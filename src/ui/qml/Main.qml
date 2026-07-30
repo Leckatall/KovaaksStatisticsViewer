@@ -54,8 +54,10 @@ ApplicationWindow {
                 color: "#1E1E1E"
                 border.color: "#2A2A2A"
             }
+
             GraphsView {
                 anchors.fill: parent
+                anchors.margins: 12
                 axisX: ValueAxis {
                     min: root.graphVm.xMin; max: root.graphVm.xMax
                 }
@@ -65,11 +67,33 @@ ApplicationWindow {
                 LineSeries {
                     id: lineSeries
                     name: "Performance"
-                    width: 2
-                    pointDelegate: Rectangle {   // optional per-point marker
+                    width: 3
+                    pointDelegate: Rectangle {
+                        id: delegate
                         width: 4; height: 4; radius: 4; color: "#4DD0E1"
+                        HoverHandler {
+                            id: hoverHandler
+                            target: Text {
+                                parent: delegate
+                                visible: hoverHandler.hovered
+                                text: "You hovering me!"
+                            }
+                        }
+
                     }
-                    color: "#FFFFFF"
+
+
+                    color: "#009600"
+                    // joinStyle: Qt.RoundJoin
+
+                }
+                LineSeries {
+                    XYPoint {
+                        x: 0; y: 0
+                    }
+                    XYPoint {
+                        x: 10; y: 10
+                    }
                 }
                 XYModelMapper {
                     series: lineSeries
@@ -81,6 +105,11 @@ ApplicationWindow {
             Component.onCompleted: {
                 graphVm.appendPoint(4, 4.2)
                 graphVm.appendPoint(5, 6.1)
+            }
+
+            Button {
+                text: "Import Score of example performance"
+                onClicked: graphVm.fetchData("Not yet implemented")
             }
         }
     }

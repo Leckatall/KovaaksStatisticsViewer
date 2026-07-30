@@ -10,13 +10,14 @@
 
 #include <scenario_perf.h>
 
+#include "interfaces/i_proto_decoder.h"
+
 namespace ksv::data {
-    class ProtoDecoder {
+    class ProtoDecoder: public application::IProtoDecoder {
     public:
-        // ProtoDecoder();
-        domain::ScenarioPerf decode(const perf::PerfLog& perfLog);
-        domain::ScenarioPerf decode_file(const std::string& filename);
+        domain::ScenarioPerf decode(const perf::PerfLog& perfLog) override;
+        domain::ScenarioPerf decode_file(std::string_view filename) override;
     };
-} // ksv
+}
 
 #endif //KOVAAKSSTATSVIEWER_PROTO_DECODER_H

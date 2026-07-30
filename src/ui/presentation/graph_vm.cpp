@@ -4,13 +4,16 @@
 
 #include "graph_vm.h"
 
+#include <utility>
+
 
 namespace ksv::presentation {
-    GraphViewModel::GraphViewModel(QObject *parent) : QAbstractTableModel(parent) {
+    GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
+                                   QObject *parent) : QAbstractTableModel(parent),
+                                                      m_graphUseCase(std::move(graphUseCase)) {
         m_points = {{0, 1}, {1, 3}, {2, 2}, {3, 5}};
         recomputeBounds();
     }
-
 
     QVariant GraphViewModel::data(const QModelIndex &index, int role) const {
         if (!checkIndex(index, CheckIndexOption::IndexIsValid | CheckIndexOption::ParentIsInvalid))
@@ -57,7 +60,7 @@ namespace ksv::presentation {
         if (m_points.isEmpty()) {
             // sensible defaults
             newXMin = 0.0;
-            newXMax = 1.0;
+            newXMax = 60.0;
             newYMin = 0.0;
             newYMax = 1.0;
         } else {
@@ -71,6 +74,7 @@ namespace ksv::presentation {
 
             double xlo = xItMin->x();
             double xhi = xItMax->x();
+
             double ylo = yItMin->y();
             double yhi = yItMax->y();
 
@@ -87,19 +91,11 @@ namespace ksv::presentation {
             // Pad by ~5%
             const double xPad = (xhi - xlo) * 0.05;
             const double yPad = (yhi - ylo) * 0.05;
-            xlo -= xPad;
-            xhi += xPad;
-            ylo -= yPad;
-            yhi += yPad;
 
-            // Snap to nice steps (target ~8 ticks)
-            const double xStep = niceStep((xhi - xlo) / 8.0);
-            const double yStep = niceStep((yhi - ylo) / 8.0);
-
-            newXMin = std::floor(xlo / xStep) * xStep;
-            newXMax = std::ceil(xhi / xStep) * xStep;
-            newYMin = std::floor(ylo / yStep) * yStep;
-            newYMax = std::ceil(yhi / yStep) * yStep;
+            floor(xlo) == 0.0F ? newXMin = 0.0F : newXMin = xlo - xPad;
+            ceil(xhi) == 60.0F ? newXMax = 60.0F : newXMax = xhi + xPad;
+            ylo == 0.0F ? newYMin = ylo : newYMin = ylo - yPad;
+            yhi == 1.0F ? newYMax = yhi : newYMax = yhi + yPad;
         }
 
         // Only notify if something actually changed
@@ -117,5 +113,24 @@ namespace ksv::presentation {
         m_yMax = newYMax;
 
         emit boundsChanged();
+    }
+
+    void GraphViewModel::fetchData(const QString &scenario_id) {
+        //TODO: Implement Variable File Recall
+        qDebug() << "Fetching data for scenario: " << scenario_id;
+        Q_UNUSED(scenario_id);
+        QString path = R"(C:\Users\Lecka\CLionProjects\KovaaksStatisticsViewer\tests\examples\1wall6targets TE.perf)";
+        const std::vector<float> times = m_graphUseCase->get_times(path.toStdString());
+        const std::vector<float> scores = m_graphUseCase->get_scores(path.toStdString());
+        assert(times.size() == scores.size());
+
+        QList<QPointF> points;
+        points.reserve(static_cast<qsizetype>(times.size()));
+
+        for (std::size_t i = 0; i < times.size(); ++i) {
+            points.append(QPointF(times[i], scores[i])); // float -> qreal
+        }
+
+        setPoints(points);
     }
 }

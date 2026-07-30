@@ -6,6 +6,7 @@ add_library(ksv_data STATIC
         ${PROTO_HDRS}
         formats/protobuf/proto_decoder.cpp
         formats/protobuf/proto_decoder.h
+        interfaces/i_proto_decoder.h
 )
 
 set(PROTO_FILES ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/perf.proto)

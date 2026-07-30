@@ -9,6 +9,7 @@
 #include <QQmlApplicationEngine>
 
 #include "graph_vm.h"
+#include "interfaces/i_proto_decoder.h"
 
 
 namespace ksv::application {
@@ -23,6 +24,8 @@ namespace ksv::application {
         // void setStatusBarMessage() const;
         QQmlApplicationEngine m_engine;
         presentation::GraphViewModel* m_graphVm;
+        std::shared_ptr<IGraphUseCase> m_graphUseCase;
+        std::shared_ptr<IProtoDecoder> m_protoDecoder;
     };
 } // Application
 

@@ -10,6 +10,8 @@
 #include <qqmlintegration.h>
 #include <ranges>
 
+#include "app/usecases/i_graph_use_case.h"
+
 namespace ksv::presentation {
     class GraphViewModel : public QAbstractTableModel {
         Q_OBJECT
@@ -23,17 +25,17 @@ namespace ksv::presentation {
     public:
         enum Column { XColumn = 0, YColumn, ColumnCount };
 
-        explicit GraphViewModel(QObject* parent = nullptr);
+        explicit GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase, QObject *parent = nullptr);
 
-        [[nodiscard]] Q_INVOKABLE int rowCount(const QModelIndex &parent = {}) const override {
+        [[nodiscard]] int rowCount(const QModelIndex &parent = {}) const override {
             return parent.isValid() ? 0 : int(m_points.size());
         }
 
-        [[nodiscard]] Q_INVOKABLE int columnCount(const QModelIndex &parent = {}) const override {
+        [[nodiscard]] int columnCount(const QModelIndex &parent = {}) const override {
             return parent.isValid() ? 0 : ColumnCount;
         }
 
-        [[nodiscard]] Q_INVOKABLE QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+        [[nodiscard]] QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
         void setPoints(QList<QPointF> points);
 
@@ -44,12 +46,16 @@ namespace ksv::presentation {
         [[nodiscard]] qreal yMin() const { return m_yMin; }
         [[nodiscard]] qreal yMax() const { return m_yMax; }
 
-        Q_INVOKABLE void recomputeBounds();
+        void recomputeBounds();
+
+    public slots:
+        void fetchData(const QString& scenario_id);
 
     signals:
         void boundsChanged();
 
     private:
+        std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
         QList<QPointF> m_points;
         qreal m_xMin = 0.0;
         qreal m_xMax = 10.0;

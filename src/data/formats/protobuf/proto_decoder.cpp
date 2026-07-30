@@ -20,50 +20,15 @@ namespace ksv::data {
             if (entry.has_dmg_possible()) perf.add_data(entry.time(), domain::DataPointType::DMG_POSSIBLE, entry.dmg_possible().value());
             if (entry.has_score()) perf.add_data(entry.time(), domain::DataPointType::SCORE, entry.score().value());
             if (entry.has_kills()) perf.add_data(entry.time(), domain::DataPointType::KILLS, entry.kills().value());
-            // switch (entry.metric_case()) {
-            //     case perf::PerfEntry::kShots: {
-            //         type = domain::DataPointType::SHOTS;
-            //         perf.add_data(entry.time(), type, entry.shots());
-            //         break;
-            //     }case perf::PerfEntry::kHits: {
-            //         type = domain::DataPointType::HITS;
-            //         perf.add_data(entry.time(), type, entry.hits());
-            //         break;
-            //     }case perf::PerfEntry::kMisses: {
-            //         type = domain::DataPointType::MISSES;
-            //         perf.add_data(entry.time(), type, entry.misses());
-            //         break;
-            //     }case perf::PerfEntry::kDmg: {
-            //         type = domain::DataPointType::DMG;
-            //         perf.add_data(entry.time(), type, entry.dmg());
-            //         break;
-            //     }case perf::PerfEntry::kDmgPossible: {
-            //         type = domain::DataPointType::DMG_POSSIBLE;
-            //         perf.add_data(entry.time(), type, entry.dmg_possible());
-            //         break;
-            //     }case perf::PerfEntry::kScore: {
-            //         type = domain::DataPointType::SCORE;
-            //         perf.add_data(entry.time(), type, entry.score());
-            //         break;
-            //     }case perf::PerfEntry::kKills: {
-            //         type = domain::DataPointType::KILLS;
-            //         perf.add_data(entry.time(), type, entry.kills());
-            //         break;
-            //     }case perf::PerfEntry::METRIC_NOT_SET: std::cout << "(no metric)"; break;
-            //         default: {
-            //         std::cerr << "Unknown metric type " << entry.metric_case() << std::endl;
-            //     }
-            //
-            // }
         }
         return perf;
     }
 
-    domain::ScenarioPerf ProtoDecoder::decode_file(const std::string &filename) {
+    domain::ScenarioPerf ProtoDecoder::decode_file(const std::string_view filename) {
         GOOGLE_PROTOBUF_VERIFY_VERSION;
         perf::PerfLog perfLog;
         if (!std::filesystem::exists(filename)) throw std::invalid_argument("File does not exist");
-        std::fstream input(filename, std::ios::in | std::ios::binary);
+        std::fstream input(filename.data(), std::ios::in | std::ios::binary);
         if (!perfLog.ParseFromIstream(&input)) {
             std::cerr << "Failed to parse file." << std::endl;
         }

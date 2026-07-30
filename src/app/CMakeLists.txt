@@ -2,6 +2,8 @@
 add_library(ksv_app STATIC
         app.h
         app.cpp
+        usecases/i_graph_use_case.h
+        usecases/graph_use_case.h
 )
 
 target_link_libraries(ksv_app PRIVATE
