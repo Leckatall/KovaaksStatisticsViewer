@@ -3,29 +3,25 @@
 //
 
 #include "app.h"
-#include <QStatusBar>
 
-#include "components/main/menu_bar.h"
+#include <qcoreapplication.h>
+#include <qdir.h>
+#include <QGuiApplication>
+#include <QQmlContext>
+
 
 namespace ksv::application {
-    App::App() : QObject(nullptr),
-                 m_window(new QMainWindow()),
-                 m_container(new QFrame()) {
-        m_window->setWindowTitle("ChessRepo");
-        m_window->setGeometry(0, 0, 1200, 800);
-        m_window->setCentralWidget(m_container);
-        m_window->setMenuBar(new ui::mainwindow::WindowMenuBar());
-        // setStatusBarMessage();
-        initLayout();
-        // initConnections();
+    App::App(QObject* parent) : QObject(parent), m_graphVm(new presentation::GraphViewModel(this)) {
+
     }
 
-    void App::start() const {
-        m_window->show();
+    int App::start() {
+        m_engine.setInitialProperties({{"graphVm", QVariant::fromValue(m_graphVm)}});
+        // m_engine.addImportPath(QDir(QGuiApplication::applicationDirPath())
+        //              .absoluteFilePath("src/ui"));
+        m_engine.loadFromModule("KovaaksStatsViewer", "Main");
+        if (m_engine.rootObjects().isEmpty()) return -1;
+        return 0;
     }
 
-    void App::initLayout() const {
-        const auto layout = new QGridLayout(m_container);
-        m_container->setLayout(layout);
-    }
 } // Application

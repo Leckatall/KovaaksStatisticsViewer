@@ -3,24 +3,18 @@
 //
 
 
-#include <QApplication>
-
-#include "app/app.h"
-
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <app/app.h>
 
 void declare_metatypes() {
 }
 
 int main(int argc, char *argv[]) {
     declare_metatypes();
-    QApplication app(argc, argv); // Initialize Qt application
+    QGuiApplication qapp(argc, argv);
+    ksv::application::App app;
+    if (app.start() != 0) return -1;
 
-    // MainWindow window;             // Create MainWindow object
-    // window.show(); // Display window
-    // application::Application mainApp;
-    // mainApp.start();
-    ksv::application::App myApp;
-    myApp.start();
-
-    return app.exec(); // Run the application event loop
+    return qapp.exec(); // Run the application event loop
 }

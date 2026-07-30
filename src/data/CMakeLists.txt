@@ -1,3 +1,6 @@
+
+find_package(Protobuf REQUIRED)
+
 add_library(ksv_data STATIC
         ${PROTO_SRCVS}
         ${PROTO_HDRS}

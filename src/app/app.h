@@ -5,24 +5,24 @@
 #ifndef KOVAAKSSTATISTICSVIEWER_APP_H
 #define KOVAAKSSTATISTICSVIEWER_APP_H
 
-#include <QMainWindow>
-#include <QFrame>
-#include <QGridLayout>
+#include <QObject>
+#include <QQmlApplicationEngine>
+
+#include "graph_vm.h"
+
 
 namespace ksv::application {
     class App: public QObject {
         Q_OBJECT
     public:
-        App();
-        void start() const;
+        explicit App(QObject* parent = nullptr);
+        int start();
 
     private:
-        void initLayout() const;
         // void initConnections();
         // void setStatusBarMessage() const;
-
-        QMainWindow *m_window;
-        QFrame *m_container;
+        QQmlApplicationEngine m_engine;
+        presentation::GraphViewModel* m_graphVm;
     };
 } // Application
 
