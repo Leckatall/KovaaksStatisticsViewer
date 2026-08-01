@@ -23,12 +23,12 @@ namespace ksv::presentation {
         Q_PROPERTY(qreal yMax READ yMax NOTIFY boundsChanged)
 
     public:
-        enum Column { XColumn = 0, YColumn, ColumnCount };
+        enum Column { Time = 0, Score, Accuracy, ColumnCount };
 
         explicit GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase, QObject *parent = nullptr);
 
         [[nodiscard]] int rowCount(const QModelIndex &parent = {}) const override {
-            return parent.isValid() ? 0 : int(m_points.size());
+            return parent.isValid() ? 0 : int(m_data.size());
         }
 
         [[nodiscard]] int columnCount(const QModelIndex &parent = {}) const override {
@@ -37,9 +37,10 @@ namespace ksv::presentation {
 
         [[nodiscard]] QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
-        void setPoints(QList<QPointF> points);
+        void setData(QList<QMap<Column, qreal>> data);
 
-        Q_INVOKABLE void appendPoint(qreal x, qreal y);
+        void setColumn(Column column, QList<qreal> col_data);
+
 
         [[nodiscard]] qreal xMin() const { return m_xMin; }
         [[nodiscard]] qreal xMax() const { return m_xMax; }
@@ -56,7 +57,7 @@ namespace ksv::presentation {
 
     private:
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
-        QList<QPointF> m_points;
+        QList<QMap<Column, qreal>> m_data;
         qreal m_xMin = 0.0;
         qreal m_xMax = 10.0;
         qreal m_yMin = 0.0;

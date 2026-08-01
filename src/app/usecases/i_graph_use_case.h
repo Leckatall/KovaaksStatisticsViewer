@@ -15,6 +15,8 @@ namespace ksv::application {
         virtual std::vector<float> get_times(std::string_view filename) = 0;
 
         virtual std::vector<float> get_scores(std::string_view filename) = 0;
+
+        virtual std::vector<float> get_accuracies(std::string_view filename) = 0;
     };
 }
 

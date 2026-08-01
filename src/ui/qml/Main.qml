@@ -3,7 +3,6 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtGraphs
-import KovaaksStatsViewer
 
 ApplicationWindow {
     id: root
@@ -65,18 +64,19 @@ ApplicationWindow {
                     min: root.graphVm.yMin; max: root.graphVm.yMax; subTickCount: 4
                 }
                 LineSeries {
-                    id: lineSeries
+                    id: score_series
                     name: "Performance"
                     width: 3
                     pointDelegate: Rectangle {
                         id: delegate
                         width: 4; height: 4; radius: 4; color: "#4DD0E1"
+                        property real pointValueY
                         HoverHandler {
                             id: hoverHandler
                             target: Text {
                                 parent: delegate
                                 visible: hoverHandler.hovered
-                                text: "You hovering me!"
+                                text: `You hovering me! ${delegate.pointValueY.toFixed(2)}`
                             }
                         }
 
@@ -86,30 +86,43 @@ ApplicationWindow {
                     color: "#009600"
                     // joinStyle: Qt.RoundJoin
 
-                }
-                LineSeries {
-                    XYPoint {
-                        x: 0; y: 0
+                    XYModelMapper {
+                        series: score_series
+                        model: root.graphVm
+                        xSection: 0
+                        ySection: 1
                     }
-                    XYPoint {
-                        x: 10; y: 10
+
+                }
+
+                LineFromModel {
+                    line_model: root.graphVm
+                    xIndex: 0
+                    yIndex: 2
+                    color: "cyan"
+                    width: 3
+                    pointDelegate: Rectangle {
+                        id: delegate2
+                        width: 4; height: 4; radius: 4; color: "#4DD0E1"
+                        property real pointValueY
+
+                        HoverHandler {
+                            id: hoverHandler2
+                            target: Text {
+                                parent: delegate2
+                                visible: hoverHandler2.hovered
+                                text: `You hovering me! ${delegate2.pointValueY.toFixed(2)}`
+                            }
+                        }
+
                     }
                 }
-                XYModelMapper {
-                    series: lineSeries
-                    model: graphVm
-                    xSection: 0
-                    ySection: 1
-                }
-            }
-            Component.onCompleted: {
-                graphVm.appendPoint(4, 4.2)
-                graphVm.appendPoint(5, 6.1)
+
             }
 
             Button {
                 text: "Import Score of example performance"
-                onClicked: graphVm.fetchData("Not yet implemented")
+                onClicked: root.graphVm.fetchData("Not yet implemented")
             }
         }
     }

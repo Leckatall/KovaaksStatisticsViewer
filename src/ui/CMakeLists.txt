@@ -18,6 +18,7 @@ qt_add_qml_module(ksv_ui
         NO_PLUGIN
         OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/KovaaksStatsViewer
         QML_FILES
+            qml/LineFromModel.qml
             qml/Main.qml
         SOURCES
             presentation/graph_vm.h

@@ -8,7 +8,6 @@ namespace ksv::domain {
 
     template<typename T>
     void ScenarioPerf::add_data(const float time, const DataPointType type, T value) {
-        std::cout << "Adding data: " << time << " " << type << " " << value << std::endl;
         ScenarioDataPoint& point = get_data_point(time);
 
         switch (type) {

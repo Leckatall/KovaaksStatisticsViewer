@@ -31,6 +31,16 @@ namespace ksv::application {
             return scores;
         }
 
+        std::vector<float> get_accuracies(const std::string_view filename) override {
+            const domain::ScenarioPerf perf = get_data(filename);
+            std::vector<float> accuracies;
+            for (const auto &point: perf.data) {
+                if (point.shots == 0) accuracies.push_back(0);
+                accuracies.push_back(static_cast<float>(point.hits) / static_cast<float>(point.shots));
+            }
+            return accuracies;
+        }
+
     private:
 
         [[nodiscard]] domain::ScenarioPerf get_data(std::string_view filename) const {
