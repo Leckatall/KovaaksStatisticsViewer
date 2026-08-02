@@ -38,6 +38,7 @@ add_subdirectory(src/domain)
 #add_subdirectory(src/presentation)
 add_subdirectory(src/ui)
 add_subdirectory(src/data)
+add_subdirectory(src/qt_data)
 #add_subdirectory(src/controllers)
 
 # Main executable
@@ -57,6 +58,7 @@ target_link_libraries(myapp PRIVATE
         ksv_app
         ksv_ui
         ksv_data
+        ksv_qt_data
         ksv_domain
 )
 

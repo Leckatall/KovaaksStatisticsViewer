@@ -8,8 +8,9 @@
 namespace ksv::data {
     domain::ScenarioPerf ProtoDecoder::decode(const perf::PerfLog &perfLog) {
         domain::ScenarioPerf perf;
-        perf.scenario_name = perfLog.meta().scenario_name();
-        perf.start_time = perfLog.meta().timestamp_ms();
+        perf.run_id.scenario_id.name = perfLog.meta().scenario_name();
+        perf.run_id.scenario_id.hash = perfLog.meta().scenario_hash();
+        perf.run_id.start_time = perfLog.meta().timestamp_ms();
         perf.scenario_length = perfLog.meta().details().scenario_length();
 
         for (const auto &entry: perfLog.entries()) {
@@ -29,6 +30,7 @@ namespace ksv::data {
         perf::PerfLog perfLog;
         if (!std::filesystem::exists(filename)) throw std::invalid_argument("File does not exist");
         std::fstream input(filename.data(), std::ios::in | std::ios::binary);
+        // std::cout << "Opening File: " << filename << std::endl;
         if (!perfLog.ParseFromIstream(&input)) {
             std::cerr << "Failed to parse file." << std::endl;
         }

@@ -30,10 +30,30 @@ namespace ksv::domain {
         float score;
         int kills;
     };
+    struct ScenarioId {
+        std::string name;
+        std::string hash;
+        bool operator==(const ScenarioId& other) const {
+            return hash == other.hash;
+        }
+        bool operator<(const ScenarioId& other) const {
+            return hash < other.hash;
+        }
+    };
+
+    struct ScenarioRunId {
+        ScenarioId scenario_id;
+        long long start_time;
+        bool operator==(const ScenarioRunId& other) const {
+            return scenario_id == other.scenario_id && start_time == other.start_time;
+        }
+        bool operator<(const ScenarioRunId& other) const {
+            return scenario_id < other.scenario_id || (scenario_id == other.scenario_id && start_time < other.start_time);
+        }
+    };
 
     struct ScenarioPerf {
-        std::string scenario_name;
-        long long start_time;
+        ScenarioRunId run_id;
         float scenario_length;
         std::vector<ScenarioDataPoint> data;
 
@@ -43,8 +63,9 @@ namespace ksv::domain {
         // void add_data(float time, DataPointType type, float value) const;
 
         void print() const {
-            std::cout << "Scenario: " << scenario_name << std::endl;
-            std::cout << "Start time: " << start_time << std::endl;
+            std::cout << "Scenario Name: " << run_id.scenario_id.name << std::endl;
+            std::cout << "Scenario Hash: " << run_id.scenario_id.hash << std::endl;
+            std::cout << "Start time: " << run_id.start_time << std::endl;
             std::cout << "Duration: " << scenario_length << std::endl;
             std::cout << "Data:" << std::endl;
             for (const auto &point: data) {
@@ -55,9 +76,20 @@ namespace ksv::domain {
     private:
         [[nodiscard]] ScenarioDataPoint& get_data_point(float time);
     };
-
-
 }
-
+namespace std {
+    template <>
+    struct hash<ksv::domain::ScenarioId> {
+        auto operator()(const ksv::domain::ScenarioId &scenario_id) const -> size_t {
+            return hash<string>{}(scenario_id.hash);
+        }
+    };
+    template <>
+    struct hash<ksv::domain::ScenarioRunId> {
+        auto operator()(const ksv::domain::ScenarioRunId &run_id) const -> size_t {
+            return hash<ksv::domain::ScenarioId>{}(run_id.scenario_id) ^ hash<long long>{}(run_id.start_time);
+        }
+    };
+}
 
 #endif //KOVAAKSSTATSVIEWER_SCEN_PERF_H

@@ -14,6 +14,10 @@ int main(int argc, char *argv[]) {
     declare_metatypes();
     QGuiApplication qapp(argc, argv);
     ksv::application::App app;
+    QCoreApplication::setOrganizationName("Lecka");
+    QCoreApplication::setApplicationName("KovaaksStatsViewer");
+    QGuiApplication::setOrganizationName("Lecka");
+    QGuiApplication::setApplicationName("KovaaksStatsViewer");
     if (app.start() != 0) return -1;
 
     return qapp.exec(); // Run the application event loop

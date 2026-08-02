@@ -23,6 +23,8 @@ qt_add_qml_module(ksv_ui
         SOURCES
             presentation/graph_vm.h
             presentation/graph_vm.cpp
+            presentation/session_vm.h
+            presentation/session_vm.cpp
 )
 
 #set(QML_IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/KovaaksStatsViewer)

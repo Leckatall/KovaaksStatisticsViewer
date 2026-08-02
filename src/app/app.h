@@ -9,7 +9,11 @@
 #include <QQmlApplicationEngine>
 
 #include "graph_vm.h"
+#include "session_vm.h"
 #include "interfaces/i_proto_decoder.h"
+#include "qt_data/interfaces/i_file_service.h"
+#include "data/interfaces/i_profile_service.h"
+#include "usecases/i_session_controller.h"
 
 
 namespace ksv::application {
@@ -18,15 +22,22 @@ namespace ksv::application {
     public:
         explicit App(QObject* parent = nullptr);
         int start();
+        //TODO: implement profile generation from directory
+
 
     private:
         // void initConnections();
         // void setStatusBarMessage() const;
         QQmlApplicationEngine m_engine;
         presentation::GraphViewModel* m_graphVm;
+        presentation::SessionViewModel* m_sessionVm;
+
+        std::shared_ptr<IFileService> m_fileService;
+        std::shared_ptr<IProfileService> m_profileService;
+        std::shared_ptr<ISessionController> m_sessionController;
         std::shared_ptr<IGraphUseCase> m_graphUseCase;
         std::shared_ptr<IProtoDecoder> m_protoDecoder;
     };
-} // Application
+}
 
 #endif //KOVAAKSSTATISTICSVIEWER_APP_H

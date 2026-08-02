@@ -2,11 +2,13 @@
 find_package(Protobuf REQUIRED)
 
 add_library(ksv_data STATIC
-        ${PROTO_SRCVS}
-        ${PROTO_HDRS}
         formats/protobuf/proto_decoder.cpp
         formats/protobuf/proto_decoder.h
+        profile_service.cpp
+        profile_service.h
+
         interfaces/i_proto_decoder.h
+        interfaces/i_profile_service.h
 )
 
 set(PROTO_FILES ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/perf.proto)
