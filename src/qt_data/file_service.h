@@ -5,6 +5,7 @@
 #ifndef KOVAAKSSTATSVIEWER_FILE_SERVICE_H
 #define KOVAAKSSTATSVIEWER_FILE_SERVICE_H
 
+#include <optional>
 #include <qdir.h>
 #include <qfilesystemwatcher.h>
 #include <QObject>
@@ -27,6 +28,12 @@ namespace ksv::qt_data {
 
         [[nodiscard]] QDir get_kovaaks_dir() const {
             return {m_settings_service->getKovaaksDir().data()};
+        }
+
+        [[nodiscard]] std::optional<QDir> get_perf_dir() const {
+            QDir perf_dir(get_kovaaks_dir());
+            if (!perf_dir.cd("FPSAimTrainer/performances")) return std::nullopt;
+            return perf_dir;
         }
 
         [[nodiscard]] std::vector<domain::ScenarioPerf> getAllPerfsFromFiles() const override;

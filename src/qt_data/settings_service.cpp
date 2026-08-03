@@ -5,8 +5,8 @@
 #include "settings_service.h"
 
 namespace ksv::qt_data {
-    SettingsService::SettingsService(QObject *parent): QObject(parent),
-    m_settings("Lecka", "KovaaksStatsViewer",this) {
+    SettingsService::SettingsService(const QSettings::Format format, QObject *parent): QObject(parent),
+    m_settings(format, QSettings::UserScope, "Lecka", "KovaaksStatsViewer", this) {
 
     }
 

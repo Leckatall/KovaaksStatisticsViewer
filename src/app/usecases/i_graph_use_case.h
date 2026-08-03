@@ -5,6 +5,7 @@
 #ifndef KOVAAKSSTATSVIEWER_I_GRAPH_USE_CASE_H
 #define KOVAAKSSTATSVIEWER_I_GRAPH_USE_CASE_H
 #include <string>
+#include <vector>
 
 
 namespace ksv::application {

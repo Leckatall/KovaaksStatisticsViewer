@@ -24,3 +24,14 @@ target_compile_definitions(proto_decoder_tests PRIVATE
 )
 
 gtest_discover_tests(proto_decoder_tests)
+
+add_executable(profile_service_tests
+    profile_service_test.cpp
+)
+
+target_link_libraries(profile_service_tests PRIVATE
+    ksv_data
+    GTest::gtest_main
+)
+
+gtest_discover_tests(profile_service_tests)

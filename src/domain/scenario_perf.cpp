@@ -19,7 +19,8 @@ namespace ksv::domain {
                 const int v = static_cast<int>(value);
                 if (type == SHOTS) point.shots = v;
                 else if (type == HITS) point.hits = v;
-                else point.misses = v;
+                else if (type == MISSES) point.misses = v;
+                else point.kills = v;
                 break;
             }
 
@@ -49,5 +50,9 @@ namespace ksv::domain {
         data.push_back(point);
         return data.back();
     }
+
+    template void ScenarioPerf::add_data<int>(float time, DataPointType type, int value);
+    template void ScenarioPerf::add_data<unsigned int>(float time, DataPointType type, unsigned int value);
+    template void ScenarioPerf::add_data<float>(float time, DataPointType type, float value);
 }
 

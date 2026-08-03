@@ -3,7 +3,6 @@
 //
 
 #include "proto_decoder.h"
-#include <scenario_perf.cpp>
 
 namespace ksv::data {
     domain::ScenarioPerf ProtoDecoder::decode(const perf::PerfLog &perfLog) {
