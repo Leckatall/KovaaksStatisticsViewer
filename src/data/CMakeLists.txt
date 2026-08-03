@@ -4,14 +4,20 @@ find_package(Protobuf REQUIRED)
 add_library(ksv_data STATIC
         formats/protobuf/proto_decoder.cpp
         formats/protobuf/proto_decoder.h
+        formats/protobuf/profile_serializer.cpp
+        formats/protobuf/profile_serializer.h
         profile_service.cpp
         profile_service.h
 
         interfaces/i_proto_decoder.h
         interfaces/i_profile_service.h
+        interfaces/i_profile_serializer.h
 )
 
-set(PROTO_FILES ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/perf.proto)
+set(PROTO_FILES
+        ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/perf.proto
+        ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/cache.proto
+)
 
 target_link_libraries(ksv_data PUBLIC
         protobuf::libprotobuf

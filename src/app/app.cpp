@@ -4,13 +4,17 @@
 
 #include "app.h"
 
+#include <filesystem>
+
 #include <qcoreapplication.h>
 #include <QGuiApplication>
 #include <QQmlContext>
+#include <QStandardPaths>
 
 #include "session_controller.h"
 #include "settings_service.h"
 #include "formats/protobuf/proto_decoder.h"
+#include "formats/protobuf/profile_serializer.h"
 #include "qt_data/file_service.h"
 #include "../data/profile_service.h"
 #include "usecases/graph_use_case.h"
@@ -22,7 +26,15 @@ namespace ksv::application {
 
         m_settingsService = std::make_shared<qt_data::SettingsService>();
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder);
-        m_profileService = std::make_shared<data::ProfileService>(m_fileService);
+
+        const auto cache_dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).toStdString();
+        std::filesystem::create_directories(cache_dir);
+        const std::filesystem::path cache_path = std::filesystem::path(cache_dir) / "profile_cache.pb";
+
+        m_profileService = std::make_shared<data::ProfileService>(
+            m_fileService, std::make_shared<data::ProfileSerializer>(), cache_path);
+        m_profileService->loadProfile();
+
         m_sessionController = std::make_shared<SessionController>(m_settingsService, m_profileService);
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController);
         m_graphVm = new presentation::GraphViewModel(m_graphUseCase, this);

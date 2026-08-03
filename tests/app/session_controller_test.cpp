@@ -32,11 +32,21 @@ namespace {
 
         void generateProfileFromDirectory() override { ++generate_call_count; }
 
+        void loadProfile() override { ++generate_call_count; }
+
         [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return scenario_list; }
 
         [[nodiscard]] ScenarioPerf getPerf(const std::string &path) const override { return perf_by_path.at(path); }
 
         [[nodiscard]] ScenarioPerf getLatestPerf() const override { return latest_perf; }
+
+        [[nodiscard]] std::optional<ScenarioPerf> getMostRecentPerf(const ScenarioId &) const override {
+            return std::nullopt;
+        }
+
+        [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &, std::size_t) const override {
+            return std::nullopt;
+        }
 
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
     };

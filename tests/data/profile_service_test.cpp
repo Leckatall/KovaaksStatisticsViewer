@@ -12,11 +12,13 @@ using namespace ksv::data;
 using namespace ksv::application;
 
 namespace {
-    ksv::domain::ScenarioPerf make_perf(const std::string &hash, const long long start_time) {
+    ksv::domain::ScenarioPerf make_perf(const std::string &hash, const long long start_time,
+                                        const float score = 0.0F) {
         ksv::domain::ScenarioPerf perf;
         perf.run_id.scenario_id.name = "Scenario " + hash;
         perf.run_id.scenario_id.hash = hash;
         perf.run_id.start_time = start_time;
+        perf.add_data(0.0F, ksv::domain::SCORE, score);
         return perf;
     }
 
@@ -44,10 +46,28 @@ namespace {
         }
     };
 
+    class FakeProfileSerializer : public IProfileSerializer {
+    public:
+        std::optional<ksv::domain::UserProfile> profile_to_load;
+        int save_count = 0;
+
+        void save(const ksv::domain::UserProfile &profile, const std::filesystem::path &path) override {
+            (void) profile;
+            (void) path;
+            ++save_count;
+        }
+
+        [[nodiscard]] std::optional<ksv::domain::UserProfile> load(const std::filesystem::path &path) override {
+            (void) path;
+            return profile_to_load;
+        }
+    };
+
     class ProfileServiceTest : public testing::Test {
     protected:
         std::shared_ptr<FakeFileService> fake_file_service = std::make_shared<FakeFileService>();
-        ProfileService profile_service{fake_file_service};
+        std::shared_ptr<FakeProfileSerializer> fake_serializer = std::make_shared<FakeProfileSerializer>();
+        ProfileService profile_service{fake_file_service, fake_serializer, "test_cache.pb"};
     };
 
     TEST_F(ProfileServiceTest, ScenarioListEmptyBeforeProfileGenerated) {
@@ -96,12 +116,84 @@ namespace {
         EXPECT_EQ(perf.run_id.scenario_id.hash, "hash-1");
     }
 
-    TEST_F(ProfileServiceTest, GetLatestPerfDelegatesToFileService) {
+    TEST_F(ProfileServiceTest, GetLatestPerfIsEmptyBeforeProfileGenerated) {
+        // GetLatestPerf now reads from the in-memory UserProfile rather than
+        // asking IFileService directly, so it has nothing to report until the
+        // profile has been generated at least once.
         fake_file_service->latest_perf = make_perf("hash-latest", 999);
 
         const auto perf = profile_service.getLatestPerf();
 
-        EXPECT_EQ(perf.run_id.scenario_id.hash, "hash-latest");
+        EXPECT_TRUE(perf.run_id.scenario_id.hash.empty());
+    }
+
+    TEST_F(ProfileServiceTest, GetLatestPerfReturnsMostRecentByStartTimeAcrossScenarios) {
+        fake_file_service->perfs_to_return = {
+            make_perf("hash-1", 100), make_perf("hash-2", 300), make_perf("hash-1", 200)
+        };
+        profile_service.generateProfileFromDirectory();
+
+        const auto perf = profile_service.getLatestPerf();
+
+        EXPECT_EQ(perf.run_id.scenario_id.hash, "hash-2");
+        EXPECT_EQ(perf.run_id.start_time, 300);
+    }
+
+    TEST_F(ProfileServiceTest, GetLatestPerfReflectsIncrementallyAddedRuns) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+
+        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 500);
+        profile_service.addPerfFileToProfile("new_run.perf");
+
+        const auto perf = profile_service.getLatestPerf();
+
+        EXPECT_EQ(perf.run_id.scenario_id.hash, "hash-2");
+        EXPECT_EQ(perf.run_id.start_time, 500);
+    }
+
+    TEST_F(ProfileServiceTest, GetMostRecentPerfIsNulloptBeforeProfileGenerated) {
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        EXPECT_FALSE(profile_service.getMostRecentPerf(scenario).has_value());
+    }
+
+    TEST_F(ProfileServiceTest, GetMostRecentPerfDelegatesToProfile) {
+        fake_file_service->perfs_to_return = {
+            make_perf("hash-1", 100), make_perf("hash-1", 300), make_perf("hash-1", 200)
+        };
+        profile_service.generateProfileFromDirectory();
+
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        const auto perf = profile_service.getMostRecentPerf(scenario);
+
+        ASSERT_TRUE(perf.has_value());
+        EXPECT_EQ(perf->run_id.start_time, 300);
+    }
+
+    TEST_F(ProfileServiceTest, GetMostRecentPerfIsNulloptForUnknownScenario) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "unknown"};
+        EXPECT_FALSE(profile_service.getMostRecentPerf(scenario).has_value());
+    }
+
+    TEST_F(ProfileServiceTest, GetAverageScoreIsNulloptBeforeProfileGenerated) {
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        EXPECT_FALSE(profile_service.getAverageScore(scenario, 2).has_value());
+    }
+
+    TEST_F(ProfileServiceTest, GetAverageScoreDelegatesToProfile) {
+        fake_file_service->perfs_to_return = {
+            make_perf("hash-1", 100, 10.0F), make_perf("hash-1", 200, 20.0F), make_perf("hash-1", 300, 30.0F)
+        };
+        profile_service.generateProfileFromDirectory();
+
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        const auto avg = profile_service.getAverageScore(scenario, 2);
+
+        ASSERT_TRUE(avg.has_value());
+        EXPECT_FLOAT_EQ(*avg, 25.0F); // average of the 2 most recent: 20 and 30
     }
 
     TEST_F(ProfileServiceTest, OnProfileChangedFiresOnGenerateAndOnIncrementalAdd) {
@@ -115,5 +207,50 @@ namespace {
         fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
         profile_service.addPerfFileToProfile("new_run.perf");
         EXPECT_EQ(notify_count, 2);
+    }
+
+    TEST_F(ProfileServiceTest, GenerateProfileFromDirectorySavesToCache) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+
+        profile_service.generateProfileFromDirectory();
+
+        EXPECT_EQ(fake_serializer->save_count, 1);
+    }
+
+    TEST_F(ProfileServiceTest, AddPerfFileToProfileSavesToCache) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+
+        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        profile_service.addPerfFileToProfile("new_run.perf");
+
+        EXPECT_EQ(fake_serializer->save_count, 2);
+    }
+
+    TEST_F(ProfileServiceTest, LoadProfileUsesCacheWhenAvailableAndSkipsDirectoryScan) {
+        ksv::domain::UserProfile cached{"cached"};
+        cached.addScenarioPerf(make_perf("hash-cached", 500));
+        fake_serializer->profile_to_load = cached;
+        // If the cache is genuinely being used instead of a directory scan,
+        // this perf (only reachable via getAllPerfsFromFiles) should never appear.
+        fake_file_service->perfs_to_return = {make_perf("hash-from-disk", 999)};
+
+        profile_service.loadProfile();
+
+        const auto scenarios = profile_service.getScenarioList();
+        ASSERT_EQ(scenarios.size(), 1);
+        EXPECT_EQ(scenarios[0].hash, "hash-cached");
+    }
+
+    TEST_F(ProfileServiceTest, LoadProfileFallsBackToDirectoryScanWhenNoCache) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+
+        profile_service.loadProfile();
+
+        const auto scenarios = profile_service.getScenarioList();
+        ASSERT_EQ(scenarios.size(), 1);
+        EXPECT_EQ(scenarios[0].hash, "hash-1");
+        // The fresh-built profile should have been persisted for next time.
+        EXPECT_EQ(fake_serializer->save_count, 1);
     }
 }

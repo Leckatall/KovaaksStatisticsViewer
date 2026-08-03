@@ -30,6 +30,21 @@ namespace ksv::domain {
         float score;
         int kills;
     };
+
+    // Aggregate totals for a finished run. scenario_time comes straight from
+    // ScenarioPerf::scenario_length; every other field is the sum of that
+    // stat across all ScenarioDataPoints (the per-tick values are not
+    // cumulative, so summing is what yields the run's actual totals).
+    struct ScenarioCompletionData {
+        float scenario_time = 0.0F;
+        int shots = 0;
+        int hits = 0;
+        int misses = 0;
+        float dmg = 0.0F;
+        float dmg_possible = 0.0F;
+        float score = 0.0F;
+        int kills = 0;
+    };
     struct ScenarioId {
         std::string name;
         std::string hash;
@@ -61,6 +76,26 @@ namespace ksv::domain {
         void add_data(float time, DataPointType type, T value);
 
         // void add_data(float time, DataPointType type, float value) const;
+
+        // The score reported at the end of a run (data points are chronological).
+        [[nodiscard]] float getFinalScore() const {
+            return data.empty() ? 0.0F : data.back().score;
+        }
+
+        [[nodiscard]] ScenarioCompletionData getCompletionData() const {
+            ScenarioCompletionData completion;
+            completion.scenario_time = scenario_length;
+            for (const auto &point: data) {
+                completion.shots += point.shots;
+                completion.hits += point.hits;
+                completion.misses += point.misses;
+                completion.dmg += point.dmg;
+                completion.dmg_possible += point.dmg_possible;
+                completion.score += point.score;
+                completion.kills += point.kills;
+            }
+            return completion;
+        }
 
         void print() const {
             std::cout << "Scenario Name: " << run_id.scenario_id.name << std::endl;

@@ -35,3 +35,14 @@ target_link_libraries(profile_service_tests PRIVATE
 )
 
 gtest_discover_tests(profile_service_tests)
+
+add_executable(profile_serializer_tests
+    profile_serializer_test.cpp
+)
+
+target_link_libraries(profile_serializer_tests PRIVATE
+    ksv_data
+    GTest::gtest_main
+)
+
+gtest_discover_tests(profile_serializer_tests)

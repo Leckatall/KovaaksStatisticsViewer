@@ -5,8 +5,10 @@
 #include "profile_service.h"
 
 namespace ksv::data {
-    ProfileService::ProfileService(std::shared_ptr<application::IFileService> file_service) : m_file_service(
-        std::move(file_service)) {
+    ProfileService::ProfileService(std::shared_ptr<application::IFileService> file_service,
+                                   std::shared_ptr<application::IProfileSerializer> serializer,
+                                   std::filesystem::path cache_path) : m_filepath(std::move(cache_path)),
+        m_file_service(std::move(file_service)), m_serializer(std::move(serializer)) {
         m_profile = nullptr;
         m_file_service->onFilesChanged([this](const std::string& path) {
             addPerfFileToProfile(path);
@@ -21,12 +23,27 @@ namespace ksv::data {
         }
         m_profile = std::make_unique<domain::UserProfile>(profile);
         notifyProfileChanged();
+        saveProfile();
+    }
+
+    void ProfileService::loadProfile() {
+        if (auto cached = m_serializer->load(m_filepath)) {
+            m_profile = std::make_unique<domain::UserProfile>(std::move(*cached));
+            notifyProfileChanged();
+            return;
+        }
+        generateProfileFromDirectory();
     }
 
     void ProfileService::addPerfFileToProfile(const std::string &perf_file) const {
         const auto perf = m_file_service->getPerfFromFile(perf_file);
         m_profile->addScenarioPerf(perf);
         notifyProfileChanged();
+        saveProfile();
+    }
+
+    void ProfileService::saveProfile() const {
+        if (m_profile) m_serializer->save(*m_profile, m_filepath);
     }
 
     std::vector<domain::ScenarioId> ProfileService::getScenarioList() const {
@@ -35,12 +52,22 @@ namespace ksv::data {
     }
 
     domain::ScenarioPerf ProfileService::getPerf(const std::string &path) const {
-        //TODO: Is allowing perfs to be loaded by file rather than through a scenarioRunId bad?
         return m_file_service->getPerfFromFile(path);
     }
 
     domain::ScenarioPerf ProfileService::getLatestPerf() const {
-        //TODO: Move the get latest logic into the Profile.
-        return m_file_service->getLatestPerf();
+        if (!m_profile) return {};
+        return m_profile->getMostRecentPerf().value_or(domain::ScenarioPerf{});
+    }
+
+    std::optional<domain::ScenarioPerf> ProfileService::getMostRecentPerf(const domain::ScenarioId &scenario) const {
+        if (!m_profile) return std::nullopt;
+        return m_profile->getMostRecentPerf(scenario);
+    }
+
+    std::optional<float> ProfileService::getAverageScore(const domain::ScenarioId &scenario,
+                                                          const std::size_t count) const {
+        if (!m_profile) return std::nullopt;
+        return m_profile->getAverageScore(scenario, count);
     }
 }
