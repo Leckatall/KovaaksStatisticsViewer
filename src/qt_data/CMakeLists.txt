@@ -2,7 +2,10 @@
 add_library(ksv_qt_data STATIC
         file_service.cpp
         file_service.h
-        interfaces/i_file_service.h
+        ../data/interfaces/i_file_service.h
+        settings_service.cpp
+        settings_service.h
+        interfaces/i_settings_service.h
 )
 
 target_link_libraries(ksv_qt_data PUBLIC

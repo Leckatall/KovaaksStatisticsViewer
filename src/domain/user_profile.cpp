@@ -18,9 +18,7 @@ namespace ksv::domain {
 
     std::vector<ScenarioId> UserProfile::getScenarioList() const {
         std::vector<ScenarioId> key_vector;
-        std::cout << "size: " << m_runs.size() << std::endl;
         for (const auto& k: m_runs | std::views::keys) {
-            // std::cout << k.name << std::endl;
             key_vector.push_back(k);
         }
         return key_vector;

@@ -5,16 +5,23 @@
 #ifndef KOVAAKSSTATSVIEWER_GRAPH_USE_CASE_H
 #define KOVAAKSSTATSVIEWER_GRAPH_USE_CASE_H
 
+#include <utility>
+
 #include "i_graph_use_case.h"
-#include "interfaces/i_proto_decoder.h"
+#include "i_session_controller.h"
 
 namespace ksv::application {
     class GraphUseCase: public IGraphUseCase {
     public:
-        explicit GraphUseCase(IProtoDecoder& decoder): m_decoder(decoder) {}
+        explicit GraphUseCase(std::shared_ptr<ISessionController> session_controller): m_session_controller(std::move(session_controller)) {}
 
-        std::vector<float> get_times(const std::string_view filename) override {
-            const domain::ScenarioPerf perf = get_data(filename);
+        void load_perf(const std::string_view filename) override {
+            std::cout << "Loading perf file: " << filename << std::endl;
+            m_session_controller->setCurrentPerf(filename.data());
+        }
+
+        std::vector<float> get_times() override {
+            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
             std::vector<float> times;
             for (const auto &point: perf.data) {
                 times.push_back(point.time);
@@ -22,8 +29,8 @@ namespace ksv::application {
             return times;
         }
 
-        std::vector<float> get_scores(const std::string_view filename) override {
-            const domain::ScenarioPerf perf = get_data(filename);
+        std::vector<float> get_scores() override {
+            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
             std::vector<float> scores;
             for (const auto &point: perf.data) {
                 scores.push_back(point.score);
@@ -31,22 +38,18 @@ namespace ksv::application {
             return scores;
         }
 
-        std::vector<float> get_accuracies(const std::string_view filename) override {
-            const domain::ScenarioPerf perf = get_data(filename);
+        std::vector<float> get_accuracies() override {
+            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
             std::vector<float> accuracies;
             for (const auto &point: perf.data) {
                 if (point.shots == 0) accuracies.push_back(0);
-                accuracies.push_back(static_cast<float>(point.hits) / static_cast<float>(point.shots));
+                else accuracies.push_back(static_cast<float>(point.hits) / static_cast<float>(point.shots));
             }
             return accuracies;
         }
 
     private:
-
-        [[nodiscard]] domain::ScenarioPerf get_data(std::string_view filename) const {
-            return m_decoder.decode_file(filename);
-        }
-        IProtoDecoder& m_decoder;
+        std::shared_ptr<ISessionController> m_session_controller;
     };
 }
 

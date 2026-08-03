@@ -10,7 +10,7 @@
 #include <memory>
 
 #include "user_profile.h"
-#include "../qt_data/interfaces/i_file_service.h"
+#include "interfaces/i_file_service.h"
 #include "interfaces/i_profile_service.h"
 
 namespace ksv::data {
@@ -18,17 +18,29 @@ namespace ksv::data {
     public:
         explicit ProfileService(std::shared_ptr<application::IFileService> file_service);
         void generateProfileFromDirectory() override;
+        void addPerfFileToProfile(const std::string& perf_file) const;
         [[nodiscard]] std::vector<domain::ScenarioId> getScenarioList() const override;
+
+        [[nodiscard]] domain::ScenarioPerf getPerf(const std::string& path) const override;
+        [[nodiscard]] domain::ScenarioPerf getLatestPerf() const override;
+
+        void onProfileChanged(std::function<void()> callback) override {
+            m_callbacks.push_back(std::move(callback));
+        }
         // TODO: implement profile persistence
         // void save_profile();
         // void load_profile();
         // void set_filepath(const QUrl& filepath);
 
     private:
-        // QUrl m_filepath;
+        void notifyProfileChanged() const {
+            for (auto& cb : m_callbacks) cb();
+        }
         std::filesystem::path m_filepath;
         std::unique_ptr<domain::UserProfile> m_profile;
         std::shared_ptr<application::IFileService> m_file_service;
+
+        std::vector<std::function<void()>> m_callbacks;
     };
 }
 

@@ -4,6 +4,7 @@
 
 #include "graph_vm.h"
 
+#include <qurl.h>
 #include <utility>
 
 
@@ -11,7 +12,6 @@ namespace ksv::presentation {
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
                                    QObject *parent) : QAbstractTableModel(parent),
                                                       m_graphUseCase(std::move(graphUseCase)) {
-        // m_data = {{0, 1}, {1, 3}, {2, 2}, {3, 5}};
         recomputeBounds();
     }
 
@@ -119,16 +119,13 @@ namespace ksv::presentation {
     }
 
     void GraphViewModel::fetchData(const QString &scenario_id) {
-        //TODO: Implement Variable File Recall
-        qDebug() << "Fetching data for scenario: " << scenario_id;
-        Q_UNUSED(scenario_id);
-        QString path = R"(C:\Users\Lecka\CLionProjects\KovaaksStatisticsViewer\tests\examples\1wall6targets TE.perf)";
-        const std::vector<float> times = m_graphUseCase->get_times(path.toStdString());
-        assert(times.size() > 0);
-        const std::vector<float> scores = m_graphUseCase->get_scores(path.toStdString());
-        assert(scores.size() > 0);
-        const std::vector<float> accuracies = m_graphUseCase->get_accuracies(path.toStdString());
-        assert(accuracies.size() > 0);
+        if (!scenario_id.isEmpty()) m_graphUseCase->load_perf(QUrl(scenario_id).toLocalFile().toStdString());
+        const std::vector<float> times = m_graphUseCase->get_times();
+        assert(!times.empty());
+        const std::vector<float> scores = m_graphUseCase->get_scores();
+        assert(!scores.empty());
+        const std::vector<float> accuracies = m_graphUseCase->get_accuracies();
+        assert(!accuracies.empty());
         assert(times.size() == scores.size());
         assert(times.size() == accuracies.size());
 

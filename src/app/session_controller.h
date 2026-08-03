@@ -6,28 +6,38 @@
 #define KOVAAKSSTATSVIEWER_SESSION_CONTROLLER_H
 
 #include <QObject>
-#include <QSettings>
 
 #include "scenario_perf.h"
-#include "../data/interfaces/i_profile_service.h"
+#include "data/interfaces/i_profile_service.h"
+#include "interfaces/i_settings_service.h"
 #include "usecases/i_session_controller.h"
 
 namespace ksv::application {
-    class SessionController: public QObject, public ISessionController {
+    class SessionController : public ISessionController {
         Q_OBJECT
+
     public:
-        explicit SessionController(QObject *parent = nullptr);
+        explicit SessionController(std::shared_ptr<ISettingsService> settings_service,
+                                   std::shared_ptr<IProfileService> profile_service, QObject *parent = nullptr);
 
         [[nodiscard]] std::string getKovaaksDir() const override;
-        std::vector<domain::ScenarioId> getScenarioList() override;
 
-        void setProfileService(std::shared_ptr<IProfileService> profile_service) override;
+        std::vector<domain::ScenarioId> getScenarioList() override;
 
         void generateProfileFromDirectory() const override;
 
+        void setCurrentPerf(const domain::ScenarioPerf& perf) override;
+
+        void setCurrentPerf(const std::string& filename) override;
+
+        void setCurrentPerfToLatest();
+        [[nodiscard]] domain::ScenarioPerf getCurrentPerf() const override { return m_current_perf; }
+
     private:
-        QSettings m_settings;
-        std::shared_ptr<IProfileService> m_profile_service{};
+        std::shared_ptr<ISettingsService> m_settings_service;
+        std::shared_ptr<IProfileService> m_profile_service;
+        domain::ScenarioPerf m_current_perf;
+
     };
 }
 

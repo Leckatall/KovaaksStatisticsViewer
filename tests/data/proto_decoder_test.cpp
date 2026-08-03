@@ -32,16 +32,16 @@ namespace {
     TEST_F(ProtoDecoderTest, decode) {
         auto perf = decoder.decode(make_perf_log());
         perf.print();
-        EXPECT_EQ(perf.scenario_name, "testing");
-        EXPECT_EQ(perf.start_time, 0LL);
+        EXPECT_EQ(perf.run_id.scenario_id.name, "testing");
+        EXPECT_EQ(perf.run_id.start_time, 0LL);
         EXPECT_EQ(perf.scenario_length, 69.0F);
     }
 
     TEST_F(ProtoDecoderTest, decode_file) {
         auto perf = decoder.decode_file(get_test_file_path());
         perf.print();
-        EXPECT_EQ(perf.scenario_name, "1wall6targets TE");
-        EXPECT_EQ(perf.start_time, 1783733140000LL);
+        EXPECT_EQ(perf.run_id.scenario_id.name, "1wall6targets TE");
+        EXPECT_EQ(perf.run_id.start_time, 1783733140000LL);
         EXPECT_EQ(perf.scenario_length, 60.0F);
     }
 }

@@ -106,6 +106,7 @@ ApplicationWindow {
             Layout.row: 1; Layout.column: 1
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.horizontalStretchFactor: 3
             background: Rectangle {
                 radius: 12
                 color: "#1E1E1E"
@@ -172,11 +173,22 @@ ApplicationWindow {
         Frame {
             Layout.row: 1; Layout.column: 0
             ColumnLayout {
+                RowLayout {
+                    ComboBox {
+                        id: scenarioComboBox
+                        model: root.sessionVm.scenario_list
+                        enabled: filterByScenarioCheckBox.checked
+                        // editable: true
+                        Layout.fillWidth: true
+                    }
+                    CheckBox {
+                        id: filterByScenarioCheckBox
+                        text: "Filter by Scenario"
+                        checked: false
+                    }
+                }
                 ComboBox {
-                    id: scenarioComboBox
-                    model: root.sessionVm.scenario_list
-                    // editable: true
-                    Layout.fillWidth: true
+                    id: displayScenarioModeComboBox
                 }
                 Button {
                     text: "Generate Profile from current kovaaks dir"
@@ -188,13 +200,26 @@ ApplicationWindow {
                         scenarioComboBox.model = root.sessionVm.scenario_list
                     }
                 }
+
+                FileDialog {
+                    id: selectPerfFileDialog
+                    title: "Load Performance"
+                    nameFilters: ["Performance Files (*.perf)"]
+                    onAccepted: {
+                        root.graphVm.fetchData(selectPerfFileDialog.selectedFiles[0])
+                    }
+                }
+                Button {
+                    text: "Load performance File"
+                    onClicked: selectPerfFileDialog.open()
+                }
+                Button {
+                    text: "Have Graph Load Latest Performance File"
+                    onClicked: root.graphVm.fetchData("")
+                }
             }
 
         }
-        Button {
-            text: "Import Score of example performance"
-            onClicked: root.graphVm.fetchData("Not yet implemented")
-        }
-    }
 
+    }
 }

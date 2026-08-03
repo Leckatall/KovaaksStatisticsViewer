@@ -12,11 +12,13 @@ namespace ksv::application {
     public:
         virtual ~IGraphUseCase() = default;
 
-        virtual std::vector<float> get_times(std::string_view filename) = 0;
+        virtual void load_perf(std::string_view filename) = 0;
 
-        virtual std::vector<float> get_scores(std::string_view filename) = 0;
+        virtual std::vector<float> get_times() = 0;
 
-        virtual std::vector<float> get_accuracies(std::string_view filename) = 0;
+        virtual std::vector<float> get_scores() = 0;
+
+        virtual std::vector<float> get_accuracies() = 0;
     };
 }
 

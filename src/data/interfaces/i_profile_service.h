@@ -16,6 +16,10 @@ namespace ksv::application {
         virtual void generateProfileFromDirectory() = 0;
 
         [[nodiscard]] virtual std::vector<domain::ScenarioId> getScenarioList() const = 0;
+        [[nodiscard]] virtual domain::ScenarioPerf getPerf(const std::string& path) const = 0;
+        [[nodiscard]] virtual domain::ScenarioPerf getLatestPerf() const = 0;
+
+        virtual void onProfileChanged(std::function<void()> callback) = 0;
     };
 }
 #endif

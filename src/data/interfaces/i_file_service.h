@@ -4,7 +4,9 @@
 
 #ifndef KOVAAKSSTATSVIEWER_I_FILE_SERVICE_H
 #define KOVAAKSSTATSVIEWER_I_FILE_SERVICE_H
+
 #include <vector>
+#include <functional>
 
 #include "scenario_perf.h"
 
@@ -13,6 +15,9 @@ namespace ksv::application {
         public:
         virtual ~IFileService() = default;
         [[nodiscard]] virtual std::vector<domain::ScenarioPerf> getAllPerfsFromFiles() const = 0;
+        [[nodiscard]] virtual domain::ScenarioPerf getPerfFromFile(std::string_view filename) const = 0;
+        [[nodiscard]] virtual domain::ScenarioPerf getLatestPerf() const = 0;
+        virtual void onFilesChanged(std::function<void(const std::string& path)> callback) = 0;
     };
 }
 #endif //KOVAAKSSTATSVIEWER_I_FILE_SERVICE_H
