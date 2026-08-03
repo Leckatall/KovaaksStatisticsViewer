@@ -6,7 +6,11 @@
 #define KOVAAKSSTATSVIEWER_GRAPH_VM_H
 
 #include <QAbstractTableModel>
+#include <QColor>
 #include <QPointF>
+#include <QVariantList>
+#include <QVariantMap>
+#include <array>
 #include <qqmlintegration.h>
 #include <ranges>
 
@@ -17,13 +21,13 @@ namespace ksv::presentation {
         Q_OBJECT
         QML_ELEMENT
         QML_UNCREATABLE("Created in C++")
-        Q_PROPERTY(qreal xMin READ xMin NOTIFY boundsChanged)
-        Q_PROPERTY(qreal xMax READ xMax NOTIFY boundsChanged)
-        Q_PROPERTY(qreal yMin READ yMin NOTIFY boundsChanged)
-        Q_PROPERTY(qreal yMax READ yMax NOTIFY boundsChanged)
+        Q_PROPERTY(QVariantList plottableColumns READ plottableColumns CONSTANT)
+        Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
+        Q_PROPERTY(QVariantMap columnVisibility READ columnVisibility NOTIFY columnVisibilityChanged)
 
     public:
-        enum Column { Time = 0, Score, Accuracy, ColumnCount };
+        enum Column { Time = 0, Score, Accuracy, Shots, Kills, Dmg, ColumnCount };
+        Q_ENUM(Column)
 
         explicit GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase, QObject *parent = nullptr);
 
@@ -39,13 +43,23 @@ namespace ksv::presentation {
 
         void setData(QList<QMap<Column, qreal>> data);
 
-        void setColumn(Column column, QList<qreal> col_data);
+        // Columns other than Time, i.e. the ones that can be plotted as lines
+        // against Time on the X axis. Exposed so QML can dynamically generate
+        // one line per column instead of hard-coding each series.
+        [[nodiscard]] QVariantList plottableColumns() const;
 
+        // Maps each Column (keyed by its stringified enum value) to its
+        // {min, max} axis bounds, stored as QPointF(min, max).
+        [[nodiscard]] QVariantMap axisBounds() const;
 
-        [[nodiscard]] qreal xMin() const { return m_xMin; }
-        [[nodiscard]] qreal xMax() const { return m_xMax; }
-        [[nodiscard]] qreal yMin() const { return m_yMin; }
-        [[nodiscard]] qreal yMax() const { return m_yMax; }
+        // Maps each Column (keyed by its stringified enum value) to whether
+        // its line should currently be visible.
+        [[nodiscard]] QVariantMap columnVisibility() const;
+
+        Q_INVOKABLE [[nodiscard]] QString columnName(Column column) const;
+        Q_INVOKABLE [[nodiscard]] QColor columnColor(Column column) const;
+        Q_INVOKABLE [[nodiscard]] bool isColumnVisible(Column column) const;
+        Q_INVOKABLE void setColumnVisible(Column column, bool visible);
 
         void recomputeBounds();
 
@@ -54,16 +68,14 @@ namespace ksv::presentation {
 
     signals:
         void boundsChanged();
+        void columnVisibilityChanged();
 
     private:
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
         QList<QMap<Column, qreal>> m_data;
-        qreal m_xMin = 0.0;
-        qreal m_xMax = 10.0;
-        qreal m_yMin = 0.0;
-        qreal m_yMax = 10.0;
+        std::array<std::pair<qreal, qreal>, ColumnCount> m_bounds{};
+        std::array<bool, ColumnCount> m_columnVisible{true, true, true, true, true, true};
     };
-};
-
+}
 
 #endif //KOVAAKSSTATSVIEWER_GRAPH_VM_H

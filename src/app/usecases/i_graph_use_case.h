@@ -20,6 +20,12 @@ namespace ksv::application {
         virtual std::vector<float> get_scores() = 0;
 
         virtual std::vector<float> get_accuracies() = 0;
+
+        virtual std::vector<int> get_shots() = 0;
+
+        virtual std::vector<int> get_kills() = 0;
+
+        virtual std::vector<float> get_dmg() = 0;
     };
 }
 

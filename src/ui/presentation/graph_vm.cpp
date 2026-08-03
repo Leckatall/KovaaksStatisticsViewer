@@ -9,6 +9,24 @@
 
 
 namespace ksv::presentation {
+    namespace {
+        struct ColumnMeta {
+            const char *name;
+            QColor color;
+        };
+
+        // Indexed by GraphViewModel::Column. Time has no line of its own (it's
+        // the X axis) so its entry is unused but kept for array alignment.
+        const std::array<ColumnMeta, GraphViewModel::ColumnCount> kColumnMeta{{
+            {"Time", QColor()},
+            {"Score", QColor("#009600")},
+            {"Accuracy", QColor("cyan")},
+            {"Shots", QColor("orange")},
+            {"Kills", QColor("red")},
+            {"Dmg", QColor("yellow")},
+        }};
+    }
+
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
                                    QObject *parent) : QAbstractTableModel(parent),
                                                       m_graphUseCase(std::move(graphUseCase)) {
@@ -18,21 +36,12 @@ namespace ksv::presentation {
     QVariant GraphViewModel::data(const QModelIndex &index, int role) const {
         if (!checkIndex(index, CheckIndexOption::IndexIsValid | CheckIndexOption::ParentIsInvalid))
             return {};
+        if (role != Qt::DisplayRole && role != Qt::EditRole) return {};
 
         const auto &row = m_data.at(index.row());
-        if (role == Qt::DisplayRole || role == Qt::EditRole) {
-            switch (static_cast<Column>(index.column())) {
-                case Time:
-                    return row[Time];
-                case Score:
-                    return row[Score];
-                case Accuracy:
-                    return row[Accuracy];
-                case ColumnCount:
-                    break;
-            }
-        }
-        return {};
+        const auto column = static_cast<Column>(index.column());
+        if (column < 0 || column >= ColumnCount) return {};
+        return row[column];
     }
 
     void GraphViewModel::setData(QList<QMap<Column, qreal>> data) {
@@ -42,78 +51,103 @@ namespace ksv::presentation {
         recomputeBounds();
     }
 
-    void GraphViewModel::setColumn(Column column, QList<qreal> col_data) {
-        beginResetModel();
-        m_data.resize(col_data.size());
-        for (auto &row: m_data) row[column] = col_data.takeFirst();
-        endResetModel();
-        recomputeBounds();
-        emit boundsChanged();
+    QVariantList GraphViewModel::plottableColumns() const {
+        QVariantList columns;
+        for (int c = Score; c < ColumnCount; ++c) columns.append(c);
+        return columns;
+    }
+
+    QVariantMap GraphViewModel::axisBounds() const {
+        QVariantMap map;
+        for (int c = 0; c < ColumnCount; ++c) {
+            map[QString::number(c)] = QPointF(m_bounds[c].first, m_bounds[c].second);
+        }
+        return map;
+    }
+
+    QVariantMap GraphViewModel::columnVisibility() const {
+        QVariantMap map;
+        for (int c = 0; c < ColumnCount; ++c) {
+            map[QString::number(c)] = m_columnVisible[c];
+        }
+        return map;
+    }
+
+    QString GraphViewModel::columnName(const Column column) const {
+        if (column < 0 || column >= ColumnCount) return {};
+        return QString::fromLatin1(kColumnMeta[column].name);
+    }
+
+    QColor GraphViewModel::columnColor(const Column column) const {
+        if (column < 0 || column >= ColumnCount) return {};
+        return kColumnMeta[column].color;
+    }
+
+    bool GraphViewModel::isColumnVisible(const Column column) const {
+        if (column < 0 || column >= ColumnCount) return false;
+        return m_columnVisible[column];
+    }
+
+    void GraphViewModel::setColumnVisible(const Column column, const bool visible) {
+        if (column < 0 || column >= ColumnCount) return;
+        if (m_columnVisible[column] == visible) return;
+        m_columnVisible[column] = visible;
+        emit columnVisibilityChanged();
+    }
+
+    namespace {
+        // Real min/max of `column` across `data`, no padding applied.
+        std::pair<qreal, qreal> rawColumnRange(const QList<QMap<GraphViewModel::Column, qreal>> &data,
+                                               const GraphViewModel::Column column) {
+            qreal lo = data.front()[column];
+            qreal hi = lo;
+            for (const auto &row: data) {
+                lo = std::min(lo, row[column]);
+                hi = std::max(hi, row[column]);
+            }
+            return {lo, hi};
+        }
+
+        // Pads [lo, hi] by ~5% on both ends. If every value is identical, pads by a
+        // fixed amount instead so the axis isn't zero-width.
+        std::pair<qreal, qreal> padded(qreal lo, qreal hi) {
+            if (lo == hi) return {lo - 0.5, hi + 0.5};
+            const qreal pad = (hi - lo) * 0.05;
+            return {lo - pad, hi + pad};
+        }
     }
 
     void GraphViewModel::recomputeBounds() {
-        double newXMin, newXMax, newYMin, newYMax;
+        std::array<std::pair<qreal, qreal>, ColumnCount> newBounds{};
+        newBounds[Time] = {0.0, 60.0};
+        for (int c = Score; c < ColumnCount; ++c) newBounds[c] = {0.0, 1.0};
 
-        newXMin = 0.0;
-        newXMax = 60.0;
-        newYMin = 0.0;
-        newYMax = 5.0;
+        if (!m_data.isEmpty()) {
+            // Time never goes negative and always starts at 0, so its min is
+            // pinned rather than padded below; only its max gets padding.
+            const auto [xlo, xhi] = rawColumnRange(m_data, Time);
+            const qreal newXMax = m_data.size() == 1 || xlo == xhi ? xhi + 0.5 : xhi + (xhi - xlo) * 0.05;
+            newBounds[Time] = {0.0, newXMax};
 
-        if (m_data.isEmpty()) {
-            // sensible defaults
-            newXMin = 0.0;
-            newXMax = 60.0;
-            newYMin = 0.0;
-            newYMax = 1.0;
-        } else {
-            // TODO: Re-enable dynamic bounds
-            // auto [xItMin, xItMax] = std::minmax_element(
-            //     m_data.cbegin(), m_data.cend(),
-            //     [](const QPointF &a, const QPointF &b) { return a.x() < b.x(); });
-            //
-            // auto [yItMin, yItMax] = std::minmax_element(
-            //     m_data.cbegin(), m_data.cend(),
-            //     [](const QPointF &a, const QPointF &b) { return a.y() < b.y(); });
-            //
-            // double xlo = xItMin->x();
-            // double xhi = xItMax->x();
-            //
-            // double ylo = yItMin->y();
-            // double yhi = yItMax->y();
-            //
-            // // Handle degenerate ranges (all x same or all y same)
-            // if (xlo == xhi) {
-            //     xlo -= 0.5;
-            //     xhi += 0.5;
-            // }
-            // if (ylo == yhi) {
-            //     ylo -= 0.5;
-            //     yhi += 0.5;
-            // }
-            //
-            // // Pad by ~5%
-            // const double xPad = (xhi - xlo) * 0.05;
-            // const double yPad = (yhi - ylo) * 0.05;
-            //
-            // floor(xlo) == 0.0F ? newXMin = 0.0F : newXMin = xlo - xPad;
-            // ceil(xhi) == 60.0F ? newXMax = 60.0F : newXMax = xhi + xPad;
-            // ylo == 0.0F ? newYMin = ylo : newYMin = ylo - yPad;
-            // yhi == 1.0F ? newYMax = yhi : newYMax = yhi + yPad;
+            for (int c = Score; c < ColumnCount; ++c) {
+                const auto [lo, hi] = rawColumnRange(m_data, static_cast<Column>(c));
+                newBounds[c] = padded(lo, hi);
+            }
         }
 
         // Only notify if something actually changed
-        const bool changed =
-                !qFuzzyCompare(1.0 + m_xMin, 1.0 + newXMin) ||
-                !qFuzzyCompare(1.0 + m_xMax, 1.0 + newXMax) ||
-                !qFuzzyCompare(1.0 + m_yMin, 1.0 + newYMin) ||
-                !qFuzzyCompare(1.0 + m_yMax, 1.0 + newYMax);
+        bool changed = false;
+        for (int c = 0; c < ColumnCount; ++c) {
+            if (!qFuzzyCompare(1.0 + m_bounds[c].first, 1.0 + newBounds[c].first) ||
+                !qFuzzyCompare(1.0 + m_bounds[c].second, 1.0 + newBounds[c].second)) {
+                changed = true;
+                break;
+            }
+        }
 
         if (!changed) return;
 
-        m_xMin = newXMin;
-        m_xMax = newXMax;
-        m_yMin = newYMin;
-        m_yMax = newYMax;
+        m_bounds = newBounds;
 
         emit boundsChanged();
     }
@@ -126,14 +160,21 @@ namespace ksv::presentation {
         assert(!scores.empty());
         const std::vector<float> accuracies = m_graphUseCase->get_accuracies();
         assert(!accuracies.empty());
+        const std::vector<int> shots = m_graphUseCase->get_shots();
+        const std::vector<int> kills = m_graphUseCase->get_kills();
+        const std::vector<float> dmg = m_graphUseCase->get_dmg();
         assert(times.size() == scores.size());
         assert(times.size() == accuracies.size());
 
-        const QList<qreal> q_times(times.begin(), times.end());
-        setColumn(Time, q_times);
-        const QList<qreal> q_scores(scores.begin(), scores.end());
-        setColumn(Score, q_scores);
-        const QList<qreal> q_accuracies(accuracies.begin(), accuracies.end());
-        setColumn(Accuracy, q_accuracies);
+        QList<QMap<Column, qreal>> rows(int(times.size()));
+        for (int i = 0; i < int(times.size()); ++i) {
+            rows[i][Time] = times[i];
+            rows[i][Score] = scores[i];
+            rows[i][Accuracy] = accuracies[i];
+            rows[i][Shots] = i < int(shots.size()) ? shots[i] : 0.0;
+            rows[i][Kills] = i < int(kills.size()) ? kills[i] : 0.0;
+            rows[i][Dmg] = i < int(dmg.size()) ? dmg[i] : 0.0;
+        }
+        setData(std::move(rows));
     }
 }

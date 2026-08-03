@@ -57,6 +57,8 @@ namespace ksv::domain {
     };
 
     struct ScenarioRunId {
+        //TODO: implement converting this to a string of the form scenario_id.name (start_date, start_time)
+        // This string can then be used in the ui to show what scenario is being displayed
         ScenarioId scenario_id;
         long long start_time;
         bool operator==(const ScenarioRunId& other) const {

@@ -24,6 +24,9 @@ namespace ksv::presentation {
 
         Q_INVOKABLE void generateProfile() { m_session_controller->generateProfileFromDirectory(); updateScenarioHashMap();}
 
+        Q_INVOKABLE [[nodiscard]] domain::ScenarioPerf getCurrentPerf() const { return m_session_controller->getCurrentPerf(); }
+        Q_INVOKABLE [[nodiscard]] QString getCurrentPerfScenario() const { return getCurrentPerf().run_id.scenario_id.name.data(); }
+
     signals:
         void scenario_list_changed();
 

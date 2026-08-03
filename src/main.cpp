@@ -7,8 +7,15 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <app/app.h>
+#include <presentation/graph_vm.h>
 
 void declare_metatypes() {
+    // ksv_ui is a static library built with qt_add_qml_module(NO_PLUGIN); its
+    // generated QML_ELEMENT auto-registration object isn't referenced by any
+    // other symbol, so the linker drops it and the type never registers.
+    // Referencing GraphViewModel here keeps that object linked in and
+    // registers it explicitly as a fallback.
+    qmlRegisterUncreatableType<ksv::presentation::GraphViewModel>("KovaaksStatsViewer", 1, 0, "GraphViewModel", "Enums only");
 }
 
 int main(int argc, char *argv[]) {

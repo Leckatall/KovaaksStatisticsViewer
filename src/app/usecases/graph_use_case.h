@@ -48,6 +48,32 @@ namespace ksv::application {
             return accuracies;
         }
 
+        std::vector<int> get_shots() override {
+            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
+            std::vector<int> shots;
+            for (const auto &point: perf.data) {
+                shots.push_back(point.shots);
+            }
+            return shots;
+        }
+
+        std::vector<int> get_kills() override {
+            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
+            std::vector<int> kills;
+            for (const auto &point: perf.data) {
+                kills.push_back(point.kills);
+            }
+            return kills;
+        }
+        std::vector<float> get_dmg() override {
+            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
+            std::vector<float> dmg;
+            for (const auto &point: perf.data) {
+                dmg.push_back(point.dmg);
+            }
+            return dmg;
+        }
+
     private:
         std::shared_ptr<ISessionController> m_session_controller;
     };

@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # Qt Configuration
-set(ENV{QTFRAMEWORK_BYPASS_LICENSE_CHECK} 1)
+set(Qt6_DIR C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -62,6 +62,18 @@ target_link_libraries(myapp PRIVATE
         ksv_data
         ksv_qt_data
         ksv_domain
+)
+
+# The MinGW toolchain's libwinpthread-1.dll is required at runtime by
+# vcpkg's libabseil_dll.dll, but only the compiler's own copy exports the
+# pthread_*64 symbols abseil links against. Copy it next to the exe so the
+# app runs standalone instead of only inside CLion (which puts the
+# toolchain's bin/ on PATH itself).
+get_filename_component(MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+add_custom_command(TARGET myapp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${MINGW_BIN_DIR}/libwinpthread-1.dll"
+        "$<TARGET_FILE_DIR:myapp>"
 )
 
 include(CTest)

@@ -34,7 +34,7 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
     }
 
     domain::ScenarioPerf FileService::getLatestPerf() const {
-        //TODO: Consider moving the "find latest" logic into the user profile class
+        // DEPRECATED: Access through profile service now
         const auto perf_dir = get_perf_dir();
         if (!perf_dir) {
             qDebug() << "Could not cd to performances dir";

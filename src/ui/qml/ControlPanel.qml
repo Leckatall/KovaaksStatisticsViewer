@@ -9,12 +9,16 @@ Frame {
     required property var graphVm
 
     ColumnLayout {
+        Text{
+            text: "Rendering: " + root.sessionVm.getCurrentPerfScenario()
+        }
         RowLayout {
+            Layout.fillWidth: true
             ComboBox {
                 id: scenarioComboBox
                 model: root.sessionVm.scenario_list
                 enabled: filterByScenarioCheckBox.checked
-                // editable: true
+                editable: true
                 Layout.fillWidth: true
             }
             CheckBox {
@@ -29,12 +33,6 @@ Frame {
         Button {
             text: "Generate Profile from current kovaaks dir"
             onClicked: root.sessionVm.generateProfile()
-        }
-        Button {
-            text: "update comboBox"
-            onClicked: {
-                scenarioComboBox.model = root.sessionVm.scenario_list
-            }
         }
 
         FileDialog {
@@ -52,6 +50,29 @@ Frame {
         Button {
             text: "Have Graph Load Latest Performance File"
             onClicked: root.graphVm.fetchData("")
+        }
+
+        Label {
+            text: "Lines"
+            color: "white"
+        }
+        Repeater {
+            model: root.graphVm.plottableColumns
+
+            CheckBox {
+                required property int modelData
+
+                text: root.graphVm.columnName(modelData)
+                checked: root.graphVm.columnVisibility[modelData]
+                background: Rectangle {
+                    anchors.fill: parent
+                    color: root.graphVm.columnColor(modelData)
+                    opacity: 0.5
+                    radius: 5
+                }
+
+                onToggled: root.graphVm.setColumnVisible(modelData, checked)
+            }
         }
     }
 }
