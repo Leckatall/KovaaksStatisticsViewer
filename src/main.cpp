@@ -5,6 +5,7 @@
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQuickStyle>
 #include <app/app.h>
 
 void declare_metatypes() {
@@ -12,6 +13,7 @@ void declare_metatypes() {
 
 int main(int argc, char *argv[]) {
     declare_metatypes();
+    QQuickStyle::setStyle("Fusion");
     QGuiApplication qapp(argc, argv);
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer");

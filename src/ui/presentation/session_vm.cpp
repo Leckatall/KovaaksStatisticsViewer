@@ -8,10 +8,8 @@ namespace ksv::presentation {
     SessionViewModel::SessionViewModel(
         std::shared_ptr<application::ISessionController> session_controller,
         QObject *parent) : QObject(parent),
-    //TODO: replace direct calls to QSettings with a SettingsService
                            m_session_controller(std::move(session_controller)) {
         updateScenarioHashMap();
-        updateKovaaksDir();
     }
 
     void SessionViewModel::updateScenarioHashMap() {

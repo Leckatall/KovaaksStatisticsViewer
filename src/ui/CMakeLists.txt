@@ -20,11 +20,18 @@ qt_add_qml_module(ksv_ui
         QML_FILES
             qml/LineFromModel.qml
             qml/Main.qml
+            qml/GraphHoverPointDelegate.qml
+            qml/DashboardGraph.qml
+            qml/ControlPanel.qml
+            qml/AppMenuBar.qml
+            qml/KovaaksDirToolBar.qml
         SOURCES
             presentation/graph_vm.h
             presentation/graph_vm.cpp
             presentation/session_vm.h
             presentation/session_vm.cpp
+            presentation/settings_vm.h
+            presentation/settings_vm.cpp
 )
 
 #set(QML_IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/KovaaksStatsViewer)

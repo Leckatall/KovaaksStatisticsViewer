@@ -39,11 +39,14 @@ namespace ksv::application {
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController);
         m_graphVm = new presentation::GraphViewModel(m_graphUseCase, this);
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
+        m_settingsVm = new presentation::SettingsViewModel(m_settingsService, this);
     }
 
     int App::start() {
         m_engine.setInitialProperties({
-            {"graphVm", QVariant::fromValue(m_graphVm)}, {"sessionVm", QVariant::fromValue(m_sessionVm)}
+            {"graphVm", QVariant::fromValue(m_graphVm)},
+            {"sessionVm", QVariant::fromValue(m_sessionVm)},
+            {"settingsVm", QVariant::fromValue(m_settingsVm)}
         });
         m_engine.loadFromModule("KovaaksStatsViewer", "Main");
         if (m_engine.rootObjects().isEmpty()) return -1;

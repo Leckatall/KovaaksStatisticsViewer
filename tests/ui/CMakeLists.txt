@@ -5,6 +5,7 @@ add_executable(ui_tests
     qt_test_main.cpp
     graph_vm_test.cpp
     session_vm_test.cpp
+    settings_vm_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE

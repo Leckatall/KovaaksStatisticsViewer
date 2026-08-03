@@ -20,8 +20,6 @@ namespace ksv::application {
         explicit SessionController(std::shared_ptr<ISettingsService> settings_service,
                                    std::shared_ptr<IProfileService> profile_service, QObject *parent = nullptr);
 
-        [[nodiscard]] std::string getKovaaksDir() const override;
-
         std::vector<domain::ScenarioId> getScenarioList() override;
 
         void generateProfileFromDirectory() const override;

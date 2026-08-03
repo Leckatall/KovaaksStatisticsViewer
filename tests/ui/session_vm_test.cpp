@@ -15,13 +15,11 @@ using namespace ksv::domain;
 namespace {
     class FakeSessionController : public ISessionController {
     public:
-        std::string kovaaks_dir = "C:/Kovaaks";
         std::vector<ScenarioId> scenario_list;
         int generate_call_count = 0;
         ScenarioPerf current_perf;
 
         std::vector<ScenarioId> getScenarioList() override { return scenario_list; }
-        [[nodiscard]] std::string getKovaaksDir() const override { return kovaaks_dir; }
 
         void generateProfileFromDirectory() const override {
             const_cast<FakeSessionController *>(this)->generate_call_count++;
@@ -77,25 +75,5 @@ namespace {
 
         EXPECT_EQ(fake_controller->generate_call_count, 1);
         EXPECT_EQ(view_model.getScenarioList().size(), 1);
-    }
-
-    TEST_F(SessionViewModelTest, KovaaksDirReflectsControllerValueAtConstruction) {
-        fake_controller->kovaaks_dir = "D:/CustomDir";
-        const SessionViewModel view_model(fake_controller);
-
-        EXPECT_EQ(view_model.getKovaaksDir(), QUrl::fromLocalFile("D:/CustomDir"));
-    }
-
-    TEST_F(SessionViewModelTest, UpdateKovaaksDirEmitsOnlyWhenDirChanges) {
-        SessionViewModel view_model(fake_controller);
-
-        const QSignalSpy spy(&view_model, &SessionViewModel::kovaaksDirChanged);
-
-        view_model.updateKovaaksDir(); // unchanged
-        EXPECT_EQ(spy.count(), 0);
-
-        fake_controller->kovaaks_dir = "D:/NewDir";
-        view_model.updateKovaaksDir();
-        EXPECT_EQ(spy.count(), 1);
     }
 }

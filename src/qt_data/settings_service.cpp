@@ -13,4 +13,9 @@ namespace ksv::qt_data {
     std::string SettingsService::getKovaaksDir() const {
         return m_settings.value("file/kovaaks", "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer").toUrl().toLocalFile().toStdString();
     }
+
+    void SettingsService::setKovaaksDir(const std::string &dir) {
+        m_settings.setValue("file/kovaaks", QUrl::fromLocalFile(QString::fromStdString(dir)));
+        m_settings.sync();
+    }
 }

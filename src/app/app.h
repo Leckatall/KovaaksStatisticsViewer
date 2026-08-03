@@ -10,6 +10,7 @@
 
 #include "graph_vm.h"
 #include "session_vm.h"
+#include "settings_vm.h"
 #include "interfaces/i_proto_decoder.h"
 #include "../data/interfaces/i_file_service.h"
 #include "data/interfaces/i_profile_service.h"
@@ -30,6 +31,7 @@ namespace ksv::application {
         QQmlApplicationEngine m_engine;
         presentation::GraphViewModel* m_graphVm;
         presentation::SessionViewModel* m_sessionVm;
+        presentation::SettingsViewModel* m_settingsVm;
 
         std::shared_ptr<ISettingsService> m_settingsService;
         std::shared_ptr<IFileService> m_fileService;

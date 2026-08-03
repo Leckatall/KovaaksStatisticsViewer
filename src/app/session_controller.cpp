@@ -14,10 +14,6 @@ namespace ksv::application {
         m_profile_service->onProfileChanged([this] { setCurrentPerfToLatest(); });
     }
 
-    std::string SessionController::getKovaaksDir() const {
-        return m_settings_service->getKovaaksDir();
-    }
-
     std::vector<domain::ScenarioId> SessionController::getScenarioList() {
         return m_profile_service->getScenarioList();
     }

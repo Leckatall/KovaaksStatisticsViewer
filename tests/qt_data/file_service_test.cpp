@@ -25,6 +25,7 @@ namespace {
         std::string dir;
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
+        void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
     };
 
     class FileServiceTest : public testing::Test {

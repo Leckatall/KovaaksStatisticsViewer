@@ -20,6 +20,7 @@ namespace {
         std::string dir = "C:/Kovaaks";
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
+        void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
     };
 
     class FakeProfileService : public IProfileService {
@@ -68,13 +69,6 @@ namespace {
             return std::make_unique<SessionController>(fake_settings_service, fake_profile_service);
         }
     };
-
-    TEST_F(SessionControllerTest, GetKovaaksDirDelegatesToSettingsService) {
-        fake_settings_service->dir = "D:/CustomDir";
-        const auto controller = make_controller();
-
-        EXPECT_EQ(controller->getKovaaksDir(), "D:/CustomDir");
-    }
 
     TEST_F(SessionControllerTest, GetScenarioListDelegatesToProfileService) {
         fake_profile_service->scenario_list = {ScenarioId{.name = "A", .hash = "h1"}};

@@ -21,8 +21,6 @@ namespace ksv::application {
 
         virtual std::vector<domain::ScenarioId> getScenarioList() = 0;
 
-        [[nodiscard]] virtual std::string getKovaaksDir() const = 0;
-
         virtual void generateProfileFromDirectory() const = 0;
 
         virtual void setCurrentPerf(const domain::ScenarioPerf &perf) = 0;

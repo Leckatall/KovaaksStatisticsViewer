@@ -16,7 +16,6 @@ namespace {
         std::vector<std::string> set_current_perf_filename_calls;
 
         std::vector<ScenarioId> getScenarioList() override { return {}; }
-        [[nodiscard]] std::string getKovaaksDir() const override { return {}; }
         void generateProfileFromDirectory() const override {}
 
         void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
