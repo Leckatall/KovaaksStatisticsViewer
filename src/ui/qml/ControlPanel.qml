@@ -11,6 +11,7 @@ Frame {
 
     ColumnLayout {
         Text{
+            objectName: "renderingLabel"
             text: "Rendering: " + root.sessionVm.getCurrentPerfScenario()
         }
         RowLayout {
@@ -32,6 +33,7 @@ Frame {
             id: displayScenarioModeComboBox
         }
         Button {
+            objectName: "generateProfileButton"
             text: "Generate Profile from current kovaaks dir"
             onClicked: root.sessionVm.generateProfile()
         }
@@ -45,10 +47,12 @@ Frame {
             }
         }
         Button {
+            objectName: "loadPerformanceFileButton"
             text: "Load performance File"
             onClicked: selectPerfFileDialog.open()
         }
         Button {
+            objectName: "loadLatestPerformanceButton"
             text: "Have Graph Load Latest Performance File"
             onClicked: root.graphVm.fetchData("")
         }
@@ -62,6 +66,7 @@ Frame {
 
             CheckBox {
                 required property int modelData
+                objectName: "columnVisibilityCheckBox_" + root.graphVm.columnName(modelData)
 
                 text: root.graphVm.columnName(modelData)
                 checked: root.columnVisibility[root.graphVm.columnName(modelData).toLowerCase()]

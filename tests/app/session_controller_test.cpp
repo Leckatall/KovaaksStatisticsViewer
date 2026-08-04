@@ -18,14 +18,19 @@ namespace {
     class FakeSettingsService : public ISettingsService {
     public:
         std::string dir = "C:/Kovaaks";
+        std::string profile_dir = "C:/Profile";
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
         void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
+        [[nodiscard]] std::string getProfileDir() const override { return profile_dir; }
+        void setProfileDir(const std::string &new_dir) override { profile_dir = new_dir; }
     };
 
     class FakeProfileService : public IProfileService {
     public:
         mutable int generate_call_count = 0;
+        bool profile_loaded = false;
+        std::string profile_directory;
         std::vector<ScenarioId> scenario_list;
         std::unordered_map<std::string, ScenarioPerf> perf_by_path;
         ScenarioPerf latest_perf;
@@ -48,6 +53,9 @@ namespace {
         [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &, std::size_t) const override {
             return std::nullopt;
         }
+
+        [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
+        void setProfileDirectory(const std::string &dir) override { profile_directory = dir; }
 
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
     };

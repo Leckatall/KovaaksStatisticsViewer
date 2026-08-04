@@ -25,6 +25,8 @@ qt_add_qml_module(ksv_ui
             qml/ControlPanel.qml
             qml/AppMenuBar.qml
             qml/KovaaksDirToolBar.qml
+            qml/SettingsDialog.qml
+            qml/DirectoryPickerRow.qml
         SOURCES
             presentation/graph_vm.h
             presentation/graph_vm.cpp

@@ -48,9 +48,23 @@ ApplicationWindow {
         onAccepted: root.settingsVm.setKovaaksDir(folderDialog.selectedFolder)
     }
 
+    Loader {
+        id: settingsDialogLoader
+        active: false
+        sourceComponent: SettingsDialog {
+            settingsVm: root.settingsVm
+            graphVm: root.graphVm
+            columnVisibility: columnVisibility
+        }
+        onLoaded: item.open()
+    }
 
     menuBar: AppMenuBar {
         onSetSourceDirRequested: folderDialog.open()
+        onSettingsRequested: {
+            if (settingsDialogLoader.active) settingsDialogLoader.item.open()
+            else settingsDialogLoader.active = true
+        }
     }
 
     header: KovaaksDirToolBar {

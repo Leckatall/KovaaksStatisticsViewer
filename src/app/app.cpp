@@ -9,7 +9,6 @@
 #include <qcoreapplication.h>
 #include <QGuiApplication>
 #include <QQmlContext>
-#include <QStandardPaths>
 
 #include "session_controller.h"
 #include "settings_service.h"
@@ -27,9 +26,9 @@ namespace ksv::application {
         m_settingsService = std::make_shared<qt_data::SettingsService>();
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder);
 
-        const auto cache_dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).toStdString();
-        std::filesystem::create_directories(cache_dir);
-        const std::filesystem::path cache_path = std::filesystem::path(cache_dir) / "profile_cache.pb";
+        const auto profile_dir = m_settingsService->getProfileDir();
+        std::filesystem::create_directories(profile_dir);
+        const std::filesystem::path cache_path = data::ProfileService::cachePathFor(profile_dir);
 
         m_profileService = std::make_shared<data::ProfileService>(
             m_fileService, std::make_shared<data::ProfileSerializer>(), cache_path);
@@ -39,7 +38,7 @@ namespace ksv::application {
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController);
         m_graphVm = new presentation::GraphViewModel(m_graphUseCase, this);
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
-        m_settingsVm = new presentation::SettingsViewModel(m_settingsService, this);
+        m_settingsVm = new presentation::SettingsViewModel(m_settingsService, m_profileService, this);
     }
 
     int App::start() {

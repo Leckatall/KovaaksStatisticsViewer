@@ -35,6 +35,16 @@ namespace ksv::data {
         generateProfileFromDirectory();
     }
 
+    std::filesystem::path ProfileService::cachePathFor(const std::filesystem::path &dir) {
+        return dir / kCacheFilename;
+    }
+
+    void ProfileService::setProfileDirectory(const std::string &dir) {
+        std::filesystem::create_directories(dir);
+        m_filepath = cachePathFor(dir);
+        loadProfile();
+    }
+
     void ProfileService::addPerfFileToProfile(const std::string &perf_file) const {
         const auto perf = m_file_service->getPerfFromFile(perf_file);
         m_profile->addScenarioPerf(perf);

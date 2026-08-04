@@ -19,14 +19,17 @@ namespace {
         std::vector<float> times;
         std::vector<float> scores;
         std::vector<float> accuracies;
+        std::vector<int> shots;
+        std::vector<int> kills;
+        std::vector<float> dmg;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
         std::vector<float> get_times() override { return times; }
         std::vector<float> get_scores() override { return scores; }
         std::vector<float> get_accuracies() override { return accuracies; }
-        std::vector<int> get_shots() override { return {}; }
-        std::vector<int> get_kills() override { return {}; }
-        std::vector<float> get_dmg() override { return {}; }
+        std::vector<int> get_shots() override { return shots; }
+        std::vector<int> get_kills() override { return kills; }
+        std::vector<float> get_dmg() override { return dmg; }
     };
 
     class GraphViewModelTest : public testing::Test {
@@ -105,8 +108,11 @@ namespace {
         EXPECT_NEAR(scoreBounds.y(), 31.0, 1e-9);
 
         // Accuracy range [0.5,0.7] gets its own independent axis, padded ~5%.
-        EXPECT_NEAR(accuracyBounds.x(), 0.49, 1e-9);
-        EXPECT_NEAR(accuracyBounds.y(), 0.71, 1e-9);
+        // Accuracies are stored as float and promoted to double, so the
+        // tolerance must absorb float-precision error (~1e-8), not just
+        // double rounding.
+        EXPECT_NEAR(accuracyBounds.x(), 0.49, 1e-6);
+        EXPECT_NEAR(accuracyBounds.y(), 0.71, 1e-6);
     }
 
     TEST_F(GraphViewModelTest, RecomputeBoundsPadsDegenerateColumnRange) {
@@ -122,8 +128,11 @@ namespace {
         // All-equal columns pad by a fixed +-0.5 instead of dividing by a zero range.
         EXPECT_DOUBLE_EQ(scoreBounds.x(), 41.5);
         EXPECT_DOUBLE_EQ(scoreBounds.y(), 42.5);
-        EXPECT_DOUBLE_EQ(accuracyBounds.x(), 0.3);
-        EXPECT_DOUBLE_EQ(accuracyBounds.y(), 1.3);
+        // Accuracy is stored as float, so 0.8F promoted to double isn't
+        // bit-exact; use a tolerance sized to float precision instead of
+        // exact equality.
+        EXPECT_NEAR(accuracyBounds.x(), 0.3, 1e-6);
+        EXPECT_NEAR(accuracyBounds.y(), 1.3, 1e-6);
     }
 
     TEST_F(GraphViewModelTest, PlottableColumnsExcludesTime) {
@@ -132,5 +141,74 @@ namespace {
         EXPECT_TRUE(columns.contains(int(GraphViewModel::Score)));
         EXPECT_TRUE(columns.contains(int(GraphViewModel::Dmg)));
         EXPECT_EQ(columns.size(), GraphViewModel::ColumnCount - 1);
+    }
+
+    // The settings dialog and control panel key their per-column visibility
+    // toggles off these names, lowercased, so every plottable column needs a
+    // stable, non-empty name and a distinct color to be usable as a toggle.
+    TEST_F(GraphViewModelTest, ColumnNameReturnsExpectedNameForEachColumn) {
+        EXPECT_EQ(view_model.columnName(GraphViewModel::Time), "Time");
+        EXPECT_EQ(view_model.columnName(GraphViewModel::Score), "Score");
+        EXPECT_EQ(view_model.columnName(GraphViewModel::Accuracy), "Accuracy");
+        EXPECT_EQ(view_model.columnName(GraphViewModel::Shots), "Shots");
+        EXPECT_EQ(view_model.columnName(GraphViewModel::Kills), "Kills");
+        EXPECT_EQ(view_model.columnName(GraphViewModel::Dmg), "Dmg");
+    }
+
+    TEST_F(GraphViewModelTest, ColumnNameReturnsEmptyForOutOfRangeColumn) {
+        EXPECT_TRUE(view_model.columnName(GraphViewModel::ColumnCount).isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, ColumnColorIsValidAndDistinctForEveryPlottableColumn) {
+        QSet<QRgb> seen;
+        for (const auto &entry: view_model.plottableColumns()) {
+            const auto column = static_cast<GraphViewModel::Column>(entry.toInt());
+            const QColor color = view_model.columnColor(column);
+            EXPECT_TRUE(color.isValid()) << "column " << entry.toInt() << " has an invalid color";
+            EXPECT_FALSE(seen.contains(color.rgb())) << "column " << entry.toInt() << " reuses another column's color";
+            seen.insert(color.rgb());
+        }
+    }
+
+    TEST_F(GraphViewModelTest, ColumnColorReturnsInvalidForOutOfRangeColumn) {
+        EXPECT_FALSE(view_model.columnColor(GraphViewModel::ColumnCount).isValid());
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataPopulatesShotsKillsAndDmgColumns) {
+        setSampleData();
+        fake_use_case->shots = {5, 10, 15};
+        fake_use_case->kills = {1, 2, 3};
+        fake_use_case->dmg = {100.0F, 200.0F, 300.0F};
+
+        view_model.fetchData("");
+
+        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Shots)).toInt(), 5);
+        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Kills)).toInt(), 2);
+        EXPECT_EQ(view_model.data(view_model.index(2, GraphViewModel::Dmg)).toDouble(), 300.0);
+    }
+
+    // Shots/Kills/Dmg come from separate optional data points than
+    // Time/Score/Accuracy, so their arrays can be shorter than the row count;
+    // rows past the end of each array fall back to 0 rather than reading OOB.
+    TEST_F(GraphViewModelTest, FetchDataDefaultsShotsKillsDmgToZeroWhenArraysShorterThanTimes) {
+        setSampleData();
+        fake_use_case->shots = {5};
+        fake_use_case->kills = {};
+        fake_use_case->dmg = {100.0F};
+
+        view_model.fetchData("");
+
+        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Shots)).toInt(), 5);
+        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Shots)).toInt(), 0);
+        EXPECT_EQ(view_model.data(view_model.index(2, GraphViewModel::Shots)).toInt(), 0);
+        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Kills)).toInt(), 0);
+        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Dmg)).toDouble(), 0.0);
+    }
+
+    TEST_F(GraphViewModelTest, DataReturnsInvalidForOutOfRangeRow) {
+        setSampleData();
+        view_model.fetchData("");
+
+        EXPECT_FALSE(view_model.data(view_model.index(3, GraphViewModel::Score)).isValid());
     }
 }

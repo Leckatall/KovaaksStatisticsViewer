@@ -33,6 +33,14 @@ namespace ksv::application {
         [[nodiscard]] virtual std::optional<float> getAverageScore(
             const domain::ScenarioId& scenario, std::size_t count) const = 0;
 
+        // True once a profile (loaded from cache or freshly generated) is held in memory.
+        [[nodiscard]] virtual bool isProfileLoaded() const = 0;
+
+        // Points the profile cache at a new directory and immediately reloads
+        // from it (cache hit) or regenerates into it (cache miss), mirroring
+        // loadProfile()'s semantics.
+        virtual void setProfileDirectory(const std::string &dir) = 0;
+
         virtual void onProfileChanged(std::function<void()> callback) = 0;
     };
 }

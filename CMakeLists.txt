@@ -22,6 +22,7 @@ find_package(Qt6 REQUIRED COMPONENTS
         QuickControls2
         Graphs
         Test  # Add for testing
+        QuickTest
 )
 qt_policy(SET QTP0004 NEW)
 

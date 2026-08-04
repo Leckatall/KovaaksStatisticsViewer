@@ -22,6 +22,12 @@ namespace {
         return perf;
     }
 
+    // setProfileDirectory() now creates its target directory for real, so tests that
+    // repoint it must use a real (temp) path rather than a drive that may not exist.
+    std::filesystem::path new_profile_dir() {
+        return std::filesystem::temp_directory_path() / "ksv_profile_service_test_new_dir";
+    }
+
     class FakeFileService : public IFileService {
     public:
         std::vector<ksv::domain::ScenarioPerf> perfs_to_return;
@@ -50,15 +56,17 @@ namespace {
     public:
         std::optional<ksv::domain::UserProfile> profile_to_load;
         int save_count = 0;
+        std::filesystem::path last_save_path;
+        std::filesystem::path last_load_path;
 
         void save(const ksv::domain::UserProfile &profile, const std::filesystem::path &path) override {
             (void) profile;
-            (void) path;
+            last_save_path = path;
             ++save_count;
         }
 
         [[nodiscard]] std::optional<ksv::domain::UserProfile> load(const std::filesystem::path &path) override {
-            (void) path;
+            last_load_path = path;
             return profile_to_load;
         }
     };
@@ -68,6 +76,10 @@ namespace {
         std::shared_ptr<FakeFileService> fake_file_service = std::make_shared<FakeFileService>();
         std::shared_ptr<FakeProfileSerializer> fake_serializer = std::make_shared<FakeProfileSerializer>();
         ProfileService profile_service{fake_file_service, fake_serializer, "test_cache.pb"};
+
+        void TearDown() override {
+            std::filesystem::remove_all(new_profile_dir());
+        }
     };
 
     TEST_F(ProfileServiceTest, ScenarioListEmptyBeforeProfileGenerated) {
@@ -252,5 +264,68 @@ namespace {
         EXPECT_EQ(scenarios[0].hash, "hash-1");
         // The fresh-built profile should have been persisted for next time.
         EXPECT_EQ(fake_serializer->save_count, 1);
+    }
+
+    TEST_F(ProfileServiceTest, IsProfileLoadedFalseBeforeAnyLoadOrGenerate) {
+        EXPECT_FALSE(profile_service.isProfileLoaded());
+    }
+
+    TEST_F(ProfileServiceTest, IsProfileLoadedTrueAfterGenerateProfileFromDirectory) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+
+        profile_service.generateProfileFromDirectory();
+
+        EXPECT_TRUE(profile_service.isProfileLoaded());
+    }
+
+    TEST_F(ProfileServiceTest, IsProfileLoadedTrueAfterLoadProfileFromCache) {
+        ksv::domain::UserProfile cached{"cached"};
+        cached.addScenarioPerf(make_perf("hash-cached", 500));
+        fake_serializer->profile_to_load = cached;
+
+        profile_service.loadProfile();
+
+        EXPECT_TRUE(profile_service.isProfileLoaded());
+    }
+
+    TEST_F(ProfileServiceTest, SetProfileDirectoryReloadsFromCacheAtNewLocation) {
+        ksv::domain::UserProfile cached{"cached"};
+        cached.addScenarioPerf(make_perf("hash-cached", 500));
+        fake_serializer->profile_to_load = cached;
+
+        profile_service.setProfileDirectory(new_profile_dir().string());
+
+        const auto scenarios = profile_service.getScenarioList();
+        ASSERT_EQ(scenarios.size(), 1);
+        EXPECT_EQ(scenarios[0].hash, "hash-cached");
+        EXPECT_TRUE(profile_service.isProfileLoaded());
+        EXPECT_EQ(fake_serializer->last_load_path, ProfileService::cachePathFor(new_profile_dir()));
+    }
+
+    TEST_F(ProfileServiceTest, SetProfileDirectoryGeneratesFreshProfileWhenNoCacheAtNewLocation) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+
+        profile_service.setProfileDirectory(new_profile_dir().string());
+
+        const auto scenarios = profile_service.getScenarioList();
+        ASSERT_EQ(scenarios.size(), 1);
+        EXPECT_EQ(scenarios[0].hash, "hash-1");
+        EXPECT_EQ(fake_serializer->save_count, 1);
+        EXPECT_EQ(fake_serializer->last_save_path, ProfileService::cachePathFor(new_profile_dir()));
+    }
+
+    TEST_F(ProfileServiceTest, SetProfileDirectorySavesUnderNewDirectoryOnNextChange) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+
+        profile_service.setProfileDirectory(new_profile_dir().string());
+
+        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        profile_service.addPerfFileToProfile("new_run.perf");
+
+        // 1 save from the initial generate, 1 from setProfileDirectory's own
+        // fallback generate (no cache at the new path), 1 from the incremental add.
+        EXPECT_EQ(fake_serializer->save_count, 3);
+        EXPECT_EQ(fake_serializer->last_save_path, ProfileService::cachePathFor(new_profile_dir()));
     }
 }

@@ -21,6 +21,11 @@ namespace ksv::data {
         explicit ProfileService(std::shared_ptr<application::IFileService> file_service,
                                  std::shared_ptr<application::IProfileSerializer> serializer,
                                  std::filesystem::path cache_path);
+
+        // Path of the cache file ProfileService reads/writes for a given profile
+        // directory. Callers should use this instead of hardcoding the filename.
+        [[nodiscard]] static std::filesystem::path cachePathFor(const std::filesystem::path &dir);
+
         void generateProfileFromDirectory() override;
         void loadProfile() override;
         void addPerfFileToProfile(const std::string& perf_file) const;
@@ -34,11 +39,16 @@ namespace ksv::data {
         [[nodiscard]] std::optional<float> getAverageScore(
             const domain::ScenarioId& scenario, std::size_t count) const override;
 
+        [[nodiscard]] bool isProfileLoaded() const override { return m_profile != nullptr; }
+        void setProfileDirectory(const std::string &dir) override;
+
         void onProfileChanged(std::function<void()> callback) override {
             m_callbacks.push_back(std::move(callback));
         }
 
     private:
+        static constexpr const char* kCacheFilename = "profile_cache.pb";
+
         void notifyProfileChanged() const {
             for (auto& cb : m_callbacks) cb();
         }

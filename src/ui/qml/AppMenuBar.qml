@@ -2,6 +2,7 @@ import QtQuick.Controls
 
 MenuBar {
     signal setSourceDirRequested()
+    signal settingsRequested()
 
     Menu {
         title: qsTr("&File")
@@ -21,7 +22,9 @@ MenuBar {
             text: qsTr("Save &As...")
         }
         Action {
+            id: settingsAction
             text: qsTr("Settings")
+            onTriggered: settingsRequested()
         }
         MenuSeparator {
         }

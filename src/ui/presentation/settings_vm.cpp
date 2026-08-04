@@ -7,9 +7,13 @@
 namespace ksv::presentation {
     SettingsViewModel::SettingsViewModel(
         std::shared_ptr<application::ISettingsService> settings_service,
+        std::shared_ptr<application::IProfileService> profile_service,
         QObject *parent) : QObject(parent),
                            m_settings_service(std::move(settings_service)),
+                           m_profile_service(std::move(profile_service)),
                            m_kovaaks_dir(QUrl::fromLocalFile(m_settings_service->getKovaaksDir().data())) {
+        const QPointer<SettingsViewModel> self(this);
+        m_profile_service->onProfileChanged([self] { if (self) emit self->profileLoadedChanged(); });
     }
 
     void SettingsViewModel::setKovaaksDir(const QUrl &dir) {
@@ -17,5 +21,12 @@ namespace ksv::presentation {
         m_settings_service->setKovaaksDir(dir.toLocalFile().toStdString());
         m_kovaaks_dir = dir;
         emit kovaaksDirChanged();
+    }
+
+    void SettingsViewModel::setProfileDir(const QUrl &dir) {
+        if (dir == getProfileDir()) return;
+        m_settings_service->setProfileDir(dir.toLocalFile().toStdString());
+        emit profileDirChanged();
+        m_profile_service->setProfileDirectory(dir.toLocalFile().toStdString());
     }
 }

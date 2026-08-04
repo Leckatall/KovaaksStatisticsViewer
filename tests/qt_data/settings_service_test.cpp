@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QUrl>
 
@@ -55,5 +56,22 @@ namespace {
 
         const SettingsService reloaded(QSettings::IniFormat);
         EXPECT_EQ(reloaded.getKovaaksDir(), QUrl::fromLocalFile("D:/Games/FPSAimTrainer").toLocalFile().toStdString());
+    }
+
+    TEST_F(SettingsServiceTest, ReturnsAppDataLocationForProfileDirWhenUnset) {
+        const SettingsService settings(QSettings::IniFormat);
+
+        const auto expected = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).toStdString();
+        EXPECT_EQ(settings.getProfileDir(), expected);
+    }
+
+    TEST_F(SettingsServiceTest, SetProfileDirPersistsValue) {
+        SettingsService settings(QSettings::IniFormat);
+
+        settings.setProfileDir("D:/Games/ProfileCache");
+
+        const SettingsService reloaded(QSettings::IniFormat);
+        EXPECT_EQ(reloaded.getProfileDir(),
+                  QUrl::fromLocalFile("D:/Games/ProfileCache").toLocalFile().toStdString());
     }
 }

@@ -23,9 +23,12 @@ namespace {
     class FakeSettingsService : public ISettingsService {
     public:
         std::string dir;
+        std::string profile_dir;
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
         void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
+        [[nodiscard]] std::string getProfileDir() const override { return profile_dir; }
+        void setProfileDir(const std::string &new_dir) override { profile_dir = new_dir; }
     };
 
     class FileServiceTest : public testing::Test {

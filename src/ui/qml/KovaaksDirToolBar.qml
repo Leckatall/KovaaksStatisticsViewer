@@ -11,6 +11,7 @@ ToolBar {
     RowLayout {
         anchors.fill: parent
         Label {
+            objectName: "kovaaksDirLabel"
             text: "KovaaksDir: " + root.kovaaksDir + "\n"
             font.pixelSize: 18
             font.bold: true
