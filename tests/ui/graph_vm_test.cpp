@@ -133,15 +133,4 @@ namespace {
         EXPECT_TRUE(columns.contains(int(GraphViewModel::Dmg)));
         EXPECT_EQ(columns.size(), GraphViewModel::ColumnCount - 1);
     }
-
-    TEST_F(GraphViewModelTest, ColumnVisibilityDefaultsToTrueAndCanBeToggled) {
-        EXPECT_TRUE(view_model.isColumnVisible(GraphViewModel::Score));
-
-        const QSignalSpy spy(&view_model, &GraphViewModel::columnVisibilityChanged);
-        view_model.setColumnVisible(GraphViewModel::Score, false);
-
-        EXPECT_FALSE(view_model.isColumnVisible(GraphViewModel::Score));
-        EXPECT_EQ(spy.count(), 1);
-        EXPECT_FALSE(view_model.columnVisibility()[QString::number(GraphViewModel::Score)].toBool());
-    }
 }

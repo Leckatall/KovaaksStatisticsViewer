@@ -7,6 +7,7 @@ import QtGraphs
 Frame {
     id: root
     required property var graphVm
+    required property var columnVisibility
 
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -47,7 +48,7 @@ Frame {
                 yIndex: columnId
                 color: root.graphVm.columnColor(columnId)
                 width: 3
-                visible: root.graphVm.columnVisibility[columnId]
+                visible: root.columnVisibility[root.graphVm.columnName(columnId).toLowerCase()]
                 pointDelegate: GraphHoverPointDelegate {}
 
                 axisY: ValueAxis {

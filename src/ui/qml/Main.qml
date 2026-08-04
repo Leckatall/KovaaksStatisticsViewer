@@ -22,6 +22,17 @@ ApplicationWindow {
         property alias height: root.height
     }
 
+    // Map of column name -> visibility, keyed dynamically off graphVm.columnName().
+    Settings {
+        id: columnVisibility
+        category: "graphColumns"
+        property bool score: true
+        property bool accuracy: true
+        property bool shots: true
+        property bool kills: true
+        property bool dmg: true
+    }
+
     required property var graphVm
     required property var sessionVm
     required property var settingsVm
@@ -60,11 +71,13 @@ ApplicationWindow {
         DashboardGraph {
             Layout.row: 1; Layout.column: 1
             graphVm: root.graphVm
+            columnVisibility: columnVisibility
         }
         ControlPanel {
             Layout.row: 1; Layout.column: 0
             sessionVm: root.sessionVm
             graphVm: root.graphVm
+            columnVisibility: columnVisibility
         }
     }
 }

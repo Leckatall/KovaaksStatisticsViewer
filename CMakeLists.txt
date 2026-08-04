@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(KovaaksStatsViewer VERSION 0.0.1)
+project(KovaaksStatsViewer VERSION 0.1.0)
 
 # C++ Standard Configuration
 set(CMAKE_CXX_STANDARD 20)
@@ -43,14 +43,14 @@ add_subdirectory(src/qt_data)
 #add_subdirectory(src/controllers)
 
 # Main executable
-add_executable(myapp
+add_executable(ksv
         src/main.cpp
         #        resources.qrc
 )
 
 
 # Link libraries to main executable
-target_link_libraries(myapp PRIVATE
+target_link_libraries(ksv PRIVATE
         Qt6::Core
         Qt6::Gui
         Qt6::Quick
@@ -70,10 +70,10 @@ target_link_libraries(myapp PRIVATE
 # app runs standalone instead of only inside CLion (which puts the
 # toolchain's bin/ on PATH itself).
 get_filename_component(MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-add_custom_command(TARGET myapp POST_BUILD
+add_custom_command(TARGET ksv POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${MINGW_BIN_DIR}/libwinpthread-1.dll"
-        "$<TARGET_FILE_DIR:myapp>"
+        "$<TARGET_FILE_DIR:ksv>"
 )
 
 include(CTest)

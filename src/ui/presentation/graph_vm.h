@@ -23,7 +23,6 @@ namespace ksv::presentation {
         QML_UNCREATABLE("Created in C++")
         Q_PROPERTY(QVariantList plottableColumns READ plottableColumns CONSTANT)
         Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
-        Q_PROPERTY(QVariantMap columnVisibility READ columnVisibility NOTIFY columnVisibilityChanged)
 
     public:
         enum Column { Time = 0, Score, Accuracy, Shots, Kills, Dmg, ColumnCount };
@@ -52,14 +51,8 @@ namespace ksv::presentation {
         // {min, max} axis bounds, stored as QPointF(min, max).
         [[nodiscard]] QVariantMap axisBounds() const;
 
-        // Maps each Column (keyed by its stringified enum value) to whether
-        // its line should currently be visible.
-        [[nodiscard]] QVariantMap columnVisibility() const;
-
         Q_INVOKABLE [[nodiscard]] QString columnName(Column column) const;
         Q_INVOKABLE [[nodiscard]] QColor columnColor(Column column) const;
-        Q_INVOKABLE [[nodiscard]] bool isColumnVisible(Column column) const;
-        Q_INVOKABLE void setColumnVisible(Column column, bool visible);
 
         void recomputeBounds();
 
@@ -68,13 +61,11 @@ namespace ksv::presentation {
 
     signals:
         void boundsChanged();
-        void columnVisibilityChanged();
 
     private:
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
         QList<QMap<Column, qreal>> m_data;
         std::array<std::pair<qreal, qreal>, ColumnCount> m_bounds{};
-        std::array<bool, ColumnCount> m_columnVisible{true, true, true, true, true, true};
     };
 }
 

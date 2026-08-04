@@ -7,6 +7,7 @@ Frame {
     id: root
     required property var sessionVm
     required property var graphVm
+    required property var columnVisibility
 
     ColumnLayout {
         Text{
@@ -63,7 +64,7 @@ Frame {
                 required property int modelData
 
                 text: root.graphVm.columnName(modelData)
-                checked: root.graphVm.columnVisibility[modelData]
+                checked: root.columnVisibility[root.graphVm.columnName(modelData).toLowerCase()]
                 background: Rectangle {
                     anchors.fill: parent
                     color: root.graphVm.columnColor(modelData)
@@ -71,7 +72,7 @@ Frame {
                     radius: 5
                 }
 
-                onToggled: root.graphVm.setColumnVisible(modelData, checked)
+                onToggled: root.columnVisibility[root.graphVm.columnName(modelData).toLowerCase()] = checked
             }
         }
     }

@@ -65,14 +65,6 @@ namespace ksv::presentation {
         return map;
     }
 
-    QVariantMap GraphViewModel::columnVisibility() const {
-        QVariantMap map;
-        for (int c = 0; c < ColumnCount; ++c) {
-            map[QString::number(c)] = m_columnVisible[c];
-        }
-        return map;
-    }
-
     QString GraphViewModel::columnName(const Column column) const {
         if (column < 0 || column >= ColumnCount) return {};
         return QString::fromLatin1(kColumnMeta[column].name);
@@ -81,18 +73,6 @@ namespace ksv::presentation {
     QColor GraphViewModel::columnColor(const Column column) const {
         if (column < 0 || column >= ColumnCount) return {};
         return kColumnMeta[column].color;
-    }
-
-    bool GraphViewModel::isColumnVisible(const Column column) const {
-        if (column < 0 || column >= ColumnCount) return false;
-        return m_columnVisible[column];
-    }
-
-    void GraphViewModel::setColumnVisible(const Column column, const bool visible) {
-        if (column < 0 || column >= ColumnCount) return;
-        if (m_columnVisible[column] == visible) return;
-        m_columnVisible[column] = visible;
-        emit columnVisibilityChanged();
     }
 
     namespace {
