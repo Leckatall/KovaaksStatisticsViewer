@@ -74,6 +74,10 @@ namespace ksv::application {
             return dmg;
         }
 
+        std::string get_run_label() override {
+            return m_session_controller->getCurrentPerf().run_id.toString();
+        }
+
     private:
         std::shared_ptr<ISessionController> m_session_controller;
     };

@@ -17,6 +17,7 @@ namespace ksv::application {
         [[nodiscard]] virtual std::vector<domain::ScenarioPerf> getAllPerfsFromFiles() const = 0;
         [[nodiscard]] virtual domain::ScenarioPerf getPerfFromFile(std::string_view filename) const = 0;
         [[nodiscard]] virtual domain::ScenarioPerf getLatestPerf() const = 0;
+        [[nodiscard]] virtual std::string getSourceDirectory() const = 0;
         virtual void onFilesChanged(std::function<void(const std::string& path)> callback) = 0;
     };
 }

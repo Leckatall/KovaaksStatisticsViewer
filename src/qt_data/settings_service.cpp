@@ -29,12 +29,14 @@ namespace ksv::qt_data {
         writeDirSetting("file/kovaaks", dir);
     }
 
-    std::string SettingsService::getProfileDir() const {
+    std::string SettingsService::getProfilePath() const {
         const auto default_dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-        return readDirSetting("file/profileDir", QUrl::fromLocalFile(default_dir));
+        const auto default_path = QDir(default_dir).filePath("profile_cache.pb");
+        return readDirSetting("file/profilePath", QUrl::fromLocalFile(default_path));
     }
 
-    void SettingsService::setProfileDir(const std::string &dir) {
-        writeDirSetting("file/profileDir", dir);
+    void SettingsService::setProfilePath(const std::string &path) {
+        writeDirSetting("file/profilePath", path);
+        for (const auto &callback: m_profile_path_callbacks) callback();
     }
 }

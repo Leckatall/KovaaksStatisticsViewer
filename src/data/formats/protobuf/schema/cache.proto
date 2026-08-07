@@ -5,24 +5,26 @@ package cache;
 // On-disk cache of a domain::UserProfile, so the app doesn't have to
 // re-scan and re-decode every .perf file on disk on every launch.
 message UserProfileCache {
-  repeated ScenarioRuns scenarios = 1;
+  // Schema version. Bumped whenever the on-disk layout changes incompatibly
+  // (e.g. field numbers being repurposed) so the loader can reject a stale
+  // cache and regenerate instead of silently mis-parsing it. Absent in
+  // pre-versioning caches, which read back as 0 and are therefore rejected.
+  uint32 version = 3;
+  string source_directory = 1;
+  repeated Run runs = 2;
 }
 
-message ScenarioRuns {
-  ScenarioId id = 1;
-  repeated ScenarioPerf perfs = 2;
+message Run {
+  ScenarioId scenario_id = 1;
+  int64 start_time = 2;
+  float scenario_length = 3;
+  repeated ScenarioDataPoint data = 4;
+  string source_file = 5;
 }
 
 message ScenarioId {
   string name = 1;
   string hash = 2;
-}
-
-message ScenarioPerf {
-  ScenarioId scenario_id = 1;
-  int64 start_time = 2;
-  float scenario_length = 3;
-  repeated ScenarioDataPoint data = 4;
 }
 
 message ScenarioDataPoint {

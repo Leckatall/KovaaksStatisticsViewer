@@ -26,6 +26,10 @@ namespace ksv::application {
         virtual std::vector<int> get_kills() = 0;
 
         virtual std::vector<float> get_dmg() = 0;
+
+        // Human-readable label for the run currently loaded (name, start date
+        // and time), for display above the graph.
+        virtual std::string get_run_label() = 0;
     };
 }
 

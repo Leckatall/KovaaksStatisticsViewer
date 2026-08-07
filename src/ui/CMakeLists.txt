@@ -22,6 +22,7 @@ qt_add_qml_module(ksv_ui
             qml/Main.qml
             qml/GraphHoverPointDelegate.qml
             qml/DashboardGraph.qml
+            qml/DashboardGraphCanvas.qml
             qml/ControlPanel.qml
             qml/AppMenuBar.qml
             qml/KovaaksDirToolBar.qml
@@ -30,6 +31,9 @@ qt_add_qml_module(ksv_ui
         SOURCES
             presentation/graph_vm.h
             presentation/graph_vm.cpp
+            presentation/graph_canvas.h
+            presentation/graph_canvas.cpp
+            presentation/monotone_spline.h
             presentation/session_vm.h
             presentation/session_vm.cpp
             presentation/settings_vm.h

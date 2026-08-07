@@ -26,12 +26,8 @@ namespace ksv::application {
         m_settingsService = std::make_shared<qt_data::SettingsService>();
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder);
 
-        const auto profile_dir = m_settingsService->getProfileDir();
-        std::filesystem::create_directories(profile_dir);
-        const std::filesystem::path cache_path = data::ProfileService::cachePathFor(profile_dir);
-
         m_profileService = std::make_shared<data::ProfileService>(
-            m_fileService, std::make_shared<data::ProfileSerializer>(), cache_path);
+            m_fileService, std::make_shared<data::ProfileSerializer>(), m_settingsService);
         m_profileService->loadProfile();
 
         m_sessionController = std::make_shared<SessionController>(m_settingsService, m_profileService);

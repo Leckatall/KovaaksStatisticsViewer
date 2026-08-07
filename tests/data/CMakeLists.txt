@@ -23,6 +23,7 @@ target_compile_definitions(proto_decoder_tests PRIVATE
     TEST_FILES_DIR="${CMAKE_CURRENT_BINARY_DIR}/examples"
 )
 
+ksv_copy_mingw_runtime_dlls(proto_decoder_tests)
 gtest_discover_tests(proto_decoder_tests)
 
 add_executable(profile_service_tests
@@ -34,6 +35,7 @@ target_link_libraries(profile_service_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(profile_service_tests)
 gtest_discover_tests(profile_service_tests)
 
 add_executable(profile_serializer_tests
@@ -45,4 +47,5 @@ target_link_libraries(profile_serializer_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(profile_serializer_tests)
 gtest_discover_tests(profile_serializer_tests)

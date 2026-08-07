@@ -39,6 +39,7 @@ add_library(ksv_data STATIC
         interfaces/i_proto_decoder.h
         interfaces/i_profile_service.h
         interfaces/i_profile_serializer.h
+        interfaces/i_settings_service.h
 )
 
 set(PROTO_FILES

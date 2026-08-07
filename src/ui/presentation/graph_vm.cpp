@@ -5,7 +5,9 @@
 #include "graph_vm.h"
 
 #include <qurl.h>
+#include <algorithm>
 #include <utility>
+#include <QVector>
 
 
 namespace ksv::presentation {
@@ -93,6 +95,14 @@ namespace ksv::presentation {
         return kColumnMeta[column].color;
     }
 
+    QList<QPointF> GraphViewModel::seriesPoints(const Column column) const {
+        if (column < 0 || column >= ColumnCount) return {};
+        QList<QPointF> points;
+        points.reserve(m_data.size());
+        for (const auto &row: m_data) points.append(QPointF(row[Time], row[column]));
+        return points;
+    }
+
     namespace {
         // Real min/max of `column` across `data`, no padding applied.
         std::pair<qreal, qreal> rawColumnRange(const QList<QMap<GraphViewModel::Column, qreal>> &data,
@@ -112,6 +122,59 @@ namespace ksv::presentation {
             if (lo == hi) return {lo - 0.5, hi + 0.5};
             const qreal pad = (hi - lo) * 0.05;
             return {lo - pad, hi + pad};
+        }
+
+        // Real .perf data ticks arrive as per-tick deltas (see
+        // ScenarioCompletionData's comment in scenario_perf.h), not
+        // cumulative totals, and can arrive at irregular intervals -
+        // including, near the end of some runs, two ticks only ~0.02s apart
+        // instead of the usual ~1s spacing. Rounding every row's Time to the
+        // nearest whole second and merging rows that land on the same second
+        // fixes both: the plot gets one point per second, and a merged
+        // near-duplicate tick no longer shows up as an anomalously small
+        // delta next to its neighbor - its value is summed into the second
+        // it belongs to instead of silently overwriting or diluting it.
+        //
+        // Score/Shots/Kills/Dmg are directly additive deltas, so summing raw
+        // values is correct. Accuracy is a ratio (hits/shots), so summing or
+        // averaging the ratio itself would be wrong; instead this recovers
+        // hits_i = Accuracy_i * Shots_i (exact, including when Shots_i is 0,
+        // since Accuracy_i is defined as 0 in that case too), sums hits and
+        // shots separately per bucket, and divides at the end.
+        //
+        // A second with no raw row defaults to all-zero - these are deltas,
+        // so "no data" means "nothing happened", not "unknown".
+        QList<QMap<GraphViewModel::Column, qreal>> resampleToWholeSeconds(
+            const QList<QMap<GraphViewModel::Column, qreal>> &rawRows) {
+            using Column = GraphViewModel::Column;
+            if (rawRows.isEmpty()) return rawRows;
+
+            int maxSecond = 0;
+            for (const auto &row: rawRows) maxSecond = std::max(maxSecond, qRound(row[Column::Time]));
+
+            QVector<qreal> score(maxSecond + 1, 0.0), shots(maxSecond + 1, 0.0), hits(maxSecond + 1, 0.0),
+                    kills(maxSecond + 1, 0.0), dmg(maxSecond + 1, 0.0);
+
+            for (const auto &row: rawRows) {
+                const int bucket = std::clamp(qRound(row[Column::Time]), 0, maxSecond);
+                const qreal rowShots = row[Column::Shots];
+                score[bucket] += row[Column::Score];
+                shots[bucket] += rowShots;
+                hits[bucket] += row[Column::Accuracy] * rowShots;
+                kills[bucket] += row[Column::Kills];
+                dmg[bucket] += row[Column::Dmg];
+            }
+
+            QList<QMap<Column, qreal>> result(maxSecond + 1);
+            for (int s = 0; s <= maxSecond; ++s) {
+                result[s][Column::Time] = qreal(s);
+                result[s][Column::Score] = score[s];
+                result[s][Column::Shots] = shots[s];
+                result[s][Column::Accuracy] = shots[s] > 0.0 ? hits[s] / shots[s] : 0.0;
+                result[s][Column::Kills] = kills[s];
+                result[s][Column::Dmg] = dmg[s];
+            }
+            return result;
         }
     }
 
@@ -152,6 +215,13 @@ namespace ksv::presentation {
 
     void GraphViewModel::fetchData(const QString &scenario_id) {
         if (!scenario_id.isEmpty()) m_graphUseCase->load_perf(QUrl(scenario_id).toLocalFile().toStdString());
+
+        const QString newTitle = QString::fromStdString(m_graphUseCase->get_run_label());
+        if (newTitle != m_scenarioTitle) {
+            m_scenarioTitle = newTitle;
+            emit scenarioTitleChanged();
+        }
+
         const std::vector<float> times = m_graphUseCase->get_times();
         assert(!times.empty());
         const std::vector<float> scores = m_graphUseCase->get_scores();
@@ -173,6 +243,6 @@ namespace ksv::presentation {
             rows[i][Kills] = i < int(kills.size()) ? kills[i] : 0.0;
             rows[i][Dmg] = i < int(dmg.size()) ? dmg[i] : 0.0;
         }
-        setData(std::move(rows));
+        setData(resampleToWholeSeconds(rows));
     }
 }

@@ -22,6 +22,7 @@ namespace {
         std::vector<int> shots;
         std::vector<int> kills;
         std::vector<float> dmg;
+        std::string run_label;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
         std::vector<float> get_times() override { return times; }
@@ -30,6 +31,7 @@ namespace {
         std::vector<int> get_shots() override { return shots; }
         std::vector<int> get_kills() override { return kills; }
         std::vector<float> get_dmg() override { return dmg; }
+        std::string get_run_label() override { return run_label; }
     };
 
     class GraphViewModelTest : public testing::Test {
@@ -41,6 +43,10 @@ namespace {
             fake_use_case->times = {0.0F, 1.0F, 2.0F};
             fake_use_case->scores = {10.0F, 20.0F, 30.0F};
             fake_use_case->accuracies = {0.5F, 0.6F, 0.7F};
+            // Resampling recovers each row's hits as accuracy*shots to merge
+            // Accuracy correctly across buckets, so shots must be nonzero
+            // wherever a non-zero accuracy is expected to survive resampling.
+            fake_use_case->shots = {10, 10, 10};
         }
     };
 
@@ -81,6 +87,17 @@ namespace {
         EXPECT_NEAR(view_model.data(view_model.index(2, GraphViewModel::Accuracy)).toDouble(), 0.7, 1e-6);
     }
 
+    TEST_F(GraphViewModelTest, FetchDataUpdatesScenarioTitleFromUseCase) {
+        setSampleData();
+        fake_use_case->run_label = "Air Angelic (2026-08-07, 14:23:00)";
+
+        const QSignalSpy spy(&view_model, &GraphViewModel::scenarioTitleChanged);
+        view_model.fetchData("");
+
+        EXPECT_EQ(view_model.scenarioTitle(), QString("Air Angelic (2026-08-07, 14:23:00)"));
+        EXPECT_EQ(spy.count(), 1);
+    }
+
     TEST_F(GraphViewModelTest, FetchDataEmitsBoundsChanged) {
         setSampleData();
 
@@ -116,9 +133,16 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, RecomputeBoundsPadsDegenerateColumnRange) {
-        fake_use_case->times = {5.0F, 5.0F};
+        // Two distinct, contiguous-from-zero seconds with the same value
+        // (rather than one duplicated timestamp, which would land in the
+        // same resampled bucket and get summed - correct behavior, but not
+        // what this test is after). Starting at 0 avoids resampling
+        // zero-filling any leading gap seconds, which would otherwise widen
+        // the range with real zeros and defeat the "degenerate range" setup.
+        fake_use_case->times = {0.0F, 1.0F};
         fake_use_case->scores = {42.0F, 42.0F};
         fake_use_case->accuracies = {0.8F, 0.8F};
+        fake_use_case->shots = {10, 10};
 
         view_model.fetchData("");
         const auto bounds = view_model.axisBounds();
@@ -205,6 +229,31 @@ namespace {
         EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Dmg)).toDouble(), 0.0);
     }
 
+    TEST_F(GraphViewModelTest, SeriesPointsReturnsTimeValuePairsInRowOrder) {
+        setSampleData();
+        view_model.fetchData("");
+
+        const auto points = view_model.seriesPoints(GraphViewModel::Score);
+        ASSERT_EQ(points.size(), 3);
+        EXPECT_DOUBLE_EQ(points[0].x(), 0.0);
+        EXPECT_DOUBLE_EQ(points[0].y(), 10.0);
+        EXPECT_DOUBLE_EQ(points[1].x(), 1.0);
+        EXPECT_DOUBLE_EQ(points[1].y(), 20.0);
+        EXPECT_DOUBLE_EQ(points[2].x(), 2.0);
+        EXPECT_DOUBLE_EQ(points[2].y(), 30.0);
+    }
+
+    TEST_F(GraphViewModelTest, SeriesPointsReturnsEmptyWhenNoDataLoaded) {
+        EXPECT_TRUE(view_model.seriesPoints(GraphViewModel::Score).isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, SeriesPointsReturnsEmptyForOutOfRangeColumn) {
+        setSampleData();
+        view_model.fetchData("");
+
+        EXPECT_TRUE(view_model.seriesPoints(GraphViewModel::ColumnCount).isEmpty());
+    }
+
     TEST_F(GraphViewModelTest, DataReturnsInvalidForOutOfRangeRow) {
         setSampleData();
         view_model.fetchData("");
@@ -252,5 +301,98 @@ namespace {
         EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Score)).toDouble(), 99.0);
 
         EXPECT_EQ(resetSpy.count(), 0);
+    }
+
+    // GraphViewModel resamples raw per-tick rows (which arrive as deltas, at
+    // irregular sub-second intervals) down to one row per whole second
+    // before storing them, so the chart/axis always deal in whole seconds.
+    TEST_F(GraphViewModelTest, FetchDataRoundsTimestampsToNearestWholeSecond) {
+        fake_use_case->times = {0.3F, 0.6F};
+        fake_use_case->scores = {10.0F, 20.0F};
+        fake_use_case->accuracies = {0.5F, 0.5F};
+
+        view_model.fetchData("");
+
+        ASSERT_EQ(view_model.rowCount(), 2);
+        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Time)).toDouble(), 0.0);
+        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Score)).toDouble(), 10.0);
+        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Time)).toDouble(), 1.0);
+        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Score)).toDouble(), 20.0);
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataFillsSecondsWithNoRawDataAsZero) {
+        fake_use_case->times = {0.1F, 3.4F};
+        fake_use_case->scores = {10.0F, 20.0F};
+        fake_use_case->accuracies = {0.5F, 0.5F};
+        fake_use_case->shots = {2, 4};
+
+        view_model.fetchData("");
+
+        // Seconds 0..3: real data at 0 and 3, seconds 1 and 2 have no raw
+        // point and must default to zero across every column.
+        ASSERT_EQ(view_model.rowCount(), 4);
+        for (int second: {1, 2}) {
+            EXPECT_EQ(view_model.data(view_model.index(second, GraphViewModel::Score)).toDouble(), 0.0);
+            EXPECT_EQ(view_model.data(view_model.index(second, GraphViewModel::Shots)).toDouble(), 0.0);
+            EXPECT_EQ(view_model.data(view_model.index(second, GraphViewModel::Accuracy)).toDouble(), 0.0);
+        }
+        EXPECT_EQ(view_model.data(view_model.index(3, GraphViewModel::Score)).toDouble(), 20.0);
+    }
+
+    // The real-world motivating case: near the end of a run, two ticks can
+    // land ~0.02s apart (e.g. x.87/x.89) instead of the usual ~1s spacing.
+    // Rounded independently, the second tick's small delta would look like
+    // an anomalous dip/spike right at the end of the chart; summed into the
+    // same bucket as its neighbor, it correctly contributes to that second's
+    // total instead.
+    TEST_F(GraphViewModelTest, FetchDataSumsAdditiveColumnsWhenPointsRoundIntoTheSameSecond) {
+        fake_use_case->times = {58.87F, 58.89F};
+        fake_use_case->scores = {1.0F, 2.0F};
+        fake_use_case->accuracies = {0.5F, 0.5F};
+        fake_use_case->shots = {3, 4};
+        fake_use_case->kills = {0, 1};
+        fake_use_case->dmg = {10.0F, 20.0F};
+
+        view_model.fetchData("");
+
+        ASSERT_EQ(view_model.rowCount(), 60);
+        const auto lastRow = view_model.rowCount() - 1;
+        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Time)).toDouble(), 59.0);
+        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Score)).toDouble(), 3.0);
+        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Shots)).toDouble(), 7.0);
+        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Kills)).toDouble(), 1.0);
+        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Dmg)).toDouble(), 30.0);
+    }
+
+    // Accuracy is a ratio, so merging two points that round into the same
+    // second must recompute it from summed hits/shots rather than summing or
+    // averaging the ratios themselves.
+    TEST_F(GraphViewModelTest, FetchDataRecomputesAccuracyFromSummedHitsAndShotsWhenMerging) {
+        fake_use_case->times = {10.0F, 10.1F};
+        fake_use_case->scores = {0.0F, 0.0F};
+        fake_use_case->shots = {10, 90};
+        // hits recovered as accuracy*shots: 0.5*10=5, 0.9*90=81 -> merged 86/100=0.86.
+        fake_use_case->accuracies = {0.5F, 0.9F};
+
+        view_model.fetchData("");
+
+        // Accuracies are stored as float and promoted to double, so the
+        // tolerance must absorb float-precision error, not just double
+        // rounding (same reasoning as RecomputeBoundsUsesRealPerColumnRangesWithPadding).
+        const double mergedAccuracy = view_model.data(view_model.index(10, GraphViewModel::Accuracy)).toDouble();
+        EXPECT_NEAR(mergedAccuracy, 0.86, 1e-6);
+        // Guard against regressing to the wrong (naive average) approach.
+        EXPECT_NE(mergedAccuracy, 0.7);
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataMergedBucketWithZeroShotsHasZeroAccuracy) {
+        fake_use_case->times = {20.0F, 20.2F};
+        fake_use_case->scores = {0.0F, 0.0F};
+        fake_use_case->shots = {0, 0};
+        fake_use_case->accuracies = {0.0F, 0.0F};
+
+        view_model.fetchData("");
+
+        EXPECT_EQ(view_model.data(view_model.index(20, GraphViewModel::Accuracy)).toDouble(), 0.0);
     }
 }

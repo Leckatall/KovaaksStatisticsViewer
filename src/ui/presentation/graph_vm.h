@@ -24,6 +24,7 @@ namespace ksv::presentation {
         Q_PROPERTY(QVariantList plottableColumns READ plottableColumns CONSTANT)
         Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
         Q_PROPERTY(int pointCount READ pointCount NOTIFY pointCountChanged)
+        Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
         // Instance-accessible mirrors of the Column enum values DashboardGraph.qml
         // needs. Referencing the enum via the bare "GraphViewModel.Score"-style
         // static type name silently fails to resolve at runtime (ReferenceError)
@@ -69,8 +70,17 @@ namespace ksv::presentation {
         // their rendering on this rather than assuming data is always present.
         [[nodiscard]] int pointCount() const { return int(m_data.size()); }
 
+        // Label for the run currently loaded, e.g. "Air Angelic (2026-08-07,
+        // 14:23:00)", shown as a title above the graph.
+        [[nodiscard]] QString scenarioTitle() const { return m_scenarioTitle; }
+
         Q_INVOKABLE [[nodiscard]] QString columnName(Column column) const;
         Q_INVOKABLE [[nodiscard]] QColor columnColor(Column column) const;
+
+        // {time, value} pairs for `column`, in row order. Used by GraphCanvas
+        // to plot a series directly in C++ rather than through a model/view
+        // mapper.
+        [[nodiscard]] QList<QPointF> seriesPoints(Column column) const;
 
         void recomputeBounds();
 
@@ -80,11 +90,13 @@ namespace ksv::presentation {
     signals:
         void boundsChanged();
         void pointCountChanged();
+        void scenarioTitleChanged();
 
     private:
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
         QList<QMap<Column, qreal>> m_data;
         std::array<std::pair<qreal, qreal>, ColumnCount> m_bounds{};
+        QString m_scenarioTitle;
     };
 }
 

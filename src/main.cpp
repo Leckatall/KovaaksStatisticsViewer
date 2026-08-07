@@ -7,6 +7,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <app/app.h>
+#include <presentation/graph_canvas.h>
 #include <presentation/graph_vm.h>
 
 void declare_metatypes() {
@@ -16,6 +17,7 @@ void declare_metatypes() {
     // Referencing GraphViewModel here keeps that object linked in and
     // registers it explicitly as a fallback.
     qmlRegisterUncreatableType<ksv::presentation::GraphViewModel>("KovaaksStatsViewer", 1, 0, "GraphViewModel", "Enums only");
+    qmlRegisterType<ksv::presentation::GraphCanvas>("KovaaksStatsViewer", 1, 0, "GraphCanvas");
 }
 
 int main(int argc, char *argv[]) {

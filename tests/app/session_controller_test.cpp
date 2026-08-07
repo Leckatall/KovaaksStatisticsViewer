@@ -18,19 +18,19 @@ namespace {
     class FakeSettingsService : public ISettingsService {
     public:
         std::string dir = "C:/Kovaaks";
-        std::string profile_dir = "C:/Profile";
+        std::string profile_path = "C:/Profile/profile_cache.pb";
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
         void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
-        [[nodiscard]] std::string getProfileDir() const override { return profile_dir; }
-        void setProfileDir(const std::string &new_dir) override { profile_dir = new_dir; }
+        [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
+        void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
+        void onProfilePathChanged(std::function<void()>) override {}
     };
 
     class FakeProfileService : public IProfileService {
     public:
         mutable int generate_call_count = 0;
         bool profile_loaded = false;
-        std::string profile_directory;
         std::vector<ScenarioId> scenario_list;
         std::unordered_map<std::string, ScenarioPerf> perf_by_path;
         ScenarioPerf latest_perf;
@@ -55,7 +55,6 @@ namespace {
         }
 
         [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
-        void setProfileDirectory(const std::string &dir) override { profile_directory = dir; }
 
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
     };

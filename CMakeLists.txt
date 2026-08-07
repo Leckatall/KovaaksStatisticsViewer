@@ -65,17 +65,30 @@ target_link_libraries(ksv PRIVATE
         ksv_domain
 )
 
-# The MinGW toolchain's libwinpthread-1.dll is required at runtime by
-# vcpkg's libabseil_dll.dll, but only the compiler's own copy exports the
-# pthread_*64 symbols abseil links against. Copy it next to the exe so the
-# app runs standalone instead of only inside CLion (which puts the
-# toolchain's bin/ on PATH itself).
+# The MinGW toolchain's runtime DLLs (libwinpthread-1, libgcc_s_seh-1,
+# libstdc++-6) are required at process startup by anything that transitively
+# links vcpkg's libabseil_dll.dll (protobuf), but only the compiler's own
+# copy exports the ABI these were built against. Several MinGW toolchains
+# can be installed side by side (Git, Qt, CLion's bundled one), and Windows'
+# DLL search order can silently pick up an incompatible one from PATH
+# instead, producing STATUS_ENTRY_POINT_NOT_FOUND / STATUS_DLL_NOT_FOUND at
+# startup even though linking succeeded. Copy the exact DLLs from the
+# compiler actually used for this build next to any target that needs them,
+# so binaries run standalone regardless of what else is on PATH.
 get_filename_component(MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-add_custom_command(TARGET ksv POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${MINGW_BIN_DIR}/libwinpthread-1.dll"
-        "$<TARGET_FILE_DIR:ksv>"
-)
+function(ksv_copy_mingw_runtime_dlls target)
+    foreach(_mingw_runtime_dll libwinpthread-1.dll libgcc_s_seh-1.dll libstdc++-6.dll)
+        if (EXISTS "${MINGW_BIN_DIR}/${_mingw_runtime_dll}")
+            add_custom_command(TARGET ${target} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${MINGW_BIN_DIR}/${_mingw_runtime_dll}"
+                    "$<TARGET_FILE_DIR:${target}>"
+            )
+        endif()
+    endforeach()
+endfunction()
+
+ksv_copy_mingw_runtime_dlls(ksv)
 
 include(CTest)
 

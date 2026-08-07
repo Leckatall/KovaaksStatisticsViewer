@@ -22,14 +22,6 @@ ApplicationWindow {
         property alias height: root.height
     }
 
-    // Map of column name -> visibility, keyed dynamically off graphVm.columnName().
-    //
-    // Named distinctly from the `columnVisibility` property that
-    // DashboardGraph/ControlPanel/SettingsDialog each declare: binding e.g.
-    // `columnVisibility: columnVisibility` inside one of those components
-    // resolves the RHS against the component's own property of the same
-    // name first, silently producing a circular/undefined binding instead
-    // of referencing this Settings object.
     Settings {
         id: columnVisibilitySettings
         category: "graphColumns"
@@ -74,9 +66,6 @@ ApplicationWindow {
         }
     }
 
-    header: KovaaksDirToolBar {
-        kovaaksDir: root.settingsVm.kovaaksDir
-    }
     GridLayout {
         anchors.fill: parent
         anchors.margins: 5
@@ -89,10 +78,26 @@ ApplicationWindow {
             color: "white"
         }
 
-        DashboardGraph {
+        ColumnLayout {
             Layout.row: 1; Layout.column: 1
-            graphVm: root.graphVm
-            columnVisibility: columnVisibilitySettings
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            Label {
+                objectName: "scenarioTitleLabel"
+                Layout.fillWidth: true
+                text: root.graphVm.scenarioTitle
+                color: "white"
+                font.pixelSize: 16
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+            DashboardGraphCanvas {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                graphVm: root.graphVm
+                columnVisibility: columnVisibilitySettings
+            }
         }
         ControlPanel {
             Layout.row: 1; Layout.column: 0

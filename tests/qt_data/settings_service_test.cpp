@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <QDir>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -58,20 +59,35 @@ namespace {
         EXPECT_EQ(reloaded.getKovaaksDir(), QUrl::fromLocalFile("D:/Games/FPSAimTrainer").toLocalFile().toStdString());
     }
 
-    TEST_F(SettingsServiceTest, ReturnsAppDataLocationForProfileDirWhenUnset) {
+    TEST_F(SettingsServiceTest, ReturnsAppDataProfileCacheFileForProfilePathWhenUnset) {
         const SettingsService settings(QSettings::IniFormat);
 
-        const auto expected = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).toStdString();
-        EXPECT_EQ(settings.getProfileDir(), expected);
+        const auto app_data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        const auto expected = QDir(app_data).filePath("profile_cache.pb").toStdString();
+        EXPECT_EQ(settings.getProfilePath(), expected);
     }
 
-    TEST_F(SettingsServiceTest, SetProfileDirPersistsValue) {
+    TEST_F(SettingsServiceTest, SetProfilePathPersistsValue) {
         SettingsService settings(QSettings::IniFormat);
 
-        settings.setProfileDir("D:/Games/ProfileCache");
+        settings.setProfilePath("D:/Games/ProfileCache/profile_cache.pb");
 
         const SettingsService reloaded(QSettings::IniFormat);
-        EXPECT_EQ(reloaded.getProfileDir(),
-                  QUrl::fromLocalFile("D:/Games/ProfileCache").toLocalFile().toStdString());
+        EXPECT_EQ(reloaded.getProfilePath(),
+                  QUrl::fromLocalFile("D:/Games/ProfileCache/profile_cache.pb").toLocalFile().toStdString());
+    }
+
+    TEST_F(SettingsServiceTest, SetProfilePathNotifiesRegisteredObservers) {
+        SettingsService settings(QSettings::IniFormat);
+
+        int notify_count = 0;
+        settings.onProfilePathChanged([&notify_count] { ++notify_count; });
+
+        settings.setProfilePath("D:/Games/ProfileCache/profile_cache.pb");
+
+        EXPECT_EQ(notify_count, 1);
+        // The observer sees the freshly stored value when it runs.
+        EXPECT_EQ(settings.getProfilePath(),
+                  QUrl::fromLocalFile("D:/Games/ProfileCache/profile_cache.pb").toLocalFile().toStdString());
     }
 }
