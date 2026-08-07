@@ -40,10 +40,10 @@ TestCase {
     // so `panel.sessionVm !== <the object literal passed in>`. Always read
     // call-tracking state back via `panel.sessionVm`/`panel.graphVm` (what's
     // returned here), never via the original object literal.
-    function createPanel(props) {
+    function createPanel(props): ControlPanel {
         const panel = createTemporaryObject(controlPanelComponent, testCase,
             Object.assign({width: 400, height: 600}, props))
-        verify(waitForRendering(panel))
+        verify(waitForRendering(panel), "ControlPanel never became visible/rendered")
         return panel
     }
 
@@ -53,10 +53,10 @@ TestCase {
         })
 
         const button = findChild(panel, "generateProfileButton")
-        verify(button !== null)
+        verify(button !== null, "no child named 'generateProfileButton' found in ControlPanel")
         mouseClick(button)
 
-        compare(panel.sessionVm.generateProfileCalls, 1)
+        compare(panel.sessionVm.generateProfileCalls, 1, "clicking generateProfileButton should call sessionVm.generateProfile() once")
     }
 
     function test_loadLatestPerformanceButton_fetchesWithEmptyId() {
@@ -65,11 +65,11 @@ TestCase {
         })
 
         const button = findChild(panel, "loadLatestPerformanceButton")
-        verify(button !== null)
+        verify(button !== null, "no child named 'loadLatestPerformanceButton' found in ControlPanel")
         mouseClick(button)
 
-        compare(panel.graphVm.fetchDataCalls.length, 1)
-        compare(panel.graphVm.fetchDataCalls[0], "")
+        compare(panel.graphVm.fetchDataCalls.length, 1, "clicking loadLatestPerformanceButton should call graphVm.fetchData() once")
+        compare(panel.graphVm.fetchDataCalls[0], "", "loadLatestPerformanceButton should fetch with an empty run id")
     }
 
     function test_columnVisibilityCheckBox_reflectsColumnVisibility() {
@@ -80,10 +80,10 @@ TestCase {
 
         const scoreCheckBox = findChild(panel, "columnVisibilityCheckBox_Score")
         const accuracyCheckBox = findChild(panel, "columnVisibilityCheckBox_Accuracy")
-        verify(scoreCheckBox !== null)
-        verify(accuracyCheckBox !== null)
-        compare(scoreCheckBox.checked, true)
-        compare(accuracyCheckBox.checked, false)
+        verify(scoreCheckBox !== null, "no child named 'columnVisibilityCheckBox_Score' found in ControlPanel")
+        verify(accuracyCheckBox !== null, "no child named 'columnVisibilityCheckBox_Accuracy' found in ControlPanel")
+        compare(scoreCheckBox.checked, true, "Score checkbox should reflect columnVisibility.score === true")
+        compare(accuracyCheckBox.checked, false, "Accuracy checkbox should reflect columnVisibility.accuracy === false")
     }
 
     function test_togglingLineVisibilityCheckBox_updatesColumnVisibility() {
@@ -93,11 +93,11 @@ TestCase {
         })
 
         const scoreCheckBox = findChild(panel, "columnVisibilityCheckBox_Score")
-        verify(scoreCheckBox !== null)
+        verify(scoreCheckBox !== null, "no child named 'columnVisibilityCheckBox_Score' found in ControlPanel")
         mouseClick(scoreCheckBox)
 
-        compare(scoreCheckBox.checked, false)
-        compare(panel.columnVisibility.score, false)
+        compare(scoreCheckBox.checked, false, "clicking the Score checkbox should uncheck it")
+        compare(panel.columnVisibility.score, false, "clicking the Score checkbox should update columnVisibility.score")
     }
 
     function test_renderingLabel_showsCurrentPerfScenarioFromSessionVm() {
@@ -106,7 +106,7 @@ TestCase {
         })
 
         const label = findChild(panel, "renderingLabel")
-        verify(label !== null)
-        compare(label.text, "Rendering: Long Jump")
+        verify(label !== null, "no child named 'renderingLabel' found in ControlPanel")
+        compare(label.text, "Rendering: Long Jump", "renderingLabel should show sessionVm.getCurrentPerfScenario()")
     }
 }

@@ -211,4 +211,46 @@ namespace {
 
         EXPECT_FALSE(view_model.data(view_model.index(3, GraphViewModel::Score)).isValid());
     }
+
+    // QtGraphs' XYModelMapper (used by LineFromModel.qml) only reacts to
+    // rowsInserted/rowsRemoved/dataChanged, not modelReset. A reset desyncs
+    // its cached series points from the model, which crashes spline
+    // calculation on the next scenario switch. setData() must therefore
+    // never reset the model, whether the new dataset is smaller, larger, or
+    // the same size as the old one.
+    TEST_F(GraphViewModelTest, FetchDataNeverResetsModelWhenSwitchingScenarios) {
+        setSampleData();
+        view_model.fetchData("");
+        ASSERT_EQ(view_model.rowCount(), 3);
+
+        const QSignalSpy resetSpy(&view_model, &GraphViewModel::modelReset);
+        const QSignalSpy removeSpy(&view_model, &GraphViewModel::rowsRemoved);
+        const QSignalSpy insertSpy(&view_model, &GraphViewModel::rowsInserted);
+
+        // Shrink: fewer rows than currently loaded.
+        fake_use_case->times = {0.0F, 1.0F};
+        fake_use_case->scores = {10.0F, 20.0F};
+        fake_use_case->accuracies = {0.5F, 0.6F};
+        view_model.fetchData("");
+        EXPECT_EQ(view_model.rowCount(), 2);
+        EXPECT_EQ(removeSpy.count(), 1);
+
+        // Grow: more rows than currently loaded.
+        fake_use_case->times = {0.0F, 1.0F, 2.0F, 3.0F};
+        fake_use_case->scores = {10.0F, 20.0F, 30.0F, 40.0F};
+        fake_use_case->accuracies = {0.5F, 0.6F, 0.7F, 0.8F};
+        view_model.fetchData("");
+        EXPECT_EQ(view_model.rowCount(), 4);
+        EXPECT_EQ(insertSpy.count(), 1);
+
+        // Same size: row count unchanged, only values differ.
+        fake_use_case->times = {0.0F, 1.0F, 2.0F, 3.0F};
+        fake_use_case->scores = {99.0F, 98.0F, 97.0F, 96.0F};
+        fake_use_case->accuracies = {0.1F, 0.2F, 0.3F, 0.4F};
+        view_model.fetchData("");
+        EXPECT_EQ(view_model.rowCount(), 4);
+        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Score)).toDouble(), 99.0);
+
+        EXPECT_EQ(resetSpy.count(), 0);
+    }
 }

@@ -23,8 +23,15 @@ ApplicationWindow {
     }
 
     // Map of column name -> visibility, keyed dynamically off graphVm.columnName().
+    //
+    // Named distinctly from the `columnVisibility` property that
+    // DashboardGraph/ControlPanel/SettingsDialog each declare: binding e.g.
+    // `columnVisibility: columnVisibility` inside one of those components
+    // resolves the RHS against the component's own property of the same
+    // name first, silently producing a circular/undefined binding instead
+    // of referencing this Settings object.
     Settings {
-        id: columnVisibility
+        id: columnVisibilitySettings
         category: "graphColumns"
         property bool score: true
         property bool accuracy: true
@@ -54,7 +61,7 @@ ApplicationWindow {
         sourceComponent: SettingsDialog {
             settingsVm: root.settingsVm
             graphVm: root.graphVm
-            columnVisibility: columnVisibility
+            columnVisibility: columnVisibilitySettings
         }
         onLoaded: item.open()
     }
@@ -85,13 +92,13 @@ ApplicationWindow {
         DashboardGraph {
             Layout.row: 1; Layout.column: 1
             graphVm: root.graphVm
-            columnVisibility: columnVisibility
+            columnVisibility: columnVisibilitySettings
         }
         ControlPanel {
             Layout.row: 1; Layout.column: 0
             sessionVm: root.sessionVm
             graphVm: root.graphVm
-            columnVisibility: columnVisibility
+            columnVisibility: columnVisibilitySettings
         }
     }
 }

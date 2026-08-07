@@ -19,20 +19,28 @@ Frame {
         border.color: "#2A2A2A"
     }
 
-    // Score is drawn as the primary, labeled Y axis; every other plottable
+    // Score is drawn as the primary, labelled Y axis; every other plottable
     // column gets its own invisible axis scaled to its own range so series
     // with very different magnitudes (e.g. Accuracy 0-1 vs Score) can share
     // the same chart without distorting one another.
-    readonly property int primaryColumn: GraphViewModel.Score
-    readonly property int lineCount: GraphViewModel.ColumnCount - 1
+    //
+    // These read off the graphVm instance rather than the bare
+    // "GraphViewModel.Score"-style static enum type name: referencing the
+    // Column enum via the type name doesn't resolve at runtime from within
+    // this QML module (ReferenceError), even with a self-import.
+    readonly property int primaryColumn: root.graphVm.scoreColumn
+    // SplineSeries needs at least 2 points to interpolate a curve; before any
+    // performance data is loaded (or after a scenario with a single sample),
+    // don't instantiate lines against the empty/underpopulated model.
+    readonly property int lineCount: root.graphVm.pointCount >= 2 ? root.graphVm.totalColumnCount - 1 : 0
 
     GraphsView {
         id: graphsView
         anchors.fill: parent
         anchors.margins: 1
         axisX: ValueAxis {
-            min: root.graphVm.axisBounds[GraphViewModel.Time].x
-            max: root.graphVm.axisBounds[GraphViewModel.Time].y
+            min: root.graphVm.axisBounds[root.graphVm.timeColumn].x
+            max: root.graphVm.axisBounds[root.graphVm.timeColumn].y
         }
 
         Instantiator {
@@ -44,11 +52,11 @@ Frame {
                 readonly property int columnId: index + 1
 
                 line_model: root.graphVm
-                xIndex: GraphViewModel.Time
+                xIndex: root.graphVm.timeColumn
                 yIndex: columnId
                 color: root.graphVm.columnColor(columnId)
                 width: 3
-                visible: root.columnVisibility[root.graphVm.columnName(columnId).toLowerCase()]
+                visible: !!root.columnVisibility[root.graphVm.columnName(columnId).toLowerCase()]
                 pointDelegate: GraphHoverPointDelegate {}
 
                 axisY: ValueAxis {

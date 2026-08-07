@@ -69,7 +69,7 @@ Frame {
                 objectName: "columnVisibilityCheckBox_" + root.graphVm.columnName(modelData)
 
                 text: root.graphVm.columnName(modelData)
-                checked: root.columnVisibility[root.graphVm.columnName(modelData).toLowerCase()]
+                checked: !!root.columnVisibility[root.graphVm.columnName(modelData).toLowerCase()]
                 background: Rectangle {
                     anchors.fill: parent
                     color: root.graphVm.columnColor(modelData)

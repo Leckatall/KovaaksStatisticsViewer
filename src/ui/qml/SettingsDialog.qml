@@ -120,8 +120,8 @@ Dialog {
                         Layout.fillWidth: true
 
                         text: root.graphVm.columnName(modelData)
-                        checked: root.columnVisibility[root.graphVm.columnName(modelData).toLowerCase()]
-                        onToggled: root.columnVisibility[root.graphVm.columnName(modelData).toLowerCase()] = checked
+                        checked: !!columnVisibility[root.graphVm.columnName(modelData).toLowerCase()]
+                        onToggled: columnVisibility[root.graphVm.columnName(modelData).toLowerCase()] = checked
 
                         background: Rectangle {
                             anchors.fill: parent

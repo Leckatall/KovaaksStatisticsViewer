@@ -10,8 +10,11 @@ SplineSeries {
 
     XYModelMapper {
         series: line
-        model: line.line_model
         xSection: line.xIndex
         ySection: line.yIndex
+        // model is assigned last: setting it triggers an immediate
+        // initializeXYFromModel(), so xSection/ySection must already be
+        // valid or it logs "Invalid X/Y coordinate index" warnings.
+        model: line.line_model
     }
 }

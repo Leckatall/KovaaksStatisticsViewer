@@ -23,6 +23,15 @@ namespace ksv::presentation {
         QML_UNCREATABLE("Created in C++")
         Q_PROPERTY(QVariantList plottableColumns READ plottableColumns CONSTANT)
         Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
+        Q_PROPERTY(int pointCount READ pointCount NOTIFY pointCountChanged)
+        // Instance-accessible mirrors of the Column enum values DashboardGraph.qml
+        // needs. Referencing the enum via the bare "GraphViewModel.Score"-style
+        // static type name silently fails to resolve at runtime (ReferenceError)
+        // from within this same QML module, even with a self-import, so QML reads
+        // these off the graphVm instance it already has instead.
+        Q_PROPERTY(int timeColumn READ timeColumn CONSTANT)
+        Q_PROPERTY(int scoreColumn READ scoreColumn CONSTANT)
+        Q_PROPERTY(int totalColumnCount READ totalColumnCount CONSTANT)
 
     public:
         enum Column { Time = 0, Score, Accuracy, Shots, Kills, Dmg, ColumnCount };
@@ -51,6 +60,15 @@ namespace ksv::presentation {
         // {min, max} axis bounds, stored as QPointF(min, max).
         [[nodiscard]] QVariantMap axisBounds() const;
 
+        [[nodiscard]] static int timeColumn() { return Time; }
+        [[nodiscard]] static int scoreColumn() { return Score; }
+        [[nodiscard]] static int totalColumnCount() { return ColumnCount; }
+
+        // Number of rows currently loaded. Series that need more than one
+        // point to be well-defined (e.g. spline interpolation) should gate
+        // their rendering on this rather than assuming data is always present.
+        [[nodiscard]] int pointCount() const { return int(m_data.size()); }
+
         Q_INVOKABLE [[nodiscard]] QString columnName(Column column) const;
         Q_INVOKABLE [[nodiscard]] QColor columnColor(Column column) const;
 
@@ -61,6 +79,7 @@ namespace ksv::presentation {
 
     signals:
         void boundsChanged();
+        void pointCountChanged();
 
     private:
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;

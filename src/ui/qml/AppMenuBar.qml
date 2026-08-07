@@ -11,19 +11,19 @@ MenuBar {
         }
         Action {
             id: setSoruceDirAction
-            text: qsTr("Set Source Directory")
+            text: qsTr("Set Source &Directory")
             onTriggered: setSourceDirRequested()
         }
 
-        Action {
-            text: qsTr("&Save")
-        }
-        Action {
-            text: qsTr("Save &As...")
-        }
+        // Action {
+        //     text: qsTr("&Save")
+        // }
+        // Action {
+        //     text: qsTr("Save &As...")
+        // }
         Action {
             id: settingsAction
-            text: qsTr("Settings")
+            text: qsTr("&Settings")
             onTriggered: settingsRequested()
         }
         MenuSeparator {
