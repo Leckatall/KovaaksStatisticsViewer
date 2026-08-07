@@ -83,15 +83,6 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            Label {
-                objectName: "scenarioTitleLabel"
-                Layout.fillWidth: true
-                text: root.graphVm.scenarioTitle
-                color: "white"
-                font.pixelSize: 16
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-            }
             DashboardGraphCanvas {
                 Layout.fillWidth: true
                 Layout.fillHeight: true

@@ -11,7 +11,7 @@
 #include <QPen>
 #include <cmath>
 
-#include "monotone_spline.h"
+#include "../presentation/monotone_spline.h"
 
 namespace ksv::presentation {
     namespace {
@@ -34,6 +34,8 @@ namespace ksv::presentation {
 
     GraphCanvas::GraphCanvas(QQuickItem *parent) : QQuickPaintedItem(parent) {
         setAntialiasing(true);
+        connect(this, &QQuickItem::widthChanged, this, &GraphCanvas::plotAreaChanged);
+        connect(this, &QQuickItem::heightChanged, this, &GraphCanvas::plotAreaChanged);
     }
 
     void GraphCanvas::setGraphVm(GraphViewModel *graphVm) {
@@ -149,6 +151,41 @@ namespace ksv::presentation {
         const QVariantMap bounds = m_graphVm ? m_graphVm->axisBounds() : QVariantMap{};
         drawAxes(painter, rect, bounds);
         drawSeries(painter, rect, bounds);
+    }
+
+    QVariantMap GraphCanvas::valuesAtX(const qreal x) const {
+        QVariantMap result;
+        result["valid"] = false;
+        if (m_cachedSeries.isEmpty() || !m_graphVm) return result;
+
+        qreal bestDist = std::numeric_limits<qreal>::max();
+        int bestIndex = -1;
+        const auto &firstSeries = m_cachedSeries.first();
+        for (int i = 0; i < firstSeries.pixelPoints.size(); ++i) {
+            const qreal dist = std::abs(firstSeries.pixelPoints[i].x() - x);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIndex = i;
+            }
+        }
+        if (bestIndex < 0) return result;
+
+        result["valid"] = true;
+        result["time"] = firstSeries.dataPoints[bestIndex].x();
+        result["pixelX"] = firstSeries.pixelPoints[bestIndex].x();
+
+        QVariantList seriesList;
+        for (const auto &series : m_cachedSeries) {
+            if (bestIndex >= series.dataPoints.size()) continue;
+            QVariantMap entry;
+            const auto column = static_cast<GraphViewModel::Column>(series.columnId);
+            entry["name"] = m_graphVm->columnName(column);
+            entry["color"] = m_graphVm->columnColor(column).name();
+            entry["value"] = series.dataPoints[bestIndex].y();
+            seriesList.append(entry);
+        }
+        result["series"] = seriesList;
+        return result;
     }
 
     QVariantMap GraphCanvas::nearestPoint(const qreal x, const qreal y) const {

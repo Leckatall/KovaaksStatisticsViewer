@@ -7,7 +7,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <app/app.h>
-#include <presentation/graph_canvas.h>
+#include <ui/components/graph_canvas.h>
 #include <presentation/graph_vm.h>
 
 void declare_metatypes() {

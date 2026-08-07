@@ -31,8 +31,8 @@ qt_add_qml_module(ksv_ui
         SOURCES
             presentation/graph_vm.h
             presentation/graph_vm.cpp
-            presentation/graph_canvas.h
-            presentation/graph_canvas.cpp
+        components/graph_canvas.h
+        components/graph_canvas.cpp
             presentation/monotone_spline.h
             presentation/session_vm.h
             presentation/session_vm.cpp
@@ -45,4 +45,5 @@ qt_add_qml_module(ksv_ui
 target_include_directories(ksv_ui PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation
+        ${CMAKE_CURRENT_SOURCE_DIR}/components
 )
