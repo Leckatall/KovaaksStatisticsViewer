@@ -8,13 +8,13 @@
 #include <QtCore>
 
 #include "data/interfaces/i_profile_service.h"
-#include "qt_data/interfaces/i_settings_service.h"
+#include "data/interfaces/i_settings_service.h"
 
 namespace ksv::presentation {
     class SettingsViewModel : public QObject {
         Q_OBJECT
         Q_PROPERTY(QUrl kovaaksDir READ getKovaaksDir WRITE setKovaaksDir NOTIFY kovaaksDirChanged)
-        Q_PROPERTY(QUrl profileDir READ getProfileDir WRITE setProfileDir NOTIFY profileDirChanged)
+        Q_PROPERTY(QUrl profilePath READ getProfilePath WRITE setProfilePath NOTIFY profilePathChanged)
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
 
     public:
@@ -26,17 +26,17 @@ namespace ksv::presentation {
 
         Q_INVOKABLE void setKovaaksDir(const QUrl &dir);
 
-        Q_INVOKABLE [[nodiscard]] QUrl getProfileDir() const {
-            return QUrl::fromLocalFile(m_settings_service->getProfileDir().data());
+        Q_INVOKABLE [[nodiscard]] QUrl getProfilePath() const {
+            return QUrl::fromLocalFile(m_settings_service->getProfilePath().data());
         }
 
-        Q_INVOKABLE void setProfileDir(const QUrl &dir);
+        Q_INVOKABLE void setProfilePath(const QUrl &path);
 
         [[nodiscard]] bool isProfileLoaded() const { return m_profile_service->isProfileLoaded(); }
 
     signals:
         void kovaaksDirChanged();
-        void profileDirChanged();
+        void profilePathChanged();
         void profileLoadedChanged();
 
     private:

@@ -6,6 +6,7 @@ add_executable(ui_tests
     graph_vm_test.cpp
     session_vm_test.cpp
     settings_vm_test.cpp
+    monotone_spline_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE
@@ -21,6 +22,7 @@ target_link_libraries(ui_tests PRIVATE
     GTest::gtest
 )
 
+ksv_copy_mingw_runtime_dlls(ui_tests)
 gtest_discover_tests(ui_tests)
 
 # Qt Quick Test suite: exercises the actual QML component files (menu

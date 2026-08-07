@@ -19,7 +19,7 @@ TestCase {
     function makeFakeSettingsVm(overrides) {
         return Object.assign({
             kovaaksDir: "file:///C:/Kovaaks",
-            profileDir: "file:///C:/Profile",
+            profilePath: "file:///C:/Profile/profile_cache.pb",
             profileLoaded: false
         }, overrides)
     }
@@ -80,32 +80,28 @@ TestCase {
         compare(field.text, "D:/CustomDir", "kovaaksDirField should show settingsVm.kovaaksDir with the file:// scheme stripped")
     }
 
-    function test_profileCategory_showsProfileDirAndLoadedState() {
+    function test_directoriesCategory_showsProfilePathAndLoadedState() {
         const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({profileDir: "file:///D:/CustomProfile", profileLoaded: true}),
+            settingsVm: makeFakeSettingsVm({profilePath: "file:///D:/CustomProfile/profile_cache.pb", profileLoaded: true}),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
         })
 
-        selectCategory(dialog, "Profile")
-
-        const field = findByObjectName(dialog.contentItem, "profileDirField")
-        verify(field !== null, "no field named 'profileDirField' found in SettingsDialog Profile category")
-        compare(field.text, "D:/CustomProfile", "profileDirField should show settingsVm.profileDir with the file:// scheme stripped")
+        const field = findByObjectName(dialog.contentItem, "profilePathField")
+        verify(field !== null, "no field named 'profilePathField' found in SettingsDialog Directories category")
+        compare(field.text, "D:/CustomProfile/profile_cache.pb", "profilePathField should show settingsVm.profilePath with the file:// scheme stripped")
 
         const statusLabel = findByObjectName(dialog.contentItem, "profileLoadedLabel")
-        verify(statusLabel !== null, "no label named 'profileLoadedLabel' found in SettingsDialog Profile category")
+        verify(statusLabel !== null, "no label named 'profileLoadedLabel' found in SettingsDialog Directories category")
         compare(statusLabel.text, "Profile status: Loaded", "profileLoadedLabel should reflect settingsVm.profileLoaded === true")
     }
 
-    function test_profileCategory_showsNotLoadedWhenProfileVmReportsFalse() {
+    function test_directoriesCategory_showsNotLoadedWhenProfileVmReportsFalse() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profileLoaded: false}),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
         })
-
-        selectCategory(dialog, "Profile")
 
         const statusLabel = findByObjectName(dialog.contentItem, "profileLoadedLabel")
         verify(statusLabel !== null, "no label named 'profileLoadedLabel' found in SettingsDialog Profile category")
@@ -146,14 +142,14 @@ TestCase {
         compare(dialog.columnVisibility.score, true, "clicking the Score checkbox should update columnVisibility.score")
     }
 
-    function test_categoryList_startsOnKovaaksDirectory() {
+    function test_categoryList_startsOnDirectories() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
         })
 
-        compare(dialog.currentCategory, 0, "SettingsDialog should default to the Kovaaks Directory category (index 0)")
+        compare(dialog.currentCategory, 0, "SettingsDialog should default to the Directories category (index 0)")
     }
 
     function test_clickingCategoryItem_switchesCurrentCategory() {
@@ -165,6 +161,6 @@ TestCase {
 
         selectCategory(dialog, "Graph Lines")
 
-        compare(dialog.currentCategory, 2, "clicking the 'Graph Lines' category item should switch currentCategory to index 2")
+        compare(dialog.currentCategory, 1, "clicking the 'Graph Lines' category item should switch currentCategory to index 1")
     }
 }

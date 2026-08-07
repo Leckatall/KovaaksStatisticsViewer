@@ -23,10 +23,11 @@ namespace ksv::presentation {
         emit kovaaksDirChanged();
     }
 
-    void SettingsViewModel::setProfileDir(const QUrl &dir) {
-        if (dir == getProfileDir()) return;
-        m_settings_service->setProfileDir(dir.toLocalFile().toStdString());
-        emit profileDirChanged();
-        m_profile_service->setProfileDirectory(dir.toLocalFile().toStdString());
+    void SettingsViewModel::setProfilePath(const QUrl &path) {
+        if (path == getProfilePath()) return;
+        // Updating the settings service notifies ProfileService, which repoints
+        // its cache at the new path and reloads/regenerates there.
+        m_settings_service->setProfilePath(path.toLocalFile().toStdString());
+        emit profilePathChanged();
     }
 }

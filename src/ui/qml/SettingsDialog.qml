@@ -25,10 +25,14 @@ Dialog {
         onAccepted: root.settingsVm.setKovaaksDir(kovaaksFolderDialog.selectedFolder)
     }
 
-    FolderDialog {
-        id: profileFolderDialog
-        currentFolder: root.settingsVm.profileDir
-        onAccepted: root.settingsVm.setProfileDir(profileFolderDialog.selectedFolder)
+    FileDialog {
+        id: profileFileDialog
+        title: "Choose where to save the profile"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "pb"
+        nameFilters: ["Profile cache (*.pb)", "All files (*)"]
+        selectedFile: root.settingsVm.profilePath
+        onAccepted: root.settingsVm.setProfilePath(profileFileDialog.selectedFile)
     }
 
     RowLayout {
@@ -43,25 +47,18 @@ Dialog {
             spacing: 0
 
             ItemDelegate {
-                objectName: "categoryItem_Kovaaks Directory"
+                objectName: "categoryItem_Directories"
                 Layout.fillWidth: true
-                text: "Kovaaks Directory"
+                text: "Directories"
                 highlighted: root.currentCategory === 0
                 onClicked: root.currentCategory = 0
-            }
-            ItemDelegate {
-                objectName: "categoryItem_Profile"
-                Layout.fillWidth: true
-                text: "Profile"
-                highlighted: root.currentCategory === 1
-                onClicked: root.currentCategory = 1
             }
             ItemDelegate {
                 objectName: "categoryItem_Graph Lines"
                 Layout.fillWidth: true
                 text: "Graph Lines"
-                highlighted: root.currentCategory === 2
-                onClicked: root.currentCategory = 2
+                highlighted: root.currentCategory === 1
+                onClicked: root.currentCategory = 1
             }
             Item { Layout.fillHeight: true }
         }
@@ -71,9 +68,9 @@ Dialog {
             Layout.fillHeight: true
             currentIndex: root.currentCategory
 
-            // Kovaaks Directory
+            // Directories
             ColumnLayout {
-                spacing: 6
+                spacing: 16
 
                 DirectoryPickerRow {
                     label: "Kovaaks Directory"
@@ -81,18 +78,12 @@ Dialog {
                     objectNamePrefix: "kovaaksDir"
                     onBrowseRequested: kovaaksFolderDialog.open()
                 }
-                Item { Layout.fillHeight: true }
-            }
-
-            // Profile
-            ColumnLayout {
-                spacing: 6
 
                 DirectoryPickerRow {
-                    label: "Profile Save Location"
-                    dir: root.settingsVm.profileDir
-                    objectNamePrefix: "profileDir"
-                    onBrowseRequested: profileFolderDialog.open()
+                    label: "Profile Save File"
+                    dir: root.settingsVm.profilePath
+                    objectNamePrefix: "profilePath"
+                    onBrowseRequested: profileFileDialog.open()
                 }
                 Label {
                     objectName: "profileLoadedLabel"

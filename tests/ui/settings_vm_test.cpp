@@ -16,18 +16,18 @@ namespace {
     class FakeSettingsService : public ISettingsService {
     public:
         std::string dir = "C:/Kovaaks";
-        std::string profile_dir = "C:/Profile";
+        std::string profile_path = "C:/Profile/profile_cache.pb";
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
         void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
-        [[nodiscard]] std::string getProfileDir() const override { return profile_dir; }
-        void setProfileDir(const std::string &new_dir) override { profile_dir = new_dir; }
+        [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
+        void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
+        void onProfilePathChanged(std::function<void()>) override {}
     };
 
     class FakeProfileService : public IProfileService {
     public:
         bool profile_loaded = false;
-        std::string profile_directory;
         std::function<void()> stored_callback;
 
         void generateProfileFromDirectory() override {
@@ -47,8 +47,6 @@ namespace {
             const ScenarioId &, std::size_t) const override { return std::nullopt; }
 
         [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
-
-        void setProfileDirectory(const std::string &dir) override { profile_directory = dir; }
 
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
     };
@@ -91,40 +89,32 @@ namespace {
         EXPECT_EQ(spy.count(), 0);
     }
 
-    TEST_F(SettingsViewModelTest, ProfileDirReflectsServiceValueAtConstruction) {
-        fake_service->profile_dir = "D:/CustomProfile";
+    TEST_F(SettingsViewModelTest, ProfilePathReflectsServiceValueAtConstruction) {
+        fake_service->profile_path = "D:/CustomProfile/profile_cache.pb";
         const auto view_model = make_view_model();
 
-        EXPECT_EQ(view_model->getProfileDir(), QUrl::fromLocalFile("D:/CustomProfile"));
+        EXPECT_EQ(view_model->getProfilePath(), QUrl::fromLocalFile("D:/CustomProfile/profile_cache.pb"));
     }
 
-    TEST_F(SettingsViewModelTest, SetProfileDirUpdatesSettingsServiceAndEmitsOnChange) {
+    TEST_F(SettingsViewModelTest, SetProfilePathUpdatesSettingsServiceAndEmitsOnChange) {
         const auto view_model = make_view_model();
 
-        const QSignalSpy spy(view_model.get(), &SettingsViewModel::profileDirChanged);
-        view_model->setProfileDir(QUrl::fromLocalFile("D:/NewProfile"));
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::profilePathChanged);
+        view_model->setProfilePath(QUrl::fromLocalFile("D:/NewProfile/profile_cache.pb"));
 
         EXPECT_EQ(spy.count(), 1);
-        EXPECT_EQ(view_model->getProfileDir(), QUrl::fromLocalFile("D:/NewProfile"));
-        EXPECT_EQ(fake_service->profile_dir, "D:/NewProfile");
+        EXPECT_EQ(view_model->getProfilePath(), QUrl::fromLocalFile("D:/NewProfile/profile_cache.pb"));
+        EXPECT_EQ(fake_service->profile_path, "D:/NewProfile/profile_cache.pb");
     }
 
-    TEST_F(SettingsViewModelTest, SetProfileDirDoesNotEmitWhenUnchanged) {
-        fake_service->profile_dir = "C:/Profile";
+    TEST_F(SettingsViewModelTest, SetProfilePathDoesNotEmitWhenUnchanged) {
+        fake_service->profile_path = "C:/Profile/profile_cache.pb";
         const auto view_model = make_view_model();
 
-        const QSignalSpy spy(view_model.get(), &SettingsViewModel::profileDirChanged);
-        view_model->setProfileDir(QUrl::fromLocalFile("C:/Profile"));
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::profilePathChanged);
+        view_model->setProfilePath(QUrl::fromLocalFile("C:/Profile/profile_cache.pb"));
 
         EXPECT_EQ(spy.count(), 0);
-    }
-
-    TEST_F(SettingsViewModelTest, SetProfileDirRepointsProfileService) {
-        const auto view_model = make_view_model();
-
-        view_model->setProfileDir(QUrl::fromLocalFile("D:/NewProfile"));
-
-        EXPECT_EQ(fake_profile_service->profile_directory, "D:/NewProfile");
     }
 
     TEST_F(SettingsViewModelTest, ProfileLoadedReflectsProfileServiceState) {

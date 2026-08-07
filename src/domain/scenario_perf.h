@@ -4,8 +4,12 @@
 
 #ifndef KOVAAKSSTATSVIEWER_SCEN_PERF_H
 #define KOVAAKSSTATSVIEWER_SCEN_PERF_H
+#include <chrono>
+#include <ctime>
+#include <iomanip>
 #include <iostream>
 #include <ostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -57,8 +61,6 @@ namespace ksv::domain {
     };
 
     struct ScenarioRunId {
-        //TODO: implement converting this to a string of the form scenario_id.name (start_date, start_time)
-        // This string can then be used in the ui to show what scenario is being displayed
         ScenarioId scenario_id;
         long long start_time;
         bool operator==(const ScenarioRunId& other) const {
@@ -67,12 +69,38 @@ namespace ksv::domain {
         bool operator<(const ScenarioRunId& other) const {
             return scenario_id < other.scenario_id || (scenario_id == other.scenario_id && start_time < other.start_time);
         }
+
+        // The UTC calendar day this run started on (start_time is ms since the Unix epoch).
+        [[nodiscard]] std::chrono::sys_days startDay() const {
+            using namespace std::chrono;
+            return floor<days>(sys_time<milliseconds>{milliseconds{start_time}});
+        }
+
+        // Human-readable "name (start_date, start_time)" label for use in the
+        // UI. start_time is epoch ms (UTC); it is rendered in the machine's
+        // local timezone so the shown wall-clock matches when the run was
+        // actually played (Kovaaks writes timestamp_ms as a true UTC epoch).
+        [[nodiscard]] std::string toString() const {
+            const auto seconds = static_cast<std::time_t>(start_time / 1000);
+            std::tm local_tm{};
+#ifdef _WIN32
+            localtime_s(&local_tm, &seconds);
+#else
+            localtime_r(&seconds, &local_tm);
+#endif
+            std::ostringstream oss;
+            oss << scenario_id.name << " (" << std::put_time(&local_tm, "%Y-%m-%d, %H:%M:%S") << ")";
+            return oss.str();
+        }
     };
 
     struct ScenarioPerf {
         ScenarioRunId run_id;
         float scenario_length;
         std::vector<ScenarioDataPoint> data;
+        // Full absolute path of the .perf file this run was decoded from.
+        // Empty when unknown (test-constructed data, or data predating this field).
+        std::string source_file;
 
         template<typename T>
         void add_data(float time, DataPointType type, T value);

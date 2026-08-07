@@ -19,19 +19,8 @@ Frame {
         border.color: "#2A2A2A"
     }
 
-    // Score is drawn as the primary, labelled Y axis; every other plottable
-    // column gets its own invisible axis scaled to its own range so series
-    // with very different magnitudes (e.g. Accuracy 0-1 vs Score) can share
-    // the same chart without distorting one another.
-    //
-    // These read off the graphVm instance rather than the bare
-    // "GraphViewModel.Score"-style static enum type name: referencing the
-    // Column enum via the type name doesn't resolve at runtime from within
-    // this QML module (ReferenceError), even with a self-import.
     readonly property int primaryColumn: root.graphVm.scoreColumn
-    // SplineSeries needs at least 2 points to interpolate a curve; before any
-    // performance data is loaded (or after a scenario with a single sample),
-    // don't instantiate lines against the empty/underpopulated model.
+
     readonly property int lineCount: root.graphVm.pointCount >= 2 ? root.graphVm.totalColumnCount - 1 : 0
 
     GraphsView {
@@ -43,6 +32,22 @@ Frame {
             max: root.graphVm.axisBounds[root.graphVm.timeColumn].y
         }
 
+        // Shared, fully inert axis for hidden columns. QGraphsView reserves a
+        // fixed-width layout slot for every *distinct* axisY object attached
+        // to any series - regardless of that axis's own visible property
+        // (Qt 6.11 QGraphsView::calculateAxisCounts doesn't check isVisible()).
+        // Pointing every hidden line at this one shared instance means Qt's
+        // per-axis dedup only ever reserves a single slot for all of them
+        // combined, instead of one slot per hidden column. AlignRight keeps
+        // that one slot from shifting the plot area left.
+        axisY: ValueAxis {
+            visible: false
+            labelsVisible: false
+            gridVisible: false
+            lineVisible: false
+            alignment: Qt.AlignRight
+        }
+
         Instantiator {
             model: root.lineCount
 
@@ -50,22 +55,32 @@ Frame {
                 id: line
                 required property int index
                 readonly property int columnId: index + 1
+                readonly property bool columnVisible: !!root.columnVisibility[root.graphVm.columnName(columnId).toLowerCase()]
 
                 line_model: root.graphVm
                 xIndex: root.graphVm.timeColumn
                 yIndex: columnId
                 color: root.graphVm.columnColor(columnId)
                 width: 3
-                visible: !!root.columnVisibility[root.graphVm.columnName(columnId).toLowerCase()]
+                visible: line.columnVisible
                 pointDelegate: GraphHoverPointDelegate {}
 
-                axisY: ValueAxis {
+                // Only columns that are actually rendered (the primary axis,
+                // or a currently-toggled-on secondary line) get their own
+                // real axis with correct bounds; everything else shares
+                // graphsView's inert dummy axisY so it costs no extra layout
+                // space. See comment on graphsView.axisY above.
+                axisY: (line.columnId === root.primaryColumn || line.columnVisible) ? ownAxisY : graphsView.axisY
+
+                ValueAxis {
+                    id: ownAxisY
                     min: root.graphVm.axisBounds[line.columnId].x
                     max: root.graphVm.axisBounds[line.columnId].y
                     visible: line.columnId === root.primaryColumn
                     labelsVisible: line.columnId === root.primaryColumn
                     gridVisible: line.columnId === root.primaryColumn
                     lineVisible: line.columnId === root.primaryColumn
+                    alignment: line.columnId === root.primaryColumn ? Qt.AlignLeft : Qt.AlignRight
                     subTickCount: 4
                 }
             }

@@ -33,6 +33,12 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
         return m_decoder->decode_file(filename);
     }
 
+    std::string FileService::getSourceDirectory() const {
+        const auto perf_dir = get_perf_dir();
+        if (!perf_dir) return {};
+        return perf_dir->absolutePath().toStdString();
+    }
+
     domain::ScenarioPerf FileService::getLatestPerf() const {
         // DEPRECATED: Access through profile service now
         const auto perf_dir = get_perf_dir();

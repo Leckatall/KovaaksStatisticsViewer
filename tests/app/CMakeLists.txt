@@ -16,4 +16,5 @@ target_link_libraries(app_tests PRIVATE
     GTest::gtest
 )
 
+ksv_copy_mingw_runtime_dlls(app_tests)
 gtest_discover_tests(app_tests)

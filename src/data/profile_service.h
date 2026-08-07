@@ -14,17 +14,14 @@
 #include "interfaces/i_file_service.h"
 #include "interfaces/i_profile_service.h"
 #include "interfaces/i_profile_serializer.h"
+#include "interfaces/i_settings_service.h"
 
 namespace ksv::data {
     class ProfileService: public application::IProfileService{
     public:
         explicit ProfileService(std::shared_ptr<application::IFileService> file_service,
                                  std::shared_ptr<application::IProfileSerializer> serializer,
-                                 std::filesystem::path cache_path);
-
-        // Path of the cache file ProfileService reads/writes for a given profile
-        // directory. Callers should use this instead of hardcoding the filename.
-        [[nodiscard]] static std::filesystem::path cachePathFor(const std::filesystem::path &dir);
+                                 std::shared_ptr<application::ISettingsService> settings_service);
 
         void generateProfileFromDirectory() override;
         void loadProfile() override;
@@ -40,24 +37,32 @@ namespace ksv::data {
             const domain::ScenarioId& scenario, std::size_t count) const override;
 
         [[nodiscard]] bool isProfileLoaded() const override { return m_profile != nullptr; }
-        void setProfileDirectory(const std::string &dir) override;
 
         void onProfileChanged(std::function<void()> callback) override {
             m_callbacks.push_back(std::move(callback));
         }
 
     private:
-        static constexpr const char* kCacheFilename = "profile_cache.pb";
-
         void notifyProfileChanged() const {
             for (auto& cb : m_callbacks) cb();
         }
         void saveProfile() const;
 
+        // Creates m_filepath's parent directory if it doesn't exist yet, so
+        // the serializer can write the cache there.
+        void ensureParentDir() const;
+
+        // Reads the current profile path from the settings service, points the
+        // cache at it, and reloads (cache hit) or regenerates (cache miss) the
+        // profile there. Invoked whenever ISettingsService reports the profile
+        // path changed.
+        void applyProfilePath();
+
         std::filesystem::path m_filepath;
         std::unique_ptr<domain::UserProfile> m_profile;
         std::shared_ptr<application::IFileService> m_file_service;
         std::shared_ptr<application::IProfileSerializer> m_serializer;
+        std::shared_ptr<application::ISettingsService> m_settings_service;
 
         std::vector<std::function<void()>> m_callbacks;
     };

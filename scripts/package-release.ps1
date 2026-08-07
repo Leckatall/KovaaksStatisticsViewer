@@ -26,7 +26,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = "0.1.0-alpha",
+    [string]$Version = "0.2.0-alpha",
 
     [string]$RepoRoot = (Resolve-Path "$PSScriptRoot/.."),
     [string]$BuildDir = "$RepoRoot/build-release",
@@ -86,7 +86,7 @@ if (-not $SkipBuild) {
     Write-Host "`n-- Skipping build (using existing $BuildDir) --" -ForegroundColor Yellow
 }
 
-$ExeSource = Join-Path $BuildDir "myapp.exe"
+$ExeSource = Join-Path $BuildDir "ksv.exe"
 Assert-PathExists $ExeSource "Built executable"
 
 Write-Host "`n-- Assembling dist folder --" -ForegroundColor Cyan

@@ -33,4 +33,5 @@ target_compile_definitions(qt_data_tests PRIVATE
     TEST_FILES_DIR="${CMAKE_CURRENT_BINARY_DIR}/examples"
 )
 
+ksv_copy_mingw_runtime_dlls(qt_data_tests)
 gtest_discover_tests(qt_data_tests)

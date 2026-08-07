@@ -171,6 +171,26 @@ namespace {
         EXPECT_FALSE(a == c);
     }
 
+    TEST(ScenarioRunIdTest, ToStringFormatsNameDateAndTimeInLocalTime) {
+        // start_time is epoch ms; toString renders it in the machine's local
+        // timezone, so build the expected string the same way rather than
+        // hard-coding a UTC value (which would fail on any off-UTC machine).
+        constexpr long long start_ms = 1783733140000LL;
+        const ScenarioRunId run_id{.scenario_id = {.name = "Air Angelic", .hash = "h1"}, .start_time = start_ms};
+
+        const auto seconds = static_cast<std::time_t>(start_ms / 1000);
+        std::tm local_tm{};
+#ifdef _WIN32
+        localtime_s(&local_tm, &seconds);
+#else
+        localtime_r(&seconds, &local_tm);
+#endif
+        std::ostringstream expected;
+        expected << "Air Angelic (" << std::put_time(&local_tm, "%Y-%m-%d, %H:%M:%S") << ")";
+
+        EXPECT_EQ(run_id.toString(), expected.str());
+    }
+
     class UserProfileTest : public testing::Test {
     protected:
         static ScenarioPerf make_perf(const std::string &hash, long long start_time, float score = 0.0F) {
@@ -277,5 +297,133 @@ namespace {
     TEST_F(UserProfileTest, GetAverageScoreIsNulloptForUnknownScenario) {
         const UserProfile profile{"default"};
         EXPECT_FALSE(profile.getAverageScore(ScenarioId{.name = "?", .hash = "unknown"}, 3).has_value());
+    }
+
+    TEST_F(UserProfileTest, GetSourceDirectoryReturnsConstructorArgument) {
+        const UserProfile profile{"C:/Kovaaks/FPSAimTrainer/performances"};
+        EXPECT_EQ(profile.getSourceDirectory(), "C:/Kovaaks/FPSAimTrainer/performances");
+    }
+
+    TEST_F(UserProfileTest, GetRunLooksUpByRunId) {
+        UserProfile profile{"default"};
+        profile.addScenarioPerf(make_perf("scenario-1", 100));
+
+        const auto run = profile.getRun(ScenarioRunId{.scenario_id = {.name = "?", .hash = "scenario-1"}, .start_time = 100});
+        ASSERT_TRUE(run.has_value());
+        EXPECT_EQ(run->run_id.start_time, 100);
+    }
+
+    TEST_F(UserProfileTest, GetRunForUnknownRunIdIsNullopt) {
+        const UserProfile profile{"default"};
+        EXPECT_FALSE(profile.getRun(ScenarioRunId{.scenario_id = {.name = "?", .hash = "unknown"}, .start_time = 1}).has_value());
+    }
+
+    TEST_F(UserProfileTest, DuplicateRunIdIsSkippedAndReturnsFalse) {
+        UserProfile profile{"default"};
+        EXPECT_TRUE(profile.addScenarioPerf(make_perf("scenario-1", 100)));
+        EXPECT_FALSE(profile.addScenarioPerf(make_perf("scenario-1", 100)));
+
+        EXPECT_EQ(profile.getRunCount(ScenarioId{.name = "?", .hash = "scenario-1"}), 1);
+    }
+
+    TEST_F(UserProfileTest, GetTotalTimeSumsScenarioLengthsForScenario) {
+        UserProfile profile{"default"};
+        auto run_a = make_perf("scenario-1", 100);
+        run_a.scenario_length = 30.0F;
+        auto run_b = make_perf("scenario-1", 200);
+        run_b.scenario_length = 45.0F;
+        profile.addScenarioPerf(run_a);
+        profile.addScenarioPerf(run_b);
+
+        const auto total = profile.getTotalTime(ScenarioId{.name = "?", .hash = "scenario-1"});
+        ASSERT_TRUE(total.has_value());
+        EXPECT_DOUBLE_EQ(*total, 75.0);
+    }
+
+    TEST_F(UserProfileTest, GetTotalTimeIsNulloptForUnknownScenario) {
+        const UserProfile profile{"default"};
+        EXPECT_FALSE(profile.getTotalTime(ScenarioId{.name = "?", .hash = "unknown"}).has_value());
+    }
+
+    TEST_F(UserProfileTest, GetTotalTimeAllScenariosSumsAcrossScenarios) {
+        UserProfile profile{"default"};
+        auto run_a = make_perf("scenario-1", 100);
+        run_a.scenario_length = 30.0F;
+        auto run_b = make_perf("scenario-2", 100);
+        run_b.scenario_length = 45.0F;
+        profile.addScenarioPerf(run_a);
+        profile.addScenarioPerf(run_b);
+
+        EXPECT_DOUBLE_EQ(profile.getTotalTimeAllScenarios(), 75.0);
+    }
+
+    TEST_F(UserProfileTest, GetRunCountReturnsNumberOfRunsForScenario) {
+        UserProfile profile{"default"};
+        profile.addScenarioPerf(make_perf("scenario-1", 100));
+        profile.addScenarioPerf(make_perf("scenario-1", 200));
+
+        EXPECT_EQ(profile.getRunCount(ScenarioId{.name = "?", .hash = "scenario-1"}), 2);
+    }
+
+    TEST_F(UserProfileTest, GetRollingTimeAverageBucketsByCalendarDayWithGapDays) {
+        UserProfile profile{"default"};
+        constexpr long long kMsPerDay = 86400000;
+
+        auto perf_day0 = make_perf("scenario-1", 0);
+        perf_day0.scenario_length = 10.0F;
+        auto perf_day2 = make_perf("scenario-1", 2 * kMsPerDay);
+        perf_day2.scenario_length = 20.0F;
+        profile.addScenarioPerf(perf_day0);
+        profile.addScenarioPerf(perf_day2);
+
+        const auto series = profile.getRollingTimeAverage(ScenarioId{.name = "?", .hash = "scenario-1"}, 2);
+
+        // day1 has no run and must be treated as 0, not skipped, so the trailing
+        // 2-day window is accurate on every day (including the partial first window).
+        ASSERT_EQ(series.size(), 3);
+        EXPECT_EQ(series[0].first.time_since_epoch().count(), 0);
+        EXPECT_DOUBLE_EQ(series[0].second, 10.0);
+        EXPECT_EQ(series[1].first.time_since_epoch().count(), 1);
+        EXPECT_DOUBLE_EQ(series[1].second, 5.0);
+        EXPECT_EQ(series[2].first.time_since_epoch().count(), 2);
+        EXPECT_DOUBLE_EQ(series[2].second, 10.0);
+    }
+
+    TEST_F(UserProfileTest, GetRollingTimeAverageIsEmptyForUnknownScenario) {
+        const UserProfile profile{"default"};
+        EXPECT_TRUE(profile.getRollingTimeAverage(ScenarioId{.name = "?", .hash = "unknown"}, 7).empty());
+    }
+
+    TEST_F(UserProfileTest, GetRollingTimeAverageAcrossAllScenariosCombinesEveryScenario) {
+        UserProfile profile{"default"};
+        constexpr long long kMsPerDay = 86400000;
+
+        // Two different scenarios both played on day 0; a third scenario alone on
+        // day 2. The all-scenarios overload must sum across scenarios per day,
+        // same gap-day and trailing-window semantics as the per-scenario one.
+        auto run_a = make_perf("scenario-1", 0);
+        run_a.scenario_length = 10.0F;
+        auto run_b = make_perf("scenario-2", 1000);
+        run_b.scenario_length = 15.0F;
+        auto run_c = make_perf("scenario-3", 2 * kMsPerDay);
+        run_c.scenario_length = 20.0F;
+        profile.addScenarioPerf(run_a);
+        profile.addScenarioPerf(run_b);
+        profile.addScenarioPerf(run_c);
+
+        const auto series = profile.getRollingTimeAverage(2);
+
+        ASSERT_EQ(series.size(), 3);
+        EXPECT_EQ(series[0].first.time_since_epoch().count(), 0);
+        EXPECT_DOUBLE_EQ(series[0].second, 25.0); // day0: 10 + 15
+        EXPECT_EQ(series[1].first.time_since_epoch().count(), 1);
+        EXPECT_DOUBLE_EQ(series[1].second, 12.5); // (25 + 0) / 2
+        EXPECT_EQ(series[2].first.time_since_epoch().count(), 2);
+        EXPECT_DOUBLE_EQ(series[2].second, 10.0); // (0 + 20) / 2
+    }
+
+    TEST_F(UserProfileTest, GetRollingTimeAverageAcrossAllScenariosIsEmptyWhenProfileEmpty) {
+        const UserProfile profile{"default"};
+        EXPECT_TRUE(profile.getRollingTimeAverage(7).empty());
     }
 }

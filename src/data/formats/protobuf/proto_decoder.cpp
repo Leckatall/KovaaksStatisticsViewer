@@ -33,7 +33,9 @@ namespace ksv::data {
         if (!perfLog.ParseFromIstream(&input)) {
             std::cerr << "Failed to parse file." << std::endl;
         }
-        return decode(perfLog);
+        auto perf = decode(perfLog);
+        perf.source_file = filename;
+        return perf;
         // google::protobuf::ShutdownProtobufLibrary();
     }
 
