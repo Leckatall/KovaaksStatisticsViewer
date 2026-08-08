@@ -50,9 +50,14 @@ namespace ksv::presentation {
     QVariantMap GraphViewModel::axisBounds() const {
         QVariantMap map;
         for (int c = 0; c < ColumnCount; ++c) {
-            map[QString::number(c)] = QPointF(m_bounds[c].first, m_bounds[c].second);
+            map[QString::number(c)] = QPointF(m_axes[c].min(), m_axes[c].max());
         }
         return map;
+    }
+
+    QList<qreal> GraphViewModel::axisTicks(const int column) const {
+        if (column < 0 || column >= ColumnCount) return {};
+        return m_axes[column].ticks();
     }
 
     QString GraphViewModel::columnName(const int column) const {
@@ -85,14 +90,6 @@ namespace ksv::presentation {
                 hi = std::max(hi, row[column]);
             }
             return {lo, hi};
-        }
-
-        // Pads [lo, hi] by ~5% on both ends. If every value is identical, pads by a
-        // fixed amount instead so the axis isn't zero-width.
-        std::pair<qreal, qreal> padded(qreal lo, qreal hi) {
-            if (lo == hi) return {lo - 0.5, hi + 0.5};
-            const qreal pad = (hi - lo) * 0.05;
-            return {lo - pad, hi + pad};
         }
 
         // Real .perf data ticks arrive as per-tick deltas (see
@@ -150,28 +147,29 @@ namespace ksv::presentation {
     }
 
     void GraphViewModel::recomputeBounds() {
-        std::array<std::pair<qreal, qreal>, ColumnCount> newBounds{};
-        newBounds[Time] = {0.0, 60.0};
-        for (int c = Score; c < ColumnCount; ++c) newBounds[c] = {0.0, 1.0};
+        // Time never goes negative and always starts at 0, and is measured in
+        // whole seconds, so it pins its floor to zero and keeps integral ticks.
+        const AxisModel::Options timeOpts{AxisModel::Baseline::Zero, /*integral=*/true};
 
-        if (!m_data.isEmpty()) {
-            // Time never goes negative and always starts at 0, so its min is
-            // pinned rather than padded below; only its max gets padding.
+        std::array<AxisModel, ColumnCount> newAxes{};
+        if (m_data.isEmpty()) {
+            newAxes[Time] = AxisModel::forRange(0.0, 60.0, timeOpts);
+            for (int c = Score; c < ColumnCount; ++c) newAxes[c] = AxisModel::forRange(0.0, 1.0);
+        } else {
             const auto [xlo, xhi] = rawColumnRange(m_data, Time);
-            const qreal newXMax = m_data.size() == 1 || xlo == xhi ? xhi + 0.5 : xhi + (xhi - xlo) * 0.05;
-            newBounds[Time] = {0.0, newXMax};
+            newAxes[Time] = AxisModel::forRange(0.0, xhi, timeOpts);
 
             for (int c = Score; c < ColumnCount; ++c) {
                 const auto [lo, hi] = rawColumnRange(m_data, static_cast<Column>(c));
-                newBounds[c] = padded(lo, hi);
+                newAxes[c] = AxisModel::forRange(lo, hi);
             }
         }
 
-        // Only notify if something actually changed
+        // Only notify if the visible range actually changed.
         bool changed = false;
         for (int c = 0; c < ColumnCount; ++c) {
-            if (!qFuzzyCompare(1.0 + m_bounds[c].first, 1.0 + newBounds[c].first) ||
-                !qFuzzyCompare(1.0 + m_bounds[c].second, 1.0 + newBounds[c].second)) {
+            if (!qFuzzyCompare(1.0 + m_axes[c].min(), 1.0 + newAxes[c].min()) ||
+                !qFuzzyCompare(1.0 + m_axes[c].max(), 1.0 + newAxes[c].max())) {
                 changed = true;
                 break;
             }
@@ -179,7 +177,7 @@ namespace ksv::presentation {
 
         if (!changed) return;
 
-        m_bounds = newBounds;
+        m_axes = newAxes;
 
         emit boundsChanged();
     }

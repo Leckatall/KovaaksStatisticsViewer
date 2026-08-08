@@ -14,6 +14,7 @@
 #include <qqmlintegration.h>
 #include <ranges>
 
+#include "axis_model.h"
 #include "graph_vm_base.h"
 #include "app/usecases/i_graph_use_case.h"
 
@@ -39,6 +40,8 @@ namespace ksv::presentation {
 
         [[nodiscard]] QVariantMap axisBounds() const override;
 
+        [[nodiscard]] QList<qreal> axisTicks(int column) const override;
+
         [[nodiscard]] int pointCount() const override { return int(m_data.size()); }
 
         [[nodiscard]] QString scenarioTitle() const { return m_scenarioTitle; }
@@ -62,7 +65,7 @@ namespace ksv::presentation {
     private:
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
         QList<QMap<Column, qreal>> m_data;
-        std::array<std::pair<qreal, qreal>, ColumnCount> m_bounds{};
+        std::array<AxisModel, ColumnCount> m_axes{};
         QString m_scenarioTitle;
     };
 }

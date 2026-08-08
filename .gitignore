@@ -73,7 +73,7 @@ Testing/
 .cache/
 
 # Jetbrains IDE
-.idea
+.*/
 
 # AI files
 CLAUDE.md

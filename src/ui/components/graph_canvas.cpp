@@ -5,12 +5,12 @@
 #include "graph_canvas.h"
 
 #include <QColor>
-#include <QFont>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
 #include <cmath>
 
+#include "axis_renderer.h"
 #include "presentation/monotone_spline.h"
 
 namespace ksv::presentation {
@@ -19,12 +19,9 @@ namespace ksv::presentation {
         constexpr qreal kBottomMargin = 28;
         constexpr qreal kTopMargin = 10;
         constexpr qreal kRightMargin = 10;
-        constexpr int kGridLines = 5;
         constexpr qreal kMarkerRadius = 4;
         constexpr qreal kHoverRadius = 10;
 
-        const QColor kGridColor("#2A2A2A");
-        const QColor kTextColor("white");
         const QColor kMarkerColor("#4DD0E1");
     }
 
@@ -73,35 +70,14 @@ namespace ksv::presentation {
         const QPointF xBounds = bounds[QString::number(m_graphVm->xColumn())].toPointF();
         const QPointF yBounds = bounds[QString::number(m_graphVm->yAxisColumn())].toPointF();
 
-        QFont tickFont = painter->font();
-        tickFont.setPointSize(8);
-        painter->setFont(tickFont);
-
-        for (int i = 0; i <= kGridLines; ++i) {
-            const qreal t = qreal(i) / kGridLines;
-            const qreal y = rect.bottom() - t * rect.height();
-
-            painter->setPen(QPen(kGridColor, 1));
-            painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
-
-            const qreal value = yBounds.x() + t * (yBounds.y() - yBounds.x());
-            painter->setPen(kTextColor);
-            painter->drawText(QRectF(0, y - 8, kLeftMargin - 6, 16), Qt::AlignRight | Qt::AlignVCenter,
-                               m_graphVm->formatYTick(value));
-        }
-
-        for (int i = 0; i <= kGridLines; ++i) {
-            const qreal t = qreal(i) / kGridLines;
-            const qreal x = rect.left() + t * rect.width();
-
-            painter->setPen(QPen(kGridColor, 1));
-            painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
-
-            const qreal value = xBounds.x() + t * (xBounds.y() - xBounds.x());
-            painter->setPen(kTextColor);
-            painter->drawText(QRectF(x - 20, rect.bottom() + 4, 40, kBottomMargin - 4),
-                               Qt::AlignHCenter | Qt::AlignTop, m_graphVm->formatXTick(value));
-        }
+        // The view model chooses tick positions (nice round numbers); the
+        // renderer draws one gridline + label per tick for each labelled axis.
+        AxisRenderer::paint(*painter, rect, AxisRenderer::Orientation::Vertical,
+                            yBounds.x(), yBounds.y(), m_graphVm->axisTicks(m_graphVm->yAxisColumn()),
+                            [vm = m_graphVm](const qreal v) { return vm->formatYTick(v); });
+        AxisRenderer::paint(*painter, rect, AxisRenderer::Orientation::Horizontal,
+                            xBounds.x(), xBounds.y(), m_graphVm->axisTicks(m_graphVm->xColumn()),
+                            [vm = m_graphVm](const qreal v) { return vm->formatXTick(v); });
     }
 
     void GraphCanvas::drawSeries(QPainter *painter, const QRectF &rect, const QVariantMap &bounds) {

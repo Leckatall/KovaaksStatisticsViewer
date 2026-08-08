@@ -6,6 +6,7 @@
 #define KOVAAKSSTATSVIEWER_GRAPH_VM_BASE_H
 
 #include <QColor>
+#include <QList>
 #include <QObject>
 #include <QPointF>
 #include <QString>
@@ -35,6 +36,11 @@ namespace ksv::presentation {
 
         // Stringified-id -> QPointF(min, max) for every column, X included.
         [[nodiscard]] virtual QVariantMap axisBounds() const = 0;
+
+        // Nice-number tick positions for `column`, all within that column's
+        // bounds. GraphCanvas draws one gridline+label per tick for the X and
+        // Y-axis columns. Returns an empty list for columns without an axis.
+        [[nodiscard]] virtual QList<qreal> axisTicks(int column) const = 0;
 
         // {x, value} points for one series id, in draw order.
         [[nodiscard]] virtual QList<QPointF> seriesPoints(int column) const = 0;

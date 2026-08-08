@@ -107,7 +107,7 @@ namespace {
         EXPECT_GT(spy.count(), 0);
     }
 
-    TEST_F(GraphViewModelTest, RecomputeBoundsUsesRealPerColumnRangesWithPadding) {
+    TEST_F(GraphViewModelTest, RecomputeBoundsSnapsEachColumnToNiceNumbers) {
         // times {0,1,2}, scores {10,20,30}, accuracies {0.5,0.6,0.7}.
         setSampleData();
         view_model.fetchData("");
@@ -116,23 +116,32 @@ namespace {
         const auto scoreBounds = bounds[QString::number(GraphViewModel::Score)].toPointF();
         const auto accuracyBounds = bounds[QString::number(GraphViewModel::Accuracy)].toPointF();
 
-        // Time min is pinned to 0.0 (time never goes negative); max padded by ~5%.
+        // Time is zero-based and integral: whole-second ticks 0,1,2.
         EXPECT_DOUBLE_EQ(timeBounds.x(), 0.0);
-        EXPECT_NEAR(timeBounds.y(), 2.1, 1e-9);
+        EXPECT_DOUBLE_EQ(timeBounds.y(), 2.0);
+        EXPECT_EQ(view_model.axisTicks(GraphViewModel::Time), (QList<qreal>{0.0, 1.0, 2.0}));
 
-        // Score range [10,30] padded by ~5% on both ends.
-        EXPECT_NEAR(scoreBounds.x(), 9.0, 1e-9);
-        EXPECT_NEAR(scoreBounds.y(), 31.0, 1e-9);
+        // Score range [10,30] snaps to nice endpoints with round ticks that
+        // span the full range.
+        EXPECT_DOUBLE_EQ(scoreBounds.x(), 10.0);
+        EXPECT_DOUBLE_EQ(scoreBounds.y(), 30.0);
+        const auto scoreTicks = view_model.axisTicks(GraphViewModel::Score);
+        ASSERT_GE(scoreTicks.size(), 2);
+        EXPECT_DOUBLE_EQ(scoreTicks.front(), 10.0);
+        EXPECT_DOUBLE_EQ(scoreTicks.back(), 30.0);
 
-        // Accuracy range [0.5,0.7] gets its own independent axis, padded ~5%.
+        // Accuracy range [0.5,0.7] gets its own independent axis.
         // Accuracies are stored as float and promoted to double, so the
-        // tolerance must absorb float-precision error (~1e-8), not just
-        // double rounding.
-        EXPECT_NEAR(accuracyBounds.x(), 0.49, 1e-6);
-        EXPECT_NEAR(accuracyBounds.y(), 0.71, 1e-6);
+        // tolerance must absorb float-precision error (~1e-8).
+        EXPECT_NEAR(accuracyBounds.x(), 0.5, 1e-6);
+        EXPECT_NEAR(accuracyBounds.y(), 0.7, 1e-6);
+        const auto accuracyTicks = view_model.axisTicks(GraphViewModel::Accuracy);
+        ASSERT_GE(accuracyTicks.size(), 2);
+        EXPECT_NEAR(accuracyTicks.front(), 0.5, 1e-6);
+        EXPECT_NEAR(accuracyTicks.back(), 0.7, 1e-6);
     }
 
-    TEST_F(GraphViewModelTest, RecomputeBoundsPadsDegenerateColumnRange) {
+    TEST_F(GraphViewModelTest, RecomputeBoundsExpandsDegenerateColumnRangeToNiceNumbers) {
         // Two distinct, contiguous-from-zero seconds with the same value
         // (rather than one duplicated timestamp, which would land in the
         // same resampled bucket and get summed - correct behavior, but not
@@ -149,14 +158,17 @@ namespace {
         const auto scoreBounds = bounds[QString::number(GraphViewModel::Score)].toPointF();
         const auto accuracyBounds = bounds[QString::number(GraphViewModel::Accuracy)].toPointF();
 
-        // All-equal columns pad by a fixed +-0.5 instead of dividing by a zero range.
-        EXPECT_DOUBLE_EQ(scoreBounds.x(), 41.5);
-        EXPECT_DOUBLE_EQ(scoreBounds.y(), 42.5);
-        // Accuracy is stored as float, so 0.8F promoted to double isn't
-        // bit-exact; use a tolerance sized to float precision instead of
-        // exact equality.
-        EXPECT_NEAR(accuracyBounds.x(), 0.3, 1e-6);
-        EXPECT_NEAR(accuracyBounds.y(), 1.3, 1e-6);
+        // An all-equal column has no real range, so the axis expands around the
+        // shared value (by the fallback span) and snaps to nice numbers rather
+        // than dividing by a zero range. Score 42 -> [41,43] on a 0.5 grid.
+        EXPECT_DOUBLE_EQ(scoreBounds.x(), 41.0);
+        EXPECT_DOUBLE_EQ(scoreBounds.y(), 43.0);
+
+        // Accuracy 0.8 expands to [-0.2,1.8] then snaps out to a 0.2 grid.
+        // 0.8F promoted to double is 0.80000001, so the upper bound rounds up
+        // one extra step to 2.0; tolerate float-precision error.
+        EXPECT_NEAR(accuracyBounds.x(), -0.2, 1e-6);
+        EXPECT_NEAR(accuracyBounds.y(), 2.0, 1e-6);
     }
 
     TEST_F(GraphViewModelTest, PlottableColumnsExcludesTime) {

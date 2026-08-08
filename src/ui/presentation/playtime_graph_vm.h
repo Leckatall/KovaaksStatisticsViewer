@@ -10,6 +10,7 @@
 #include <memory>
 #include <qqmlintegration.h>
 
+#include "axis_model.h"
 #include "graph_vm_base.h"
 #include "app/usecases/i_playtime_graph_use_case.h"
 
@@ -34,6 +35,7 @@ namespace ksv::presentation {
         [[nodiscard]] int pointCount() const override { return int(m_points.size()); }
         [[nodiscard]] QVariantList plottableColumns() const override { return {int(Playtime)}; }
         [[nodiscard]] QVariantMap axisBounds() const override;
+        [[nodiscard]] QList<qreal> axisTicks(int column) const override;
         [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
         Q_INVOKABLE [[nodiscard]] QString columnName(int column) const override;
         Q_INVOKABLE [[nodiscard]] QColor columnColor(int column) const override;
@@ -55,8 +57,8 @@ namespace ksv::presentation {
         std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;
         // {days-since-epoch, minutes} points, ordered by day.
         QList<QPointF> m_points;
-        std::pair<qreal, qreal> m_xBounds{0.0, 1.0};
-        std::pair<qreal, qreal> m_yBounds{0.0, 1.0};
+        AxisModel m_xAxis;
+        AxisModel m_yAxis;
     };
 }
 

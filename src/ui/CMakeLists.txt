@@ -27,6 +27,8 @@ qt_add_qml_module(ksv_ui
             qml/SettingsDialog.qml
             qml/DirectoryPickerRow.qml
         SOURCES
+            presentation/axis_model.h
+            presentation/axis_model.cpp
             presentation/graph_vm_base.h
             presentation/graph_vm.h
             presentation/graph_vm.cpp
@@ -34,6 +36,8 @@ qt_add_qml_module(ksv_ui
             presentation/playtime_graph_vm.cpp
         components/graph_canvas.h
         components/graph_canvas.cpp
+        components/axis_renderer.h
+        components/axis_renderer.cpp
             presentation/monotone_spline.h
             presentation/session_vm.h
             presentation/session_vm.cpp

@@ -64,7 +64,7 @@ namespace {
         EXPECT_TRUE(view_model.seriesPoints(PlaytimeGraphViewModel::Date).isEmpty());
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, AxisBoundsSpanDaysAndStartYAtZeroWithHeadroom) {
+    TEST_F(PlaytimeGraphViewModelTest, AxisBoundsSpanDaysAndStartYAtZeroOnNiceNumbers) {
         fake->series = {{19500, 1800.0}, {19502, 3600.0}}; // 30 min, 60 min
         view_model.refresh();
 
@@ -72,19 +72,28 @@ namespace {
         const auto xBounds = bounds[QString::number(PlaytimeGraphViewModel::Date)].toPointF();
         const auto yBounds = bounds[QString::number(PlaytimeGraphViewModel::Playtime)].toPointF();
 
+        // X spans the days on a whole-day (integral) grid.
         EXPECT_DOUBLE_EQ(xBounds.x(), 19500.0);
         EXPECT_DOUBLE_EQ(xBounds.y(), 19502.0);
+        EXPECT_EQ(view_model.axisTicks(PlaytimeGraphViewModel::Date),
+                  (QList<qreal>{19500.0, 19501.0, 19502.0}));
+
+        // Y is zero-based and rounds up to a nice value with round ticks.
         EXPECT_DOUBLE_EQ(yBounds.x(), 0.0);
-        EXPECT_DOUBLE_EQ(yBounds.y(), 60.0 * 1.05);
+        EXPECT_DOUBLE_EQ(yBounds.y(), 60.0);
+        const auto yTicks = view_model.axisTicks(PlaytimeGraphViewModel::Playtime);
+        ASSERT_GE(yTicks.size(), 2);
+        EXPECT_DOUBLE_EQ(yTicks.front(), 0.0);
+        EXPECT_DOUBLE_EQ(yTicks.back(), 60.0);
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, SinglePointGetsSymmetricallyPaddedXAxis) {
+    TEST_F(PlaytimeGraphViewModelTest, SinglePointExpandsXAxisToNiceWholeDays) {
         fake->series = {{19500, 1800.0}};
         view_model.refresh();
 
         const auto xBounds = view_model.axisBounds()[QString::number(PlaytimeGraphViewModel::Date)].toPointF();
-        EXPECT_DOUBLE_EQ(xBounds.x(), 19499.5);
-        EXPECT_DOUBLE_EQ(xBounds.y(), 19500.5);
+        EXPECT_DOUBLE_EQ(xBounds.x(), 19499.0);
+        EXPECT_DOUBLE_EQ(xBounds.y(), 19501.0);
     }
 
     TEST_F(PlaytimeGraphViewModelTest, RefreshEmitsPointCountAndBoundsChanged) {

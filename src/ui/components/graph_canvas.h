@@ -34,12 +34,7 @@ namespace ksv::presentation {
 
         void paint(QPainter *painter) override;
 
-        // Hit-tests (x, y) in item-local coordinates against the point
-        // markers drawn during the last paint(). Returns
-        // {valid, columnId, time, value}; `valid` is false when nothing is
-        // within the hover radius.
         Q_INVOKABLE [[nodiscard]] QVariantMap nearestPoint(qreal x, qreal y) const;
-
 
         // Given a pixel-x coordinate, finds the nearest time point and returns
         // {valid, time, pixelX, series: [{name, color, value}, ...]}.
