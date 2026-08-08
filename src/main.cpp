@@ -9,6 +9,7 @@
 #include <app/app.h>
 #include <ui/components/graph_canvas.h>
 #include <presentation/graph_vm.h>
+#include <presentation/playtime_graph_vm.h>
 
 void declare_metatypes() {
     // ksv_ui is a static library built with qt_add_qml_module(NO_PLUGIN); its
@@ -17,6 +18,7 @@ void declare_metatypes() {
     // Referencing GraphViewModel here keeps that object linked in and
     // registers it explicitly as a fallback.
     qmlRegisterUncreatableType<ksv::presentation::GraphViewModel>("KovaaksStatsViewer", 1, 0, "GraphViewModel", "Enums only");
+    qmlRegisterUncreatableType<ksv::presentation::PlaytimeGraphViewModel>("KovaaksStatsViewer", 1, 0, "PlaytimeGraphViewModel", "Created in C++");
     qmlRegisterType<ksv::presentation::GraphCanvas>("KovaaksStatsViewer", 1, 0, "GraphCanvas");
 }
 

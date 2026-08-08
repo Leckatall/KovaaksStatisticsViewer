@@ -33,6 +33,7 @@ ApplicationWindow {
     }
 
     required property var graphVm
+    required property var playtimeVm
     required property var sessionVm
     required property var settingsVm
 
@@ -88,6 +89,11 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 graphVm: root.graphVm
                 columnVisibility: columnVisibilitySettings
+            }
+            PlaytimeGraphPanel {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                playtimeVm: root.playtimeVm
             }
         }
         ControlPanel {

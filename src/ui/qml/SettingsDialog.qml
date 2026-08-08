@@ -10,14 +10,36 @@ Dialog {
     modal: true
     standardButtons: Dialog.Close
     anchors.centerIn: parent
-    width: 640
-    height: 420
+    width: 680
+    height: 460
+    padding: 0
+    margins: 10
 
     required property var settingsVm
     required property var graphVm
     required property var columnVisibility
 
     property int currentCategory: 0
+
+    // Rounded "pill" navigation entry for the sidebar.
+    component CategoryButton: ItemDelegate {
+        id: catButton
+        padding: 10
+        Layout.fillWidth: true
+
+        background: Rectangle {
+            radius: 2
+            color: catButton.highlighted
+                   ? Qt.alpha(Material.accentColor, 0.22)
+                   : (catButton.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
+        }
+        contentItem: Label {
+            text: catButton.text
+            color: Material.foreground
+            font.bold: catButton.highlighted
+            verticalAlignment: Text.AlignVCenter
+        }
+    }
 
     FolderDialog {
         id: kovaaksFolderDialog
@@ -37,32 +59,51 @@ Dialog {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 16
+        spacing: 10
 
-        ColumnLayout {
-            id: categoryList
-            objectName: "categoryList"
-            Layout.preferredWidth: 160
+        // ---- Sidebar ------------------------------------------------------
+        Rectangle {
+            Layout.preferredWidth: 176
             Layout.fillHeight: true
-            spacing: 0
+            color: Qt.darker(Material.dialogColor, 1.25)
 
-            ItemDelegate {
-                objectName: "categoryItem_Directories"
-                Layout.fillWidth: true
-                text: "Directories"
-                highlighted: root.currentCategory === 0
-                onClicked: root.currentCategory = 0
+
+            // Right-edge divider between sidebar and content.
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 1
+                color: Qt.rgba(1, 1, 1, 0.08)
             }
-            ItemDelegate {
-                objectName: "categoryItem_Graph Lines"
-                Layout.fillWidth: true
-                text: "Graph Lines"
-                highlighted: root.currentCategory === 1
-                onClicked: root.currentCategory = 1
+
+            ColumnLayout {
+                id: categoryList
+                objectName: "categoryList"
+                anchors.fill: parent
+                anchors.margins: 5
+                anchors.topMargin: 5
+                spacing: 4
+
+                CategoryButton {
+                    objectName: "categoryItem_Directories"
+                    Layout.fillWidth: true
+                    text: "Directories"
+                    highlighted: root.currentCategory === 0
+                    onClicked: root.currentCategory = 0
+                }
+                CategoryButton {
+                    objectName: "categoryItem_Graph Lines"
+                    Layout.fillWidth: true
+                    text: "Graph Lines"
+                    highlighted: root.currentCategory === 1
+                    onClicked: root.currentCategory = 1
+                }
+                Item { Layout.fillHeight: true }
             }
-            Item { Layout.fillHeight: true }
         }
 
+        // ---- Content ------------------------------------------------------
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -72,7 +113,16 @@ Dialog {
             ColumnLayout {
                 spacing: 16
 
+                Label {
+                    text: "Directories"
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: Material.foreground
+                    Layout.bottomMargin: 4
+                }
+
                 DirectoryPickerRow {
+                    Layout.fillWidth: true
                     label: "Kovaaks Directory"
                     dir: root.settingsVm.kovaaksDir
                     objectNamePrefix: "kovaaksDir"
@@ -80,45 +130,73 @@ Dialog {
                 }
 
                 DirectoryPickerRow {
+                    Layout.fillWidth: true
                     label: "Profile Save File"
                     dir: root.settingsVm.profilePath
                     objectNamePrefix: "profilePath"
                     onBrowseRequested: profileFileDialog.open()
                 }
-                Label {
-                    objectName: "profileLoadedLabel"
-                    text: "Profile status: " + (root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
-                    color: root.settingsVm.profileLoaded ? "#4CAF50" : "#F44336"
+
+                RowLayout {
+                    spacing: 8
+                    Rectangle {
+                        width: 10
+                        height: 10
+                        radius: width / 2
+                        color: root.settingsVm.profileLoaded
+                               ? Material.color(Material.Green)
+                               : Material.color(Material.Red)
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                    Label {
+                        objectName: "profileLoadedLabel"
+                        text: "Profile status: " + (root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
+                        color: Material.foreground
+                    }
                 }
                 Item { Layout.fillHeight: true }
             }
 
             // Graph Lines
             ColumnLayout {
-                spacing: 6
+                spacing: 8
 
                 Label {
-                    text: "Visible Graph Lines"
+                    text: "Graph Lines"
+                    font.pixelSize: 18
                     font.bold: true
-                    color: "white"
+                    color: Material.foreground
+                    Layout.bottomMargin: 4
                 }
+
                 Repeater {
                     model: root.graphVm.plottableColumns
 
-                    CheckBox {
+                    RowLayout {
+                        id: lineRow
                         required property int modelData
-                        objectName: "columnVisibilityCheckBox_" + root.graphVm.columnName(modelData)
                         Layout.fillWidth: true
+                        spacing: 12
 
-                        text: root.graphVm.columnName(modelData)
-                        checked: !!columnVisibility[root.graphVm.columnName(modelData).toLowerCase()]
-                        onToggled: columnVisibility[root.graphVm.columnName(modelData).toLowerCase()] = checked
-
-                        background: Rectangle {
-                            anchors.fill: parent
-                            color: root.graphVm.columnColor(modelData)
-                            opacity: 0.5
-                            radius: 5
+                        Rectangle {
+                            width: 16
+                            height: 16
+                            radius: 4
+                            color: root.graphVm.columnColor(lineRow.modelData)
+                            border.width: 1
+                            border.color: Qt.rgba(1, 1, 1, 0.15)
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        Label {
+                            text: root.graphVm.columnName(lineRow.modelData)
+                            color: Material.foreground
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        Item { Layout.fillWidth: true }
+                        Switch {
+                            objectName: "columnVisibilityCheckBox_" + root.graphVm.columnName(lineRow.modelData)
+                            checked: !!columnVisibility[root.graphVm.columnName(lineRow.modelData).toLowerCase()]
+                            onToggled: columnVisibility[root.graphVm.columnName(lineRow.modelData).toLowerCase()] = checked
                         }
                     }
                 }
@@ -126,4 +204,6 @@ Dialog {
             }
         }
     }
+
+
 }

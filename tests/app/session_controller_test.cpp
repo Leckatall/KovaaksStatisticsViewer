@@ -54,6 +54,9 @@ namespace {
             return std::nullopt;
         }
 
+        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
+        getRollingTimeAverage(int) const override { return {}; }
+
         [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
 
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }

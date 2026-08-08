@@ -142,6 +142,12 @@ namespace ksv::domain {
         std::vector<std::pair<sys_days, double> > daily_totals;
         for (const auto idx: sorted_indices) {
             const auto &perf = m_runs[idx];
+            // A non-positive start_time is a pre-epoch (1970) timestamp that no
+            // real Kovaaks run can have - it comes from a default-constructed or
+            // malformed run. Including it would anchor the dense day-fill below
+            // at 1970, stretching every consumer (e.g. the rolling-playtime
+            // graph's axis) back across decades of empty days. Skip it.
+            if (perf.run_id.start_time <= 0) continue;
             const auto day = perf.run_id.startDay();
             if (!daily_totals.empty() && daily_totals.back().first == day) {
                 daily_totals.back().second += perf.scenario_length;
@@ -149,6 +155,9 @@ namespace ksv::domain {
                 daily_totals.emplace_back(day, perf.scenario_length);
             }
         }
+
+        // Every run may have been skipped as invalid above.
+        if (daily_totals.empty()) return result;
 
         const sys_days first_day = daily_totals.front().first;
         const sys_days last_day = daily_totals.back().first;

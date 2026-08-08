@@ -4,7 +4,9 @@
 
 #ifndef KOVAAKSSTATSVIEWER_I_PROFILE_SEVICE_H
 #define KOVAAKSSTATSVIEWER_I_PROFILE_SEVICE_H
+#include <chrono>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "domain/scenario_perf.h"
@@ -32,6 +34,14 @@ namespace ksv::application {
         // Average final score across the `count` most recent runs for a scenario.
         [[nodiscard]] virtual std::optional<float> getAverageScore(
             const domain::ScenarioId& scenario, std::size_t count) const = 0;
+
+        // Per-day rolling average of daily playtime (summed scenario_length,
+        // seconds) over a trailing window of `window_days`, across all
+        // scenarios. One (day, average-seconds) pair per calendar day from the
+        // first to the last day with runs; gap days count as 0. Empty if no
+        // profile is loaded or it has no runs.
+        [[nodiscard]] virtual std::vector<std::pair<std::chrono::sys_days, double>>
+        getRollingTimeAverage(int window_days) const = 0;
 
         // True once a profile (loaded from cache or freshly generated) is held in memory.
         [[nodiscard]] virtual bool isProfileLoaded() const = 0;

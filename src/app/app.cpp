@@ -17,6 +17,7 @@
 #include "qt_data/file_service.h"
 #include "../data/profile_service.h"
 #include "usecases/graph_use_case.h"
+#include "usecases/playtime_graph_use_case.h"
 
 
 namespace ksv::application {
@@ -33,6 +34,13 @@ namespace ksv::application {
         m_sessionController = std::make_shared<SessionController>(m_settingsService, m_profileService);
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController);
         m_graphVm = new presentation::GraphViewModel(m_graphUseCase, this);
+
+        m_playtimeUseCase = std::make_shared<PlaytimeGraphUseCase>(m_profileService);
+        m_playtimeVm = new presentation::PlaytimeGraphViewModel(m_playtimeUseCase, this);
+        // Re-pull the rolling average whenever the profile reloads (source dir
+        // change, cache reload, or a new run appended).
+        m_profileService->onProfileChanged([this] { m_playtimeVm->refresh(); });
+
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
         m_settingsVm = new presentation::SettingsViewModel(m_settingsService, m_profileService, this);
     }
@@ -40,6 +48,7 @@ namespace ksv::application {
     int App::start() {
         m_engine.setInitialProperties({
             {"graphVm", QVariant::fromValue(m_graphVm)},
+            {"playtimeVm", QVariant::fromValue(m_playtimeVm)},
             {"sessionVm", QVariant::fromValue(m_sessionVm)},
             {"settingsVm", QVariant::fromValue(m_settingsVm)}
         });

@@ -36,6 +36,9 @@ namespace ksv::data {
         [[nodiscard]] std::optional<float> getAverageScore(
             const domain::ScenarioId& scenario, std::size_t count) const override;
 
+        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
+        getRollingTimeAverage(int window_days) const override;
+
         [[nodiscard]] bool isProfileLoaded() const override { return m_profile != nullptr; }
 
         void onProfileChanged(std::function<void()> callback) override {

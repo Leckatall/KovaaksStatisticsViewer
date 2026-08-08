@@ -9,6 +9,7 @@
 #include <QQmlApplicationEngine>
 
 #include "graph_vm.h"
+#include "playtime_graph_vm.h"
 #include "session_vm.h"
 #include "settings_vm.h"
 #include "interfaces/i_proto_decoder.h"
@@ -16,6 +17,7 @@
 #include "data/interfaces/i_profile_service.h"
 #include "interfaces/i_settings_service.h"
 #include "usecases/i_session_controller.h"
+#include "usecases/i_playtime_graph_use_case.h"
 
 
 namespace ksv::application {
@@ -30,6 +32,7 @@ namespace ksv::application {
         // void setStatusBarMessage() const;
         QQmlApplicationEngine m_engine;
         presentation::GraphViewModel* m_graphVm;
+        presentation::PlaytimeGraphViewModel* m_playtimeVm;
         presentation::SessionViewModel* m_sessionVm;
         presentation::SettingsViewModel* m_settingsVm;
 
@@ -38,6 +41,7 @@ namespace ksv::application {
         std::shared_ptr<IProfileService> m_profileService;
         std::shared_ptr<ISessionController> m_sessionController;
         std::shared_ptr<IGraphUseCase> m_graphUseCase;
+        std::shared_ptr<IPlaytimeGraphUseCase> m_playtimeUseCase;
         std::shared_ptr<IProtoDecoder> m_protoDecoder;
     };
 }

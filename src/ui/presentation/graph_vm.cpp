@@ -30,7 +30,7 @@ namespace ksv::presentation {
     }
 
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
-                                   QObject *parent) : QObject(parent),
+                                   QObject *parent) : GraphViewModelBase(parent),
                                                       m_graphUseCase(std::move(graphUseCase)) {
         recomputeBounds();
     }
@@ -55,21 +55,22 @@ namespace ksv::presentation {
         return map;
     }
 
-    QString GraphViewModel::columnName(const Column column) const {
+    QString GraphViewModel::columnName(const int column) const {
         if (column < 0 || column >= ColumnCount) return {};
         return QString::fromLatin1(kColumnMeta[column].name);
     }
 
-    QColor GraphViewModel::columnColor(const Column column) const {
+    QColor GraphViewModel::columnColor(const int column) const {
         if (column < 0 || column >= ColumnCount) return {};
         return kColumnMeta[column].color;
     }
 
-    QList<QPointF> GraphViewModel::seriesPoints(const Column column) const {
+    QList<QPointF> GraphViewModel::seriesPoints(const int column) const {
         if (column < 0 || column >= ColumnCount) return {};
+        const auto col = static_cast<Column>(column);
         QList<QPointF> points;
         points.reserve(m_data.size());
-        for (const auto &row: m_data) points.append(QPointF(row[Time], row[column]));
+        for (const auto &row: m_data) points.append(QPointF(row[Time], row[col]));
         return points;
     }
 

@@ -368,10 +368,13 @@ namespace {
     TEST_F(UserProfileTest, GetRollingTimeAverageBucketsByCalendarDayWithGapDays) {
         UserProfile profile{"default"};
         constexpr long long kMsPerDay = 86400000;
+        // A realistic epoch day (real runs always have positive timestamps; 0 is
+        // reserved for the "unset" case the aggregation now rejects).
+        constexpr long long kBaseDay = 19000;
 
-        auto perf_day0 = make_perf("scenario-1", 0);
+        auto perf_day0 = make_perf("scenario-1", kBaseDay * kMsPerDay);
         perf_day0.scenario_length = 10.0F;
-        auto perf_day2 = make_perf("scenario-1", 2 * kMsPerDay);
+        auto perf_day2 = make_perf("scenario-1", (kBaseDay + 2) * kMsPerDay);
         perf_day2.scenario_length = 20.0F;
         profile.addScenarioPerf(perf_day0);
         profile.addScenarioPerf(perf_day2);
@@ -381,12 +384,36 @@ namespace {
         // day1 has no run and must be treated as 0, not skipped, so the trailing
         // 2-day window is accurate on every day (including the partial first window).
         ASSERT_EQ(series.size(), 3);
-        EXPECT_EQ(series[0].first.time_since_epoch().count(), 0);
+        EXPECT_EQ(series[0].first.time_since_epoch().count(), kBaseDay);
         EXPECT_DOUBLE_EQ(series[0].second, 10.0);
-        EXPECT_EQ(series[1].first.time_since_epoch().count(), 1);
+        EXPECT_EQ(series[1].first.time_since_epoch().count(), kBaseDay + 1);
         EXPECT_DOUBLE_EQ(series[1].second, 5.0);
-        EXPECT_EQ(series[2].first.time_since_epoch().count(), 2);
+        EXPECT_EQ(series[2].first.time_since_epoch().count(), kBaseDay + 2);
         EXPECT_DOUBLE_EQ(series[2].second, 10.0);
+    }
+
+    TEST_F(UserProfileTest, GetRollingTimeAverageSkipsRunsWithNonPositiveStartTime) {
+        // A default-constructed / malformed run carries start_time == 0 (the Unix
+        // epoch, 1970). Including it would anchor the dense day-fill at 1970 and
+        // stretch the series across decades of empty days. It must be ignored.
+        UserProfile profile{"default"};
+        constexpr long long kMsPerDay = 86400000;
+        constexpr long long kBaseDay = 19000;
+
+        auto bogus = make_perf("scenario-1", 0);
+        bogus.scenario_length = 99.0F;
+        auto real_run = make_perf("scenario-1", kBaseDay * kMsPerDay);
+        real_run.scenario_length = 10.0F;
+        profile.addScenarioPerf(bogus);
+        profile.addScenarioPerf(real_run);
+
+        const auto series = profile.getRollingTimeAverage(ScenarioId{.name = "?", .hash = "scenario-1"}, 3);
+
+        // Only the real day survives; the 1970 run does not appear and does not
+        // drag the series' first day back to the epoch.
+        ASSERT_EQ(series.size(), 1);
+        EXPECT_EQ(series[0].first.time_since_epoch().count(), kBaseDay);
+        EXPECT_DOUBLE_EQ(series[0].second, 10.0);
     }
 
     TEST_F(UserProfileTest, GetRollingTimeAverageIsEmptyForUnknownScenario) {
@@ -401,11 +428,14 @@ namespace {
         // Two different scenarios both played on day 0; a third scenario alone on
         // day 2. The all-scenarios overload must sum across scenarios per day,
         // same gap-day and trailing-window semantics as the per-scenario one.
-        auto run_a = make_perf("scenario-1", 0);
+        // A realistic epoch day; both day-0 runs land on kBaseDay, the third two
+        // days later (real runs always have positive timestamps).
+        constexpr long long kBaseDay = 19000;
+        auto run_a = make_perf("scenario-1", kBaseDay * kMsPerDay);
         run_a.scenario_length = 10.0F;
-        auto run_b = make_perf("scenario-2", 1000);
+        auto run_b = make_perf("scenario-2", kBaseDay * kMsPerDay + 1000);
         run_b.scenario_length = 15.0F;
-        auto run_c = make_perf("scenario-3", 2 * kMsPerDay);
+        auto run_c = make_perf("scenario-3", (kBaseDay + 2) * kMsPerDay);
         run_c.scenario_length = 20.0F;
         profile.addScenarioPerf(run_a);
         profile.addScenarioPerf(run_b);
@@ -414,11 +444,11 @@ namespace {
         const auto series = profile.getRollingTimeAverage(2);
 
         ASSERT_EQ(series.size(), 3);
-        EXPECT_EQ(series[0].first.time_since_epoch().count(), 0);
+        EXPECT_EQ(series[0].first.time_since_epoch().count(), kBaseDay);
         EXPECT_DOUBLE_EQ(series[0].second, 25.0); // day0: 10 + 15
-        EXPECT_EQ(series[1].first.time_since_epoch().count(), 1);
+        EXPECT_EQ(series[1].first.time_since_epoch().count(), kBaseDay + 1);
         EXPECT_DOUBLE_EQ(series[1].second, 12.5); // (25 + 0) / 2
-        EXPECT_EQ(series[2].first.time_since_epoch().count(), 2);
+        EXPECT_EQ(series[2].first.time_since_epoch().count(), kBaseDay + 2);
         EXPECT_DOUBLE_EQ(series[2].second, 10.0); // (0 + 20) / 2
     }
 

@@ -1,4 +1,5 @@
 import QtQuick.Controls
+import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 // A labeled, read-only path field (directory or file) with a "Browse..."
@@ -15,19 +16,23 @@ ColumnLayout {
     Label {
         id: titleLabel
         font.bold: true
-        color: "white"
+        color: Material.foreground
     }
     RowLayout {
         Layout.fillWidth: true
+        spacing: 8
         TextField {
             objectName: root.objectNamePrefix + "Field"
             Layout.fillWidth: true
             readOnly: true
             text: root.dir.toString().replace("file:///", "")
+            ToolTip.visible: hovered && text.length > 0
+            ToolTip.text: text
         }
         Button {
             objectName: root.objectNamePrefix + "BrowseButton"
-            text: "Browse..."
+            text: "Browse…"
+            flat: true
             onClicked: root.browseRequested()
         }
     }

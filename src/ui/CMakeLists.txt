@@ -20,14 +20,18 @@ qt_add_qml_module(ksv_ui
         QML_FILES
             qml/Main.qml
             qml/DashboardGraphCanvas.qml
+            qml/PlaytimeGraphPanel.qml
             qml/ControlPanel.qml
             qml/AppMenuBar.qml
             qml/KovaaksDirToolBar.qml
             qml/SettingsDialog.qml
             qml/DirectoryPickerRow.qml
         SOURCES
+            presentation/graph_vm_base.h
             presentation/graph_vm.h
             presentation/graph_vm.cpp
+            presentation/playtime_graph_vm.h
+            presentation/playtime_graph_vm.cpp
         components/graph_canvas.h
         components/graph_canvas.cpp
             presentation/monotone_spline.h

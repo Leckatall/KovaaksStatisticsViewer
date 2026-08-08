@@ -11,22 +11,22 @@
 #include <QVector>
 #include <qqmlintegration.h>
 
-#include "presentation/graph_vm.h"
+#include "presentation/graph_vm_base.h"
 
 namespace ksv::presentation {
     class GraphCanvas : public QQuickPaintedItem {
         Q_OBJECT
         QML_ELEMENT
-        Q_PROPERTY(GraphViewModel *graphVm READ graphVm WRITE setGraphVm NOTIFY graphVmChanged)
+        Q_PROPERTY(GraphViewModelBase *graphVm READ graphVm WRITE setGraphVm NOTIFY graphVmChanged)
         Q_PROPERTY(QVariantList visibleColumns READ visibleColumns WRITE setVisibleColumns NOTIFY visibleColumnsChanged)
         Q_PROPERTY(QRectF plotArea READ plotRect NOTIFY plotAreaChanged)
 
     public:
         explicit GraphCanvas(QQuickItem *parent = nullptr);
 
-        [[nodiscard]] GraphViewModel *graphVm() const { return m_graphVm; }
+        [[nodiscard]] GraphViewModelBase *graphVm() const { return m_graphVm; }
 
-        void setGraphVm(GraphViewModel *graphVm);
+        void setGraphVm(GraphViewModelBase *graphVm);
 
         [[nodiscard]] QVariantList visibleColumns() const { return m_visibleColumns; }
 
@@ -66,7 +66,7 @@ namespace ksv::presentation {
 
         void drawSeries(QPainter *painter, const QRectF &rect, const QVariantMap &bounds);
 
-        GraphViewModel *m_graphVm = nullptr;
+        GraphViewModelBase *m_graphVm = nullptr;
         QVariantList m_visibleColumns;
         QVector<CachedSeries> m_cachedSeries;
     };

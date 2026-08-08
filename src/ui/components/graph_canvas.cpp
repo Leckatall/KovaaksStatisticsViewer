@@ -26,10 +26,6 @@ namespace ksv::presentation {
         const QColor kGridColor("#2A2A2A");
         const QColor kTextColor("white");
         const QColor kMarkerColor("#4DD0E1");
-
-        QString formatTick(const qreal value) {
-            return QString::number(value, 'f', std::abs(value - std::round(value)) < 1e-6 ? 0 : 1);
-        }
     }
 
     GraphCanvas::GraphCanvas(QQuickItem *parent) : QQuickPaintedItem(parent) {
@@ -38,13 +34,13 @@ namespace ksv::presentation {
         connect(this, &QQuickItem::heightChanged, this, &GraphCanvas::plotAreaChanged);
     }
 
-    void GraphCanvas::setGraphVm(GraphViewModel *graphVm) {
+    void GraphCanvas::setGraphVm(GraphViewModelBase *graphVm) {
         if (m_graphVm == graphVm) return;
         if (m_graphVm) m_graphVm->disconnect(this);
         m_graphVm = graphVm;
         if (m_graphVm) {
-            connect(m_graphVm, &GraphViewModel::pointCountChanged, this, [this] { update(); });
-            connect(m_graphVm, &GraphViewModel::boundsChanged, this, [this] { update(); });
+            connect(m_graphVm, &GraphViewModelBase::pointCountChanged, this, [this] { update(); });
+            connect(m_graphVm, &GraphViewModelBase::boundsChanged, this, [this] { update(); });
         }
         emit graphVmChanged();
         update();
@@ -74,8 +70,8 @@ namespace ksv::presentation {
 
     void GraphCanvas::drawAxes(QPainter *painter, const QRectF &rect, const QVariantMap &bounds) const {
         if (!m_graphVm) return;
-        const QPointF timeBounds = bounds[QString::number(GraphViewModel::Time)].toPointF();
-        const QPointF scoreBounds = bounds[QString::number(GraphViewModel::Score)].toPointF();
+        const QPointF xBounds = bounds[QString::number(m_graphVm->xColumn())].toPointF();
+        const QPointF yBounds = bounds[QString::number(m_graphVm->yAxisColumn())].toPointF();
 
         QFont tickFont = painter->font();
         tickFont.setPointSize(8);
@@ -88,9 +84,10 @@ namespace ksv::presentation {
             painter->setPen(QPen(kGridColor, 1));
             painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
 
-            const qreal value = scoreBounds.x() + t * (scoreBounds.y() - scoreBounds.x());
+            const qreal value = yBounds.x() + t * (yBounds.y() - yBounds.x());
             painter->setPen(kTextColor);
-            painter->drawText(QRectF(0, y - 8, kLeftMargin - 6, 16), Qt::AlignRight | Qt::AlignVCenter, formatTick(value));
+            painter->drawText(QRectF(0, y - 8, kLeftMargin - 6, 16), Qt::AlignRight | Qt::AlignVCenter,
+                               m_graphVm->formatYTick(value));
         }
 
         for (int i = 0; i <= kGridLines; ++i) {
@@ -100,10 +97,10 @@ namespace ksv::presentation {
             painter->setPen(QPen(kGridColor, 1));
             painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
 
-            const qreal value = timeBounds.x() + t * (timeBounds.y() - timeBounds.x());
+            const qreal value = xBounds.x() + t * (xBounds.y() - xBounds.x());
             painter->setPen(kTextColor);
             painter->drawText(QRectF(x - 20, rect.bottom() + 4, 40, kBottomMargin - 4),
-                               Qt::AlignHCenter | Qt::AlignTop, formatTick(value));
+                               Qt::AlignHCenter | Qt::AlignTop, m_graphVm->formatXTick(value));
         }
     }
 
@@ -111,13 +108,13 @@ namespace ksv::presentation {
         m_cachedSeries.clear();
         if (!m_graphVm || m_graphVm->pointCount() < 2) return;
 
-        const QPointF timeBounds = bounds[QString::number(GraphViewModel::Time)].toPointF();
+        const QPointF xBounds = bounds[QString::number(m_graphVm->xColumn())].toPointF();
         const auto plottable = m_graphVm->plottableColumns();
 
         for (int i = 0; i < plottable.size(); ++i) {
             if (i >= m_visibleColumns.size() || !m_visibleColumns[i].toBool()) continue;
 
-            const auto column = static_cast<GraphViewModel::Column>(plottable[i].toInt());
+            const int column = plottable[i].toInt();
             const QPointF columnBounds = bounds[QString::number(column)].toPointF();
 
             QVector<QPointF> dataPoints = m_graphVm->seriesPoints(column);
@@ -125,7 +122,7 @@ namespace ksv::presentation {
 
             QVector<QPointF> pixelPoints;
             pixelPoints.reserve(dataPoints.size());
-            for (const auto &p: dataPoints) pixelPoints.append(toPixel(p, rect, timeBounds, columnBounds));
+            for (const auto &p: dataPoints) pixelPoints.append(toPixel(p, rect, xBounds, columnBounds));
 
             const auto curve = monotoneCubicInterpolate(pixelPoints, 16);
 
@@ -178,9 +175,8 @@ namespace ksv::presentation {
         for (const auto &series : m_cachedSeries) {
             if (bestIndex >= series.dataPoints.size()) continue;
             QVariantMap entry;
-            const auto column = static_cast<GraphViewModel::Column>(series.columnId);
-            entry["name"] = m_graphVm->columnName(column);
-            entry["color"] = m_graphVm->columnColor(column).name();
+            entry["name"] = m_graphVm->columnName(series.columnId);
+            entry["color"] = m_graphVm->columnColor(series.columnId).name();
             entry["value"] = series.dataPoints[bestIndex].y();
             seriesList.append(entry);
         }

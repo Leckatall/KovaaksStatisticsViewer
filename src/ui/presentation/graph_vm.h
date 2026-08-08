@@ -14,10 +14,11 @@
 #include <qqmlintegration.h>
 #include <ranges>
 
+#include "graph_vm_base.h"
 #include "app/usecases/i_graph_use_case.h"
 
 namespace ksv::presentation {
-    class GraphViewModel : public QObject {
+    class GraphViewModel : public GraphViewModelBase {
         Q_OBJECT
         QML_ELEMENT
         QML_UNCREATABLE("Created in C++")
@@ -34,18 +35,21 @@ namespace ksv::presentation {
 
         void setData(QList<QMap<Column, qreal>> data);
 
-        [[nodiscard]] QVariantList plottableColumns() const;
+        [[nodiscard]] QVariantList plottableColumns() const override;
 
-        [[nodiscard]] QVariantMap axisBounds() const;
+        [[nodiscard]] QVariantMap axisBounds() const override;
 
-        [[nodiscard]] int pointCount() const { return int(m_data.size()); }
+        [[nodiscard]] int pointCount() const override { return int(m_data.size()); }
 
         [[nodiscard]] QString scenarioTitle() const { return m_scenarioTitle; }
 
-        Q_INVOKABLE [[nodiscard]] QString columnName(Column column) const;
-        Q_INVOKABLE [[nodiscard]] QColor columnColor(Column column) const;
-        
-        [[nodiscard]] QList<QPointF> seriesPoints(Column column) const;
+        Q_INVOKABLE [[nodiscard]] QString columnName(int column) const override;
+        Q_INVOKABLE [[nodiscard]] QColor columnColor(int column) const override;
+
+        [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
+
+        [[nodiscard]] int xColumn() const override { return Time; }
+        [[nodiscard]] int yAxisColumn() const override { return Score; }
 
         void recomputeBounds();
 
@@ -53,8 +57,6 @@ namespace ksv::presentation {
         void fetchData(const QString& scenario_id);
 
     signals:
-        void boundsChanged();
-        void pointCountChanged();
         void scenarioTitleChanged();
 
     private:

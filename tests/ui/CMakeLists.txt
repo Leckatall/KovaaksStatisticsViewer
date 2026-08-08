@@ -4,6 +4,7 @@ include(GoogleTest)
 add_executable(ui_tests
     qt_test_main.cpp
     graph_vm_test.cpp
+    playtime_graph_vm_test.cpp
     session_vm_test.cpp
     settings_vm_test.cpp
     monotone_spline_test.cpp

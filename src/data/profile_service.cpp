@@ -92,4 +92,10 @@ namespace ksv::data {
         if (!m_profile) return std::nullopt;
         return m_profile->getAverageScore(scenario, count);
     }
+
+    std::vector<std::pair<std::chrono::sys_days, double>>
+    ProfileService::getRollingTimeAverage(const int window_days) const {
+        if (!m_profile) return {};
+        return m_profile->getRollingTimeAverage(window_days);
+    }
 }
