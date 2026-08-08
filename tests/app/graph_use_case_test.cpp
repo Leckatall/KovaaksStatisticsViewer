@@ -49,54 +49,52 @@ namespace {
         EXPECT_EQ(fake_session_controller->set_current_perf_filename_calls[0], "some/file.perf");
     }
 
-    TEST_F(GraphUseCaseTest, GetTimesReturnsAllPointTimes) {
+    TEST_F(GraphUseCaseTest, GetSeriesReturnsAllPointTimes) {
         fake_session_controller->current_perf.data = {
             make_point(0.0F, 1, 1, 0.0F), make_point(1.0F, 1, 1, 0.0F)
         };
 
-        const auto times = use_case.get_times();
+        const auto series = use_case.get_series();
 
-        ASSERT_EQ(times.size(), 2);
-        EXPECT_FLOAT_EQ(times[0], 0.0F);
-        EXPECT_FLOAT_EQ(times[1], 1.0F);
+        ASSERT_EQ(series.times.size(), 2);
+        EXPECT_FLOAT_EQ(series.times[0], 0.0F);
+        EXPECT_FLOAT_EQ(series.times[1], 1.0F);
     }
 
-    TEST_F(GraphUseCaseTest, GetScoresReturnsAllPointScores) {
+    TEST_F(GraphUseCaseTest, GetSeriesReturnsPointScores) {
         fake_session_controller->current_perf.data = {make_point(0.0F, 1, 1, 42.0F)};
 
-        const auto scores = use_case.get_scores();
+        const auto series = use_case.get_series();
 
-        ASSERT_EQ(scores.size(), 1);
-        EXPECT_FLOAT_EQ(scores[0], 42.0F);
+        ASSERT_EQ(series.columns.at(ColumnId::Score).size(), 1);
+        EXPECT_FLOAT_EQ(series.columns.at(ColumnId::Score)[0], 42.0F);
     }
 
-    TEST_F(GraphUseCaseTest, GetAccuraciesComputesHitsOverShots) {
+    TEST_F(GraphUseCaseTest, GetSeriesComputesAccuracyAsHitsOverShots) {
         fake_session_controller->current_perf.data = {make_point(0.0F, 10, 5, 0.0F)};
 
-        const auto accuracies = use_case.get_accuracies();
+        const auto series = use_case.get_series();
 
-        ASSERT_EQ(accuracies.size(), 1);
-        EXPECT_FLOAT_EQ(accuracies[0], 0.5F);
+        ASSERT_EQ(series.columns.at(ColumnId::Accuracy).size(), 1);
+        EXPECT_FLOAT_EQ(series.columns.at(ColumnId::Accuracy)[0], 0.5F);
     }
 
-    TEST_F(GraphUseCaseTest, GetAccuraciesReturnsZeroForZeroShotsWithoutExtraEntry) {
-        // Regression test for a fixed bug: a zero-shots point used to append
-        // both a 0 AND a hits/shots (0/0) value, desyncing the accuracies
-        // vector's length from times/scores.
+    TEST_F(GraphUseCaseTest, GetSeriesReturnsZeroAccuracyForZeroShots) {
         fake_session_controller->current_perf.data = {
             make_point(0.0F, 0, 0, 0.0F), make_point(1.0F, 10, 5, 0.0F)
         };
 
-        const auto accuracies = use_case.get_accuracies();
+        const auto series = use_case.get_series();
 
-        ASSERT_EQ(accuracies.size(), 2);
-        EXPECT_FLOAT_EQ(accuracies[0], 0.0F);
-        EXPECT_FLOAT_EQ(accuracies[1], 0.5F);
+        ASSERT_EQ(series.columns.at(ColumnId::Accuracy).size(), 2);
+        EXPECT_FLOAT_EQ(series.columns.at(ColumnId::Accuracy)[0], 0.0F);
+        EXPECT_FLOAT_EQ(series.columns.at(ColumnId::Accuracy)[1], 0.5F);
     }
 
-    TEST_F(GraphUseCaseTest, EmptyPerfProducesEmptyVectors) {
-        EXPECT_TRUE(use_case.get_times().empty());
-        EXPECT_TRUE(use_case.get_scores().empty());
-        EXPECT_TRUE(use_case.get_accuracies().empty());
+    TEST_F(GraphUseCaseTest, EmptyPerfProducesEmptySeries) {
+        const auto series = use_case.get_series();
+
+        EXPECT_TRUE(series.times.empty());
+        EXPECT_TRUE(series.columns.empty());
     }
 }

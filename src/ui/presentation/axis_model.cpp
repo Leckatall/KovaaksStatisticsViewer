@@ -10,9 +10,6 @@
 namespace ksv::presentation {
     namespace {
         // Heckbert's "nice number" rounding. Returns a value close to `range`
-        // that is 1, 2, 5 (or 2.5 when not rounding to the nearest) times a
-        // power of ten. With `round == false` it always rounds up, giving a
-        // step whose span comfortably covers `range`.
         qreal niceNum(const qreal range, const bool round) {
             if (range <= 0.0) return 1.0;
             const qreal exponent = std::floor(std::log10(range));
@@ -38,9 +35,7 @@ namespace ksv::presentation {
         qreal lo = options.baseline == Baseline::Zero ? 0.0 : dataLo;
         qreal hi = dataHi;
 
-        // Widen a degenerate/empty range so the axis is never zero-width. A
-        // zero-baseline axis grows only upward (its floor stays 0); otherwise
-        // it grows symmetrically around the shared value.
+        // Widen a degenerate/empty range so the axis is never zero-width.
         if (hi <= lo) {
             if (options.baseline == Baseline::Zero) {
                 lo = 0.0;

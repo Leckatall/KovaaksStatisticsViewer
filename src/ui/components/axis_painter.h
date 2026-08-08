@@ -15,7 +15,7 @@ class QPainter;
 class QString;
 
 namespace ksv::presentation {
-    class AxisRenderer {
+    class AxisPainter {
     public:
         enum class Orientation { Horizontal, Vertical };
 

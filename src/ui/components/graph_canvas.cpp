@@ -6,12 +6,10 @@
 
 #include <QColor>
 #include <QPainter>
-#include <QPainterPath>
-#include <QPen>
-#include <cmath>
+#include <limits>
 
-#include "axis_renderer.h"
-#include "presentation/monotone_spline.h"
+#include "axis_painter.h"
+#include "series_painter.h"
 
 namespace ksv::presentation {
     namespace {
@@ -19,10 +17,7 @@ namespace ksv::presentation {
         constexpr qreal kBottomMargin = 28;
         constexpr qreal kTopMargin = 10;
         constexpr qreal kRightMargin = 10;
-        constexpr qreal kMarkerRadius = 4;
         constexpr qreal kHoverRadius = 10;
-
-        const QColor kMarkerColor("#4DD0E1");
     }
 
     GraphCanvas::GraphCanvas(QQuickItem *parent) : QQuickPaintedItem(parent) {
@@ -36,7 +31,7 @@ namespace ksv::presentation {
         if (m_graphVm) m_graphVm->disconnect(this);
         m_graphVm = graphVm;
         if (m_graphVm) {
-            connect(m_graphVm, &GraphViewModelBase::pointCountChanged, this, [this] { update(); });
+            connect(m_graphVm, &GraphViewModelBase::dataUpdated, this, [this] { update(); });
             connect(m_graphVm, &GraphViewModelBase::boundsChanged, this, [this] { update(); });
         }
         emit graphVmChanged();
@@ -50,110 +45,111 @@ namespace ksv::presentation {
         update();
     }
 
+    QList<int> GraphCanvas::visibleColumnIds() const {
+        QList<int> ids;
+        ids.reserve(m_visibleColumns.size());
+        for (const auto &v: m_visibleColumns) ids.append(v.toInt());
+        return ids;
+    }
+
     QRectF GraphCanvas::plotRect() const {
         return {kLeftMargin, kTopMargin,
                 qMax(0.0, width() - kLeftMargin - kRightMargin),
                 qMax(0.0, height() - kTopMargin - kBottomMargin)};
     }
 
-    QPointF GraphCanvas::toPixel(const QPointF &dataPoint, const QRectF &rect,
-                                  const QPointF &xBounds, const QPointF &yBounds) {
-        const qreal xSpan = xBounds.y() - xBounds.x();
-        const qreal ySpan = yBounds.y() - yBounds.x();
-        const qreal xt = xSpan != 0.0 ? (dataPoint.x() - xBounds.x()) / xSpan : 0.5;
-        const qreal yt = ySpan != 0.0 ? (dataPoint.y() - yBounds.x()) / ySpan : 0.5;
+    AxisModel GraphCanvas::xAxisFor(const SeriesModel &series) const {
+        return series.xAxis.value_or(m_graphVm->xAxis());
+    }
+
+    AxisModel GraphCanvas::yAxisFor(const SeriesModel &series) const {
+        return series.yAxis.value_or(m_graphVm->xAxis());
+    }
+
+    QPointF GraphCanvas::toPixel(const QPointF &displayPoint, const QRectF &rect,
+                                  const AxisModel &xAxis, const AxisModel &yAxis) {
+        const qreal xt = xAxis.normalizedPosition(displayPoint.x());
+        const qreal yt = yAxis.normalizedPosition(displayPoint.y());
         return {rect.left() + xt * rect.width(), rect.bottom() - yt * rect.height()};
     }
 
-    void GraphCanvas::drawAxes(QPainter *painter, const QRectF &rect, const QVariantMap &bounds) const {
+    void GraphCanvas::drawAxes(QPainter *painter, const QRectF &rect) const {
         if (!m_graphVm) return;
-        const QPointF xBounds = bounds[QString::number(m_graphVm->xColumn())].toPointF();
-        const QPointF yBounds = bounds[QString::number(m_graphVm->yAxisColumn())].toPointF();
+        const auto labelled = m_graphVm->series({m_graphVm->yAxisColumn()});
+        const AxisModel xAxis = m_graphVm->xAxis();
 
         // The view model chooses tick positions (nice round numbers); the
         // renderer draws one gridline + label per tick for each labelled axis.
-        AxisRenderer::paint(*painter, rect, AxisRenderer::Orientation::Vertical,
-                            yBounds.x(), yBounds.y(), m_graphVm->axisTicks(m_graphVm->yAxisColumn()),
-                            [vm = m_graphVm](const qreal v) { return vm->formatYTick(v); });
-        AxisRenderer::paint(*painter, rect, AxisRenderer::Orientation::Horizontal,
-                            xBounds.x(), xBounds.y(), m_graphVm->axisTicks(m_graphVm->xColumn()),
-                            [vm = m_graphVm](const qreal v) { return vm->formatXTick(v); });
+        // Only one series' Y axis is labelled; each still projects against its own.
+        if (!labelled.isEmpty()) {
+            const AxisModel yAxis = yAxisFor(labelled.front());
+            AxisPainter::paint(*painter, rect, AxisPainter::Orientation::Vertical,
+                                yAxis.min(), yAxis.max(), yAxis.ticks(),
+                                [&yAxis](const qreal v) { return yAxis.formatTick(v); });
+        }
+        AxisPainter::paint(*painter, rect, AxisPainter::Orientation::Horizontal,
+                            xAxis.min(), xAxis.max(), xAxis.ticks(),
+                            [&xAxis](const qreal v) { return xAxis.formatTick(v); });
     }
 
-    void GraphCanvas::drawSeries(QPainter *painter, const QRectF &rect, const QVariantMap &bounds) {
-        m_cachedSeries.clear();
-        if (!m_graphVm || m_graphVm->pointCount() < 2) return;
+    void GraphCanvas::drawSeries(QPainter *painter, const QRectF &rect) {
+        if (!m_graphVm) return;
 
-        const QPointF xBounds = bounds[QString::number(m_graphVm->xColumn())].toPointF();
-        const auto plottable = m_graphVm->plottableColumns();
+        const auto series = m_graphVm->series(visibleColumnIds());
 
-        for (int i = 0; i < plottable.size(); ++i) {
-            if (i >= m_visibleColumns.size() || !m_visibleColumns[i].toBool()) continue;
+        for (const auto &s: series) {
+            const QList<QPointF> displayPoints = s.displayPoints();
+            if (displayPoints.size() < 2) continue;
 
-            const int column = plottable[i].toInt();
-            const QPointF columnBounds = bounds[QString::number(column)].toPointF();
-
-            QVector<QPointF> dataPoints = m_graphVm->seriesPoints(column);
-            if (dataPoints.size() < 2) continue;
+            const AxisModel xAxis = xAxisFor(s);
+            const AxisModel yAxis = yAxisFor(s);
 
             QVector<QPointF> pixelPoints;
-            pixelPoints.reserve(dataPoints.size());
-            for (const auto &p: dataPoints) pixelPoints.append(toPixel(p, rect, xBounds, columnBounds));
+            pixelPoints.reserve(displayPoints.size());
+            for (const auto &p: displayPoints) pixelPoints.append(toPixel(p, rect, xAxis, yAxis));
 
-            const auto curve = monotoneCubicInterpolate(pixelPoints, 16);
-
-            QPainterPath path;
-            path.moveTo(curve.first());
-            for (int p = 1; p < curve.size(); ++p) path.lineTo(curve[p]);
-
-            painter->setPen(QPen(m_graphVm->columnColor(column), 3));
-            painter->setBrush(Qt::NoBrush);
-            painter->drawPath(path);
-
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(kMarkerColor);
-            for (const auto &p: pixelPoints) painter->drawEllipse(p, kMarkerRadius, kMarkerRadius);
-
-            m_cachedSeries.append({int(column), std::move(pixelPoints), std::move(dataPoints)});
+            SeriesPainter::paint(*painter, pixelPoints, s.color);
         }
     }
 
     void GraphCanvas::paint(QPainter *painter) {
         painter->setRenderHint(QPainter::Antialiasing, true);
         const QRectF rect = plotRect();
-        const QVariantMap bounds = m_graphVm ? m_graphVm->axisBounds() : QVariantMap{};
-        drawAxes(painter, rect, bounds);
-        drawSeries(painter, rect, bounds);
+        drawAxes(painter, rect);
+        drawSeries(painter, rect);
     }
 
     QVariantMap GraphCanvas::valuesAtX(const qreal x) const {
         QVariantMap result;
         result["valid"] = false;
-        if (m_cachedSeries.isEmpty() || !m_graphVm) return result;
+        if (!m_graphVm) return result;
 
-        qreal bestDist = std::numeric_limits<qreal>::max();
-        int bestIndex = -1;
-        const auto &firstSeries = m_cachedSeries.first();
-        for (int i = 0; i < firstSeries.pixelPoints.size(); ++i) {
-            const qreal dist = std::abs(firstSeries.pixelPoints[i].x() - x);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestIndex = i;
-            }
-        }
-        if (bestIndex < 0) return result;
+        const auto series = m_graphVm->series(visibleColumnIds());
+        if (series.isEmpty()) return result;
+        const auto &refSeries = series.front();
+
+        const QRectF rect = plotRect();
+        const AxisModel sharedXAxis = m_graphVm->xAxis();
+        const qreal t = rect.width() != 0.0 ? (x - rect.left()) / rect.width() : 0.5;
+        const qreal dataX = sharedXAxis.valueAt(t);
+
+        const AxisModel refXAxis = xAxisFor(refSeries);
+        const auto refSample = refSeries.sampleAtX(dataX);
+        if (!refSample) return result;
 
         result["valid"] = true;
-        result["time"] = firstSeries.dataPoints[bestIndex].x();
-        result["pixelX"] = firstSeries.pixelPoints[bestIndex].x();
+        result["x"] = refXAxis.formatTick(refSample->x());
+        result["xRaw"] = refSample->x();
+        result["pixelX"] = rect.left() + refXAxis.normalizedPosition(refSample->x()) * rect.width();
 
         QVariantList seriesList;
-        for (const auto &series : m_cachedSeries) {
-            if (bestIndex >= series.dataPoints.size()) continue;
+        for (const auto &s: series) {
             QVariantMap entry;
-            entry["name"] = m_graphVm->columnName(series.columnId);
-            entry["color"] = m_graphVm->columnColor(series.columnId).name();
-            entry["value"] = series.dataPoints[bestIndex].y();
+            entry["name"] = s.name;
+            entry["color"] = s.color.name();
+            entry["value"] = s.formattedValueAtX(dataX);
+            const auto sample = s.sampleAtX(dataX);
+            entry["valueRaw"] = sample ? sample->y() : QVariant();
             seriesList.append(entry);
         }
         result["series"] = seriesList;
@@ -161,22 +157,31 @@ namespace ksv::presentation {
     }
 
     QVariantMap GraphCanvas::nearestPoint(const qreal x, const qreal y) const {
-        qreal bestDistanceSq = kHoverRadius * kHoverRadius;
         QVariantMap best;
         best["valid"] = false;
+        if (!m_graphVm) return best;
 
-        for (const auto &series: m_cachedSeries) {
-            for (int i = 0; i < series.pixelPoints.size(); ++i) {
-                const QPointF &p = series.pixelPoints[i];
-                const qreal dx = p.x() - x;
-                const qreal dy = p.y() - y;
+        const QRectF rect = plotRect();
+        const auto series = m_graphVm->series(visibleColumnIds());
+        qreal bestDistanceSq = kHoverRadius * kHoverRadius;
+
+        for (const auto &s: series) {
+            const AxisModel xAxis = xAxisFor(s);
+            const AxisModel yAxis = yAxisFor(s);
+            const QList<QPointF> displayPoints = s.displayPoints();
+
+            for (const auto &p: displayPoints) {
+                const QPointF pixel = toPixel(p, rect, xAxis, yAxis);
+                const qreal dx = pixel.x() - x;
+                const qreal dy = pixel.y() - y;
                 const qreal distSq = dx * dx + dy * dy;
                 if (distSq <= bestDistanceSq) {
                     bestDistanceSq = distSq;
                     best["valid"] = true;
-                    best["columnId"] = series.columnId;
-                    best["time"] = series.dataPoints[i].x();
-                    best["value"] = series.dataPoints[i].y();
+                    best["name"] = s.name;
+                    best["color"] = s.color.name();
+                    best["x"] = xAxis.formatTick(p.x());
+                    best["value"] = yAxis.formatTick(p.y());
                 }
             }
         }

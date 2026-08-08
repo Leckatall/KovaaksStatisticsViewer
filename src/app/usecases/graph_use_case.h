@@ -20,58 +20,8 @@ namespace ksv::application {
             m_session_controller->setCurrentPerf(filename.data());
         }
 
-        std::vector<float> get_times() override {
-            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
-            std::vector<float> times;
-            for (const auto &point: perf.data) {
-                times.push_back(point.time);
-            }
-            return times;
-        }
-
-        std::vector<float> get_scores() override {
-            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
-            std::vector<float> scores;
-            for (const auto &point: perf.data) {
-                scores.push_back(point.score);
-            }
-            return scores;
-        }
-
-        std::vector<float> get_accuracies() override {
-            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
-            std::vector<float> accuracies;
-            for (const auto &point: perf.data) {
-                if (point.shots == 0) accuracies.push_back(0);
-                else accuracies.push_back(static_cast<float>(point.hits) / static_cast<float>(point.shots));
-            }
-            return accuracies;
-        }
-
-        std::vector<int> get_shots() override {
-            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
-            std::vector<int> shots;
-            for (const auto &point: perf.data) {
-                shots.push_back(point.shots);
-            }
-            return shots;
-        }
-
-        std::vector<int> get_kills() override {
-            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
-            std::vector<int> kills;
-            for (const auto &point: perf.data) {
-                kills.push_back(point.kills);
-            }
-            return kills;
-        }
-        std::vector<float> get_dmg() override {
-            const domain::ScenarioPerf perf = m_session_controller->getCurrentPerf();
-            std::vector<float> dmg;
-            for (const auto &point: perf.data) {
-                dmg.push_back(point.dmg);
-            }
-            return dmg;
+        GraphSeries get_series() override {
+            return PerfColumnBuilder::build(m_session_controller->getCurrentPerf());
         }
 
         std::string get_run_label() override {

@@ -21,6 +21,7 @@ qt_add_qml_module(ksv_ui
             qml/Main.qml
             qml/DashboardGraphCanvas.qml
             qml/PlaytimeGraphPanel.qml
+            qml/GraphCanvasWithTooltip.qml
             qml/ControlPanel.qml
             qml/AppMenuBar.qml
             qml/KovaaksDirToolBar.qml
@@ -29,6 +30,9 @@ qt_add_qml_module(ksv_ui
         SOURCES
             presentation/axis_model.h
             presentation/axis_model.cpp
+            presentation/value_transform.h
+            presentation/series_model.h
+            presentation/series_model.cpp
             presentation/graph_vm_base.h
             presentation/graph_vm.h
             presentation/graph_vm.cpp
@@ -36,8 +40,10 @@ qt_add_qml_module(ksv_ui
             presentation/playtime_graph_vm.cpp
         components/graph_canvas.h
         components/graph_canvas.cpp
-        components/axis_renderer.h
-        components/axis_renderer.cpp
+        components/axis_painter.h
+        components/axis_painter.cpp
+        components/series_painter.h
+        components/series_painter.cpp
             presentation/monotone_spline.h
             presentation/session_vm.h
             presentation/session_vm.cpp

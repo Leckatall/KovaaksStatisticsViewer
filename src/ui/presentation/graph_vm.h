@@ -25,16 +25,26 @@ namespace ksv::presentation {
         QML_UNCREATABLE("Created in C++")
         Q_PROPERTY(QVariantList plottableColumns READ plottableColumns CONSTANT)
         Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
-        Q_PROPERTY(int pointCount READ pointCount NOTIFY pointCountChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
 
     public:
-        enum Column { Time = 0, Score, Accuracy, Shots, Kills, Dmg, ColumnCount };
+        enum Column {
+            Time = 0, Score, Accuracy, Shots, Kills, Dmg, ScoreTotal, ExpectedFinalScore, ExpectedFinalScoreRecent,
+            ColumnCount
+        };
         Q_ENUM(Column)
 
         explicit GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase, QObject *parent = nullptr);
 
         void setData(QList<QMap<Column, qreal>> data);
+
+        [[nodiscard]] QList<SeriesModel> series(const QList<int> &columns) const override {
+            QList<SeriesModel> result;
+            result.reserve(columns.size());
+            for (const int c: columns) if (c >= Score && c < ColumnCount) result.append(m_series[c - Score]);
+            return result;
+        }
+        [[nodiscard]] AxisModel xAxis() const override { return m_axes[Time]; }
 
         [[nodiscard]] QVariantList plottableColumns() const override;
 
@@ -42,12 +52,11 @@ namespace ksv::presentation {
 
         [[nodiscard]] QList<qreal> axisTicks(int column) const override;
 
-        [[nodiscard]] int pointCount() const override { return int(m_data.size()); }
-
         [[nodiscard]] QString scenarioTitle() const { return m_scenarioTitle; }
 
         Q_INVOKABLE [[nodiscard]] QString columnName(int column) const override;
         Q_INVOKABLE [[nodiscard]] QColor columnColor(int column) const override;
+        Q_INVOKABLE [[nodiscard]] QString columnKey(int column) const override;
 
         [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
 
@@ -66,6 +75,7 @@ namespace ksv::presentation {
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
         QList<QMap<Column, qreal>> m_data;
         std::array<AxisModel, ColumnCount> m_axes{};
+        QList<SeriesModel> m_series;
         QString m_scenarioTitle;
     };
 }

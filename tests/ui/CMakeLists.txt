@@ -4,6 +4,8 @@ include(GoogleTest)
 add_executable(ui_tests
     qt_test_main.cpp
     axis_model_test.cpp
+    value_transform_test.cpp
+    series_model_test.cpp
     graph_vm_test.cpp
     playtime_graph_vm_test.cpp
     session_vm_test.cpp

@@ -5,8 +5,8 @@
 #ifndef KOVAAKSSTATSVIEWER_I_GRAPH_USE_CASE_H
 #define KOVAAKSSTATSVIEWER_I_GRAPH_USE_CASE_H
 #include <string>
-#include <vector>
 
+#include "perf_column_builder.h"
 
 namespace ksv::application {
     class IGraphUseCase {
@@ -15,20 +15,9 @@ namespace ksv::application {
 
         virtual void load_perf(std::string_view filename) = 0;
 
-        virtual std::vector<float> get_times() = 0;
+        // Whole-second-resampled columns for the currently loaded run.
+        virtual GraphSeries get_series() = 0;
 
-        virtual std::vector<float> get_scores() = 0;
-
-        virtual std::vector<float> get_accuracies() = 0;
-
-        virtual std::vector<int> get_shots() = 0;
-
-        virtual std::vector<int> get_kills() = 0;
-
-        virtual std::vector<float> get_dmg() = 0;
-
-        // Human-readable label for the run currently loaded (name, start date
-        // and time), for display above the graph.
         virtual std::string get_run_label() = 0;
     };
 }

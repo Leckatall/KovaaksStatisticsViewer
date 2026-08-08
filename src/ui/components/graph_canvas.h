@@ -12,6 +12,7 @@
 #include <qqmlintegration.h>
 
 #include "presentation/graph_vm_base.h"
+#include "presentation/series_model.h"
 
 namespace ksv::presentation {
     class GraphCanvas : public QQuickPaintedItem {
@@ -36,8 +37,9 @@ namespace ksv::presentation {
 
         Q_INVOKABLE [[nodiscard]] QVariantMap nearestPoint(qreal x, qreal y) const;
 
-        // Given a pixel-x coordinate, finds the nearest time point and returns
-        // {valid, time, pixelX, series: [{name, color, value}, ...]}.
+        // Given a pixel-x coordinate, converts it to a data-x via the shared X
+        // axis and returns {valid, x, xRaw, pixelX, series: [{name, color,
+        // value, valueRaw}, ...]}, each series queried at that data-x.
         Q_INVOKABLE [[nodiscard]] QVariantMap valuesAtX(qreal x) const;
 
     signals:
@@ -46,24 +48,22 @@ namespace ksv::presentation {
         void plotAreaChanged();
 
     private:
-        struct CachedSeries {
-            int columnId = 0;
-            QVector<QPointF> pixelPoints;
-            QVector<QPointF> dataPoints; // {time, value}, matches pixelPoints index-for-index
-        };
-
         [[nodiscard]] QRectF plotRect() const;
 
-        [[nodiscard]] static QPointF toPixel(const QPointF &dataPoint, const QRectF &rect,
-                                             const QPointF &xBounds, const QPointF &yBounds);
+        [[nodiscard]] QList<int> visibleColumnIds() const;
 
-        void drawAxes(QPainter *painter, const QRectF &rect, const QVariantMap &bounds) const;
+        [[nodiscard]] AxisModel xAxisFor(const SeriesModel &series) const;
+        [[nodiscard]] AxisModel yAxisFor(const SeriesModel &series) const;
 
-        void drawSeries(QPainter *painter, const QRectF &rect, const QVariantMap &bounds);
+        [[nodiscard]] static QPointF toPixel(const QPointF &displayPoint, const QRectF &rect,
+                                             const AxisModel &xAxis, const AxisModel &yAxis);
+
+        void drawAxes(QPainter *painter, const QRectF &rect) const;
+
+        void drawSeries(QPainter *painter, const QRectF &rect);
 
         GraphViewModelBase *m_graphVm = nullptr;
         QVariantList m_visibleColumns;
-        QVector<CachedSeries> m_cachedSeries;
     };
 }
 

@@ -23,27 +23,32 @@ namespace ksv::presentation {
         Q_OBJECT
         QML_ELEMENT
         QML_UNCREATABLE("Created in C++")
-        Q_PROPERTY(int pointCount READ pointCount NOTIFY pointCountChanged)
 
     public:
         // Column ids for the two axes; Playtime is the only drawn series.
         enum Column { Date = 0, Playtime = 1 };
+        Q_ENUM(Column)
 
         explicit PlaytimeGraphViewModel(std::shared_ptr<application::IPlaytimeGraphUseCase> useCase,
                                         QObject *parent = nullptr);
 
-        [[nodiscard]] int pointCount() const override { return int(m_points.size()); }
+        [[nodiscard]] QList<SeriesModel> series(const QList<int> &columns) const override {
+            QList<SeriesModel> result;
+            for (const int c: columns) if (c == Playtime) result.append(m_series);
+            return result;
+        }
+        [[nodiscard]] AxisModel xAxis() const override { return m_xAxis; }
+
         [[nodiscard]] QVariantList plottableColumns() const override { return {int(Playtime)}; }
         [[nodiscard]] QVariantMap axisBounds() const override;
         [[nodiscard]] QList<qreal> axisTicks(int column) const override;
         [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
         Q_INVOKABLE [[nodiscard]] QString columnName(int column) const override;
         Q_INVOKABLE [[nodiscard]] QColor columnColor(int column) const override;
+        Q_INVOKABLE [[nodiscard]] QString columnKey(int column) const override;
 
         [[nodiscard]] int xColumn() const override { return Date; }
         [[nodiscard]] int yAxisColumn() const override { return Playtime; }
-
-        [[nodiscard]] QString formatXTick(qreal value) const override;
 
     public slots:
         // Re-pulls the rolling average from the use case. Call after the
@@ -59,6 +64,7 @@ namespace ksv::presentation {
         QList<QPointF> m_points;
         AxisModel m_xAxis;
         AxisModel m_yAxis;
+        SeriesModel m_series; // raw seconds + a seconds->minutes transform
     };
 }
 

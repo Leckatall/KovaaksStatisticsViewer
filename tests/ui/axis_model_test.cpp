@@ -9,6 +9,7 @@
 #include "axis_model.h"
 
 using ksv::presentation::AxisModel;
+using ksv::presentation::ValueTransform;
 
 namespace {
     // Every tick is an (integer) multiple of the spacing between the first two.
@@ -107,5 +108,28 @@ namespace {
         EXPECT_DOUBLE_EQ(axis.min(), 0.0);
         EXPECT_DOUBLE_EQ(axis.max(), 1.0);
         EXPECT_FALSE(axis.ticks().isEmpty());
+    }
+
+    TEST(AxisModelTest, NormalizedPositionAndValueAtRoundTrip) {
+        const AxisModel axis = AxisModel::forRange(10.0, 30.0);
+        for (const double value: {10.0, 15.0, 22.5, 30.0}) {
+            const double t = axis.normalizedPosition(value);
+            EXPECT_NEAR(axis.valueAt(t), value, 1e-9);
+        }
+        EXPECT_DOUBLE_EQ(axis.normalizedPosition(10.0), 0.0);
+        EXPECT_DOUBLE_EQ(axis.normalizedPosition(30.0), 1.0);
+        EXPECT_DOUBLE_EQ(axis.valueAt(0.0), 10.0);
+        EXPECT_DOUBLE_EQ(axis.valueAt(1.0), 30.0);
+    }
+
+    TEST(AxisModelTest, FormatTickUsesTheAttachedDelegate) {
+        const AxisModel axis = AxisModel::forRange(0.0, 100.0).withDelegate(ValueTransform::percentage());
+        EXPECT_EQ(axis.formatTick(40.0), "40%");
+    }
+
+    TEST(AxisModelTest, DefaultDelegateFormatsWithDefaultTickRules) {
+        const AxisModel axis = AxisModel::forRange(0.0, 10.0);
+        EXPECT_EQ(axis.formatTick(5.0), "5");
+        EXPECT_EQ(axis.formatTick(5.25), "5.3");
     }
 }

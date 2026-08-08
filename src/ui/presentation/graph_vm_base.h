@@ -14,6 +14,9 @@
 #include <QVariantMap>
 #include <cmath>
 
+#include "axis_model.h"
+#include "series_model.h"
+
 namespace ksv::presentation {
     // The abstract surface GraphCanvas renders. Concrete view models (the
     // per-run GraphViewModel, the PlaytimeGraphViewModel) implement it so a
@@ -29,7 +32,16 @@ namespace ksv::presentation {
     public:
         explicit GraphViewModelBase(QObject *parent = nullptr) : QObject(parent) {}
 
-        [[nodiscard]] virtual int pointCount() const = 0;
+        // The SeriesModel for each requested column id, in the same order as
+        // `columns`; ids with no drawable series (e.g. an X-axis-only column)
+        // are simply omitted.
+        [[nodiscard]] virtual QList<SeriesModel> series(const QList<int> &columns) const = 0;
+
+        // The shared X axis every series is plotted against.
+        [[nodiscard]] virtual AxisModel xAxis() const = 0;
+
+        // DEPRECATED: superseded by series(); kept until
+        // DashboardGraphCanvas.qml is migrated off them.
 
         // Series ids that should be drawn (excludes the X-axis column).
         [[nodiscard]] virtual QVariantList plottableColumns() const = 0;
@@ -47,26 +59,21 @@ namespace ksv::presentation {
 
         Q_INVOKABLE [[nodiscard]] virtual QString columnName(int column) const = 0;
         Q_INVOKABLE [[nodiscard]] virtual QColor columnColor(int column) const = 0;
+        // Stable, identifier-safe key for a column (unlike columnName, never
+        // contains spaces) - used to key persisted per-column visibility.
+        Q_INVOKABLE [[nodiscard]] virtual QString columnKey(int column) const = 0;
 
         // Column id whose bounds are the X axis.
         [[nodiscard]] virtual int xColumn() const = 0;
         // Column id whose bounds label the Y axis.
         [[nodiscard]] virtual int yAxisColumn() const = 0;
 
-        // Axis tick label formatting. Default is a compact number; override
-        // formatXTick to render dates, etc.
-        [[nodiscard]] virtual QString formatXTick(qreal value) const { return defaultTick(value); }
-        [[nodiscard]] virtual QString formatYTick(qreal value) const { return defaultTick(value); }
-
     signals:
         void boundsChanged();
-        void pointCountChanged();
-
-    protected:
-        // Whole numbers print with no decimals, everything else with one.
-        static QString defaultTick(const qreal value) {
-            return QString::number(value, 'f', std::abs(value - std::round(value)) < 1e-6 ? 0 : 1);
-        }
+        // Fires on every data reload, unlike boundsChanged (which only fires
+        // when axis bounds actually move) - GraphCanvas uses this to know it
+        // must repaint even when the new data's bounds are unchanged.
+        void dataUpdated();
     };
 }
 

@@ -6,18 +6,13 @@
 #define KOVAAKSSTATSVIEWER_AXIS_MODEL_H
 
 #include <QList>
+#include <QString>
 #include <QtGlobal>
+#include <utility>
+
+#include "value_transform.h"
 
 namespace ksv::presentation {
-    // A single graph axis: given a raw data range, it picks "nice" endpoints
-    // and a "nice" tick step (multiples of 1/2/2.5/5 x 10^n, the classic
-    // Heckbert algorithm) so tick labels land on round numbers instead of
-    // arbitrary fractions of a padded range. Owns both the bounds and the tick
-    // positions because the two only come out round when chosen together.
-    //
-    // This is the pure data/math half of an axis; AxisRenderer paints it.
-    // Qt-light on purpose (only qreal/QList) so it can be unit-tested without a
-    // running Quick scene.
     class AxisModel {
     public:
         enum class Baseline {
@@ -52,6 +47,28 @@ namespace ksv::presentation {
         [[nodiscard]] qreal min() const { return m_min; }
         [[nodiscard]] qreal max() const { return m_max; }
         [[nodiscard]] const QList<qreal> &ticks() const { return m_ticks; }
+
+        // How values on this axis are displayed - shared by tick labels and
+        // any tooltip reporting a value against this axis.
+        ValueTransform delegate = ValueTransform::identity();
+
+        [[nodiscard]] AxisModel withDelegate(ValueTransform d) const {
+            AxisModel axis = *this;
+            axis.delegate = std::move(d);
+            return axis;
+        }
+
+        [[nodiscard]] QString formatTick(const qreal displayValue) const { return delegate.format(displayValue); }
+
+        // Rect-agnostic value<->position mapping, shared by drawing, axis
+        // painting, and hit-testing. `t` is a fraction of the axis span,
+        // 0 at min and 1 at max; a zero-width axis maps everything to 0.5.
+        [[nodiscard]] qreal normalizedPosition(const qreal value) const {
+            const qreal span = m_max - m_min;
+            return span != 0.0 ? (value - m_min) / span : 0.5;
+        }
+
+        [[nodiscard]] qreal valueAt(const qreal t) const { return m_min + t * (m_max - m_min); }
 
     private:
         qreal m_min = 0.0;

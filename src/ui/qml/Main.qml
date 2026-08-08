@@ -30,6 +30,9 @@ ApplicationWindow {
         property bool shots: true
         property bool kills: true
         property bool dmg: true
+        property bool scoreTotal: true
+        property bool expectedFinalScore: true
+        property bool expectedFinalScoreRecent: true
     }
 
     required property var graphVm

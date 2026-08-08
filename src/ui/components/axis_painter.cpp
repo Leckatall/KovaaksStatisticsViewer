@@ -2,7 +2,7 @@
 // Created by Lecka on 08/08/2026.
 //
 
-#include "axis_renderer.h"
+#include "axis_painter.h"
 
 #include <QFont>
 #include <QPainter>
@@ -11,7 +11,7 @@
 #include <QString>
 
 namespace ksv::presentation {
-    void AxisRenderer::paint(QPainter &painter, const QRectF &plot, const Orientation orientation,
+    void AxisPainter::paint(QPainter &painter, const QRectF &plot, const Orientation orientation,
                              const qreal boundMin, const qreal boundMax, const QList<qreal> &ticks,
                              const std::function<QString(qreal)> &formatTick, const Style &style) {
         QFont tickFont = painter.font();

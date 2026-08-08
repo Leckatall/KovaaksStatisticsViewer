@@ -7,37 +7,54 @@
 #include <qurl.h>
 #include <algorithm>
 #include <utility>
-#include <QVector>
 
 
 namespace ksv::presentation {
     namespace {
         struct ColumnMeta {
             const char *name;
+            const char *key;
             QColor color;
+            ValueTransform transform;
         };
 
-        // Indexed by GraphViewModel::Column. Time has no line of its own (it's
-        // the X axis) so its entry is unused but kept for array alignment.
+        ValueTransform secondsDelegate() {
+            ValueTransform t;
+            t.formatter = [](const qreal v) { return QString::number(qRound(v)) + "s"; };
+            return t;
+        }
+
+        // Indexed by GraphViewModel::Column. Time isn't drawn as a series of
+        // its own (it's the X axis) - its entry only carries the X delegate.
         const std::array<ColumnMeta, GraphViewModel::ColumnCount> kColumnMeta{{
-            {"Time", QColor()},
-            {"Score", QColor("#009600")},
-            {"Accuracy", QColor("cyan")},
-            {"Shots", QColor("orange")},
-            {"Kills", QColor("red")},
-            {"Dmg", QColor("yellow")},
+            {"Time", "time", QColor(), secondsDelegate()},
+            {"Score", "score", QColor("#009600"), ValueTransform::identity()},
+            {"Accuracy", "accuracy", QColor("cyan"), ValueTransform::percentage()},
+            {"Shots", "shots", QColor("orange"), ValueTransform::identity()},
+            {"Kills", "kills", QColor("red"), ValueTransform::identity()},
+            {"Dmg", "dmg", QColor("yellow"), ValueTransform::identity()},
+            {"Score Total", "scoreTotal", QColor("purple"), ValueTransform::identity()},
+            {"Expected Final Score", "expectedFinalScore", QColor("magenta"), ValueTransform::identity()},
+            {"Expected Final Score (5s)", "expectedFinalScoreRecent", QColor("deepskyblue"), ValueTransform::identity()},
         }};
     }
 
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
                                    QObject *parent) : GraphViewModelBase(parent),
                                                       m_graphUseCase(std::move(graphUseCase)) {
+        for (int c = Score; c < ColumnCount; ++c) {
+            SeriesModel series;
+            series.name = GraphViewModel::columnName(c);
+            series.color = kColumnMeta[c].color;
+            series.transform = kColumnMeta[c].transform;
+            m_series.append(std::move(series));
+        }
         recomputeBounds();
     }
 
     void GraphViewModel::setData(QList<QMap<Column, qreal>> data) {
         m_data = std::move(data);
-        emit pointCountChanged();
+        emit dataUpdated();
         recomputeBounds();
     }
 
@@ -70,6 +87,11 @@ namespace ksv::presentation {
         return kColumnMeta[column].color;
     }
 
+    QString GraphViewModel::columnKey(const int column) const {
+        if (column < 0 || column >= ColumnCount) return {};
+        return QString::fromLatin1(kColumnMeta[column].key);
+    }
+
     QList<QPointF> GraphViewModel::seriesPoints(const int column) const {
         if (column < 0 || column >= ColumnCount) return {};
         const auto col = static_cast<Column>(column);
@@ -91,59 +113,6 @@ namespace ksv::presentation {
             }
             return {lo, hi};
         }
-
-        // Real .perf data ticks arrive as per-tick deltas (see
-        // ScenarioCompletionData's comment in scenario_perf.h), not
-        // cumulative totals, and can arrive at irregular intervals -
-        // including, near the end of some runs, two ticks only ~0.02s apart
-        // instead of the usual ~1s spacing. Rounding every row's Time to the
-        // nearest whole second and merging rows that land on the same second
-        // fixes both: the plot gets one point per second, and a merged
-        // near-duplicate tick no longer shows up as an anomalously small
-        // delta next to its neighbor - its value is summed into the second
-        // it belongs to instead of silently overwriting or diluting it.
-        //
-        // Score/Shots/Kills/Dmg are directly additive deltas, so summing raw
-        // values is correct. Accuracy is a ratio (hits/shots), so summing or
-        // averaging the ratio itself would be wrong; instead this recovers
-        // hits_i = Accuracy_i * Shots_i (exact, including when Shots_i is 0,
-        // since Accuracy_i is defined as 0 in that case too), sums hits and
-        // shots separately per bucket, and divides at the end.
-        //
-        // A second with no raw row defaults to all-zero - these are deltas,
-        // so "no data" means "nothing happened", not "unknown".
-        QList<QMap<GraphViewModel::Column, qreal>> resampleToWholeSeconds(
-            const QList<QMap<GraphViewModel::Column, qreal>> &rawRows) {
-            using Column = GraphViewModel::Column;
-            if (rawRows.isEmpty()) return rawRows;
-
-            int maxSecond = 0;
-            for (const auto &row: rawRows) maxSecond = std::max(maxSecond, qRound(row[Column::Time]));
-
-            QVector<qreal> score(maxSecond + 1, 0.0), shots(maxSecond + 1, 0.0), hits(maxSecond + 1, 0.0),
-                    kills(maxSecond + 1, 0.0), dmg(maxSecond + 1, 0.0);
-
-            for (const auto &row: rawRows) {
-                const int bucket = std::clamp(qRound(row[Column::Time]), 0, maxSecond);
-                const qreal rowShots = row[Column::Shots];
-                score[bucket] += row[Column::Score];
-                shots[bucket] += rowShots;
-                hits[bucket] += row[Column::Accuracy] * rowShots;
-                kills[bucket] += row[Column::Kills];
-                dmg[bucket] += row[Column::Dmg];
-            }
-
-            QList<QMap<Column, qreal>> result(maxSecond + 1);
-            for (int s = 0; s <= maxSecond; ++s) {
-                result[s][Column::Time] = qreal(s);
-                result[s][Column::Score] = score[s];
-                result[s][Column::Shots] = shots[s];
-                result[s][Column::Accuracy] = shots[s] > 0.0 ? hits[s] / shots[s] : 0.0;
-                result[s][Column::Kills] = kills[s];
-                result[s][Column::Dmg] = dmg[s];
-            }
-            return result;
-        }
     }
 
     void GraphViewModel::recomputeBounds() {
@@ -163,6 +132,13 @@ namespace ksv::presentation {
                 const auto [lo, hi] = rawColumnRange(m_data, static_cast<Column>(c));
                 newAxes[c] = AxisModel::forRange(lo, hi);
             }
+        }
+        newAxes[Time] = newAxes[Time].withDelegate(kColumnMeta[Time].transform);
+
+        // Rebuilt every call; the change-gated skip below only guards the
+        // deprecated m_axes/boundsChanged path, not m_series.
+        for (int c = Score; c < ColumnCount; ++c) {
+            m_series[c - Score].setData(seriesPoints(static_cast<Column>(c)));
         }
 
         // Only notify if the visible range actually changed.
@@ -191,27 +167,18 @@ namespace ksv::presentation {
             emit scenarioTitleChanged();
         }
 
-        const std::vector<float> times = m_graphUseCase->get_times();
-        assert(!times.empty());
-        const std::vector<float> scores = m_graphUseCase->get_scores();
-        assert(!scores.empty());
-        const std::vector<float> accuracies = m_graphUseCase->get_accuracies();
-        assert(!accuracies.empty());
-        const std::vector<int> shots = m_graphUseCase->get_shots();
-        const std::vector<int> kills = m_graphUseCase->get_kills();
-        const std::vector<float> dmg = m_graphUseCase->get_dmg();
-        assert(times.size() == scores.size());
-        assert(times.size() == accuracies.size());
+        const application::GraphSeries seriesData = m_graphUseCase->get_series();
 
-        QList<QMap<Column, qreal>> rows(int(times.size()));
-        for (int i = 0; i < int(times.size()); ++i) {
-            rows[i][Time] = times[i];
-            rows[i][Score] = scores[i];
-            rows[i][Accuracy] = accuracies[i];
-            rows[i][Shots] = i < int(shots.size()) ? shots[i] : 0.0;
-            rows[i][Kills] = i < int(kills.size()) ? kills[i] : 0.0;
-            rows[i][Dmg] = i < int(dmg.size()) ? dmg[i] : 0.0;
+        QList<QMap<Column, qreal>> rows(int(seriesData.times.size()));
+        for (int i = 0; i < int(seriesData.times.size()); ++i) rows[i][Time] = seriesData.times[i];
+
+        for (int c = Score; c < ColumnCount; ++c) {
+            const auto it = seriesData.columns.find(static_cast<application::ColumnId>(c));
+            if (it == seriesData.columns.end()) continue;
+            const auto &values = it->second;
+            for (int i = 0; i < rows.size() && i < int(values.size()); ++i) rows[i][static_cast<Column>(c)] = values[i];
         }
-        setData(resampleToWholeSeconds(rows));
+
+        setData(std::move(rows));
     }
 }

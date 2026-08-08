@@ -195,8 +195,8 @@ Dialog {
                         Item { Layout.fillWidth: true }
                         Switch {
                             objectName: "columnVisibilityCheckBox_" + root.graphVm.columnName(lineRow.modelData)
-                            checked: !!columnVisibility[root.graphVm.columnName(lineRow.modelData).toLowerCase()]
-                            onToggled: columnVisibility[root.graphVm.columnName(lineRow.modelData).toLowerCase()] = checked
+                            checked: !!columnVisibility[root.graphVm.columnKey(lineRow.modelData)]
+                            onToggled: columnVisibility[root.graphVm.columnKey(lineRow.modelData)] = checked
                         }
                     }
                 }
