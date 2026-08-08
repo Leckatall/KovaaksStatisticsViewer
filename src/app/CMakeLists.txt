@@ -14,7 +14,6 @@ target_link_libraries(ksv_app PUBLIC
         Qt6::Gui
         Qt6::Quick
         Qt6::Qml
-        Qt6::Graphs
         ksv_ui
         ksv_qt_data
         ksv_data

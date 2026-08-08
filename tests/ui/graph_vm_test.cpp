@@ -51,8 +51,7 @@ namespace {
     };
 
     TEST_F(GraphViewModelTest, StartsEmptyWithDefaultBounds) {
-        EXPECT_EQ(view_model.rowCount(), 0);
-        EXPECT_EQ(view_model.columnCount(), GraphViewModel::ColumnCount);
+        EXPECT_EQ(view_model.pointCount(), 0);
         const auto bounds = view_model.axisBounds();
         EXPECT_DOUBLE_EQ(bounds[QString::number(GraphViewModel::Score)].toPointF().y(), 1.0);
         EXPECT_DOUBLE_EQ(bounds[QString::number(GraphViewModel::Accuracy)].toPointF().x(), 0.0);
@@ -65,7 +64,7 @@ namespace {
         view_model.fetchData("");
 
         EXPECT_TRUE(fake_use_case->load_perf_calls.empty());
-        EXPECT_EQ(view_model.rowCount(), 3);
+        EXPECT_EQ(view_model.pointCount(), 3);
     }
 
     TEST_F(GraphViewModelTest, FetchDataWithScenarioIdCallsLoadPerfWithLocalPath) {
@@ -82,9 +81,10 @@ namespace {
 
         view_model.fetchData("");
 
-        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Time)).toDouble(), 0.0);
-        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Score)).toDouble(), 20.0);
-        EXPECT_NEAR(view_model.data(view_model.index(2, GraphViewModel::Accuracy)).toDouble(), 0.7, 1e-6);
+        // seriesPoints packs each row as {time, value}, so x() is Time.
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Score)[0].x(), 0.0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Score)[1].y(), 20.0);
+        EXPECT_NEAR(view_model.seriesPoints(GraphViewModel::Accuracy)[2].y(), 0.7, 1e-6);
     }
 
     TEST_F(GraphViewModelTest, FetchDataUpdatesScenarioTitleFromUseCase) {
@@ -206,9 +206,9 @@ namespace {
 
         view_model.fetchData("");
 
-        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Shots)).toInt(), 5);
-        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Kills)).toInt(), 2);
-        EXPECT_EQ(view_model.data(view_model.index(2, GraphViewModel::Dmg)).toDouble(), 300.0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Shots)[0].y(), 5);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Kills)[1].y(), 2);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Dmg)[2].y(), 300.0);
     }
 
     // Shots/Kills/Dmg come from separate optional data points than
@@ -222,11 +222,11 @@ namespace {
 
         view_model.fetchData("");
 
-        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Shots)).toInt(), 5);
-        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Shots)).toInt(), 0);
-        EXPECT_EQ(view_model.data(view_model.index(2, GraphViewModel::Shots)).toInt(), 0);
-        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Kills)).toInt(), 0);
-        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Dmg)).toDouble(), 0.0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Shots)[0].y(), 5);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Shots)[1].y(), 0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Shots)[2].y(), 0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Kills)[0].y(), 0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Dmg)[1].y(), 0.0);
     }
 
     TEST_F(GraphViewModelTest, SeriesPointsReturnsTimeValuePairsInRowOrder) {
@@ -254,55 +254,6 @@ namespace {
         EXPECT_TRUE(view_model.seriesPoints(GraphViewModel::ColumnCount).isEmpty());
     }
 
-    TEST_F(GraphViewModelTest, DataReturnsInvalidForOutOfRangeRow) {
-        setSampleData();
-        view_model.fetchData("");
-
-        EXPECT_FALSE(view_model.data(view_model.index(3, GraphViewModel::Score)).isValid());
-    }
-
-    // QtGraphs' XYModelMapper (used by LineFromModel.qml) only reacts to
-    // rowsInserted/rowsRemoved/dataChanged, not modelReset. A reset desyncs
-    // its cached series points from the model, which crashes spline
-    // calculation on the next scenario switch. setData() must therefore
-    // never reset the model, whether the new dataset is smaller, larger, or
-    // the same size as the old one.
-    TEST_F(GraphViewModelTest, FetchDataNeverResetsModelWhenSwitchingScenarios) {
-        setSampleData();
-        view_model.fetchData("");
-        ASSERT_EQ(view_model.rowCount(), 3);
-
-        const QSignalSpy resetSpy(&view_model, &GraphViewModel::modelReset);
-        const QSignalSpy removeSpy(&view_model, &GraphViewModel::rowsRemoved);
-        const QSignalSpy insertSpy(&view_model, &GraphViewModel::rowsInserted);
-
-        // Shrink: fewer rows than currently loaded.
-        fake_use_case->times = {0.0F, 1.0F};
-        fake_use_case->scores = {10.0F, 20.0F};
-        fake_use_case->accuracies = {0.5F, 0.6F};
-        view_model.fetchData("");
-        EXPECT_EQ(view_model.rowCount(), 2);
-        EXPECT_EQ(removeSpy.count(), 1);
-
-        // Grow: more rows than currently loaded.
-        fake_use_case->times = {0.0F, 1.0F, 2.0F, 3.0F};
-        fake_use_case->scores = {10.0F, 20.0F, 30.0F, 40.0F};
-        fake_use_case->accuracies = {0.5F, 0.6F, 0.7F, 0.8F};
-        view_model.fetchData("");
-        EXPECT_EQ(view_model.rowCount(), 4);
-        EXPECT_EQ(insertSpy.count(), 1);
-
-        // Same size: row count unchanged, only values differ.
-        fake_use_case->times = {0.0F, 1.0F, 2.0F, 3.0F};
-        fake_use_case->scores = {99.0F, 98.0F, 97.0F, 96.0F};
-        fake_use_case->accuracies = {0.1F, 0.2F, 0.3F, 0.4F};
-        view_model.fetchData("");
-        EXPECT_EQ(view_model.rowCount(), 4);
-        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Score)).toDouble(), 99.0);
-
-        EXPECT_EQ(resetSpy.count(), 0);
-    }
-
     // GraphViewModel resamples raw per-tick rows (which arrive as deltas, at
     // irregular sub-second intervals) down to one row per whole second
     // before storing them, so the chart/axis always deal in whole seconds.
@@ -313,11 +264,12 @@ namespace {
 
         view_model.fetchData("");
 
-        ASSERT_EQ(view_model.rowCount(), 2);
-        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Time)).toDouble(), 0.0);
-        EXPECT_EQ(view_model.data(view_model.index(0, GraphViewModel::Score)).toDouble(), 10.0);
-        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Time)).toDouble(), 1.0);
-        EXPECT_EQ(view_model.data(view_model.index(1, GraphViewModel::Score)).toDouble(), 20.0);
+        const auto score = view_model.seriesPoints(GraphViewModel::Score);
+        ASSERT_EQ(score.size(), 2);
+        EXPECT_EQ(score[0].x(), 0.0);
+        EXPECT_EQ(score[0].y(), 10.0);
+        EXPECT_EQ(score[1].x(), 1.0);
+        EXPECT_EQ(score[1].y(), 20.0);
     }
 
     TEST_F(GraphViewModelTest, FetchDataFillsSecondsWithNoRawDataAsZero) {
@@ -330,13 +282,16 @@ namespace {
 
         // Seconds 0..3: real data at 0 and 3, seconds 1 and 2 have no raw
         // point and must default to zero across every column.
-        ASSERT_EQ(view_model.rowCount(), 4);
+        const auto score = view_model.seriesPoints(GraphViewModel::Score);
+        const auto shots = view_model.seriesPoints(GraphViewModel::Shots);
+        const auto accuracy = view_model.seriesPoints(GraphViewModel::Accuracy);
+        ASSERT_EQ(score.size(), 4);
         for (int second: {1, 2}) {
-            EXPECT_EQ(view_model.data(view_model.index(second, GraphViewModel::Score)).toDouble(), 0.0);
-            EXPECT_EQ(view_model.data(view_model.index(second, GraphViewModel::Shots)).toDouble(), 0.0);
-            EXPECT_EQ(view_model.data(view_model.index(second, GraphViewModel::Accuracy)).toDouble(), 0.0);
+            EXPECT_EQ(score[second].y(), 0.0);
+            EXPECT_EQ(shots[second].y(), 0.0);
+            EXPECT_EQ(accuracy[second].y(), 0.0);
         }
-        EXPECT_EQ(view_model.data(view_model.index(3, GraphViewModel::Score)).toDouble(), 20.0);
+        EXPECT_EQ(score[3].y(), 20.0);
     }
 
     // The real-world motivating case: near the end of a run, two ticks can
@@ -355,13 +310,13 @@ namespace {
 
         view_model.fetchData("");
 
-        ASSERT_EQ(view_model.rowCount(), 60);
-        const auto lastRow = view_model.rowCount() - 1;
-        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Time)).toDouble(), 59.0);
-        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Score)).toDouble(), 3.0);
-        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Shots)).toDouble(), 7.0);
-        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Kills)).toDouble(), 1.0);
-        EXPECT_EQ(view_model.data(view_model.index(lastRow, GraphViewModel::Dmg)).toDouble(), 30.0);
+        ASSERT_EQ(view_model.pointCount(), 60);
+        const auto lastRow = view_model.pointCount() - 1;
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Score)[lastRow].x(), 59.0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Score)[lastRow].y(), 3.0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Shots)[lastRow].y(), 7.0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Kills)[lastRow].y(), 1.0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Dmg)[lastRow].y(), 30.0);
     }
 
     // Accuracy is a ratio, so merging two points that round into the same
@@ -379,7 +334,7 @@ namespace {
         // Accuracies are stored as float and promoted to double, so the
         // tolerance must absorb float-precision error, not just double
         // rounding (same reasoning as RecomputeBoundsUsesRealPerColumnRangesWithPadding).
-        const double mergedAccuracy = view_model.data(view_model.index(10, GraphViewModel::Accuracy)).toDouble();
+        const double mergedAccuracy = view_model.seriesPoints(GraphViewModel::Accuracy)[10].y();
         EXPECT_NEAR(mergedAccuracy, 0.86, 1e-6);
         // Guard against regressing to the wrong (naive average) approach.
         EXPECT_NE(mergedAccuracy, 0.7);
@@ -393,6 +348,6 @@ namespace {
 
         view_model.fetchData("");
 
-        EXPECT_EQ(view_model.data(view_model.index(20, GraphViewModel::Accuracy)).toDouble(), 0.0);
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Accuracy)[20].y(), 0.0);
     }
 }

@@ -20,7 +20,6 @@ find_package(Qt6 REQUIRED COMPONENTS
         Quick
         Qml
         QuickControls2
-        Graphs
         Test  # Add for testing
         QuickTest
 )
@@ -57,7 +56,6 @@ target_link_libraries(ksv PRIVATE
         Qt6::Quick
         Qt6::Qml
         Qt6::QuickControls2
-        Qt6::Graphs
         ksv_app
         ksv_ui
         ksv_data

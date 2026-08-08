@@ -11,7 +11,7 @@
 #include <QPen>
 #include <cmath>
 
-#include "../presentation/monotone_spline.h"
+#include "presentation/monotone_spline.h"
 
 namespace ksv::presentation {
     namespace {

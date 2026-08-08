@@ -17,7 +17,6 @@ target_link_libraries(ui_tests PRIVATE
     Qt6::Core
     Qt6::Quick
     Qt6::Qml
-    Qt6::Graphs
     Qt6::Test
     GTest::gtest
 )
@@ -41,7 +40,7 @@ target_link_libraries(ui_qml_tests PRIVATE
 # component's tests doesn't hide the others from `ctest`.
 #
 # QT_QUICK_BACKEND=software forces the raster Quick renderer instead of the
-# default RHI/Direct3D11 backend. None of these tests render GraphsView, and
+# default RHI/Direct3D11 backend. None of these tests need GPU rendering, and
 # without it, running several TestCase windows in one process under
 # QT_QPA_PLATFORM=offscreen intermittently fails with "the handle is
 # invalid" from the D3D11 device being torn down and recreated per window

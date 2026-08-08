@@ -30,43 +30,13 @@ namespace ksv::presentation {
     }
 
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
-                                   QObject *parent) : QAbstractTableModel(parent),
+                                   QObject *parent) : QObject(parent),
                                                       m_graphUseCase(std::move(graphUseCase)) {
         recomputeBounds();
     }
 
-    QVariant GraphViewModel::data(const QModelIndex &index, int role) const {
-        if (!checkIndex(index, CheckIndexOption::IndexIsValid | CheckIndexOption::ParentIsInvalid))
-            return {};
-        if (role != Qt::DisplayRole && role != Qt::EditRole) return {};
-
-        const auto &row = m_data.at(index.row());
-        const auto column = static_cast<Column>(index.column());
-        if (column < 0 || column >= ColumnCount) return {};
-        return row[column];
-    }
-
     void GraphViewModel::setData(QList<QMap<Column, qreal>> data) {
-        // QtGraphs' XYModelMapper only reacts to rowsInserted/rowsRemoved/
-        // dataChanged, not modelReset — a begin/endResetModel() here leaves
-        // its cached series points desynced from the new row count (it can
-        // end up with 0 points, crashing spline calculation on the next
-        // dataset switch). Use targeted insert/remove/dataChanged instead so
-        // the mapper stays in sync.
-        const int oldSize = int(m_data.size());
-        const int newSize = int(data.size());
-
-        if (newSize < oldSize) beginRemoveRows({}, newSize, oldSize - 1);
-        else if (newSize > oldSize) beginInsertRows({}, oldSize, newSize - 1);
-
         m_data = std::move(data);
-
-        if (newSize < oldSize) endRemoveRows();
-        else if (newSize > oldSize) endInsertRows();
-
-        const int commonRows = std::min(oldSize, newSize);
-        if (commonRows > 0) emit dataChanged(index(0, 0), index(commonRows - 1, ColumnCount - 1));
-
         emit pointCountChanged();
         recomputeBounds();
     }

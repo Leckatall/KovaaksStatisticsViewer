@@ -10,7 +10,7 @@ qt_policy(SET QTP0001 NEW)
 
 add_library(ksv_ui STATIC)
 
-target_link_libraries(ksv_ui PRIVATE Qt6::Core Qt6::Quick Qt6::Qml Qt6::Graphs)
+target_link_libraries(ksv_ui PRIVATE Qt6::Core Qt6::Quick Qt6::Qml)
 
 qt_add_qml_module(ksv_ui
         URI KovaaksStatsViewer
@@ -18,10 +18,7 @@ qt_add_qml_module(ksv_ui
         NO_PLUGIN
         OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/KovaaksStatsViewer
         QML_FILES
-            qml/LineFromModel.qml
             qml/Main.qml
-            qml/GraphHoverPointDelegate.qml
-            qml/DashboardGraph.qml
             qml/DashboardGraphCanvas.qml
             qml/ControlPanel.qml
             qml/AppMenuBar.qml
