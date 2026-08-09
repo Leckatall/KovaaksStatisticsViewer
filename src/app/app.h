@@ -10,6 +10,7 @@
 
 #include "graph_vm.h"
 #include "playtime_graph_vm.h"
+#include "scenario_browser_vm.h"
 #include "session_vm.h"
 #include "settings_vm.h"
 #include "interfaces/i_proto_decoder.h"
@@ -36,6 +37,7 @@ namespace ksv::application {
         [[nodiscard]] presentation::PlaytimeGraphViewModel* playtimeVm() const { return m_playtimeVm; }
         [[nodiscard]] presentation::SessionViewModel* sessionVm() const { return m_sessionVm; }
         [[nodiscard]] presentation::SettingsViewModel* settingsVm() const { return m_settingsVm; }
+        [[nodiscard]] presentation::ScenarioBrowserViewModel* scenarioBrowserVm() const { return m_scenarioBrowserVm; }
         [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
         [[nodiscard]] std::shared_ptr<ISessionController> sessionController() const { return m_sessionController; }
@@ -48,6 +50,7 @@ namespace ksv::application {
         presentation::PlaytimeGraphViewModel* m_playtimeVm;
         presentation::SessionViewModel* m_sessionVm;
         presentation::SettingsViewModel* m_settingsVm;
+        presentation::ScenarioBrowserViewModel* m_scenarioBrowserVm;
 
         std::shared_ptr<ISettingsService> m_settingsService;
         std::shared_ptr<IFileService> m_fileService;

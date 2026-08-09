@@ -39,6 +39,7 @@ ApplicationWindow {
     required property var playtimeVm
     required property var sessionVm
     required property var settingsVm
+    required property var scenarioBrowserVm
 
     Rectangle {
         anchors.fill: parent
@@ -75,7 +76,7 @@ ApplicationWindow {
         anchors.margins: 5
         Label {
             Layout.row: 0; Layout.column: 0
-            Layout.columnSpan: 2
+            Layout.columnSpan: 3
             text: "Dashboard"
             font.pixelSize: 24
             font.bold: true
@@ -83,7 +84,7 @@ ApplicationWindow {
         }
 
         ColumnLayout {
-            Layout.row: 1; Layout.column: 1
+            Layout.row: 1; Layout.column: 2
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -100,10 +101,21 @@ ApplicationWindow {
             }
         }
         ControlPanel {
-            Layout.row: 1; Layout.column: 0
+            Layout.row: 1; Layout.column: 1
             sessionVm: root.sessionVm
             graphVm: root.graphVm
             columnVisibility: columnVisibilitySettings
+        }
+        SelectionPanel {
+            Layout.row: 1; Layout.column: 0
+            Layout.fillHeight: true
+            scenarioModel: root.scenarioBrowserVm.scenarioModel
+            runModel: root.scenarioBrowserVm.runModel
+            recentRunModel: root.scenarioBrowserVm.recentRunsModel
+            onSearchEdited: text => root.scenarioBrowserVm.setSearchText(text)
+            onScenarioActivated: (hash, name) => root.scenarioBrowserVm.activateScenario(hash, name)
+            onRunSelected: (hash, startTimeMs) => root.scenarioBrowserVm.selectRun(hash, startTimeMs)
+            onSortRequested: (field, ascending) => root.scenarioBrowserVm.setSort(field, ascending)
         }
     }
 }

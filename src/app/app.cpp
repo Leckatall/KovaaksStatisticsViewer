@@ -46,6 +46,7 @@ namespace ksv::application {
 
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
         m_settingsVm = new presentation::SettingsViewModel(m_settingsService, m_profileService, this);
+        m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_sessionController, this);
     }
 
     int App::start() {
@@ -53,7 +54,8 @@ namespace ksv::application {
             {"graphVm", QVariant::fromValue(m_graphVm)},
             {"playtimeVm", QVariant::fromValue(m_playtimeVm)},
             {"sessionVm", QVariant::fromValue(m_sessionVm)},
-            {"settingsVm", QVariant::fromValue(m_settingsVm)}
+            {"settingsVm", QVariant::fromValue(m_settingsVm)},
+            {"scenarioBrowserVm", QVariant::fromValue(m_scenarioBrowserVm)}
         });
         m_engine.loadFromModule("KovaaksStatsViewer", "Main");
         if (m_engine.rootObjects().isEmpty()) return -1;

@@ -24,7 +24,15 @@ namespace {
             set_current_perf_filename_calls.push_back(filename);
         }
 
+        void setCurrentPerf(const ScenarioRunId &) override {}
+
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
+
+        [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return {}; }
+
+        [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const ScenarioId &) const override { return {}; }
+
+        [[nodiscard]] std::vector<RunSummary> getRecentRuns(std::size_t) const override { return {}; }
     };
 
     ScenarioDataPoint make_point(const float time, const int shots, const int hits, const float score) {
