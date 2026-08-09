@@ -63,7 +63,7 @@ namespace ksv::presentation {
     }
 
     AxisModel GraphCanvas::yAxisFor(const SeriesModel &series) const {
-        return series.yAxis.value_or(m_graphVm->xAxis());
+        return series.yAxis.value_or(series.deriveYAxis());
     }
 
     QPointF GraphCanvas::toPixel(const QPointF &displayPoint, const QRectF &rect,
@@ -90,12 +90,11 @@ namespace ksv::presentation {
                             [&xAxis](const qreal v) { return xAxis.formatTick(v); });
     }
 
-    void GraphCanvas::drawSeries(QPainter *painter, const QRectF &rect) {
+    void GraphCanvas::drawSeries(QPainter *painter, const QRectF &rect) const {
         if (!m_graphVm) return;
 
-        const auto series = m_graphVm->series(visibleColumnIds());
-
-        for (const auto &s: series) {
+        for (const auto series = m_graphVm->series(visibleColumnIds());
+            const auto &s: series) {
             const QList<QPointF> displayPoints = s.displayPoints();
             if (displayPoints.size() < 2) continue;
 

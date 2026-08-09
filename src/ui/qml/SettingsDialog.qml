@@ -6,6 +6,7 @@ import QtQuick.Dialogs
 
 Dialog {
     id: root
+    objectName: "settingsDialog"
     title: "Settings"
     modal: true
     standardButtons: Dialog.Close

@@ -25,7 +25,20 @@ namespace ksv::application {
         Q_OBJECT
     public:
         explicit App(QObject* parent = nullptr);
+        // Injects the leaf services so tests can drive the real wiring with
+        // deterministic paths instead of the real registry / AppDataLocation.
+        App(std::shared_ptr<ISettingsService> settingsService,
+            std::shared_ptr<IProtoDecoder> decoder, QObject* parent = nullptr);
         int start();
+        QQmlApplicationEngine* engine() {return &m_engine;}
+
+        [[nodiscard]] presentation::GraphViewModel* graphVm() const { return m_graphVm; }
+        [[nodiscard]] presentation::PlaytimeGraphViewModel* playtimeVm() const { return m_playtimeVm; }
+        [[nodiscard]] presentation::SessionViewModel* sessionVm() const { return m_sessionVm; }
+        [[nodiscard]] presentation::SettingsViewModel* settingsVm() const { return m_settingsVm; }
+        [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
+        [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
+        [[nodiscard]] std::shared_ptr<ISessionController> sessionController() const { return m_sessionController; }
 
     private:
         // void initConnections();

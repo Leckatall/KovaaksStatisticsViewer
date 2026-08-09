@@ -21,10 +21,14 @@
 
 
 namespace ksv::application {
-    App::App(QObject *parent) : QObject(parent) {
-        m_protoDecoder = std::make_shared<data::ProtoDecoder>();
+    App::App(QObject *parent)
+        : App(std::make_shared<qt_data::SettingsService>(), std::make_shared<data::ProtoDecoder>(), parent) {}
 
-        m_settingsService = std::make_shared<qt_data::SettingsService>();
+    App::App(std::shared_ptr<ISettingsService> settingsService,
+             std::shared_ptr<IProtoDecoder> decoder, QObject *parent) : QObject(parent) {
+        m_protoDecoder = std::move(decoder);
+
+        m_settingsService = std::move(settingsService);
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder);
 
         m_profileService = std::make_shared<data::ProfileService>(

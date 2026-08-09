@@ -24,7 +24,6 @@ qt_add_qml_module(ksv_ui
             qml/GraphCanvasWithTooltip.qml
             qml/ControlPanel.qml
             qml/AppMenuBar.qml
-            qml/KovaaksDirToolBar.qml
             qml/SettingsDialog.qml
             qml/DirectoryPickerRow.qml
         SOURCES

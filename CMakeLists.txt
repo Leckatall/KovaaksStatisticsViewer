@@ -29,7 +29,6 @@ qt_policy(SET QTP0004 NEW)
 qt_standard_project_setup()
 
 
-
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
@@ -87,6 +86,12 @@ function(ksv_copy_mingw_runtime_dlls target)
 endfunction()
 
 ksv_copy_mingw_runtime_dlls(ksv)
+
+# Dev-only component gallery (qmlpreview target). Off for packaged builds.
+option(KSV_BUILD_GALLERY "Build the dev component gallery (ksv_gallery)" ON)
+if(KSV_BUILD_GALLERY)
+    add_subdirectory(tools/gallery)
+endif()
 
 include(CTest)
 

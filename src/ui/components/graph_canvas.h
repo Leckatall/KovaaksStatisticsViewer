@@ -57,7 +57,7 @@ namespace ksv::presentation {
 
         void drawAxes(QPainter *painter, const QRectF &rect) const;
 
-        void drawSeries(QPainter *painter, const QRectF &rect);
+        void drawSeries(QPainter *painter, const QRectF &rect) const;
 
         GraphViewModelBase *m_graphVm = nullptr;
         QVariantList m_visibleColumns;

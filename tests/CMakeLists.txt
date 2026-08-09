@@ -5,4 +5,5 @@ add_subdirectory(data)
 add_subdirectory(qt_data)
 add_subdirectory(app)
 add_subdirectory(ui)
+add_subdirectory(integration)
 

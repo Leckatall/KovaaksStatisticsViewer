@@ -25,9 +25,8 @@ namespace ksv::presentation {
         std::optional<AxisModel> xAxis;
         std::optional<AxisModel> yAxis;
 
-        // Stores rawPoints and rebuilds yAxis from their display-space range
-        void setData(QList<QPointF> rawPoints) {
-            points = std::move(rawPoints);
+        // Builds a y-axis from the current points' display-space range
+        [[nodiscard]] AxisModel deriveYAxis() const {
             qreal lo = 0.0, hi = 1.0;
             if (!points.isEmpty()) {
                 lo = hi = transform.display(points.front().y());
@@ -37,7 +36,12 @@ namespace ksv::presentation {
                     hi = std::max(hi, v);
                 }
             }
-            yAxis = AxisModel::forRange(lo, hi, yAxisOptions).withDelegate(transform);
+            return AxisModel::forRange(lo, hi, yAxisOptions).withDelegate(transform);
+        }
+
+        void setData(QList<QPointF> rawPoints) {
+            points = std::move(rawPoints);
+            yAxis = deriveYAxis();
         }
 
         [[nodiscard]] QList<QPointF> displayPoints() const {
