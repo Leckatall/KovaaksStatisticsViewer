@@ -33,8 +33,18 @@ namespace ksv::data {
 
         [[nodiscard]] std::optional<domain::ScenarioPerf> getMostRecentPerf(
             const domain::ScenarioId& scenario) const override;
+        [[nodiscard]] std::vector<domain::ScenarioPerf> getMostRecentPerfs(
+            const domain::ScenarioId& scenario, std::size_t count) const override;
         [[nodiscard]] std::optional<float> getAverageScore(
             const domain::ScenarioId& scenario, std::size_t count) const override;
+
+        [[nodiscard]] std::optional<domain::ScenarioPerf> getRun(
+            const domain::ScenarioRunId& run_id) const override;
+        [[nodiscard]] std::optional<std::size_t> getRunCount(
+            const domain::ScenarioId& scenario) const override;
+        [[nodiscard]] std::optional<double> getTotalTime(
+            const domain::ScenarioId& scenario) const override;
+        [[nodiscard]] std::vector<domain::ScenarioPerf> getRecentRuns(std::size_t count) const override;
 
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
         getRollingTimeAverage(int window_days) const override;

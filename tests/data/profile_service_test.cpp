@@ -252,6 +252,106 @@ namespace {
         EXPECT_FLOAT_EQ(*avg, 25.0F); // average of the 2 most recent: 20 and 30
     }
 
+    TEST_F(ProfileServiceTest, GetMostRecentPerfsIsEmptyBeforeProfileGenerated) {
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        EXPECT_TRUE(profile_service.getMostRecentPerfs(scenario, 2).empty());
+    }
+
+    TEST_F(ProfileServiceTest, GetMostRecentPerfsDelegatesToProfile) {
+        fake_file_service->perfs_to_return = {
+            make_perf("hash-1", 100), make_perf("hash-1", 300), make_perf("hash-1", 200)
+        };
+        profile_service.generateProfileFromDirectory();
+
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        const auto recent = profile_service.getMostRecentPerfs(scenario, 2);
+
+        ASSERT_EQ(recent.size(), 2);
+        EXPECT_EQ(recent[0].run_id.start_time, 200);
+        EXPECT_EQ(recent[1].run_id.start_time, 300);
+    }
+
+    TEST_F(ProfileServiceTest, GetRunReturnsNulloptBeforeProfileGenerated) {
+        const auto run_id = ksv::domain::ScenarioRunId{.scenario_id = {.name = "?", .hash = "hash-1"}, .start_time = 100};
+        EXPECT_FALSE(profile_service.getRun(run_id).has_value());
+    }
+
+    TEST_F(ProfileServiceTest, GetRunDelegatesToProfile) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100), make_perf("hash-2", 200)};
+        profile_service.generateProfileFromDirectory();
+
+        const auto run_id = ksv::domain::ScenarioRunId{.scenario_id = {.name = "?", .hash = "hash-2"}, .start_time = 200};
+        const auto perf = profile_service.getRun(run_id);
+
+        ASSERT_TRUE(perf.has_value());
+        EXPECT_EQ(perf->run_id.scenario_id.hash, "hash-2");
+    }
+
+    TEST_F(ProfileServiceTest, GetRunCountDelegatesToProfile) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100), make_perf("hash-1", 200)};
+        profile_service.generateProfileFromDirectory();
+
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        const auto count = profile_service.getRunCount(scenario);
+
+        ASSERT_TRUE(count.has_value());
+        EXPECT_EQ(*count, 2);
+    }
+
+    TEST_F(ProfileServiceTest, GetRunCountIsNulloptForUnknownScenario) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "unknown"};
+        EXPECT_FALSE(profile_service.getRunCount(scenario).has_value());
+    }
+
+    TEST_F(ProfileServiceTest, GetTotalTimeDelegatesToProfile) {
+        ksv::domain::ScenarioPerf perf_a = make_perf("hash-1", 100);
+        perf_a.scenario_length = 10.0F;
+        ksv::domain::ScenarioPerf perf_b = make_perf("hash-1", 200);
+        perf_b.scenario_length = 15.0F;
+        fake_file_service->perfs_to_return = {perf_a, perf_b};
+        profile_service.generateProfileFromDirectory();
+
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        const auto total = profile_service.getTotalTime(scenario);
+
+        ASSERT_TRUE(total.has_value());
+        EXPECT_DOUBLE_EQ(*total, 25.0);
+    }
+
+    TEST_F(ProfileServiceTest, GetRecentRunsIsEmptyBeforeProfileGenerated) {
+        EXPECT_TRUE(profile_service.getRecentRuns(5).empty());
+    }
+
+    TEST_F(ProfileServiceTest, GetRecentRunsReturnsNewestFirstAcrossScenarios) {
+        fake_file_service->perfs_to_return = {
+            make_perf("hash-1", 100), make_perf("hash-2", 300), make_perf("hash-1", 200)
+        };
+        profile_service.generateProfileFromDirectory();
+
+        const auto recent = profile_service.getRecentRuns(10);
+
+        ASSERT_EQ(recent.size(), 3);
+        EXPECT_EQ(recent[0].run_id.start_time, 300);
+        EXPECT_EQ(recent[1].run_id.start_time, 200);
+        EXPECT_EQ(recent[2].run_id.start_time, 100);
+    }
+
+    TEST_F(ProfileServiceTest, GetRecentRunsIsCappedByCount) {
+        fake_file_service->perfs_to_return = {
+            make_perf("hash-1", 100), make_perf("hash-2", 300), make_perf("hash-1", 200)
+        };
+        profile_service.generateProfileFromDirectory();
+
+        const auto recent = profile_service.getRecentRuns(2);
+
+        ASSERT_EQ(recent.size(), 2);
+        EXPECT_EQ(recent[0].run_id.start_time, 300);
+        EXPECT_EQ(recent[1].run_id.start_time, 200);
+    }
+
     TEST_F(ProfileServiceTest, OnProfileChangedFiresOnGenerateAndOnIncrementalAdd) {
         int notify_count = 0;
         profile_service.onProfileChanged([&notify_count] { ++notify_count; });

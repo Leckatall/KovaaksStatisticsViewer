@@ -43,8 +43,19 @@ namespace {
         [[nodiscard]] std::optional<ScenarioPerf> getMostRecentPerf(
             const ScenarioId &) const override { return std::nullopt; }
 
+        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(
+            const ScenarioId &, std::size_t) const override { return {}; }
+
         [[nodiscard]] std::optional<float> getAverageScore(
             const ScenarioId &, std::size_t) const override { return std::nullopt; }
+
+        [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &) const override { return std::nullopt; }
+
+        [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override { return std::nullopt; }
+
+        [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override { return std::nullopt; }
+
+        [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t) const override { return {}; }
 
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
         getRollingTimeAverage(int) const override { return {}; }
