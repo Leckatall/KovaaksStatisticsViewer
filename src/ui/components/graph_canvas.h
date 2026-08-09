@@ -37,9 +37,6 @@ namespace ksv::presentation {
 
         Q_INVOKABLE [[nodiscard]] QVariantMap nearestPoint(qreal x, qreal y) const;
 
-        // Given a pixel-x coordinate, converts it to a data-x via the shared X
-        // axis and returns {valid, x, xRaw, pixelX, series: [{name, color,
-        // value, valueRaw}, ...]}, each series queried at that data-x.
         Q_INVOKABLE [[nodiscard]] QVariantMap valuesAtX(qreal x) const;
 
     signals:

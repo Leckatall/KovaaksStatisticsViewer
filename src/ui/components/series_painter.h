@@ -21,8 +21,6 @@ namespace ksv::presentation {
             QColor markerColor{"white"};
         };
 
-        // A smoothed (monotone-cubic) curve through `pixelPoints`, plus a
-        // marker at each. `pixelPoints` must already be projected to the plot rect.
         static void paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor,
                           const Style &style);
         static void paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor) {

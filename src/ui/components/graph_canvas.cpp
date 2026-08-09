@@ -78,9 +78,7 @@ namespace ksv::presentation {
         const auto labelled = m_graphVm->series({m_graphVm->yAxisColumn()});
         const AxisModel xAxis = m_graphVm->xAxis();
 
-        // The view model chooses tick positions (nice round numbers); the
-        // renderer draws one gridline + label per tick for each labelled axis.
-        // Only one series' Y axis is labelled; each still projects against its own.
+        // Only one series' Y axis gets labels; all project against their own axis
         if (!labelled.isEmpty()) {
             const AxisModel yAxis = yAxisFor(labelled.front());
             AxisPainter::paint(*painter, rect, AxisPainter::Orientation::Vertical,

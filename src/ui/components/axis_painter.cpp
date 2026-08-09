@@ -21,8 +21,7 @@ namespace ksv::presentation {
         const qreal span = boundMax - boundMin;
 
         for (const qreal value: ticks) {
-            // Fraction of the axis this tick sits at; a zero span pins every
-            // tick to mid-axis, matching GraphCanvas::toPixel's fallback.
+            // t is [0,1] position on axis; zero span pins everything to mid-axis
             const qreal t = span != 0.0 ? (value - boundMin) / span : 0.5;
 
             painter.setPen(QPen(style.gridColor, 1));

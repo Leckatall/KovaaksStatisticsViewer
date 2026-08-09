@@ -37,8 +37,7 @@ namespace ksv::application {
 
         m_playtimeUseCase = std::make_shared<PlaytimeGraphUseCase>(m_profileService);
         m_playtimeVm = new presentation::PlaytimeGraphViewModel(m_playtimeUseCase, this);
-        // Re-pull the rolling average whenever the profile reloads (source dir
-        // change, cache reload, or a new run appended).
+        // Re-pull rolling average when profile changes (new run, cache reload, or dir change)
         m_profileService->onProfileChanged([this] { m_playtimeVm->refresh(); });
 
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);

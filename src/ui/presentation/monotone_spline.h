@@ -10,12 +10,7 @@
 #include <cmath>
 
 namespace ksv::presentation {
-    // Fritsch-Carlson monotone cubic Hermite interpolation. Produces a dense
-    // polyline through every point in `points` (which must be sorted by x)
-    // that is guaranteed to never rise above or dip below the [min, max] of
-    // whichever segment's two endpoints it's currently between - unlike a
-    // Catmull-Rom style spline (e.g. QSplineSeries), which can overshoot past
-    // the data's own range between points.
+    // Fritsch-Carlson monotone cubic interpolation: never overshoots data range between points (unlike Catmull-Rom)
     inline QVector<QPointF> monotoneCubicInterpolate(const QVector<QPointF> &points, const int samplesPerSegment = 16) {
         const int n = points.size();
         if (n < 2 || samplesPerSegment < 1) return points;
@@ -26,10 +21,7 @@ namespace ksv::presentation {
             m[i] = dx[i] != 0.0 ? (points[i + 1].y() - points[i].y()) / dx[i] : 0.0;
         }
 
-        // Initial tangent at each point: average of the adjacent secants,
-        // except at a local extremum (adjacent secants disagree in sign, or
-        // either is flat) where the tangent is forced to 0 so the curve
-        // doesn't overshoot past the extremum.
+        // Tangent: average of adjacent secants, zero at extrema to prevent overshoot
         QVector<double> t(n);
         t[0] = m[0];
         t[n - 1] = m[n - 2];
@@ -41,8 +33,7 @@ namespace ksv::presentation {
             }
         }
 
-        // Fritsch-Carlson limiter: rescales each segment's endpoint tangents
-        // so the Hermite curve can't overshoot that segment's y-range.
+        // Fritsch-Carlson: rescale tangents to prevent segment overshoot
         for (int i = 0; i < n - 1; ++i) {
             if (m[i] == 0.0) {
                 t[i] = 0.0;
@@ -64,8 +55,7 @@ namespace ksv::presentation {
         for (int i = 0; i < n - 1; ++i) {
             const QPointF &p0 = points[i];
             const QPointF &p1 = points[i + 1];
-            // A zero-width segment (duplicate timestamp) can't be sampled -
-            // just emit its start point and move on.
+            // Zero-width segment (duplicate x) can't be sampled; just emit start point
             const int samples = dx[i] == 0.0 ? 1 : samplesPerSegment;
             for (int s = 0; s < samples; ++s) {
                 const double u = double(s) / double(samples);

@@ -12,7 +12,6 @@ namespace ksv::presentation {
     namespace {
         const QColor kPlaytimeColor("#4DD0E1");
 
-        // value is a day count since the Unix epoch (see PlaytimeGraphUseCase).
         QString formatEpochDay(const qreal value) {
             const QDate date = QDate(1970, 1, 1).addDays(qint64(std::llround(value)));
             return date.toString("MMM d");
@@ -82,21 +81,19 @@ namespace ksv::presentation {
             rawSecondsPoints.append(QPointF(qreal(epoch_day), avg_seconds));
         }
 
-        // X spans the first..last day, rounded to nice whole-day boundaries;
-        // the Date axis is integral so ticks never fall on fractional days.
         if (m_points.isEmpty()) {
             m_xAxis = AxisModel::forRange(0.0, 1.0, {AxisModel::Baseline::HugData, /*integral=*/true});
         } else {
             const qreal xlo = m_points.first().x();
             const qreal xhi = m_points.last().x();
+            // X spans first..last day with integral ticks so fractional days never appear
             m_xAxis = AxisModel::forRange(xlo, xhi, {AxisModel::Baseline::HugData, /*integral=*/true});
         }
         m_xAxis = m_xAxis.withDelegate(dateDelegate());
 
-        // Plots raw seconds, presents minutes.
         m_series.name = columnName(Playtime);
         m_series.color = kPlaytimeColor;
-        m_series.transform = ValueTransform::secondsToMinutes();
+        m_series.transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
         m_series.yAxisOptions = {AxisModel::Baseline::Zero};
         m_series.setData(rawSecondsPoints);
         m_yAxis = *m_series.yAxis;

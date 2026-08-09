@@ -15,7 +15,6 @@ namespace ksv::application {
 
         virtual void load_perf(std::string_view filename) = 0;
 
-        // Whole-second-resampled columns for the currently loaded run.
         virtual GraphSeries get_series() = 0;
 
         virtual std::string get_run_label() = 0;

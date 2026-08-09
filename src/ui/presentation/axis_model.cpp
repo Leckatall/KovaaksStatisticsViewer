@@ -51,10 +51,7 @@ namespace ksv::presentation {
         qreal step = niceNum(niceNum(hi - lo, false) / intervals, true);
         if (options.integral) step = std::max(1.0, std::round(step));
 
-        // Nudge the quotients by a tiny epsilon before floor/ceil so a bound
-        // that sits on a step multiple but computes as e.g. 9.9999999 (0.05 is
-        // not exactly representable) still snaps to that multiple instead of
-        // spilling onto the next one.
+        // Epsilon handles non-representable values (e.g. 0.05) that round incorrectly
         constexpr qreal kEps = 1e-9;
         qreal niceMin = std::floor(lo / step + kEps) * step;
         qreal niceMax = std::ceil(hi / step - kEps) * step;
@@ -65,8 +62,7 @@ namespace ksv::presentation {
         axis.m_max = niceMax;
 
         axis.m_ticks.clear();
-        // Build ticks by index off niceMin rather than repeatedly adding `step`
-        // so floating-point drift doesn't accumulate across a long axis.
+        // Index from niceMin instead of accumulating step to avoid floating-point drift
         const int tickCount = int(std::round((niceMax - niceMin) / step));
         for (int i = 0; i <= tickCount; ++i) {
             axis.m_ticks.append(niceMin + step * i);

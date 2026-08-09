@@ -24,8 +24,7 @@ namespace ksv::presentation {
             return t;
         }
 
-        // Indexed by GraphViewModel::Column. Time isn't drawn as a series of
-        // its own (it's the X axis) - its entry only carries the X delegate.
+        // Time column only carries X delegate; others are drawn as series
         const std::array<ColumnMeta, GraphViewModel::ColumnCount> kColumnMeta{{
             {"Time", "time", QColor(), secondsDelegate()},
             {"Score", "score", QColor("#009600"), ValueTransform::identity()},
@@ -102,7 +101,6 @@ namespace ksv::presentation {
     }
 
     namespace {
-        // Real min/max of `column` across `data`, no padding applied.
         std::pair<qreal, qreal> rawColumnRange(const QList<QMap<GraphViewModel::Column, qreal>> &data,
                                                const GraphViewModel::Column column) {
             qreal lo = data.front()[column];
@@ -116,8 +114,7 @@ namespace ksv::presentation {
     }
 
     void GraphViewModel::recomputeBounds() {
-        // Time never goes negative and always starts at 0, and is measured in
-        // whole seconds, so it pins its floor to zero and keeps integral ticks.
+        // Time: zero floor, integral steps (whole seconds)
         const AxisModel::Options timeOpts{AxisModel::Baseline::Zero, /*integral=*/true};
 
         std::array<AxisModel, ColumnCount> newAxes{};
@@ -135,13 +132,11 @@ namespace ksv::presentation {
         }
         newAxes[Time] = newAxes[Time].withDelegate(kColumnMeta[Time].transform);
 
-        // Rebuilt every call; the change-gated skip below only guards the
-        // deprecated m_axes/boundsChanged path, not m_series.
+        // Rebuild series on every call (change-gated skip below only guards deprecated m_axes path)
         for (int c = Score; c < ColumnCount; ++c) {
             m_series[c - Score].setData(seriesPoints(static_cast<Column>(c)));
         }
 
-        // Only notify if the visible range actually changed.
         bool changed = false;
         for (int c = 0; c < ColumnCount; ++c) {
             if (!qFuzzyCompare(1.0 + m_axes[c].min(), 1.0 + newAxes[c].min()) ||

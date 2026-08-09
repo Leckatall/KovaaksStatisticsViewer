@@ -11,8 +11,7 @@
 #include <functional>
 
 namespace ksv::presentation {
-    // Affine map from a plotted (raw) value to the value shown in axes/labels/
-    // tooltips, so a series can be plotted in one unit and presented in another.
+    // Affine transform: plot in one unit (e.g., seconds), display in another (e.g., minutes)
     struct ValueTransform {
         qreal scale = 1.0;
         qreal offset = 0.0;

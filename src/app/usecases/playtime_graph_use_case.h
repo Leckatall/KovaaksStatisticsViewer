@@ -22,8 +22,7 @@ namespace ksv::application {
             std::vector<std::pair<long long, double>> result;
             result.reserve(series.size());
             for (const auto &[day, avg_seconds]: series) {
-                // sys_days counts days since the Unix epoch (1970-01-01); that
-                // integer is the graph's X value.
+                // sys_days counts days since Unix epoch (1970-01-01); used as graph X value
                 result.emplace_back(static_cast<long long>(day.time_since_epoch().count()), avg_seconds);
             }
             return result;

@@ -23,11 +23,9 @@ namespace ksv::presentation {
             QColor gridColor{"#2A2A2A"};
             QColor textColor{"white"};
             int fontPointSize = 8;
-            qreal labelGap = 4; // px between the plot edge and the label band
+            qreal labelGap = 4;
         };
 
-        // `boundMin`/`boundMax` scale a tick value to a pixel exactly as
-        // GraphCanvas::toPixel does (a zero span maps every tick to mid-axis).
         static void paint(QPainter &painter, const QRectF &plot, Orientation orientation,
                           qreal boundMin, qreal boundMax, const QList<qreal> &ticks,
                           const std::function<QString(qreal)> &formatTick, const Style &style);

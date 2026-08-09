@@ -16,22 +16,16 @@
 #include "value_transform.h"
 
 namespace ksv::presentation {
-    // A drawable series vended by a GraphViewModel: raw points, the delegate
-    // to its display unit, and the Y axis computed over that display range.
-    // xAxis/yAxis are optional per-series overrides; when unset the caller
-    // (GraphCanvas) falls back to the graph's shared axis.
     struct SeriesModel {
         QString name;
         QColor color;
         ValueTransform transform;
         AxisModel::Options yAxisOptions;
-        QList<QPointF> points; // {x, raw value}, in draw order
+        QList<QPointF> points;
         std::optional<AxisModel> xAxis;
-        std::optional<AxisModel> yAxis; // built over the DISPLAY range (transform applied)
+        std::optional<AxisModel> yAxis;
 
-        // Stores `rawPoints` and rebuilds yAxis from their display-space
-        // range, carrying the same delegate the series itself uses so the
-        // axis and the series can never format a value differently.
+        // Stores rawPoints and rebuilds yAxis from their display-space range
         void setData(QList<QPointF> rawPoints) {
             points = std::move(rawPoints);
             qreal lo = 0.0, hi = 1.0;
@@ -53,7 +47,6 @@ namespace ksv::presentation {
             return out;
         }
 
-        // Nearest sample to `xValue` by raw x -> {sample x, display y}.
         [[nodiscard]] std::optional<QPointF> sampleAtX(qreal xValue) const;
 
         [[nodiscard]] QString formattedValueAtX(qreal xValue) const {

@@ -11,7 +11,6 @@
 
 namespace ksv::application {
     namespace {
-        // The data from the perf grouped into 1s Buckets
         struct Bucket {
             float shots = 0.0F;
             float hits = 0.0F;
@@ -20,10 +19,6 @@ namespace ksv::application {
             float score = 0.0F;
         };
 
-        // What a column definition sees: the whole run, not just one instant.
-        // Needed for anything that isn't a pure per-second value - a running
-        // total, or a projection that extrapolates from the pace-so-far (or a
-        // trailing window of it) out to the run's actual duration.
         struct BuildContext {
             const domain::ScenarioPerf &perf;
             const std::vector<Bucket> &buckets;
@@ -34,8 +29,6 @@ namespace ksv::application {
             std::function<std::vector<float>(const BuildContext &)> derive;
         };
 
-        // Convenience for the common case: a column whose value at second i
-        // depends only on bucket i.
         std::vector<float> perBucket(const std::vector<Bucket> &buckets, const std::function<float(const Bucket &)> &f) {
             std::vector<float> result(buckets.size());
             for (size_t i = 0; i < buckets.size(); ++i) result[i] = f(buckets[i]);
@@ -78,9 +71,7 @@ namespace ksv::application {
                 }
             },
             {
-                // Projects the final score by extrapolating the average pace
-                // so far (cumulative score / elapsed time) across the run's
-                // full duration.
+                // Extrapolates final score from average pace-so-far across full run duration
                 ColumnId::ExpectedFinalScore,
                 [](const BuildContext &ctx) {
                     std::vector<float> result(ctx.buckets.size());
@@ -95,9 +86,7 @@ namespace ksv::application {
                 }
             },
             {
-                // Same projection, but paced off only the trailing 5 seconds
-                // rather than the whole run so far - reacts to a recent
-                // hot/cold streak instead of averaging it away.
+                // Same as ExpectedFinalScore but paced off trailing 5 seconds (reacts to hot/cold streaks)
                 ColumnId::ExpectedFinalScoreRecent,
                 [](const BuildContext &ctx) {
                     constexpr size_t kWindowSeconds = 5;

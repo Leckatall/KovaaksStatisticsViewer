@@ -138,15 +138,10 @@ namespace ksv::domain {
         std::vector<std::pair<sys_days, double> > result;
         if (window_days <= 0 || sorted_indices.empty()) return result;
 
-        // Sum scenario_length per calendar day (indices are already sorted by start_time).
         std::vector<std::pair<sys_days, double> > daily_totals;
         for (const auto idx: sorted_indices) {
             const auto &perf = m_runs[idx];
-            // A non-positive start_time is a pre-epoch (1970) timestamp that no
-            // real Kovaaks run can have - it comes from a default-constructed or
-            // malformed run. Including it would anchor the dense day-fill below
-            // at 1970, stretching every consumer (e.g. the rolling-playtime
-            // graph's axis) back across decades of empty days. Skip it.
+            // Skip pre-epoch timestamps (malformed/test data) to avoid stretching axis back to 1970
             if (perf.run_id.start_time <= 0) continue;
             const auto day = perf.run_id.startDay();
             if (!daily_totals.empty() && daily_totals.back().first == day) {
@@ -156,14 +151,13 @@ namespace ksv::domain {
             }
         }
 
-        // Every run may have been skipped as invalid above.
         if (daily_totals.empty()) return result;
 
         const sys_days first_day = daily_totals.front().first;
         const sys_days last_day = daily_totals.back().first;
         const auto total_days = static_cast<std::size_t>((last_day - first_day).count()) + 1;
 
-        // Dense per-day series; gap days (no play) are implicitly 0.
+        // Dense per-day series with implicit 0 for gap days (no play)
         std::vector<double> dense(total_days, 0.0);
         for (const auto &[day, total]: daily_totals) {
             dense[static_cast<std::size_t>((day - first_day).count())] = total;

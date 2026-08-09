@@ -8,9 +8,7 @@
 
 namespace ksv::data {
     namespace {
-        // Current on-disk cache schema version. Bump this whenever cache.proto
-        // changes incompatibly so older caches are rejected and regenerated
-        // rather than silently mis-parsed.
+        // Bumped when cache.proto changes incompatibly, ensuring old caches are regenerated instead of silently mis-parsed
         constexpr std::uint32_t kCacheVersion = 1;
     }
 
@@ -51,9 +49,7 @@ namespace ksv::data {
         std::ifstream input(path, std::ios::in | std::ios::binary);
         if (!proto.ParseFromIstream(&input)) return std::nullopt;
 
-        // Reject caches written by an incompatible (or pre-versioning) schema
-        // so the caller regenerates from the .perf files instead of loading a
-        // silently mis-parsed, empty-looking profile.
+        // Reject incompatible cache schema to force regeneration from .perf files instead of silent mis-parsing
         if (proto.version() != kCacheVersion) return std::nullopt;
 
         domain::UserProfile profile{proto.source_directory()};

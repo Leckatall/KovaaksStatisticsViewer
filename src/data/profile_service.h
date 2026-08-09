@@ -50,15 +50,7 @@ namespace ksv::data {
             for (auto& cb : m_callbacks) cb();
         }
         void saveProfile() const;
-
-        // Creates m_filepath's parent directory if it doesn't exist yet, so
-        // the serializer can write the cache there.
         void ensureParentDir() const;
-
-        // Reads the current profile path from the settings service, points the
-        // cache at it, and reloads (cache hit) or regenerates (cache miss) the
-        // profile there. Invoked whenever ISettingsService reports the profile
-        // path changed.
         void applyProfilePath();
 
         std::filesystem::path m_filepath;

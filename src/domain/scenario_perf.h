@@ -35,10 +35,6 @@ namespace ksv::domain {
         int kills;
     };
 
-    // Aggregate totals for a finished run. scenario_time comes straight from
-    // ScenarioPerf::scenario_length; every other field is the sum of that
-    // stat across all ScenarioDataPoints (the per-tick values are not
-    // cumulative, so summing is what yields the run's actual totals).
     struct ScenarioCompletionData {
         float scenario_time = 0.0F;
         int shots = 0;
@@ -70,16 +66,12 @@ namespace ksv::domain {
             return scenario_id < other.scenario_id || (scenario_id == other.scenario_id && start_time < other.start_time);
         }
 
-        // The UTC calendar day this run started on (start_time is ms since the Unix epoch).
         [[nodiscard]] std::chrono::sys_days startDay() const {
             using namespace std::chrono;
             return floor<days>(sys_time<milliseconds>{milliseconds{start_time}});
         }
 
-        // Human-readable "name (start_date, start_time)" label for use in the
-        // UI. start_time is epoch ms (UTC); it is rendered in the machine's
-        // local timezone so the shown wall-clock matches when the run was
-        // actually played (Kovaaks writes timestamp_ms as a true UTC epoch).
+        // Renders in local timezone so wall-clock matches when the run was actually played.
         [[nodiscard]] std::string toString() const {
             const auto seconds = static_cast<std::time_t>(start_time / 1000);
             std::tm local_tm{};
@@ -98,16 +90,11 @@ namespace ksv::domain {
         ScenarioRunId run_id;
         float scenario_length;
         std::vector<ScenarioDataPoint> data;
-        // Full absolute path of the .perf file this run was decoded from.
-        // Empty when unknown (test-constructed data, or data predating this field).
-        std::string source_file;
+        std::string source_file; // Full path if known, empty if test data or pre-versioning
 
         template<typename T>
         void add_data(float time, DataPointType type, T value);
 
-        // void add_data(float time, DataPointType type, float value) const;
-
-        // The score reported at the end of a run (data points are chronological).
         [[nodiscard]] float getFinalScore() const {
             return data.empty() ? 0.0F : data.back().score;
         }

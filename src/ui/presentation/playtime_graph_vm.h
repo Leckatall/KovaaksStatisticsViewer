@@ -15,10 +15,7 @@
 #include "app/usecases/i_playtime_graph_use_case.h"
 
 namespace ksv::presentation {
-    // Days-vs-playtime graph: X is a calendar date, Y is the 3-day rolling
-    // average of that day's total playtime in minutes, across all scenarios.
-    // Pulls its series from IPlaytimeGraphUseCase and reshapes it for the
-    // shared GraphCanvas painter (one series, dated X axis).
+    // Calendar-date vs rolling-average playtime. Adapts IPlaytimeGraphUseCase output for GraphCanvas.
     class PlaytimeGraphViewModel : public GraphViewModelBase {
         Q_OBJECT
         QML_ELEMENT
@@ -51,8 +48,7 @@ namespace ksv::presentation {
         [[nodiscard]] int yAxisColumn() const override { return Playtime; }
 
     public slots:
-        // Re-pulls the rolling average from the use case. Call after the
-        // profile reloads.
+        // Re-pulls rolling average when profile reloads
         void refresh();
 
     private:

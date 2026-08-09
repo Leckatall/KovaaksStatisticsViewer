@@ -29,14 +29,12 @@ namespace ksv::data {
         perf::PerfLog perfLog;
         if (!std::filesystem::exists(filename)) throw std::invalid_argument("File does not exist");
         std::fstream input(filename.data(), std::ios::in | std::ios::binary);
-        // std::cout << "Opening File: " << filename << std::endl;
         if (!perfLog.ParseFromIstream(&input)) {
             std::cerr << "Failed to parse file." << std::endl;
         }
         auto perf = decode(perfLog);
         perf.source_file = filename;
         return perf;
-        // google::protobuf::ShutdownProtobufLibrary();
     }
 
 }
