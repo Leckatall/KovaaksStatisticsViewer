@@ -85,7 +85,7 @@ namespace ksv::domain {
         if (recent.empty()) return std::nullopt;
 
         float total = 0.0F;
-        for (const auto &perf: recent) total += perf.getFinalScore();
+        for (const auto &perf: recent) total += perf.getCompletionData().score;
         return total / static_cast<float>(recent.size());
     }
 

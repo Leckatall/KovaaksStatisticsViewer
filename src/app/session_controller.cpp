@@ -48,7 +48,7 @@ namespace ksv::application {
         summary.run_id = perf.run_id;
         summary.scenario_name = QString::fromStdString(perf.run_id.scenario_id.name);
         summary.start_time_ms = perf.run_id.start_time;
-        summary.score = perf.getFinalScore();
+        summary.score = completion.score;
         summary.accuracy = completion.shots == 0 ? 0.0F : static_cast<float>(completion.hits) / static_cast<float>(completion.shots);
         summary.duration_seconds = perf.scenario_length;
         summary.shots = completion.shots;

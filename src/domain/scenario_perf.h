@@ -95,10 +95,6 @@ namespace ksv::domain {
         template<typename T>
         void add_data(float time, DataPointType type, T value);
 
-        [[nodiscard]] float getFinalScore() const {
-            return data.empty() ? 0.0F : data.back().score;
-        }
-
         [[nodiscard]] ScenarioCompletionData getCompletionData() const {
             ScenarioCompletionData completion;
             completion.scenario_time = scenario_length;

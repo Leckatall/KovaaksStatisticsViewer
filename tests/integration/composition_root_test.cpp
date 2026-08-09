@@ -55,6 +55,19 @@ namespace {
         EXPECT_EQ(app->sessionController()->getCurrentPerf().run_id.scenario_id.name, "1wall6targets TE");
     }
 
+    TEST_F(CompositionRootTest, CurrentPerfChangeCascadesToGraphViewModelReload) {
+        // App wires sessionController->currentPerfChanged -> graphVm->fetchData({}) so the
+        // graph reloads whenever currentPerf changes for any reason, not just file loads.
+        const QString file = QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf");
+
+        QSignalSpy spy(app->graphVm(), &presentation::GraphViewModelBase::dataUpdated);
+        ASSERT_TRUE(spy.isValid());
+
+        app->sessionController()->setCurrentPerf(file.toStdString());
+
+        EXPECT_GE(spy.count(), 1);
+    }
+
     TEST_F(CompositionRootTest, ProfileChangeCascadesToPlaytimeViewModelRefresh) {
         // The App wires m_profileService->onProfileChanged([]{ m_playtimeVm->refresh(); });
         // refresh() emits dataUpdated, so a profile mutation must reach the playtime VM.
