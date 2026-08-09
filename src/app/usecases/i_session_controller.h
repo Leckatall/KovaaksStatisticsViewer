@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "domain/scenario_perf.h"
+#include "run_summary.h"
 #include <QObject>
 
 namespace ksv::application {
@@ -27,7 +28,18 @@ namespace ksv::application {
 
         virtual void setCurrentPerf(const std::string &filename) = 0;
 
+        virtual void setCurrentPerf(const domain::ScenarioRunId &run_id) = 0;
+
         [[nodiscard]] virtual domain::ScenarioPerf getCurrentPerf() const = 0;
+
+        [[nodiscard]] virtual std::vector<ScenarioSummary> getScenarioSummaries() const = 0;
+
+        // Newest-first.
+        [[nodiscard]] virtual std::vector<RunSummary> getRunsForScenario(
+            const domain::ScenarioId &scenario) const = 0;
+
+        // Newest-first, capped at count, across all scenarios.
+        [[nodiscard]] virtual std::vector<RunSummary> getRecentRuns(std::size_t count) const = 0;
 
     signals:
         void currentPerfChanged();

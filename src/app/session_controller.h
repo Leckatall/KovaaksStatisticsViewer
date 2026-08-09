@@ -28,10 +28,20 @@ namespace ksv::application {
 
         void setCurrentPerf(const std::string& filename) override;
 
+        void setCurrentPerf(const domain::ScenarioRunId& run_id) override;
+
         void setCurrentPerfToLatest();
         [[nodiscard]] domain::ScenarioPerf getCurrentPerf() const override { return m_current_perf; }
 
+        [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override;
+
+        [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const domain::ScenarioId& scenario) const override;
+
+        [[nodiscard]] std::vector<RunSummary> getRecentRuns(std::size_t count) const override;
+
     private:
+        [[nodiscard]] static RunSummary toRunSummary(const domain::ScenarioPerf& perf);
+
         std::shared_ptr<ISettingsService> m_settings_service;
         std::shared_ptr<IProfileService> m_profile_service;
         domain::ScenarioPerf m_current_perf;
