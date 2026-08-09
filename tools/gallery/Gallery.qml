@@ -19,6 +19,7 @@ ApplicationWindow {
     readonly property var playtimeVm: galleryPlaytimeVm
     readonly property var sessionVm: gallerySessionVm
     readonly property var settingsVm: gallerySettingsVm
+    readonly property var scenarioBrowserVm: galleryScenarioBrowserVm
 
     Material.theme: Material.Dark
     Material.accent: Material.Cyan
@@ -119,11 +120,9 @@ ApplicationWindow {
                 cellWidth: 440; cellHeight: 360
                 ScenarioSearchPanel {
                     anchors.fill: parent
-                    scenarioModel: ListModel {
-                        ListElement { name: "1wall6targets TE"; hash: "te"; runCount: 42; lastPlayedMs: 1723200000000 }
-                        ListElement { name: "Pasu Small Reload"; hash: "psr"; runCount: 19; lastPlayedMs: 1723113600000 }
-                        ListElement { name: "Smoothbot Invincible"; hash: "smooth"; runCount: 8; lastPlayedMs: 1723027200000 }
-                    }
+                    scenarioModel: window.scenarioBrowserVm.scenarioModel
+                    onSearchEdited: text => window.scenarioBrowserVm.setSearchText(text)
+                    onScenarioActivated: (hash, name) => window.scenarioBrowserVm.activateScenario(hash, name)
                 }
             }
 

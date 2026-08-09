@@ -11,6 +11,7 @@ add_executable(ui_tests
     session_vm_test.cpp
     settings_vm_test.cpp
     monotone_spline_test.cpp
+    scenario_browser_vm_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE

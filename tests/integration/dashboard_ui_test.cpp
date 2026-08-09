@@ -46,6 +46,7 @@ namespace {
                 {"playtimeVm", QVariant::fromValue(app->playtimeVm())},
                 {"sessionVm", QVariant::fromValue(app->sessionVm())},
                 {"settingsVm", QVariant::fromValue(app->settingsVm())},
+                {"scenarioBrowserVm", QVariant::fromValue(app->scenarioBrowserVm())},
             });
             engine.loadFromModule("KovaaksStatsViewer", "Main");
             ASSERT_FALSE(engine.rootObjects().isEmpty()) << "Main.qml failed to load";

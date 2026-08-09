@@ -83,6 +83,7 @@ int main(int argc, char *argv[]) {
     engine->rootContext()->setContextProperty("galleryPlaytimeVm", app.playtimeVm());
     engine->rootContext()->setContextProperty("gallerySessionVm", app.sessionVm());
     engine->rootContext()->setContextProperty("gallerySettingsVm", app.settingsVm());
+    engine->rootContext()->setContextProperty("galleryScenarioBrowserVm", app.scenarioBrowserVm());
     engine->load(QUrl::fromLocalFile(GALLERY_QML_FILE));
     if (engine->rootObjects().isEmpty()) return -1;
 

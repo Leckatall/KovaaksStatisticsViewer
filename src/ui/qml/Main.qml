@@ -39,6 +39,7 @@ ApplicationWindow {
     required property var playtimeVm
     required property var sessionVm
     required property var settingsVm
+    required property var scenarioBrowserVm
 
     Rectangle {
         anchors.fill: parent
@@ -108,6 +109,9 @@ ApplicationWindow {
         SelectionPanel {
             Layout.row: 1; Layout.column: 0
             Layout.fillHeight: true
+            scenarioModel: root.scenarioBrowserVm.scenarioModel
+            onSearchEdited: text => root.scenarioBrowserVm.setSearchText(text)
+            onScenarioActivated: (hash, name) => root.scenarioBrowserVm.activateScenario(hash, name)
         }
     }
 }
