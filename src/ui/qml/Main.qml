@@ -114,6 +114,7 @@ ApplicationWindow {
             onSearchEdited: text => root.scenarioBrowserVm.setSearchText(text)
             onScenarioActivated: (hash, name) => root.scenarioBrowserVm.activateScenario(hash, name)
             onRunSelected: (hash, startTimeMs) => root.scenarioBrowserVm.selectRun(hash, startTimeMs)
+            onSortRequested: (field, ascending) => root.scenarioBrowserVm.setSort(field, ascending)
         }
     }
 }

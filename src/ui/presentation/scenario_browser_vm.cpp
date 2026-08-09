@@ -4,6 +4,8 @@
 
 #include "scenario_browser_vm.h"
 
+#include <algorithm>
+
 namespace ksv::presentation {
     ScenarioBrowserViewModel::ScenarioBrowserViewModel(
         std::shared_ptr<application::ISessionController> session_controller,
@@ -70,6 +72,41 @@ namespace ksv::presentation {
             .name = m_active_scenario_name.toStdString(),
             .hash = m_active_scenario_hash.toStdString(),
         };
-        m_run_model->setRuns(m_session_controller->getRunsForScenario(scenario_id));
+        auto runs = m_session_controller->getRunsForScenario(scenario_id);
+        applySort(runs);
+        m_run_model->setRuns(std::move(runs));
+    }
+
+    void ScenarioBrowserViewModel::setSort(const SortField field, const bool ascending) {
+        m_sort_field = field;
+        m_sort_ascending = ascending;
+        refreshRunModel();
+    }
+
+    void ScenarioBrowserViewModel::applySort(std::vector<application::RunSummary> &runs) const {
+        const bool ascending = m_sort_ascending;
+        switch (m_sort_field) {
+            case SortField::Score:
+                std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
+                    return ascending ? a.score < b.score : a.score > b.score;
+                });
+                break;
+            case SortField::Accuracy:
+                std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
+                    return ascending ? a.accuracy < b.accuracy : a.accuracy > b.accuracy;
+                });
+                break;
+            case SortField::Duration:
+                std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
+                    return ascending ? a.duration_seconds < b.duration_seconds : a.duration_seconds > b.duration_seconds;
+                });
+                break;
+            case SortField::Date:
+            default:
+                std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
+                    return ascending ? a.start_time_ms < b.start_time_ms : a.start_time_ms > b.start_time_ms;
+                });
+                break;
+        }
     }
 }

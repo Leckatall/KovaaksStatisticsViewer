@@ -69,6 +69,16 @@ namespace {
         return run;
     }
 
+    RunSummary make_run_full(const std::string &scenario_name, const std::string &hash, const long long start_time,
+                              const float score, const float accuracy, const float duration_seconds,
+                              const int shots, const int hits) {
+        RunSummary run = make_run(scenario_name, hash, start_time, score, accuracy);
+        run.duration_seconds = duration_seconds;
+        run.shots = shots;
+        run.hits = hits;
+        return run;
+    }
+
     class ScenarioBrowserViewModelTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSessionController> fake_controller = std::make_shared<FakeSessionController>();
@@ -194,5 +204,155 @@ namespace {
         const auto &run_id = fake_controller->set_current_perf_run_id_calls.front();
         EXPECT_EQ(run_id.scenario_id.hash, "hash-2");
         EXPECT_EQ(run_id.start_time, 1723200000000LL);
+    }
+
+    std::vector<long long> collectStartTimes(QAbstractListModel *run_model) {
+        std::vector<long long> result;
+        for (int row = 0; row < run_model->rowCount(); ++row)
+            result.push_back(run_model->data(run_model->index(row, 0), RunListModel::StartTimeMsRole).toLongLong());
+        return result;
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, DefaultSortIsDateDescending) {
+        fake_controller->runs_for_scenario = {
+            make_run("Microshot", "hash-2", 3000, 8500.0F, 0.9F),
+            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
+            make_run("Microshot", "hash-2", 2000, 7500.0F, 0.85F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.activateScenario("hash-2", "Microshot");
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{3000, 2000, 1000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetSortDateAscendingOrdersOldestFirst) {
+        fake_controller->runs_for_scenario = {
+            make_run("Microshot", "hash-2", 3000, 8500.0F, 0.9F),
+            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
+            make_run("Microshot", "hash-2", 2000, 7500.0F, 0.85F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Date, true);
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 2000, 3000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetSortScoreDescendingOrdersHighestFirst) {
+        fake_controller->runs_for_scenario = {
+            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
+            make_run("Microshot", "hash-2", 2000, 9000.0F, 0.9F),
+            make_run("Microshot", "hash-2", 3000, 8000.0F, 0.85F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Score, false);
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetSortScoreAscendingOrdersLowestFirst) {
+        fake_controller->runs_for_scenario = {
+            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
+            make_run("Microshot", "hash-2", 2000, 9000.0F, 0.9F),
+            make_run("Microshot", "hash-2", 3000, 8000.0F, 0.85F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Score, true);
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 3000, 2000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetSortAccuracyDescendingHandlesShotsZeroGuard) {
+        fake_controller->runs_for_scenario = {
+            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 0.8F, 60.0F, 100, 80),
+            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0.0F, 60.0F, 0, 0),
+            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 0.95F, 60.0F, 50, 47),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Accuracy, false);
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{3000, 1000, 2000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetSortAccuracyAscendingHandlesShotsZeroGuard) {
+        fake_controller->runs_for_scenario = {
+            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 0.8F, 60.0F, 100, 80),
+            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0.0F, 60.0F, 0, 0),
+            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 0.95F, 60.0F, 50, 47),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Accuracy, true);
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 1000, 3000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetSortDurationDescendingOrdersLongestFirst) {
+        fake_controller->runs_for_scenario = {
+            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 0.8F, 45.0F, 100, 80),
+            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0.9F, 90.0F, 100, 90),
+            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 0.85F, 60.0F, 100, 85),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Duration, false);
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetSortDurationAscendingOrdersShortestFirst) {
+        fake_controller->runs_for_scenario = {
+            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 0.8F, 45.0F, 100, 80),
+            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0.9F, 90.0F, 100, 90),
+            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 0.85F, 60.0F, 100, 85),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Duration, true);
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 3000, 2000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetSortScoreDescendingIsStableForTies) {
+        fake_controller->runs_for_scenario = {
+            make_run("Microshot", "hash-2", 3000, 8000.0F, 0.9F),
+            make_run("Microshot", "hash-2", 2000, 8000.0F, 0.9F),
+            make_run("Microshot", "hash-2", 1000, 8000.0F, 0.9F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Score, false);
+
+        // All scores tie; stable sort preserves the incoming newest-first order.
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{3000, 2000, 1000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SortStatePersistsAcrossScenarioActivation) {
+        fake_controller->runs_for_scenario = {
+            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
+            make_run("Microshot", "hash-2", 2000, 9000.0F, 0.9F),
+            make_run("Microshot", "hash-2", 3000, 8000.0F, 0.85F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+        view_model.setSort(ScenarioBrowserViewModel::SortField::Score, false);
+        ASSERT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
+
+        view_model.activateScenario("hash-3", "OtherScenario");
+        view_model.activateScenario("hash-2", "Microshot");
+
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
     }
 }

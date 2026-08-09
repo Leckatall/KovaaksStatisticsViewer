@@ -16,6 +16,7 @@ ColumnLayout {
     signal searchEdited(string text)
     signal scenarioActivated(string hash, string name)
     signal runSelected(string hash, double startTimeMs)
+    signal sortRequested(int field, bool ascending)
 
     ToolButton {
         Layout.fillWidth: true
@@ -30,6 +31,7 @@ ColumnLayout {
         Layout.preferredHeight: root.recentExpanded ? 180 : 0
         visible: root.recentExpanded
         title: ""
+        showSort: false
         runModel: root.recentRunModel
         onRunSelected: (hash, startTimeMs) => root.runSelected(hash, startTimeMs)
     }
@@ -56,5 +58,6 @@ ColumnLayout {
         visible: root.activeScenarioName !== ""
         runModel: root.runModel
         onRunSelected: (hash, startTimeMs) => root.runSelected(hash, startTimeMs)
+        onSortRequested: (field, ascending) => root.sortRequested(field, ascending)
     }
 }

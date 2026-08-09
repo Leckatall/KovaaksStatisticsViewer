@@ -25,6 +25,11 @@ namespace ksv::presentation {
         Q_PROPERTY(QString activeScenarioHash READ activeScenarioHash NOTIFY activeScenarioChanged)
 
     public:
+        enum SortField {
+            Date = 0, Score, Accuracy, Duration
+        };
+        Q_ENUM(SortField)
+
         explicit ScenarioBrowserViewModel(std::shared_ptr<application::ISessionController> session_controller,
                                           QObject *parent = nullptr);
 
@@ -35,6 +40,7 @@ namespace ksv::presentation {
         Q_INVOKABLE void setSearchText(const QString &text);
         Q_INVOKABLE void activateScenario(const QString &hash, const QString &name);
         Q_INVOKABLE void selectRun(const QString &hash, double startTimeMs);
+        Q_INVOKABLE void setSort(SortField field, bool ascending);
         Q_INVOKABLE void refresh();
 
     signals:
@@ -43,6 +49,7 @@ namespace ksv::presentation {
     private:
         void applyFilter();
         void refreshRunModel();
+        void applySort(std::vector<application::RunSummary> &runs) const;
 
         std::shared_ptr<application::ISessionController> m_session_controller;
         ScenarioListModel *m_model;
@@ -51,6 +58,8 @@ namespace ksv::presentation {
         QString m_search_text;
         QString m_active_scenario_hash;
         QString m_active_scenario_name;
+        SortField m_sort_field = SortField::Date;
+        bool m_sort_ascending = false;
     };
 }
 

@@ -109,6 +109,7 @@ ApplicationWindow {
                     title: window.scenarioBrowserVm.activeScenarioHash === "" ? "" : "Active scenario runs"
                     runModel: window.scenarioBrowserVm.runModel
                     onRunSelected: (hash, startTimeMs) => window.scenarioBrowserVm.selectRun(hash, startTimeMs)
+                    onSortRequested: (field, ascending) => window.scenarioBrowserVm.setSort(field, ascending)
                 }
 
                 // Preselects the first scenario so the showcase above renders real run data;
