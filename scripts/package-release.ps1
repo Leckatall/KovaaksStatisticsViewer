@@ -26,7 +26,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = "0.2.0-alpha",
+    [string]$Version = "0.4.0-alpha",
 
     [string]$RepoRoot = (Resolve-Path "$PSScriptRoot/.."),
     [string]$BuildDir = "$RepoRoot/build-release",
