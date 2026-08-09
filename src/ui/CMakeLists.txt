@@ -23,6 +23,10 @@ qt_add_qml_module(ksv_ui
             qml/PlaytimeGraphPanel.qml
             qml/GraphCanvasWithTooltip.qml
             qml/ControlPanel.qml
+            qml/SelectionPanel.qml
+            qml/ScenarioSearchPanel.qml
+            qml/RunListView.qml
+            qml/ScenarioRunItem.qml
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
             qml/DirectoryPickerRow.qml

@@ -75,7 +75,7 @@ ApplicationWindow {
         anchors.margins: 5
         Label {
             Layout.row: 0; Layout.column: 0
-            Layout.columnSpan: 2
+            Layout.columnSpan: 3
             text: "Dashboard"
             font.pixelSize: 24
             font.bold: true
@@ -83,7 +83,7 @@ ApplicationWindow {
         }
 
         ColumnLayout {
-            Layout.row: 1; Layout.column: 1
+            Layout.row: 1; Layout.column: 2
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -100,10 +100,14 @@ ApplicationWindow {
             }
         }
         ControlPanel {
-            Layout.row: 1; Layout.column: 0
+            Layout.row: 1; Layout.column: 1
             sessionVm: root.sessionVm
             graphVm: root.graphVm
             columnVisibility: columnVisibilitySettings
+        }
+        SelectionPanel {
+            Layout.row: 1; Layout.column: 0
+            Layout.fillHeight: true
         }
     }
 }
