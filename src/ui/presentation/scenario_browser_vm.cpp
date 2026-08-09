@@ -12,7 +12,8 @@ namespace ksv::presentation {
         QObject *parent) : QObject(parent),
                            m_session_controller(std::move(session_controller)),
                            m_model(new ScenarioListModel(this)),
-                           m_run_model(new RunListModel(this)) {
+                           m_run_model(new RunListModel(this)),
+                           m_recent_runs_model(new RunListModel(this)) {
         connect(m_session_controller.get(), &application::ISessionController::currentPerfChanged,
                 this, &ScenarioBrowserViewModel::refresh);
         refresh();
@@ -22,6 +23,7 @@ namespace ksv::presentation {
         m_all_summaries = m_session_controller->getScenarioSummaries();
         applyFilter();
         refreshRunModel();
+        refreshRecentRunsModel();
     }
 
     void ScenarioBrowserViewModel::setSearchText(const QString &text) {
@@ -108,5 +110,9 @@ namespace ksv::presentation {
                 });
                 break;
         }
+    }
+
+    void ScenarioBrowserViewModel::refreshRecentRunsModel() {
+        m_recent_runs_model->setRuns(m_session_controller->getRecentRuns(kRecentRunsCount));
     }
 }

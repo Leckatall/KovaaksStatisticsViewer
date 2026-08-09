@@ -128,6 +128,17 @@ ApplicationWindow {
             }
 
             Showcase {
+                label: "RunListView (Recent, all scenarios)"
+                cellWidth: 600; cellHeight: 360
+                RunListView {
+                    anchors.fill: parent
+                    title: "Recent"
+                    runModel: window.scenarioBrowserVm.recentRunsModel
+                    onRunSelected: (hash, startTimeMs) => window.scenarioBrowserVm.selectRun(hash, startTimeMs)
+                }
+            }
+
+            Showcase {
                 label: "ScenarioSearchPanel"
                 cellWidth: 440; cellHeight: 360
                 ScenarioSearchPanel {

@@ -20,6 +20,8 @@ namespace {
         std::vector<ScenarioId> scenario_list;
         std::vector<ScenarioSummary> scenario_summaries;
         std::vector<RunSummary> runs_for_scenario;
+        std::vector<RunSummary> recent_runs;
+        std::size_t last_recent_runs_count = 0;
         ScenarioId last_runs_for_scenario_query;
         ScenarioPerf current_perf;
         std::vector<ScenarioRunId> set_current_perf_run_id_calls;
@@ -45,7 +47,10 @@ namespace {
             return runs_for_scenario;
         }
 
-        [[nodiscard]] std::vector<RunSummary> getRecentRuns(std::size_t) const override { return {}; }
+        [[nodiscard]] std::vector<RunSummary> getRecentRuns(const std::size_t count) const override {
+            const_cast<FakeSessionController *>(this)->last_recent_runs_count = count;
+            return recent_runs;
+        }
     };
 
     ScenarioSummary make_summary(const std::string &name, const std::string &hash, const int run_count = 1) {
@@ -89,6 +94,10 @@ namespace {
 
         [[nodiscard]] static QAbstractListModel *asRunListModel(ScenarioBrowserViewModel &vm) {
             return qobject_cast<QAbstractListModel *>(vm.runModel());
+        }
+
+        [[nodiscard]] static QAbstractListModel *asRecentRunsModel(ScenarioBrowserViewModel &vm) {
+            return qobject_cast<QAbstractListModel *>(vm.recentRunsModel());
         }
     };
 
@@ -354,5 +363,53 @@ namespace {
         view_model.activateScenario("hash-2", "Microshot");
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, RecentRunsModelPopulatedNewestFirstAcrossScenarios) {
+        fake_controller->recent_runs = {
+            make_run("Microshot", "hash-2", 3000, 9000.0F, 0.95F),
+            make_run("1wall6targets TE", "hash-1", 2000, 8000.0F, 0.9F),
+            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        auto *recent_model = asRecentRunsModel(view_model);
+        ASSERT_EQ(recent_model->rowCount(), 3);
+        EXPECT_EQ(recent_model->data(recent_model->index(0, 0), RunListModel::StartTimeMsRole).toLongLong(), 3000);
+        EXPECT_EQ(recent_model->data(recent_model->index(0, 0), RunListModel::ScenarioNameRole).toString(), QString("Microshot"));
+        EXPECT_EQ(recent_model->data(recent_model->index(1, 0), RunListModel::StartTimeMsRole).toLongLong(), 2000);
+        EXPECT_EQ(recent_model->data(recent_model->index(1, 0), RunListModel::ScenarioNameRole).toString(), QString("1wall6targets TE"));
+        EXPECT_EQ(recent_model->data(recent_model->index(2, 0), RunListModel::StartTimeMsRole).toLongLong(), 1000);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, RecentRunsModelIsRequestedWithConfiguredCap) {
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        EXPECT_EQ(fake_controller->last_recent_runs_count, 10u);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, CurrentPerfChangedSignalRefreshesRecentRuns) {
+        ScenarioBrowserViewModel view_model(fake_controller);
+        ASSERT_EQ(asRecentRunsModel(view_model)->rowCount(), 0);
+
+        fake_controller->recent_runs = {make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F)};
+        emit fake_controller->currentPerfChanged();
+
+        EXPECT_EQ(asRecentRunsModel(view_model)->rowCount(), 1);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SelectingRecentRunInvokesSetCurrentPerfAcrossScenarios) {
+        fake_controller->recent_runs = {
+            make_run("Microshot", "hash-2", 3000, 9000.0F, 0.95F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-1", "1wall6targets TE");
+
+        view_model.selectRun("hash-2", 3000.0);
+
+        ASSERT_EQ(fake_controller->set_current_perf_run_id_calls.size(), 1u);
+        const auto &run_id = fake_controller->set_current_perf_run_id_calls.front();
+        EXPECT_EQ(run_id.scenario_id.hash, "hash-2");
+        EXPECT_EQ(run_id.start_time, 3000LL);
     }
 }
