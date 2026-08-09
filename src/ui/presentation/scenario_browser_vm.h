@@ -22,6 +22,7 @@ namespace ksv::presentation {
         QML_UNCREATABLE("Created in C++")
         Q_PROPERTY(QObject* scenarioModel READ scenarioModel CONSTANT)
         Q_PROPERTY(QObject* runModel READ runModel CONSTANT)
+        Q_PROPERTY(QObject* recentRunsModel READ recentRunsModel CONSTANT)
         Q_PROPERTY(QString activeScenarioHash READ activeScenarioHash NOTIFY activeScenarioChanged)
 
     public:
@@ -30,6 +31,7 @@ namespace ksv::presentation {
 
         [[nodiscard]] QObject *scenarioModel() const { return m_model; }
         [[nodiscard]] QObject *runModel() const { return m_run_model; }
+        [[nodiscard]] QObject *recentRunsModel() const { return m_recent_runs_model; }
         [[nodiscard]] QString activeScenarioHash() const { return m_active_scenario_hash; }
 
         Q_INVOKABLE void setSearchText(const QString &text);
@@ -43,10 +45,14 @@ namespace ksv::presentation {
     private:
         void applyFilter();
         void refreshRunModel();
+        void refreshRecentRunsModel();
+
+        static constexpr std::size_t kRecentRunsCount = 10;
 
         std::shared_ptr<application::ISessionController> m_session_controller;
         ScenarioListModel *m_model;
         RunListModel *m_run_model;
+        RunListModel *m_recent_runs_model;
         std::vector<application::ScenarioSummary> m_all_summaries;
         QString m_search_text;
         QString m_active_scenario_hash;

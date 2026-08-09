@@ -111,6 +111,7 @@ ApplicationWindow {
             Layout.fillHeight: true
             scenarioModel: root.scenarioBrowserVm.scenarioModel
             runModel: root.scenarioBrowserVm.runModel
+            recentRunModel: root.scenarioBrowserVm.recentRunsModel
             onSearchEdited: text => root.scenarioBrowserVm.setSearchText(text)
             onScenarioActivated: (hash, name) => root.scenarioBrowserVm.activateScenario(hash, name)
             onRunSelected: (hash, startTimeMs) => root.scenarioBrowserVm.selectRun(hash, startTimeMs)
