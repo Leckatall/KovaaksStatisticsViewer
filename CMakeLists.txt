@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(KovaaksStatsViewer VERSION 0.3.0)
+project(KovaaksStatsViewer VERSION 0.4.0)
 
 # C++ Standard Configuration
 set(CMAKE_CXX_STANDARD 20)
