@@ -8,6 +8,7 @@
 #include <QSignalSpy>
 
 #include "scenario_browser_vm.h"
+#include "run_list_model.h"
 
 using namespace ksv::presentation;
 using namespace ksv::application;
@@ -18,7 +19,10 @@ namespace {
     public:
         std::vector<ScenarioId> scenario_list;
         std::vector<ScenarioSummary> scenario_summaries;
+        std::vector<RunSummary> runs_for_scenario;
+        ScenarioId last_runs_for_scenario_query;
         ScenarioPerf current_perf;
+        std::vector<ScenarioRunId> set_current_perf_run_id_calls;
 
         std::vector<ScenarioId> getScenarioList() override { return scenario_list; }
 
@@ -27,12 +31,19 @@ namespace {
 
         void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
         void setCurrentPerf(const std::string &filename) override {}
-        void setCurrentPerf(const ScenarioRunId &) override {}
+
+        void setCurrentPerf(const ScenarioRunId &run_id) override {
+            set_current_perf_run_id_calls.push_back(run_id);
+        }
+
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return scenario_summaries; }
 
-        [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const ScenarioId &) const override { return {}; }
+        [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const ScenarioId &scenario) const override {
+            const_cast<FakeSessionController *>(this)->last_runs_for_scenario_query = scenario;
+            return runs_for_scenario;
+        }
 
         [[nodiscard]] std::vector<RunSummary> getRecentRuns(std::size_t) const override { return {}; }
     };
@@ -44,12 +55,30 @@ namespace {
         return summary;
     }
 
+    RunSummary make_run(const std::string &scenario_name, const std::string &hash, const long long start_time,
+                         const float score, const float accuracy) {
+        RunSummary run;
+        run.run_id = ScenarioRunId{.scenario_id = ScenarioId{.name = scenario_name, .hash = hash}, .start_time = start_time};
+        run.scenario_name = QString::fromStdString(scenario_name);
+        run.start_time_ms = start_time;
+        run.score = score;
+        run.accuracy = accuracy;
+        run.duration_seconds = 60.0F;
+        run.shots = 100;
+        run.hits = 80;
+        return run;
+    }
+
     class ScenarioBrowserViewModelTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSessionController> fake_controller = std::make_shared<FakeSessionController>();
 
         [[nodiscard]] static QAbstractListModel *asListModel(ScenarioBrowserViewModel &vm) {
             return qobject_cast<QAbstractListModel *>(vm.scenarioModel());
+        }
+
+        [[nodiscard]] static QAbstractListModel *asRunListModel(ScenarioBrowserViewModel &vm) {
+            return qobject_cast<QAbstractListModel *>(vm.runModel());
         }
     };
 
@@ -121,5 +150,49 @@ namespace {
         emit fake_controller->currentPerfChanged();
 
         EXPECT_EQ(asListModel(view_model)->rowCount(), 1);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, ActivateScenarioPopulatesRunModelNewestFirst) {
+        fake_controller->runs_for_scenario = {
+            make_run("Microshot", "hash-2", 2000, 8500.0F, 0.9F),
+            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.activateScenario("hash-2", "Microshot");
+
+        EXPECT_EQ(fake_controller->last_runs_for_scenario_query.hash, "hash-2");
+        auto *run_model = asRunListModel(view_model);
+        ASSERT_EQ(run_model->rowCount(), 2);
+        EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::StartTimeMsRole).toLongLong(), 2000);
+        EXPECT_FLOAT_EQ(run_model->data(run_model->index(0, 0), RunListModel::ScoreRole).toFloat(), 8500.0F);
+        EXPECT_FLOAT_EQ(run_model->data(run_model->index(0, 0), RunListModel::AccuracyRole).toFloat(), 0.9F);
+        EXPECT_EQ(run_model->data(run_model->index(1, 0), RunListModel::StartTimeMsRole).toLongLong(), 1000);
+        EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::DurationSecondsRole).toFloat(), 60.0F);
+        EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::ShotsRole).toInt(), 100);
+        EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::HitsRole).toInt(), 80);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, ActivatingEmptyScenarioClearsRunModel) {
+        fake_controller->runs_for_scenario = {make_run("Microshot", "hash-2", 1000, 8500.0F, 0.9F)};
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+        ASSERT_EQ(asRunListModel(view_model)->rowCount(), 1);
+
+        view_model.activateScenario("", "");
+
+        EXPECT_EQ(asRunListModel(view_model)->rowCount(), 0);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SelectRunInvokesSetCurrentPerfWithRunId) {
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Microshot");
+
+        view_model.selectRun("hash-2", 1723200000000.0);
+
+        ASSERT_EQ(fake_controller->set_current_perf_run_id_calls.size(), 1u);
+        const auto &run_id = fake_controller->set_current_perf_run_id_calls.front();
+        EXPECT_EQ(run_id.scenario_id.hash, "hash-2");
+        EXPECT_EQ(run_id.start_time, 1723200000000LL);
     }
 }

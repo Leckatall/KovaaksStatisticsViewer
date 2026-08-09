@@ -9,7 +9,8 @@ namespace ksv::presentation {
         std::shared_ptr<application::ISessionController> session_controller,
         QObject *parent) : QObject(parent),
                            m_session_controller(std::move(session_controller)),
-                           m_model(new ScenarioListModel(this)) {
+                           m_model(new ScenarioListModel(this)),
+                           m_run_model(new RunListModel(this)) {
         connect(m_session_controller.get(), &application::ISessionController::currentPerfChanged,
                 this, &ScenarioBrowserViewModel::refresh);
         refresh();
@@ -18,6 +19,7 @@ namespace ksv::presentation {
     void ScenarioBrowserViewModel::refresh() {
         m_all_summaries = m_session_controller->getScenarioSummaries();
         applyFilter();
+        refreshRunModel();
     }
 
     void ScenarioBrowserViewModel::setSearchText(const QString &text) {
@@ -40,9 +42,34 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::activateScenario(const QString &hash, const QString &name) {
-        Q_UNUSED(name)
+        m_active_scenario_name = name;
         if (m_active_scenario_hash == hash) return;
         m_active_scenario_hash = hash;
+        refreshRunModel();
         emit activeScenarioChanged();
+    }
+
+    void ScenarioBrowserViewModel::selectRun(const QString &hash, const double startTimeMs) {
+        const domain::ScenarioRunId run_id{
+            .scenario_id = domain::ScenarioId{
+                .name = m_active_scenario_name.toStdString(),
+                .hash = hash.toStdString(),
+            },
+            .start_time = static_cast<long long>(startTimeMs),
+        };
+        m_session_controller->setCurrentPerf(run_id);
+    }
+
+    void ScenarioBrowserViewModel::refreshRunModel() {
+        if (m_active_scenario_hash.isEmpty()) {
+            m_run_model->setRuns({});
+            return;
+        }
+
+        const domain::ScenarioId scenario_id{
+            .name = m_active_scenario_name.toStdString(),
+            .hash = m_active_scenario_hash.toStdString(),
+        };
+        m_run_model->setRuns(m_session_controller->getRunsForScenario(scenario_id));
     }
 }

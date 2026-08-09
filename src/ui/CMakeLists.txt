@@ -54,6 +54,8 @@ qt_add_qml_module(ksv_ui
             presentation/settings_vm.cpp
             presentation/scenario_list_model.h
             presentation/scenario_list_model.cpp
+            presentation/run_list_model.h
+            presentation/run_list_model.cpp
             presentation/scenario_browser_vm.h
             presentation/scenario_browser_vm.cpp
 )

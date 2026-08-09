@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "scenario_list_model.h"
+#include "run_list_model.h"
 #include "app/usecases/i_session_controller.h"
 
 namespace ksv::presentation {
@@ -20,6 +21,7 @@ namespace ksv::presentation {
         QML_ELEMENT
         QML_UNCREATABLE("Created in C++")
         Q_PROPERTY(QObject* scenarioModel READ scenarioModel CONSTANT)
+        Q_PROPERTY(QObject* runModel READ runModel CONSTANT)
         Q_PROPERTY(QString activeScenarioHash READ activeScenarioHash NOTIFY activeScenarioChanged)
 
     public:
@@ -27,10 +29,12 @@ namespace ksv::presentation {
                                           QObject *parent = nullptr);
 
         [[nodiscard]] QObject *scenarioModel() const { return m_model; }
+        [[nodiscard]] QObject *runModel() const { return m_run_model; }
         [[nodiscard]] QString activeScenarioHash() const { return m_active_scenario_hash; }
 
         Q_INVOKABLE void setSearchText(const QString &text);
         Q_INVOKABLE void activateScenario(const QString &hash, const QString &name);
+        Q_INVOKABLE void selectRun(const QString &hash, double startTimeMs);
         Q_INVOKABLE void refresh();
 
     signals:
@@ -38,12 +42,15 @@ namespace ksv::presentation {
 
     private:
         void applyFilter();
+        void refreshRunModel();
 
         std::shared_ptr<application::ISessionController> m_session_controller;
         ScenarioListModel *m_model;
+        RunListModel *m_run_model;
         std::vector<application::ScenarioSummary> m_all_summaries;
         QString m_search_text;
         QString m_active_scenario_hash;
+        QString m_active_scenario_name;
     };
 }
 
