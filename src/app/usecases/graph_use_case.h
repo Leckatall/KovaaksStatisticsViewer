@@ -28,6 +28,11 @@ namespace ksv::application {
             return m_session_controller->getCurrentPerf().run_id.toString();
         }
 
+        void onCurrentPerfChanged(std::function<void()> callback) override {
+            QObject::connect(m_session_controller.get(), &ISessionController::currentPerfChanged,
+                              m_session_controller.get(), std::move(callback));
+        }
+
     private:
         std::shared_ptr<ISessionController> m_session_controller;
     };

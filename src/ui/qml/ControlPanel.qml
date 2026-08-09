@@ -2,7 +2,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
-
+// TODO: Extract line visbility toggles and put the next to the graph
+//  That's the only part of this component that shouldn't be completely deleted
 Frame {
     id: root
     required property var sessionVm

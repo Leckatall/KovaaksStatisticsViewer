@@ -22,6 +22,7 @@ namespace {
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
         GraphSeries get_series() override { return series_to_return; }
         std::string get_run_label() override { return run_label; }
+        void onCurrentPerfChanged(std::function<void()>) override {}
     };
 
     class GraphViewModelTest : public testing::Test {
