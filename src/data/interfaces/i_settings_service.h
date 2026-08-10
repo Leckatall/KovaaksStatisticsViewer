@@ -18,6 +18,7 @@ namespace ksv::application {
         virtual void setProfilePath(const std::string &path) = 0;
 
         virtual void onProfilePathChanged(std::function<void()> callback) = 0;
+        virtual void onKovaaksDirChanged(std::function<void()> callback) = 0;
     };
 }
 #endif //KOVAAKSSTATSVIEWER_I_SETTINGS_SERVICE_H

@@ -27,6 +27,7 @@ namespace ksv::qt_data {
 
     void SettingsService::setKovaaksDir(const std::string &dir) {
         writeDirSetting("file/kovaaks", dir);
+        for (const auto &callback: m_kovaaks_dir_callbacks) callback();
     }
 
     std::string SettingsService::getProfilePath() const {

@@ -24,12 +24,16 @@ namespace ksv::qt_data {
         void onProfilePathChanged(std::function<void()> callback) override {
             m_profile_path_callbacks.push_back(std::move(callback));
         }
+        void onKovaaksDirChanged(std::function<void()> callback) override {
+            m_kovaaks_dir_callbacks.push_back(std::move(callback));
+        }
     private:
         [[nodiscard]] std::string readDirSetting(const QString &key, const QVariant &default_value) const;
         void writeDirSetting(const QString &key, const std::string &dir);
 
         QSettings m_settings;
         std::vector<std::function<void()>> m_profile_path_callbacks;
+        std::vector<std::function<void()>> m_kovaaks_dir_callbacks;
     };
 }
 

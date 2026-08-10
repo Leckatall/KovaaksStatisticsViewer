@@ -23,6 +23,7 @@ namespace {
         [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
         void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
         void onProfilePathChanged(std::function<void()>) override {}
+        void onKovaaksDirChanged(std::function<void()>) override {}
     };
 
     class FakeProfileService : public IProfileService {

@@ -93,7 +93,7 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 
 > *Understanding how much time is spent practising and how that changes.*
 
-- [ ] **Read and display playtime data** `[Medium]` `[Medium]`
+- [x] **Read and display playtime data** `[Medium]` `[Medium]`
   - [x] Extract time total of scenario completions from `.perf` files
   - [x] Aggregate playtime per day/week/month
   - [x] Display playtime as a bar chart (time per period) or line chart (rolling window)
@@ -106,10 +106,11 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 
 > *Real-time overlays and projections while viewing a run's timeline.*
 
-- [ ] **Projected final score line** `[Medium]` `[Medium]`
-  - [ ] Implement a rolling projection algorithm from recent-seconds performance
-  - [ ] Render a dashed/styled projection line extending from the current point to scenario end
-  - [ ] Update projection dynamically as the user scrubs through the run timeline
+- [x] **Projected final score line** `[Medium]` `[Medium]`
+  - [x] Implement a rolling projection algorithm from recent-seconds performance
+  - [x] Render a dashed/styled projection line extending from the current point to scenario end
+  - [x] Update projection dynamically as the user scrubs through the run timeline
+  - Note: Implemented as `ExpectedFinalScore` (average pace) and `ExpectedFinalScoreRecent` (trailing 5-sec pace)
 
 - [ ] **Recent challenge completion rate graph** `[Medium]` `[Low]`
   - [ ] Compute a windowed rate of challenge completions from kill/hit events
@@ -123,12 +124,12 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 > *Making the app look and feel good.*
 
 - [x] **Settings dialog for data display and source configuration**
-- [x] **Smooth curve interpolation on graphs** *(monotone cubic spline implemented)*
+- [x] **Smooth curve interpolation on graphs** *(AxisModel with Heckbert's nice-number algorithm implemented)*
 
 - [ ] **General UI polish** `[Medium]` `[High]`
-  - [ ] Design a consistent color scheme and typography
-  - [ ] Add a dark/light theme toggle
-  - [ ] Polish graph styling (grid lines, axis labels, tick formatting, legend)
+  - [x] Design a consistent color scheme and typography (Material Design with Dark theme)
+  - [ ] Add a dark/light theme toggle (currently hardcoded to Material.Dark)
+  - [x] Polish graph styling (grid lines, axis labels, tick formatting, legend)
   - [ ] Add loading indicators for profile generation and data processing
   - [ ] Improve layout responsiveness for different window sizes
 

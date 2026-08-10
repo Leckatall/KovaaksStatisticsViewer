@@ -9,6 +9,8 @@
 #include <qdir.h>
 #include <qfilesystemwatcher.h>
 #include <QObject>
+#include <QSet>
+#include <QString>
 #include <qurl.h>
 
 #include "user_profile.h"
@@ -49,11 +51,21 @@ namespace ksv::qt_data {
         void notifyFilesChanged(const std::string& path) const {
             for (auto& cb : m_callbacks) cb(path);
         }
+
+        // QFileSystemWatcher::directoryChanged only reports the watched directory's own
+        // path, not which file changed inside it, so new files are found by diffing
+        // entryList() snapshots taken before and after the signal fires.
+        void handleDirectoryChanged();
+
+        void watchPerfDir();
+        void repointWatcher();
+
         std::shared_ptr<application::ISettingsService> m_settings_service;
         std::shared_ptr<application::IProtoDecoder> m_decoder;
 
         QFileSystemWatcher m_watcher;
         std::vector<std::function<void(const std::string& path)>> m_callbacks;
+        QSet<QString> m_known_files;
     };
 }
 

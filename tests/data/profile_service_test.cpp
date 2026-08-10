@@ -82,6 +82,8 @@ namespace {
         void onProfilePathChanged(std::function<void()> callback) override {
             profile_path_changed = std::move(callback);
         }
+
+        void onKovaaksDirChanged(std::function<void()>) override {}
     };
 
     class FakeProfileSerializer : public IProfileSerializer {
@@ -162,6 +164,16 @@ namespace {
         fake_file_service->stored_callback("watched.perf");
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
+    }
+
+    TEST_F(ProfileServiceTest, FilesChangedCallbackBeforeProfileLoadedDoesNotCrash) {
+        ASSERT_TRUE(static_cast<bool>(fake_file_service->stored_callback));
+
+        fake_file_service->perfs_by_path["watched.perf"] = make_perf("hash-1", 100);
+        fake_file_service->stored_callback("watched.perf");
+
+        EXPECT_FALSE(profile_service.isProfileLoaded());
+        EXPECT_TRUE(profile_service.getScenarioList().empty());
     }
 
     TEST_F(ProfileServiceTest, GetPerfDelegatesToFileService) {

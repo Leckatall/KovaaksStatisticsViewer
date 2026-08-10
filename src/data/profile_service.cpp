@@ -58,6 +58,7 @@ namespace ksv::data {
     }
 
     void ProfileService::addPerfFileToProfile(const std::string &perf_file) const {
+        if (!m_profile) return;
         const auto perf = m_file_service->getPerfFromFile(perf_file);
         m_profile->addScenarioPerf(perf);
         notifyProfileChanged();
