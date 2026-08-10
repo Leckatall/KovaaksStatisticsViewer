@@ -11,17 +11,17 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 
 > *Core navigation — users need to browse and pick what they want to look at.*
 
-- [ ] **Select a scenario from a list in the GUI** `[Easy]` `[Critical]`
+- [x] **Select a scenario from a list in the GUI** `[Easy]` `[Critical]`
   - [x] Expose scenario list from `SessionController` via `SessionViewModel`
-  - [ ] Add a searchable/filterable scenario list panel in QML
-  - [ ] Wire scenario selection to update `SessionController`'s current state
-  - [ ] Show scenario metadata (run count, last played date) in the list items
+  - [x] Add a searchable/filterable scenario list panel in QML
+  - [x] Wire scenario selection to update `SessionController`'s current state
+  - [x] Show scenario metadata (run count, last played date) in the list items
 
-- [ ] **Select a specific run within a scenario** `[Medium]` `[High]`
-  - [ ] Expose per-scenario run list from `SessionController`
-  - [ ] Add a run list/dropdown in QML that populates when a scenario is selected
-  - [ ] Display run summary info (date, score, accuracy) in each run entry
-  - [ ] Wire run selection to update the graph and detail views
+- [x] **Select a specific run within a scenario** `[Medium]` `[High]`
+  - [x] Expose per-scenario run list from `SessionController`
+  - [x] Add a run list/dropdown in QML that populates when a scenario is selected
+  - [x] Display run summary info (date, score, accuracy) in each run entry
+  - [x] Wire run selection to update the graph and detail views
 
 ---
 
@@ -94,10 +94,11 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 > *Understanding how much time is spent practising and how that changes.*
 
 - [ ] **Read and display playtime data** `[Medium]` `[Medium]`
-  - [ ] Extract non-paused playtime from `.perf` files (or Kovaaks data source)
-  - [ ] Aggregate playtime per day/week/month
-  - [ ] Display playtime as a bar chart (time per period) or line chart (rolling window)
-  - [ ] Decide on visualisation approach: bar chart of time-per-period vs. rolling-window line graph (or offer both)
+  - [x] Extract time total of scenario completions from `.perf` files
+  - [x] Aggregate playtime per day/week/month
+  - [x] Display playtime as a bar chart (time per period) or line chart (rolling window)
+  - [x] Decide on visualisation approach: bar chart of time-per-period vs. rolling-window line graph (or offer both)
+  - [ ]  Extract non-paused playtime from Kovaaks application memory
 
 ---
 
