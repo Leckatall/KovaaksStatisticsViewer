@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(KovaaksStatsViewer VERSION 0.4.0)
+project(KovaaksStatsViewer VERSION 0.4.1)
 
 # project(VERSION) accepts numeric fields only, so the pre-release suffix lives here. This file is the
 # single source of the version: scripts/version.ps1 parses the project() call and the set() below out

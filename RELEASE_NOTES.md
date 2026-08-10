@@ -2,6 +2,13 @@
 
 What's new for people using the app. For the technical record, see [CHANGELOG.md](CHANGELOG.md).
 
+## v0.4.1-alpha
+
+### Bug fixes
+- New runs completed while the app is open are now correctly picked up and added to your stats — previously they were silently ignored until the app restarted.
+- Changing your KovaaKs folder in Settings now takes effect immediately — previously new runs stopped being picked up until you restarted the app.
+- Fixed a rare startup crash if a new run's .perf file appeared before the profile finished loading.
+
 ## v0.4.0-alpha
 
 ### Scenario & run selection
