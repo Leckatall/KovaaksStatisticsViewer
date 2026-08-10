@@ -1,5 +1,7 @@
 # Prerequisites
 *.d
+# ...but changelog.d/ is tracked, not a dependency file
+!changelog.d/
 
 # Compiled Object files
 *.slo
