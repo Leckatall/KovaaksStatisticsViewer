@@ -12,7 +12,7 @@
 class QPainter;
 class QPointF;
 
-namespace ksv::presentation {
+namespace ksv::ui {
     class SeriesPainter {
     public:
         struct Style {

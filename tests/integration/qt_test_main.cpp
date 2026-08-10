@@ -25,7 +25,7 @@ namespace {
             "KovaaksStatsViewer", 1, 0, "GraphViewModel", "Enums only");
         qmlRegisterUncreatableType<ksv::presentation::PlaytimeGraphViewModel>(
             "KovaaksStatsViewer", 1, 0, "PlaytimeGraphViewModel", "Created in C++");
-        qmlRegisterType<ksv::presentation::GraphCanvas>("KovaaksStatsViewer", 1, 0, "GraphCanvas");
+        qmlRegisterType<ksv::ui::GraphCanvas>("KovaaksStatsViewer", 1, 0, "GraphCanvas");
     }
 }
 

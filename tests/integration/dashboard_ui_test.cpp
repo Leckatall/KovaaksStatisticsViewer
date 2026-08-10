@@ -55,8 +55,8 @@ namespace {
 
         // The dashboard canvas is the GraphCanvas bound to the single-run graphVm
         // (Main.qml also has a second GraphCanvas for the playtime graph).
-        [[nodiscard]] presentation::GraphCanvas *dashboardCanvas() const {
-            for (auto *c: root->findChildren<presentation::GraphCanvas *>()) {
+        [[nodiscard]] ui::GraphCanvas *dashboardCanvas() const {
+            for (auto *c: root->findChildren<ui::GraphCanvas *>()) {
                 if (c->graphVm() == app->graphVm()) return c;
             }
             return nullptr;

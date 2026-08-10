@@ -19,7 +19,7 @@
 #include "integration_env.h"
 
 using namespace ksv;
-using presentation::GraphCanvas;
+using ui::GraphCanvas;
 using presentation::GraphViewModel;
 
 namespace {

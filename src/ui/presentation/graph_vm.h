@@ -21,8 +21,6 @@
 namespace ksv::presentation {
     class GraphViewModel : public GraphViewModelBase {
         Q_OBJECT
-        QML_ELEMENT
-        QML_UNCREATABLE("Created in C++")
         Q_PROPERTY(QVariantList plottableColumns READ plottableColumns CONSTANT)
         Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)

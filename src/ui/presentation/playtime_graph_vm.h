@@ -18,8 +18,6 @@ namespace ksv::presentation {
     // Calendar-date vs rolling-average playtime. Adapts IPlaytimeGraphUseCase output for GraphCanvas.
     class PlaytimeGraphViewModel : public GraphViewModelBase {
         Q_OBJECT
-        QML_ELEMENT
-        QML_UNCREATABLE("Created in C++")
 
     public:
         // Column ids for the two axes; Playtime is the only drawn series.
@@ -52,6 +50,7 @@ namespace ksv::presentation {
         void refresh();
 
     private:
+        // TODO: make this configurable by the user
         // Trailing window for the rolling average, in days.
         static constexpr int kWindowDays = 3;
 

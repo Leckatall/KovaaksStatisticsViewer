@@ -10,7 +10,7 @@
 #include <QPointF>
 #include <QString>
 
-namespace ksv::presentation {
+namespace ksv::ui {
     void AxisPainter::paint(QPainter &painter, const QRectF &plot, const Orientation orientation,
                              const qreal boundMin, const qreal boundMax, const QList<qreal> &ticks,
                              const std::function<QString(qreal)> &formatTick, const Style &style) {
