@@ -16,7 +16,10 @@ initial properties. Shares axis calculation with `GraphViewModel` via `AxisModel
 `type` is one of `added`, `changed`, `fixed`, `removed`, `internal`. `area` is one of
 **Scenario & run selection, Graphing, Sessions, Settings, Data & profile cache, Build & packaging,
 Architecture** — add a new one only when none fit. The body is developer detail: which classes, which
-layers, what a future reader could not recover from the diff.
+layers, what a future reader could not recover from the diff. Keep it rich — for a fix, spell out the
+old-bug mechanism in full. CHANGELOG.md summarizes this body down to a scannable bullet and drops that
+mechanism, so the fragment (and its commit) is the canonical detailed record; nothing else preserves it
+once the fragment is deleted at version bump.
 
 **`user` is optional, and it is the whole user-facing/internal distinction.** Include it only if someone
 using the app would notice the change, and write it in their vocabulary, not the codebase's — it is

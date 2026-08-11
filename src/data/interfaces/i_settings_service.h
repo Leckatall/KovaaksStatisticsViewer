@@ -22,3 +22,4 @@ namespace ksv::application {
     };
 }
 #endif //KOVAAKSSTATSVIEWER_I_SETTINGS_SERVICE_H
+

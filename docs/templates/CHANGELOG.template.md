@@ -19,11 +19,40 @@ A `> **RULE**` line is never content: it describes the output, it is never emitt
 ### <area>
 
 **Added**
-- <fragment body, reflowed to ~110 columns>
+- <the change in one bullet, plus any forward-looking design rationale>
 
 **Fixed**
-- <fragment body>
+- <the change + before→after behavior contrast; no old-bug mechanism>
 ````
+
+> **RULE** — Each fragment becomes **one bullet** stating the change. **Summarize the fragment body —
+> do not copy it.** CHANGELOG.md is a scannable digest, not a transcript of the fragment.
+> - **Keep**: forward-looking design rationale (why it is built this way, what it enables), and — for
+>   fixes — the before→after behavior contrast, meaning *observable behavior before vs. after*, not the
+>   internal code mechanism.
+> - **Drop**: the backward-looking mechanism of the old bug — which call, path or field was wrong and
+>   why it failed. That detail survives in git via the committed-then-deleted fragment and its diff, so
+>   it is not lost by omitting it here.
+> - Repeated assembly runs need only converge on the same *shape* — what is included and excluded, and
+>   roughly the length — not on identical wording. The printed-to-chat review step backstops the rest.
+>
+> Example — fragment body:
+> ```
+> FileService was forwarding the watched directory's own path (from
+> QFileSystemWatcher::directoryChanged) to onFilesChanged instead of the new file's path, so
+> ProfileService::addPerfFileToProfile decoded the directory and failed silently. FileService now diffs
+> QDir::entryList snapshots to report the actual new file(s).
+> ```
+> becomes:
+> ```
+> - New runs completed while the app is open are now picked up; FileService reports the actual new
+>   file(s) rather than the watched directory itself.
+> ```
+> Kept: the before→after behavior (runs not detected → detected). Dropped: the `directoryChanged` /
+> path-forwarding mechanism — recoverable from the fragment's commit.
+
+> **RULE** — This projection governs future assembly only. Past sections stay in whatever format they
+> were written in (see the intro above); summarizing a fragment never means reformatting history.
 
 > **RULE** — Insertion point: below the intro paragraph, above the previous `## v...` section. Newest
 > first.

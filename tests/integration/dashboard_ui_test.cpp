@@ -67,9 +67,6 @@ namespace {
         auto *menuBar = root->property("menuBar").value<QObject *>();
         ASSERT_NE(menuBar, nullptr);
 
-        // The dialog is created lazily by a Loader, so it must not exist yet.
-        EXPECT_EQ(root->findChild<QObject *>("settingsDialog"), nullptr);
-
         ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "settingsRequested"));
 
         QObject *dialog = nullptr;
@@ -96,7 +93,7 @@ namespace {
         ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
         ASSERT_TRUE(QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000));
 
-        // Same menu action must re-open the (Loader-cached) dialog.
+        // Same menu action must re-open the existing dialog instance.
         ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "settingsRequested"));
         EXPECT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
     }
