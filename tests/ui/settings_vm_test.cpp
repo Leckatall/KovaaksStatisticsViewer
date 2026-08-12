@@ -16,10 +16,12 @@ namespace {
     class FakeSettingsService : public ISettingsService {
     public:
         std::string dir = "C:/Kovaaks";
+        bool dir_set = true;
         std::string profile_path = "C:/Profile/profile_cache.pb";
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
-        void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
+        [[nodiscard]] bool isKovaaksDirSet() const override { return dir_set; }
+        void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; dir_set = true; }
         [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
         void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
         void onProfilePathChanged(std::function<void()>) override {}
@@ -107,6 +109,24 @@ namespace {
         view_model->setKovaaksDir(QUrl::fromLocalFile("C:/Kovaaks"));
 
         EXPECT_EQ(spy.count(), 0);
+    }
+
+    TEST_F(SettingsViewModelTest, KovaaksDirSetReflectsServiceValueAtConstruction) {
+        fake_service->dir_set = false;
+        const auto view_model = make_view_model();
+
+        EXPECT_FALSE(view_model->isKovaaksDirSet());
+    }
+
+    TEST_F(SettingsViewModelTest, KovaaksDirSetBecomesTrueAfterSetKovaaksDir) {
+        fake_service->dir_set = false;
+        const auto view_model = make_view_model();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::kovaaksDirChanged);
+
+        view_model->setKovaaksDir(QUrl::fromLocalFile("D:/NewDir"));
+
+        EXPECT_EQ(spy.count(), 1);
+        EXPECT_TRUE(view_model->isKovaaksDirSet());
     }
 
     TEST_F(SettingsViewModelTest, ProfilePathReflectsServiceValueAtConstruction) {

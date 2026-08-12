@@ -12,6 +12,7 @@ namespace ksv::application {
         public:
         virtual ~ISettingsService() = default;
         [[nodiscard]] virtual std::string getKovaaksDir() const = 0;
+        [[nodiscard]] virtual bool isKovaaksDirSet() const = 0;
         virtual void setKovaaksDir(const std::string &dir) = 0;
 
         [[nodiscard]] virtual std::string getProfilePath() const = 0;

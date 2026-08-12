@@ -32,6 +32,7 @@ qt_add_qml_module(ksv_ui
             qml/SettingsDialog.qml
             qml/AboutDialog.qml
             qml/DirectoryPickerRow.qml
+            qml/FirstRunBanner.qml
         SOURCES
             presentation/axis_model.h
             presentation/axis_model.cpp

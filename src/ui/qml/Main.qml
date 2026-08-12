@@ -60,6 +60,7 @@ ApplicationWindow {
 
     FolderDialog {
         id: folderDialog
+        objectName: "kovaaksFolderDialog"
         currentFolder: root.settingsVm.kovaaksDir
         onAccepted: root.settingsVm.setKovaaksDir(folderDialog.selectedFolder)
     }
@@ -95,52 +96,64 @@ ApplicationWindow {
         onAboutRequested: aboutDialog.open()
     }
 
-    GridLayout {
+    ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 5
 
-        ColumnLayout {
-            Layout.row: 1; Layout.column: 2
+        FirstRunBanner {
+            objectName: "firstRunBanner"
+            Layout.fillWidth: true
+            visible: !root.settingsVm.kovaaksDirSet
+            onChooseFolderRequested: folderDialog.open()
+        }
+
+        GridLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.margins: 5
 
-            DashboardGraphCanvas {
+            ColumnLayout {
+                Layout.row: 1; Layout.column: 2
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                visible: viewSettings.scenarioGraphVisible
+
+                DashboardGraphCanvas {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: viewSettings.scenarioGraphVisible
+                    graphVm: root.graphVm
+                    columnVisibility: columnVisibilitySettings
+                    graphAxisSettings: graphAxisSettings
+                }
+                PlaytimeGraphPanel {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: viewSettings.playtimeGraphVisible
+                    playtimeVm: root.playtimeVm
+                }
+            }
+            ControlPanel {
+                Layout.row: 1; Layout.column: 1
+                visible: viewSettings.controlPanelVisible
                 graphVm: root.graphVm
                 columnVisibility: columnVisibilitySettings
-                graphAxisSettings: graphAxisSettings
             }
-            PlaytimeGraphPanel {
-                Layout.fillWidth: true
+            SelectionPanel {
+                Layout.row: 1; Layout.column: 0
                 Layout.fillHeight: true
-                visible: viewSettings.playtimeGraphVisible
-                playtimeVm: root.playtimeVm
+                visible: viewSettings.selectionPanelVisible
+                recentSectionVisible: viewSettings.recentRunsSectionVisible
+                scenarioBrowserSectionVisible: viewSettings.scenarioBrowserSectionVisible
+                widestScenarioName: root.scenarioBrowserVm.longestScenarioName
+                maximumPanelWidth: root.width / 3
+                scenarioModel: root.scenarioBrowserVm.scenarioModel
+                runModel: root.scenarioBrowserVm.runModel
+                recentRunModel: root.scenarioBrowserVm.recentRunsModel
+                onSearchEdited: text => root.scenarioBrowserVm.setSearchText(text)
+                onScenarioActivated: (hash, name) => root.scenarioBrowserVm.activateScenario(hash, name)
+                onRunSelected: (hash, startTimeMs) => root.scenarioBrowserVm.selectRun(hash, startTimeMs)
+                onSortRequested: (field, ascending) => root.scenarioBrowserVm.setRunSort(field, ascending)
+                onScenarioSortRequested: (field, ascending) => root.scenarioBrowserVm.setScenarioSort(field, ascending)
             }
-        }
-        ControlPanel {
-            Layout.row: 1; Layout.column: 1
-            visible: viewSettings.controlPanelVisible
-            graphVm: root.graphVm
-            columnVisibility: columnVisibilitySettings
-        }
-        SelectionPanel {
-            Layout.row: 1; Layout.column: 0
-            Layout.fillHeight: true
-            visible: viewSettings.selectionPanelVisible
-            recentSectionVisible: viewSettings.recentRunsSectionVisible
-            scenarioBrowserSectionVisible: viewSettings.scenarioBrowserSectionVisible
-            widestScenarioName: root.scenarioBrowserVm.longestScenarioName
-            maximumPanelWidth: root.width / 3
-            scenarioModel: root.scenarioBrowserVm.scenarioModel
-            runModel: root.scenarioBrowserVm.runModel
-            recentRunModel: root.scenarioBrowserVm.recentRunsModel
-            onSearchEdited: text => root.scenarioBrowserVm.setSearchText(text)
-            onScenarioActivated: (hash, name) => root.scenarioBrowserVm.activateScenario(hash, name)
-            onRunSelected: (hash, startTimeMs) => root.scenarioBrowserVm.selectRun(hash, startTimeMs)
-            onSortRequested: (field, ascending) => root.scenarioBrowserVm.setRunSort(field, ascending)
-            onScenarioSortRequested: (field, ascending) => root.scenarioBrowserVm.setScenarioSort(field, ascending)
         }
     }
 }

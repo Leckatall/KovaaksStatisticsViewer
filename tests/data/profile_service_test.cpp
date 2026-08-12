@@ -79,6 +79,7 @@ namespace {
         std::function<void()> profile_path_changed;
 
         [[nodiscard]] std::string getKovaaksDir() const override { return kovaaks_dir; }
+        [[nodiscard]] bool isKovaaksDirSet() const override { return true; }
         void setKovaaksDir(const std::string &dir) override { kovaaks_dir = dir; }
         [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
 

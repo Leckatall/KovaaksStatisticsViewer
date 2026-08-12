@@ -10,6 +10,7 @@
 
 #include <QQmlApplicationEngine>
 #include <QRectF>
+#include <QSettings>
 #include <QTest>
 #include <QUrl>
 #include <QVariant>
@@ -19,6 +20,7 @@
 #include "components/graph_canvas.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "presentation/graph_vm.h"
+#include "settings_service.h"
 
 #include "integration_env.h"
 
@@ -146,5 +148,39 @@ namespace {
         canvas->setYAxisColumn(static_cast<int>(presentation::GraphViewModel::Accuracy));
 
         EXPECT_EQ(label->property("text").toString(), "Accuracy");
+    }
+
+    TEST(FirstRunUiTest, BannerOpensFolderDialogAndHidesAfterDirectorySelection) {
+        QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
+        raw.remove("file/kovaaks");
+        raw.sync();
+
+        const auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
+        application::App app(settings, std::make_shared<data::ProtoDecoder>());
+        QQmlApplicationEngine engine;
+        engine.setInitialProperties({
+            {"graphVm", QVariant::fromValue(app.graphVm())},
+            {"playtimeVm", QVariant::fromValue(app.playtimeVm())},
+            {"sessionVm", QVariant::fromValue(app.sessionVm())},
+            {"settingsVm", QVariant::fromValue(app.settingsVm())},
+            {"scenarioBrowserVm", QVariant::fromValue(app.scenarioBrowserVm())},
+        });
+        engine.loadFromModule("KovaaksStatsViewer", "Main");
+        ASSERT_FALSE(engine.rootObjects().isEmpty()) << "Main.qml failed to load";
+
+        auto *root = engine.rootObjects().first();
+        auto *banner = root->findChild<QObject *>("firstRunBanner");
+        auto *dialog = root->findChild<QObject *>("kovaaksFolderDialog");
+        ASSERT_NE(banner, nullptr);
+        ASSERT_NE(dialog, nullptr);
+        EXPECT_TRUE(banner->property("visible").toBool());
+
+        ASSERT_TRUE(QMetaObject::invokeMethod(banner, "chooseFolderRequested"));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
+        dialog->setProperty("visible", false);
+
+        app.settingsVm()->setKovaaksDir(QUrl::fromLocalFile("D:/Kovaaks"));
+
+        EXPECT_TRUE(QTest::qWaitFor([&] { return !banner->property("visible").toBool(); }, 3000));
     }
 }

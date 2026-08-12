@@ -27,6 +27,11 @@ namespace ksv::qt_data {
         return readDirSetting("file/kovaaks", "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer");
     }
 
+    bool SettingsService::isKovaaksDirSet() const {
+        const QMutexLocker locker(&m_settings_mutex);
+        return m_settings.contains("file/kovaaks");
+    }
+
     void SettingsService::setKovaaksDir(const std::string &dir) {
         writeDirSetting("file/kovaaks", dir);
         for (const auto &callback: m_kovaaks_dir_callbacks) callback();

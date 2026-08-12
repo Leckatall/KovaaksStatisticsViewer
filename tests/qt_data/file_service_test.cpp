@@ -28,6 +28,7 @@ namespace {
         std::string profile_path;
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
+        [[nodiscard]] bool isKovaaksDirSet() const override { return !dir.empty(); }
         void setKovaaksDir(const std::string &new_dir) override {
             dir = new_dir;
             for (const auto &callback: kovaaks_dir_callbacks) callback();

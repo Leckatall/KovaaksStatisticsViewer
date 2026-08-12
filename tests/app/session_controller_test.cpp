@@ -23,6 +23,7 @@ namespace {
         std::string profile_path = "C:/Profile/profile_cache.pb";
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
+        [[nodiscard]] bool isKovaaksDirSet() const override { return true; }
         void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
         [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
         void setProfilePath(const std::string &new_path) override { profile_path = new_path; }

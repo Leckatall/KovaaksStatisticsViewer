@@ -59,6 +59,20 @@ namespace {
         EXPECT_EQ(reloaded.getKovaaksDir(), QUrl::fromLocalFile("D:/Games/FPSAimTrainer").toLocalFile().toStdString());
     }
 
+    TEST_F(SettingsServiceTest, IsKovaaksDirSetFalseWhenNeverConfigured) {
+        const SettingsService settings(QSettings::IniFormat);
+
+        EXPECT_FALSE(settings.isKovaaksDirSet());
+    }
+
+    TEST_F(SettingsServiceTest, IsKovaaksDirSetTrueAfterSetKovaaksDir) {
+        SettingsService settings(QSettings::IniFormat);
+
+        settings.setKovaaksDir("D:/Games/FPSAimTrainer");
+
+        EXPECT_TRUE(settings.isKovaaksDirSet());
+    }
+
     TEST_F(SettingsServiceTest, ReturnsAppDataProfileCacheFileForProfilePathWhenUnset) {
         const SettingsService settings(QSettings::IniFormat);
 

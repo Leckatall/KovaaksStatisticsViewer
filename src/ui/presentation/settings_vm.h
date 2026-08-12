@@ -14,6 +14,7 @@ namespace ksv::presentation {
     class SettingsViewModel : public QObject {
         Q_OBJECT
         Q_PROPERTY(QUrl kovaaksDir READ getKovaaksDir WRITE setKovaaksDir NOTIFY kovaaksDirChanged)
+        Q_PROPERTY(bool kovaaksDirSet READ isKovaaksDirSet NOTIFY kovaaksDirChanged)
         Q_PROPERTY(QUrl profilePath READ getProfilePath WRITE setProfilePath NOTIFY profilePathChanged)
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
 
@@ -23,6 +24,7 @@ namespace ksv::presentation {
                                    QObject *parent = nullptr);
 
         Q_INVOKABLE [[nodiscard]] QUrl getKovaaksDir() const { return m_kovaaks_dir; }
+        [[nodiscard]] bool isKovaaksDirSet() const { return m_settings_service->isKovaaksDirSet(); }
 
         Q_INVOKABLE void setKovaaksDir(const QUrl &dir);
 
