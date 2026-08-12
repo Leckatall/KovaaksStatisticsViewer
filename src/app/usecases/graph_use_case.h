@@ -19,6 +19,9 @@ namespace ksv::application {
             std::cout << "Loading perf file: " << filename << std::endl;
             m_session_controller->setCurrentPerf(filename.data());
         }
+        void load_latest_perf() override {
+            m_session_controller->setCurrentPerfToLatest();
+        }
 
         GraphSeries get_series() override {
             return PerfColumnBuilder::build(m_session_controller->getCurrentPerf());

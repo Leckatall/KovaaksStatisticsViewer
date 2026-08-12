@@ -23,7 +23,6 @@ TestCase {
         return {
             scenario_list: scenarioList || [],
             generateProfileCalls: 0,
-            getCurrentPerfScenario: function () { return "Long Jump" },
             generateProfile: function () { this.generateProfileCalls++ }
         }
     }
@@ -59,7 +58,7 @@ TestCase {
         compare(panel.sessionVm.generateProfileCalls, 1, "clicking generateProfileButton should call sessionVm.generateProfile() once")
     }
 
-    function test_loadLatestPerformanceButton_fetchesWithEmptyId() {
+    function test_loadLatestPerformanceButton_fetchesLatestData() {
         const panel = createPanel({
             sessionVm: makeFakeSessionVm(), graphVm: makeFakeGraphVm(), columnVisibility: ({})
         })
@@ -68,8 +67,8 @@ TestCase {
         verify(button !== null, "no child named 'loadLatestPerformanceButton' found in ControlPanel")
         mouseClick(button)
 
-        compare(panel.graphVm.fetchDataCalls.length, 1, "clicking loadLatestPerformanceButton should call graphVm.fetchData() once")
-        compare(panel.graphVm.fetchDataCalls[0], "", "loadLatestPerformanceButton should fetch with an empty run id")
+        compare(panel.graphVm.fetchLatestDataCalls, 1, "clicking loadLatestPerformanceButton should call graphVm.fetchLatestData() once")
+        compare(panel.graphVm.fetchDataCalls.length, 0, "clicking loadLatestPerformanceButton should not call graphVm.fetchData()")
     }
 
     function test_columnVisibilityCheckBox_reflectsColumnVisibility() {
@@ -98,15 +97,5 @@ TestCase {
 
         compare(scoreCheckBox.checked, false, "clicking the Score checkbox should uncheck it")
         compare(panel.columnVisibility.score, false, "clicking the Score checkbox should update columnVisibility.score")
-    }
-
-    function test_renderingLabel_showsCurrentPerfScenarioFromSessionVm() {
-        const panel = createPanel({
-            sessionVm: makeFakeSessionVm(), graphVm: makeFakeGraphVm(), columnVisibility: ({})
-        })
-
-        const label = findChild(panel, "renderingLabel")
-        verify(label !== null, "no child named 'renderingLabel' found in ControlPanel")
-        compare(label.text, "Rendering: Long Jump", "renderingLabel should show sessionVm.getCurrentPerfScenario()")
     }
 }

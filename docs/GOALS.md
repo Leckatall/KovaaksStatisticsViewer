@@ -127,8 +127,8 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 - [x] **Smooth curve interpolation on graphs** *(AxisModel with Heckbert's nice-number algorithm implemented)*
 
 - [ ] **General UI polish** `[Medium]` `[High]`
-  - [x] Design a consistent color scheme and typography (Material Design with Dark theme)
-  - [ ] Add a dark/light theme toggle (currently hardcoded to Material.Dark)
+  - [x] Design a consistent color scheme and typography
+  - [ ] Add a dark/light theme toggle
   - [x] Polish graph styling (grid lines, axis labels, tick formatting, legend)
   - [ ] Add loading indicators for profile generation and data processing
   - [ ] Improve layout responsiveness for different window sizes

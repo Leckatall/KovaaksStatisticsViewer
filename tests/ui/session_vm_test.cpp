@@ -26,6 +26,7 @@ namespace {
         }
 
         void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
+        void setCurrentPerfToLatest() override {}
         void setCurrentPerf(const std::string &filename) override {}
         void setCurrentPerf(const ScenarioRunId &) override {}
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }

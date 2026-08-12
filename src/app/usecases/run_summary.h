@@ -25,6 +25,7 @@ namespace ksv::application {
         domain::ScenarioId scenario_id;
         int run_count = 0;
         double total_time_seconds = 0.0;
+        std::chrono::sys_seconds last_played;
     };
 }
 

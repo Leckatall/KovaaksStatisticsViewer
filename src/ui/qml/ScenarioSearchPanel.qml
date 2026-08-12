@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 ColumnLayout {
@@ -11,8 +10,12 @@ ColumnLayout {
     property alias searchText: searchField.text
     property string emptyText: "No scenarios"
     property string currentScenarioHash
+    property bool showSort: true
+    property int sortField: 0
+    property bool sortAscending: false
     signal searchEdited(string text)
     signal scenarioActivated(string hash, string name)
+    signal scenarioSortRequested(int field, bool ascending)
 
     TextField {
         id: searchField
@@ -20,6 +23,47 @@ ColumnLayout {
         Layout.fillWidth: true
         placeholderText: "Search scenarios…"
         onTextEdited: root.searchEdited(text)
+    }
+
+    Loader {
+        // Deferred for the same reason as RunListView's sort controls: instantiating
+        // the ComboBox/Popup machinery while hidden interferes with unrelated mouse
+        // clicks elsewhere in the window.
+        active: root.showSort && root.visible
+        sourceComponent: sortControlsComponent
+    }
+
+    Component {
+        id: sortControlsComponent
+
+        RowLayout {
+            spacing: 4
+
+            Label {
+                text: "Sort:"
+            }
+
+            ComboBox {
+                id: sortCombo
+                objectName: "scenarioSortCombo"
+                model: ["Runs", "Last Played", "Name"]
+                currentIndex: root.sortField
+                onActivated: (index) => {
+                    root.sortField = index
+                    root.scenarioSortRequested(root.sortField, root.sortAscending)
+                }
+            }
+
+            ToolButton {
+                id: sortDirectionButton
+                objectName: "scenarioSortDirectionButton"
+                text: root.sortAscending ? "▲" : "▼"
+                onClicked: {
+                    root.sortAscending = !root.sortAscending
+                    root.scenarioSortRequested(root.sortField, root.sortAscending)
+                }
+            }
+        }
     }
 
     ListView {
@@ -45,7 +89,7 @@ ColumnLayout {
 
             contentItem: RowLayout {
                 Label { Layout.fillWidth: true; text: delegateRoot.name; elide: Text.ElideRight }
-                Label { text: delegateRoot.runCount; color: Material.foreground; opacity: 0.65 }
+                Label { text: delegateRoot.runCount; opacity: 0.65 }
             }
             onClicked: {
                 root.currentScenarioHash = hash
@@ -59,6 +103,5 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
         visible: !root.scenarioModel || root.scenarioModel.count === 0
         text: root.emptyText
-        color: Material.foreground
     }
 }

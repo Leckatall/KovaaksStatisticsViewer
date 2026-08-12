@@ -16,10 +16,12 @@ namespace {
     class FakeGraphUseCase : public IGraphUseCase {
     public:
         std::vector<std::string> load_perf_calls;
+        int load_latest_perf_calls = 0;
         GraphSeries series_to_return;
         std::string run_label;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
+        void load_latest_perf() override { load_latest_perf_calls++; }
         GraphSeries get_series() override { return series_to_return; }
         std::string get_run_label() override { return run_label; }
         void onCurrentPerfChanged(std::function<void()>) override {}
@@ -47,13 +49,28 @@ namespace {
         EXPECT_DOUBLE_EQ(bounds[QString::number(GraphViewModel::Accuracy)].toPointF().y(), 1.0);
     }
 
-    TEST_F(GraphViewModelTest, FetchDataWithEmptyIdSkipsLoadPerfButRefreshesSeries) {
+    TEST_F(GraphViewModelTest, FetchDataRefreshesSeriesWithoutLoadingPerf) {
+        setSampleData();
+
+        view_model.fetchData();
+
+        EXPECT_TRUE(fake_use_case->load_perf_calls.empty());
+        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Score).size(), 3);
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataWithEmptyIdIsIgnoredAndDoesNotLoadPerf) {
         setSampleData();
 
         view_model.fetchData("");
 
         EXPECT_TRUE(fake_use_case->load_perf_calls.empty());
-        EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Score).size(), 3);
+        EXPECT_TRUE(view_model.seriesPoints(GraphViewModel::Score).isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, FetchLatestDataCallsLoadLatestPerfOnUseCase) {
+        view_model.fetchLatestData();
+
+        EXPECT_EQ(fake_use_case->load_latest_perf_calls, 1);
     }
 
     TEST_F(GraphViewModelTest, FetchDataWithScenarioIdCallsLoadPerfWithLocalPath) {
@@ -68,7 +85,7 @@ namespace {
     TEST_F(GraphViewModelTest, FetchDataPopulatesAllThreeColumns) {
         setSampleData();
 
-        view_model.fetchData("");
+        view_model.fetchData();
 
         // seriesPoints packs each row as {time, value}, so x() is Time.
         EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Score)[0].x(), 0.0);
@@ -81,7 +98,7 @@ namespace {
         fake_use_case->run_label = "Air Angelic (2026-08-07, 14:23:00)";
 
         const QSignalSpy spy(&view_model, &GraphViewModel::scenarioTitleChanged);
-        view_model.fetchData("");
+        view_model.fetchData();
 
         EXPECT_EQ(view_model.scenarioTitle(), QString("Air Angelic (2026-08-07, 14:23:00)"));
         EXPECT_EQ(spy.count(), 1);
@@ -91,7 +108,7 @@ namespace {
         setSampleData();
 
         const QSignalSpy spy(&view_model, &GraphViewModel::boundsChanged);
-        view_model.fetchData("");
+        view_model.fetchData();
 
         EXPECT_GT(spy.count(), 0);
     }
@@ -100,7 +117,7 @@ namespace {
         setSampleData();
 
         const QSignalSpy spy(&view_model, &GraphViewModelBase::dataUpdated);
-        view_model.fetchData("");
+        view_model.fetchData();
 
         EXPECT_GT(spy.count(), 0);
     }
@@ -108,7 +125,7 @@ namespace {
     TEST_F(GraphViewModelTest, RecomputeBoundsSnapsEachColumnToNiceNumbers) {
         // times {0,1,2}, scores {10,20,30}, accuracies {0.5,0.6,0.7}.
         setSampleData();
-        view_model.fetchData("");
+        view_model.fetchData();
         const auto bounds = view_model.axisBounds();
         const auto timeBounds = bounds[QString::number(GraphViewModel::Time)].toPointF();
         const auto scoreBounds = bounds[QString::number(GraphViewModel::Score)].toPointF();
@@ -144,7 +161,7 @@ namespace {
         fake_use_case->series_to_return.columns[ColumnId::Score] = {42.0F, 42.0F};
         fake_use_case->series_to_return.columns[ColumnId::Accuracy] = {0.8F, 0.8F};
 
-        view_model.fetchData("");
+        view_model.fetchData();
         const auto bounds = view_model.axisBounds();
         const auto scoreBounds = bounds[QString::number(GraphViewModel::Score)].toPointF();
         const auto accuracyBounds = bounds[QString::number(GraphViewModel::Accuracy)].toPointF();
@@ -230,7 +247,7 @@ namespace {
         fake_use_case->series_to_return.columns[ColumnId::Kills] = {1.0F, 2.0F, 3.0F};
         fake_use_case->series_to_return.columns[ColumnId::Dmg] = {100.0F, 200.0F, 300.0F};
 
-        view_model.fetchData("");
+        view_model.fetchData();
 
         EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Shots)[0].y(), 5);
         EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Kills)[1].y(), 2);
@@ -246,7 +263,7 @@ namespace {
         fake_use_case->series_to_return.columns[ColumnId::Shots] = {5.0F};
         fake_use_case->series_to_return.columns[ColumnId::Dmg] = {100.0F};
 
-        view_model.fetchData("");
+        view_model.fetchData();
 
         EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Shots)[0].y(), 5);
         EXPECT_EQ(view_model.seriesPoints(GraphViewModel::Shots)[1].y(), 0);
@@ -257,7 +274,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, SeriesPointsReturnsTimeValuePairsInRowOrder) {
         setSampleData();
-        view_model.fetchData("");
+        view_model.fetchData();
 
         const auto points = view_model.seriesPoints(GraphViewModel::Score);
         ASSERT_EQ(points.size(), 3);
@@ -275,7 +292,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, SeriesPointsReturnsEmptyForOutOfRangeColumn) {
         setSampleData();
-        view_model.fetchData("");
+        view_model.fetchData();
 
         EXPECT_TRUE(view_model.seriesPoints(GraphViewModel::ColumnCount).isEmpty());
     }
@@ -284,7 +301,7 @@ namespace {
         fake_use_case->series_to_return.times = {0.0F};
         fake_use_case->series_to_return.columns[ColumnId::Accuracy] = {0.87F};
 
-        view_model.fetchData("");
+        view_model.fetchData();
 
         const auto series = view_model.series({GraphViewModel::Accuracy});
         ASSERT_EQ(series.size(), 1);
@@ -296,7 +313,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, SeriesReturnsOnlyRequestedColumnsInRequestedOrder) {
         setSampleData();
-        view_model.fetchData("");
+        view_model.fetchData();
 
         const auto series = view_model.series({GraphViewModel::Dmg, GraphViewModel::Score});
         ASSERT_EQ(series.size(), 2);
@@ -306,7 +323,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, SeriesOmitsColumnsWithNoDrawableSeries) {
         setSampleData();
-        view_model.fetchData("");
+        view_model.fetchData();
 
         EXPECT_TRUE(view_model.series({GraphViewModel::Time}).isEmpty());
         EXPECT_TRUE(view_model.series({GraphViewModel::ColumnCount}).isEmpty());
@@ -314,7 +331,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, XAxisDelegateFormatsSecondsWithSuffix) {
         setSampleData();
-        view_model.fetchData("");
+        view_model.fetchData();
 
         EXPECT_EQ(view_model.xAxis().formatTick(20.0), "20s");
     }

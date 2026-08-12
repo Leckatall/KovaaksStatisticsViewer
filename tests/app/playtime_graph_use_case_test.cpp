@@ -34,6 +34,9 @@ namespace {
         [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &) const override {
             return std::nullopt;
         }
+        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
+            return std::nullopt;
+        }
         [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override {
             return std::nullopt;
         }

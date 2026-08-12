@@ -39,6 +39,9 @@ namespace ksv::application {
         [[nodiscard]] virtual std::optional<std::size_t> getRunCount(
             const domain::ScenarioId& scenario) const = 0;
 
+        [[nodiscard]] virtual std::optional<std::chrono::sys_seconds> getLastRunTime(
+            const domain::ScenarioId& scenario) const = 0;
+
         [[nodiscard]] virtual std::optional<double> getTotalTime(
             const domain::ScenarioId& scenario) const = 0;
 

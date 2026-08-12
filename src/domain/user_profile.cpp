@@ -95,6 +95,13 @@ namespace ksv::domain {
         return m_runs[it->second];
     }
 
+    std::optional<std::chrono::sys_seconds> UserProfile::getLastRunTime(const ScenarioId &scenario) const {
+        const auto it = m_scenario_index.find(scenario);
+        using namespace std::chrono;
+        if (it == m_scenario_index.end() || it->second.empty()) return std::nullopt;
+        return m_runs[it->second.back()].run_id.startSecond();
+    }
+
     std::optional<double> UserProfile::getTotalTime(const ScenarioId &scenario) const {
         const auto it = m_scenario_aggregate.find(scenario);
         if (it == m_scenario_aggregate.end()) return std::nullopt;

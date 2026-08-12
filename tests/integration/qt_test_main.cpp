@@ -9,6 +9,7 @@
 #include <QQuickStyle>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QStyleHints>
 #include <QTemporaryDir>
 #include <gtest/gtest.h>
 
@@ -34,6 +35,7 @@ int main(int argc, char **argv) {
     QQuickStyle::setStyle("Fusion");
 
     QGuiApplication app(argc, argv);
+    QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer");
 

@@ -64,7 +64,9 @@ namespace ksv::presentation {
         void recomputeBounds();
 
     public slots:
+        void fetchData();
         void fetchData(const QString& scenario_id);
+        void fetchLatestData();
 
     signals:
         void scenarioTitleChanged();

@@ -32,6 +32,7 @@ namespace {
         }
 
         void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
+        void setCurrentPerfToLatest() override {}
         void setCurrentPerf(const std::string &filename) override {}
 
         void setCurrentPerf(const ScenarioRunId &run_id) override {
@@ -53,11 +54,20 @@ namespace {
         }
     };
 
-    ScenarioSummary make_summary(const std::string &name, const std::string &hash, const int run_count = 1) {
+    ScenarioSummary make_summary(const std::string &name, const std::string &hash, const int run_count = 1,
+                                  const long long last_played_epoch_seconds = 0) {
         ScenarioSummary summary;
         summary.scenario_id = ScenarioId{.name = name, .hash = hash};
         summary.run_count = run_count;
+        summary.last_played = std::chrono::sys_seconds{std::chrono::seconds{last_played_epoch_seconds}};
         return summary;
+    }
+
+    std::vector<QString> collectScenarioNames(QAbstractListModel *scenario_model) {
+        std::vector<QString> result;
+        for (int row = 0; row < scenario_model->rowCount(); ++row)
+            result.push_back(scenario_model->data(scenario_model->index(row, 0), ScenarioListModel::NameRole).toString());
+        return result;
     }
 
     RunSummary make_run(const std::string &scenario_name, const std::string &hash, const long long start_time,
@@ -161,6 +171,105 @@ namespace {
         EXPECT_EQ(spy.count(), 0);
     }
 
+    TEST_F(ScenarioBrowserViewModelTest, DefaultScenarioSortIsRunCountDescending) {
+        fake_controller->scenario_summaries = {
+            make_summary("1wall6targets TE", "hash-1", 3),
+            make_summary("Microshot", "hash-2", 7),
+            make_summary("Smoothbot Invincible", "hash-3", 5),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
+                  (std::vector<QString>{"Microshot", "Smoothbot Invincible", "1wall6targets TE"}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortRunCountAscendingOrdersLowestFirst) {
+        fake_controller->scenario_summaries = {
+            make_summary("1wall6targets TE", "hash-1", 3),
+            make_summary("Microshot", "hash-2", 7),
+            make_summary("Smoothbot Invincible", "hash-3", 5),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::RUN_COUNT, true);
+
+        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
+                  (std::vector<QString>{"1wall6targets TE", "Smoothbot Invincible", "Microshot"}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortNameDescendingOrdersReverseAlphabetically) {
+        fake_controller->scenario_summaries = {
+            make_summary("1wall6targets TE", "hash-1"),
+            make_summary("Microshot", "hash-2"),
+            make_summary("Smoothbot Invincible", "hash-3"),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::NAME, false);
+
+        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
+                  (std::vector<QString>{"Smoothbot Invincible", "Microshot", "1wall6targets TE"}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortNameAscendingOrdersAlphabetically) {
+        fake_controller->scenario_summaries = {
+            make_summary("1wall6targets TE", "hash-1"),
+            make_summary("Microshot", "hash-2"),
+            make_summary("Smoothbot Invincible", "hash-3"),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::NAME, true);
+
+        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
+                  (std::vector<QString>{"1wall6targets TE", "Microshot", "Smoothbot Invincible"}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortLastPlayedDescendingOrdersMostRecentFirst) {
+        fake_controller->scenario_summaries = {
+            make_summary("1wall6targets TE", "hash-1", 1, 1000),
+            make_summary("Microshot", "hash-2", 1, 3000),
+            make_summary("Smoothbot Invincible", "hash-3", 1, 2000),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::LAST_PLAYED, false);
+
+        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
+                  (std::vector<QString>{"Microshot", "Smoothbot Invincible", "1wall6targets TE"}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortLastPlayedAscendingOrdersLeastRecentFirst) {
+        fake_controller->scenario_summaries = {
+            make_summary("1wall6targets TE", "hash-1", 1, 1000),
+            make_summary("Microshot", "hash-2", 1, 3000),
+            make_summary("Smoothbot Invincible", "hash-3", 1, 2000),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::LAST_PLAYED, true);
+
+        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
+                  (std::vector<QString>{"1wall6targets TE", "Smoothbot Invincible", "Microshot"}));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, RefreshReappliesConfiguredScenarioSort) {
+        fake_controller->scenario_summaries = {
+            make_summary("1wall6targets TE", "hash-1"),
+            make_summary("Microshot", "hash-2"),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::NAME, true);
+        ASSERT_EQ(collectScenarioNames(asListModel(view_model)),
+                  (std::vector<QString>{"1wall6targets TE", "Microshot"}));
+
+        fake_controller->scenario_summaries.push_back(make_summary("Smoothbot Invincible", "hash-3"));
+        view_model.refresh();
+
+        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
+                  (std::vector<QString>{"1wall6targets TE", "Microshot", "Smoothbot Invincible"}));
+    }
+
     TEST_F(ScenarioBrowserViewModelTest, CurrentPerfChangedSignalRefreshesScenarioSummaries) {
         ScenarioBrowserViewModel view_model(fake_controller);
         ASSERT_EQ(asListModel(view_model)->rowCount(), 0);
@@ -244,7 +353,7 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Date, true);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Date, true);
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 2000, 3000}));
     }
@@ -258,7 +367,7 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Score, false);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Score, false);
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
     }
@@ -272,7 +381,7 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Score, true);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Score, true);
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 3000, 2000}));
     }
@@ -286,7 +395,7 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Accuracy, false);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Accuracy, false);
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{3000, 1000, 2000}));
     }
@@ -300,7 +409,7 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Accuracy, true);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Accuracy, true);
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 1000, 3000}));
     }
@@ -314,7 +423,7 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Duration, false);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Duration, false);
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
     }
@@ -328,7 +437,7 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Duration, true);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Duration, true);
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 3000, 2000}));
     }
@@ -342,7 +451,7 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Score, false);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Score, false);
 
         // All scores tie; stable sort preserves the incoming newest-first order.
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{3000, 2000, 1000}));
@@ -356,7 +465,7 @@ namespace {
         };
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
-        view_model.setSort(ScenarioBrowserViewModel::SortField::Score, false);
+        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Score, false);
         ASSERT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
 
         view_model.activateScenario("hash-3", "OtherScenario");

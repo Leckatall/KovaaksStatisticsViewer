@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtQuick.Dialogs
 
@@ -8,7 +7,7 @@ Dialog {
     id: root
     objectName: "settingsDialog"
     title: "Settings"
-    modal: true
+    modal: false
     standardButtons: Dialog.Close
     anchors.centerIn: parent
     width: 680
@@ -31,12 +30,11 @@ Dialog {
         background: Rectangle {
             radius: 2
             color: catButton.highlighted
-                   ? Qt.alpha(Material.accentColor, 0.22)
-                   : (catButton.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
+                   ? Qt.alpha(catButton.palette.accent, 0.3)
+                   : (catButton.hovered ? Qt.alpha(catButton.palette.text, 0.06) : "transparent")
         }
         contentItem: Label {
             text: catButton.text
-            color: Material.foreground
             font.bold: catButton.highlighted
             verticalAlignment: Text.AlignVCenter
         }
@@ -66,7 +64,7 @@ Dialog {
         Rectangle {
             Layout.preferredWidth: 176
             Layout.fillHeight: true
-            color: Qt.darker(Material.dialogColor, 1.25)
+            color: Qt.darker(root.palette.window, 1.2)
 
 
             // Right-edge divider between sidebar and content.
@@ -75,7 +73,7 @@ Dialog {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 width: 1
-                color: Qt.rgba(1, 1, 1, 0.08)
+                color: root.palette.mid
             }
 
             ColumnLayout {
@@ -118,7 +116,6 @@ Dialog {
                     text: "Directories"
                     font.pixelSize: 18
                     font.bold: true
-                    color: Material.foreground
                     Layout.bottomMargin: 4
                 }
 
@@ -144,15 +141,14 @@ Dialog {
                         width: 10
                         height: 10
                         radius: width / 2
-                        color: root.settingsVm.profileLoaded
-                               ? Material.color(Material.Green)
-                               : Material.color(Material.Red)
+                        // Semantic status, not chrome — there is no palette role
+                        // for ok/error, so these stay literal.
+                        color: root.settingsVm.profileLoaded ? "#4CAF50" : "#E53935"
                         Layout.alignment: Qt.AlignVCenter
                     }
                     Label {
                         objectName: "profileLoadedLabel"
                         text: "Profile status: " + (root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
-                        color: Material.foreground
                     }
                 }
                 Item { Layout.fillHeight: true }
@@ -166,7 +162,6 @@ Dialog {
                     text: "Graph Lines"
                     font.pixelSize: 18
                     font.bold: true
-                    color: Material.foreground
                     Layout.bottomMargin: 4
                 }
 
@@ -185,12 +180,11 @@ Dialog {
                             radius: 4
                             color: root.graphVm.columnColor(lineRow.modelData)
                             border.width: 1
-                            border.color: Qt.rgba(1, 1, 1, 0.15)
+                            border.color: root.palette.mid
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Label {
                             text: root.graphVm.columnName(lineRow.modelData)
-                            color: Material.foreground
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Item { Layout.fillWidth: true }

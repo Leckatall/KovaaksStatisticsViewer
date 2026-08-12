@@ -10,7 +10,7 @@ namespace ksv::application {
                                          QObject *parent) : ISessionController(parent),
                                                             m_settings_service(std::move(settings_service)),
                                                             m_profile_service(std::move(profile_service)) {
-        setCurrentPerfToLatest();
+        SessionController::setCurrentPerfToLatest();
         m_profile_service->onProfileChanged([this] { setCurrentPerfToLatest(); });
     }
 
@@ -65,6 +65,12 @@ namespace ksv::application {
             summary.scenario_id = scenario;
             summary.run_count = static_cast<int>(m_profile_service->getRunCount(scenario).value_or(0));
             summary.total_time_seconds = m_profile_service->getTotalTime(scenario).value_or(0.0);
+            if (m_profile_service->getLastRunTime(scenario)) {
+                summary.last_played = m_profile_service->getLastRunTime(scenario).value();
+            } else {
+                std::cerr << "No last run time for scenario '" << scenario.name << "'" << std::endl;
+            }
+
             summaries.push_back(summary);
         }
         return summaries;

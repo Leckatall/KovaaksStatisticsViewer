@@ -56,7 +56,7 @@ namespace {
     }
 
     TEST_F(CompositionRootTest, CurrentPerfChangeCascadesToGraphViewModelReload) {
-        // App wires sessionController->currentPerfChanged -> graphVm->fetchData({}) so the
+        // App wires sessionController->currentPerfChanged -> graphVm->fetchData() so the
         // graph reloads whenever currentPerf changes for any reason, not just file loads.
         const QString file = QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf");
 

@@ -26,10 +26,15 @@ namespace ksv::presentation {
         Q_PROPERTY(QString activeScenarioHash READ activeScenarioHash NOTIFY activeScenarioChanged)
 
     public:
-        enum SortField {
+        enum RunSortField {
             Date = 0, Score, Accuracy, Duration
         };
-        Q_ENUM(SortField)
+        Q_ENUM(RunSortField)
+
+        enum ScenarioSortField {
+            RUN_COUNT = 0, LAST_PLAYED, NAME
+        };
+        Q_ENUM(ScenarioSortField)
 
         explicit ScenarioBrowserViewModel(std::shared_ptr<application::ISessionController> session_controller,
                                           QObject *parent = nullptr);
@@ -42,7 +47,8 @@ namespace ksv::presentation {
         Q_INVOKABLE void setSearchText(const QString &text);
         Q_INVOKABLE void activateScenario(const QString &hash, const QString &name);
         Q_INVOKABLE void selectRun(const QString &hash, double startTimeMs);
-        Q_INVOKABLE void setSort(SortField field, bool ascending);
+        Q_INVOKABLE void setRunSort(RunSortField field, bool ascending);
+        Q_INVOKABLE void setScenarioSort(ScenarioSortField field, bool ascending);
         Q_INVOKABLE void refresh();
 
     signals:
@@ -50,8 +56,10 @@ namespace ksv::presentation {
 
     private:
         void applyFilter();
+        void refreshScenarioModel();
         void refreshRunModel();
-        void applySort(std::vector<application::RunSummary> &runs) const;
+        void applyRunSort(std::vector<application::RunSummary> &runs) const;
+        void applyScenarioSort(std::vector<application::ScenarioSummary> &summaries) const;
         void refreshRecentRunsModel();
 
         static constexpr std::size_t kRecentRunsCount = 10;
@@ -64,8 +72,10 @@ namespace ksv::presentation {
         QString m_search_text;
         QString m_active_scenario_hash;
         QString m_active_scenario_name;
-        SortField m_sort_field = SortField::Date;
-        bool m_sort_ascending = false;
+        RunSortField m_run_sort_field = RunSortField::Date;
+        ScenarioSortField m_scenario_sort_field = ScenarioSortField::RUN_COUNT;
+        bool m_run_sort_ascending = false;
+        bool m_scenario_sort_ascending = false;
     };
 }
 

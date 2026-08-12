@@ -39,7 +39,10 @@ namespace ksv::application {
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController);
         m_graphVm = new presentation::GraphViewModel(m_graphUseCase, this);
         // Re-pull the series when currentPerf changes for any reason (file load, run selection, latest-on-startup)
-        m_graphUseCase->onCurrentPerfChanged([this] { m_graphVm->fetchData(QString{}); });
+        m_graphUseCase->onCurrentPerfChanged([this] { m_graphVm->fetchData(); });
+        // SessionController already loaded the latest perf in its own constructor, before the
+        // connection above existed, so that first currentPerfChanged was never observed here.
+        m_graphVm->fetchData();
 
         m_playtimeUseCase = std::make_shared<PlaytimeGraphUseCase>(m_profileService);
         m_playtimeVm = new presentation::PlaytimeGraphViewModel(m_playtimeUseCase, this);

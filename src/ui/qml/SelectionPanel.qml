@@ -12,13 +12,15 @@ ColumnLayout {
     property var recentRunModel
     property alias searchText: scenarioSearch.searchText
     property string activeScenarioName
-    property bool recentExpanded: true
+    property bool recentExpanded: false
     signal searchEdited(string text)
     signal scenarioActivated(string hash, string name)
     signal runSelected(string hash, double startTimeMs)
     signal sortRequested(int field, bool ascending)
+    signal scenarioSortRequested(int field, bool ascending)
 
     ToolButton {
+        objectName: "recentToggleButton"
         Layout.fillWidth: true
         text: (root.recentExpanded ? "▾" : "▸") + " Recent"
         onClicked: root.recentExpanded = !root.recentExpanded
@@ -47,6 +49,7 @@ ColumnLayout {
             root.activeScenarioName = name
             root.scenarioActivated(hash, name)
         }
+        onScenarioSortRequested: (field, ascending) => root.scenarioSortRequested(field, ascending)
     }
 
     RunListView {

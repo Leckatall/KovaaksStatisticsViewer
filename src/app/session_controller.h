@@ -30,7 +30,8 @@ namespace ksv::application {
 
         void setCurrentPerf(const domain::ScenarioRunId& run_id) override;
 
-        void setCurrentPerfToLatest();
+        void setCurrentPerfToLatest() override;
+
         [[nodiscard]] domain::ScenarioPerf getCurrentPerf() const override { return m_current_perf; }
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override;

@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtCore
@@ -12,9 +11,10 @@ ApplicationWindow {
 
     visible: true
     title: "Kovaaks Stats Viewer"
-    Material.theme: Material.Dark
-    Material.accent: Material.Cyan
-    Material.primary: Material.BlueGrey
+    // The app's accent, propagated to every control and popup below. The dark
+    // scheme itself is pinned in main.cpp, not here.
+    palette.accent: "#00BCD4"
+    palette.highlight: "#00838F"
 
     Settings {
         category: "window"
@@ -40,11 +40,6 @@ ApplicationWindow {
     required property var sessionVm
     required property var settingsVm
     required property var scenarioBrowserVm
-
-    Rectangle {
-        anchors.fill: parent
-        color: "#121212"
-    }
 
     FolderDialog {
         id: folderDialog
@@ -73,7 +68,6 @@ ApplicationWindow {
             text: "Dashboard"
             font.pixelSize: 24
             font.bold: true
-            color: "white"
         }
 
         ColumnLayout {
@@ -108,7 +102,8 @@ ApplicationWindow {
             onSearchEdited: text => root.scenarioBrowserVm.setSearchText(text)
             onScenarioActivated: (hash, name) => root.scenarioBrowserVm.activateScenario(hash, name)
             onRunSelected: (hash, startTimeMs) => root.scenarioBrowserVm.selectRun(hash, startTimeMs)
-            onSortRequested: (field, ascending) => root.scenarioBrowserVm.setSort(field, ascending)
+            onSortRequested: (field, ascending) => root.scenarioBrowserVm.setRunSort(field, ascending)
+            onScenarioSortRequested: (field, ascending) => root.scenarioBrowserVm.setScenarioSort(field, ascending)
         }
     }
 }

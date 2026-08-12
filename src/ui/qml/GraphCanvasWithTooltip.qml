@@ -40,7 +40,7 @@ Item {
 
         readonly property rect plotArea: canvas.plotArea
 
-        color: "#80FFFFFF"
+        color: Qt.alpha(root.palette.text, 0.5)
         height: plotArea.height
         visible: hoverArea.hoverInfo.valid === true
         width: 1
@@ -54,8 +54,8 @@ Item {
         property real idealX: hoverArea.mouseX + 14
         property real idealY: hoverArea.mouseY - height / 2
 
-        color: "#DD222222"
-        border.color: "#555555"
+        color: Qt.alpha(root.palette.toolTipBase, 0.87)
+        border.color: root.palette.mid
         border.width: 1
         radius: 6
         visible: hoverArea.hoverInfo.valid === true
@@ -71,7 +71,7 @@ Item {
             spacing: 3
 
             Text {
-                color: "#CCCCCC"
+                color: Qt.alpha(root.palette.toolTipText, 0.8)
                 font.pixelSize: 11
                 font.bold: true
                 text: hoverArea.hoverInfo.valid ? (root.showSeriesNames ? "Time: " + hoverArea.hoverInfo.x : hoverArea.hoverInfo.x) : ""
@@ -90,7 +90,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
-                        color: "white"
+                        color: root.palette.toolTipText
                         font.pixelSize: 11
                         text: root.showSeriesNames ? modelData.name + ": " + modelData.value : modelData.value
                     }

@@ -30,7 +30,7 @@ namespace {
     }
 
     // Substrings that mark a genuine registration/binding failure (as opposed to
-    // cosmetic style chatter from Fusion/Material under offscreen).
+    // cosmetic style chatter from Fusion under offscreen).
     bool looksLikeLoadFailure(const QString &msg) {
         static const char *signatures[] = {
             "is not a type", "Cannot assign", "Unable to assign", "ReferenceError",

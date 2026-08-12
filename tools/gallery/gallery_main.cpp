@@ -16,6 +16,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QSettings>
+#include <QStyleHints>
 #include <QTemporaryDir>
 #include <QUrl>
 
@@ -53,6 +54,7 @@ int main(int argc, char *argv[]) {
     declare_metatypes();
     QQuickStyle::setStyle("Fusion");
     QGuiApplication qapp(argc, argv);
+    QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer-Gallery");
 

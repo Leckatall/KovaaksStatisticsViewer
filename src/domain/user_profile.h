@@ -37,6 +37,8 @@ namespace ksv::domain {
 
         [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &run_id) const;
 
+        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &scenario) const;
+
         [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &scenario) const;
 
         [[nodiscard]] double getTotalTimeAllScenarios() const;

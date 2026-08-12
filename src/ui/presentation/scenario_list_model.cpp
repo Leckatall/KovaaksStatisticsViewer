@@ -4,6 +4,8 @@
 
 #include "scenario_list_model.h"
 
+#include <qdatetime.h>
+
 namespace ksv::presentation {
     ScenarioListModel::ScenarioListModel(QObject *parent) : QAbstractListModel(parent) {
     }
@@ -23,6 +25,7 @@ namespace ksv::presentation {
             case HashRole: return QString::fromStdString(summary.scenario_id.hash);
             case RunCountRole: return summary.run_count;
             case TotalTimeRole: return summary.total_time_seconds;
+            case LastPlayedRole: return QDateTime::fromSecsSinceEpoch(summary.last_played.time_since_epoch().count());
             default: return {};
         }
     }

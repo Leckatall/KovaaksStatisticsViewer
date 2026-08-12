@@ -20,8 +20,7 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::refresh() {
-        m_all_summaries = m_session_controller->getScenarioSummaries();
-        applyFilter();
+        refreshScenarioModel();
         refreshRunModel();
         refreshRecentRunsModel();
     }
@@ -43,6 +42,13 @@ namespace ksv::presentation {
                 filtered.push_back(summary);
         }
         m_model->setSummaries(std::move(filtered));
+    }
+
+    void ScenarioBrowserViewModel::refreshScenarioModel() {
+        auto summaries = m_session_controller->getScenarioSummaries();
+        applyScenarioSort(summaries);
+        m_all_summaries = summaries;
+        applyFilter();
     }
 
     void ScenarioBrowserViewModel::activateScenario(const QString &hash, const QString &name) {
@@ -75,38 +81,65 @@ namespace ksv::presentation {
             .hash = m_active_scenario_hash.toStdString(),
         };
         auto runs = m_session_controller->getRunsForScenario(scenario_id);
-        applySort(runs);
+        applyRunSort(runs);
         m_run_model->setRuns(std::move(runs));
     }
 
-    void ScenarioBrowserViewModel::setSort(const SortField field, const bool ascending) {
-        m_sort_field = field;
-        m_sort_ascending = ascending;
+    void ScenarioBrowserViewModel::setRunSort(const RunSortField field, const bool ascending) {
+        m_run_sort_field = field;
+        m_run_sort_ascending = ascending;
         refreshRunModel();
     }
 
-    void ScenarioBrowserViewModel::applySort(std::vector<application::RunSummary> &runs) const {
-        const bool ascending = m_sort_ascending;
-        switch (m_sort_field) {
-            case SortField::Score:
+    void ScenarioBrowserViewModel::setScenarioSort(ScenarioSortField field, bool ascending) {
+        m_scenario_sort_field = field;
+        m_scenario_sort_ascending = ascending;
+        refreshScenarioModel();
+    }
+
+    void ScenarioBrowserViewModel::applyRunSort(std::vector<application::RunSummary> &runs) const {
+        const bool ascending = m_run_sort_ascending;
+        switch (m_run_sort_field) {
+            case RunSortField::Score:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
                     return ascending ? a.score < b.score : a.score > b.score;
                 });
                 break;
-            case SortField::Accuracy:
+            case RunSortField::Accuracy:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
                     return ascending ? a.accuracy < b.accuracy : a.accuracy > b.accuracy;
                 });
                 break;
-            case SortField::Duration:
+            case RunSortField::Duration:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
                     return ascending ? a.duration_seconds < b.duration_seconds : a.duration_seconds > b.duration_seconds;
                 });
                 break;
-            case SortField::Date:
+            case RunSortField::Date:
             default:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
                     return ascending ? a.start_time_ms < b.start_time_ms : a.start_time_ms > b.start_time_ms;
+                });
+                break;
+        }
+    }
+
+    void ScenarioBrowserViewModel::applyScenarioSort(std::vector<application::ScenarioSummary> &summaries) const {
+        const bool ascending = m_scenario_sort_ascending;
+        switch (m_scenario_sort_field) {
+            case ScenarioSortField::RUN_COUNT:
+                std::ranges::stable_sort(summaries, [ascending](const auto &a, const auto &b) {
+                    return ascending ? a.run_count < b.run_count : a.run_count > b.run_count;
+                });
+                break;
+            case ScenarioSortField::LAST_PLAYED:
+                std::ranges::stable_sort(summaries, [ascending](const auto &a, const auto &b) {
+                    return ascending ? a.last_played < b.last_played : a.last_played > b.last_played;
+                });
+                break;
+            case ScenarioSortField::NAME:
+                std::ranges::stable_sort(summaries, [ascending](const auto &a, const auto &b) {
+                    return ascending ? a.scenario_id.name < b.scenario_id.name : a.scenario_id.name > b.scenario_id.name;
                 });
                 break;
         }

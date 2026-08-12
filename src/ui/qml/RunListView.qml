@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 ColumnLayout {
@@ -28,7 +27,6 @@ ColumnLayout {
         Label {
             id: titleLabel
             font.bold: true
-            color: Material.foreground
             Layout.fillWidth: true
         }
 
@@ -50,7 +48,6 @@ ColumnLayout {
 
             Label {
                 text: "Sort:"
-                color: Material.foreground
             }
 
             ComboBox {
@@ -96,6 +93,5 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
         visible: root.hasNoRuns()
         text: root.emptyText
-        color: Material.foreground
     }
 }

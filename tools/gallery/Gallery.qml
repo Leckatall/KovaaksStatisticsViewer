@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 // import QtCore
 import KovaaksStatsViewer
@@ -21,17 +20,15 @@ ApplicationWindow {
     readonly property var settingsVm: gallerySettingsVm
     readonly property var scenarioBrowserVm: galleryScenarioBrowserVm
 
-    Material.theme: Material.Dark
-    Material.accent: Material.Cyan
-    Material.primary: Material.BlueGrey
+    // Mirrors Main.qml's accent.
+    palette.accent: "#00BCD4"
+    palette.highlight: "#00838F"
 
     // Mirrors Main.qml's columnVisibilitySettings; a plain object is enough here.
     property var columnVisibility: ({
         score: true, accuracy: true, shots: true, kills: true, dmg: true,
         scoreTotal: true, expectedFinalScore: true, expectedFinalScoreRecent: true
     })
-
-    background: Rectangle { color: "#121212" }
 
     // A labelled, sized cell. Components like ControlPanel have no implicit
     // size of their own, so every showcase gets explicit dimensions.
@@ -44,15 +41,15 @@ ApplicationWindow {
 
         Label {
             text: parent.label
-            color: "#7FDBFF"
+            color: window.palette.accent
             font.bold: true
             font.pixelSize: 15
         }
         Rectangle {
             Layout.preferredWidth: parent.cellWidth
             Layout.preferredHeight: parent.cellHeight
-            color: "#181818"
-            border.color: "#2A2A2A"
+            color: window.palette.base
+            border.color: window.palette.mid
             radius: 8
             Item {
                 id: holder

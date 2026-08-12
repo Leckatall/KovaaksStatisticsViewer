@@ -42,6 +42,8 @@ namespace ksv::data {
             const domain::ScenarioRunId& run_id) const override;
         [[nodiscard]] std::optional<std::size_t> getRunCount(
             const domain::ScenarioId& scenario) const override;
+        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(
+            const domain::ScenarioId& scenario) const override;
         [[nodiscard]] std::optional<double> getTotalTime(
             const domain::ScenarioId& scenario) const override;
         [[nodiscard]] std::vector<domain::ScenarioPerf> getRecentRuns(std::size_t count) const override;

@@ -113,6 +113,11 @@ namespace ksv::data {
         return m_profile->getRunCount(scenario);
     }
 
+    std::optional<std::chrono::sys_seconds> ProfileService::getLastRunTime(const domain::ScenarioId &scenario) const {
+        if (!m_profile) return std::nullopt;
+        return m_profile->getLastRunTime(scenario);
+    }
+
     std::optional<double> ProfileService::getTotalTime(const domain::ScenarioId &scenario) const {
         if (!m_profile) return std::nullopt;
         return m_profile->getTotalTime(scenario);

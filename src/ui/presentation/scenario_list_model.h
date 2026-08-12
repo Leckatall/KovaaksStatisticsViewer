@@ -24,6 +24,7 @@ namespace ksv::presentation {
             HashRole,
             RunCountRole,
             TotalTimeRole,
+            LastPlayedRole,
         };
 
         explicit ScenarioListModel(QObject *parent = nullptr);

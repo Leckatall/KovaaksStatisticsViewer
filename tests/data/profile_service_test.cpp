@@ -318,6 +318,22 @@ namespace {
         EXPECT_FALSE(profile_service.getRunCount(scenario).has_value());
     }
 
+    TEST_F(ProfileServiceTest, GetLastRunTimeDelegatesToProfile) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100000), make_perf("hash-1", 300000)};
+        profile_service.generateProfileFromDirectory();
+
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        const auto last_played = profile_service.getLastRunTime(scenario);
+
+        ASSERT_TRUE(last_played.has_value());
+        EXPECT_EQ(*last_played, (ksv::domain::ScenarioRunId{.scenario_id = scenario, .start_time = 300000}.startSecond()));
+    }
+
+    TEST_F(ProfileServiceTest, GetLastRunTimeIsNulloptBeforeProfileGenerated) {
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        EXPECT_FALSE(profile_service.getLastRunTime(scenario).has_value());
+    }
+
     TEST_F(ProfileServiceTest, GetTotalTimeDelegatesToProfile) {
         ksv::domain::ScenarioPerf perf_a = make_perf("hash-1", 100);
         perf_a.scenario_length = 10.0F;

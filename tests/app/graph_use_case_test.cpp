@@ -20,6 +20,8 @@ namespace {
 
         void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
 
+        void setCurrentPerfToLatest() override {}
+
         void setCurrentPerf(const std::string &filename) override {
             set_current_perf_filename_calls.push_back(filename);
         }
@@ -36,7 +38,7 @@ namespace {
     };
 
     ScenarioDataPoint make_point(const float time, const int shots, const int hits, const float score) {
-        ScenarioDataPoint point{};
+        auto point = ScenarioDataPoint(time);
         point.time = time;
         point.shots = shots;
         point.hits = hits;

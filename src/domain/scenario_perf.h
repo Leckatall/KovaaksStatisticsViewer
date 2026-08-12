@@ -26,17 +26,19 @@ namespace ksv::domain {
 
     struct ScenarioDataPoint {
         float time;
-        int shots;
-        int hits;
-        int misses;
-        float dmg;
-        float dmg_possible;
-        float score;
-        int kills;
+        int shots = 0;
+        int hits = 0;
+        int misses = 0;
+        float dmg = 0.0F;
+        float dmg_possible = 0.0F;
+        float score = 0.0F;
+        int kills = 0.0F;
+
+        explicit ScenarioDataPoint(const float t) : time(t) {}
     };
 
     struct ScenarioCompletionData {
-        float scenario_time = 0.0F;
+        float scenario_length = 0.0F;
         int shots = 0;
         int hits = 0;
         int misses = 0;
@@ -64,6 +66,11 @@ namespace ksv::domain {
         }
         bool operator<(const ScenarioRunId& other) const {
             return scenario_id < other.scenario_id || (scenario_id == other.scenario_id && start_time < other.start_time);
+        }
+
+        [[nodiscard]] std::chrono::sys_seconds startSecond() const {
+            using namespace std::chrono;
+            return floor<seconds>(sys_time<milliseconds>{milliseconds{start_time}});
         }
 
         [[nodiscard]] std::chrono::sys_days startDay() const {
@@ -97,7 +104,7 @@ namespace ksv::domain {
 
         [[nodiscard]] ScenarioCompletionData getCompletionData() const {
             ScenarioCompletionData completion;
-            completion.scenario_time = scenario_length;
+            completion.scenario_length = scenario_length;
             for (const auto &point: data) {
                 completion.shots += point.shots;
                 completion.hits += point.hits;

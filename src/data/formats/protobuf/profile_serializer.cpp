@@ -62,8 +62,7 @@ namespace ksv::data {
             perf.source_file = run_proto.source_file();
 
             for (const auto &data_point: run_proto.data()) {
-                domain::ScenarioDataPoint point{};
-                point.time = data_point.time();
+                auto point = domain::ScenarioDataPoint(data_point.time());
                 point.shots = data_point.shots();
                 point.hits = data_point.hits();
                 point.misses = data_point.misses();

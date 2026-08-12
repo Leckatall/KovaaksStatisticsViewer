@@ -17,10 +17,10 @@ namespace ksv::domain {
             case KILLS:{
                 if (!std::is_integral_v<T>) throw std::invalid_argument("Value is not an integer");
                 const int v = static_cast<int>(value);
-                if (type == SHOTS) point.shots = v;
-                else if (type == HITS) point.hits = v;
-                else if (type == MISSES) point.misses = v;
-                else point.kills = v;
+                if (type == SHOTS) point.shots += v;
+                else if (type == HITS) point.hits += v;
+                else if (type == MISSES) point.misses += v;
+                else point.kills += v;
                 break;
             }
 
@@ -29,9 +29,9 @@ namespace ksv::domain {
             case SCORE: {
                 if (!std::is_floating_point_v<T>) throw std::invalid_argument("Value is not a floating point");
                 const float v = static_cast<float>(value);
-                if (type == DMG) point.dmg = v;
-                else if (type == DMG_POSSIBLE) point.dmg_possible = v;
-                else point.score = v;
+                if (type == DMG) point.dmg += v;
+                else if (type == DMG_POSSIBLE) point.dmg_possible += v;
+                else point.score += v;
                 break;
             }
 
@@ -46,7 +46,7 @@ namespace ksv::domain {
                 return point;
             }
         }
-        auto point = ScenarioDataPoint{.time = time};
+        const auto point = ScenarioDataPoint(time);
         data.push_back(point);
         return data.back();
     }

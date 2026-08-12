@@ -1,5 +1,4 @@
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 // A labeled, read-only path field (directory or file) with a "Browse..."
@@ -16,7 +15,6 @@ ColumnLayout {
     Label {
         id: titleLabel
         font.bold: true
-        color: Material.foreground
     }
     RowLayout {
         Layout.fillWidth: true

@@ -72,6 +72,10 @@ namespace {
             return it->second;
         }
 
+        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
+            return std::nullopt;
+        }
+
         [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &scenario) const override {
             const auto it = run_count_by_scenario.find(scenario);
             if (it == run_count_by_scenario.end()) return std::nullopt;

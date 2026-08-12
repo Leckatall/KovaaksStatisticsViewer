@@ -39,8 +39,15 @@ TestCase {
         const panel = createPanel()
         const scenarioRuns = findChild(panel, "scenarioRunsView")
         const recentRuns = findChild(panel, "recentRunsView")
-        verify(findChild(recentRuns, "runItem_0") !== null)
+        compare(panel.recentExpanded, false)
+        compare(recentRuns.visible, false)
         compare(scenarioRuns.visible, false)
+
+        const recentToggle = findChild(panel, "recentToggleButton")
+        mouseClick(recentToggle, recentToggle.width / 2, recentToggle.height / 2)
+        wait(0)
+        compare(recentRuns.visible, true)
+        verify(findChild(recentRuns, "runItem_0") !== null)
 
         const scenarioItem = findChild(panel, "scenarioItem_0")
         mouseClick(scenarioItem, scenarioItem.width / 2, scenarioItem.height / 2)
@@ -53,7 +60,12 @@ TestCase {
         const panel = createPanel()
         runSelectedSpy.target = panel
         verify(runSelectedSpy.valid)
+
+        const recentToggle = findChild(panel, "recentToggleButton")
+        mouseClick(recentToggle, recentToggle.width / 2, recentToggle.height / 2)
+        tryVerify(() => findChild(panel, "recentRunsView").visible)
         const recentItem = findChild(findChild(panel, "recentRunsView"), "runItem_0")
+        verify(waitForRendering(recentItem))
         mouseClick(recentItem, recentItem.width / 2, recentItem.height / 2)
         wait(0)
         compare(runSelectedSpy.count, 1)

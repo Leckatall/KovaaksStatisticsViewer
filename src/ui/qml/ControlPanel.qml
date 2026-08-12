@@ -2,8 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
-// TODO: Extract line visbility toggles and put the next to the graph
-//  That's the only part of this component that shouldn't be completely deleted
+// DEPRECATED: This component is deprecated and all functionality should be moved from here
 Frame {
     id: root
     required property var sessionVm
@@ -11,28 +10,6 @@ Frame {
     required property var columnVisibility
 
     ColumnLayout {
-        Text{
-            objectName: "renderingLabel"
-            text: "Rendering: " + root.sessionVm.getCurrentPerfScenario()
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            ComboBox {
-                id: scenarioComboBox
-                model: root.sessionVm.scenario_list
-                enabled: filterByScenarioCheckBox.checked
-                editable: true
-                Layout.fillWidth: true
-            }
-            CheckBox {
-                id: filterByScenarioCheckBox
-                text: "Filter by Scenario"
-                checked: false
-            }
-        }
-        ComboBox {
-            id: displayScenarioModeComboBox
-        }
         Button {
             objectName: "generateProfileButton"
             text: "Generate Profile from current kovaaks dir"
@@ -55,12 +32,11 @@ Frame {
         Button {
             objectName: "loadLatestPerformanceButton"
             text: "Have Graph Load Latest Performance File"
-            onClicked: root.graphVm.fetchData("")
+            onClicked: root.graphVm.fetchLatestData()
         }
 
         Label {
             text: "Lines"
-            color: "white"
         }
         Repeater {
             model: root.graphVm.plottableColumns

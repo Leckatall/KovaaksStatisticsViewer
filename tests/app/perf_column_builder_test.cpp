@@ -13,7 +13,7 @@ using namespace ksv::domain;
 namespace {
     ScenarioDataPoint make_point(const float time, const int shots, const int hits, const float score,
                                   const int kills = 0, const float dmg = 0.0F) {
-        ScenarioDataPoint point{};
+        auto point = ScenarioDataPoint(time);
         point.time = time;
         point.shots = shots;
         point.hits = hits;

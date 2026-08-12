@@ -78,7 +78,7 @@ namespace {
 
         const auto completion = perf.getCompletionData();
 
-        EXPECT_FLOAT_EQ(completion.scenario_time, 60.0F);
+        EXPECT_FLOAT_EQ(completion.scenario_length, 60.0F);
         EXPECT_EQ(completion.shots, 0);
         EXPECT_EQ(completion.hits, 0);
         EXPECT_EQ(completion.misses, 0);
@@ -112,7 +112,7 @@ namespace {
 
         const auto completion = perf.getCompletionData();
 
-        EXPECT_FLOAT_EQ(completion.scenario_time, 60.0F);
+        EXPECT_FLOAT_EQ(completion.scenario_length, 60.0F);
         EXPECT_EQ(completion.shots, 5);
         EXPECT_EQ(completion.hits, 4);
         EXPECT_EQ(completion.misses, 1);
@@ -363,6 +363,22 @@ namespace {
         profile.addScenarioPerf(make_perf("scenario-1", 200));
 
         EXPECT_EQ(profile.getRunCount(ScenarioId{.name = "?", .hash = "scenario-1"}), 2);
+    }
+
+    TEST_F(UserProfileTest, GetLastRunTimeReturnsStartSecondOfMostRecentRun) {
+        UserProfile profile{"default"};
+        profile.addScenarioPerf(make_perf("scenario-1", 300000));
+        profile.addScenarioPerf(make_perf("scenario-1", 100000));
+        profile.addScenarioPerf(make_perf("scenario-1", 200000));
+
+        const auto last_played = profile.getLastRunTime(ScenarioId{.name = "?", .hash = "scenario-1"});
+        ASSERT_TRUE(last_played.has_value());
+        EXPECT_EQ(*last_played, (ScenarioRunId{.scenario_id = {.name = "?", .hash = "scenario-1"}, .start_time = 300000}.startSecond()));
+    }
+
+    TEST_F(UserProfileTest, GetLastRunTimeIsNulloptForUnknownScenario) {
+        const UserProfile profile{"default"};
+        EXPECT_FALSE(profile.getLastRunTime(ScenarioId{.name = "?", .hash = "unknown"}).has_value());
     }
 
     TEST_F(UserProfileTest, GetRollingTimeAverageBucketsByCalendarDayWithGapDays) {

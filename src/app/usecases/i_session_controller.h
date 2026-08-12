@@ -24,6 +24,8 @@ namespace ksv::application {
 
         virtual void generateProfileFromDirectory() const = 0;
 
+        virtual void setCurrentPerfToLatest() = 0;
+
         virtual void setCurrentPerf(const domain::ScenarioPerf &perf) = 0;
 
         virtual void setCurrentPerf(const std::string &filename) = 0;

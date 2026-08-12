@@ -12,8 +12,8 @@ Frame {
     Layout.fillWidth: true
 
     background: Rectangle {
-        border.color: "#2A2A2A"
-        color: "#1E1E1E"
+        border.color: root.palette.mid
+        color: root.palette.base
         radius: 12
     }
 
@@ -24,7 +24,6 @@ Frame {
         Label {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            color: "white"
             font.bold: true
             font.pixelSize: 16
             horizontalAlignment: Text.AlignHCenter

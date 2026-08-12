@@ -5,6 +5,7 @@
 #include "graph_vm.h"
 
 #include <qurl.h>
+#include <QDebug>
 #include <algorithm>
 #include <utility>
 
@@ -153,9 +154,12 @@ namespace ksv::presentation {
         emit boundsChanged();
     }
 
-    void GraphViewModel::fetchData(const QString &scenario_id) {
-        if (!scenario_id.isEmpty()) m_graphUseCase->load_perf(QUrl(scenario_id).toLocalFile().toStdString());
+    void GraphViewModel::fetchLatestData() {
+        m_graphUseCase->load_latest_perf();
+        // fetchData() called through signal
+    }
 
+    void GraphViewModel::fetchData() {
         const QString newTitle = QString::fromStdString(m_graphUseCase->get_run_label());
         if (newTitle != m_scenarioTitle) {
             m_scenarioTitle = newTitle;
@@ -175,5 +179,14 @@ namespace ksv::presentation {
         }
 
         setData(std::move(rows));
+    }
+
+    void GraphViewModel::fetchData(const QString &scenario_id) {
+        if (scenario_id.isEmpty()) {
+            qWarning() << "GraphViewModel::fetchData(scenario_id) called with an empty id; ignoring";
+            return;
+        }
+        m_graphUseCase->load_perf(QUrl(scenario_id).toLocalFile().toStdString());
+        // fetchData() called through signal
     }
 }
