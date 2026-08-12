@@ -34,6 +34,17 @@ namespace ksv::ui {
                           const std::function<QString(qreal)> &formatTick) {
             paint(painter, plot, orientation, boundMin, boundMax, ticks, formatTick, Style{});
         }
+
+        // Pixel extent needed to draw `ticks` without clipping: max label width for Vertical
+        // (reserved on the left), label height for Horizontal (reserved on the bottom).
+        // Uses Style's own font/gap so this can never drift out of sync with paint().
+        static qreal measureLabelExtent(Orientation orientation, const QList<qreal> &ticks,
+                                        const std::function<QString(qreal)> &formatTick,
+                                        const Style &style);
+        static qreal measureLabelExtent(Orientation orientation, const QList<qreal> &ticks,
+                                        const std::function<QString(qreal)> &formatTick) {
+            return measureLabelExtent(orientation, ticks, formatTick, Style{});
+        }
     };
 }
 

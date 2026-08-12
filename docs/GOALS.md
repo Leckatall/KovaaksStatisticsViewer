@@ -130,11 +130,11 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
   - [x] Design a consistent color scheme and typography
   - [ ] Add a dark/light theme toggle
   - [x] Polish graph styling (grid lines, axis labels, tick formatting, legend)
-  - [ ] Add loading indicators for profile generation and data processing
+  - [x] Add loading indicators for profile generation and data processing
   - [ ] Improve layout responsiveness for different window sizes
 
 - [ ] **Graph interaction improvements** `[Medium]` `[Medium]`
   - [ ] Add zoom and pan to graphs
-  - [ ] Improve hover tooltip with more contextual data
-  - [ ] Add ability to toggle individual series on/off
+  - [x] Improve hover tooltip with more contextual data
+  - [x] Add ability to toggle individual series on/off
   - [ ] Support exporting graphs as images

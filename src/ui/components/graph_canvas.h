@@ -9,6 +9,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
+#include <optional>
 #include <qqmlintegration.h>
 
 #include "presentation/graph_vm_base.h"
@@ -62,6 +63,9 @@ namespace ksv::ui {
 
         [[nodiscard]] presentation::AxisModel xAxisFor(const presentation::SeriesModel &series) const;
         [[nodiscard]] presentation::AxisModel yAxisFor(const presentation::SeriesModel &series) const;
+
+        // AxisModel for the series whose ticks are drawn on the y axis, if any is currently labelled.
+        [[nodiscard]] std::optional<presentation::AxisModel> labelledYAxis() const;
 
         [[nodiscard]] static QPointF toPixel(const QPointF &displayPoint, const QRectF &rect,
                                              const presentation::AxisModel &xAxis, const presentation::AxisModel &yAxis);

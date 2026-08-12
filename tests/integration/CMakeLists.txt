@@ -10,6 +10,7 @@ add_executable(integration_tests
     composition_root_test.cpp
     profile_cascade_test.cpp
     graph_canvas_geometry_test.cpp
+    axis_painter_test.cpp
     qml_smoke_test.cpp
     dashboard_ui_test.cpp
 )

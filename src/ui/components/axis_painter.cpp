@@ -5,10 +5,12 @@
 #include "axis_painter.h"
 
 #include <QFont>
+#include <QFontMetricsF>
 #include <QPainter>
 #include <QPen>
 #include <QPointF>
 #include <QString>
+#include <algorithm>
 
 namespace ksv::ui {
     void AxisPainter::paint(QPainter &painter, const QRectF &plot, const Orientation orientation,
@@ -41,5 +43,21 @@ namespace ksv::ui {
                                  Qt::AlignHCenter | Qt::AlignTop, formatTick(value));
             }
         }
+    }
+
+    qreal AxisPainter::measureLabelExtent(const Orientation orientation, const QList<qreal> &ticks,
+                                           const std::function<QString(qreal)> &formatTick,
+                                           const Style &style) {
+        QFont tickFont;
+        tickFont.setPointSize(style.fontPointSize);
+        const QFontMetricsF metrics(tickFont);
+
+        if (orientation == Orientation::Horizontal) return metrics.height();
+
+        qreal maxWidth = 0.0;
+        for (const qreal value: ticks) {
+            maxWidth = std::max(maxWidth, metrics.horizontalAdvance(formatTick(value)));
+        }
+        return maxWidth;
     }
 }

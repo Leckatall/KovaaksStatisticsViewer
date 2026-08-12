@@ -6,6 +6,7 @@
 
 #include <QColor>
 #include <QPainter>
+#include <algorithm>
 #include <limits>
 
 #include "axis_painter.h"
@@ -13,11 +14,13 @@
 
 namespace ksv::ui {
     namespace {
-        constexpr qreal kLeftMargin = 40;
-        constexpr qreal kBottomMargin = 28;
+        constexpr qreal kMinLeftMargin = 20;
+        constexpr qreal kMinBottomMargin = 16;
         constexpr qreal kTopMargin = 10;
         constexpr qreal kRightMargin = 10;
         constexpr qreal kHoverRadius = 10;
+        // Matches the fudge AxisPainter::paint already bakes into its label rects.
+        const qreal kLabelExtentPadding = AxisPainter::Style{}.labelGap + 2;
     }
 
     GraphCanvas::GraphCanvas(QQuickItem *parent) : QQuickPaintedItem(parent) {
@@ -31,11 +34,18 @@ namespace ksv::ui {
         if (m_graphVm) m_graphVm->disconnect(this);
         m_graphVm = graphVm;
         if (m_graphVm) {
-            connect(m_graphVm, &presentation::GraphViewModelBase::dataUpdated, this, [this] { update(); });
-            connect(m_graphVm, &presentation::GraphViewModelBase::boundsChanged, this, [this] { update(); });
+            connect(m_graphVm, &presentation::GraphViewModelBase::dataUpdated, this, [this] {
+                emit plotAreaChanged();
+                update();
+            });
+            connect(m_graphVm, &presentation::GraphViewModelBase::boundsChanged, this, [this] {
+                emit plotAreaChanged();
+                update();
+            });
         }
         emit graphVmChanged();
         emit labelledYAxisColumnChanged();
+        emit plotAreaChanged();
         update();
     }
 
@@ -44,6 +54,7 @@ namespace ksv::ui {
         m_visibleColumns = visibleColumns;
         emit visibleColumnsChanged();
         emit labelledYAxisColumnChanged();
+        emit plotAreaChanged();
         update();
     }
 
@@ -52,6 +63,7 @@ namespace ksv::ui {
         m_yAxisColumn = yAxisColumn;
         emit yAxisColumnChanged();
         emit labelledYAxisColumnChanged();
+        emit plotAreaChanged();
         update();
     }
 
@@ -69,10 +81,32 @@ namespace ksv::ui {
         return ids;
     }
 
+    std::optional<presentation::AxisModel> GraphCanvas::labelledYAxis() const {
+        if (!m_graphVm) return std::nullopt;
+        const auto labelled = m_graphVm->series({labelledYAxisColumn()});
+        if (labelled.isEmpty()) return std::nullopt;
+        return yAxisFor(labelled.front());
+    }
+
     QRectF GraphCanvas::plotRect() const {
-        return {kLeftMargin, kTopMargin,
-                qMax(0.0, width() - kLeftMargin - kRightMargin),
-                qMax(0.0, height() - kTopMargin - kBottomMargin)};
+        qreal leftMargin = kMinLeftMargin;
+        qreal bottomMargin = kMinBottomMargin;
+
+        if (m_graphVm) {
+            if (const auto yAxis = labelledYAxis()) {
+                leftMargin = std::max(kMinLeftMargin,
+                    AxisPainter::measureLabelExtent(AxisPainter::Orientation::Vertical, yAxis->ticks(),
+                        [&yAxis](const qreal v) { return yAxis->formatTick(v); }) + kLabelExtentPadding);
+            }
+            const presentation::AxisModel xAxis = m_graphVm->xAxis();
+            bottomMargin = std::max(kMinBottomMargin,
+                AxisPainter::measureLabelExtent(AxisPainter::Orientation::Horizontal, xAxis.ticks(),
+                    [&xAxis](const qreal v) { return xAxis.formatTick(v); }) + kLabelExtentPadding);
+        }
+
+        return {leftMargin, kTopMargin,
+                qMax(0.0, width() - leftMargin - kRightMargin),
+                qMax(0.0, height() - kTopMargin - bottomMargin)};
     }
 
     presentation::AxisModel GraphCanvas::xAxisFor(const presentation::SeriesModel &series) const {
@@ -92,15 +126,13 @@ namespace ksv::ui {
 
     void GraphCanvas::drawAxes(QPainter *painter, const QRectF &rect) const {
         if (!m_graphVm) return;
-        const auto labelled = m_graphVm->series({labelledYAxisColumn()});
         const presentation::AxisModel xAxis = m_graphVm->xAxis();
 
         // Only one series' Y axis gets labels; all project against their own axis
-        if (!labelled.isEmpty()) {
-            const presentation::AxisModel yAxis = yAxisFor(labelled.front());
+        if (const auto yAxis = labelledYAxis()) {
             AxisPainter::paint(*painter, rect, AxisPainter::Orientation::Vertical,
-                                yAxis.min(), yAxis.max(), yAxis.ticks(),
-                                [&yAxis](const qreal v) { return yAxis.formatTick(v); });
+                                yAxis->min(), yAxis->max(), yAxis->ticks(),
+                                [&yAxis](const qreal v) { return yAxis->formatTick(v); });
         }
         AxisPainter::paint(*painter, rect, AxisPainter::Orientation::Horizontal,
                             xAxis.min(), xAxis.max(), xAxis.ticks(),

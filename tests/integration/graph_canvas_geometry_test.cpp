@@ -158,6 +158,56 @@ namespace {
         EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), graphVm->yAxisColumn());
     }
 
+    // Minimal VM whose y-range is caller-controlled, to compare margins for narrow vs. wide tick text.
+    class FixedRangeVm : public presentation::GraphViewModelBase {
+    public:
+        explicit FixedRangeVm(const qreal yHi) : m_yHi(yHi) {}
+
+        [[nodiscard]] QList<presentation::SeriesModel> series(const QList<int> &) const override {
+            presentation::SeriesModel s;
+            s.name = "Value";
+            s.points = {QPointF(0.0, 0.0), QPointF(10.0, m_yHi)};
+            return {s};
+        }
+        [[nodiscard]] presentation::AxisModel xAxis() const override {
+            return presentation::AxisModel::forRange(0.0, 10.0);
+        }
+        [[nodiscard]] QVariantList plottableColumns() const override { return {0}; }
+        [[nodiscard]] QVariantMap axisBounds() const override { return {}; }
+        [[nodiscard]] QList<qreal> axisTicks(int) const override { return {}; }
+        [[nodiscard]] QList<QPointF> seriesPoints(int) const override { return {}; }
+        [[nodiscard]] QString columnName(int) const override { return "Value"; }
+        [[nodiscard]] QColor columnColor(int) const override { return {}; }
+        [[nodiscard]] QString columnKey(int) const override { return "value"; }
+        [[nodiscard]] int xColumn() const override { return 0; }
+        [[nodiscard]] int yAxisColumn() const override { return 0; }
+
+    private:
+        qreal m_yHi;
+    };
+
+    TEST_F(GraphCanvasGeometryTest, LeftMarginGrowsWithWiderTickLabels) {
+        FixedRangeVm narrowVm(1.0);
+        GraphCanvas narrowCanvas;
+        narrowCanvas.setWidth(800);
+        narrowCanvas.setHeight(600);
+        narrowCanvas.setGraphVm(&narrowVm);
+        narrowCanvas.setVisibleColumns(QVariantList{0});
+
+        FixedRangeVm wideVm(123456.0);
+        GraphCanvas wideCanvas;
+        wideCanvas.setWidth(800);
+        wideCanvas.setHeight(600);
+        wideCanvas.setGraphVm(&wideVm);
+        wideCanvas.setVisibleColumns(QVariantList{0});
+
+        const qreal narrowLeft = narrowCanvas.property("plotArea").toRectF().left();
+        const qreal wideLeft = wideCanvas.property("plotArea").toRectF().left();
+
+        EXPECT_GT(wideLeft, narrowLeft)
+            << "left margin should grow to fit wider y-axis tick text instead of staying fixed";
+    }
+
     TEST_F(GraphCanvasGeometryTest, DrawnAxisReflectsSelectedYAxisColumn) {
         canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Score),
                                                static_cast<int>(GraphViewModel::Accuracy)});
