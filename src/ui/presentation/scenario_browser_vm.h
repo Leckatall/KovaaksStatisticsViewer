@@ -32,7 +32,7 @@ namespace ksv::presentation {
         Q_ENUM(RunSortField)
 
         enum ScenarioSortField {
-            RUN_COUNT = 0, LAST_PLAYED, NAME
+            LAST_PLAYED = 0, RUN_COUNT, NAME
         };
         Q_ENUM(ScenarioSortField)
 
@@ -73,7 +73,7 @@ namespace ksv::presentation {
         QString m_active_scenario_hash;
         QString m_active_scenario_name;
         RunSortField m_run_sort_field = RunSortField::Date;
-        ScenarioSortField m_scenario_sort_field = ScenarioSortField::RUN_COUNT;
+        ScenarioSortField m_scenario_sort_field = ScenarioSortField::LAST_PLAYED;
         bool m_run_sort_ascending = false;
         bool m_scenario_sort_ascending = false;
     };

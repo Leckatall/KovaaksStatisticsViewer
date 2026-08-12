@@ -4,104 +4,123 @@ import QtQuick.Layouts
 
 ColumnLayout {
     id: root
-    spacing: 6
 
+    property string currentScenarioHash
+    property string emptyText: "No scenarios"
     property var scenarioModel
     property alias searchText: searchField.text
-    property string emptyText: "No scenarios"
-    property string currentScenarioHash
     property bool showSort: true
-    property int sortField: 0
     property bool sortAscending: false
-    signal searchEdited(string text)
+    property int sortField: 0
+
     signal scenarioActivated(string hash, string name)
     signal scenarioSortRequested(int field, bool ascending)
+    signal searchEdited(string text)
 
-    TextField {
-        id: searchField
-        objectName: "scenarioSearchField"
-        Layout.fillWidth: true
-        placeholderText: "Search scenarios…"
-        onTextEdited: root.searchEdited(text)
+    spacing: 6
+
+    RowLayout {
+        TextField {
+            id: searchField
+
+            Layout.fillWidth: true
+
+            objectName: "scenarioSearchField"
+            placeholderText: "Search scenarios…"
+
+            onTextEdited: root.searchEdited(text)
+        }
+        GridLayout {
+            id: searchSortControls
+            rowSpacing: 0
+            Label {
+                Layout.columnSpan: 2
+                Layout.row: 0
+                Layout.alignment: Qt.AlignCenter
+                text: "Sort By:"
+            }
+            ComboBox {
+                id: sortCombo
+
+                Layout.column: 0
+                Layout.row: 1
+                currentIndex: root.sortField
+                model: ["Last Played", "Runs", "Name"]
+                objectName: "scenarioSortCombo"
+
+                onActivated: index => {
+                    root.sortField = index;
+                    root.scenarioSortRequested(root.sortField, root.sortAscending);
+                }
+            }
+            ToolButton {
+                id: sortDirectionButton
+
+                Layout.column: 1
+                Layout.row: 1
+                objectName: "scenarioSortDirectionButton"
+                text: root.sortAscending ? "▲" : "▼"
+
+                onClicked: {
+                    root.sortAscending = !root.sortAscending;
+                    root.scenarioSortRequested(root.sortField, root.sortAscending);
+                }
+            }
+        }
     }
-
-    Loader {
-        // Deferred for the same reason as RunListView's sort controls: instantiating
-        // the ComboBox/Popup machinery while hidden interferes with unrelated mouse
-        // clicks elsewhere in the window.
-        active: root.showSort && root.visible
-        sourceComponent: sortControlsComponent
-    }
-
     Component {
         id: sortControlsComponent
 
         RowLayout {
             spacing: 4
-
-            Label {
-                text: "Sort:"
-            }
-
-            ComboBox {
-                id: sortCombo
-                objectName: "scenarioSortCombo"
-                model: ["Runs", "Last Played", "Name"]
-                currentIndex: root.sortField
-                onActivated: (index) => {
-                    root.sortField = index
-                    root.scenarioSortRequested(root.sortField, root.sortAscending)
-                }
-            }
-
-            ToolButton {
-                id: sortDirectionButton
-                objectName: "scenarioSortDirectionButton"
-                text: root.sortAscending ? "▲" : "▼"
-                onClicked: {
-                    root.sortAscending = !root.sortAscending
-                    root.scenarioSortRequested(root.sortField, root.sortAscending)
-                }
-            }
         }
     }
-
     ListView {
         id: scenarioList
-        objectName: "scenarioListView"
-        Layout.fillWidth: true
+
         Layout.fillHeight: true
+        Layout.fillWidth: true
         Layout.minimumHeight: 100
         clip: true
-        model: root.scenarioModel
         currentIndex: -1
+        model: root.scenarioModel
+        objectName: "scenarioListView"
 
         delegate: ItemDelegate {
             id: delegateRoot
-            objectName: "scenarioItem_" + index
-            width: ListView.view.width
-            implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
-            highlighted: root.currentScenarioHash === hash
+
+            required property string hash
             required property int index
             required property string name
-            required property string hash
             required property int runCount
 
+            highlighted: root.currentScenarioHash === hash
+            implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
+            objectName: "scenarioItem_" + index
+            width: ListView.view.width
+
             contentItem: RowLayout {
-                Label { Layout.fillWidth: true; text: delegateRoot.name; elide: Text.ElideRight }
-                Label { text: delegateRoot.runCount; opacity: 0.65 }
+                Label {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    text: delegateRoot.name
+                }
+                Label {
+                    opacity: 0.65
+                    text: delegateRoot.runCount
+                }
             }
+
             onClicked: {
-                root.currentScenarioHash = hash
-                root.scenarioActivated(hash, name)
+                root.currentScenarioHash = hash;
+                root.scenarioActivated(hash, name);
             }
         }
     }
-
     Label {
-        objectName: "scenarioListEmptyLabel"
         Layout.alignment: Qt.AlignHCenter
-        visible: !root.scenarioModel || root.scenarioModel.count === 0
+        objectName: "scenarioListEmptyLabel"
         text: root.emptyText
+        visible: !root.scenarioModel || root.scenarioModel.count === 0
     }
 }
