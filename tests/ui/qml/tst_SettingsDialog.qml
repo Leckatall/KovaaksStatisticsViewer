@@ -28,6 +28,15 @@ TestCase {
         return TestDoubles.makeFakeGraphVm()
     }
 
+    function makeFakeSessionVm(overrides) {
+        return Object.assign({
+            generateProfileCalls: 0,
+            generateProfile: function () { this.generateProfileCalls++ },
+            profileBuildInProgress: false,
+            profileBuildProgress: 0
+        }, overrides)
+    }
+
     // TestCase.findChild doesn't reliably reach items nested under
     // StackLayout pages / ListView delegates in this tree (confirmed by
     // inspection: the target items exist, are visible, but findChild still
@@ -71,6 +80,7 @@ TestCase {
     function test_kovaaksDirField_showsSettingsVmDirWithoutFileScheme() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({kovaaksDir: "file:///D:/CustomDir"}),
+            sessionVm: makeFakeSessionVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
         })
@@ -83,6 +93,7 @@ TestCase {
     function test_directoriesCategory_showsProfilePathAndLoadedState() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profilePath: "file:///D:/CustomProfile/profile_cache.pb", profileLoaded: true}),
+            sessionVm: makeFakeSessionVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
         })
@@ -99,6 +110,7 @@ TestCase {
     function test_directoriesCategory_showsNotLoadedWhenProfileVmReportsFalse() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profileLoaded: false}),
+            sessionVm: makeFakeSessionVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
         })
@@ -108,9 +120,66 @@ TestCase {
         compare(statusLabel.text, "Profile status: Not loaded", "profileLoadedLabel should reflect settingsVm.profileLoaded === false")
     }
 
+    function test_generateProfileButton_delegatesToSessionVm() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({})
+        })
+
+        const button = findByObjectName(dialog.contentItem, "generateProfileButton")
+        verify(button !== null, "no button named 'generateProfileButton' found in SettingsDialog Profile category")
+        mouseClick(button)
+
+        compare(dialog.sessionVm.generateProfileCalls, 1, "clicking generateProfileButton should call sessionVm.generateProfile() once")
+    }
+
+    function test_profileBuildProgressBar_hiddenWhenNoBuildIsRunning() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({})
+        })
+
+        const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
+        verify(bar !== null, "no progress bar named 'profileBuildProgressBar' found in SettingsDialog Profile category")
+        compare(bar.visible, false, "the progress bar should be hidden while no build is running")
+    }
+
+    function test_profileBuildProgressBar_showsProgressWhileBuilding() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4}),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({})
+        })
+
+        const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
+        verify(bar !== null, "no progress bar named 'profileBuildProgressBar' found in SettingsDialog Profile category")
+        compare(bar.visible, true, "the progress bar should be visible while a build is running")
+        compare(bar.value, 0.4, "the progress bar should bind to sessionVm.profileBuildProgress")
+        compare(bar.indeterminate, false, "a known fraction should not render as indeterminate")
+    }
+
+    // The file count is only known once the first per-file report lands.
+    function test_profileBuildProgressBar_indeterminateBeforeTheFirstReport() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true}),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({})
+        })
+
+        const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
+        compare(bar.indeterminate, true, "a build with no progress yet should render as indeterminate")
+    }
+
     function test_columnVisibilityCheckBoxes_reflectColumnVisibility() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({score: false, accuracy: true})
         })
@@ -128,6 +197,7 @@ TestCase {
     function test_togglingColumnVisibilityCheckBox_updatesColumnVisibility() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({score: false, accuracy: true})
         })
@@ -145,6 +215,7 @@ TestCase {
     function test_categoryList_startsOnDirectories() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
         })
@@ -155,6 +226,7 @@ TestCase {
     function test_clickingCategoryItem_switchesCurrentCategory() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
         })

@@ -92,7 +92,6 @@ ApplicationWindow {
                 cellWidth: 440; cellHeight: 480
                 ControlPanel {
                     anchors.fill: parent
-                    sessionVm: window.sessionVm
                     graphVm: window.graphVm
                     columnVisibility: window.columnVisibility
                 }
@@ -204,6 +203,7 @@ ApplicationWindow {
     SettingsDialog {
         id: settingsDialog
         settingsVm: window.settingsVm
+        sessionVm: window.sessionVm
         graphVm: window.graphVm
         columnVisibility: window.columnVisibility
     }

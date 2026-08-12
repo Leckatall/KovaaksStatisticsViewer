@@ -57,6 +57,7 @@ ApplicationWindow {
     SettingsDialog {
         id: settingsDialog
         settingsVm: root.settingsVm
+        sessionVm: root.sessionVm
         graphVm: root.graphVm
         columnVisibility: columnVisibilitySettings
     }
@@ -70,13 +71,6 @@ ApplicationWindow {
     GridLayout {
         anchors.fill: parent
         anchors.margins: 5
-        Label {
-            Layout.row: 0; Layout.column: 0
-            Layout.columnSpan: 3
-            text: "Dashboard"
-            font.pixelSize: 24
-            font.bold: true
-        }
 
         ColumnLayout {
             Layout.row: 1; Layout.column: 2
@@ -97,7 +91,6 @@ ApplicationWindow {
         }
         ControlPanel {
             Layout.row: 1; Layout.column: 1
-            sessionVm: root.sessionVm
             graphVm: root.graphVm
             columnVisibility: columnVisibilitySettings
         }
