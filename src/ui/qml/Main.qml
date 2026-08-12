@@ -80,6 +80,10 @@ ApplicationWindow {
         graphAxisSettings: graphAxisSettings
     }
 
+    AboutDialog {
+        id: aboutDialog
+    }
+
     menuBar: AppMenuBar {
         graphVm: root.graphVm
         columnVisibility: columnVisibilitySettings
@@ -87,6 +91,8 @@ ApplicationWindow {
         onSetSourceDirRequested: folderDialog.open()
         onSettingsRequested: settingsDialog.open()
         onLoadPerformanceFileRequested: perfFileDialog.open()
+        onQuitRequested: Qt.quit()
+        onAboutRequested: aboutDialog.open()
     }
 
     GridLayout {

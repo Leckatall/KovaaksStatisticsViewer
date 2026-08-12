@@ -79,6 +79,34 @@ TestCase {
         compare(emitted, 1, "settingsRequested should fire exactly once when its action is triggered")
     }
 
+    function test_quitRequested_emittedWhenActionTriggered() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        verify(menuBar !== null, "AppMenuBar failed to instantiate")
+
+        let emitted = 0
+        menuBar.quitRequested.connect(() => emitted++)
+
+        const item = findMenuItemByText(menuBar.menuAt(0), "&Quit")
+        verify(item !== null, "no menu item with text '&Quit' found in menuAt(0)")
+        item.action.trigger()
+
+        compare(emitted, 1, "quitRequested should fire exactly once when its action is triggered")
+    }
+
+    function test_aboutRequested_emittedWhenActionTriggered() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        verify(menuBar !== null, "AppMenuBar failed to instantiate")
+
+        let emitted = 0
+        menuBar.aboutRequested.connect(() => emitted++)
+
+        const item = findMenuItemByText(menuBar.menuAt(2), "&About")
+        verify(item !== null, "no menu item with text '&About' found in menuAt(2)")
+        item.action.trigger()
+
+        compare(emitted, 1, "aboutRequested should fire exactly once when its action is triggered")
+    }
+
     function test_unrelatedActions_doNotEmitEitherSignal() {
         const menuBar = createTemporaryObject(menuBarComponent, testCase)
         verify(menuBar !== null, "AppMenuBar failed to instantiate")

@@ -11,12 +11,11 @@ MenuBar {
     signal setSourceDirRequested()
     signal settingsRequested()
     signal loadPerformanceFileRequested()
+    signal quitRequested()
+    signal aboutRequested()
 
     Menu {
         title: qsTr("&File")
-        Action {
-            text: qsTr("&New...")
-        }
         Action {
             id: setSoruceDirAction
             text: qsTr("Set Source &Directory")
@@ -43,6 +42,7 @@ MenuBar {
         }
         Action {
             text: qsTr("&Quit")
+            onTriggered: quitRequested()
         }
     }
     Menu {
@@ -109,6 +109,7 @@ MenuBar {
         title: qsTr("&Help")
         Action {
             text: qsTr("&About")
+            onTriggered: aboutRequested()
         }
     }
 }

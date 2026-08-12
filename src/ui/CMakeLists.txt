@@ -30,6 +30,7 @@ qt_add_qml_module(ksv_ui
             qml/ScenarioRunItem.qml
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
+            qml/AboutDialog.qml
             qml/DirectoryPickerRow.qml
         SOURCES
             presentation/axis_model.h
