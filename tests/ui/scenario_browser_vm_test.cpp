@@ -282,6 +282,22 @@ namespace {
         EXPECT_EQ(asListModel(view_model)->rowCount(), 1);
     }
 
+    TEST_F(ScenarioBrowserViewModelTest, CurrentRunIdentityTracksCurrentPerf) {
+        fake_controller->current_perf.run_id = make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F).run_id;
+        ScenarioBrowserViewModel view_model(fake_controller);
+        const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::currentRunChanged);
+
+        EXPECT_EQ(view_model.currentRunHash(), QString("hash-2"));
+        EXPECT_EQ(view_model.currentRunStartTimeMs(), 1000.0);
+
+        fake_controller->current_perf.run_id = make_run("Pasu", "hash-3", 2000, 8000.0F, 0.9F).run_id;
+        emit fake_controller->currentPerfChanged();
+
+        EXPECT_EQ(view_model.currentRunHash(), QString("hash-3"));
+        EXPECT_EQ(view_model.currentRunStartTimeMs(), 2000.0);
+        EXPECT_EQ(spy.count(), 1);
+    }
+
     TEST_F(ScenarioBrowserViewModelTest, LongestScenarioNameIsTakenFromTheWholeCatalogue) {
         fake_controller->scenario_summaries = {
             make_summary("Microshot", "hash-2"),

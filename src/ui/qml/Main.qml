@@ -145,6 +145,8 @@ ApplicationWindow {
                 scenarioBrowserSectionVisible: viewSettings.scenarioBrowserSectionVisible
                 widestScenarioName: root.scenarioBrowserVm.longestScenarioName
                 maximumPanelWidth: root.width / 3
+                currentRunHash: root.scenarioBrowserVm.currentRunHash
+                currentRunStartTimeMs: root.scenarioBrowserVm.currentRunStartTimeMs
                 scenarioModel: root.scenarioBrowserVm.scenarioModel
                 runModel: root.scenarioBrowserVm.runModel
                 recentRunModel: root.scenarioBrowserVm.recentRunsModel
