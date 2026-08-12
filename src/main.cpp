@@ -20,8 +20,10 @@ int main(int argc, char *argv[]) {
     QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer");
+    QCoreApplication::setApplicationVersion(KSV_VERSION);
     QGuiApplication::setOrganizationName("Lecka");
     QGuiApplication::setApplicationName("KovaaksStatsViewer");
+    QGuiApplication::setApplicationVersion(KSV_VERSION);
     ksv::application::App app;
     if (app.start() != 0) return -1;
 

@@ -54,6 +54,8 @@ add_executable(ksv
 )
 
 
+target_compile_definitions(ksv PRIVATE KSV_VERSION="${KSV_VERSION}")
+
 # Link libraries to main executable
 target_link_libraries(ksv PRIVATE
         Qt6::Core
