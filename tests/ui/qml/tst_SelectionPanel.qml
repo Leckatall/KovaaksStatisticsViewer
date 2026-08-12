@@ -116,4 +116,37 @@ TestCase {
         compare(runSelectedSpy.count, 2)
         compare(runSelectedSpy.signalArguments[1][0], "a")
     }
+
+    function test_recentSectionVisibleFalse_hidesToggleButtonAndList() {
+        const panel = createPanel()
+        const recentToggle = findChild(panel, "recentToggleButton")
+        mouseClick(recentToggle, recentToggle.width / 2, recentToggle.height / 2)
+        wait(0)
+        compare(findChild(panel, "recentRunsView").visible, true)
+
+        panel.recentSectionVisible = false
+        wait(0)
+        compare(recentToggle.visible, false)
+        compare(findChild(panel, "recentRunsView").visible, false, "recentExpanded stays true but the section is hidden")
+    }
+
+    function test_scenarioBrowserSectionVisibleFalse_hidesSearchPanelAndAndsIntoRunListGate() {
+        const panel = createPanel()
+        const scenarioItem = findChild(panel, "scenarioItem_0")
+        mouseClick(scenarioItem, scenarioItem.width / 2, scenarioItem.height / 2)
+        wait(0)
+        compare(panel.activeScenarioName, "Scenario A")
+        compare(findChild(panel, "scenarioRunsView").visible, true)
+
+        panel.scenarioBrowserSectionVisible = false
+        wait(0)
+        compare(findChild(panel, "scenarioSearchPanel").visible, false)
+        compare(findChild(panel, "scenarioRunsView").visible, false,
+                "activeScenarioName is still set but the section is hidden")
+
+        panel.scenarioBrowserSectionVisible = true
+        wait(0)
+        compare(findChild(panel, "scenarioSearchPanel").visible, true)
+        compare(findChild(panel, "scenarioRunsView").visible, true)
+    }
 }

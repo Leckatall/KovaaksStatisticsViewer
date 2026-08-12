@@ -12,6 +12,8 @@ ColumnLayout {
     property alias searchText: scenarioSearch.searchText
     property string activeScenarioName
     property bool recentExpanded: false
+    property bool recentSectionVisible: true
+    property bool scenarioBrowserSectionVisible: true
     // The panel is sized to the widest name in the whole scenario catalogue, not to
     // whatever happens to be listed or selected right now, so clicking around never
     // resizes it. Both inputs come from Main.qml.
@@ -45,6 +47,7 @@ ColumnLayout {
     ToolButton {
         objectName: "recentToggleButton"
         Layout.fillWidth: true
+        visible: root.recentSectionVisible
         text: (root.recentExpanded ? "▾" : "▸") + " Recent"
         onClicked: root.recentExpanded = !root.recentExpanded
     }
@@ -55,7 +58,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: root.recentExpanded ? 180 : 0
         Layout.maximumHeight: root.height / 2
-        visible: root.recentExpanded
+        visible: root.recentExpanded && root.recentSectionVisible
         title: ""
         showSort: false
         runModel: root.recentRunModel
@@ -64,7 +67,9 @@ ColumnLayout {
 
     ScenarioSearchPanel {
         id: scenarioSearch
+        objectName: "scenarioSearchPanel"
         Layout.fillWidth: true
+        visible: root.scenarioBrowserSectionVisible
         Layout.fillHeight: root.activeScenarioName === ""
         Layout.preferredHeight: root.activeScenarioName === "" ? 0 : 180
         scenarioModel: root.scenarioModel
@@ -82,7 +87,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: visible ? 220 : 0
         title: root.activeScenarioName
-        visible: root.activeScenarioName !== ""
+        visible: root.activeScenarioName !== "" && root.scenarioBrowserSectionVisible
         runModel: root.runModel
         onRunSelected: (hash, startTimeMs) => root.runSelected(hash, startTimeMs)
         onSortRequested: (field, ascending) => root.sortRequested(field, ascending)

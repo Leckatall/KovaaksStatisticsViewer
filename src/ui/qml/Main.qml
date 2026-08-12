@@ -35,6 +35,17 @@ ApplicationWindow {
         property bool expectedFinalScoreRecent: true
     }
 
+    Settings {
+        id: viewSettings
+        category: "view"
+        property bool scenarioGraphVisible: true
+        property bool playtimeGraphVisible: true
+        property bool controlPanelVisible: true
+        property bool selectionPanelVisible: true
+        property bool recentRunsSectionVisible: true
+        property bool scenarioBrowserSectionVisible: true
+    }
+
     required property var graphVm
     required property var playtimeVm
     required property var sessionVm
@@ -63,6 +74,9 @@ ApplicationWindow {
     }
 
     menuBar: AppMenuBar {
+        graphVm: root.graphVm
+        columnVisibility: columnVisibilitySettings
+        viewSettings: viewSettings
         onSetSourceDirRequested: folderDialog.open()
         onSettingsRequested: settingsDialog.open()
         onLoadPerformanceFileRequested: perfFileDialog.open()
@@ -80,23 +94,29 @@ ApplicationWindow {
             DashboardGraphCanvas {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                visible: viewSettings.scenarioGraphVisible
                 graphVm: root.graphVm
                 columnVisibility: columnVisibilitySettings
             }
             PlaytimeGraphPanel {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                visible: viewSettings.playtimeGraphVisible
                 playtimeVm: root.playtimeVm
             }
         }
         ControlPanel {
             Layout.row: 1; Layout.column: 1
+            visible: viewSettings.controlPanelVisible
             graphVm: root.graphVm
             columnVisibility: columnVisibilitySettings
         }
         SelectionPanel {
             Layout.row: 1; Layout.column: 0
             Layout.fillHeight: true
+            visible: viewSettings.selectionPanelVisible
+            recentSectionVisible: viewSettings.recentRunsSectionVisible
+            scenarioBrowserSectionVisible: viewSettings.scenarioBrowserSectionVisible
             widestScenarioName: root.scenarioBrowserVm.longestScenarioName
             maximumPanelWidth: root.width / 3
             scenarioModel: root.scenarioBrowserVm.scenarioModel

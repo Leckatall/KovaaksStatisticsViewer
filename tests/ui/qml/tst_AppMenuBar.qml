@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../../src/ui/qml"
+import "TestDoubles.js" as TestDoubles
 
 TestCase {
     id: testCase
@@ -10,6 +11,34 @@ TestCase {
         id: menuBarComponent
         AppMenuBar {}
     }
+
+    QtObject {
+        id: fakeViewSettings
+        property bool scenarioGraphVisible: true
+        property bool playtimeGraphVisible: true
+        property bool controlPanelVisible: true
+        property bool selectionPanelVisible: true
+        property bool recentRunsSectionVisible: true
+        property bool scenarioBrowserSectionVisible: true
+    }
+
+    QtObject {
+        id: fakeColumnVisibility
+        property bool score: true
+        property bool accuracy: true
+    }
+
+    readonly property var fakeGraphVm: TestDoubles.makeFakeGraphVm()
+
+    Component {
+        id: wiredMenuBarComponent
+        AppMenuBar {
+            graphVm: fakeGraphVm
+            columnVisibility: fakeColumnVisibility
+            viewSettings: fakeViewSettings
+        }
+    }
+
 
     // Menu items created from a bare `Action { ... }` child are wrapped by
     // Menu into a MenuItem exposing `.action`; find them by label instead of
@@ -79,5 +108,92 @@ TestCase {
         item.action.trigger()
 
         compare(emitted, 1, "loadPerformanceFileRequested should fire exactly once when its action is triggered")
+    }
+
+    function test_masterToggleActions_readAndWriteViewSettings() {
+        fakeViewSettings.scenarioGraphVisible = true
+        fakeViewSettings.playtimeGraphVisible = true
+        fakeViewSettings.controlPanelVisible = true
+        fakeViewSettings.selectionPanelVisible = true
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        verify(menuBar !== null, "AppMenuBar failed to instantiate")
+        const viewMenu = menuBar.menuAt(1)
+
+        const scenarioGraphItem = findMenuItemByText(viewMenu, "Scenario Graph")
+        verify(scenarioGraphItem !== null)
+        compare(scenarioGraphItem.action.checked, true)
+        scenarioGraphItem.action.trigger()
+        compare(fakeViewSettings.scenarioGraphVisible, false, "triggering the checkable action should flip viewSettings")
+
+        const playtimeItem = findMenuItemByText(viewMenu, "Playtime Graph")
+        verify(playtimeItem !== null)
+        playtimeItem.action.trigger()
+        compare(fakeViewSettings.playtimeGraphVisible, false)
+
+        const controlPanelItem = findMenuItemByText(viewMenu, "Control Panel")
+        verify(controlPanelItem !== null)
+        controlPanelItem.action.trigger()
+        compare(fakeViewSettings.controlPanelVisible, false)
+
+        const selectionPanelItem = findMenuItemByText(viewMenu, "Selection Panel")
+        verify(selectionPanelItem !== null)
+        selectionPanelItem.action.trigger()
+        compare(fakeViewSettings.selectionPanelVisible, false)
+    }
+
+    function test_scenarioGraphLinesSubmenu_enabledTracksMasterToggle() {
+        fakeViewSettings.scenarioGraphVisible = true
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
+        verify(linesMenu !== null, "scenarioGraphLinesMenu not found")
+        compare(linesMenu.enabled, true)
+
+        fakeViewSettings.scenarioGraphVisible = false
+        compare(linesMenu.enabled, false)
+    }
+
+    function test_selectionPanelSectionsSubmenu_enabledTracksMasterToggle() {
+        fakeViewSettings.selectionPanelVisible = true
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const sectionsMenu = findChild(menuBar, "selectionPanelSectionsMenu")
+        verify(sectionsMenu !== null, "selectionPanelSectionsMenu not found")
+        compare(sectionsMenu.enabled, true)
+
+        fakeViewSettings.selectionPanelVisible = false
+        compare(sectionsMenu.enabled, false)
+    }
+
+    function test_selectionPanelSectionItems_reflectViewSettings() {
+        fakeViewSettings.recentRunsSectionVisible = true
+        fakeViewSettings.scenarioBrowserSectionVisible = false
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const sectionsMenu = findChild(menuBar, "selectionPanelSectionsMenu")
+
+        const recentItem = findMenuItemByText(sectionsMenu, "Recent Runs")
+        const browserItem = findMenuItemByText(sectionsMenu, "Scenario Browser")
+        verify(recentItem !== null)
+        verify(browserItem !== null)
+        compare(recentItem.checked, true)
+        compare(browserItem.checked, false)
+
+        fakeViewSettings.scenarioBrowserSectionVisible = true
+        compare(browserItem.checked, true)
+    }
+
+    function test_graphLinesSubmenu_buildsOneItemPerPlottableColumnFromGraphVm() {
+        fakeColumnVisibility.score = true
+        fakeColumnVisibility.accuracy = false
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
+
+        const scoreItem = findMenuItemByText(linesMenu, "Score")
+        const accuracyItem = findMenuItemByText(linesMenu, "Accuracy")
+        verify(scoreItem !== null, "expected a menu item labeled 'Score' from graphVm.columnName")
+        verify(accuracyItem !== null, "expected a menu item labeled 'Accuracy' from graphVm.columnName")
+        compare(scoreItem.checked, true)
+        compare(accuracyItem.checked, false)
+
+        fakeColumnVisibility.score = false
+        compare(scoreItem.checked, false, "menu item should track columnVisibility[graphVm.columnKey(col)]")
     }
 }
