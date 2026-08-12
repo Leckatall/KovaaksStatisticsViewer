@@ -8,6 +8,7 @@ Frame {
 
     required property var columnVisibility
     required property var graphVm
+    required property var graphAxisSettings
     readonly property var visibleColumns: {
         const cols = root.graphVm.plottableColumns;
         const result = [];
@@ -17,6 +18,15 @@ Frame {
             }
         }
         return result;
+    }
+    readonly property int yAxisColumn: {
+        const cols = root.graphVm.plottableColumns;
+        for (let i = 0; i < cols.length; i++) {
+            if (root.graphVm.columnKey(cols[i]) === root.graphAxisSettings.yAxisColumnKey) {
+                return cols[i];
+            }
+        }
+        return -1;
     }
 
     Layout.fillHeight: true
@@ -43,9 +53,24 @@ Frame {
             objectName: "scenarioTitleLabel"
             text: root.graphVm.scenarioTitle
         }
-        GraphCanvasWithTooltip {
-            graphVm: root.graphVm
-            visibleColumns: root.visibleColumns
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 0
+
+            YAxisTitle {
+                labelObjectName: "scenarioYAxisTitleLabel"
+                plotArea: canvasWithTooltip.plotArea
+                text: root.graphVm.columnName(canvasWithTooltip.labelledYAxisColumn)
+            }
+            GraphCanvasWithTooltip {
+                id: canvasWithTooltip
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                graphVm: root.graphVm
+                visibleColumns: root.visibleColumns
+                yAxisColumn: root.yAxisColumn
+            }
         }
     }
 }

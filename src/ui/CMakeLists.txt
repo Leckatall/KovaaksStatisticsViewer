@@ -22,6 +22,7 @@ qt_add_qml_module(ksv_ui
             qml/DashboardGraphCanvas.qml
             qml/PlaytimeGraphPanel.qml
             qml/GraphCanvasWithTooltip.qml
+            qml/YAxisTitle.qml
             qml/ControlPanel.qml
             qml/SelectionPanel.qml
             qml/ScenarioSearchPanel.qml

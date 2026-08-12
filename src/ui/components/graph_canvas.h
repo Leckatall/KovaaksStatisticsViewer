@@ -21,6 +21,8 @@ namespace ksv::ui {
         Q_PROPERTY(presentation::GraphViewModelBase *graphVm READ graphVm WRITE setGraphVm NOTIFY graphVmChanged)
         Q_PROPERTY(QVariantList visibleColumns READ visibleColumns WRITE setVisibleColumns NOTIFY visibleColumnsChanged)
         Q_PROPERTY(QRectF plotArea READ plotRect NOTIFY plotAreaChanged)
+        Q_PROPERTY(int yAxisColumn READ yAxisColumn WRITE setYAxisColumn NOTIFY yAxisColumnChanged)
+        Q_PROPERTY(int labelledYAxisColumn READ labelledYAxisColumn NOTIFY labelledYAxisColumnChanged)
 
     public:
         explicit GraphCanvas(QQuickItem *parent = nullptr);
@@ -33,6 +35,13 @@ namespace ksv::ui {
 
         void setVisibleColumns(const QVariantList &visibleColumns);
 
+        [[nodiscard]] int yAxisColumn() const { return m_yAxisColumn; }
+
+        void setYAxisColumn(int yAxisColumn);
+
+        // Resolves yAxisColumn against visibleColumns, falling back to the VM default.
+        [[nodiscard]] int labelledYAxisColumn() const;
+
         void paint(QPainter *painter) override;
 
         Q_INVOKABLE [[nodiscard]] QVariantMap nearestPoint(qreal x, qreal y) const;
@@ -43,6 +52,8 @@ namespace ksv::ui {
         void graphVmChanged();
         void visibleColumnsChanged();
         void plotAreaChanged();
+        void yAxisColumnChanged();
+        void labelledYAxisColumnChanged();
 
     private:
         [[nodiscard]] QRectF plotRect() const;
@@ -61,6 +72,7 @@ namespace ksv::ui {
 
         presentation::GraphViewModelBase *m_graphVm = nullptr;
         QVariantList m_visibleColumns;
+        int m_yAxisColumn = -1;
     };
 }
 

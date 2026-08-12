@@ -61,7 +61,8 @@ TestCase {
     // Read mutation-tracking state back via the returned dialog's own
     // properties, never via the original object literal.
     function openDialog(props): SettingsDialog {
-        const dialog = createTemporaryObject(settingsDialogComponent, testCase, props)
+        const fullProps = Object.assign({graphAxisSettings: {yAxisColumnKey: "score"}}, props)
+        const dialog = createTemporaryObject(settingsDialogComponent, testCase, fullProps)
         verify(dialog !== null, "SettingsDialog failed to instantiate")
         dialog.open()
         verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never became visible after open()")
@@ -234,5 +235,73 @@ TestCase {
         selectCategory(dialog, "Graph Lines")
 
         compare(dialog.currentCategory, 1, "clicking the 'Graph Lines' category item should switch currentCategory to index 1")
+    }
+
+    function test_yAxisColumnComboBox_listsOnlyVisibleColumns() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({score: true, accuracy: false}),
+            graphAxisSettings: ({yAxisColumnKey: "score"})
+        })
+
+        selectCategory(dialog, "Graph Lines")
+
+        const combo = findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        verify(combo !== null, "no combo box named 'yAxisColumnComboBox' found in SettingsDialog Graph Lines category")
+        compare(combo.count, 1, "the combo box should only list the visible columns")
+        compare(combo.displayText, "Score", "the combo box should show the sole visible column")
+    }
+
+    function test_selectingYAxisColumn_writesGraphAxisSettings() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({score: true, accuracy: true}),
+            graphAxisSettings: ({yAxisColumnKey: "score"})
+        })
+
+        selectCategory(dialog, "Graph Lines")
+
+        const combo = findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        verify(combo !== null, "no combo box named 'yAxisColumnComboBox' found in SettingsDialog Graph Lines category")
+        combo.activated(1)
+
+        compare(dialog.graphAxisSettings.yAxisColumnKey, "accuracy", "selecting a combo entry should write graphAxisSettings.yAxisColumnKey")
+    }
+
+    function test_yAxisColumnComboBox_disabledWhenNoColumnVisible() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({score: false, accuracy: false}),
+            graphAxisSettings: ({yAxisColumnKey: "score"})
+        })
+
+        selectCategory(dialog, "Graph Lines")
+
+        const combo = findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        verify(combo !== null, "no combo box named 'yAxisColumnComboBox' found in SettingsDialog Graph Lines category")
+        compare(combo.enabled, false, "the combo box should be disabled when no column is visible")
+    }
+
+    function test_yAxisColumnComboBox_fallsBackWithoutRewritingStoredKeyWhenHidden() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({score: false, accuracy: true}),
+            graphAxisSettings: ({yAxisColumnKey: "score"})
+        })
+
+        selectCategory(dialog, "Graph Lines")
+
+        const combo = findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        verify(combo !== null, "no combo box named 'yAxisColumnComboBox' found in SettingsDialog Graph Lines category")
+        compare(combo.displayText, "Accuracy", "the combo box should fall back to the first visible column")
+        compare(dialog.graphAxisSettings.yAxisColumnKey, "score", "falling back should not rewrite the stored key")
     }
 }

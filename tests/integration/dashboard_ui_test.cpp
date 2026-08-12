@@ -129,4 +129,22 @@ namespace {
         const QVariantMap sample = canvas->valuesAtX(plot.center().x());
         EXPECT_TRUE(sample.value("valid").toBool()) << "dashboard graph has no plotted data at mid-x";
     }
+
+    TEST_F(DashboardUiTest, YAxisTitleLabelDefaultsToScore) {
+        auto *label = root->findChild<QObject *>("scenarioYAxisTitleLabel");
+        ASSERT_NE(label, nullptr) << "no label named 'scenarioYAxisTitleLabel' found in the dashboard scene";
+        EXPECT_EQ(label->property("text").toString(),
+                  app->graphVm()->columnName(app->graphVm()->yAxisColumn()));
+    }
+
+    TEST_F(DashboardUiTest, YAxisTitleLabelTracksTheSelectedColumn) {
+        auto *canvas = dashboardCanvas();
+        ASSERT_NE(canvas, nullptr);
+        auto *label = root->findChild<QObject *>("scenarioYAxisTitleLabel");
+        ASSERT_NE(label, nullptr) << "no label named 'scenarioYAxisTitleLabel' found in the dashboard scene";
+
+        canvas->setYAxisColumn(static_cast<int>(presentation::GraphViewModel::Accuracy));
+
+        EXPECT_EQ(label->property("text").toString(), "Accuracy");
+    }
 }

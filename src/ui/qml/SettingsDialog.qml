@@ -19,6 +19,7 @@ Dialog {
     required property var sessionVm
     required property var graphVm
     required property var columnVisibility
+    required property var graphAxisSettings
 
     property int currentCategory: 0
 
@@ -174,13 +175,56 @@ Dialog {
 
             // Graph Lines
             ColumnLayout {
+                id: graphLinesPage
                 spacing: 8
+
+                readonly property var visibleColumns: {
+                    const cols = root.graphVm.plottableColumns;
+                    const result = [];
+                    for (let i = 0; i < cols.length; i++) {
+                        if (root.columnVisibility[root.graphVm.columnKey(cols[i])]) {
+                            result.push(cols[i]);
+                        }
+                    }
+                    return result;
+                }
 
                 Label {
                     text: "Graph Lines"
                     font.pixelSize: 18
                     font.bold: true
                     Layout.bottomMargin: 4
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    Label {
+                        text: "Y-axis labels"
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                    ComboBox {
+                        id: yAxisColumnComboBox
+                        objectName: "yAxisColumnComboBox"
+                        Layout.fillWidth: true
+                        enabled: graphLinesPage.visibleColumns.length > 0
+                        model: graphLinesPage.visibleColumns
+                        displayText: enabled ? root.graphVm.columnName(graphLinesPage.visibleColumns[currentIndex]) : ""
+                        delegate: ItemDelegate {
+                            required property int modelData
+                            width: yAxisColumnComboBox.width
+                            text: root.graphVm.columnName(modelData)
+                        }
+                        currentIndex: {
+                            const idx = graphLinesPage.visibleColumns.findIndex(
+                                c => root.graphVm.columnKey(c) === root.graphAxisSettings.yAxisColumnKey);
+                            return idx >= 0 ? idx : 0;
+                        }
+                        onActivated: index => {
+                            root.graphAxisSettings.yAxisColumnKey = root.graphVm.columnKey(graphLinesPage.visibleColumns[index]);
+                        }
+                    }
                 }
 
                 Repeater {

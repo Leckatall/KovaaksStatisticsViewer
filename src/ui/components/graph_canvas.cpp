@@ -13,7 +13,7 @@
 
 namespace ksv::ui {
     namespace {
-        constexpr qreal kLeftMargin = 55;
+        constexpr qreal kLeftMargin = 40;
         constexpr qreal kBottomMargin = 28;
         constexpr qreal kTopMargin = 10;
         constexpr qreal kRightMargin = 10;
@@ -35,6 +35,7 @@ namespace ksv::ui {
             connect(m_graphVm, &presentation::GraphViewModelBase::boundsChanged, this, [this] { update(); });
         }
         emit graphVmChanged();
+        emit labelledYAxisColumnChanged();
         update();
     }
 
@@ -42,7 +43,23 @@ namespace ksv::ui {
         if (m_visibleColumns == visibleColumns) return;
         m_visibleColumns = visibleColumns;
         emit visibleColumnsChanged();
+        emit labelledYAxisColumnChanged();
         update();
+    }
+
+    void GraphCanvas::setYAxisColumn(const int yAxisColumn) {
+        if (m_yAxisColumn == yAxisColumn) return;
+        m_yAxisColumn = yAxisColumn;
+        emit yAxisColumnChanged();
+        emit labelledYAxisColumnChanged();
+        update();
+    }
+
+    int GraphCanvas::labelledYAxisColumn() const {
+        const QList<int> visible = visibleColumnIds();
+        if (visible.contains(m_yAxisColumn)) return m_yAxisColumn;
+        if (!visible.isEmpty()) return visible.front();
+        return m_graphVm ? m_graphVm->yAxisColumn() : -1;
     }
 
     QList<int> GraphCanvas::visibleColumnIds() const {
@@ -75,7 +92,7 @@ namespace ksv::ui {
 
     void GraphCanvas::drawAxes(QPainter *painter, const QRectF &rect) const {
         if (!m_graphVm) return;
-        const auto labelled = m_graphVm->series({m_graphVm->yAxisColumn()});
+        const auto labelled = m_graphVm->series({labelledYAxisColumn()});
         const presentation::AxisModel xAxis = m_graphVm->xAxis();
 
         // Only one series' Y axis gets labels; all project against their own axis

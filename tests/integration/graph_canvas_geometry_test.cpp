@@ -133,4 +133,45 @@ namespace {
                "if this fails, yAxisFor() no longer derives a y-axis for series without one";
         EXPECT_EQ(hit.value("name").toString(), "Fallback");
     }
+
+    TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnDefaultsToVmYAxisColumnWhenUnset) {
+        canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Score)});
+        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), static_cast<int>(GraphViewModel::Score));
+    }
+
+    TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnReturnsRequestedColumnWhenVisible) {
+        canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Score),
+                                               static_cast<int>(GraphViewModel::Accuracy)});
+        canvas.setYAxisColumn(static_cast<int>(GraphViewModel::Accuracy));
+        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), static_cast<int>(GraphViewModel::Accuracy));
+    }
+
+    TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnFallsBackToFirstVisibleWhenRequestedIsHidden) {
+        canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Accuracy)});
+        canvas.setYAxisColumn(static_cast<int>(GraphViewModel::Score));
+        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), static_cast<int>(GraphViewModel::Accuracy));
+    }
+
+    TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnFallsBackToVmDefaultWhenNothingVisible) {
+        canvas.setVisibleColumns(QVariantList{});
+        canvas.setYAxisColumn(static_cast<int>(GraphViewModel::Accuracy));
+        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), graphVm->yAxisColumn());
+    }
+
+    TEST_F(GraphCanvasGeometryTest, DrawnAxisReflectsSelectedYAxisColumn) {
+        canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Score),
+                                               static_cast<int>(GraphViewModel::Accuracy)});
+        canvas.setYAxisColumn(static_cast<int>(GraphViewModel::Accuracy));
+
+        const auto accuracySeries = graphVm->series({static_cast<int>(GraphViewModel::Accuracy)});
+        ASSERT_FALSE(accuracySeries.isEmpty());
+        ASSERT_TRUE(accuracySeries.front().yAxis.has_value());
+        const auto &expectedAxis = *accuracySeries.front().yAxis;
+
+        const auto labelled = graphVm->series({canvas.property("labelledYAxisColumn").toInt()});
+        ASSERT_FALSE(labelled.isEmpty());
+        ASSERT_TRUE(labelled.front().yAxis.has_value());
+        EXPECT_DOUBLE_EQ(labelled.front().yAxis->min(), expectedAxis.min());
+        EXPECT_DOUBLE_EQ(labelled.front().yAxis->max(), expectedAxis.max());
+    }
 }

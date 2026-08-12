@@ -30,6 +30,9 @@ ApplicationWindow {
         scoreTotal: true, expectedFinalScore: true, expectedFinalScoreRecent: true
     })
 
+    // Mirrors Main.qml's graphAxisSettings; a plain object is enough here.
+    property var graphAxisSettings: ({yAxisColumnKey: "score"})
+
     // A labelled, sized cell. Components like ControlPanel have no implicit
     // size of their own, so every showcase gets explicit dimensions.
     component Showcase: ColumnLayout {
@@ -75,6 +78,7 @@ ApplicationWindow {
                     anchors.fill: parent
                     graphVm: window.graphVm
                     columnVisibility: window.columnVisibility
+                    graphAxisSettings: window.graphAxisSettings
                 }
             }
 
@@ -206,5 +210,6 @@ ApplicationWindow {
         sessionVm: window.sessionVm
         graphVm: window.graphVm
         columnVisibility: window.columnVisibility
+        graphAxisSettings: window.graphAxisSettings
     }
 }

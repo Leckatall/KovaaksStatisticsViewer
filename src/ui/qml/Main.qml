@@ -36,6 +36,12 @@ ApplicationWindow {
     }
 
     Settings {
+        id: graphAxisSettings
+        category: "graph"
+        property string yAxisColumnKey: "score"
+    }
+
+    Settings {
         id: viewSettings
         category: "view"
         property bool scenarioGraphVisible: true
@@ -71,6 +77,7 @@ ApplicationWindow {
         sessionVm: root.sessionVm
         graphVm: root.graphVm
         columnVisibility: columnVisibilitySettings
+        graphAxisSettings: graphAxisSettings
     }
 
     menuBar: AppMenuBar {
@@ -97,6 +104,7 @@ ApplicationWindow {
                 visible: viewSettings.scenarioGraphVisible
                 graphVm: root.graphVm
                 columnVisibility: columnVisibilitySettings
+                graphAxisSettings: graphAxisSettings
             }
             PlaytimeGraphPanel {
                 Layout.fillWidth: true

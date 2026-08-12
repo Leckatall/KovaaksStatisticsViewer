@@ -7,7 +7,10 @@ Item {
 
     required property var graphVm
     property var visibleColumns: []
+    property int yAxisColumn: -1
     property bool showSeriesNames: true
+    readonly property rect plotArea: canvas.plotArea
+    readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
 
     Layout.fillHeight: true
     Layout.fillWidth: true
@@ -18,6 +21,7 @@ Item {
         anchors.fill: parent
         graphVm: root.graphVm
         visibleColumns: root.visibleColumns
+        yAxisColumn: root.yAxisColumn
     }
     MouseArea {
         id: hoverArea
