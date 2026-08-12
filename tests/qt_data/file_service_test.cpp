@@ -73,24 +73,26 @@ namespace {
         }
     };
 
-    TEST_F(FileServiceTest, GetAllPerfsFromFilesReturnsEmptyWhenPerformancesDirMissing) {
+    TEST_F(FileServiceTest, ListPerfFilesReturnsEmptyWhenPerformancesDirMissing) {
         // No FPSAimTrainer/performances subdirectory created.
         const FileService file_service(settings_service, decoder);
 
-        EXPECT_TRUE(file_service.getAllPerfsFromFiles().empty());
+        EXPECT_TRUE(file_service.listPerfFiles().empty());
     }
 
-    TEST_F(FileServiceTest, GetAllPerfsFromFilesDecodesEveryFixture) {
+    TEST_F(FileServiceTest, ListPerfFilesReturnsAbsolutePathsForEveryFixture) {
         makePerformancesDir();
         std::ignore = copyFixtureInto("1wall6targets TE.perf");
         std::ignore = copyFixtureInto("VT FlyTS Novice S5.perf");
 
         const FileService file_service(settings_service, decoder);
-        const auto perfs = file_service.getAllPerfsFromFiles();
+        const auto paths = file_service.listPerfFiles();
 
-        ASSERT_EQ(perfs.size(), 2);
+        ASSERT_EQ(paths.size(), 2);
         bool found_known_scenario = false;
-        for (const auto &perf: perfs) {
+        for (const auto &path: paths) {
+            EXPECT_TRUE(QFileInfo(QString::fromStdString(path)).isAbsolute());
+            const auto perf = file_service.getPerfFromFile(path);
             if (perf.run_id.scenario_id.name == "1wall6targets TE") found_known_scenario = true;
             EXPECT_FALSE(perf.run_id.scenario_id.name.empty());
         }

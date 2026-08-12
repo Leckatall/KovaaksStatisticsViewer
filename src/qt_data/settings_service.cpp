@@ -13,10 +13,12 @@ namespace ksv::qt_data {
     }
 
     std::string SettingsService::readDirSetting(const QString &key, const QVariant &default_value) const {
+        const QMutexLocker locker(&m_settings_mutex);
         return m_settings.value(key, default_value).toUrl().toLocalFile().toStdString();
     }
 
     void SettingsService::writeDirSetting(const QString &key, const std::string &dir) {
+        const QMutexLocker locker(&m_settings_mutex);
         m_settings.setValue(key, QUrl::fromLocalFile(QString::fromStdString(dir)));
         m_settings.sync();
     }

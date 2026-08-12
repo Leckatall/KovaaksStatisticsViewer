@@ -38,6 +38,18 @@ target_link_libraries(profile_service_tests PRIVATE
 ksv_copy_mingw_runtime_dlls(profile_service_tests)
 gtest_discover_tests(profile_service_tests)
 
+add_executable(profile_builder_tests
+    profile_builder_test.cpp
+)
+
+target_link_libraries(profile_builder_tests PRIVATE
+    ksv_data
+    GTest::gtest_main
+)
+
+ksv_copy_mingw_runtime_dlls(profile_builder_tests)
+gtest_discover_tests(profile_builder_tests)
+
 add_executable(profile_serializer_tests
     profile_serializer_test.cpp
 )

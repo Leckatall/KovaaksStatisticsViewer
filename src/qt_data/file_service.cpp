@@ -57,18 +57,19 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
         m_known_files = current_files;
     }
 
-    std::vector<domain::ScenarioPerf> FileService::getAllPerfsFromFiles() const {
+    std::vector<std::string> FileService::listPerfFiles() const {
         const auto perf_dir = get_perf_dir();
         if (!perf_dir) {
             qDebug() << "Could not cd to performances dir";
             return {};
         }
-        auto files = perf_dir->entryList(QDir::Files);
-        std::vector<domain::ScenarioPerf> perfs;
+        const auto files = perf_dir->entryList(QDir::Files);
+        std::vector<std::string> paths;
+        paths.reserve(files.size());
         for (const auto &file: files) {
-            perfs.push_back(getPerfFromFile(perf_dir->absoluteFilePath(file).toStdString()));
+            paths.push_back(perf_dir->absoluteFilePath(file).toStdString());
         }
-        return perfs;
+        return paths;
     }
 
     domain::ScenarioPerf FileService::getPerfFromFile(const std::string_view filename) const {

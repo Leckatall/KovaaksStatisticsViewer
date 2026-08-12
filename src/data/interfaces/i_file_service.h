@@ -14,7 +14,9 @@ namespace ksv::application {
     class IFileService {
         public:
         virtual ~IFileService() = default;
-        [[nodiscard]] virtual std::vector<domain::ScenarioPerf> getAllPerfsFromFiles() const = 0;
+        // Absolute paths, undecoded — a caller that decodes them one at a time can
+        // report progress, which getAllPerfsFromFiles() could not.
+        [[nodiscard]] virtual std::vector<std::string> listPerfFiles() const = 0;
         [[nodiscard]] virtual domain::ScenarioPerf getPerfFromFile(std::string_view filename) const = 0;
         [[nodiscard]] virtual domain::ScenarioPerf getLatestPerf() const = 0;
         [[nodiscard]] virtual std::string getSourceDirectory() const = 0;

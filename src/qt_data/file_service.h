@@ -38,7 +38,7 @@ namespace ksv::qt_data {
             return perf_dir;
         }
 
-        [[nodiscard]] std::vector<domain::ScenarioPerf> getAllPerfsFromFiles() const override;
+        [[nodiscard]] std::vector<std::string> listPerfFiles() const override;
         [[nodiscard]] domain::ScenarioPerf getPerfFromFile(std::string_view filename) const override;
         [[nodiscard]] domain::ScenarioPerf getLatestPerf() const override;
         [[nodiscard]] std::string getSourceDirectory() const override;

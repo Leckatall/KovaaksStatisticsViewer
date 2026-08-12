@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs
 // DEPRECATED: This component is deprecated and all functionality should be moved from here
 Frame {
     id: root
@@ -13,22 +12,20 @@ Frame {
         Button {
             objectName: "generateProfileButton"
             text: "Generate Profile from current kovaaks dir"
+            enabled: !root.sessionVm.profileBuildInProgress
             onClicked: root.sessionVm.generateProfile()
         }
 
-        FileDialog {
-            id: selectPerfFileDialog
-            title: "Load Performance"
-            nameFilters: ["Performance Files (*.perf)"]
-            onAccepted: {
-                root.graphVm.fetchData(selectPerfFileDialog.selectedFiles[0])
-            }
+        ProgressBar {
+            objectName: "profileBuildProgressBar"
+            Layout.fillWidth: true
+            visible: root.sessionVm.profileBuildInProgress
+            // The file count only arrives with the first per-file report; until then
+            // there is nothing to show a fraction of.
+            indeterminate: value === 0
+            value: root.sessionVm.profileBuildProgress
         }
-        Button {
-            objectName: "loadPerformanceFileButton"
-            text: "Load performance File"
-            onClicked: selectPerfFileDialog.open()
-        }
+
         Button {
             objectName: "loadLatestPerformanceButton"
             text: "Have Graph Load Latest Performance File"

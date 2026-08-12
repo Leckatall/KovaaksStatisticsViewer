@@ -1,4 +1,4 @@
-//
+﻿//
 // SessionController tests using hand-written fakes for ISettingsService and
 // IProfileService. Needs a QCoreApplication (see qt_test_main.cpp) since
 // SessionController/ISessionController are QObjects with a signal.
@@ -6,7 +6,9 @@
 
 #include <gtest/gtest.h>
 
+#include <QSemaphore>
 #include <QSignalSpy>
+#include <optional>
 #include <unordered_map>
 
 #include "session_controller.h"
@@ -100,6 +102,62 @@ namespace {
         [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
 
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
+
+        void onBuildRequested(std::function<void()> callback) override {
+            stored_build_requester = std::move(callback);
+        }
+
+        void beginProfileBuild() override { ++begin_build_count; }
+
+        void applyBuiltProfile(ksv::domain::UserProfile profile) override {
+            ++apply_count;
+            applied_profile = std::move(profile);
+            scenario_list = applied_profile->getScenarioList();
+            profile_loaded = true;
+            if (stored_callback) stored_callback();
+        }
+
+        std::function<void()> stored_build_requester;
+        int begin_build_count = 0;
+        int apply_count = 0;
+        std::optional<ksv::domain::UserProfile> applied_profile;
+    };
+
+    // Blocks inside the build so a test can observe the in-flight window deterministically
+    // instead of racing the worker thread.
+    class FakeFileService : public IFileService {
+    public:
+        std::vector<ScenarioPerf> perfs_to_return;
+        std::string source_directory = "C:/Kovaaks/FPSAimTrainer/performances";
+        QSemaphore scan_gate;
+        QSemaphore scan_entered;
+        bool gate_scan = false;
+
+        [[nodiscard]] std::vector<std::string> listPerfFiles() const override {
+            if (gate_scan) {
+                const_cast<QSemaphore &>(scan_entered).release();
+                const_cast<QSemaphore &>(scan_gate).acquire();
+            }
+            std::vector<std::string> paths;
+            for (std::size_t i = 0; i < perfs_to_return.size(); ++i) {
+                paths.push_back("listed-perf-" + std::to_string(i));
+            }
+            return paths;
+        }
+
+        [[nodiscard]] ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
+            const std::string path(filename);
+            if (const auto it = perfs_by_path.find(path); it != perfs_by_path.end()) return it->second;
+            return perfs_to_return.at(std::stoul(path.substr(std::string("listed-perf-").size())));
+        }
+
+        [[nodiscard]] ScenarioPerf getLatestPerf() const override { return {}; }
+
+        [[nodiscard]] std::string getSourceDirectory() const override { return source_directory; }
+
+        void onFilesChanged(std::function<void(const std::string &)>) override {}
+
+        std::unordered_map<std::string, ScenarioPerf> perfs_by_path;
     };
 
     ScenarioPerf make_perf(const std::string &hash, const long long start_time, const float score = 0.0F,
@@ -119,9 +177,11 @@ namespace {
     protected:
         std::shared_ptr<FakeSettingsService> fake_settings_service = std::make_shared<FakeSettingsService>();
         std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
+        std::shared_ptr<FakeFileService> fake_file_service = std::make_shared<FakeFileService>();
 
         std::unique_ptr<SessionController> make_controller() {
-            return std::make_unique<SessionController>(fake_settings_service, fake_profile_service);
+            return std::make_unique<SessionController>(fake_settings_service, fake_profile_service,
+                                                        fake_file_service);
         }
     };
 
@@ -132,12 +192,88 @@ namespace {
         EXPECT_EQ(controller->getScenarioList().size(), 1);
     }
 
-    TEST_F(SessionControllerTest, GenerateProfileFromDirectoryDelegatesToProfileService) {
+    TEST_F(SessionControllerTest, GenerateProfileFromDirectoryBuildsOnAWorkerAndAppliesTheResult) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
         const auto controller = make_controller();
+        QSignalSpy spy(controller.get(), &ISessionController::profileChanged);
 
         controller->generateProfileFromDirectory();
 
-        EXPECT_EQ(fake_profile_service->generate_call_count, 1);
+        EXPECT_EQ(fake_profile_service->begin_build_count, 1);
+        ASSERT_TRUE(spy.wait(5000));
+        EXPECT_EQ(fake_profile_service->apply_count, 1);
+        ASSERT_TRUE(fake_profile_service->applied_profile.has_value());
+        EXPECT_EQ(fake_profile_service->applied_profile->getScenarioList().size(), 1);
+    }
+
+    TEST_F(SessionControllerTest, BuildReportsProgressAndBracketsItWithStartedAndFinished) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100), make_perf("hash-2", 200)};
+        const auto controller = make_controller();
+        const QSignalSpy started(controller.get(), &ISessionController::buildStarted);
+        QSignalSpy progress(controller.get(), &ISessionController::buildProgress);
+        QSignalSpy finished(controller.get(), &ISessionController::buildFinished);
+
+        controller->generateProfileFromDirectory();
+
+        EXPECT_EQ(started.count(), 1);
+        EXPECT_TRUE(controller->isBuildInProgress());
+        ASSERT_TRUE(finished.wait(5000));
+        EXPECT_FALSE(controller->isBuildInProgress());
+
+        ASSERT_FALSE(progress.isEmpty());
+        const auto last = progress.back();
+        EXPECT_EQ(last.at(0).toInt(), 2);
+        EXPECT_EQ(last.at(1).toInt(), 2);
+    }
+
+    TEST_F(SessionControllerTest, GenerateProfileFromDirectoryReturnsBeforeTheBuildFinishes) {
+        fake_file_service->gate_scan = true;
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        const auto controller = make_controller();
+
+        controller->generateProfileFromDirectory();
+        ASSERT_TRUE(fake_file_service->scan_entered.tryAcquire(1, 5000));
+
+        // The worker is parked inside the scan, so nothing can have been applied yet.
+        EXPECT_EQ(fake_profile_service->apply_count, 0);
+
+        QSignalSpy spy(controller.get(), &ISessionController::profileChanged);
+        fake_file_service->scan_gate.release();
+        ASSERT_TRUE(spy.wait(5000));
+        EXPECT_EQ(fake_profile_service->apply_count, 1);
+    }
+
+    TEST_F(SessionControllerTest, SecondGenerateWhileOneIsInFlightDoesNotStartASecondBuild) {
+        fake_file_service->gate_scan = true;
+        const auto controller = make_controller();
+
+        controller->generateProfileFromDirectory();
+        ASSERT_TRUE(fake_file_service->scan_entered.tryAcquire(1, 5000));
+        controller->generateProfileFromDirectory();
+
+        EXPECT_EQ(fake_profile_service->begin_build_count, 1);
+
+        // The queued request is honoured once the first build lands, so the second
+        // scan must still happen â€” a coalesced request is deferred, never dropped.
+        QSignalSpy spy(controller.get(), &ISessionController::profileChanged);
+        fake_file_service->scan_gate.release();
+        ASSERT_TRUE(spy.wait(5000));
+        ASSERT_TRUE(fake_file_service->scan_entered.tryAcquire(1, 5000));
+        fake_file_service->scan_gate.release();
+        EXPECT_EQ(fake_profile_service->begin_build_count, 2);
+    }
+
+    TEST_F(SessionControllerTest, ProfileServiceBuildRequestStartsAWorkerBuild) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        const auto controller = make_controller();
+        ASSERT_TRUE(static_cast<bool>(fake_profile_service->stored_build_requester));
+        QSignalSpy spy(controller.get(), &ISessionController::profileChanged);
+
+        // This is the hook ProfileService::loadProfile() uses on a cache miss.
+        fake_profile_service->stored_build_requester();
+
+        ASSERT_TRUE(spy.wait(5000));
+        EXPECT_EQ(fake_profile_service->apply_count, 1);
     }
 
     TEST_F(SessionControllerTest, ConstructorLoadsLatestPerfFromProfileService) {

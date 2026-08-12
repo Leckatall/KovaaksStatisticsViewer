@@ -41,12 +41,20 @@ namespace {
         std::string source_directory = "fake/kovaaks/performances";
         std::function<void(const std::string &)> stored_callback;
 
-        [[nodiscard]] std::vector<ksv::domain::ScenarioPerf> getAllPerfsFromFiles() const override {
-            return perfs_to_return;
+        // perfs_to_return is addressed through synthetic paths so the builder can walk
+        // it one file at a time, the same shape as the real directory listing.
+        [[nodiscard]] std::vector<std::string> listPerfFiles() const override {
+            std::vector<std::string> paths;
+            for (std::size_t i = 0; i < perfs_to_return.size(); ++i) {
+                paths.push_back("listed-perf-" + std::to_string(i));
+            }
+            return paths;
         }
 
         [[nodiscard]] ksv::domain::ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
-            return perfs_by_path.at(std::string(filename));
+            const std::string path(filename);
+            if (const auto it = perfs_by_path.find(path); it != perfs_by_path.end()) return it->second;
+            return perfs_to_return.at(std::stoul(path.substr(std::string("listed-perf-").size())));
         }
 
         [[nodiscard]] ksv::domain::ScenarioPerf getLatestPerf() const override {
@@ -426,6 +434,18 @@ namespace {
         EXPECT_EQ(scenarios[0].hash, "hash-cached");
     }
 
+    // A cache hit is not a generate: rewriting the cache we just read back to disk
+    // would turn every startup into a write.
+    TEST_F(ProfileServiceTest, LoadProfileFromCacheDoesNotSave) {
+        ksv::domain::UserProfile cached{"cached"};
+        cached.addScenarioPerf(make_perf("hash-cached", 500));
+        fake_serializer->profile_to_load = cached;
+
+        profile_service.loadProfile();
+
+        EXPECT_EQ(fake_serializer->save_count, 0);
+    }
+
     TEST_F(ProfileServiceTest, LoadProfileFallsBackToDirectoryScanWhenNoCache) {
         fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
 
@@ -436,6 +456,95 @@ namespace {
         EXPECT_EQ(scenarios[0].hash, "hash-1");
         // The fresh-built profile should have been persisted for next time.
         EXPECT_EQ(fake_serializer->save_count, 1);
+    }
+
+    TEST_F(ProfileServiceTest, LoadProfileDelegatesToTheBuildRequesterWhenOneIsInstalled) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        int request_count = 0;
+        profile_service.onBuildRequested([&request_count] { ++request_count; });
+
+        profile_service.loadProfile();
+
+        EXPECT_EQ(request_count, 1);
+        // The requester owns the build now; nothing may have been built here.
+        EXPECT_FALSE(profile_service.isProfileLoaded());
+        EXPECT_EQ(fake_serializer->save_count, 0);
+    }
+
+    TEST_F(ProfileServiceTest, PerfFileArrivingDuringABuildIsQueuedNotApplied) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+
+        profile_service.beginProfileBuild();
+        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        profile_service.addPerfFileToProfile("new_run.perf");
+
+        EXPECT_EQ(profile_service.getScenarioList().size(), 1);
+        EXPECT_EQ(fake_serializer->save_count, 1);
+    }
+
+    TEST_F(ProfileServiceTest, ApplyBuiltProfileReplaysQueuedPerfFiles) {
+        profile_service.beginProfileBuild();
+        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        profile_service.addPerfFileToProfile("new_run.perf");
+
+        ksv::domain::UserProfile built{fake_file_service->source_directory};
+        built.addScenarioPerf(make_perf("hash-1", 100));
+        profile_service.applyBuiltProfile(std::move(built));
+
+        EXPECT_EQ(profile_service.getScenarioList().size(), 2);
+        EXPECT_EQ(fake_serializer->save_count, 1);
+    }
+
+    // A file that landed before the build's directory scan is already in the result;
+    // replaying it must not double-count the run.
+    TEST_F(ProfileServiceTest, ApplyBuiltProfileSkipsQueuedFileAlreadyInTheBuiltProfile) {
+        const auto perf = make_perf("hash-1", 100);
+        profile_service.beginProfileBuild();
+        fake_file_service->perfs_by_path["new_run.perf"] = perf;
+        profile_service.addPerfFileToProfile("new_run.perf");
+
+        ksv::domain::UserProfile built{fake_file_service->source_directory};
+        built.addScenarioPerf(perf);
+        profile_service.applyBuiltProfile(std::move(built));
+
+        const auto scenarios = profile_service.getScenarioList();
+        ASSERT_EQ(scenarios.size(), 1);
+        EXPECT_EQ(profile_service.getRunCount(scenarios[0]).value_or(0), 1);
+    }
+
+    TEST_F(ProfileServiceTest, ApplyBuiltProfileDiscardsAResultFromAnotherSourceDirectory) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+        const auto saves_before = fake_serializer->save_count;
+
+        profile_service.beginProfileBuild();
+        ksv::domain::UserProfile stale{"D:/SomeOtherKovaaksDir/performances"};
+        stale.addScenarioPerf(make_perf("hash-stale", 500));
+        profile_service.applyBuiltProfile(std::move(stale));
+
+        const auto scenarios = profile_service.getScenarioList();
+        ASSERT_EQ(scenarios.size(), 1);
+        EXPECT_EQ(scenarios[0].hash, "hash-1");
+        EXPECT_EQ(fake_serializer->save_count, saves_before);
+    }
+
+    // The discarded build takes the queue with it otherwise, and the rebuild that
+    // follows would have nothing to replay.
+    TEST_F(ProfileServiceTest, QueuedPerfFilesSurviveADiscardedBuild) {
+        profile_service.beginProfileBuild();
+        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        profile_service.addPerfFileToProfile("new_run.perf");
+
+        ksv::domain::UserProfile stale{"D:/SomeOtherKovaaksDir/performances"};
+        profile_service.applyBuiltProfile(std::move(stale));
+
+        profile_service.beginProfileBuild();
+        ksv::domain::UserProfile rebuilt{fake_file_service->source_directory};
+        rebuilt.addScenarioPerf(make_perf("hash-1", 100));
+        profile_service.applyBuiltProfile(std::move(rebuilt));
+
+        EXPECT_EQ(profile_service.getScenarioList().size(), 2);
     }
 
     TEST_F(ProfileServiceTest, IsProfileLoadedFalseBeforeAnyLoadOrGenerate) {

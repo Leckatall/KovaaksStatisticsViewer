@@ -16,7 +16,9 @@ namespace {
         std::vector<std::string> set_current_perf_filename_calls;
 
         std::vector<ScenarioId> getScenarioList() override { return {}; }
-        void generateProfileFromDirectory() const override {}
+        void generateProfileFromDirectory() override {}
+
+        [[nodiscard]] bool isBuildInProgress() const override { return false; }
 
         void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
 

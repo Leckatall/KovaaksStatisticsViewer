@@ -22,7 +22,7 @@ namespace ksv::application {
 
         virtual std::vector<domain::ScenarioId> getScenarioList() = 0;
 
-        virtual void generateProfileFromDirectory() const = 0;
+        virtual void generateProfileFromDirectory() = 0;
 
         virtual void setCurrentPerfToLatest() = 0;
 
@@ -33,6 +33,9 @@ namespace ksv::application {
         virtual void setCurrentPerf(const domain::ScenarioRunId &run_id) = 0;
 
         [[nodiscard]] virtual domain::ScenarioPerf getCurrentPerf() const = 0;
+
+        // A build started before a view model existed still has to show up in it.
+        [[nodiscard]] virtual bool isBuildInProgress() const = 0;
 
         [[nodiscard]] virtual std::vector<ScenarioSummary> getScenarioSummaries() const = 0;
 
@@ -45,6 +48,11 @@ namespace ksv::application {
 
     signals:
         void currentPerfChanged();
+        void profileChanged();
+
+        void buildStarted();
+        void buildProgress(int done, int total);
+        void buildFinished();
     };
 }
 

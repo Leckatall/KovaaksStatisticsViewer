@@ -33,9 +33,13 @@ namespace ksv::application {
 
         m_profileService = std::make_shared<data::ProfileService>(
             m_fileService, std::make_shared<data::ProfileSerializer>(), m_settingsService);
+
+        // SessionController installs the build requester, so it has to exist before the
+        // first loadProfile() — otherwise a cache miss builds synchronously and blocks
+        // startup for as long as a full directory scan takes.
+        m_sessionController = std::make_shared<SessionController>(m_settingsService, m_profileService, m_fileService);
         m_profileService->loadProfile();
 
-        m_sessionController = std::make_shared<SessionController>(m_settingsService, m_profileService);
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController);
         m_graphVm = new presentation::GraphViewModel(m_graphUseCase, this);
         // Re-pull the series when currentPerf changes for any reason (file load, run selection, latest-on-startup)

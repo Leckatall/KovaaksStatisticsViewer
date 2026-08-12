@@ -33,6 +33,8 @@ add_library(ksv_data STATIC
         formats/protobuf/proto_decoder.h
         formats/protobuf/profile_serializer.cpp
         formats/protobuf/profile_serializer.h
+        profile_builder.cpp
+        profile_builder.h
         profile_service.cpp
         profile_service.h
 

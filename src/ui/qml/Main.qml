@@ -47,6 +47,13 @@ ApplicationWindow {
         onAccepted: root.settingsVm.setKovaaksDir(folderDialog.selectedFolder)
     }
 
+    FileDialog {
+        id: perfFileDialog
+        title: "Load Performance"
+        nameFilters: ["Performance Files (*.perf)"]
+        onAccepted: root.graphVm.fetchData(perfFileDialog.selectedFiles[0])
+    }
+
     SettingsDialog {
         id: settingsDialog
         settingsVm: root.settingsVm
@@ -57,6 +64,7 @@ ApplicationWindow {
     menuBar: AppMenuBar {
         onSetSourceDirRequested: folderDialog.open()
         onSettingsRequested: settingsDialog.open()
+        onLoadPerformanceFileRequested: perfFileDialog.open()
     }
 
     GridLayout {

@@ -3,6 +3,7 @@ import QtQuick.Controls
 MenuBar {
     signal setSourceDirRequested()
     signal settingsRequested()
+    signal loadPerformanceFileRequested()
 
     Menu {
         title: qsTr("&File")
@@ -13,6 +14,11 @@ MenuBar {
             id: setSoruceDirAction
             text: qsTr("Set Source &Directory")
             onTriggered: setSourceDirRequested()
+        }
+        Action {
+            id: loadPerformanceFileAction
+            text: qsTr("&Load Performance File...")
+            onTriggered: loadPerformanceFileRequested()
         }
 
         // Action {

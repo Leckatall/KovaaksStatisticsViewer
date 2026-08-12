@@ -9,7 +9,31 @@ namespace ksv::presentation {
         std::shared_ptr<application::ISessionController> session_controller,
         QObject *parent) : QObject(parent),
                            m_session_controller(std::move(session_controller)) {
+        connect(m_session_controller.get(), &application::ISessionController::profileChanged,
+                this, &SessionViewModel::updateScenarioHashMap);
+        connect(m_session_controller.get(), &application::ISessionController::buildStarted,
+                this, [this] { setBuildInProgress(true); });
+        connect(m_session_controller.get(), &application::ISessionController::buildFinished,
+                this, [this] { setBuildInProgress(false); });
+        connect(m_session_controller.get(), &application::ISessionController::buildProgress,
+                this, [this](const int done, const int total) {
+                    m_build_done = done;
+                    m_build_total = total;
+                    emit profileBuildChanged();
+                });
+
+        // App builds the profile before it builds the view models, so a build can
+        // already be running by the time this connects.
+        m_build_in_progress = m_session_controller->isBuildInProgress();
+
         updateScenarioHashMap();
+    }
+
+    void SessionViewModel::setBuildInProgress(const bool in_progress) {
+        m_build_in_progress = in_progress;
+        m_build_done = 0;
+        m_build_total = 0;
+        emit profileBuildChanged();
     }
 
     void SessionViewModel::updateScenarioHashMap() {

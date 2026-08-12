@@ -1,6 +1,6 @@
 ---
 type: changed
-area: Settings
+area: User Interface
 user: The app now has one consistent dark theme throughout. Previously the controls and the surfaces around them were drawn from two different colour schemes, which was most visible in the Settings dialog, and the controls followed the Windows light/dark setting while everything else stayed dark.
 ---
 The app ran on the Fusion style (`QQuickStyle::setStyle("Fusion")`) but the QML was written against

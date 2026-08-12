@@ -66,4 +66,18 @@ TestCase {
         compare(sourceDirEmitted, 0, "triggering Quit should not emit setSourceDirRequested")
         compare(settingsEmitted, 0, "triggering Quit should not emit settingsRequested")
     }
+
+    function test_loadPerformanceFileRequested_emittedWhenActionTriggered() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        verify(menuBar !== null, "AppMenuBar failed to instantiate")
+
+        let emitted = 0
+        menuBar.loadPerformanceFileRequested.connect(() => emitted++)
+
+        const item = findMenuItemByText(menuBar.menuAt(0), "&Load Performance File...")
+        verify(item !== null, "no menu item with text 'Load Performance File...' found in menuAt(0)")
+        item.action.trigger()
+
+        compare(emitted, 1, "loadPerformanceFileRequested should fire exactly once when its action is triggered")
+    }
 }

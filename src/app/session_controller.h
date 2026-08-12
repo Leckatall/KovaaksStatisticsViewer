@@ -6,8 +6,11 @@
 #define KOVAAKSSTATSVIEWER_SESSION_CONTROLLER_H
 
 #include <QObject>
+#include <QThread>
 
+#include "profile_build_worker.h"
 #include "scenario_perf.h"
+#include "data/interfaces/i_file_service.h"
 #include "data/interfaces/i_profile_service.h"
 #include "interfaces/i_settings_service.h"
 #include "usecases/i_session_controller.h"
@@ -18,11 +21,14 @@ namespace ksv::application {
 
     public:
         explicit SessionController(std::shared_ptr<ISettingsService> settings_service,
-                                   std::shared_ptr<IProfileService> profile_service, QObject *parent = nullptr);
+                                   std::shared_ptr<IProfileService> profile_service,
+                                   std::shared_ptr<IFileService> file_service, QObject *parent = nullptr);
+
+        ~SessionController() override;
 
         std::vector<domain::ScenarioId> getScenarioList() override;
 
-        void generateProfileFromDirectory() const override;
+        void generateProfileFromDirectory() override;
 
         void setCurrentPerf(const domain::ScenarioPerf& perf) override;
 
@@ -34,19 +40,32 @@ namespace ksv::application {
 
         [[nodiscard]] domain::ScenarioPerf getCurrentPerf() const override { return m_current_perf; }
 
+        [[nodiscard]] bool isBuildInProgress() const override { return m_build_in_flight; }
+
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override;
 
         [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const domain::ScenarioId& scenario) const override;
 
         [[nodiscard]] std::vector<RunSummary> getRecentRuns(std::size_t count) const override;
 
+    signals:
+        void buildRequested();
+
     private:
         [[nodiscard]] static RunSummary toRunSummary(const domain::ScenarioPerf& perf);
 
+        void startBuild();
+        void onBuildFinished(const domain::UserProfile& profile);
+
         std::shared_ptr<ISettingsService> m_settings_service;
         std::shared_ptr<IProfileService> m_profile_service;
+        std::shared_ptr<IFileService> m_file_service;
         domain::ScenarioPerf m_current_perf;
 
+        QThread m_build_thread;
+        ProfileBuildWorker* m_build_worker;
+        bool m_build_in_flight = false;
+        bool m_rebuild_requested = false;
     };
 }
 

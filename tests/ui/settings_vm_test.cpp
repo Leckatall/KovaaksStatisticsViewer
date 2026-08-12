@@ -37,6 +37,10 @@ namespace {
         void loadProfile() override {
         }
 
+        void onBuildRequested(std::function<void()>) override {}
+        void beginProfileBuild() override {}
+        void applyBuiltProfile(ksv::domain::UserProfile) override {}
+
         [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return {}; }
         [[nodiscard]] ScenarioPerf getPerf(const std::string &) const override { return {}; }
         [[nodiscard]] ScenarioPerf getLatestPerf() const override { return {}; }

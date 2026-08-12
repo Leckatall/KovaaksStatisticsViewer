@@ -23,7 +23,9 @@ TestCase {
         return {
             scenario_list: scenarioList || [],
             generateProfileCalls: 0,
-            generateProfile: function () { this.generateProfileCalls++ }
+            generateProfile: function () { this.generateProfileCalls++ },
+            profileBuildInProgress: false,
+            profileBuildProgress: 0
         }
     }
 
@@ -69,6 +71,43 @@ TestCase {
 
         compare(panel.graphVm.fetchLatestDataCalls, 1, "clicking loadLatestPerformanceButton should call graphVm.fetchLatestData() once")
         compare(panel.graphVm.fetchDataCalls.length, 0, "clicking loadLatestPerformanceButton should not call graphVm.fetchData()")
+    }
+
+    function test_profileBuildProgressBar_hiddenWhenNoBuildIsRunning() {
+        const panel = createPanel({
+            sessionVm: makeFakeSessionVm(), graphVm: makeFakeGraphVm(), columnVisibility: ({})
+        })
+
+        const bar = findChild(panel, "profileBuildProgressBar")
+        verify(bar !== null, "no child named 'profileBuildProgressBar' found in ControlPanel")
+        compare(bar.visible, false, "the progress bar should be hidden while no build is running")
+    }
+
+    function test_profileBuildProgressBar_showsProgressWhileBuilding() {
+        const vm = makeFakeSessionVm()
+        vm.profileBuildInProgress = true
+        vm.profileBuildProgress = 0.4
+        const panel = createPanel({
+            sessionVm: vm, graphVm: makeFakeGraphVm(), columnVisibility: ({})
+        })
+
+        const bar = findChild(panel, "profileBuildProgressBar")
+        verify(bar !== null, "no child named 'profileBuildProgressBar' found in ControlPanel")
+        compare(bar.visible, true, "the progress bar should be visible while a build is running")
+        compare(bar.value, 0.4, "the progress bar should bind to sessionVm.profileBuildProgress")
+        compare(bar.indeterminate, false, "a known fraction should not render as indeterminate")
+    }
+
+    // The file count is only known once the first per-file report lands.
+    function test_profileBuildProgressBar_indeterminateBeforeTheFirstReport() {
+        const vm = makeFakeSessionVm()
+        vm.profileBuildInProgress = true
+        const panel = createPanel({
+            sessionVm: vm, graphVm: makeFakeGraphVm(), columnVisibility: ({})
+        })
+
+        const bar = findChild(panel, "profileBuildProgressBar")
+        compare(bar.indeterminate, true, "a build with no progress yet should render as indeterminate")
     }
 
     function test_columnVisibilityCheckBox_reflectsColumnVisibility() {

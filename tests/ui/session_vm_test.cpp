@@ -21,15 +21,16 @@ namespace {
 
         std::vector<ScenarioId> getScenarioList() override { return scenario_list; }
 
-        void generateProfileFromDirectory() const override {
-            const_cast<FakeSessionController *>(this)->generate_call_count++;
-        }
+        void generateProfileFromDirectory() override { generate_call_count++; }
 
         void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
         void setCurrentPerfToLatest() override {}
         void setCurrentPerf(const std::string &filename) override {}
         void setCurrentPerf(const ScenarioRunId &) override {}
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
+
+        bool build_in_progress = false;
+        [[nodiscard]] bool isBuildInProgress() const override { return build_in_progress; }
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return {}; }
 
@@ -75,14 +76,50 @@ namespace {
         EXPECT_EQ(view_model.getScenarioList().size(), 2);
     }
 
-    TEST_F(SessionViewModelTest, GenerateProfileDelegatesAndRefreshesScenarioList) {
+    TEST_F(SessionViewModelTest, GenerateProfileDelegatesToTheController) {
         SessionViewModel view_model(fake_controller);
 
-        fake_controller->scenario_list = {ScenarioId{.name = "Long Jump", .hash = "hash-1"}};
         view_model.generateProfile();
 
         EXPECT_EQ(fake_controller->generate_call_count, 1);
+    }
+
+    // The build is asynchronous now, so the scenario list can only refresh off the
+    // controller's profileChanged signal, never off the generateProfile() call itself.
+    TEST_F(SessionViewModelTest, ProfileChangedRefreshesScenarioList) {
+        SessionViewModel view_model(fake_controller);
+
+        fake_controller->scenario_list = {ScenarioId{.name = "Long Jump", .hash = "hash-1"}};
+        emit fake_controller->profileChanged();
+
         EXPECT_EQ(view_model.getScenarioList().size(), 1);
+    }
+
+    TEST_F(SessionViewModelTest, BuildSignalsDriveTheProgressProperties) {
+        SessionViewModel view_model(fake_controller);
+        ASSERT_FALSE(view_model.profileBuildInProgress());
+
+        const QSignalSpy spy(&view_model, &SessionViewModel::profileBuildChanged);
+        emit fake_controller->buildStarted();
+        EXPECT_TRUE(view_model.profileBuildInProgress());
+        EXPECT_DOUBLE_EQ(view_model.profileBuildProgress(), 0.0);
+
+        emit fake_controller->buildProgress(1, 4);
+        EXPECT_DOUBLE_EQ(view_model.profileBuildProgress(), 0.25);
+
+        emit fake_controller->buildFinished();
+        EXPECT_FALSE(view_model.profileBuildInProgress());
+        EXPECT_EQ(spy.count(), 3);
+    }
+
+    // App starts the profile build before it constructs the view models, so a build
+    // already running has to be visible from the first binding evaluation.
+    TEST_F(SessionViewModelTest, BuildAlreadyRunningAtConstructionIsReportedInProgress) {
+        fake_controller->build_in_progress = true;
+
+        const SessionViewModel view_model(fake_controller);
+
+        EXPECT_TRUE(view_model.profileBuildInProgress());
     }
 
     TEST_F(SessionViewModelTest, GetCurrentPerfReturnsControllersCurrentPerf) {

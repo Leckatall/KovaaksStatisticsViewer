@@ -9,6 +9,8 @@ add_library(ksv_app STATIC
         usecases/perf_column_builder.cpp
         usecases/i_playtime_graph_use_case.h
         usecases/playtime_graph_use_case.h
+        profile_build_worker.cpp
+        profile_build_worker.h
         session_controller.cpp
         session_controller.h
         usecases/i_session_controller.h
