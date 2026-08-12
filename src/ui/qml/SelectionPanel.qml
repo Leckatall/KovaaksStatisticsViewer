@@ -9,6 +9,8 @@ ColumnLayout {
     property var scenarioModel
     property var runModel
     property var recentRunModel
+    property string currentRunHash
+    property double currentRunStartTimeMs: 0
     property alias searchText: scenarioSearch.searchText
     property string activeScenarioName
     property bool recentExpanded: false
@@ -62,6 +64,8 @@ ColumnLayout {
         title: ""
         showSort: false
         runModel: root.recentRunModel
+        currentRunHash: root.currentRunHash
+        currentRunStartTimeMs: root.currentRunStartTimeMs
         onRunSelected: (hash, startTimeMs) => root.runSelected(hash, startTimeMs)
     }
 
@@ -89,6 +93,8 @@ ColumnLayout {
         title: root.activeScenarioName
         visible: root.activeScenarioName !== "" && root.scenarioBrowserSectionVisible
         runModel: root.runModel
+        currentRunHash: root.currentRunHash
+        currentRunStartTimeMs: root.currentRunStartTimeMs
         onRunSelected: (hash, startTimeMs) => root.runSelected(hash, startTimeMs)
         onSortRequested: (field, ascending) => root.sortRequested(field, ascending)
     }

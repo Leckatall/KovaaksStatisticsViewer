@@ -108,6 +108,8 @@ ApplicationWindow {
                     anchors.fill: parent
                     title: window.scenarioBrowserVm.activeScenarioHash === "" ? "" : "Active scenario runs"
                     runModel: window.scenarioBrowserVm.runModel
+                    currentRunHash: window.scenarioBrowserVm.currentRunHash
+                    currentRunStartTimeMs: window.scenarioBrowserVm.currentRunStartTimeMs
                     onRunSelected: (hash, startTimeMs) => window.scenarioBrowserVm.selectRun(hash, startTimeMs)
                     onSortRequested: (field, ascending) => window.scenarioBrowserVm.setSort(field, ascending)
                 }
@@ -134,6 +136,8 @@ ApplicationWindow {
                     anchors.fill: parent
                     title: "Recent"
                     runModel: window.scenarioBrowserVm.recentRunsModel
+                    currentRunHash: window.scenarioBrowserVm.currentRunHash
+                    currentRunStartTimeMs: window.scenarioBrowserVm.currentRunStartTimeMs
                     onRunSelected: (hash, startTimeMs) => window.scenarioBrowserVm.selectRun(hash, startTimeMs)
                 }
             }

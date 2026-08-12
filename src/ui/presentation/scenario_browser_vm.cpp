@@ -24,6 +24,7 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::refresh() {
+        refreshCurrentRun();
         refreshScenarioModel();
         refreshRunModel();
         refreshRecentRunsModel();
@@ -101,6 +102,18 @@ namespace ksv::presentation {
         auto runs = m_session_controller->getRunsForScenario(scenario_id);
         applyRunSort(runs);
         m_run_model->setRuns(std::move(runs));
+    }
+
+    void ScenarioBrowserViewModel::refreshCurrentRun() {
+        const auto &run_id = m_session_controller->getCurrentPerf().run_id;
+        const QString hash = QString::fromStdString(run_id.scenario_id.hash);
+        const double start_time_ms = static_cast<double>(run_id.start_time);
+        if (m_current_run_hash == hash && m_current_run_start_time_ms == start_time_ms)
+            return;
+
+        m_current_run_hash = hash;
+        m_current_run_start_time_ms = start_time_ms;
+        emit currentRunChanged();
     }
 
     void ScenarioBrowserViewModel::setRunSort(const RunSortField field, const bool ascending) {

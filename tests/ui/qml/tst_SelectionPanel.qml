@@ -117,6 +117,51 @@ TestCase {
         compare(runSelectedSpy.signalArguments[1][0], "a")
     }
 
+    function test_currentRunIsHighlightedAcrossListsAndUpdates() {
+        const currentTime = 1723200000000
+        const nextTime = currentTime + 1
+        const runs = [
+            {hash: "a", runLabel: "current", scenarioName: "Scenario A", startTimeMs: currentTime,
+             score: 8421, accuracy: 0.91, durationSeconds: 60, shots: 132, hits: 120},
+            {hash: "a", runLabel: "next", scenarioName: "Scenario A", startTimeMs: nextTime,
+             score: 8150, accuracy: 0.885, durationSeconds: 59.8, shots: 128, hits: 113}
+        ]
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            width: 600, height: 700, currentRunHash: "a", currentRunStartTimeMs: currentTime,
+            scenarioModel: [{name: "Scenario A", hash: "a", runCount: 2, lastPlayedMs: currentTime}],
+            runModel: runs, recentRunModel: runs
+        })
+        verify(waitForRendering(panel))
+
+        const recentToggle = findChild(panel, "recentToggleButton")
+        mouseClick(recentToggle, recentToggle.width / 2, recentToggle.height / 2)
+        const scenarioItem = findChild(panel, "scenarioItem_0")
+        mouseClick(scenarioItem, scenarioItem.width / 2, scenarioItem.height / 2)
+        const recentRuns = findChild(panel, "recentRunsView")
+        const scenarioRuns = findChild(panel, "scenarioRunsView")
+        tryVerify(() => findChild(recentRuns, "runItem_1") !== null
+                        && findChild(scenarioRuns, "runItem_1") !== null)
+
+        const recentCurrent = findChild(recentRuns, "runItem_0")
+        const recentNext = findChild(recentRuns, "runItem_1")
+        const scenarioCurrent = findChild(scenarioRuns, "runItem_0")
+        const scenarioNext = findChild(scenarioRuns, "runItem_1")
+        compare(recentCurrent.isCurrentRun, true)
+        compare(scenarioCurrent.isCurrentRun, true)
+        compare(recentNext.isCurrentRun, false)
+        compare(scenarioNext.isCurrentRun, false)
+        compare(recentCurrent.background.color, recentCurrent.currentRunColor)
+        compare(recentCurrent.background.border.color, panel.palette.accent)
+
+        panel.currentRunStartTimeMs = nextTime
+        wait(0)
+
+        compare(recentCurrent.isCurrentRun, false)
+        compare(scenarioCurrent.isCurrentRun, false)
+        compare(recentNext.isCurrentRun, true)
+        compare(scenarioNext.isCurrentRun, true)
+    }
+
     function test_recentSectionVisibleFalse_hidesToggleButtonAndList() {
         const panel = createPanel()
         const recentToggle = findChild(panel, "recentToggleButton")

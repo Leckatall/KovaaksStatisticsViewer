@@ -9,6 +9,8 @@ ColumnLayout {
     property var runModel
     property alias title: titleLabel.text
     property string emptyText: "No runs"
+    property string currentRunHash
+    property double currentRunStartTimeMs: 0
     property bool showSort: true
     property int sortField: 0
     property bool sortAscending: false
@@ -73,6 +75,8 @@ ColumnLayout {
         model: root.runModel
 
         delegate: ScenarioRunItem {
+            currentRunHash: root.currentRunHash
+            currentRunStartTimeMs: root.currentRunStartTimeMs
             onRunSelected: (hash, startTimeMs) => root.runSelected(hash, startTimeMs)
         }
     }
