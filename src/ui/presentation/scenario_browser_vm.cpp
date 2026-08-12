@@ -52,7 +52,21 @@ namespace ksv::presentation {
         auto summaries = m_session_controller->getScenarioSummaries();
         applyScenarioSort(summaries);
         m_all_summaries = summaries;
+        updateLongestScenarioName();
         applyFilter();
+    }
+
+    void ScenarioBrowserViewModel::updateLongestScenarioName() {
+        // Character count stands in for the pixel width; QML measures the winner once
+        // with TextMetrics. Emitting only on a real change is what keeps the panel
+        // width still — refreshScenarioModel() runs on every run selection.
+        const auto longest = std::ranges::max_element(m_all_summaries, {}, [](const auto &summary) {
+            return summary.scenario_id.name.size();
+        });
+        QString name = longest == m_all_summaries.end() ? QString() : QString::fromStdString(longest->scenario_id.name);
+        if (name == m_longest_scenario_name) return;
+        m_longest_scenario_name = std::move(name);
+        emit longestScenarioNameChanged();
     }
 
     void ScenarioBrowserViewModel::activateScenario(const QString &hash, const QString &name) {

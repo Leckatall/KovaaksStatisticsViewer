@@ -173,11 +173,11 @@ namespace {
         EXPECT_EQ(spy.count(), 0);
     }
 
-    TEST_F(ScenarioBrowserViewModelTest, DefaultScenarioSortIsRunCountDescending) {
+    TEST_F(ScenarioBrowserViewModelTest, DefaultScenarioSortIsLastPlayedDescending) {
         fake_controller->scenario_summaries = {
-            make_summary("1wall6targets TE", "hash-1", 3),
-            make_summary("Microshot", "hash-2", 7),
-            make_summary("Smoothbot Invincible", "hash-3", 5),
+            make_summary("1wall6targets TE", "hash-1", 7, 1000),
+            make_summary("Microshot", "hash-2", 3, 3000),
+            make_summary("Smoothbot Invincible", "hash-3", 5, 2000),
         };
         ScenarioBrowserViewModel view_model(fake_controller);
 
@@ -280,6 +280,44 @@ namespace {
         emit fake_controller->currentPerfChanged();
 
         EXPECT_EQ(asListModel(view_model)->rowCount(), 1);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, LongestScenarioNameIsTakenFromTheWholeCatalogue) {
+        fake_controller->scenario_summaries = {
+            make_summary("Microshot", "hash-2"),
+            make_summary("Smoothbot Invincible", "hash-3"),
+            make_summary("1wall6targets TE", "hash-1"),
+        };
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        EXPECT_EQ(view_model.longestScenarioName(), QString("Smoothbot Invincible"));
+
+        // Filtering the list must not narrow the name the panel is sized against.
+        view_model.setSearchText("micro");
+        EXPECT_EQ(view_model.longestScenarioName(), QString("Smoothbot Invincible"));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, RefreshWithUnchangedCatalogueDoesNotReemitLongestScenarioName) {
+        fake_controller->scenario_summaries = {make_summary("Smoothbot Invincible", "hash-3")};
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::longestScenarioNameChanged);
+        view_model.selectRun("hash-3", 1000.0);
+        emit fake_controller->currentPerfChanged();
+
+        EXPECT_EQ(spy.count(), 0);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, LongestScenarioNameEmitsWhenCatalogueGainsALongerName) {
+        fake_controller->scenario_summaries = {make_summary("Microshot", "hash-2")};
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::longestScenarioNameChanged);
+        fake_controller->scenario_summaries.push_back(make_summary("Smoothbot Invincible", "hash-3"));
+        emit fake_controller->profileChanged();
+
+        EXPECT_EQ(view_model.longestScenarioName(), QString("Smoothbot Invincible"));
+        EXPECT_EQ(spy.count(), 1);
     }
 
     TEST_F(ScenarioBrowserViewModelTest, ActivateScenarioPopulatesRunModelNewestFirst) {

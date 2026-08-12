@@ -5,7 +5,6 @@ import QtQuick.Layouts
 ColumnLayout {
     id: root
     spacing: 8
-    implicitWidth: 360
 
     property var scenarioModel
     property var runModel
@@ -13,6 +12,30 @@ ColumnLayout {
     property alias searchText: scenarioSearch.searchText
     property string activeScenarioName
     property bool recentExpanded: false
+    // The panel is sized to the widest name in the whole scenario catalogue, not to
+    // whatever happens to be listed or selected right now, so clicking around never
+    // resizes it. Both inputs come from Main.qml.
+    property string widestScenarioName
+    property real maximumPanelWidth: 480
+
+    readonly property real chromeWidth: scenarioSearch.implicitWidth
+    // Delegate padding, the run-count label beside the name, and scrollbar allowance.
+    readonly property real scenarioDelegateChrome: 72
+
+    readonly property real desiredWidth: Math.min(root.maximumPanelWidth,
+                                                  Math.max(root.chromeWidth,
+                                                           nameMetrics.advanceWidth + root.scenarioDelegateChrome))
+
+    Layout.minimumWidth: root.chromeWidth
+    Layout.maximumWidth: root.maximumPanelWidth
+    Layout.preferredWidth: root.desiredWidth
+
+    TextMetrics {
+        id: nameMetrics
+        font: Qt.application.font
+        text: root.widestScenarioName
+    }
+
     signal searchEdited(string text)
     signal scenarioActivated(string hash, string name)
     signal runSelected(string hash, double startTimeMs)
@@ -31,6 +54,7 @@ ColumnLayout {
         objectName: "recentRunsView"
         Layout.fillWidth: true
         Layout.preferredHeight: root.recentExpanded ? 180 : 0
+        Layout.maximumHeight: root.height / 2
         visible: root.recentExpanded
         title: ""
         showSort: false

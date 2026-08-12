@@ -104,6 +104,8 @@ ApplicationWindow {
         SelectionPanel {
             Layout.row: 1; Layout.column: 0
             Layout.fillHeight: true
+            widestScenarioName: root.scenarioBrowserVm.longestScenarioName
+            maximumPanelWidth: root.width / 3
             scenarioModel: root.scenarioBrowserVm.scenarioModel
             runModel: root.scenarioBrowserVm.runModel
             recentRunModel: root.scenarioBrowserVm.recentRunsModel

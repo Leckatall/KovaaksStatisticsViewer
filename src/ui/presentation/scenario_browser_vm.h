@@ -24,6 +24,9 @@ namespace ksv::presentation {
         Q_PROPERTY(QObject* runModel READ runModel CONSTANT)
         Q_PROPERTY(QObject* recentRunsModel READ recentRunsModel CONSTANT)
         Q_PROPERTY(QString activeScenarioHash READ activeScenarioHash NOTIFY activeScenarioChanged)
+        // Drives SelectionPanel's width. Taken from the unfiltered catalogue so that
+        // filtering, sorting and run selection cannot resize the panel.
+        Q_PROPERTY(QString longestScenarioName READ longestScenarioName NOTIFY longestScenarioNameChanged)
 
     public:
         enum RunSortField {
@@ -43,6 +46,7 @@ namespace ksv::presentation {
         [[nodiscard]] QObject *runModel() const { return m_run_model; }
         [[nodiscard]] QObject *recentRunsModel() const { return m_recent_runs_model; }
         [[nodiscard]] QString activeScenarioHash() const { return m_active_scenario_hash; }
+        [[nodiscard]] QString longestScenarioName() const { return m_longest_scenario_name; }
 
         Q_INVOKABLE void setSearchText(const QString &text);
         Q_INVOKABLE void activateScenario(const QString &hash, const QString &name);
@@ -53,10 +57,12 @@ namespace ksv::presentation {
 
     signals:
         void activeScenarioChanged();
+        void longestScenarioNameChanged();
 
     private:
         void applyFilter();
         void refreshScenarioModel();
+        void updateLongestScenarioName();
         void refreshRunModel();
         void applyRunSort(std::vector<application::RunSummary> &runs) const;
         void applyScenarioSort(std::vector<application::ScenarioSummary> &summaries) const;
@@ -72,6 +78,7 @@ namespace ksv::presentation {
         QString m_search_text;
         QString m_active_scenario_hash;
         QString m_active_scenario_name;
+        QString m_longest_scenario_name;
         RunSortField m_run_sort_field = RunSortField::Date;
         ScenarioSortField m_scenario_sort_field = ScenarioSortField::LAST_PLAYED;
         bool m_run_sort_ascending = false;

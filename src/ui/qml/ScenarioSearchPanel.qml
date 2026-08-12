@@ -20,10 +20,16 @@ ColumnLayout {
     spacing: 6
 
     RowLayout {
+        id: searchRow
+
+        Layout.fillWidth: true
+
         TextField {
             id: searchField
 
             Layout.fillWidth: true
+            // Without this the style's own implicit width sets the panel's floor.
+            Layout.preferredWidth: 120
 
             objectName: "scenarioSearchField"
             placeholderText: "Search scenarios…"
@@ -66,13 +72,6 @@ ColumnLayout {
                     root.scenarioSortRequested(root.sortField, root.sortAscending);
                 }
             }
-        }
-    }
-    Component {
-        id: sortControlsComponent
-
-        RowLayout {
-            spacing: 4
         }
     }
     ListView {

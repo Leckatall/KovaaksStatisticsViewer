@@ -27,7 +27,12 @@ ColumnLayout {
         Label {
             id: titleLabel
             font.bold: true
+            // preferredWidth 0 keeps the (arbitrarily long) scenario name out of the
+            // layout's width hint; it still takes the row's slack via fillWidth.
             Layout.fillWidth: true
+            Layout.preferredWidth: 0
+            Layout.minimumWidth: 60
+            elide: Text.ElideRight
         }
 
         Loader {

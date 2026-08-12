@@ -35,6 +35,42 @@ TestCase {
         return panel
     }
 
+    function test_widthIsUnaffectedByScenarioAndRunSelection() {
+        const longName = "A".repeat(200)
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            height: 700, maximumPanelWidth: 400,
+            scenarioModel: [{name: longName, hash: "a", runCount: 3, lastPlayedMs: 1723200000000}],
+            runModel: makeRuns("a"), recentRunModel: makeRuns("recent")
+        })
+        verify(waitForRendering(panel))
+        const initialWidth = panel.desiredWidth
+
+        const scenarioItem = findChild(panel, "scenarioItem_0")
+        mouseClick(scenarioItem, scenarioItem.width / 2, scenarioItem.height / 2)
+        wait(0)
+        compare(panel.activeScenarioName, longName)
+        compare(panel.desiredWidth, initialWidth)
+
+        const runItem = findChild(findChild(panel, "scenarioRunsView"), "runItem_0")
+        verify(waitForRendering(runItem))
+        mouseClick(runItem, runItem.width / 2, runItem.height / 2)
+        wait(0)
+        compare(panel.desiredWidth, initialWidth)
+    }
+
+    function test_widthTracksWidestScenarioNameWithinBounds() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            height: 700, maximumPanelWidth: 400, widestScenarioName: "A".repeat(200)
+        })
+        verify(waitForRendering(panel))
+        compare(panel.desiredWidth, 400)
+
+        panel.widestScenarioName = ""
+        wait(0)
+        compare(panel.desiredWidth, panel.chromeWidth)
+        verify(panel.chromeWidth > 0)
+    }
+
     function test_activationRevealsScenarioRunsAndRecentRenders() {
         const panel = createPanel()
         const scenarioRuns = findChild(panel, "scenarioRunsView")
