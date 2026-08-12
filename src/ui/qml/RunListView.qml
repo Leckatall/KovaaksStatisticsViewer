@@ -48,32 +48,16 @@ ColumnLayout {
     Component {
         id: sortControlsComponent
 
-        RowLayout {
-            spacing: 4
-
-            Label {
-                text: "Sort:"
-            }
-
-            ComboBox {
-                id: sortCombo
-                objectName: "runSortCombo"
-                model: ["Date", "Score", "Accuracy", "Duration"]
-                currentIndex: root.sortField
-                onActivated: (index) => {
-                    root.sortField = index
-                    root.sortRequested(root.sortField, root.sortAscending)
-                }
-            }
-
-            ToolButton {
-                id: sortDirectionButton
-                objectName: "runSortDirectionButton"
-                text: root.sortAscending ? "▲" : "▼"
-                onClicked: {
-                    root.sortAscending = !root.sortAscending
-                    root.sortRequested(root.sortField, root.sortAscending)
-                }
+        SortControls {
+            comboObjectName: "runSortCombo"
+            buttonObjectName: "runSortDirectionButton"
+            options: ["Date", "Score", "Accuracy", "Duration"]
+            sortField: root.sortField
+            sortAscending: root.sortAscending
+            onSortRequested: (field, ascending) => {
+                root.sortField = field
+                root.sortAscending = ascending
+                root.sortRequested(field, ascending)
             }
         }
     }

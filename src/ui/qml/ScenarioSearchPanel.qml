@@ -36,41 +36,16 @@ ColumnLayout {
 
             onTextEdited: root.searchEdited(text)
         }
-        GridLayout {
-            id: searchSortControls
-            rowSpacing: 0
-            Label {
-                Layout.columnSpan: 2
-                Layout.row: 0
-                Layout.alignment: Qt.AlignCenter
-                text: "Sort By:"
-            }
-            ComboBox {
-                id: sortCombo
-
-                Layout.column: 0
-                Layout.row: 1
-                currentIndex: root.sortField
-                model: ["Last Played", "Runs", "Name"]
-                objectName: "scenarioSortCombo"
-
-                onActivated: index => {
-                    root.sortField = index;
-                    root.scenarioSortRequested(root.sortField, root.sortAscending);
-                }
-            }
-            ToolButton {
-                id: sortDirectionButton
-
-                Layout.column: 1
-                Layout.row: 1
-                objectName: "scenarioSortDirectionButton"
-                text: root.sortAscending ? "▲" : "▼"
-
-                onClicked: {
-                    root.sortAscending = !root.sortAscending;
-                    root.scenarioSortRequested(root.sortField, root.sortAscending);
-                }
+        SortControls {
+            comboObjectName: "scenarioSortCombo"
+            buttonObjectName: "scenarioSortDirectionButton"
+            options: ["Last Played", "Runs", "Name"]
+            sortField: root.sortField
+            sortAscending: root.sortAscending
+            onSortRequested: (field, ascending) => {
+                root.sortField = field
+                root.sortAscending = ascending
+                root.scenarioSortRequested(field, ascending)
             }
         }
     }

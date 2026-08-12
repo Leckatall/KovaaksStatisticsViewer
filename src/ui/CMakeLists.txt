@@ -27,6 +27,7 @@ qt_add_qml_module(ksv_ui
             qml/SelectionPanel.qml
             qml/ScenarioSearchPanel.qml
             qml/RunListView.qml
+            qml/SortControls.qml
             qml/ScenarioRunItem.qml
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
