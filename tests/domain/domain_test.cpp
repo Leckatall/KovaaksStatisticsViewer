@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <unordered_set>
 
 #include "scenario_perf.h"
@@ -189,6 +190,15 @@ namespace {
         expected << "Air Angelic (" << std::put_time(&local_tm, "%Y-%m-%d, %H:%M:%S") << ")";
 
         EXPECT_EQ(run_id.toString(), expected.str());
+    }
+
+    TEST(ScenarioRunIdTest, ToStringFallsBackToNameWhenLocalTimeConversionFails) {
+        const ScenarioRunId run_id{
+            .scenario_id = {.name = "Air Angelic", .hash = "h1"},
+            .start_time = std::numeric_limits<long long>::max(),
+        };
+
+        EXPECT_EQ(run_id.toString(), "Air Angelic");
     }
 
     class UserProfileTest : public testing::Test {

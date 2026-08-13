@@ -83,9 +83,13 @@ namespace ksv::domain {
             const auto seconds = static_cast<std::time_t>(start_time / 1000);
             std::tm local_tm{};
 #ifdef _WIN32
-            localtime_s(&local_tm, &seconds);
+            if (localtime_s(&local_tm, &seconds) != 0) {
+                return scenario_id.name;
+            }
 #else
-            localtime_r(&seconds, &local_tm);
+            if (localtime_r(&seconds, &local_tm) == nullptr) {
+                return scenario_id.name;
+            }
 #endif
             std::ostringstream oss;
             oss << scenario_id.name << " (" << std::put_time(&local_tm, "%Y-%m-%d, %H:%M:%S") << ")";
