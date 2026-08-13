@@ -27,11 +27,21 @@ namespace ksv::presentation {
             qreal fallbackSpan = 1.0;       // Range padding for degenerate/empty data
         };
 
+        // TODO(2026-08-13): Extract DateTimeAxis when another axis needs calendar behavior; keeping it here preserves
+        //  the value-based GraphViewModelBase/GraphCanvas contract until polymorphic axis ownership is justified.
+        struct DateTimeOptions {
+            int targetTicks = 10;
+        };
+
         AxisModel() = default;
 
         [[nodiscard]] static AxisModel forRange(qreal dataLo, qreal dataHi, Options options);
         [[nodiscard]] static AxisModel forRange(qreal dataLo, qreal dataHi) {
             return forRange(dataLo, dataHi, Options{});
+        }
+        [[nodiscard]] static AxisModel forDateTimeRange(qreal dataLoMs, qreal dataHiMs, DateTimeOptions options);
+        [[nodiscard]] static AxisModel forDateTimeRange(qreal dataLoMs, qreal dataHiMs) {
+            return forDateTimeRange(dataLoMs, dataHiMs, DateTimeOptions{});
         }
 
         [[nodiscard]] qreal min() const { return m_min; }

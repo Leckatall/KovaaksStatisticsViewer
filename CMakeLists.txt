@@ -106,5 +106,4 @@ include(CTest)
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
-#target_include_directories(myapp PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 

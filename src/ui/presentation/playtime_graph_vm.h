@@ -55,7 +55,7 @@ namespace ksv::presentation {
         static constexpr int kWindowDays = 3;
 
         std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;
-        // {days-since-epoch, minutes} points, ordered by day.
+        // UTC epoch milliseconds and minutes, ordered by day.
         QList<QPointF> m_points;
         AxisModel m_xAxis;
         AxisModel m_yAxis;

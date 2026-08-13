@@ -17,7 +17,7 @@ namespace ksv::ui {
         constexpr qreal kMinLeftMargin = 20;
         constexpr qreal kMinBottomMargin = 16;
         constexpr qreal kTopMargin = 10;
-        constexpr qreal kRightMargin = 10;
+        constexpr qreal kRightMargin = 20;
         constexpr qreal kHoverRadius = 10;
         // Matches the fudge AxisPainter::paint already bakes into its label rects.
         const qreal kLabelExtentPadding = AxisPainter::Style{}.labelGap + 2;

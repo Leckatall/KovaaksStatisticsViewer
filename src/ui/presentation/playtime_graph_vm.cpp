@@ -4,7 +4,8 @@
 
 #include "playtime_graph_vm.h"
 
-#include <QDate>
+#include <QDateTime>
+#include <QTimeZone>
 #include <algorithm>
 #include <utility>
 
@@ -12,14 +13,17 @@ namespace ksv::presentation {
     namespace {
         const QColor kPlaytimeColor("#4DD0E1");
 
-        QString formatEpochDay(const qreal value) {
-            const QDate date = QDate(1970, 1, 1).addDays(qint64(std::llround(value)));
-            return date.toString("MMM d");
+        qint64 epochDayToUtcMs(const long long epochDay) {
+            return QDateTime(QDate(1970, 1, 1).addDays(epochDay), QTime(0, 0), QTimeZone::utc()).toMSecsSinceEpoch();
+        }
+
+        QString formatEpochMs(const qreal value) {
+            return QDateTime::fromMSecsSinceEpoch(qint64(std::llround(value)), QTimeZone::utc()).date().toString("MMM d");
         }
 
         ValueTransform dateDelegate() {
             ValueTransform t;
-            t.formatter = &formatEpochDay;
+            t.formatter = &formatEpochMs;
             return t;
         }
     }
@@ -77,17 +81,18 @@ namespace ksv::presentation {
         QList<QPointF> rawSecondsPoints;
         rawSecondsPoints.reserve(int(rollingPlaytime.size()));
         for (const auto &[epoch_day, avg_seconds]: rollingPlaytime) {
-            m_points.append(QPointF(qreal(epoch_day), avg_seconds / 60.0));
-            rawSecondsPoints.append(QPointF(qreal(epoch_day), avg_seconds));
+            const qreal epochMs = epochDayToUtcMs(epoch_day);
+            m_points.append(QPointF(epochMs, avg_seconds / 60.0));
+            rawSecondsPoints.append(QPointF(epochMs, avg_seconds));
         }
 
         if (m_points.isEmpty()) {
-            m_xAxis = AxisModel::forRange(0.0, 1.0, {AxisModel::Baseline::HugData, /*integral=*/true});
+            const qreal nowMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+            m_xAxis = AxisModel::forDateTimeRange(nowMs, nowMs);
         } else {
             const qreal xlo = m_points.first().x();
             const qreal xhi = m_points.last().x();
-            // X spans first..last day with integral ticks so fractional days never appear
-            m_xAxis = AxisModel::forRange(xlo, xhi, {AxisModel::Baseline::HugData, /*integral=*/true});
+            m_xAxis = AxisModel::forDateTimeRange(xlo, xhi, {.targetTicks = 10});
         }
         m_xAxis = m_xAxis.withDelegate(dateDelegate());
 

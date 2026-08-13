@@ -4,7 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include <QDate>
+#include <QDateTime>
+#include <QTimeZone>
 #include <QSignalSpy>
 
 #include "playtime_graph_vm.h"
@@ -13,6 +14,10 @@ using namespace ksv::presentation;
 using namespace ksv::application;
 
 namespace {
+    qreal epochDayMs(const long long epochDay) {
+        return QDateTime(QDate(1970, 1, 1).addDays(epochDay), QTime(0, 0), QTimeZone::utc()).toMSecsSinceEpoch();
+    }
+
     class FakePlaytimeUseCase : public IPlaytimeGraphUseCase {
     public:
         std::vector<std::pair<long long, double>> series;
@@ -38,16 +43,16 @@ namespace {
         EXPECT_TRUE(view_model.seriesPoints(PlaytimeGraphViewModel::Playtime).isEmpty());
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, RefreshConvertsSecondsToMinutesKeepingTheDayAsX) {
+    TEST_F(PlaytimeGraphViewModelTest, RefreshConvertsSecondsToMinutesKeepingTheDateTimeAsX) {
         fake->series = {{19500, 1800.0}, {19501, 900.0}};
 
         view_model.refresh();
 
         const auto points = view_model.seriesPoints(PlaytimeGraphViewModel::Playtime);
         ASSERT_EQ(points.size(), 2);
-        EXPECT_DOUBLE_EQ(points[0].x(), 19500.0);
+        EXPECT_DOUBLE_EQ(points[0].x(), epochDayMs(19500));
         EXPECT_DOUBLE_EQ(points[0].y(), 30.0); // 1800s / 60
-        EXPECT_DOUBLE_EQ(points[1].x(), 19501.0);
+        EXPECT_DOUBLE_EQ(points[1].x(), epochDayMs(19501));
         EXPECT_DOUBLE_EQ(points[1].y(), 15.0); // 900s / 60
     }
 
@@ -71,11 +76,10 @@ namespace {
         const auto xBounds = bounds[QString::number(PlaytimeGraphViewModel::Date)].toPointF();
         const auto yBounds = bounds[QString::number(PlaytimeGraphViewModel::Playtime)].toPointF();
 
-        // X spans the days on a whole-day (integral) grid.
-        EXPECT_DOUBLE_EQ(xBounds.x(), 19500.0);
-        EXPECT_DOUBLE_EQ(xBounds.y(), 19502.0);
+        EXPECT_DOUBLE_EQ(xBounds.x(), epochDayMs(19500));
+        EXPECT_DOUBLE_EQ(xBounds.y(), epochDayMs(19502));
         EXPECT_EQ(view_model.axisTicks(PlaytimeGraphViewModel::Date),
-                  (QList<qreal>{19500.0, 19501.0, 19502.0}));
+                  (QList<qreal>{epochDayMs(19500), epochDayMs(19501), epochDayMs(19502)}));
 
         // Y is zero-based and rounds up to a nice value with round ticks.
         EXPECT_DOUBLE_EQ(yBounds.x(), 0.0);
@@ -86,13 +90,13 @@ namespace {
         EXPECT_DOUBLE_EQ(yTicks.back(), 60.0);
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, SinglePointExpandsXAxisToNiceWholeDays) {
+    TEST_F(PlaytimeGraphViewModelTest, SinglePointExpandsXAxisToSurroundingCalendarDays) {
         fake->series = {{19500, 1800.0}};
         view_model.refresh();
 
         const auto xBounds = view_model.axisBounds()[QString::number(PlaytimeGraphViewModel::Date)].toPointF();
-        EXPECT_DOUBLE_EQ(xBounds.x(), 19499.0);
-        EXPECT_DOUBLE_EQ(xBounds.y(), 19501.0);
+        EXPECT_DOUBLE_EQ(xBounds.x(), epochDayMs(19499));
+        EXPECT_DOUBLE_EQ(xBounds.y(), epochDayMs(19501));
     }
 
     TEST_F(PlaytimeGraphViewModelTest, RefreshEmitsDataUpdatedAndBoundsChanged) {
@@ -106,9 +110,8 @@ namespace {
         EXPECT_GT(boundsSpy.count(), 0);
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, XAxisDelegateRendersTheEpochDayAsACalendarDate) {
-        // X values are days since 1970-01-01; the axis must show real dates.
-        const qreal dayValue = 19500.0;
+    TEST_F(PlaytimeGraphViewModelTest, XAxisDelegateRendersTheEpochMsAsACalendarDate) {
+        const qreal dayValue = epochDayMs(19500);
         const QString expected = QDate(1970, 1, 1).addDays(19500).toString("MMM d");
         EXPECT_EQ(view_model.xAxis().formatTick(dayValue), expected);
         EXPECT_FALSE(expected.isEmpty());
@@ -121,7 +124,7 @@ namespace {
         const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
         ASSERT_EQ(series.size(), 1);
         ASSERT_TRUE(series.front().yAxis.has_value());
-        EXPECT_EQ(series.front().formattedValueAtX(19500.0), "30 min");
+        EXPECT_EQ(series.front().formattedValueAtX(epochDayMs(19500)), "30 min");
         EXPECT_EQ(series.front().yAxis->formatTick(30.0), "30 min");
     }
 
