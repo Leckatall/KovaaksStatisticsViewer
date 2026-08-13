@@ -16,6 +16,7 @@ TestCase {
         id: fakeViewSettings
         property bool scenarioGraphVisible: true
         property bool playtimeGraphVisible: true
+        property bool scenarioHistoryGraphVisible: true
         property bool controlPanelVisible: true
         property bool selectionPanelVisible: true
         property bool recentRunsSectionVisible: true
@@ -28,13 +29,25 @@ TestCase {
         property bool accuracy: true
     }
 
+    QtObject {
+        id: fakeHistoryColumnVisibility
+        property bool score: true
+        property bool accuracy: false
+        property bool shots: false
+        property bool hits: false
+        property bool misses: false
+    }
+
     readonly property var fakeGraphVm: TestDoubles.makeFakeGraphVm()
+    readonly property var fakeHistoryVm: TestDoubles.makeFakeHistoryVm()
 
     Component {
         id: wiredMenuBarComponent
         AppMenuBar {
             graphVm: fakeGraphVm
+            historyVm: fakeHistoryVm
             columnVisibility: fakeColumnVisibility
+            historyColumnVisibility: fakeHistoryColumnVisibility
             viewSettings: fakeViewSettings
         }
     }
@@ -141,6 +154,7 @@ TestCase {
     function test_masterToggleActions_readAndWriteViewSettings() {
         fakeViewSettings.scenarioGraphVisible = true
         fakeViewSettings.playtimeGraphVisible = true
+        fakeViewSettings.scenarioHistoryGraphVisible = true
         fakeViewSettings.controlPanelVisible = true
         fakeViewSettings.selectionPanelVisible = true
         const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
@@ -157,6 +171,11 @@ TestCase {
         verify(playtimeItem !== null)
         playtimeItem.action.trigger()
         compare(fakeViewSettings.playtimeGraphVisible, false)
+
+        const historyItem = findMenuItemByText(viewMenu, "Scenario History")
+        verify(historyItem !== null)
+        historyItem.action.trigger()
+        compare(fakeViewSettings.scenarioHistoryGraphVisible, false)
 
         const controlPanelItem = findMenuItemByText(viewMenu, "Control Panel")
         verify(controlPanelItem !== null)
@@ -189,6 +208,30 @@ TestCase {
 
         fakeViewSettings.selectionPanelVisible = false
         compare(sectionsMenu.enabled, false)
+    }
+
+    function test_scenarioHistoryLinesSubmenuTracksVisibilityAndColumnSettings() {
+        fakeViewSettings.scenarioHistoryGraphVisible = true
+        fakeHistoryColumnVisibility.score = true
+        fakeHistoryColumnVisibility.accuracy = false
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const linesMenu = findChild(menuBar, "scenarioHistoryLinesMenu")
+        verify(linesMenu !== null)
+        compare(linesMenu.enabled, true)
+
+        const scoreItem = findMenuItemByText(linesMenu, "Score")
+        const accuracyItem = findMenuItemByText(linesMenu, "Accuracy")
+        verify(scoreItem !== null)
+        verify(accuracyItem !== null)
+        compare(scoreItem.checked, true)
+        compare(accuracyItem.checked, false)
+
+        accuracyItem.checked = true
+        accuracyItem.triggered()
+        compare(fakeHistoryColumnVisibility.accuracy, true)
+
+        fakeViewSettings.scenarioHistoryGraphVisible = false
+        compare(linesMenu.enabled, false)
     }
 
     function test_selectionPanelSectionItems_reflectViewSettings() {

@@ -9,6 +9,7 @@ Item {
     property var visibleColumns: []
     property int yAxisColumn: -1
     property bool showSeriesNames: true
+    property string xLabel: qsTr("Time")
     readonly property rect plotArea: canvas.plotArea
     readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
 
@@ -78,7 +79,11 @@ Item {
                 color: Qt.alpha(root.palette.toolTipText, 0.8)
                 font.pixelSize: 11
                 font.bold: true
-                text: hoverArea.hoverInfo.valid ? (root.showSeriesNames ? "Time: " + hoverArea.hoverInfo.x : hoverArea.hoverInfo.x) : ""
+                text: hoverArea.hoverInfo.valid
+                      ? (root.showSeriesNames
+                         ? qsTr("%1: %2").arg(root.xLabel).arg(hoverArea.hoverInfo.x)
+                         : hoverArea.hoverInfo.x)
+                      : ""
             }
             Repeater {
                 model: hoverArea.hoverInfo.valid ? hoverArea.hoverInfo.series : []

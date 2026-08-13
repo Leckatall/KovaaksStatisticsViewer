@@ -34,7 +34,8 @@ namespace ksv::domain {
         float score = 0.0F;
         int kills = 0.0F;
 
-        explicit ScenarioDataPoint(const float t) : time(t) {}
+        explicit ScenarioDataPoint(const float t) : time(t) {
+        }
     };
 
     struct ScenarioCompletionData {
@@ -47,13 +48,16 @@ namespace ksv::domain {
         float score = 0.0F;
         int kills = 0;
     };
+
     struct ScenarioId {
         std::string name;
         std::string hash;
-        bool operator==(const ScenarioId& other) const {
+
+        bool operator==(const ScenarioId &other) const {
             return hash == other.hash;
         }
-        bool operator<(const ScenarioId& other) const {
+
+        bool operator<(const ScenarioId &other) const {
             return hash < other.hash;
         }
     };
@@ -61,11 +65,14 @@ namespace ksv::domain {
     struct ScenarioRunId {
         ScenarioId scenario_id;
         long long start_time;
-        bool operator==(const ScenarioRunId& other) const {
+
+        bool operator==(const ScenarioRunId &other) const {
             return scenario_id == other.scenario_id && start_time == other.start_time;
         }
-        bool operator<(const ScenarioRunId& other) const {
-            return scenario_id < other.scenario_id || (scenario_id == other.scenario_id && start_time < other.start_time);
+
+        bool operator<(const ScenarioRunId &other) const {
+            return scenario_id < other.scenario_id || (
+                       scenario_id == other.scenario_id && start_time < other.start_time);
         }
 
         [[nodiscard]] std::chrono::sys_seconds startSecond() const {
@@ -128,22 +135,25 @@ namespace ksv::domain {
             std::cout << "Duration: " << scenario_length << std::endl;
             std::cout << "Data:" << std::endl;
             for (const auto &point: data) {
-                std::cout << point.time << " " << point.shots << " " << point.hits << " " << point.misses << " " << point.dmg << " " << point.dmg_possible << " " << point.score << " " << point.kills << std::endl;
+                std::cout << point.time << " " << point.shots << " " << point.hits << " " << point.misses << " " <<
+                        point.dmg << " " << point.dmg_possible << " " << point.score << " " << point.kills << std::endl;
             }
         }
 
     private:
-        [[nodiscard]] ScenarioDataPoint& get_data_point(float time);
+        [[nodiscard]] ScenarioDataPoint &get_data_point(float time);
     };
 }
+
 namespace std {
-    template <>
+    template<>
     struct hash<ksv::domain::ScenarioId> {
         auto operator()(const ksv::domain::ScenarioId &scenario_id) const -> size_t {
             return hash<string>{}(scenario_id.hash);
         }
     };
-    template <>
+
+    template<>
     struct hash<ksv::domain::ScenarioRunId> {
         auto operator()(const ksv::domain::ScenarioRunId &run_id) const -> size_t {
             return hash<ksv::domain::ScenarioId>{}(run_id.scenario_id) ^ hash<long long>{}(run_id.start_time);

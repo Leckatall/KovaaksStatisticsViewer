@@ -44,6 +44,9 @@ namespace ksv::application {
         [[nodiscard]] virtual std::vector<domain::ScenarioPerf> getMostRecentPerfs(
             const domain::ScenarioId& scenario, std::size_t count) const = 0;
 
+        [[nodiscard]] virtual std::vector<std::pair<domain::ScenarioRunId, domain::ScenarioCompletionData> >
+        getCompletionHistory(const domain::ScenarioId &scenario) const = 0;
+
         [[nodiscard]] virtual std::optional<float> getAverageScore(
             const domain::ScenarioId& scenario, std::size_t count) const = 0;
 

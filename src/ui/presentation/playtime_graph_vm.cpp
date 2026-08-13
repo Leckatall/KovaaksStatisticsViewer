@@ -99,7 +99,7 @@ namespace ksv::presentation {
         m_series.name = columnName(Playtime);
         m_series.color = kPlaytimeColor;
         m_series.transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
-        m_series.yAxisOptions = {AxisModel::Baseline::Zero};
+        m_series.yAxisOptions = {.baseline = AxisModel::Baseline::Zero};
         m_series.setData(rawSecondsPoints);
         m_yAxis = *m_series.yAxis;
 

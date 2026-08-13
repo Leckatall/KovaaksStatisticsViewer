@@ -42,10 +42,27 @@ ApplicationWindow {
     }
 
     Settings {
+        id: historyColumnVisibilitySettings
+        category: "historyGraphColumns"
+        property bool score: true
+        property bool accuracy: false
+        property bool shots: false
+        property bool hits: false
+        property bool misses: false
+    }
+
+    Settings {
+        id: historyAxisSettings
+        category: "historyGraph"
+        property string yAxisColumnKey: "score"
+    }
+
+    Settings {
         id: viewSettings
         category: "view"
         property bool scenarioGraphVisible: true
         property bool playtimeGraphVisible: true
+        property bool scenarioHistoryGraphVisible: true
         property bool controlPanelVisible: true
         property bool selectionPanelVisible: true
         property bool recentRunsSectionVisible: true
@@ -54,6 +71,7 @@ ApplicationWindow {
 
     required property var graphVm
     required property var playtimeVm
+    required property var historyVm
     required property var sessionVm
     required property var settingsVm
     required property var scenarioBrowserVm
@@ -87,7 +105,9 @@ ApplicationWindow {
 
     menuBar: AppMenuBar {
         graphVm: root.graphVm
+        historyVm: root.historyVm
         columnVisibility: columnVisibilitySettings
+        historyColumnVisibility: historyColumnVisibilitySettings
         viewSettings: viewSettings
         onSetSourceDirRequested: folderDialog.open()
         onSettingsRequested: settingsDialog.open()
@@ -129,6 +149,14 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     visible: viewSettings.playtimeGraphVisible
                     playtimeVm: root.playtimeVm
+                }
+                ScenarioHistoryPanel {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: viewSettings.scenarioHistoryGraphVisible
+                    historyVm: root.historyVm
+                    columnVisibility: historyColumnVisibilitySettings
+                    historyAxisSettings: historyAxisSettings
                 }
             }
             ControlPanel {

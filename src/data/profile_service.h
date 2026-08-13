@@ -42,6 +42,8 @@ namespace ksv::data {
             const domain::ScenarioId& scenario) const override;
         [[nodiscard]] std::vector<domain::ScenarioPerf> getMostRecentPerfs(
             const domain::ScenarioId& scenario, std::size_t count) const override;
+        [[nodiscard]] std::vector<std::pair<domain::ScenarioRunId, domain::ScenarioCompletionData> >
+        getCompletionHistory(const domain::ScenarioId &scenario) const override;
         [[nodiscard]] std::optional<float> getAverageScore(
             const domain::ScenarioId& scenario, std::size_t count) const override;
 

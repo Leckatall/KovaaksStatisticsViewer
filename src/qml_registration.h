@@ -4,6 +4,7 @@
 #include <QtQml>
 
 #include <ui/components/graph_canvas.h>
+#include <presentation/completion_history_vm.h>
 #include <presentation/graph_vm.h>
 #include <presentation/playtime_graph_vm.h>
 #include <presentation/scenario_browser_vm.h>
@@ -16,6 +17,8 @@ namespace ksv {
         // TODO: I believe registering uncreatable type lines are unnecessary I will remove if this is verified with testing
         qmlRegisterUncreatableType<presentation::PlaytimeGraphViewModel>(
             "KovaaksStatsViewer", 1, 0, "PlaytimeGraphViewModel", "Created in C++");
+        qmlRegisterUncreatableType<presentation::CompletionHistoryViewModel>(
+            "KovaaksStatsViewer", 1, 0, "CompletionHistoryViewModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::ScenarioBrowserViewModel>(
             "KovaaksStatsViewer", 1, 0, "ScenarioBrowserViewModel", "Created in C++");
         qmlRegisterType<ui::GraphCanvas>(

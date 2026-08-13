@@ -8,6 +8,7 @@ add_executable(ui_tests
     series_model_test.cpp
     graph_vm_test.cpp
     playtime_graph_vm_test.cpp
+    completion_history_vm_test.cpp
     session_vm_test.cpp
     settings_vm_test.cpp
     monotone_spline_test.cpp
@@ -35,10 +36,13 @@ gtest_discover_tests(ui_tests)
 add_executable(ui_qml_tests qml/tst_ui_qml.cpp)
 
 target_link_libraries(ui_qml_tests PRIVATE
+    ksv_app
     Qt6::QuickTest
     Qt6::Quick
     Qt6::Qml
 )
+
+ksv_copy_mingw_runtime_dlls(ui_qml_tests)
 
 # Register each tst_*.qml file as its own CTest test (instead of one
 # add_test running the whole -input directory) so a failure in one

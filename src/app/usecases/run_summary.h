@@ -10,6 +10,7 @@
 #include "domain/scenario_perf.h"
 
 namespace ksv::application {
+    // DEPRECATED (13/08/2026) THIS IS LAYER BLEED REMOVE ASAP
     struct RunSummary {
         domain::ScenarioRunId run_id;
         QString scenario_name;

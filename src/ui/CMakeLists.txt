@@ -21,6 +21,7 @@ qt_add_qml_module(ksv_ui
             qml/Main.qml
             qml/DashboardGraphCanvas.qml
             qml/PlaytimeGraphPanel.qml
+            qml/ScenarioHistoryPanel.qml
             qml/GraphCanvasWithTooltip.qml
             qml/YAxisTitle.qml
             qml/ControlPanel.qml
@@ -45,6 +46,8 @@ qt_add_qml_module(ksv_ui
             presentation/graph_vm.cpp
             presentation/playtime_graph_vm.h
             presentation/playtime_graph_vm.cpp
+            presentation/completion_history_vm.h
+            presentation/completion_history_vm.cpp
         components/graph_canvas.h
         components/graph_canvas.cpp
         components/axis_painter.h

@@ -3,6 +3,7 @@ include(GoogleTest)
 
 add_executable(app_tests
     qt_test_main.cpp
+    completion_history_use_case_test.cpp
     graph_use_case_test.cpp
     perf_column_builder_test.cpp
     playtime_graph_use_case_test.cpp

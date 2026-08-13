@@ -17,6 +17,7 @@
 #include "qt_data/file_service.h"
 #include "../data/profile_service.h"
 #include "usecases/graph_use_case.h"
+#include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
 
 
@@ -53,6 +54,11 @@ namespace ksv::application {
         // Re-pull rolling average when profile changes (new run, cache reload, or dir change)
         m_profileService->onProfileChanged([this] { m_playtimeVm->refresh(); });
 
+        m_completionHistoryUseCase = std::make_shared<CompletionHistoryUseCase>(
+            m_sessionController, m_profileService);
+        m_completionHistoryVm = new presentation::CompletionHistoryViewModel(m_completionHistoryUseCase, this);
+        m_completionHistoryUseCase->onCurrentScenarioChanged([this] { m_completionHistoryVm->refresh(); });
+
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
         m_settingsVm = new presentation::SettingsViewModel(m_settingsService, m_profileService, this);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_sessionController, this);
@@ -62,6 +68,7 @@ namespace ksv::application {
         m_engine.setInitialProperties({
             {"graphVm", QVariant::fromValue(m_graphVm)},
             {"playtimeVm", QVariant::fromValue(m_playtimeVm)},
+            {"historyVm", QVariant::fromValue(m_completionHistoryVm)},
             {"sessionVm", QVariant::fromValue(m_sessionVm)},
             {"settingsVm", QVariant::fromValue(m_settingsVm)},
             {"scenarioBrowserVm", QVariant::fromValue(m_scenarioBrowserVm)}

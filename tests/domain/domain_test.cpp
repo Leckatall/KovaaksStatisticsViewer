@@ -293,6 +293,43 @@ namespace {
         EXPECT_EQ(recent.size(), 1);
     }
 
+    TEST_F(UserProfileTest, GetCompletionHistoryProjectsOnlyMatchingRunsInChronologicalOrder) {
+        UserProfile profile{"default"};
+        auto latest = make_perf("scenario-1", 300, 30.0F);
+        latest.add_data(0.0F, SHOTS, 12);
+        latest.add_data(0.0F, HITS, 9);
+        latest.add_data(0.0F, MISSES, 3);
+        auto earliest = make_perf("scenario-1", 100, 10.0F);
+        earliest.add_data(0.0F, SHOTS, 5);
+        earliest.add_data(0.0F, HITS, 4);
+        earliest.add_data(0.0F, MISSES, 1);
+        profile.addScenarioPerf(latest);
+        profile.addScenarioPerf(make_perf("scenario-2", 200, 99.0F));
+        profile.addScenarioPerf(earliest);
+
+        const auto history = profile.getCompletionHistory(
+            ScenarioId{.name = "Different display name", .hash = "scenario-1"});
+
+        ASSERT_EQ(history.size(), 2);
+        EXPECT_EQ(history[0].first.start_time, 100);
+        EXPECT_FLOAT_EQ(history[0].second.score, earliest.getCompletionData().score);
+        EXPECT_EQ(history[0].second.shots, earliest.getCompletionData().shots);
+        EXPECT_EQ(history[0].second.hits, earliest.getCompletionData().hits);
+        EXPECT_EQ(history[0].second.misses, earliest.getCompletionData().misses);
+        EXPECT_EQ(history[1].first.start_time, 300);
+        EXPECT_FLOAT_EQ(history[1].second.score, latest.getCompletionData().score);
+        EXPECT_EQ(history[1].second.shots, latest.getCompletionData().shots);
+        EXPECT_EQ(history[1].second.hits, latest.getCompletionData().hits);
+        EXPECT_EQ(history[1].second.misses, latest.getCompletionData().misses);
+    }
+
+    TEST_F(UserProfileTest, GetCompletionHistoryIsEmptyForUnknownScenario) {
+        UserProfile profile{"default"};
+        profile.addScenarioPerf(make_perf("scenario-1", 100));
+
+        EXPECT_TRUE(profile.getCompletionHistory(ScenarioId{.name = "?", .hash = "unknown"}).empty());
+    }
+
     TEST_F(UserProfileTest, GetAverageScoreAveragesFinalScoresOfMostRecentRuns) {
         UserProfile profile{"default"};
         profile.addScenarioPerf(make_perf("scenario-1", 100, 10.0F));

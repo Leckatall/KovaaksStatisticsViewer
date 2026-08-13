@@ -80,6 +80,20 @@ namespace ksv::domain {
         return result;
     }
 
+    std::vector<std::pair<ScenarioRunId, ScenarioCompletionData> >
+    UserProfile::getCompletionHistory(const ScenarioId &scenario) const {
+        const auto it = m_scenario_index.find(scenario);
+        if (it == m_scenario_index.end()) return {};
+
+        std::vector<std::pair<ScenarioRunId, ScenarioCompletionData> > result;
+        result.reserve(it->second.size());
+        for (const std::size_t idx: it->second) {
+            const auto &perf = m_runs[idx];
+            result.emplace_back(perf.run_id, perf.getCompletionData());
+        }
+        return result;
+    }
+
     std::optional<float> UserProfile::getAverageScore(const ScenarioId &scenario, const std::size_t count) const {
         const auto recent = getMostRecentPerfs(scenario, count);
         if (recent.empty()) return std::nullopt;

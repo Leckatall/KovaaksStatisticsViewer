@@ -1,12 +1,22 @@
 import QtQuick
 import QtQuick.Controls
+import KovaaksStatsViewer
 
 MenuBar {
     id: root
 
     property var graphVm
+    property var historyVm
     property var columnVisibility
+    property var historyColumnVisibility
     property var viewSettings
+    readonly property var historyColumns: root.historyVm ? [
+        CompletionHistoryViewModel.Score,
+        CompletionHistoryViewModel.Accuracy,
+        CompletionHistoryViewModel.Shots,
+        CompletionHistoryViewModel.Hits,
+        CompletionHistoryViewModel.Misses
+    ] : []
 
     signal setSourceDirRequested()
     signal settingsRequested()
@@ -74,6 +84,27 @@ MenuBar {
             checkable: true
             checked: root.viewSettings ? root.viewSettings.playtimeGraphVisible : true
             onTriggered: if (root.viewSettings) root.viewSettings.playtimeGraphVisible = checked
+        }
+        Action {
+            text: qsTr("Scenario History")
+            checkable: true
+            checked: root.viewSettings ? root.viewSettings.scenarioHistoryGraphVisible : true
+            onTriggered: if (root.viewSettings) root.viewSettings.scenarioHistoryGraphVisible = checked
+        }
+        Menu {
+            objectName: "scenarioHistoryLinesMenu"
+            title: qsTr("Scenario History Lines")
+            enabled: root.viewSettings ? root.viewSettings.scenarioHistoryGraphVisible : true
+            Repeater {
+                model: root.historyColumns
+                MenuItem {
+                    required property int modelData
+                    text: root.historyVm.columnName(modelData)
+                    checkable: true
+                    checked: !!root.historyColumnVisibility[root.historyVm.columnKey(modelData)]
+                    onTriggered: root.historyColumnVisibility[root.historyVm.columnKey(modelData)] = checked
+                }
+            }
         }
         Action {
             text: qsTr("Control Panel")

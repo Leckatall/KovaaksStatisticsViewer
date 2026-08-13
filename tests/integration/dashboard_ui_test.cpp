@@ -34,18 +34,21 @@ namespace {
         QQmlApplicationEngine engine;
         QObject *root = nullptr;
         QString perfUrl;
+        QString perfFile;
 
         void SetUp() override {
             ASSERT_TRUE(env.valid());
             ASSERT_TRUE(env.makePerformancesDir());
             const QString file = env.copyFixtureIntoPerformances("1wall6targets TE.perf");
             ASSERT_FALSE(file.isEmpty());
+            perfFile = file;
             perfUrl = QUrl::fromLocalFile(file).toString();
 
             app = std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>());
             engine.setInitialProperties({
                 {"graphVm", QVariant::fromValue(app->graphVm())},
                 {"playtimeVm", QVariant::fromValue(app->playtimeVm())},
+                {"historyVm", QVariant::fromValue(app->completionHistoryVm())},
                 {"sessionVm", QVariant::fromValue(app->sessionVm())},
                 {"settingsVm", QVariant::fromValue(app->settingsVm())},
                 {"scenarioBrowserVm", QVariant::fromValue(app->scenarioBrowserVm())},
@@ -55,11 +58,16 @@ namespace {
             root = engine.rootObjects().first();
         }
 
-        // The dashboard canvas is the GraphCanvas bound to the single-run graphVm
-        // (Main.qml also has a second GraphCanvas for the playtime graph).
         [[nodiscard]] ui::GraphCanvas *dashboardCanvas() const {
             for (auto *c: root->findChildren<ui::GraphCanvas *>()) {
                 if (c->graphVm() == app->graphVm()) return c;
+            }
+            return nullptr;
+        }
+
+        [[nodiscard]] ui::GraphCanvas *historyCanvas() const {
+            for (auto *canvas: root->findChildren<ui::GraphCanvas *>()) {
+                if (canvas->graphVm() == app->completionHistoryVm()) return canvas;
             }
             return nullptr;
         }
@@ -150,6 +158,22 @@ namespace {
         EXPECT_EQ(label->property("text").toString(), "Accuracy");
     }
 
+    TEST_F(DashboardUiTest, ScenarioHistoryCanvasUsesTheCompletionHistoryViewModel) {
+        ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
+        data::ProtoDecoder decoder;
+        auto first_run = decoder.decode_file(perfFile.toStdString());
+        auto second_run = first_run;
+        second_run.run_id.start_time += 1000;
+        domain::UserProfile profile{env.performancesDir().toStdString()};
+        ASSERT_TRUE(profile.addScenarioPerf(first_run));
+        ASSERT_TRUE(profile.addScenarioPerf(second_run));
+
+        app->profileService()->applyBuiltProfile(std::move(profile));
+
+        ASSERT_TRUE(QTest::qWaitFor([&] { return historyCanvas() != nullptr; }, 3000));
+        EXPECT_EQ(historyCanvas()->graphVm(), app->completionHistoryVm());
+    }
+
     TEST(FirstRunUiTest, BannerOpensFolderDialogAndHidesAfterDirectorySelection) {
         QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         raw.remove("file/kovaaks");
@@ -161,6 +185,7 @@ namespace {
         engine.setInitialProperties({
             {"graphVm", QVariant::fromValue(app.graphVm())},
             {"playtimeVm", QVariant::fromValue(app.playtimeVm())},
+            {"historyVm", QVariant::fromValue(app.completionHistoryVm())},
             {"sessionVm", QVariant::fromValue(app.sessionVm())},
             {"settingsVm", QVariant::fromValue(app.settingsVm())},
             {"scenarioBrowserVm", QVariant::fromValue(app.scenarioBrowserVm())},

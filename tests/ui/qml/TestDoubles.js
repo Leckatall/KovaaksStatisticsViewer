@@ -12,3 +12,18 @@ function makeFakeGraphVm() {
         fetchLatestData: function () { this.fetchLatestDataCalls++ }
     }
 }
+
+function makeFakeHistoryVm() {
+    return {
+        scenarioTitle: "Air Angelic",
+        runCount: 0,
+        columnName: function (id) {
+            const names = ["Run", "Score", "Accuracy", "Shots", "Hits", "Misses"]
+            return names[id]
+        },
+        columnKey: function (id) {
+            const keys = ["run", "score", "accuracy", "shots", "hits", "misses"]
+            return keys[id]
+        }
+    }
+}

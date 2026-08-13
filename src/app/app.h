@@ -9,6 +9,7 @@
 #include <QQmlApplicationEngine>
 
 #include "graph_vm.h"
+#include "completion_history_vm.h"
 #include "playtime_graph_vm.h"
 #include "scenario_browser_vm.h"
 #include "session_vm.h"
@@ -19,6 +20,7 @@
 #include "interfaces/i_settings_service.h"
 #include "usecases/i_session_controller.h"
 #include "usecases/i_playtime_graph_use_case.h"
+#include "usecases/i_completion_history_use_case.h"
 
 
 namespace ksv::application {
@@ -35,6 +37,9 @@ namespace ksv::application {
 
         [[nodiscard]] presentation::GraphViewModel* graphVm() const { return m_graphVm; }
         [[nodiscard]] presentation::PlaytimeGraphViewModel* playtimeVm() const { return m_playtimeVm; }
+        [[nodiscard]] presentation::CompletionHistoryViewModel* completionHistoryVm() const {
+            return m_completionHistoryVm;
+        }
         [[nodiscard]] presentation::SessionViewModel* sessionVm() const { return m_sessionVm; }
         [[nodiscard]] presentation::SettingsViewModel* settingsVm() const { return m_settingsVm; }
         [[nodiscard]] presentation::ScenarioBrowserViewModel* scenarioBrowserVm() const { return m_scenarioBrowserVm; }
@@ -48,6 +53,7 @@ namespace ksv::application {
         QQmlApplicationEngine m_engine;
         presentation::GraphViewModel* m_graphVm;
         presentation::PlaytimeGraphViewModel* m_playtimeVm;
+        presentation::CompletionHistoryViewModel* m_completionHistoryVm;
         presentation::SessionViewModel* m_sessionVm;
         presentation::SettingsViewModel* m_settingsVm;
         presentation::ScenarioBrowserViewModel* m_scenarioBrowserVm;
@@ -58,6 +64,7 @@ namespace ksv::application {
         std::shared_ptr<ISessionController> m_sessionController;
         std::shared_ptr<IGraphUseCase> m_graphUseCase;
         std::shared_ptr<IPlaytimeGraphUseCase> m_playtimeUseCase;
+        std::shared_ptr<ICompletionHistoryUseCase> m_completionHistoryUseCase;
         std::shared_ptr<IProtoDecoder> m_protoDecoder;
     };
 }
