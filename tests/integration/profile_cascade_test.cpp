@@ -24,6 +24,24 @@
 using namespace ksv;
 
 namespace {
+    std::string readFile(const std::filesystem::path &path) {
+        std::ifstream input(path, std::ios::in | std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    std::vector<std::filesystem::path> quarantineFiles(const std::filesystem::path &profilePath,
+                                                        const std::string &reason) {
+        std::vector<std::filesystem::path> matches;
+        const auto prefix = profilePath.stem().string() + "_" + reason + "_";
+        for (const auto &entry: std::filesystem::directory_iterator(profilePath.parent_path())) {
+            if (entry.path().extension() == profilePath.extension() &&
+                entry.path().stem().string().starts_with(prefix)) {
+                matches.push_back(entry.path());
+            }
+        }
+        return matches;
+    }
+
     class ProfileCascadeTest : public testing::Test {
     protected:
         integration::TestEnv env;
@@ -86,10 +104,17 @@ namespace {
                               std::ios::out | std::ios::binary | std::ios::trunc);
             stale.SerializeToOstream(&out);
         }
+        const auto profilePath = std::filesystem::path(env.profileCachePath().toStdString());
+        const auto rejectedBytes = readFile(profilePath);
 
         profileService->loadProfile();
 
         EXPECT_TRUE(profileService->isProfileLoaded());
+        EXPECT_TRUE(std::filesystem::exists(profilePath));
+        const auto quarantined = quarantineFiles(profilePath, "version-mismatch");
+        ASSERT_EQ(quarantined.size(), 1);
+        EXPECT_EQ(readFile(quarantined.front()), rejectedBytes);
+        EXPECT_NE(readFile(profilePath), rejectedBytes);
         const auto scenarios = profileService->getScenarioList();
         EXPECT_FALSE(scenarios.empty());
         for (const auto &s: scenarios) {

@@ -6,10 +6,18 @@
 
 #include <filesystem>
 #include <fstream>
+#include <set>
+#include <string>
+#include <vector>
 
 #include "formats/protobuf/profile_serializer.h"
 
 namespace {
+    std::string read_file(const std::filesystem::path &path) {
+        std::ifstream input(path, std::ios::in | std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
     ksv::domain::ScenarioPerf make_perf(const std::string &name, const std::string &hash,
                                         const long long start_time, const float scenario_length,
                                         const std::string &source_file = {}) {
@@ -31,8 +39,23 @@ namespace {
         std::filesystem::path cache_path =
             std::filesystem::temp_directory_path() / "profile_serializer_test_cache.pb";
 
+        [[nodiscard]] std::vector<std::filesystem::path> quarantine_files(const std::string &reason) const {
+            std::vector<std::filesystem::path> matches;
+            const auto prefix = cache_path.stem().string() + "_" + reason + "_";
+            for (const auto &entry: std::filesystem::directory_iterator(cache_path.parent_path())) {
+                if (entry.path().extension() == cache_path.extension() &&
+                    entry.path().stem().string().starts_with(prefix)) {
+                    matches.push_back(entry.path());
+                }
+            }
+            return matches;
+        }
+
         void TearDown() override {
             std::filesystem::remove(cache_path);
+            for (const auto &reason: {"unparseable", "version-mismatch"}) {
+                for (const auto &path: quarantine_files(reason)) std::filesystem::remove(path);
+            }
         }
     };
 
@@ -93,6 +116,10 @@ namespace {
         garbage.close();
 
         EXPECT_FALSE(serializer.load(cache_path).has_value());
+        EXPECT_FALSE(std::filesystem::exists(cache_path));
+        const auto quarantined = quarantine_files("unparseable");
+        ASSERT_EQ(quarantined.size(), 1);
+        EXPECT_EQ(read_file(quarantined.front()), std::string(garbage_bytes, sizeof(garbage_bytes)));
     }
 
     TEST_F(ProfileSerializerTest, LoadRejectsCacheWithMismatchedSchemaVersion) {
@@ -112,7 +139,30 @@ namespace {
         std::ofstream out(cache_path, std::ios::out | std::ios::binary | std::ios::trunc);
         proto.SerializeToOstream(&out);
         out.close();
+        const auto original_bytes = read_file(cache_path);
 
         EXPECT_FALSE(serializer.load(cache_path).has_value());
+        EXPECT_FALSE(std::filesystem::exists(cache_path));
+        const auto quarantined = quarantine_files("version-mismatch");
+        ASSERT_EQ(quarantined.size(), 1);
+        EXPECT_EQ(read_file(quarantined.front()), original_bytes);
+    }
+
+    TEST_F(ProfileSerializerTest, SuccessiveDistinctRejectionsPreserveBothFiles) {
+        const std::string first_bytes{"\x00\x01\x02", 3};
+        const std::string second_bytes{"\x00\x03\x04", 3};
+
+        for (const auto &bytes: {first_bytes, second_bytes}) {
+            std::ofstream output(cache_path, std::ios::out | std::ios::binary | std::ios::trunc);
+            output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+            output.close();
+            EXPECT_FALSE(serializer.load(cache_path).has_value());
+        }
+
+        const auto quarantined = quarantine_files("unparseable");
+        ASSERT_EQ(quarantined.size(), 2);
+        std::set<std::string> preserved;
+        for (const auto &path: quarantined) preserved.insert(read_file(path));
+        EXPECT_EQ(preserved, (std::set<std::string>{first_bytes, second_bytes}));
     }
 }

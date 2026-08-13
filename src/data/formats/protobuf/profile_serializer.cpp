@@ -4,12 +4,73 @@
 
 #include "profile_serializer.h"
 
+#include <chrono>
+#include <cstdint>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
+#include <optional>
+#include <sstream>
+#include <string_view>
+#include <system_error>
 
 namespace ksv::data {
     namespace {
         // Bumped when cache.proto changes incompatibly, ensuring old caches are regenerated instead of silently mis-parsed
         constexpr std::uint32_t kCacheVersion = 1;
+
+        std::optional<std::uint64_t> contentDigest(const std::filesystem::path &path) {
+            constexpr std::uint64_t offset_basis = 14695981039346656037ULL;
+            constexpr std::uint64_t prime = 1099511628211ULL;
+
+            std::ifstream input(path, std::ios::in | std::ios::binary);
+            if (!input) return std::nullopt;
+
+            std::uint64_t digest = offset_basis;
+            char buffer[8192];
+            while (input) {
+                input.read(buffer, sizeof(buffer));
+                for (std::streamsize i = 0; i < input.gcount(); ++i) {
+                    digest ^= static_cast<unsigned char>(buffer[i]);
+                    digest *= prime;
+                }
+            }
+            if (input.bad()) return std::nullopt;
+            return digest;
+        }
+
+        std::string utcTimestamp() {
+            using namespace std::chrono;
+            const auto now = system_clock::now();
+            const auto seconds = system_clock::to_time_t(now);
+            std::tm utc_tm{};
+#ifdef _WIN32
+            const bool converted = gmtime_s(&utc_tm, &seconds) == 0;
+#else
+            const bool converted = gmtime_r(&seconds, &utc_tm) != nullptr;
+#endif
+            if (converted) {
+                std::ostringstream formatted;
+                formatted << std::put_time(&utc_tm, "%Y%m%dT%H%M%SZ");
+                if (formatted) return formatted.str();
+            }
+            return std::to_string(duration_cast<std::chrono::seconds>(now.time_since_epoch()).count());
+        }
+
+        void quarantineRejectedFile(const std::filesystem::path &path, const std::string_view reason) {
+            std::ostringstream suffix;
+            suffix << '_' << reason << '_' << utcTimestamp();
+            if (const auto digest = contentDigest(path)) {
+                suffix << '_' << std::hex << std::setw(16) << std::setfill('0') << *digest;
+            }
+
+            auto quarantine_name = path.stem();
+            quarantine_name += suffix.str();
+            quarantine_name += path.extension();
+
+            std::error_code error;
+            std::filesystem::rename(path, path.parent_path() / quarantine_name, error);
+        }
     }
 
     void ProfileSerializer::save(const domain::UserProfile &profile, const std::filesystem::path &path) {
@@ -38,6 +99,7 @@ namespace ksv::data {
             }
         }
 
+        // TODO(2026-08-13): Replace the live-path truncation once save writes a temporary file and renames it atomically.
         std::ofstream output(path, std::ios::out | std::ios::binary | std::ios::trunc);
         proto.SerializeToOstream(&output);
     }
@@ -47,10 +109,19 @@ namespace ksv::data {
 
         cache::UserProfileCache proto;
         std::ifstream input(path, std::ios::in | std::ios::binary);
-        if (!proto.ParseFromIstream(&input)) return std::nullopt;
+        if (!proto.ParseFromIstream(&input)) {
+            input.close();
+            quarantineRejectedFile(path, "unparseable");
+            // TODO(2026-08-13): Widen IProfileSerializer::load's result once callers distinguish rejection from absence.
+            return std::nullopt;
+        }
+        input.close();
 
         // Reject incompatible cache schema to force regeneration from .perf files instead of silent mis-parsing
-        if (proto.version() != kCacheVersion) return std::nullopt;
+        if (proto.version() != kCacheVersion) {
+            quarantineRejectedFile(path, "version-mismatch");
+            return std::nullopt;
+        }
 
         domain::UserProfile profile{proto.source_directory()};
         for (const auto &run_proto: proto.runs()) {
