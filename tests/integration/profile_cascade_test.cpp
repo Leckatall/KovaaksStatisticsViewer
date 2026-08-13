@@ -1,8 +1,8 @@
 //
 // The profile subsystem wired for real: SettingsService -> ProfileService ->
 // FileService/ProtoDecoder/ProfileSerializer. Covers the setProfilePath ->
-// applyProfilePath -> loadProfile -> onProfileChanged cascade, the cache
-// save/reload round-trip, and cache-version-mismatch regeneration through the
+// applyProfilePath -> loadProfile -> onProfileChanged cascade, the store
+// save/reload round-trip, and version-mismatch regeneration through the
 // live service (not the serializer in isolation).
 //
 
@@ -65,7 +65,7 @@ namespace {
         int notify_count = 0;
         profileService->onProfileChanged([&] { ++notify_count; });
 
-        const QString newPath = QDir(env.dir.path()).absoluteFilePath("relocated/profile_cache.pb");
+        const QString newPath = QDir(env.dir.path()).absoluteFilePath("relocated/profile.pb");
         env.settings->setProfilePath(newPath.toStdString());
 
         EXPECT_GE(notify_count, 1);
@@ -73,14 +73,14 @@ namespace {
         EXPECT_FALSE(profileService->getScenarioList().empty());
     }
 
-    TEST_F(ProfileCascadeTest, GeneratingProfileWritesCacheThatReloadsWithoutRescanning) {
+    TEST_F(ProfileCascadeTest, GeneratingProfileWritesStoreThatReloadsWithoutRescanning) {
         profileService->loadProfile();
         const auto originalCount = profileService->getScenarioList().size();
         ASSERT_GT(originalCount, 0u);
-        ASSERT_TRUE(std::filesystem::exists(env.profileCachePath().toStdString()));
+        ASSERT_TRUE(std::filesystem::exists(env.profileStorePath().toStdString()));
 
         // Wipe the source .perf files: a fresh service that still returns scenarios
-        // must have loaded them from the cache, not re-scanned the (now empty) dir.
+        // must have loaded them from the store, not re-scanned the (now empty) dir.
         ASSERT_TRUE(QDir(env.performancesDir()).removeRecursively());
 
         const auto reloadFileService = std::make_shared<qt_data::FileService>(env.settings, decoder);
@@ -90,9 +90,9 @@ namespace {
         EXPECT_EQ(reloaded.getScenarioList().size(), originalCount);
     }
 
-    TEST_F(ProfileCascadeTest, MismatchedCacheVersionRegeneratesFromDirectory) {
-        // Plant a cache stamped with an incompatible version at the cache path.
-        cache::UserProfileCache stale;
+    TEST_F(ProfileCascadeTest, MismatchedStoreVersionRebuildsFromDirectory) {
+        // Plant a store stamped with an incompatible version at the configured path.
+        store::UserProfileStore stale;
         stale.set_version(0);
         stale.set_source_directory("bogus");
         auto *run = stale.add_runs();
@@ -100,11 +100,11 @@ namespace {
         run->mutable_scenario_id()->set_hash("stale-hash");
         run->set_start_time(1);
         {
-            std::ofstream out(env.profileCachePath().toStdString(),
+            std::ofstream out(env.profileStorePath().toStdString(),
                               std::ios::out | std::ios::binary | std::ios::trunc);
             stale.SerializeToOstream(&out);
         }
-        const auto profilePath = std::filesystem::path(env.profileCachePath().toStdString());
+        const auto profilePath = std::filesystem::path(env.profileStorePath().toStdString());
         const auto rejectedBytes = readFile(profilePath);
 
         profileService->loadProfile();
@@ -118,7 +118,7 @@ namespace {
         const auto scenarios = profileService->getScenarioList();
         EXPECT_FALSE(scenarios.empty());
         for (const auto &s: scenarios) {
-            EXPECT_NE(s.name, "Should Not Appear") << "stale cache leaked into the regenerated profile";
+            EXPECT_NE(s.name, "Should Not Appear") << "rejected store leaked into the rebuilt profile";
         }
     }
 }

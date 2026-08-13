@@ -17,7 +17,7 @@ namespace {
     public:
         std::string dir = "C:/Kovaaks";
         bool dir_set = true;
-        std::string profile_path = "C:/Profile/profile_cache.pb";
+        std::string profile_path = "C:/Profile/profile.pb";
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
         [[nodiscard]] bool isKovaaksDirSet() const override { return dir_set; }
@@ -133,29 +133,29 @@ namespace {
     }
 
     TEST_F(SettingsViewModelTest, ProfilePathReflectsServiceValueAtConstruction) {
-        fake_service->profile_path = "D:/CustomProfile/profile_cache.pb";
+        fake_service->profile_path = "D:/CustomProfile/profile.pb";
         const auto view_model = make_view_model();
 
-        EXPECT_EQ(view_model->getProfilePath(), QUrl::fromLocalFile("D:/CustomProfile/profile_cache.pb"));
+        EXPECT_EQ(view_model->getProfilePath(), QUrl::fromLocalFile("D:/CustomProfile/profile.pb"));
     }
 
     TEST_F(SettingsViewModelTest, SetProfilePathUpdatesSettingsServiceAndEmitsOnChange) {
         const auto view_model = make_view_model();
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::profilePathChanged);
-        view_model->setProfilePath(QUrl::fromLocalFile("D:/NewProfile/profile_cache.pb"));
+        view_model->setProfilePath(QUrl::fromLocalFile("D:/NewProfile/profile.pb"));
 
         EXPECT_EQ(spy.count(), 1);
-        EXPECT_EQ(view_model->getProfilePath(), QUrl::fromLocalFile("D:/NewProfile/profile_cache.pb"));
-        EXPECT_EQ(fake_service->profile_path, "D:/NewProfile/profile_cache.pb");
+        EXPECT_EQ(view_model->getProfilePath(), QUrl::fromLocalFile("D:/NewProfile/profile.pb"));
+        EXPECT_EQ(fake_service->profile_path, "D:/NewProfile/profile.pb");
     }
 
     TEST_F(SettingsViewModelTest, SetProfilePathDoesNotEmitWhenUnchanged) {
-        fake_service->profile_path = "C:/Profile/profile_cache.pb";
+        fake_service->profile_path = "C:/Profile/profile.pb";
         const auto view_model = make_view_model();
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::profilePathChanged);
-        view_model->setProfilePath(QUrl::fromLocalFile("C:/Profile/profile_cache.pb"));
+        view_model->setProfilePath(QUrl::fromLocalFile("C:/Profile/profile.pb"));
 
         EXPECT_EQ(spy.count(), 0);
     }

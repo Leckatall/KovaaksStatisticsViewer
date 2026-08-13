@@ -1,14 +1,13 @@
 edition = "2023";
 
-package cache;
+package store;
 
-// On-disk cache of a domain::UserProfile, so the app doesn't have to
-// re-scan and re-decode every .perf file on disk on every launch.
-message UserProfileCache {
-  // Schema version. Bumped whenever the on-disk layout changes incompatibly
-  // (e.g. field numbers being repurposed) so the loader can reject a stale
-  // cache and regenerate instead of silently mis-parsing it. Absent in
-  // pre-versioning caches, which read back as 0 and are therefore rejected.
+// Authoritative on-disk record of the user's runs, including runs whose
+// original .perf files are no longer available.
+message UserProfileStore {
+  // Schema version. Bumped when the on-disk layout changes incompatibly so
+  // the loader can quarantine a rejected store instead of silently
+  // mis-parsing it. Absent in pre-versioning stores, which read back as 0.
   uint32 version = 3;
   string source_directory = 1;
   repeated Run runs = 2;

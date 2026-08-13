@@ -32,7 +32,7 @@ namespace ksv::integration {
 
         TestEnv() {
             settings->setKovaaksDir(dir.path().toStdString());
-            settings->setProfilePath(profileCachePath().toStdString());
+            settings->setProfilePath(profileStorePath().toStdString());
         }
 
         [[nodiscard]] bool valid() const { return dir.isValid(); }
@@ -41,8 +41,8 @@ namespace ksv::integration {
             return QDir(dir.path()).absoluteFilePath("FPSAimTrainer/performances");
         }
 
-        [[nodiscard]] QString profileCachePath() const {
-            return QDir(dir.path()).absoluteFilePath("cache/profile_cache.pb");
+        [[nodiscard]] QString profileStorePath() const {
+            return QDir(dir.path()).absoluteFilePath("store/profile.pb");
         }
 
         bool makePerformancesDir() const { return QDir().mkpath(performancesDir()); }

@@ -19,9 +19,9 @@ namespace ksv::application {
         virtual ~IProfileService() = default;
 
         // Builds synchronously. Prefer the build-request hook below: with a requester
-        // installed, loadProfile()'s cache miss goes through it instead of blocking here.
+        // installed, a missing or rejected stored profile goes through it instead of blocking here.
         virtual void generateProfileFromDirectory() = 0;
-        // Loads from cache if present, otherwise falls back to a build.
+        // Loads the stored profile if present, otherwise falls back to a build.
         virtual void loadProfile() = 0;
 
         // Installed by whoever owns a build worker. With no requester installed every

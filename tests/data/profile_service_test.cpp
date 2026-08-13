@@ -30,7 +30,7 @@ namespace {
     }
 
     std::filesystem::path new_profile_path() {
-        return new_profile_dir() / "profile_cache.pb";
+        return new_profile_dir() / "profile.pb";
     }
 
     class FakeFileService : public IFileService {
@@ -75,7 +75,7 @@ namespace {
     class FakeSettingsService : public ISettingsService {
     public:
         std::string kovaaks_dir = "fake/kovaaks";
-        std::string profile_path = "test_cache.pb";
+        std::string profile_path = "test_profile.pb";
         std::function<void()> profile_path_changed;
 
         [[nodiscard]] std::string getKovaaksDir() const override { return kovaaks_dir; }
@@ -402,7 +402,7 @@ namespace {
         EXPECT_EQ(notify_count, 2);
     }
 
-    TEST_F(ProfileServiceTest, GenerateProfileFromDirectorySavesToCache) {
+    TEST_F(ProfileServiceTest, GenerateProfileFromDirectorySavesToStore) {
         fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
 
         profile_service.generateProfileFromDirectory();
@@ -410,7 +410,7 @@ namespace {
         EXPECT_EQ(fake_serializer->save_count, 1);
     }
 
-    TEST_F(ProfileServiceTest, AddPerfFileToProfileSavesToCache) {
+    TEST_F(ProfileServiceTest, AddPerfFileToProfileSavesToStore) {
         fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
@@ -420,11 +420,11 @@ namespace {
         EXPECT_EQ(fake_serializer->save_count, 2);
     }
 
-    TEST_F(ProfileServiceTest, LoadProfileUsesCacheWhenAvailableAndSkipsDirectoryScan) {
-        ksv::domain::UserProfile cached{"cached"};
-        cached.addScenarioPerf(make_perf("hash-cached", 500));
-        fake_serializer->profile_to_load = cached;
-        // If the cache is genuinely being used instead of a directory scan,
+    TEST_F(ProfileServiceTest, LoadProfileUsesStoreWhenAvailableAndSkipsDirectoryScan) {
+        ksv::domain::UserProfile stored{"stored"};
+        stored.addScenarioPerf(make_perf("hash-stored", 500));
+        fake_serializer->profile_to_load = stored;
+        // If the store is genuinely being used instead of a directory scan,
         // this perf (only reachable via getAllPerfsFromFiles) should never appear.
         fake_file_service->perfs_to_return = {make_perf("hash-from-disk", 999)};
 
@@ -432,22 +432,22 @@ namespace {
 
         const auto scenarios = profile_service.getScenarioList();
         ASSERT_EQ(scenarios.size(), 1);
-        EXPECT_EQ(scenarios[0].hash, "hash-cached");
+        EXPECT_EQ(scenarios[0].hash, "hash-stored");
     }
 
-    // A cache hit is not a generate: rewriting the cache we just read back to disk
+    // Loading the store is not a generate: rewriting the file we just read back to disk
     // would turn every startup into a write.
-    TEST_F(ProfileServiceTest, LoadProfileFromCacheDoesNotSave) {
-        ksv::domain::UserProfile cached{"cached"};
-        cached.addScenarioPerf(make_perf("hash-cached", 500));
-        fake_serializer->profile_to_load = cached;
+    TEST_F(ProfileServiceTest, LoadProfileFromStoreDoesNotSave) {
+        ksv::domain::UserProfile stored{"stored"};
+        stored.addScenarioPerf(make_perf("hash-stored", 500));
+        fake_serializer->profile_to_load = stored;
 
         profile_service.loadProfile();
 
         EXPECT_EQ(fake_serializer->save_count, 0);
     }
 
-    TEST_F(ProfileServiceTest, LoadProfileFallsBackToDirectoryScanWhenNoCache) {
+    TEST_F(ProfileServiceTest, LoadProfileFallsBackToDirectoryScanWhenNoStore) {
         fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
 
         profile_service.loadProfile();
@@ -560,32 +560,32 @@ namespace {
         EXPECT_TRUE(profile_service.isProfileLoaded());
     }
 
-    TEST_F(ProfileServiceTest, IsProfileLoadedTrueAfterLoadProfileFromCache) {
-        ksv::domain::UserProfile cached{"cached"};
-        cached.addScenarioPerf(make_perf("hash-cached", 500));
-        fake_serializer->profile_to_load = cached;
+    TEST_F(ProfileServiceTest, IsProfileLoadedTrueAfterLoadProfileFromStore) {
+        ksv::domain::UserProfile stored{"stored"};
+        stored.addScenarioPerf(make_perf("hash-stored", 500));
+        fake_serializer->profile_to_load = stored;
 
         profile_service.loadProfile();
 
         EXPECT_TRUE(profile_service.isProfileLoaded());
     }
 
-    TEST_F(ProfileServiceTest, ProfilePathChangeReloadsFromCacheAtNewLocation) {
-        ksv::domain::UserProfile cached{"cached"};
-        cached.addScenarioPerf(make_perf("hash-cached", 500));
-        fake_serializer->profile_to_load = cached;
+    TEST_F(ProfileServiceTest, ProfilePathChangeReloadsFromStoreAtNewLocation) {
+        ksv::domain::UserProfile stored{"stored"};
+        stored.addScenarioPerf(make_perf("hash-stored", 500));
+        fake_serializer->profile_to_load = stored;
 
-        // Changing the setting notifies ProfileService, which repoints its cache.
+        // Changing the setting notifies ProfileService, which repoints its store.
         fake_settings->setProfilePath(new_profile_path().string());
 
         const auto scenarios = profile_service.getScenarioList();
         ASSERT_EQ(scenarios.size(), 1);
-        EXPECT_EQ(scenarios[0].hash, "hash-cached");
+        EXPECT_EQ(scenarios[0].hash, "hash-stored");
         EXPECT_TRUE(profile_service.isProfileLoaded());
         EXPECT_EQ(fake_serializer->last_load_path, new_profile_path());
     }
 
-    TEST_F(ProfileServiceTest, ProfilePathChangeGeneratesFreshProfileWhenNoCacheAtNewLocation) {
+    TEST_F(ProfileServiceTest, ProfilePathChangeGeneratesFreshProfileWhenNoStoreAtNewLocation) {
         fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
 
         fake_settings->setProfilePath(new_profile_path().string());
@@ -607,7 +607,7 @@ namespace {
         profile_service.addPerfFileToProfile("new_run.perf");
 
         // 1 save from the initial generate, 1 from the path-change's own fallback
-        // generate (no cache at the new path), 1 from the incremental add.
+        // generate (no store at the new path), 1 from the incremental add.
         EXPECT_EQ(fake_serializer->save_count, 3);
         EXPECT_EQ(fake_serializer->last_save_path, new_profile_path());
     }

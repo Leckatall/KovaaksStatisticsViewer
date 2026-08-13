@@ -39,8 +39,8 @@ namespace ksv::data {
     }
 
     void ProfileService::loadProfile() {
-        if (auto cached = m_serializer->load(m_filepath)) {
-            setProfile(std::move(*cached));
+        if (auto stored = m_serializer->load(m_filepath)) {
+            setProfile(std::move(*stored));
             return;
         }
         if (m_build_requester) {

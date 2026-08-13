@@ -46,7 +46,7 @@ add_library(ksv_data STATIC
 
 set(PROTO_FILES
         ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/perf.proto
-        ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/cache.proto
+        ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/store.proto
 )
 
 target_link_libraries(ksv_data PUBLIC

@@ -73,22 +73,22 @@ namespace {
         EXPECT_TRUE(settings.isKovaaksDirSet());
     }
 
-    TEST_F(SettingsServiceTest, ReturnsAppDataProfileCacheFileForProfilePathWhenUnset) {
+    TEST_F(SettingsServiceTest, ReturnsAppDataProfileFileForProfilePathWhenUnset) {
         const SettingsService settings(QSettings::IniFormat);
 
         const auto app_data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-        const auto expected = QDir(app_data).filePath("profile_cache.pb").toStdString();
+        const auto expected = QDir(app_data).filePath("profile.pb").toStdString();
         EXPECT_EQ(settings.getProfilePath(), expected);
     }
 
     TEST_F(SettingsServiceTest, SetProfilePathPersistsValue) {
         SettingsService settings(QSettings::IniFormat);
 
-        settings.setProfilePath("D:/Games/ProfileCache/profile_cache.pb");
+        settings.setProfilePath("D:/Games/Profile/profile.pb");
 
         const SettingsService reloaded(QSettings::IniFormat);
         EXPECT_EQ(reloaded.getProfilePath(),
-                  QUrl::fromLocalFile("D:/Games/ProfileCache/profile_cache.pb").toLocalFile().toStdString());
+                  QUrl::fromLocalFile("D:/Games/Profile/profile.pb").toLocalFile().toStdString());
     }
 
     TEST_F(SettingsServiceTest, SetProfilePathNotifiesRegisteredObservers) {
@@ -97,11 +97,11 @@ namespace {
         int notify_count = 0;
         settings.onProfilePathChanged([&notify_count] { ++notify_count; });
 
-        settings.setProfilePath("D:/Games/ProfileCache/profile_cache.pb");
+        settings.setProfilePath("D:/Games/Profile/profile.pb");
 
         EXPECT_EQ(notify_count, 1);
         // The observer sees the freshly stored value when it runs.
         EXPECT_EQ(settings.getProfilePath(),
-                  QUrl::fromLocalFile("D:/Games/ProfileCache/profile_cache.pb").toLocalFile().toStdString());
+                  QUrl::fromLocalFile("D:/Games/Profile/profile.pb").toLocalFile().toStdString());
     }
 }

@@ -19,7 +19,7 @@ TestCase {
     function makeFakeSettingsVm(overrides) {
         return Object.assign({
             kovaaksDir: "file:///C:/Kovaaks",
-            profilePath: "file:///C:/Profile/profile_cache.pb",
+            profilePath: "file:///C:/Profile/profile.pb",
             profileLoaded: false
         }, overrides)
     }
@@ -93,7 +93,7 @@ TestCase {
 
     function test_directoriesCategory_showsProfilePathAndLoadedState() {
         const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({profilePath: "file:///D:/CustomProfile/profile_cache.pb", profileLoaded: true}),
+            settingsVm: makeFakeSettingsVm({profilePath: "file:///D:/CustomProfile/profile.pb", profileLoaded: true}),
             sessionVm: makeFakeSessionVm(),
             graphVm: makeFakeGraphVm(),
             columnVisibility: ({})
@@ -101,7 +101,7 @@ TestCase {
 
         const field = findByObjectName(dialog.contentItem, "profilePathField")
         verify(field !== null, "no field named 'profilePathField' found in SettingsDialog Directories category")
-        compare(field.text, "D:/CustomProfile/profile_cache.pb", "profilePathField should show settingsVm.profilePath with the file:// scheme stripped")
+        compare(field.text, "D:/CustomProfile/profile.pb", "profilePathField should show settingsVm.profilePath with the file:// scheme stripped")
 
         const statusLabel = findByObjectName(dialog.contentItem, "profileLoadedLabel")
         verify(statusLabel !== null, "no label named 'profileLoadedLabel' found in SettingsDialog Directories category")

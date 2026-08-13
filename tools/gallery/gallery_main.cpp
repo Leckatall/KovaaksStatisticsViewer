@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
 
     auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
     settings->setKovaaksDir(tmp.path().toStdString());
-    settings->setProfilePath(QDir(tmp.path()).absoluteFilePath("cache/profile_cache.pb").toStdString());
+    settings->setProfilePath(QDir(tmp.path()).absoluteFilePath("store/profile.pb").toStdString());
 
     application::App app(settings, std::make_shared<data::ProtoDecoder>());
     app.sessionVm()->generateProfile();

@@ -17,20 +17,20 @@ Static audit findings retained from the 2026-08-13 review. Each checkbox reports
 - [ ] Linear data-point lookup makes decoding a run quadratic in distinct point count. (`src/domain/scenario_perf.cpp:43`, `ScenarioPerf::get_data_point`; `src/data/formats/protobuf/proto_decoder.cpp:40`, `ProtoDecoder::decode`)
 - [ ] The local-time formatting test duplicates the implementation it tests. (`tests/domain/domain_test.cpp:174`, `ToStringFormatsNameDateAndTimeInLocalTime`)
 
-## Data and profile cache
+## Data and profile store
 
 - [ ] A file observed mid-write can be cached as a bad run and permanently marked known. (`src/qt_data/file_service.cpp:37`, `FileService::handleDirectoryChanged`; `src/data/formats/protobuf/proto_decoder.cpp:27`, `ProtoDecoder::decode_file`)
 - [ ] `decode_file()` does not check whether its input stream opened and treats parse failure as non-fatal. (`src/data/formats/protobuf/proto_decoder.cpp:30`, `ProtoDecoder::decode_file`)
 - [ ] A file deleted between discovery and decode can throw through the watcher path. (`src/qt_data/file_service.cpp:55`, `FileService::handleDirectoryChanged`; `src/data/profile_service.cpp:91`, `ProfileService::onFileChanged`)
-- [ ] Cache saves truncate the destination directly and ignore open/write/serialization failures. (`src/data/formats/protobuf/profile_serializer.cpp:15`, `ProfileSerializer::save`)
-- [ ] A protobuf-valid incomplete cache can replace the complete cache. (`src/data/formats/protobuf/profile_serializer.cpp:47`, `ProfileSerializer::load`; `src/data/profile_service.cpp:97`, `ProfileService::saveProfile`)
+- [ ] Profile-store saves truncate the destination directly and ignore open/write/serialization failures. (`src/data/formats/protobuf/profile_serializer.cpp:15`, `ProfileSerializer::save`)
+- [ ] A protobuf-valid incomplete store can replace the complete store. (`src/data/formats/protobuf/profile_serializer.cpp:47`, `ProfileSerializer::load`; `src/data/profile_service.cpp:97`, `ProfileService::saveProfile`)
 - [ ] The default KovaaKs directory is read as a schemeless URL and becomes empty. (`src/qt_data/settings_service.cpp:24`, `SettingsService::getKovaaksDir`)
 - [ ] File discovery and protobuf decoding do not preserve Unicode and long paths. (`src/qt_data/file_service.cpp:65`, `FileService::getLatestPerf`; `src/data/formats/protobuf/proto_decoder.cpp:30`, `ProtoDecoder::decode_file`)
 - [ ] Directory-creation failures can escape construction and settings callbacks. (`src/data/profile_service.cpp:78`, `ProfileService::ensureParentDir`; `src/data/profile_service.cpp:85`, `ProfileService::applyProfilePath`)
 - [ ] Changing the KovaaKs directory repoints the watcher without reloading or reconciling the profile. (`src/qt_data/file_service.cpp:18`, `FileService::FileService`; `src/data/profile_service.cpp:22`, `ProfileService::ProfileService`)
 - [ ] Directory scans decode every file instead of filtering to `.perf`. (`src/qt_data/file_service.cpp:23`, `FileService::watchPerfDir`; `src/qt_data/file_service.cpp:39`, `FileService::handleDirectoryChanged`)
 - [ ] Watcher add/remove failures are ignored, and a failed repoint can retain known-file state. (`src/qt_data/file_service.cpp:21`, `FileService::repointWatcher`; `src/qt_data/file_service.cpp:30`, `FileService::watchPerfDir`)
-- [ ] Cache schema upgrades and downgrades rely only on a manual version constant. (`src/data/formats/protobuf/profile_serializer.cpp:9`, `kCacheVersion`; `src/data/formats/protobuf/profile_serializer.cpp:53`, `ProfileSerializer::load`)
+- [ ] Store schema upgrades and downgrades rely only on a manual version constant. (`src/data/formats/protobuf/profile_serializer.cpp:19`, `kStoreVersion`; `src/data/formats/protobuf/profile_serializer.cpp:121`, `ProfileSerializer::load`)
 
 ## Application and presentation
 

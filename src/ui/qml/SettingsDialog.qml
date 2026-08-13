@@ -53,7 +53,7 @@ Dialog {
         title: "Choose where to save the profile"
         fileMode: FileDialog.SaveFile
         defaultSuffix: "pb"
-        nameFilters: ["Profile cache (*.pb)", "All files (*)"]
+        nameFilters: ["Profile (*.pb)", "All files (*)"]
         selectedFile: root.settingsVm.profilePath
         onAccepted: root.settingsVm.setProfilePath(profileFileDialog.selectedFile)
     }

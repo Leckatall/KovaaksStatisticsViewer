@@ -39,7 +39,7 @@ namespace ksv::qt_data {
 
     std::string SettingsService::getProfilePath() const {
         const auto default_dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-        const auto default_path = QDir(default_dir).filePath("profile_cache.pb");
+        const auto default_path = QDir(default_dir).filePath("profile.pb");
         return readDirSetting("file/profilePath", QUrl::fromLocalFile(default_path));
     }
 

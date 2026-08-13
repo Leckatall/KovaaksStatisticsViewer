@@ -16,8 +16,8 @@
 
 namespace ksv::data {
     namespace {
-        // Bumped when cache.proto changes incompatibly, ensuring old caches are regenerated instead of silently mis-parsed
-        constexpr std::uint32_t kCacheVersion = 1;
+        // Bumped when store.proto changes incompatibly so rejected stores are quarantined instead of silently mis-parsed.
+        constexpr std::uint32_t kStoreVersion = 1;
 
         std::optional<std::uint64_t> contentDigest(const std::filesystem::path &path) {
             constexpr std::uint64_t offset_basis = 14695981039346656037ULL;
@@ -74,8 +74,8 @@ namespace ksv::data {
     }
 
     void ProfileSerializer::save(const domain::UserProfile &profile, const std::filesystem::path &path) {
-        cache::UserProfileCache proto;
-        proto.set_version(kCacheVersion);
+        store::UserProfileStore proto;
+        proto.set_version(kStoreVersion);
         proto.set_source_directory(profile.getSourceDirectory());
 
         for (const auto &perf: profile.getAllRunRecords()) {
@@ -107,7 +107,7 @@ namespace ksv::data {
     std::optional<domain::UserProfile> ProfileSerializer::load(const std::filesystem::path &path) {
         if (!std::filesystem::exists(path)) return std::nullopt;
 
-        cache::UserProfileCache proto;
+        store::UserProfileStore proto;
         std::ifstream input(path, std::ios::in | std::ios::binary);
         if (!proto.ParseFromIstream(&input)) {
             input.close();
@@ -117,8 +117,8 @@ namespace ksv::data {
         }
         input.close();
 
-        // Reject incompatible cache schema to force regeneration from .perf files instead of silent mis-parsing
-        if (proto.version() != kCacheVersion) {
+        // The field layout cannot be interpreted safely under an incompatible version.
+        if (proto.version() != kStoreVersion) {
             quarantineRejectedFile(path, "version-mismatch");
             return std::nullopt;
         }

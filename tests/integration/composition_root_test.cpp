@@ -33,8 +33,8 @@ namespace {
             ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
             ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
 
-            // App::App() runs loadProfile(), which on a cache miss asks SessionController
-            // for a build on its worker thread. The result only lands once the event
+            // App::App() runs loadProfile(), which asks SessionController for a build
+            // on its worker thread when no store is available. The result only lands once the event
             // loop spins, so every test here starts by waiting for it.
             app = std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>());
             ASSERT_TRUE(waitForProfile());

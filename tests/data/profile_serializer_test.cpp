@@ -36,14 +36,14 @@ namespace {
     class ProfileSerializerTest : public testing::Test {
     protected:
         ksv::data::ProfileSerializer serializer;
-        std::filesystem::path cache_path =
-            std::filesystem::temp_directory_path() / "profile_serializer_test_cache.pb";
+        std::filesystem::path store_path =
+            std::filesystem::temp_directory_path() / "profile_serializer_test_store.pb";
 
         [[nodiscard]] std::vector<std::filesystem::path> quarantine_files(const std::string &reason) const {
             std::vector<std::filesystem::path> matches;
-            const auto prefix = cache_path.stem().string() + "_" + reason + "_";
-            for (const auto &entry: std::filesystem::directory_iterator(cache_path.parent_path())) {
-                if (entry.path().extension() == cache_path.extension() &&
+            const auto prefix = store_path.stem().string() + "_" + reason + "_";
+            for (const auto &entry: std::filesystem::directory_iterator(store_path.parent_path())) {
+                if (entry.path().extension() == store_path.extension() &&
                     entry.path().stem().string().starts_with(prefix)) {
                     matches.push_back(entry.path());
                 }
@@ -52,7 +52,7 @@ namespace {
         }
 
         void TearDown() override {
-            std::filesystem::remove(cache_path);
+            std::filesystem::remove(store_path);
             for (const auto &reason: {"unparseable", "version-mismatch"}) {
                 for (const auto &path: quarantine_files(reason)) std::filesystem::remove(path);
             }
@@ -60,8 +60,8 @@ namespace {
     };
 
     TEST_F(ProfileSerializerTest, LoadReturnsNulloptWhenFileDoesNotExist) {
-        std::filesystem::remove(cache_path);
-        EXPECT_FALSE(serializer.load(cache_path).has_value());
+        std::filesystem::remove(store_path);
+        EXPECT_FALSE(serializer.load(store_path).has_value());
     }
 
     TEST_F(ProfileSerializerTest, RoundTripsScenariosRunsAndDataPoints) {
@@ -70,8 +70,8 @@ namespace {
         profile.addScenarioPerf(make_perf("Scenario A", "hash-a", 200, 60.0F, "C:/Kovaaks/.../run2.perf"));
         profile.addScenarioPerf(make_perf("Scenario B", "hash-b", 300, 30.0F, "C:/Kovaaks/.../run3.perf"));
 
-        serializer.save(profile, cache_path);
-        const auto loaded = serializer.load(cache_path);
+        serializer.save(profile, store_path);
+        const auto loaded = serializer.load(store_path);
 
         ASSERT_TRUE(loaded.has_value());
         EXPECT_EQ(loaded->getSourceDirectory(), "C:/Kovaaks/FPSAimTrainer/performances");
@@ -100,8 +100,8 @@ namespace {
     TEST_F(ProfileSerializerTest, RoundTripOfEmptyProfileHasNoScenarios) {
         const ksv::domain::UserProfile profile{"default"};
 
-        serializer.save(profile, cache_path);
-        const auto loaded = serializer.load(cache_path);
+        serializer.save(profile, store_path);
+        const auto loaded = serializer.load(store_path);
 
         ASSERT_TRUE(loaded.has_value());
         EXPECT_TRUE(loaded->getScenarioList().empty());
@@ -111,24 +111,24 @@ namespace {
         // A leading tag byte of 0x00 encodes field number 0, which is illegal in
         // protobuf's wire format and is guaranteed to fail parsing.
         const char garbage_bytes[] = {0x00, 0x01, 0x02, 0x03};
-        std::ofstream garbage(cache_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        std::ofstream garbage(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
         garbage.write(garbage_bytes, sizeof(garbage_bytes));
         garbage.close();
 
-        EXPECT_FALSE(serializer.load(cache_path).has_value());
-        EXPECT_FALSE(std::filesystem::exists(cache_path));
+        EXPECT_FALSE(serializer.load(store_path).has_value());
+        EXPECT_FALSE(std::filesystem::exists(store_path));
         const auto quarantined = quarantine_files("unparseable");
         ASSERT_EQ(quarantined.size(), 1);
         EXPECT_EQ(read_file(quarantined.front()), std::string(garbage_bytes, sizeof(garbage_bytes)));
     }
 
-    TEST_F(ProfileSerializerTest, LoadRejectsCacheWithMismatchedSchemaVersion) {
-        // A cache written by an incompatible (or pre-versioning) schema reads
+    TEST_F(ProfileSerializerTest, LoadRejectsStoreWithMismatchedSchemaVersion) {
+        // A store written by an incompatible (or pre-versioning) schema reads
         // back with a version that doesn't match the current one; load() must
-        // reject it so the caller regenerates instead of loading a
+        // reject it so the caller rebuilds instead of loading a
         // silently-empty/mis-parsed profile. Version 0 stands in for such a
-        // cache (the current writer always stamps a non-zero version).
-        cache::UserProfileCache proto;
+        // store (the current writer always stamps a non-zero version).
+        store::UserProfileStore proto;
         proto.set_version(0);
         proto.set_source_directory("C:/Kovaaks/FPSAimTrainer/performances");
         auto *run = proto.add_runs();
@@ -136,13 +136,13 @@ namespace {
         run->mutable_scenario_id()->set_hash("hash-a");
         run->set_start_time(100);
 
-        std::ofstream out(cache_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        std::ofstream out(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
         proto.SerializeToOstream(&out);
         out.close();
-        const auto original_bytes = read_file(cache_path);
+        const auto original_bytes = read_file(store_path);
 
-        EXPECT_FALSE(serializer.load(cache_path).has_value());
-        EXPECT_FALSE(std::filesystem::exists(cache_path));
+        EXPECT_FALSE(serializer.load(store_path).has_value());
+        EXPECT_FALSE(std::filesystem::exists(store_path));
         const auto quarantined = quarantine_files("version-mismatch");
         ASSERT_EQ(quarantined.size(), 1);
         EXPECT_EQ(read_file(quarantined.front()), original_bytes);
@@ -153,10 +153,10 @@ namespace {
         const std::string second_bytes{"\x00\x03\x04", 3};
 
         for (const auto &bytes: {first_bytes, second_bytes}) {
-            std::ofstream output(cache_path, std::ios::out | std::ios::binary | std::ios::trunc);
+            std::ofstream output(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
             output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
             output.close();
-            EXPECT_FALSE(serializer.load(cache_path).has_value());
+            EXPECT_FALSE(serializer.load(store_path).has_value());
         }
 
         const auto quarantined = quarantine_files("unparseable");

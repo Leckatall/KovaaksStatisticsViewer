@@ -17,7 +17,7 @@ namespace ksv::presentation {
         connect(m_session_controller.get(), &application::ISessionController::currentPerfChanged,
                 this, &ScenarioBrowserViewModel::refresh);
         // currentPerfChanged is suppressed when the latest run is unchanged, so a
-        // rebuild that only adds older runs would otherwise leave the cached summaries stale.
+        // rebuild that only adds older runs would otherwise leave the displayed summaries stale.
         connect(m_session_controller.get(), &application::ISessionController::profileChanged,
                 this, &ScenarioBrowserViewModel::refresh);
         refresh();

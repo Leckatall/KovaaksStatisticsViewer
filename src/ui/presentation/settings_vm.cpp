@@ -25,7 +25,7 @@ namespace ksv::presentation {
 
     void SettingsViewModel::setProfilePath(const QUrl &path) {
         if (path == getProfilePath()) return;
-        // Setting path triggers ProfileService to repoint cache and reload
+        // Setting path triggers ProfileService to repoint the store and reload.
         m_settings_service->setProfilePath(path.toLocalFile().toStdString());
         emit profilePathChanged();
     }

@@ -5,7 +5,7 @@
 #ifndef KOVAAKSSTATSVIEWER_PROFILE_SERIALIZER_H
 #define KOVAAKSSTATSVIEWER_PROFILE_SERIALIZER_H
 
-#include "formats/protobuf/schema/cache.pb.h"
+#include "formats/protobuf/schema/store.pb.h"
 #include "interfaces/i_profile_serializer.h"
 
 namespace ksv::data {

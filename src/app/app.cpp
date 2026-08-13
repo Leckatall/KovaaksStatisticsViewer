@@ -36,7 +36,7 @@ namespace ksv::application {
             m_fileService, std::make_shared<data::ProfileSerializer>(), m_settingsService);
 
         // SessionController installs the build requester, so it has to exist before the
-        // first loadProfile() — otherwise a cache miss builds synchronously and blocks
+        // first loadProfile() — otherwise a missing stored profile builds synchronously and blocks
         // startup for as long as a full directory scan takes.
         m_sessionController = std::make_shared<SessionController>(m_settingsService, m_profileService, m_fileService);
         m_profileService->loadProfile();
@@ -51,7 +51,7 @@ namespace ksv::application {
 
         m_playtimeUseCase = std::make_shared<PlaytimeGraphUseCase>(m_profileService);
         m_playtimeVm = new presentation::PlaytimeGraphViewModel(m_playtimeUseCase, this);
-        // Re-pull rolling average when profile changes (new run, cache reload, or dir change)
+        // Re-pull rolling average when profile changes (new run, store reload, or dir change)
         m_profileService->onProfileChanged([this] { m_playtimeVm->refresh(); });
 
         m_completionHistoryUseCase = std::make_shared<CompletionHistoryUseCase>(

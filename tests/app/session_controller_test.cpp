@@ -20,7 +20,7 @@ namespace {
     class FakeSettingsService : public ISettingsService {
     public:
         std::string dir = "C:/Kovaaks";
-        std::string profile_path = "C:/Profile/profile_cache.pb";
+        std::string profile_path = "C:/Profile/profile.pb";
 
         [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
         [[nodiscard]] bool isKovaaksDirSet() const override { return true; }
@@ -273,7 +273,7 @@ namespace {
         ASSERT_TRUE(static_cast<bool>(fake_profile_service->stored_build_requester));
         QSignalSpy spy(controller.get(), &ISessionController::profileChanged);
 
-        // This is the hook ProfileService::loadProfile() uses on a cache miss.
+        // This is the hook ProfileService::loadProfile() uses when no stored profile can be loaded.
         fake_profile_service->stored_build_requester();
 
         ASSERT_TRUE(spy.wait(5000));
