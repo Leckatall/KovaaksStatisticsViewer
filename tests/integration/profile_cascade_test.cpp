@@ -95,9 +95,9 @@ namespace {
 
     TEST_F(ProfileCascadeTest, MismatchedStoreVersionRebuildsFromDirectory) {
         // Plant a store stamped with an incompatible version at the configured path.
-        store::UserProfileStore stale;
-        stale.set_version(1);
-        auto *run = stale.add_runs();
+        store::ProfileStoreFile stale;
+        stale.mutable_header()->set_version(1);
+        auto *run = stale.mutable_store()->add_runs();
         run->mutable_scenario_id()->set_name("Should Not Appear");
         run->mutable_scenario_id()->set_hash("stale-hash");
         run->set_start_time(1);

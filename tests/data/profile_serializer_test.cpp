@@ -112,6 +112,64 @@ namespace {
         EXPECT_TRUE(loaded->getScenarioList().empty());
     }
 
+    TEST_F(ProfileSerializerTest, ReadHeaderReturnsMetadataWrittenBySave) {
+        const ksv::domain::UserProfile profile;
+        serializer.save(profile, store_path);
+
+        const auto header = serializer.readHeader(store_path);
+
+        ASSERT_TRUE(header.has_value());
+        EXPECT_EQ(header->version, 3U);
+        EXPECT_GT(header->created_at, 0);
+        EXPECT_EQ(header->name, "default");
+    }
+
+    TEST_F(ProfileSerializerTest, SavePreservesExistingHeaderMetadata) {
+        const ksv::domain::UserProfile profile;
+        serializer.save(profile, store_path);
+        const auto first_header = serializer.readHeader(store_path);
+        ASSERT_TRUE(first_header.has_value());
+
+        serializer.save(profile, store_path);
+        const auto second_header = serializer.readHeader(store_path);
+
+        ASSERT_TRUE(second_header.has_value());
+        EXPECT_EQ(second_header->created_at, first_header->created_at);
+        EXPECT_EQ(second_header->name, first_header->name);
+    }
+
+    TEST_F(ProfileSerializerTest, ReadHeaderReturnsNulloptWithoutQuarantiningInvalidFiles) {
+        EXPECT_FALSE(serializer.readHeader(store_path).has_value());
+
+        const std::string garbage{"\x00\x01\x02", 3};
+        std::ofstream output(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        output.write(garbage.data(), static_cast<std::streamsize>(garbage.size()));
+        output.close();
+
+        EXPECT_FALSE(serializer.readHeader(store_path).has_value());
+        EXPECT_TRUE(std::filesystem::exists(store_path));
+        EXPECT_EQ(read_file(store_path), garbage);
+    }
+
+    TEST_F(ProfileSerializerTest, ReadHeaderDoesNotParseTheStoreBody) {
+        store::ProfileStoreFile file;
+        file.mutable_header()->set_version(3);
+        file.mutable_header()->set_created_at(1);
+        file.mutable_header()->set_name("default");
+        std::ofstream output(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        file.SerializeToOstream(&output);
+        const std::string trailing_garbage{"\x00\x01\x02", 3};
+        output.write(trailing_garbage.data(), static_cast<std::streamsize>(trailing_garbage.size()));
+        output.close();
+
+        const auto header = serializer.readHeader(store_path);
+
+        ASSERT_TRUE(header.has_value());
+        EXPECT_EQ(header->version, 3U);
+        EXPECT_EQ(header->created_at, 1);
+        EXPECT_EQ(header->name, "default");
+    }
+
     TEST_F(ProfileSerializerTest, LoadReturnsNulloptForUnparseableFile) {
         // A leading tag byte of 0x00 encodes field number 0, which is illegal in
         // protobuf's wire format and is guaranteed to fail parsing.
@@ -128,20 +186,15 @@ namespace {
     }
 
     TEST_F(ProfileSerializerTest, LoadRejectsStoreWithMismatchedSchemaVersion) {
-        // A store written by an incompatible (or pre-versioning) schema reads
-        // back with a version that doesn't match the current one; load() must
-        // reject it so the caller rebuilds instead of loading a
-        // silently-empty/mis-parsed profile. Version 0 stands in for such a
-        // store (the current writer always stamps a non-zero version).
-        store::UserProfileStore proto;
-        proto.set_version(1);
-        auto *run = proto.add_runs();
+        store::ProfileStoreFile file;
+        file.mutable_header()->set_version(1);
+        auto *run = file.mutable_store()->add_runs();
         run->mutable_scenario_id()->set_name("Scenario A");
         run->mutable_scenario_id()->set_hash("hash-a");
         run->set_start_time(100);
 
         std::ofstream out(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
-        proto.SerializeToOstream(&out);
+        file.SerializeToOstream(&out);
         out.close();
         const auto original_bytes = read_file(store_path);
 
@@ -150,6 +203,26 @@ namespace {
         const auto quarantined = quarantine_files("version-mismatch");
         ASSERT_EQ(quarantined.size(), 1);
         EXPECT_EQ(read_file(quarantined.front()), original_bytes);
+    }
+
+    TEST_F(ProfileSerializerTest, LoadQuarantinesLegacyStoreAsUnparseable) {
+        store::Run legacy_run;
+        auto *run = &legacy_run;
+        run->mutable_scenario_id()->set_name("Scenario A");
+        run->mutable_scenario_id()->set_hash("hash-a");
+        run->set_start_time(100);
+        const auto run_bytes = legacy_run.SerializeAsString();
+        ASSERT_LT(run_bytes.size(), 128U);
+
+        std::ofstream out(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        out.put(0x12);
+        out.put(static_cast<char>(run_bytes.size()));
+        out.write(run_bytes.data(), static_cast<std::streamsize>(run_bytes.size()));
+        out.close();
+
+        EXPECT_FALSE(serializer.load(store_path).has_value());
+        EXPECT_FALSE(std::filesystem::exists(store_path));
+        EXPECT_EQ(quarantine_files("unparseable").size(), 1);
     }
 
     TEST_F(ProfileSerializerTest, SuccessiveDistinctRejectionsPreserveBothFiles) {

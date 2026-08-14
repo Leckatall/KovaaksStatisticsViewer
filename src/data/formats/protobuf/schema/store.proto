@@ -2,16 +2,20 @@ edition = "2023";
 
 package store;
 
-// Authoritative on-disk record of the user's runs, including runs whose
-// original .perf files are no longer available.
+message ProfileStoreFile {
+  StoreHeader header = 1;
+  UserProfileStore store = 2;
+}
+
+message StoreHeader {
+  uint32 version = 1;
+  int64 created_at = 2;
+  string name = 3;
+}
+
 message UserProfileStore {
-  // Schema version. Bumped when the on-disk layout changes incompatibly so
-  // the loader can quarantine a rejected store instead of silently
-  // mis-parsing it. Absent in pre-versioning stores, which read back as 0.
-  uint32 version = 3;
-  reserved 1;
-  repeated Run runs = 2;
-  repeated SourceDirectory sources = 4;
+  repeated Run runs = 1;
+  repeated SourceDirectory sources = 2;
 }
 
 message SourceDirectory {

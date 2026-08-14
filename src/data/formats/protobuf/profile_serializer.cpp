@@ -4,10 +4,13 @@
 
 #include "profile_serializer.h"
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <ctime>
 #include <fstream>
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/wire_format_lite.h>
 #include <iomanip>
 #include <optional>
 #include <sstream>
@@ -17,7 +20,32 @@
 namespace ksv::data {
     namespace {
         // Bumped when store.proto changes incompatibly so rejected stores are quarantined instead of silently mis-parsed.
-        constexpr std::uint32_t kStoreVersion = 2;
+        constexpr std::uint32_t kStoreVersion = 3;
+        constexpr std::size_t kHeaderPrefixSize = 4096;
+
+        std::optional<store::StoreHeader> readProtoHeader(const std::filesystem::path& path) {
+            std::ifstream input(path, std::ios::in | std::ios::binary);
+            if (!input) return std::nullopt;
+
+            std::array<std::uint8_t, kHeaderPrefixSize> buffer{};
+            input.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
+            if (input.bad() || input.gcount() <= 0) return std::nullopt;
+
+            google::protobuf::io::CodedInputStream coded_input(
+                buffer.data(), static_cast<int>(input.gcount()));
+            const auto header_tag = google::protobuf::internal::WireFormatLite::MakeTag(
+                1, google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED);
+            if (coded_input.ReadTag() != header_tag) return std::nullopt;
+
+            int header_size = 0;
+            if (!coded_input.ReadVarintSizeAsInt(&header_size)) return std::nullopt;
+            const auto limit = coded_input.PushLimit(header_size);
+            store::StoreHeader header;
+            const bool parsed = header.MergeFromCodedStream(&coded_input) && coded_input.ConsumedEntireMessage();
+            coded_input.PopLimit(limit);
+            if (!parsed) return std::nullopt;
+            return header;
+        }
 
         std::optional<std::uint64_t> contentDigest(const std::filesystem::path &path) {
             constexpr std::uint64_t offset_basis = 14695981039346656037ULL;
@@ -74,8 +102,11 @@ namespace ksv::data {
     }
 
     void ProfileSerializer::save(const domain::UserProfile &profile, const std::filesystem::path &path) {
+        const auto previous_header = readHeader(path);
+        const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
         store::UserProfileStore proto;
-        proto.set_version(kStoreVersion);
 
         for (const auto &source : profile.sources().entries()) {
             auto *source_proto = proto.add_sources();
@@ -106,17 +137,47 @@ namespace ksv::data {
             }
         }
 
+        store::ProfileStoreFile file;
+        auto* header = file.mutable_header();
+        header->set_version(kStoreVersion);
+        header->set_created_at(previous_header && previous_header->created_at != 0
+                                   ? previous_header->created_at
+                                   : now);
+        header->set_name(previous_header && !previous_header->name.empty() ? previous_header->name : "default");
+        *file.mutable_store() = std::move(proto);
+
         // TODO(2026-08-13): Replace the live-path truncation once save writes a temporary file and renames it atomically.
         std::ofstream output(path, std::ios::out | std::ios::binary | std::ios::trunc);
-        proto.SerializeToOstream(&output);
+        file.SerializeToOstream(&output);
+    }
+
+    std::optional<application::ProfileStoreHeader> ProfileSerializer::readHeader(
+        const std::filesystem::path& path) const {
+        const auto header = readProtoHeader(path);
+        if (!header) return std::nullopt;
+        return application::ProfileStoreHeader{
+            .version = header->version(),
+            .created_at = header->created_at(),
+            .name = header->name(),
+        };
     }
 
     std::optional<domain::UserProfile> ProfileSerializer::load(const std::filesystem::path &path) {
         if (!std::filesystem::exists(path)) return std::nullopt;
 
-        store::UserProfileStore proto;
+        const auto header = readHeader(path);
+        if (!header) {
+            quarantineRejectedFile(path, "unparseable");
+            return std::nullopt;
+        }
+        if (header->version != kStoreVersion) {
+            quarantineRejectedFile(path, "version-mismatch");
+            return std::nullopt;
+        }
+
+        store::ProfileStoreFile file;
         std::ifstream input(path, std::ios::in | std::ios::binary);
-        if (!proto.ParseFromIstream(&input)) {
+        if (!file.ParseFromIstream(&input)) {
             input.close();
             quarantineRejectedFile(path, "unparseable");
             // TODO(2026-08-13): Widen IProfileSerializer::load's result once callers distinguish rejection from absence.
@@ -124,11 +185,7 @@ namespace ksv::data {
         }
         input.close();
 
-        // The field layout cannot be interpreted safely under an incompatible version.
-        if (proto.version() != kStoreVersion) {
-            quarantineRejectedFile(path, "version-mismatch");
-            return std::nullopt;
-        }
+        const auto& proto = file.store();
 
         std::vector<domain::SourceDirectory> sources;
         sources.reserve(proto.sources_size());

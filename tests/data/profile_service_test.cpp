@@ -108,6 +108,7 @@ namespace {
     class FakeProfileSerializer : public IProfileSerializer {
     public:
         std::optional<ksv::domain::UserProfile> profile_to_load;
+        std::optional<ProfileStoreHeader> header_to_read;
         int save_count = 0;
         std::filesystem::path last_save_path;
         std::filesystem::path last_load_path;
@@ -117,6 +118,10 @@ namespace {
             last_saved_profile = profile;
             last_save_path = path;
             ++save_count;
+        }
+
+        [[nodiscard]] std::optional<ProfileStoreHeader> readHeader(const std::filesystem::path&) const override {
+            return header_to_read;
         }
 
         [[nodiscard]] std::optional<ksv::domain::UserProfile> load(const std::filesystem::path &path) override {
