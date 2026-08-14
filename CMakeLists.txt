@@ -96,9 +96,9 @@ endfunction()
 
 ksv_copy_mingw_runtime_dlls(ksv)
 
-# Dev-only component gallery (qmlpreview target). Off for packaged builds.
+# Dev-only component gallery (qmlpreview target). Excluded from Release and packaged builds.
 option(KSV_BUILD_GALLERY "Build the dev component gallery (ksv_gallery)" ON)
-if(KSV_BUILD_GALLERY)
+if(KSV_BUILD_GALLERY AND NOT CMAKE_BUILD_TYPE STREQUAL "Release")
     add_subdirectory(tools/gallery)
 endif()
 
