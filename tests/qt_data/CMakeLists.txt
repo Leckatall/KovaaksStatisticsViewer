@@ -3,6 +3,7 @@ include(GoogleTest)
 
 add_executable(qt_data_tests
     qt_test_main.cpp
+    graph_line_config_test.cpp
     settings_service_test.cpp
     file_service_test.cpp
 )

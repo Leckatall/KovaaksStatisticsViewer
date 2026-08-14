@@ -111,6 +111,7 @@ ApplicationWindow {
         viewSettings: viewSettings
         onSetSourceDirRequested: folderDialog.open()
         onSettingsRequested: settingsDialog.open()
+        onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
         onLoadPerformanceFileRequested: perfFileDialog.open()
         onQuitRequested: Qt.quit()
         onAboutRequested: aboutDialog.open()
@@ -164,6 +165,7 @@ ApplicationWindow {
                 visible: viewSettings.controlPanelVisible
                 graphVm: root.graphVm
                 columnVisibility: columnVisibilitySettings
+                onConfigureLinesRequested: settingsDialog.openGraphLines()
             }
             SelectionPanel {
                 Layout.row: 1; Layout.column: 0

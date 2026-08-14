@@ -30,7 +30,8 @@ namespace ksv::presentation {
         // Shared X axis all series are plotted against
         [[nodiscard]] virtual AxisModel xAxis() const = 0;
 
-        // DEPRECATED: superseded by series(); kept while DashboardGraphCanvas.qml still uses it
+        // TODO(2026-08-14): Remove with the remaining legacy graph-interface methods;
+        // dashboard QML uses GraphViewModel::allColumns()/enabledColumns().
         [[nodiscard]] virtual QVariantList plottableColumns() const = 0;
 
         [[nodiscard]] virtual QVariantMap axisBounds() const = 0;

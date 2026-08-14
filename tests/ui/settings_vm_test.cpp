@@ -76,13 +76,27 @@ namespace {
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
     };
 
+    class FakeGraphColumnPreferences final : public IGraphColumnPreferences {
+    public:
+        std::vector<std::pair<ColumnId, bool>> calls;
+
+        [[nodiscard]] std::vector<ColumnId> getEnabledColumns() const override { return {}; }
+        [[nodiscard]] bool isEnabled(ColumnId) const override { return false; }
+        void setEnabled(const ColumnId column, const bool enabled) override {
+            calls.emplace_back(column, enabled);
+        }
+    };
+
     class SettingsViewModelTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSettingsService> fake_service = std::make_shared<FakeSettingsService>();
         std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
+        std::shared_ptr<FakeGraphColumnPreferences> fake_graph_preferences =
+            std::make_shared<FakeGraphColumnPreferences>();
 
         std::unique_ptr<SettingsViewModel> make_view_model() {
-            return std::make_unique<SettingsViewModel>(fake_service, fake_profile_service);
+            return std::make_unique<SettingsViewModel>(
+                fake_service, fake_profile_service, fake_graph_preferences);
         }
     };
 
@@ -186,5 +200,24 @@ namespace {
 
         EXPECT_EQ(spy.count(), 1);
         EXPECT_TRUE(view_model->isProfileLoaded());
+    }
+
+    TEST_F(SettingsViewModelTest, SetGraphColumnEnabledDelegatesValidColumn) {
+        const auto view_model = make_view_model();
+
+        view_model->setGraphColumnEnabled(static_cast<int>(ColumnId::Accuracy), false);
+
+        EXPECT_EQ(fake_graph_preferences->calls,
+                  (std::vector<std::pair<ColumnId, bool>>{{ColumnId::Accuracy, false}}));
+    }
+
+    TEST_F(SettingsViewModelTest, SetGraphColumnEnabledRejectsInvalidAndTimeColumns) {
+        const auto view_model = make_view_model();
+
+        view_model->setGraphColumnEnabled(static_cast<int>(ColumnId::Time), false);
+        view_model->setGraphColumnEnabled(-1, false);
+        view_model->setGraphColumnEnabled(999, false);
+
+        EXPECT_TRUE(fake_graph_preferences->calls.empty());
     }
 }

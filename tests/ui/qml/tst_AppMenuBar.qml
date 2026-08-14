@@ -251,20 +251,43 @@ TestCase {
         compare(browserItem.checked, true)
     }
 
-    function test_graphLinesSubmenu_buildsOneItemPerPlottableColumnFromGraphVm() {
+    function test_graphLinesSubmenu_buildsOneItemPerEnabledColumnFromGraphVm() {
         fakeColumnVisibility.score = true
         fakeColumnVisibility.accuracy = false
+        fakeGraphVm.enabledColumns = [1]
         const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
         const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
 
         const scoreItem = findMenuItemByText(linesMenu, "Score")
         const accuracyItem = findMenuItemByText(linesMenu, "Accuracy")
         verify(scoreItem !== null, "expected a menu item labeled 'Score' from graphVm.columnName")
-        verify(accuracyItem !== null, "expected a menu item labeled 'Accuracy' from graphVm.columnName")
+        verify(accuracyItem === null)
         compare(scoreItem.checked, true)
-        compare(accuracyItem.checked, false)
 
         fakeColumnVisibility.score = false
         compare(scoreItem.checked, false, "menu item should track columnVisibility[graphVm.columnKey(col)]")
+        fakeGraphVm.enabledColumns = [1, 2]
+    }
+
+    function test_graphLinesSubmenuRetainsConfigureItemWhenAllColumnsDisabled() {
+        fakeGraphVm.enabledColumns = []
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
+
+        verify(findMenuItemByText(linesMenu, "Configure Lines...") !== null)
+        fakeGraphVm.enabledColumns = [1, 2]
+    }
+
+    function test_configureGraphLinesRequestedEmittedFromMenuItem() {
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
+        const item = findMenuItemByText(linesMenu, "Configure Lines...")
+        let emitted = 0
+        menuBar.configureGraphLinesRequested.connect(() => emitted++)
+
+        verify(item !== null)
+        item.action.trigger()
+
+        compare(emitted, 1)
     }
 }

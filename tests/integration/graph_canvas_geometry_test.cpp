@@ -43,7 +43,8 @@ namespace {
             const QString file = env.copyFixtureIntoPerformances("1wall6targets TE.perf");
             ASSERT_FALSE(file.isEmpty());
 
-            app = std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>());
+            app = std::make_unique<application::App>(
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphLineConfig);
             graphVm = app->graphVm();
             graphVm->fetchData(QUrl::fromLocalFile(file).toString());
 

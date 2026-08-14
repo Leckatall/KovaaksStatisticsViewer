@@ -6,6 +6,7 @@
 
 #include <qurl.h>
 #include <QDebug>
+#include <QSet>
 #include <algorithm>
 #include <utility>
 
@@ -51,6 +52,7 @@ namespace ksv::presentation {
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
                                    QObject *parent) : GraphViewModelBase(parent),
                                                       m_graphUseCase(std::move(graphUseCase)) {
+        m_enabledColumns = allColumns();
         for (int c = Score; c < ColumnCount; ++c) {
             SeriesModel series;
             series.name = GraphViewModel::columnName(c);
@@ -68,9 +70,33 @@ namespace ksv::presentation {
     }
 
     QVariantList GraphViewModel::plottableColumns() const {
+        return allColumns();
+    }
+
+    QVariantList GraphViewModel::allColumns() const {
         QVariantList columns;
-        for (int c = Score; c < ColumnCount; ++c) columns.append(c);
+        columns.reserve(static_cast<qsizetype>(application::kPlottableColumnIds.size()));
+        for (const auto column: application::kPlottableColumnIds) {
+            columns.append(static_cast<int>(column));
+        }
         return columns;
+    }
+
+    void GraphViewModel::setEnabledColumns(const std::vector<application::ColumnId> &columns) {
+        QSet<int> requested;
+        for (const auto column: columns) {
+            if (application::isPlottableGraphColumn(column)) requested.insert(static_cast<int>(column));
+        }
+
+        QVariantList normalized;
+        normalized.reserve(static_cast<qsizetype>(application::kPlottableColumnIds.size()));
+        for (const auto column: application::kPlottableColumnIds) {
+            const auto value = static_cast<int>(column);
+            if (requested.contains(value)) normalized.append(value);
+        }
+        if (m_enabledColumns == normalized) return;
+        m_enabledColumns = std::move(normalized);
+        emit enabledColumnsChanged();
     }
 
     QVariantMap GraphViewModel::axisBounds() const {

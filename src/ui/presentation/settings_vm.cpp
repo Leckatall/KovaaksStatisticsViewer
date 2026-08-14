@@ -8,9 +8,11 @@ namespace ksv::presentation {
     SettingsViewModel::SettingsViewModel(
         std::shared_ptr<application::ISettingsService> settings_service,
         std::shared_ptr<application::IProfileService> profile_service,
+        std::shared_ptr<application::IGraphColumnPreferences> graph_column_preferences,
         QObject *parent) : QObject(parent),
                            m_settings_service(std::move(settings_service)),
                            m_profile_service(std::move(profile_service)),
+                           m_graph_column_preferences(std::move(graph_column_preferences)),
                            m_kovaaks_dir([&] {
                                const auto dirs = m_settings_service->getKovaaksDirs();
                                return dirs.empty() ? QUrl{} : QUrl::fromLocalFile(QString::fromStdString(dirs.front()));
@@ -35,5 +37,11 @@ namespace ksv::presentation {
         // Setting path triggers ProfileService to repoint the store and reload.
         m_settings_service->setProfilePath(path.toLocalFile().toStdString());
         emit profilePathChanged();
+    }
+
+    void SettingsViewModel::setGraphColumnEnabled(const int column, const bool enabled) {
+        const auto columnId = static_cast<application::ColumnId>(column);
+        if (!application::isPlottableGraphColumn(columnId)) return;
+        m_graph_column_preferences->setEnabled(columnId, enabled);
     }
 }

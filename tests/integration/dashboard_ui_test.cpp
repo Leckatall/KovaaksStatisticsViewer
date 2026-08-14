@@ -8,10 +8,12 @@
 
 #include <gtest/gtest.h>
 
+#include <QDir>
 #include <QQmlApplicationEngine>
 #include <QRectF>
 #include <QSettings>
 #include <QTest>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QVariant>
 #include <filesystem>
@@ -45,7 +47,8 @@ namespace {
             perfFile = file;
             perfUrl = QUrl::fromLocalFile(file).toString();
 
-            app = std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>());
+            app = std::make_unique<application::App>(
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphLineConfig);
             engine.setInitialProperties({
                 {"graphVm", QVariant::fromValue(app->graphVm())},
                 {"playtimeVm", QVariant::fromValue(app->playtimeVm())},
@@ -109,14 +112,50 @@ namespace {
         EXPECT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
     }
 
-    TEST_F(DashboardUiTest, DashboardShowsAllPlottableColumns) {
+    TEST_F(DashboardUiTest, DashboardShowsAllEnabledColumns) {
         auto *canvas = dashboardCanvas();
         ASSERT_NE(canvas, nullptr) << "no GraphCanvas bound to the single-run graphVm";
 
         // columnVisibilitySettings defaults every column to visible, so the
-        // dashboard's computed visibleColumns must cover the full plottable set.
-        EXPECT_EQ(canvas->visibleColumns().size(), app->graphVm()->plottableColumns().size());
+        // dashboard's computed visibleColumns must cover the full enabled set.
+        EXPECT_EQ(canvas->visibleColumns().size(), app->graphVm()->enabledColumns().size());
         EXPECT_FALSE(canvas->visibleColumns().isEmpty());
+    }
+
+    TEST_F(DashboardUiTest, DisablingAndReEnablingLinePreservesItsVisibility) {
+        auto *canvas = dashboardCanvas();
+        ASSERT_NE(canvas, nullptr);
+        constexpr int score = presentation::GraphViewModel::Score;
+        ASSERT_TRUE(canvas->visibleColumns().contains(score));
+
+        app->settingsVm()->setGraphColumnEnabled(score, false);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !canvas->visibleColumns().contains(score); }, 3000));
+
+        app->settingsVm()->setGraphColumnEnabled(score, true);
+        EXPECT_TRUE(QTest::qWaitFor([&] { return canvas->visibleColumns().contains(score); }, 3000));
+    }
+
+    TEST_F(DashboardUiTest, ConfigureActionsOpenGraphLinesSettingsCategory) {
+        auto *menuBar = root->property("menuBar").value<QObject *>();
+        ASSERT_NE(menuBar, nullptr);
+        ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "configureGraphLinesRequested"));
+
+        auto *dialog = root->findChild<QObject *>("settingsDialog");
+        ASSERT_NE(dialog, nullptr);
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 1;
+        }, 3000));
+
+        ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000));
+        dialog->setProperty("currentCategory", 0);
+
+        auto *button = root->findChild<QObject *>("configureGraphLinesButton");
+        ASSERT_NE(button, nullptr);
+        ASSERT_TRUE(QMetaObject::invokeMethod(button, "clicked"));
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 1;
+        }, 3000));
     }
 
     TEST_F(DashboardUiTest, FetchingPerfPopulatesDashboardTitleAndGraph) {
@@ -181,10 +220,16 @@ namespace {
     TEST(FirstRunUiTest, BannerOpensFolderDialogAndHidesAfterDirectorySelection) {
         QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         raw.remove("file/kovaaks");
+        raw.remove("file/kovaaksDirs");
         raw.sync();
 
+        QTemporaryDir tempDir;
+        ASSERT_TRUE(tempDir.isValid());
         const auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
-        application::App app(settings, std::make_shared<data::ProtoDecoder>());
+        settings->setProfilePath(QDir(tempDir.path()).filePath("profile.pb").toStdString());
+        const auto graphLineConfig = std::make_shared<qt_data::GraphLineConfig>(QSettings::IniFormat);
+        graphLineConfig->setDisabledGraphLineKeys({});
+        application::App app(settings, std::make_shared<data::ProtoDecoder>(), graphLineConfig);
         QQmlApplicationEngine engine;
         engine.setInitialProperties({
             {"graphVm", QVariant::fromValue(app.graphVm())},

@@ -187,6 +187,43 @@ namespace {
         EXPECT_EQ(columns.size(), GraphViewModel::ColumnCount - 1);
     }
 
+    TEST_F(GraphViewModelTest, EnabledColumnsDefaultToAllColumns) {
+        EXPECT_EQ(view_model.enabledColumns(), view_model.allColumns());
+    }
+
+    TEST_F(GraphViewModelTest, SetEnabledColumnsFiltersDuplicatesInvalidValuesAndUsesCanonicalOrder) {
+        view_model.setEnabledColumns({
+            ColumnId::Dmg,
+            ColumnId::Score,
+            ColumnId::Dmg,
+            ColumnId::Time,
+            static_cast<ColumnId>(999)
+        });
+
+        EXPECT_EQ(view_model.enabledColumns(), (QVariantList{GraphViewModel::Score, GraphViewModel::Dmg}));
+    }
+
+    TEST_F(GraphViewModelTest, SetEnabledColumnsEmitsOnlyForEffectiveChange) {
+        const QSignalSpy spy(&view_model, &GraphViewModel::enabledColumnsChanged);
+
+        view_model.setEnabledColumns({ColumnId::Score, ColumnId::Accuracy});
+        EXPECT_EQ(spy.count(), 1);
+
+        view_model.setEnabledColumns({ColumnId::Accuracy, ColumnId::Score, ColumnId::Score});
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(GraphViewModelTest, AllColumnsMayBeDisabledWithoutHidingSeriesData) {
+        setSampleData();
+        view_model.fetchData();
+
+        view_model.setEnabledColumns({});
+
+        EXPECT_TRUE(view_model.enabledColumns().isEmpty());
+        EXPECT_FALSE(view_model.seriesPoints(GraphViewModel::Score).isEmpty());
+        EXPECT_EQ(view_model.series({GraphViewModel::Score}).size(), 1);
+    }
+
     // The settings dialog and control panel key their per-column visibility
     // toggles off these names, lowercased, so every plottable column needs a
     // stable, non-empty name and a distinct color to be usable as a toggle.

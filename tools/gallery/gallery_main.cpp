@@ -24,11 +24,33 @@
 
 #include "qml_registration.h"
 #include "settings_service.h"
+#include "data/interfaces/i_graph_line_config.h"
 #include "formats/protobuf/proto_decoder.h"
 
 using namespace ksv;
 
 namespace {
+    class InMemoryGraphLineConfig final : public application::IGraphLineConfig {
+    public:
+        [[nodiscard]] std::vector<std::string> getDisabledGraphLineKeys() const override {
+            return m_disabledKeys;
+        }
+
+        void setDisabledGraphLineKeys(const std::vector<std::string> &keys) override {
+            if (m_disabledKeys == keys) return;
+            m_disabledKeys = keys;
+            for (const auto &callback: m_callbacks) callback();
+        }
+
+        void onDisabledGraphLinesChanged(std::function<void()> callback) override {
+            m_callbacks.push_back(std::move(callback));
+        }
+
+    private:
+        std::vector<std::string> m_disabledKeys;
+        std::vector<std::function<void()>> m_callbacks;
+    };
+
     class GalleryQmlSourceInterceptor final : public QQmlAbstractUrlInterceptor {
     public:
         explicit GalleryQmlSourceInterceptor(QString sourceDirectory)
@@ -70,7 +92,8 @@ int main(int argc, char *argv[]) {
     settings->setKovaaksDirs({tmp.path().toStdString()});
     settings->setProfilePath(QDir(tmp.path()).absoluteFilePath("store/profile.pb").toStdString());
 
-    application::App app(settings, std::make_shared<data::ProtoDecoder>());
+    application::App app(
+        settings, std::make_shared<data::ProtoDecoder>(), std::make_shared<InMemoryGraphLineConfig>());
     app.sessionVm()->generateProfile();
     app.graphVm()->fetchData(QUrl::fromLocalFile(perf).toString());
 

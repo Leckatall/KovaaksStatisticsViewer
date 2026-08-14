@@ -12,24 +12,33 @@
 
 #include "session_controller.h"
 #include "settings_service.h"
+#include "graph_line_config.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "formats/protobuf/profile_serializer.h"
 #include "qt_data/file_service.h"
 #include "../data/profile_service.h"
 #include "usecases/graph_use_case.h"
+#include "usecases/graph_column_preferences.h"
 #include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
 
 
 namespace ksv::application {
     App::App(QObject *parent)
-        : App(std::make_shared<qt_data::SettingsService>(), std::make_shared<data::ProtoDecoder>(), parent) {}
+        : App(std::make_shared<qt_data::SettingsService>(),
+              std::make_shared<data::ProtoDecoder>(),
+              std::make_shared<qt_data::GraphLineConfig>(),
+              parent) {}
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
-             std::shared_ptr<IProtoDecoder> decoder, QObject *parent) : QObject(parent) {
+             std::shared_ptr<IProtoDecoder> decoder,
+             std::shared_ptr<IGraphLineConfig> graphLineConfig,
+             QObject *parent) : QObject(parent) {
         m_protoDecoder = std::move(decoder);
 
         m_settingsService = std::move(settingsService);
+        m_graphLineConfig = std::move(graphLineConfig);
+        m_graphColumnPreferences = std::make_shared<GraphColumnPreferences>(m_graphLineConfig);
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder);
 
         m_profileService = std::make_shared<data::ProfileService>(
@@ -43,6 +52,13 @@ namespace ksv::application {
 
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController);
         m_graphVm = new presentation::GraphViewModel(m_graphUseCase, this);
+        m_graphVm->setEnabledColumns(m_graphColumnPreferences->getEnabledColumns());
+        const QPointer graphVm(m_graphVm);
+        const std::weak_ptr<IGraphColumnPreferences> preferences = m_graphColumnPreferences;
+        m_graphLineConfig->onDisabledGraphLinesChanged([graphVm, preferences] {
+            const auto lockedPreferences = preferences.lock();
+            if (graphVm && lockedPreferences) graphVm->setEnabledColumns(lockedPreferences->getEnabledColumns());
+        });
         // Re-pull the series when currentPerf changes for any reason (file load, run selection, latest-on-startup)
         m_graphUseCase->onCurrentPerfChanged([this] { m_graphVm->fetchData(); });
         // SessionController already loaded the latest perf in its own constructor, before the
@@ -60,7 +76,8 @@ namespace ksv::application {
         m_completionHistoryUseCase->onCurrentScenarioChanged([this] { m_completionHistoryVm->refresh(); });
 
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
-        m_settingsVm = new presentation::SettingsViewModel(m_settingsService, m_profileService, this);
+        m_settingsVm = new presentation::SettingsViewModel(
+            m_settingsService, m_profileService, m_graphColumnPreferences, this);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_sessionController, this);
     }
 

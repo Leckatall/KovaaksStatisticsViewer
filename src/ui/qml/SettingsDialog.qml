@@ -22,6 +22,12 @@ Dialog {
     required property var graphAxisSettings
 
     property int currentCategory: 0
+    readonly property int graphLinesCategory: 1
+
+    function openGraphLines() {
+        currentCategory = graphLinesCategory
+        open()
+    }
 
     // Rounded "pill" navigation entry for the sidebar.
     component CategoryButton: ItemDelegate {
@@ -179,7 +185,7 @@ Dialog {
                 spacing: 8
 
                 readonly property var visibleColumns: {
-                    const cols = root.graphVm.plottableColumns;
+                    const cols = root.graphVm.enabledColumns;
                     const result = [];
                     for (let i = 0; i < cols.length; i++) {
                         if (root.columnVisibility[root.graphVm.columnKey(cols[i])]) {
@@ -228,7 +234,7 @@ Dialog {
                 }
 
                 Repeater {
-                    model: root.graphVm.plottableColumns
+                    model: root.graphVm.allColumns
 
                     RowLayout {
                         id: lineRow
@@ -251,9 +257,9 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true }
                         Switch {
-                            objectName: "columnVisibilityCheckBox_" + root.graphVm.columnName(lineRow.modelData)
-                            checked: !!columnVisibility[root.graphVm.columnKey(lineRow.modelData)]
-                            onToggled: columnVisibility[root.graphVm.columnKey(lineRow.modelData)] = checked
+                            objectName: "graphColumnEnabledSwitch_" + root.graphVm.columnName(lineRow.modelData)
+                            checked: root.graphVm.enabledColumns.includes(lineRow.modelData)
+                            onToggled: root.settingsVm.setGraphColumnEnabled(lineRow.modelData, checked)
                         }
                     }
                 }

@@ -34,7 +34,8 @@ namespace {
             ASSERT_FALSE(file.isEmpty());
             perfUrl = QUrl::fromLocalFile(file).toString();
 
-            app = std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>());
+            app = std::make_unique<application::App>(
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphLineConfig);
             graphVm = app->graphVm();
             ASSERT_NE(graphVm, nullptr);
         }

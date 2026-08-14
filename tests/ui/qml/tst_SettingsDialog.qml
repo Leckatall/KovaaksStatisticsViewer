@@ -20,7 +20,11 @@ TestCase {
         return Object.assign({
             kovaaksDir: "file:///C:/Kovaaks",
             profilePath: "file:///C:/Profile/profile.pb",
-            profileLoaded: false
+            profileLoaded: false,
+            graphColumnEnabledCalls: [],
+            setGraphColumnEnabled: function (column, enabled) {
+                this.graphColumnEnabledCalls.push({column: column, enabled: enabled})
+            }
         }, overrides)
     }
 
@@ -177,40 +181,47 @@ TestCase {
         compare(bar.indeterminate, true, "a build with no progress yet should render as indeterminate")
     }
 
-    function test_columnVisibilityCheckBoxes_reflectColumnVisibility() {
+    function test_graphColumnSwitchesListAllColumnsAndReflectEnabledSet() {
+        const graphVm = makeFakeGraphVm()
+        graphVm.enabledColumns = [1]
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
+            graphVm: graphVm,
             columnVisibility: ({score: false, accuracy: true})
         })
 
         selectCategory(dialog, "Graph Lines")
 
-        const scoreCheckBox = findByObjectName(dialog.contentItem, "columnVisibilityCheckBox_Score")
-        const accuracyCheckBox = findByObjectName(dialog.contentItem, "columnVisibilityCheckBox_Accuracy")
-        verify(scoreCheckBox !== null, "no checkbox named 'columnVisibilityCheckBox_Score' found in SettingsDialog Graph Lines category")
-        verify(accuracyCheckBox !== null, "no checkbox named 'columnVisibilityCheckBox_Accuracy' found in SettingsDialog Graph Lines category")
-        compare(scoreCheckBox.checked, false, "Score checkbox should reflect columnVisibility.score === false")
-        compare(accuracyCheckBox.checked, true, "Accuracy checkbox should reflect columnVisibility.accuracy === true")
+        const scoreSwitch = findByObjectName(dialog.contentItem, "graphColumnEnabledSwitch_Score")
+        const accuracySwitch = findByObjectName(dialog.contentItem, "graphColumnEnabledSwitch_Accuracy")
+        verify(scoreSwitch !== null)
+        verify(accuracySwitch !== null)
+        compare(scoreSwitch.checked, true)
+        compare(accuracySwitch.checked, false)
     }
 
-    function test_togglingColumnVisibilityCheckBox_updatesColumnVisibility() {
+    function test_togglingGraphColumnSwitchWritesThroughSettingsVm() {
+        const graphVm = makeFakeGraphVm()
+        graphVm.enabledColumns = [1]
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
+            graphVm: graphVm,
             columnVisibility: ({score: false, accuracy: true})
         })
 
         selectCategory(dialog, "Graph Lines")
 
-        const scoreCheckBox = findByObjectName(dialog.contentItem, "columnVisibilityCheckBox_Score")
-        verify(scoreCheckBox !== null, "no checkbox named 'columnVisibilityCheckBox_Score' found in SettingsDialog Graph Lines category")
-        mouseClick(scoreCheckBox)
+        const accuracySwitch = findByObjectName(dialog.contentItem, "graphColumnEnabledSwitch_Accuracy")
+        verify(accuracySwitch !== null)
+        mouseClick(accuracySwitch)
 
-        compare(scoreCheckBox.checked, true, "clicking the Score checkbox should check it")
-        compare(dialog.columnVisibility.score, true, "clicking the Score checkbox should update columnVisibility.score")
+        tryCompare(accuracySwitch, "checked", true)
+        tryCompare(dialog.settingsVm.graphColumnEnabledCalls, "length", 1)
+        tryCompare(dialog.settingsVm.graphColumnEnabledCalls[0], "column", 2)
+        tryCompare(dialog.settingsVm.graphColumnEnabledCalls[0], "enabled", true)
+        tryCompare(dialog.columnVisibility, "accuracy", true)
     }
 
     function test_categoryList_startsOnDirectories() {
@@ -237,6 +248,21 @@ TestCase {
         compare(dialog.currentCategory, 1, "clicking the 'Graph Lines' category item should switch currentCategory to index 1")
     }
 
+    function test_openGraphLinesOpensDialogOnGraphLinesCategory() {
+        const dialog = createTemporaryObject(settingsDialogComponent, testCase, {
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({}),
+            graphAxisSettings: ({yAxisColumnKey: "score"})
+        })
+
+        dialog.openGraphLines()
+
+        tryCompare(dialog, "visible", true)
+        compare(dialog.currentCategory, dialog.graphLinesCategory)
+    }
+
     function test_yAxisColumnComboBox_listsOnlyVisibleColumns() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
@@ -252,6 +278,25 @@ TestCase {
         verify(combo !== null, "no combo box named 'yAxisColumnComboBox' found in SettingsDialog Graph Lines category")
         compare(combo.count, 1, "the combo box should only list the visible columns")
         compare(combo.displayText, "Score", "the combo box should show the sole visible column")
+    }
+
+    function test_yAxisColumnComboBoxExcludesDisabledButVisibleColumn() {
+        const graphVm = makeFakeGraphVm()
+        graphVm.enabledColumns = [1]
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: graphVm,
+            columnVisibility: ({score: true, accuracy: true}),
+            graphAxisSettings: ({yAxisColumnKey: "accuracy"})
+        })
+
+        selectCategory(dialog, "Graph Lines")
+
+        const combo = findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        compare(combo.count, 1)
+        compare(combo.displayText, "Score")
+        compare(dialog.graphAxisSettings.yAxisColumnKey, "accuracy")
     }
 
     function test_selectingYAxisColumn_writesGraphAxisSettings() {

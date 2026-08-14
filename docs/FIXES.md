@@ -65,7 +65,6 @@ Static audit findings retained from the 2026-08-13 review. Each checkbox reports
 - [ ] The UI drives `IProfileService` directly. (`src/ui/presentation/settings_vm.h:43`; `src/ui/presentation/settings_vm.cpp:8`, `SettingsViewModel::SettingsViewModel`)
 - [ ] The domain layer performs console I/O. (`src/domain/scenario_perf.h:120`, `ScenarioPerf::print`; `src/domain/user_profile.cpp:17`, `UserProfile::addScenarioPerf`)
 - [ ] Integration tests use divergent manual QML registration. (`tests/integration/qt_test_main.cpp:16`, `registerQmlTypes`; `src/qml_registration.h:15`, `declare_metatypes`)
-- [ ] `plottableColumns()` has QML callers beyond the one named in its deprecated comment. (`src/ui/presentation/graph_vm_base.h:42`, `GraphViewModelBase::plottableColumns`; `src/ui/qml/AppMenuBar.qml:62`)
 - [ ] Release packaging leaves gallery construction enabled. (`CMakeLists.txt:99`; `scripts/package-release.ps1:137`)
 - [ ] `ui_qml_tests` lacks the MinGW runtime-DLL copy step. (`tests/ui/CMakeLists.txt:35`)
 - [ ] The integration suite contains a view-model stub despite its “no fakes” rule. (`tests/integration/graph_canvas_geometry_test.cpp:93`, `NoYAxisVm`)

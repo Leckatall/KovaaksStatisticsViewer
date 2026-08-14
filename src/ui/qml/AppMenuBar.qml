@@ -20,6 +20,7 @@ MenuBar {
 
     signal setSourceDirRequested()
     signal settingsRequested()
+    signal configureGraphLinesRequested()
     signal loadPerformanceFileRequested()
     signal quitRequested()
     signal aboutRequested()
@@ -69,7 +70,7 @@ MenuBar {
             title: qsTr("Scenario Graph Lines")
             enabled: root.viewSettings ? root.viewSettings.scenarioGraphVisible : true
             Repeater {
-                model: root.graphVm ? root.graphVm.plottableColumns : []
+                model: root.graphVm ? root.graphVm.enabledColumns : []
                 MenuItem {
                     required property var modelData
                     text: root.graphVm.columnName(modelData)
@@ -77,6 +78,12 @@ MenuBar {
                     checked: !!root.columnVisibility[root.graphVm.columnKey(modelData)]
                     onTriggered: root.columnVisibility[root.graphVm.columnKey(modelData)] = checked
                 }
+            }
+            MenuSeparator {}
+            Action {
+                objectName: "configureGraphLinesMenuItem"
+                text: qsTr("Configure Lines...")
+                onTriggered: root.configureGraphLinesRequested()
             }
         }
         Action {

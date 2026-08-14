@@ -34,6 +34,13 @@ namespace ksv::application {
         ColumnId::ExpectedFinalScoreRecent
     };
 
+    [[nodiscard]] constexpr bool isPlottableGraphColumn(const ColumnId column) {
+        for (const auto candidate: kPlottableColumnIds) {
+            if (candidate == column) return true;
+        }
+        return false;
+    }
+
     // Persisted keys must never be renamed or reused for a different column.
     [[nodiscard]] constexpr std::string_view graphColumnKey(const ColumnId column) {
         switch (column) {

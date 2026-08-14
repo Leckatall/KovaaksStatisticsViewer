@@ -6,13 +6,14 @@ Frame {
     id: root
     required property var graphVm
     required property var columnVisibility
+    signal configureLinesRequested()
 
     ColumnLayout {
         Label {
             text: "Lines"
         }
         Repeater {
-            model: root.graphVm.plottableColumns
+            model: root.graphVm.enabledColumns
 
             CheckBox {
                 required property int modelData
@@ -29,6 +30,16 @@ Frame {
 
                 onToggled: root.columnVisibility[root.graphVm.columnKey(modelData)] = checked
             }
+        }
+        Label {
+            objectName: "noEnabledGraphLinesLabel"
+            text: qsTr("No graph lines enabled")
+            visible: root.graphVm.enabledColumns.length === 0
+        }
+        Button {
+            objectName: "configureGraphLinesButton"
+            text: qsTr("Configure...")
+            onClicked: root.configureLinesRequested()
         }
     }
 }

@@ -3,6 +3,8 @@
 function makeFakeGraphVm() {
     return {
         plottableColumns: [1, 2],
+        allColumns: [1, 2],
+        enabledColumns: [1, 2],
         fetchDataCalls: [],
         fetchLatestDataCalls: 0,
         columnName: function (id) { return id === 1 ? "Score" : "Accuracy" },

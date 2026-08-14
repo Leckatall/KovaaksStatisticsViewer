@@ -36,7 +36,8 @@ namespace {
             // App::App() runs loadProfile(), which asks SessionController for a build
             // on its worker thread when no store is available. The result only lands once the event
             // loop spins, so every test here starts by waiting for it.
-            app = std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>());
+            app = std::make_unique<application::App>(
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphLineConfig);
             ASSERT_TRUE(waitForProfile());
         }
 

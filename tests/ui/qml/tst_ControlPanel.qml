@@ -16,6 +16,11 @@ TestCase {
         ControlPanel {}
     }
 
+    SignalSpy {
+        id: configureLinesSpy
+        signalName: "configureLinesRequested"
+    }
+
     // graphVm/columnVisibility are declared `property var`, so ControlPanel
     // accesses them dynamically at runtime and a plain JS object stands in
     // fine for the real (C++) view models.
@@ -64,5 +69,47 @@ TestCase {
 
         compare(scoreCheckBox.checked, false, "clicking the Score checkbox should uncheck it")
         compare(panel.columnVisibility.score, false, "clicking the Score checkbox should update columnVisibility.score")
+    }
+
+    function test_onlyEnabledColumnsHaveVisibilityControls() {
+        const graphVm = makeFakeGraphVm()
+        graphVm.enabledColumns = [1]
+        const panel = createPanel({
+            graphVm: graphVm,
+            columnVisibility: ({score: true, accuracy: true})
+        })
+
+        verify(findChild(panel, "columnVisibilityCheckBox_Score") !== null)
+        verify(findChild(panel, "columnVisibilityCheckBox_Accuracy") === null)
+    }
+
+    function test_allDisabledStateRetainsConfigureAffordance() {
+        const graphVm = makeFakeGraphVm()
+        graphVm.enabledColumns = []
+        const panel = createPanel({
+            graphVm: graphVm,
+            columnVisibility: ({score: true, accuracy: true})
+        })
+
+        const emptyLabel = findChild(panel, "noEnabledGraphLinesLabel")
+        const configureButton = findChild(panel, "configureGraphLinesButton")
+        verify(emptyLabel !== null)
+        verify(configureButton !== null)
+        compare(emptyLabel.visible, true)
+        compare(configureButton.visible, true)
+    }
+
+    function test_configureButtonEmitsRequest() {
+        const panel = createPanel({
+            graphVm: makeFakeGraphVm(),
+            columnVisibility: ({score: true, accuracy: true})
+        })
+        const configureButton = findChild(panel, "configureGraphLinesButton")
+        configureLinesSpy.target = panel
+        configureLinesSpy.clear()
+
+        mouseClick(configureButton)
+
+        tryCompare(configureLinesSpy, "count", 1)
     }
 }

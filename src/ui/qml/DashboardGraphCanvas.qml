@@ -10,7 +10,7 @@ Frame {
     required property var graphVm
     required property var graphAxisSettings
     readonly property var visibleColumns: {
-        const cols = root.graphVm.plottableColumns;
+        const cols = root.graphVm.enabledColumns;
         const result = [];
         for (let i = 0; i < cols.length; i++) {
             if (root.columnVisibility[root.graphVm.columnKey(cols[i])]) {
@@ -20,7 +20,7 @@ Frame {
         return result;
     }
     readonly property int yAxisColumn: {
-        const cols = root.graphVm.plottableColumns;
+        const cols = root.graphVm.enabledColumns;
         for (let i = 0; i < cols.length; i++) {
             if (root.graphVm.columnKey(cols[i]) === root.graphAxisSettings.yAxisColumnKey) {
                 return cols[i];

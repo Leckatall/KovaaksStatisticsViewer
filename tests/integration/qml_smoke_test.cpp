@@ -52,7 +52,8 @@ namespace {
 
         int startResult = -1;
         {
-            application::App app(env.settings, std::make_shared<data::ProtoDecoder>());
+            application::App app(
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphLineConfig);
             startResult = app.start();
         }
 

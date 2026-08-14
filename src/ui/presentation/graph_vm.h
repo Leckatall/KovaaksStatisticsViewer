@@ -22,6 +22,8 @@ namespace ksv::presentation {
     class GraphViewModel : public GraphViewModelBase {
         Q_OBJECT
         Q_PROPERTY(QVariantList plottableColumns READ plottableColumns CONSTANT)
+        Q_PROPERTY(QVariantList allColumns READ allColumns CONSTANT)
+        Q_PROPERTY(QVariantList enabledColumns READ enabledColumns NOTIFY enabledColumnsChanged)
         Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
 
@@ -45,6 +47,9 @@ namespace ksv::presentation {
         [[nodiscard]] AxisModel xAxis() const override { return m_axes[Time]; }
 
         [[nodiscard]] QVariantList plottableColumns() const override;
+        [[nodiscard]] QVariantList allColumns() const;
+        [[nodiscard]] QVariantList enabledColumns() const { return m_enabledColumns; }
+        void setEnabledColumns(const std::vector<application::ColumnId> &columns);
 
         [[nodiscard]] QVariantMap axisBounds() const override;
 
@@ -70,12 +75,14 @@ namespace ksv::presentation {
 
     signals:
         void scenarioTitleChanged();
+        void enabledColumnsChanged();
 
     private:
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
         QList<QMap<Column, qreal>> m_data;
         std::array<AxisModel, ColumnCount> m_axes{};
         QList<SeriesModel> m_series;
+        QVariantList m_enabledColumns;
         QString m_scenarioTitle;
     };
 }

@@ -3,6 +3,9 @@ add_library(ksv_qt_data STATIC
         file_service.cpp
         file_service.h
         ../data/interfaces/i_file_service.h
+        graph_line_config.cpp
+        graph_line_config.h
+        ../data/interfaces/i_graph_line_config.h
         settings_service.cpp
         settings_service.h
         ../data/interfaces/i_settings_service.h
