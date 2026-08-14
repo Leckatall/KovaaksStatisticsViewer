@@ -10,7 +10,7 @@
 #include <array>
 #include <memory>
 
-#include "app/usecases/i_completion_history_use_case.h"
+#include "app/contracts/i_completion_history_use_case.h"
 #include "axis_model.h"
 #include "graph_vm_base.h"
 

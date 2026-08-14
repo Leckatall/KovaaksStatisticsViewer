@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "i_playtime_graph_use_case.h"
+#include "contracts/i_playtime_graph_use_case.h"
 #include "data/interfaces/i_profile_service.h"
 
 namespace ksv::application {

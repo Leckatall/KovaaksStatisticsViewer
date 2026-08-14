@@ -9,7 +9,7 @@
 
 #include "data/interfaces/i_profile_service.h"
 #include "data/interfaces/i_settings_service.h"
-#include "app/usecases/i_graph_column_preferences.h"
+#include "app/contracts/i_graph_column_preferences.h"
 
 namespace ksv::presentation {
     class SettingsViewModel : public QObject {

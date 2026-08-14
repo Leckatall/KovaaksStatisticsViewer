@@ -19,10 +19,10 @@
 #include "data/interfaces/i_profile_service.h"
 #include "interfaces/i_settings_service.h"
 #include "data/interfaces/i_graph_line_config.h"
-#include "usecases/i_graph_column_preferences.h"
+#include "contracts/i_graph_column_preferences.h"
 #include "usecases/i_session_controller.h"
-#include "usecases/i_playtime_graph_use_case.h"
-#include "usecases/i_completion_history_use_case.h"
+#include "contracts/i_playtime_graph_use_case.h"
+#include "contracts/i_completion_history_use_case.h"
 
 
 namespace ksv::application {

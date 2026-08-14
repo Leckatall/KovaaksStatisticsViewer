@@ -4,7 +4,7 @@
 #include <memory>
 
 #include "data/interfaces/i_graph_line_config.h"
-#include "i_graph_column_preferences.h"
+#include "contracts/i_graph_column_preferences.h"
 
 namespace ksv::application {
     class GraphColumnPreferences final : public IGraphColumnPreferences {

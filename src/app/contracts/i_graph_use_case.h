@@ -7,7 +7,7 @@
 #include <functional>
 #include <string>
 
-#include "perf_column_builder.h"
+#include "graph_series.h"
 
 namespace ksv::application {
     class IGraphUseCase {

@@ -7,8 +7,9 @@
 
 #include <utility>
 
-#include "i_graph_use_case.h"
+#include "contracts/i_graph_use_case.h"
 #include "i_session_controller.h"
+#include "perf_column_builder.h"
 
 namespace ksv::application {
     class GraphUseCase: public IGraphUseCase {

@@ -16,7 +16,7 @@
 
 #include "axis_model.h"
 #include "graph_vm_base.h"
-#include "app/usecases/i_graph_use_case.h"
+#include "app/contracts/i_graph_use_case.h"
 
 namespace ksv::presentation {
     class GraphViewModel : public GraphViewModelBase {

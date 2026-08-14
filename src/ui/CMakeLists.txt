@@ -10,6 +10,7 @@ qt_policy(SET QTP0001 NEW)
 
 add_library(ksv_ui STATIC)
 
+target_link_libraries(ksv_ui PUBLIC ksv_contracts)
 target_link_libraries(ksv_ui PRIVATE Qt6::Core Qt6::Quick Qt6::Qml)
 
 qt_add_qml_module(ksv_ui

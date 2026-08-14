@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "data/interfaces/i_profile_service.h"
-#include "i_completion_history_use_case.h"
+#include "contracts/i_completion_history_use_case.h"
 #include "i_session_controller.h"
 
 namespace ksv::application {

@@ -12,7 +12,7 @@
 
 #include "axis_model.h"
 #include "graph_vm_base.h"
-#include "app/usecases/i_playtime_graph_use_case.h"
+#include "app/contracts/i_playtime_graph_use_case.h"
 
 namespace ksv::presentation {
     // Calendar-date vs rolling-average playtime. Adapts IPlaytimeGraphUseCase output for GraphCanvas.

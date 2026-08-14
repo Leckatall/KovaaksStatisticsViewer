@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "domain/scenario_perf.h"
-#include "scenario_summary.h"
+#include "contracts/scenario_summary.h"
 #include "domain/run_performance.h"
 #include <QObject>
 

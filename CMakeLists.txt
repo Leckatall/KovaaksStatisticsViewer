@@ -39,8 +39,9 @@ qt_standard_project_setup()
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # Add subdirectories for modular libraries
-add_subdirectory(src/app)
 add_subdirectory(src/domain)
+add_subdirectory(src/app/contracts)
+add_subdirectory(src/app)
 #add_subdirectory(src/presentation)
 add_subdirectory(src/ui)
 add_subdirectory(src/data)
@@ -104,6 +105,10 @@ endif()
 include(CTest)
 
 if(BUILD_TESTING)
+    # CMake's generated header verifier is excluded from ordinary builds.
+    add_test(NAME contracts_qt_free
+            COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+                    --target ksv_contracts_verify_interface_header_sets)
     add_subdirectory(tests)
 endif()
 

@@ -2,25 +2,18 @@
 add_library(ksv_app STATIC
         app.h
         app.cpp
-        usecases/i_graph_use_case.h
         usecases/graph_use_case.h
-        usecases/graph_column.h
-        usecases/i_graph_column_preferences.h
         usecases/graph_column_preferences.h
         usecases/graph_column_preferences.cpp
         usecases/perf_column_builder.h
         usecases/perf_column_builder.cpp
-        usecases/i_playtime_graph_use_case.h
         usecases/playtime_graph_use_case.h
-        usecases/completion_history.h
-        usecases/i_completion_history_use_case.h
         usecases/completion_history_use_case.h
         profile_build_worker.cpp
         profile_build_worker.h
         session_controller.cpp
         session_controller.h
         usecases/i_session_controller.h
-        usecases/scenario_summary.h
 )
 
 target_link_libraries(ksv_app PUBLIC
@@ -32,6 +25,7 @@ target_link_libraries(ksv_app PUBLIC
         ksv_qt_data
         ksv_data
         ksv_domain
+        ksv_contracts
 )
 
 target_include_directories(ksv_app PUBLIC

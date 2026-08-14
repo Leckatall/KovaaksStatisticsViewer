@@ -3,7 +3,7 @@
 #include <array>
 #include <string_view>
 
-#include "usecases/graph_column.h"
+#include "app/contracts/graph_column.h"
 
 using namespace ksv::application;
 

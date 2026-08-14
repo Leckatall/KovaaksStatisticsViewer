@@ -13,6 +13,7 @@ add_library(ksv_qt_data STATIC
 
 target_link_libraries(ksv_qt_data PUBLIC
         Qt6::Core
+        ksv_contracts
         ksv_domain
         ksv_data
 )
