@@ -216,7 +216,12 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, ColumnKeyMatchesExpectedStableKeys) {
+        EXPECT_EQ(view_model.columnKey(GraphViewModel::Time), "time");
         EXPECT_EQ(view_model.columnKey(GraphViewModel::Score), "score");
+        EXPECT_EQ(view_model.columnKey(GraphViewModel::Accuracy), "accuracy");
+        EXPECT_EQ(view_model.columnKey(GraphViewModel::Shots), "shots");
+        EXPECT_EQ(view_model.columnKey(GraphViewModel::Kills), "kills");
+        EXPECT_EQ(view_model.columnKey(GraphViewModel::Dmg), "dmg");
         EXPECT_EQ(view_model.columnKey(GraphViewModel::ScoreTotal), "scoreTotal");
         EXPECT_EQ(view_model.columnKey(GraphViewModel::ExpectedFinalScore), "expectedFinalScore");
         EXPECT_EQ(view_model.columnKey(GraphViewModel::ExpectedFinalScoreRecent), "expectedFinalScoreRecent");

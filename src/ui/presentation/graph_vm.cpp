@@ -14,7 +14,6 @@ namespace ksv::presentation {
     namespace {
         struct ColumnMeta {
             const char *name;
-            const char *key;
             QColor color;
             ValueTransform transform;
         };
@@ -27,16 +26,26 @@ namespace ksv::presentation {
 
         // Time column only carries X delegate; others are drawn as series
         const std::array<ColumnMeta, GraphViewModel::ColumnCount> kColumnMeta{{
-            {"Time", "time", QColor(), secondsDelegate()},
-            {"Score", "score", QColor("#009600"), ValueTransform::identity()},
-            {"Accuracy", "accuracy", QColor("cyan"), ValueTransform::percentage()},
-            {"Shots", "shots", QColor("orange"), ValueTransform::identity()},
-            {"Kills", "kills", QColor("red"), ValueTransform::identity()},
-            {"Dmg", "dmg", QColor("yellow"), ValueTransform::identity()},
-            {"Score Total", "scoreTotal", QColor("purple"), ValueTransform::identity()},
-            {"Expected Final Score", "expectedFinalScore", QColor("magenta"), ValueTransform::identity()},
-            {"Expected Final Score (5s)", "expectedFinalScoreRecent", QColor("deepskyblue"), ValueTransform::identity()},
+            {"Time", QColor(), secondsDelegate()},
+            {"Score", QColor("#009600"), ValueTransform::identity()},
+            {"Accuracy", QColor("cyan"), ValueTransform::percentage()},
+            {"Shots", QColor("orange"), ValueTransform::identity()},
+            {"Kills", QColor("red"), ValueTransform::identity()},
+            {"Dmg", QColor("yellow"), ValueTransform::identity()},
+            {"Score Total", QColor("purple"), ValueTransform::identity()},
+            {"Expected Final Score", QColor("magenta"), ValueTransform::identity()},
+            {"Expected Final Score (5s)", QColor("deepskyblue"), ValueTransform::identity()},
         }};
+
+        static_assert(static_cast<int>(application::ColumnId::Time) == GraphViewModel::Time);
+        static_assert(static_cast<int>(application::ColumnId::Score) == GraphViewModel::Score);
+        static_assert(static_cast<int>(application::ColumnId::Accuracy) == GraphViewModel::Accuracy);
+        static_assert(static_cast<int>(application::ColumnId::Shots) == GraphViewModel::Shots);
+        static_assert(static_cast<int>(application::ColumnId::Kills) == GraphViewModel::Kills);
+        static_assert(static_cast<int>(application::ColumnId::Dmg) == GraphViewModel::Dmg);
+        static_assert(static_cast<int>(application::ColumnId::ScoreTotal) == GraphViewModel::ScoreTotal);
+        static_assert(static_cast<int>(application::ColumnId::ExpectedFinalScore) == GraphViewModel::ExpectedFinalScore);
+        static_assert(static_cast<int>(application::ColumnId::ExpectedFinalScoreRecent) == GraphViewModel::ExpectedFinalScoreRecent);
     }
 
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
@@ -89,7 +98,8 @@ namespace ksv::presentation {
 
     QString GraphViewModel::columnKey(const int column) const {
         if (column < 0 || column >= ColumnCount) return {};
-        return QString::fromLatin1(kColumnMeta[column].key);
+        const auto key = application::graphColumnKey(static_cast<application::ColumnId>(column));
+        return QString::fromLatin1(key.data(), static_cast<qsizetype>(key.size()));
     }
 
     QList<QPointF> GraphViewModel::seriesPoints(const int column) const {
