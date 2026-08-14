@@ -21,8 +21,8 @@ TestCase {
     }
 
     function makeRuns(hash) {
-        return [{hash: hash, runLabel: "run", scenarioName: "Scenario A", startTimeMs: 1723200000000,
-                 score: 8421, accuracy: 0.91, durationSeconds: 60, shots: 132, hits: 120}]
+        return [{hash: hash, runLabel: "run", startTimeMs: 1723200000000,
+                 score: 8421, accuracy: 0.91, shots: 132, hits: 120}]
     }
 
     function createPanel() {
@@ -121,10 +121,10 @@ TestCase {
         const currentTime = 1723200000000
         const nextTime = currentTime + 1
         const runs = [
-            {hash: "a", runLabel: "current", scenarioName: "Scenario A", startTimeMs: currentTime,
-             score: 8421, accuracy: 0.91, durationSeconds: 60, shots: 132, hits: 120},
-            {hash: "a", runLabel: "next", scenarioName: "Scenario A", startTimeMs: nextTime,
-             score: 8150, accuracy: 0.885, durationSeconds: 59.8, shots: 128, hits: 113}
+            {hash: "a", runLabel: "current", startTimeMs: currentTime,
+             score: 8421, accuracy: 0.91, shots: 132, hits: 120},
+            {hash: "a", runLabel: "next", startTimeMs: nextTime,
+             score: 8150, accuracy: 0.885, shots: 128, hits: 113}
         ]
         const panel = createTemporaryObject(panelComponent, testCase, {
             width: 600, height: 700, currentRunHash: "a", currentRunStartTimeMs: currentTime,

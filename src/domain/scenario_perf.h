@@ -41,7 +41,6 @@ namespace ksv::domain {
     };
 
     struct ScenarioCompletionData {
-        float scenario_length = 0.0F;
         int shots = 0;
         int hits = 0;
         int misses = 0;
@@ -49,6 +48,10 @@ namespace ksv::domain {
         float dmg_possible = 0.0F;
         float score = 0.0F;
         int kills = 0;
+
+        [[nodiscard]] double accuracy() const {
+            return shots == 0 ? 0.0 : static_cast<double>(hits) / shots;
+        }
     };
 
     struct ScenarioId {
@@ -120,7 +123,6 @@ namespace ksv::domain {
 
         [[nodiscard]] ScenarioCompletionData getCompletionData() const {
             ScenarioCompletionData completion;
-            completion.scenario_length = scenario_length;
             for (const auto &point: data) {
                 completion.shots += point.shots;
                 completion.hits += point.hits;

@@ -88,20 +88,6 @@ namespace ksv::application {
         setCurrentPerf(m_profile_service->getLatestPerf());
     }
 
-    RunSummary SessionController::toRunSummary(const domain::ScenarioPerf &perf) {
-        const auto completion = perf.getCompletionData();
-        RunSummary summary;
-        summary.run_id = perf.run_id;
-        summary.scenario_name = QString::fromStdString(perf.run_id.scenario_id.name);
-        summary.start_time_ms = perf.run_id.start_time;
-        summary.score = completion.score;
-        summary.accuracy = completion.shots == 0 ? 0.0F : static_cast<float>(completion.hits) / static_cast<float>(completion.shots);
-        summary.duration_seconds = perf.scenario_length;
-        summary.shots = completion.shots;
-        summary.hits = completion.hits;
-        return summary;
-    }
-
     std::vector<ScenarioSummary> SessionController::getScenarioSummaries() const {
         std::vector<ScenarioSummary> summaries;
         const auto scenarios = m_profile_service->getScenarioList();
@@ -122,25 +108,25 @@ namespace ksv::application {
         return summaries;
     }
 
-    std::vector<RunSummary> SessionController::getRunsForScenario(const domain::ScenarioId &scenario) const {
+    std::vector<domain::RunPerformance> SessionController::getRunsForScenario(const domain::ScenarioId &scenario) const {
         const auto count = m_profile_service->getRunCount(scenario).value_or(0);
         const auto perfs = m_profile_service->getMostRecentPerfs(scenario, count);
 
-        std::vector<RunSummary> summaries;
+        std::vector<domain::RunPerformance> summaries;
         summaries.reserve(perfs.size());
         for (auto it = perfs.rbegin(); it != perfs.rend(); ++it) {
-            summaries.push_back(toRunSummary(*it));
+            summaries.push_back({it->run_id, it->getCompletionData()});
         }
         return summaries;
     }
 
-    std::vector<RunSummary> SessionController::getRecentRuns(const std::size_t count) const {
+    std::vector<domain::RunPerformance> SessionController::getRecentRuns(const std::size_t count) const {
         const auto perfs = m_profile_service->getRecentRuns(count);
 
-        std::vector<RunSummary> summaries;
+        std::vector<domain::RunPerformance> summaries;
         summaries.reserve(perfs.size());
         for (const auto &perf: perfs) {
-            summaries.push_back(toRunSummary(perf));
+            summaries.push_back({perf.run_id, perf.getCompletionData()});
         }
         return summaries;
     }

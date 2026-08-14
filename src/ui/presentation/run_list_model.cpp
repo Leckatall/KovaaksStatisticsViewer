@@ -21,13 +21,11 @@ namespace ksv::presentation {
         switch (role) {
             case HashRole: return QString::fromStdString(run.run_id.scenario_id.hash);
             case RunLabelRole: return QString::fromStdString(run.run_id.toString());
-            case ScenarioNameRole: return run.scenario_name;
-            case StartTimeMsRole: return run.start_time_ms;
-            case ScoreRole: return run.score;
-            case AccuracyRole: return run.accuracy;
-            case DurationSecondsRole: return run.duration_seconds;
-            case ShotsRole: return run.shots;
-            case HitsRole: return run.hits;
+            case StartTimeMsRole: return static_cast<qint64>(run.run_id.start_time);
+            case ScoreRole: return run.completion.score;
+            case AccuracyRole: return run.completion.accuracy();
+            case ShotsRole: return run.completion.shots;
+            case HitsRole: return run.completion.hits;
             default: return {};
         }
     }
@@ -36,22 +34,15 @@ namespace ksv::presentation {
         return {
             {HashRole, "hash"},
             {RunLabelRole, "runLabel"},
-            {ScenarioNameRole, "scenarioName"},
             {StartTimeMsRole, "startTimeMs"},
             {ScoreRole, "score"},
             {AccuracyRole, "accuracy"},
-            {DurationSecondsRole, "durationSeconds"},
             {ShotsRole, "shots"},
             {HitsRole, "hits"},
         };
     }
 
-    const application::RunSummary *RunListModel::runAt(const int row) const {
-        if (row < 0 || row >= static_cast<int>(m_runs.size())) return nullptr;
-        return &m_runs[row];
-    }
-
-    void RunListModel::setRuns(std::vector<application::RunSummary> runs) {
+    void RunListModel::setRuns(std::vector<domain::RunPerformance> runs) {
         beginResetModel();
         m_runs = std::move(runs);
         endResetModel();

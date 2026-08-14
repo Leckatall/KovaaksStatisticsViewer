@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.24)
 project(KovaaksStatsViewer VERSION 0.4.1)
 
 # project(VERSION) accepts numeric fields only, so the pre-release suffix lives here. This file is the

@@ -26,18 +26,15 @@ TestCase {
     }
 
     function makeRuns() {
-        return [{hash: "scenario-a", runLabel: "run", scenarioName: "Scenario A", startTimeMs: 1723200000000,
-                 score: 8421, accuracy: 0.91, durationSeconds: 60, shots: 132, hits: 120}]
+        return [{hash: "scenario-a", runLabel: "run", startTimeMs: 1723200000000,
+                 score: 8421, accuracy: 0.91, shots: 132, hits: 120}]
     }
 
     function makeSortableRuns() {
         return [
-            {hash: "a", runLabel: "run-a", scenarioName: "Scenario A", startTimeMs: 3000,
-             score: 8000, accuracy: 0.80, durationSeconds: 60, shots: 100, hits: 80},
-            {hash: "b", runLabel: "run-b", scenarioName: "Scenario A", startTimeMs: 1000,
-             score: 9500, accuracy: 0.95, durationSeconds: 30, shots: 100, hits: 95},
-            {hash: "c", runLabel: "run-c", scenarioName: "Scenario A", startTimeMs: 2000,
-             score: 7000, accuracy: 0.70, durationSeconds: 45, shots: 100, hits: 70},
+            {hash: "a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80},
+            {hash: "b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95},
+            {hash: "c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70},
         ]
     }
 
@@ -97,12 +94,9 @@ TestCase {
 
         // Simulate what the real VM does on sortRequested: re-sort by score desc.
         view.runModel = [
-            {hash: "b", runLabel: "run-b", scenarioName: "Scenario A", startTimeMs: 1000,
-             score: 9500, accuracy: 0.95, durationSeconds: 30, shots: 100, hits: 95},
-            {hash: "a", runLabel: "run-a", scenarioName: "Scenario A", startTimeMs: 3000,
-             score: 8000, accuracy: 0.80, durationSeconds: 60, shots: 100, hits: 80},
-            {hash: "c", runLabel: "run-c", scenarioName: "Scenario A", startTimeMs: 2000,
-             score: 7000, accuracy: 0.70, durationSeconds: 45, shots: 100, hits: 70},
+            {hash: "b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95},
+            {hash: "a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80},
+            {hash: "c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70},
         ]
         wait(0)
 

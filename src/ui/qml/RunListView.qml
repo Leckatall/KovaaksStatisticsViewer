@@ -53,7 +53,7 @@ ColumnLayout {
         SortControls {
             comboObjectName: "runSortCombo"
             buttonObjectName: "runSortDirectionButton"
-            options: ["Date", "Score", "Accuracy", "Duration"]
+            options: ["Date", "Score", "Accuracy"]
             sortField: root.sortField
             sortAscending: root.sortAscending
             onSortRequested: (field, ascending) => {

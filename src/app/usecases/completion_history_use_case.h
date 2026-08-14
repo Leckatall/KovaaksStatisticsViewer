@@ -40,9 +40,7 @@ namespace ksv::application {
                     .run_index = static_cast<int>(i + 1),
                     .start_time_ms = run_id.start_time,
                     .score = completion.score,
-                    .accuracy = completion.shots == 0
-                                    ? 0.0
-                                    : static_cast<double>(completion.hits) / completion.shots,
+                    .accuracy = completion.accuracy(),
                     .shots = static_cast<double>(completion.shots),
                     .hits = static_cast<double>(completion.hits),
                     .misses = static_cast<double>(completion.misses),

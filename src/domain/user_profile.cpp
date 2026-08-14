@@ -80,12 +80,11 @@ namespace ksv::domain {
         return result;
     }
 
-    std::vector<std::pair<ScenarioRunId, ScenarioCompletionData> >
-    UserProfile::getCompletionHistory(const ScenarioId &scenario) const {
+    std::vector<RunPerformance> UserProfile::getCompletionHistory(const ScenarioId &scenario) const {
         const auto it = m_scenario_index.find(scenario);
         if (it == m_scenario_index.end()) return {};
 
-        std::vector<std::pair<ScenarioRunId, ScenarioCompletionData> > result;
+        std::vector<RunPerformance> result;
         result.reserve(it->second.size());
         for (const std::size_t idx: it->second) {
             const auto &perf = m_runs[idx];

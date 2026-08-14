@@ -32,7 +32,7 @@ namespace ksv::presentation {
 
     public:
         enum RunSortField {
-            Date = 0, Score, Accuracy, Duration
+            Date = 0, Score, Accuracy
         };
         Q_ENUM(RunSortField)
 
@@ -70,7 +70,7 @@ namespace ksv::presentation {
         void refreshCurrentRun();
         void updateLongestScenarioName();
         void refreshRunModel();
-        void applyRunSort(std::vector<application::RunSummary> &runs) const;
+        void applyRunSort(std::vector<domain::RunPerformance> &runs) const;
         void applyScenarioSort(std::vector<application::ScenarioSummary> &summaries) const;
         void refreshRecentRunsModel();
 

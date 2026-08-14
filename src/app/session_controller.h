@@ -44,16 +44,14 @@ namespace ksv::application {
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override;
 
-        [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const domain::ScenarioId& scenario) const override;
+        [[nodiscard]] std::vector<domain::RunPerformance> getRunsForScenario(const domain::ScenarioId& scenario) const override;
 
-        [[nodiscard]] std::vector<RunSummary> getRecentRuns(std::size_t count) const override;
+        [[nodiscard]] std::vector<domain::RunPerformance> getRecentRuns(std::size_t count) const override;
 
     signals:
         void buildRequested();
 
     private:
-        [[nodiscard]] static RunSummary toRunSummary(const domain::ScenarioPerf& perf);
-
         void startBuild();
         void onBuildFinished(const domain::UserProfile& profile);
 

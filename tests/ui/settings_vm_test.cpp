@@ -53,7 +53,7 @@ namespace {
         [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(
             const ScenarioId &, std::size_t) const override { return {}; }
 
-        [[nodiscard]] std::vector<std::pair<ScenarioRunId, ScenarioCompletionData> >
+        [[nodiscard]] std::vector<RunPerformance>
         getCompletionHistory(const ScenarioId &) const override { return {}; }
 
         [[nodiscard]] std::optional<float> getAverageScore(

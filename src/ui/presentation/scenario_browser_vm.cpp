@@ -128,28 +128,23 @@ namespace ksv::presentation {
         refreshScenarioModel();
     }
 
-    void ScenarioBrowserViewModel::applyRunSort(std::vector<application::RunSummary> &runs) const {
+    void ScenarioBrowserViewModel::applyRunSort(std::vector<domain::RunPerformance> &runs) const {
         const bool ascending = m_run_sort_ascending;
         switch (m_run_sort_field) {
             case RunSortField::Score:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
-                    return ascending ? a.score < b.score : a.score > b.score;
+                    return ascending ? a.completion.score < b.completion.score : a.completion.score > b.completion.score;
                 });
                 break;
             case RunSortField::Accuracy:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
-                    return ascending ? a.accuracy < b.accuracy : a.accuracy > b.accuracy;
-                });
-                break;
-            case RunSortField::Duration:
-                std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
-                    return ascending ? a.duration_seconds < b.duration_seconds : a.duration_seconds > b.duration_seconds;
+                    return ascending ? a.completion.accuracy() < b.completion.accuracy() : a.completion.accuracy() > b.completion.accuracy();
                 });
                 break;
             case RunSortField::Date:
             default:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
-                    return ascending ? a.start_time_ms < b.start_time_ms : a.start_time_ms > b.start_time_ms;
+                    return ascending ? a.run_id.start_time < b.run_id.start_time : a.run_id.start_time > b.run_id.start_time;
                 });
                 break;
         }

@@ -19,8 +19,8 @@ namespace {
     public:
         std::vector<ScenarioId> scenario_list;
         std::vector<ScenarioSummary> scenario_summaries;
-        std::vector<RunSummary> runs_for_scenario;
-        std::vector<RunSummary> recent_runs;
+        std::vector<RunPerformance> runs_for_scenario;
+        std::vector<RunPerformance> recent_runs;
         std::size_t last_recent_runs_count = 0;
         ScenarioId last_runs_for_scenario_query;
         ScenarioPerf current_perf;
@@ -45,12 +45,12 @@ namespace {
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return scenario_summaries; }
 
-        [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const ScenarioId &scenario) const override {
+        [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(const ScenarioId &scenario) const override {
             const_cast<FakeSessionController *>(this)->last_runs_for_scenario_query = scenario;
             return runs_for_scenario;
         }
 
-        [[nodiscard]] std::vector<RunSummary> getRecentRuns(const std::size_t count) const override {
+        [[nodiscard]] std::vector<RunPerformance> getRecentRuns(const std::size_t count) const override {
             const_cast<FakeSessionController *>(this)->last_recent_runs_count = count;
             return recent_runs;
         }
@@ -72,27 +72,21 @@ namespace {
         return result;
     }
 
-    RunSummary make_run(const std::string &scenario_name, const std::string &hash, const long long start_time,
+    RunPerformance make_run(const std::string &scenario_name, const std::string &hash, const long long start_time,
                          const float score, const float accuracy) {
-        RunSummary run;
+        RunPerformance run;
         run.run_id = ScenarioRunId{.scenario_id = ScenarioId{.name = scenario_name, .hash = hash}, .start_time = start_time};
-        run.scenario_name = QString::fromStdString(scenario_name);
-        run.start_time_ms = start_time;
-        run.score = score;
-        run.accuracy = accuracy;
-        run.duration_seconds = 60.0F;
-        run.shots = 100;
-        run.hits = 80;
+        run.completion.score = score;
+        run.completion.shots = 100;
+        run.completion.hits = static_cast<int>(accuracy * run.completion.shots + 0.5F);
         return run;
     }
 
-    RunSummary make_run_full(const std::string &scenario_name, const std::string &hash, const long long start_time,
-                              const float score, const float accuracy, const float duration_seconds,
-                              const int shots, const int hits) {
-        RunSummary run = make_run(scenario_name, hash, start_time, score, accuracy);
-        run.duration_seconds = duration_seconds;
-        run.shots = shots;
-        run.hits = hits;
+    RunPerformance make_run_full(const std::string &scenario_name, const std::string &hash, const long long start_time,
+                                 const float score, const int shots, const int hits) {
+        RunPerformance run = make_run(scenario_name, hash, start_time, score, 0.0F);
+        run.completion.shots = shots;
+        run.completion.hits = hits;
         return run;
     }
 
@@ -352,9 +346,8 @@ namespace {
         EXPECT_FLOAT_EQ(run_model->data(run_model->index(0, 0), RunListModel::ScoreRole).toFloat(), 8500.0F);
         EXPECT_FLOAT_EQ(run_model->data(run_model->index(0, 0), RunListModel::AccuracyRole).toFloat(), 0.9F);
         EXPECT_EQ(run_model->data(run_model->index(1, 0), RunListModel::StartTimeMsRole).toLongLong(), 1000);
-        EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::DurationSecondsRole).toFloat(), 60.0F);
         EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::ShotsRole).toInt(), 100);
-        EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::HitsRole).toInt(), 80);
+        EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::HitsRole).toInt(), 90);
     }
 
     TEST_F(ScenarioBrowserViewModelTest, ActivatingEmptyScenarioClearsRunModel) {
@@ -444,9 +437,9 @@ namespace {
 
     TEST_F(ScenarioBrowserViewModelTest, SetSortAccuracyDescendingHandlesShotsZeroGuard) {
         fake_controller->runs_for_scenario = {
-            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 0.8F, 60.0F, 100, 80),
-            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0.0F, 60.0F, 0, 0),
-            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 0.95F, 60.0F, 50, 47),
+            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 100, 80),
+            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0, 0),
+            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 50, 47),
         };
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
@@ -458,9 +451,9 @@ namespace {
 
     TEST_F(ScenarioBrowserViewModelTest, SetSortAccuracyAscendingHandlesShotsZeroGuard) {
         fake_controller->runs_for_scenario = {
-            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 0.8F, 60.0F, 100, 80),
-            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0.0F, 60.0F, 0, 0),
-            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 0.95F, 60.0F, 50, 47),
+            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 100, 80),
+            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0, 0),
+            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 50, 47),
         };
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
@@ -468,34 +461,6 @@ namespace {
         view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Accuracy, true);
 
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 1000, 3000}));
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, SetSortDurationDescendingOrdersLongestFirst) {
-        fake_controller->runs_for_scenario = {
-            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 0.8F, 45.0F, 100, 80),
-            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0.9F, 90.0F, 100, 90),
-            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 0.85F, 60.0F, 100, 85),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-        view_model.activateScenario("hash-2", "Microshot");
-
-        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Duration, false);
-
-        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, SetSortDurationAscendingOrdersShortestFirst) {
-        fake_controller->runs_for_scenario = {
-            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 0.8F, 45.0F, 100, 80),
-            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0.9F, 90.0F, 100, 90),
-            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 0.85F, 60.0F, 100, 85),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-        view_model.activateScenario("hash-2", "Microshot");
-
-        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Duration, true);
-
-        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 3000, 2000}));
     }
 
     TEST_F(ScenarioBrowserViewModelTest, SetSortScoreDescendingIsStableForTies) {
@@ -541,9 +506,7 @@ namespace {
         auto *recent_model = asRecentRunsModel(view_model);
         ASSERT_EQ(recent_model->rowCount(), 3);
         EXPECT_EQ(recent_model->data(recent_model->index(0, 0), RunListModel::StartTimeMsRole).toLongLong(), 3000);
-        EXPECT_EQ(recent_model->data(recent_model->index(0, 0), RunListModel::ScenarioNameRole).toString(), QString("Microshot"));
         EXPECT_EQ(recent_model->data(recent_model->index(1, 0), RunListModel::StartTimeMsRole).toLongLong(), 2000);
-        EXPECT_EQ(recent_model->data(recent_model->index(1, 0), RunListModel::ScenarioNameRole).toString(), QString("1wall6targets TE"));
         EXPECT_EQ(recent_model->data(recent_model->index(2, 0), RunListModel::StartTimeMsRole).toLongLong(), 1000);
     }
 

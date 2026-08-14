@@ -27,8 +27,8 @@ namespace {
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
         [[nodiscard]] bool isBuildInProgress() const override { return false; }
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return {}; }
-        [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const ScenarioId &) const override { return {}; }
-        [[nodiscard]] std::vector<RunSummary> getRecentRuns(std::size_t) const override { return {}; }
+        [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(const ScenarioId &) const override { return {}; }
+        [[nodiscard]] std::vector<RunPerformance> getRecentRuns(std::size_t) const override { return {}; }
 
         void changeRun(const std::string &hash, const long long start_time) {
             current_perf.run_id.scenario_id = {.name = "Scenario " + hash, .hash = hash};
@@ -43,7 +43,7 @@ namespace {
     public:
         mutable int completion_history_calls = 0;
         mutable ScenarioId requested_scenario;
-        std::vector<std::pair<ScenarioRunId, ScenarioCompletionData> > completion_history;
+        std::vector<RunPerformance> completion_history;
 
         void generateProfileFromDirectory() override {}
         void loadProfile() override {}
@@ -59,7 +59,7 @@ namespace {
         [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &, std::size_t) const override {
             return {};
         }
-        [[nodiscard]] std::vector<std::pair<ScenarioRunId, ScenarioCompletionData> >
+        [[nodiscard]] std::vector<RunPerformance>
         getCompletionHistory(const ScenarioId &scenario) const override {
             ++completion_history_calls;
             requested_scenario = scenario;
@@ -102,12 +102,10 @@ namespace {
     TEST_F(CompletionHistoryUseCaseTest, MapsCompletionRowsAndAssignsOneBasedRunIndices) {
         setCurrentScenario();
         profile->completion_history = {
-            std::make_pair(
-                ScenarioRunId{.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
-                ScenarioCompletionData{.shots = 10, .hits = 4, .misses = 6, .score = 25.0F}),
-            std::make_pair(
-                ScenarioRunId{.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 200},
-                ScenarioCompletionData{.shots = 20, .hits = 15, .misses = 5, .score = 75.0F}),
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
+             .completion = {.shots = 10, .hits = 4, .misses = 6, .score = 25.0F}},
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 200},
+             .completion = {.shots = 20, .hits = 15, .misses = 5, .score = 75.0F}},
         };
 
         const auto history = use_case.get_history();
@@ -128,9 +126,8 @@ namespace {
     TEST_F(CompletionHistoryUseCaseTest, AccuracyIsZeroWhenShotsAreZero) {
         setCurrentScenario();
         profile->completion_history = {
-            std::make_pair(
-                ScenarioRunId{.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
-                ScenarioCompletionData{.shots = 0, .hits = 0}),
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
+             .completion = {.shots = 0, .hits = 0}},
         };
 
         const auto history = use_case.get_history();

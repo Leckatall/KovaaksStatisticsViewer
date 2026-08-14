@@ -26,7 +26,7 @@ namespace ksv::presentation {
 
         Q_INVOKABLE void generateProfile() { m_session_controller->generateProfileFromDirectory(); }
 
-        Q_INVOKABLE [[nodiscard]] domain::ScenarioPerf getCurrentPerf() const { return m_session_controller->getCurrentPerf(); }
+        [[nodiscard]] domain::ScenarioPerf getCurrentPerf() const { return m_session_controller->getCurrentPerf(); }
         Q_INVOKABLE [[nodiscard]] QString getCurrentPerfScenario() const { return getCurrentPerf().run_id.scenario_id.name.data(); }
 
         [[nodiscard]] bool profileBuildInProgress() const { return m_build_in_progress; }

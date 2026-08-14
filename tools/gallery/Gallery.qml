@@ -164,12 +164,12 @@ ApplicationWindow {
                         ListElement { name: "Pasu Small Reload"; hash: "psr"; runCount: 19; lastPlayedMs: 1723113600000 }
                     }
                     runModel: ListModel {
-                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-09"; scenarioName: "1wall6targets TE"; startTimeMs: 1723200000000; score: 8421; accuracy: 0.91; durationSeconds: 60; shots: 132; hits: 120 }
-                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-08"; scenarioName: "1wall6targets TE"; startTimeMs: 1723113600000; score: 8150; accuracy: 0.885; durationSeconds: 59.8; shots: 128; hits: 113 }
+                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-09"; startTimeMs: 1723200000000; score: 8421; accuracy: 0.91; shots: 132; hits: 120 }
+                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-08"; startTimeMs: 1723113600000; score: 8150; accuracy: 0.885; shots: 128; hits: 113 }
                     }
                     recentRunModel: ListModel {
-                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-09"; scenarioName: "1wall6targets TE"; startTimeMs: 1723200000000; score: 8421; accuracy: 0.91; durationSeconds: 60; shots: 132; hits: 120 }
-                        ListElement { hash: "psr"; runLabel: "Pasu Small Reload 2024-08-08"; scenarioName: "Pasu Small Reload"; startTimeMs: 1723113600000; score: 7120; accuracy: 0.84; durationSeconds: 45; shots: 98; hits: 82 }
+                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-09"; startTimeMs: 1723200000000; score: 8421; accuracy: 0.91; shots: 132; hits: 120 }
+                        ListElement { hash: "psr"; runLabel: "Pasu Small Reload 2024-08-08"; startTimeMs: 1723113600000; score: 7120; accuracy: 0.84; shots: 98; hits: 82 }
                     }
                 }
             }

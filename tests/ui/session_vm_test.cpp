@@ -34,9 +34,9 @@ namespace {
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return {}; }
 
-        [[nodiscard]] std::vector<RunSummary> getRunsForScenario(const ScenarioId &) const override { return {}; }
+        [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(const ScenarioId &) const override { return {}; }
 
-        [[nodiscard]] std::vector<RunSummary> getRecentRuns(std::size_t) const override { return {}; }
+        [[nodiscard]] std::vector<RunPerformance> getRecentRuns(std::size_t) const override { return {}; }
     };
 
     class SessionViewModelTest : public testing::Test {

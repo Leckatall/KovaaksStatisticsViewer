@@ -9,7 +9,7 @@
 #include <QHash>
 #include <vector>
 
-#include "app/usecases/run_summary.h"
+#include "app/usecases/scenario_summary.h"
 
 namespace ksv::presentation {
     class ScenarioListModel : public QAbstractListModel {

@@ -9,7 +9,7 @@
 #include <QHash>
 #include <vector>
 
-#include "app/usecases/run_summary.h"
+#include "domain/run_performance.h"
 
 namespace ksv::presentation {
     class RunListModel : public QAbstractListModel {
@@ -22,11 +22,9 @@ namespace ksv::presentation {
         enum Role {
             HashRole = Qt::UserRole + 1,
             RunLabelRole,
-            ScenarioNameRole,
             StartTimeMsRole,
             ScoreRole,
             AccuracyRole,
-            DurationSecondsRole,
             ShotsRole,
             HitsRole,
         };
@@ -38,15 +36,13 @@ namespace ksv::presentation {
         [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
         [[nodiscard]] int count() const { return rowCount(); }
 
-        [[nodiscard]] const application::RunSummary *runAt(int row) const;
-
-        void setRuns(std::vector<application::RunSummary> runs);
+        void setRuns(std::vector<domain::RunPerformance> runs);
 
     signals:
         void countChanged();
 
     private:
-        std::vector<application::RunSummary> m_runs;
+        std::vector<domain::RunPerformance> m_runs;
     };
 }
 
