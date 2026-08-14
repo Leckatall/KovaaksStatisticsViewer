@@ -11,12 +11,14 @@ The shape a version section takes in [CHANGELOG.md](../../CHANGELOG.md), assembl
 ````markdown
 ## v<version>
 
-### <area>
+### Added
 
-**Added**
+#### <area>
 - <the change in one bullet, plus any forward-looking design rationale>
 
-**Fixed**
+### Fixed
+
+#### <area>
 - <the change + before→after behavior contrast; no old-bug mechanism>
 ````
 
@@ -42,9 +44,9 @@ The shape a version section takes in [CHANGELOG.md](../../CHANGELOG.md), assembl
 
 > **RULE** — No dates. Not in the version heading, not anywhere in the section.
 
-> **RULE** — One `###` per area, in the order the `area` enum lists them in [changelog-fragment.md](changelog-fragment.md). Omit any area with no fragments.
+> **RULE** — Type headings are `### Added`, `### Changed`, `### Fixed`, `### Removed`, in that order. Omit any type with no fragments.
 
-> **RULE** — Within an area, buckets are `**Added**`, `**Changed**`, `**Fixed**`, `**Removed**`, in that order. Omit any bucket with no fragments.
+> **RULE** — Within a type, use one `####` per area, in the order the `area` enum lists them in [changelog-fragment.md](changelog-fragment.md). Omit any area with no fragments of that type.
 
 > **RULE** — `internal` is a fragment type, not a bucket. An `internal` fragment goes under whichever of the four buckets its content fits.
 
