@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.24)
-project(KovaaksStatsViewer VERSION 0.4.1)
+project(KovaaksStatsViewer VERSION 0.5.0)
 
 # project(VERSION) accepts numeric fields only, so the pre-release suffix lives here. This file is the
 # single source of the version: scripts/version.ps1 parses the project() call and the set() below out
 # of it by regex, so keep their literal shape.
-set(KSV_VERSION_SUFFIX "-alpha")
+set(KSV_VERSION_SUFFIX "-beta")
 set(KSV_VERSION "${PROJECT_VERSION}${KSV_VERSION_SUFFIX}")
 
 # C++ Standard Configuration
