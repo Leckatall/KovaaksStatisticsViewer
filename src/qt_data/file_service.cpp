@@ -4,6 +4,8 @@
 
 #include "file_service.h"
 
+#include <algorithm>
+
 #include <qdatetime.h>
 #include <qdir.h>
 #include <qfileinfo.h>
@@ -12,62 +14,81 @@ namespace ksv::qt_data {
     FileService::FileService(std::shared_ptr<application::ISettingsService> settings_service,
         std::shared_ptr<application::IProtoDecoder> decoder, QObject *parent): QObject(parent),
 m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
-        watchPerfDir();
+        watchPerfDirs();
         connect(&m_watcher, &QFileSystemWatcher::directoryChanged,
-                this, [this](const QString&) { handleDirectoryChanged(); });
-        m_settings_service->onKovaaksDirChanged([this] { repointWatcher(); });
+                this, [this](const QString &directory) { handleDirectoryChanged(directory); });
+        m_settings_service->onKovaaksDirsChanged([this] { repointWatcher(); });
     }
 
-    void FileService::watchPerfDir() {
-        if (const auto perf_dir = get_perf_dir()) {
-            m_watcher.addPath(perf_dir->absolutePath());
-            const auto files = perf_dir->entryList(QDir::Files);
-            m_known_files = QSet(files.begin(), files.end());
+    std::vector<FileService::PerfDir> FileService::perfDirs() const {
+        std::vector<PerfDir> result;
+        for (const auto &root : sourceRoots()) {
+            QDir directory(QString::fromStdString(root));
+            if (directory.cd("FPSAimTrainer/performances")) {
+                result.push_back({root, "FPSAimTrainer/performances", directory});
+            }
+        }
+        return result;
+    }
+
+    void FileService::watchPerfDirs() {
+        for (const auto &perf_dir : perfDirs()) {
+            const auto path = perf_dir.directory.absolutePath();
+            m_watcher.addPath(path);
+            const auto files = perf_dir.directory.entryList(QDir::Files);
+            m_known_files.insert(path, QSet(files.begin(), files.end()));
         }
     }
 
     void FileService::repointWatcher() {
         const auto watched = m_watcher.directories();
         if (!watched.isEmpty()) m_watcher.removePaths(watched);
-        watchPerfDir();
+        m_known_files.clear();
+        watchPerfDirs();
     }
 
-    void FileService::handleDirectoryChanged() {
-        const auto perf_dir = get_perf_dir();
-        if (!perf_dir) return;
+    void FileService::handleDirectoryChanged(const QString &directory) {
+        const auto perf_dirs = perfDirs();
+        const auto perf_dir = std::ranges::find_if(perf_dirs, [&](const PerfDir &candidate) {
+            return candidate.directory.absolutePath() == QDir(directory).absolutePath();
+        });
+        if (perf_dir == perf_dirs.end()) return;
 
-        const auto files = perf_dir->entryList(QDir::Files);
+        const auto files = perf_dir->directory.entryList(QDir::Files);
         const QSet current_files(files.begin(), files.end());
+        const auto known_files = m_known_files.value(perf_dir->directory.absolutePath());
 
         // TEMP DIAGNOSTIC (2026-08-10): logging file size/mtime per directoryChanged firing to
         // establish whether KovaaKs writes .perf files in place (race) or renames them in atomically.
         // Remove after the investigation in fileservice-handledirectorychanged-decod-serene-pancake.md.
         for (const auto &file : files) {
-            const QFileInfo info(perf_dir->absoluteFilePath(file));
+            const QFileInfo info(perf_dir->directory.absoluteFilePath(file));
             qDebug() << "[perf-watch]" << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
                       << file << "size=" << info.size() << "lastModified=" << info.lastModified()
-                      << (m_known_files.contains(file) ? "known" : "NEW");
+                      << (known_files.contains(file) ? "known" : "NEW");
         }
 
         for (const auto &file : current_files) {
-            if (!m_known_files.contains(file)) {
-                notifyFilesChanged(perf_dir->absoluteFilePath(file).toStdString());
+            if (!known_files.contains(file)) {
+                notifyFilesChanged({perf_dir->root, perf_dir->subdir, file.toStdString()});
             }
         }
-        m_known_files = current_files;
+        m_known_files.insert(perf_dir->directory.absolutePath(), current_files);
     }
 
-    std::vector<std::string> FileService::listPerfFiles() const {
-        const auto perf_dir = get_perf_dir();
-        if (!perf_dir) {
+    std::vector<application::PerfFile> FileService::listPerfFiles() const {
+        const auto perf_dirs = perfDirs();
+        if (perf_dirs.empty()) {
             qDebug() << "Could not cd to performances dir";
             return {};
         }
-        const auto files = perf_dir->entryList(QDir::Files);
-        std::vector<std::string> paths;
-        paths.reserve(files.size());
-        for (const auto &file: files) {
-            paths.push_back(perf_dir->absoluteFilePath(file).toStdString());
+        std::vector<application::PerfFile> paths;
+        for (const auto &perf_dir : perf_dirs) {
+            const auto files = perf_dir.directory.entryList(QDir::Files);
+            paths.reserve(paths.size() + files.size());
+            for (const auto &file: files) {
+                paths.push_back({perf_dir.root, perf_dir.subdir, file.toStdString()});
+            }
         }
         return paths;
     }
@@ -76,23 +97,22 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
         return m_decoder->decode_file(filename);
     }
 
-    std::string FileService::getSourceDirectory() const {
-        const auto perf_dir = get_perf_dir();
-        if (!perf_dir) return {};
-        return perf_dir->absolutePath().toStdString();
+    std::vector<std::string> FileService::sourceRoots() const {
+        return m_settings_service->getKovaaksDirs();
     }
 
     domain::ScenarioPerf FileService::getLatestPerf() const {
         // DEPRECATED: Access through profile service now
-        const auto perf_dir = get_perf_dir();
-        if (!perf_dir) {
+        const auto perf_dirs = perfDirs();
+        if (perf_dirs.empty()) {
             qDebug() << "Could not cd to performances dir";
             return {};
         }
-        auto files = perf_dir->entryList(QDir::Files, QDir::Time);
+        const auto &perf_dir = perf_dirs.front().directory;
+        auto files = perf_dir.entryList(QDir::Files, QDir::Time);
         if (files.isEmpty()) return {};
         const auto latest_file = files.takeFirst();
         qDebug() << "Latest file: " << latest_file;
-        return getPerfFromFile(perf_dir->absoluteFilePath(latest_file).toStdString());
+        return getPerfFromFile(perf_dir.absoluteFilePath(latest_file).toStdString());
     }
 }

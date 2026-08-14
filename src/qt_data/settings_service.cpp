@@ -23,18 +23,42 @@ namespace ksv::qt_data {
         m_settings.sync();
     }
 
-    std::string SettingsService::getKovaaksDir() const {
-        return readDirSetting("file/kovaaks", "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer");
+    std::vector<std::string> SettingsService::readDirListSetting(const QString &key) const {
+        const QMutexLocker locker(&m_settings_mutex);
+        const auto stored = m_settings.value(key).toStringList();
+        std::vector<std::string> result;
+        result.reserve(stored.size());
+        for (const auto &url : stored) result.push_back(QUrl(url).toLocalFile().toStdString());
+        return result;
+    }
+
+    void SettingsService::writeDirListSetting(const QString &key, const std::vector<std::string> &dirs) {
+        QStringList stored;
+        stored.reserve(static_cast<qsizetype>(dirs.size()));
+        for (const auto &dir : dirs) stored.push_back(QUrl::fromLocalFile(QString::fromStdString(dir)).toString());
+        const QMutexLocker locker(&m_settings_mutex);
+        m_settings.setValue(key, stored);
+        m_settings.sync();
+    }
+
+    std::vector<std::string> SettingsService::getKovaaksDirs() const {
+        {
+            const QMutexLocker locker(&m_settings_mutex);
+            if (!m_settings.contains("file/kovaaksDirs"))
+                return {m_settings.value("file/kovaaks", "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer")
+                    .toUrl().toLocalFile().toStdString()};
+        }
+        return readDirListSetting("file/kovaaksDirs");
     }
 
     bool SettingsService::isKovaaksDirSet() const {
         const QMutexLocker locker(&m_settings_mutex);
-        return m_settings.contains("file/kovaaks");
+        return m_settings.contains("file/kovaaksDirs") || m_settings.contains("file/kovaaks");
     }
 
-    void SettingsService::setKovaaksDir(const std::string &dir) {
-        writeDirSetting("file/kovaaks", dir);
-        for (const auto &callback: m_kovaaks_dir_callbacks) callback();
+    void SettingsService::setKovaaksDirs(const std::vector<std::string> &dirs) {
+        writeDirListSetting("file/kovaaksDirs", dirs);
+        for (const auto &callback: m_kovaaks_dirs_callbacks) callback();
     }
 
     std::string SettingsService::getProfilePath() const {

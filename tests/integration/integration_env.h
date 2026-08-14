@@ -31,7 +31,7 @@ namespace ksv::integration {
             std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
 
         TestEnv() {
-            settings->setKovaaksDir(dir.path().toStdString());
+            settings->setKovaaksDirs({dir.path().toStdString()});
             settings->setProfilePath(profileStorePath().toStdString());
         }
 

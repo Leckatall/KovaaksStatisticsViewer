@@ -11,7 +11,7 @@
 #include <utility>
 
 namespace ksv::domain {
-    UserProfile::UserProfile(std::string source_directory) : m_source_directory(std::move(source_directory)) {
+    UserProfile::UserProfile(SourceRegistry sources) : m_sources(std::move(sources)) {
     }
 
     bool UserProfile::addScenarioPerf(const ScenarioPerf &perf) {
@@ -132,8 +132,13 @@ namespace ksv::domain {
         return it->second.run_count;
     }
 
-    const std::string &UserProfile::getSourceDirectory() const {
-        return m_source_directory;
+    const SourceRegistry &UserProfile::sources() const {
+        return m_sources;
+    }
+
+    DirectoryId UserProfile::ensureSource(const std::string &root, const std::string &subdir) {
+        const auto root_id = m_sources.ensure({}, root);
+        return m_sources.ensure(root_id, subdir);
     }
 
     std::vector<std::pair<std::chrono::sys_days, double> >

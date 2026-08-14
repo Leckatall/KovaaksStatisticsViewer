@@ -15,17 +15,17 @@ using namespace ksv::domain;
 namespace {
     class FakeSettingsService : public ISettingsService {
     public:
-        std::string dir = "C:/Kovaaks";
+        std::vector<std::string> dirs{"C:/Kovaaks"};
         bool dir_set = true;
         std::string profile_path = "C:/Profile/profile.pb";
 
-        [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
+        [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
         [[nodiscard]] bool isKovaaksDirSet() const override { return dir_set; }
-        void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; dir_set = true; }
+        void setKovaaksDirs(const std::vector<std::string> &new_dirs) override { dirs = new_dirs; dir_set = true; }
         [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
         void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
         void onProfilePathChanged(std::function<void()>) override {}
-        void onKovaaksDirChanged(std::function<void()>) override {}
+        void onKovaaksDirsChanged(std::function<void()>) override {}
     };
 
     class FakeProfileService : public IProfileService {
@@ -87,7 +87,7 @@ namespace {
     };
 
     TEST_F(SettingsViewModelTest, KovaaksDirReflectsServiceValueAtConstruction) {
-        fake_service->dir = "D:/CustomDir";
+        fake_service->dirs = {"D:/CustomDir"};
         const auto view_model = make_view_model();
 
         EXPECT_EQ(view_model->getKovaaksDir(), QUrl::fromLocalFile("D:/CustomDir"));
@@ -101,11 +101,11 @@ namespace {
 
         EXPECT_EQ(spy.count(), 1);
         EXPECT_EQ(view_model->getKovaaksDir(), QUrl::fromLocalFile("D:/NewDir"));
-        EXPECT_EQ(fake_service->dir, "D:/NewDir");
+        EXPECT_EQ(fake_service->dirs, (std::vector<std::string>{"D:/NewDir"}));
     }
 
     TEST_F(SettingsViewModelTest, SetKovaaksDirDoesNotEmitWhenUnchanged) {
-        fake_service->dir = "C:/Kovaaks";
+        fake_service->dirs = {"C:/Kovaaks"};
         const auto view_model = make_view_model();
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::kovaaksDirChanged);
@@ -119,6 +119,15 @@ namespace {
         const auto view_model = make_view_model();
 
         EXPECT_FALSE(view_model->isKovaaksDirSet());
+    }
+
+    TEST_F(SettingsViewModelTest, SetKovaaksDirPreservesAdditionalDirectories) {
+        fake_service->dirs = {"C:/Primary", "D:/Secondary"};
+        const auto view_model = make_view_model();
+
+        view_model->setKovaaksDir(QUrl::fromLocalFile("E:/Replacement"));
+
+        EXPECT_EQ(fake_service->dirs, (std::vector<std::string>{"E:/Replacement", "D:/Secondary"}));
     }
 
     TEST_F(SettingsViewModelTest, KovaaksDirSetBecomesTrueAfterSetKovaaksDir) {

@@ -44,7 +44,7 @@ A `> **RULE**` line is never content: it describes the output, it is never emitt
 > **RULE** — Inside `### Features & changes`, one `####` per area, in the order the `area` enum lists
 > them in [changelog-fragment.md](changelog-fragment.md). Omit any area with no user-facing fragments.
 
-> **RULE** — `Data & profile cache`, `Build & packaging` and `Architecture` collapse into a single
+> **RULE** — `Data & Profile`, `Build & packaging` and `Architecture` collapse into a single
 > `#### Under the hood`, placed last within `### Features & changes`. It is a features subheading
 > only — it never appears under `### Bug fixes`.
 

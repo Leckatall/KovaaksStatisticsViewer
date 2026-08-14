@@ -9,10 +9,13 @@
 #include <gtest/gtest.h>
 
 #include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <set>
 
 #include "file_service.h"
 #include "formats/protobuf/profile_serializer.h"
@@ -93,8 +96,7 @@ namespace {
     TEST_F(ProfileCascadeTest, MismatchedStoreVersionRebuildsFromDirectory) {
         // Plant a store stamped with an incompatible version at the configured path.
         store::UserProfileStore stale;
-        stale.set_version(0);
-        stale.set_source_directory("bogus");
+        stale.set_version(1);
         auto *run = stale.add_runs();
         run->mutable_scenario_id()->set_name("Should Not Appear");
         run->mutable_scenario_id()->set_hash("stale-hash");
@@ -120,5 +122,32 @@ namespace {
         for (const auto &s: scenarios) {
             EXPECT_NE(s.name, "Should Not Appear") << "rejected store leaked into the rebuilt profile";
         }
+    }
+
+    TEST_F(ProfileCascadeTest, GeneratesAndReloadsRunsFromTwoSourceRoots) {
+        ASSERT_TRUE(QFile::remove(QDir(env.performancesDir()).absoluteFilePath("VT FlyTS Novice S5.perf")));
+        QTemporaryDir second_root;
+        ASSERT_TRUE(second_root.isValid());
+        const auto second_performances = QDir(second_root.path()).absoluteFilePath("FPSAimTrainer/performances");
+        ASSERT_TRUE(QDir().mkpath(second_performances));
+        ASSERT_TRUE(QFile::copy(integration::fixturePath("VT FlyTS Novice S5.perf"),
+                               QDir(second_performances).absoluteFilePath("VT FlyTS Novice S5.perf")));
+        env.settings->setKovaaksDirs({env.dir.path().toStdString(), second_root.path().toStdString()});
+
+        profileService->generateProfileFromDirectory();
+        const auto stored = serializer->load(env.profileStorePath().toStdString());
+
+        ASSERT_TRUE(stored.has_value());
+        ASSERT_EQ(stored->getAllRunRecords().size(), 2);
+        std::set<std::string> resolved_roots;
+        for (const auto &run : stored->getAllRunRecords()) {
+            const auto resolved = stored->sources().resolve(run.source);
+            ASSERT_TRUE(resolved.has_value());
+            resolved_roots.insert(std::filesystem::path(*resolved).parent_path().parent_path().parent_path()
+                                      .generic_string());
+        }
+        EXPECT_EQ(resolved_roots,
+                  (std::set<std::string>{QDir::fromNativeSeparators(env.dir.path()).toStdString(),
+                                         QDir::fromNativeSeparators(second_root.path()).toStdString()}));
     }
 }

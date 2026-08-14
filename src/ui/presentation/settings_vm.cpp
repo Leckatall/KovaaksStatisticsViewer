@@ -11,14 +11,21 @@ namespace ksv::presentation {
         QObject *parent) : QObject(parent),
                            m_settings_service(std::move(settings_service)),
                            m_profile_service(std::move(profile_service)),
-                           m_kovaaks_dir(QUrl::fromLocalFile(m_settings_service->getKovaaksDir().data())) {
+                           m_kovaaks_dir([&] {
+                               const auto dirs = m_settings_service->getKovaaksDirs();
+                               return dirs.empty() ? QUrl{} : QUrl::fromLocalFile(QString::fromStdString(dirs.front()));
+                           }()) {
         const QPointer<SettingsViewModel> self(this);
         m_profile_service->onProfileChanged([self] { if (self) emit self->profileLoadedChanged(); });
     }
 
     void SettingsViewModel::setKovaaksDir(const QUrl &dir) {
         if (dir == m_kovaaks_dir) return;
-        m_settings_service->setKovaaksDir(dir.toLocalFile().toStdString());
+        auto dirs = m_settings_service->getKovaaksDirs();
+        const auto path = dir.toLocalFile().toStdString();
+        if (dirs.empty()) dirs.push_back(path);
+        else dirs.front() = path;
+        m_settings_service->setKovaaksDirs(dirs);
         m_kovaaks_dir = dir;
         emit kovaaksDirChanged();
     }

@@ -15,7 +15,7 @@ Shares axis calculation with `GraphViewModel` via `AxisModel`.
 ```
 
 `type` is one of `added`, `changed`, `fixed`, `removed`, `internal`.
-`area` is one of **Scenario & run selection, Graphing, Sessions, Settings, Data & profile cache, Build & packaging, Architecture, User Interface** — add a new one only when none fit.
+`area` is one of **Scenario & run selection, Graphing, Sessions, Settings, Data & Profile, Build & packaging, Architecture, User Interface** — add a new one only when none fit.
 The body is developer detail: which classes, which layers, what a future reader could not recover from the diff.
 Keep it rich — for a fix, spell out the old-bug mechanism in full.
 Do not hand-wrap the body to a fixed line width.

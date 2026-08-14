@@ -37,9 +37,11 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 
 - [ ] **Richer profile persistence and control** `[Hard]` `[High]`
   - [ ] Support multiple named profiles (e.g. different Kovaaks accounts or data sets)
-  - [ ] Add profile switching UI in settings
+  - [ ] Add UI for profile switching in settings
   - [ ] Allow import/export of profile data for backup or sharing
   - [ ] Handle profile migration when the cache schema changes between versions
+  - [ ] Add support for additional profile data sources (e.g. scrapping Kovaaks runtime mem, csv files, etc.)
+  - [ ] Allow profiles to store groupings of scenarios
 
 ---
 
@@ -104,7 +106,8 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 
 ## 6. In-Run / Live Analysis
 
-> *Real-time overlays and projections while viewing a run's timeline.*
+> *This section was a misunderstanding there has never been any plans for live analysis.*
+> *Some sections are checked off because things like "Projected final score line" was a reference to line showed after the run was completed.*
 
 - [x] **Projected final score line** `[Medium]` `[Medium]`
   - [x] Implement a rolling projection algorithm from recent-seconds performance

@@ -43,14 +43,12 @@ namespace {
         EXPECT_EQ(perf.run_id.scenario_id.name, "1wall6targets TE");
         EXPECT_EQ(perf.run_id.start_time, 1783733140000LL);
         EXPECT_EQ(perf.scenario_length, 60.0F);
-        EXPECT_EQ(perf.source_file, get_test_file_path());
+        EXPECT_EQ(perf.source, ksv::domain::SourceFileRef{});
     }
 
     TEST_F(ProtoDecoderTest, decodeDoesNotSetSourceFile) {
-        // The meta-only decode() overload has no filename in scope, so source_file
-        // must stay empty there (only decode_file() knows the path).
         const auto perf = decoder.decode(make_perf_log());
-        EXPECT_TRUE(perf.source_file.empty());
+        EXPECT_EQ(perf.source, ksv::domain::SourceFileRef{});
     }
 
     TEST_F(ProtoDecoderTest, decodeSkipsUnsetOptionalFields) {

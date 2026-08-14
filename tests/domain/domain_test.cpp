@@ -214,7 +214,7 @@ namespace {
     };
 
     TEST_F(UserProfileTest, GroupsMultipleRunsUnderSameScenario) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
         profile.addScenarioPerf(make_perf("scenario-1", 200));
 
@@ -224,7 +224,7 @@ namespace {
     }
 
     TEST_F(UserProfileTest, ListsDistinctScenariosSeparately) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
         profile.addScenarioPerf(make_perf("scenario-2", 100));
 
@@ -233,17 +233,17 @@ namespace {
     }
 
     TEST_F(UserProfileTest, EmptyProfileHasNoScenarios) {
-        const UserProfile profile{"default"};
+        const UserProfile profile;
         EXPECT_TRUE(profile.getScenarioList().empty());
     }
 
     TEST_F(UserProfileTest, GetMostRecentPerfReturnsNulloptWhenEmpty) {
-        const UserProfile profile{"default"};
+        const UserProfile profile;
         EXPECT_FALSE(profile.getMostRecentPerf().has_value());
     }
 
     TEST_F(UserProfileTest, GetMostRecentPerfPicksLatestAcrossScenarios) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
         profile.addScenarioPerf(make_perf("scenario-2", 300));
         profile.addScenarioPerf(make_perf("scenario-1", 200));
@@ -255,7 +255,7 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetMostRecentPerfForScenarioIgnoresInsertionOrder) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 200));
         profile.addScenarioPerf(make_perf("scenario-1", 100));
         profile.addScenarioPerf(make_perf("scenario-1", 300));
@@ -266,14 +266,14 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetMostRecentPerfForUnknownScenarioIsNullopt) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
 
         EXPECT_FALSE(profile.getMostRecentPerf(ScenarioId{.name = "?", .hash = "unknown"}).has_value());
     }
 
     TEST_F(UserProfileTest, GetMostRecentPerfsReturnsUpToCountMostRecentInChronologicalOrder) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 300));
         profile.addScenarioPerf(make_perf("scenario-1", 100));
         profile.addScenarioPerf(make_perf("scenario-1", 200));
@@ -286,7 +286,7 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetMostRecentPerfsClampsToAvailableRuns) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
 
         const auto recent = profile.getMostRecentPerfs(ScenarioId{.name = "?", .hash = "scenario-1"}, 5);
@@ -294,7 +294,7 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetCompletionHistoryProjectsOnlyMatchingRunsInChronologicalOrder) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         auto latest = make_perf("scenario-1", 300, 30.0F);
         latest.add_data(0.0F, SHOTS, 12);
         latest.add_data(0.0F, HITS, 9);
@@ -324,14 +324,14 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetCompletionHistoryIsEmptyForUnknownScenario) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
 
         EXPECT_TRUE(profile.getCompletionHistory(ScenarioId{.name = "?", .hash = "unknown"}).empty());
     }
 
     TEST_F(UserProfileTest, GetAverageScoreAveragesFinalScoresOfMostRecentRuns) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100, 10.0F));
         profile.addScenarioPerf(make_perf("scenario-1", 200, 20.0F));
         profile.addScenarioPerf(make_perf("scenario-1", 300, 30.0F));
@@ -342,17 +342,52 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetAverageScoreIsNulloptForUnknownScenario) {
-        const UserProfile profile{"default"};
+        const UserProfile profile;
         EXPECT_FALSE(profile.getAverageScore(ScenarioId{.name = "?", .hash = "unknown"}, 3).has_value());
     }
 
-    TEST_F(UserProfileTest, GetSourceDirectoryReturnsConstructorArgument) {
-        const UserProfile profile{"C:/Kovaaks/FPSAimTrainer/performances"};
-        EXPECT_EQ(profile.getSourceDirectory(), "C:/Kovaaks/FPSAimTrainer/performances");
+    TEST(SourceRegistryTest, EnsureReturnsStableIdsAndResolvesChild) {
+        SourceRegistry sources;
+
+        const auto root = sources.ensure({}, "C:/Kovaaks");
+        const auto repeated_root = sources.ensure({}, "C:/Kovaaks");
+        const auto performances = sources.ensure(root, "FPSAimTrainer/performances");
+
+        EXPECT_EQ(root, repeated_root);
+        EXPECT_EQ(sources.resolve(performances), "C:/Kovaaks/FPSAimTrainer/performances");
+        EXPECT_EQ(sources.resolve(SourceFileRef{performances, "run.perf"}),
+                  "C:/Kovaaks/FPSAimTrainer/performances/run.perf");
+    }
+
+    TEST(SourceRegistryTest, RestoredIdsRemainStableForNewEntries) {
+        SourceRegistry sources{{
+            {{7}, {}, "C:/Kovaaks"},
+            {{12}, {7}, "FPSAimTrainer/performances"}
+        }};
+
+        EXPECT_EQ(sources.ensure({}, "C:/Kovaaks"), DirectoryId{7});
+        EXPECT_EQ(sources.ensure({}, "D:/Kovaaks"), DirectoryId{13});
+    }
+
+    TEST(SourceRegistryTest, ResolveRejectsCycles) {
+        const SourceRegistry sources{{
+            {{1}, {2}, "one"},
+            {{2}, {1}, "two"}
+        }};
+
+        EXPECT_FALSE(sources.resolve(DirectoryId{1}).has_value());
+    }
+
+    TEST_F(UserProfileTest, EnsureSourceRegistersRootAndPerformancesDirectory) {
+        UserProfile profile;
+
+        const auto directory = profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/performances");
+
+        EXPECT_EQ(profile.sources().resolve(directory), "C:/Kovaaks/FPSAimTrainer/performances");
     }
 
     TEST_F(UserProfileTest, GetRunLooksUpByRunId) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
 
         const auto run = profile.getRun(ScenarioRunId{.scenario_id = {.name = "?", .hash = "scenario-1"}, .start_time = 100});
@@ -361,12 +396,12 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetRunForUnknownRunIdIsNullopt) {
-        const UserProfile profile{"default"};
+        const UserProfile profile;
         EXPECT_FALSE(profile.getRun(ScenarioRunId{.scenario_id = {.name = "?", .hash = "unknown"}, .start_time = 1}).has_value());
     }
 
     TEST_F(UserProfileTest, DuplicateRunIdIsSkippedAndReturnsFalse) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         EXPECT_TRUE(profile.addScenarioPerf(make_perf("scenario-1", 100)));
         EXPECT_FALSE(profile.addScenarioPerf(make_perf("scenario-1", 100)));
 
@@ -374,7 +409,7 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetTotalTimeSumsScenarioLengthsForScenario) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         auto run_a = make_perf("scenario-1", 100);
         run_a.scenario_length = 30.0F;
         auto run_b = make_perf("scenario-1", 200);
@@ -388,12 +423,12 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetTotalTimeIsNulloptForUnknownScenario) {
-        const UserProfile profile{"default"};
+        const UserProfile profile;
         EXPECT_FALSE(profile.getTotalTime(ScenarioId{.name = "?", .hash = "unknown"}).has_value());
     }
 
     TEST_F(UserProfileTest, GetTotalTimeAllScenariosSumsAcrossScenarios) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         auto run_a = make_perf("scenario-1", 100);
         run_a.scenario_length = 30.0F;
         auto run_b = make_perf("scenario-2", 100);
@@ -405,7 +440,7 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetRunCountReturnsNumberOfRunsForScenario) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
         profile.addScenarioPerf(make_perf("scenario-1", 200));
 
@@ -413,7 +448,7 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetLastRunTimeReturnsStartSecondOfMostRecentRun) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 300000));
         profile.addScenarioPerf(make_perf("scenario-1", 100000));
         profile.addScenarioPerf(make_perf("scenario-1", 200000));
@@ -424,12 +459,12 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetLastRunTimeIsNulloptForUnknownScenario) {
-        const UserProfile profile{"default"};
+        const UserProfile profile;
         EXPECT_FALSE(profile.getLastRunTime(ScenarioId{.name = "?", .hash = "unknown"}).has_value());
     }
 
     TEST_F(UserProfileTest, GetRollingTimeAverageBucketsByCalendarDayWithGapDays) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         constexpr long long kMsPerDay = 86400000;
         // A realistic epoch day (real runs always have positive timestamps; 0 is
         // reserved for the "unset" case the aggregation now rejects).
@@ -459,7 +494,7 @@ namespace {
         // A default-constructed / malformed run carries start_time == 0 (the Unix
         // epoch, 1970). Including it would anchor the dense day-fill at 1970 and
         // stretch the series across decades of empty days. It must be ignored.
-        UserProfile profile{"default"};
+        UserProfile profile;
         constexpr long long kMsPerDay = 86400000;
         constexpr long long kBaseDay = 19000;
 
@@ -480,12 +515,12 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetRollingTimeAverageIsEmptyForUnknownScenario) {
-        const UserProfile profile{"default"};
+        const UserProfile profile;
         EXPECT_TRUE(profile.getRollingTimeAverage(ScenarioId{.name = "?", .hash = "unknown"}, 7).empty());
     }
 
     TEST_F(UserProfileTest, GetRollingTimeAverageAcrossAllScenariosCombinesEveryScenario) {
-        UserProfile profile{"default"};
+        UserProfile profile;
         constexpr long long kMsPerDay = 86400000;
 
         // Two different scenarios both played on day 0; a third scenario alone on
@@ -516,7 +551,7 @@ namespace {
     }
 
     TEST_F(UserProfileTest, GetRollingTimeAverageAcrossAllScenariosIsEmptyWhenProfileEmpty) {
-        const UserProfile profile{"default"};
+        const UserProfile profile;
         EXPECT_TRUE(profile.getRollingTimeAverage(7).empty());
     }
 }

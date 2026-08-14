@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "source_directory.h"
+
 namespace ksv::domain {
     enum DataPointType {
         SHOTS,
@@ -54,6 +56,9 @@ namespace ksv::domain {
         std::string hash;
 
         bool operator==(const ScenarioId &other) const {
+            // The hash is the source of truth for identifying the scenario the name never drifts
+            // Hash equality is only used here because it is safer than using the name
+            // which may contain escape chars or have slightly different capitalization
             return hash == other.hash;
         }
 
@@ -108,7 +113,7 @@ namespace ksv::domain {
         ScenarioRunId run_id;
         float scenario_length;
         std::vector<ScenarioDataPoint> data;
-        std::string source_file; // Full path if known, empty if test data or pre-versioning
+        SourceFileRef source;
 
         template<typename T>
         void add_data(float time, DataPointType type, T value);

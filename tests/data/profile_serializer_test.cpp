@@ -20,13 +20,13 @@ namespace {
 
     ksv::domain::ScenarioPerf make_perf(const std::string &name, const std::string &hash,
                                         const long long start_time, const float scenario_length,
-                                        const std::string &source_file = {}) {
+                                        const ksv::domain::SourceFileRef source = {}) {
         ksv::domain::ScenarioPerf perf;
         perf.run_id.scenario_id.name = name;
         perf.run_id.scenario_id.hash = hash;
         perf.run_id.start_time = start_time;
         perf.scenario_length = scenario_length;
-        perf.source_file = source_file;
+        perf.source = source;
         perf.add_data(0.0F, ksv::domain::SHOTS, 5);
         perf.add_data(0.0F, ksv::domain::HITS, 4);
         perf.add_data(1.5F, ksv::domain::SCORE, 42.0F);
@@ -65,16 +65,19 @@ namespace {
     }
 
     TEST_F(ProfileSerializerTest, RoundTripsScenariosRunsAndDataPoints) {
-        ksv::domain::UserProfile profile{"C:/Kovaaks/FPSAimTrainer/performances"};
-        profile.addScenarioPerf(make_perf("Scenario A", "hash-a", 100, 60.0F, "C:/Kovaaks/.../run1.perf"));
-        profile.addScenarioPerf(make_perf("Scenario A", "hash-a", 200, 60.0F, "C:/Kovaaks/.../run2.perf"));
-        profile.addScenarioPerf(make_perf("Scenario B", "hash-b", 300, 30.0F, "C:/Kovaaks/.../run3.perf"));
+        ksv::domain::UserProfile profile{ksv::domain::SourceRegistry{{
+            {{7}, {}, "C:/Kovaaks"},
+            {{12}, {7}, "FPSAimTrainer/performances"}
+        }}};
+        profile.addScenarioPerf(make_perf("Scenario A", "hash-a", 100, 60.0F, {{12}, "run1.perf"}));
+        profile.addScenarioPerf(make_perf("Scenario A", "hash-a", 200, 60.0F, {{12}, "run2.perf"}));
+        profile.addScenarioPerf(make_perf("Scenario B", "hash-b", 300, 30.0F, {{12}, "run3.perf"}));
 
         serializer.save(profile, store_path);
         const auto loaded = serializer.load(store_path);
 
         ASSERT_TRUE(loaded.has_value());
-        EXPECT_EQ(loaded->getSourceDirectory(), "C:/Kovaaks/FPSAimTrainer/performances");
+        EXPECT_EQ(loaded->sources().entries(), profile.sources().entries());
         EXPECT_EQ(loaded->getScenarioList().size(), 2);
 
         const auto scenario_a = ksv::domain::ScenarioId{.name = "Scenario A", .hash = "hash-a"};
@@ -83,7 +86,9 @@ namespace {
         EXPECT_EQ(runs_a[0].run_id.start_time, 100LL);
         EXPECT_EQ(runs_a[1].run_id.start_time, 200LL);
         EXPECT_FLOAT_EQ(runs_a[1].scenario_length, 60.0F);
-        EXPECT_EQ(runs_a[1].source_file, "C:/Kovaaks/.../run2.perf");
+        EXPECT_EQ(runs_a[1].source, (ksv::domain::SourceFileRef{{12}, "run2.perf"}));
+        EXPECT_EQ(loaded->sources().resolve(runs_a[1].source),
+                  "C:/Kovaaks/FPSAimTrainer/performances/run2.perf");
 
         ASSERT_EQ(runs_a[1].data.size(), 2);
         EXPECT_EQ(runs_a[1].data[0].shots, 5);
@@ -98,7 +103,7 @@ namespace {
     }
 
     TEST_F(ProfileSerializerTest, RoundTripOfEmptyProfileHasNoScenarios) {
-        const ksv::domain::UserProfile profile{"default"};
+        const ksv::domain::UserProfile profile;
 
         serializer.save(profile, store_path);
         const auto loaded = serializer.load(store_path);
@@ -129,8 +134,7 @@ namespace {
         // silently-empty/mis-parsed profile. Version 0 stands in for such a
         // store (the current writer always stamps a non-zero version).
         store::UserProfileStore proto;
-        proto.set_version(0);
-        proto.set_source_directory("C:/Kovaaks/FPSAimTrainer/performances");
+        proto.set_version(1);
         auto *run = proto.add_runs();
         run->mutable_scenario_id()->set_name("Scenario A");
         run->mutable_scenario_id()->set_hash("hash-a");

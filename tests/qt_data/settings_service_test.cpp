@@ -36,7 +36,7 @@ namespace {
 
         const SettingsService settings(QSettings::IniFormat);
 
-        EXPECT_EQ(settings.getKovaaksDir(), expected);
+        EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{expected}));
     }
 
     TEST_F(SettingsServiceTest, ReturnsPreviouslyStoredValue) {
@@ -47,16 +47,27 @@ namespace {
 
         const SettingsService settings(QSettings::IniFormat);
 
-        EXPECT_EQ(settings.getKovaaksDir(), QUrl::fromLocalFile("D:/Games/FPSAimTrainer").toLocalFile().toStdString());
+        EXPECT_EQ(settings.getKovaaksDirs(),
+                  (std::vector<std::string>{QUrl::fromLocalFile("D:/Games/FPSAimTrainer").toLocalFile().toStdString()}));
     }
 
-    TEST_F(SettingsServiceTest, SetKovaaksDirPersistsValue) {
+    TEST_F(SettingsServiceTest, SetKovaaksDirsPersistsEveryValue) {
         SettingsService settings(QSettings::IniFormat);
 
-        settings.setKovaaksDir("D:/Games/FPSAimTrainer");
+        settings.setKovaaksDirs({"D:/Games/First", "E:/Games/Second"});
 
         const SettingsService reloaded(QSettings::IniFormat);
-        EXPECT_EQ(reloaded.getKovaaksDir(), QUrl::fromLocalFile("D:/Games/FPSAimTrainer").toLocalFile().toStdString());
+        EXPECT_EQ(reloaded.getKovaaksDirs(), (std::vector<std::string>{"D:/Games/First", "E:/Games/Second"}));
+    }
+
+    TEST_F(SettingsServiceTest, NewListSettingTakesPrecedenceOverLegacyValue) {
+        QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
+        raw.setValue("file/kovaaks", QUrl::fromLocalFile("C:/Legacy"));
+        raw.setValue("file/kovaaksDirs", QStringList{QUrl::fromLocalFile("D:/Current").toString()});
+
+        const SettingsService settings(QSettings::IniFormat);
+
+        EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{"D:/Current"}));
     }
 
     TEST_F(SettingsServiceTest, IsKovaaksDirSetFalseWhenNeverConfigured) {
@@ -68,7 +79,16 @@ namespace {
     TEST_F(SettingsServiceTest, IsKovaaksDirSetTrueAfterSetKovaaksDir) {
         SettingsService settings(QSettings::IniFormat);
 
-        settings.setKovaaksDir("D:/Games/FPSAimTrainer");
+        settings.setKovaaksDirs({"D:/Games/FPSAimTrainer"});
+
+        EXPECT_TRUE(settings.isKovaaksDirSet());
+    }
+
+    TEST_F(SettingsServiceTest, IsKovaaksDirSetTrueForLegacyKey) {
+        QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
+        raw.setValue("file/kovaaks", QUrl::fromLocalFile("C:/Legacy"));
+
+        const SettingsService settings(QSettings::IniFormat);
 
         EXPECT_TRUE(settings.isKovaaksDirSet());
     }

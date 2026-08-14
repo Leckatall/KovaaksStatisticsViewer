@@ -11,10 +11,15 @@ namespace ksv::data {
 
     domain::UserProfile ProfileBuilder::build(const ProgressCallback &on_progress) const {
         const auto files = m_file_service->listPerfFiles();
-        domain::UserProfile profile{m_file_service->getSourceDirectory()};
+        domain::UserProfile profile;
+        for (const auto &root : m_file_service->sourceRoots()) {
+            profile.ensureSource(root, "FPSAimTrainer/performances");
+        }
         std::size_t done = 0;
         for (const auto &file: files) {
-            profile.addScenarioPerf(m_file_service->getPerfFromFile(file));
+            auto perf = m_file_service->getPerfFromFile(file.absolutePath());
+            perf.source = {profile.ensureSource(file.root, file.subdir), file.filename};
+            profile.addScenarioPerf(perf);
             ++done;
             if (on_progress) on_progress(done, files.size());
         }

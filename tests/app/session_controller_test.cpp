@@ -8,6 +8,7 @@
 
 #include <QSemaphore>
 #include <QSignalSpy>
+#include <filesystem>
 #include <optional>
 #include <unordered_map>
 
@@ -19,16 +20,16 @@ using namespace ksv::domain;
 namespace {
     class FakeSettingsService : public ISettingsService {
     public:
-        std::string dir = "C:/Kovaaks";
+        std::vector<std::string> dirs{"C:/Kovaaks"};
         std::string profile_path = "C:/Profile/profile.pb";
 
-        [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
+        [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
         [[nodiscard]] bool isKovaaksDirSet() const override { return true; }
-        void setKovaaksDir(const std::string &new_dir) override { dir = new_dir; }
+        void setKovaaksDirs(const std::vector<std::string> &new_dirs) override { dirs = new_dirs; }
         [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
         void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
         void onProfilePathChanged(std::function<void()>) override {}
-        void onKovaaksDirChanged(std::function<void()>) override {}
+        void onKovaaksDirsChanged(std::function<void()>) override {}
     };
 
     class FakeProfileService : public IProfileService {
@@ -132,19 +133,20 @@ namespace {
     class FakeFileService : public IFileService {
     public:
         std::vector<ScenarioPerf> perfs_to_return;
-        std::string source_directory = "C:/Kovaaks/FPSAimTrainer/performances";
+        std::vector<std::string> source_roots{"C:/Kovaaks"};
         QSemaphore scan_gate;
         QSemaphore scan_entered;
         bool gate_scan = false;
 
-        [[nodiscard]] std::vector<std::string> listPerfFiles() const override {
+        [[nodiscard]] std::vector<PerfFile> listPerfFiles() const override {
             if (gate_scan) {
                 const_cast<QSemaphore &>(scan_entered).release();
                 const_cast<QSemaphore &>(scan_gate).acquire();
             }
-            std::vector<std::string> paths;
+            std::vector<PerfFile> paths;
             for (std::size_t i = 0; i < perfs_to_return.size(); ++i) {
-                paths.push_back("listed-perf-" + std::to_string(i));
+                paths.push_back({source_roots.front(), "FPSAimTrainer/performances",
+                                 "listed-perf-" + std::to_string(i)});
             }
             return paths;
         }
@@ -152,14 +154,15 @@ namespace {
         [[nodiscard]] ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
             const std::string path(filename);
             if (const auto it = perfs_by_path.find(path); it != perfs_by_path.end()) return it->second;
-            return perfs_to_return.at(std::stoul(path.substr(std::string("listed-perf-").size())));
+            const auto name = std::filesystem::path(path).filename().string();
+            return perfs_to_return.at(std::stoul(name.substr(std::string("listed-perf-").size())));
         }
 
         [[nodiscard]] ScenarioPerf getLatestPerf() const override { return {}; }
 
-        [[nodiscard]] std::string getSourceDirectory() const override { return source_directory; }
+        [[nodiscard]] std::vector<std::string> sourceRoots() const override { return source_roots; }
 
-        void onFilesChanged(std::function<void(const std::string &)>) override {}
+        void onFilesChanged(std::function<void(const PerfFile &)>) override {}
 
         std::unordered_map<std::string, ScenarioPerf> perfs_by_path;
     };

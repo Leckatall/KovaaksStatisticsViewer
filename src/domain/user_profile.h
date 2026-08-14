@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "scenario_perf.h"
+#include "source_directory.h"
 
 namespace ksv::domain {
     struct ScenarioAggregate {
@@ -21,7 +22,7 @@ namespace ksv::domain {
 
     class UserProfile {
     public:
-        explicit UserProfile(std::string source_directory = {});
+        explicit UserProfile(SourceRegistry sources = {});
 
         bool addScenarioPerf(const ScenarioPerf &perf);
 
@@ -48,7 +49,8 @@ namespace ksv::domain {
 
         [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &scenario) const;
 
-        [[nodiscard]] const std::string &getSourceDirectory() const;
+        [[nodiscard]] const SourceRegistry &sources() const;
+        DirectoryId ensureSource(const std::string &root, const std::string &subdir);
 
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
         getRollingTimeAverage(const ScenarioId &scenario, int window_days) const;
@@ -62,7 +64,7 @@ namespace ksv::domain {
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
         rollingTimeAverageFor(const std::vector<std::size_t> &sorted_indices, int window_days) const;
 
-        std::string m_source_directory;
+        SourceRegistry m_sources;
         // Append-only; indices stable and used as keys in maps below
         std::vector<ScenarioPerf> m_runs;
         std::unordered_map<ScenarioRunId, std::size_t> m_run_index;

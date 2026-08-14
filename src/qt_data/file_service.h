@@ -9,6 +9,7 @@
 #include <qdir.h>
 #include <qfilesystemwatcher.h>
 #include <QObject>
+#include <QHash>
 #include <QSet>
 #include <QString>
 #include <qurl.h>
@@ -28,44 +29,42 @@ namespace ksv::qt_data {
 
         // [[nodiscard]] std::vector<std::string> get_files_in_dir(std::string_view dir) const;
 
-        [[nodiscard]] QDir get_kovaaks_dir() const {
-            return {m_settings_service->getKovaaksDir().data()};
-        }
-
-        [[nodiscard]] std::optional<QDir> get_perf_dir() const {
-            QDir perf_dir(get_kovaaks_dir());
-            if (!perf_dir.cd("FPSAimTrainer/performances")) return std::nullopt;
-            return perf_dir;
-        }
-
-        [[nodiscard]] std::vector<std::string> listPerfFiles() const override;
+        [[nodiscard]] std::vector<application::PerfFile> listPerfFiles() const override;
         [[nodiscard]] domain::ScenarioPerf getPerfFromFile(std::string_view filename) const override;
         [[nodiscard]] domain::ScenarioPerf getLatestPerf() const override;
-        [[nodiscard]] std::string getSourceDirectory() const override;
+        [[nodiscard]] std::vector<std::string> sourceRoots() const override;
 
-        void onFilesChanged(std::function<void(const std::string& path)> callback) override {
+        void onFilesChanged(std::function<void(const application::PerfFile &)> callback) override {
             m_callbacks.push_back(std::move(callback));
         }
 
     private:
-        void notifyFilesChanged(const std::string& path) const {
-            for (auto& cb : m_callbacks) cb(path);
+        struct PerfDir {
+            std::string root;
+            std::string subdir;
+            QDir directory;
+        };
+
+        [[nodiscard]] std::vector<PerfDir> perfDirs() const;
+
+        void notifyFilesChanged(const application::PerfFile &file) const {
+            for (auto& cb : m_callbacks) cb(file);
         }
 
         // QFileSystemWatcher::directoryChanged only reports the watched directory's own
         // path, not which file changed inside it, so new files are found by diffing
         // entryList() snapshots taken before and after the signal fires.
-        void handleDirectoryChanged();
+        void handleDirectoryChanged(const QString &directory);
 
-        void watchPerfDir();
+        void watchPerfDirs();
         void repointWatcher();
 
         std::shared_ptr<application::ISettingsService> m_settings_service;
         std::shared_ptr<application::IProtoDecoder> m_decoder;
 
         QFileSystemWatcher m_watcher;
-        std::vector<std::function<void(const std::string& path)>> m_callbacks;
-        QSet<QString> m_known_files;
+        std::vector<std::function<void(const application::PerfFile &)>> m_callbacks;
+        QHash<QString, QSet<QString>> m_known_files;
     };
 }
 

@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
     QFile::copy(QDir(GALLERY_FIXTURE_DIR).absoluteFilePath(fixtureName), perf);
 
     auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
-    settings->setKovaaksDir(tmp.path().toStdString());
+    settings->setKovaaksDirs({tmp.path().toStdString()});
     settings->setProfilePath(QDir(tmp.path()).absoluteFilePath("store/profile.pb").toStdString());
 
     application::App app(settings, std::make_shared<data::ProtoDecoder>());

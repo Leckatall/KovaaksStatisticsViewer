@@ -12,6 +12,7 @@
 #include <QTest>
 
 #include <functional>
+#include <set>
 #include <tuple>
 #include <vector>
 
@@ -24,24 +25,24 @@ using namespace ksv::application;
 namespace {
     class FakeSettingsService : public ISettingsService {
     public:
-        std::string dir;
+        std::vector<std::string> dirs;
         std::string profile_path;
 
-        [[nodiscard]] std::string getKovaaksDir() const override { return dir; }
-        [[nodiscard]] bool isKovaaksDirSet() const override { return !dir.empty(); }
-        void setKovaaksDir(const std::string &new_dir) override {
-            dir = new_dir;
-            for (const auto &callback: kovaaks_dir_callbacks) callback();
+        [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
+        [[nodiscard]] bool isKovaaksDirSet() const override { return !dirs.empty(); }
+        void setKovaaksDirs(const std::vector<std::string> &new_dirs) override {
+            dirs = new_dirs;
+            for (const auto &callback: kovaaks_dirs_callbacks) callback();
         }
         [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
         void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
         void onProfilePathChanged(std::function<void()>) override {}
-        void onKovaaksDirChanged(std::function<void()> callback) override {
-            kovaaks_dir_callbacks.push_back(std::move(callback));
+        void onKovaaksDirsChanged(std::function<void()> callback) override {
+            kovaaks_dirs_callbacks.push_back(std::move(callback));
         }
 
     private:
-        std::vector<std::function<void()>> kovaaks_dir_callbacks;
+        std::vector<std::function<void()>> kovaaks_dirs_callbacks;
     };
 
     class FileServiceTest : public testing::Test {
@@ -56,7 +57,7 @@ namespace {
 
         void SetUp() override {
             ASSERT_TRUE(temp_dir.isValid());
-            settings_service->dir = temp_dir.path().toStdString();
+            settings_service->dirs = {temp_dir.path().toStdString()};
         }
 
         [[nodiscard]] QString performances_dir() const {
@@ -92,8 +93,8 @@ namespace {
         ASSERT_EQ(paths.size(), 2);
         bool found_known_scenario = false;
         for (const auto &path: paths) {
-            EXPECT_TRUE(QFileInfo(QString::fromStdString(path)).isAbsolute());
-            const auto perf = file_service.getPerfFromFile(path);
+            EXPECT_TRUE(QFileInfo(QString::fromStdString(path.absolutePath())).isAbsolute());
+            const auto perf = file_service.getPerfFromFile(path.absolutePath());
             if (perf.run_id.scenario_id.name == "1wall6targets TE") found_known_scenario = true;
             EXPECT_FALSE(perf.run_id.scenario_id.name.empty());
         }
@@ -148,10 +149,10 @@ namespace {
         FileService file_service(settings_service, decoder);
 
         bool notified = false;
-        std::string notified_path;
-        file_service.onFilesChanged([&](const std::string &path) {
+        PerfFile notified_file;
+        file_service.onFilesChanged([&](const PerfFile &file) {
             notified = true;
-            notified_path = path;
+            notified_file = file;
         });
 
         const QString new_file = copyFixtureInto("1wall6targets TE.perf");
@@ -159,27 +160,29 @@ namespace {
         std::ignore = QTest::qWaitFor([&] { return notified; }, 5000);
 
         ASSERT_TRUE(notified);
-        EXPECT_EQ(notified_path, new_file.toStdString());
+        EXPECT_EQ(notified_file.root, temp_dir.path().toStdString());
+        EXPECT_EQ(notified_file.filename, "1wall6targets TE.perf");
+        EXPECT_EQ(notified_file.absolutePath(), QDir::fromNativeSeparators(new_file).toStdString());
     }
 
     TEST_F(FileServiceTest, OnFilesChangedReportsEachNewFileSeparately) {
         makePerformancesDir();
         FileService file_service(settings_service, decoder);
 
-        std::vector<std::string> notified_paths;
-        file_service.onFilesChanged([&](const std::string &path) {
-            notified_paths.push_back(path);
+        std::vector<PerfFile> notified_files;
+        file_service.onFilesChanged([&](const PerfFile &file) {
+            notified_files.push_back(file);
         });
 
         const QString first = copyFixtureInto("1wall6targets TE.perf");
-        std::ignore = QTest::qWaitFor([&] { return !notified_paths.empty(); }, 5000);
+        std::ignore = QTest::qWaitFor([&] { return !notified_files.empty(); }, 5000);
 
         const QString second = copyFixtureInto("VT FlyTS Novice S5.perf");
-        std::ignore = QTest::qWaitFor([&] { return notified_paths.size() == 2; }, 5000);
+        std::ignore = QTest::qWaitFor([&] { return notified_files.size() == 2; }, 5000);
 
-        ASSERT_EQ(notified_paths.size(), 2);
-        EXPECT_EQ(notified_paths[0], first.toStdString());
-        EXPECT_EQ(notified_paths[1], second.toStdString());
+        ASSERT_EQ(notified_files.size(), 2);
+        EXPECT_EQ(notified_files[0].absolutePath(), QDir::fromNativeSeparators(first).toStdString());
+        EXPECT_EQ(notified_files[1].absolutePath(), QDir::fromNativeSeparators(second).toStdString());
     }
 
     TEST_F(FileServiceTest, FollowsKovaaksDirChangeMidSession) {
@@ -193,19 +196,43 @@ namespace {
         const QString preexisting = QDir(new_performances_dir).absoluteFilePath("1wall6targets TE.perf");
         ASSERT_TRUE(QFile::copy(fixture_path("1wall6targets TE.perf"), preexisting));
 
-        std::vector<std::string> notified_paths;
-        file_service.onFilesChanged([&](const std::string &path) {
-            notified_paths.push_back(path);
+        std::vector<PerfFile> notified_files;
+        file_service.onFilesChanged([&](const PerfFile &file) {
+            notified_files.push_back(file);
         });
 
-        settings_service->setKovaaksDir(new_temp_dir.path().toStdString());
+        settings_service->setKovaaksDirs({new_temp_dir.path().toStdString()});
 
         const QString new_file = QDir(new_performances_dir).absoluteFilePath("VT FlyTS Novice S5.perf");
         ASSERT_TRUE(QFile::copy(fixture_path("VT FlyTS Novice S5.perf"), new_file));
 
-        std::ignore = QTest::qWaitFor([&] { return !notified_paths.empty(); }, 5000);
+        std::ignore = QTest::qWaitFor([&] { return !notified_files.empty(); }, 5000);
 
-        ASSERT_EQ(notified_paths.size(), 1);
-        EXPECT_EQ(notified_paths[0], new_file.toStdString());
+        ASSERT_EQ(notified_files.size(), 1);
+        EXPECT_EQ(notified_files[0].root, new_temp_dir.path().toStdString());
+        EXPECT_EQ(notified_files[0].absolutePath(), QDir::fromNativeSeparators(new_file).toStdString());
+    }
+
+    TEST_F(FileServiceTest, WatchesEveryConfiguredSourceRoot) {
+        makePerformancesDir();
+        QTemporaryDir second_root;
+        ASSERT_TRUE(second_root.isValid());
+        const auto second_performances = QDir(second_root.path()).absoluteFilePath("FPSAimTrainer/performances");
+        ASSERT_TRUE(QDir().mkpath(second_performances));
+        settings_service->dirs.push_back(second_root.path().toStdString());
+        FileService file_service(settings_service, decoder);
+
+        std::vector<PerfFile> notified_files;
+        file_service.onFilesChanged([&](const PerfFile &file) { notified_files.push_back(file); });
+
+        std::ignore = copyFixtureInto("1wall6targets TE.perf");
+        ASSERT_TRUE(QFile::copy(fixture_path("VT FlyTS Novice S5.perf"),
+                               QDir(second_performances).absoluteFilePath("VT FlyTS Novice S5.perf")));
+        std::ignore = QTest::qWaitFor([&] { return notified_files.size() == 2; }, 5000);
+
+        ASSERT_EQ(notified_files.size(), 2);
+        std::set<std::string> roots;
+        for (const auto &file : notified_files) roots.insert(file.root);
+        EXPECT_EQ(roots, (std::set<std::string>{temp_dir.path().toStdString(), second_root.path().toStdString()}));
     }
 }

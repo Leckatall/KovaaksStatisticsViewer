@@ -25,30 +25,29 @@ namespace {
     class FakeFileService : public IFileService {
     public:
         std::vector<ksv::domain::ScenarioPerf> perfs_to_return;
-        std::string source_directory = "fake/kovaaks/performances";
+        std::vector<std::string> source_roots{"fake/kovaaks"};
 
-        [[nodiscard]] std::vector<std::string> listPerfFiles() const override {
-            std::vector<std::string> paths;
+        [[nodiscard]] std::vector<PerfFile> listPerfFiles() const override {
+            std::vector<PerfFile> paths;
             for (std::size_t i = 0; i < perfs_to_return.size(); ++i) {
-                paths.push_back("listed-perf-" + std::to_string(i));
+                paths.push_back({source_roots.front(), "FPSAimTrainer/performances",
+                                 "listed-perf-" + std::to_string(i)});
             }
             return paths;
         }
 
         [[nodiscard]] ksv::domain::ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
-            const std::string path(filename);
-            return perfs_to_return.at(std::stoul(path.substr(std::string("listed-perf-").size())));
+            const auto name = std::filesystem::path(filename).filename().string();
+            return perfs_to_return.at(std::stoul(name.substr(std::string("listed-perf-").size())));
         }
 
         [[nodiscard]] ksv::domain::ScenarioPerf getLatestPerf() const override {
             return {};
         }
 
-        [[nodiscard]] std::string getSourceDirectory() const override {
-            return source_directory;
-        }
+        [[nodiscard]] std::vector<std::string> sourceRoots() const override { return source_roots; }
 
-        void onFilesChanged(std::function<void(const std::string &path)>) override {}
+        void onFilesChanged(std::function<void(const PerfFile &)>) override {}
     };
 
     class ProfileBuilderTest : public testing::Test {
@@ -57,10 +56,14 @@ namespace {
         ProfileBuilder builder{fake_file_service};
     };
 
-    TEST_F(ProfileBuilderTest, BuildUsesFileServiceSourceDirectory) {
-        fake_file_service->source_directory = "D:/Kovaaks/FPSAimTrainer/performances";
+    TEST_F(ProfileBuilderTest, BuildRegistersEveryConfiguredRoot) {
+        fake_file_service->source_roots = {"C:/Kovaaks", "D:/Kovaaks"};
 
-        EXPECT_EQ(builder.build().getSourceDirectory(), "D:/Kovaaks/FPSAimTrainer/performances");
+        const auto profile = builder.build();
+        const auto &entries = profile.sources().entries();
+        ASSERT_EQ(entries.size(), 4);
+        EXPECT_EQ(entries[0].path, "C:/Kovaaks");
+        EXPECT_EQ(entries[2].path, "D:/Kovaaks");
     }
 
     TEST_F(ProfileBuilderTest, BuildAggregatesEveryPerfFromTheDirectory) {
@@ -74,6 +77,9 @@ namespace {
         ASSERT_EQ(scenarios.size(), 2);
         EXPECT_EQ(profile.getRunCount(scenarios[0]).value_or(0) +
                   profile.getRunCount(scenarios[1]).value_or(0), 3);
+        for (const auto &run : profile.getAllRunRecords()) {
+            EXPECT_TRUE(profile.sources().resolve(run.source).has_value());
+        }
     }
 
     TEST_F(ProfileBuilderTest, BuildReportsProgressOncePerFile) {

@@ -17,7 +17,7 @@
 namespace ksv::data {
     namespace {
         // Bumped when store.proto changes incompatibly so rejected stores are quarantined instead of silently mis-parsed.
-        constexpr std::uint32_t kStoreVersion = 1;
+        constexpr std::uint32_t kStoreVersion = 2;
 
         std::optional<std::uint64_t> contentDigest(const std::filesystem::path &path) {
             constexpr std::uint64_t offset_basis = 14695981039346656037ULL;
@@ -76,7 +76,13 @@ namespace ksv::data {
     void ProfileSerializer::save(const domain::UserProfile &profile, const std::filesystem::path &path) {
         store::UserProfileStore proto;
         proto.set_version(kStoreVersion);
-        proto.set_source_directory(profile.getSourceDirectory());
+
+        for (const auto &source : profile.sources().entries()) {
+            auto *source_proto = proto.add_sources();
+            source_proto->set_id(source.id.value);
+            source_proto->set_parent_id(source.parent.value);
+            source_proto->set_path(source.path);
+        }
 
         for (const auto &perf: profile.getAllRunRecords()) {
             auto *run_proto = proto.add_runs();
@@ -84,7 +90,8 @@ namespace ksv::data {
             run_proto->mutable_scenario_id()->set_hash(perf.run_id.scenario_id.hash);
             run_proto->set_start_time(perf.run_id.start_time);
             run_proto->set_scenario_length(perf.scenario_length);
-            run_proto->set_source_file(perf.source_file);
+            run_proto->set_source_directory_id(perf.source.directory.value);
+            run_proto->set_source_filename(perf.source.filename);
 
             for (const auto &point: perf.data) {
                 auto *data_point = run_proto->add_data();
@@ -123,14 +130,24 @@ namespace ksv::data {
             return std::nullopt;
         }
 
-        domain::UserProfile profile{proto.source_directory()};
+        std::vector<domain::SourceDirectory> sources;
+        sources.reserve(proto.sources_size());
+        for (const auto &source_proto : proto.sources()) {
+            sources.push_back({
+                {source_proto.id()},
+                {source_proto.parent_id()},
+                source_proto.path()
+            });
+        }
+        domain::UserProfile profile{domain::SourceRegistry{std::move(sources)}};
         for (const auto &run_proto: proto.runs()) {
             domain::ScenarioPerf perf{};
             perf.run_id.scenario_id.name = run_proto.scenario_id().name();
             perf.run_id.scenario_id.hash = run_proto.scenario_id().hash();
             perf.run_id.start_time = run_proto.start_time();
             perf.scenario_length = run_proto.scenario_length();
-            perf.source_file = run_proto.source_file();
+            perf.source.directory = {run_proto.source_directory_id()};
+            perf.source.filename = run_proto.source_filename();
 
             for (const auto &data_point: run_proto.data()) {
                 auto point = domain::ScenarioDataPoint(data_point.time());

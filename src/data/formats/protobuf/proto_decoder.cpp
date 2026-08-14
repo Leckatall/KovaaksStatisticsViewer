@@ -32,9 +32,7 @@ namespace ksv::data {
         if (!perfLog.ParseFromIstream(&input)) {
             std::cerr << "Failed to parse file." << std::endl;
         }
-        auto perf = decode(perfLog);
-        perf.source_file = filename;
-        return perf;
+        return decode(perfLog);
     }
 
 }

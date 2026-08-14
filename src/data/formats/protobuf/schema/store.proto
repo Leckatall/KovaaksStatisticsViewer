@@ -9,8 +9,15 @@ message UserProfileStore {
   // the loader can quarantine a rejected store instead of silently
   // mis-parsing it. Absent in pre-versioning stores, which read back as 0.
   uint32 version = 3;
-  string source_directory = 1;
+  reserved 1;
   repeated Run runs = 2;
+  repeated SourceDirectory sources = 4;
+}
+
+message SourceDirectory {
+  uint32 id = 1;
+  uint32 parent_id = 2;
+  string path = 3;
 }
 
 message Run {
@@ -18,7 +25,9 @@ message Run {
   int64 start_time = 2;
   float scenario_length = 3;
   repeated ScenarioDataPoint data = 4;
-  string source_file = 5;
+  reserved 5;
+  uint32 source_directory_id = 6;
+  string source_filename = 7;
 }
 
 message ScenarioId {

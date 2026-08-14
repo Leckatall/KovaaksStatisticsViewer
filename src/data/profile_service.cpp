@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <set>
 #include <utility>
 
 namespace ksv::data {
@@ -20,8 +21,8 @@ namespace ksv::data {
         m_profile = nullptr;
         m_filepath = m_settings_service->getProfilePath();
         ensureParentDir();
-        m_file_service->onFilesChanged([this](const std::string &path) {
-            addPerfFileToProfile(path);
+        m_file_service->onFilesChanged([this](const application::PerfFile &file) {
+            addPerfFileToProfile(file);
         });
         m_settings_service->onProfilePathChanged([this] {
             applyProfilePath();
@@ -57,17 +58,23 @@ namespace ksv::data {
     void ProfileService::applyBuiltProfile(domain::UserProfile profile) {
         m_build_in_flight = false;
 
-        // The Kovaaks directory can be repointed while a build is running; the result
-        // then describes a directory nobody is looking at any more. The queued files
-        // survive the discard so the rebuild that follows still replays them.
-        if (profile.getSourceDirectory() != m_file_service->getSourceDirectory()) return;
+        // A settings change can replace the configured roots while a build is running.
+        // The queued files survive a stale result so the follow-up build can replay them.
+        std::set<std::string> profile_roots;
+        for (const auto &source : profile.sources().entries()) {
+            if (source.parent.value == 0) profile_roots.insert(source.path);
+        }
+        const auto current_roots_list = m_file_service->sourceRoots();
+        const std::set current_roots(current_roots_list.begin(), current_roots_list.end());
+        if (profile_roots != current_roots) return;
 
         const auto pending = std::exchange(m_pending_perf_files, {});
         setProfile(std::move(profile));
 
         bool replayed = false;
         for (const auto &perf_file: pending) {
-            const auto perf = m_file_service->getPerfFromFile(perf_file);
+            auto perf = m_file_service->getPerfFromFile(perf_file.absolutePath());
+            perf.source = {m_profile->ensureSource(perf_file.root, perf_file.subdir), perf_file.filename};
             if (m_profile->getRun(perf.run_id)) continue;
             replayed |= m_profile->addScenarioPerf(perf);
         }
@@ -87,13 +94,14 @@ namespace ksv::data {
         loadProfile();
     }
 
-    void ProfileService::addPerfFileToProfile(const std::string &perf_file) {
+    void ProfileService::addPerfFileToProfile(const application::PerfFile &perf_file) {
         if (m_build_in_flight) {
             m_pending_perf_files.push_back(perf_file);
             return;
         }
         if (!m_profile) return;
-        const auto perf = m_file_service->getPerfFromFile(perf_file);
+        auto perf = m_file_service->getPerfFromFile(perf_file.absolutePath());
+        perf.source = {m_profile->ensureSource(perf_file.root, perf_file.subdir), perf_file.filename};
         m_profile->addScenarioPerf(perf);
         notifyProfileChanged();
         saveProfile();

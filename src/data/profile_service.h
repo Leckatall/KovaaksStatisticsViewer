@@ -25,7 +25,7 @@ namespace ksv::data {
 
         void generateProfileFromDirectory() override;
         void loadProfile() override;
-        void addPerfFileToProfile(const std::string& perf_file);
+        void addPerfFileToProfile(const application::PerfFile &perf_file);
         void setProfile(domain::UserProfile profile);
 
         void onBuildRequested(std::function<void()> callback) override {
@@ -78,7 +78,7 @@ namespace ksv::data {
         std::unique_ptr<domain::UserProfile> m_profile;
         std::function<void()> m_build_requester;
         bool m_build_in_flight = false;
-        std::vector<std::string> m_pending_perf_files;
+        std::vector<application::PerfFile> m_pending_perf_files;
         std::shared_ptr<application::IFileService> m_file_service;
         std::shared_ptr<application::IProfileSerializer> m_serializer;
         std::shared_ptr<application::ISettingsService> m_settings_service;
