@@ -7,6 +7,7 @@
 #include "profile_builder.h"
 
 #include <algorithm>
+#include <iostream>
 #include <numeric>
 #include <set>
 #include <utility>
@@ -108,7 +109,10 @@ namespace ksv::data {
     }
 
     void ProfileService::saveProfile() const {
-        if (m_profile) m_serializer->save(*m_profile, m_filepath);
+        if (!m_profile) return;
+        if (!m_serializer->save(*m_profile, m_filepath)) {
+            std::cerr << "Failed to save profile to " << m_filepath << std::endl;
+        }
     }
 
     std::vector<domain::ScenarioId> ProfileService::getScenarioList() const {

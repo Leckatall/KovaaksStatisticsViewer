@@ -39,6 +39,12 @@ namespace {
         std::filesystem::path store_path =
             std::filesystem::temp_directory_path() / "profile_serializer_test_store.pb";
 
+        [[nodiscard]] std::filesystem::path temp_path() const {
+            auto path = store_path;
+            path += ".tmp";
+            return path;
+        }
+
         [[nodiscard]] std::vector<std::filesystem::path> quarantine_files(const std::string &reason) const {
             std::vector<std::filesystem::path> matches;
             const auto prefix = store_path.stem().string() + "_" + reason + "_";
@@ -53,6 +59,7 @@ namespace {
 
         void TearDown() override {
             std::filesystem::remove(store_path);
+            std::filesystem::remove(temp_path());
             for (const auto &reason: {"unparseable", "version-mismatch"}) {
                 for (const auto &path: quarantine_files(reason)) std::filesystem::remove(path);
             }
@@ -73,7 +80,7 @@ namespace {
         profile.addScenarioPerf(make_perf("Scenario A", "hash-a", 200, 60.0F, {{12}, "run2.perf"}));
         profile.addScenarioPerf(make_perf("Scenario B", "hash-b", 300, 30.0F, {{12}, "run3.perf"}));
 
-        serializer.save(profile, store_path);
+        ASSERT_TRUE(serializer.save(profile, store_path));
         const auto loaded = serializer.load(store_path);
 
         ASSERT_TRUE(loaded.has_value());
@@ -105,7 +112,7 @@ namespace {
     TEST_F(ProfileSerializerTest, RoundTripOfEmptyProfileHasNoScenarios) {
         const ksv::domain::UserProfile profile;
 
-        serializer.save(profile, store_path);
+        ASSERT_TRUE(serializer.save(profile, store_path));
         const auto loaded = serializer.load(store_path);
 
         ASSERT_TRUE(loaded.has_value());
@@ -114,7 +121,7 @@ namespace {
 
     TEST_F(ProfileSerializerTest, ReadHeaderReturnsMetadataWrittenBySave) {
         const ksv::domain::UserProfile profile;
-        serializer.save(profile, store_path);
+        ASSERT_TRUE(serializer.save(profile, store_path));
 
         const auto header = serializer.readHeader(store_path);
 
@@ -126,16 +133,49 @@ namespace {
 
     TEST_F(ProfileSerializerTest, SavePreservesExistingHeaderMetadata) {
         const ksv::domain::UserProfile profile;
-        serializer.save(profile, store_path);
+        ASSERT_TRUE(serializer.save(profile, store_path));
         const auto first_header = serializer.readHeader(store_path);
         ASSERT_TRUE(first_header.has_value());
 
-        serializer.save(profile, store_path);
+        ASSERT_TRUE(serializer.save(profile, store_path));
         const auto second_header = serializer.readHeader(store_path);
 
         ASSERT_TRUE(second_header.has_value());
         EXPECT_EQ(second_header->created_at, first_header->created_at);
         EXPECT_EQ(second_header->name, first_header->name);
+    }
+
+    TEST_F(ProfileSerializerTest, SaveLeavesNoTemporaryFile) {
+        const ksv::domain::UserProfile profile;
+
+        ASSERT_TRUE(serializer.save(profile, store_path));
+
+        EXPECT_FALSE(std::filesystem::exists(temp_path()));
+    }
+
+    TEST_F(ProfileSerializerTest, FailedSavePreservesExistingStore) {
+        const ksv::domain::UserProfile profile;
+        ASSERT_TRUE(serializer.save(profile, store_path));
+        const auto original_bytes = read_file(store_path);
+        ASSERT_TRUE(std::filesystem::create_directory(temp_path()));
+
+        EXPECT_FALSE(serializer.save(profile, store_path));
+        EXPECT_EQ(read_file(store_path), original_bytes);
+        EXPECT_FALSE(std::filesystem::exists(temp_path()));
+    }
+
+    TEST_F(ProfileSerializerTest, SaveReplacesLeftoverTemporaryFile) {
+        const ksv::domain::UserProfile profile;
+        {
+            std::ofstream output(temp_path(), std::ios::out | std::ios::binary | std::ios::trunc);
+            output << "junk";
+        }
+
+        ASSERT_TRUE(serializer.save(profile, store_path));
+        const auto loaded = serializer.load(store_path);
+
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_TRUE(loaded->getScenarioList().empty());
     }
 
     TEST_F(ProfileSerializerTest, ReadHeaderReturnsNulloptWithoutQuarantiningInvalidFiles) {

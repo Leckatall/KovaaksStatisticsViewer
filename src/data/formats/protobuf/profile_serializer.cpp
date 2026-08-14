@@ -101,7 +101,7 @@ namespace ksv::data {
         }
     }
 
-    void ProfileSerializer::save(const domain::UserProfile &profile, const std::filesystem::path &path) {
+    bool ProfileSerializer::save(const domain::UserProfile &profile, const std::filesystem::path &path) {
         const auto previous_header = readHeader(path);
         const auto now = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
@@ -146,9 +146,38 @@ namespace ksv::data {
         header->set_name(previous_header && !previous_header->name.empty() ? previous_header->name : "default");
         *file.mutable_store() = std::move(proto);
 
-        // TODO(2026-08-13): Replace the live-path truncation once save writes a temporary file and renames it atomically.
-        std::ofstream output(path, std::ios::out | std::ios::binary | std::ios::trunc);
-        file.SerializeToOstream(&output);
+        auto temp_path = path;
+        temp_path += ".tmp";
+        const auto discard_temp = [&temp_path] {
+            std::error_code discarded;
+            std::filesystem::remove(temp_path, discarded);
+        };
+
+        std::ofstream output(temp_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!output || !file.SerializeToOstream(&output)) {
+            output.close();
+            discard_temp();
+            return false;
+        }
+        output.flush();
+        if (!output) {
+            output.close();
+            discard_temp();
+            return false;
+        }
+        output.close();
+        if (!output) {
+            discard_temp();
+            return false;
+        }
+
+        std::error_code error;
+        std::filesystem::rename(temp_path, path, error);
+        if (error) {
+            discard_temp();
+            return false;
+        }
+        return true;
     }
 
     std::optional<application::ProfileStoreHeader> ProfileSerializer::readHeader(

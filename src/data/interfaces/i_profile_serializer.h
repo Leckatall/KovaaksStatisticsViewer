@@ -23,7 +23,7 @@ namespace ksv::application {
     public:
         virtual ~IProfileSerializer() = default;
 
-        virtual void save(const domain::UserProfile& profile, const std::filesystem::path& path) = 0;
+        [[nodiscard]] virtual bool save(const domain::UserProfile& profile, const std::filesystem::path& path) = 0;
 
         [[nodiscard]] virtual std::optional<ProfileStoreHeader> readHeader(const std::filesystem::path& path) const = 0;
 

@@ -113,11 +113,13 @@ namespace {
         std::filesystem::path last_save_path;
         std::filesystem::path last_load_path;
         std::optional<ksv::domain::UserProfile> last_saved_profile;
+        bool save_result = true;
 
-        void save(const ksv::domain::UserProfile &profile, const std::filesystem::path &path) override {
+        bool save(const ksv::domain::UserProfile &profile, const std::filesystem::path &path) override {
             last_saved_profile = profile;
             last_save_path = path;
             ++save_count;
+            return save_result;
         }
 
         [[nodiscard]] std::optional<ProfileStoreHeader> readHeader(const std::filesystem::path&) const override {

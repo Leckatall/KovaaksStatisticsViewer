@@ -11,7 +11,7 @@
 namespace ksv::data {
     class ProfileSerializer: public application::IProfileSerializer {
     public:
-        void save(const domain::UserProfile& profile, const std::filesystem::path& path) override;
+        [[nodiscard]] bool save(const domain::UserProfile& profile, const std::filesystem::path& path) override;
         [[nodiscard]] std::optional<application::ProfileStoreHeader> readHeader(
             const std::filesystem::path& path) const override;
         std::optional<domain::UserProfile> load(const std::filesystem::path& path) override;
