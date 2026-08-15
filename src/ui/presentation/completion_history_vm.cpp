@@ -5,6 +5,7 @@
 
 #include <array>
 #include <utility>
+#include <vector>
 
 namespace ksv::presentation {
     namespace {
@@ -12,8 +13,16 @@ namespace ksv::presentation {
             const char *name;
             const char *key;
             QColor color;
+            int yAxis;
+        };
+
+        struct AxisDescriptor {
             ValueTransform transform;
-            AxisModel::Options y_axis_options;
+            AxisModel::Options options;
+        };
+
+        enum YAxis {
+            ScoreAxis, AccuracyAxis, CountAxis, YAxisCount
         };
 
         ValueTransform runIndexTransform() {
@@ -24,18 +33,31 @@ namespace ksv::presentation {
             return transform;
         }
 
-        const std::array<ColumnMeta, CompletionHistoryViewModel::ColumnCount> kColumnMeta{{
-            {"Run", "run", QColor(), runIndexTransform(), {}},
-            {"Score", "score", QColor("#009600"), ValueTransform::identity(),
-             {.baseline = AxisModel::Baseline::Zero}},
-            {"Accuracy", "accuracy", QColor("cyan"), ValueTransform::percentage(), {}},
-            {"Shots", "shots", QColor("orange"), ValueTransform::identity(),
-             {.baseline = AxisModel::Baseline::Zero}},
-            {"Hits", "hits", QColor("#7CB342"), ValueTransform::identity(),
-             {.baseline = AxisModel::Baseline::Zero}},
-            {"Misses", "misses", QColor("#E53935"), ValueTransform::identity(),
-             {.baseline = AxisModel::Baseline::Zero}},
+        const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{{
+            {ValueTransform::identity(), {.baseline = AxisModel::Baseline::Zero}},
+            {ValueTransform::percentage(), {}},
+            {ValueTransform::identity(), {.baseline = AxisModel::Baseline::Zero}},
         }};
+
+        const std::array<ColumnMeta, CompletionHistoryViewModel::ColumnCount> kColumnMeta{{
+            {"Run", "run", QColor(), -1},
+            {"Score", "score", QColor("#009600"), ScoreAxis},
+            {"Accuracy", "accuracy", QColor("cyan"), AccuracyAxis},
+            {"Shots", "shots", QColor("orange"), CountAxis},
+            {"Hits", "hits", QColor("#7CB342"), CountAxis},
+            {"Misses", "misses", QColor("#E53935"), CountAxis},
+        }};
+
+        AxisModel axisForColumn(const QList<SeriesModel> &series, const int column) {
+            const int axis = kColumnMeta[column].yAxis;
+            std::vector<const SeriesModel *> members;
+            for (int member = CompletionHistoryViewModel::Score;
+                 member < CompletionHistoryViewModel::ColumnCount; ++member) {
+                if (kColumnMeta[member].yAxis == axis) members.push_back(&series[member - CompletionHistoryViewModel::Score]);
+            }
+            const auto &descriptor = kYAxisMeta[axis];
+            return axisForSeries(members, descriptor.options, descriptor.transform);
+        }
     }
 
     CompletionHistoryViewModel::CompletionHistoryViewModel(
@@ -45,8 +67,7 @@ namespace ksv::presentation {
             SeriesModel series_model;
             series_model.name = columnName(column);
             series_model.color = kColumnMeta[column].color;
-            series_model.transform = kColumnMeta[column].transform;
-            series_model.yAxisOptions = kColumnMeta[column].y_axis_options;
+            series_model.transform = kYAxisMeta[kColumnMeta[column].yAxis].transform;
             m_series.append(std::move(series_model));
         }
         refresh();
@@ -55,8 +76,22 @@ namespace ksv::presentation {
     QList<SeriesModel> CompletionHistoryViewModel::series(const QList<int> &columns) const {
         QList<SeriesModel> result;
         result.reserve(columns.size());
+        std::array<std::vector<int>, YAxisCount> membersByAxis;
         for (const int column: columns) {
-            if (column >= Score && column < ColumnCount) result.append(m_series[column - Score]);
+            if (column < Score || column >= ColumnCount) continue;
+            result.append(m_series[column - Score]);
+            result.back().column = column;
+            membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
+        }
+        for (int axis = 0; axis < YAxisCount; ++axis) {
+            const auto &indices = membersByAxis[axis];
+            if (indices.empty()) continue;
+            std::vector<const SeriesModel *> members;
+            members.reserve(indices.size());
+            for (const int index: indices) members.push_back(&result[index]);
+            const auto &descriptor = kYAxisMeta[axis];
+            const AxisModel yAxis = axisForSeries(members, descriptor.options, descriptor.transform);
+            for (const int index: indices) result[index].yAxis = yAxis;
         }
         return result;
     }
@@ -71,7 +106,7 @@ namespace ksv::presentation {
         QVariantMap bounds;
         bounds[QString::number(RunIndex)] = QPointF(m_x_axis.min(), m_x_axis.max());
         for (int column = Score; column < ColumnCount; ++column) {
-            const AxisModel y_axis = m_series[column - Score].deriveYAxis();
+            const AxisModel y_axis = axisForColumn(m_series, column);
             bounds[QString::number(column)] = QPointF(y_axis.min(), y_axis.max());
         }
         return bounds;
@@ -80,7 +115,7 @@ namespace ksv::presentation {
     QList<qreal> CompletionHistoryViewModel::axisTicks(const int column) const {
         if (column == RunIndex) return m_x_axis.ticks();
         if (column < Score || column >= ColumnCount) return {};
-        return m_series[column - Score].yAxis->ticks();
+        return axisForColumn(m_series, column).ticks();
     }
 
     QList<QPointF> CompletionHistoryViewModel::seriesPoints(const int column) const {
@@ -122,7 +157,9 @@ namespace ksv::presentation {
             m_points[Misses].append(QPointF(x, row.misses));
         }
         for (int column = Score; column < ColumnCount; ++column) {
-            m_series[column - Score].setData(m_points[column]);
+            auto &series = m_series[column - Score];
+            series.points = m_points[column];
+            series.yAxis.reset();
         }
 
         constexpr AxisModel::Options kRunAxis{
@@ -131,7 +168,7 @@ namespace ksv::presentation {
             .targetTicks = 10,
         };
         m_x_axis = AxisModel::forRange(m_run_count > 0 ? 1.0 : 0.0, m_run_count, kRunAxis)
-                       .withDelegate(kColumnMeta[RunIndex].transform);
+                       .withDelegate(runIndexTransform());
 
         emit dataUpdated();
         emit boundsChanged();

@@ -83,9 +83,15 @@ namespace ksv::ui {
 
     std::optional<presentation::AxisModel> GraphCanvas::labelledYAxis() const {
         if (!m_graphVm) return std::nullopt;
-        const auto labelled = m_graphVm->series({labelledYAxisColumn()});
-        if (labelled.isEmpty()) return std::nullopt;
-        return yAxisFor(labelled.front());
+        const int labelledColumn = labelledYAxisColumn();
+        const QList<int> visible = visibleColumnIds();
+        const auto series = m_graphVm->series(visible);
+        for (const auto &entry: series) {
+            if (entry.column == labelledColumn) return yAxisFor(entry);
+        }
+        const auto fallback = m_graphVm->series({labelledColumn});
+        if (fallback.isEmpty()) return std::nullopt;
+        return yAxisFor(fallback.front());
     }
 
     QRectF GraphCanvas::plotRect() const {

@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QPointF>
+#include <array>
 #include <cmath>
 
 #include "series_model.h"
@@ -55,6 +56,36 @@ namespace {
         EXPECT_LE(series.yAxis->min(), 12.0);
         EXPECT_GE(series.yAxis->max(), 87.0);
         EXPECT_EQ(series.yAxis->formatTick(87.0), "87%");
+    }
+
+    TEST(SeriesModelTest, DisplayRangeIsEmptyWithoutPointsAndUsesDisplayValues) {
+        SeriesModel empty;
+        EXPECT_FALSE(empty.displayRange().has_value());
+
+        SeriesModel series;
+        series.transform = ValueTransform::percentage();
+        series.points = {QPointF(0.0, 0.12), QPointF(1.0, 0.87)};
+
+        const auto range = series.displayRange();
+        ASSERT_TRUE(range.has_value());
+        EXPECT_DOUBLE_EQ(range->first, 12.0);
+        EXPECT_DOUBLE_EQ(range->second, 87.0);
+    }
+
+    TEST(SeriesModelTest, AxisForSeriesUsesTheUnionAndItsEmptyFallback) {
+        SeriesModel first;
+        first.points = {QPointF(0.0, 10.0), QPointF(1.0, 20.0)};
+        SeriesModel second;
+        second.points = {QPointF(0.0, 100.0), QPointF(1.0, 200.0)};
+        const std::array<const SeriesModel *, 2> members{&first, &second};
+
+        const AxisModel axis = ksv::presentation::axisForSeries(members, {}, ValueTransform::identity());
+        EXPECT_LE(axis.min(), 10.0);
+        EXPECT_GE(axis.max(), 200.0);
+
+        const AxisModel empty = ksv::presentation::axisForSeries({}, {}, ValueTransform::identity());
+        EXPECT_DOUBLE_EQ(empty.min(), 0.0);
+        EXPECT_DOUBLE_EQ(empty.max(), 1.0);
     }
 
     TEST(SeriesModelTest, SampleAtXReturnsNearestSampleByRawX) {

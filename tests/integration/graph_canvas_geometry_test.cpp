@@ -96,6 +96,7 @@ namespace {
         [[nodiscard]] QList<presentation::SeriesModel> series(const QList<int> &) const override {
             presentation::SeriesModel s;
             s.name = "Fallback";
+            s.column = 0;
             s.points = {QPointF(0.0, 0.0), QPointF(10.0, 100.0)};
             // Deliberately leave xAxis / yAxis unset.
             return {s};
@@ -167,6 +168,7 @@ namespace {
         [[nodiscard]] QList<presentation::SeriesModel> series(const QList<int> &) const override {
             presentation::SeriesModel s;
             s.name = "Value";
+            s.column = 0;
             s.points = {QPointF(0.0, 0.0), QPointF(10.0, m_yHi)};
             return {s};
         }
@@ -207,6 +209,53 @@ namespace {
 
         EXPECT_GT(wideLeft, narrowLeft)
             << "left margin should grow to fit wider y-axis tick text instead of staying fixed";
+    }
+
+    class VisibleSetAxisVm : public presentation::GraphViewModelBase {
+    public:
+        [[nodiscard]] QList<presentation::SeriesModel> series(const QList<int> &columns) const override {
+            const bool shared = columns.contains(0) && columns.contains(1);
+            const presentation::AxisModel yAxis = presentation::AxisModel::forRange(0.0, shared ? 123456.0 : 1.0);
+            QList<presentation::SeriesModel> result;
+            for (const int column: columns) {
+                if (column < 0 || column > 1) continue;
+                presentation::SeriesModel s;
+                s.column = column;
+                s.name = "Value";
+                s.points = {QPointF(0.0, 0.0), QPointF(10.0, shared ? 123456.0 : 1.0)};
+                s.yAxis = yAxis;
+                result.append(std::move(s));
+            }
+            return result;
+        }
+        [[nodiscard]] presentation::AxisModel xAxis() const override {
+            return presentation::AxisModel::forRange(0.0, 10.0);
+        }
+        [[nodiscard]] QVariantList plottableColumns() const override { return {0, 1}; }
+        [[nodiscard]] QVariantMap axisBounds() const override { return {}; }
+        [[nodiscard]] QList<qreal> axisTicks(int) const override { return {}; }
+        [[nodiscard]] QList<QPointF> seriesPoints(int) const override { return {}; }
+        [[nodiscard]] QString columnName(int) const override { return "Value"; }
+        [[nodiscard]] QColor columnColor(int) const override { return {}; }
+        [[nodiscard]] QString columnKey(int) const override { return "value"; }
+        [[nodiscard]] int xColumn() const override { return 0; }
+        [[nodiscard]] int yAxisColumn() const override { return 0; }
+    };
+
+    TEST_F(GraphCanvasGeometryTest, LabelledAxisUsesTheVisibleSeriesSet) {
+        VisibleSetAxisVm vm;
+        GraphCanvas canvas;
+        canvas.setWidth(800);
+        canvas.setHeight(600);
+        canvas.setGraphVm(&vm);
+
+        canvas.setVisibleColumns(QVariantList{0});
+        const qreal singleLeft = canvas.property("plotArea").toRectF().left();
+
+        canvas.setVisibleColumns(QVariantList{0, 1});
+        const qreal sharedLeft = canvas.property("plotArea").toRectF().left();
+
+        EXPECT_GT(sharedLeft, singleLeft);
     }
 
     TEST_F(GraphCanvasGeometryTest, DrawnAxisReflectsSelectedYAxisColumn) {

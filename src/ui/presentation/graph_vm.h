@@ -38,12 +38,7 @@ namespace ksv::presentation {
 
         void setData(QList<QMap<Column, qreal>> data);
 
-        [[nodiscard]] QList<SeriesModel> series(const QList<int> &columns) const override {
-            QList<SeriesModel> result;
-            result.reserve(columns.size());
-            for (const int c: columns) if (c >= Score && c < ColumnCount) result.append(m_series[c - Score]);
-            return result;
-        }
+        [[nodiscard]] QList<SeriesModel> series(const QList<int> &columns) const override;
         [[nodiscard]] AxisModel xAxis() const override { return m_axes[Time]; }
 
         [[nodiscard]] QVariantList plottableColumns() const override;

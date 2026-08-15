@@ -76,6 +76,37 @@ namespace {
         EXPECT_EQ(accuracy_series.front().formattedValueAtX(1.0), "45%");
     }
 
+    TEST_F(CompletionHistoryViewModelTest, CountSeriesShareAnAxisButScoreDoesNot) {
+        setHistory();
+        view_model.refresh();
+
+        const auto series = view_model.series({CompletionHistoryViewModel::Score,
+                                                CompletionHistoryViewModel::Shots,
+                                                CompletionHistoryViewModel::Hits});
+        ASSERT_EQ(series.size(), 3);
+        ASSERT_TRUE(series[0].yAxis.has_value());
+        ASSERT_TRUE(series[1].yAxis.has_value());
+        ASSERT_TRUE(series[2].yAxis.has_value());
+        EXPECT_DOUBLE_EQ(series[1].yAxis->min(), series[2].yAxis->min());
+        EXPECT_DOUBLE_EQ(series[1].yAxis->max(), series[2].yAxis->max());
+        EXPECT_NE(series[0].yAxis->max(), series[1].yAxis->max());
+        EXPECT_LE(series[1].yAxis->min(), 0.0);
+        EXPECT_GE(series[1].yAxis->max(), 25.0);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, LegacyAxesAreAvailableForEveryColumn) {
+        setHistory();
+        view_model.refresh();
+
+        for (int column = CompletionHistoryViewModel::RunIndex;
+             column < CompletionHistoryViewModel::ColumnCount; ++column) {
+            const auto bounds = view_model.axisBounds()[QString::number(column)].toPointF();
+            const auto ticks = view_model.axisTicks(column);
+            EXPECT_LT(bounds.x(), bounds.y());
+            EXPECT_GE(ticks.size(), 2);
+        }
+    }
+
     TEST_F(CompletionHistoryViewModelTest, RunIndexHasNoDrawableSeries) {
         setHistory();
         view_model.refresh();

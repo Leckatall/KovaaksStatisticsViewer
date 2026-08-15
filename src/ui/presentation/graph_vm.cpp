@@ -9,6 +9,7 @@
 #include <QSet>
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 
 namespace ksv::presentation {
@@ -16,7 +17,16 @@ namespace ksv::presentation {
         struct ColumnMeta {
             const char *name;
             QColor color;
+            int yAxis;
+        };
+
+        struct AxisDescriptor {
             ValueTransform transform;
+            AxisModel::Options options;
+        };
+
+        enum YAxis {
+            ScoreAxis, AccuracyAxis, ShotsAxis, KillsAxis, DmgAxis, ScoreFamilyAxis, YAxisCount
         };
 
         ValueTransform secondsDelegate() {
@@ -25,17 +35,25 @@ namespace ksv::presentation {
             return t;
         }
 
-        // Time column only carries X delegate; others are drawn as series
+        const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{{
+            {ValueTransform::identity(), {}},
+            {ValueTransform::percentage(), {}},
+            {ValueTransform::identity(), {}},
+            {ValueTransform::identity(), {}},
+            {ValueTransform::identity(), {}},
+            {ValueTransform::identity(), {}},
+        }};
+
         const std::array<ColumnMeta, GraphViewModel::ColumnCount> kColumnMeta{{
-            {"Time", QColor(), secondsDelegate()},
-            {"Score", QColor("#009600"), ValueTransform::identity()},
-            {"Accuracy", QColor("cyan"), ValueTransform::percentage()},
-            {"Shots", QColor("orange"), ValueTransform::identity()},
-            {"Kills", QColor("red"), ValueTransform::identity()},
-            {"Dmg", QColor("yellow"), ValueTransform::identity()},
-            {"Score Total", QColor("purple"), ValueTransform::identity()},
-            {"Expected Final Score", QColor("magenta"), ValueTransform::identity()},
-            {"Expected Final Score (5s)", QColor("deepskyblue"), ValueTransform::identity()},
+            {"Time", QColor(), -1},
+            {"Score", QColor("#009600"), ScoreAxis},
+            {"Accuracy", QColor("cyan"), AccuracyAxis},
+            {"Shots", QColor("orange"), ShotsAxis},
+            {"Kills", QColor("red"), KillsAxis},
+            {"Dmg", QColor("yellow"), DmgAxis},
+            {"Score Total", QColor("purple"), ScoreFamilyAxis},
+            {"Expected Final Score", QColor("magenta"), ScoreFamilyAxis},
+            {"Expected Final Score (5s)", QColor("deepskyblue"), ScoreFamilyAxis},
         }};
 
         static_assert(static_cast<int>(application::ColumnId::Time) == GraphViewModel::Time);
@@ -57,7 +75,7 @@ namespace ksv::presentation {
             SeriesModel series;
             series.name = GraphViewModel::columnName(c);
             series.color = kColumnMeta[c].color;
-            series.transform = kColumnMeta[c].transform;
+            series.transform = kYAxisMeta[kColumnMeta[c].yAxis].transform;
             m_series.append(std::move(series));
         }
         recomputeBounds();
@@ -67,6 +85,29 @@ namespace ksv::presentation {
         m_data = std::move(data);
         emit dataUpdated();
         recomputeBounds();
+    }
+
+    QList<SeriesModel> GraphViewModel::series(const QList<int> &columns) const {
+        QList<SeriesModel> result;
+        result.reserve(columns.size());
+        std::array<std::vector<int>, YAxisCount> membersByAxis;
+        for (const int column: columns) {
+            if (column < Score || column >= ColumnCount) continue;
+            result.append(m_series[column - Score]);
+            result.back().column = column;
+            membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
+        }
+        for (int axis = 0; axis < YAxisCount; ++axis) {
+            const auto &indices = membersByAxis[axis];
+            if (indices.empty()) continue;
+            std::vector<const SeriesModel *> members;
+            members.reserve(indices.size());
+            for (const int index: indices) members.push_back(&result[index]);
+            const auto &descriptor = kYAxisMeta[axis];
+            const AxisModel yAxis = axisForSeries(members, descriptor.options, descriptor.transform);
+            for (const int index: indices) result[index].yAxis = yAxis;
+        }
+        return result;
     }
 
     QVariantList GraphViewModel::plottableColumns() const {
@@ -161,17 +202,36 @@ namespace ksv::presentation {
         } else {
             const auto [xlo, xhi] = rawColumnRange(m_data, Time);
             newAxes[Time] = AxisModel::forRange(0.0, xhi, timeOpts);
-
             for (int c = Score; c < ColumnCount; ++c) {
                 const auto [lo, hi] = rawColumnRange(m_data, static_cast<Column>(c));
                 newAxes[c] = AxisModel::forRange(lo, hi);
             }
         }
-        newAxes[Time] = newAxes[Time].withDelegate(kColumnMeta[Time].transform);
+        newAxes[Time] = newAxes[Time].withDelegate(secondsDelegate());
 
-        // Rebuild series on every call (change-gated skip below only guards deprecated m_axes path)
         for (int c = Score; c < ColumnCount; ++c) {
-            m_series[c - Score].setData(seriesPoints(static_cast<Column>(c)));
+            auto &series = m_series[c - Score];
+            series.points = seriesPoints(c);
+            series.yAxis.reset();
+        }
+
+        if (!m_data.isEmpty()) {
+            qreal lo = 0.0;
+            qreal hi = 0.0;
+            bool initialized = false;
+            for (int c = ScoreTotal; c <= ExpectedFinalScoreRecent; ++c) {
+                const auto range = rawColumnRange(m_data, static_cast<Column>(c));
+                if (!initialized) {
+                    lo = range.first;
+                    hi = range.second;
+                    initialized = true;
+                } else {
+                    lo = std::min(lo, range.first);
+                    hi = std::max(hi, range.second);
+                }
+            }
+            const AxisModel scoreFamilyAxis = AxisModel::forRange(lo, hi);
+            for (int c = ScoreTotal; c <= ExpectedFinalScoreRecent; ++c) newAxes[c] = scoreFamilyAxis;
         }
 
         bool changed = false;

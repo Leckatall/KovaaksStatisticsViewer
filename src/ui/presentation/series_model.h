@@ -10,7 +10,9 @@
 #include <QPointF>
 #include <QString>
 #include <QVariantMap>
+#include <algorithm>
 #include <optional>
+#include <span>
 
 #include "axis_model.h"
 #include "value_transform.h"
@@ -22,21 +24,27 @@ namespace ksv::presentation {
         ValueTransform transform;
         AxisModel::Options yAxisOptions;
         QList<QPointF> points;
+        int column = -1;
         std::optional<AxisModel> xAxis;
         std::optional<AxisModel> yAxis;
 
-        // Builds a y-axis from the current points' display-space range
-        [[nodiscard]] AxisModel deriveYAxis() const {
-            qreal lo = 0.0, hi = 1.0;
-            if (!points.isEmpty()) {
-                lo = hi = transform.display(points.front().y());
-                for (const auto &p: points) {
-                    const qreal v = transform.display(p.y());
-                    lo = std::min(lo, v);
-                    hi = std::max(hi, v);
-                }
+        [[nodiscard]] std::optional<std::pair<qreal, qreal>> displayRange() const {
+            if (points.isEmpty()) return std::nullopt;
+            qreal lo = transform.display(points.front().y());
+            qreal hi = lo;
+            for (const auto &p: points) {
+                const qreal value = transform.display(p.y());
+                lo = std::min(lo, value);
+                hi = std::max(hi, value);
             }
-            return AxisModel::forRange(lo, hi, yAxisOptions).withDelegate(transform);
+            return std::pair{lo, hi};
+        }
+
+        [[nodiscard]] AxisModel deriveYAxis() const {
+            if (const auto range = displayRange()) {
+                return AxisModel::forRange(range->first, range->second, yAxisOptions).withDelegate(transform);
+            }
+            return AxisModel::forRange(0.0, 1.0, yAxisOptions).withDelegate(transform);
         }
 
         void setData(QList<QPointF> rawPoints) {
@@ -58,6 +66,25 @@ namespace ksv::presentation {
             return sample ? transform.format(sample->y()) : QString();
         }
     };
+
+    [[nodiscard]] inline AxisModel axisForSeries(const std::span<const SeriesModel *const> members,
+                                                  const AxisModel::Options &options,
+                                                  const ValueTransform &delegate) {
+        std::optional<std::pair<qreal, qreal>> range;
+        for (const SeriesModel *series: members) {
+            if (!series) continue;
+            const auto memberRange = series->displayRange();
+            if (!memberRange) continue;
+            if (!range) {
+                range = memberRange;
+            } else {
+                range->first = std::min(range->first, memberRange->first);
+                range->second = std::max(range->second, memberRange->second);
+            }
+        }
+        if (!range) return AxisModel::forRange(0.0, 1.0, options).withDelegate(delegate);
+        return AxisModel::forRange(range->first, range->second, options).withDelegate(delegate);
+    }
 }
 
 #endif //KOVAAKSSTATSVIEWER_SERIES_MODEL_H

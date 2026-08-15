@@ -179,6 +179,56 @@ namespace {
         EXPECT_NEAR(accuracyBounds.y(), 2.0, 1e-6);
     }
 
+    TEST_F(GraphViewModelTest, ScoreFamilySharesAnAxisForTheRequestedVisibleSubset) {
+        fake_use_case->series_to_return.times = {0.0F, 1.0F};
+        fake_use_case->series_to_return.columns[ColumnId::ScoreTotal] = {10.0F, 20.0F};
+        fake_use_case->series_to_return.columns[ColumnId::ExpectedFinalScore] = {30.0F, 40.0F};
+        fake_use_case->series_to_return.columns[ColumnId::ExpectedFinalScoreRecent] = {1000.0F, 2000.0F};
+        view_model.fetchData();
+
+        const auto visible = view_model.series({GraphViewModel::ScoreTotal, GraphViewModel::ExpectedFinalScore});
+        ASSERT_EQ(visible.size(), 2);
+        ASSERT_TRUE(visible[0].yAxis.has_value());
+        ASSERT_TRUE(visible[1].yAxis.has_value());
+        EXPECT_DOUBLE_EQ(visible[0].yAxis->min(), visible[1].yAxis->min());
+        EXPECT_DOUBLE_EQ(visible[0].yAxis->max(), visible[1].yAxis->max());
+        EXPECT_LE(visible[0].yAxis->min(), 10.0);
+        EXPECT_GE(visible[0].yAxis->max(), 40.0);
+        EXPECT_LT(visible[0].yAxis->max(), 1000.0);
+
+        const auto single = view_model.series({GraphViewModel::ScoreTotal});
+        ASSERT_EQ(single.size(), 1);
+        ASSERT_TRUE(single.front().yAxis.has_value());
+        EXPECT_LE(single.front().yAxis->min(), 10.0);
+        EXPECT_GE(single.front().yAxis->max(), 20.0);
+        EXPECT_LT(single.front().yAxis->max(), 30.0);
+    }
+
+    TEST_F(GraphViewModelTest, AccuracyRemainsIndependentAndFormatsAsPercentage) {
+        setSampleData();
+        fake_use_case->series_to_return.columns[ColumnId::ScoreTotal] = {100.0F, 200.0F, 300.0F};
+        fake_use_case->series_to_return.columns[ColumnId::ExpectedFinalScore] = {400.0F, 500.0F, 600.0F};
+        view_model.fetchData();
+
+        const auto series = view_model.series({GraphViewModel::Accuracy, GraphViewModel::ScoreTotal,
+                                                GraphViewModel::ExpectedFinalScore});
+        ASSERT_EQ(series.size(), 3);
+        EXPECT_EQ(series[0].formattedValueAtX(0.0), "50%");
+        ASSERT_TRUE(series[0].yAxis.has_value());
+        ASSERT_TRUE(series[1].yAxis.has_value());
+        EXPECT_LT(series[0].yAxis->max(), series[1].yAxis->min());
+    }
+
+    TEST_F(GraphViewModelTest, SeriesRecordsItsSourceColumn) {
+        setSampleData();
+        view_model.fetchData();
+
+        const auto series = view_model.series({GraphViewModel::Score, GraphViewModel::Accuracy});
+        ASSERT_EQ(series.size(), 2);
+        EXPECT_EQ(series[0].column, GraphViewModel::Score);
+        EXPECT_EQ(series[1].column, GraphViewModel::Accuracy);
+    }
+
     TEST_F(GraphViewModelTest, PlottableColumnsExcludesTime) {
         const auto columns = view_model.plottableColumns();
         EXPECT_FALSE(columns.contains(int(GraphViewModel::Time)));
