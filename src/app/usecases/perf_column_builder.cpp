@@ -125,8 +125,12 @@ namespace ksv::application {
             buckets[bucket].score += point.score;
         }
 
-        result.times.resize(maxSecond + 1);
-        for (int s = 0; s <= maxSecond; ++s) result.times[s] = float(s);
+        // t=0 is always a phantom bucket (no data can land before the run starts); drop it
+        // so the series doesn't open on a spurious zero point.
+        buckets.erase(buckets.begin());
+
+        result.times.resize(buckets.size());
+        for (size_t s = 0; s < buckets.size(); ++s) result.times[s] = float(s + 1);
 
         const BuildContext context{perf, buckets};
         for (const auto &def: kColumnDefinitions) result.columns[def.id] = def.derive(context);

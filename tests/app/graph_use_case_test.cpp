@@ -58,18 +58,18 @@ namespace {
 
     TEST_F(GraphUseCaseTest, GetSeriesReturnsAllPointTimes) {
         fake_session_controller->current_perf.data = {
-            make_point(0.0F, 1, 1, 0.0F), make_point(1.0F, 1, 1, 0.0F)
+            make_point(1.0F, 1, 1, 0.0F), make_point(2.0F, 1, 1, 0.0F)
         };
 
         const auto series = use_case.get_series();
 
         ASSERT_EQ(series.times.size(), 2);
-        EXPECT_FLOAT_EQ(series.times[0], 0.0F);
-        EXPECT_FLOAT_EQ(series.times[1], 1.0F);
+        EXPECT_FLOAT_EQ(series.times[0], 1.0F);
+        EXPECT_FLOAT_EQ(series.times[1], 2.0F);
     }
 
     TEST_F(GraphUseCaseTest, GetSeriesReturnsPointScores) {
-        fake_session_controller->current_perf.data = {make_point(0.0F, 1, 1, 42.0F)};
+        fake_session_controller->current_perf.data = {make_point(1.0F, 1, 1, 42.0F)};
 
         const auto series = use_case.get_series();
 
@@ -78,7 +78,7 @@ namespace {
     }
 
     TEST_F(GraphUseCaseTest, GetSeriesComputesAccuracyAsHitsOverShots) {
-        fake_session_controller->current_perf.data = {make_point(0.0F, 10, 5, 0.0F)};
+        fake_session_controller->current_perf.data = {make_point(1.0F, 10, 5, 0.0F)};
 
         const auto series = use_case.get_series();
 
@@ -88,7 +88,7 @@ namespace {
 
     TEST_F(GraphUseCaseTest, GetSeriesReturnsZeroAccuracyForZeroShots) {
         fake_session_controller->current_perf.data = {
-            make_point(0.0F, 0, 0, 0.0F), make_point(1.0F, 10, 5, 0.0F)
+            make_point(1.0F, 0, 0, 0.0F), make_point(2.0F, 10, 5, 0.0F)
         };
 
         const auto series = use_case.get_series();

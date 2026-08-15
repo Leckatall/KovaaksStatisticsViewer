@@ -38,19 +38,19 @@ namespace {
     }
 
     TEST(PerfColumnBuilderTest, RoundsTimestampsToNearestWholeSecond) {
-        const auto perf = make_perf({make_point(0.3F, 10, 5, 10.0F), make_point(0.6F, 10, 5, 20.0F)});
+        const auto perf = make_perf({make_point(1.3F, 10, 5, 10.0F), make_point(1.6F, 10, 5, 20.0F)});
 
         const auto series = PerfColumnBuilder::build(perf);
 
         ASSERT_EQ(series.times.size(), 2);
-        EXPECT_EQ(series.times[0], 0.0F);
-        EXPECT_EQ(series.times[1], 1.0F);
+        EXPECT_EQ(series.times[0], 1.0F);
+        EXPECT_EQ(series.times[1], 2.0F);
         EXPECT_EQ(series.columns.at(ColumnId::Score)[0], 10.0F);
         EXPECT_EQ(series.columns.at(ColumnId::Score)[1], 20.0F);
     }
 
     TEST(PerfColumnBuilderTest, FillsSecondsWithNoRawDataAsZero) {
-        const auto perf = make_perf({make_point(0.1F, 2, 1, 10.0F), make_point(3.4F, 4, 2, 20.0F)});
+        const auto perf = make_perf({make_point(1.1F, 2, 1, 10.0F), make_point(4.4F, 4, 2, 20.0F)});
 
         const auto series = PerfColumnBuilder::build(perf);
 
@@ -58,12 +58,22 @@ namespace {
         const auto &score = series.columns.at(ColumnId::Score);
         const auto &shots = series.columns.at(ColumnId::Shots);
         const auto &accuracy = series.columns.at(ColumnId::Accuracy);
-        for (int second: {1, 2}) {
-            EXPECT_EQ(score[second], 0.0F);
-            EXPECT_EQ(shots[second], 0.0F);
-            EXPECT_EQ(accuracy[second], 0.0F);
+        for (int row: {1, 2}) {
+            EXPECT_EQ(score[row], 0.0F);
+            EXPECT_EQ(shots[row], 0.0F);
+            EXPECT_EQ(accuracy[row], 0.0F);
         }
         EXPECT_EQ(score[3], 20.0F);
+    }
+
+    TEST(PerfColumnBuilderTest, DropsThePhantomZeroSecondBucketBeforeTheRunStarts) {
+        const auto perf = make_perf({make_point(0.1F, 2, 1, 10.0F), make_point(1.0F, 4, 2, 20.0F)});
+
+        const auto series = PerfColumnBuilder::build(perf);
+
+        ASSERT_EQ(series.times.size(), 1);
+        EXPECT_EQ(series.times[0], 1.0F);
+        EXPECT_EQ(series.columns.at(ColumnId::Score)[0], 20.0F);
     }
 
     // Near the end of a run, two ticks can land ~0.02s apart (e.g. x.87/x.89)
@@ -94,7 +104,7 @@ namespace {
 
         const auto series = PerfColumnBuilder::build(perf);
 
-        EXPECT_NEAR(series.columns.at(ColumnId::Accuracy)[10], 0.86, 1e-6);
+        EXPECT_NEAR(series.columns.at(ColumnId::Accuracy)[9], 0.86, 1e-6);
     }
 
     TEST(PerfColumnBuilderTest, MergedBucketWithZeroShotsHasZeroAccuracy) {
@@ -102,12 +112,12 @@ namespace {
 
         const auto series = PerfColumnBuilder::build(perf);
 
-        EXPECT_EQ(series.columns.at(ColumnId::Accuracy)[20], 0.0F);
+        EXPECT_EQ(series.columns.at(ColumnId::Accuracy)[19], 0.0F);
     }
 
     TEST(PerfColumnBuilderTest, ScoreTotalIsARunningSumOfPerSecondScore) {
         const auto perf = make_perf({
-            make_point(0.0F, 1, 1, 10.0F), make_point(1.0F, 1, 1, 20.0F), make_point(2.0F, 1, 1, 5.0F)
+            make_point(1.0F, 1, 1, 10.0F), make_point(2.0F, 1, 1, 20.0F), make_point(3.0F, 1, 1, 5.0F)
         });
 
         const auto series = PerfColumnBuilder::build(perf);
@@ -123,7 +133,7 @@ namespace {
     // should read the same steady final value at every point, and that final
     // value must equal ScoreTotal at the last bucket.
     TEST(PerfColumnBuilderTest, ExpectedFinalScoreProjectsSteadyPaceAcrossFullDuration) {
-        const auto perf = make_perf({make_point(0.0F, 1, 1, 10.0F), make_point(1.0F, 1, 1, 10.0F)});
+        const auto perf = make_perf({make_point(1.0F, 1, 1, 10.0F), make_point(2.0F, 1, 1, 10.0F)});
 
         const auto series = PerfColumnBuilder::build(perf);
 
@@ -141,7 +151,7 @@ namespace {
     // ScoreTotal at the final bucket regardless of scenario_length.
     TEST(PerfColumnBuilderTest, ExpectedFinalScoreIgnoresScenarioLengthAndConvergesToScoreTotal) {
         const auto perf = make_perf({
-            make_point(0.0F, 1, 1, 10.0F), make_point(1.0F, 1, 1, 10.0F), make_point(2.0F, 1, 1, 10.0F)
+            make_point(1.0F, 1, 1, 10.0F), make_point(2.0F, 1, 1, 10.0F), make_point(3.0F, 1, 1, 10.0F)
         }, 10.0F);
 
         const auto series = PerfColumnBuilder::build(perf);
@@ -159,8 +169,8 @@ namespace {
     // that's the entire reason it exists as a separate column.
     TEST(PerfColumnBuilderTest, ExpectedFinalScoreRecentIgnoresPaceOlderThanTheTrailingWindow) {
         const auto perf = make_perf({
-            make_point(0.0F, 1, 1, 100.0F), make_point(1.0F, 1, 1, 10.0F), make_point(2.0F, 1, 1, 10.0F),
-            make_point(3.0F, 1, 1, 10.0F), make_point(4.0F, 1, 1, 10.0F), make_point(5.0F, 1, 1, 10.0F)
+            make_point(1.0F, 1, 1, 100.0F), make_point(2.0F, 1, 1, 10.0F), make_point(3.0F, 1, 1, 10.0F),
+            make_point(4.0F, 1, 1, 10.0F), make_point(5.0F, 1, 1, 10.0F), make_point(6.0F, 1, 1, 10.0F)
         }, 6.0F);
 
         const auto series = PerfColumnBuilder::build(perf);
