@@ -12,6 +12,7 @@ ItemDelegate {
     required property string hash
     required property int index
     readonly property bool isCurrentRun: hash === currentRunHash && startTimeMs === currentRunStartTimeMs
+    required property bool personalBest
     required property string runLabel
     required property real score
     required property double startTimeMs
@@ -51,6 +52,25 @@ ItemDelegate {
             Label {
                 objectName: "runAccuracy_" + root.index
                 text: "Acc " + (root.accuracy * 100).toFixed(1) + "%"
+            }
+            Item {
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                visible: root.personalBest
+                Layout.preferredHeight: personalBestLabel.implicitHeight + 4
+                Layout.preferredWidth: personalBestLabel.implicitWidth + 10
+                color: root.palette.accent
+                objectName: "personalBestBadge_" + root.index
+                radius: 4
+
+                Label {
+                    id: personalBestLabel
+                    anchors.centerIn: parent
+                    color: root.palette.base
+                    font.bold: true
+                    text: qsTr("PB")
+                }
             }
         }
     }

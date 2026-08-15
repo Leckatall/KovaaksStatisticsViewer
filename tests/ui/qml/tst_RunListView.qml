@@ -27,14 +27,14 @@ TestCase {
 
     function makeRuns() {
         return [{hash: "scenario-a", runLabel: "run", startTimeMs: 1723200000000,
-                 score: 8421, accuracy: 0.91, shots: 132, hits: 120}]
+                 score: 8421, accuracy: 0.91, shots: 132, hits: 120, personalBest: true}]
     }
 
     function makeSortableRuns() {
         return [
-            {hash: "a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80},
-            {hash: "b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95},
-            {hash: "c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70},
+            {hash: "a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80, personalBest: false},
+            {hash: "b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95, personalBest: false},
+            {hash: "c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70, personalBest: false},
         ]
     }
 
@@ -52,6 +52,7 @@ TestCase {
         verify(findChild(delegate, "runScore_0").text.indexOf("8421") !== -1)
         verify(findChild(delegate, "runAccuracy_0").text.indexOf("91.0%") !== -1)
         verify(findChild(delegate, "runLabel_0").text.length > 0)
+        verify(findChild(delegate, "personalBestBadge_0").visible)
 
         runSelectedSpy.target = view
         verify(runSelectedSpy.valid)
@@ -60,6 +61,14 @@ TestCase {
         compare(runSelectedSpy.count, 1)
         compare(runSelectedSpy.signalArguments[0][0], "scenario-a")
         compare(runSelectedSpy.signalArguments[0][1], 1723200000000)
+    }
+
+    function test_personalBestBadgeIsHiddenByDefault() {
+        const view = createView({runModel: makeSortableRuns()})
+        const badge = findChild(view, "personalBestBadge_0")
+
+        verify(badge !== null)
+        verify(!badge.visible)
     }
 
     function test_emptyModelShowsEmptyLabel() {
@@ -94,9 +103,9 @@ TestCase {
 
         // Simulate what the real VM does on sortRequested: re-sort by score desc.
         view.runModel = [
-            {hash: "b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95},
-            {hash: "a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80},
-            {hash: "c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70},
+            {hash: "b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95, personalBest: false},
+            {hash: "a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80, personalBest: false},
+            {hash: "c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70, personalBest: false},
         ]
         wait(0)
 
