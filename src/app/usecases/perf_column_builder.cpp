@@ -71,16 +71,18 @@ namespace ksv::application {
                 }
             },
             {
-                // Extrapolates final score from average pace-so-far across full run duration
+                // Extrapolates final score from average pace-so-far across the run's observed
+                // duration (bucket count), not the game-reported scenario_length: scenarios that
+                // manipulate time flow report a scaled duration that doesn't match real elapsed time.
                 ColumnId::ExpectedFinalScore,
                 [](const BuildContext &ctx) {
                     std::vector<float> result(ctx.buckets.size());
-                    const float totalDuration = ctx.perf.scenario_length;
+                    const float totalDuration = float(ctx.buckets.size());
                     float running = 0.0F;
                     for (size_t i = 0; i < ctx.buckets.size(); ++i) {
                         running += ctx.buckets[i].score;
                         const float elapsed = float(i) + 1.0F;
-                        result[i] = totalDuration > 0.0F ? running / elapsed * totalDuration : running;
+                        result[i] = running / elapsed * totalDuration;
                     }
                     return result;
                 }
@@ -91,14 +93,14 @@ namespace ksv::application {
                 [](const BuildContext &ctx) {
                     constexpr size_t kWindowSeconds = 5;
                     std::vector<float> result(ctx.buckets.size());
-                    const float totalDuration = ctx.perf.scenario_length;
+                    const float totalDuration = float(ctx.buckets.size());
                     for (size_t i = 0; i < ctx.buckets.size(); ++i) {
                         const size_t windowStart = i + 1 >= kWindowSeconds ? i + 1 - kWindowSeconds : 0;
                         float windowScore = 0.0F;
                         for (size_t j = windowStart; j <= i; ++j) windowScore += ctx.buckets[j].score;
                         const float windowLength = float(i - windowStart + 1);
                         const float pace = windowScore / windowLength;
-                        result[i] = totalDuration > 0.0F ? pace * totalDuration : windowScore;
+                        result[i] = pace * totalDuration;
                     }
                     return result;
                 }

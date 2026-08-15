@@ -119,17 +119,38 @@ namespace {
         EXPECT_EQ(total[2], 35.0F);
     }
 
-    // Steady 10/s pace over a 10s run: the average-pace-so-far projection
-    // should read the same steady final value at every point.
+    // Steady 10/s pace over a 2-bucket run: the average-pace-so-far projection
+    // should read the same steady final value at every point, and that final
+    // value must equal ScoreTotal at the last bucket.
     TEST(PerfColumnBuilderTest, ExpectedFinalScoreProjectsSteadyPaceAcrossFullDuration) {
-        const auto perf = make_perf({make_point(0.0F, 1, 1, 10.0F), make_point(1.0F, 1, 1, 10.0F)}, 10.0F);
+        const auto perf = make_perf({make_point(0.0F, 1, 1, 10.0F), make_point(1.0F, 1, 1, 10.0F)});
 
         const auto series = PerfColumnBuilder::build(perf);
 
         const auto &expected = series.columns.at(ColumnId::ExpectedFinalScore);
+        const auto &total = series.columns.at(ColumnId::ScoreTotal);
         ASSERT_EQ(expected.size(), 2);
-        EXPECT_NEAR(expected[0], 100.0F, 1e-4);
-        EXPECT_NEAR(expected[1], 100.0F, 1e-4);
+        EXPECT_NEAR(expected[0], 20.0F, 1e-4);
+        EXPECT_NEAR(expected[1], 20.0F, 1e-4);
+        EXPECT_NEAR(expected[1], total[1], 1e-4);
+    }
+
+    // scenario_length reflects scaled time on scenarios that manipulate time
+    // flow, so it can diverge from the run's real observed duration; the
+    // projection must extrapolate against the latter, converging exactly to
+    // ScoreTotal at the final bucket regardless of scenario_length.
+    TEST(PerfColumnBuilderTest, ExpectedFinalScoreIgnoresScenarioLengthAndConvergesToScoreTotal) {
+        const auto perf = make_perf({
+            make_point(0.0F, 1, 1, 10.0F), make_point(1.0F, 1, 1, 10.0F), make_point(2.0F, 1, 1, 10.0F)
+        }, 10.0F);
+
+        const auto series = PerfColumnBuilder::build(perf);
+
+        const auto &expected = series.columns.at(ColumnId::ExpectedFinalScore);
+        const auto &total = series.columns.at(ColumnId::ScoreTotal);
+        ASSERT_EQ(expected.size(), 3);
+        EXPECT_NEAR(expected[2], total[2], 1e-4);
+        EXPECT_NEAR(expected[2], 30.0F, 1e-4);
     }
 
     // An outlier-heavy first second (100) dragged into an otherwise steady
