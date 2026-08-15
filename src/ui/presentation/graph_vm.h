@@ -55,6 +55,7 @@ namespace ksv::presentation {
         Q_INVOKABLE [[nodiscard]] QString columnName(int column) const override;
         Q_INVOKABLE [[nodiscard]] QColor columnColor(int column) const override;
         Q_INVOKABLE [[nodiscard]] QString columnKey(int column) const override;
+        Q_INVOKABLE [[nodiscard]] int columnYAxis(int column) const;
 
         [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
 

@@ -280,6 +280,29 @@ TestCase {
         compare(combo.displayText, "Score", "the combo box should show the sole visible column")
     }
 
+    function test_yAxisColumnComboBox_collapsesColumnsSharingAnAxis() {
+        const graphVm = makeFakeGraphVm()
+        graphVm.plottableColumns = [1, 2]
+        graphVm.allColumns = [1, 2]
+        graphVm.enabledColumns = [1, 2]
+        // Both columns share a y-axis; the combo should offer one entry, not two.
+        graphVm.columnYAxis = function () { return 0 }
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            graphVm: graphVm,
+            columnVisibility: ({score: true, accuracy: true}),
+            graphAxisSettings: ({yAxisColumnKey: "accuracy"})
+        })
+
+        selectCategory(dialog, "Graph Lines")
+
+        const combo = findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        verify(combo !== null, "no combo box named 'yAxisColumnComboBox' found in SettingsDialog Graph Lines category")
+        compare(combo.count, 1, "columns sharing a y-axis should collapse into a single combo entry")
+        compare(combo.displayText, "Score", "the combo box should show the first column of the shared axis")
+    }
+
     function test_yAxisColumnComboBoxExcludesDisabledButVisibleColumn() {
         const graphVm = makeFakeGraphVm()
         graphVm.enabledColumns = [1]

@@ -10,6 +10,7 @@ function makeFakeGraphVm() {
         columnName: function (id) { return id === 1 ? "Score" : "Accuracy" },
         columnKey: function (id) { return id === 1 ? "score" : "accuracy" },
         columnColor: function () { return "#00ff00" },
+        columnYAxis: function (id) { return id },
         fetchData: function (scenarioId) { this.fetchDataCalls.push(scenarioId) },
         fetchLatestData: function () { this.fetchLatestDataCalls++ }
     }

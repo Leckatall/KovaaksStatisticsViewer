@@ -169,6 +169,11 @@ namespace ksv::presentation {
         return QString::fromLatin1(key.data(), static_cast<qsizetype>(key.size()));
     }
 
+    int GraphViewModel::columnYAxis(const int column) const {
+        if (column < 0 || column >= ColumnCount) return -1;
+        return kColumnMeta[column].yAxis;
+    }
+
     QList<QPointF> GraphViewModel::seriesPoints(const int column) const {
         if (column < 0 || column >= ColumnCount) return {};
         const auto col = static_cast<Column>(column);

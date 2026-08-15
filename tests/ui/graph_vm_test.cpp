@@ -333,6 +333,17 @@ namespace {
         EXPECT_FALSE(view_model.columnColor(GraphViewModel::ColumnCount).isValid());
     }
 
+    TEST_F(GraphViewModelTest, ColumnYAxisGroupsTheScoreFamilyTogetherAndKeepsScoreSeparate) {
+        EXPECT_EQ(view_model.columnYAxis(GraphViewModel::ScoreTotal), view_model.columnYAxis(GraphViewModel::ExpectedFinalScore));
+        EXPECT_EQ(view_model.columnYAxis(GraphViewModel::ScoreTotal), view_model.columnYAxis(GraphViewModel::ExpectedFinalScoreRecent));
+        EXPECT_NE(view_model.columnYAxis(GraphViewModel::ScoreTotal), view_model.columnYAxis(GraphViewModel::Score));
+        EXPECT_NE(view_model.columnYAxis(GraphViewModel::Score), view_model.columnYAxis(GraphViewModel::Accuracy));
+    }
+
+    TEST_F(GraphViewModelTest, ColumnYAxisReturnsNegativeOneForOutOfRangeColumn) {
+        EXPECT_EQ(view_model.columnYAxis(GraphViewModel::ColumnCount), -1);
+    }
+
     TEST_F(GraphViewModelTest, FetchDataPopulatesShotsKillsAndDmgColumns) {
         setSampleData();
         fake_use_case->series_to_return.columns[ColumnId::Shots] = {5.0F, 10.0F, 15.0F};

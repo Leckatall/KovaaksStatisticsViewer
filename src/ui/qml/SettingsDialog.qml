@@ -195,6 +195,23 @@ Dialog {
                     return result;
                 }
 
+                // One representative column per shared y-axis, so columns that render against
+                // the same axis (e.g. Score Total / Expected Final Score) aren't offered as
+                // separate picks.
+                readonly property var visibleAxisColumns: {
+                    const cols = graphLinesPage.visibleColumns;
+                    const seenAxes = new Set();
+                    const result = [];
+                    for (let i = 0; i < cols.length; i++) {
+                        const axis = root.graphVm.columnYAxis(cols[i]);
+                        if (!seenAxes.has(axis)) {
+                            seenAxes.add(axis);
+                            result.push(cols[i]);
+                        }
+                    }
+                    return result;
+                }
+
                 Label {
                     text: "Graph Lines"
                     font.pixelSize: 18
@@ -214,21 +231,21 @@ Dialog {
                         id: yAxisColumnComboBox
                         objectName: "yAxisColumnComboBox"
                         Layout.fillWidth: true
-                        enabled: graphLinesPage.visibleColumns.length > 0
-                        model: graphLinesPage.visibleColumns
-                        displayText: enabled ? root.graphVm.columnName(graphLinesPage.visibleColumns[currentIndex]) : ""
+                        enabled: graphLinesPage.visibleAxisColumns.length > 0
+                        model: graphLinesPage.visibleAxisColumns
+                        displayText: enabled ? root.graphVm.columnName(graphLinesPage.visibleAxisColumns[currentIndex]) : ""
                         delegate: ItemDelegate {
                             required property int modelData
                             width: yAxisColumnComboBox.width
                             text: root.graphVm.columnName(modelData)
                         }
                         currentIndex: {
-                            const idx = graphLinesPage.visibleColumns.findIndex(
+                            const idx = graphLinesPage.visibleAxisColumns.findIndex(
                                 c => root.graphVm.columnKey(c) === root.graphAxisSettings.yAxisColumnKey);
                             return idx >= 0 ? idx : 0;
                         }
                         onActivated: index => {
-                            root.graphAxisSettings.yAxisColumnKey = root.graphVm.columnKey(graphLinesPage.visibleColumns[index]);
+                            root.graphAxisSettings.yAxisColumnKey = root.graphVm.columnKey(graphLinesPage.visibleAxisColumns[index]);
                         }
                     }
                 }
