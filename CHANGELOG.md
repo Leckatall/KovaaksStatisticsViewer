@@ -4,6 +4,40 @@ The technical record — every change, user-visible or not. For the user-facing 
 [RELEASE_NOTES.md](RELEASE_NOTES.md). Pending entries live as fragments in `changelog.d/` and are
 assembled into both files at version bump.
 
+## v0.5.1-beta
+
+### Added
+
+#### Scenario & run selection
+- Personal-best runs are now flagged with a badge in scenario and recent-run lists.
+
+### Changed
+
+#### Scenario & run selection
+- `ScenarioBrowserUseCase` now calculates the personal-best flag from a run's full chronological history, exposed via a new `RunListModel` role for the UI to consume.
+
+#### Graphing
+- Score Total, Expected Final Score, and Expected Final Score (5s) now share y-axis bounds, making their values directly comparable on the graph.
+
+#### Data & Profile
+- Profile loading now distinguishes an absent store from an unparseable or schema-mismatched one, so `ProfileService` can report the specific rejection reason instead of a generic fallback.
+
+#### Architecture
+- Future CHANGELOG.md sections group changes by type before area.
+- `ScenarioBrowserUseCase` now owns scenario-browser aggregation, selected-run access, and refresh notifications, so `ScenarioBrowserViewModel` depends on a narrow contract instead of `ISessionController`.
+
+### Fixed
+
+#### Data & Profile
+- A failed or interrupted save can no longer corrupt your profile — the previous store is left intact, and a failed save is now reported instead of silently ignored.
+
+#### Graphing
+- Run graphs no longer open on a spurious zero-value point at 0s, which was also pulling the y-axis down to 0 unnecessarily.
+- Expected Final Score and Expected Final Score (5s) now project accurately throughout a run instead of consistently landing under the real total, especially on scenarios that manipulate time flow.
+
+#### User Interface
+- The y-axis picker in Graph Lines settings now lists one entry per axis, so columns sharing an axis (Score Total, Expected Final Score, Expected Final Score (5s)) no longer appear as separate, functionally identical choices.
+
 ## v0.5.0-beta
 
 ### Scenario & run selection

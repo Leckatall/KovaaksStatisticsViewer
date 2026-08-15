@@ -2,6 +2,22 @@
 
 What's new for people using the app. For the technical record, see [CHANGELOG.md](CHANGELOG.md).
 
+## v0.5.1-beta
+
+### Features & changes
+
+#### Scenario & run selection
+- Personal-best runs are now marked with a PB badge in scenario and recent-run lists.
+
+#### Graphing
+- Score Total, Expected Final Score, and Expected Final Score (5s) now share a y-axis, so you can compare their actual values.
+
+### Bug fixes
+- A failed or interrupted save can no longer corrupt your profile — the previous store is left intact.
+- Run graphs no longer open on a spurious zero-value point at 0s, which was also dragging the y-axis down to 0 unnecessarily.
+- Expected Final Score and Expected Final Score (5s) now project accurately throughout a run instead of consistently landing under the real total, especially on scenarios that manipulate time flow.
+- The y-axis picker in the Graph Lines settings now lists one entry per axis, so columns that share an axis (Score Total, Expected Final Score, Expected Final Score (5s)) no longer show up as separate, functionally identical choices.
+
 ## v0.5.0-beta
 
 ### Features & changes
