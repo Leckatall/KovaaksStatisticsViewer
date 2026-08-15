@@ -41,7 +41,8 @@ namespace ksv::data {
     }
 
     void ProfileService::loadProfile() {
-        if (auto stored = m_serializer->load(m_filepath)) {
+        const auto result = m_serializer->load(m_filepath);
+        if (const auto stored = std::get_if<domain::UserProfile>(&result)) {
             setProfile(std::move(*stored));
             return;
         }

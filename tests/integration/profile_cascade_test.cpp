@@ -137,11 +137,12 @@ namespace {
         profileService->generateProfileFromDirectory();
         const auto stored = serializer->load(env.profileStorePath().toStdString());
 
-        ASSERT_TRUE(stored.has_value());
-        ASSERT_EQ(stored->getAllRunRecords().size(), 2);
+        ASSERT_TRUE(std::holds_alternative<domain::UserProfile>(stored));
+        const auto& profile = std::get<domain::UserProfile>(stored);
+        ASSERT_EQ(profile.getAllRunRecords().size(), 2);
         std::set<std::string> resolved_roots;
-        for (const auto &run : stored->getAllRunRecords()) {
-            const auto resolved = stored->sources().resolve(run.source);
+        for (const auto &run : profile.getAllRunRecords()) {
+            const auto resolved = profile.sources().resolve(run.source);
             ASSERT_TRUE(resolved.has_value());
             resolved_roots.insert(std::filesystem::path(*resolved).parent_path().parent_path().parent_path()
                                       .generic_string());

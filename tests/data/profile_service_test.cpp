@@ -126,9 +126,11 @@ namespace {
             return header_to_read;
         }
 
-        [[nodiscard]] std::optional<ksv::domain::UserProfile> load(const std::filesystem::path &path) override {
+        [[nodiscard]] ProfileLoadResult load(const std::filesystem::path &path) override {
             last_load_path = path;
-            return profile_to_load;
+            return profile_to_load
+                       ? ProfileLoadResult{*profile_to_load}
+                       : ProfileLoadResult{ProfileLoadError::NotFound};
         }
     };
 

@@ -68,7 +68,8 @@ namespace {
 
     TEST_F(ProfileSerializerTest, LoadReturnsNulloptWhenFileDoesNotExist) {
         std::filesystem::remove(store_path);
-        EXPECT_FALSE(serializer.load(store_path).has_value());
+        EXPECT_EQ(std::get<ksv::application::ProfileLoadError>(serializer.load(store_path)),
+                  ksv::application::ProfileLoadError::NotFound);
     }
 
     TEST_F(ProfileSerializerTest, RoundTripsScenariosRunsAndDataPoints) {
@@ -83,18 +84,19 @@ namespace {
         ASSERT_TRUE(serializer.save(profile, store_path));
         const auto loaded = serializer.load(store_path);
 
-        ASSERT_TRUE(loaded.has_value());
-        EXPECT_EQ(loaded->sources().entries(), profile.sources().entries());
-        EXPECT_EQ(loaded->getScenarioList().size(), 2);
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(loaded));
+        const auto& loaded_profile = std::get<ksv::domain::UserProfile>(loaded);
+        EXPECT_EQ(loaded_profile.sources().entries(), profile.sources().entries());
+        EXPECT_EQ(loaded_profile.getScenarioList().size(), 2);
 
         const auto scenario_a = ksv::domain::ScenarioId{.name = "Scenario A", .hash = "hash-a"};
-        const auto runs_a = loaded->getMostRecentPerfs(scenario_a, 10);
+        const auto runs_a = loaded_profile.getMostRecentPerfs(scenario_a, 10);
         ASSERT_EQ(runs_a.size(), 2);
         EXPECT_EQ(runs_a[0].run_id.start_time, 100LL);
         EXPECT_EQ(runs_a[1].run_id.start_time, 200LL);
         EXPECT_FLOAT_EQ(runs_a[1].scenario_length, 60.0F);
         EXPECT_EQ(runs_a[1].source, (ksv::domain::SourceFileRef{{12}, "run2.perf"}));
-        EXPECT_EQ(loaded->sources().resolve(runs_a[1].source),
+        EXPECT_EQ(loaded_profile.sources().resolve(runs_a[1].source),
                   "C:/Kovaaks/FPSAimTrainer/performances/run2.perf");
 
         ASSERT_EQ(runs_a[1].data.size(), 2);
@@ -104,7 +106,7 @@ namespace {
         EXPECT_FLOAT_EQ(runs_a[1].data[1].score, 42.0F);
 
         const auto scenario_b = ksv::domain::ScenarioId{.name = "Scenario B", .hash = "hash-b"};
-        const auto perf_b = loaded->getMostRecentPerf(scenario_b);
+        const auto perf_b = loaded_profile.getMostRecentPerf(scenario_b);
         ASSERT_TRUE(perf_b.has_value());
         EXPECT_FLOAT_EQ(perf_b->scenario_length, 30.0F);
     }
@@ -115,8 +117,8 @@ namespace {
         ASSERT_TRUE(serializer.save(profile, store_path));
         const auto loaded = serializer.load(store_path);
 
-        ASSERT_TRUE(loaded.has_value());
-        EXPECT_TRUE(loaded->getScenarioList().empty());
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(loaded));
+        EXPECT_TRUE(std::get<ksv::domain::UserProfile>(loaded).getScenarioList().empty());
     }
 
     TEST_F(ProfileSerializerTest, ReadHeaderReturnsMetadataWrittenBySave) {
@@ -174,8 +176,8 @@ namespace {
         ASSERT_TRUE(serializer.save(profile, store_path));
         const auto loaded = serializer.load(store_path);
 
-        ASSERT_TRUE(loaded.has_value());
-        EXPECT_TRUE(loaded->getScenarioList().empty());
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(loaded));
+        EXPECT_TRUE(std::get<ksv::domain::UserProfile>(loaded).getScenarioList().empty());
     }
 
     TEST_F(ProfileSerializerTest, ReadHeaderReturnsNulloptWithoutQuarantiningInvalidFiles) {
@@ -218,7 +220,8 @@ namespace {
         garbage.write(garbage_bytes, sizeof(garbage_bytes));
         garbage.close();
 
-        EXPECT_FALSE(serializer.load(store_path).has_value());
+        EXPECT_EQ(std::get<ksv::application::ProfileLoadError>(serializer.load(store_path)),
+                  ksv::application::ProfileLoadError::Unparseable);
         EXPECT_FALSE(std::filesystem::exists(store_path));
         const auto quarantined = quarantine_files("unparseable");
         ASSERT_EQ(quarantined.size(), 1);
@@ -238,7 +241,8 @@ namespace {
         out.close();
         const auto original_bytes = read_file(store_path);
 
-        EXPECT_FALSE(serializer.load(store_path).has_value());
+        EXPECT_EQ(std::get<ksv::application::ProfileLoadError>(serializer.load(store_path)),
+                  ksv::application::ProfileLoadError::VersionMismatch);
         EXPECT_FALSE(std::filesystem::exists(store_path));
         const auto quarantined = quarantine_files("version-mismatch");
         ASSERT_EQ(quarantined.size(), 1);
@@ -260,7 +264,8 @@ namespace {
         out.write(run_bytes.data(), static_cast<std::streamsize>(run_bytes.size()));
         out.close();
 
-        EXPECT_FALSE(serializer.load(store_path).has_value());
+        EXPECT_EQ(std::get<ksv::application::ProfileLoadError>(serializer.load(store_path)),
+                  ksv::application::ProfileLoadError::Unparseable);
         EXPECT_FALSE(std::filesystem::exists(store_path));
         EXPECT_EQ(quarantine_files("unparseable").size(), 1);
     }
@@ -273,7 +278,8 @@ namespace {
             std::ofstream output(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
             output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
             output.close();
-            EXPECT_FALSE(serializer.load(store_path).has_value());
+            EXPECT_EQ(std::get<ksv::application::ProfileLoadError>(serializer.load(store_path)),
+                      ksv::application::ProfileLoadError::Unparseable);
         }
 
         const auto quarantined = quarantine_files("unparseable");

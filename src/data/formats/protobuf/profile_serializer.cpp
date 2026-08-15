@@ -191,17 +191,17 @@ namespace ksv::data {
         };
     }
 
-    std::optional<domain::UserProfile> ProfileSerializer::load(const std::filesystem::path &path) {
-        if (!std::filesystem::exists(path)) return std::nullopt;
+    application::ProfileLoadResult ProfileSerializer::load(const std::filesystem::path &path) {
+        if (!std::filesystem::exists(path)) return application::ProfileLoadError::NotFound;
 
         const auto header = readHeader(path);
         if (!header) {
             quarantineRejectedFile(path, "unparseable");
-            return std::nullopt;
+            return application::ProfileLoadError::Unparseable;
         }
         if (header->version != kStoreVersion) {
             quarantineRejectedFile(path, "version-mismatch");
-            return std::nullopt;
+            return application::ProfileLoadError::VersionMismatch;
         }
 
         store::ProfileStoreFile file;
@@ -209,8 +209,7 @@ namespace ksv::data {
         if (!file.ParseFromIstream(&input)) {
             input.close();
             quarantineRejectedFile(path, "unparseable");
-            // TODO(2026-08-13): Widen IProfileSerializer::load's result once callers distinguish rejection from absence.
-            return std::nullopt;
+            return application::ProfileLoadError::Unparseable;
         }
         input.close();
 

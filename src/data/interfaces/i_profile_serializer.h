@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <variant>
 
 #include "domain/user_profile.h"
 
@@ -19,6 +20,14 @@ namespace ksv::application {
         std::string name;
     };
 
+    enum class ProfileLoadError {
+        NotFound,
+        Unparseable,
+        VersionMismatch,
+    };
+
+    using ProfileLoadResult = std::variant<domain::UserProfile, ProfileLoadError>;
+
     class IProfileSerializer {
     public:
         virtual ~IProfileSerializer() = default;
@@ -27,7 +36,7 @@ namespace ksv::application {
 
         [[nodiscard]] virtual std::optional<ProfileStoreHeader> readHeader(const std::filesystem::path& path) const = 0;
 
-        [[nodiscard]] virtual std::optional<domain::UserProfile> load(const std::filesystem::path& path) = 0;
+        [[nodiscard]] virtual ProfileLoadResult load(const std::filesystem::path& path) = 0;
     };
 }
 
