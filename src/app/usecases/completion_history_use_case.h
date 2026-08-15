@@ -35,15 +35,15 @@ namespace ksv::application {
             const auto completion_history = m_profile_service->getCompletionHistory(scenario);
             history.rows.reserve(completion_history.size());
             for (std::size_t i = 0; i < completion_history.size(); ++i) {
-                const auto &[run_id, completion] = completion_history[i];
+                const auto &row = completion_history[i];
                 history.rows.push_back({
                     .run_index = static_cast<int>(i + 1),
-                    .start_time_ms = run_id.start_time,
-                    .score = completion.score,
-                    .accuracy = completion.accuracy(),
-                    .shots = static_cast<double>(completion.shots),
-                    .hits = static_cast<double>(completion.hits),
-                    .misses = static_cast<double>(completion.misses),
+                    .start_time_ms = row.run_id.start_time,
+                    .score = row.score,
+                    .accuracy = row.accuracy(),
+                    .shots = static_cast<double>(row.shots),
+                    .hits = static_cast<double>(row.hits),
+                    .misses = static_cast<double>(row.misses),
                 });
             }
             return history;

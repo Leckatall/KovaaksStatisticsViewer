@@ -40,20 +40,6 @@ namespace ksv::domain {
         }
     };
 
-    struct ScenarioCompletionData {
-        int shots = 0;
-        int hits = 0;
-        int misses = 0;
-        float dmg = 0.0F;
-        float dmg_possible = 0.0F;
-        float score = 0.0F;
-        int kills = 0;
-
-        [[nodiscard]] double accuracy() const {
-            return shots == 0 ? 0.0 : static_cast<double>(hits) / shots;
-        }
-    };
-
     struct ScenarioId {
         std::string name;
         std::string hash;
@@ -112,6 +98,21 @@ namespace ksv::domain {
         }
     };
 
+    struct RunData {
+        ScenarioRunId run_id;
+        int shots = 0;
+        int hits = 0;
+        int misses = 0;
+        float dmg = 0.0F;
+        float dmg_possible = 0.0F;
+        float score = 0.0F;
+        int kills = 0;
+
+        [[nodiscard]] double accuracy() const {
+            return shots == 0 ? 0.0 : static_cast<double>(hits) / shots;
+        }
+    };
+
     struct ScenarioPerf {
         ScenarioRunId run_id;
         float scenario_length;
@@ -121,18 +122,18 @@ namespace ksv::domain {
         template<typename T>
         void add_data(float time, DataPointType type, T value);
 
-        [[nodiscard]] ScenarioCompletionData getCompletionData() const {
-            ScenarioCompletionData completion;
+        [[nodiscard]] RunData getRunData() const {
+            RunData run_data{.run_id = run_id};
             for (const auto &point: data) {
-                completion.shots += point.shots;
-                completion.hits += point.hits;
-                completion.misses += point.misses;
-                completion.dmg += point.dmg;
-                completion.dmg_possible += point.dmg_possible;
-                completion.score += point.score;
-                completion.kills += point.kills;
+                run_data.shots += point.shots;
+                run_data.hits += point.hits;
+                run_data.misses += point.misses;
+                run_data.dmg += point.dmg;
+                run_data.dmg_possible += point.dmg_possible;
+                run_data.score += point.score;
+                run_data.kills += point.kills;
             }
-            return completion;
+            return run_data;
         }
 
         void print() const {

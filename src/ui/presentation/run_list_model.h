@@ -9,7 +9,7 @@
 #include <QHash>
 #include <vector>
 
-#include "domain/run_performance.h"
+#include "app/contracts/run_performance.h"
 
 namespace ksv::presentation {
     class RunListModel : public QAbstractListModel {
@@ -27,6 +27,7 @@ namespace ksv::presentation {
             AccuracyRole,
             ShotsRole,
             HitsRole,
+            PersonalBestRole,
         };
 
         explicit RunListModel(QObject *parent = nullptr);
@@ -36,13 +37,13 @@ namespace ksv::presentation {
         [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
         [[nodiscard]] int count() const { return rowCount(); }
 
-        void setRuns(std::vector<domain::RunPerformance> runs);
+        void setRuns(std::vector<application::RunPerformance> runs);
 
     signals:
         void countChanged();
 
     private:
-        std::vector<domain::RunPerformance> m_runs;
+        std::vector<application::RunPerformance> m_runs;
     };
 }
 

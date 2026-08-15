@@ -6,6 +6,7 @@ target_sources(ksv_contracts INTERFACE
         FILES
             completion_history.h
             scenario_summary.h
+            run_performance.h
             graph_column.h
             graph_series.h
             i_graph_use_case.h

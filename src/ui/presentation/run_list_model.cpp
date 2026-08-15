@@ -19,13 +19,14 @@ namespace ksv::presentation {
 
         const auto &run = m_runs[index.row()];
         switch (role) {
-            case HashRole: return QString::fromStdString(run.run_id.scenario_id.hash);
-            case RunLabelRole: return QString::fromStdString(run.run_id.toString());
-            case StartTimeMsRole: return static_cast<qint64>(run.run_id.start_time);
-            case ScoreRole: return run.completion.score;
-            case AccuracyRole: return run.completion.accuracy();
-            case ShotsRole: return run.completion.shots;
-            case HitsRole: return run.completion.hits;
+            case HashRole: return QString::fromStdString(run.data.run_id.scenario_id.hash);
+            case RunLabelRole: return QString::fromStdString(run.data.run_id.toString());
+            case StartTimeMsRole: return static_cast<qint64>(run.data.run_id.start_time);
+            case ScoreRole: return run.data.score;
+            case AccuracyRole: return run.data.accuracy();
+            case ShotsRole: return run.data.shots;
+            case HitsRole: return run.data.hits;
+            case PersonalBestRole: return run.personal_best;
             default: return {};
         }
     }
@@ -39,10 +40,11 @@ namespace ksv::presentation {
             {AccuracyRole, "accuracy"},
             {ShotsRole, "shots"},
             {HitsRole, "hits"},
+            {PersonalBestRole, "personalBest"},
         };
     }
 
-    void RunListModel::setRuns(std::vector<domain::RunPerformance> runs) {
+    void RunListModel::setRuns(std::vector<application::RunPerformance> runs) {
         beginResetModel();
         m_runs = std::move(runs);
         endResetModel();

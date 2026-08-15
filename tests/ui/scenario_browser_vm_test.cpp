@@ -72,18 +72,18 @@ namespace {
     RunPerformance make_run(const std::string &scenario_name, const std::string &hash, const long long start_time,
                          const float score, const float accuracy) {
         RunPerformance run;
-        run.run_id = ScenarioRunId{.scenario_id = ScenarioId{.name = scenario_name, .hash = hash}, .start_time = start_time};
-        run.completion.score = score;
-        run.completion.shots = 100;
-        run.completion.hits = static_cast<int>(accuracy * run.completion.shots + 0.5F);
+        run.data.run_id = ScenarioRunId{.scenario_id = ScenarioId{.name = scenario_name, .hash = hash}, .start_time = start_time};
+        run.data.score = score;
+        run.data.shots = 100;
+        run.data.hits = static_cast<int>(accuracy * run.data.shots + 0.5F);
         return run;
     }
 
     RunPerformance make_run_full(const std::string &scenario_name, const std::string &hash, const long long start_time,
                                  const float score, const int shots, const int hits) {
         RunPerformance run = make_run(scenario_name, hash, start_time, score, 0.0F);
-        run.completion.shots = shots;
-        run.completion.hits = hits;
+        run.data.shots = shots;
+        run.data.hits = hits;
         return run;
     }
 
@@ -274,14 +274,14 @@ namespace {
     }
 
     TEST_F(ScenarioBrowserViewModelTest, CurrentRunIdentityTracksCurrentPerf) {
-        fake_controller->current_perf.run_id = make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F).run_id;
+        fake_controller->current_perf.run_id = make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F).data.run_id;
         ScenarioBrowserViewModel view_model(fake_controller);
         const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::currentRunChanged);
 
         EXPECT_EQ(view_model.currentRunHash(), QString("hash-2"));
         EXPECT_EQ(view_model.currentRunStartTimeMs(), 1000.0);
 
-        fake_controller->current_perf.run_id = make_run("Pasu", "hash-3", 2000, 8000.0F, 0.9F).run_id;
+        fake_controller->current_perf.run_id = make_run("Pasu", "hash-3", 2000, 8000.0F, 0.9F).data.run_id;
         fake_controller->notifyChanged();
 
         EXPECT_EQ(view_model.currentRunHash(), QString("hash-3"));
@@ -345,6 +345,20 @@ namespace {
         EXPECT_EQ(run_model->data(run_model->index(1, 0), RunListModel::StartTimeMsRole).toLongLong(), 1000);
         EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::ShotsRole).toInt(), 100);
         EXPECT_EQ(run_model->data(run_model->index(0, 0), RunListModel::HitsRole).toInt(), 90);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, RunListModelExposesPersonalBestRole) {
+        auto personal_best = make_run("Microshot", "hash-2", 2000, 8500.0F, 0.9F);
+        personal_best.personal_best = true;
+        fake_controller->runs_for_scenario = {personal_best};
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.activateScenario("hash-2", "Microshot");
+
+        auto *run_model = asRunListModel(view_model);
+        ASSERT_EQ(run_model->rowCount(), 1);
+        EXPECT_TRUE(run_model->data(run_model->index(0, 0), RunListModel::PersonalBestRole).toBool());
+        EXPECT_EQ(run_model->roleNames().value(RunListModel::PersonalBestRole), QByteArray("personalBest"));
     }
 
     TEST_F(ScenarioBrowserViewModelTest, ActivatingEmptyScenarioClearsRunModel) {

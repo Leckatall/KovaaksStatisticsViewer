@@ -70,7 +70,7 @@ namespace ksv::presentation {
         void refreshCurrentRun();
         void updateLongestScenarioName();
         void refreshRunModel();
-        void applyRunSort(std::vector<domain::RunPerformance> &runs) const;
+        void applyRunSort(std::vector<application::RunPerformance> &runs) const;
         void applyScenarioSort(std::vector<application::ScenarioSummary> &summaries) const;
         void refreshRecentRunsModel();
 

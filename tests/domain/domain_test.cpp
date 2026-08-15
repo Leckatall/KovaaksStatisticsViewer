@@ -77,7 +77,7 @@ namespace {
         ScenarioPerf perf;
         perf.scenario_length = 60.0F;
 
-        const auto completion = perf.getCompletionData();
+        const auto completion = perf.getRunData();
 
         EXPECT_EQ(completion.shots, 0);
         EXPECT_EQ(completion.hits, 0);
@@ -110,7 +110,7 @@ namespace {
         perf.add_data(1.0F, SCORE, 4.0F);
         perf.add_data(1.0F, KILLS, 4);
 
-        const auto completion = perf.getCompletionData();
+        const auto completion = perf.getRunData();
 
         EXPECT_EQ(completion.shots, 5);
         EXPECT_EQ(completion.hits, 4);
@@ -121,9 +121,9 @@ namespace {
         EXPECT_EQ(completion.kills, 5);
     }
 
-    TEST(ScenarioCompletionDataTest, AccuracyReturnsRatioAndHandlesZeroShots) {
-        EXPECT_DOUBLE_EQ((ScenarioCompletionData{.shots = 8, .hits = 6}.accuracy()), 0.75);
-        EXPECT_DOUBLE_EQ((ScenarioCompletionData{.shots = 0, .hits = 0}.accuracy()), 0.0);
+    TEST(RunDataTest, AccuracyReturnsRatioAndHandlesZeroShots) {
+        EXPECT_DOUBLE_EQ((RunData{.shots = 8, .hits = 6}.accuracy()), 0.75);
+        EXPECT_DOUBLE_EQ((RunData{.shots = 0, .hits = 0}.accuracy()), 0.0);
     }
 
     TEST(ScenarioIdTest, EqualityIsHashOnlyIgnoringName) {
@@ -315,15 +315,15 @@ namespace {
 
         ASSERT_EQ(history.size(), 2);
         EXPECT_EQ(history[0].run_id.start_time, 100);
-        EXPECT_FLOAT_EQ(history[0].completion.score, earliest.getCompletionData().score);
-        EXPECT_EQ(history[0].completion.shots, earliest.getCompletionData().shots);
-        EXPECT_EQ(history[0].completion.hits, earliest.getCompletionData().hits);
-        EXPECT_EQ(history[0].completion.misses, earliest.getCompletionData().misses);
+        EXPECT_FLOAT_EQ(history[0].score, earliest.getRunData().score);
+        EXPECT_EQ(history[0].shots, earliest.getRunData().shots);
+        EXPECT_EQ(history[0].hits, earliest.getRunData().hits);
+        EXPECT_EQ(history[0].misses, earliest.getRunData().misses);
         EXPECT_EQ(history[1].run_id.start_time, 300);
-        EXPECT_FLOAT_EQ(history[1].completion.score, latest.getCompletionData().score);
-        EXPECT_EQ(history[1].completion.shots, latest.getCompletionData().shots);
-        EXPECT_EQ(history[1].completion.hits, latest.getCompletionData().hits);
-        EXPECT_EQ(history[1].completion.misses, latest.getCompletionData().misses);
+        EXPECT_FLOAT_EQ(history[1].score, latest.getRunData().score);
+        EXPECT_EQ(history[1].shots, latest.getRunData().shots);
+        EXPECT_EQ(history[1].hits, latest.getRunData().hits);
+        EXPECT_EQ(history[1].misses, latest.getRunData().misses);
     }
 
     TEST_F(UserProfileTest, GetCompletionHistoryIsEmptyForUnknownScenario) {

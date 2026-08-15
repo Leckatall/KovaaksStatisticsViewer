@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "run_performance.h"
 #include "scenario_perf.h"
 #include "source_directory.h"
 
@@ -35,7 +34,7 @@ namespace ksv::domain {
 
         [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &scenario, std::size_t count) const;
 
-        [[nodiscard]] std::vector<RunPerformance> getCompletionHistory(const ScenarioId &scenario) const;
+        [[nodiscard]] std::vector<RunData> getCompletionHistory(const ScenarioId &scenario) const;
 
         [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &scenario, std::size_t count) const;
 

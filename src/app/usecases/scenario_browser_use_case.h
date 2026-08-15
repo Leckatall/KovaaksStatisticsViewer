@@ -5,6 +5,8 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <ranges>
 #include <utility>
 
 #include "contracts/i_scenario_browser_use_case.h"
@@ -44,26 +46,28 @@ namespace ksv::application {
             return summaries;
         }
 
-        [[nodiscard]] std::vector<domain::RunPerformance> getRunsForScenario(
+        [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(
             const domain::ScenarioId &scenario) const override {
             const auto count = m_profile_service->getRunCount(scenario).value_or(0);
             const auto perfs = m_profile_service->getMostRecentPerfs(scenario, count);
 
-            std::vector<domain::RunPerformance> summaries;
-            summaries.reserve(perfs.size());
-            for (auto it = perfs.rbegin(); it != perfs.rend(); ++it) {
-                summaries.push_back({it->run_id, it->getCompletionData()});
-            }
-            return summaries;
+            std::vector<domain::RunData> history;
+            history.reserve(perfs.size());
+            for (const auto &perf: perfs) history.push_back(perf.getRunData());
+            auto runs = withPersonalBest(std::move(history));
+            std::ranges::reverse(runs);
+            return runs;
         }
 
-        [[nodiscard]] std::vector<domain::RunPerformance> getRecentRuns(const std::size_t count) const override {
+        [[nodiscard]] std::vector<RunPerformance> getRecentRuns(const std::size_t count) const override {
             const auto perfs = m_profile_service->getRecentRuns(count);
 
-            std::vector<domain::RunPerformance> summaries;
+            std::vector<RunPerformance> summaries;
             summaries.reserve(perfs.size());
             for (const auto &perf: perfs) {
-                summaries.push_back({perf.run_id, perf.getCompletionData()});
+                const auto data = perf.getRunData();
+                const auto history = m_profile_service->getCompletionHistory(data.run_id.scenario_id);
+                summaries.push_back({data, isPersonalBest(history, data)});
             }
             return summaries;
         }
@@ -88,6 +92,29 @@ namespace ksv::application {
         }
 
     private:
+        [[nodiscard]] static std::vector<RunPerformance> withPersonalBest(
+            const std::vector<domain::RunData> &ascending) {
+            std::vector<RunPerformance> result;
+            result.reserve(ascending.size());
+            std::optional<float> highest_score;
+            for (const auto &data: ascending) {
+                const bool personal_best = !highest_score || data.score > *highest_score;
+                if (personal_best) highest_score = data.score;
+                result.push_back({data, personal_best});
+            }
+            return result;
+        }
+
+        [[nodiscard]] static bool isPersonalBest(const std::vector<domain::RunData> &ascending_history,
+                                                  const domain::RunData &target) {
+            std::optional<float> highest_score;
+            for (const auto &data: ascending_history) {
+                if (data.run_id == target.run_id) return !highest_score || target.score > *highest_score;
+                if (!highest_score || data.score > *highest_score) highest_score = data.score;
+            }
+            return false;
+        }
+
         std::shared_ptr<ISessionController> m_session_controller;
         std::shared_ptr<IProfileService> m_profile_service;
         QMetaObject::Connection m_current_perf_connection;

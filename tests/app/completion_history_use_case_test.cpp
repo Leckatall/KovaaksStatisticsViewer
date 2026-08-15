@@ -40,7 +40,7 @@ namespace {
     public:
         mutable int completion_history_calls = 0;
         mutable ScenarioId requested_scenario;
-        std::vector<RunPerformance> completion_history;
+        std::vector<RunData> completion_history;
 
         void generateProfileFromDirectory() override {}
         void loadProfile() override {}
@@ -56,7 +56,7 @@ namespace {
         [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &, std::size_t) const override {
             return {};
         }
-        [[nodiscard]] std::vector<RunPerformance>
+        [[nodiscard]] std::vector<RunData>
         getCompletionHistory(const ScenarioId &scenario) const override {
             ++completion_history_calls;
             requested_scenario = scenario;
@@ -100,9 +100,9 @@ namespace {
         setCurrentScenario();
         profile->completion_history = {
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
-             .completion = {.shots = 10, .hits = 4, .misses = 6, .score = 25.0F}},
+             .shots = 10, .hits = 4, .misses = 6, .score = 25.0F},
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 200},
-             .completion = {.shots = 20, .hits = 15, .misses = 5, .score = 75.0F}},
+             .shots = 20, .hits = 15, .misses = 5, .score = 75.0F},
         };
 
         const auto history = use_case.get_history();
@@ -124,7 +124,7 @@ namespace {
         setCurrentScenario();
         profile->completion_history = {
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
-             .completion = {.shots = 0, .hits = 0}},
+             .shots = 0, .hits = 0},
         };
 
         const auto history = use_case.get_history();

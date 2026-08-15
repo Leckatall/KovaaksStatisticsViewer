@@ -144,7 +144,7 @@ namespace ksv::data {
         return m_profile->getMostRecentPerfs(scenario, count);
     }
 
-    std::vector<domain::RunPerformance> ProfileService::getCompletionHistory(const domain::ScenarioId &scenario) const {
+    std::vector<domain::RunData> ProfileService::getCompletionHistory(const domain::ScenarioId &scenario) const {
         if (!m_profile) return {};
         return m_profile->getCompletionHistory(scenario);
     }
