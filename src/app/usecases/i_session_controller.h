@@ -9,8 +9,6 @@
 #include <vector>
 
 #include "domain/scenario_perf.h"
-#include "contracts/scenario_summary.h"
-#include "domain/run_performance.h"
 #include <QObject>
 
 namespace ksv::application {
@@ -37,15 +35,6 @@ namespace ksv::application {
 
         // A build started before a view model existed still has to show up in it.
         [[nodiscard]] virtual bool isBuildInProgress() const = 0;
-
-        [[nodiscard]] virtual std::vector<ScenarioSummary> getScenarioSummaries() const = 0;
-
-        // Newest-first.
-        [[nodiscard]] virtual std::vector<domain::RunPerformance> getRunsForScenario(
-            const domain::ScenarioId &scenario) const = 0;
-
-        // Newest-first, capped at count, across all scenarios.
-        [[nodiscard]] virtual std::vector<domain::RunPerformance> getRecentRuns(std::size_t count) const = 0;
 
     signals:
         void currentPerfChanged();

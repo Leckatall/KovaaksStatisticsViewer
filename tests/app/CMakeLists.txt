@@ -9,6 +9,7 @@ add_executable(app_tests
     graph_use_case_test.cpp
     perf_column_builder_test.cpp
     playtime_graph_use_case_test.cpp
+    scenario_browser_use_case_test.cpp
     session_controller_test.cpp
 )
 

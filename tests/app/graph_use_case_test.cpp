@@ -32,11 +32,6 @@ namespace {
 
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
 
-        [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return {}; }
-
-        [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(const ScenarioId &) const override { return {}; }
-
-        [[nodiscard]] std::vector<RunPerformance> getRecentRuns(std::size_t) const override { return {}; }
     };
 
     ScenarioDataPoint make_point(const float time, const int shots, const int hits, const float score) {

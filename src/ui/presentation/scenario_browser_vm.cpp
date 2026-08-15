@@ -8,18 +8,13 @@
 
 namespace ksv::presentation {
     ScenarioBrowserViewModel::ScenarioBrowserViewModel(
-        std::shared_ptr<application::ISessionController> session_controller,
+        std::shared_ptr<application::IScenarioBrowserUseCase> scenario_browser_use_case,
         QObject *parent) : QObject(parent),
-                           m_session_controller(std::move(session_controller)),
+                            m_scenario_browser_use_case(std::move(scenario_browser_use_case)),
                            m_model(new ScenarioListModel(this)),
                            m_run_model(new RunListModel(this)),
                            m_recent_runs_model(new RunListModel(this)) {
-        connect(m_session_controller.get(), &application::ISessionController::currentPerfChanged,
-                this, &ScenarioBrowserViewModel::refresh);
-        // currentPerfChanged is suppressed when the latest run is unchanged, so a
-        // rebuild that only adds older runs would otherwise leave the displayed summaries stale.
-        connect(m_session_controller.get(), &application::ISessionController::profileChanged,
-                this, &ScenarioBrowserViewModel::refresh);
+        m_scenario_browser_use_case->onChanged(this, [this] { refresh(); });
         refresh();
     }
 
@@ -50,7 +45,7 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::refreshScenarioModel() {
-        auto summaries = m_session_controller->getScenarioSummaries();
+        auto summaries = m_scenario_browser_use_case->getScenarioSummaries();
         applyScenarioSort(summaries);
         m_all_summaries = summaries;
         updateLongestScenarioName();
@@ -86,7 +81,7 @@ namespace ksv::presentation {
             },
             .start_time = static_cast<long long>(startTimeMs),
         };
-        m_session_controller->setCurrentPerf(run_id);
+        m_scenario_browser_use_case->selectRun(run_id);
     }
 
     void ScenarioBrowserViewModel::refreshRunModel() {
@@ -99,13 +94,13 @@ namespace ksv::presentation {
             .name = m_active_scenario_name.toStdString(),
             .hash = m_active_scenario_hash.toStdString(),
         };
-        auto runs = m_session_controller->getRunsForScenario(scenario_id);
+        auto runs = m_scenario_browser_use_case->getRunsForScenario(scenario_id);
         applyRunSort(runs);
         m_run_model->setRuns(std::move(runs));
     }
 
     void ScenarioBrowserViewModel::refreshCurrentRun() {
-        const auto &run_id = m_session_controller->getCurrentPerf().run_id;
+        const auto &run_id = m_scenario_browser_use_case->getCurrentPerf().run_id;
         const QString hash = QString::fromStdString(run_id.scenario_id.hash);
         const double start_time_ms = static_cast<double>(run_id.start_time);
         if (m_current_run_hash == hash && m_current_run_start_time_ms == start_time_ms)
@@ -172,6 +167,6 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::refreshRecentRunsModel() {
-        m_recent_runs_model->setRuns(m_session_controller->getRecentRuns(kRecentRunsCount));
+        m_recent_runs_model->setRuns(m_scenario_browser_use_case->getRecentRuns(kRecentRunsCount));
     }
 }

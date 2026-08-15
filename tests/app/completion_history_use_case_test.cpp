@@ -26,9 +26,6 @@ namespace {
         void setCurrentPerf(const ScenarioRunId &) override {}
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
         [[nodiscard]] bool isBuildInProgress() const override { return false; }
-        [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return {}; }
-        [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(const ScenarioId &) const override { return {}; }
-        [[nodiscard]] std::vector<RunPerformance> getRecentRuns(std::size_t) const override { return {}; }
 
         void changeRun(const std::string &hash, const long long start_time) {
             current_perf.run_id.scenario_id = {.name = "Scenario " + hash, .hash = hash};

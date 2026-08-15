@@ -1,11 +1,13 @@
 //
-// ScenarioBrowserViewModel tests using a hand-written fake ISessionController.
+// ScenarioBrowserViewModel tests using a hand-written fake IScenarioBrowserUseCase.
 //
 
 #include <gtest/gtest.h>
 
 #include <QAbstractListModel>
 #include <QSignalSpy>
+
+#include <functional>
 
 #include "scenario_browser_vm.h"
 #include "run_list_model.h"
@@ -15,9 +17,8 @@ using namespace ksv::application;
 using namespace ksv::domain;
 
 namespace {
-    class FakeSessionController : public ISessionController {
+    class FakeScenarioBrowserUseCase : public IScenarioBrowserUseCase {
     public:
-        std::vector<ScenarioId> scenario_list;
         std::vector<ScenarioSummary> scenario_summaries;
         std::vector<RunPerformance> runs_for_scenario;
         std::vector<RunPerformance> recent_runs;
@@ -26,34 +27,30 @@ namespace {
         ScenarioPerf current_perf;
         std::vector<ScenarioRunId> set_current_perf_run_id_calls;
 
-        std::vector<ScenarioId> getScenarioList() override { return scenario_list; }
-
-        void generateProfileFromDirectory() override {
-        }
-
-        [[nodiscard]] bool isBuildInProgress() const override { return false; }
-
-        void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
-        void setCurrentPerfToLatest() override {}
-        void setCurrentPerf(const std::string &filename) override {}
-
-        void setCurrentPerf(const ScenarioRunId &run_id) override {
-            set_current_perf_run_id_calls.push_back(run_id);
-        }
-
-        [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
-
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return scenario_summaries; }
 
         [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(const ScenarioId &scenario) const override {
-            const_cast<FakeSessionController *>(this)->last_runs_for_scenario_query = scenario;
+            const_cast<FakeScenarioBrowserUseCase *>(this)->last_runs_for_scenario_query = scenario;
             return runs_for_scenario;
         }
 
         [[nodiscard]] std::vector<RunPerformance> getRecentRuns(const std::size_t count) const override {
-            const_cast<FakeSessionController *>(this)->last_recent_runs_count = count;
+            const_cast<FakeScenarioBrowserUseCase *>(this)->last_recent_runs_count = count;
             return recent_runs;
         }
+
+        [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
+
+        void selectRun(const ScenarioRunId &run_id) override {
+            set_current_perf_run_id_calls.push_back(run_id);
+        }
+
+        void onChanged(QObject *, std::function<void()> callback) override { change_callback = std::move(callback); }
+
+        void notifyChanged() const { if (change_callback) change_callback(); }
+
+    private:
+        std::function<void()> change_callback;
     };
 
     ScenarioSummary make_summary(const std::string &name, const std::string &hash, const int run_count = 1,
@@ -92,7 +89,7 @@ namespace {
 
     class ScenarioBrowserViewModelTest : public testing::Test {
     protected:
-        std::shared_ptr<FakeSessionController> fake_controller = std::make_shared<FakeSessionController>();
+        std::shared_ptr<FakeScenarioBrowserUseCase> fake_controller = std::make_shared<FakeScenarioBrowserUseCase>();
 
         [[nodiscard]] static QAbstractListModel *asListModel(ScenarioBrowserViewModel &vm) {
             return qobject_cast<QAbstractListModel *>(vm.scenarioModel());
@@ -271,7 +268,7 @@ namespace {
         ASSERT_EQ(asListModel(view_model)->rowCount(), 0);
 
         fake_controller->scenario_summaries = {make_summary("Microshot", "hash-2")};
-        emit fake_controller->currentPerfChanged();
+        fake_controller->notifyChanged();
 
         EXPECT_EQ(asListModel(view_model)->rowCount(), 1);
     }
@@ -285,7 +282,7 @@ namespace {
         EXPECT_EQ(view_model.currentRunStartTimeMs(), 1000.0);
 
         fake_controller->current_perf.run_id = make_run("Pasu", "hash-3", 2000, 8000.0F, 0.9F).run_id;
-        emit fake_controller->currentPerfChanged();
+        fake_controller->notifyChanged();
 
         EXPECT_EQ(view_model.currentRunHash(), QString("hash-3"));
         EXPECT_EQ(view_model.currentRunStartTimeMs(), 2000.0);
@@ -313,7 +310,7 @@ namespace {
 
         const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::longestScenarioNameChanged);
         view_model.selectRun("hash-3", 1000.0);
-        emit fake_controller->currentPerfChanged();
+        fake_controller->notifyChanged();
 
         EXPECT_EQ(spy.count(), 0);
     }
@@ -324,7 +321,7 @@ namespace {
 
         const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::longestScenarioNameChanged);
         fake_controller->scenario_summaries.push_back(make_summary("Smoothbot Invincible", "hash-3"));
-        emit fake_controller->profileChanged();
+        fake_controller->notifyChanged();
 
         EXPECT_EQ(view_model.longestScenarioName(), QString("Smoothbot Invincible"));
         EXPECT_EQ(spy.count(), 1);
@@ -521,7 +518,7 @@ namespace {
         ASSERT_EQ(asRecentRunsModel(view_model)->rowCount(), 0);
 
         fake_controller->recent_runs = {make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F)};
-        emit fake_controller->currentPerfChanged();
+        fake_controller->notifyChanged();
 
         EXPECT_EQ(asRecentRunsModel(view_model)->rowCount(), 1);
     }

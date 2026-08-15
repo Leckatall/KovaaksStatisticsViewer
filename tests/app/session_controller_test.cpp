@@ -39,10 +39,6 @@ namespace {
         std::vector<ScenarioId> scenario_list;
         std::unordered_map<std::string, ScenarioPerf> perf_by_path;
         std::unordered_map<ScenarioRunId, ScenarioPerf> run_by_id;
-        std::unordered_map<ScenarioId, std::vector<ScenarioPerf>> most_recent_perfs_by_scenario;
-        std::unordered_map<ScenarioId, std::size_t> run_count_by_scenario;
-        std::unordered_map<ScenarioId, double> total_time_by_scenario;
-        std::vector<ScenarioPerf> recent_runs;
         ScenarioPerf latest_perf;
         std::function<void()> stored_callback;
 
@@ -60,11 +56,7 @@ namespace {
             return std::nullopt;
         }
 
-        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &scenario,
-                                                                     std::size_t) const override {
-            const auto it = most_recent_perfs_by_scenario.find(scenario);
-            return it == most_recent_perfs_by_scenario.end() ? std::vector<ScenarioPerf>{} : it->second;
-        }
+        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &, std::size_t) const override { return {}; }
 
         [[nodiscard]] std::vector<RunPerformance>
         getCompletionHistory(const ScenarioId &) const override { return {}; }
@@ -83,23 +75,11 @@ namespace {
             return std::nullopt;
         }
 
-        [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &scenario) const override {
-            const auto it = run_count_by_scenario.find(scenario);
-            if (it == run_count_by_scenario.end()) return std::nullopt;
-            return it->second;
-        }
+        [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override { return std::nullopt; }
 
-        [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &scenario) const override {
-            const auto it = total_time_by_scenario.find(scenario);
-            if (it == total_time_by_scenario.end()) return std::nullopt;
-            return it->second;
-        }
+        [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override { return std::nullopt; }
 
-        [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t count) const override {
-            std::vector<ScenarioPerf> result = recent_runs;
-            if (result.size() > count) result.resize(count);
-            return result;
-        }
+        [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t) const override { return {}; }
 
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
         getRollingTimeAverage(int) const override { return {}; }
@@ -355,79 +335,4 @@ namespace {
         EXPECT_EQ(controller->getCurrentPerf().run_id.scenario_id.hash, "hash-1");
     }
 
-    TEST_F(SessionControllerTest, GetScenarioSummariesCombinesScenarioListRunCountAndTotalTime) {
-        const auto scenario = ScenarioId{.name = "1wall6", .hash = "hash-1"};
-        fake_profile_service->scenario_list = {scenario};
-        fake_profile_service->run_count_by_scenario[scenario] = 3;
-        fake_profile_service->total_time_by_scenario[scenario] = 42.5;
-        const auto controller = make_controller();
-
-        const auto summaries = controller->getScenarioSummaries();
-
-        ASSERT_EQ(summaries.size(), 1);
-        EXPECT_EQ(summaries[0].scenario_id.hash, "hash-1");
-        EXPECT_EQ(summaries[0].run_count, 3);
-        EXPECT_DOUBLE_EQ(summaries[0].total_time_seconds, 42.5);
-    }
-
-    TEST_F(SessionControllerTest, GetRunsForScenarioMapsScoreAndAccuracy) {
-        const auto scenario = ScenarioId{.name = "1wall6", .hash = "hash-1"};
-        fake_profile_service->run_count_by_scenario[scenario] = 1;
-        fake_profile_service->most_recent_perfs_by_scenario[scenario] = {
-            make_perf("hash-1", 100, 50.0F, 10, 5, 30.0F)
-        };
-        const auto controller = make_controller();
-
-        const auto runs = controller->getRunsForScenario(scenario);
-
-        ASSERT_EQ(runs.size(), 1);
-        EXPECT_FLOAT_EQ(runs[0].completion.score, 50.0F);
-        EXPECT_DOUBLE_EQ(runs[0].completion.accuracy(), 0.5);
-        EXPECT_EQ(runs[0].completion.shots, 10);
-        EXPECT_EQ(runs[0].completion.hits, 5);
-        EXPECT_EQ(runs[0].run_id.start_time, 100);
-    }
-
-    TEST_F(SessionControllerTest, GetRunsForScenarioAccuracyIsZeroWhenNoShots) {
-        const auto scenario = ScenarioId{.name = "1wall6", .hash = "hash-1"};
-        fake_profile_service->run_count_by_scenario[scenario] = 1;
-        fake_profile_service->most_recent_perfs_by_scenario[scenario] = {
-            make_perf("hash-1", 100, 50.0F, 0, 0)
-        };
-        const auto controller = make_controller();
-
-        const auto runs = controller->getRunsForScenario(scenario);
-
-        ASSERT_EQ(runs.size(), 1);
-        EXPECT_DOUBLE_EQ(runs[0].completion.accuracy(), 0.0);
-    }
-
-    TEST_F(SessionControllerTest, GetRunsForScenarioReturnsNewestFirst) {
-        // getMostRecentPerfs (mirroring UserProfile) returns oldest-of-the-window first;
-        // getRunsForScenario must present newest-first for the UI.
-        const auto scenario = ScenarioId{.name = "1wall6", .hash = "hash-1"};
-        fake_profile_service->run_count_by_scenario[scenario] = 2;
-        fake_profile_service->most_recent_perfs_by_scenario[scenario] = {
-            make_perf("hash-1", 100), make_perf("hash-1", 200)
-        };
-        const auto controller = make_controller();
-
-        const auto runs = controller->getRunsForScenario(scenario);
-
-        ASSERT_EQ(runs.size(), 2);
-        EXPECT_EQ(runs[0].run_id.start_time, 200);
-        EXPECT_EQ(runs[1].run_id.start_time, 100);
-    }
-
-    TEST_F(SessionControllerTest, GetRecentRunsMapsPerformanceAndScenarioIdentity) {
-        fake_profile_service->recent_runs = {make_perf("hash-1", 300, 75.0F, 20, 15, 45.0F)};
-        const auto controller = make_controller();
-
-        const auto runs = controller->getRecentRuns(5);
-
-        ASSERT_EQ(runs.size(), 1);
-        EXPECT_EQ(runs[0].run_id.scenario_id.name, "Scenario hash-1");
-        EXPECT_FLOAT_EQ(runs[0].completion.score, 75.0F);
-        EXPECT_DOUBLE_EQ(runs[0].completion.accuracy(), 0.75);
-    }
 }

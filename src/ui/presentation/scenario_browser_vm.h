@@ -13,7 +13,7 @@
 
 #include "scenario_list_model.h"
 #include "run_list_model.h"
-#include "app/usecases/i_session_controller.h"
+#include "app/contracts/i_scenario_browser_use_case.h"
 
 namespace ksv::presentation {
     class ScenarioBrowserViewModel : public QObject {
@@ -41,7 +41,7 @@ namespace ksv::presentation {
         };
         Q_ENUM(ScenarioSortField)
 
-        explicit ScenarioBrowserViewModel(std::shared_ptr<application::ISessionController> session_controller,
+        explicit ScenarioBrowserViewModel(std::shared_ptr<application::IScenarioBrowserUseCase> scenario_browser_use_case,
                                           QObject *parent = nullptr);
 
         [[nodiscard]] QObject *scenarioModel() const { return m_model; }
@@ -76,7 +76,7 @@ namespace ksv::presentation {
 
         static constexpr std::size_t kRecentRunsCount = 10;
 
-        std::shared_ptr<application::ISessionController> m_session_controller;
+        std::shared_ptr<application::IScenarioBrowserUseCase> m_scenario_browser_use_case;
         ScenarioListModel *m_model;
         RunListModel *m_run_model;
         RunListModel *m_recent_runs_model;

@@ -32,11 +32,6 @@ namespace {
         bool build_in_progress = false;
         [[nodiscard]] bool isBuildInProgress() const override { return build_in_progress; }
 
-        [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return {}; }
-
-        [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(const ScenarioId &) const override { return {}; }
-
-        [[nodiscard]] std::vector<RunPerformance> getRecentRuns(std::size_t) const override { return {}; }
     };
 
     class SessionViewModelTest : public testing::Test {

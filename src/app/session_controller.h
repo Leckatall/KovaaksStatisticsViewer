@@ -42,12 +42,6 @@ namespace ksv::application {
 
         [[nodiscard]] bool isBuildInProgress() const override { return m_build_in_flight; }
 
-        [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override;
-
-        [[nodiscard]] std::vector<domain::RunPerformance> getRunsForScenario(const domain::ScenarioId& scenario) const override;
-
-        [[nodiscard]] std::vector<domain::RunPerformance> getRecentRuns(std::size_t count) const override;
-
     signals:
         void buildRequested();
 

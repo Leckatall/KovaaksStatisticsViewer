@@ -21,6 +21,7 @@
 #include "usecases/graph_column_preferences.h"
 #include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
+#include "usecases/scenario_browser_use_case.h"
 
 
 namespace ksv::application {
@@ -78,7 +79,8 @@ namespace ksv::application {
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
         m_settingsVm = new presentation::SettingsViewModel(
             m_settingsService, m_profileService, m_graphColumnPreferences, this);
-        m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_sessionController, this);
+        m_scenarioBrowserUseCase = std::make_shared<ScenarioBrowserUseCase>(m_sessionController, m_profileService);
+        m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_scenarioBrowserUseCase, this);
     }
 
     int App::start() {

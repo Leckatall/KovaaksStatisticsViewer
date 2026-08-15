@@ -23,6 +23,7 @@
 #include "usecases/i_session_controller.h"
 #include "contracts/i_playtime_graph_use_case.h"
 #include "contracts/i_completion_history_use_case.h"
+#include "contracts/i_scenario_browser_use_case.h"
 
 
 namespace ksv::application {
@@ -71,6 +72,7 @@ namespace ksv::application {
         std::shared_ptr<IGraphUseCase> m_graphUseCase;
         std::shared_ptr<IPlaytimeGraphUseCase> m_playtimeUseCase;
         std::shared_ptr<ICompletionHistoryUseCase> m_completionHistoryUseCase;
+        std::shared_ptr<IScenarioBrowserUseCase> m_scenarioBrowserUseCase;
         std::shared_ptr<IProtoDecoder> m_protoDecoder;
     };
 }
