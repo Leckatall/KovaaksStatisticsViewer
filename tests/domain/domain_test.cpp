@@ -557,4 +557,24 @@ namespace {
         const UserProfile profile;
         EXPECT_TRUE(profile.getRollingTimeAverage(7).empty());
     }
+
+    TEST_F(UserProfileTest, GetRollingTimeAverageStaysSparseAcrossAWideTimestampGap) {
+        UserProfile profile;
+        constexpr long long kMsPerDay = 86400000;
+        constexpr long long kBaseDay = 19000;
+        constexpr long long kFarDay = kBaseDay + 1'000'000;
+
+        auto near_run = make_perf("scenario-1", kBaseDay * kMsPerDay);
+        near_run.scenario_length = 10.0F;
+        auto far_run = make_perf("scenario-1", kFarDay * kMsPerDay);
+        far_run.scenario_length = 20.0F;
+        profile.addScenarioPerf(near_run);
+        profile.addScenarioPerf(far_run);
+
+        const auto series = profile.getRollingTimeAverage(ScenarioId{.name = "?", .hash = "scenario-1"}, 2);
+
+        // Bounded by daily_totals.size() * window_days (2 runs * window 2), not the
+        // ~1,000,000-day calendar span between them.
+        EXPECT_LE(series.size(), 4);
+    }
 }

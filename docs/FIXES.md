@@ -5,7 +5,7 @@ Static audit findings retained from the 2026-08-13 review. Each checkbox reports
 ## Domain
 
 - [ ] `toString()` ignores `localtime_s` / `localtime_r` failure before formatting the result. (`src/domain/scenario_perf.h:82`, `ScenarioRunId::toString`)
-- [ ] A timestamp can drive an unbounded rolling-series vector allocation. (`src/domain/user_profile.cpp:152`, `UserProfile::rollingTimeAverageFor`)
+- [x] A timestamp can drive an unbounded rolling-series vector allocation. `rollingTimeAverageFor` now walks day-by-day only while the trailing window-sum is non-zero, jumping straight to the next recorded play day once it hits zero, bounding output to `daily_totals.size() * window_days` instead of the full calendar span; covered by `GetRollingTimeAverageStaysSparseAcrossAWideTimestampGap`. (`src/domain/user_profile.cpp:160`, `UserProfile::rollingTimeAverageFor`)
 - [ ] UTC day bucketing disagrees with local-time run labels at day boundaries. (`src/domain/scenario_perf.h:74`, `ScenarioRunId::startDay`; `src/domain/scenario_perf.h:82`, `ScenarioRunId::toString`)
 - [ ] A scenario display name is fixed by its first insertion for a given hash. (`src/domain/user_profile.cpp:27`, `UserProfile::addScenarioPerf`; `src/domain/scenario_perf.h:53`, `ScenarioId::operator==`)
 - [ ] `ScenarioPerf::scenario_length` is uninitialised by default before contributing to aggregates. (`src/domain/scenario_perf.h:96`, `ScenarioPerf`; `src/domain/user_profile.cpp:37`, `UserProfile::addScenarioPerf`)

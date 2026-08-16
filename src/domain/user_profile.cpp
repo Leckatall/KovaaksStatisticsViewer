@@ -180,24 +180,32 @@ namespace ksv::domain {
 
         const sys_days first_day = daily_totals.front().first;
         const sys_days last_day = daily_totals.back().first;
-        const auto total_days = static_cast<std::size_t>((last_day - first_day).count()) + 1;
+        const auto window = days{window_days};
 
-        // Dense per-day series with implicit 0 for gap days (no play)
-        std::vector<double> dense(total_days, 0.0);
-        for (const auto &[day, total]: daily_totals) {
-            dense[static_cast<std::size_t>((day - first_day).count())] = total;
-        }
-
-        const auto window = static_cast<std::size_t>(window_days);
-        result.reserve(total_days);
+        result.reserve(daily_totals.size() * static_cast<std::size_t>(window_days));
+        std::size_t lo = 0;
+        std::size_t next = 0;
         double window_sum = 0.0;
-        for (std::size_t i = 0; i < total_days; ++i) {
-            window_sum += dense[i];
-            if (i >= window) {
-                window_sum -= dense[i - window];
+        for (sys_days day = first_day; day <= last_day;) {
+            if (next < daily_totals.size() && daily_totals[next].first == day) {
+                window_sum += daily_totals[next].second;
+                ++next;
             }
-            const std::size_t window_len = std::min(i + 1, window);
-            result.emplace_back(first_day + days{static_cast<int>(i)}, window_sum / static_cast<double>(window_len));
+            while (lo < next && daily_totals[lo].first <= day - window) {
+                window_sum -= daily_totals[lo].second;
+                ++lo;
+            }
+            if (lo == next) {
+                window_sum = 0.0;
+            }
+            if (window_sum != 0.0) {
+                const auto window_len = std::min(static_cast<std::size_t>((day - first_day).count()) + 1,
+                                                 static_cast<std::size_t>(window_days));
+                result.emplace_back(day, window_sum / static_cast<double>(window_len));
+                day += days{1};
+            } else {
+                day = (next < daily_totals.size()) ? daily_totals[next].first : last_day + days{1};
+            }
         }
 
         return result;
