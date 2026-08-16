@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <set>
+#include <stdexcept>
 #include <unordered_map>
 
 #include "profile_service.h"
@@ -47,6 +49,7 @@ namespace {
     public:
         std::vector<ksv::domain::ScenarioPerf> perfs_to_return;
         std::unordered_map<std::string, ksv::domain::ScenarioPerf> perfs_by_path;
+        std::set<std::string> paths_to_throw_for;
         ksv::domain::ScenarioPerf latest_perf;
         std::vector<std::string> source_roots{"fake/kovaaks"};
         std::function<void(const PerfFile &)> stored_callback;
@@ -63,6 +66,7 @@ namespace {
 
         [[nodiscard]] ksv::domain::ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
             const std::string path(filename);
+            if (paths_to_throw_for.contains(path)) throw std::invalid_argument("File does not exist");
             if (const auto it = perfs_by_path.find(path); it != perfs_by_path.end()) return it->second;
             const auto name = std::filesystem::path(path).filename().string();
             if (const auto it = perfs_by_path.find(name); it != perfs_by_path.end()) return it->second;
@@ -441,6 +445,19 @@ namespace {
         EXPECT_EQ(fake_serializer->save_count, 2);
     }
 
+    TEST_F(ProfileServiceTest, AddPerfFileToProfileSkipsAFileThatVanishedDuringDecode) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+        const auto saves_before = fake_serializer->save_count;
+
+        const auto vanished = perf_file("vanished.perf");
+        fake_file_service->paths_to_throw_for.insert(vanished.absolutePath());
+        profile_service.addPerfFileToProfile(vanished);
+
+        EXPECT_EQ(profile_service.getScenarioList().size(), 1);
+        EXPECT_EQ(fake_serializer->save_count, saves_before);
+    }
+
     TEST_F(ProfileServiceTest, LoadProfileUsesStoreWhenAvailableAndSkipsDirectoryScan) {
         ksv::domain::UserProfile stored;
         stored.addScenarioPerf(make_perf("hash-stored", 500));
@@ -522,6 +539,22 @@ namespace {
         ASSERT_TRUE(replayed.has_value());
         EXPECT_EQ(fake_serializer->last_saved_profile->sources().resolve(replayed->source),
                   "fake/kovaaks/FPSAimTrainer/performances/new_run.perf");
+    }
+
+    TEST_F(ProfileServiceTest, ApplyBuiltProfileSkipsAVanishedPendingFileButKeepsOthers) {
+        profile_service.beginProfileBuild();
+        const auto vanished = perf_file("vanished.perf");
+        fake_file_service->paths_to_throw_for.insert(vanished.absolutePath());
+        profile_service.addPerfFileToProfile(vanished);
+        fake_file_service->perfs_by_path["surviving.perf"] = make_perf("hash-2", 300);
+        profile_service.addPerfFileToProfile(perf_file("surviving.perf"));
+
+        auto built = profile_for_roots(fake_file_service->source_roots);
+        built.addScenarioPerf(make_perf("hash-1", 100));
+        profile_service.applyBuiltProfile(std::move(built));
+
+        EXPECT_EQ(profile_service.getScenarioList().size(), 2);
+        EXPECT_TRUE(profile_service.getRun({{"Scenario hash-2", "hash-2"}, 300}).has_value());
     }
 
     // A file that landed before the build's directory scan is already in the result;

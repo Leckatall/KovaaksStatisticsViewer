@@ -7,6 +7,7 @@
 #include "profile_builder.h"
 
 #include <algorithm>
+#include <exception>
 #include <iostream>
 #include <numeric>
 #include <set>
@@ -75,7 +76,13 @@ namespace ksv::data {
 
         bool replayed = false;
         for (const auto &perf_file: pending) {
-            auto perf = m_file_service->getPerfFromFile(perf_file.absolutePath());
+            domain::ScenarioPerf perf;
+            try {
+                perf = m_file_service->getPerfFromFile(perf_file.absolutePath());
+            } catch (const std::exception &e) {
+                std::cerr << "Skipping " << perf_file.absolutePath() << ": " << e.what() << std::endl;
+                continue;
+            }
             perf.source = {m_profile->ensureSource(perf_file.root, perf_file.subdir), perf_file.filename};
             if (m_profile->getRun(perf.run_id)) continue;
             replayed |= m_profile->addScenarioPerf(perf);
@@ -102,7 +109,13 @@ namespace ksv::data {
             return;
         }
         if (!m_profile) return;
-        auto perf = m_file_service->getPerfFromFile(perf_file.absolutePath());
+        domain::ScenarioPerf perf;
+        try {
+            perf = m_file_service->getPerfFromFile(perf_file.absolutePath());
+        } catch (const std::exception &e) {
+            std::cerr << "Skipping " << perf_file.absolutePath() << ": " << e.what() << std::endl;
+            return;
+        }
         perf.source = {m_profile->ensureSource(perf_file.root, perf_file.subdir), perf_file.filename};
         m_profile->addScenarioPerf(perf);
         notifyProfileChanged();

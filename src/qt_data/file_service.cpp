@@ -6,9 +6,7 @@
 
 #include <algorithm>
 
-#include <qdatetime.h>
 #include <qdir.h>
-#include <qfileinfo.h>
 
 namespace ksv::qt_data {
     FileService::FileService(std::shared_ptr<application::ISettingsService> settings_service,
@@ -57,16 +55,6 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
         const auto files = perf_dir->directory.entryList(QDir::Files);
         const QSet current_files(files.begin(), files.end());
         const auto known_files = m_known_files.value(perf_dir->directory.absolutePath());
-
-        // TEMP DIAGNOSTIC (2026-08-10): logging file size/mtime per directoryChanged firing to
-        // establish whether KovaaKs writes .perf files in place (race) or renames them in atomically.
-        // Remove after the investigation in fileservice-handledirectorychanged-decod-serene-pancake.md.
-        for (const auto &file : files) {
-            const QFileInfo info(perf_dir->directory.absoluteFilePath(file));
-            qDebug() << "[perf-watch]" << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
-                      << file << "size=" << info.size() << "lastModified=" << info.lastModified()
-                      << (known_files.contains(file) ? "known" : "NEW");
-        }
 
         for (const auto &file : current_files) {
             if (!known_files.contains(file)) {

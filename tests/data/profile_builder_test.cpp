@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <set>
+#include <stdexcept>
 #include <unordered_map>
 
 #include "profile_builder.h"
@@ -25,6 +27,7 @@ namespace {
     class FakeFileService : public IFileService {
     public:
         std::vector<ksv::domain::ScenarioPerf> perfs_to_return;
+        std::set<std::size_t> throw_for_indices;
         std::vector<std::string> source_roots{"fake/kovaaks"};
 
         [[nodiscard]] std::vector<PerfFile> listPerfFiles() const override {
@@ -38,7 +41,9 @@ namespace {
 
         [[nodiscard]] ksv::domain::ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
             const auto name = std::filesystem::path(filename).filename().string();
-            return perfs_to_return.at(std::stoul(name.substr(std::string("listed-perf-").size())));
+            const auto index = std::stoul(name.substr(std::string("listed-perf-").size()));
+            if (throw_for_indices.contains(index)) throw std::invalid_argument("File does not exist");
+            return perfs_to_return.at(index);
         }
 
         [[nodiscard]] ksv::domain::ScenarioPerf getLatestPerf() const override {
@@ -96,6 +101,22 @@ namespace {
         EXPECT_EQ(reports[0], (std::pair<std::size_t, std::size_t>{1, 3}));
         EXPECT_EQ(reports[1], (std::pair<std::size_t, std::size_t>{2, 3}));
         EXPECT_EQ(reports[2], (std::pair<std::size_t, std::size_t>{3, 3}));
+    }
+
+    TEST_F(ProfileBuilderTest, BuildSkipsAFileThatVanishedDuringDecodeButAggregatesTheRest) {
+        fake_file_service->perfs_to_return = {
+            make_perf("hash-1", 100), make_perf("hash-2", 200), make_perf("hash-3", 300)
+        };
+        fake_file_service->throw_for_indices.insert(1);
+
+        std::vector<std::pair<std::size_t, std::size_t>> reports;
+        const auto profile = builder.build([&reports](const std::size_t done, const std::size_t total) {
+            reports.emplace_back(done, total);
+        });
+
+        EXPECT_EQ(profile.getAllRunRecords().size(), 2);
+        ASSERT_FALSE(reports.empty());
+        EXPECT_EQ(reports.back(), (std::pair<std::size_t, std::size_t>{3, 3}));
     }
 
     TEST_F(ProfileBuilderTest, BuildReportsNoProgressForAnEmptyDirectory) {

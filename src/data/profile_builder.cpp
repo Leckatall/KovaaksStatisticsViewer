@@ -4,6 +4,9 @@
 
 #include "profile_builder.h"
 
+#include <exception>
+#include <iostream>
+
 namespace ksv::data {
     ProfileBuilder::ProfileBuilder(std::shared_ptr<application::IFileService> file_service)
         : m_file_service(std::move(file_service)) {
@@ -17,9 +20,13 @@ namespace ksv::data {
         }
         std::size_t done = 0;
         for (const auto &file: files) {
-            auto perf = m_file_service->getPerfFromFile(file.absolutePath());
-            perf.source = {profile.ensureSource(file.root, file.subdir), file.filename};
-            profile.addScenarioPerf(perf);
+            try {
+                auto perf = m_file_service->getPerfFromFile(file.absolutePath());
+                perf.source = {profile.ensureSource(file.root, file.subdir), file.filename};
+                profile.addScenarioPerf(perf);
+            } catch (const std::exception &e) {
+                std::cerr << "Skipping " << file.absolutePath() << ": " << e.what() << std::endl;
+            }
             ++done;
             if (on_progress) on_progress(done, files.size());
         }
