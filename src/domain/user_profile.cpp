@@ -97,9 +97,9 @@ namespace ksv::domain {
         const auto recent = getMostRecentPerfs(scenario, count);
         if (recent.empty()) return std::nullopt;
 
-        float total = 0.0F;
+        double total = 0.0;
         for (const auto &perf: recent) total += perf.getRunData().score;
-        return total / static_cast<float>(recent.size());
+        return static_cast<float>(total / static_cast<double>(recent.size()));
     }
 
     std::optional<ScenarioPerf> UserProfile::getRun(const ScenarioRunId &run_id) const {
