@@ -44,7 +44,7 @@ Static audit findings retained from the 2026-08-13 review. Each checkbox reports
 - [x] `GraphUseCase` retains a console diagnostic. Removed while fixing the adjacent `string_view` bug above. (`src/app/usecases/graph_use_case.h:19`, `GraphUseCase::load_perf`)
 - [ ] `FileService` retains a temporary watcher diagnostic loop. (`src/qt_data/file_service.cpp:42`, `FileService::handleDirectoryChanged`)
 - [ ] Refreshing either list model performs a full model reset rather than scoped updates. (`src/ui/presentation/scenario_list_model.cpp:42`, `ScenarioListModel::setSummaries`; `src/ui/presentation/run_list_model.cpp:54`, `RunListModel::setRuns`)
-- [ ] `activateScenario()` writes the active name before checking whether the hash changed. (`src/ui/presentation/scenario_browser_vm.cpp:72`, `ScenarioBrowserViewModel::activateScenario`)
+- [x] `activateScenario()` writes the active name before checking whether the hash changed. Name is now only written alongside the hash inside the "hash actually changed" branch, matching the domain's first-name-wins policy for a shared hash; covered by `ActivateScenarioRetainsFirstNameForARepeatedHash`. (`src/ui/presentation/scenario_browser_vm.cpp:68`, `ScenarioBrowserViewModel::activateScenario`)
 - [ ] `runAt()` returns a pointer into a replaceable vector. (`src/ui/presentation/run_list_model.cpp:49`, `RunListModel::runAt`)
 - [ ] QML can request `ScenarioPerf` by value without a declared metatype contract. (`src/ui/presentation/session_vm.h:29`, `SessionViewModel::getCurrentPerf`)
 - [ ] `GraphCanvas` retains a bare view-model pointer without a destruction guard. (`src/ui/components/graph_canvas.h:77`, `GraphCanvas::m_graphVm`; `src/ui/components/graph_canvas.cpp:32`, `GraphCanvas::setGraphVm`)

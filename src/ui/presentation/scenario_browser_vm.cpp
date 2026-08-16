@@ -66,9 +66,9 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::activateScenario(const QString &hash, const QString &name) {
-        m_active_scenario_name = name;
         if (m_active_scenario_hash == hash) return;
         m_active_scenario_hash = hash;
+        m_active_scenario_name = name;
         refreshRunModel();
         emit activeScenarioChanged();
     }
