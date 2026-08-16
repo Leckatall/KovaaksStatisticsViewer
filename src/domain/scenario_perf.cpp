@@ -8,35 +8,33 @@ namespace ksv::domain {
 
     template<typename T>
     void ScenarioPerf::add_data(const float time, const DataPointType type, T value) {
-        ScenarioDataPoint& point = get_data_point(time);
-
         switch (type) {
             case SHOTS:
             case HITS:
             case MISSES:
-            case KILLS:{
+            case KILLS:
                 if (!std::is_integral_v<T>) throw std::invalid_argument("Value is not an integer");
-                const int v = static_cast<int>(value);
-                if (type == SHOTS) point.shots += v;
-                else if (type == HITS) point.hits += v;
-                else if (type == MISSES) point.misses += v;
-                else point.kills += v;
                 break;
-            }
 
             case DMG:
             case DMG_POSSIBLE:
-            case SCORE: {
+            case SCORE:
                 if (!std::is_floating_point_v<T>) throw std::invalid_argument("Value is not a floating point");
-                const float v = static_cast<float>(value);
-                if (type == DMG) point.dmg += v;
-                else if (type == DMG_POSSIBLE) point.dmg_possible += v;
-                else point.score += v;
                 break;
-            }
 
             default:
                 throw std::invalid_argument("Unknown DataPointType");
+        }
+
+        ScenarioDataPoint& point = get_data_point(time);
+        switch (type) {
+            case SHOTS: point.shots += static_cast<int>(value); break;
+            case HITS: point.hits += static_cast<int>(value); break;
+            case MISSES: point.misses += static_cast<int>(value); break;
+            case KILLS: point.kills += static_cast<int>(value); break;
+            case DMG: point.dmg += static_cast<float>(value); break;
+            case DMG_POSSIBLE: point.dmg_possible += static_cast<float>(value); break;
+            case SCORE: point.score += static_cast<float>(value); break;
         }
     }
 
