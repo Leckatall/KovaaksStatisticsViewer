@@ -17,8 +17,7 @@ namespace ksv::application {
         explicit GraphUseCase(std::shared_ptr<ISessionController> session_controller): m_session_controller(std::move(session_controller)) {}
 
         void load_perf(const std::string_view filename) override {
-            std::cout << "Loading perf file: " << filename << std::endl;
-            m_session_controller->setCurrentPerf(filename.data());
+            m_session_controller->setCurrentPerf(std::string(filename));
         }
         void load_latest_perf() override {
             m_session_controller->setCurrentPerfToLatest();
