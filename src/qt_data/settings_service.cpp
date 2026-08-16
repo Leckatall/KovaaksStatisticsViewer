@@ -42,11 +42,13 @@ namespace ksv::qt_data {
     }
 
     std::vector<std::string> SettingsService::getKovaaksDirs() const {
+        static const QString kDefaultDir = "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer";
         {
             const QMutexLocker locker(&m_settings_mutex);
-            if (!m_settings.contains("file/kovaaksDirs"))
-                return {m_settings.value("file/kovaaks", "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer")
-                    .toUrl().toLocalFile().toStdString()};
+            if (!m_settings.contains("file/kovaaksDirs")) {
+                if (!m_settings.contains("file/kovaaks")) return {kDefaultDir.toStdString()};
+                return {m_settings.value("file/kovaaks").toUrl().toLocalFile().toStdString()};
+            }
         }
         return readDirListSetting("file/kovaaksDirs");
     }

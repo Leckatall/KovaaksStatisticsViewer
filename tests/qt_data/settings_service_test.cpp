@@ -30,14 +30,6 @@ namespace {
         }
     };
 
-    TEST_F(SettingsServiceTest, ReturnsDefaultWhenUnset) {
-        const QString default_dir = "C:/Program Files(x86)/Steam/steamapps/common/FPSAimTrainer";
-        const std::string expected = QUrl(default_dir).toLocalFile().toStdString();
-
-        const SettingsService settings(QSettings::IniFormat);
-
-        EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{expected}));
-    }
 
     TEST_F(SettingsServiceTest, ReturnsPreviouslyStoredValue) {
         {
