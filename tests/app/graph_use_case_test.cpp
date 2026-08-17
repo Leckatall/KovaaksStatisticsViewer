@@ -56,6 +56,21 @@ namespace {
         EXPECT_EQ(fake_session_controller->set_current_perf_filename_calls[0], "some/file.perf");
     }
 
+    TEST_F(GraphUseCaseTest, LoadPerfPassesOnlyTheGivenViewLengthNotTheWholeUnderlyingBuffer) {
+        const std::string buffer = "some/file.perfJUNK-PAST-THE-END";
+        const std::string_view truncated(buffer.data(), std::string("some/file.perf").size());
+
+        use_case.load_perf(truncated);
+
+        // Correct contract: only the view's own length reaches the session
+        // controller. filename.data() has no length of its own, so passing it to
+        // the setCurrentPerf(const std::string&) overload reads until the next
+        // NUL - the buffer's real end, not the view's - for a non-terminated
+        // substring like this one.
+        ASSERT_EQ(fake_session_controller->set_current_perf_filename_calls.size(), 1);
+        EXPECT_EQ(fake_session_controller->set_current_perf_filename_calls[0], "some/file.perf");
+    }
+
     TEST_F(GraphUseCaseTest, GetSeriesReturnsAllPointTimes) {
         fake_session_controller->current_perf.data = {
             make_point(1.0F, 1, 1, 0.0F), make_point(2.0F, 1, 1, 0.0F)

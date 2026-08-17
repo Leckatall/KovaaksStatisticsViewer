@@ -30,6 +30,16 @@ namespace {
         }
     };
 
+    TEST_F(SettingsServiceTest, DefaultKovaaksDirIsReturnedUnchangedWhenUnset) {
+        // Correct contract: the hard-coded default path is returned exactly as
+        // written. getKovaaksDirs() currently round-trips it through
+        // QVariant::toUrl().toLocalFile(), which can silently mangle a schemeless
+        // Windows path like this one (e.g. "C:" parses as a URL scheme).
+        const SettingsService settings(QSettings::IniFormat);
+
+        EXPECT_EQ(settings.getKovaaksDirs(),
+                  (std::vector<std::string>{"C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer"}));
+    }
 
     TEST_F(SettingsServiceTest, ReturnsPreviouslyStoredValue) {
         {

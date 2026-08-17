@@ -56,7 +56,15 @@ namespace {
             return std::nullopt;
         }
 
-        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &, std::size_t) const override { return {}; }
+        std::unordered_map<std::string, std::vector<ScenarioPerf>> most_recent_perfs_by_hash;
+
+        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &scenario,
+                                                                    const std::size_t count) const override {
+            const auto it = most_recent_perfs_by_hash.find(scenario.hash);
+            if (it == most_recent_perfs_by_hash.end()) return {};
+            const auto n = std::min(count, it->second.size());
+            return {it->second.end() - static_cast<std::ptrdiff_t>(n), it->second.end()};
+        }
 
         [[nodiscard]] std::vector<RunData>
         getCompletionHistory(const ScenarioId &) const override { return {}; }
@@ -333,6 +341,21 @@ namespace {
 
         EXPECT_EQ(spy.count(), 0);
         EXPECT_EQ(controller->getCurrentPerf().run_id.scenario_id.hash, "hash-1");
+    }
+
+    TEST_F(SessionControllerTest, FakeProfileServiceGetMostRecentPerfsHonorsRequestedCount) {
+        // Repairs the test-double contract: this fake previously ignored `count`
+        // and always returned {}, so any test relying on it couldn't observe a
+        // capped result.
+        fake_profile_service->most_recent_perfs_by_hash["hash-1"] = {
+            make_perf("hash-1", 100), make_perf("hash-1", 200), make_perf("hash-1", 300)
+        };
+
+        const auto recent = fake_profile_service->getMostRecentPerfs(ScenarioId{.name = "?", .hash = "hash-1"}, 2);
+
+        ASSERT_EQ(recent.size(), 2);
+        EXPECT_EQ(recent[0].run_id.start_time, 200);
+        EXPECT_EQ(recent[1].run_id.start_time, 300);
     }
 
 }

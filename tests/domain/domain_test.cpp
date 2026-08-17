@@ -73,6 +73,16 @@ namespace {
         EXPECT_THROW(perf.add_data(0.0F, SCORE, 5), std::invalid_argument);
     }
 
+    TEST(ScenarioPerfTest, AddDataDoesNotLeaveAPhantomPointWhenTypeValidationFails) {
+        ScenarioPerf perf;
+        EXPECT_THROW(perf.add_data(0.0F, SHOTS, 5.0F), std::invalid_argument);
+
+        // Correct contract: a rejected call must not mutate the perf at all.
+        // get_data_point() currently inserts the point before add_data()'s type
+        // check runs, so a failed call still leaves a phantom zero-value point.
+        EXPECT_TRUE(perf.data.empty());
+    }
+
     TEST(ScenarioPerfTest, GetCompletionDataOnEmptyPerfIsAllZero) {
         ScenarioPerf perf;
         perf.scenario_length = 60.0F;
@@ -576,5 +586,49 @@ namespace {
         // Bounded by daily_totals.size() * window_days (2 runs * window 2), not the
         // ~1,000,000-day calendar span between them.
         EXPECT_LE(series.size(), 4);
+    }
+
+    TEST_F(UserProfileTest, GetAverageScoreMatchesDoublePrecisionAccumulation) {
+        UserProfile profile;
+        // 1e8 sits in float32's [2^26, 2^27) range, where the representable
+        // spacing (ULP) is 8 - well above the +1.0F terms below, so every one of
+        // them is silently absorbed by a naive float accumulator once the running
+        // total reaches this magnitude.
+        constexpr float kBase = 100000000.0F;
+        constexpr int kSmallScoreCount = 500;
+
+        profile.addScenarioPerf(make_perf("scenario-1", 0, kBase));
+        for (int i = 1; i <= kSmallScoreCount; ++i) {
+            profile.addScenarioPerf(make_perf("scenario-1", i, 1.0F));
+        }
+
+        const auto scenario = ScenarioId{.name = "?", .hash = "scenario-1"};
+        const auto avg = profile.getAverageScore(scenario, kSmallScoreCount + 1);
+        ASSERT_TRUE(avg.has_value());
+
+        const double sum = double(kBase) + double(kSmallScoreCount) * 1.0;
+        const auto expected = static_cast<float>(sum / (kSmallScoreCount + 1));
+
+        // Correct contract: matches a double-precision accumulation rounded once
+        // at the end, not a float accumulator that drifts as the running total
+        // grows.
+        EXPECT_EQ(*avg, expected);
+    }
+
+    TEST_F(UserProfileTest, ScenarioListRetainsTheFirstObservedDisplayNameForASharedHash) {
+        // Confirmed policy (not a bug): the hash is the scenario's identity, and
+        // its display name is fixed by first insertion - a later run reporting a
+        // different name under the same hash must never rename it.
+        UserProfile profile;
+        auto first = make_perf("scenario-1", 100);
+        first.run_id.scenario_id.name = "Original Name";
+        auto second = make_perf("scenario-1", 200);
+        second.run_id.scenario_id.name = "Renamed Later";
+        profile.addScenarioPerf(first);
+        profile.addScenarioPerf(second);
+
+        const auto scenarios = profile.getScenarioList();
+        ASSERT_EQ(scenarios.size(), 1);
+        EXPECT_EQ(scenarios[0].name, "Original Name");
     }
 }
