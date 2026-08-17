@@ -42,6 +42,7 @@ add_library(ksv_data STATIC
         interfaces/i_profile_service.h
         interfaces/i_profile_serializer.h
         interfaces/i_settings_service.h
+        interfaces/i_series_config_store.h
 )
 
 set(PROTO_FILES
@@ -52,6 +53,7 @@ set(PROTO_FILES
 target_link_libraries(ksv_data PUBLIC
         protobuf::libprotobuf
         ksv_domain
+        ksv_contracts
 )
 
 protobuf_generate(TARGET ksv_data PROTO_SRCS PROTO_HDRS

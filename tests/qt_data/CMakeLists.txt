@@ -6,6 +6,7 @@ add_executable(qt_data_tests
     graph_line_config_test.cpp
     settings_service_test.cpp
     file_service_test.cpp
+    series_config_store_test.cpp
 )
 
 target_link_libraries(qt_data_tests PRIVATE
