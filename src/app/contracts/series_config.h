@@ -108,6 +108,10 @@ namespace ksv::application {
         Expression input;
     };
 
+    struct ProjectRateToFinal {
+        Expression input;
+    };
+
     struct AverageAcrossRuns {
         Expression input;
         RunSelection selection;
@@ -116,9 +120,10 @@ namespace ksv::application {
     class ExpressionNode {
     public:
         using Value = std::variant<PrimitiveReference, NumericConstant, Add, Subtract, Multiply, Divide,
-                                   RunningSum, RollingMean, ProjectedFinalValue, AverageAcrossRuns>;
+            RunningSum, RollingMean, ProjectedFinalValue, ProjectRateToFinal, AverageAcrossRuns>;
 
-        explicit ExpressionNode(Value value) : m_value(std::move(value)) {}
+        explicit ExpressionNode(Value value) : m_value(std::move(value)) {
+        }
 
         [[nodiscard]] const Value &value() const { return m_value; }
 
@@ -127,14 +132,25 @@ namespace ksv::application {
     };
 
     [[nodiscard]] Expression primitive(PrimitiveMetric metric);
+
     [[nodiscard]] Expression numericConstant(double value);
+
     [[nodiscard]] Expression add(Expression left, Expression right);
+
     [[nodiscard]] Expression subtract(Expression left, Expression right);
+
     [[nodiscard]] Expression multiply(Expression left, Expression right);
+
     [[nodiscard]] Expression divide(Expression left, Expression right);
+
     [[nodiscard]] Expression runningSum(Expression input);
+
     [[nodiscard]] Expression rollingMean(Expression input, uint32_t window);
+
     [[nodiscard]] Expression projectedFinalValue(Expression input);
+
+    [[nodiscard]] Expression projectRateToFinal(Expression input);
+
     [[nodiscard]] Expression averageAcrossRuns(Expression input, RunSelection selection);
 
     struct BaseSeriesConfig {
@@ -179,8 +195,12 @@ namespace ksv::application {
     };
 
     [[nodiscard]] const SeriesPresentation &seriesPresentation(const SeriesConfig &config);
+
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfig(const SeriesConfig &config);
+
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfig(const ComputedSeriesConfig &config);
+
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs);
+
     [[nodiscard]] std::vector<SeriesConfig> defaultSeriesConfigs();
 }

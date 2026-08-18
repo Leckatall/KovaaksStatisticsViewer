@@ -65,6 +65,7 @@ namespace ksv::qt_data {
         }
 
         QJsonObject encodeExpression(const Expression &expression);
+
         std::optional<Expression> decodeExpression(const QJsonValue &value);
 
         template<typename Node>
@@ -165,15 +166,21 @@ namespace ksv::qt_data {
                     };
                 else if constexpr (std::same_as<Node, ProjectedFinalValue>)
                     return encodeUnaryExpression("projectedFinalValue", node);
-                else return {{"kind", "averageAcrossRuns"}, {"input", encodeExpression(node.input)},
-                             {"selection", encodeSelection(node.selection)}};
+                else if constexpr (std::same_as<Node, ProjectRateToFinal>)
+                    return encodeUnaryExpression("projectRateToFinal", node);
+                else
+                    return {
+                        {"kind", "averageAcrossRuns"}, {"input", encodeExpression(node.input)},
+                        {"selection", encodeSelection(node.selection)}
+                    };
             }, expression->value());
         }
 
         using BinaryExpressionFactory = Expression (*)(Expression, Expression);
         using UnaryExpressionFactory = Expression (*)(Expression);
 
-        std::optional<Expression> decodeBinaryExpression(const QJsonObject &object, const BinaryExpressionFactory factory) {
+        std::optional<Expression> decodeBinaryExpression(const QJsonObject &object,
+                                                         const BinaryExpressionFactory factory) {
             if (!exactKeys(object, {"kind", "left", "right"})) return {};
             const auto left = decodeExpression(object["left"]);
             const auto right = decodeExpression(object["right"]);
@@ -181,7 +188,8 @@ namespace ksv::qt_data {
             return factory(*left, *right);
         }
 
-        std::optional<Expression> decodeUnaryExpression(const QJsonObject &object, const UnaryExpressionFactory factory) {
+        std::optional<Expression>
+        decodeUnaryExpression(const QJsonObject &object, const UnaryExpressionFactory factory) {
             if (!exactKeys(object, {"kind", "input"})) return {};
             const auto input = decodeExpression(object["input"]);
             return input ? std::optional{factory(*input)} : std::nullopt;
@@ -223,6 +231,7 @@ namespace ksv::qt_data {
             if (kind == "divide") return decodeBinaryExpression(object, divide);
             if (kind == "runningSum") return decodeUnaryExpression(object, runningSum);
             if (kind == "projectedFinalValue") return decodeUnaryExpression(object, projectedFinalValue);
+            if (kind == "projectRateToFinal") return decodeUnaryExpression(object, projectRateToFinal);
             if (kind == "rollingMean") {
                 if (!exactKeys(object, {"kind", "input", "window"})) return {};
                 const auto decoded = decodeExpression(object["input"]);
@@ -424,8 +433,8 @@ namespace ksv::qt_data {
     }
 
     MutationResult SeriesConfigStore::commitLocked(std::vector<SeriesConfig> configs,
-                                                                std::optional<ComputedSeriesId> next,
-                                                                std::optional<ComputedSeriesId> created) {
+                                                   std::optional<ComputedSeriesId> next,
+                                                   std::optional<ComputedSeriesId> created) {
         const auto errors = validateSeriesConfigs(configs);
         if (!errors.empty()) return {errors};
         if (!created && encode(configs, next) == encode(m_configs, m_next)) return {};
@@ -455,8 +464,7 @@ namespace ksv::qt_data {
         return result;
     }
 
-    MutationResult SeriesConfigStore::createComputed(
-        const CreateComputedSeriesRequest &request) {
+    MutationResult SeriesConfigStore::createComputed(const CreateComputedSeriesRequest &request) {
         return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
             if (!m_next) return {{}, StoreMutationFailureCode::ComputedSeriesIdExhausted};
             const auto id = *m_next;
@@ -512,7 +520,7 @@ namespace ksv::qt_data {
     }
 
     MutationResult SeriesConfigStore::reorder(SeriesRecordReference reference,
-                                                           const uint32_t position) {
+                                              const uint32_t position) {
         return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
             const auto index = indexOfLocked(reference);
             if (!index) return {{}, missingReferenceFailure(reference)};

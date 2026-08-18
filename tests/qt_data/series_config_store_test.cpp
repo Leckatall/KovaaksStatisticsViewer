@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <QJsonArray>
 #include <QSettings>
 #include <QJsonDocument>
 #include <QJsonObject>
+
+#include <array>
 
 #include "qt_data/series_config_store.h"
 #include "qt_data/series_config_store_settings_backend.h"
@@ -16,10 +19,19 @@ namespace {
     public:
         [[nodiscard]] bool contains(const QString &key) const override { return values.contains(key); }
         [[nodiscard]] QVariant value(const QString &key) const override { return values.value(key); }
-        void setValue(const QString &key, const QVariant &value) override { values.insert(key, value); ++writes; }
+
+        void setValue(const QString &key, const QVariant &value) override {
+            values.insert(key, value);
+            ++writes;
+        }
+
         void sync() override { ++syncs; }
         [[nodiscard]] QSettings::Status status() const override { return syncStatus; }
-        void reload() override { ++reloads; if (useReloadedValues) values = reloadedValues; }
+
+        void reload() override {
+            ++reloads;
+            if (useReloadedValues) values = reloadedValues;
+        }
 
         QHash<QString, QVariant> values;
         QHash<QString, QVariant> reloadedValues;
@@ -36,6 +48,7 @@ namespace {
         std::unique_ptr<SeriesConfigStore> store;
 
         void makeStore() { store = std::make_unique<SeriesConfigStore>(backend); }
+
         static CreateComputedSeriesRequest request() {
             return {{"Custom", {{1, 2, 3, 255}, 2.0}, true}, numericConstant(4.0)};
         }
@@ -49,6 +62,11 @@ namespace {
 
     TEST_F(SeriesConfigStoreTest, RoundTripsEverySeriesAndExpressionNode) {
         makeStore();
+        const auto quotient = divide(primitive(PrimitiveMetric::Score), numericConstant(2.0));
+        const auto product = multiply(quotient, runningSum(primitive(PrimitiveMetric::Hits)));
+        const auto projection = rollingMean(projectedFinalValue(projectRateToFinal(primitive(PrimitiveMetric::Kills))), 5);
+        const auto expression = averageAcrossRuns(add(subtract(product, projection), numericConstant(1.0)), RecentRuns{2});
+        ASSERT_TRUE(store->createComputed({{"Every node", {}, true}, expression}).succeeded());
         const auto expected = store->getAll();
         const auto raw = backend->values;
         auto reopenedBackend = std::make_shared<MemorySettingsBackend>();
@@ -58,8 +76,73 @@ namespace {
         EXPECT_EQ(reopened.getAll().size(), expected.size());
     }
 
+    TEST_F(SeriesConfigStoreTest, RoundTripsProjectRateToFinalExpressionNodeInV1) {
+        makeStore();
+        auto document = QJsonDocument::fromJson(backend->values.value("graph/seriesConfigV1").toString().toUtf8());
+        auto root = document.object();
+        auto series = root["series"].toArray();
+        auto direct = series[7].toObject();
+        direct["expression"] = QJsonObject{
+            {"kind", "projectRateToFinal"}, {"input", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}}
+        };
+        auto nested = series[8].toObject();
+        nested["expression"] = QJsonObject{
+            {"kind", "projectRateToFinal"},
+            {
+                "input",
+                QJsonObject{
+                    {"kind", "projectedFinalValue"},
+                    {"input", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}}
+                }
+            }
+        };
+        series[7] = direct;
+        series[8] = nested;
+        root["series"] = series;
+        backend->values.insert("graph/seriesConfigV1",
+                               QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)));
+
+        SeriesConfigStore reopened(backend);
+        const auto &directNode = std::get<ProjectRateToFinal>(
+            std::get<ComputedSeriesConfig>(reopened.getAll()[7]).expression->value());
+        EXPECT_EQ(std::get<PrimitiveReference>(directNode.input->value()).metric, PrimitiveMetric::Score);
+        const auto &nestedNode = std::get<ProjectRateToFinal>(
+            std::get<ComputedSeriesConfig>(reopened.getAll()[8]).expression->value());
+        EXPECT_TRUE(std::holds_alternative<ProjectedFinalValue>(nestedNode.input->value()));
+    }
+
+    TEST_F(SeriesConfigStoreTest, RejectsMalformedProjectRateToFinalExpressionInV1) {
+        const std::array malformedExpressions{
+            QJsonObject{{"kind", "projectRateToFinal"}},
+            QJsonObject{
+                {"kind", "projectRateToFinal"},
+                {"input", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}}, {"extra", true}
+            },
+            QJsonObject{{"kind", "projectRateToFinal"}, {"input", 1}}
+        };
+
+        for (const auto &expression: malformedExpressions) {
+            backend = std::make_shared<MemorySettingsBackend>();
+            makeStore();
+            auto document = QJsonDocument::fromJson(backend->values.value("graph/seriesConfigV1").toString().toUtf8());
+            auto root = document.object();
+            auto series = root["series"].toArray();
+            auto computed = series[7].toObject();
+            computed["expression"] = expression;
+            series[7] = computed;
+            root["series"] = series;
+            backend->values.insert("graph/seriesConfigV1",
+                                   QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)));
+
+            SeriesConfigStore reopened(backend);
+            EXPECT_EQ(reopened.getAll().size(), 9U);
+            EXPECT_GT(backend->writes, 1);
+        }
+    }
+
     TEST_F(SeriesConfigStoreTest, RejectsNonCanonicalJsonNumbersAndQuarantinesRawValue) {
-        backend->values.insert("graph/seriesConfigV1", "{\"schemaVersion\":1,\"nextComputedSeriesId\":\"5\",\"series\":[\"") ;
+        backend->values.insert("graph/seriesConfigV1",
+                               "{\"schemaVersion\":1,\"nextComputedSeriesId\":\"5\",\"series\":[\"");
         makeStore();
         EXPECT_EQ(store->getAll().size(), 9U);
         EXPECT_GT(backend->writes, 1);
@@ -93,8 +176,10 @@ namespace {
         backend->values.insert("graph/yAxisColumnKey", "accuracy");
         const auto before = backend->values;
         makeStore();
-        EXPECT_EQ(backend->values.value("graph/disabledColumns").toStringList(), before.value("graph/disabledColumns").toStringList());
-        EXPECT_EQ(backend->values.value("graph/yAxisColumnKey").toString(), before.value("graph/yAxisColumnKey").toString());
+        EXPECT_EQ(backend->values.value("graph/disabledColumns").toStringList(),
+                  before.value("graph/disabledColumns").toStringList());
+        EXPECT_EQ(backend->values.value("graph/yAxisColumnKey").toString(),
+                  before.value("graph/yAxisColumnKey").toString());
     }
 
     TEST_F(SeriesConfigStoreTest, ExistingDocumentBypassesLegacyMigration) {
@@ -117,7 +202,8 @@ namespace {
         auto document = QJsonDocument::fromJson(backend->values.value("graph/seriesConfigV1").toString().toUtf8());
         auto root = document.object();
         root["nextComputedSeriesId"] = QString::number(UINT64_MAX);
-        backend->values.insert("graph/seriesConfigV1", QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)));
+        backend->values.insert("graph/seriesConfigV1",
+                               QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)));
         store = std::make_unique<SeriesConfigStore>(backend);
         EXPECT_EQ(store->createComputed(request()).createdId->value, UINT64_MAX);
         EXPECT_EQ(store->createComputed(request()).failure, StoreMutationFailureCode::ComputedSeriesIdExhausted);
