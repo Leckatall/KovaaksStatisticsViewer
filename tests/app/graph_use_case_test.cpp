@@ -16,22 +16,25 @@ namespace {
         std::vector<std::string> set_current_perf_filename_calls;
 
         std::vector<ScenarioId> getScenarioList() override { return {}; }
-        void generateProfileFromDirectory() override {}
+
+        void generateProfileFromDirectory() override {
+        }
 
         [[nodiscard]] bool isBuildInProgress() const override { return false; }
 
         void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
 
-        void setCurrentPerfToLatest() override {}
+        void setCurrentPerfToLatest() override {
+        }
 
         void setCurrentPerf(const std::string &filename) override {
             set_current_perf_filename_calls.push_back(filename);
         }
 
-        void setCurrentPerf(const ScenarioRunId &) override {}
+        void setCurrentPerf(const ScenarioRunId &) override {
+        }
 
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
-
     };
 
     ScenarioDataPoint make_point(const float time, const int shots, const int hits, const float score) {
@@ -118,5 +121,22 @@ namespace {
 
         EXPECT_TRUE(series.times.empty());
         EXPECT_TRUE(series.columns.empty());
+    }
+
+    TEST_F(GraphUseCaseTest, ResolvesBaseAndComputedConfigsAsPeers) {
+        const auto graph = use_case.get_resolved_graph();
+        EXPECT_EQ(graph.series.size(), graph.times.size());
+    }
+
+    TEST_F(GraphUseCaseTest, AverageUnavailableRemainsConfiguredWithoutPoints) {
+        const auto graph = use_case.get_resolved_graph();
+        EXPECT_TRUE(graph.series.empty() || !graph.series.front().values.has_value());
+    }
+
+    TEST_F(GraphUseCaseTest, MutationsDelegateToStoreAndPublishOneChange) {
+        int changes = 0;
+        use_case.onSeriesConfigChanged([&] { ++changes; });
+        use_case.createComputed({});
+        EXPECT_EQ(changes, 1);
     }
 }

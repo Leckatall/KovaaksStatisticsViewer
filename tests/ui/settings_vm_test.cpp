@@ -6,6 +6,8 @@
 
 #include <QSignalSpy>
 
+#include <type_traits>
+
 #include "settings_vm.h"
 
 using namespace ksv::presentation;
@@ -21,11 +23,20 @@ namespace {
 
         [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
         [[nodiscard]] bool isKovaaksDirSet() const override { return dir_set; }
-        void setKovaaksDirs(const std::vector<std::string> &new_dirs) override { dirs = new_dirs; dir_set = true; }
+
+        void setKovaaksDirs(const std::vector<std::string> &new_dirs) override {
+            dirs = new_dirs;
+            dir_set = true;
+        }
+
         [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
         void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
-        void onProfilePathChanged(std::function<void()>) override {}
-        void onKovaaksDirsChanged(std::function<void()>) override {}
+
+        void onProfilePathChanged(std::function<void()>) override {
+        }
+
+        void onKovaaksDirsChanged(std::function<void()>) override {
+        }
     };
 
     class FakeProfileService : public IProfileService {
@@ -39,9 +50,14 @@ namespace {
         void loadProfile() override {
         }
 
-        void onBuildRequested(std::function<void()>) override {}
-        void beginProfileBuild() override {}
-        void applyBuiltProfile(ksv::domain::UserProfile) override {}
+        void onBuildRequested(std::function<void()>) override {
+        }
+
+        void beginProfileBuild() override {
+        }
+
+        void applyBuiltProfile(ksv::domain::UserProfile) override {
+        }
 
         [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return {}; }
         [[nodiscard]] ScenarioPerf getPerf(const std::string &) const override { return {}; }
@@ -52,6 +68,7 @@ namespace {
 
         [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(
             const ScenarioId &, std::size_t) const override { return {}; }
+
         [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &) const override { return {}; }
 
         [[nodiscard]] std::vector<RunData>
@@ -62,14 +79,17 @@ namespace {
 
         [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &) const override { return std::nullopt; }
 
-        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override { return std::nullopt; }
+        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
+            return std::nullopt;
+        }
+
         [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override { return std::nullopt; }
 
         [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override { return std::nullopt; }
 
         [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t) const override { return {}; }
 
-        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
+        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
         getRollingTimeAverage(int) const override { return {}; }
 
         [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
@@ -77,27 +97,12 @@ namespace {
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
     };
 
-    class FakeGraphColumnPreferences final : public IGraphColumnPreferences {
-    public:
-        std::vector<std::pair<ColumnId, bool>> calls;
-
-        [[nodiscard]] std::vector<ColumnId> getEnabledColumns() const override { return {}; }
-        [[nodiscard]] bool isEnabled(ColumnId) const override { return false; }
-        void setEnabled(const ColumnId column, const bool enabled) override {
-            calls.emplace_back(column, enabled);
-        }
-    };
-
     class SettingsViewModelTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSettingsService> fake_service = std::make_shared<FakeSettingsService>();
         std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
-        std::shared_ptr<FakeGraphColumnPreferences> fake_graph_preferences =
-            std::make_shared<FakeGraphColumnPreferences>();
-
         std::unique_ptr<SettingsViewModel> make_view_model() {
-            return std::make_unique<SettingsViewModel>(
-                fake_service, fake_profile_service, fake_graph_preferences);
+            return std::make_unique<SettingsViewModel>(fake_service, fake_profile_service);
         }
     };
 
@@ -203,22 +208,8 @@ namespace {
         EXPECT_TRUE(view_model->isProfileLoaded());
     }
 
-    TEST_F(SettingsViewModelTest, SetGraphColumnEnabledDelegatesValidColumn) {
-        const auto view_model = make_view_model();
-
-        view_model->setGraphColumnEnabled(static_cast<int>(ColumnId::Accuracy), false);
-
-        EXPECT_EQ(fake_graph_preferences->calls,
-                  (std::vector<std::pair<ColumnId, bool>>{{ColumnId::Accuracy, false}}));
-    }
-
-    TEST_F(SettingsViewModelTest, SetGraphColumnEnabledRejectsInvalidAndTimeColumns) {
-        const auto view_model = make_view_model();
-
-        view_model->setGraphColumnEnabled(static_cast<int>(ColumnId::Time), false);
-        view_model->setGraphColumnEnabled(-1, false);
-        view_model->setGraphColumnEnabled(999, false);
-
-        EXPECT_TRUE(fake_graph_preferences->calls.empty());
+    TEST_F(SettingsViewModelTest, HasNoMainGraphSeriesDependency) {
+        auto view_model = std::make_unique<SettingsViewModel>(fake_service, fake_profile_service);
+        EXPECT_TRUE(view_model->getKovaaksDir().isValid());
     }
 }

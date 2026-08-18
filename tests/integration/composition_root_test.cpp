@@ -12,8 +12,10 @@
 #include <QElapsedTimer>
 #include <QSignalSpy>
 #include <memory>
+#include <type_traits>
 
 #include "app/app.h"
+#include "data/interfaces/i_graph_line_config.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "presentation/playtime_graph_vm.h"
 
@@ -37,7 +39,7 @@ namespace {
             // on its worker thread when no store is available. The result only lands once the event
             // loop spins, so every test here starts by waiting for it.
             app = std::make_unique<application::App>(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphLineConfig);
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
             ASSERT_TRUE(waitForProfile());
         }
 
@@ -93,5 +95,11 @@ namespace {
         app->profileService()->generateProfileFromDirectory();
 
         EXPECT_GE(spy.count(), 1);
+    }
+
+    TEST_F(CompositionRootTest, WiresSeriesStoreAndAverageUseCaseWithoutLegacyGraphPreferences) {
+        static_assert(!std::is_constructible_v<application::App, std::shared_ptr<application::ISettingsService>,
+                                               std::shared_ptr<application::IProtoDecoder>, std::shared_ptr<application::IGraphLineConfig>>);
+        EXPECT_NE(app->seriesConfigStore(), nullptr);
     }
 }

@@ -276,7 +276,7 @@ Dialog {
                         Switch {
                             objectName: "graphColumnEnabledSwitch_" + root.graphVm.columnName(lineRow.modelData)
                             checked: root.graphVm.enabledColumns.includes(lineRow.modelData)
-                            onToggled: root.settingsVm.setGraphColumnEnabled(lineRow.modelData, checked)
+                            onToggled: root.graphVm.setSeriesEnabled(root.graphVm.seriesIdForColumn(lineRow.modelData), checked)
                         }
                     }
                 }

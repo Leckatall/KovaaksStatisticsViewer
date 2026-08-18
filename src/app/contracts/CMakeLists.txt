@@ -11,6 +11,7 @@ target_sources(ksv_contracts PUBLIC
         run_performance.h
         graph_column.h
         graph_series.h
+        resolved_graph.h
         series_config.h
         i_graph_use_case.h
         i_playtime_graph_use_case.h

@@ -48,7 +48,7 @@ namespace {
             perfUrl = QUrl::fromLocalFile(file).toString();
 
             app = std::make_unique<application::App>(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphLineConfig);
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
             engine.setInitialProperties({
                 {"graphVm", QVariant::fromValue(app->graphVm())},
                 {"playtimeVm", QVariant::fromValue(app->playtimeVm())},
@@ -128,10 +128,10 @@ namespace {
         constexpr int score = presentation::GraphViewModel::Score;
         ASSERT_TRUE(canvas->visibleColumns().contains(score));
 
-        app->settingsVm()->setGraphColumnEnabled(score, false);
+        app->graphVm()->setSeriesEnabled(app->graphVm()->seriesIdForColumn(score), false);
         ASSERT_TRUE(QTest::qWaitFor([&] { return !canvas->visibleColumns().contains(score); }, 3000));
 
-        app->settingsVm()->setGraphColumnEnabled(score, true);
+        app->graphVm()->setSeriesEnabled(app->graphVm()->seriesIdForColumn(score), true);
         EXPECT_TRUE(QTest::qWaitFor([&] { return canvas->visibleColumns().contains(score); }, 3000));
     }
 
@@ -227,9 +227,8 @@ namespace {
         ASSERT_TRUE(tempDir.isValid());
         const auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
         settings->setProfilePath(QDir(tempDir.path()).filePath("profile.pb").toStdString());
-        const auto graphLineConfig = std::make_shared<qt_data::GraphLineConfig>(QSettings::IniFormat);
-        graphLineConfig->setDisabledGraphLineKeys({});
-        application::App app(settings, std::make_shared<data::ProtoDecoder>(), graphLineConfig);
+        const auto seriesConfigStore = std::make_shared<qt_data::SeriesConfigStore>(QSettings::IniFormat);
+        application::App app(settings, std::make_shared<data::ProtoDecoder>(), seriesConfigStore);
         QQmlApplicationEngine engine;
         engine.setInitialProperties({
             {"graphVm", QVariant::fromValue(app.graphVm())},

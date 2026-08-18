@@ -53,7 +53,7 @@ namespace {
         int startResult = -1;
         {
             application::App app(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphLineConfig);
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
             startResult = app.start();
         }
 

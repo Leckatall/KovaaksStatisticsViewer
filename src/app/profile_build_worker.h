@@ -29,7 +29,7 @@ namespace ksv::application {
 
     signals:
         void progress(int done, int total);
-        void finished(ksv::domain::UserProfile profile);
+        void finished(domain::UserProfile profile);
 
     private:
         std::shared_ptr<IFileService> m_file_service;

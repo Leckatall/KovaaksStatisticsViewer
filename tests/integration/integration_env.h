@@ -17,7 +17,7 @@
 #include <QTemporaryDir>
 
 #include "settings_service.h"
-#include "graph_line_config.h"
+#include "series_config_store.h"
 
 namespace ksv::integration {
     inline QString fixturePath(const QString &name) {
@@ -30,13 +30,12 @@ namespace ksv::integration {
         QTemporaryDir dir;
         std::shared_ptr<qt_data::SettingsService> settings =
             std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
-        std::shared_ptr<qt_data::GraphLineConfig> graphLineConfig =
-            std::make_shared<qt_data::GraphLineConfig>(QSettings::IniFormat);
+        std::shared_ptr<qt_data::SeriesConfigStore> seriesConfigStore =
+            std::make_shared<qt_data::SeriesConfigStore>(QSettings::IniFormat);
 
         TestEnv() {
             settings->setKovaaksDirs({dir.path().toStdString()});
             settings->setProfilePath(profileStorePath().toStdString());
-            graphLineConfig->setDisabledGraphLineKeys({});
         }
 
         [[nodiscard]] bool valid() const { return dir.isValid(); }

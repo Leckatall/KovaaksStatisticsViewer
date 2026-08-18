@@ -10,6 +10,7 @@
 #include <QPointF>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QHash>
 #include <array>
 #include <qqmlintegration.h>
 #include <ranges>
@@ -24,6 +25,8 @@ namespace ksv::presentation {
         Q_PROPERTY(QVariantList plottableColumns READ plottableColumns CONSTANT)
         Q_PROPERTY(QVariantList allColumns READ allColumns CONSTANT)
         Q_PROPERTY(QVariantList enabledColumns READ enabledColumns NOTIFY enabledColumnsChanged)
+        Q_PROPERTY(QVariantList allSeries READ allSeries NOTIFY seriesConfigurationChanged)
+        Q_PROPERTY(QVariantList enabledSeriesIds READ enabledSeriesIds NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
 
@@ -44,6 +47,8 @@ namespace ksv::presentation {
         [[nodiscard]] QVariantList plottableColumns() const override;
         [[nodiscard]] QVariantList allColumns() const;
         [[nodiscard]] QVariantList enabledColumns() const { return m_enabledColumns; }
+        [[nodiscard]] QVariantList allSeries() const { return m_allSeries; }
+        [[nodiscard]] QVariantList enabledSeriesIds() const { return m_enabledSeriesIds; }
         void setEnabledColumns(const std::vector<application::ColumnId> &columns);
 
         [[nodiscard]] QVariantMap axisBounds() const override;
@@ -64,6 +69,16 @@ namespace ksv::presentation {
 
         void recomputeBounds();
 
+        Q_INVOKABLE QVariantMap setSeriesEnabled(const QString &id, bool enabled);
+        Q_INVOKABLE QVariantMap updateBasePresentation(const QString &id, const QColor &color, double width);
+        Q_INVOKABLE QVariantMap createComputedSeries(const QString &name, const QColor &color, double width,
+                                                      bool enabled, const QVariantMap &expression);
+        Q_INVOKABLE QVariantMap updateComputedSeries(const QString &id, const QString &name, const QColor &color,
+                                                      double width, bool enabled, const QVariantMap &expression);
+        Q_INVOKABLE QVariantMap removeComputedSeries(const QString &id);
+        Q_INVOKABLE QVariantMap moveSeries(const QString &id, int displayPosition);
+        Q_INVOKABLE QString seriesIdForColumn(int column) const;
+
     public slots:
         void fetchData();
         void fetchData(const QString& scenario_id);
@@ -72,6 +87,7 @@ namespace ksv::presentation {
     signals:
         void scenarioTitleChanged();
         void enabledColumnsChanged();
+        void seriesConfigurationChanged();
 
     private:
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
@@ -80,6 +96,9 @@ namespace ksv::presentation {
         QList<SeriesModel> m_series;
         QVariantList m_enabledColumns;
         QString m_scenarioTitle;
+        QVariantList m_allSeries;
+        QVariantList m_enabledSeriesIds;
+        QHash<int, QString> m_legacyColumnIds;
     };
 }
 

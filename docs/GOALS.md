@@ -70,6 +70,12 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
   - [ ] Allow the user to configure the percentile threshold (e.g. top 10%, top 5%)
   - [ ] Overlay the baseline on the graph as a reference line
 
+- [ ] **Fetch leaderboard percentile data per scenario** *(stretch)* `[Very Hard]` `[Medium]`
+  - [ ] Reverse-engineer or find an API for Kovaaks leaderboard data
+  - [ ] Fetch and cache leaderboard distributions per scenario
+  - [ ] Show the user's score as a percentile rank on the leaderboard
+  - [ ] Handle API rate limiting, errors, and offline fallback gracefully
+
 ---
 
 ## 4. Performance Analysis — Cross-Scenario
@@ -82,12 +88,6 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
   - [ ] Compute a normalised average score across the group for each time period
   - [ ] Display a time-series graph of the group's averaged score
   - [ ] Persist groups in user settings or profile data
-
-- [ ] **Fetch leaderboard percentile data per scenario** *(stretch)* `[Very Hard]` `[Medium]`
-  - [ ] Reverse-engineer or find an API for Kovaaks leaderboard data
-  - [ ] Fetch and cache leaderboard distributions per scenario
-  - [ ] Show the user's score as a percentile rank on the leaderboard
-  - [ ] Handle API rate limiting, errors, and offline fallback gracefully
 
 ---
 

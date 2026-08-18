@@ -18,13 +18,17 @@ namespace {
         std::vector<std::string> load_perf_calls;
         int load_latest_perf_calls = 0;
         GraphSeries series_to_return;
+        ResolvedGraph resolved_graph_to_return;
         std::string run_label;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
         void load_latest_perf() override { load_latest_perf_calls++; }
         GraphSeries get_series() override { return series_to_return; }
         std::string get_run_label() override { return run_label; }
-        void onCurrentPerfChanged(std::function<void()>) override {}
+
+        void onCurrentPerfChanged(std::function<void()>) override {
+        }
+        ResolvedGraph get_resolved_graph() override { return resolved_graph_to_return; }
     };
 
     class GraphViewModelTest : public testing::Test {
@@ -210,8 +214,10 @@ namespace {
         fake_use_case->series_to_return.columns[ColumnId::ExpectedFinalScore] = {400.0F, 500.0F, 600.0F};
         view_model.fetchData();
 
-        const auto series = view_model.series({GraphViewModel::Accuracy, GraphViewModel::ScoreTotal,
-                                                GraphViewModel::ExpectedFinalScore});
+        const auto series = view_model.series({
+            GraphViewModel::Accuracy, GraphViewModel::ScoreTotal,
+            GraphViewModel::ExpectedFinalScore
+        });
         ASSERT_EQ(series.size(), 3);
         EXPECT_EQ(series[0].formattedValueAtX(0.0), "50%");
         ASSERT_TRUE(series[0].yAxis.has_value());
@@ -296,7 +302,8 @@ namespace {
             const auto column = static_cast<GraphViewModel::Column>(entry.toInt());
             const QString key = view_model.columnKey(column);
             EXPECT_FALSE(key.isEmpty()) << "column " << entry.toInt() << " has an empty key";
-            EXPECT_FALSE(key.contains(' ')) << "column " << entry.toInt() << " key contains a space: " << key.toStdString();
+            EXPECT_FALSE(key.contains(' ')) << "column " << entry.toInt() << " key contains a space: " << key.
+                    toStdString();
             EXPECT_FALSE(seen.contains(key)) << "column " << entry.toInt() << " reuses key " << key.toStdString();
             seen.insert(key);
         }
@@ -334,8 +341,10 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, ColumnYAxisGroupsTheScoreFamilyTogetherAndKeepsScoreSeparate) {
-        EXPECT_EQ(view_model.columnYAxis(GraphViewModel::ScoreTotal), view_model.columnYAxis(GraphViewModel::ExpectedFinalScore));
-        EXPECT_EQ(view_model.columnYAxis(GraphViewModel::ScoreTotal), view_model.columnYAxis(GraphViewModel::ExpectedFinalScoreRecent));
+        EXPECT_EQ(view_model.columnYAxis(GraphViewModel::ScoreTotal),
+                  view_model.columnYAxis(GraphViewModel::ExpectedFinalScore));
+        EXPECT_EQ(view_model.columnYAxis(GraphViewModel::ScoreTotal),
+                  view_model.columnYAxis(GraphViewModel::ExpectedFinalScoreRecent));
         EXPECT_NE(view_model.columnYAxis(GraphViewModel::ScoreTotal), view_model.columnYAxis(GraphViewModel::Score));
         EXPECT_NE(view_model.columnYAxis(GraphViewModel::Score), view_model.columnYAxis(GraphViewModel::Accuracy));
     }
@@ -437,5 +446,16 @@ namespace {
         view_model.fetchData();
 
         EXPECT_EQ(view_model.xAxis().formatTick(20.0), "20s");
+    }
+
+    TEST_F(GraphViewModelTest, AdaptsResolvedSeriesAndExcludesUnavailableFromBounds) {
+        fake_use_case->resolved_graph_to_return = {};
+        view_model.fetchData();
+        EXPECT_TRUE(view_model.allSeries().isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, TranslatesQmlMutationsAndRejectsMalformedExpressions) {
+        const auto result = view_model.createComputedSeries("New", QColor("red"), 2.0, true, {{"kind", "unknown"}});
+        EXPECT_FALSE(result["succeeded"].toBool());
     }
 }

@@ -18,8 +18,7 @@
 #include "../data/interfaces/i_file_service.h"
 #include "data/interfaces/i_profile_service.h"
 #include "interfaces/i_settings_service.h"
-#include "data/interfaces/i_graph_line_config.h"
-#include "contracts/i_graph_column_preferences.h"
+#include "data/interfaces/i_series_config_store.h"
 #include "usecases/i_session_controller.h"
 #include "contracts/i_playtime_graph_use_case.h"
 #include "contracts/i_completion_history_use_case.h"
@@ -35,7 +34,7 @@ namespace ksv::application {
         // deterministic paths instead of the real registry / AppDataLocation.
         App(std::shared_ptr<ISettingsService> settingsService,
             std::shared_ptr<IProtoDecoder> decoder,
-            std::shared_ptr<IGraphLineConfig> graphLineConfig,
+            std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
             QObject* parent = nullptr);
         int start();
         QQmlApplicationEngine* engine() {return &m_engine;}
@@ -51,6 +50,7 @@ namespace ksv::application {
         [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
         [[nodiscard]] std::shared_ptr<ISessionController> sessionController() const { return m_sessionController; }
+        [[nodiscard]] std::shared_ptr<ISeriesConfigStore> seriesConfigStore() const { return m_seriesConfigStore; }
 
     private:
         // void initConnections();
@@ -64,8 +64,7 @@ namespace ksv::application {
         presentation::ScenarioBrowserViewModel* m_scenarioBrowserVm;
 
         std::shared_ptr<ISettingsService> m_settingsService;
-        std::shared_ptr<IGraphLineConfig> m_graphLineConfig;
-        std::shared_ptr<IGraphColumnPreferences> m_graphColumnPreferences;
+        std::shared_ptr<ISeriesConfigStore> m_seriesConfigStore;
         std::shared_ptr<IFileService> m_fileService;
         std::shared_ptr<IProfileService> m_profileService;
         std::shared_ptr<ISessionController> m_sessionController;

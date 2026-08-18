@@ -8,6 +8,8 @@
 #include <string>
 
 #include "graph_series.h"
+#include "resolved_graph.h"
+#include "../../data/interfaces/i_series_config_store.h"
 
 namespace ksv::application {
     class IGraphUseCase {
@@ -23,6 +25,15 @@ namespace ksv::application {
         virtual std::string get_run_label() = 0;
 
         virtual void onCurrentPerfChanged(std::function<void()> callback) = 0;
+
+        [[nodiscard]] virtual ResolvedGraph get_resolved_graph() { return {}; }
+        virtual MutationResult setSeriesEnabled(SeriesRecordReference, bool) { return {}; }
+        virtual MutationResult updateBasePresentation(const UpdateBaseSeriesRequest &) { return {}; }
+        virtual MutationResult createComputed(const CreateComputedSeriesRequest &) { return {}; }
+        virtual MutationResult updateComputed(const UpdateComputedSeriesRequest &) { return {}; }
+        virtual MutationResult removeComputed(ComputedSeriesId) { return {}; }
+        virtual MutationResult moveSeries(SeriesRecordReference, uint32_t) { return {}; }
+        virtual void onSeriesConfigChanged(std::function<void()>) {}
     };
 }
 
