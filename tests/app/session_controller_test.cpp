@@ -65,6 +65,10 @@ namespace {
             const auto n = std::min(count, it->second.size());
             return {it->second.end() - static_cast<std::ptrdiff_t>(n), it->second.end()};
         }
+        [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &scenario) const override {
+            const auto it = most_recent_perfs_by_hash.find(scenario.hash);
+            return it == most_recent_perfs_by_hash.end() ? std::vector<ScenarioPerf>{} : it->second;
+        }
 
         [[nodiscard]] std::vector<RunData>
         getCompletionHistory(const ScenarioId &) const override { return {}; }

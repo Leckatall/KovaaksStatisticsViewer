@@ -64,7 +64,7 @@ namespace ksv::data {
         // A settings change can replace the configured roots while a build is running.
         // The queued files survive a stale result so the follow-up build can replay them.
         std::set<std::string> profile_roots;
-        for (const auto &source : profile.sources().entries()) {
+        for (const auto &source: profile.sources().entries()) {
             if (source.parent.value == 0) profile_roots.insert(source.path);
         }
         const auto current_roots_list = m_file_service->sourceRoots();
@@ -152,9 +152,14 @@ namespace ksv::data {
     }
 
     std::vector<domain::ScenarioPerf> ProfileService::getMostRecentPerfs(const domain::ScenarioId &scenario,
-                                                                          const std::size_t count) const {
+                                                                         const std::size_t count) const {
         if (!m_profile) return {};
         return m_profile->getMostRecentPerfs(scenario, count);
+    }
+
+    std::vector<domain::ScenarioPerf> ProfileService::getRunsForScenario(const domain::ScenarioId &scenario) const {
+        if (!m_profile) return {};
+        return m_profile->getRunsForScenario(scenario);
     }
 
     std::vector<domain::RunData> ProfileService::getCompletionHistory(const domain::ScenarioId &scenario) const {
@@ -207,7 +212,7 @@ namespace ksv::data {
         return result;
     }
 
-    std::vector<std::pair<std::chrono::sys_days, double>>
+    std::vector<std::pair<std::chrono::sys_days, double> >
     ProfileService::getRollingTimeAverage(const int window_days) const {
         if (!m_profile) return {};
         return m_profile->getRollingTimeAverage(window_days);

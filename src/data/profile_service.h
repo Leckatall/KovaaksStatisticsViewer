@@ -17,46 +17,64 @@
 #include "interfaces/i_settings_service.h"
 
 namespace ksv::data {
-    class ProfileService: public application::IProfileService{
+    class ProfileService : public application::IProfileService {
     public:
         explicit ProfileService(std::shared_ptr<application::IFileService> file_service,
-                                 std::shared_ptr<application::IProfileSerializer> serializer,
-                                 std::shared_ptr<application::ISettingsService> settings_service);
+                                std::shared_ptr<application::IProfileSerializer> serializer,
+                                std::shared_ptr<application::ISettingsService> settings_service);
 
         void generateProfileFromDirectory() override;
+
         void loadProfile() override;
+
         void addPerfFileToProfile(const application::PerfFile &perf_file);
+
         void setProfile(domain::UserProfile profile);
 
         void onBuildRequested(std::function<void()> callback) override {
             m_build_requester = std::move(callback);
         }
+
         void beginProfileBuild() override;
+
         void applyBuiltProfile(domain::UserProfile profile) override;
+
         [[nodiscard]] std::vector<domain::ScenarioId> getScenarioList() const override;
 
-        [[nodiscard]] domain::ScenarioPerf getPerf(const std::string& path) const override;
+        [[nodiscard]] domain::ScenarioPerf getPerf(const std::string &path) const override;
+
         [[nodiscard]] domain::ScenarioPerf getLatestPerf() const override;
 
         [[nodiscard]] std::optional<domain::ScenarioPerf> getMostRecentPerf(
-            const domain::ScenarioId& scenario) const override;
+            const domain::ScenarioId &scenario) const override;
+
         [[nodiscard]] std::vector<domain::ScenarioPerf> getMostRecentPerfs(
-            const domain::ScenarioId& scenario, std::size_t count) const override;
-        [[nodiscard]] std::vector<domain::RunData> getCompletionHistory(const domain::ScenarioId &scenario) const override;
+            const domain::ScenarioId &scenario, std::size_t count) const override;
+
+        [[nodiscard]] std::vector<domain::ScenarioPerf> getRunsForScenario(
+            const domain::ScenarioId &scenario) const override;
+
+        [[nodiscard]] std::vector<domain::RunData>
+        getCompletionHistory(const domain::ScenarioId &scenario) const override;
+
         [[nodiscard]] std::optional<float> getAverageScore(
-            const domain::ScenarioId& scenario, std::size_t count) const override;
+            const domain::ScenarioId &scenario, std::size_t count) const override;
 
         [[nodiscard]] std::optional<domain::ScenarioPerf> getRun(
-            const domain::ScenarioRunId& run_id) const override;
+            const domain::ScenarioRunId &run_id) const override;
+
         [[nodiscard]] std::optional<std::size_t> getRunCount(
-            const domain::ScenarioId& scenario) const override;
+            const domain::ScenarioId &scenario) const override;
+
         [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(
-            const domain::ScenarioId& scenario) const override;
+            const domain::ScenarioId &scenario) const override;
+
         [[nodiscard]] std::optional<double> getTotalTime(
-            const domain::ScenarioId& scenario) const override;
+            const domain::ScenarioId &scenario) const override;
+
         [[nodiscard]] std::vector<domain::ScenarioPerf> getRecentRuns(std::size_t count) const override;
 
-        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
+        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
         getRollingTimeAverage(int window_days) const override;
 
         [[nodiscard]] bool isProfileLoaded() const override { return m_profile != nullptr; }
@@ -67,10 +85,13 @@ namespace ksv::data {
 
     private:
         void notifyProfileChanged() const {
-            for (auto& cb : m_callbacks) cb();
+            for (auto &cb: m_callbacks) cb();
         }
+
         void saveProfile() const;
+
         void ensureParentDir() const;
+
         void applyProfilePath();
 
         std::filesystem::path m_filepath;
@@ -82,7 +103,7 @@ namespace ksv::data {
         std::shared_ptr<application::IProfileSerializer> m_serializer;
         std::shared_ptr<application::ISettingsService> m_settings_service;
 
-        std::vector<std::function<void()>> m_callbacks;
+        std::vector<std::function<void()> > m_callbacks;
     };
 }
 

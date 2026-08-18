@@ -34,6 +34,8 @@ namespace ksv::domain {
 
         [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &scenario, std::size_t count) const;
 
+        [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &scenario) const;
+
         [[nodiscard]] std::vector<RunData> getCompletionHistory(const ScenarioId &scenario) const;
 
         [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &scenario, std::size_t count) const;
@@ -49,6 +51,7 @@ namespace ksv::domain {
         [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &scenario) const;
 
         [[nodiscard]] const SourceRegistry &sources() const;
+
         DirectoryId ensureSource(const std::string &root, const std::string &subdir);
 
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >

@@ -6,16 +6,17 @@ target_sources(ksv_contracts PUBLIC
         FILE_SET HEADERS
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
         FILES
-            completion_history.h
-            scenario_summary.h
-            run_performance.h
-            graph_column.h
-            graph_series.h
-            series_config.h
-            i_graph_use_case.h
-            i_playtime_graph_use_case.h
-            i_completion_history_use_case.h
-            i_graph_column_preferences.h
+        completion_history.h
+        scenario_summary.h
+        run_performance.h
+        graph_column.h
+        graph_series.h
+        series_config.h
+        i_graph_use_case.h
+        i_playtime_graph_use_case.h
+        i_completion_history_use_case.h
+        i_graph_column_preferences.h
+        i_average_line_use_case.h
 )
 
 target_include_directories(ksv_contracts PUBLIC

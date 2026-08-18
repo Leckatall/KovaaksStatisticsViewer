@@ -166,7 +166,7 @@ namespace {
         const ScenarioId a{.name = "Scenario A", .hash = "abc123"};
         const ScenarioId b{.name = "Scenario B", .hash = "abc123"};
 
-        std::unordered_set<ScenarioId, std::hash<ScenarioId>> ids;
+        std::unordered_set<ScenarioId, std::hash<ScenarioId> > ids;
         ids.insert(a);
         ids.insert(b);
 
@@ -373,20 +373,24 @@ namespace {
     }
 
     TEST(SourceRegistryTest, RestoredIdsRemainStableForNewEntries) {
-        SourceRegistry sources{{
-            {{7}, {}, "C:/Kovaaks"},
-            {{12}, {7}, "FPSAimTrainer/performances"}
-        }};
+        SourceRegistry sources{
+            {
+                {{7}, {}, "C:/Kovaaks"},
+                {{12}, {7}, "FPSAimTrainer/performances"}
+            }
+        };
 
         EXPECT_EQ(sources.ensure({}, "C:/Kovaaks"), DirectoryId{7});
         EXPECT_EQ(sources.ensure({}, "D:/Kovaaks"), DirectoryId{13});
     }
 
     TEST(SourceRegistryTest, ResolveRejectsCycles) {
-        const SourceRegistry sources{{
-            {{1}, {2}, "one"},
-            {{2}, {1}, "two"}
-        }};
+        const SourceRegistry sources{
+            {
+                {{1}, {2}, "one"},
+                {{2}, {1}, "two"}
+            }
+        };
 
         EXPECT_FALSE(sources.resolve(DirectoryId{1}).has_value());
     }
@@ -403,14 +407,19 @@ namespace {
         UserProfile profile;
         profile.addScenarioPerf(make_perf("scenario-1", 100));
 
-        const auto run = profile.getRun(ScenarioRunId{.scenario_id = {.name = "?", .hash = "scenario-1"}, .start_time = 100});
+        const auto run = profile.getRun(ScenarioRunId{
+            .scenario_id = {.name = "?", .hash = "scenario-1"}, .start_time = 100
+        });
         ASSERT_TRUE(run.has_value());
         EXPECT_EQ(run->run_id.start_time, 100);
     }
 
     TEST_F(UserProfileTest, GetRunForUnknownRunIdIsNullopt) {
         const UserProfile profile;
-        EXPECT_FALSE(profile.getRun(ScenarioRunId{.scenario_id = {.name = "?", .hash = "unknown"}, .start_time = 1}).has_value());
+        EXPECT_FALSE(
+            profile.getRun(ScenarioRunId{
+                .scenario_id = {.name = "?", .hash = "unknown"}, .start_time = 1
+            }).has_value());
     }
 
     TEST_F(UserProfileTest, DuplicateRunIdIsSkippedAndReturnsFalse) {
@@ -468,7 +477,10 @@ namespace {
 
         const auto last_played = profile.getLastRunTime(ScenarioId{.name = "?", .hash = "scenario-1"});
         ASSERT_TRUE(last_played.has_value());
-        EXPECT_EQ(*last_played, (ScenarioRunId{.scenario_id = {.name = "?", .hash = "scenario-1"}, .start_time = 300000}.startSecond()));
+        EXPECT_EQ(*last_played,
+                  (ScenarioRunId{
+                      .scenario_id = {.name = "?", .hash = "scenario-1"}, .start_time = 300000
+                  }.startSecond()));
     }
 
     TEST_F(UserProfileTest, GetLastRunTimeIsNulloptForUnknownScenario) {

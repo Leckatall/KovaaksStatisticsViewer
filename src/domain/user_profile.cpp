@@ -28,9 +28,9 @@ namespace ksv::domain {
         const ScenarioId &scenario = perf.run_id.scenario_id;
         auto &indices = m_scenario_index[scenario];
         const auto insert_pos = std::ranges::upper_bound(indices, perf.run_id.start_time, {},
-                                                           [this](const std::size_t idx) {
-                                                               return m_runs[idx].run_id.start_time;
-                                                           });
+                                                         [this](const std::size_t idx) {
+                                                             return m_runs[idx].run_id.start_time;
+                                                         });
         indices.insert(insert_pos, index);
 
         auto &aggregate = m_scenario_aggregate[scenario];
@@ -77,6 +77,15 @@ namespace ksv::domain {
         for (auto idx_it = indices.end() - static_cast<std::ptrdiff_t>(n); idx_it != indices.end(); ++idx_it) {
             result.push_back(m_runs[*idx_it]);
         }
+        return result;
+    }
+
+    std::vector<ScenarioPerf> UserProfile::getRunsForScenario(const ScenarioId &scenario) const {
+        const auto it = m_scenario_index.find(scenario);
+        if (it == m_scenario_index.end()) return {};
+        std::vector<ScenarioPerf> result;
+        result.reserve(it->second.size());
+        for (const auto index: it->second) result.push_back(m_runs[index]);
         return result;
     }
 

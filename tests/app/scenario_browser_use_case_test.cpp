@@ -53,6 +53,9 @@ namespace {
             const auto it = perfs_by_scenario.find(scenario);
             return it == perfs_by_scenario.end() ? std::vector<ScenarioPerf>{} : it->second;
         }
+        [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &scenario) const override {
+            return getMostRecentPerfs(scenario, 0);
+        }
         [[nodiscard]] std::vector<RunData> getCompletionHistory(const ScenarioId &scenario) const override {
             const auto it = completion_history_by_scenario.find(scenario);
             return it == completion_history_by_scenario.end() ? std::vector<RunData>{} : it->second;
