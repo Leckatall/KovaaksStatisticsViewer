@@ -21,7 +21,7 @@ TestCase {
         property bool selectionPanelVisible: true
         property bool recentRunsSectionVisible: true
         property bool scenarioBrowserSectionVisible: true
-        property var historyColumnVisibility: ({score: true, accuracy: false, shots: false, hits: false, misses: false})
+        property var historyColumnVisibility: ({"1": true, "2": false, "3": false, "4": false, "5": false})
         property var visibleSeriesIds: ["1", "2"]
         function isSeriesVisible(id) { return visibleSeriesIds.indexOf(id) !== -1 }
         function setSeriesVisible(id, visible) {

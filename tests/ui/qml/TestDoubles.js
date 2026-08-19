@@ -5,11 +5,13 @@ function makeFakeGraphVm() {
         plottableColumns: [1, 2],
         allColumns: [1, 2],
         enabledColumns: [1, 2],
+        allSeries: [
+            {id: "1", name: "Score", color: "#00ff00", column: 1},
+            {id: "2", name: "Accuracy", color: "#00ff00", column: 2}
+        ],
+        enabledSeriesIds: ["1", "2"],
         fetchDataCalls: [],
         fetchLatestDataCalls: 0,
-        columnName: function (id) { return id === 1 ? "Score" : "Accuracy" },
-        columnKey: function (id) { return id === 1 ? "score" : "accuracy" },
-        columnColor: function () { return "#00ff00" },
         columnYAxis: function (id) { return id },
         fetchData: function (scenarioId) { this.fetchDataCalls.push(scenarioId) },
         fetchLatestData: function () { this.fetchLatestDataCalls++ }
@@ -20,13 +22,12 @@ function makeFakeHistoryVm() {
     return {
         scenarioTitle: "Air Angelic",
         runCount: 0,
-        columnName: function (id) {
-            const names = ["Run", "Score", "Accuracy", "Shots", "Hits", "Misses"]
-            return names[id]
-        },
-        columnKey: function (id) {
-            const keys = ["run", "score", "accuracy", "shots", "hits", "misses"]
-            return keys[id]
-        }
+        allSeries: [
+            {id: "1", name: "Score", column: 1},
+            {id: "2", name: "Accuracy", column: 2},
+            {id: "3", name: "Shots", column: 3},
+            {id: "4", name: "Hits", column: 4},
+            {id: "5", name: "Misses", column: 5}
+        ]
     }
 }

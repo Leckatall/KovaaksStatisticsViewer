@@ -46,7 +46,7 @@ namespace {
 
         [[nodiscard]] QList<QPointF> rawPoints(const int column) const {
             const auto series = graphVm->series(QList<int>{column});
-            return series.isEmpty() ? QList<QPointF>{} : series.front().points;
+            return series.isEmpty() ? QList<QPointF>{} : series.front()->points;
         }
     };
 

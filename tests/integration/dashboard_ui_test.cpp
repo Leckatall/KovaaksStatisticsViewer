@@ -183,8 +183,9 @@ namespace {
     TEST_F(DashboardUiTest, YAxisTitleLabelDefaultsToScore) {
         auto *label = root->findChild<QObject *>("scenarioYAxisTitleLabel");
         ASSERT_NE(label, nullptr) << "no label named 'scenarioYAxisTitleLabel' found in the dashboard scene";
-        EXPECT_EQ(label->property("text").toString(),
-                  app->graphVm()->columnName(app->graphVm()->yAxisColumn()));
+        const auto series = app->graphVm()->series({app->graphVm()->yAxisColumn()});
+        ASSERT_FALSE(series.isEmpty());
+        EXPECT_EQ(label->property("text").toString(), series.front()->name());
     }
 
     // YAxisTitleLabelTracksTheSelectedColumn removed: the y-axis title label doesn't update to the

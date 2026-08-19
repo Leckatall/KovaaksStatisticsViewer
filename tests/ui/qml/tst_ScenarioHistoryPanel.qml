@@ -13,17 +13,13 @@ Item {
     QtObject {
         id: historyVisibilitySettings
 
-        property bool score: true
-        property bool accuracy: false
-        property bool shots: false
-        property bool hits: false
-        property bool misses: false
+        property var value: ({"1": true, "2": false, "3": false, "4": false, "5": false})
     }
 
     QtObject {
         id: axisSettings
 
-        property string yAxisColumnKey: "score"
+        property string yAxisColumnKey: "1"
     }
 
     Component {
@@ -33,7 +29,7 @@ Item {
             width: 900
             height: 600
             historyVm: TestDoubles.makeFakeHistoryVm()
-            columnVisibility: historyVisibilitySettings
+            columnVisibility: historyVisibilitySettings.value
             historyAxisSettings: axisSettings
         }
     }
@@ -43,12 +39,8 @@ Item {
         when: windowShown
 
         function init() {
-            historyVisibilitySettings.score = true
-            historyVisibilitySettings.accuracy = false
-            historyVisibilitySettings.shots = false
-            historyVisibilitySettings.hits = false
-            historyVisibilitySettings.misses = false
-            axisSettings.yAxisColumnKey = "score"
+            historyVisibilitySettings.value = {"1": true, "2": false, "3": false, "4": false, "5": false}
+            axisSettings.yAxisColumnKey = "1"
         }
 
         function test_visibleColumnsTrackSettings() {
@@ -56,7 +48,7 @@ Item {
             verify(!!panel, "Component exists")
             compare(panel.visibleColumns, [1])
 
-            historyVisibilitySettings.accuracy = true
+            historyVisibilitySettings.value = Object.assign({}, historyVisibilitySettings.value, {"2": true})
             tryCompare(panel, "visibleColumns", [1, 2])
         }
 
