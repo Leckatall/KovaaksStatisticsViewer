@@ -45,8 +45,8 @@ Item {
     Settings {
         id: historySettings
         category: "historyGraph"
-        property var columnVisibility: ({"score": true, "accuracy": false, "shots": false, "hits": false, "misses": false})
-        property string yAxisColumnKey: "score"
+        property var columnVisibility: ({"1": true, "2": false, "3": false, "4": false, "5": false})
+        property string yAxisColumnKey: "1"
     }
 
     property alias visibleSeriesIds: visibilitySettings.visibleSeriesIds

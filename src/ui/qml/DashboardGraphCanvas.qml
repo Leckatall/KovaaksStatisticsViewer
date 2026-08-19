@@ -28,6 +28,15 @@ Frame {
         return cols.length > 0 ? cols[0] : -1;
     }
 
+    function nameForColumn(column) {
+        if (!root.graphVm) return ""
+        const series = root.graphVm.allSeries
+        for (let i = 0; i < series.length; ++i) {
+            if (series[i].column === column) return series[i].name
+        }
+        return ""
+    }
+
     Layout.fillHeight: true
     Layout.fillWidth: true
 
@@ -60,7 +69,7 @@ Frame {
             YAxisTitle {
                 labelObjectName: "scenarioYAxisTitleLabel"
                 plotArea: canvasWithTooltip.plotArea
-                text: root.graphVm.columnName(canvasWithTooltip.labelledYAxisColumn)
+                text: root.nameForColumn(canvasWithTooltip.labelledYAxisColumn)
             }
             GraphCanvasWithTooltip {
                 id: canvasWithTooltip

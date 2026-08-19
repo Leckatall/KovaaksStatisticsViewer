@@ -16,13 +16,22 @@ Frame {
         CompletionHistoryViewModel.Hits,
         CompletionHistoryViewModel.Misses
     ]
-    readonly property var visibleColumns: root.plottable.filter(
-        column => !!root.columnVisibility[root.historyVm.columnKey(column)])
+    function seriesForColumn(column) {
+        const series = root.historyVm.allSeries
+        for (let i = 0; i < series.length; ++i) {
+            if (series[i].column === column) return series[i]
+        }
+        return null
+    }
+    readonly property var visibleColumns: root.plottable.filter(column => {
+        const s = root.seriesForColumn(column)
+        return s && !!root.columnVisibility[s.id]
+    })
     readonly property int yAxisColumn: {
         for (let i = 0; i < root.plottable.length; ++i) {
             const column = root.plottable[i]
-            if (root.historyVm.columnKey(column) === root.historyAxisSettings.yAxisColumnKey)
-                return column
+            const s = root.seriesForColumn(column)
+            if (s && s.id === root.historyAxisSettings.yAxisColumnKey) return column
         }
         return -1
     }
@@ -62,7 +71,10 @@ Frame {
                     YAxisTitle {
                         labelObjectName: "historyYAxisTitleLabel"
                         plotArea: historyCanvas.plotArea
-                        text: root.historyVm.columnName(historyCanvas.labelledYAxisColumn)
+                        text: {
+                            const s = root.seriesForColumn(historyCanvas.labelledYAxisColumn)
+                            return s ? s.name : ""
+                        }
                     }
                     GraphCanvasWithTooltip {
                         id: historyCanvas

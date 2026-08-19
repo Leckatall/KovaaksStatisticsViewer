@@ -8,18 +8,7 @@ MenuBar {
     property var historyVm
     property var visualSettings
 
-    function graphLineName(id) {
-        const series = root.graphVm && root.graphVm.allSeries
-                ? root.graphVm.allSeries.find(s => s.id === id) : null
-        return series ? series.name : id
-    }
-    readonly property var historyColumns: root.historyVm ? [
-        CompletionHistoryViewModel.Score,
-        CompletionHistoryViewModel.Accuracy,
-        CompletionHistoryViewModel.Shots,
-        CompletionHistoryViewModel.Hits,
-        CompletionHistoryViewModel.Misses
-    ] : []
+    readonly property var historyColumns: root.historyVm ? root.historyVm.allSeries : []
 
     signal setSourceDirRequested()
     signal settingsRequested()
@@ -73,13 +62,13 @@ MenuBar {
             title: qsTr("Scenario Graph Lines")
             enabled: root.visualSettings ? root.visualSettings.scenarioGraphVisible : true
             Repeater {
-                model: root.graphVm ? root.graphVm.enabledSeriesIds : []
+                model: root.graphVm ? root.graphVm.allSeries : []
                 MenuItem {
-                    required property string modelData
-                    text: root.graphLineName(modelData)
+                    required property var modelData
+                    text: modelData.name
                     checkable: true
-                    checked: root.visualSettings.isSeriesVisible(modelData)
-                    onTriggered: root.visualSettings.setSeriesVisible(modelData, checked)
+                    checked: root.visualSettings.isSeriesVisible(modelData.id)
+                    onTriggered: root.visualSettings.setSeriesVisible(modelData.id, checked)
                 }
             }
             MenuSeparator {}
@@ -108,11 +97,11 @@ MenuBar {
             Repeater {
                 model: root.historyColumns
                 MenuItem {
-                    required property int modelData
-                    text: root.historyVm.columnName(modelData)
+                    required property var modelData
+                    text: modelData.name
                     checkable: true
-                    checked: !!root.visualSettings.historyColumnVisibility[root.historyVm.columnKey(modelData)]
-                    onTriggered: root.visualSettings.historyColumnVisibility[root.historyVm.columnKey(modelData)] = checked
+                    checked: !!root.visualSettings.historyColumnVisibility[modelData.id]
+                    onTriggered: root.visualSettings.historyColumnVisibility[modelData.id] = checked
                 }
             }
         }
