@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QColor>
 #include <QPointF>
+#include <QQmlListProperty>
 #include <QVariantList>
 #include <QVariantMap>
 #include <qqmlintegration.h>
@@ -20,7 +21,7 @@
 namespace ksv::presentation {
     class GraphViewModel : public GraphViewModelBase {
         Q_OBJECT
-        Q_PROPERTY(QVariantList allSeries READ allSeries NOTIFY seriesConfigurationChanged)
+        Q_PROPERTY(QQmlListProperty<SeriesModel> allSeries READ allSeries NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantList enabledSeriesIds READ enabledSeriesIds NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
@@ -30,10 +31,13 @@ namespace ksv::presentation {
 
         void setData(QList<QMap<int, qreal>> data);
 
-        [[nodiscard]] QList<SeriesModel> series(const QList<int> &columns) const override;
+        [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override;
         [[nodiscard]] AxisModel xAxis() const override { return m_timeAxis; }
 
-        [[nodiscard]] QVariantList allSeries() const { return m_allSeries; }
+        [[nodiscard]] QQmlListProperty<SeriesModel> allSeries() const {
+            return QQmlListProperty<SeriesModel>(const_cast<GraphViewModel *>(this), &m_allSeriesList);
+        }
+
         [[nodiscard]] QVariantList enabledSeriesIds() const { return m_enabledSeriesIds; }
 
         // Unused by any real caller (GraphCanvas gets axis info via series()/xAxis()); kept minimal
@@ -42,10 +46,6 @@ namespace ksv::presentation {
         [[nodiscard]] QList<qreal> axisTicks(int column) const override;
 
         [[nodiscard]] QString scenarioTitle() const { return m_scenarioTitle; }
-
-        Q_INVOKABLE [[nodiscard]] [[deprecated]] QString columnName(int column) const override;
-        Q_INVOKABLE [[nodiscard]] [[deprecated]] QColor columnColor(int column) const override;
-        Q_INVOKABLE [[nodiscard]] [[deprecated]] QString columnKey(int column) const override;
 
         [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
 
@@ -78,9 +78,12 @@ namespace ksv::presentation {
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
         QList<QMap<int, qreal>> m_data;
         AxisModel m_timeAxis{};
-        QMap<QString, SeriesModel> m_seriesById;
+        QMap<QString, SeriesModel *> m_seriesById;
+        // Backs the allSeries QQmlListProperty; rebuilt (not just re-sorted) by fetchMetadata()/
+        // fetchData() to match resolved.series' order — QMap<QString,...> iteration order (lexical
+        // by id string) is not the display order QML expects.
+        mutable QList<SeriesModel *> m_allSeriesList;
         QString m_scenarioTitle;
-        QVariantList m_allSeries;
         QVariantList m_enabledSeriesIds;
     };
 }

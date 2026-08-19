@@ -24,8 +24,9 @@ namespace ksv::presentation {
     public:
         explicit GraphViewModelBase(QObject *parent = nullptr) : QObject(parent) {}
 
-        // SeriesModel for each requested column; omits columns with no drawable series
-        [[nodiscard]] virtual QList<SeriesModel> series(const QList<int> &columns) const = 0;
+        // SeriesModel for each requested column; omits columns with no drawable series.
+        // Returned pointers are owned by the VM and remain valid only until its next refresh.
+        [[nodiscard]] virtual QList<SeriesModel *> series(const QList<int> &columns) const = 0;
 
         // Shared X axis all series are plotted against
         [[nodiscard]] virtual AxisModel xAxis() const = 0;
@@ -38,10 +39,6 @@ namespace ksv::presentation {
         [[nodiscard]] virtual QList<qreal> axisTicks(int column) const = 0;
 
         [[nodiscard]] virtual QList<QPointF> seriesPoints(int column) const = 0;
-
-        Q_INVOKABLE [[nodiscard]] [[deprecated]] virtual QString columnName(int column) const = 0;
-        Q_INVOKABLE [[nodiscard]] [[deprecated]] virtual QColor columnColor(int column) const = 0;
-        Q_INVOKABLE [[nodiscard]] [[deprecated]] virtual QString columnKey(int column) const = 0;
 
         [[nodiscard]] virtual int xColumn() const = 0;
         [[nodiscard]] virtual int yAxisColumn() const = 0;

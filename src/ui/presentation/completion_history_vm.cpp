@@ -11,7 +11,6 @@ namespace ksv::presentation {
     namespace {
         struct ColumnMeta {
             const char *name;
-            const char *key;
             QColor color;
             int yAxis;
         };
@@ -40,20 +39,20 @@ namespace ksv::presentation {
         }};
 
         const std::array<ColumnMeta, CompletionHistoryViewModel::ColumnCount> kColumnMeta{{
-            {"Run", "run", QColor(), -1},
-            {"Score", "score", QColor("#009600"), ScoreAxis},
-            {"Accuracy", "accuracy", QColor("cyan"), AccuracyAxis},
-            {"Shots", "shots", QColor("orange"), CountAxis},
-            {"Hits", "hits", QColor("#7CB342"), CountAxis},
-            {"Misses", "misses", QColor("#E53935"), CountAxis},
+            {"Run", QColor(), -1},
+            {"Score", QColor("#009600"), ScoreAxis},
+            {"Accuracy", QColor("cyan"), AccuracyAxis},
+            {"Shots", QColor("orange"), CountAxis},
+            {"Hits", QColor("#7CB342"), CountAxis},
+            {"Misses", QColor("#E53935"), CountAxis},
         }};
 
-        AxisModel axisForColumn(const QList<SeriesModel> &series, const int column) {
+        AxisModel axisForColumn(const QList<SeriesModel *> &series, const int column) {
             const int axis = kColumnMeta[column].yAxis;
             std::vector<const SeriesModel *> members;
             for (int member = CompletionHistoryViewModel::Score;
                  member < CompletionHistoryViewModel::ColumnCount; ++member) {
-                if (kColumnMeta[member].yAxis == axis) members.push_back(&series[member - CompletionHistoryViewModel::Score]);
+                if (kColumnMeta[member].yAxis == axis) members.push_back(series[member - CompletionHistoryViewModel::Score]);
             }
             const auto &descriptor = kYAxisMeta[axis];
             return axisForSeries(members, descriptor.options, descriptor.transform);
@@ -64,23 +63,24 @@ namespace ksv::presentation {
         std::shared_ptr<application::ICompletionHistoryUseCase> use_case, QObject *parent)
         : GraphViewModelBase(parent), m_use_case(std::move(use_case)) {
         for (int column = Score; column < ColumnCount; ++column) {
-            SeriesModel series_model;
-            series_model.name = columnName(column);
-            series_model.color = kColumnMeta[column].color;
-            series_model.transform = kYAxisMeta[kColumnMeta[column].yAxis].transform;
-            m_series.append(std::move(series_model));
+            auto *series_model = new SeriesModel(this);
+            series_model->setId(QString::number(column));
+            series_model->setName(QString::fromLatin1(kColumnMeta[column].name));
+            series_model->setColor(kColumnMeta[column].color);
+            series_model->setColumn(column);
+            series_model->transform = kYAxisMeta[kColumnMeta[column].yAxis].transform;
+            m_series.append(series_model);
         }
         refresh();
     }
 
-    QList<SeriesModel> CompletionHistoryViewModel::series(const QList<int> &columns) const {
-        QList<SeriesModel> result;
+    QList<SeriesModel *> CompletionHistoryViewModel::series(const QList<int> &columns) const {
+        QList<SeriesModel *> result;
         result.reserve(columns.size());
         std::array<std::vector<int>, YAxisCount> membersByAxis;
         for (const int column: columns) {
             if (column < Score || column >= ColumnCount) continue;
             result.append(m_series[column - Score]);
-            result.back().column = column;
             membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
         }
         for (int axis = 0; axis < YAxisCount; ++axis) {
@@ -88,10 +88,10 @@ namespace ksv::presentation {
             if (indices.empty()) continue;
             std::vector<const SeriesModel *> members;
             members.reserve(indices.size());
-            for (const int index: indices) members.push_back(&result[index]);
+            for (const int index: indices) members.push_back(result[index]);
             const auto &descriptor = kYAxisMeta[axis];
             const AxisModel yAxis = axisForSeries(members, descriptor.options, descriptor.transform);
-            for (const int index: indices) result[index].yAxis = yAxis;
+            for (const int index: indices) result[index]->yAxis = yAxis;
         }
         return result;
     }
@@ -123,21 +123,6 @@ namespace ksv::presentation {
         return m_points[column];
     }
 
-    QString CompletionHistoryViewModel::columnName(const int column) const {
-        if (column < 0 || column >= ColumnCount) return {};
-        return QString::fromLatin1(kColumnMeta[column].name);
-    }
-
-    QColor CompletionHistoryViewModel::columnColor(const int column) const {
-        if (column < 0 || column >= ColumnCount) return {};
-        return kColumnMeta[column].color;
-    }
-
-    QString CompletionHistoryViewModel::columnKey(const int column) const {
-        if (column < 0 || column >= ColumnCount) return {};
-        return QString::fromLatin1(kColumnMeta[column].key);
-    }
-
     void CompletionHistoryViewModel::refresh() {
         const application::CompletionHistory history = m_use_case->get_history();
         const QString title = QString::fromStdString(history.scenario_name);
@@ -157,9 +142,9 @@ namespace ksv::presentation {
             m_points[Misses].append(QPointF(x, row.misses));
         }
         for (int column = Score; column < ColumnCount; ++column) {
-            auto &series = m_series[column - Score];
-            series.points = m_points[column];
-            series.yAxis.reset();
+            SeriesModel *series = m_series[column - Score];
+            series->points = m_points[column];
+            series->yAxis.reset();
         }
 
         constexpr AxisModel::Options kRunAxis{

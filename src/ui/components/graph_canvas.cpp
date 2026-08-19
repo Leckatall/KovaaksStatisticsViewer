@@ -88,12 +88,12 @@ namespace ksv::ui {
         const int labelledColumn = labelledYAxisColumn();
         const QList<int> visible = visibleColumnIds();
         const auto series = m_graphVm->series(visible);
-        for (const auto &entry: series) {
-            if (entry.column == labelledColumn) return yAxisFor(entry);
+        for (const auto *entry: series) {
+            if (entry->column() == labelledColumn) return yAxisFor(*entry);
         }
         const auto fallback = m_graphVm->series({labelledColumn});
         if (fallback.isEmpty()) return std::nullopt;
-        return yAxisFor(fallback.front());
+        return yAxisFor(*fallback.front());
     }
 
     QRectF GraphCanvas::plotRect() const {
@@ -158,18 +158,18 @@ namespace ksv::ui {
         if (!m_graphVm) return;
 
         for (const auto series = m_graphVm->series(visibleColumnIds());
-             const auto &s: series) {
-            const QList<QPointF> displayPoints = s.displayPoints();
+             const auto *s: series) {
+            const QList<QPointF> displayPoints = s->displayPoints();
             if (displayPoints.size() < 2) continue;
 
-            const presentation::AxisModel xAxis = xAxisFor(s);
-            const presentation::AxisModel yAxis = yAxisFor(s);
+            const presentation::AxisModel xAxis = xAxisFor(*s);
+            const presentation::AxisModel yAxis = yAxisFor(*s);
 
             QVector<QPointF> pixelPoints;
             pixelPoints.reserve(displayPoints.size());
             for (const auto &p: displayPoints) pixelPoints.append(toPixel(p, rect, xAxis, yAxis));
 
-            SeriesPainter::paint(*painter, pixelPoints, s.color);
+            SeriesPainter::paint(*painter, pixelPoints, s->color());
         }
     }
 
@@ -187,7 +187,7 @@ namespace ksv::ui {
 
         const auto series = m_graphVm->series(visibleColumnIds());
         if (series.isEmpty()) return result;
-        const auto &refSeries = series.front();
+        const auto &refSeries = *series.front();
 
         const QRectF rect = plotRect();
         const presentation::AxisModel sharedXAxis = m_graphVm->xAxis();
@@ -204,12 +204,12 @@ namespace ksv::ui {
         result["pixelX"] = rect.left() + refXAxis.normalizedPosition(refSample->x()) * rect.width();
 
         QVariantList seriesList;
-        for (const auto &s: series) {
+        for (const auto *s: series) {
             QVariantMap entry;
-            entry["name"] = s.name;
-            entry["color"] = s.color.name();
-            entry["value"] = s.formattedValueAtX(dataX);
-            const auto sample = s.sampleAtX(dataX);
+            entry["name"] = s->name();
+            entry["color"] = s->color().name();
+            entry["value"] = s->formattedValueAtX(dataX);
+            const auto sample = s->sampleAtX(dataX);
             entry["valueRaw"] = sample ? sample->y() : QVariant();
             seriesList.append(entry);
         }
@@ -226,10 +226,10 @@ namespace ksv::ui {
         const auto series = m_graphVm->series(visibleColumnIds());
         qreal bestDistanceSq = kHoverRadius * kHoverRadius;
 
-        for (const auto &s: series) {
-            const presentation::AxisModel xAxis = xAxisFor(s);
-            const presentation::AxisModel yAxis = yAxisFor(s);
-            const QList<QPointF> displayPoints = s.displayPoints();
+        for (const auto *s: series) {
+            const presentation::AxisModel xAxis = xAxisFor(*s);
+            const presentation::AxisModel yAxis = yAxisFor(*s);
+            const QList<QPointF> displayPoints = s->displayPoints();
 
             for (const auto &p: displayPoints) {
                 const QPointF pixel = toPixel(p, rect, xAxis, yAxis);
@@ -239,8 +239,8 @@ namespace ksv::ui {
                 if (distSq <= bestDistanceSq) {
                     bestDistanceSq = distSq;
                     best["valid"] = true;
-                    best["name"] = s.name;
-                    best["color"] = s.color.name();
+                    best["name"] = s->name();
+                    best["color"] = s->color().name();
                     best["x"] = xAxis.formatTick(p.x());
                     best["value"] = yAxis.formatTick(p.y());
                 }

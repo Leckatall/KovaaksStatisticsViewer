@@ -27,8 +27,8 @@ namespace ksv::presentation {
         explicit PlaytimeGraphViewModel(std::shared_ptr<application::IPlaytimeGraphUseCase> useCase,
                                         QObject *parent = nullptr);
 
-        [[nodiscard]] QList<SeriesModel> series(const QList<int> &columns) const override {
-            QList<SeriesModel> result;
+        [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override {
+            QList<SeriesModel *> result;
             for (const int c: columns) if (c == Playtime) result.append(m_series);
             return result;
         }
@@ -38,9 +38,6 @@ namespace ksv::presentation {
         [[nodiscard]] QVariantMap axisBounds() const override;
         [[nodiscard]] QList<qreal> axisTicks(int column) const override;
         [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
-        Q_INVOKABLE [[nodiscard]] QString columnName(int column) const override;
-        Q_INVOKABLE [[nodiscard]] QColor columnColor(int column) const override;
-        Q_INVOKABLE [[nodiscard]] QString columnKey(int column) const override;
 
         [[nodiscard]] int xColumn() const override { return Date; }
         [[nodiscard]] int yAxisColumn() const override { return Playtime; }
@@ -59,7 +56,7 @@ namespace ksv::presentation {
         QList<QPointF> m_points;
         AxisModel m_xAxis;
         AxisModel m_yAxis;
-        SeriesModel m_series; // raw seconds + a seconds->minutes transform
+        SeriesModel *m_series; // raw seconds + a seconds->minutes transform
     };
 }
 

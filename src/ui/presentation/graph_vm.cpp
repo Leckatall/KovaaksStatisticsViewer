@@ -62,24 +62,24 @@ namespace ksv::presentation {
         recomputeBounds();
     }
 
-    QList<SeriesModel> GraphViewModel::series(const QList<int> &columns) const {
-        QList<SeriesModel> result;
+    QList<SeriesModel *> GraphViewModel::series(const QList<int> &columns) const {
+        QList<SeriesModel *> result;
         result.reserve(columns.size());
         std::array<std::vector<int>, YAxisCount> membersByAxis;
-        for (const SeriesModel &series: m_seriesById) {
-            if (!columns.contains(series.column)) continue;
+        for (SeriesModel *series: m_seriesById) {
+            if (!columns.contains(series->column())) continue;
             result.append(series);
-            if (const auto axis = yAxisFor(series.column)) membersByAxis[*axis].push_back(result.size() - 1);
+            if (const auto axis = yAxisFor(series->column())) membersByAxis[*axis].push_back(result.size() - 1);
         }
         for (int axis = 0; axis < YAxisCount; ++axis) {
             const auto &indices = membersByAxis[axis];
             if (indices.empty()) continue;
             std::vector<const SeriesModel *> members;
             members.reserve(indices.size());
-            for (const int index: indices) members.push_back(&result[index]);
+            for (const int index: indices) members.push_back(result[index]);
             const auto &descriptor = kYAxisMeta[axis];
             const AxisModel yAxis = axisForSeries(members, descriptor.options, descriptor.transform);
-            for (const int index: indices) result[index].yAxis = yAxis;
+            for (const int index: indices) result[index]->yAxis = yAxis;
         }
         return result;
     }
@@ -90,22 +90,6 @@ namespace ksv::presentation {
 
     QList<qreal> GraphViewModel::axisTicks(const int column) const {
         return column == kTimeColumn ? m_timeAxis.ticks() : QList<qreal>{};
-    }
-
-    QString GraphViewModel::columnName(const int column) const {
-        if (column == kTimeColumn) return "Time";
-        const auto it = m_seriesById.find(QString::number(column));
-        return it != m_seriesById.end() ? it->name : QString();
-    }
-
-    QColor GraphViewModel::columnColor(const int column) const {
-        if (column == kTimeColumn) return {};
-        const auto it = m_seriesById.find(QString::number(column));
-        return it != m_seriesById.end() ? it->color : QColor();
-    }
-
-    QString GraphViewModel::columnKey(const int column) const {
-        return columnName(column);
     }
 
     QList<QPointF> GraphViewModel::seriesPoints(const int column) const {
@@ -145,24 +129,25 @@ namespace ksv::presentation {
 
     void GraphViewModel::fetchMetadata() {
         auto series_list = m_graphUseCase->get_resolved_graph().series;
+        qDeleteAll(m_seriesById);
         m_seriesById.clear();
         for (const auto &entry: series_list) {
             if (!entry.config.presentation.enabled) continue;
             const auto entry_id = QString::number(entry.config.id.value);
-            m_seriesById[entry_id] = SeriesModel{
-                .id = entry_id,
-                .name = QString::fromStdString(entry.config.presentation.name),
-                .color = QColor(entry.config.presentation.lineStyle.color.red,
-                                 entry.config.presentation.lineStyle.color.green,
-                                 entry.config.presentation.lineStyle.color.blue,
-                                 entry.config.presentation.lineStyle.color.alpha),
-                .transform = entry_id == "2" ? ValueTransform::percentage() : ValueTransform::identity(),
-                .column = entry_id.toInt(),
-                // TODO(18/08/26): transform and yAxisId should be stored as part of seriesConfig
-                // .transform = entry.config.presentation.lineStyle.transform,
-                // TODO(18/08/26): displayPosition and width support in SeriesModel
-                // .displayPosition = entry.config.presentation.displayPosition,
-            };
+            auto *series = new SeriesModel(this);
+            series->setId(entry_id);
+            series->setName(QString::fromStdString(entry.config.presentation.name));
+            series->setColor(QColor(entry.config.presentation.lineStyle.color.red,
+                                     entry.config.presentation.lineStyle.color.green,
+                                     entry.config.presentation.lineStyle.color.blue,
+                                     entry.config.presentation.lineStyle.color.alpha));
+            series->transform = entry_id == "2" ? ValueTransform::percentage() : ValueTransform::identity();
+            series->setColumn(entry_id.toInt());
+            // TODO(18/08/26): transform and yAxisId should be stored as part of seriesConfig
+            // series->transform = entry.config.presentation.lineStyle.transform;
+            // TODO(18/08/26): displayPosition and width support in SeriesModel
+            // series->displayPosition = entry.config.presentation.displayPosition;
+            m_seriesById[entry_id] = series;
         }
         fetchData();
     }
@@ -176,7 +161,7 @@ namespace ksv::presentation {
 
         const auto resolved = m_graphUseCase->get_resolved_graph();
         if (!resolved.series.empty() || !resolved.times.empty()) {
-            m_allSeries.clear();
+            m_allSeriesList.clear();
             m_enabledSeriesIds.clear();
             QList<QMap<int, qreal> > rows(int(resolved.times.size()));
             for (int i = 0; i < rows.size(); ++i) rows[i][kTimeColumn] = resolved.times[static_cast<size_t>(i)];
@@ -191,18 +176,20 @@ namespace ksv::presentation {
                 for (int i = 0; i < rows.size(); ++i) {
                     points.append(QPointF(resolved.times[i], values[i]));
                 }
-                m_seriesById[id].points = points;
-                m_seriesById[id].column = static_cast<int>(entry_id);
 
-                QVariantMap series{
-                    {"id", id},
-                    {"name", QString::fromStdString(presentation.name)},
-                    {"color", QColor(presentation.lineStyle.color.red, presentation.lineStyle.color.green,
-                                      presentation.lineStyle.color.blue, presentation.lineStyle.color.alpha)},
-                    {"enabled", presentation.enabled},
-                    {"displayPosition", presentation.displayPosition},
-                };
-                m_allSeries.append(series);
+                // fetchMetadata() only creates entries for enabled series; this preserves the
+                // original QMap<QString,SeriesModel>::operator[] auto-vivification behavior for
+                // any id fetchData() sees that fetchMetadata() didn't (e.g. a disabled series
+                // still present in resolved.series).
+                SeriesModel *entrySeries = m_seriesById.value(id, nullptr);
+                if (!entrySeries) {
+                    entrySeries = new SeriesModel(this);
+                    m_seriesById[id] = entrySeries;
+                }
+                entrySeries->points = points;
+                entrySeries->setColumn(static_cast<int>(entry_id));
+
+                m_allSeriesList.append(entrySeries);
                 m_enabledSeriesIds.append(id);
             }
             emit seriesConfigurationChanged();
@@ -259,7 +246,7 @@ namespace ksv::presentation {
 
     int GraphViewModel::columnForSeriesId(const QString &id) const {
         const auto it = m_seriesById.find(id);
-        return it != m_seriesById.end() ? it->column : -1;
+        return it != m_seriesById.end() ? (*it)->column() : -1;
     }
 
 }

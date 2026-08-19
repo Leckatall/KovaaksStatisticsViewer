@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QList>
+#include <QObject>
 #include <QPointF>
 #include <QString>
 #include <QVariantMap>
@@ -18,14 +19,31 @@
 #include "value_transform.h"
 
 namespace ksv::presentation {
-    struct SeriesModel {
-        QString id;
-        QString name;
-        QColor color;
+    class SeriesModel : public QObject {
+        Q_OBJECT
+        Q_PROPERTY(QString id READ id WRITE setId NOTIFY idChanged)
+        Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+        Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
+        Q_PROPERTY(int column READ column WRITE setColumn NOTIFY columnChanged)
+
+    public:
+        explicit SeriesModel(QObject *parent = nullptr) : QObject(parent) {}
+
+        [[nodiscard]] QString id() const { return m_id; }
+        void setId(const QString &id) { if (m_id == id) return; m_id = id; emit idChanged(); }
+
+        [[nodiscard]] QString name() const { return m_name; }
+        void setName(const QString &name) { if (m_name == name) return; m_name = name; emit nameChanged(); }
+
+        [[nodiscard]] QColor color() const { return m_color; }
+        void setColor(const QColor &color) { if (m_color == color) return; m_color = color; emit colorChanged(); }
+
+        [[nodiscard]] int column() const { return m_column; }
+        void setColumn(const int column) { if (m_column == column) return; m_column = column; emit columnChanged(); }
+
         ValueTransform transform;
         AxisModel::Options yAxisOptions;
         QList<QPointF> points;
-        int column = -1;
         std::optional<AxisModel> xAxis;
         std::optional<AxisModel> yAxis;
 
@@ -66,6 +84,18 @@ namespace ksv::presentation {
             const auto sample = sampleAtX(xValue);
             return sample ? transform.format(sample->y()) : QString();
         }
+
+    signals:
+        void idChanged();
+        void nameChanged();
+        void colorChanged();
+        void columnChanged();
+
+    private:
+        QString m_id;
+        QString m_name;
+        QColor m_color;
+        int m_column = -1;
     };
 
     [[nodiscard]] inline AxisModel axisForSeries(const std::span<const SeriesModel *const> members,
