@@ -22,6 +22,7 @@
 #include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
 #include "usecases/scenario_browser_use_case.h"
+#include "usecases/series_management_use_case.h"
 
 
 namespace ksv::application {
@@ -45,6 +46,7 @@ namespace ksv::application {
 
         m_settingsService = std::move(settingsService);
         m_seriesConfigStore = std::move(seriesConfigStore);
+        m_seriesManagementUseCase = std::make_shared<SeriesManagementUseCase>(m_seriesConfigStore);
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder);
 
         m_profileService = std::make_shared<data::ProfileService>(
@@ -77,7 +79,7 @@ namespace ksv::application {
 
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
         m_settingsVm = new presentation::SettingsViewModel(
-            m_settingsService, m_profileService, this);
+            m_settingsService, m_profileService, m_seriesManagementUseCase, this);
         m_scenarioBrowserUseCase = std::make_shared<ScenarioBrowserUseCase>(m_sessionController, m_profileService);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_scenarioBrowserUseCase, this);
     }

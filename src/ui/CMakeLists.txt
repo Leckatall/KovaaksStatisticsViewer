@@ -45,6 +45,8 @@ qt_add_qml_module(ksv_ui
             presentation/graph_vm_base.h
             presentation/graph_vm.h
             presentation/graph_vm.cpp
+            presentation/series_expression_qml.h
+            presentation/series_expression_qml.cpp
             presentation/playtime_graph_vm.h
             presentation/playtime_graph_vm.cpp
             presentation/completion_history_vm.h

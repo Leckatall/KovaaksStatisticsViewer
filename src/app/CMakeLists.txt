@@ -3,6 +3,7 @@ add_library(ksv_app STATIC
         app.h
         app.cpp
         usecases/graph_use_case.h
+        usecases/series_management_use_case.h
         usecases/graph_column_preferences.h
         usecases/graph_column_preferences.cpp
         usecases/perf_column_builder.h

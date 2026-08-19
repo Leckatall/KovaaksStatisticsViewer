@@ -102,12 +102,35 @@ namespace {
         void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
     };
 
+    class FakeSeriesManagementUseCase final : public ISeriesManagementUseCase {
+    public:
+        [[nodiscard]] std::vector<SeriesConfig> getAll() const override { return configs; }
+        MutationResult setSeriesEnabled(const SeriesId id, const bool enabled) override {
+            lastSetEnabled = std::pair{id, enabled};
+            return {};
+        }
+        MutationResult createComputed(const CreateComputedSeriesRequest &) override { return {}; }
+        MutationResult updateSeries(const UpdateSeriesRequest &) override { return {}; }
+        MutationResult removeComputed(SeriesId) override { return {}; }
+        MutationResult reorder(const SeriesId id, const uint32_t position) override {
+            lastReorder = std::pair{id, position};
+            return {};
+        }
+        void onChanged(std::function<void()> callback) override { callback_ = std::move(callback); }
+
+        std::vector<SeriesConfig> configs;
+        std::optional<std::pair<SeriesId, bool>> lastSetEnabled;
+        std::optional<std::pair<SeriesId, uint32_t>> lastReorder;
+        std::function<void()> callback_;
+    };
+
     class SettingsViewModelTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSettingsService> fake_service = std::make_shared<FakeSettingsService>();
         std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
+        std::shared_ptr<FakeSeriesManagementUseCase> seriesManagement = std::make_shared<FakeSeriesManagementUseCase>();
         std::unique_ptr<SettingsViewModel> make_view_model() {
-            return std::make_unique<SettingsViewModel>(fake_service, fake_profile_service);
+            return std::make_unique<SettingsViewModel>(fake_service, fake_profile_service, seriesManagement);
         }
     };
 
@@ -214,7 +237,36 @@ namespace {
     }
 
     TEST_F(SettingsViewModelTest, HasNoMainGraphSeriesDependency) {
-        auto view_model = std::make_unique<SettingsViewModel>(fake_service, fake_profile_service);
+        auto view_model = std::make_unique<SettingsViewModel>(fake_service, fake_profile_service, seriesManagement);
         EXPECT_TRUE(view_model->getKovaaksDir().isValid());
+    }
+
+    TEST_F(SettingsViewModelTest, GetAllSeriesConfigsReturnsEveryRowAsAVariantMap) {
+        seriesManagement->configs = {
+            SeriesConfig{{1}, {"Score", {{0, 150, 0, 255}, 2.0}, true, 0}, primitive(PrimitiveMetric::Score)},
+        };
+        const auto view_model = make_view_model();
+        const auto result = view_model->getAllSeriesConfigs();
+        ASSERT_EQ(result.size(), 1);
+        const auto row = result.first().toMap();
+        EXPECT_EQ(row["id"].toString(), "1");
+        EXPECT_EQ(row["name"].toString(), "Score");
+        EXPECT_TRUE(row["enabled"].toBool());
+    }
+
+    TEST_F(SettingsViewModelTest, SetSeriesEnabledForwardsToTheSeriesManagementUseCase) {
+        const auto view_model = make_view_model();
+        view_model->setSeriesEnabled("3", false);
+        ASSERT_TRUE(seriesManagement->lastSetEnabled);
+        EXPECT_EQ(seriesManagement->lastSetEnabled->first.value, 3U);
+        EXPECT_FALSE(seriesManagement->lastSetEnabled->second);
+    }
+
+    TEST_F(SettingsViewModelTest, ReorderSeriesForwardsIdAndPosition) {
+        const auto view_model = make_view_model();
+        view_model->reorderSeries("5", 2);
+        ASSERT_TRUE(seriesManagement->lastReorder);
+        EXPECT_EQ(seriesManagement->lastReorder->first.value, 5U);
+        EXPECT_EQ(seriesManagement->lastReorder->second, 2U);
     }
 }

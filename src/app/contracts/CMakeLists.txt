@@ -18,6 +18,7 @@ target_sources(ksv_contracts PUBLIC
         i_completion_history_use_case.h
         i_graph_column_preferences.h
         i_average_line_use_case.h
+        i_series_management_use_case.h
 )
 
 target_include_directories(ksv_contracts PUBLIC

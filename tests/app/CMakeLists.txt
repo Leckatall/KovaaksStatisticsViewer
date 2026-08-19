@@ -13,6 +13,7 @@ add_executable(app_tests
         playtime_graph_use_case_test.cpp
         scenario_browser_use_case_test.cpp
         session_controller_test.cpp
+        series_management_use_case_test.cpp
 )
 
 target_link_libraries(app_tests PRIVATE
