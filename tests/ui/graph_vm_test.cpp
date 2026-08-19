@@ -60,17 +60,6 @@ namespace {
             fake_use_case->series_to_return.columns[ColumnId::Score] = {10.0F, 20.0F, 30.0F};
             fake_use_case->series_to_return.columns[ColumnId::Accuracy] = {0.5F, 0.6F, 0.7F};
         }
-
-        // Loads the real default series catalogue through the resolved-graph path and refreshes
-        // m_seriesById, so columnName/columnColor/columnKey (which now read from it) have real data.
-        void loadDefaultSeriesMetadata() {
-            ResolvedGraph resolved;
-            resolved.times = {0.0F, 1.0F};
-            for (const auto &config: defaultSeriesConfigs())
-                resolved.series.push_back({config, std::vector<double>{1.0, 2.0}});
-            fake_use_case->resolved_graph_to_return = resolved;
-            view_model.fetchMetadata();
-        }
     };
 
     TEST_F(GraphViewModelTest, StartsEmptyWithDefaultBounds) {
@@ -182,8 +171,8 @@ namespace {
 
         const auto scoreSeries = view_model.series({kScore});
         ASSERT_EQ(scoreSeries.size(), 1);
-        EXPECT_FALSE(scoreSeries.front().yAxis.has_value());
-        const AxisModel scoreAxis = scoreSeries.front().deriveYAxis();
+        EXPECT_FALSE(scoreSeries.front()->yAxis.has_value());
+        const AxisModel scoreAxis = scoreSeries.front()->deriveYAxis();
         EXPECT_DOUBLE_EQ(scoreAxis.min(), 10.0);
         EXPECT_DOUBLE_EQ(scoreAxis.max(), 30.0);
         ASSERT_GE(scoreAxis.ticks().size(), 2);
@@ -194,8 +183,8 @@ namespace {
         // supply, so it's the one primitive still hardcoded to its own axis.
         const auto accuracySeries = view_model.series({kAccuracy});
         ASSERT_EQ(accuracySeries.size(), 1);
-        ASSERT_TRUE(accuracySeries.front().yAxis.has_value());
-        const AxisModel &accuracyAxis = *accuracySeries.front().yAxis;
+        ASSERT_TRUE(accuracySeries.front()->yAxis.has_value());
+        const AxisModel &accuracyAxis = *accuracySeries.front()->yAxis;
         EXPECT_NEAR(accuracyAxis.min(), 0.5, 1e-6);
         EXPECT_NEAR(accuracyAxis.max(), 0.7, 1e-6);
         ASSERT_GE(accuracyAxis.ticks().size(), 2);
@@ -215,10 +204,10 @@ namespace {
 
         const auto series = view_model.series({kScoreTotal, kExpectedFinalScore});
         ASSERT_EQ(series.size(), 2);
-        ASSERT_TRUE(series[0].yAxis.has_value());
-        ASSERT_TRUE(series[1].yAxis.has_value());
-        EXPECT_DOUBLE_EQ(series[0].yAxis->min(), series[1].yAxis->min());
-        EXPECT_DOUBLE_EQ(series[0].yAxis->max(), series[1].yAxis->max());
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->min(), series[1]->yAxis->min());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
     }
 
     // ScoreFamilySharesAnAxisForTheRequestedVisibleSubset, AccuracyRemainsIndependentAndFormatsAsPercentage,
@@ -230,51 +219,6 @@ namespace {
     // AllColumnsMayBeDisabledWithoutHidingSeriesData removed: its series({Score}) assertion always
     // returns empty for the same reason as the tests removed above.
     // See .plans/series-config-migration-completion/plans/04-graph-read-model-narrowing.md.
-
-    // The settings dialog and control panel key their per-column visibility
-    // toggles off these names, lowercased, so every plottable column needs a
-    // stable, non-empty name and a distinct color to be usable as a toggle.
-    TEST_F(GraphViewModelTest, ColumnNameReturnsExpectedNameForEachColumn) {
-        loadDefaultSeriesMetadata();
-
-        EXPECT_EQ(view_model.columnName(kTime), "Time");
-        EXPECT_EQ(view_model.columnName(kScore), "Score");
-        EXPECT_EQ(view_model.columnName(kAccuracy), "Accuracy");
-        EXPECT_EQ(view_model.columnName(kShots), "Shots");
-        EXPECT_EQ(view_model.columnName(kKills), "Kills");
-        EXPECT_EQ(view_model.columnName(kDmg), "Dmg");
-        EXPECT_EQ(view_model.columnName(kExpectedFinalScoreRecent), "Expected Final Score (5s)");
-    }
-
-    TEST_F(GraphViewModelTest, ColumnNameReturnsEmptyForUnknownColumn) {
-        EXPECT_TRUE(view_model.columnName(kInvalidColumn).isEmpty());
-    }
-
-    TEST_F(GraphViewModelTest, ColumnKeyDelegatesToColumnName) {
-        loadDefaultSeriesMetadata();
-
-        EXPECT_EQ(view_model.columnKey(kTime), view_model.columnName(kTime));
-        EXPECT_EQ(view_model.columnKey(kScore), view_model.columnName(kScore));
-        EXPECT_EQ(view_model.columnKey(kExpectedFinalScoreRecent), view_model.columnName(kExpectedFinalScoreRecent));
-        EXPECT_TRUE(view_model.columnKey(kInvalidColumn).isEmpty());
-    }
-
-    TEST_F(GraphViewModelTest, ColumnColorIsValidAndDistinctForEveryBuiltinColumn) {
-        loadDefaultSeriesMetadata();
-
-        QSet<QRgb> seen;
-        for (const int column: {kScore, kAccuracy, kShots, kKills, kDmg, kScoreTotal, kExpectedFinalScore,
-                                kExpectedFinalScoreRecent}) {
-            const QColor color = view_model.columnColor(column);
-            EXPECT_TRUE(color.isValid()) << "column " << column << " has an invalid color";
-            EXPECT_FALSE(seen.contains(color.rgb())) << "column " << column << " reuses another column's color";
-            seen.insert(color.rgb());
-        }
-    }
-
-    TEST_F(GraphViewModelTest, ColumnColorReturnsInvalidForUnknownColumn) {
-        EXPECT_FALSE(view_model.columnColor(kInvalidColumn).isValid());
-    }
 
     TEST_F(GraphViewModelTest, FetchDataPopulatesShotsKillsAndDmgColumns) {
         setSampleData();
@@ -351,7 +295,7 @@ namespace {
     TEST_F(GraphViewModelTest, AdaptsResolvedSeriesAndExcludesUnavailableFromBounds) {
         fake_use_case->resolved_graph_to_return = {};
         view_model.fetchData();
-        EXPECT_TRUE(view_model.allSeries().isEmpty());
+        EXPECT_TRUE(view_model.enabledSeriesIds().isEmpty());
     }
 
     TEST_F(GraphViewModelTest, ResolvesColumnsForEnabledSeriesIds) {
@@ -391,11 +335,11 @@ namespace {
 
         EXPECT_EQ(view_model.columnForSeriesId("9"), kExpectedFinalScoreRecent);
         EXPECT_FALSE(view_model.seriesPoints(kExpectedFinalScoreRecent).isEmpty());
-        EXPECT_EQ(view_model.columnName(kExpectedFinalScoreRecent), "Expected Final Score (5s)");
+        EXPECT_EQ(view_model.series({kExpectedFinalScoreRecent}).front()->name(), "Expected Final Score (5s)");
 
         // A mid-list series (Kills, SeriesId 5) renders under its own name, not the next series'.
         EXPECT_EQ(view_model.columnForSeriesId("5"), kKills);
-        EXPECT_EQ(view_model.columnName(kKills), "Kills");
+        EXPECT_EQ(view_model.series({kKills}).front()->name(), "Kills");
     }
 
 }

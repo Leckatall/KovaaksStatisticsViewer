@@ -73,7 +73,7 @@ namespace {
 
         const auto accuracy_series = view_model.series({CompletionHistoryViewModel::Accuracy});
         ASSERT_EQ(accuracy_series.size(), 1);
-        EXPECT_EQ(accuracy_series.front().formattedValueAtX(1.0), "45%");
+        EXPECT_EQ(accuracy_series.front()->formattedValueAtX(1.0), "45%");
     }
 
     TEST_F(CompletionHistoryViewModelTest, CountSeriesShareAnAxisButScoreDoesNot) {
@@ -84,14 +84,14 @@ namespace {
                                                 CompletionHistoryViewModel::Shots,
                                                 CompletionHistoryViewModel::Hits});
         ASSERT_EQ(series.size(), 3);
-        ASSERT_TRUE(series[0].yAxis.has_value());
-        ASSERT_TRUE(series[1].yAxis.has_value());
-        ASSERT_TRUE(series[2].yAxis.has_value());
-        EXPECT_DOUBLE_EQ(series[1].yAxis->min(), series[2].yAxis->min());
-        EXPECT_DOUBLE_EQ(series[1].yAxis->max(), series[2].yAxis->max());
-        EXPECT_NE(series[0].yAxis->max(), series[1].yAxis->max());
-        EXPECT_LE(series[1].yAxis->min(), 0.0);
-        EXPECT_GE(series[1].yAxis->max(), 25.0);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        ASSERT_TRUE(series[2]->yAxis.has_value());
+        EXPECT_DOUBLE_EQ(series[1]->yAxis->min(), series[2]->yAxis->min());
+        EXPECT_DOUBLE_EQ(series[1]->yAxis->max(), series[2]->yAxis->max());
+        EXPECT_NE(series[0]->yAxis->max(), series[1]->yAxis->max());
+        EXPECT_LE(series[1]->yAxis->min(), 0.0);
+        EXPECT_GE(series[1]->yAxis->max(), 25.0);
     }
 
     TEST_F(CompletionHistoryViewModelTest, LegacyAxesAreAvailableForEveryColumn) {
@@ -147,15 +147,17 @@ namespace {
         EXPECT_EQ(title_spy.count(), 1);
     }
 
-    TEST_F(CompletionHistoryViewModelTest, EveryMetricHasANameColorAndUniqueKey) {
-        QSet<QString> keys;
+    TEST_F(CompletionHistoryViewModelTest, EveryMetricHasANameColorAndUniqueId) {
+        QSet<QString> ids;
         for (int column = CompletionHistoryViewModel::Score;
              column < CompletionHistoryViewModel::ColumnCount; ++column) {
-            EXPECT_FALSE(view_model.columnName(column).isEmpty());
-            EXPECT_TRUE(view_model.columnColor(column).isValid());
-            EXPECT_FALSE(view_model.columnKey(column).isEmpty());
-            keys.insert(view_model.columnKey(column));
+            const auto series = view_model.series({column});
+            ASSERT_EQ(series.size(), 1);
+            EXPECT_FALSE(series.front()->name().isEmpty());
+            EXPECT_TRUE(series.front()->color().isValid());
+            EXPECT_FALSE(series.front()->id().isEmpty());
+            ids.insert(series.front()->id());
         }
-        EXPECT_EQ(keys.size(), CompletionHistoryViewModel::ColumnCount - CompletionHistoryViewModel::Score);
+        EXPECT_EQ(ids.size(), CompletionHistoryViewModel::ColumnCount - CompletionHistoryViewModel::Score);
     }
 }

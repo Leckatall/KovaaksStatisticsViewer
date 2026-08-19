@@ -124,9 +124,9 @@ namespace {
 
         const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
         ASSERT_EQ(series.size(), 1);
-        ASSERT_TRUE(series.front().yAxis.has_value());
-        EXPECT_EQ(series.front().formattedValueAtX(epochDayMs(19500)), "30 min");
-        EXPECT_EQ(series.front().yAxis->formatTick(30.0), "30 min");
+        ASSERT_TRUE(series.front()->yAxis.has_value());
+        EXPECT_EQ(series.front()->formattedValueAtX(epochDayMs(19500)), "30 min");
+        EXPECT_EQ(series.front()->yAxis->formatTick(30.0), "30 min");
     }
 
     TEST_F(PlaytimeGraphViewModelTest, SeriesOmitsDateColumnWhichHasNoDrawableSeries) {
@@ -137,7 +137,9 @@ namespace {
     }
 
     TEST_F(PlaytimeGraphViewModelTest, PlaytimeColumnHasNameAndValidColor) {
-        EXPECT_EQ(view_model.columnName(PlaytimeGraphViewModel::Playtime), "Playtime (3-day avg)");
-        EXPECT_TRUE(view_model.columnColor(PlaytimeGraphViewModel::Playtime).isValid());
+        const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
+        ASSERT_EQ(series.size(), 1);
+        EXPECT_EQ(series.front()->name(), "Playtime (3-day avg)");
+        EXPECT_TRUE(series.front()->color().isValid());
     }
 }

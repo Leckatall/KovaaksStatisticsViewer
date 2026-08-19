@@ -76,7 +76,7 @@ namespace {
     TEST_F(GraphCanvasGeometryTest, NearestPointHitsAKnownScorePixel) {
         const auto series = graphVm->series(QList<int>{kScoreSeriesId});
         ASSERT_FALSE(series.isEmpty());
-        const auto display = series.front().displayPoints();
+        const auto display = series.front()->displayPoints();
         ASSERT_FALSE(display.isEmpty());
 
         const QRectF rect = canvas.property("plotArea").toRectF();
@@ -84,7 +84,7 @@ namespace {
         // Score isn't in GraphViewModel's hardcoded axis table, so it derives its own axis the same
         // way GraphCanvas does — see yAxisFor() in graph_canvas.cpp.
         const QPointF pixel = toPixel(display.front(), rect, xAxis,
-                                      series.front().yAxis.value_or(series.front().deriveYAxis()));
+                                      series.front()->yAxis.value_or(series.front()->deriveYAxis()));
 
         const QVariantMap hit = canvas.nearestPoint(pixel.x(), pixel.y());
 
@@ -100,11 +100,11 @@ namespace {
     // Minimal VM whose single series has NO y-axis, forcing yAxisFor() to derive one.
     class NoYAxisVm : public presentation::GraphViewModelBase {
     public:
-        [[nodiscard]] QList<presentation::SeriesModel> series(const QList<int> &) const override {
-            presentation::SeriesModel s;
-            s.name = "Fallback";
-            s.column = 0;
-            s.points = {QPointF(0.0, 0.0), QPointF(10.0, 100.0)};
+        [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &) const override {
+            auto *s = new presentation::SeriesModel(const_cast<NoYAxisVm *>(this));
+            s->setName("Fallback");
+            s->setColumn(0);
+            s->points = {QPointF(0.0, 0.0), QPointF(10.0, 100.0)};
             // Deliberately leave xAxis / yAxis unset.
             return {s};
         }
@@ -115,9 +115,6 @@ namespace {
         [[nodiscard]] QVariantMap axisBounds() const override { return {}; }
         [[nodiscard]] QList<qreal> axisTicks(int) const override { return {}; }
         [[nodiscard]] QList<QPointF> seriesPoints(int) const override { return {}; }
-        [[nodiscard]] QString columnName(int) const override { return "Fallback"; }
-        [[nodiscard]] QColor columnColor(int) const override { return {}; }
-        [[nodiscard]] QString columnKey(int) const override { return "fallback"; }
         [[nodiscard]] int xColumn() const override { return 0; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
     };
@@ -132,8 +129,8 @@ namespace {
 
         const QRectF rect = fallbackCanvas.property("plotArea").toRectF();
         const auto s = vm.series({0}).front();
-        const auto yAxis = s.deriveYAxis();
-        const QPointF expected = toPixel(s.displayPoints().back(), rect, vm.xAxis(), yAxis);
+        const auto yAxis = s->deriveYAxis();
+        const QPointF expected = toPixel(s->displayPoints().back(), rect, vm.xAxis(), yAxis);
 
         const QVariantMap hit = fallbackCanvas.nearestPoint(expected.x(), expected.y());
 
@@ -172,11 +169,11 @@ namespace {
     public:
         explicit FixedRangeVm(const qreal yHi) : m_yHi(yHi) {}
 
-        [[nodiscard]] QList<presentation::SeriesModel> series(const QList<int> &) const override {
-            presentation::SeriesModel s;
-            s.name = "Value";
-            s.column = 0;
-            s.points = {QPointF(0.0, 0.0), QPointF(10.0, m_yHi)};
+        [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &) const override {
+            auto *s = new presentation::SeriesModel(const_cast<FixedRangeVm *>(this));
+            s->setName("Value");
+            s->setColumn(0);
+            s->points = {QPointF(0.0, 0.0), QPointF(10.0, m_yHi)};
             return {s};
         }
         [[nodiscard]] presentation::AxisModel xAxis() const override {
@@ -186,9 +183,6 @@ namespace {
         [[nodiscard]] QVariantMap axisBounds() const override { return {}; }
         [[nodiscard]] QList<qreal> axisTicks(int) const override { return {}; }
         [[nodiscard]] QList<QPointF> seriesPoints(int) const override { return {}; }
-        [[nodiscard]] QString columnName(int) const override { return "Value"; }
-        [[nodiscard]] QColor columnColor(int) const override { return {}; }
-        [[nodiscard]] QString columnKey(int) const override { return "value"; }
         [[nodiscard]] int xColumn() const override { return 0; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
 
@@ -220,18 +214,18 @@ namespace {
 
     class VisibleSetAxisVm : public presentation::GraphViewModelBase {
     public:
-        [[nodiscard]] QList<presentation::SeriesModel> series(const QList<int> &columns) const override {
+        [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &columns) const override {
             const bool shared = columns.contains(0) && columns.contains(1);
             const presentation::AxisModel yAxis = presentation::AxisModel::forRange(0.0, shared ? 123456.0 : 1.0);
-            QList<presentation::SeriesModel> result;
+            QList<presentation::SeriesModel *> result;
             for (const int column: columns) {
                 if (column < 0 || column > 1) continue;
-                presentation::SeriesModel s;
-                s.column = column;
-                s.name = "Value";
-                s.points = {QPointF(0.0, 0.0), QPointF(10.0, shared ? 123456.0 : 1.0)};
-                s.yAxis = yAxis;
-                result.append(std::move(s));
+                auto *s = new presentation::SeriesModel(const_cast<VisibleSetAxisVm *>(this));
+                s->setColumn(column);
+                s->setName("Value");
+                s->points = {QPointF(0.0, 0.0), QPointF(10.0, shared ? 123456.0 : 1.0)};
+                s->yAxis = yAxis;
+                result.append(s);
             }
             return result;
         }
@@ -242,9 +236,6 @@ namespace {
         [[nodiscard]] QVariantMap axisBounds() const override { return {}; }
         [[nodiscard]] QList<qreal> axisTicks(int) const override { return {}; }
         [[nodiscard]] QList<QPointF> seriesPoints(int) const override { return {}; }
-        [[nodiscard]] QString columnName(int) const override { return "Value"; }
-        [[nodiscard]] QColor columnColor(int) const override { return {}; }
-        [[nodiscard]] QString columnKey(int) const override { return "value"; }
         [[nodiscard]] int xColumn() const override { return 0; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
     };
@@ -272,13 +263,13 @@ namespace {
 
         const auto accuracySeries = graphVm->series({kAccuracySeriesId});
         ASSERT_FALSE(accuracySeries.isEmpty());
-        ASSERT_TRUE(accuracySeries.front().yAxis.has_value());
-        const auto &expectedAxis = *accuracySeries.front().yAxis;
+        ASSERT_TRUE(accuracySeries.front()->yAxis.has_value());
+        const auto &expectedAxis = *accuracySeries.front()->yAxis;
 
         const auto labelled = graphVm->series({canvas.property("labelledYAxisColumn").toInt()});
         ASSERT_FALSE(labelled.isEmpty());
-        ASSERT_TRUE(labelled.front().yAxis.has_value());
-        EXPECT_DOUBLE_EQ(labelled.front().yAxis->min(), expectedAxis.min());
-        EXPECT_DOUBLE_EQ(labelled.front().yAxis->max(), expectedAxis.max());
+        ASSERT_TRUE(labelled.front()->yAxis.has_value());
+        EXPECT_DOUBLE_EQ(labelled.front()->yAxis->min(), expectedAxis.min());
+        EXPECT_DOUBLE_EQ(labelled.front()->yAxis->max(), expectedAxis.max());
     }
 }
