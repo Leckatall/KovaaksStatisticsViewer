@@ -43,9 +43,9 @@ namespace ksv::presentation {
 
         [[nodiscard]] QString scenarioTitle() const { return m_scenarioTitle; }
 
-        Q_INVOKABLE [[nodiscard]] QString columnName(int column) const override;
-        Q_INVOKABLE [[nodiscard]] QColor columnColor(int column) const override;
-        Q_INVOKABLE [[nodiscard]] QString columnKey(int column) const override;
+        Q_INVOKABLE [[nodiscard]] [[deprecated]] QString columnName(int column) const override;
+        Q_INVOKABLE [[nodiscard]] [[deprecated]] QColor columnColor(int column) const override;
+        Q_INVOKABLE [[nodiscard]] [[deprecated]] QString columnKey(int column) const override;
 
         [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
 
@@ -72,6 +72,7 @@ namespace ksv::presentation {
         // Time has no SeriesId (primitives start at 1), so 0 is reserved for it below.
         static constexpr int kTimeColumn = 0;
         // Fallback y-axis column when nothing else is specified; the built-in Score primitive, id 1.
+        // DEPRECATED: Fallback uses every visible series before this default what is the point of having an axis for a graph with no data
         static constexpr int kDefaultYAxisSeriesId = 1;
 
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;

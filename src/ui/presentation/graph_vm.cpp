@@ -35,7 +35,7 @@ namespace ksv::presentation {
         // column == SeriesId::value for the built-in series (see fetchMetadata()/fetchData()).
         std::optional<YAxis> yAxisFor(const int column) {
             switch (column) {
-                case 2: return AccuracyAxis; // Accuracy
+                // case 2: return AccuracyAxis; // Accuracy
                 case 7: case 8: case 9: return ScoreFamilyAxis; // Score Total / Expected Final Score / (5s)
                 default: return std::nullopt;
             }
@@ -148,14 +148,16 @@ namespace ksv::presentation {
         m_seriesById.clear();
         for (const auto &entry: series_list) {
             if (!entry.config.presentation.enabled) continue;
-            m_seriesById[QString::number(entry.config.id.value)] = SeriesModel{
-                .id = QString::number(entry.config.id.value),
+            const auto entry_id = QString::number(entry.config.id.value);
+            m_seriesById[entry_id] = SeriesModel{
+                .id = entry_id,
                 .name = QString::fromStdString(entry.config.presentation.name),
                 .color = QColor(entry.config.presentation.lineStyle.color.red,
                                  entry.config.presentation.lineStyle.color.green,
                                  entry.config.presentation.lineStyle.color.blue,
                                  entry.config.presentation.lineStyle.color.alpha),
-                .column = static_cast<int>(entry.config.id.value),
+                .transform = entry_id == "2" ? ValueTransform::percentage() : ValueTransform::identity(),
+                .column = entry_id.toInt(),
                 // TODO(18/08/26): transform and yAxisId should be stored as part of seriesConfig
                 // .transform = entry.config.presentation.lineStyle.transform,
                 // TODO(18/08/26): displayPosition and width support in SeriesModel

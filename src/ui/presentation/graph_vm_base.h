@@ -39,9 +39,9 @@ namespace ksv::presentation {
 
         [[nodiscard]] virtual QList<QPointF> seriesPoints(int column) const = 0;
 
-        Q_INVOKABLE [[nodiscard]] virtual QString columnName(int column) const = 0;
-        Q_INVOKABLE [[nodiscard]] virtual QColor columnColor(int column) const = 0;
-        Q_INVOKABLE [[nodiscard]] virtual QString columnKey(int column) const = 0;
+        Q_INVOKABLE [[nodiscard]] [[deprecated]] virtual QString columnName(int column) const = 0;
+        Q_INVOKABLE [[nodiscard]] [[deprecated]] virtual QColor columnColor(int column) const = 0;
+        Q_INVOKABLE [[nodiscard]] [[deprecated]] virtual QString columnKey(int column) const = 0;
 
         [[nodiscard]] virtual int xColumn() const = 0;
         [[nodiscard]] virtual int yAxisColumn() const = 0;
