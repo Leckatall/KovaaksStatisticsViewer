@@ -51,6 +51,7 @@ namespace ksv::application {
             const auto bucketed = bucketRun(run);
             result.times = bucketed.times;
             for (const SeriesConfig &config : m_store->getAll()) {
+                if (!config.presentation.enabled) continue;
                 std::optional<std::vector<double>> values;
                 values = m_average->evaluate(run, config.expression);
                 result.series.push_back({config, std::move(values)});
@@ -58,15 +59,6 @@ namespace ksv::application {
             return result;
         }
 
-        MutationResult setSeriesEnabled(const SeriesId series_id, const bool enabled) override {
-            UpdatedSeriesPresentation presentation{.enabled = enabled};
-            return m_store->updateSeries({.id = series_id, .presentation = presentation});
-        }
-        MutationResult updateBasePresentation(const UpdateBaseSeriesRequest &request) override { return m_store->updateBase(request); }
-        MutationResult createComputed(const CreateComputedSeriesRequest &request) override { return m_store->createComputed(request);}
-        MutationResult updateComputed(const UpdateComputedSeriesRequest &request) override { return m_store->updateComputed(request);}
-        MutationResult removeComputed(const SeriesId id) override { return m_store->removeComputed(id);}
-        MutationResult moveSeries(const SeriesId id, const uint32_t position) override { return m_store->reorder(id, position); }
         void onSeriesConfigChanged(std::function<void()> callback) override { m_config_callbacks.push_back(std::move(callback)); }
 
     private:
@@ -75,10 +67,6 @@ namespace ksv::application {
         std::shared_ptr<IAverageLineUseCase> m_average;
         std::vector<std::function<void()>> m_config_callbacks;
 
-        MutationResult publishLegacy() {
-            for (const auto &callback : m_config_callbacks) callback();
-            return {};
-        }
     };
 }
 

@@ -153,28 +153,15 @@ namespace ksv::application {
 
     [[nodiscard]] Expression averageAcrossRuns(Expression input, RunSelection selection);
 
-    // struct BaseSeriesConfig {
-    //     PrimitiveMetric metric;
-    //     SeriesPresentation presentation;
-    // };
-    //
-    // struct ComputedSeriesConfig {
-    //     SeriesId id;
-    //     SeriesPresentation presentation;
-    //     Expression expression;
-    // };
-
     struct SeriesConfig {
         SeriesId id;
         SeriesPresentation presentation;
         Expression expression;
 
         [[nodiscard]] bool isPrimitive() const {
-            return std::holds_alternative<PrimitiveReference>(expression->value());
+            return expression && std::holds_alternative<PrimitiveReference>(expression->value());
         }
     };
-
-    // using SeriesConfig = std::variant<BaseSeriesConfig, ComputedSeriesConfig>;
 
     enum class SeriesConfigValidationCode {
         InvalidPrimitiveMetric,
@@ -207,8 +194,6 @@ namespace ksv::application {
     class SeriesConfigValidator {
 
     };
-
-    // [[nodiscard]] const SeriesPresentation &seriesPresentation(const SeriesConfig &config);
 
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfig(const SeriesConfig &config);
 

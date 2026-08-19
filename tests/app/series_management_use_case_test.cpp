@@ -9,8 +9,6 @@ namespace {
     public:
         [[nodiscard]] std::vector<SeriesConfig> getAll() const override { return configs; }
         MutationResult createComputed(const CreateComputedSeriesRequest &) override { ++createComputedCalls; return {}; }
-        MutationResult updateComputed(const UpdateComputedSeriesRequest &) override { return {}; }
-        MutationResult updateBase(const UpdateBaseSeriesRequest &) override { return {}; }
         MutationResult updateSeries(const UpdateSeriesRequest &request) override { lastUpdateSeriesRequest = request; return {}; }
         MutationResult removeComputed(const SeriesId id) override { lastRemovedId = id; return {}; }
         MutationResult reorder(const SeriesId id, const uint32_t position) override {

@@ -193,7 +193,7 @@ namespace ksv::application {
     std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs) {
         std::vector<ValidationError> errors;
         std::array<size_t, kPrimitiveMetrics.size()> base_counts{};
-        std::vector<std::pair<uint64_t, size_t> > computed_ids;
+        std::vector<std::pair<uint64_t, size_t> > series_ids;
         std::vector<std::pair<uint32_t, size_t> > positions;
 
         for (size_t index = 0; index < configs.size(); ++index) {
@@ -204,6 +204,7 @@ namespace ksv::application {
                           std::make_move_iterator(record_errors.end()));
 
             positions.emplace_back(config.presentation.displayPosition, index);
+            if (config.id.value != 0) series_ids.emplace_back(config.id.value, index);
             if (config.isPrimitive()) {
                 const auto metric = std::ranges::find(kPrimitiveMetrics,
                                                       std::get_if<PrimitiveReference>(&config.expression->value())->
@@ -219,8 +220,6 @@ namespace ksv::application {
                         });
                     }
                 }
-            } else if (config.id.value != 0) {
-                computed_ids.emplace_back(config.id.value, index);
             }
         }
 
@@ -233,23 +232,15 @@ namespace ksv::application {
             }
         }
 
-        std::ranges::sort(computed_ids);
-        if (auto it = std::ranges::adjacent_find(computed_ids); it != computed_ids.end()) {
+        std::ranges::sort(series_ids);
+        if (auto it = std::ranges::adjacent_find(series_ids, [](const auto &left, const auto &right) {
+                return left.first == right.first;
+            }); it != series_ids.end()) {
             errors.push_back({
                 SeriesConfigValidationCode::DuplicateComputedSeriesId,
                 "records[" + std::to_string(it->second) + "].id"
             });
         }
-        // DEPRECATED?: 18/08/2026
-        // for (size_t index = 1; index < computed_ids.size(); ++index) {
-        //     if (computed_ids[index].first == computed_ids[index - 1].first) {
-        //         errors.push_back({
-        //             SeriesConfigValidationCode::DuplicateComputedSeriesId,
-        //             "records[" + std::to_string(computed_ids[index].second) + "].id"
-        //         });
-        //     }
-        // }
-
         std::ranges::sort(positions);
         for (size_t index = 0; index < positions.size(); ++index) {
             if (index > 0 && positions[index].first == positions[index - 1].first) {

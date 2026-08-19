@@ -41,8 +41,6 @@ namespace {
     public:
         [[nodiscard]] std::vector<SeriesConfig> getAll() const override { return configs; }
         MutationResult createComputed(const CreateComputedSeriesRequest &) override { notify(); return {}; }
-        MutationResult updateComputed(const UpdateComputedSeriesRequest &) override { notify(); return {}; }
-        MutationResult updateBase(const UpdateBaseSeriesRequest &) override { notify(); return {}; }
         MutationResult updateSeries(const UpdateSeriesRequest &) override { notify(); return {}; }
         MutationResult removeComputed(SeriesId) override { notify(); return {}; }
         MutationResult reorder(SeriesId, uint32_t) override { notify(); return {}; }
@@ -58,9 +56,10 @@ namespace {
     class FakeAverageLineUseCase final : public IAverageLineUseCase {
     public:
         [[nodiscard]] std::optional<std::vector<double> > evaluate(
-            const ScenarioPerf &, const Expression &) const override { return result; }
+            const ScenarioPerf &, const Expression &) const override { ++evaluateCallCount; return result; }
 
         std::optional<std::vector<double> > result;
+        mutable int evaluateCallCount = 0;
     };
 
     ScenarioDataPoint make_point(const float time, const int shots, const int hits, const float score) {
@@ -161,10 +160,16 @@ namespace {
         EXPECT_TRUE(graph.series.empty() || !graph.series.front().values.has_value());
     }
 
-    TEST_F(GraphUseCaseTest, MutationsDelegateToStoreAndPublishOneChange) {
-        int changes = 0;
-        use_case.onSeriesConfigChanged([&] { ++changes; });
-        use_case.createComputed({});
-        EXPECT_EQ(changes, 1);
+    TEST_F(GraphUseCaseTest, ResolvedGraphNeverIncludesADisabledSeriesAndNeverEvaluatesItsExpression) {
+        fake_store->configs = {
+            SeriesConfig{{1}, {"Enabled", {}, true, 0}, primitive(PrimitiveMetric::Score)},
+            SeriesConfig{{2}, {"Disabled", {}, false, 1}, primitive(PrimitiveMetric::Shots)},
+        };
+
+        const auto resolved = use_case.get_resolved_graph();
+
+        ASSERT_EQ(resolved.series.size(), 1U);
+        EXPECT_EQ(resolved.series.front().config.id.value, 1U);
+        EXPECT_EQ(fake_average->evaluateCallCount, 1);
     }
 }

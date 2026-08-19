@@ -30,12 +30,6 @@ namespace {
         }
         ResolvedGraph get_resolved_graph() override { return resolved_graph_to_return; }
 
-        MutationResult setSeriesEnabled(SeriesId, bool) override { return {}; }
-        MutationResult updateBasePresentation(const UpdateBaseSeriesRequest &) override { return {}; }
-        MutationResult createComputed(const CreateComputedSeriesRequest &) override { return {}; }
-        MutationResult updateComputed(const UpdateComputedSeriesRequest &) override { return {}; }
-        MutationResult removeComputed(SeriesId) override { return {}; }
-        MutationResult moveSeries(SeriesId, uint32_t) override { return {}; }
         void onSeriesConfigChanged(std::function<void()>) override {
         }
     };
@@ -198,38 +192,12 @@ namespace {
     // currently commented out (graph_vm.cpp only builds m_seriesById from the resolved-graph path).
     // See .plans/series-config-migration-completion/plans/04-graph-read-model-narrowing.md.
 
-    TEST_F(GraphViewModelTest, PlottableColumnsExcludesTime) {
-        const auto columns = view_model.plottableColumns();
+    TEST_F(GraphViewModelTest, AllColumnsExcludesTime) {
+        const auto columns = view_model.allColumns();
         EXPECT_FALSE(columns.contains(int(GraphViewModel::Time)));
         EXPECT_TRUE(columns.contains(int(GraphViewModel::Score)));
         EXPECT_TRUE(columns.contains(int(GraphViewModel::Dmg)));
         EXPECT_EQ(columns.size(), GraphViewModel::ColumnCount - 1);
-    }
-
-    TEST_F(GraphViewModelTest, EnabledColumnsDefaultToAllColumns) {
-        EXPECT_EQ(view_model.enabledColumns(), view_model.allColumns());
-    }
-
-    TEST_F(GraphViewModelTest, SetEnabledColumnsFiltersDuplicatesInvalidValuesAndUsesCanonicalOrder) {
-        view_model.setEnabledColumns({
-            ColumnId::Dmg,
-            ColumnId::Score,
-            ColumnId::Dmg,
-            ColumnId::Time,
-            static_cast<ColumnId>(999)
-        });
-
-        EXPECT_EQ(view_model.enabledColumns(), (QVariantList{GraphViewModel::Score, GraphViewModel::Dmg}));
-    }
-
-    TEST_F(GraphViewModelTest, SetEnabledColumnsEmitsOnlyForEffectiveChange) {
-        const QSignalSpy spy(&view_model, &GraphViewModel::enabledColumnsChanged);
-
-        view_model.setEnabledColumns({ColumnId::Score, ColumnId::Accuracy});
-        EXPECT_EQ(spy.count(), 1);
-
-        view_model.setEnabledColumns({ColumnId::Accuracy, ColumnId::Score, ColumnId::Score});
-        EXPECT_EQ(spy.count(), 1);
     }
 
     // AllColumnsMayBeDisabledWithoutHidingSeriesData removed: its series({Score}) assertion always
@@ -254,7 +222,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, ColumnKeyIsIdentifierSafeAndUniqueForEveryPlottableColumn) {
         QSet<QString> seen;
-        for (const auto &entry: view_model.plottableColumns()) {
+        for (const auto &entry: view_model.allColumns()) {
             const auto column = static_cast<GraphViewModel::Column>(entry.toInt());
             const QString key = view_model.columnKey(column);
             EXPECT_FALSE(key.isEmpty()) << "column " << entry.toInt() << " has an empty key";
@@ -283,7 +251,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, ColumnColorIsValidAndDistinctForEveryPlottableColumn) {
         QSet<QRgb> seen;
-        for (const auto &entry: view_model.plottableColumns()) {
+        for (const auto &entry: view_model.allColumns()) {
             const auto column = static_cast<GraphViewModel::Column>(entry.toInt());
             const QColor color = view_model.columnColor(column);
             EXPECT_TRUE(color.isValid()) << "column " << entry.toInt() << " has an invalid color";
@@ -411,8 +379,4 @@ namespace {
         EXPECT_EQ(view_model.columnForSeriesId("missing"), -1);
     }
 
-    TEST_F(GraphViewModelTest, TranslatesQmlMutationsAndRejectsMalformedExpressions) {
-        const auto result = view_model.createComputedSeries("New", QColor("red"), 2.0, true, {{"kind", "unknown"}});
-        EXPECT_FALSE(result["succeeded"].toBool());
-    }
 }

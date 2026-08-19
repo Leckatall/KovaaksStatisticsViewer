@@ -56,6 +56,7 @@ add_executable(ksv
 
 
 target_compile_definitions(ksv PRIVATE KSV_VERSION="${KSV_VERSION}")
+target_compile_definitions(ksv PRIVATE $<$<CONFIG:Release>:QT_NO_DEBUG_OUTPUT>)
 
 # Link libraries to main executable
 target_link_libraries(ksv PRIVATE

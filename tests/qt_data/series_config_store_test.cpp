@@ -74,10 +74,6 @@ namespace {
         EXPECT_EQ(reopened.getAll().size(), expected.size());
     }
 
-    // RoundTripsProjectRateToFinalExpressionNodeInV1 removed: referenced the retired
-    // ComputedSeriesConfig variant type and no longer compiled. See
-    // .plans/series-config-migration-completion/plans/05-store-api-collapse.md.
-
     TEST_F(SeriesConfigStoreTest, RejectsMalformedProjectRateToFinalExpressionInV1) {
         const std::array malformedExpressions{
             QJsonObject{{"kind", "projectRateToFinal"}},
@@ -113,19 +109,11 @@ namespace {
         EXPECT_GT(settings->writes, 0);
     }
 
-    // MigratesDisabledColumnsWithoutTreatingQmlVisibilityAsEnabledState removed: referenced the
-    // retired seriesPresentation() free function and no longer compiled. See
-    // .plans/series-config-migration-completion/plans/05-store-api-collapse.md.
-
     TEST_F(SeriesConfigStoreTest, LeavesLegacySettingsAndAxisSettingsUntouched) {
         settings->legacyDisabledColumns = {"score"};
         makeStore();
         EXPECT_EQ(settings->legacyDisabledColumns, (std::vector<std::string>{"score"}));
     }
-
-    // ExistingDocumentBypassesLegacyMigration removed: referenced the retired seriesPresentation()
-    // free function and no longer compiled. See
-    // .plans/series-config-migration-completion/plans/05-store-api-collapse.md.
 
     TEST_F(SeriesConfigStoreTest, CreateAllocatesAndPersistsSequentialIds) {
         makeStore();
@@ -137,15 +125,23 @@ namespace {
     // the current default catalogue/decode logic and needs investigation beyond a literal-value fix.
     // See .plans/series-config-migration-completion/plans/05-store-api-collapse.md.
 
-    // UpdatesDeletesAndReordersWithinTypedPermissions removed: its reorder(PrimitiveMetric::Score, 1)
-    // call no longer compiles against reorder(SeriesId, uint32_t). See
-    // .plans/series-config-migration-completion/plans/05-store-api-collapse.md.
+    TEST_F(SeriesConfigStoreTest, UpdatesDeletesAndReordersWithinTypedPermissions) {
+        makeStore();
+        const auto id = *store->createComputed(request()).createdId;
+        EXPECT_TRUE(store->updateSeries({
+            id, UpdatedSeriesPresentation{"Updated", LineStyle{}, false}, numericConstant(4.0)
+        }).succeeded());
+        EXPECT_TRUE(store->removeComputed(id).succeeded());
+        EXPECT_TRUE(store->reorder({1}, 1).succeeded());
+    }
 
     TEST_F(SeriesConfigStoreTest, RejectsUnknownAndInvalidMutationRequestsWithoutNotification) {
         makeStore();
         int notifications = 0;
         store->onChanged([&] { ++notifications; });
         EXPECT_EQ(store->removeComputed({99}).failure, StoreMutationFailureCode::UnknownSeriesId);
+        EXPECT_EQ(store->updateSeries({{99}, UpdatedSeriesPresentation{.enabled = false}, {}}).failure,
+                  StoreMutationFailureCode::UnknownSeriesId);
         EXPECT_EQ(notifications, 0);
     }
 

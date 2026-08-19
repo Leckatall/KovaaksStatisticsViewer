@@ -24,27 +24,9 @@ namespace ksv::application {
         [[nodiscard]] bool succeeded() const { return errors.empty() && !failure.has_value(); }
     };
 
-    struct ComputedSeriesPresentation {
-        std::string name;
-        LineStyle lineStyle;
-        bool enabled;
-    };
-
     struct CreateComputedSeriesRequest {
-        ComputedSeriesPresentation presentation;
+        SeriesPresentation presentation;
         Expression expression;
-    };
-
-    struct UpdateComputedSeriesRequest {
-        SeriesId id;
-        ComputedSeriesPresentation presentation;
-        Expression expression;
-    };
-
-    struct UpdateBaseSeriesRequest {
-        SeriesId id;
-        bool enabled;
-        LineStyle lineStyle;
     };
 
     struct UpdatedSeriesPresentation {
@@ -64,8 +46,6 @@ namespace ksv::application {
         virtual ~ISeriesConfigStore() = default;
         [[nodiscard]] virtual std::vector<SeriesConfig> getAll() const = 0;
         virtual MutationResult createComputed(const CreateComputedSeriesRequest &) = 0;
-        virtual MutationResult updateComputed(const UpdateComputedSeriesRequest &) = 0;
-        virtual MutationResult updateBase(const UpdateBaseSeriesRequest &) = 0;
         virtual MutationResult updateSeries(const UpdateSeriesRequest &) = 0;
         virtual MutationResult removeComputed(SeriesId) = 0;
         virtual MutationResult reorder(SeriesId, uint32_t position) = 0;

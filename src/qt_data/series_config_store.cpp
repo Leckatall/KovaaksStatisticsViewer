@@ -318,10 +318,9 @@ namespace ksv::qt_data {
         ensureLoadedLocked();
     }
 
-    bool SeriesConfigStore::writeLocked(const std::vector<SeriesConfig> &configs,
+    void SeriesConfigStore::writeLocked(const std::vector<SeriesConfig> &configs,
                                         const SeriesId &next) const {
         m_settingsService->setSeriesConfigDocument(encode(configs, next).toStdString());
-        return true;
     }
 
     void SeriesConfigStore::seedLocked(const std::string *invalidRaw) const {
@@ -340,7 +339,8 @@ namespace ksv::qt_data {
             if (std::ranges::find(disabled, std::string(legacyKey)) != disabled.end())
                 m_configs[recordIndex].presentation.enabled = false;
         }
-        m_requiresReload = !writeLocked(m_configs, m_next.value());
+        writeLocked(m_configs, m_next.value());
+        m_requiresReload = false;
     }
 
     void SeriesConfigStore::ensureLoadedLocked() const {
@@ -386,12 +386,7 @@ namespace ksv::qt_data {
         const auto errors = validateSeriesConfigs(configs);
         if (!errors.empty()) return {errors};
         if ((!created && !m_next) && encode(configs, next) == encode(m_configs, m_next.value_or(SeriesId{1}))) return {};
-        if (!writeLocked(configs, next)) {
-            m_configs.clear();
-            m_next.reset();
-            m_requiresReload = true;
-            return {{}, StoreMutationFailureCode::PersistenceWriteFailed, true};
-        }
+        writeLocked(configs, next);
         m_configs = std::move(configs);
         m_next = next;
         m_requiresReload = false;
@@ -426,32 +421,6 @@ namespace ksv::qt_data {
             });
             const auto next = id.value == UINT64_MAX ? std::nullopt : std::optional{SeriesId{id.value + 1}};
             return commitLocked(std::move(configs), next.value(), id);
-        });
-    }
-
-    MutationResult SeriesConfigStore::updateComputed(const UpdateComputedSeriesRequest &request) {
-        return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
-            const auto index = indexOfLocked(request.id);
-            if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
-            auto &record = configs[*index];
-            record.presentation.name = request.presentation.name;
-            record.presentation.lineStyle = request.presentation.lineStyle;
-            record.presentation.enabled = request.presentation.enabled;
-            record.expression = request.expression;
-            return commitLocked(std::move(configs), m_next.value());
-        });
-    }
-
-    MutationResult SeriesConfigStore::updateBase(const UpdateBaseSeriesRequest &request) {
-        return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
-            const auto index = indexOfLocked(request.id);
-            if (!index)
-                return {{}, StoreMutationFailureCode::UnknownSeriesId};
-
-            auto &record = configs[*index];
-            record.presentation.enabled = request.enabled;
-            record.presentation.lineStyle = request.lineStyle;
-            return commitLocked(std::move(configs), m_next.value());
         });
     }
 

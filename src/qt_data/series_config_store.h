@@ -12,8 +12,6 @@ namespace ksv::qt_data {
 
         [[nodiscard]] std::vector<application::SeriesConfig> getAll() const override;
         application::MutationResult createComputed(const application::CreateComputedSeriesRequest &) override;
-        application::MutationResult updateComputed(const application::UpdateComputedSeriesRequest &) override;
-        application::MutationResult updateBase(const application::UpdateBaseSeriesRequest &) override;
         application::MutationResult updateSeries(const application::UpdateSeriesRequest &) override;
         application::MutationResult removeComputed(application::SeriesId) override;
         application::MutationResult reorder(application::SeriesId, uint32_t position) override;
@@ -22,7 +20,7 @@ namespace ksv::qt_data {
     private:
         void ensureLoadedLocked() const;
         void seedLocked(const std::string *invalidRaw = nullptr) const;
-        bool writeLocked(const std::vector<application::SeriesConfig> &, const application::SeriesId &next) const;
+        void writeLocked(const std::vector<application::SeriesConfig> &, const application::SeriesId &next) const;
         application::MutationResult commitLocked(std::vector<application::SeriesConfig>,
                                                  application::SeriesId next, std::optional<application::SeriesId> created = std::nullopt);
         [[nodiscard]] std::optional<size_t> indexOfLocked(application::SeriesId) const;

@@ -3,11 +3,9 @@
 //
 
 #include "graph_vm.h"
-#include "series_expression_qml.h"
 
 #include <qurl.h>
 #include <QDebug>
-#include <QSet>
 #include <algorithm>
 #include <utility>
 #include <vector>
@@ -79,14 +77,6 @@ namespace ksv::presentation {
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
                                    QObject *parent) : GraphViewModelBase(parent),
                                                       m_graphUseCase(std::move(graphUseCase)) {
-        m_enabledColumns = allColumns();
-        // for (int c = Score; c < ColumnCount; ++c) {
-        //     SeriesModel series;
-        //     series.name = GraphViewModel::columnName(c);
-        //     series.color = kColumnMeta[c].color;
-        //     series.transform = kYAxisMeta[kColumnMeta[c].yAxis].transform;
-        //     m_series.append(std::move(series));
-        // }
         fetchMetadata();
         recomputeBounds();
         m_graphUseCase->onSeriesConfigChanged([this] { fetchMetadata(); });
@@ -102,16 +92,11 @@ namespace ksv::presentation {
         QList<SeriesModel> result;
         result.reserve(columns.size());
         std::array<std::vector<int>, YAxisCount> membersByAxis;
-        // for (const int column: columns) {
-        //     if (column < Score || column >= ColumnCount) continue;
-        //     result.append(m_series[column - Score]);
-        //     result.back().column = column;
-        //     membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
-        // }
         for (const SeriesModel &series: m_seriesById) {
-            if (!columns.contains(columnForSeriesId(series.id))) continue;
+            const int column = columnForSeriesId(series.id);
+            if (column < Score || column >= ColumnCount || !columns.contains(column)) continue;
             result.append(series);
-            membersByAxis[kColumnMeta[series.column].yAxis].push_back(result.size() - 1);
+            membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
         }
         for (int axis = 0; axis < YAxisCount; ++axis) {
             const auto &indices = membersByAxis[axis];
@@ -126,10 +111,6 @@ namespace ksv::presentation {
         return result;
     }
 
-    QVariantList GraphViewModel::plottableColumns() const {
-        return allColumns();
-    }
-
     QVariantList GraphViewModel::allColumns() const {
         QVariantList columns;
         columns.reserve(static_cast<qsizetype>(application::kPlottableColumnIds.size()));
@@ -137,23 +118,6 @@ namespace ksv::presentation {
             columns.append(static_cast<int>(column));
         }
         return columns;
-    }
-
-    void GraphViewModel::setEnabledColumns(const std::vector<application::ColumnId> &columns) {
-        QSet<int> requested;
-        for (const auto column: columns) {
-            if (application::isPlottableGraphColumn(column)) requested.insert(static_cast<int>(column));
-        }
-
-        QVariantList normalized;
-        normalized.reserve(static_cast<qsizetype>(application::kPlottableColumnIds.size()));
-        for (const auto column: application::kPlottableColumnIds) {
-            const auto value = static_cast<int>(column);
-            if (requested.contains(value)) normalized.append(value);
-        }
-        if (m_enabledColumns == normalized) return;
-        m_enabledColumns = std::move(normalized);
-        emit enabledColumnsChanged();
     }
 
     QVariantMap GraphViewModel::axisBounds() const {
@@ -282,6 +246,7 @@ namespace ksv::presentation {
                                  entry.config.presentation.lineStyle.color.green,
                                  entry.config.presentation.lineStyle.color.blue,
                                  entry.config.presentation.lineStyle.color.alpha),
+                .column = static_cast<int>(entry.config.presentation.displayPosition) + Score,
                 // TODO(18/08/26): transform and yAxisId should be stored as part of seriesConfig
                 // .transform = entry.config.presentation.lineStyle.transform,
                 // TODO(18/08/26): displayPosition and width support in SeriesModel
@@ -302,14 +267,11 @@ namespace ksv::presentation {
         if (!resolved.series.empty() || !resolved.times.empty()) {
             m_allSeries.clear();
             m_enabledSeriesIds.clear();
-            m_legacyColumnIds.clear();
-            QVariantList transitionalEnabledColumns;
             QList<QMap<Column, qreal> > rows(int(resolved.times.size()));
             for (int i = 0; i < rows.size(); ++i) rows[i][Time] = resolved.times[static_cast<size_t>(i)];
 
             for (const auto &entry: resolved.series) {
                 const auto &presentation = entry.config.presentation;
-                if (!presentation.enabled) continue;
                 const auto &entry_id = entry.config.id.value;
                 const QString id = QString::number(entry_id);
                 const auto values = entry.values.value_or({});
@@ -319,11 +281,7 @@ namespace ksv::presentation {
                     points.append(QPointF(resolved.times[i], values[i]));
                 }
                 m_seriesById[id].points = points;
-
-                int column = -1;
-                if (entry_id <= 3) column = static_cast<int>(entry_id);
-                else if (entry_id <= 9) column = static_cast<int>(entry_id - 1);
-                m_seriesById[id].column = column;
+                m_seriesById[id].column = static_cast<int>(presentation.displayPosition) + Score;
 
                 QVariantMap series{
                     {"id", id},
@@ -335,14 +293,6 @@ namespace ksv::presentation {
                 };
                 m_allSeries.append(series);
                 m_enabledSeriesIds.append(id);
-
-                if (column >= Score && column < ColumnCount) m_legacyColumnIds[column] = id;
-                if (presentation.enabled && column >= Score && column < ColumnCount)
-                    transitionalEnabledColumns.append(column);
-            }
-            if (m_enabledColumns != transitionalEnabledColumns) {
-                m_enabledColumns = std::move(transitionalEnabledColumns);
-                emit enabledColumnsChanged();
             }
             emit seriesConfigurationChanged();
             setData(std::move(rows));
@@ -374,7 +324,9 @@ namespace ksv::presentation {
     }
 
     QString GraphViewModel::seriesIdForColumn(const int column) const {
-        return m_legacyColumnIds.value(column);
+        for (auto it = m_seriesById.cbegin(); it != m_seriesById.cend(); ++it)
+            if (it->column == column) return it.key();
+        return {};
     }
 
     int GraphViewModel::columnForSeriesId(const QString &id) const {
@@ -382,106 +334,4 @@ namespace ksv::presentation {
         return it != m_seriesById.end() ? it->column : -1;
     }
 
-    QVariantMap GraphViewModel::setSeriesEnabled(const QString &id, const bool enabled) {
-        if (id.startsWith("computed:")) {
-            const auto result = m_graphUseCase->setSeriesEnabled(application::SeriesId{id.toULongLong()},enabled);
-            if (result.succeeded()) {
-                fetchData();
-                for (auto it = m_legacyColumnIds.cbegin(); it != m_legacyColumnIds.cend(); ++it)
-                    if (it.value() == id) {
-                        auto columns = m_enabledColumns;
-                        columns.removeAll(it.key());
-                        if (enabled) columns.append(it.key());
-                        if (columns != m_enabledColumns) {
-                            m_enabledColumns = columns;
-                            emit enabledColumnsChanged();
-                        }
-                        break;
-                    }
-            }
-            return mutationMap(result);
-        }
-
-        return invalidMutationMap();
-    }
-
-    QVariantMap GraphViewModel::updateBasePresentation(const QString &id, const QColor &color, const double width) {
-        // const std::optional<application::PrimitiveMetric> metric = id.startsWith("base:")
-        //                                                                ? metricFromString(id.mid(5))
-        //                                                                : std::optional<application::PrimitiveMetric>{};
-        // if (!metric) return invalidMutationMap();
-        // return mutationMap(m_graphUseCase->updateBasePresentation({
-        //     *metric, true,
-        //     {
-        //         {
-        //             static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
-        //             static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())
-        //         },
-        //         width
-        //     }
-        // }));
-        return {};
-    }
-
-    QVariantMap GraphViewModel::createComputedSeries(const QString &name, const QColor &color, const double width,
-                                                     const bool enabled, const QVariantMap &expression) {
-        const auto parsed = parseExpression(expression);
-        if (!parsed) return invalidMutationMap();
-        return mutationMap(m_graphUseCase->createComputed({
-            {
-                name.toStdString(),
-                {
-                    {
-                        static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
-                        static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())
-                    },
-                    width
-                },
-                enabled
-            },
-            *parsed
-        }));
-    }
-
-    QVariantMap GraphViewModel::updateComputedSeries(const QString &id, const QString &name, const QColor &color,
-                                                     const double width, const bool enabled,
-                                                     const QVariantMap &expression) {
-        const auto parsed = parseExpression(expression);
-        bool ok = false;
-        const auto numericId = id.startsWith("computed:") ? id.mid(9).toULongLong(&ok) : 0;
-        if (!parsed || !ok || numericId == 0) return invalidMutationMap();
-        application::UpdateComputedSeriesRequest request;
-        request.id.value = numericId;
-        request.presentation.name = name.toStdString();
-        request.presentation.lineStyle = {
-            {
-                static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
-                static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())
-            },
-            width
-        };
-        request.presentation.enabled = enabled;
-        request.expression = *parsed;
-        return mutationMap(m_graphUseCase->updateComputed(request));
-    }
-
-    QVariantMap GraphViewModel::removeComputedSeries(const QString &id) {
-        bool ok = false;
-        const auto numericId = id.startsWith("computed:") ? id.mid(9).toULongLong(&ok) : 0;
-        return ok && numericId ? mutationMap(m_graphUseCase->removeComputed({numericId})) : invalidMutationMap();
-    }
-
-    QVariantMap GraphViewModel::moveSeries(const QString &id, const int displayPosition) {
-        // if (displayPosition < 0) return invalidMutationMap();
-        // if (id.startsWith("computed:")) return mutationMap(
-        //     m_graphUseCase->moveSeries(application::SeriesId{id.mid(9).toULongLong()},
-        //                                static_cast<uint32_t>(displayPosition)));
-        // const std::optional<application::PrimitiveMetric> metric = id.startsWith("base:")
-        //                                                                ? metricFromString(id.mid(5))
-        //                                                                : std::optional<application::PrimitiveMetric>{};
-        // return metric
-        //            ? mutationMap(m_graphUseCase->moveSeries(*metric, static_cast<uint32_t>(displayPosition)))
-        //            : invalidMutationMap();
-        return{};
-    }
 }
