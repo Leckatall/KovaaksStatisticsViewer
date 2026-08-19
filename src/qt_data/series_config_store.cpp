@@ -439,7 +439,7 @@ namespace ksv::qt_data {
                 auto [name, lineStyle, enabled] = request.presentation.value();
                 if (name) config.presentation.name = name.value();
                 if (lineStyle) config.presentation.lineStyle = lineStyle.value();
-                if (name) config.presentation.enabled = enabled.value();
+                if (enabled) config.presentation.enabled = enabled.value();
             }
                 if (request.expression) config.expression = request.expression.value();
             return commitLocked(std::move(configs), m_next.value());
