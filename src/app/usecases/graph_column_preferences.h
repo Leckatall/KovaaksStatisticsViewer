@@ -7,6 +7,9 @@
 #include "contracts/i_graph_column_preferences.h"
 
 namespace ksv::application {
+    // TODO(2026-08-19): Orphaned — nothing in src/ or tools/ constructs this anymore. Superseded by
+    // SeriesConfigStore's per-series `enabled` flag. Safe to delete along with IGraphColumnPreferences
+    // and IGraphLineConfig once nothing references them.
     class GraphColumnPreferences final : public IGraphColumnPreferences {
     public:
         explicit GraphColumnPreferences(std::shared_ptr<IGraphLineConfig> config);

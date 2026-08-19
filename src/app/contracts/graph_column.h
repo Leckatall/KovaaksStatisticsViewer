@@ -10,7 +10,6 @@
 #include <string_view>
 
 namespace ksv::application {
-    // Numeric values remain index-aligned with GraphViewModel::Column.
     enum class ColumnId {
         Time = 0,
         Score = 1,

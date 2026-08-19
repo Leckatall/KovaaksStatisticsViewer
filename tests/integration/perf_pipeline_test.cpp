@@ -20,6 +20,10 @@ using namespace ksv;
 using presentation::GraphViewModel;
 
 namespace {
+    // Built-in SeriesId from defaultSeriesConfigs() — GraphViewModel::column is always a series'
+    // SeriesId, not a position, and has no dedicated enum outside the class.
+    constexpr int kScoreSeriesId = 1;
+
     class PerfPipelineTest : public testing::Test {
     protected:
         integration::TestEnv env;
@@ -40,8 +44,8 @@ namespace {
             ASSERT_NE(graphVm, nullptr);
         }
 
-        [[nodiscard]] QList<QPointF> rawPoints(const GraphViewModel::Column c) const {
-            const auto series = graphVm->series(QList<int>{static_cast<int>(c)});
+        [[nodiscard]] QList<QPointF> rawPoints(const int column) const {
+            const auto series = graphVm->series(QList<int>{column});
             return series.isEmpty() ? QList<QPointF>{} : series.front().points;
         }
     };
@@ -51,7 +55,7 @@ namespace {
 
         EXPECT_TRUE(graphVm->scenarioTitle().contains("1wall6targets TE"));
 
-        const auto score = rawPoints(GraphViewModel::Score);
+        const auto score = rawPoints(kScoreSeriesId);
         ASSERT_GE(score.size(), 2);
         // Time axis is built from real data and must span more than the empty default.
         EXPECT_GT(graphVm->xAxis().max(), 0.0);
@@ -84,6 +88,6 @@ namespace {
 
         graphVm->fetchData(QUrl::fromLocalFile(second).toString());
         EXPECT_TRUE(graphVm->scenarioTitle().contains("VT FlyTS"));
-        EXPECT_GE(rawPoints(GraphViewModel::Score).size(), 2);
+        EXPECT_GE(rawPoints(kScoreSeriesId).size(), 2);
     }
 }

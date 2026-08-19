@@ -50,13 +50,13 @@ Item {
     }
 
     property alias visibleSeriesIds: visibilitySettings.visibleSeriesIds
+    property alias seenSeriesIds: visibilitySettings.seenSeriesIds
     Settings {
         id: visibilitySettings
         category: "graphSeriesVisibility"
         property var visibleSeriesIds: []
+        property var seenSeriesIds: []
     }
-
-    property var seenIds: new Set()
 
     function isSeriesVisible(id) {
         return root.visibleSeriesIds.indexOf(id) !== -1
@@ -75,16 +75,17 @@ Item {
     }
 
     function syncVisibleSeriesIds(enabledIds) {
+        const seen = new Set(root.seenSeriesIds)
         const current = root.visibleSeriesIds
         const result = []
         for (const id of enabledIds) {
-            if (root.seenIds.has(id)) {
+            if (seen.has(id)) {
                 if (current.indexOf(id) !== -1) result.push(id)
             } else {
                 result.push(id)
             }
         }
         root.visibleSeriesIds = result
-        root.seenIds = new Set(enabledIds)
+        root.seenSeriesIds = enabledIds
     }
 }

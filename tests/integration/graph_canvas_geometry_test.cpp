@@ -23,6 +23,11 @@ using ui::GraphCanvas;
 using presentation::GraphViewModel;
 
 namespace {
+    // Built-in SeriesIds from defaultSeriesConfigs() — GraphViewModel::column is always a series'
+    // SeriesId, not a position, and has no dedicated enum outside the class.
+    constexpr int kScoreSeriesId = 1;
+    constexpr int kAccuracySeriesId = 2;
+
     QPointF toPixel(const QPointF &display, const QRectF &rect,
                     const presentation::AxisModel &xAxis, const presentation::AxisModel &yAxis) {
         const qreal xt = xAxis.normalizedPosition(display.x());
@@ -51,7 +56,7 @@ namespace {
             canvas.setWidth(800);
             canvas.setHeight(600);
             canvas.setGraphVm(graphVm);
-            canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Score)});
+            canvas.setVisibleColumns(QVariantList{kScoreSeriesId});
         }
     };
 
@@ -69,15 +74,17 @@ namespace {
     }
 
     TEST_F(GraphCanvasGeometryTest, NearestPointHitsAKnownScorePixel) {
-        const auto series = graphVm->series(QList<int>{static_cast<int>(GraphViewModel::Score)});
+        const auto series = graphVm->series(QList<int>{kScoreSeriesId});
         ASSERT_FALSE(series.isEmpty());
         const auto display = series.front().displayPoints();
         ASSERT_FALSE(display.isEmpty());
 
         const QRectF rect = canvas.property("plotArea").toRectF();
         const auto xAxis = graphVm->xAxis();
-        ASSERT_TRUE(series.front().yAxis.has_value());
-        const QPointF pixel = toPixel(display.front(), rect, xAxis, *series.front().yAxis);
+        // Score isn't in GraphViewModel's hardcoded axis table, so it derives its own axis the same
+        // way GraphCanvas does — see yAxisFor() in graph_canvas.cpp.
+        const QPointF pixel = toPixel(display.front(), rect, xAxis,
+                                      series.front().yAxis.value_or(series.front().deriveYAxis()));
 
         const QVariantMap hit = canvas.nearestPoint(pixel.x(), pixel.y());
 
@@ -137,26 +144,26 @@ namespace {
     }
 
     TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnDefaultsToVmYAxisColumnWhenUnset) {
-        canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Score)});
-        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), static_cast<int>(GraphViewModel::Score));
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId});
+        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), kScoreSeriesId);
     }
 
     TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnReturnsRequestedColumnWhenVisible) {
-        canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Score),
-                                               static_cast<int>(GraphViewModel::Accuracy)});
-        canvas.setYAxisColumn(static_cast<int>(GraphViewModel::Accuracy));
-        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), static_cast<int>(GraphViewModel::Accuracy));
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId,
+                                               kAccuracySeriesId});
+        canvas.setYAxisColumn(kAccuracySeriesId);
+        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), kAccuracySeriesId);
     }
 
     TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnFallsBackToFirstVisibleWhenRequestedIsHidden) {
-        canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Accuracy)});
-        canvas.setYAxisColumn(static_cast<int>(GraphViewModel::Score));
-        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), static_cast<int>(GraphViewModel::Accuracy));
+        canvas.setVisibleColumns(QVariantList{kAccuracySeriesId});
+        canvas.setYAxisColumn(kScoreSeriesId);
+        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), kAccuracySeriesId);
     }
 
     TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnFallsBackToVmDefaultWhenNothingVisible) {
         canvas.setVisibleColumns(QVariantList{});
-        canvas.setYAxisColumn(static_cast<int>(GraphViewModel::Accuracy));
+        canvas.setYAxisColumn(kAccuracySeriesId);
         EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), graphVm->yAxisColumn());
     }
 
@@ -259,11 +266,11 @@ namespace {
     }
 
     TEST_F(GraphCanvasGeometryTest, DrawnAxisReflectsSelectedYAxisColumn) {
-        canvas.setVisibleColumns(QVariantList{static_cast<int>(GraphViewModel::Score),
-                                               static_cast<int>(GraphViewModel::Accuracy)});
-        canvas.setYAxisColumn(static_cast<int>(GraphViewModel::Accuracy));
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId,
+                                               kAccuracySeriesId});
+        canvas.setYAxisColumn(kAccuracySeriesId);
 
-        const auto accuracySeries = graphVm->series({static_cast<int>(GraphViewModel::Accuracy)});
+        const auto accuracySeries = graphVm->series({kAccuracySeriesId});
         ASSERT_FALSE(accuracySeries.isEmpty());
         ASSERT_TRUE(accuracySeries.front().yAxis.has_value());
         const auto &expectedAxis = *accuracySeries.front().yAxis;

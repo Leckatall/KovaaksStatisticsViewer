@@ -7,71 +7,45 @@
 #include <qurl.h>
 #include <QDebug>
 #include <algorithm>
+#include <array>
+#include <optional>
 #include <utility>
 #include <vector>
 
 
 namespace ksv::presentation {
     namespace {
-        struct ColumnMeta {
-            const char *name;
-            QColor color;
-            int yAxis;
-        };
-
         struct AxisDescriptor {
             ValueTransform transform;
             AxisModel::Options options;
         };
 
-        enum YAxis {
-            ScoreAxis, AccuracyAxis, ShotsAxis, KillsAxis, DmgAxis, ScoreFamilyAxis, YAxisCount
+        // Only series that can't derive a sensible axis on their own get grouped here; everything
+        // else (Score, Shots, Kills, Dmg, and any user computed series) falls through to
+        // SeriesModel::deriveYAxis()'s per-series default via GraphCanvas::yAxisFor().
+        enum YAxis { AccuracyAxis, ScoreFamilyAxis, YAxisCount };
+
+        const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{
+            {
+                {ValueTransform::percentage(), {}},
+                {ValueTransform::identity(), {}},
+            }
         };
+
+        // column == SeriesId::value for the built-in series (see fetchMetadata()/fetchData()).
+        std::optional<YAxis> yAxisFor(const int column) {
+            switch (column) {
+                case 2: return AccuracyAxis; // Accuracy
+                case 7: case 8: case 9: return ScoreFamilyAxis; // Score Total / Expected Final Score / (5s)
+                default: return std::nullopt;
+            }
+        }
 
         ValueTransform secondsDelegate() {
             ValueTransform t;
             t.formatter = [](const qreal v) { return QString::number(qRound(v)) + "s"; };
             return t;
         }
-
-        const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{
-            {
-                {ValueTransform::identity(), {}},
-                {ValueTransform::percentage(), {}},
-                {ValueTransform::identity(), {}},
-                {ValueTransform::identity(), {}},
-                {ValueTransform::identity(), {}},
-                {ValueTransform::identity(), {}},
-            }
-        };
-
-        const std::array<ColumnMeta, GraphViewModel::ColumnCount> kColumnMeta{
-            {
-                {"Time", QColor(), -1},
-                {"Score", QColor("#009600"), ScoreAxis},
-                {"Accuracy", QColor("cyan"), AccuracyAxis},
-                {"Shots", QColor("orange"), ShotsAxis},
-                {"Kills", QColor("red"), KillsAxis},
-                {"Dmg", QColor("yellow"), DmgAxis},
-                {"Score Total", QColor("purple"), ScoreFamilyAxis},
-                {"Expected Final Score", QColor("magenta"), ScoreFamilyAxis},
-                {"Expected Final Score (5s)", QColor("deepskyblue"), ScoreFamilyAxis},
-            }
-        };
-
-        static_assert(static_cast<int>(application::ColumnId::Time) == GraphViewModel::Time);
-        static_assert(static_cast<int>(application::ColumnId::Score) == GraphViewModel::Score);
-        static_assert(static_cast<int>(application::ColumnId::Accuracy) == GraphViewModel::Accuracy);
-        static_assert(static_cast<int>(application::ColumnId::Shots) == GraphViewModel::Shots);
-        static_assert(static_cast<int>(application::ColumnId::Kills) == GraphViewModel::Kills);
-        static_assert(static_cast<int>(application::ColumnId::Dmg) == GraphViewModel::Dmg);
-        static_assert(static_cast<int>(application::ColumnId::ScoreTotal) == GraphViewModel::ScoreTotal);
-        static_assert(static_cast<int>(application::ColumnId::ExpectedFinalScore) == GraphViewModel::ExpectedFinalScore)
-        ;
-        static_assert(
-            static_cast<int>(application::ColumnId::ExpectedFinalScoreRecent) ==
-            GraphViewModel::ExpectedFinalScoreRecent);
-
     }
 
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
@@ -82,7 +56,7 @@ namespace ksv::presentation {
         m_graphUseCase->onSeriesConfigChanged([this] { fetchMetadata(); });
     }
 
-    void GraphViewModel::setData(QList<QMap<Column, qreal> > data) {
+    void GraphViewModel::setData(QList<QMap<int, qreal> > data) {
         m_data = std::move(data);
         emit dataUpdated();
         recomputeBounds();
@@ -93,10 +67,9 @@ namespace ksv::presentation {
         result.reserve(columns.size());
         std::array<std::vector<int>, YAxisCount> membersByAxis;
         for (const SeriesModel &series: m_seriesById) {
-            const int column = columnForSeriesId(series.id);
-            if (column < Score || column >= ColumnCount || !columns.contains(column)) continue;
+            if (!columns.contains(series.column)) continue;
             result.append(series);
-            membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
+            if (const auto axis = yAxisFor(series.column)) membersByAxis[*axis].push_back(result.size() - 1);
         }
         for (int axis = 0; axis < YAxisCount; ++axis) {
             const auto &indices = membersByAxis[axis];
@@ -111,120 +84,56 @@ namespace ksv::presentation {
         return result;
     }
 
-    QVariantList GraphViewModel::allColumns() const {
-        QVariantList columns;
-        columns.reserve(static_cast<qsizetype>(application::kPlottableColumnIds.size()));
-        for (const auto column: application::kPlottableColumnIds) {
-            columns.append(static_cast<int>(column));
-        }
-        return columns;
-    }
-
     QVariantMap GraphViewModel::axisBounds() const {
-        QVariantMap map;
-        for (int c = 0; c < ColumnCount; ++c) {
-            map[QString::number(c)] = QPointF(m_axes[c].min(), m_axes[c].max());
-        }
-        return map;
+        return {{QString::number(kTimeColumn), QPointF(m_timeAxis.min(), m_timeAxis.max())}};
     }
 
     QList<qreal> GraphViewModel::axisTicks(const int column) const {
-        if (column < 0 || column >= ColumnCount) return {};
-        return m_axes[column].ticks();
+        return column == kTimeColumn ? m_timeAxis.ticks() : QList<qreal>{};
     }
 
     QString GraphViewModel::columnName(const int column) const {
-        if (column < 0 || column >= ColumnCount) return {};
-        return QString::fromLatin1(kColumnMeta[column].name);
+        if (column == kTimeColumn) return "Time";
+        const auto it = m_seriesById.find(QString::number(column));
+        return it != m_seriesById.end() ? it->name : QString();
     }
 
     QColor GraphViewModel::columnColor(const int column) const {
-        if (column < 0 || column >= ColumnCount) return {};
-        return kColumnMeta[column].color;
+        if (column == kTimeColumn) return {};
+        const auto it = m_seriesById.find(QString::number(column));
+        return it != m_seriesById.end() ? it->color : QColor();
     }
 
     QString GraphViewModel::columnKey(const int column) const {
-        if (column < 0 || column >= ColumnCount) return {};
-        const auto key = application::graphColumnKey(static_cast<application::ColumnId>(column));
-        return QString::fromLatin1(key.data(), static_cast<qsizetype>(key.size()));
-    }
-
-    int GraphViewModel::columnYAxis(const int column) const {
-        if (column < 0 || column >= ColumnCount) return -1;
-        return kColumnMeta[column].yAxis;
+        return columnName(column);
     }
 
     QList<QPointF> GraphViewModel::seriesPoints(const int column) const {
-        if (column < 0 || column >= ColumnCount) return {};
-        const auto col = static_cast<Column>(column);
         QList<QPointF> points;
         points.reserve(m_data.size());
-        for (const auto &row: m_data) points.append(QPointF(row[Time], row[col]));
+        for (const auto &row: m_data) points.append(QPointF(row[kTimeColumn], row[column]));
         return points;
-    }
-
-    namespace {
-        std::pair<qreal, qreal> rawColumnRange(const QList<QMap<GraphViewModel::Column, qreal> > &data,
-                                               const GraphViewModel::Column column) {
-            qreal lo = data.front()[column];
-            qreal hi = lo;
-            for (const auto &row: data) {
-                lo = std::min(lo, row[column]);
-                hi = std::max(hi, row[column]);
-            }
-            return {lo, hi};
-        }
     }
 
     void GraphViewModel::recomputeBounds() {
         // Time: zero floor, integral steps (whole seconds)
         const AxisModel::Options timeOpts{AxisModel::Baseline::Zero, /*integral=*/true};
 
-        std::array<AxisModel, ColumnCount> newAxes{};
+        AxisModel newTimeAxis;
         if (m_data.isEmpty()) {
-            newAxes[Time] = AxisModel::forRange(0.0, 60.0, timeOpts);
-            for (int c = Score; c < ColumnCount; ++c) newAxes[c] = AxisModel::forRange(0.0, 1.0);
+            newTimeAxis = AxisModel::forRange(0.0, 60.0, timeOpts);
         } else {
-            const auto [xlo, xhi] = rawColumnRange(m_data, Time);
-            newAxes[Time] = AxisModel::forRange(0.0, xhi, timeOpts);
-            for (int c = Score; c < ColumnCount; ++c) {
-                const auto [lo, hi] = rawColumnRange(m_data, static_cast<Column>(c));
-                newAxes[c] = AxisModel::forRange(lo, hi);
-            }
+            qreal hi = m_data.front()[kTimeColumn];
+            for (const auto &row: m_data) hi = std::max(hi, row[kTimeColumn]);
+            newTimeAxis = AxisModel::forRange(0.0, hi, timeOpts);
         }
-        newAxes[Time] = newAxes[Time].withDelegate(secondsDelegate());
+        newTimeAxis = newTimeAxis.withDelegate(secondsDelegate());
 
-        if (!m_data.isEmpty()) {
-            qreal lo = 0.0;
-            qreal hi = 0.0;
-            bool initialized = false;
-            for (int c = ScoreTotal; c <= ExpectedFinalScoreRecent; ++c) {
-                const auto range = rawColumnRange(m_data, static_cast<Column>(c));
-                if (!initialized) {
-                    lo = range.first;
-                    hi = range.second;
-                    initialized = true;
-                } else {
-                    lo = std::min(lo, range.first);
-                    hi = std::max(hi, range.second);
-                }
-            }
-            const AxisModel scoreFamilyAxis = AxisModel::forRange(lo, hi);
-            for (int c = ScoreTotal; c <= ExpectedFinalScoreRecent; ++c) newAxes[c] = scoreFamilyAxis;
-        }
+        if (qFuzzyCompare(1.0 + m_timeAxis.min(), 1.0 + newTimeAxis.min()) &&
+            qFuzzyCompare(1.0 + m_timeAxis.max(), 1.0 + newTimeAxis.max()))
+            return;
 
-        bool changed = false;
-        for (int c = 0; c < ColumnCount; ++c) {
-            if (!qFuzzyCompare(1.0 + m_axes[c].min(), 1.0 + newAxes[c].min()) ||
-                !qFuzzyCompare(1.0 + m_axes[c].max(), 1.0 + newAxes[c].max())) {
-                changed = true;
-                break;
-            }
-        }
-
-        if (!changed) return;
-
-        m_axes = newAxes;
+        m_timeAxis = newTimeAxis;
 
         emit boundsChanged();
     }
@@ -246,7 +155,7 @@ namespace ksv::presentation {
                                  entry.config.presentation.lineStyle.color.green,
                                  entry.config.presentation.lineStyle.color.blue,
                                  entry.config.presentation.lineStyle.color.alpha),
-                .column = static_cast<int>(entry.config.presentation.displayPosition) + Score,
+                .column = static_cast<int>(entry.config.id.value),
                 // TODO(18/08/26): transform and yAxisId should be stored as part of seriesConfig
                 // .transform = entry.config.presentation.lineStyle.transform,
                 // TODO(18/08/26): displayPosition and width support in SeriesModel
@@ -267,8 +176,8 @@ namespace ksv::presentation {
         if (!resolved.series.empty() || !resolved.times.empty()) {
             m_allSeries.clear();
             m_enabledSeriesIds.clear();
-            QList<QMap<Column, qreal> > rows(int(resolved.times.size()));
-            for (int i = 0; i < rows.size(); ++i) rows[i][Time] = resolved.times[static_cast<size_t>(i)];
+            QList<QMap<int, qreal> > rows(int(resolved.times.size()));
+            for (int i = 0; i < rows.size(); ++i) rows[i][kTimeColumn] = resolved.times[static_cast<size_t>(i)];
 
             for (const auto &entry: resolved.series) {
                 const auto &presentation = entry.config.presentation;
@@ -281,7 +190,7 @@ namespace ksv::presentation {
                     points.append(QPointF(resolved.times[i], values[i]));
                 }
                 m_seriesById[id].points = points;
-                m_seriesById[id].column = static_cast<int>(presentation.displayPosition) + Score;
+                m_seriesById[id].column = static_cast<int>(entry_id);
 
                 QVariantMap series{
                     {"id", id},
@@ -299,16 +208,34 @@ namespace ksv::presentation {
             return;
         }
 
+        // TODO(2026-08-19): Deprecated, unwanted fallback. Dead in production — App::App() always
+        // wires GraphUseCase with a SeriesConfigStore, so get_resolved_graph() above is never empty
+        // there. This branch (and the ColumnId->SeriesId table below it) exists only because ~15
+        // tests in graph_vm_test.cpp still drive GraphViewModel via the legacy GraphSeries/
+        // get_series() path instead of resolved_graph_to_return. Once those tests migrate to the
+        // SeriesConfig-backed path, delete this whole branch, get_series(), GraphSeries, and this
+        // file's use of application::ColumnId.
         const application::GraphSeries seriesData = m_graphUseCase->get_series();
 
-        QList<QMap<Column, qreal> > rows(int(seriesData.times.size()));
-        for (int i = 0; i < int(seriesData.times.size()); ++i) rows[i][Time] = seriesData.times[i];
+        QList<QMap<int, qreal> > rows(int(seriesData.times.size()));
+        for (int i = 0; i < int(seriesData.times.size()); ++i) rows[i][kTimeColumn] = seriesData.times[i];
 
-        for (int c = Score; c < ColumnCount; ++c) {
-            const auto it = seriesData.columns.find(static_cast<application::ColumnId>(c));
+        // Maps the legacy fixed ColumnId set onto the real built-in SeriesIds from
+        // defaultSeriesConfigs(). Hits (SeriesId 4) has no ColumnId and is skipped — it was never
+        // part of this legacy set.
+        static constexpr std::array<std::pair<application::ColumnId, int>, 8> kLegacyColumnToSeriesId{
+            {
+                {application::ColumnId::Score, 1}, {application::ColumnId::Accuracy, 2},
+                {application::ColumnId::Shots, 3}, {application::ColumnId::Kills, 5},
+                {application::ColumnId::Dmg, 6}, {application::ColumnId::ScoreTotal, 7},
+                {application::ColumnId::ExpectedFinalScore, 8}, {application::ColumnId::ExpectedFinalScoreRecent, 9},
+            }
+        };
+        for (const auto &[legacyColumn, seriesId]: kLegacyColumnToSeriesId) {
+            const auto it = seriesData.columns.find(legacyColumn);
             if (it == seriesData.columns.end()) continue;
             const auto &values = it->second;
-            for (int i = 0; i < rows.size() && i < int(values.size()); ++i) rows[i][static_cast<Column>(c)] = values[i];
+            for (int i = 0; i < rows.size() && i < int(values.size()); ++i) rows[i][seriesId] = values[i];
         }
 
         setData(std::move(rows));
@@ -324,9 +251,8 @@ namespace ksv::presentation {
     }
 
     QString GraphViewModel::seriesIdForColumn(const int column) const {
-        for (auto it = m_seriesById.cbegin(); it != m_seriesById.cend(); ++it)
-            if (it->column == column) return it.key();
-        return {};
+        const auto id = QString::number(column);
+        return m_seriesById.contains(id) ? id : QString();
     }
 
     int GraphViewModel::columnForSeriesId(const QString &id) const {

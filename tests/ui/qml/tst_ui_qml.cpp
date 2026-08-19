@@ -7,6 +7,8 @@
 
 #include <QtQuickTest/quicktest.h>
 #include <QtQml>
+#include <QSettings>
+#include <QTemporaryDir>
 
 #include "components/graph_canvas.h"
 #include "presentation/completion_history_vm.h"
@@ -17,6 +19,18 @@ class UiQmlTestSetup : public QObject {
 
 public slots:
     void qmlEngineAvailable(QQmlEngine *) {
+        // QML `Settings {}` items (VisualSettingsManager.qml) need these to construct at
+        // all; without them QSettings fails to initialize and every Settings-backed
+        // property silently behaves as a plain, non-persisted local property instead.
+        QCoreApplication::setOrganizationName("Lecka");
+        QCoreApplication::setApplicationName("KovaaksStatsViewer");
+        static QTemporaryDir settings_dir;
+        if (settings_dir.isValid()) {
+            QSettings::setDefaultFormat(QSettings::IniFormat);
+            QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_dir.path());
+            QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settings_dir.path());
+        }
+
         qRegisterMetaType<ksv::application::ISessionController *>();
         qmlRegisterUncreatableType<ksv::presentation::CompletionHistoryViewModel>(
             "KovaaksStatsViewer", 1, 0, "CompletionHistoryViewModel", "Created in C++");
