@@ -1,26 +1,40 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-// DEPRECATED: This component is deprecated and all functionality should be moved from here
+
 Frame {
     id: root
+
     required property var graphVm
-    required property var columnVisibility
-    signal configureLinesRequested()
+    required property var seriesVisibility
+
+    signal configureLinesRequested
+
+    function seriesFor(id) {
+        if (root.graphVm.allSeries) {
+            const found = root.graphVm.allSeries.find(s => s.id === id);
+            if (found)
+                return found;
+        }
+        return null;
+    }
 
     ColumnLayout {
         Label {
             text: "Lines"
         }
         Repeater {
-            model: root.graphVm.enabledColumns
+            model: root.graphVm.enabledSeriesIds
 
             CheckBox {
-                required property int modelData
-                objectName: "columnVisibilityCheckBox_" + root.graphVm.columnName(modelData)
+                required property string modelData
+                readonly property var series: root.seriesFor(modelData)
 
-                text: root.graphVm.columnName(modelData)
-                checked: !!root.columnVisibility[root.graphVm.columnKey(modelData)]
+                checked: !(root.seriesVisibility.hiddenSeriesIds.indexOf(modelData) === -1)
+                objectName: "seriesVisibilityCheckBox_" + modelData
+                text: root.seriesFor(modelData).name
+
                 background: Rectangle {
                     anchors.fill: parent
                     color: root.graphVm.columnColor(modelData)
@@ -28,17 +42,21 @@ Frame {
                     radius: 5
                 }
 
-                onToggled: root.columnVisibility[root.graphVm.columnKey(modelData)] = checked
+                onToggled: {
+                    root.seriesVisibility.hiddenSeriesIds.push(modelData);
+                    console.log(root.seriesVisibility.hiddenSeriesIds);
+                }
             }
         }
         Label {
             objectName: "noEnabledGraphLinesLabel"
             text: qsTr("No graph lines enabled")
-            visible: root.graphVm.enabledColumns.length === 0
+            visible: root.graphVm.enabledSeriesIds.length === 0
         }
         Button {
             objectName: "configureGraphLinesButton"
             text: qsTr("Configure...")
+
             onClicked: root.configureLinesRequested()
         }
     }

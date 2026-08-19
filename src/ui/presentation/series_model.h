@@ -19,6 +19,7 @@
 
 namespace ksv::presentation {
     struct SeriesModel {
+        QString id;
         QString name;
         QColor color;
         ValueTransform transform;

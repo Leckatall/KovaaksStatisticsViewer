@@ -26,14 +26,14 @@ namespace ksv::application {
 
         virtual void onCurrentPerfChanged(std::function<void()> callback) = 0;
 
-        [[nodiscard]] virtual ResolvedGraph get_resolved_graph() { return {}; }
-        virtual MutationResult setSeriesEnabled(SeriesRecordReference, bool) { return {}; }
-        virtual MutationResult updateBasePresentation(const UpdateBaseSeriesRequest &) { return {}; }
-        virtual MutationResult createComputed(const CreateComputedSeriesRequest &) { return {}; }
-        virtual MutationResult updateComputed(const UpdateComputedSeriesRequest &) { return {}; }
-        virtual MutationResult removeComputed(ComputedSeriesId) { return {}; }
-        virtual MutationResult moveSeries(SeriesRecordReference, uint32_t) { return {}; }
-        virtual void onSeriesConfigChanged(std::function<void()>) {}
+        [[nodiscard]] virtual ResolvedGraph get_resolved_graph() = 0;
+        virtual MutationResult setSeriesEnabled(SeriesId, bool) = 0;
+        virtual MutationResult updateBasePresentation(const UpdateBaseSeriesRequest &) = 0;
+        virtual MutationResult createComputed(const CreateComputedSeriesRequest &) = 0;
+        virtual MutationResult updateComputed(const UpdateComputedSeriesRequest &) = 0;
+        virtual MutationResult removeComputed(SeriesId) = 0;
+        virtual MutationResult moveSeries(SeriesId, uint32_t) = 0;
+        virtual void onSeriesConfigChanged(std::function<void()>) = 0;
     };
 }
 

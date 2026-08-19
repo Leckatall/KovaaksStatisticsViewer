@@ -7,9 +7,8 @@
 #include <QStandardPaths>
 
 namespace ksv::qt_data {
-    SettingsService::SettingsService(const QSettings::Format format, QObject *parent): QObject(parent),
-    m_settings(format, QSettings::UserScope, "Lecka", "KovaaksStatsViewer", this) {
-
+    SettingsService::SettingsService(const QSettings::Format format, QObject *parent) : QObject(parent),
+        m_settings(format, QSettings::UserScope, "Lecka", "KovaaksStatsViewer", this) {
     }
 
     std::string SettingsService::readDirSetting(const QString &key, const QVariant &default_value) const {
@@ -24,18 +23,20 @@ namespace ksv::qt_data {
     }
 
     std::vector<std::string> SettingsService::readDirListSetting(const QString &key) const {
-        const QMutexLocker locker(&m_settings_mutex);
+        // No lock here: this is a private helper whose only caller (getKovaaksDirs) already
+        // holds m_settings_mutex. m_settings_mutex is a plain QMutex (non-recursive), so
+        // locking it again here would deadlock the calling thread.
         const auto stored = m_settings.value(key).toStringList();
         std::vector<std::string> result;
         result.reserve(stored.size());
-        for (const auto &url : stored) result.push_back(QUrl(url).toLocalFile().toStdString());
+        for (const auto &url: stored) result.push_back(QUrl(url).toLocalFile().toStdString());
         return result;
     }
 
     void SettingsService::writeDirListSetting(const QString &key, const std::vector<std::string> &dirs) {
         QStringList stored;
         stored.reserve(static_cast<qsizetype>(dirs.size()));
-        for (const auto &dir : dirs) stored.push_back(QUrl::fromLocalFile(QString::fromStdString(dir)).toString());
+        for (const auto &dir: dirs) stored.push_back(QUrl::fromLocalFile(QString::fromStdString(dir)).toString());
         const QMutexLocker locker(&m_settings_mutex);
         m_settings.setValue(key, stored);
         m_settings.sync();
@@ -43,13 +44,13 @@ namespace ksv::qt_data {
 
     std::vector<std::string> SettingsService::getKovaaksDirs() const {
         static const QString kDefaultDir = "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer";
-        {
-            const QMutexLocker locker(&m_settings_mutex);
-            if (!m_settings.contains("file/kovaaksDirs")) {
-                if (!m_settings.contains("file/kovaaks")) return {kDefaultDir.toStdString()};
-                return {m_settings.value("file/kovaaks").toUrl().toLocalFile().toStdString()};
-            }
+
+        const QMutexLocker locker(&m_settings_mutex);
+        if (!m_settings.contains("file/kovaaksDirs")) {
+            if (!m_settings.contains("file/kovaaks")) return {kDefaultDir.toStdString()};
+            return {m_settings.value("file/kovaaks").toUrl().toLocalFile().toStdString()};
         }
+
         return readDirListSetting("file/kovaaksDirs");
     }
 

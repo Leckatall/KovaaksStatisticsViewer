@@ -31,11 +31,14 @@ namespace ksv::qt_data {
         }
 
         bool exactKeys(const QJsonObject &object, const std::initializer_list<const char *> keys) {
-            if (object.size() != static_cast<qsizetype>(keys.size())) return false;
-            for (const auto key: keys) {
-                if (!object.contains(QLatin1String(key))) return false;
-            }
-            return true;
+            if (object.size() != static_cast<qsizetype>(keys.size())) return false; // TODO: Necessary?
+            if (std::ranges::all_of(keys, [&](const auto &key) { return object.contains(key); })) return true;
+
+            return false;
+            // for (const auto key: keys) {
+            //     if (!object.contains(QLatin1String(key))) return false;
+            // }
+            // return true;
         }
 
         std::optional<uint64_t> decimalId(const QJsonValue &value, const bool zeroAllowed) {
@@ -246,36 +249,26 @@ namespace ksv::qt_data {
             return averageAcrossRuns(*input, *selection);
         }
 
-        QString encode(const std::vector<SeriesConfig> &configs, const std::optional<ComputedSeriesId> &next) {
+        QString encode(const std::vector<SeriesConfig> &configs, const SeriesId &next) {
             QJsonArray series;
             for (const auto &config: configs)
-                std::visit([&](const auto &record) {
-                    using Record = std::decay_t<decltype(record)>;
-                    if constexpr (std::same_as<Record, BaseSeriesConfig>)
-                        series.append(QJsonObject{
-                            {"kind", "base"}, {"primitiveMetric", metricTag(record.metric)},
-                            {"presentation", encodePresentation(record.presentation)}
-                        });
-                    else
-                        series.append(QJsonObject{
-                            {"kind", "computed"}, {"id", QString::number(record.id.value)},
-                            {"presentation", encodePresentation(record.presentation)},
-                            {"expression", encodeExpression(record.expression)}
-                        });
-                }, config);
+                series.append(QJsonObject{
+                    {"id", QString::number(config.id.value)},
+                    {"presentation", encodePresentation(config.presentation)},
+                    {"expression", encodeExpression(config.expression)}
+                });
             return QString::fromUtf8(QJsonDocument(QJsonObject{
                 {"schemaVersion", 1},
                 {
-                    "nextComputedSeriesId",
-                    next ? QJsonValue(QString::number(next->value)) : QJsonValue(QJsonValue::Null)
+                    "nextComputedSeriesId", QJsonValue(QString::number(next.value))
                 },
                 {"series", series}
-            }).toJson(QJsonDocument::Compact));
+            }).toJson(QJsonDocument::Indented));
         }
 
         struct Document {
             std::vector<SeriesConfig> configs;
-            std::optional<ComputedSeriesId> next;
+            std::optional<SeriesId> next;
         };
 
         std::optional<Document> decode(const QVariant &raw) {
@@ -284,56 +277,41 @@ namespace ksv::qt_data {
             const auto document = QJsonDocument::fromJson(raw.toString().toUtf8(), &error);
             if (error.error != QJsonParseError::NoError || !document.isObject()) return {};
             const auto root = document.object();
-            if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series"}) || !root["schemaVersion"].
-                isDouble() || root["schemaVersion"].toDouble() != 1 || !root["series"].isArray())
+            if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series"}) ||
+                !root["schemaVersion"].isDouble() ||
+                root["schemaVersion"].toDouble() != 1 ||
+                !root["series"].isArray())
                 return {};
-            std::optional<ComputedSeriesId> next;
-            if (!root["nextComputedSeriesId"].isNull()) {
-                const auto id = decimalId(root["nextComputedSeriesId"], false);
-                if (!id) return {};
-                next = ComputedSeriesId{*id};
-            }
+            if (root["nextComputedSeriesId"].isNull()) return {};
+
+            const auto id = decimalId(root["nextComputedSeriesId"], false);
+            if (!id) return {};
+            SeriesId next = {*id};
+
             std::vector<SeriesConfig> configs;
             for (const auto &item: root["series"].toArray()) {
                 if (!item.isObject()) return {};
                 const auto object = item.toObject();
-                if (!object["kind"].isString()) return {};
                 const auto presentation = decodePresentation(object["presentation"]);
                 if (!presentation) return {};
-                if (object["kind"] == "base") {
-                    const auto metric = metricFromTag(object["primitiveMetric"].toString());
-                    if (!exactKeys(object, {"kind", "primitiveMetric", "presentation"}) || !metric) return {};
-                    configs.emplace_back(BaseSeriesConfig{*metric, *presentation});
-                } else if (object["kind"] == "computed") {
-                    const auto id = decimalId(object["id"], false);
-                    const auto expression = decodeExpression(object["expression"]);
-                    if (!exactKeys(object, {"kind", "id", "presentation", "expression"}) || !id || !expression)
-                        return
-                                {};
-                    configs.emplace_back(ComputedSeriesConfig{{*id}, *presentation, *expression});
-                } else return {};
+                const auto id = decimalId(object["id"], false);
+                const auto expression = decodeExpression(object["expression"]);
+                if (!exactKeys(object, {"id", "presentation", "expression"}) || !id || !expression)
+                    return {};
+                configs.emplace_back(SeriesConfig{{*id}, *presentation, *expression});
             }
             if (!validateSeriesConfigs(configs).empty()) return {};
             uint64_t maximumId = 0;
             for (const auto &config: configs) {
-                if (const auto *computed = std::get_if<ComputedSeriesConfig>(&config))
-                    maximumId = std::max(maximumId, computed->id.value);
+                maximumId = std::max(maximumId, config.id.value);
             }
-            if ((next && next->value <= maximumId) || (!next && maximumId != UINT64_MAX)) return {};
+            if (next.value <= maximumId) return {};
             return Document{std::move(configs), next};
         }
 
         void normalizeDisplayPositions(std::vector<SeriesConfig> &configs) {
             for (size_t index = 0; index < configs.size(); ++index)
-                std::visit([index](auto &record) {
-                    record.presentation.displayPosition = static_cast<uint32_t>(index);
-                }, configs[index]);
-        }
-
-        StoreMutationFailureCode missingReferenceFailure(const SeriesRecordReference &reference) {
-            return std::holds_alternative<PrimitiveMetric>(reference)
-                       ? StoreMutationFailureCode::InvalidPrimitiveMetric
-                       : StoreMutationFailureCode::UnknownComputedSeriesId;
+                configs[index].presentation.displayPosition = static_cast<uint32_t>(index);
         }
     }
 
@@ -348,18 +326,20 @@ namespace ksv::qt_data {
     }
 
     bool SeriesConfigStore::writeLocked(const std::vector<SeriesConfig> &configs,
-                                        const std::optional<ComputedSeriesId> &next) const {
+                                        const SeriesId &next) const {
         m_backend->setValue(kActiveKey, encode(configs, next));
         m_backend->sync();
         return m_backend->status() == QSettings::NoError;
     }
 
     void SeriesConfigStore::seedLocked(const QVariant *invalidRaw) const {
+        qDebug() << "Seeding series config store";
         if (invalidRaw) {
             const auto base = QString("graph/seriesConfigQuarantine/") + QDateTime::currentDateTimeUtc().toString(
                                   "yyyyMMddTHHmmsszzzZ");
             auto key = base;
             for (int suffix = 1; m_backend->contains(key); ++suffix) key = base + "-" + QString::number(suffix);
+            qDebug() << "Quarantining invalid series config store to " << key;
             m_backend->setValue(key, *invalidRaw);
             m_backend->sync();
             if (m_backend->status() != QSettings::NoError) {
@@ -379,15 +359,10 @@ namespace ksv::qt_data {
             }
         };
         for (const auto &[legacyKey, recordIndex]: legacy) {
-            const auto key = QString::fromLatin1(legacyKey);
-            const auto qml_key = QString("graphColumns/") + key;
-            const auto is_disabled = disabled.contains(key) || (
-                                         m_backend->contains(qml_key) && !m_backend->value(qml_key).toBool());
-            if (is_disabled)
-                std::visit([](auto &record) { record.presentation.enabled = false; },
-                           m_configs[recordIndex]);
+            if (const auto key = QString::fromLatin1(legacyKey); disabled.contains(key))
+                m_configs[recordIndex].presentation.enabled = false;
         }
-        m_requiresReload = !writeLocked(m_configs, m_next);
+        m_requiresReload = !writeLocked(m_configs, m_next.value());
     }
 
     void SeriesConfigStore::ensureLoadedLocked() const {
@@ -403,6 +378,9 @@ namespace ksv::qt_data {
             seedLocked(&raw);
             return;
         }
+        // TODO (18/08/26): Added diagnostics here because I do not think this method has any use outside of seeding
+        //  which it shouldn't really be doing anyway tbh it isn't clear seeding is it's job
+        qDebug() << "Ensure Loaded Locked actually set members";
         m_configs = decoded->configs;
         m_next = decoded->next;
         m_requiresReload = false;
@@ -419,25 +397,21 @@ namespace ksv::qt_data {
         m_callbacks.push_back(std::move(callback));
     }
 
-    std::optional<size_t> SeriesConfigStore::indexOfLocked(const SeriesRecordReference reference) const {
-        for (size_t i = 0; i < m_configs.size(); ++i) {
-            if (const auto *metric = std::get_if<PrimitiveMetric>(&reference)) {
-                const auto *base = std::get_if<BaseSeriesConfig>(&m_configs[i]);
-                if (base && base->metric == *metric) return i;
-            } else if (const auto *id = std::get_if<ComputedSeriesId>(&reference)) {
-                const auto *computed = std::get_if<ComputedSeriesConfig>(&m_configs[i]);
-                if (computed && computed->id == *id) return i;
-            }
-        }
-        return {};
+    std::optional<size_t> SeriesConfigStore::indexOfLocked(const SeriesId series_id) const {
+        const auto index = std::ranges::find_if(m_configs, [&](const auto &config) { return config.id == series_id; });
+        if (index == m_configs.end()) {
+            qCritical() << "Requested series id " << series_id.value << " not found in series config store";
+            return {};
+        };
+        return std::distance(m_configs.begin(), index);
     }
 
     MutationResult SeriesConfigStore::commitLocked(std::vector<SeriesConfig> configs,
-                                                   std::optional<ComputedSeriesId> next,
-                                                   std::optional<ComputedSeriesId> created) {
+                                                   SeriesId next,
+                                                   std::optional<SeriesId> created) {
         const auto errors = validateSeriesConfigs(configs);
         if (!errors.empty()) return {errors};
-        if (!created && encode(configs, next) == encode(m_configs, m_next)) return {};
+        if ((!created && !m_next) && encode(configs, next) == encode(m_configs, m_next.value_or(SeriesId{1}))) return {};
         if (!writeLocked(configs, next)) {
             m_configs.clear();
             m_next.reset();
@@ -468,7 +442,7 @@ namespace ksv::qt_data {
         return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
             if (!m_next) return {{}, StoreMutationFailureCode::ComputedSeriesIdExhausted};
             const auto id = *m_next;
-            configs.emplace_back(ComputedSeriesConfig{
+            configs.emplace_back(SeriesConfig{
                 id,
                 {
                     request.presentation.name, request.presentation.lineStyle, request.presentation.enabled,
@@ -476,61 +450,82 @@ namespace ksv::qt_data {
                 },
                 request.expression
             });
-            const auto next = id.value == UINT64_MAX ? std::nullopt : std::optional{ComputedSeriesId{id.value + 1}};
-            return commitLocked(std::move(configs), next, id);
+            const auto next = id.value == UINT64_MAX ? std::nullopt : std::optional{SeriesId{id.value + 1}};
+            return commitLocked(std::move(configs), next.value(), id);
         });
     }
 
-    MutationResult SeriesConfigStore::updateComputed(
-        const UpdateComputedSeriesRequest &request) {
+    MutationResult SeriesConfigStore::updateComputed(const UpdateComputedSeriesRequest &request) {
         return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
             const auto index = indexOfLocked(request.id);
-            if (!index) return {{}, StoreMutationFailureCode::UnknownComputedSeriesId};
-            auto &record = std::get<ComputedSeriesConfig>(configs[*index]);
+            if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
+            auto &record = configs[*index];
             record.presentation.name = request.presentation.name;
             record.presentation.lineStyle = request.presentation.lineStyle;
             record.presentation.enabled = request.presentation.enabled;
             record.expression = request.expression;
-            return commitLocked(std::move(configs), m_next);
+            return commitLocked(std::move(configs), m_next.value());
         });
     }
 
     MutationResult SeriesConfigStore::updateBase(const UpdateBaseSeriesRequest &request) {
         return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
-            if (std::ranges::find(kPrimitiveMetrics, request.metric) == kPrimitiveMetrics.end())
-                return {
-                    {}, StoreMutationFailureCode::InvalidPrimitiveMetric
-                };
-            const auto index = indexOfLocked(request.metric);
-            auto &record = std::get<BaseSeriesConfig>(configs[*index]);
+            const auto index = indexOfLocked(request.id);
+            if (!index)
+                return {{}, StoreMutationFailureCode::UnknownSeriesId};
+
+            auto &record = configs[*index];
             record.presentation.enabled = request.enabled;
             record.presentation.lineStyle = request.lineStyle;
-            return commitLocked(std::move(configs), m_next);
+            return commitLocked(std::move(configs), m_next.value());
         });
     }
 
-    MutationResult SeriesConfigStore::removeComputed(const ComputedSeriesId id) {
+    application::MutationResult SeriesConfigStore::updateSeries(const application::UpdateSeriesRequest &request) {
+        return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
+            const auto index = indexOfLocked(request.id);
+            if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
+            auto &config = configs[*index];
+            if (config.isPrimitive()) {
+                if (request.expression) return {{}, StoreMutationFailureCode::BannedPrimitiveUpdateType};
+                if (request.presentation && request.presentation.value().name)
+                    return {{}, StoreMutationFailureCode::BannedPrimitiveUpdateType};
+            }
+
+            if (request.presentation) {
+                auto [name, lineStyle, enabled] = request.presentation.value();
+                if (name) config.presentation.name = name.value();
+                if (lineStyle) config.presentation.lineStyle = lineStyle.value();
+                if (name) config.presentation.enabled = enabled.value();
+            }
+                if (request.expression) config.expression = request.expression.value();
+            return commitLocked(std::move(configs), m_next.value());
+        });
+    }
+
+    MutationResult SeriesConfigStore::removeComputed(const SeriesId id) {
         return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
             const auto index = indexOfLocked(id);
-            if (!index) return {{}, StoreMutationFailureCode::UnknownComputedSeriesId};
+            if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
+            if (configs[*index].isPrimitive()) return {{}, StoreMutationFailureCode::BannedPrimitiveUpdateType};
             configs.erase(configs.begin() + *index);
             normalizeDisplayPositions(configs);
-            return commitLocked(std::move(configs), m_next);
+            return commitLocked(std::move(configs), m_next.value());
         });
     }
 
-    MutationResult SeriesConfigStore::reorder(SeriesRecordReference reference,
+    MutationResult SeriesConfigStore::reorder(SeriesId reference,
                                               const uint32_t position) {
         return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
             const auto index = indexOfLocked(reference);
-            if (!index) return {{}, missingReferenceFailure(reference)};
+            if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
             if (position >= configs.size()) return {{}, StoreMutationFailureCode::DisplayPositionOutOfRange};
             if (*index == position) return {};
             const auto record = std::move(configs[*index]);
             configs.erase(configs.begin() + *index);
             configs.insert(configs.begin() + position, record);
             normalizeDisplayPositions(configs);
-            return commitLocked(std::move(configs), m_next);
+            return commitLocked(std::move(configs), m_next.value());
         });
     }
 }

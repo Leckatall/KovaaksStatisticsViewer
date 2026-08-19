@@ -8,15 +8,18 @@
 
 namespace ksv::application {
     enum class StoreMutationFailureCode {
-        UnknownComputedSeriesId, InvalidPrimitiveMetric, DisplayPositionOutOfRange,
-        ComputedSeriesIdExhausted, PersistenceWriteFailed
+        UnknownSeriesId,
+        DisplayPositionOutOfRange,
+        ComputedSeriesIdExhausted,
+        PersistenceWriteFailed,
+        BannedPrimitiveUpdateType
     };
 
     struct MutationResult {
         std::vector<ValidationError> errors;
         std::optional<StoreMutationFailureCode> failure;
         bool requiresReload = false;
-        std::optional<ComputedSeriesId> createdId;
+        std::optional<SeriesId> createdId;
 
         [[nodiscard]] bool succeeded() const { return errors.empty() && !failure.has_value(); }
     };
@@ -33,18 +36,28 @@ namespace ksv::application {
     };
 
     struct UpdateComputedSeriesRequest {
-        ComputedSeriesId id;
+        SeriesId id;
         ComputedSeriesPresentation presentation;
         Expression expression;
     };
 
     struct UpdateBaseSeriesRequest {
-        PrimitiveMetric metric;
+        SeriesId id;
         bool enabled;
         LineStyle lineStyle;
     };
 
-    using SeriesRecordReference = std::variant<PrimitiveMetric, ComputedSeriesId>;
+    struct UpdatedSeriesPresentation {
+        std::optional<std::string> name{};
+        std::optional<LineStyle> lineStyle{};
+        std::optional<bool> enabled{};
+    };
+
+    struct UpdateSeriesRequest {
+        SeriesId id;
+        std::optional<UpdatedSeriesPresentation> presentation;
+        std::optional<Expression> expression;
+    };
 
     class ISeriesConfigStore {
     public:
@@ -53,8 +66,9 @@ namespace ksv::application {
         virtual MutationResult createComputed(const CreateComputedSeriesRequest &) = 0;
         virtual MutationResult updateComputed(const UpdateComputedSeriesRequest &) = 0;
         virtual MutationResult updateBase(const UpdateBaseSeriesRequest &) = 0;
-        virtual MutationResult removeComputed(ComputedSeriesId) = 0;
-        virtual MutationResult reorder(SeriesRecordReference, uint32_t position) = 0;
+        virtual MutationResult updateSeries(const UpdateSeriesRequest &) = 0;
+        virtual MutationResult removeComputed(SeriesId) = 0;
+        virtual MutationResult reorder(SeriesId, uint32_t position) = 0;
         virtual void onChanged(std::function<void()> callback) = 0;
     };
 }

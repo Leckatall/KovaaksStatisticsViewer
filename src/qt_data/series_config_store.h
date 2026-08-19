@@ -15,24 +15,25 @@ namespace ksv::qt_data {
         application::MutationResult createComputed(const application::CreateComputedSeriesRequest &) override;
         application::MutationResult updateComputed(const application::UpdateComputedSeriesRequest &) override;
         application::MutationResult updateBase(const application::UpdateBaseSeriesRequest &) override;
-        application::MutationResult removeComputed(application::ComputedSeriesId) override;
-        application::MutationResult reorder(application::SeriesRecordReference, uint32_t position) override;
+        application::MutationResult updateSeries(const application::UpdateSeriesRequest &) override;
+        application::MutationResult removeComputed(application::SeriesId) override;
+        application::MutationResult reorder(application::SeriesId, uint32_t position) override;
         void onChanged(std::function<void()> callback) override;
 
     private:
         void ensureLoadedLocked() const;
         void seedLocked(const QVariant *invalidRaw = nullptr) const;
-        bool writeLocked(const std::vector<application::SeriesConfig> &, const std::optional<application::ComputedSeriesId> &) const;
-        application::MutationResult commitLocked(std::vector<application::SeriesConfig>, std::optional<application::ComputedSeriesId>,
-                                                 std::optional<application::ComputedSeriesId> created = std::nullopt);
-        [[nodiscard]] std::optional<size_t> indexOfLocked(application::SeriesRecordReference) const;
+        bool writeLocked(const std::vector<application::SeriesConfig> &, const application::SeriesId &next) const;
+        application::MutationResult commitLocked(std::vector<application::SeriesConfig>,
+                                                 application::SeriesId next, std::optional<application::SeriesId> created = std::nullopt);
+        [[nodiscard]] std::optional<size_t> indexOfLocked(application::SeriesId) const;
         application::MutationResult mutateLocked(
             const std::function<application::MutationResult(std::vector<application::SeriesConfig> &)> &mutate);
 
         std::shared_ptr<ISeriesConfigStoreSettingsBackend> m_backend;
         mutable QMutex m_mutex;
         mutable std::vector<application::SeriesConfig> m_configs;
-        mutable std::optional<application::ComputedSeriesId> m_next;
+        mutable std::optional<application::SeriesId> m_next;
         mutable bool m_requiresReload = true;
         std::vector<std::function<void()>> m_callbacks;
     };

@@ -47,42 +47,26 @@ namespace ksv::application {
 
         [[nodiscard]] ResolvedGraph get_resolved_graph() override {
             ResolvedGraph result;
-            if (!m_session_controller) return result;
             const auto run = m_session_controller->getCurrentPerf();
             const auto bucketed = bucketRun(run);
             result.times = bucketed.times;
-            const auto configs = m_store ? m_store->getAll() : std::vector<SeriesConfig>{};
-            for (const auto &config : configs) {
+            for (const SeriesConfig &config : m_store->getAll()) {
                 std::optional<std::vector<double>> values;
-                if (const auto *base = std::get_if<BaseSeriesConfig>(&config)) {
-                    values = bucketed.valuesFor(base->metric);
-                } else if (m_average) {
-                    values = m_average->evaluate(run, std::get<ComputedSeriesConfig>(config).expression);
-                }
+                values = m_average->evaluate(run, config.expression);
                 result.series.push_back({config, std::move(values)});
             }
             return result;
         }
 
-        MutationResult setSeriesEnabled(const SeriesRecordReference reference, const bool enabled) override {
-            if (!m_store) return publishLegacy();
-            if (const auto metric = std::get_if<PrimitiveMetric>(&reference)) {
-                const auto configs = m_store->getAll();
-                for (const auto &config : configs) if (const auto *base = std::get_if<BaseSeriesConfig>(&config); base && base->metric == *metric)
-                    return updateBasePresentation({*metric, enabled, base->presentation.lineStyle});
-            }
-            if (const auto id = std::get_if<ComputedSeriesId>(&reference)) {
-                const auto configs = m_store->getAll();
-                for (const auto &config : configs) if (const auto *computed = std::get_if<ComputedSeriesConfig>(&config); computed && computed->id == *id)
-                    return updateComputed({*id, {computed->presentation.name, computed->presentation.lineStyle, enabled}, computed->expression});
-            }
-            return {};
+        MutationResult setSeriesEnabled(const SeriesId series_id, const bool enabled) override {
+            UpdatedSeriesPresentation presentation{.enabled = enabled};
+            return m_store->updateSeries({.id = series_id, .presentation = presentation});
         }
-        MutationResult updateBasePresentation(const UpdateBaseSeriesRequest &request) override { return m_store ? m_store->updateBase(request) : publishLegacy(); }
-        MutationResult createComputed(const CreateComputedSeriesRequest &request) override { return m_store ? m_store->createComputed(request) : publishLegacy(); }
-        MutationResult updateComputed(const UpdateComputedSeriesRequest &request) override { return m_store ? m_store->updateComputed(request) : publishLegacy(); }
-        MutationResult removeComputed(const ComputedSeriesId id) override { return m_store ? m_store->removeComputed(id) : publishLegacy(); }
-        MutationResult moveSeries(const SeriesRecordReference reference, const uint32_t position) override { return m_store ? m_store->reorder(reference, position) : publishLegacy(); }
+        MutationResult updateBasePresentation(const UpdateBaseSeriesRequest &request) override { return m_store->updateBase(request); }
+        MutationResult createComputed(const CreateComputedSeriesRequest &request) override { return m_store->createComputed(request);}
+        MutationResult updateComputed(const UpdateComputedSeriesRequest &request) override { return m_store->updateComputed(request);}
+        MutationResult removeComputed(const SeriesId id) override { return m_store->removeComputed(id);}
+        MutationResult moveSeries(const SeriesId id, const uint32_t position) override { return m_store->reorder(id, position); }
         void onSeriesConfigChanged(std::function<void()> callback) override { m_config_callbacks.push_back(std::move(callback)); }
 
     private:

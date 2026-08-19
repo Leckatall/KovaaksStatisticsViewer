@@ -21,22 +21,25 @@ ApplicationWindow {
         property alias width: root.width
         property alias height: root.height
     }
+    QtObject {
+        id: settings
+        property list<int> test: [1, 2, 3]
 
+    }
     Settings {
-        id: columnVisibilitySettings
-        category: "graphColumns"
-        property bool score: true
-        property bool accuracy: true
-        property bool shots: true
-        property bool kills: true
-        property bool dmg: true
-        property bool scoreTotal: true
-        property bool expectedFinalScore: true
-        property bool expectedFinalScoreRecent: true
+        id: seriesVisibilitySettings
+        category: "graphSeriesVisibility"
+        property var hiddenSeriesIds: []
     }
 
     Settings {
         id: graphAxisSettings
+        category: "graphAxis"
+        property string seriesId: ""
+    }
+
+    Settings {
+        id: legacyGraphAxisSettings
         category: "graph"
         property string yAxisColumnKey: "score"
     }
@@ -95,8 +98,9 @@ ApplicationWindow {
         settingsVm: root.settingsVm
         sessionVm: root.sessionVm
         graphVm: root.graphVm
-        columnVisibility: columnVisibilitySettings
+        seriesVisibility: seriesVisibilitySettings
         graphAxisSettings: graphAxisSettings
+        legacyGraphAxisSettings: legacyGraphAxisSettings
     }
 
     AboutDialog {
@@ -106,7 +110,7 @@ ApplicationWindow {
     menuBar: AppMenuBar {
         graphVm: root.graphVm
         historyVm: root.historyVm
-        columnVisibility: columnVisibilitySettings
+        seriesVisibility: seriesVisibilitySettings
         historyColumnVisibility: historyColumnVisibilitySettings
         viewSettings: viewSettings
         onSetSourceDirRequested: folderDialog.open()
@@ -142,7 +146,7 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     visible: viewSettings.scenarioGraphVisible
                     graphVm: root.graphVm
-                    columnVisibility: columnVisibilitySettings
+                    seriesVisibility: seriesVisibilitySettings
                     graphAxisSettings: graphAxisSettings
                 }
                 PlaytimeGraphPanel {
@@ -164,7 +168,7 @@ ApplicationWindow {
                 Layout.row: 1; Layout.column: 1
                 visible: viewSettings.controlPanelVisible
                 graphVm: root.graphVm
-                columnVisibility: columnVisibilitySettings
+                seriesVisibility: seriesVisibilitySettings
                 onConfigureLinesRequested: settingsDialog.openGraphLines()
             }
             SelectionPanel {

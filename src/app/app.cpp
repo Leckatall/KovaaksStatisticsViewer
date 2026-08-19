@@ -35,6 +35,7 @@ namespace ksv::application {
              std::shared_ptr<IProtoDecoder> decoder,
              std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
              QObject *parent) : QObject(parent) {
+        qInfo() << "App Started. This messsage should not appear in release builds";
         m_protoDecoder = std::move(decoder);
 
         m_settingsService = std::move(settingsService);

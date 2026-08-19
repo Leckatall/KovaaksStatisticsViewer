@@ -25,13 +25,13 @@ namespace ksv::application {
         PrimitiveMetric::Dmg
     };
 
-    struct ComputedSeriesId {
+    struct SeriesId {
         uint64_t value = 0;
 
-        auto operator<=>(const ComputedSeriesId &) const = default;
+        auto operator<=>(const SeriesId &) const = default;
     };
 
-    inline constexpr ComputedSeriesId kFirstUserComputedSeriesId{5};
+    inline constexpr SeriesId kFirstUserComputedSeriesId{10};
 
     struct RgbaColor {
         uint8_t red = 0;
@@ -153,18 +153,28 @@ namespace ksv::application {
 
     [[nodiscard]] Expression averageAcrossRuns(Expression input, RunSelection selection);
 
-    struct BaseSeriesConfig {
-        PrimitiveMetric metric;
-        SeriesPresentation presentation;
-    };
+    // struct BaseSeriesConfig {
+    //     PrimitiveMetric metric;
+    //     SeriesPresentation presentation;
+    // };
+    //
+    // struct ComputedSeriesConfig {
+    //     SeriesId id;
+    //     SeriesPresentation presentation;
+    //     Expression expression;
+    // };
 
-    struct ComputedSeriesConfig {
-        ComputedSeriesId id;
+    struct SeriesConfig {
+        SeriesId id;
         SeriesPresentation presentation;
         Expression expression;
+
+        [[nodiscard]] constexpr bool isPrimitive() const {
+            return std::holds_alternative<PrimitiveReference>(expression->value());
+        }
     };
 
-    using SeriesConfig = std::variant<BaseSeriesConfig, ComputedSeriesConfig>;
+    // using SeriesConfig = std::variant<BaseSeriesConfig, ComputedSeriesConfig>;
 
     enum class SeriesConfigValidationCode {
         InvalidPrimitiveMetric,
@@ -194,11 +204,13 @@ namespace ksv::application {
         std::string path;
     };
 
-    [[nodiscard]] const SeriesPresentation &seriesPresentation(const SeriesConfig &config);
+    class SeriesConfigValidator {
+
+    };
+
+    // [[nodiscard]] const SeriesPresentation &seriesPresentation(const SeriesConfig &config);
 
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfig(const SeriesConfig &config);
-
-    [[nodiscard]] std::vector<ValidationError> validateSeriesConfig(const ComputedSeriesConfig &config);
 
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs);
 

@@ -18,8 +18,24 @@ Dialog {
     required property var settingsVm
     required property var sessionVm
     required property var graphVm
-    required property var columnVisibility
-    required property var graphAxisSettings
+    property var seriesVisibility
+    property var columnVisibility
+    property var graphAxisSettings
+    property var legacyGraphAxisSettings
+    readonly property var effectiveVisibility: root.seriesVisibility || root.columnVisibility
+
+    function seriesName(id) {
+        if (root.graphVm.allSeries) {
+            const series = root.graphVm.allSeries.find(s => s.id === id)
+            if (series) return series.name
+        }
+        if (root.graphVm.columnName) {
+            const column = root.graphVm.allColumns
+                    ? root.graphVm.allColumns.find(c => root.graphVm.columnKey(c) === id) : id
+            return root.graphVm.columnName(column === undefined ? id : column)
+        }
+        return id
+    }
 
     property int currentCategory: 0
     readonly property int graphLinesCategory: 1
@@ -185,10 +201,12 @@ Dialog {
                 spacing: 8
 
                 readonly property var visibleColumns: {
-                    const cols = root.graphVm.enabledColumns;
+                    const cols = root.graphVm.enabledSeriesIds !== undefined
+                            ? root.graphVm.enabledSeriesIds : root.graphVm.enabledColumns.map(
+                                  c => root.graphVm.columnKey(c));
                     const result = [];
                     for (let i = 0; i < cols.length; i++) {
-                        if (root.columnVisibility[root.graphVm.columnKey(cols[i])]) {
+                        if (SeriesVisibility.read(root.effectiveVisibility, cols[i])) {
                             result.push(cols[i]);
                         }
                     }
@@ -203,7 +221,12 @@ Dialog {
                     const seenAxes = new Set();
                     const result = [];
                     for (let i = 0; i < cols.length; i++) {
-                        const axis = root.graphVm.columnYAxis(cols[i]);
+                        const series = root.graphVm.allSeries ? root.graphVm.allSeries.find(s => s.id === cols[i]) : null;
+                        const legacyColumn = root.graphVm.allColumns
+                                ? root.graphVm.allColumns.find(c => root.graphVm.columnKey(c) === cols[i]) : cols[i];
+                        const axis = series ? series.displayPosition
+                                            : (root.graphVm.columnYAxis ? root.graphVm.columnYAxis(
+                                                  legacyColumn === undefined ? cols[i] : legacyColumn) : -1);
                         if (!seenAxes.has(axis)) {
                             seenAxes.add(axis);
                             result.push(cols[i]);
@@ -233,29 +256,36 @@ Dialog {
                         Layout.fillWidth: true
                         enabled: graphLinesPage.visibleAxisColumns.length > 0
                         model: graphLinesPage.visibleAxisColumns
-                        displayText: enabled ? root.graphVm.columnName(graphLinesPage.visibleAxisColumns[currentIndex]) : ""
+                        displayText: enabled ? root.seriesName(graphLinesPage.visibleAxisColumns[currentIndex]) : ""
                         delegate: ItemDelegate {
-                            required property int modelData
+                            required property var modelData
                             width: yAxisColumnComboBox.width
-                            text: root.graphVm.columnName(modelData)
+                            text: root.seriesName(modelData)
                         }
                         currentIndex: {
-                            const idx = graphLinesPage.visibleAxisColumns.findIndex(
-                                c => root.graphVm.columnKey(c) === root.graphAxisSettings.yAxisColumnKey);
+                            const idx = graphLinesPage.visibleAxisColumns.findIndex(c =>
+                                root.graphAxisSettings.seriesId !== undefined
+                                    ? c === root.graphAxisSettings.seriesId
+                                    : root.graphVm.columnKey(c) === root.graphAxisSettings.yAxisColumnKey);
                             return idx >= 0 ? idx : 0;
                         }
                         onActivated: index => {
-                            root.graphAxisSettings.yAxisColumnKey = root.graphVm.columnKey(graphLinesPage.visibleAxisColumns[index]);
+                            if (root.graphAxisSettings.seriesId !== undefined)
+                                root.graphAxisSettings.seriesId = graphLinesPage.visibleAxisColumns[index];
+                            else
+                                root.graphAxisSettings.yAxisColumnKey = root.graphVm.columnKey(
+                                    root.graphVm.allColumns.find(c => root.graphVm.columnKey(c) ===
+                                        graphLinesPage.visibleAxisColumns[index]));
                         }
                     }
                 }
 
                 Repeater {
-                    model: root.graphVm.allColumns
+                    model: root.graphVm.allSeries || root.graphVm.allColumns
 
                     RowLayout {
                         id: lineRow
-                        required property int modelData
+                        required property var modelData
                         Layout.fillWidth: true
                         spacing: 12
 
@@ -263,20 +293,26 @@ Dialog {
                             width: 16
                             height: 16
                             radius: 4
-                            color: root.graphVm.columnColor(lineRow.modelData)
+                            color: lineRow.modelData.color || root.graphVm.columnColor(lineRow.modelData)
                             border.width: 1
                             border.color: root.palette.mid
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Label {
-                            text: root.graphVm.columnName(lineRow.modelData)
+                            text: lineRow.modelData.name || root.graphVm.columnName(lineRow.modelData)
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Item { Layout.fillWidth: true }
                         Switch {
-                            objectName: "graphColumnEnabledSwitch_" + root.graphVm.columnName(lineRow.modelData)
-                            checked: root.graphVm.enabledColumns.includes(lineRow.modelData)
-                            onToggled: root.graphVm.setSeriesEnabled(root.graphVm.seriesIdForColumn(lineRow.modelData), checked)
+                            objectName: lineRow.modelData.id ? "seriesEnabledSwitch_" + lineRow.modelData.id
+                                                              : "graphColumnEnabledSwitch_" + root.graphVm.columnName(lineRow.modelData)
+                            checked: lineRow.modelData.id ? lineRow.modelData.enabled
+                                                         : root.graphVm.enabledColumns.includes(lineRow.modelData)
+                            onToggled: lineRow.modelData.id
+                                       ? root.graphVm.setSeriesEnabled(lineRow.modelData.id, checked)
+                                       : (root.settingsVm.setGraphColumnEnabled
+                                          ? root.settingsVm.setGraphColumnEnabled(lineRow.modelData, checked)
+                                          : root.graphVm.setSeriesEnabled(root.graphVm.seriesIdForColumn(lineRow.modelData), checked))
                         }
                     }
                 }

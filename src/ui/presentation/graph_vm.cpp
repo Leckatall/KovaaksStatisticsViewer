@@ -40,26 +40,30 @@ namespace ksv::presentation {
             return t;
         }
 
-        const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{{
-            {ValueTransform::identity(), {}},
-            {ValueTransform::percentage(), {}},
-            {ValueTransform::identity(), {}},
-            {ValueTransform::identity(), {}},
-            {ValueTransform::identity(), {}},
-            {ValueTransform::identity(), {}},
-        }};
+        const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{
+            {
+                {ValueTransform::identity(), {}},
+                {ValueTransform::percentage(), {}},
+                {ValueTransform::identity(), {}},
+                {ValueTransform::identity(), {}},
+                {ValueTransform::identity(), {}},
+                {ValueTransform::identity(), {}},
+            }
+        };
 
-        const std::array<ColumnMeta, GraphViewModel::ColumnCount> kColumnMeta{{
-            {"Time", QColor(), -1},
-            {"Score", QColor("#009600"), ScoreAxis},
-            {"Accuracy", QColor("cyan"), AccuracyAxis},
-            {"Shots", QColor("orange"), ShotsAxis},
-            {"Kills", QColor("red"), KillsAxis},
-            {"Dmg", QColor("yellow"), DmgAxis},
-            {"Score Total", QColor("purple"), ScoreFamilyAxis},
-            {"Expected Final Score", QColor("magenta"), ScoreFamilyAxis},
-            {"Expected Final Score (5s)", QColor("deepskyblue"), ScoreFamilyAxis},
-        }};
+        const std::array<ColumnMeta, GraphViewModel::ColumnCount> kColumnMeta{
+            {
+                {"Time", QColor(), -1},
+                {"Score", QColor("#009600"), ScoreAxis},
+                {"Accuracy", QColor("cyan"), AccuracyAxis},
+                {"Shots", QColor("orange"), ShotsAxis},
+                {"Kills", QColor("red"), KillsAxis},
+                {"Dmg", QColor("yellow"), DmgAxis},
+                {"Score Total", QColor("purple"), ScoreFamilyAxis},
+                {"Expected Final Score", QColor("magenta"), ScoreFamilyAxis},
+                {"Expected Final Score (5s)", QColor("deepskyblue"), ScoreFamilyAxis},
+            }
+        };
 
         static_assert(static_cast<int>(application::ColumnId::Time) == GraphViewModel::Time);
         static_assert(static_cast<int>(application::ColumnId::Score) == GraphViewModel::Score);
@@ -68,8 +72,11 @@ namespace ksv::presentation {
         static_assert(static_cast<int>(application::ColumnId::Kills) == GraphViewModel::Kills);
         static_assert(static_cast<int>(application::ColumnId::Dmg) == GraphViewModel::Dmg);
         static_assert(static_cast<int>(application::ColumnId::ScoreTotal) == GraphViewModel::ScoreTotal);
-        static_assert(static_cast<int>(application::ColumnId::ExpectedFinalScore) == GraphViewModel::ExpectedFinalScore);
-        static_assert(static_cast<int>(application::ColumnId::ExpectedFinalScoreRecent) == GraphViewModel::ExpectedFinalScoreRecent);
+        static_assert(static_cast<int>(application::ColumnId::ExpectedFinalScore) == GraphViewModel::ExpectedFinalScore)
+        ;
+        static_assert(
+            static_cast<int>(application::ColumnId::ExpectedFinalScoreRecent) ==
+            GraphViewModel::ExpectedFinalScoreRecent);
 
         std::optional<application::PrimitiveMetric> metricFromString(const QString &value) {
             if (value == "score") return application::PrimitiveMetric::Score;
@@ -82,7 +89,7 @@ namespace ksv::presentation {
 
         bool exactKeys(const QVariantMap &map, std::initializer_list<const char *> expected) {
             if (map.size() != static_cast<int>(expected.size())) return false;
-            for (const auto *key : expected) if (!map.contains(key)) return false;
+            for (const auto *key: expected) if (!map.contains(key)) return false;
             return true;
         }
 
@@ -96,18 +103,23 @@ namespace ksv::presentation {
             }
             if (kind == "constant") {
                 if (!exactKeys(map, {"kind", "value"})) return std::nullopt;
-                bool ok = false; const auto value = map.value("value").toDouble(&ok);
+                bool ok = false;
+                const auto value = map.value("value").toDouble(&ok);
                 if (!ok || !std::isfinite(value)) return std::nullopt;
                 return std::optional<application::Expression>{application::numericConstant(value)};
             }
-            if (kind == "runningSum" || kind == "projectedFinalValue" || kind == "projectRateToFinal" || kind == "rollingMean") {
-                if (!exactKeys(map, kind == "rollingMean" ? std::initializer_list<const char *>{"kind", "input", "window"} : std::initializer_list<const char *>{"kind", "input"})) return std::nullopt;
+            if (kind == "runningSum" || kind == "projectedFinalValue" || kind == "projectRateToFinal" || kind ==
+                "rollingMean") {
+                if (!exactKeys(map, kind == "rollingMean"
+                                        ? std::initializer_list<const char *>{"kind", "input", "window"}
+                                        : std::initializer_list<const char *>{"kind", "input"})) return std::nullopt;
                 const auto input = parseExpression(map.value("input").toMap());
                 if (!input) return std::nullopt;
                 if (kind == "runningSum") return application::runningSum(*input);
                 if (kind == "projectedFinalValue") return application::projectedFinalValue(*input);
                 if (kind == "projectRateToFinal") return application::projectRateToFinal(*input);
-                bool ok = false; const auto window = map.value("window").toUInt(&ok);
+                bool ok = false;
+                const auto window = map.value("window").toUInt(&ok);
                 if (!ok || window == 0) return std::nullopt;
                 return std::optional<application::Expression>{application::rollingMean(*input, window)};
             }
@@ -132,7 +144,8 @@ namespace ksv::presentation {
                     if (ok && count > 0) return application::averageAcrossRuns(*input, application::RecentRuns{count});
                 } else if (selection.value("kind").toString() == "topPercentile" && selection.contains("percent")) {
                     const auto percent = selection.value("percent").toDouble(&ok);
-                    if (ok && std::isfinite(percent)) return application::averageAcrossRuns(*input, application::TopPercentile{percent});
+                    if (ok && std::isfinite(percent)) return application::averageAcrossRuns(
+                        *input, application::TopPercentile{percent});
                 }
             }
             return std::nullopt;
@@ -145,25 +158,46 @@ namespace ksv::presentation {
                 if constexpr (std::is_same_v<Node, application::PrimitiveReference>) {
                     const auto names = std::array{"score", "shots", "hits", "kills", "dmg"};
                     return {{"kind", "primitive"}, {"primitiveMetric", names[static_cast<int>(node.metric)]}};
-                } else if constexpr (std::is_same_v<Node, application::NumericConstant>) return {{"kind", "constant"}, {"value", node.value}};
-                else if constexpr (std::is_same_v<Node, application::RunningSum>) return {{"kind", "runningSum"}, {"input", expressionMap(node.input)}};
-                else if constexpr (std::is_same_v<Node, application::ProjectedFinalValue>) return {{"kind", "projectedFinalValue"}, {"input", expressionMap(node.input)}};
-                else if constexpr (std::is_same_v<Node, application::ProjectRateToFinal>) return {{"kind", "projectRateToFinal"}, {"input", expressionMap(node.input)}};
-                else if constexpr (std::is_same_v<Node, application::RollingMean>) return {{"kind", "rollingMean"}, {"input", expressionMap(node.input)}, {"window", node.window}};
-                else if constexpr (std::is_same_v<Node, application::Add>) return {{"kind", "add"}, {"left", expressionMap(node.left)}, {"right", expressionMap(node.right)}};
-                else if constexpr (std::is_same_v<Node, application::Subtract>) return {{"kind", "subtract"}, {"left", expressionMap(node.left)}, {"right", expressionMap(node.right)}};
-                else if constexpr (std::is_same_v<Node, application::Multiply>) return {{"kind", "multiply"}, {"left", expressionMap(node.left)}, {"right", expressionMap(node.right)}};
-                else if constexpr (std::is_same_v<Node, application::Divide>) return {{"kind", "divide"}, {"left", expressionMap(node.left)}, {"right", expressionMap(node.right)}};
+                } else if constexpr (std::is_same_v<Node, application::NumericConstant>) return {
+                    {"kind", "constant"}, {"value", node.value}
+                };
+                else if constexpr (std::is_same_v<Node, application::RunningSum>) return {
+                    {"kind", "runningSum"}, {"input", expressionMap(node.input)}
+                };
+                else if constexpr (std::is_same_v<Node, application::ProjectedFinalValue>) return {
+                    {"kind", "projectedFinalValue"}, {"input", expressionMap(node.input)}
+                };
+                else if constexpr (std::is_same_v<Node, application::ProjectRateToFinal>) return {
+                    {"kind", "projectRateToFinal"}, {"input", expressionMap(node.input)}
+                };
+                else if constexpr (std::is_same_v<Node, application::RollingMean>) return {
+                    {"kind", "rollingMean"}, {"input", expressionMap(node.input)}, {"window", node.window}
+                };
+                else if constexpr (std::is_same_v<Node, application::Add>) return {
+                    {"kind", "add"}, {"left", expressionMap(node.left)}, {"right", expressionMap(node.right)}
+                };
+                else if constexpr (std::is_same_v<Node, application::Subtract>) return {
+                    {"kind", "subtract"}, {"left", expressionMap(node.left)}, {"right", expressionMap(node.right)}
+                };
+                else if constexpr (std::is_same_v<Node, application::Multiply>) return {
+                    {"kind", "multiply"}, {"left", expressionMap(node.left)}, {"right", expressionMap(node.right)}
+                };
+                else if constexpr (std::is_same_v<Node, application::Divide>) return {
+                    {"kind", "divide"}, {"left", expressionMap(node.left)}, {"right", expressionMap(node.right)}
+                };
                 else if constexpr (std::is_same_v<Node, application::AverageAcrossRuns>) {
                     QVariantMap selection;
                     std::visit([&](const auto &value) {
                         using Selection = std::decay_t<decltype(value)>;
-                        if constexpr (std::is_same_v<Selection, application::RecentRuns>) selection = {{"kind", "recentRuns"}, {"count", value.count}};
+                        if constexpr (std::is_same_v<Selection, application::RecentRuns>) selection = {
+                            {"kind", "recentRuns"}, {"count", value.count}
+                        };
                         else selection = {{"kind", "topPercentile"}, {"percent", value.percent}};
                     }, node.selection);
-                    return {{"kind", "averageAcrossRuns"}, {"input", expressionMap(node.input)}, {"selection", selection}};
-                }
-                else return QVariantMap{};
+                    return {
+                        {"kind", "averageAcrossRuns"}, {"input", expressionMap(node.input)}, {"selection", selection}
+                    };
+                } else return QVariantMap{};
             }, expression->value());
         }
 
@@ -174,14 +208,18 @@ namespace ksv::presentation {
             map["failure"] = result.failure ? QVariant(static_cast<int>(*result.failure)) : QVariant();
             map["createdId"] = result.createdId ? QVariant(QString::number(result.createdId->value)) : QVariant();
             QVariantList errors;
-            for (const auto &error : result.errors) errors.append(QVariantMap{{"code", static_cast<int>(error.code)}, {"path", QString::fromStdString(error.path)}});
+            for (const auto &error: result.errors) errors.append(QVariantMap{
+                {"code", static_cast<int>(error.code)}, {"path", QString::fromStdString(error.path)}
+            });
             map["validationErrors"] = errors;
             return map;
         }
 
         QVariantMap invalidMutationMap() {
-            return {{"succeeded", false}, {"failure", "invalidRequest"}, {"requiresReload", false},
-                    {"createdId", QVariant()}, {"validationErrors", QVariantList{}}};
+            return {
+                {"succeeded", false}, {"failure", "invalidRequest"}, {"requiresReload", false},
+                {"createdId", QVariant()}, {"validationErrors", QVariantList{}}
+            };
         }
     }
 
@@ -189,18 +227,19 @@ namespace ksv::presentation {
                                    QObject *parent) : GraphViewModelBase(parent),
                                                       m_graphUseCase(std::move(graphUseCase)) {
         m_enabledColumns = allColumns();
-        for (int c = Score; c < ColumnCount; ++c) {
-            SeriesModel series;
-            series.name = GraphViewModel::columnName(c);
-            series.color = kColumnMeta[c].color;
-            series.transform = kYAxisMeta[kColumnMeta[c].yAxis].transform;
-            m_series.append(std::move(series));
-        }
+        // for (int c = Score; c < ColumnCount; ++c) {
+        //     SeriesModel series;
+        //     series.name = GraphViewModel::columnName(c);
+        //     series.color = kColumnMeta[c].color;
+        //     series.transform = kYAxisMeta[kColumnMeta[c].yAxis].transform;
+        //     m_series.append(std::move(series));
+        // }
+        fetchMetadata();
         recomputeBounds();
-        m_graphUseCase->onSeriesConfigChanged([this] { fetchData(); });
+        m_graphUseCase->onSeriesConfigChanged([this] { fetchMetadata(); });
     }
 
-    void GraphViewModel::setData(QList<QMap<Column, qreal>> data) {
+    void GraphViewModel::setData(QList<QMap<Column, qreal> > data) {
         m_data = std::move(data);
         emit dataUpdated();
         recomputeBounds();
@@ -210,11 +249,15 @@ namespace ksv::presentation {
         QList<SeriesModel> result;
         result.reserve(columns.size());
         std::array<std::vector<int>, YAxisCount> membersByAxis;
-        for (const int column: columns) {
-            if (column < Score || column >= ColumnCount) continue;
-            result.append(m_series[column - Score]);
-            result.back().column = column;
-            membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
+        // for (const int column: columns) {
+        //     if (column < Score || column >= ColumnCount) continue;
+        //     result.append(m_series[column - Score]);
+        //     result.back().column = column;
+        //     membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
+        // }
+        for (const SeriesModel &series: m_seriesById) {
+            result.append(series);
+            membersByAxis[kColumnMeta[series.column].yAxis].push_back(result.size() - 1);
         }
         for (int axis = 0; axis < YAxisCount; ++axis) {
             const auto &indices = membersByAxis[axis];
@@ -303,7 +346,7 @@ namespace ksv::presentation {
     }
 
     namespace {
-        std::pair<qreal, qreal> rawColumnRange(const QList<QMap<GraphViewModel::Column, qreal>> &data,
+        std::pair<qreal, qreal> rawColumnRange(const QList<QMap<GraphViewModel::Column, qreal> > &data,
                                                const GraphViewModel::Column column) {
             qreal lo = data.front()[column];
             qreal hi = lo;
@@ -332,12 +375,6 @@ namespace ksv::presentation {
             }
         }
         newAxes[Time] = newAxes[Time].withDelegate(secondsDelegate());
-
-        for (int c = Score; c < ColumnCount; ++c) {
-            auto &series = m_series[c - Score];
-            series.points = seriesPoints(c);
-            series.yAxis.reset();
-        }
 
         if (!m_data.isEmpty()) {
             qreal lo = 0.0;
@@ -379,62 +416,62 @@ namespace ksv::presentation {
         // fetchData() called through signal
     }
 
+    void GraphViewModel::fetchMetadata() {
+        auto series_list = m_graphUseCase->get_resolved_graph().series;
+        m_seriesById.clear();
+        for (const auto &entry: series_list) {
+            m_seriesById[QString::number(entry.config.id.value)] = SeriesModel{
+                .id = QString::number(entry.config.id.value),
+                .name = QString::fromStdString(entry.config.presentation.name),
+                .color = QColor(entry.config.presentation.lineStyle.color.red,
+                                 entry.config.presentation.lineStyle.color.green,
+                                 entry.config.presentation.lineStyle.color.blue,
+                                 entry.config.presentation.lineStyle.color.alpha),
+                // TODO(18/08/26): transform and yAxisId should be stored as part of seriesConfig
+                // .transform = entry.config.presentation.lineStyle.transform,
+                // TODO(18/08/26): displayPosition and width support in SeriesModel
+                // .displayPosition = entry.config.presentation.displayPosition,
+            };
+        }
+        fetchData();
+    }
+
     void GraphViewModel::fetchData() {
         const QString newTitle = QString::fromStdString(m_graphUseCase->get_run_label());
         if (newTitle != m_scenarioTitle) {
             m_scenarioTitle = newTitle;
-            emit scenarioTitleChanged();
+            emit scenarioTitleChanged(); // Seems redundant
         }
 
         const auto resolved = m_graphUseCase->get_resolved_graph();
         if (!resolved.series.empty() || !resolved.times.empty()) {
-            m_allSeries.clear(); m_enabledSeriesIds.clear(); m_legacyColumnIds.clear();
+            m_allSeries.clear();
+            m_enabledSeriesIds.clear();
+            m_legacyColumnIds.clear();
             QVariantList transitionalEnabledColumns;
-            QList<QMap<Column, qreal>> rows(int(resolved.times.size()));
+            QList<QMap<Column, qreal> > rows(int(resolved.times.size()));
             for (int i = 0; i < rows.size(); ++i) rows[i][Time] = resolved.times[static_cast<size_t>(i)];
-            for (const auto &entry : resolved.series) {
-                const auto &presentation = application::seriesPresentation(entry.config);
-                const bool computed = std::holds_alternative<application::ComputedSeriesConfig>(entry.config);
-                QString id;
-                if (computed) {
-                    id = "computed:" + QString::number(std::get<application::ComputedSeriesConfig>(entry.config).id.value);
-                } else {
-                    const auto metric = std::get<application::BaseSeriesConfig>(entry.config).metric;
-                    static constexpr std::array tags{"score", "shots", "hits", "kills", "dmg"};
-                    id = "base:" + QString::fromLatin1(tags[static_cast<int>(metric)]);
+
+            for (const auto &entry: resolved.series) {
+                const auto &presentation = entry.config.presentation;
+                const auto &entry_id = entry.config.id.value;
+                const QString id = QString::number(entry_id);
+                const auto values = entry.values.value_or({});
+                QList<QPointF> points;
+                points.reserve(resolved.times.size());
+                for (int i = 0; i < rows.size(); ++i) {
+                    points.append(QPointF(resolved.times[i], values[i]));
                 }
-                QVariantMap series{{"id", id}, {"kind", computed ? "computed" : "base"},
-                                   {"name", QString::fromStdString(presentation.name)}, {"enabled", presentation.enabled},
-                                   {"displayPosition", static_cast<qulonglong>(presentation.displayPosition)},
-                                   {"color", QColor(presentation.lineStyle.color.red, presentation.lineStyle.color.green,
-                                                      presentation.lineStyle.color.blue, presentation.lineStyle.color.alpha)},
-                                   {"width", presentation.lineStyle.width}};
-                if (const auto *base = std::get_if<application::BaseSeriesConfig>(&entry.config)) series["metric"] = static_cast<int>(base->metric);
-                else series["expression"] = expressionMap(std::get<application::ComputedSeriesConfig>(entry.config).expression);
-                m_allSeries.append(series);
-                if (presentation.enabled) m_enabledSeriesIds.append(id);
+                m_seriesById[id].points = points;
+
                 int column = -1;
-                if (const auto *base = std::get_if<application::BaseSeriesConfig>(&entry.config)) {
-                    switch (base->metric) {
-                        case application::PrimitiveMetric::Score: column = Score; break;
-                        case application::PrimitiveMetric::Shots: column = Shots; break;
-                        case application::PrimitiveMetric::Kills: column = Kills; break;
-                        case application::PrimitiveMetric::Dmg: column = Dmg; break;
-                        case application::PrimitiveMetric::Hits: break;
-                    }
-                } else {
-                    const auto idValue = std::get<application::ComputedSeriesConfig>(entry.config).id.value;
-                    if (idValue == 1) column = Accuracy;
-                    else if (idValue == 2) column = ScoreTotal;
-                    else if (idValue == 3) column = ExpectedFinalScore;
-                    else if (idValue == 4) column = ExpectedFinalScoreRecent;
-                }
+                if (entry_id <= 3) column = static_cast<int>(entry_id);
+                else if (entry_id <= 9) column = static_cast<int>(entry_id - 1);
+                m_seriesById[id].column = column;
+
                 if (column >= Score && column < ColumnCount) m_legacyColumnIds[column] = id;
-                if (presentation.enabled && column >= Score && column < ColumnCount) transitionalEnabledColumns.append(column);
-                if (column >= Score && column < ColumnCount && entry.values) {
-                    for (int i = 0; i < rows.size() && i < static_cast<int>(entry.values->size()); ++i)
-                        rows[i][static_cast<Column>(column)] = static_cast<qreal>((*entry.values)[static_cast<size_t>(i)]);
-                }
+                if (presentation.enabled && column >= Score && column < ColumnCount)
+                    transitionalEnabledColumns.append(column);
             }
             if (m_enabledColumns != transitionalEnabledColumns) {
                 m_enabledColumns = std::move(transitionalEnabledColumns);
@@ -447,7 +484,7 @@ namespace ksv::presentation {
 
         const application::GraphSeries seriesData = m_graphUseCase->get_series();
 
-        QList<QMap<Column, qreal>> rows(int(seriesData.times.size()));
+        QList<QMap<Column, qreal> > rows(int(seriesData.times.size()));
         for (int i = 0; i < int(seriesData.times.size()); ++i) rows[i][Time] = seriesData.times[i];
 
         for (int c = Score; c < ColumnCount; ++c) {
@@ -470,7 +507,7 @@ namespace ksv::presentation {
     }
 
     QString GraphViewModel::seriesIdForColumn(const int column) const {
-        for (const auto &value : m_allSeries) {
+        for (const auto &value: m_allSeries) {
             const auto map = value.toMap();
             if (m_legacyColumnIds.value(column) == map.value("id").toString()) return map.value("id").toString();
         }
@@ -479,7 +516,7 @@ namespace ksv::presentation {
 
     QVariantMap GraphViewModel::setSeriesEnabled(const QString &id, const bool enabled) {
         if (id.startsWith("computed:")) {
-            const auto result = m_graphUseCase->setSeriesEnabled(application::ComputedSeriesId{id.mid(9).toULongLong()}, enabled);
+            const auto result = m_graphUseCase->setSeriesEnabled(application::SeriesId{id.toULongLong()},enabled);
             if (result.succeeded()) {
                 fetchData();
                 for (auto it = m_legacyColumnIds.cbegin(); it != m_legacyColumnIds.cend(); ++it)
@@ -487,74 +524,96 @@ namespace ksv::presentation {
                         auto columns = m_enabledColumns;
                         columns.removeAll(it.key());
                         if (enabled) columns.append(it.key());
-                        if (columns != m_enabledColumns) { m_enabledColumns = columns; emit enabledColumnsChanged(); }
+                        if (columns != m_enabledColumns) {
+                            m_enabledColumns = columns;
+                            emit enabledColumnsChanged();
+                        }
                         break;
                     }
             }
             return mutationMap(result);
         }
-        if (id.startsWith("base:")) {
-            const auto metric = metricFromString(id.mid(5));
-            if (metric) {
-                const auto result = m_graphUseCase->setSeriesEnabled(*metric, enabled);
-                if (result.succeeded()) {
-                    fetchData();
-                    for (auto it = m_legacyColumnIds.cbegin(); it != m_legacyColumnIds.cend(); ++it)
-                        if (it.value() == id) {
-                            auto columns = m_enabledColumns;
-                            columns.removeAll(it.key());
-                            if (enabled) columns.append(it.key());
-                            if (columns != m_enabledColumns) { m_enabledColumns = columns; emit enabledColumnsChanged(); }
-                            break;
-                        }
-                }
-                return mutationMap(result);
-            }
-        }
+
         return invalidMutationMap();
     }
 
     QVariantMap GraphViewModel::updateBasePresentation(const QString &id, const QColor &color, const double width) {
-        const std::optional<application::PrimitiveMetric> metric = id.startsWith("base:")
-            ? metricFromString(id.mid(5)) : std::optional<application::PrimitiveMetric>{};
-        if (!metric) return invalidMutationMap();
-        return mutationMap(m_graphUseCase->updateBasePresentation({*metric, true,
-            {{static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()), static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())}, width}}));
+        // const std::optional<application::PrimitiveMetric> metric = id.startsWith("base:")
+        //                                                                ? metricFromString(id.mid(5))
+        //                                                                : std::optional<application::PrimitiveMetric>{};
+        // if (!metric) return invalidMutationMap();
+        // return mutationMap(m_graphUseCase->updateBasePresentation({
+        //     *metric, true,
+        //     {
+        //         {
+        //             static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
+        //             static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())
+        //         },
+        //         width
+        //     }
+        // }));
+        return {};
     }
 
     QVariantMap GraphViewModel::createComputedSeries(const QString &name, const QColor &color, const double width,
-                                                      const bool enabled, const QVariantMap &expression) {
+                                                     const bool enabled, const QVariantMap &expression) {
         const auto parsed = parseExpression(expression);
         if (!parsed) return invalidMutationMap();
-        return mutationMap(m_graphUseCase->createComputed({{name.toStdString(),
-            {{static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()), static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())}, width}, enabled}, *parsed}));
+        return mutationMap(m_graphUseCase->createComputed({
+            {
+                name.toStdString(),
+                {
+                    {
+                        static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
+                        static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())
+                    },
+                    width
+                },
+                enabled
+            },
+            *parsed
+        }));
     }
 
     QVariantMap GraphViewModel::updateComputedSeries(const QString &id, const QString &name, const QColor &color,
-                                                      const double width, const bool enabled, const QVariantMap &expression) {
+                                                     const double width, const bool enabled,
+                                                     const QVariantMap &expression) {
         const auto parsed = parseExpression(expression);
-        bool ok = false; const auto numericId = id.startsWith("computed:") ? id.mid(9).toULongLong(&ok) : 0;
+        bool ok = false;
+        const auto numericId = id.startsWith("computed:") ? id.mid(9).toULongLong(&ok) : 0;
         if (!parsed || !ok || numericId == 0) return invalidMutationMap();
         application::UpdateComputedSeriesRequest request;
         request.id.value = numericId;
         request.presentation.name = name.toStdString();
-        request.presentation.lineStyle = {{static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
-                                           static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())}, width};
+        request.presentation.lineStyle = {
+            {
+                static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
+                static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())
+            },
+            width
+        };
         request.presentation.enabled = enabled;
         request.expression = *parsed;
         return mutationMap(m_graphUseCase->updateComputed(request));
     }
 
     QVariantMap GraphViewModel::removeComputedSeries(const QString &id) {
-        bool ok = false; const auto numericId = id.startsWith("computed:") ? id.mid(9).toULongLong(&ok) : 0;
+        bool ok = false;
+        const auto numericId = id.startsWith("computed:") ? id.mid(9).toULongLong(&ok) : 0;
         return ok && numericId ? mutationMap(m_graphUseCase->removeComputed({numericId})) : invalidMutationMap();
     }
 
     QVariantMap GraphViewModel::moveSeries(const QString &id, const int displayPosition) {
-        if (displayPosition < 0) return invalidMutationMap();
-        if (id.startsWith("computed:")) return mutationMap(m_graphUseCase->moveSeries(application::ComputedSeriesId{id.mid(9).toULongLong()}, static_cast<uint32_t>(displayPosition)));
-        const std::optional<application::PrimitiveMetric> metric = id.startsWith("base:")
-            ? metricFromString(id.mid(5)) : std::optional<application::PrimitiveMetric>{};
-        return metric ? mutationMap(m_graphUseCase->moveSeries(*metric, static_cast<uint32_t>(displayPosition))) : invalidMutationMap();
+        // if (displayPosition < 0) return invalidMutationMap();
+        // if (id.startsWith("computed:")) return mutationMap(
+        //     m_graphUseCase->moveSeries(application::SeriesId{id.mid(9).toULongLong()},
+        //                                static_cast<uint32_t>(displayPosition)));
+        // const std::optional<application::PrimitiveMetric> metric = id.startsWith("base:")
+        //                                                                ? metricFromString(id.mid(5))
+        //                                                                : std::optional<application::PrimitiveMetric>{};
+        // return metric
+        //            ? mutationMap(m_graphUseCase->moveSeries(*metric, static_cast<uint32_t>(displayPosition)))
+        //            : invalidMutationMap();
+        return{};
     }
 }

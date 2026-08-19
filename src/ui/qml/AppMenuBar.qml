@@ -1,13 +1,33 @@
 import QtQuick
 import QtQuick.Controls
-import KovaaksStatsViewer
 
 MenuBar {
     id: root
 
     property var graphVm
     property var historyVm
+    property var seriesVisibility
     property var columnVisibility
+    readonly property var effectiveVisibility: root.seriesVisibility || root.columnVisibility
+    readonly property var graphLineIds: root.graphVm ? (
+        root.graphVm.enabledSeriesIds !== undefined ? root.graphVm.enabledSeriesIds
+                                                     : root.graphVm.enabledColumns.map(
+                                                           c => root.graphVm.columnKey(c))) : []
+
+    function seriesFor(id) {
+        if (root.graphVm && root.graphVm.allSeries) {
+            const found = root.graphVm.allSeries.find(s => s.id === id)
+            if (found) return found
+        }
+        return null
+    }
+
+    function graphLineName(id) {
+        const series = seriesFor(id)
+        if (series) return series.name
+        const column = root.graphVm.allColumns.find(c => root.graphVm.columnKey(c) === id)
+        return column === undefined ? id : root.graphVm.columnName(column)
+    }
     property var historyColumnVisibility
     property var viewSettings
     readonly property var historyColumns: root.historyVm ? [
@@ -70,13 +90,18 @@ MenuBar {
             title: qsTr("Scenario Graph Lines")
             enabled: root.viewSettings ? root.viewSettings.scenarioGraphVisible : true
             Repeater {
-                model: root.graphVm ? root.graphVm.enabledColumns : []
+                model: root.graphLineIds
                 MenuItem {
-                    required property var modelData
-                    text: root.graphVm.columnName(modelData)
+                    required property string modelData
+                    text: root.graphLineName(modelData)
                     checkable: true
-                    checked: !!root.columnVisibility[root.graphVm.columnKey(modelData)]
-                    onTriggered: root.columnVisibility[root.graphVm.columnKey(modelData)] = checked
+                    checked: SeriesVisibility.read(root.effectiveVisibility, modelData)
+                    onTriggered: {
+                        if (root.seriesVisibility && root.seriesVisibility.setValue)
+                            SeriesVisibility.write(root.seriesVisibility, modelData, checked)
+                        else
+                            root.columnVisibility[modelData] = checked
+                    }
                 }
             }
             MenuSeparator {}

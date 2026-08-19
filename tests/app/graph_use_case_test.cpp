@@ -37,6 +37,32 @@ namespace {
         [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
     };
 
+    class FakeSeriesConfigStore final : public ISeriesConfigStore {
+    public:
+        [[nodiscard]] std::vector<SeriesConfig> getAll() const override { return configs; }
+        MutationResult createComputed(const CreateComputedSeriesRequest &) override { notify(); return {}; }
+        MutationResult updateComputed(const UpdateComputedSeriesRequest &) override { notify(); return {}; }
+        MutationResult updateBase(const UpdateBaseSeriesRequest &) override { notify(); return {}; }
+        MutationResult updateSeries(const UpdateSeriesRequest &) override { notify(); return {}; }
+        MutationResult removeComputed(SeriesId) override { notify(); return {}; }
+        MutationResult reorder(SeriesId, uint32_t) override { notify(); return {}; }
+        void onChanged(std::function<void()> callback) override { callbacks.push_back(std::move(callback)); }
+
+        std::vector<SeriesConfig> configs;
+        std::vector<std::function<void()> > callbacks;
+
+    private:
+        void notify() { for (const auto &callback: callbacks) callback(); }
+    };
+
+    class FakeAverageLineUseCase final : public IAverageLineUseCase {
+    public:
+        [[nodiscard]] std::optional<std::vector<double> > evaluate(
+            const ScenarioPerf &, const Expression &) const override { return result; }
+
+        std::optional<std::vector<double> > result;
+    };
+
     ScenarioDataPoint make_point(const float time, const int shots, const int hits, const float score) {
         auto point = ScenarioDataPoint(time);
         point.time = time;
@@ -49,7 +75,9 @@ namespace {
     class GraphUseCaseTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSessionController> fake_session_controller = std::make_shared<FakeSessionController>();
-        GraphUseCase use_case{fake_session_controller};
+        std::shared_ptr<FakeSeriesConfigStore> fake_store = std::make_shared<FakeSeriesConfigStore>();
+        std::shared_ptr<FakeAverageLineUseCase> fake_average = std::make_shared<FakeAverageLineUseCase>();
+        GraphUseCase use_case{fake_session_controller, fake_store, fake_average};
     };
 
     TEST_F(GraphUseCaseTest, LoadPerfDelegatesToSessionController) {

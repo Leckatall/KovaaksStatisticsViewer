@@ -32,7 +32,15 @@ namespace ksv::presentation {
 
     public:
         enum Column {
-            Time = 0, Score, Accuracy, Shots, Kills, Dmg, ScoreTotal, ExpectedFinalScore, ExpectedFinalScoreRecent,
+            Time = 0,
+            Score,
+            Accuracy,
+            Shots,
+            Kills,
+            Dmg,
+            ScoreTotal,
+            ExpectedFinalScore,
+            ExpectedFinalScoreRecent,
             ColumnCount
         };
         Q_ENUM(Column)
@@ -83,6 +91,7 @@ namespace ksv::presentation {
         void fetchData();
         void fetchData(const QString& scenario_id);
         void fetchLatestData();
+        void fetchMetadata();
 
     signals:
         void scenarioTitleChanged();
@@ -94,6 +103,8 @@ namespace ksv::presentation {
         QList<QMap<Column, qreal>> m_data;
         std::array<AxisModel, ColumnCount> m_axes{};
         QList<SeriesModel> m_series;
+        QMap<QString, SeriesModel> m_seriesById;
+        QMap<QString, QPoint> m_computedSeries;
         QVariantList m_enabledColumns;
         QString m_scenarioTitle;
         QVariantList m_allSeries;

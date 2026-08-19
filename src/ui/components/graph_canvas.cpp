@@ -34,14 +34,16 @@ namespace ksv::ui {
         if (m_graphVm) m_graphVm->disconnect(this);
         m_graphVm = graphVm;
         if (m_graphVm) {
-            connect(m_graphVm, &presentation::GraphViewModelBase::dataUpdated, this, [this] {
-                emit plotAreaChanged();
-                update();
-            });
-            connect(m_graphVm, &presentation::GraphViewModelBase::boundsChanged, this, [this] {
-                emit plotAreaChanged();
-                update();
-            });
+            connect(m_graphVm, &presentation::GraphViewModelBase::dataUpdated,
+                    this, [this] {
+                        emit plotAreaChanged();
+                        update();
+                    });
+            connect(m_graphVm, &presentation::GraphViewModelBase::boundsChanged,
+                    this, [this] {
+                        emit plotAreaChanged();
+                        update();
+                    });
         }
         emit graphVmChanged();
         emit labelledYAxisColumnChanged();
@@ -101,18 +103,25 @@ namespace ksv::ui {
         if (m_graphVm) {
             if (const auto yAxis = labelledYAxis()) {
                 leftMargin = std::max(kMinLeftMargin,
-                    AxisPainter::measureLabelExtent(AxisPainter::Orientation::Vertical, yAxis->ticks(),
-                        [&yAxis](const qreal v) { return yAxis->formatTick(v); }) + kLabelExtentPadding);
+                                      AxisPainter::measureLabelExtent(AxisPainter::Orientation::Vertical,
+                                                                      yAxis->ticks(),
+                                                                      [&yAxis](const qreal v) {
+                                                                          return yAxis->formatTick(v);
+                                                                      }) + kLabelExtentPadding);
             }
             const presentation::AxisModel xAxis = m_graphVm->xAxis();
             bottomMargin = std::max(kMinBottomMargin,
-                AxisPainter::measureLabelExtent(AxisPainter::Orientation::Horizontal, xAxis.ticks(),
-                    [&xAxis](const qreal v) { return xAxis.formatTick(v); }) + kLabelExtentPadding);
+                                    AxisPainter::measureLabelExtent(AxisPainter::Orientation::Horizontal, xAxis.ticks(),
+                                                                    [&xAxis](const qreal v) {
+                                                                        return xAxis.formatTick(v);
+                                                                    }) + kLabelExtentPadding);
         }
 
-        return {leftMargin, kTopMargin,
-                qMax(0.0, width() - leftMargin - kRightMargin),
-                qMax(0.0, height() - kTopMargin - bottomMargin)};
+        return {
+            leftMargin, kTopMargin,
+            qMax(0.0, width() - leftMargin - kRightMargin),
+            qMax(0.0, height() - kTopMargin - bottomMargin)
+        };
     }
 
     presentation::AxisModel GraphCanvas::xAxisFor(const presentation::SeriesModel &series) const {
@@ -124,7 +133,7 @@ namespace ksv::ui {
     }
 
     QPointF GraphCanvas::toPixel(const QPointF &displayPoint, const QRectF &rect,
-                                  const presentation::AxisModel &xAxis, const presentation::AxisModel &yAxis) {
+                                 const presentation::AxisModel &xAxis, const presentation::AxisModel &yAxis) {
         const qreal xt = xAxis.normalizedPosition(displayPoint.x());
         const qreal yt = yAxis.normalizedPosition(displayPoint.y());
         return {rect.left() + xt * rect.width(), rect.bottom() - yt * rect.height()};
@@ -137,19 +146,19 @@ namespace ksv::ui {
         // Only one series' Y axis gets labels; all project against their own axis
         if (const auto yAxis = labelledYAxis()) {
             AxisPainter::paint(*painter, rect, AxisPainter::Orientation::Vertical,
-                                yAxis->min(), yAxis->max(), yAxis->ticks(),
-                                [&yAxis](const qreal v) { return yAxis->formatTick(v); });
+                               yAxis->min(), yAxis->max(), yAxis->ticks(),
+                               [&yAxis](const qreal v) { return yAxis->formatTick(v); });
         }
         AxisPainter::paint(*painter, rect, AxisPainter::Orientation::Horizontal,
-                            xAxis.min(), xAxis.max(), xAxis.ticks(),
-                            [&xAxis](const qreal v) { return xAxis.formatTick(v); });
+                           xAxis.min(), xAxis.max(), xAxis.ticks(),
+                           [&xAxis](const qreal v) { return xAxis.formatTick(v); });
     }
 
     void GraphCanvas::drawSeries(QPainter *painter, const QRectF &rect) const {
         if (!m_graphVm) return;
 
         for (const auto series = m_graphVm->series(visibleColumnIds());
-            const auto &s: series) {
+             const auto &s: series) {
             const QList<QPointF> displayPoints = s.displayPoints();
             if (displayPoints.size() < 2) continue;
 

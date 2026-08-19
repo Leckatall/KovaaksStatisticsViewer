@@ -7,8 +7,9 @@
 
 namespace ksv::application {
     struct ResolvedGraphSeries {
+        // TODO: Series should be created with x-axis
         SeriesConfig config;
-        std::optional<std::vector<double>> values;
+        std::optional<std::vector<double>> values; //TODO: Why are series values optional??
     };
 
     struct ResolvedGraph {

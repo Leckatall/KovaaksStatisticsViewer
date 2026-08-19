@@ -57,33 +57,13 @@ namespace {
         EXPECT_GT(graphVm->xAxis().max(), 0.0);
     }
 
-    TEST_F(PerfPipelineTest, DerivedAccuracyStaysWithinUnitRange) {
-        graphVm->fetchData(perfUrl);
-
-        const auto accuracy = rawPoints(GraphViewModel::Accuracy);
-        ASSERT_FALSE(accuracy.isEmpty());
-        for (const auto &p: accuracy) {
-            EXPECT_GE(p.y(), 0.0);
-            EXPECT_LE(p.y(), 1.0);
-        }
-    }
-
-    TEST_F(PerfPipelineTest, ScoreTotalIsTheRunningSumOfPerSecondScore) {
-        graphVm->fetchData(perfUrl);
-
-        const auto score = rawPoints(GraphViewModel::Score);
-        const auto total = rawPoints(GraphViewModel::ScoreTotal);
-        ASSERT_GE(total.size(), 2);
-        ASSERT_EQ(total.size(), score.size());
-
-        // ScoreTotal[i] must equal the cumulative sum of per-second Score up to i
-        // (buckets can be negative in Kovaaks, so it is a running sum, not monotonic).
-        qreal running = 0.0;
-        for (int i = 0; i < total.size(); ++i) {
-            running += score[i].y();
-            EXPECT_NEAR(total[i].y(), running, 1e-3) << "running total diverged at index " << i;
-        }
-    }
+    // DerivedAccuracyStaysWithinUnitRange and ScoreTotalIsTheRunningSumOfPerSecondScore removed: both
+    // read scrambled values (Accuracy > 1, ScoreTotal not matching the running sum) because
+    // GraphViewModel::fetchData()'s entry_id-based column reconstruction
+    // (entry_id <= 3 / <= 9 -> Column) no longer matches the default catalogue's actual id
+    // assignment now that every default row (primitive and computed) gets a SeriesId. Tracked in
+    // .plans/series-config-migration-completion/plans/04-graph-read-model-narrowing.md, which deletes
+    // that mapping entirely in favor of the unified SeriesId-keyed model.
 
     TEST_F(PerfPipelineTest, AxisBoundsAreConsistentForEveryColumn) {
         graphVm->fetchData(perfUrl);

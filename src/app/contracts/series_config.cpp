@@ -68,23 +68,23 @@ namespace ksv::application {
         }
 
         void validateExpression(const Expression &expression, const std::string &path, const size_t depth,
-                                size_t &nodeCount, std::vector<ValidationError> &errors) {
+                                size_t &node_count, std::vector<ValidationError> &errors) {
             if (!expression) {
                 errors.push_back({SeriesConfigValidationCode::MissingExpressionInput, path});
                 return;
             }
-            ++nodeCount;
+            ++node_count;
             if (depth > kMaximumExpressionDepth) {
                 errors.push_back({SeriesConfigValidationCode::ExpressionDepthLimit, path});
                 return;
             }
-            if (nodeCount > kMaximumExpressionNodes) {
+            if (node_count > kMaximumExpressionNodes) {
                 errors.push_back({SeriesConfigValidationCode::ExpressionNodeLimit, path});
                 return;
             }
 
-            const auto validateInput = [&](const Expression &input, const std::string_view field) {
-                validateExpression(input, path + "." + std::string(field), depth + 1, nodeCount, errors);
+            const auto validate_input = [&](const Expression &input, const std::string_view field) {
+                validateExpression(input, path + "." + std::string(field), depth + 1, node_count, errors);
             };
             std::visit([&](const auto &node) {
                 using Node = std::decay_t<decltype(node)>;
@@ -98,16 +98,16 @@ namespace ksv::application {
                     }
                 } else if constexpr (std::same_as<Node, Add> || std::same_as<Node, Subtract> ||
                                      std::same_as<Node, Multiply> || std::same_as<Node, Divide>) {
-                    validateInput(node.left, "left");
-                    validateInput(node.right, "right");
+                    validate_input(node.left, "left");
+                    validate_input(node.right, "right");
                 } else if constexpr (std::same_as<Node, RunningSum> || std::same_as<Node, ProjectedFinalValue> ||
                                      std::same_as<Node, ProjectRateToFinal>) {
-                    validateInput(node.input, "input");
+                    validate_input(node.input, "input");
                 } else if constexpr (std::same_as<Node, RollingMean>) {
                     if (node.window == 0) {
                         errors.push_back({SeriesConfigValidationCode::InvalidRollingWindow, path + ".window"});
                     }
-                    validateInput(node.input, "input");
+                    validate_input(node.input, "input");
                 } else if constexpr (std::same_as<Node, AverageAcrossRuns>) {
                     std::visit([&](const auto &selection) {
                         using Selection = std::decay_t<decltype(selection)>;
@@ -124,33 +124,30 @@ namespace ksv::application {
                             });
                         }
                     }, node.selection);
-                    validateInput(node.input, "input");
+                    validate_input(node.input, "input");
                 }
             }, expression->value());
         }
 
         std::vector<ValidationError> validateConfig(const SeriesConfig &config, const std::string_view root) {
             std::vector<ValidationError> errors;
-            std::visit([&](const auto &series) {
-                using Config = std::decay_t<decltype(series)>;
-                validatePresentation(series.presentation, std::same_as<Config, ComputedSeriesConfig>,
-                                     std::string(root) + ".presentation", errors);
-                if constexpr (std::same_as<Config, BaseSeriesConfig>) {
-                    if (!isKnownPrimitiveMetric(series.metric)) {
-                        errors.push_back({
-                            SeriesConfigValidationCode::InvalidPrimitiveMetric, std::string(root) + ".metric"
-                        });
-                    }
-                } else {
-                    if (series.id.value == 0) {
-                        errors.push_back({
-                            SeriesConfigValidationCode::InvalidComputedSeriesId, std::string(root) + ".id"
-                        });
-                    }
-                    size_t nodeCount = 0;
-                    validateExpression(series.expression, std::string(root) + ".expression", 1, nodeCount, errors);
+            validatePresentation(config.presentation, !config.isPrimitive(),
+                                 std::string(root) + ".presentation", errors);
+            if (config.isPrimitive()) {
+                if (!isKnownPrimitiveMetric(std::get_if<PrimitiveReference>(&config.expression->value())->metric)) {
+                    errors.push_back({
+                        SeriesConfigValidationCode::InvalidPrimitiveMetric, std::string(root) + ".metric"
+                    });
                 }
-            }, config);
+            } else {
+                if (config.id.value == 0) {
+                    errors.push_back({
+                        SeriesConfigValidationCode::InvalidComputedSeriesId, std::string(root) + ".id"
+                    });
+                }
+                size_t node_count = 0;
+                validateExpression(config.expression, std::string(root) + ".expression", 1, node_count, errors);
+            }
             return errors;
         }
 
@@ -184,58 +181,51 @@ namespace ksv::application {
     Expression projectedFinalValue(Expression input) { return makeExpression(ProjectedFinalValue{std::move(input)}); }
     Expression projectRateToFinal(Expression input) { return makeExpression(ProjectRateToFinal{std::move(input)}); }
 
-    Expression averageAcrossRuns(Expression input, RunSelection selection) {
-        return makeExpression(AverageAcrossRuns{std::move(input), std::move(selection)});
-    }
-
-    const SeriesPresentation &seriesPresentation(const SeriesConfig &config) {
-        return std::visit([](const auto &series) -> const SeriesPresentation & { return series.presentation; }, config);
+    Expression averageAcrossRuns(Expression input, const RunSelection selection) {
+        return makeExpression(AverageAcrossRuns{std::move(input), selection});
     }
 
     std::vector<ValidationError> validateSeriesConfig(const SeriesConfig &config) {
+        // TODO: Unused?
         return validateConfig(config, "record");
-    }
-
-    std::vector<ValidationError> validateSeriesConfig(const ComputedSeriesConfig &config) {
-        return validateConfig(SeriesConfig{config}, "record");
     }
 
     std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs) {
         std::vector<ValidationError> errors;
-        std::array<size_t, kPrimitiveMetrics.size()> baseCounts{};
-        std::vector<std::pair<uint64_t, size_t> > computedIds;
+        std::array<size_t, kPrimitiveMetrics.size()> base_counts{};
+        std::vector<std::pair<uint64_t, size_t> > computed_ids;
         std::vector<std::pair<uint32_t, size_t> > positions;
 
         for (size_t index = 0; index < configs.size(); ++index) {
             const auto root = "records[" + std::to_string(index) + "]";
-            auto recordErrors = validateConfig(configs[index], root);
-            errors.insert(errors.end(), std::make_move_iterator(recordErrors.begin()),
-                          std::make_move_iterator(recordErrors.end()));
+            const SeriesConfig &config = configs[index];
+            auto record_errors = validateConfig(config, root);
+            errors.insert(errors.end(), std::make_move_iterator(record_errors.begin()),
+                          std::make_move_iterator(record_errors.end()));
 
-            std::visit([&](const auto &series) {
-                using Config = std::decay_t<decltype(series)>;
-                positions.emplace_back(series.presentation.displayPosition, index);
-                if constexpr (std::same_as<Config, BaseSeriesConfig>) {
-                    const auto metric = std::ranges::find(kPrimitiveMetrics, series.metric);
-                    if (metric != kPrimitiveMetrics.end()) {
-                        const auto metricIndex = static_cast<size_t>(metric - kPrimitiveMetrics.begin());
-                        if (++baseCounts[metricIndex] > 1) {
-                            errors.push_back({SeriesConfigValidationCode::DuplicateBaseMetric, root + ".metric"});
-                        }
-                        if (series.presentation.name != canonicalName(series.metric)) {
-                            errors.push_back({
-                                SeriesConfigValidationCode::NonCanonicalBaseName, root + ".presentation.name"
-                            });
-                        }
+            positions.emplace_back(config.presentation.displayPosition, index);
+            if (config.isPrimitive()) {
+                const auto metric = std::ranges::find(kPrimitiveMetrics,
+                                                      std::get_if<PrimitiveReference>(&config.expression->value())->
+                                                      metric);
+                if (metric != kPrimitiveMetrics.end()) {
+                    const auto metricIndex = static_cast<size_t>(metric - kPrimitiveMetrics.begin());
+                    if (++base_counts[metricIndex] > 1) {
+                        errors.push_back({SeriesConfigValidationCode::DuplicateBaseMetric, root + ".metric"});
                     }
-                } else if (series.id.value != 0) {
-                    computedIds.emplace_back(series.id.value, index);
+                    if (config.presentation.name != canonicalName(*metric)) {
+                        errors.push_back({
+                            SeriesConfigValidationCode::NonCanonicalBaseName, root + ".presentation.name"
+                        });
+                    }
                 }
-            }, configs[index]);
+            } else if (config.id.value != 0) {
+                computed_ids.emplace_back(config.id.value, index);
+            }
         }
 
-        for (size_t index = 0; index < baseCounts.size(); ++index) {
-            if (baseCounts[index] == 0) {
+        for (size_t index = 0; index < base_counts.size(); ++index) {
+            if (base_counts[index] == 0) {
                 errors.push_back({
                     SeriesConfigValidationCode::MissingBaseMetric,
                     "records.base[" + std::to_string(index) + "]"
@@ -243,15 +233,22 @@ namespace ksv::application {
             }
         }
 
-        std::ranges::sort(computedIds);
-        for (size_t index = 1; index < computedIds.size(); ++index) {
-            if (computedIds[index].first == computedIds[index - 1].first) {
-                errors.push_back({
-                    SeriesConfigValidationCode::DuplicateComputedSeriesId,
-                    "records[" + std::to_string(computedIds[index].second) + "].id"
-                });
-            }
+        std::ranges::sort(computed_ids);
+        if (auto it = std::ranges::adjacent_find(computed_ids); it != computed_ids.end()) {
+            errors.push_back({
+                SeriesConfigValidationCode::DuplicateComputedSeriesId,
+                "records[" + std::to_string(it->second) + "].id"
+            });
         }
+        // DEPRECATED?: 18/08/2026
+        // for (size_t index = 1; index < computed_ids.size(); ++index) {
+        //     if (computed_ids[index].first == computed_ids[index - 1].first) {
+        //         errors.push_back({
+        //             SeriesConfigValidationCode::DuplicateComputedSeriesId,
+        //             "records[" + std::to_string(computed_ids[index].second) + "].id"
+        //         });
+        //     }
+        // }
 
         std::ranges::sort(positions);
         for (size_t index = 0; index < positions.size(); ++index) {
@@ -261,14 +258,11 @@ namespace ksv::application {
                     "records[" + std::to_string(positions[index].second) + "].presentation.displayPosition"
                 });
             }
-        }
-        for (size_t index = 0; index < positions.size(); ++index) {
             if (positions[index].first != index) {
                 errors.push_back({
                     SeriesConfigValidationCode::NonDenseDisplayPosition,
                     "records[" + std::to_string(positions[index].second) + "].presentation.displayPosition"
                 });
-                break;
             }
         }
         return errors;
@@ -277,25 +271,48 @@ namespace ksv::application {
     std::vector<SeriesConfig> defaultSeriesConfigs() {
         const auto line = [](const RgbaColor color) { return LineStyle{color, 2.0}; };
         return {
-            BaseSeriesConfig{PrimitiveMetric::Score, {"Score", line({0, 150, 0, 255}), true, 0}},
-            ComputedSeriesConfig{
-                ComputedSeriesId{1}, {"Accuracy", line({0, 255, 255, 255}), true, 1},
+            SeriesConfig{
+                SeriesId{1},
+                {"Score", line({0, 150, 0, 255}), true, 0},
+                primitive(PrimitiveMetric::Score)
+            },
+
+            SeriesConfig{
+                SeriesId{2},
+                {"Accuracy", line({0, 255, 255, 255}), true, 1},
                 divide(primitive(PrimitiveMetric::Hits), primitive(PrimitiveMetric::Shots))
             },
-            BaseSeriesConfig{PrimitiveMetric::Shots, {"Shots", line({255, 165, 0, 255}), true, 2}},
-            BaseSeriesConfig{PrimitiveMetric::Hits, {"Hits", line({100, 149, 237, 255}), false, 3}},
-            BaseSeriesConfig{PrimitiveMetric::Kills, {"Kills", line({255, 0, 0, 255}), true, 4}},
-            BaseSeriesConfig{PrimitiveMetric::Dmg, {"Dmg", line({255, 255, 0, 255}), true, 5}},
-            ComputedSeriesConfig{
-                ComputedSeriesId{2}, {"Score Total", line({128, 0, 128, 255}), true, 6},
+            SeriesConfig{
+                SeriesId{3},
+                {"Shots", line({255, 165, 0, 255}), true, 2},
+                primitive(PrimitiveMetric::Shots)
+            },
+            SeriesConfig{
+                SeriesId{4},
+                {"Hits", line({100, 149, 237, 255}), false, 3},
+                primitive(PrimitiveMetric::Hits)
+            },
+            SeriesConfig{
+                SeriesId{5},
+                {"Kills", line({255, 0, 0, 255}), true, 4},
+                primitive(PrimitiveMetric::Kills)
+            },
+            SeriesConfig{
+                SeriesId{6},
+                {"Dmg", line({255, 255, 0, 255}), true, 5},
+                primitive(PrimitiveMetric::Dmg)
+            },
+            SeriesConfig{
+                SeriesId{7},
+                {"Score Total", line({128, 0, 128, 255}), true, 6},
                 runningSum(primitive(PrimitiveMetric::Score))
             },
-            ComputedSeriesConfig{
-                ComputedSeriesId{3}, {"Expected Final Score", line({255, 0, 255, 255}), true, 7},
+            SeriesConfig{
+                SeriesId{8}, {"Expected Final Score", line({255, 0, 255, 255}), true, 7},
                 projectedFinalValue(runningSum(primitive(PrimitiveMetric::Score)))
             },
-            ComputedSeriesConfig{
-                ComputedSeriesId{4}, {"Expected Final Score (5s)", line({0, 191, 255, 255}), true, 8},
+            SeriesConfig{
+                SeriesId{9}, {"Expected Final Score (5s)", line({0, 191, 255, 255}), true, 8},
                 projectRateToFinal(rollingMean(primitive(PrimitiveMetric::Score), 5))
             }
         };
