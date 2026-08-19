@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
 
     application::App app(
         settings, std::make_shared<data::ProtoDecoder>(),
-        std::make_shared<qt_data::SeriesConfigStore>(QSettings::IniFormat));
+        std::make_shared<qt_data::SeriesConfigStore>(settings));
     app.sessionVm()->generateProfile();
     app.graphVm()->fetchData(QUrl::fromLocalFile(perf).toString());
 

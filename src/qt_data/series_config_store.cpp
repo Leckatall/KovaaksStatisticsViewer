@@ -1,6 +1,5 @@
 #include "series_config_store.h"
 
-#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -12,7 +11,6 @@
 namespace ksv::qt_data {
     namespace {
         using namespace application;
-        constexpr auto kActiveKey = "graph/seriesConfigV1";
 
         QString metricTag(const PrimitiveMetric metric) {
             switch (metric) {
@@ -271,10 +269,9 @@ namespace ksv::qt_data {
             std::optional<SeriesId> next;
         };
 
-        std::optional<Document> decode(const QVariant &raw) {
-            if (raw.metaType().id() != QMetaType::QString) return {};
+        std::optional<Document> decode(const QString &raw) {
             QJsonParseError error;
-            const auto document = QJsonDocument::fromJson(raw.toString().toUtf8(), &error);
+            const auto document = QJsonDocument::fromJson(raw.toUtf8(), &error);
             if (error.error != QJsonParseError::NoError || !document.isObject()) return {};
             const auto root = document.object();
             if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series"}) ||
@@ -315,43 +312,24 @@ namespace ksv::qt_data {
         }
     }
 
-    SeriesConfigStore::SeriesConfigStore(std::shared_ptr<ISeriesConfigStoreSettingsBackend> backend) : m_backend(
-        std::move(backend)) {
+    SeriesConfigStore::SeriesConfigStore(std::shared_ptr<application::ISettingsService> settingsService)
+        : m_settingsService(std::move(settingsService)) {
         QMutexLocker lock(&m_mutex);
         ensureLoadedLocked();
     }
 
-    SeriesConfigStore::SeriesConfigStore(const QSettings::Format format) : SeriesConfigStore(
-        std::make_shared<QSettingsSeriesConfigStoreSettingsBackend>(format)) {
-    }
-
     bool SeriesConfigStore::writeLocked(const std::vector<SeriesConfig> &configs,
                                         const SeriesId &next) const {
-        m_backend->setValue(kActiveKey, encode(configs, next));
-        m_backend->sync();
-        return m_backend->status() == QSettings::NoError;
+        m_settingsService->setSeriesConfigDocument(encode(configs, next).toStdString());
+        return true;
     }
 
-    void SeriesConfigStore::seedLocked(const QVariant *invalidRaw) const {
+    void SeriesConfigStore::seedLocked(const std::string *invalidRaw) const {
         qDebug() << "Seeding series config store";
-        if (invalidRaw) {
-            const auto base = QString("graph/seriesConfigQuarantine/") + QDateTime::currentDateTimeUtc().toString(
-                                  "yyyyMMddTHHmmsszzzZ");
-            auto key = base;
-            for (int suffix = 1; m_backend->contains(key); ++suffix) key = base + "-" + QString::number(suffix);
-            qDebug() << "Quarantining invalid series config store to " << key;
-            m_backend->setValue(key, *invalidRaw);
-            m_backend->sync();
-            if (m_backend->status() != QSettings::NoError) {
-                m_configs = defaultSeriesConfigs();
-                m_next = kFirstUserComputedSeriesId;
-                m_requiresReload = true;
-                return;
-            }
-        }
+        if (invalidRaw) m_settingsService->quarantineSeriesConfigDocument(*invalidRaw);
         m_configs = defaultSeriesConfigs();
         m_next = kFirstUserComputedSeriesId;
-        const auto disabled = m_backend->value("graph/disabledColumns").toStringList();
+        const auto disabled = m_settingsService->getLegacyDisabledColumnKeys();
         constexpr std::array<std::pair<const char *, unsigned>, 8> legacy{
             {
                 {"score", 0}, {"accuracy", 1}, {"shots", 2}, {"kills", 4},
@@ -359,7 +337,7 @@ namespace ksv::qt_data {
             }
         };
         for (const auto &[legacyKey, recordIndex]: legacy) {
-            if (const auto key = QString::fromLatin1(legacyKey); disabled.contains(key))
+            if (std::ranges::find(disabled, std::string(legacyKey)) != disabled.end())
                 m_configs[recordIndex].presentation.enabled = false;
         }
         m_requiresReload = !writeLocked(m_configs, m_next.value());
@@ -367,20 +345,16 @@ namespace ksv::qt_data {
 
     void SeriesConfigStore::ensureLoadedLocked() const {
         if (!m_requiresReload) return;
-        m_backend->reload();
-        if (!m_backend->contains(kActiveKey)) {
+        if (!m_settingsService->hasSeriesConfigDocument()) {
             seedLocked();
             return;
         }
-        const auto raw = m_backend->value(kActiveKey);
-        const auto decoded = decode(raw);
+        const auto raw = m_settingsService->getSeriesConfigDocument();
+        const auto decoded = decode(QString::fromStdString(raw));
         if (!decoded) {
             seedLocked(&raw);
             return;
         }
-        // TODO (18/08/26): Added diagnostics here because I do not think this method has any use outside of seeding
-        //  which it shouldn't really be doing anyway tbh it isn't clear seeding is it's job
-        qDebug() << "Ensure Loaded Locked actually set members";
         m_configs = decoded->configs;
         m_next = decoded->next;
         m_requiresReload = false;

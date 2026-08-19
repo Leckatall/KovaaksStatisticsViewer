@@ -169,7 +169,7 @@ namespace ksv::application {
         SeriesPresentation presentation;
         Expression expression;
 
-        [[nodiscard]] constexpr bool isPrimitive() const {
+        [[nodiscard]] bool isPrimitive() const {
             return std::holds_alternative<PrimitiveReference>(expression->value());
         }
     };

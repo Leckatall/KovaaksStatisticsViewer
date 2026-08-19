@@ -31,7 +31,7 @@ namespace ksv::integration {
         std::shared_ptr<qt_data::SettingsService> settings =
             std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
         std::shared_ptr<qt_data::SeriesConfigStore> seriesConfigStore =
-            std::make_shared<qt_data::SeriesConfigStore>(QSettings::IniFormat);
+            std::make_shared<qt_data::SeriesConfigStore>(settings);
 
         TestEnv() {
             settings->setKovaaksDirs({dir.path().toStdString()});

@@ -3,13 +3,12 @@
 #include <QMutex>
 
 #include "data/interfaces/i_series_config_store.h"
-#include "series_config_store_settings_backend.h"
+#include "data/interfaces/i_settings_service.h"
 
 namespace ksv::qt_data {
     class SeriesConfigStore final : public application::ISeriesConfigStore {
     public:
-        explicit SeriesConfigStore(std::shared_ptr<ISeriesConfigStoreSettingsBackend> backend);
-        explicit SeriesConfigStore(QSettings::Format format = QSettings::NativeFormat);
+        explicit SeriesConfigStore(std::shared_ptr<application::ISettingsService> settingsService);
 
         [[nodiscard]] std::vector<application::SeriesConfig> getAll() const override;
         application::MutationResult createComputed(const application::CreateComputedSeriesRequest &) override;
@@ -22,7 +21,7 @@ namespace ksv::qt_data {
 
     private:
         void ensureLoadedLocked() const;
-        void seedLocked(const QVariant *invalidRaw = nullptr) const;
+        void seedLocked(const std::string *invalidRaw = nullptr) const;
         bool writeLocked(const std::vector<application::SeriesConfig> &, const application::SeriesId &next) const;
         application::MutationResult commitLocked(std::vector<application::SeriesConfig>,
                                                  application::SeriesId next, std::optional<application::SeriesId> created = std::nullopt);
@@ -30,7 +29,8 @@ namespace ksv::qt_data {
         application::MutationResult mutateLocked(
             const std::function<application::MutationResult(std::vector<application::SeriesConfig> &)> &mutate);
 
-        std::shared_ptr<ISeriesConfigStoreSettingsBackend> m_backend;
+        std::shared_ptr<application::ISettingsService> m_settingsService;
+        // Guards this store's cache; SettingsService synchronizes its backing QSettings instance.
         mutable QMutex m_mutex;
         mutable std::vector<application::SeriesConfig> m_configs;
         mutable std::optional<application::SeriesId> m_next;

@@ -11,8 +11,6 @@ add_library(ksv_qt_data STATIC
         ../data/interfaces/i_settings_service.h
         series_config_store.cpp
         series_config_store.h
-        series_config_store_settings_backend.cpp
-        series_config_store_settings_backend.h
         ../data/interfaces/i_series_config_store.h
 )
 

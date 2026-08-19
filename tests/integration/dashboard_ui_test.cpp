@@ -202,7 +202,7 @@ namespace {
         ASSERT_TRUE(tempDir.isValid());
         const auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
         settings->setProfilePath(QDir(tempDir.path()).filePath("profile.pb").toStdString());
-        const auto seriesConfigStore = std::make_shared<qt_data::SeriesConfigStore>(QSettings::IniFormat);
+        const auto seriesConfigStore = std::make_shared<qt_data::SeriesConfigStore>(settings);
         application::App app(settings, std::make_shared<data::ProtoDecoder>(), seriesConfigStore);
         QQmlApplicationEngine engine;
         engine.setInitialProperties({

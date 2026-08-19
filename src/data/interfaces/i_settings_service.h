@@ -21,6 +21,12 @@ namespace ksv::application {
 
         virtual void onProfilePathChanged(std::function<void()> callback) = 0;
         virtual void onKovaaksDirsChanged(std::function<void()> callback) = 0;
+
+        [[nodiscard]] virtual bool hasSeriesConfigDocument() const = 0;
+        [[nodiscard]] virtual std::string getSeriesConfigDocument() const = 0;
+        virtual void setSeriesConfigDocument(const std::string &json) = 0;
+        virtual void quarantineSeriesConfigDocument(const std::string &invalidJson) = 0;
+        [[nodiscard]] virtual std::vector<std::string> getLegacyDisabledColumnKeys() const = 0;
     };
 }
 #endif //KOVAAKSSTATSVIEWER_I_SETTINGS_SERVICE_H

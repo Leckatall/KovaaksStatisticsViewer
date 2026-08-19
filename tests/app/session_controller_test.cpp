@@ -30,6 +30,11 @@ namespace {
         void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
         void onProfilePathChanged(std::function<void()>) override {}
         void onKovaaksDirsChanged(std::function<void()>) override {}
+        [[nodiscard]] bool hasSeriesConfigDocument() const override { return false; }
+        [[nodiscard]] std::string getSeriesConfigDocument() const override { return {}; }
+        void setSeriesConfigDocument(const std::string &) override {}
+        void quarantineSeriesConfigDocument(const std::string &) override {}
+        [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override { return {}; }
     };
 
     class FakeProfileService : public IProfileService {

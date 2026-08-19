@@ -108,6 +108,11 @@ namespace {
 
         void onKovaaksDirsChanged(std::function<void()>) override {
         }
+        [[nodiscard]] bool hasSeriesConfigDocument() const override { return false; }
+        [[nodiscard]] std::string getSeriesConfigDocument() const override { return {}; }
+        void setSeriesConfigDocument(const std::string &) override {}
+        void quarantineSeriesConfigDocument(const std::string &) override {}
+        [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override { return {}; }
     };
 
     class FakeProfileSerializer : public IProfileSerializer {

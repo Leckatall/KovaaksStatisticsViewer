@@ -34,6 +34,9 @@ namespace ksv::application {
         // deterministic paths instead of the real registry / AppDataLocation.
         App(std::shared_ptr<ISettingsService> settingsService,
             std::shared_ptr<IProtoDecoder> decoder,
+            QObject* parent = nullptr);
+        App(std::shared_ptr<ISettingsService> settingsService,
+            std::shared_ptr<IProtoDecoder> decoder,
             std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
             QObject* parent = nullptr);
         int start();

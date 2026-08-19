@@ -126,4 +126,26 @@ namespace {
         EXPECT_EQ(settings.getProfilePath(),
                   QUrl::fromLocalFile("D:/Games/Profile/profile.pb").toLocalFile().toStdString());
     }
+
+    TEST_F(SettingsServiceTest, SeriesConfigDocumentRoundTrips) {
+        SettingsService service(QSettings::IniFormat);
+
+        EXPECT_FALSE(service.hasSeriesConfigDocument());
+        service.setSeriesConfigDocument(R"({"schemaVersion":1})");
+        EXPECT_TRUE(service.hasSeriesConfigDocument());
+        EXPECT_EQ(service.getSeriesConfigDocument(), R"({"schemaVersion":1})");
+    }
+
+    TEST_F(SettingsServiceTest, QuarantinedSeriesConfigDocumentsGetDistinctKeysAndDoNotOverwriteTheActiveOne) {
+        SettingsService service(QSettings::IniFormat);
+
+        service.setSeriesConfigDocument(R"({"schemaVersion":1})");
+        service.quarantineSeriesConfigDocument("not json");
+        service.quarantineSeriesConfigDocument("also not json");
+
+        EXPECT_EQ(service.getSeriesConfigDocument(), R"({"schemaVersion":1})");
+        QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
+        raw.beginGroup("graph/seriesConfigQuarantine");
+        EXPECT_EQ(raw.childKeys().size(), 2);
+    }
 }

@@ -4,9 +4,15 @@
 
 #include "settings_service.h"
 
+#include <QDateTime>
 #include <QStandardPaths>
 
 namespace ksv::qt_data {
+    namespace {
+        constexpr auto kSeriesConfigKey = "graph/seriesConfigV1";
+        constexpr auto kSeriesConfigQuarantinePrefix = "graph/seriesConfigQuarantine/";
+    }
+
     SettingsService::SettingsService(const QSettings::Format format, QObject *parent) : QObject(parent),
         m_settings(format, QSettings::UserScope, "Lecka", "KovaaksStatsViewer", this) {
     }
@@ -73,5 +79,40 @@ namespace ksv::qt_data {
     void SettingsService::setProfilePath(const std::string &path) {
         writeDirSetting("file/profilePath", path);
         for (const auto &callback: m_profile_path_callbacks) callback();
+    }
+
+    bool SettingsService::hasSeriesConfigDocument() const {
+        const QMutexLocker locker(&m_settings_mutex);
+        return m_settings.contains(kSeriesConfigKey);
+    }
+
+    std::string SettingsService::getSeriesConfigDocument() const {
+        const QMutexLocker locker(&m_settings_mutex);
+        return m_settings.value(kSeriesConfigKey).toString().toStdString();
+    }
+
+    void SettingsService::setSeriesConfigDocument(const std::string &json) {
+        const QMutexLocker locker(&m_settings_mutex);
+        m_settings.setValue(kSeriesConfigKey, QString::fromStdString(json));
+        m_settings.sync();
+    }
+
+    void SettingsService::quarantineSeriesConfigDocument(const std::string &invalidJson) {
+        const QMutexLocker locker(&m_settings_mutex);
+        const auto timestamp = QDateTime::currentDateTimeUtc().toString("yyyyMMddTHHmmsszzzZ");
+        auto key = QString(kSeriesConfigQuarantinePrefix) + timestamp;
+        for (int suffix = 1; m_settings.contains(key); ++suffix)
+            key = QString(kSeriesConfigQuarantinePrefix) + timestamp + "-" + QString::number(suffix);
+        m_settings.setValue(key, QString::fromStdString(invalidJson));
+        m_settings.sync();
+    }
+
+    std::vector<std::string> SettingsService::getLegacyDisabledColumnKeys() const {
+        const QMutexLocker locker(&m_settings_mutex);
+        const auto stored = m_settings.value("graph/disabledColumns").toStringList();
+        std::vector<std::string> result;
+        result.reserve(stored.size());
+        for (const auto &key: stored) result.push_back(key.toStdString());
+        return result;
     }
 }

@@ -21,6 +21,11 @@ namespace ksv::qt_data {
         void setKovaaksDirs(const std::vector<std::string> &dirs) override;
         [[nodiscard]] std::string getProfilePath() const override;
         void setProfilePath(const std::string &path) override;
+        [[nodiscard]] bool hasSeriesConfigDocument() const override;
+        [[nodiscard]] std::string getSeriesConfigDocument() const override;
+        void setSeriesConfigDocument(const std::string &json) override;
+        void quarantineSeriesConfigDocument(const std::string &invalidJson) override;
+        [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override;
 
         void onProfilePathChanged(std::function<void()> callback) override {
             m_profile_path_callbacks.push_back(std::move(callback));
