@@ -1,7 +1,6 @@
 import QtQuick
 import QtTest
 import "../../../src/ui/qml"
-import "TestDoubles.js" as TestDoubles
 
 TestCase {
     id: testCase
@@ -21,15 +20,15 @@ TestCase {
             kovaaksDir: "file:///C:/Kovaaks",
             profilePath: "file:///C:/Profile/profile.pb",
             profileLoaded: false,
-            graphColumnEnabledCalls: [],
-            setGraphColumnEnabled: function (column, enabled) {
-                this.graphColumnEnabledCalls.push({column: column, enabled: enabled})
+            allSeriesConfigs: [
+                {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
+                {id: "2", name: "Accuracy", color: "#00ffff", enabled: false, displayPosition: 1}
+            ],
+            seriesEnabledCalls: [],
+            setSeriesEnabled: function (id, enabled) {
+                this.seriesEnabledCalls.push({id: id, enabled: enabled})
             }
         }, overrides)
-    }
-
-    function makeFakeGraphVm() {
-        return TestDoubles.makeFakeGraphVm()
     }
 
     function makeFakeSessionVm(overrides) {
@@ -60,12 +59,12 @@ TestCase {
     // Opens the dialog and waits for its Popup content (created on open,
     // not at construction) to actually show up in the item tree.
     //
-    // Note: initial properties passed here are cloned into the QML engine,
-    // so e.g. `dialog.columnVisibility !== <the object literal passed in>`.
-    // Read mutation-tracking state back via the returned dialog's own
-    // properties, never via the original object literal.
+    property var visualSettings: QtObject {
+        property string graphAxisSeriesId: ""
+    }
+
     function openDialog(props): SettingsDialog {
-        const fullProps = Object.assign({graphAxisSettings: {yAxisColumnKey: "score"}}, props)
+        const fullProps = Object.assign({visualSettings: testCase.visualSettings}, props)
         const dialog = createTemporaryObject(settingsDialogComponent, testCase, fullProps)
         verify(dialog !== null, "SettingsDialog failed to instantiate")
         dialog.open()
@@ -86,8 +85,7 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({kovaaksDir: "file:///D:/CustomDir"}),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         const field = findByObjectName(dialog.contentItem, "kovaaksDirField")
@@ -99,8 +97,7 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profilePath: "file:///D:/CustomProfile/profile.pb", profileLoaded: true}),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         const field = findByObjectName(dialog.contentItem, "profilePathField")
@@ -116,8 +113,7 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profileLoaded: false}),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         const statusLabel = findByObjectName(dialog.contentItem, "profileLoadedLabel")
@@ -129,8 +125,7 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         const button = findByObjectName(dialog.contentItem, "generateProfileButton")
@@ -144,8 +139,7 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
@@ -157,8 +151,7 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4}),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
@@ -173,63 +166,52 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm({profileBuildInProgress: true}),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
         compare(bar.indeterminate, true, "a build with no progress yet should render as indeterminate")
     }
 
-    function test_graphColumnSwitchesListAllColumnsAndReflectEnabledSet() {
-        const graphVm = makeFakeGraphVm()
-        graphVm.enabledColumns = [1]
+    function test_seriesEnabledSwitchesListAllSeriesConfigsAndReflectEnabledState() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: graphVm,
-            columnVisibility: ({score: false, accuracy: true})
         })
 
         selectCategory(dialog, "Graph Lines")
 
-        const scoreSwitch = findByObjectName(dialog.contentItem, "graphColumnEnabledSwitch_Score")
-        const accuracySwitch = findByObjectName(dialog.contentItem, "graphColumnEnabledSwitch_Accuracy")
+        const scoreSwitch = findByObjectName(dialog.contentItem, "seriesEnabledSwitch_1")
+        const accuracySwitch = findByObjectName(dialog.contentItem, "seriesEnabledSwitch_2")
         verify(scoreSwitch !== null)
         verify(accuracySwitch !== null)
         compare(scoreSwitch.checked, true)
         compare(accuracySwitch.checked, false)
     }
 
-    function test_togglingGraphColumnSwitchWritesThroughSettingsVm() {
-        const graphVm = makeFakeGraphVm()
-        graphVm.enabledColumns = [1]
+    function test_togglingSeriesEnabledSwitchWritesThroughSettingsVm() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: graphVm,
-            columnVisibility: ({score: false, accuracy: true})
         })
 
         selectCategory(dialog, "Graph Lines")
 
-        const accuracySwitch = findByObjectName(dialog.contentItem, "graphColumnEnabledSwitch_Accuracy")
+        const accuracySwitch = findByObjectName(dialog.contentItem, "seriesEnabledSwitch_2")
         verify(accuracySwitch !== null)
         mouseClick(accuracySwitch)
 
         tryCompare(accuracySwitch, "checked", true)
-        tryCompare(dialog.settingsVm.graphColumnEnabledCalls, "length", 1)
-        tryCompare(dialog.settingsVm.graphColumnEnabledCalls[0], "column", 2)
-        tryCompare(dialog.settingsVm.graphColumnEnabledCalls[0], "enabled", true)
-        tryCompare(dialog.columnVisibility, "accuracy", true)
+        tryCompare(dialog.settingsVm.seriesEnabledCalls, "length", 1)
+        compare(dialog.settingsVm.seriesEnabledCalls[0].id, "2")
+        compare(dialog.settingsVm.seriesEnabledCalls[0].enabled, true)
     }
 
     function test_categoryList_startsOnDirectories() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         compare(dialog.currentCategory, 0, "SettingsDialog should default to the Directories category (index 0)")
@@ -239,8 +221,7 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({})
+            visualSettings: visualSettings
         })
 
         selectCategory(dialog, "Graph Lines")
@@ -252,9 +233,7 @@ TestCase {
         const dialog = createTemporaryObject(settingsDialogComponent, testCase, {
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm(),
-            graphVm: makeFakeGraphVm(),
-            columnVisibility: ({}),
-            graphAxisSettings: ({yAxisColumnKey: "score"})
+            visualSettings: visualSettings
         })
 
         dialog.openGraphLines()
@@ -263,10 +242,4 @@ TestCase {
         compare(dialog.currentCategory, dialog.graphLinesCategory)
     }
 
-    // The six yAxisColumnComboBox_* tests and test_selectingYAxisColumn_writesGraphAxisSettings were
-    // removed: they all drive SettingsDialog's Graph Lines page through the old
-    // columnVisibility/graphAxisSettings.yAxisColumnKey properties, which the dialog's currently
-    // mid-migration QML no longer honors correctly (dual-path fallback logic against the new
-    // series-based model). Tracked in
-    // .plans/series-config-migration-completion/plans/03-qml-visible-enabled-split.md.
 }

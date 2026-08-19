@@ -16,6 +16,7 @@
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QVariant>
+#include <algorithm>
 #include <filesystem>
 #include <memory>
 
@@ -112,10 +113,27 @@ namespace {
         EXPECT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
     }
 
-    // DashboardShowsAllEnabledColumns and DisablingAndReEnablingLinePreservesItsVisibility removed:
-    // DashboardGraphCanvas.qml's visibleColumns computation is currently broken mid-migration
-    // (always empty) — this is the QML wiring rewrite tracked in
-    // .plans/series-config-migration-completion/plans/03-qml-visible-enabled-split.md.
+    TEST_F(DashboardUiTest, DashboardFiltersEnabledSeriesThroughVisibleSettings) {
+        app->graphVm()->fetchData(perfUrl);
+
+        auto *canvas = dashboardCanvas();
+        ASSERT_NE(canvas, nullptr);
+        QObject *visualSettings = root->findChild<QObject *>("visualSettings");
+        ASSERT_NE(visualSettings, nullptr);
+
+        const auto enabledIds = app->graphVm()->enabledSeriesIds();
+        const auto selected = std::find_if(enabledIds.cbegin(), enabledIds.cend(), [this](const QVariant &id) {
+            return app->graphVm()->columnForSeriesId(id.toString()) != -1;
+        });
+        ASSERT_NE(selected, enabledIds.cend());
+        const int selectedColumn = app->graphVm()->columnForSeriesId(selected->toString());
+
+        visualSettings->setProperty("visibleSeriesIds", QVariantList{*selected});
+
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return canvas->visibleColumns() == QVariantList{selectedColumn};
+        }, 2000));
+    }
 
     TEST_F(DashboardUiTest, ConfigureActionsOpenGraphLinesSettingsCategory) {
         auto *menuBar = root->property("menuBar").value<QObject *>();

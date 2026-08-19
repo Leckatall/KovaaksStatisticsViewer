@@ -86,6 +86,7 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap removeComputedSeries(const QString &id);
         Q_INVOKABLE QVariantMap moveSeries(const QString &id, int displayPosition);
         Q_INVOKABLE QString seriesIdForColumn(int column) const;
+        Q_INVOKABLE [[nodiscard]] int columnForSeriesId(const QString &id) const;
 
     public slots:
         void fetchData();

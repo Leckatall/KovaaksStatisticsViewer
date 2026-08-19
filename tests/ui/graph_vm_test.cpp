@@ -390,6 +390,27 @@ namespace {
         EXPECT_TRUE(view_model.allSeries().isEmpty());
     }
 
+    TEST_F(GraphViewModelTest, ResolvesColumnsForEnabledSeriesIds) {
+        fake_use_case->resolved_graph_to_return = {
+            {0.0F, 1.0F},
+            {{
+                {
+                    {1},
+                    {"Score", {{0, 150, 0, 255}, 2.0}, true, 0},
+                    primitive(PrimitiveMetric::Score)
+                },
+                std::vector<double>{10.0, 20.0}
+            }}
+        };
+
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.enabledSeriesIds(), (QVariantList{"1"}));
+        EXPECT_EQ(view_model.columnForSeriesId("1"), GraphViewModel::Score);
+        EXPECT_EQ(view_model.seriesIdForColumn(GraphViewModel::Score), "1");
+        EXPECT_EQ(view_model.columnForSeriesId("missing"), -1);
+    }
+
     TEST_F(GraphViewModelTest, TranslatesQmlMutationsAndRejectsMalformedExpressions) {
         const auto result = view_model.createComputedSeries("New", QColor("red"), 2.0, true, {{"kind", "unknown"}});
         EXPECT_FALSE(result["succeeded"].toBool());

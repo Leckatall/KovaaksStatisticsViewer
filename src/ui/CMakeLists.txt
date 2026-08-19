@@ -20,6 +20,7 @@ qt_add_qml_module(ksv_ui
         OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/KovaaksStatsViewer
         QML_FILES
             qml/Main.qml
+            qml/VisualSettingsManager.qml
             qml/DashboardGraphCanvas.qml
             qml/PlaytimeGraphPanel.qml
             qml/ScenarioHistoryPanel.qml

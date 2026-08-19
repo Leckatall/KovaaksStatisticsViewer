@@ -21,24 +21,27 @@ TestCase {
         property bool selectionPanelVisible: true
         property bool recentRunsSectionVisible: true
         property bool scenarioBrowserSectionVisible: true
+        property var historyColumnVisibility: ({score: true, accuracy: false, shots: false, hits: false, misses: false})
+        property var visibleSeriesIds: ["1", "2"]
+        function isSeriesVisible(id) { return visibleSeriesIds.indexOf(id) !== -1 }
+        function setSeriesVisible(id, visible) {
+            const index = visibleSeriesIds.indexOf(id)
+            if (visible && index === -1) visibleSeriesIds = visibleSeriesIds.concat([id])
+            else if (!visible && index !== -1) {
+                const next = visibleSeriesIds.slice()
+                next.splice(index, 1)
+                visibleSeriesIds = next
+            }
+        }
     }
 
-    QtObject {
-        id: fakeColumnVisibility
-        property bool score: true
-        property bool accuracy: true
-    }
-
-    QtObject {
-        id: fakeHistoryColumnVisibility
-        property bool score: true
-        property bool accuracy: false
-        property bool shots: false
-        property bool hits: false
-        property bool misses: false
-    }
-
-    readonly property var fakeGraphVm: TestDoubles.makeFakeGraphVm()
+    readonly property var fakeGraphVm: ({
+        allSeries: [
+            {id: "1", name: "Score"},
+            {id: "2", name: "Accuracy"}
+        ],
+        enabledSeriesIds: ["1", "2"]
+    })
     readonly property var fakeHistoryVm: TestDoubles.makeFakeHistoryVm()
 
     Component {
@@ -46,9 +49,7 @@ TestCase {
         AppMenuBar {
             graphVm: fakeGraphVm
             historyVm: fakeHistoryVm
-            columnVisibility: fakeColumnVisibility
-            historyColumnVisibility: fakeHistoryColumnVisibility
-            viewSettings: fakeViewSettings
+            visualSettings: fakeViewSettings
         }
     }
 
@@ -210,11 +211,6 @@ TestCase {
         compare(sectionsMenu.enabled, false)
     }
 
-    // test_scenarioHistoryLinesSubmenuTracksVisibilityAndColumnSettings removed: fails because loading
-    // AppMenuBar.qml throws on the dangling `SeriesVisibility` singleton reference (never defined
-    // anywhere in this repo), which breaks the whole component's item tree, not just the series-lines
-    // submenu. Tracked in .plans/series-config-migration-completion/plans/03-qml-visible-enabled-split.md.
-
     function test_selectionPanelSectionItems_reflectViewSettings() {
         fakeViewSettings.recentRunsSectionVisible = true
         fakeViewSettings.scenarioBrowserSectionVisible = false
@@ -232,18 +228,20 @@ TestCase {
         compare(browserItem.checked, true)
     }
 
-    // test_graphLinesSubmenu_buildsOneItemPerEnabledColumnFromGraphVm removed: fails because loading
-    // AppMenuBar.qml throws on the dangling `SeriesVisibility` singleton reference (never defined
-    // anywhere in this repo). Tracked in
-    // .plans/series-config-migration-completion/plans/03-qml-visible-enabled-split.md.
+    function test_graphLinesSubmenuBuildsOneItemPerEnabledSeries() {
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
+        verify(findMenuItemByText(linesMenu, "Score") !== null)
+        verify(findMenuItemByText(linesMenu, "Accuracy") !== null)
+    }
 
-    function test_graphLinesSubmenuRetainsConfigureItemWhenAllColumnsDisabled() {
-        fakeGraphVm.enabledColumns = []
+    function test_graphLinesSubmenuRetainsConfigureItemWhenAllSeriesDisabled() {
+        fakeGraphVm.enabledSeriesIds = []
         const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
         const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
 
         verify(findMenuItemByText(linesMenu, "Configure Lines...") !== null)
-        fakeGraphVm.enabledColumns = [1, 2]
+        fakeGraphVm.enabledSeriesIds = ["1", "2"]
     }
 
     function test_configureGraphLinesRequestedEmittedFromMenuItem() {

@@ -109,6 +109,7 @@ namespace ksv::presentation {
         //     membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
         // }
         for (const SeriesModel &series: m_seriesById) {
+            if (!columns.contains(columnForSeriesId(series.id))) continue;
             result.append(series);
             membersByAxis[kColumnMeta[series.column].yAxis].push_back(result.size() - 1);
         }
@@ -273,6 +274,7 @@ namespace ksv::presentation {
         auto series_list = m_graphUseCase->get_resolved_graph().series;
         m_seriesById.clear();
         for (const auto &entry: series_list) {
+            if (!entry.config.presentation.enabled) continue;
             m_seriesById[QString::number(entry.config.id.value)] = SeriesModel{
                 .id = QString::number(entry.config.id.value),
                 .name = QString::fromStdString(entry.config.presentation.name),
@@ -307,6 +309,7 @@ namespace ksv::presentation {
 
             for (const auto &entry: resolved.series) {
                 const auto &presentation = entry.config.presentation;
+                if (!presentation.enabled) continue;
                 const auto &entry_id = entry.config.id.value;
                 const QString id = QString::number(entry_id);
                 const auto values = entry.values.value_or({});
@@ -321,6 +324,17 @@ namespace ksv::presentation {
                 if (entry_id <= 3) column = static_cast<int>(entry_id);
                 else if (entry_id <= 9) column = static_cast<int>(entry_id - 1);
                 m_seriesById[id].column = column;
+
+                QVariantMap series{
+                    {"id", id},
+                    {"name", QString::fromStdString(presentation.name)},
+                    {"color", QColor(presentation.lineStyle.color.red, presentation.lineStyle.color.green,
+                                      presentation.lineStyle.color.blue, presentation.lineStyle.color.alpha)},
+                    {"enabled", presentation.enabled},
+                    {"displayPosition", presentation.displayPosition},
+                };
+                m_allSeries.append(series);
+                m_enabledSeriesIds.append(id);
 
                 if (column >= Score && column < ColumnCount) m_legacyColumnIds[column] = id;
                 if (presentation.enabled && column >= Score && column < ColumnCount)
@@ -360,11 +374,12 @@ namespace ksv::presentation {
     }
 
     QString GraphViewModel::seriesIdForColumn(const int column) const {
-        for (const auto &value: m_allSeries) {
-            const auto map = value.toMap();
-            if (m_legacyColumnIds.value(column) == map.value("id").toString()) return map.value("id").toString();
-        }
-        return column >= 0 && column < ColumnCount ? "base:" + columnKey(column) : QString{};
+        return m_legacyColumnIds.value(column);
+    }
+
+    int GraphViewModel::columnForSeriesId(const QString &id) const {
+        const auto it = m_seriesById.find(id);
+        return it != m_seriesById.end() ? it->column : -1;
     }
 
     QVariantMap GraphViewModel::setSeriesEnabled(const QString &id, const bool enabled) {

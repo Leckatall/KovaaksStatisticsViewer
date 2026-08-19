@@ -6,33 +6,23 @@ import KovaaksStatsViewer
 Frame {
     id: root
 
-    property var seriesVisibility
-    property var columnVisibility
     required property var graphVm
-    required property var graphAxisSettings
+    required property var visualSettings
     readonly property var visibleColumns: {
-        const cols = root.graphVm.allColumns || root.graphVm.enabledColumns;
         const result = [];
-        for (let i = 0; i < cols.length; i++) {
-            const id = root.graphVm.seriesIdForColumn ? root.graphVm.seriesIdForColumn(cols[i])
-                                                       : root.graphVm.columnKey(cols[i]);
-            const enabled = root.graphVm.enabledSeriesIds !== undefined
-                    ? root.graphVm.enabledSeriesIds.indexOf(id) >= 0
-                    : root.graphVm.enabledColumns.indexOf(cols[i]) >= 0;
-            if (id && enabled && SeriesVisibility.read(root.effectiveVisibility, id)) {
-                result.push(cols[i]);
-            }
+        for (const id of root.graphVm.enabledSeriesIds) {
+            if (!root.visualSettings.isSeriesVisible(id)) continue;
+            const column = root.graphVm.columnForSeriesId(id);
+            if (column !== -1) result.push(column);
         }
         return result;
     }
 
     readonly property int yAxisColumn: {
         const cols = root.visibleColumns;
-        const preferred = root.graphAxisSettings.seriesId || root.graphAxisSettings.yAxisColumnKey;
-        for (let i = 0; i < cols.length; i++) {
-            if ((root.graphVm.seriesIdForColumn ? root.graphVm.seriesIdForColumn(cols[i])
-                                                 : root.graphVm.columnKey(cols[i])) === preferred) {
-                return cols[i];
+        for (const column of cols) {
+            if (root.graphVm.seriesIdForColumn(column) === root.visualSettings.graphAxisSeriesId) {
+                return column;
             }
         }
         return cols.length > 0 ? cols[0] : -1;

@@ -6,8 +6,10 @@ import QtCore
 
 ApplicationWindow {
     id: root
-    width: 1200
-    height: 800
+    width: visualSettings.windowWidth
+    height: visualSettings.windowHeight
+    onWidthChanged: visualSettings.windowWidth = width
+    onHeightChanged: visualSettings.windowHeight = height
 
     visible: true
     title: "Kovaaks Stats Viewer"
@@ -16,60 +18,9 @@ ApplicationWindow {
     palette.accent: "#00BCD4"
     palette.highlight: "#00838F"
 
-    Settings {
-        category: "window"
-        property alias width: root.width
-        property alias height: root.height
-    }
-    QtObject {
-        id: settings
-        property list<int> test: [1, 2, 3]
-
-    }
-    Settings {
-        id: seriesVisibilitySettings
-        category: "graphSeriesVisibility"
-        property var hiddenSeriesIds: []
-    }
-
-    Settings {
-        id: graphAxisSettings
-        category: "graphAxis"
-        property string seriesId: ""
-    }
-
-    Settings {
-        id: legacyGraphAxisSettings
-        category: "graph"
-        property string yAxisColumnKey: "score"
-    }
-
-    Settings {
-        id: historyColumnVisibilitySettings
-        category: "historyGraphColumns"
-        property bool score: true
-        property bool accuracy: false
-        property bool shots: false
-        property bool hits: false
-        property bool misses: false
-    }
-
-    Settings {
-        id: historyAxisSettings
-        category: "historyGraph"
-        property string yAxisColumnKey: "score"
-    }
-
-    Settings {
-        id: viewSettings
-        category: "view"
-        property bool scenarioGraphVisible: true
-        property bool playtimeGraphVisible: true
-        property bool scenarioHistoryGraphVisible: true
-        property bool controlPanelVisible: true
-        property bool selectionPanelVisible: true
-        property bool recentRunsSectionVisible: true
-        property bool scenarioBrowserSectionVisible: true
+    VisualSettingsManager {
+        id: visualSettings
+        objectName: "visualSettings"
     }
 
     required property var graphVm
@@ -97,10 +48,7 @@ ApplicationWindow {
         id: settingsDialog
         settingsVm: root.settingsVm
         sessionVm: root.sessionVm
-        graphVm: root.graphVm
-        seriesVisibility: seriesVisibilitySettings
-        graphAxisSettings: graphAxisSettings
-        legacyGraphAxisSettings: legacyGraphAxisSettings
+        visualSettings: visualSettings
     }
 
     AboutDialog {
@@ -110,9 +58,7 @@ ApplicationWindow {
     menuBar: AppMenuBar {
         graphVm: root.graphVm
         historyVm: root.historyVm
-        seriesVisibility: seriesVisibilitySettings
-        historyColumnVisibility: historyColumnVisibilitySettings
-        viewSettings: viewSettings
+        visualSettings: visualSettings
         onSetSourceDirRequested: folderDialog.open()
         onSettingsRequested: settingsDialog.open()
         onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
@@ -144,39 +90,38 @@ ApplicationWindow {
                 DashboardGraphCanvas {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    visible: viewSettings.scenarioGraphVisible
+                    visible: visualSettings.scenarioGraphVisible
                     graphVm: root.graphVm
-                    seriesVisibility: seriesVisibilitySettings
-                    graphAxisSettings: graphAxisSettings
+                    visualSettings: visualSettings
                 }
                 PlaytimeGraphPanel {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    visible: viewSettings.playtimeGraphVisible
+                    visible: visualSettings.playtimeGraphVisible
                     playtimeVm: root.playtimeVm
                 }
                 ScenarioHistoryPanel {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    visible: viewSettings.scenarioHistoryGraphVisible
+                    visible: visualSettings.scenarioHistoryGraphVisible
                     historyVm: root.historyVm
-                    columnVisibility: historyColumnVisibilitySettings
-                    historyAxisSettings: historyAxisSettings
+                    columnVisibility: visualSettings.historyColumnVisibility
+                    historyAxisSettings: visualSettings
                 }
             }
             ControlPanel {
                 Layout.row: 1; Layout.column: 1
-                visible: viewSettings.controlPanelVisible
+                visible: visualSettings.controlPanelVisible
                 graphVm: root.graphVm
-                seriesVisibility: seriesVisibilitySettings
+                visualSettings: visualSettings
                 onConfigureLinesRequested: settingsDialog.openGraphLines()
             }
             SelectionPanel {
                 Layout.row: 1; Layout.column: 0
                 Layout.fillHeight: true
-                visible: viewSettings.selectionPanelVisible
-                recentSectionVisible: viewSettings.recentRunsSectionVisible
-                scenarioBrowserSectionVisible: viewSettings.scenarioBrowserSectionVisible
+                visible: visualSettings.selectionPanelVisible
+                recentSectionVisible: visualSettings.recentRunsSectionVisible
+                scenarioBrowserSectionVisible: visualSettings.scenarioBrowserSectionVisible
                 widestScenarioName: root.scenarioBrowserVm.longestScenarioName
                 maximumPanelWidth: root.width / 3
                 currentRunHash: root.scenarioBrowserVm.currentRunHash
@@ -192,4 +137,13 @@ ApplicationWindow {
             }
         }
     }
+
+    Connections {
+        target: root.graphVm
+        function onSeriesConfigurationChanged() {
+            visualSettings.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
+        }
+    }
+
+    Component.onCompleted: visualSettings.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
 }

@@ -17,24 +17,11 @@ Dialog {
 
     required property var settingsVm
     required property var sessionVm
-    required property var graphVm
-    property var seriesVisibility
-    property var columnVisibility
-    property var graphAxisSettings
-    property var legacyGraphAxisSettings
-    readonly property var effectiveVisibility: root.seriesVisibility || root.columnVisibility
+    required property var visualSettings
 
     function seriesName(id) {
-        if (root.graphVm.allSeries) {
-            const series = root.graphVm.allSeries.find(s => s.id === id)
-            if (series) return series.name
-        }
-        if (root.graphVm.columnName) {
-            const column = root.graphVm.allColumns
-                    ? root.graphVm.allColumns.find(c => root.graphVm.columnKey(c) === id) : id
-            return root.graphVm.columnName(column === undefined ? id : column)
-        }
-        return id
+        const series = root.settingsVm.allSeriesConfigs.find(s => s.id === id)
+        return series ? series.name : id
     }
 
     property int currentCategory: 0
@@ -200,39 +187,18 @@ Dialog {
                 id: graphLinesPage
                 spacing: 8
 
-                readonly property var visibleColumns: {
-                    const cols = root.graphVm.enabledSeriesIds !== undefined
-                            ? root.graphVm.enabledSeriesIds : root.graphVm.enabledColumns.map(
-                                  c => root.graphVm.columnKey(c));
-                    const result = [];
-                    for (let i = 0; i < cols.length; i++) {
-                        if (SeriesVisibility.read(root.effectiveVisibility, cols[i])) {
-                            result.push(cols[i]);
-                        }
-                    }
-                    return result;
-                }
+                readonly property var enabledSeriesConfigs: root.settingsVm.allSeriesConfigs.filter(s => s.enabled)
 
-                // One representative column per shared y-axis, so columns that render against
-                // the same axis (e.g. Score Total / Expected Final Score) aren't offered as
-                // separate picks.
                 readonly property var visibleAxisColumns: {
-                    const cols = graphLinesPage.visibleColumns;
-                    const seenAxes = new Set();
-                    const result = [];
-                    for (let i = 0; i < cols.length; i++) {
-                        const series = root.graphVm.allSeries ? root.graphVm.allSeries.find(s => s.id === cols[i]) : null;
-                        const legacyColumn = root.graphVm.allColumns
-                                ? root.graphVm.allColumns.find(c => root.graphVm.columnKey(c) === cols[i]) : cols[i];
-                        const axis = series ? series.displayPosition
-                                            : (root.graphVm.columnYAxis ? root.graphVm.columnYAxis(
-                                                  legacyColumn === undefined ? cols[i] : legacyColumn) : -1);
-                        if (!seenAxes.has(axis)) {
-                            seenAxes.add(axis);
-                            result.push(cols[i]);
+                    const seenPositions = new Set()
+                    const result = []
+                    for (const series of graphLinesPage.enabledSeriesConfigs) {
+                        if (!seenPositions.has(series.displayPosition)) {
+                            seenPositions.add(series.displayPosition)
+                            result.push(series.id)
                         }
                     }
-                    return result;
+                    return result
                 }
 
                 Label {
@@ -263,25 +229,15 @@ Dialog {
                             text: root.seriesName(modelData)
                         }
                         currentIndex: {
-                            const idx = graphLinesPage.visibleAxisColumns.findIndex(c =>
-                                root.graphAxisSettings.seriesId !== undefined
-                                    ? c === root.graphAxisSettings.seriesId
-                                    : root.graphVm.columnKey(c) === root.graphAxisSettings.yAxisColumnKey);
-                            return idx >= 0 ? idx : 0;
+                            const idx = graphLinesPage.visibleAxisColumns.indexOf(root.visualSettings.graphAxisSeriesId)
+                            return idx >= 0 ? idx : 0
                         }
-                        onActivated: index => {
-                            if (root.graphAxisSettings.seriesId !== undefined)
-                                root.graphAxisSettings.seriesId = graphLinesPage.visibleAxisColumns[index];
-                            else
-                                root.graphAxisSettings.yAxisColumnKey = root.graphVm.columnKey(
-                                    root.graphVm.allColumns.find(c => root.graphVm.columnKey(c) ===
-                                        graphLinesPage.visibleAxisColumns[index]));
-                        }
+                        onActivated: index => root.visualSettings.graphAxisSeriesId = graphLinesPage.visibleAxisColumns[index]
                     }
                 }
 
                 Repeater {
-                    model: root.graphVm.allSeries || root.graphVm.allColumns
+                    model: root.settingsVm.allSeriesConfigs
 
                     RowLayout {
                         id: lineRow
@@ -293,26 +249,20 @@ Dialog {
                             width: 16
                             height: 16
                             radius: 4
-                            color: lineRow.modelData.color || root.graphVm.columnColor(lineRow.modelData)
+                            color: lineRow.modelData.color
                             border.width: 1
                             border.color: root.palette.mid
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Label {
-                            text: lineRow.modelData.name || root.graphVm.columnName(lineRow.modelData)
+                            text: lineRow.modelData.name
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Item { Layout.fillWidth: true }
                         Switch {
-                            objectName: lineRow.modelData.id ? "seriesEnabledSwitch_" + lineRow.modelData.id
-                                                              : "graphColumnEnabledSwitch_" + root.graphVm.columnName(lineRow.modelData)
-                            checked: lineRow.modelData.id ? lineRow.modelData.enabled
-                                                         : root.graphVm.enabledColumns.includes(lineRow.modelData)
-                            onToggled: lineRow.modelData.id
-                                       ? root.graphVm.setSeriesEnabled(lineRow.modelData.id, checked)
-                                       : (root.settingsVm.setGraphColumnEnabled
-                                          ? root.settingsVm.setGraphColumnEnabled(lineRow.modelData, checked)
-                                          : root.graphVm.setSeriesEnabled(root.graphVm.seriesIdForColumn(lineRow.modelData), checked))
+                            objectName: "seriesEnabledSwitch_" + lineRow.modelData.id
+                            checked: lineRow.modelData.enabled
+                            onToggled: root.settingsVm.setSeriesEnabled(lineRow.modelData.id, checked)
                         }
                     }
                 }

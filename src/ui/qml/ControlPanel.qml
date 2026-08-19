@@ -7,17 +7,12 @@ Frame {
     id: root
 
     required property var graphVm
-    required property var seriesVisibility
+    required property var visualSettings
 
     signal configureLinesRequested
 
     function seriesFor(id) {
-        if (root.graphVm.allSeries) {
-            const found = root.graphVm.allSeries.find(s => s.id === id);
-            if (found)
-                return found;
-        }
-        return null;
+        return root.graphVm.allSeries.find(s => s.id === id) || null
     }
 
     ColumnLayout {
@@ -31,21 +26,18 @@ Frame {
                 required property string modelData
                 readonly property var series: root.seriesFor(modelData)
 
-                checked: !(root.seriesVisibility.hiddenSeriesIds.indexOf(modelData) === -1)
+                checked: root.visualSettings.isSeriesVisible(modelData)
                 objectName: "seriesVisibilityCheckBox_" + modelData
-                text: root.seriesFor(modelData).name
+                text: series ? series.name : modelData
 
                 background: Rectangle {
                     anchors.fill: parent
-                    color: root.graphVm.columnColor(modelData)
+                    color: series ? series.color : "transparent"
                     opacity: 0.5
                     radius: 5
                 }
 
-                onToggled: {
-                    root.seriesVisibility.hiddenSeriesIds.push(modelData);
-                    console.log(root.seriesVisibility.hiddenSeriesIds);
-                }
+                onToggled: root.visualSettings.setSeriesVisible(modelData, checked)
             }
         }
         Label {
