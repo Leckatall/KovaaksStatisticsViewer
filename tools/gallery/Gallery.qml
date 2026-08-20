@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "expression_tree_mockup" as ExpressionTreeMockup
 // import QtCore
 import KovaaksStatsViewer
 
@@ -71,149 +72,201 @@ ApplicationWindow {
             width: window.width - 48
             spacing: 24
 
-            Showcase {
-                label: "DashboardGraphCanvas"
-                cellWidth: 600; cellHeight: 360
-                DashboardGraphCanvas {
-                    anchors.fill: parent
-                    graphVm: window.graphVm
-                    columnVisibility: window.columnVisibility
-                    graphAxisSettings: window.graphAxisSettings
-                }
-            }
+            // Showcase {
+            //     label: "DashboardGraphCanvas"
+            //     cellWidth: 600; cellHeight: 360
+            //     DashboardGraphCanvas {
+            //         anchors.fill: parent
+            //         graphVm: window.graphVm
+            //         columnVisibility: window.columnVisibility
+            //         graphAxisSettings: window.graphAxisSettings
+            //     }
+            // }
+
+            // Showcase {
+            //     label: "PlaytimeGraphPanel"
+            //     cellWidth: 600; cellHeight: 360
+            //     PlaytimeGraphPanel {
+            //         anchors.fill: parent
+            //         playtimeVm: window.playtimeVm
+            //     }
+            // }
+
+            // Showcase {
+            //     label: "ControlPanel"
+            //     cellWidth: 440; cellHeight: 480
+            //     ControlPanel {
+            //         anchors.fill: parent
+            //         graphVm: window.graphVm
+            //         columnVisibility: window.columnVisibility
+            //     }
+            // }
+
+            // Showcase {
+            //     label: "RunListView"
+            //     cellWidth: 600; cellHeight: 360
+            //     RunListView {
+            //         anchors.fill: parent
+            //         title: window.scenarioBrowserVm.activeScenarioHash === "" ? "" : "Active scenario runs"
+            //         runModel: window.scenarioBrowserVm.runModel
+            //         currentRunHash: window.scenarioBrowserVm.currentRunHash
+            //         currentRunStartTimeMs: window.scenarioBrowserVm.currentRunStartTimeMs
+            //         onRunSelected: (hash, startTimeMs) => window.scenarioBrowserVm.selectRun(hash, startTimeMs)
+            //         onSortRequested: (field, ascending) => window.scenarioBrowserVm.setSort(field, ascending)
+            //     }
+            //
+            //     // Preselects the first scenario so the showcase above renders real run data;
+            //     // this Repeater is never shown, it only exists to read the first model row.
+            //     Repeater {
+            //         model: window.scenarioBrowserVm.scenarioModel
+            //         delegate: Item {
+            //             required property int index
+            //             required property string name
+            //             required property string hash
+            //             Component.onCompleted: {
+            //                 if (index === 0) window.scenarioBrowserVm.activateScenario(hash, name)
+            //             }
+            //         }
+            //     }
+            // }
+            //
+            // Showcase {
+            //     label: "RunListView (Recent, all scenarios)"
+            //     cellWidth: 600; cellHeight: 360
+            //     RunListView {
+            //         anchors.fill: parent
+            //         title: "Recent"
+            //         runModel: window.scenarioBrowserVm.recentRunsModel
+            //         currentRunHash: window.scenarioBrowserVm.currentRunHash
+            //         currentRunStartTimeMs: window.scenarioBrowserVm.currentRunStartTimeMs
+            //         onRunSelected: (hash, startTimeMs) => window.scenarioBrowserVm.selectRun(hash, startTimeMs)
+            //     }
+            // }
+            //
+            // Showcase {
+            //     label: "ScenarioSearchPanel"
+            //     cellWidth: 440; cellHeight: 360
+            //     ScenarioSearchPanel {
+            //         anchors.fill: parent
+            //         scenarioModel: window.scenarioBrowserVm.scenarioModel
+            //         onSearchEdited: text => window.scenarioBrowserVm.setSearchText(text)
+            //         onScenarioActivated: (hash, name) => window.scenarioBrowserVm.activateScenario(hash, name)
+            //     }
+            // }
+            //
+            // Showcase {
+            //     label: "SelectionPanel"
+            //     cellWidth: 600; cellHeight: 700
+            //     SelectionPanel {
+            //         anchors.fill: parent
+            //         activeScenarioName: "1wall6targets TE"
+            //         scenarioModel: ListModel {
+            //             ListElement { name: "1wall6targets TE"; hash: "te"; runCount: 42; lastPlayedMs: 1723200000000 }
+            //             ListElement { name: "Pasu Small Reload"; hash: "psr"; runCount: 19; lastPlayedMs: 1723113600000 }
+            //         }
+            //         runModel: ListModel {
+            //             ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-09"; startTimeMs: 1723200000000; score: 8421; accuracy: 0.91; shots: 132; hits: 120 }
+            //             ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-08"; startTimeMs: 1723113600000; score: 8150; accuracy: 0.885; shots: 128; hits: 113 }
+            //         }
+            //         recentRunModel: ListModel {
+            //             ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-09"; startTimeMs: 1723200000000; score: 8421; accuracy: 0.91; shots: 132; hits: 120 }
+            //             ListElement { hash: "psr"; runLabel: "Pasu Small Reload 2024-08-08"; startTimeMs: 1723113600000; score: 7120; accuracy: 0.84; shots: 98; hits: 82 }
+            //         }
+            //     }
+            // }
+            //
+            // Showcase {
+            //     label: "AppMenuBar"
+            //     cellWidth: 440; cellHeight: 100
+            //     AppMenuBar {
+            //         anchors.left: parent.left
+            //         anchors.right: parent.right
+            //     }
+            // }
+            //
+            // Showcase {
+            //     label: "DirectoryPickerRow"
+            //     cellWidth: 440; cellHeight: 120
+            //     DirectoryPickerRow {
+            //         anchors.left: parent.left
+            //         anchors.right: parent.right
+            //         anchors.verticalCenter: parent.verticalCenter
+            //         label: "Kovaaks Directory"
+            //         dir: window.settingsVm.kovaaksDir
+            //         objectNamePrefix: "galleryDir"
+            //     }
+            // }
+            //
+            // Showcase {
+            //     label: "SettingsDialog"
+            //     cellWidth: 440; cellHeight: 120
+            //     Button {
+            //         anchors.centerIn: parent
+            //         text: "Open SettingsDialog"
+            //         onClicked: settingsDialog.open()
+            //     }
+            // }
 
             Showcase {
-                label: "PlaytimeGraphPanel"
-                cellWidth: 600; cellHeight: 360
-                PlaytimeGraphPanel {
+                label: "Expression Tree — Cards (mockup)"
+                cellWidth: 640; cellHeight: 520
+                ExpressionTreeMockup.ExpressionTreeMockModel { id: cardsTreeModel }
+                ColumnLayout {
                     anchors.fill: parent
-                    playtimeVm: window.playtimeVm
-                }
-            }
-
-            Showcase {
-                label: "ControlPanel"
-                cellWidth: 440; cellHeight: 480
-                ControlPanel {
-                    anchors.fill: parent
-                    graphVm: window.graphVm
-                    columnVisibility: window.columnVisibility
-                }
-            }
-
-            Showcase {
-                label: "RunListView"
-                cellWidth: 600; cellHeight: 360
-                RunListView {
-                    anchors.fill: parent
-                    title: window.scenarioBrowserVm.activeScenarioHash === "" ? "" : "Active scenario runs"
-                    runModel: window.scenarioBrowserVm.runModel
-                    currentRunHash: window.scenarioBrowserVm.currentRunHash
-                    currentRunStartTimeMs: window.scenarioBrowserVm.currentRunStartTimeMs
-                    onRunSelected: (hash, startTimeMs) => window.scenarioBrowserVm.selectRun(hash, startTimeMs)
-                    onSortRequested: (field, ascending) => window.scenarioBrowserVm.setSort(field, ascending)
-                }
-
-                // Preselects the first scenario so the showcase above renders real run data;
-                // this Repeater is never shown, it only exists to read the first model row.
-                Repeater {
-                    model: window.scenarioBrowserVm.scenarioModel
-                    delegate: Item {
-                        required property int index
-                        required property string name
-                        required property string hash
-                        Component.onCompleted: {
-                            if (index === 0) window.scenarioBrowserVm.activateScenario(hash, name)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Repeater {
+                            model: cardsTreeModel.exampleNames
+                            delegate: Button {
+                                required property int index
+                                required property string modelData
+                                text: modelData
+                                onClicked: cardsTreeModel.loadExample(index)
+                            }
                         }
                     }
-                }
-            }
-
-            Showcase {
-                label: "RunListView (Recent, all scenarios)"
-                cellWidth: 600; cellHeight: 360
-                RunListView {
-                    anchors.fill: parent
-                    title: "Recent"
-                    runModel: window.scenarioBrowserVm.recentRunsModel
-                    currentRunHash: window.scenarioBrowserVm.currentRunHash
-                    currentRunStartTimeMs: window.scenarioBrowserVm.currentRunStartTimeMs
-                    onRunSelected: (hash, startTimeMs) => window.scenarioBrowserVm.selectRun(hash, startTimeMs)
-                }
-            }
-
-            Showcase {
-                label: "ScenarioSearchPanel"
-                cellWidth: 440; cellHeight: 360
-                ScenarioSearchPanel {
-                    anchors.fill: parent
-                    scenarioModel: window.scenarioBrowserVm.scenarioModel
-                    onSearchEdited: text => window.scenarioBrowserVm.setSearchText(text)
-                    onScenarioActivated: (hash, name) => window.scenarioBrowserVm.activateScenario(hash, name)
-                }
-            }
-
-            Showcase {
-                label: "SelectionPanel"
-                cellWidth: 600; cellHeight: 700
-                SelectionPanel {
-                    anchors.fill: parent
-                    activeScenarioName: "1wall6targets TE"
-                    scenarioModel: ListModel {
-                        ListElement { name: "1wall6targets TE"; hash: "te"; runCount: 42; lastPlayedMs: 1723200000000 }
-                        ListElement { name: "Pasu Small Reload"; hash: "psr"; runCount: 19; lastPlayedMs: 1723113600000 }
-                    }
-                    runModel: ListModel {
-                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-09"; startTimeMs: 1723200000000; score: 8421; accuracy: 0.91; shots: 132; hits: 120 }
-                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-08"; startTimeMs: 1723113600000; score: 8150; accuracy: 0.885; shots: 128; hits: 113 }
-                    }
-                    recentRunModel: ListModel {
-                        ListElement { hash: "te"; runLabel: "1wall6targets TE 2024-08-09"; startTimeMs: 1723200000000; score: 8421; accuracy: 0.91; shots: 132; hits: 120 }
-                        ListElement { hash: "psr"; runLabel: "Pasu Small Reload 2024-08-08"; startTimeMs: 1723113600000; score: 7120; accuracy: 0.84; shots: 98; hits: 82 }
+                    ExpressionTreeMockup.ExpressionTreeCardsMockup {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        model: cardsTreeModel
                     }
                 }
             }
 
             Showcase {
-                label: "AppMenuBar"
-                cellWidth: 440; cellHeight: 100
-                AppMenuBar {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                }
-            }
-
-            Showcase {
-                label: "DirectoryPickerRow"
-                cellWidth: 440; cellHeight: 120
-                DirectoryPickerRow {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    label: "Kovaaks Directory"
-                    dir: window.settingsVm.kovaaksDir
-                    objectNamePrefix: "galleryDir"
-                }
-            }
-
-            Showcase {
-                label: "SettingsDialog"
-                cellWidth: 440; cellHeight: 120
-                Button {
-                    anchors.centerIn: parent
-                    text: "Open SettingsDialog"
-                    onClicked: settingsDialog.open()
+                label: "Expression Tree — Breadcrumb (mockup)"
+                cellWidth: 640; cellHeight: 520
+                ExpressionTreeMockup.ExpressionTreeMockModel { id: breadcrumbTreeModel }
+                ColumnLayout {
+                    anchors.fill: parent
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Repeater {
+                            model: breadcrumbTreeModel.exampleNames
+                            delegate: Button {
+                                required property int index
+                                required property string modelData
+                                text: modelData
+                                onClicked: breadcrumbTreeModel.loadExample(index)
+                            }
+                        }
+                    }
+                    ExpressionTreeMockup.ExpressionTreeBreadcrumbMockup {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        model: breadcrumbTreeModel
+                    }
                 }
             }
         }
     }
 
-    SettingsDialog {
-        id: settingsDialog
-        settingsVm: window.settingsVm
-        sessionVm: window.sessionVm
-        graphVm: window.graphVm
-        columnVisibility: window.columnVisibility
-        graphAxisSettings: window.graphAxisSettings
-    }
+    // SettingsDialog {
+    //     id: settingsDialog
+    //     settingsVm: window.settingsVm
+    //     sessionVm: window.sessionVm
+    //     graphVm: window.graphVm
+    //     columnVisibility: window.columnVisibility
+    //     graphAxisSettings: window.graphAxisSettings
+    // }
 }
