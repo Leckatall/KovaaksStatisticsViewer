@@ -40,7 +40,7 @@ namespace ksv::application {
             return value.substr(first, last - first);
         }
 
-        void validatePresentation(const SeriesPresentation &presentation, const bool computed,
+        void validatePresentation(const SeriesPresentation &presentation,
                                   const std::string_view path, std::vector<ValidationError> &errors) {
             if (!std::isfinite(presentation.lineStyle.width)) {
                 errors.push_back({
@@ -54,7 +54,6 @@ namespace ksv::application {
                     std::string(path) + ".lineStyle.width"
                 });
             }
-            if (!computed) return;
 
             const auto name = std::string_view{presentation.name};
             if (trim(name).empty()) {
@@ -131,23 +130,12 @@ namespace ksv::application {
 
         std::vector<ValidationError> validateConfig(const SeriesConfig &config, const std::string_view root) {
             std::vector<ValidationError> errors;
-            validatePresentation(config.presentation, !config.isPrimitive(),
-                                 std::string(root) + ".presentation", errors);
-            if (config.isPrimitive()) {
-                if (!isKnownPrimitiveMetric(std::get_if<PrimitiveReference>(&config.expression->value())->metric)) {
-                    errors.push_back({
-                        SeriesConfigValidationCode::InvalidPrimitiveMetric, std::string(root) + ".metric"
-                    });
-                }
-            } else {
-                if (config.id.value == 0) {
-                    errors.push_back({
-                        SeriesConfigValidationCode::InvalidComputedSeriesId, std::string(root) + ".id"
-                    });
-                }
-                size_t node_count = 0;
-                validateExpression(config.expression, std::string(root) + ".expression", 1, node_count, errors);
+            validatePresentation(config.presentation, std::string(root) + ".presentation", errors);
+            if (config.id.value == 0) {
+                errors.push_back({SeriesConfigValidationCode::InvalidComputedSeriesId, std::string(root) + ".id"});
             }
+            size_t node_count = 0;
+            validateExpression(config.expression, std::string(root) + ".expression", 1, node_count, errors);
             return errors;
         }
 
@@ -192,7 +180,6 @@ namespace ksv::application {
 
     std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs) {
         std::vector<ValidationError> errors;
-        std::array<size_t, kPrimitiveMetrics.size()> base_counts{};
         std::vector<std::pair<uint64_t, size_t> > series_ids;
         std::vector<std::pair<uint32_t, size_t> > positions;
 
@@ -205,31 +192,6 @@ namespace ksv::application {
 
             positions.emplace_back(config.presentation.displayPosition, index);
             if (config.id.value != 0) series_ids.emplace_back(config.id.value, index);
-            if (config.isPrimitive()) {
-                const auto metric = std::ranges::find(kPrimitiveMetrics,
-                                                      std::get_if<PrimitiveReference>(&config.expression->value())->
-                                                      metric);
-                if (metric != kPrimitiveMetrics.end()) {
-                    const auto metricIndex = static_cast<size_t>(metric - kPrimitiveMetrics.begin());
-                    if (++base_counts[metricIndex] > 1) {
-                        errors.push_back({SeriesConfigValidationCode::DuplicateBaseMetric, root + ".metric"});
-                    }
-                    if (config.presentation.name != canonicalName(*metric)) {
-                        errors.push_back({
-                            SeriesConfigValidationCode::NonCanonicalBaseName, root + ".presentation.name"
-                        });
-                    }
-                }
-            }
-        }
-
-        for (size_t index = 0; index < base_counts.size(); ++index) {
-            if (base_counts[index] == 0) {
-                errors.push_back({
-                    SeriesConfigValidationCode::MissingBaseMetric,
-                    "records.base[" + std::to_string(index) + "]"
-                });
-            }
         }
 
         std::ranges::sort(series_ids);

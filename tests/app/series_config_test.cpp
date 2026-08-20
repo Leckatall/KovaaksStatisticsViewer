@@ -128,12 +128,28 @@ namespace {
             return std::ranges::any_of(errors, [code](const ValidationError &error) { return error.code == code; });
         };
         EXPECT_TRUE(hasCode(SeriesConfigValidationCode::InvalidRollingWindow));
-        EXPECT_TRUE(hasCode(SeriesConfigValidationCode::NonCanonicalBaseName));
-        EXPECT_TRUE(hasCode(SeriesConfigValidationCode::DuplicateBaseMetric));
-        EXPECT_TRUE(hasCode(SeriesConfigValidationCode::MissingBaseMetric));
         EXPECT_TRUE(hasCode(SeriesConfigValidationCode::DuplicateComputedSeriesId));
         EXPECT_TRUE(hasCode(SeriesConfigValidationCode::DuplicateDisplayPosition));
         EXPECT_TRUE(hasCode(SeriesConfigValidationCode::NonDenseDisplayPosition));
+    }
+
+    TEST(SeriesConfigTest, DuplicatePrimitiveReferencesAreNoLongerRejected) {
+        auto configs = defaultSeriesConfigs();
+        configs[2].presentation.name = "Kills Again";
+        configs[2].expression = primitive(PrimitiveMetric::Kills);
+
+        EXPECT_TRUE(validateSeriesConfigs(configs).empty());
+    }
+
+    TEST(SeriesConfigTest, RenamingAPrimitiveRowToAnEmptyOrUntrimmedNameIsStillRejected) {
+        auto configs = defaultSeriesConfigs();
+        ASSERT_TRUE(configs[0].isPrimitive());
+        configs[0].presentation.name = "  ";
+
+        const auto errors = validateSeriesConfigs(configs);
+        EXPECT_TRUE(std::ranges::any_of(errors, [](const ValidationError &error) {
+            return error.code == SeriesConfigValidationCode::EmptyComputedName;
+        }));
     }
 
     TEST(SeriesConfigTest, CopiedExpressionsContainOnlyPrimitiveLeaves) {

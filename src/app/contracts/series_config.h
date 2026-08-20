@@ -178,9 +178,6 @@ namespace ksv::application {
         InvalidTopPercentile,
         ExpressionDepthLimit,
         ExpressionNodeLimit,
-        MissingBaseMetric,
-        DuplicateBaseMetric,
-        NonCanonicalBaseName,
         DuplicateComputedSeriesId,
         DuplicateDisplayPosition,
         NonDenseDisplayPosition

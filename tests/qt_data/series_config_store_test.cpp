@@ -4,7 +4,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <algorithm>
 #include <array>
+#include <ranges>
 
 #include "data/interfaces/i_settings_service.h"
 #include "qt_data/series_config_store.h"
@@ -133,6 +135,26 @@ namespace {
         }).succeeded());
         EXPECT_TRUE(store->removeComputed(id).succeeded());
         EXPECT_TRUE(store->reorder({1}, 1).succeeded());
+    }
+
+    TEST_F(SeriesConfigStoreTest, PrimitiveRowsCanBeRenamedReExpressedAndDeletedLikeAnyOther) {
+        makeStore();
+        const SeriesId scoreId{1};
+        const auto seeded = store->getAll();
+        ASSERT_TRUE(std::ranges::find(seeded, scoreId, &SeriesConfig::id) != seeded.end());
+
+        EXPECT_TRUE(store->updateSeries({
+            scoreId, UpdatedSeriesPresentation{"Renamed Score", LineStyle{}, false}, numericConstant(4.0)
+        }).succeeded());
+        const auto afterUpdate = store->getAll();
+        const auto renamed = std::ranges::find(afterUpdate, scoreId, &SeriesConfig::id);
+        ASSERT_NE(renamed, afterUpdate.end());
+        EXPECT_EQ(renamed->presentation.name, "Renamed Score");
+        EXPECT_FALSE(renamed->isPrimitive());
+
+        EXPECT_TRUE(store->removeComputed(scoreId).succeeded());
+        const auto afterRemove = store->getAll();
+        EXPECT_TRUE(std::ranges::find(afterRemove, scoreId, &SeriesConfig::id) == afterRemove.end());
     }
 
     TEST_F(SeriesConfigStoreTest, RejectsUnknownAndInvalidMutationRequestsWithoutNotification) {

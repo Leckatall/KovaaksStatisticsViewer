@@ -429,12 +429,6 @@ namespace ksv::qt_data {
             const auto index = indexOfLocked(request.id);
             if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
             auto &config = configs[*index];
-            if (config.isPrimitive()) {
-                if (request.expression) return {{}, StoreMutationFailureCode::BannedPrimitiveUpdateType};
-                if (request.presentation && request.presentation.value().name)
-                    return {{}, StoreMutationFailureCode::BannedPrimitiveUpdateType};
-            }
-
             if (request.presentation) {
                 auto [name, lineStyle, enabled] = request.presentation.value();
                 if (name) config.presentation.name = name.value();
@@ -450,7 +444,6 @@ namespace ksv::qt_data {
         return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
             const auto index = indexOfLocked(id);
             if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
-            if (configs[*index].isPrimitive()) return {{}, StoreMutationFailureCode::BannedPrimitiveUpdateType};
             configs.erase(configs.begin() + *index);
             normalizeDisplayPositions(configs);
             return commitLocked(std::move(configs), m_next.value());

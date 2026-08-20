@@ -11,8 +11,7 @@ namespace ksv::application {
         UnknownSeriesId,
         DisplayPositionOutOfRange,
         ComputedSeriesIdExhausted,
-        PersistenceWriteFailed,
-        BannedPrimitiveUpdateType
+        PersistenceWriteFailed
     };
 
     struct MutationResult {
