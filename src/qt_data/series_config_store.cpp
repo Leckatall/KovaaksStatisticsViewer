@@ -386,11 +386,46 @@ namespace ksv::qt_data {
         const auto errors = validateSeriesConfigs(configs);
         if (!errors.empty()) return {errors};
         if ((!created && !m_next) && encode(configs, next) == encode(m_configs, m_next.value_or(SeriesId{1}))) return {};
-        writeLocked(configs, next);
+        if (!m_draftActive) writeLocked(configs, next);
         m_configs = std::move(configs);
         m_next = next;
         m_requiresReload = false;
         return {{}, {}, false, created};
+    }
+
+    void SeriesConfigStore::beginDraft() {
+        QMutexLocker lock(&m_mutex);
+        ensureLoadedLocked();
+        m_draftBaseline = {m_configs, m_next.value()};
+        m_draftActive = true;
+    }
+
+    MutationResult SeriesConfigStore::commitDraft() {
+        QMutexLocker lock(&m_mutex);
+        if (!m_draftActive) return {};
+        writeLocked(m_configs, m_next.value());
+        m_draftBaseline.reset();
+        m_draftActive = false;
+        return {};
+    }
+
+    void SeriesConfigStore::discardDraft() {
+        std::vector<std::function<void()>> callbacks; {
+            QMutexLocker lock(&m_mutex);
+            if (!m_draftActive) return;
+            m_configs = m_draftBaseline->first;
+            m_next = m_draftBaseline->second;
+            m_draftBaseline.reset();
+            m_draftActive = false;
+            callbacks = m_callbacks;
+        }
+        for (auto &callback: callbacks) callback();
+    }
+
+    bool SeriesConfigStore::hasPendingChanges() const {
+        QMutexLocker lock(&m_mutex);
+        if (!m_draftActive) return false;
+        return encode(m_configs, m_next.value()) != encode(m_draftBaseline->first, m_draftBaseline->second);
     }
 
     MutationResult SeriesConfigStore::mutateLocked(

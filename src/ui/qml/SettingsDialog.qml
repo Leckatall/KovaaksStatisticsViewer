@@ -3,21 +3,26 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 
-Dialog {
+ApplicationWindow {
     id: root
     objectName: "settingsDialog"
     title: "Settings"
-    modal: false
-    standardButtons: Dialog.Close
-    anchors.centerIn: parent
+    flags: Qt.Dialog
+    modality: Qt.WindowModal
     width: 680
     height: 460
-    padding: 0
-    margins: 10
 
     required property var settingsVm
     required property var sessionVm
     required property var visualSettings
+
+    footer: DialogButtonBox {
+        Button {
+            text: qsTr("Close")
+            DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+            onClicked: root.close()
+        }
+    }
 
     function seriesName(id) {
         const series = root.settingsVm.allSeriesConfigs.find(s => s.id === id)
@@ -26,10 +31,46 @@ Dialog {
 
     property int currentCategory: 0
     readonly property int graphLinesCategory: 1
+    readonly property alias discardChangesPrompt: discardChangesPrompt
+
+    function open() {
+        visible = true
+        raise()
+        requestActivate()
+    }
 
     function openGraphLines() {
         currentCategory = graphLinesCategory
         open()
+    }
+
+    onClosing: (close) => {
+        if (root.settingsVm.pendingChanges) {
+            close.accepted = false
+            discardChangesPrompt.open()
+        }
+    }
+
+    MessageDialog {
+        id: discardChangesPrompt
+        objectName: "discardChangesPrompt"
+        title: "Save changes?"
+        text: "You have unsaved changes."
+        informativeText: "Do you want to save them before closing?"
+        buttons: MessageDialog.Save | MessageDialog.Discard | MessageDialog.Cancel
+        onButtonClicked: function (button) {
+            switch (button) {
+                case MessageDialog.Save:
+                    root.settingsVm.commitSeriesDraft()
+                    break
+                case MessageDialog.Discard:
+                    root.settingsVm.discardSeriesDraft()
+                    break
+                case MessageDialog.Cancel:
+                    return
+            }
+            root.close()
+        }
     }
 
     // Rounded "pill" navigation entry for the sidebar.
@@ -67,209 +108,188 @@ Dialog {
         onAccepted: root.settingsVm.setProfilePath(profileFileDialog.selectedFile)
     }
 
-    RowLayout {
+    ColumnLayout {
         anchors.fill: parent
+        anchors.margins: 10
         spacing: 10
 
-        // ---- Sidebar ------------------------------------------------------
-        Rectangle {
-            Layout.preferredWidth: 176
-            Layout.fillHeight: true
-            color: Qt.darker(root.palette.window, 1.2)
-
-
-            // Right-edge divider between sidebar and content.
-            Rectangle {
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                width: 1
-                color: root.palette.mid
-            }
-
-            ColumnLayout {
-                id: categoryList
-                objectName: "categoryList"
-                anchors.fill: parent
-                anchors.margins: 5
-                anchors.topMargin: 5
-                spacing: 4
-
-                CategoryButton {
-                    objectName: "categoryItem_Directories"
-                    Layout.fillWidth: true
-                    text: "Profile"
-                    highlighted: root.currentCategory === 0
-                    onClicked: root.currentCategory = 0
-                }
-                CategoryButton {
-                    objectName: "categoryItem_Graph Lines"
-                    Layout.fillWidth: true
-                    text: "Graph Lines"
-                    highlighted: root.currentCategory === 1
-                    onClicked: root.currentCategory = 1
-                }
-                Item { Layout.fillHeight: true }
-            }
-        }
-
-        // ---- Content ------------------------------------------------------
-        StackLayout {
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: root.currentCategory
+            spacing: 10
 
-            // Directories
-            ColumnLayout {
-                spacing: 16
+            // ---- Sidebar ------------------------------------------------------
+            Rectangle {
+                Layout.preferredWidth: 176
+                Layout.fillHeight: true
+                color: Qt.darker(root.palette.window, 1.2)
 
-                Label {
-                    text: "Profile"
-                    font.pixelSize: 18
-                    font.bold: true
-                    Layout.bottomMargin: 4
+
+                // Right-edge divider between sidebar and content.
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 1
+                    color: root.palette.mid
                 }
 
-                DirectoryPickerRow {
-                    Layout.fillWidth: true
-                    label: "Kovaaks Directory"
-                    dir: root.settingsVm.kovaaksDir
-                    objectNamePrefix: "kovaaksDir"
-                    onBrowseRequested: kovaaksFolderDialog.open()
-                }
+                ColumnLayout {
+                    id: categoryList
+                    objectName: "categoryList"
+                    anchors.fill: parent
+                    anchors.margins: 5
+                    anchors.topMargin: 5
+                    spacing: 4
 
-                DirectoryPickerRow {
-                    Layout.fillWidth: true
-                    label: "Profile Save File"
-                    dir: root.settingsVm.profilePath
-                    objectNamePrefix: "profilePath"
-                    onBrowseRequested: profileFileDialog.open()
-                }
-
-                RowLayout {
-                    spacing: 8
-                    Rectangle {
-                        width: 10
-                        height: 10
-                        radius: width / 2
-                        // Semantic status, not chrome — there is no palette role
-                        // for ok/error, so these stay literal.
-                        color: root.settingsVm.profileLoaded ? "#4CAF50" : "#E53935"
-                        Layout.alignment: Qt.AlignVCenter
+                    CategoryButton {
+                        objectName: "categoryItem_Directories"
+                        Layout.fillWidth: true
+                        text: "Profile"
+                        highlighted: root.currentCategory === 0
+                        onClicked: root.currentCategory = 0
                     }
-                    Label {
-                        objectName: "profileLoadedLabel"
-                        text: "Profile status: " + (root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
+                    CategoryButton {
+                        objectName: "categoryItem_Graph Lines"
+                        Layout.fillWidth: true
+                        text: "Graph Lines"
+                        highlighted: root.currentCategory === 1
+                        onClicked: root.currentCategory = 1
                     }
+                    Item { Layout.fillHeight: true }
                 }
-
-                Button {
-                    objectName: "generateProfileButton"
-                    text: "Generate Profile from current kovaaks dir"
-                    enabled: !root.sessionVm.profileBuildInProgress
-                    onClicked: root.sessionVm.generateProfile()
-                }
-
-                ProgressBar {
-                    objectName: "profileBuildProgressBar"
-                    Layout.fillWidth: true
-                    visible: root.sessionVm.profileBuildInProgress
-                    // The file count only arrives with the first per-file report; until then
-                    // there is nothing to show a fraction of.
-                    indeterminate: value === 0
-                    value: root.sessionVm.profileBuildProgress
-                }
-                Item { Layout.fillHeight: true }
             }
 
-            // Graph Lines
-            ColumnLayout {
-                id: graphLinesPage
-                spacing: 8
+            // ---- Content ------------------------------------------------------
+            StackLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                currentIndex: root.currentCategory
 
-                readonly property var enabledSeriesConfigs: root.settingsVm.allSeriesConfigs.filter(s => s.enabled)
-
-                readonly property var visibleAxisColumns: {
-                    const seenPositions = new Set()
-                    const result = []
-                    for (const series of graphLinesPage.enabledSeriesConfigs) {
-                        if (!seenPositions.has(series.displayPosition)) {
-                            seenPositions.add(series.displayPosition)
-                            result.push(series.id)
-                        }
-                    }
-                    return result
-                }
-
-                Label {
-                    text: "Graph Lines"
-                    font.pixelSize: 18
-                    font.bold: true
-                    Layout.bottomMargin: 4
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
+                // Directories
+                ColumnLayout {
+                    spacing: 16
 
                     Label {
-                        text: "Y-axis labels"
-                        Layout.alignment: Qt.AlignVCenter
+                        text: "Profile"
+                        font.pixelSize: 18
+                        font.bold: true
+                        Layout.bottomMargin: 4
                     }
-                    ComboBox {
-                        id: yAxisColumnComboBox
-                        objectName: "yAxisColumnComboBox"
-                        Layout.fillWidth: true
-                        enabled: graphLinesPage.visibleAxisColumns.length > 0
-                        model: graphLinesPage.visibleAxisColumns
-                        displayText: enabled ? root.seriesName(graphLinesPage.visibleAxisColumns[currentIndex]) : ""
-                        delegate: ItemDelegate {
-                            required property var modelData
-                            width: yAxisColumnComboBox.width
-                            text: root.seriesName(modelData)
-                        }
-                        currentIndex: {
-                            const idx = graphLinesPage.visibleAxisColumns.indexOf(root.visualSettings.graphAxisSeriesId)
-                            return idx >= 0 ? idx : 0
-                        }
-                        onActivated: index => root.visualSettings.graphAxisSeriesId = graphLinesPage.visibleAxisColumns[index]
-                    }
-                }
 
-                Repeater {
-                    model: root.settingsVm.allSeriesConfigs
+                    DirectoryPickerRow {
+                        Layout.fillWidth: true
+                        label: "Kovaaks Directory"
+                        dir: root.settingsVm.kovaaksDir
+                        objectNamePrefix: "kovaaksDir"
+                        onBrowseRequested: kovaaksFolderDialog.open()
+                    }
+
+                    DirectoryPickerRow {
+                        Layout.fillWidth: true
+                        label: "Profile Save File"
+                        dir: root.settingsVm.profilePath
+                        objectNamePrefix: "profilePath"
+                        onBrowseRequested: profileFileDialog.open()
+                    }
 
                     RowLayout {
-                        id: lineRow
-                        required property var modelData
-                        Layout.fillWidth: true
-                        spacing: 12
-
+                        spacing: 8
                         Rectangle {
-                            width: 16
-                            height: 16
-                            radius: 4
-                            color: lineRow.modelData.color
-                            border.width: 1
-                            border.color: root.palette.mid
+                            width: 10
+                            height: 10
+                            radius: width / 2
+                            // Semantic status, not chrome — there is no palette role
+                            // for ok/error, so these stay literal.
+                            color: root.settingsVm.profileLoaded ? "#4CAF50" : "#E53935"
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Label {
-                            text: lineRow.modelData.name
-                            Layout.alignment: Qt.AlignVCenter
-                        }
-                        Item { Layout.fillWidth: true }
-                        Switch {
-                            objectName: "seriesEnabledSwitch_" + lineRow.modelData.id
-                            checked: lineRow.modelData.enabled
-                            onToggled: root.settingsVm.setSeriesEnabled(lineRow.modelData.id, checked)
+                            objectName: "profileLoadedLabel"
+                            text: "Profile status: " + (root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
                         }
                     }
+
+                    Button {
+                        objectName: "generateProfileButton"
+                        text: "Generate Profile from current kovaaks dir"
+                        enabled: !root.sessionVm.profileBuildInProgress
+                        onClicked: root.sessionVm.generateProfile()
+                    }
+
+                    ProgressBar {
+                        objectName: "profileBuildProgressBar"
+                        Layout.fillWidth: true
+                        visible: root.sessionVm.profileBuildInProgress
+                        // The file count only arrives with the first per-file report; until then
+                        // there is nothing to show a fraction of.
+                        indeterminate: value === 0
+                        value: root.sessionVm.profileBuildProgress
+                    }
+                    Item { Layout.fillHeight: true }
                 }
-                Item { Layout.fillHeight: true }
+
+                // Graph Lines
+                ColumnLayout {
+                    id: graphLinesPage
+                    spacing: 8
+
+                    readonly property var enabledSeriesConfigs: root.settingsVm.allSeriesConfigs.filter(s => s.enabled)
+
+                    readonly property var visibleAxisColumns: {
+                        const seenPositions = new Set()
+                        const result = []
+                        for (const series of graphLinesPage.enabledSeriesConfigs) {
+                            if (!seenPositions.has(series.displayPosition)) {
+                                seenPositions.add(series.displayPosition)
+                                result.push(series.id)
+                            }
+                        }
+                        return result
+                    }
+
+                    Label {
+                        text: "Graph Lines"
+                        font.pixelSize: 18
+                        font.bold: true
+                        Layout.bottomMargin: 4
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        Label {
+                            text: "Y-axis labels"
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        ComboBox {
+                            id: yAxisColumnComboBox
+                            objectName: "yAxisColumnComboBox"
+                            Layout.fillWidth: true
+                            enabled: graphLinesPage.visibleAxisColumns.length > 0
+                            model: graphLinesPage.visibleAxisColumns
+                            displayText: enabled ? root.seriesName(graphLinesPage.visibleAxisColumns[currentIndex]) : ""
+                            delegate: ItemDelegate {
+                                required property var modelData
+                                width: yAxisColumnComboBox.width
+                                text: root.seriesName(modelData)
+                            }
+                            currentIndex: {
+                                const idx = graphLinesPage.visibleAxisColumns.indexOf(root.visualSettings.graphAxisSeriesId)
+                                return idx >= 0 ? idx : 0
+                            }
+                            onActivated: index => root.visualSettings.graphAxisSeriesId = graphLinesPage.visibleAxisColumns[index]
+                        }
+                    }
+
+                    SeriesConfigDraftPanel {
+                        Layout.fillWidth: true
+                        settingsVm: root.settingsVm
+                    }
+                    Item { Layout.fillHeight: true }
+                }
             }
         }
     }
-
-
 }

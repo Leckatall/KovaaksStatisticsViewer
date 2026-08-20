@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import QtQuick.Dialogs
 import "../../../src/ui/qml"
 
 TestCase {
@@ -24,10 +25,20 @@ TestCase {
                 {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
                 {id: "2", name: "Accuracy", color: "#00ffff", enabled: false, displayPosition: 1}
             ],
-            seriesEnabledCalls: [],
+            setSeriesEnabledCalls: 0,
+            lastSetSeriesEnabledId: null,
+            lastSetSeriesEnabledValue: null,
             setSeriesEnabled: function (id, enabled) {
-                this.seriesEnabledCalls.push({id: id, enabled: enabled})
-            }
+                this.setSeriesEnabledCalls++
+                this.lastSetSeriesEnabledId = id
+                this.lastSetSeriesEnabledValue = enabled
+            },
+            pendingChanges: false,
+            beginSeriesDraft: function () {},
+            commitDraftCalls: 0,
+            commitSeriesDraft: function () { this.commitDraftCalls++; this.pendingChanges = false; return {succeeded: true} },
+            discardSeriesDraftCalls: 0,
+            discardSeriesDraft: function () { this.discardSeriesDraftCalls++; this.pendingChanges = false }
         }, overrides)
     }
 
@@ -202,9 +213,15 @@ TestCase {
         mouseClick(accuracySwitch)
 
         tryCompare(accuracySwitch, "checked", true)
-        tryCompare(dialog.settingsVm.seriesEnabledCalls, "length", 1)
-        compare(dialog.settingsVm.seriesEnabledCalls[0].id, "2")
-        compare(dialog.settingsVm.seriesEnabledCalls[0].enabled, true)
+        // SeriesConfigDraftPanel's settingsVm is a distinct object from dialog.settingsVm despite
+        // the plain `settingsVm: root.settingsVm` forwarding binding in SettingsDialog.qml — read
+        // call-site state back through the panel's own settingsVm, matching
+        // tst_SeriesConfigDraftPanel.qml's convention, not through the dialog's.
+        const panel = findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
+        verify(panel !== null)
+        tryCompare(panel.settingsVm, "setSeriesEnabledCalls", 1)
+        compare(panel.settingsVm.lastSetSeriesEnabledId, "2")
+        compare(panel.settingsVm.lastSetSeriesEnabledValue, true)
     }
 
     function test_categoryList_startsOnDirectories() {
@@ -240,6 +257,86 @@ TestCase {
 
         tryCompare(dialog, "visible", true)
         compare(dialog.currentCategory, dialog.graphLinesCategory)
+    }
+
+    function test_closingWithNoPendingChangesClosesImmediatelyWithoutPrompt() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: false}),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        dialog.close()
+
+        tryCompare(dialog, "visible", false)
+        compare(dialog.settingsVm.discardSeriesDraftCalls, 0)
+    }
+
+    function test_closingWithPendingChangesShowsConfirmPromptAndStaysOpenUntilResolved() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        dialog.close()
+
+        tryCompare(dialog, "visible", true)
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+    }
+
+    function test_confirmingDiscardOnCloseCallsDiscardSeriesDraftThenCloses() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        dialog.close()
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        dialog.discardChangesPrompt.buttonClicked(MessageDialog.Discard, MessageDialog.DestructiveRole)
+
+        tryCompare(dialog.settingsVm, "discardSeriesDraftCalls", 1)
+        tryCompare(dialog, "visible", false)
+    }
+
+    function test_savingOnCloseCallsCommitSeriesDraftThenCloses() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        dialog.close()
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        dialog.discardChangesPrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
+
+        tryCompare(dialog.settingsVm, "commitDraftCalls", 1)
+        tryCompare(dialog, "visible", false)
+    }
+
+    function test_cancellingCloseLeavesWindowOpenAndDraftUntouched() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        dialog.close()
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        dialog.discardChangesPrompt.buttonClicked(MessageDialog.Cancel, MessageDialog.RejectRole)
+
+        compare(dialog.visible, true)
+        compare(dialog.settingsVm.commitDraftCalls, 0)
+        compare(dialog.settingsVm.discardSeriesDraftCalls, 0)
+    }
+
+    function test_switchingCategoriesDoesNotRetriggerDraftLifecycle() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        selectCategory(dialog, "Graph Lines")
+        selectCategory(dialog, "Directories")
+        selectCategory(dialog, "Graph Lines")
+
+        compare(dialog.settingsVm.discardSeriesDraftCalls, 0)
     }
 
 }

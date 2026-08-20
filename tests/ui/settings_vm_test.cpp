@@ -118,10 +118,21 @@ namespace {
         }
         void onChanged(std::function<void()> callback) override { callback_ = std::move(callback); }
 
+        void beginDraft() override { ++beginDraftCalls; }
+        MutationResult commitDraft() override { ++commitDraftCalls; return commitDraftResult; }
+        void discardDraft() override { ++discardDraftCalls; }
+        [[nodiscard]] bool hasPendingChanges() const override { return pendingChanges; }
+
         std::vector<SeriesConfig> configs;
         std::optional<std::pair<SeriesId, bool>> lastSetEnabled;
         std::optional<std::pair<SeriesId, uint32_t>> lastReorder;
         std::function<void()> callback_;
+
+        int beginDraftCalls = 0;
+        int commitDraftCalls = 0;
+        int discardDraftCalls = 0;
+        bool pendingChanges = false;
+        MutationResult commitDraftResult;
     };
 
     class SettingsViewModelTest : public testing::Test {
@@ -268,5 +279,45 @@ namespace {
         ASSERT_TRUE(seriesManagement->lastReorder);
         EXPECT_EQ(seriesManagement->lastReorder->first.value, 5U);
         EXPECT_EQ(seriesManagement->lastReorder->second, 2U);
+    }
+
+    TEST_F(SettingsViewModelTest, BeginSeriesDraftForwardsToUseCase) {
+        const auto view_model = make_view_model();
+        view_model->beginSeriesDraft();
+        EXPECT_EQ(seriesManagement->beginDraftCalls, 1);
+    }
+
+    TEST_F(SettingsViewModelTest, DiscardSeriesDraftForwardsToUseCase) {
+        const auto view_model = make_view_model();
+        view_model->discardSeriesDraft();
+        EXPECT_EQ(seriesManagement->discardDraftCalls, 1);
+    }
+
+    TEST_F(SettingsViewModelTest, CommitSeriesDraftForwardsAndEmitsPendingChangesChanged) {
+        const auto view_model = make_view_model();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::pendingChangesChanged);
+
+        view_model->commitSeriesDraft();
+
+        EXPECT_EQ(seriesManagement->commitDraftCalls, 1);
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(SettingsViewModelTest, PendingChangesReflectsUseCaseState) {
+        seriesManagement->pendingChanges = true;
+        const auto view_model = make_view_model();
+        EXPECT_TRUE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, PendingChangesChangedFiresAlongsideSeriesConfigurationChanged) {
+        const auto view_model = make_view_model();
+        ASSERT_TRUE(static_cast<bool>(seriesManagement->callback_));
+
+        const QSignalSpy configSpy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
+        const QSignalSpy pendingSpy(view_model.get(), &SettingsViewModel::pendingChangesChanged);
+        seriesManagement->callback_();
+
+        EXPECT_EQ(configSpy.count(), 1);
+        EXPECT_EQ(pendingSpy.count(), 1);
     }
 }

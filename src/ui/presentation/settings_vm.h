@@ -20,6 +20,7 @@ namespace ksv::presentation {
         Q_PROPERTY(QUrl profilePath READ getProfilePath WRITE setProfilePath NOTIFY profilePathChanged)
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
         Q_PROPERTY(QVariantList allSeriesConfigs READ getAllSeriesConfigs NOTIFY seriesConfigurationChanged)
+        Q_PROPERTY(bool pendingChanges READ hasPendingChanges NOTIFY pendingChangesChanged)
 
     public:
         explicit SettingsViewModel(std::shared_ptr<application::ISettingsService> settings_service,
@@ -48,11 +49,17 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap removeComputedSeries(const QString &id);
         Q_INVOKABLE QVariantMap reorderSeries(const QString &id, int displayPosition);
 
+        [[nodiscard]] bool hasPendingChanges() const { return m_series_management->hasPendingChanges(); }
+        Q_INVOKABLE void beginSeriesDraft() { m_series_management->beginDraft(); }
+        Q_INVOKABLE QVariantMap commitSeriesDraft();
+        Q_INVOKABLE void discardSeriesDraft();
+
     signals:
         void kovaaksDirChanged();
         void profilePathChanged();
         void profileLoadedChanged();
         void seriesConfigurationChanged();
+        void pendingChangesChanged();
 
     private:
         std::shared_ptr<application::ISettingsService> m_settings_service;

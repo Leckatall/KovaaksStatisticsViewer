@@ -127,6 +127,82 @@ namespace {
     // the current default catalogue/decode logic and needs investigation beyond a literal-value fix.
     // See .plans/series-config-migration-completion/plans/05-store-api-collapse.md.
 
+    TEST_F(SeriesConfigStoreTest, DraftMutationDoesNotReachDiskUntilCommitted) {
+        makeStore();
+        store->beginDraft();
+        ASSERT_TRUE(store->createComputed(request()).succeeded());
+        const int writesAfterMutation = settings->writes;
+
+        SeriesConfigStore reopened(settings);
+        EXPECT_EQ(reopened.getAll().size(), 9U);
+        EXPECT_EQ(settings->writes, writesAfterMutation);
+    }
+
+    TEST_F(SeriesConfigStoreTest, DiscardDraftRestoresPreDraftStateAndFiresOnChangedOnce) {
+        makeStore();
+        const auto beforeDraft = store->getAll();
+        store->beginDraft();
+        ASSERT_TRUE(store->createComputed(request()).succeeded());
+
+        int notifications = 0;
+        store->onChanged([&] { ++notifications; });
+        store->discardDraft();
+
+        const auto after = store->getAll();
+        ASSERT_EQ(after.size(), beforeDraft.size());
+        for (size_t i = 0; i < after.size(); ++i) {
+            EXPECT_EQ(after[i].id, beforeDraft[i].id);
+            EXPECT_EQ(after[i].presentation.name, beforeDraft[i].presentation.name);
+        }
+        EXPECT_EQ(notifications, 1);
+    }
+
+    TEST_F(SeriesConfigStoreTest, CommitDraftWritesOnceReflectingFinalShadowState) {
+        makeStore();
+        store->beginDraft();
+        ASSERT_TRUE(store->createComputed(request()).succeeded());
+        ASSERT_TRUE(store->createComputed(request()).succeeded());
+        const int writesDuringDraft = settings->writes;
+
+        ASSERT_TRUE(store->commitDraft().succeeded());
+
+        EXPECT_EQ(settings->writes, writesDuringDraft + 1);
+        SeriesConfigStore reopened(settings);
+        EXPECT_EQ(reopened.getAll().size(), 11U);
+    }
+
+    TEST_F(SeriesConfigStoreTest, HasPendingChangesTracksDraftMutationsAndResolution) {
+        makeStore();
+        EXPECT_FALSE(store->hasPendingChanges());
+
+        store->beginDraft();
+        EXPECT_FALSE(store->hasPendingChanges());
+
+        ASSERT_TRUE(store->createComputed(request()).succeeded());
+        EXPECT_TRUE(store->hasPendingChanges());
+
+        store->discardDraft();
+        EXPECT_FALSE(store->hasPendingChanges());
+
+        store->beginDraft();
+        ASSERT_TRUE(store->createComputed(request()).succeeded());
+        ASSERT_TRUE(store->commitDraft().succeeded());
+        EXPECT_FALSE(store->hasPendingChanges());
+    }
+
+    TEST_F(SeriesConfigStoreTest, CommitOrDiscardDraftWithNoActiveDraftIsANoOp) {
+        makeStore();
+        const int writesBefore = settings->writes;
+        int notifications = 0;
+        store->onChanged([&] { ++notifications; });
+
+        EXPECT_TRUE(store->commitDraft().succeeded());
+        store->discardDraft();
+
+        EXPECT_EQ(settings->writes, writesBefore);
+        EXPECT_EQ(notifications, 0);
+    }
+
     TEST_F(SeriesConfigStoreTest, UpdatesDeletesAndReordersWithinTypedPermissions) {
         makeStore();
         const auto id = *store->createComputed(request()).createdId;

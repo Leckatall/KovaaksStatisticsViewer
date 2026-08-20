@@ -20,7 +20,7 @@ namespace ksv::presentation {
                            }()) {
         const QPointer<SettingsViewModel> self(this);
         m_profile_service->onProfileChanged([self] { if (self) emit self->profileLoadedChanged(); });
-        m_series_management->onChanged([self] { if (self) emit self->seriesConfigurationChanged(); });
+        m_series_management->onChanged([self] { if (self) { emit self->seriesConfigurationChanged(); emit self->pendingChangesChanged(); } });
     }
 
     void SettingsViewModel::setKovaaksDir(const QUrl &dir) {
@@ -108,6 +108,16 @@ namespace ksv::presentation {
         const auto value = id.toULongLong(&ok);
         if (!ok || displayPosition < 0) return invalidMutationMap();
         return mutationMap(m_series_management->reorder({value}, static_cast<uint32_t>(displayPosition)));
+    }
+
+    QVariantMap SettingsViewModel::commitSeriesDraft() {
+        const auto result = mutationMap(m_series_management->commitDraft());
+        emit pendingChangesChanged();
+        return result;
+    }
+
+    void SettingsViewModel::discardSeriesDraft() {
+        m_series_management->discardDraft();
     }
 
 }

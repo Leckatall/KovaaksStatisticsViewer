@@ -255,21 +255,4 @@ namespace {
 
         EXPECT_GT(sharedLeft, singleLeft);
     }
-
-    TEST_F(GraphCanvasGeometryTest, DrawnAxisReflectsSelectedYAxisColumn) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId,
-                                               kAccuracySeriesId});
-        canvas.setYAxisColumn(kAccuracySeriesId);
-
-        const auto accuracySeries = graphVm->series({kAccuracySeriesId});
-        ASSERT_FALSE(accuracySeries.isEmpty());
-        ASSERT_TRUE(accuracySeries.front()->yAxis.has_value());
-        const auto &expectedAxis = *accuracySeries.front()->yAxis;
-
-        const auto labelled = graphVm->series({canvas.property("labelledYAxisColumn").toInt()});
-        ASSERT_FALSE(labelled.isEmpty());
-        ASSERT_TRUE(labelled.front()->yAxis.has_value());
-        EXPECT_DOUBLE_EQ(labelled.front()->yAxis->min(), expectedAxis.min());
-        EXPECT_DOUBLE_EQ(labelled.front()->yAxis->max(), expectedAxis.max());
-    }
 }

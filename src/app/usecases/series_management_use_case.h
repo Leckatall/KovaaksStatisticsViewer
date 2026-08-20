@@ -19,6 +19,11 @@ namespace ksv::application {
         MutationResult reorder(const SeriesId id, const uint32_t position) override { return m_store->reorder(id, position); }
         void onChanged(std::function<void()> callback) override { m_store->onChanged(std::move(callback)); }
 
+        void beginDraft() override { m_store->beginDraft(); }
+        MutationResult commitDraft() override { return m_store->commitDraft(); }
+        void discardDraft() override { m_store->discardDraft(); }
+        [[nodiscard]] bool hasPendingChanges() const override { return m_store->hasPendingChanges(); }
+
     private:
         std::shared_ptr<ISeriesConfigStore> m_store;
     };

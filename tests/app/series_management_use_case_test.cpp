@@ -18,6 +18,11 @@ namespace {
         }
         void onChanged(std::function<void()> callback) override { callbacks.push_back(std::move(callback)); }
 
+        void beginDraft() override { ++beginDraftCalls; }
+        MutationResult commitDraft() override { ++commitDraftCalls; return {}; }
+        void discardDraft() override { ++discardDraftCalls; }
+        [[nodiscard]] bool hasPendingChanges() const override { return pendingChanges; }
+
         std::vector<SeriesConfig> configs;
         int createComputedCalls = 0;
         std::optional<UpdateSeriesRequest> lastUpdateSeriesRequest;
@@ -25,6 +30,10 @@ namespace {
         std::optional<SeriesId> lastReorderedId;
         uint32_t lastReorderPosition = 0;
         std::vector<std::function<void()>> callbacks;
+        int beginDraftCalls = 0;
+        int commitDraftCalls = 0;
+        int discardDraftCalls = 0;
+        bool pendingChanges = false;
     };
 
     TEST(SeriesManagementUseCaseTest, GetAllForwardsEveryRowRegardlessOfEnabled) {
@@ -70,5 +79,22 @@ namespace {
         ASSERT_EQ(store->callbacks.size(), 1U);
         store->callbacks.front()();
         EXPECT_EQ(notifications, 1);
+    }
+
+    TEST(SeriesManagementUseCaseTest, DraftLifecycleAndPendingChangesForwardDirectlyToTheStore) {
+        const auto store = std::make_shared<FakeSeriesConfigStore>();
+        SeriesManagementUseCase useCase(store);
+
+        useCase.beginDraft();
+        EXPECT_EQ(store->beginDraftCalls, 1);
+
+        store->pendingChanges = true;
+        EXPECT_TRUE(useCase.hasPendingChanges());
+
+        useCase.commitDraft();
+        EXPECT_EQ(store->commitDraftCalls, 1);
+
+        useCase.discardDraft();
+        EXPECT_EQ(store->discardDraftCalls, 1);
     }
 }

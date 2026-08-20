@@ -49,5 +49,10 @@ namespace ksv::application {
         virtual MutationResult removeComputed(SeriesId) = 0;
         virtual MutationResult reorder(SeriesId, uint32_t position) = 0;
         virtual void onChanged(std::function<void()> callback) = 0;
+
+        virtual void beginDraft() = 0;
+        virtual MutationResult commitDraft() = 0;
+        virtual void discardDraft() = 0;
+        [[nodiscard]] virtual bool hasPendingChanges() const = 0;
     };
 }

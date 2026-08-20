@@ -17,6 +17,11 @@ namespace ksv::qt_data {
         application::MutationResult reorder(application::SeriesId, uint32_t position) override;
         void onChanged(std::function<void()> callback) override;
 
+        void beginDraft() override;
+        application::MutationResult commitDraft() override;
+        void discardDraft() override;
+        [[nodiscard]] bool hasPendingChanges() const override;
+
     private:
         void ensureLoadedLocked() const;
         void seedLocked(const std::string *invalidRaw = nullptr) const;
@@ -34,5 +39,7 @@ namespace ksv::qt_data {
         mutable std::optional<application::SeriesId> m_next;
         mutable bool m_requiresReload = true;
         std::vector<std::function<void()>> m_callbacks;
+        mutable std::optional<std::pair<std::vector<application::SeriesConfig>, application::SeriesId>> m_draftBaseline;
+        mutable bool m_draftActive = false;
     };
 }

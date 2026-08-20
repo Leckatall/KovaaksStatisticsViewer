@@ -34,6 +34,7 @@ qt_add_qml_module(ksv_ui
             qml/ScenarioRunItem.qml
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
+            qml/SeriesConfigDraftPanel.qml
             qml/AboutDialog.qml
             qml/DirectoryPickerRow.qml
             qml/FirstRunBanner.qml
@@ -69,6 +70,7 @@ qt_add_qml_module(ksv_ui
             presentation/run_list_model.cpp
             presentation/scenario_browser_vm.h
             presentation/scenario_browser_vm.cpp
+        DEPENDENCIES QtCore
 )
 
 #set(QML_IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/KovaaksStatsViewer)

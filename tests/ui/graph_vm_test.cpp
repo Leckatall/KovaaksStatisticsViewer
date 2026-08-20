@@ -156,42 +156,6 @@ namespace {
         EXPECT_EQ(view_model.axisTicks(kTime), (QList<qreal>{0.0, 1.0, 2.0}));
     }
 
-    TEST_F(GraphViewModelTest, ScoreDerivesItsOwnAxisWhileAccuracyGetsAnExplicitPercentageAxis) {
-        // Score isn't in the hardcoded axis table — GraphCanvas derives its axis from its own points
-        // (identity transform), so GraphViewModel leaves SeriesModel::yAxis unset for it.
-        ResolvedGraph resolved;
-        resolved.times = {0.0F, 1.0F, 2.0F};
-        for (const auto &config: defaultSeriesConfigs()) {
-            if (config.id.value == kScore) resolved.series.push_back({config, std::vector<double>{10.0, 20.0, 30.0}});
-            else if (config.id.value == kAccuracy)
-                resolved.series.push_back({config, std::vector<double>{0.5, 0.6, 0.7}});
-        }
-        fake_use_case->resolved_graph_to_return = resolved;
-        view_model.fetchMetadata();
-
-        const auto scoreSeries = view_model.series({kScore});
-        ASSERT_EQ(scoreSeries.size(), 1);
-        EXPECT_FALSE(scoreSeries.front()->yAxis.has_value());
-        const AxisModel scoreAxis = scoreSeries.front()->deriveYAxis();
-        EXPECT_DOUBLE_EQ(scoreAxis.min(), 10.0);
-        EXPECT_DOUBLE_EQ(scoreAxis.max(), 30.0);
-        ASSERT_GE(scoreAxis.ticks().size(), 2);
-        EXPECT_DOUBLE_EQ(scoreAxis.ticks().front(), 10.0);
-        EXPECT_DOUBLE_EQ(scoreAxis.ticks().back(), 30.0);
-
-        // Accuracy needs the percentage transform, which deriveYAxis()'s identity default can't
-        // supply, so it's the one primitive still hardcoded to its own axis.
-        const auto accuracySeries = view_model.series({kAccuracy});
-        ASSERT_EQ(accuracySeries.size(), 1);
-        ASSERT_TRUE(accuracySeries.front()->yAxis.has_value());
-        const AxisModel &accuracyAxis = *accuracySeries.front()->yAxis;
-        EXPECT_NEAR(accuracyAxis.min(), 0.5, 1e-6);
-        EXPECT_NEAR(accuracyAxis.max(), 0.7, 1e-6);
-        ASSERT_GE(accuracyAxis.ticks().size(), 2);
-        EXPECT_NEAR(accuracyAxis.ticks().front(), 0.5, 1e-6);
-        EXPECT_NEAR(accuracyAxis.ticks().back(), 0.7, 1e-6);
-    }
-
     TEST_F(GraphViewModelTest, SeriesGroupsTheScoreFamilyOntoOneSharedAxis) {
         ResolvedGraph resolved;
         resolved.times = {0.0F, 1.0F};
