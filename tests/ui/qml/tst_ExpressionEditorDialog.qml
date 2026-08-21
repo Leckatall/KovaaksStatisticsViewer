@@ -1,9 +1,23 @@
 import QtQuick
+import QtQuick.Controls
 import QtTest
 import "../../../src/ui/qml"
 
 TestCase {
     id: testCase
+
+    function findByObjectName(root, name) {
+        if (!root)
+            return null;
+        if (root.objectName === name)
+            return root;
+        for (const child of root.children || []) {
+            const found = findByObjectName(child, name);
+            if (found)
+                return found;
+        }
+        return null;
+    }
 
     function fakeEditor(expression) {
         return {
@@ -54,6 +68,53 @@ TestCase {
             }
         };
     }
+    function fakeDeepEditor() {
+        const root = {
+            id: "node-1", kind: "rollingMean", window: 5,
+            input: { id: "node-2", kind: "rollingMean", window: 3,
+                input: { id: "node-3", kind: "rollingMean", window: 4,
+                    input: { id: "node-4", kind: "rollingMean", window: 2,
+                        input: { id: "node-5", kind: "rollingMean", window: 6,
+                            input: { id: "node-6", kind: "rollingMean", window: 1,
+                                input: { id: "node-7", kind: "rollingMean", window: 7,
+                                    input: { id: "node-8", kind: "rollingMean", window: 8,
+                                        input: { id: "node-9", kind: "primitive", metric: "score" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        function pathTo(id, node, path) {
+            if (!node || !node.kind)
+                return null;
+            const extended = path.concat([node]);
+            if (node.id === id)
+                return extended;
+            return pathTo(id, node.input, extended);
+        }
+        return {
+            root: root,
+            selectedNodeId: "node-9",
+            treeRevision: 0,
+            nodeKinds: ["primitive", "rollingMean"],
+            primitiveMetrics: ["score"],
+            isBinary: function () { return false; },
+            childSlotsFor: function (kind) { return kind === "rollingMean" ? ["input"] : []; },
+            describe: function (node) { return node.kind === "primitive" ? node.metric : node.kind; },
+            ancestorChain: function (id) { return pathTo(id, root, []) || []; },
+            select: function (id) { this.selectedNodeId = id; },
+            replaceChild: function () {},
+            deleteNode: function () {},
+            wrapSelected: function () {},
+            changeBinaryOperator: function () {},
+            updateField: function () {},
+            changeSelectionKind: function () {},
+            toExpressionMap: function () { return root; }
+        };
+    }
     function makeDialog(vm) {
         return createTemporaryObject(dialogComponent, testCase, {
             settingsVm: vm,
@@ -95,6 +156,40 @@ TestCase {
         const dialog = makeDialog(fakeVm());
         verify(dialog !== null);
         verify(findChild(dialog, "expressionEditorTreeEditor") === null);
+    }
+    function test_dialogClampsAndScrollsARealDeepTreeOpenedThroughTheRealDialog() {
+        const vm = fakeVm();
+        vm.beginExpressionEdit = function (id) {
+            this.beginExpressionEditCalls.push(id);
+            return fakeDeepEditor();
+        };
+        const dialog = makeDialog(vm);
+        dialog.beginEditing();
+        dialog.open();
+        tryCompare(dialog, "visible", true);
+        wait(20);
+
+        compare(dialog.height, Math.max(0, Overlay.overlay.height - dialog.overlayMargin));
+        const treeEditor = findChild(dialog, "expressionEditorTreeEditor");
+        verify(treeEditor !== null);
+        const scrollView = findByObjectName(treeEditor, "expressionTreeScrollView");
+        verify(scrollView !== null);
+        verify(findByObjectName(treeEditor, "pathCard_node-1") !== null);
+        verify(scrollView.contentHeight > scrollView.height);
+        const contentYBeforeScroll = scrollView.contentItem.contentY;
+        scrollView.contentItem.contentY = scrollView.contentHeight - scrollView.height;
+        wait(20);
+        verify(scrollView.contentItem.contentY > contentYBeforeScroll);
+    }
+    function test_dialogWidthAndHeightAreClampedToTheOverlaySize() {
+        const vm = fakeVm();
+        const dialog = makeDialog(vm);
+        dialog.beginEditing();
+        dialog.open();
+        tryCompare(dialog, "visible", true);
+        wait(20);
+        verify(dialog.width <= testCase.width);
+        verify(dialog.height <= testCase.height);
     }
     function test_openingDialogCallsBeginExpressionEditWithTheGivenSeriesId() {
         const vm = fakeVm();

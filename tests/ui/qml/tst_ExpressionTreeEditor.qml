@@ -311,6 +311,23 @@ TestCase {
         verify(waitForRendering(editor));
         verify(findByObjectName(editor, "kindChooser__root") !== null);
     }
+    function test_implicitSizeReflectsContentEvenWithoutAnExplicitSizeBinding() {
+        const model = makeFakeModel({
+            root: {
+                id: "node-1",
+                kind: "primitive",
+                metric: "score"
+            },
+            selectedNodeId: "node-1"
+        });
+        const editor = createTemporaryObject(implicitSizeEditorComponent, testCase, {
+            model: model
+        });
+        verify(waitForRendering(editor));
+        wait(20);
+        verify(editor.implicitWidth > 0);
+        verify(editor.implicitHeight > 0);
+    }
     function test_modelWithPopulatedRootAndAnExistingSelectionDoesNotCallSelectAgain() {
         const model = makeFakeModel({
             root: {
@@ -325,6 +342,60 @@ TestCase {
         });
         wait(20);
         compare(model.selectCalls.length, 0);
+    }
+    function test_ancestorCardsReportNaturalHeightInsteadOfStretchingToFillAvailableSpace() {
+        const model = makeFakeModel({
+            root: {
+                id: "node-1",
+                kind: "rollingMean",
+                window: 10,
+                input: {
+                    id: "node-2",
+                    kind: "primitive",
+                    metric: "score"
+                }
+            },
+            selectedNodeId: "node-2"
+        });
+        const editor = createTemporaryObject(editorComponent, testCase, {
+            model: model
+        });
+        verify(waitForRendering(editor));
+        wait(20);
+        const outerCard = findByObjectName(editor, "pathCard_node-1");
+        verify(outerCard !== null);
+        verify(outerCard.height < editor.height * 0.3);
+    }
+    function test_deepChainScrollsInsteadOfClippingOrExpandingPastAnExplicitHeight() {
+        const model = makeFakeModel({
+            root: {
+                id: "node-1", kind: "rollingMean", window: 1,
+                input: { id: "node-2", kind: "rollingMean", window: 2,
+                    input: { id: "node-3", kind: "rollingMean", window: 3,
+                        input: { id: "node-4", kind: "rollingMean", window: 4,
+                            input: { id: "node-5", kind: "primitive", metric: "score" }
+                        }
+                    }
+                }
+            },
+            selectedNodeId: "node-5"
+        });
+        const editor = createTemporaryObject(shortEditorComponent, testCase, {
+            model: model
+        });
+        verify(waitForRendering(editor));
+        wait(20);
+        compare(editor.height, 120);
+        const scrollView = findByObjectName(editor, "expressionTreeScrollView");
+        verify(scrollView !== null);
+        const rootCard = findByObjectName(editor, "pathCard_node-1");
+        verify(rootCard !== null);
+        verify(rootCard.height > editor.height);
+        verify(scrollView.contentHeight > scrollView.height);
+        const contentYBeforeScroll = scrollView.contentItem.contentY;
+        scrollView.contentItem.contentY = scrollView.contentHeight - scrollView.height;
+        wait(20);
+        verify(scrollView.contentItem.contentY > contentYBeforeScroll);
     }
     function test_modelWithPopulatedRootAndNoSelectionAutoSelectsRootOnComponentCompleted() {
         const model = makeFakeModel({
@@ -595,6 +666,20 @@ TestCase {
         ExpressionTreeEditor {
             height: 400
             width: 500
+        }
+    }
+    Component {
+        id: implicitSizeEditorComponent
+
+        ExpressionTreeEditor {
+        }
+    }
+    Component {
+        id: shortEditorComponent
+
+        ExpressionTreeEditor {
+            height: 120
+            width: 400
         }
     }
     Component {

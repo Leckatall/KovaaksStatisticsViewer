@@ -9,6 +9,9 @@ Item {
     property int selectionRevision: 0
     property var observedRoot: model ? model.root : {}
 
+    implicitWidth: mainColumn.implicitWidth
+    implicitHeight: mainColumn.implicitHeight
+
     function hasNode(node) { return !!node && node.kind !== undefined && node.kind !== "" }
     function kindLabel(kind) {
         return ({ primitive: qsTr("Metric"), constant: qsTr("Constant"), add: qsTr("Add"), subtract: qsTr("Subtract"),
@@ -154,11 +157,15 @@ Item {
             property int index: 0
             readonly property var node: chain[index] || {}
             readonly property bool isFocused: index >= chain.length - 1
+            objectName: "pathCard_" + shell.node.id
+            implicitWidth: cardColumn.implicitWidth + cardColumn.anchors.margins * 2
+            implicitHeight: cardColumn.implicitHeight + cardColumn.anchors.margins * 2
             color: rootItem.accentColor(node.kind, 0.12)
             border.color: rootItem.accentColor(node.kind, 0.45)
             border.width: 1
             radius: 6
             ColumnLayout {
+                id: cardColumn
                 anchors.fill: parent
                 anchors.margins: 7
                 spacing: 6
@@ -178,7 +185,6 @@ Item {
                 ColumnLayout {
                     visible: shell.isFocused
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
                     Item {
                         id: fieldLoader
                         Layout.fillWidth: true
@@ -236,7 +242,6 @@ Item {
                     active: !shell.isFocused
                     visible: !shell.isFocused
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
                     sourceComponent: pathCardComponent
                     property var chain: shell.chain
                     property int childIndex: shell.index + 1
@@ -249,19 +254,31 @@ Item {
     }
 
     ColumnLayout {
+        id: mainColumn
         anchors.fill: parent
         spacing: 8
         KindChooser { visible: !rootItem.hasNode(rootItem.model.root); Layout.fillWidth: true }
-        Loader {
-            id: rootLoader
+        ScrollView {
+            id: expressionTreeScrollView
+            objectName: "expressionTreeScrollView"
             visible: rootItem.hasNode(rootItem.model.root)
-            active: visible
             Layout.fillWidth: true
             Layout.fillHeight: true
-            sourceComponent: pathCardComponent
-            property var chain: { rootItem.model.treeRevision; rootItem.selectionRevision; return rootItem.model.ancestorChain(rootItem.model.selectedNodeId) }
-            onChainChanged: if (item) item.chain = chain
-            onLoaded: { item.treeModel = rootItem.model; item.chain = chain; item.index = 0 }
+            clip: true
+            contentWidth: availableWidth
+            // Keep the unclamped content request visible to the outer dialog.
+            implicitWidth: rootLoader.implicitWidth
+            implicitHeight: rootLoader.implicitHeight
+
+            Loader {
+                id: rootLoader
+                active: expressionTreeScrollView.visible
+                width: expressionTreeScrollView.availableWidth
+                sourceComponent: pathCardComponent
+                property var chain: { rootItem.model.treeRevision; rootItem.selectionRevision; return rootItem.model.ancestorChain(rootItem.model.selectedNodeId) }
+                onChainChanged: if (item) item.chain = chain
+                onLoaded: { item.treeModel = rootItem.model; item.chain = chain; item.index = 0 }
+            }
         }
         RowLayout {
             visible: !!rootItem.model.selectedNodeId
