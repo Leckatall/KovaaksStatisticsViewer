@@ -4,6 +4,7 @@
 
 #include "settings_vm.h"
 #include "series_expression_qml.h"
+#include "series_expression_editor_model.h"
 
 namespace ksv::presentation {
     SettingsViewModel::SettingsViewModel(
@@ -108,6 +109,20 @@ namespace ksv::presentation {
         const auto value = id.toULongLong(&ok);
         if (!ok || displayPosition < 0) return invalidMutationMap();
         return mutationMap(m_series_management->reorder({value}, static_cast<uint32_t>(displayPosition)));
+    }
+
+    SeriesExpressionEditorModel *SettingsViewModel::beginExpressionEdit(const QString &id) {
+        auto *editor = new SeriesExpressionEditorModel();
+        bool ok = false;
+        const auto value = id.toULongLong(&ok);
+        if (!ok) return editor;
+        for (const auto &config: m_series_management->getAll()) {
+            if (config.id.value == value) {
+                editor->loadFrom(config.expression);
+                break;
+            }
+        }
+        return editor;
     }
 
     QVariantMap SettingsViewModel::commitSeriesDraft() {

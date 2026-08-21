@@ -11,6 +11,7 @@ add_executable(ui_tests
     completion_history_vm_test.cpp
     session_vm_test.cpp
     settings_vm_test.cpp
+    series_expression_editor_model_test.cpp
     monotone_spline_test.cpp
     scenario_browser_vm_test.cpp
 )

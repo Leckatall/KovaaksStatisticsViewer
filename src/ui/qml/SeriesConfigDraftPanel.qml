@@ -1,56 +1,164 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 Pane {
     id: root
 
     required property var settingsVm
+    property var sourceRows: settingsVm.allSeriesConfigs
+    property var displayRows: []
+    property var colorTarget: null
+    property string draggedSeriesId: ""
+    property int dragOriginIndex: -1
+    property int dragPreviewIndex: -1
+    property real dragTranslationY: 0
+    property real dragRowHeight: 0
+    readonly property alias colorDialog: colorDialog
+    readonly property alias expressionDialog: expressionDialog
 
     objectName: "seriesConfigDraftPanel"
     spacing: 8
 
-    Component.onCompleted: settingsVm.beginSeriesDraft()
+    function refreshRows() {
+        displayRows = sourceRows.slice().sort(function(a, b) { return a.displayPosition - b.displayPosition })
+    }
+    function updateSeries(row, name, color) {
+        settingsVm.updateComputedSeries(row.id, name, color, row.width, row.enabled, row.expression)
+    }
+    function previewMove(position) {
+        dragPreviewIndex = Math.max(0, Math.min(displayRows.length - 1, position))
+    }
+    function previewOffset(id) {
+        if (!draggedSeriesId || dragOriginIndex < 0 || dragPreviewIndex < 0)
+            return 0
+        if (id === draggedSeriesId)
+            return dragTranslationY
+
+        const index = displayRows.findIndex(function(row) { return row.id === id })
+        if (dragOriginIndex < dragPreviewIndex && index > dragOriginIndex && index <= dragPreviewIndex)
+            return -dragRowHeight
+        if (dragPreviewIndex < dragOriginIndex && index >= dragPreviewIndex && index < dragOriginIndex)
+            return dragRowHeight
+        return 0
+    }
+
+    Component.onCompleted: {
+        refreshRows()
+        settingsVm.beginSeriesDraft()
+    }
+    onSourceRowsChanged: refreshRows()
+
+    ColorDialog {
+        id: colorDialog
+        onAccepted: if (root.colorTarget) root.updateSeries(root.colorTarget, root.colorTarget.name, selectedColor)
+    }
+    ExpressionEditorDialog { id: expressionDialog; settingsVm: root.settingsVm }
 
     ColumnLayout {
+        anchors.fill: parent
+        spacing: 8
+
         Repeater {
-            model: root.settingsVm.allSeriesConfigs
+            model: root.displayRows
 
             RowLayout {
                 id: lineRow
-
                 required property var modelData
-
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: 8
+                z: root.draggedSeriesId === modelData.id ? 1 : 0
+                transform: Translate { y: root.previewOffset(lineRow.modelData.id) }
 
                 Rectangle {
-                    Layout.alignment: Qt.AlignVCenter
+                    id: dragHandle
+                    objectName: "seriesDragHandle_" + lineRow.modelData.id
+                    Layout.preferredWidth: 12
+                    Layout.preferredHeight: 24
+                    color: root.palette.mid
+                    radius: 2
+                    DragHandler {
+                        id: drag
+                        target: null
+                        dragThreshold: 0
+                        onActiveChanged: {
+                            if (active) {
+                                root.draggedSeriesId = lineRow.modelData.id
+                                root.dragOriginIndex = root.displayRows.findIndex(function(row) { return row.id === lineRow.modelData.id })
+                                root.dragPreviewIndex = root.dragOriginIndex
+                                root.dragRowHeight = Math.max(lineRow.height, 1)
+                            } else if (root.draggedSeriesId === lineRow.modelData.id) {
+                                root.settingsVm.reorderSeries(lineRow.modelData.id, root.dragPreviewIndex)
+                                root.draggedSeriesId = ""
+                                root.dragOriginIndex = -1
+                                root.dragPreviewIndex = -1
+                                root.dragTranslationY = 0
+                                root.dragRowHeight = 0
+                            }
+                        }
+                        onTranslationChanged: {
+                            root.dragTranslationY = translation.y
+                            const target = root.dragOriginIndex + Math.round(translation.y / root.dragRowHeight)
+                            root.previewMove(target)
+                        }
+                    }
+                }
+                Rectangle {
+                    objectName: "seriesColorSwatch_" + lineRow.modelData.id
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 16
                     border.color: root.palette.mid
                     border.width: 1
                     color: lineRow.modelData.color
-                    height: 16
                     radius: 4
-                    width: 16
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            root.colorTarget = lineRow.modelData
+                            colorDialog.selectedColor = lineRow.modelData.color
+                            colorDialog.open()
+                        }
+                    }
                 }
-                Label {
-                    Layout.alignment: Qt.AlignVCenter
-                    text: lineRow.modelData.name
-                }
-                Item {
+                TextField {
+                    id: nameField
+                    objectName: "seriesNameField_" + lineRow.modelData.id
                     Layout.fillWidth: true
+                    text: lineRow.modelData.name
+                    onEditingFinished: root.updateSeries(lineRow.modelData, text, lineRow.modelData.color)
+                }
+                Button {
+                    objectName: "editExpressionButton_" + lineRow.modelData.id
+                    text: qsTr("Edit expression")
+                    onClicked: {
+                        expressionDialog.seriesId = lineRow.modelData.id
+                        expressionDialog.seriesName = lineRow.modelData.name
+                        expressionDialog.seriesColor = lineRow.modelData.color
+                        expressionDialog.seriesWidth = lineRow.modelData.width
+                        expressionDialog.seriesEnabled = lineRow.modelData.enabled
+                        expressionDialog.open()
+                    }
+                }
+                Button {
+                    objectName: "deleteSeriesButton_" + lineRow.modelData.id
+                    text: qsTr("Delete")
+                    onClicked: root.settingsVm.removeComputedSeries(lineRow.modelData.id)
                 }
                 Switch {
                     checked: lineRow.modelData.enabled
                     objectName: "seriesEnabledSwitch_" + lineRow.modelData.id
-
                     onToggled: root.settingsVm.setSeriesEnabled(lineRow.modelData.id, checked)
                 }
             }
         }
+        Button {
+            objectName: "addSeriesButton"
+            text: qsTr("Add series")
+            onClicked: root.settingsVm.createComputedSeries(qsTr("New Series"), "#4CAF50", 2.0, true, { kind: "primitive", primitiveMetric: "score" })
+        }
         Label {
             id: seriesDraftErrorLabel
-
             Layout.fillWidth: true
             color: "#E53935"
             objectName: "seriesDraftErrorLabel"
@@ -59,26 +167,21 @@ Pane {
         }
         RowLayout {
             Layout.fillWidth: true
-            spacing: 8
-
             Button {
                 enabled: root.settingsVm.pendingChanges
                 objectName: "saveGraphLinesButton"
-                text: "Save Graph Lines"
-
+                text: qsTr("Save Graph Lines")
                 onClicked: {
-                    const result = root.settingsVm.commitSeriesDraft();
-                    seriesDraftErrorLabel.text = (result && result.succeeded === false) ? "Couldn't save graph line changes. Your edits are still here — try again." : "";
+                    const result = root.settingsVm.commitSeriesDraft()
+                    seriesDraftErrorLabel.text = result && result.succeeded === false ? qsTr("Couldn't save graph line changes. Your edits are still here — try again.") : ""
                 }
             }
             Button {
                 enabled: root.settingsVm.pendingChanges
                 objectName: "discardGraphLineChangesButton"
-                text: "Discard Graph Line Changes"
-
+                text: qsTr("Discard Graph Line Changes")
                 onClicked: root.settingsVm.discardSeriesDraft()
             }
         }
     }
 }
-

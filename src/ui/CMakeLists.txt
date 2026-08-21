@@ -35,6 +35,8 @@ qt_add_qml_module(ksv_ui
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
             qml/SeriesConfigDraftPanel.qml
+            qml/ExpressionTreeEditor.qml
+            qml/ExpressionEditorDialog.qml
             qml/AboutDialog.qml
             qml/DirectoryPickerRow.qml
             qml/FirstRunBanner.qml
@@ -49,6 +51,8 @@ qt_add_qml_module(ksv_ui
             presentation/graph_vm.cpp
             presentation/series_expression_qml.h
             presentation/series_expression_qml.cpp
+            presentation/series_expression_editor_model.h
+            presentation/series_expression_editor_model.cpp
             presentation/playtime_graph_vm.h
             presentation/playtime_graph_vm.cpp
             presentation/completion_history_vm.h

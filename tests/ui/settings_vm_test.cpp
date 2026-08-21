@@ -9,6 +9,7 @@
 #include <type_traits>
 
 #include "settings_vm.h"
+#include "series_expression_editor_model.h"
 
 using namespace ksv::presentation;
 using namespace ksv::application;
@@ -319,5 +320,33 @@ namespace {
 
         EXPECT_EQ(configSpy.count(), 1);
         EXPECT_EQ(pendingSpy.count(), 1);
+    }
+
+    TEST_F(SettingsViewModelTest, BeginExpressionEditReturnsEditorSeededFromMatchingSeriesExpression) {
+        seriesManagement->configs = {
+            SeriesConfig{{3}, {"Hits", {{0, 0, 0, 255}, 2.0}, true, 0}, primitive(PrimitiveMetric::Hits)},
+        };
+        const auto view_model = make_view_model();
+        std::unique_ptr<SeriesExpressionEditorModel> editor(view_model->beginExpressionEdit("3"));
+
+        ASSERT_NE(editor, nullptr);
+        EXPECT_EQ(editor->root().value("kind"), "primitive");
+        EXPECT_EQ(editor->root().value("metric"), "hits");
+    }
+
+    TEST_F(SettingsViewModelTest, BeginExpressionEditReturnsEditorWithEmptyRootForUnknownId) {
+        const auto view_model = make_view_model();
+        std::unique_ptr<SeriesExpressionEditorModel> editor(view_model->beginExpressionEdit("999"));
+
+        ASSERT_NE(editor, nullptr);
+        EXPECT_TRUE(editor->root().isEmpty());
+    }
+
+    TEST_F(SettingsViewModelTest, BeginExpressionEditReturnsANewInstanceOnEveryCall) {
+        const auto view_model = make_view_model();
+        std::unique_ptr<SeriesExpressionEditorModel> first(view_model->beginExpressionEdit("1"));
+        std::unique_ptr<SeriesExpressionEditorModel> second(view_model->beginExpressionEdit("1"));
+
+        EXPECT_NE(first.get(), second.get());
     }
 }

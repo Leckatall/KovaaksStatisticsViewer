@@ -13,6 +13,8 @@
 #include "app/contracts/i_series_management_use_case.h"
 
 namespace ksv::presentation {
+    class SeriesExpressionEditorModel;
+
     class SettingsViewModel : public QObject {
         Q_OBJECT
         Q_PROPERTY(QUrl kovaaksDir READ getKovaaksDir WRITE setKovaaksDir NOTIFY kovaaksDirChanged)
@@ -48,6 +50,7 @@ namespace ksv::presentation {
                                                       double width, bool enabled, const QVariantMap &expression);
         Q_INVOKABLE QVariantMap removeComputedSeries(const QString &id);
         Q_INVOKABLE QVariantMap reorderSeries(const QString &id, int displayPosition);
+        Q_INVOKABLE SeriesExpressionEditorModel *beginExpressionEdit(const QString &id);
 
         [[nodiscard]] bool hasPendingChanges() const { return m_series_management->hasPendingChanges(); }
         Q_INVOKABLE void beginSeriesDraft() { m_series_management->beginDraft(); }

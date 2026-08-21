@@ -9,6 +9,7 @@
 #include <presentation/playtime_graph_vm.h>
 #include <presentation/scenario_browser_vm.h>
 #include <presentation/series_model.h>
+#include <presentation/series_expression_editor_model.h>
 
 namespace ksv {
     // Referencing these types keeps the linker from dropping the static QML
@@ -24,6 +25,8 @@ namespace ksv {
             "KovaaksStatsViewer", 1, 0, "ScenarioBrowserViewModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::SeriesModel>(
             "KovaaksStatsViewer", 1, 0, "SeriesModel", "Created in C++");
+        qmlRegisterUncreatableType<presentation::SeriesExpressionEditorModel>(
+            "KovaaksStatsViewer", 1, 0, "SeriesExpressionEditorModel", "Created in C++");
         qmlRegisterType<ui::GraphCanvas>(
             "KovaaksStatsViewer", 1, 0, "GraphCanvas");
     }
