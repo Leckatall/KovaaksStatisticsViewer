@@ -131,7 +131,8 @@ Pane {
                                         seriesListScrollView.autoScrollAccumulatedDelta = 0
                                         seriesListScrollView.autoScrollDirection = 0
                                     } else if (root.draggedSeriesId === lineRow.modelData.id) {
-                                        root.settingsVm.reorderSeries(lineRow.modelData.id, root.dragPreviewIndex)
+                                        const seriesId = lineRow.modelData.id
+                                        const targetPosition = root.dragPreviewIndex
                                         root.draggedSeriesId = ""
                                         root.dragOriginIndex = -1
                                         root.dragPreviewIndex = -1
@@ -141,6 +142,10 @@ Pane {
                                         root.dragRowHeight = 0
                                         seriesListScrollView.autoScrollAccumulatedDelta = 0
                                         seriesListScrollView.autoScrollDirection = 0
+                                        // reorderSeries() can synchronously reset the Repeater (allSeriesConfigs ->
+                                        // sourceRows -> displayRows), destroying this delegate mid-call; nothing above
+                                        // this line touches root or lineRow again, and nothing may be added after it.
+                                        root.settingsVm.reorderSeries(seriesId, targetPosition)
                                     }
                                 }
                                 onTranslationChanged: {
