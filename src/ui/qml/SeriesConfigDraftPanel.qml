@@ -51,6 +51,7 @@ Pane {
 
     ColorDialog {
         id: colorDialog
+        options: ColorDialog.ShowAlphaChannel
         onAccepted: if (root.colorTarget) root.updateSeries(root.colorTarget, root.colorTarget.name, selectedColor)
     }
     ExpressionEditorDialog { id: expressionDialog; settingsVm: root.settingsVm }
