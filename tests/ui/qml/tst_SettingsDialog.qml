@@ -34,7 +34,8 @@ TestCase {
                 this.lastSetSeriesEnabledValue = enabled
             },
             pendingChanges: false,
-            beginSeriesDraft: function () {},
+            beginDraftCalls: 0,
+            beginSeriesDraft: function () { this.beginDraftCalls++ },
             commitDraftCalls: 0,
             commitSeriesDraft: function () { this.commitDraftCalls++; this.pendingChanges = false; return {succeeded: true} },
             discardSeriesDraftCalls: 0,
@@ -337,6 +338,59 @@ TestCase {
         selectCategory(dialog, "Graph Lines")
 
         compare(dialog.settingsVm.discardSeriesDraftCalls, 0)
+    }
+
+    function test_openingDialogCallsBeginSeriesDraft() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        const panel = findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
+        verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
+        compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should be called when the dialog is opened")
+    }
+
+    function test_reopeningDialogAfterCloseCallsBeginSeriesDraftAgain() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: false}),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        const panel = findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
+        verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
+        compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should have fired on the first open()")
+
+        dialog.close()
+        tryCompare(dialog, "visible", false)
+
+        dialog.open()
+        verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never became visible after reopening")
+
+        compare(dialog.settingsVm.beginDraftCalls, 2, "beginSeriesDraft must be called again every time the dialog is opened, not just once at construction")
+    }
+
+    function test_reopeningAfterSavingPendingChangesCallsBeginSeriesDraftAgain() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm(),
+        })
+
+        const panel = findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
+        verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
+        compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should have fired on the first open()")
+
+        dialog.close()
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        dialog.discardChangesPrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
+
+        tryCompare(dialog.settingsVm, "commitDraftCalls", 1)
+        tryCompare(dialog, "visible", false)
+
+        dialog.open()
+        verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never became visible after reopening")
+
+        compare(dialog.settingsVm.beginDraftCalls, 2, "beginSeriesDraft must be called again on reopen after a save, matching the reported bug: Save-and-reopen must start a fresh draft")
     }
 
 }

@@ -34,6 +34,7 @@ ApplicationWindow {
     readonly property alias discardChangesPrompt: discardChangesPrompt
 
     function open() {
+        root.settingsVm.beginSeriesDraft()
         visible = true
         raise()
         requestActivate()

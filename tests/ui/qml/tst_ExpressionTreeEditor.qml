@@ -497,6 +497,7 @@ TestCase {
     }
     function test_selectingAnAncestorCardHeaderCallsSelectWithThatNodeId() {
         // TODO (2026/08/21): This test fails non-deterministically.
+        //  Update: I have made changes to try and fix this, will wait for more runs to verify it never fails anymore.
         const model = makeFakeModel({
             root: {
                 id: "node-1",
@@ -513,13 +514,12 @@ TestCase {
         const editor = createTemporaryObject(editorComponent, testCase, {
             model: model
         });
-        wait(20);
+        verify(waitForRendering(editor));
         const label = findByText(editor, "Rolling mean");
         const point = label.mapToItem(editor, 1, 1);
         mouseClick(editor, point.x, point.y);
         compare(model.selectCalls[0], "node-1");
-        wait(20);
-        verify(findByObjectName(editor, "metricComboBox_node-2") === null);
+        tryVerify(function(){return findByObjectName(editor, "metricComboBox_node-2") === null});
     }
     function test_swappingInAPopulatedPrimitiveModelLogsNoWarnings() {
         failOnWarning(/.?/);

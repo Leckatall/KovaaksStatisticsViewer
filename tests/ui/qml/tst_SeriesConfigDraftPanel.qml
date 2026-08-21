@@ -40,7 +40,6 @@ TestCase {
                 }
             ],
             pendingChanges: false,
-            beginDraftCalls: 0,
             commitDraftCalls: 0,
             discardDraftCalls: 0,
             seriesEnabledCalls: 0,
@@ -48,9 +47,7 @@ TestCase {
             updateCalls: [],
             removeCalls: [],
             reorderCalls: [],
-            beginSeriesDraft: function () {
-                this.beginDraftCalls++;
-            },
+            beginSeriesDraft: function () {},
             commitSeriesDraft: function () {
                 this.commitDraftCalls++;
                 return {
@@ -175,13 +172,6 @@ TestCase {
             kind: "primitive",
             primitiveMetric: "score"
         });
-    }
-    function test_beginSeriesDraftCalledOnceOnInstantiation() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm()
-        });
-        verify(panel !== null);
-        compare(panel.settingsVm.beginDraftCalls, 1);
     }
     function test_clickingDiscardCallsDiscardSeriesDraft() {
         const panel = createTemporaryObject(panelComponent, testCase, {

@@ -44,10 +44,7 @@ Pane {
         return 0
     }
 
-    Component.onCompleted: {
-        refreshRows()
-        settingsVm.beginSeriesDraft()
-    }
+    Component.onCompleted: refreshRows()
     onSourceRowsChanged: refreshRows()
 
     ColorDialog {

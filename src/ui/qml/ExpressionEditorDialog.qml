@@ -7,8 +7,6 @@ Dialog {
     objectName: "expressionEditorDialog"
     modal: true
     title: qsTr("Edit expression")
-    width: 600
-    height: 400
     standardButtons: Dialog.Save | Dialog.Cancel
 
     required property var settingsVm
