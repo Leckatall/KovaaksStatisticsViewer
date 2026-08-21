@@ -481,6 +481,30 @@ TestCase {
         flick.contentY = maxContentY;
         compare(flick.contentY, maxContentY, "expected the Flickable to move to the bottom of the series list");
     }
+    function test_reentrantModelResetDuringDragReleaseLeavesCleanDragState() {
+        const vm = createTemporaryObject(reentrantSettingsVmComponent, testCase, {
+            allSeriesConfigs: rowsOutOfOrder()
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm
+        });
+        verify(waitForRendering(panel));
+        const handle = findByObjectName(panel, "seriesDragHandle_1");
+        const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
+        const rowHeight = handle.parent.height;
+        mousePress(panel, start.x, start.y);
+        wait(20);
+        for (let step = 1; step <= 8; step++) {
+            mouseMove(panel, start.x, start.y + rowHeight * step / 8, -1, Qt.LeftButton);
+            wait(10);
+        }
+        mouseRelease(panel, start.x, start.y + rowHeight);
+        wait(20);
+        compare(panel.draggedSeriesId, "");
+        compare(panel.dragOriginIndex, -1);
+        compare(panel.dragPreviewIndex, -1);
+        compare(panel.dragTranslationY, 0);
+    }
     function test_releasingADraggedRowCallsReorderSeriesOnceWithTheFinalPosition() {
         const vm = makeFakeSettingsVm({
             allSeriesConfigs: rowsOutOfOrder()
@@ -566,6 +590,27 @@ TestCase {
         id: panelComponent
 
         SeriesConfigDraftPanel {
+        }
+    }
+
+    // Unlike makeFakeSettingsVm()'s plain JS object, allSeriesConfigs here is a real
+    // QML property var: reassigning it fires the engine's automatic change notification,
+    // matching the real SettingsViewModel's Q_PROPERTY(... NOTIFY seriesConfigurationChanged).
+    Component {
+        id: reentrantSettingsVmComponent
+
+        QtObject {
+            property var allSeriesConfigs: []
+            property bool pendingChanges: false
+            function reorderSeries(id, position) {
+                const configs = allSeriesConfigs.slice().sort(function(a, b) { return a.displayPosition - b.displayPosition })
+                const index = configs.findIndex(function(row) { return row.id === id })
+                if (index === -1 || position >= configs.length || index === position) return
+                const [row] = configs.splice(index, 1)
+                configs.splice(position, 0, row)
+                configs.forEach(function(row, i) { row.displayPosition = i })
+                allSeriesConfigs = configs
+            }
         }
     }
 }

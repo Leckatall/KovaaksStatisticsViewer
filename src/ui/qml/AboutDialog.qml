@@ -16,12 +16,12 @@ Dialog {
         spacing: 8
 
         Label {
-            text: "Kovaaks Stats Viewer"
+            text: Qt.application.name
             font.bold: true
             font.pixelSize: 16
         }
         Label {
-            text: qsTr("Version information is not wired up yet.")
+            text: qsTr("Version %1").arg(Qt.application.version)
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }
