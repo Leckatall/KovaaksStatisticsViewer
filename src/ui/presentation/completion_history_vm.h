@@ -40,7 +40,7 @@ namespace ksv::presentation {
         [[nodiscard]] QList<qreal> axisTicks(int column) const override;
         [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
         [[nodiscard]] int xColumn() const override { return RunIndex; }
-        [[nodiscard]] int yAxisColumn() const override { return Score; }
+        [[nodiscard]] int yAxisColumn() const override { return -1; }
         [[nodiscard]] QString scenarioTitle() const { return m_scenario_title; }
         [[nodiscard]] int runCount() const { return m_run_count; }
 

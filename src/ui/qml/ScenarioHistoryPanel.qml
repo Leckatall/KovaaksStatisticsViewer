@@ -27,13 +27,15 @@ Frame {
         const s = root.seriesForColumn(column)
         return s && !!root.columnVisibility[s.id]
     })
+
     readonly property int yAxisColumn: {
-        for (let i = 0; i < root.plottable.length; ++i) {
-            const column = root.plottable[i]
-            const s = root.seriesForColumn(column)
-            if (s && s.id === root.historyAxisSettings.yAxisColumnKey) return column
+        const cols = root.visibleColumns;
+        for (const column of cols) {
+            if (root.seriesForColumn(column).id === root.historyAxisSettings.yAxisColumnKey) {
+                return column;
+            }
         }
-        return -1
+        return cols.length > 0 ? cols[0] : -1;
     }
 
     Layout.fillHeight: true
