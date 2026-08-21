@@ -14,6 +14,8 @@ Pane {
     property int dragOriginIndex: -1
     property int dragPreviewIndex: -1
     property real dragTranslationY: 0
+    property real dragRawTranslationY: 0
+    property real dragStartPointerY: 0
     property real dragRowHeight: 0
     readonly property alias colorDialog: colorDialog
     readonly property alias expressionDialog: expressionDialog
@@ -57,95 +59,152 @@ Pane {
         anchors.fill: parent
         spacing: 8
 
-        Repeater {
-            model: root.displayRows
+        ScrollView {
+            id: seriesListScrollView
+            objectName: "seriesListScrollView"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            contentWidth: availableWidth
 
-            RowLayout {
-                id: lineRow
-                required property var modelData
-                Layout.fillWidth: true
+            property int autoScrollDirection: 0
+            property real autoScrollAccumulatedDelta: 0
+            readonly property real autoScrollEdgeThreshold: 32
+            readonly property real autoScrollSpeed: 6
+
+            function applyAutoScrollTick() {
+                const flick = contentItem
+                const maxContentY = Math.max(0, flick.contentHeight - flick.height)
+                const requestedContentY = flick.contentY + autoScrollDirection * autoScrollSpeed
+                const clampedContentY = Math.max(0, Math.min(maxContentY, requestedContentY))
+                const appliedDelta = clampedContentY - flick.contentY
+                flick.contentY = clampedContentY
+                if (appliedDelta === 0)
+                    return
+
+                autoScrollAccumulatedDelta += appliedDelta
+                root.dragTranslationY = root.dragRawTranslationY + autoScrollAccumulatedDelta
+                root.previewMove(root.dragOriginIndex + Math.round(root.dragTranslationY / root.dragRowHeight))
+            }
+
+            Timer {
+                interval: 16
+                running: seriesListScrollView.autoScrollDirection !== 0
+                repeat: true
+                onTriggered: seriesListScrollView.applyAutoScrollTick()
+            }
+
+            ColumnLayout {
+                width: seriesListScrollView.availableWidth
                 spacing: 8
-                z: root.draggedSeriesId === modelData.id ? 1 : 0
-                transform: Translate { y: root.previewOffset(lineRow.modelData.id) }
 
-                Rectangle {
-                    id: dragHandle
-                    objectName: "seriesDragHandle_" + lineRow.modelData.id
-                    Layout.preferredWidth: 12
-                    Layout.preferredHeight: 24
-                    color: root.palette.mid
-                    radius: 2
-                    DragHandler {
-                        id: drag
-                        target: null
-                        dragThreshold: 0
-                        onActiveChanged: {
-                            if (active) {
-                                root.draggedSeriesId = lineRow.modelData.id
-                                root.dragOriginIndex = root.displayRows.findIndex(function(row) { return row.id === lineRow.modelData.id })
-                                root.dragPreviewIndex = root.dragOriginIndex
-                                root.dragRowHeight = Math.max(lineRow.height, 1)
-                            } else if (root.draggedSeriesId === lineRow.modelData.id) {
-                                root.settingsVm.reorderSeries(lineRow.modelData.id, root.dragPreviewIndex)
-                                root.draggedSeriesId = ""
-                                root.dragOriginIndex = -1
-                                root.dragPreviewIndex = -1
-                                root.dragTranslationY = 0
-                                root.dragRowHeight = 0
+                Repeater {
+                    model: root.displayRows
+
+                    RowLayout {
+                        id: lineRow
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 8
+                        z: root.draggedSeriesId === modelData.id ? 1 : 0
+                        transform: Translate { y: root.previewOffset(lineRow.modelData.id) }
+
+                        Rectangle {
+                            id: dragHandle
+                            objectName: "seriesDragHandle_" + lineRow.modelData.id
+                            Layout.preferredWidth: 12
+                            Layout.preferredHeight: 24
+                            color: root.palette.mid
+                            radius: 2
+                            DragHandler {
+                                id: drag
+                                target: null
+                                dragThreshold: 0
+                                grabPermissions: PointerHandler.CanTakeOverFromAnything
+                                onActiveChanged: {
+                                    if (active) {
+                                        root.draggedSeriesId = lineRow.modelData.id
+                                        root.dragOriginIndex = root.displayRows.findIndex(function(row) { return row.id === lineRow.modelData.id })
+                                        root.dragPreviewIndex = root.dragOriginIndex
+                                        root.dragRowHeight = Math.max(lineRow.height, 1)
+                                        root.dragRawTranslationY = 0
+                                        root.dragStartPointerY = dragHandle.mapToItem(seriesListScrollView, 0, 0).y
+                                        seriesListScrollView.autoScrollAccumulatedDelta = 0
+                                        seriesListScrollView.autoScrollDirection = 0
+                                    } else if (root.draggedSeriesId === lineRow.modelData.id) {
+                                        root.settingsVm.reorderSeries(lineRow.modelData.id, root.dragPreviewIndex)
+                                        root.draggedSeriesId = ""
+                                        root.dragOriginIndex = -1
+                                        root.dragPreviewIndex = -1
+                                        root.dragTranslationY = 0
+                                        root.dragRawTranslationY = 0
+                                        root.dragStartPointerY = 0
+                                        root.dragRowHeight = 0
+                                        seriesListScrollView.autoScrollAccumulatedDelta = 0
+                                        seriesListScrollView.autoScrollDirection = 0
+                                    }
+                                }
+                                onTranslationChanged: {
+                                    root.dragRawTranslationY = translation.y
+                                    root.dragTranslationY = translation.y + seriesListScrollView.autoScrollAccumulatedDelta
+                                    root.previewMove(root.dragOriginIndex + Math.round(root.dragTranslationY / root.dragRowHeight))
+
+                                    const pointerY = root.dragStartPointerY + translation.y
+                                    if (pointerY < seriesListScrollView.autoScrollEdgeThreshold)
+                                        seriesListScrollView.autoScrollDirection = -1
+                                    else if (pointerY > seriesListScrollView.height - seriesListScrollView.autoScrollEdgeThreshold)
+                                        seriesListScrollView.autoScrollDirection = 1
+                                    else
+                                        seriesListScrollView.autoScrollDirection = 0
+                                }
                             }
                         }
-                        onTranslationChanged: {
-                            root.dragTranslationY = translation.y
-                            const target = root.dragOriginIndex + Math.round(translation.y / root.dragRowHeight)
-                            root.previewMove(target)
+                        Rectangle {
+                            objectName: "seriesColorSwatch_" + lineRow.modelData.id
+                            Layout.preferredWidth: 16
+                            Layout.preferredHeight: 16
+                            border.color: root.palette.mid
+                            border.width: 1
+                            color: lineRow.modelData.color
+                            radius: 4
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    root.colorTarget = lineRow.modelData
+                                    colorDialog.selectedColor = lineRow.modelData.color
+                                    colorDialog.open()
+                                }
+                            }
+                        }
+                        TextField {
+                            id: nameField
+                            objectName: "seriesNameField_" + lineRow.modelData.id
+                            Layout.fillWidth: true
+                            text: lineRow.modelData.name
+                            onEditingFinished: root.updateSeries(lineRow.modelData, text, lineRow.modelData.color)
+                        }
+                        Button {
+                            objectName: "editExpressionButton_" + lineRow.modelData.id
+                            text: qsTr("Edit expression")
+                            onClicked: {
+                                expressionDialog.seriesId = lineRow.modelData.id
+                                expressionDialog.seriesName = lineRow.modelData.name
+                                expressionDialog.seriesColor = lineRow.modelData.color
+                                expressionDialog.seriesWidth = lineRow.modelData.width
+                                expressionDialog.seriesEnabled = lineRow.modelData.enabled
+                                expressionDialog.open()
+                            }
+                        }
+                        Button {
+                            objectName: "deleteSeriesButton_" + lineRow.modelData.id
+                            text: qsTr("Delete")
+                            onClicked: root.settingsVm.removeComputedSeries(lineRow.modelData.id)
+                        }
+                        Switch {
+                            checked: lineRow.modelData.enabled
+                            objectName: "seriesEnabledSwitch_" + lineRow.modelData.id
+                            onToggled: root.settingsVm.setSeriesEnabled(lineRow.modelData.id, checked)
                         }
                     }
-                }
-                Rectangle {
-                    objectName: "seriesColorSwatch_" + lineRow.modelData.id
-                    Layout.preferredWidth: 16
-                    Layout.preferredHeight: 16
-                    border.color: root.palette.mid
-                    border.width: 1
-                    color: lineRow.modelData.color
-                    radius: 4
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            root.colorTarget = lineRow.modelData
-                            colorDialog.selectedColor = lineRow.modelData.color
-                            colorDialog.open()
-                        }
-                    }
-                }
-                TextField {
-                    id: nameField
-                    objectName: "seriesNameField_" + lineRow.modelData.id
-                    Layout.fillWidth: true
-                    text: lineRow.modelData.name
-                    onEditingFinished: root.updateSeries(lineRow.modelData, text, lineRow.modelData.color)
-                }
-                Button {
-                    objectName: "editExpressionButton_" + lineRow.modelData.id
-                    text: qsTr("Edit expression")
-                    onClicked: {
-                        expressionDialog.seriesId = lineRow.modelData.id
-                        expressionDialog.seriesName = lineRow.modelData.name
-                        expressionDialog.seriesColor = lineRow.modelData.color
-                        expressionDialog.seriesWidth = lineRow.modelData.width
-                        expressionDialog.seriesEnabled = lineRow.modelData.enabled
-                        expressionDialog.open()
-                    }
-                }
-                Button {
-                    objectName: "deleteSeriesButton_" + lineRow.modelData.id
-                    text: qsTr("Delete")
-                    onClicked: root.settingsVm.removeComputedSeries(lineRow.modelData.id)
-                }
-                Switch {
-                    checked: lineRow.modelData.enabled
-                    objectName: "seriesEnabledSwitch_" + lineRow.modelData.id
-                    onToggled: root.settingsVm.setSeriesEnabled(lineRow.modelData.id, checked)
                 }
             }
         }

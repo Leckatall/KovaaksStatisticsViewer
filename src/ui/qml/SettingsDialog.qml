@@ -286,9 +286,9 @@ ApplicationWindow {
 
                     SeriesConfigDraftPanel {
                         Layout.fillWidth: true
+                        Layout.fillHeight: true
                         settingsVm: root.settingsVm
                     }
-                    Item { Layout.fillHeight: true }
                 }
             }
         }

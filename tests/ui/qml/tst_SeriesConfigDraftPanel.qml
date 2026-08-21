@@ -139,6 +139,25 @@ TestCase {
             }
         ];
     }
+    function manyRows() {
+        const rows = [];
+        for (let i = 0; i < 20; i++) {
+            rows.push({
+                id: String(i),
+                name: "Series " + i,
+                color: "#009600",
+                width: 2,
+                enabled: true,
+                displayPosition: i,
+                isPrimitive: true,
+                expression: {
+                    kind: "primitive",
+                    primitiveMetric: "score"
+                }
+            });
+        }
+        return rows;
+    }
     function test_acceptingColorDialogCallsUpdateComputedSeriesWithNewColorAndOtherFieldsUnchanged() {
         const vm = makeFakeSettingsVm();
         const panel = createTemporaryObject(panelComponent, testCase, {
@@ -300,6 +319,88 @@ TestCase {
         compare(panel.settingsVm.reorderCalls.length, 1);
         compare(panel.settingsVm.reorderCalls[0], ["1", 1]);
     }
+    function test_draggingNearTheBottomEdgeAutoScrollsTheSeriesList() {
+        const vm = makeFakeSettingsVm({
+            allSeriesConfigs: manyRows(),
+            pendingChanges: true
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm,
+            height: 250
+        });
+        verify(waitForRendering(panel));
+
+        const scrollView = findByObjectName(panel, "seriesListScrollView");
+        const handle = findByObjectName(panel, "seriesDragHandle_0");
+        const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
+        const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
+
+        mousePress(panel, start.x, start.y);
+        wait(20);
+        for (let step = 1; step <= 8; step++) {
+            mouseMove(panel, start.x, start.y + (bottomEdge.y - start.y) * step / 8, -1, Qt.LeftButton);
+            wait(10);
+        }
+        wait(300);
+
+        verify(scrollView.contentItem.contentY > 0, "expected dragging near the bottom edge to auto-scroll the series list");
+
+        mouseRelease(panel, start.x, bottomEdge.y);
+        wait(20);
+    }
+    function test_draggingToTheEndOfALongListWhileAutoScrollingReordersToTheCorrectFinalPosition() {
+        const vm = makeFakeSettingsVm({
+            allSeriesConfigs: manyRows(),
+            pendingChanges: true
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm,
+            height: 250
+        });
+        verify(waitForRendering(panel));
+
+        const handle = findByObjectName(panel, "seriesDragHandle_0");
+        const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
+        const scrollView = findByObjectName(panel, "seriesListScrollView");
+        const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
+        mousePress(panel, start.x, start.y);
+        wait(20);
+        for (let step = 1; step <= 8; step++) {
+            mouseMove(panel, start.x, start.y + (bottomEdge.y - start.y) * step / 8, -1, Qt.LeftButton);
+            wait(10);
+        }
+        wait(1800);
+        compare(panel.dragPreviewIndex, 19);
+        mouseRelease(panel, start.x, bottomEdge.y);
+        wait(20);
+    }
+    function test_holdingThePointerStillNearTheEdgeStillAdvancesTheDropTargetAsTheListScrolls() {
+        const vm = makeFakeSettingsVm({
+            allSeriesConfigs: manyRows(),
+            pendingChanges: true
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm,
+            height: 250
+        });
+        verify(waitForRendering(panel));
+
+        const handle = findByObjectName(panel, "seriesDragHandle_0");
+        const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
+        const scrollView = findByObjectName(panel, "seriesListScrollView");
+        const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
+
+        mousePress(panel, start.x, start.y);
+        wait(20);
+        for (let step = 1; step <= 8; step++) {
+            mouseMove(panel, start.x, start.y + (bottomEdge.y - start.y) * step / 8, -1, Qt.LeftButton);
+            wait(10);
+        }
+        wait(500);
+        verify(panel.dragPreviewIndex > 0, "expected auto-scrolling while holding still near the edge to advance the drop target");
+        mouseRelease(panel, start.x, bottomEdge.y);
+        wait(20);
+    }
     function test_editExpressionButtonOpensExpressionEditorDialogWithThisRowsSeriesId() {
         const vm = makeFakeSettingsVm({
             allSeriesConfigs: rowsOutOfOrder()
@@ -354,6 +455,31 @@ TestCase {
             verify(findByObjectName(panel, "editExpressionButton_" + id) !== null);
             verify(findByObjectName(panel, "deleteSeriesButton_" + id) !== null);
         }
+    }
+    function test_manySeriesRowsScrollInsteadOfPushingSaveButtonOutOfBounds() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: makeFakeSettingsVm({
+                allSeriesConfigs: manyRows(),
+                pendingChanges: true
+            }),
+            height: 250
+        });
+        verify(waitForRendering(panel));
+
+        const scrollView = findByObjectName(panel, "seriesListScrollView");
+        verify(scrollView !== null, "expected a seriesListScrollView wrapping the series rows");
+
+        const saveButton = findByObjectName(panel, "saveGraphLinesButton");
+        verify(saveButton !== null);
+        const point = saveButton.mapToItem(panel, 0, 0);
+        verify(point.y >= 0 && point.y + saveButton.height <= panel.height, "saveGraphLinesButton should stay within the panel's bounds when many series are present");
+
+        const flick = scrollView.contentItem;
+        verify(flick.contentHeight > scrollView.height, "expected the series list to exceed the scroll viewport");
+        const maxContentY = flick.contentHeight - flick.height;
+        verify(maxContentY > 0);
+        flick.contentY = maxContentY;
+        compare(flick.contentY, maxContentY, "expected the Flickable to move to the bottom of the series list");
     }
     function test_releasingADraggedRowCallsReorderSeriesOnceWithTheFinalPosition() {
         const vm = makeFakeSettingsVm({

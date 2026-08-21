@@ -201,6 +201,23 @@ TestCase {
         compare(accuracySwitch.checked, false)
     }
 
+    function test_manySeriesRowsSaveButtonStaysWithinTheSettingsWindowWhenScrolling() {
+        const rows = []
+        for (let i = 0; i < 20; i++)
+            rows.push({id: String(i), name: "Series " + i, color: "#009600", enabled: true, displayPosition: i})
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({allSeriesConfigs: rows, pendingChanges: true}),
+            sessionVm: makeFakeSessionVm(),
+            visualSettings: visualSettings
+        })
+        selectCategory(dialog, "Graph Lines")
+
+        const saveButton = findByObjectName(dialog.contentItem, "saveGraphLinesButton")
+        verify(saveButton !== null, "no item named 'saveGraphLinesButton' found in SettingsDialog")
+        const point = saveButton.mapToItem(dialog.contentItem, 0, 0)
+        verify(point.y >= 0 && point.y + saveButton.height <= dialog.contentItem.height, "saveGraphLinesButton should remain visible within the SettingsDialog window when many series are present")
+    }
+
     function test_togglingSeriesEnabledSwitchWritesThroughSettingsVm() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
