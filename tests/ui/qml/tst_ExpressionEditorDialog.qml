@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtTest
+import KovaaksStatsViewer
 import "../../../src/ui/qml"
 
 TestCase {
@@ -69,43 +70,26 @@ TestCase {
         };
     }
     function fakeDeepEditor() {
-        const root = {
-            id: "node-1", kind: "rollingMean", window: 5,
-            input: { id: "node-2", kind: "rollingMean", window: 3,
-                input: { id: "node-3", kind: "rollingMean", window: 4,
-                    input: { id: "node-4", kind: "rollingMean", window: 2,
-                        input: { id: "node-5", kind: "rollingMean", window: 6,
-                            input: { id: "node-6", kind: "rollingMean", window: 1,
-                                input: { id: "node-7", kind: "rollingMean", window: 7,
-                                    input: { id: "node-8", kind: "rollingMean", window: 8,
-                                        input: { id: "node-9", kind: "primitive", metric: "score" }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        };
-        function pathTo(id, node, path) {
-            if (!node || !node.kind)
-                return null;
-            const extended = path.concat([node]);
-            if (node.id === id)
-                return extended;
-            return pathTo(id, node.input, extended);
+        const leaf = Qt.createQmlObject('import KovaaksStatsViewer; EditablePrimitiveNode { metric: "score" }', testCase, "deepLeaf");
+        const chain = [leaf];
+        let child = leaf;
+        for (const window of [8, 7, 1, 6, 2, 4, 3, 5]) {
+            child = Qt.createQmlObject('import KovaaksStatsViewer; EditableRollingMeanNode {}', testCase, "deepRollingMean");
+            child.window = window;
+            child.input = chain[chain.length - 1];
+            chain.push(child);
         }
+        const root = chain[chain.length - 1];
         return {
             root: root,
-            selectedNodeId: "node-9",
-            treeRevision: 0,
+            selected: leaf,
             nodeKinds: ["primitive", "rollingMean"],
             primitiveMetrics: ["score"],
             isBinary: function () { return false; },
             childSlotsFor: function (kind) { return kind === "rollingMean" ? ["input"] : []; },
             describe: function (node) { return node.kind === "primitive" ? node.metric : node.kind; },
-            ancestorChain: function (id) { return pathTo(id, root, []) || []; },
-            select: function (id) { this.selectedNodeId = id; },
+            ancestorChain: function () { return chain.slice().reverse(); },
+            select: function (node) { this.selected = node; },
             replaceChild: function () {},
             deleteNode: function () {},
             wrapSelected: function () {},
@@ -174,7 +158,7 @@ TestCase {
         verify(treeEditor !== null);
         const scrollView = findByObjectName(treeEditor, "expressionTreeScrollView");
         verify(scrollView !== null);
-        verify(findByObjectName(treeEditor, "pathCard_node-1") !== null);
+        verify(findByObjectName(treeEditor, "pathCard_0") !== null);
         verify(scrollView.contentHeight > scrollView.height);
         const contentYBeforeScroll = scrollView.contentItem.contentY;
         scrollView.contentItem.contentY = scrollView.contentHeight - scrollView.height;

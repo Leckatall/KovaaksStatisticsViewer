@@ -1,657 +1,220 @@
 import QtQuick
 import QtTest
+import KovaaksStatsViewer
 import "../../../src/ui/qml"
 
 TestCase {
     id: testCase
 
     function findByObjectName(root, name) {
-        if (!root)
-            return null;
-        if (root.objectName === name)
-            return root;
+        if (!root) return null;
+        if (root.objectName === name) return root;
         for (const child of root.children || []) {
             const found = findByObjectName(child, name);
-            if (found)
-                return found;
+            if (found) return found;
         }
         return null;
     }
     function findByText(root, text) {
-        if (!root)
-            return null;
-        if (root.text === text)
-            return root;
+        if (!root) return null;
+        if (root.text === text) return root;
         for (const child of root.children || []) {
             const found = findByText(child, text);
-            if (found)
-                return found;
+            if (found) return found;
         }
         return null;
     }
     function makeFakeModel(overrides) {
         return createTemporaryObject(fakeModelComponent, testCase, overrides || {});
     }
-    function test_averageAcrossRunsRootRendersSelectionKindComboAndCountOrPercentSpinBox() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "averageAcrossRuns",
-                selection: {
-                    kind: "recentRuns",
-                    count: 6
-                },
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(findByObjectName(editor, "selectionKindComboBox_node-1") !== null);
-        compare(findByObjectName(editor, "selectionValueSpinBox_node-1").value, 6);
+    function makePrimitive(metric) {
+        return createTemporaryObject(primitiveNodeComponent, testCase, { metric: metric || "score" });
     }
-    function test_binaryRootRendersOperatorComboBoxAndTwoChildSlots() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "add",
-                left: {},
-                right: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
+    function makeBinary(kind, left, right) {
+        return createTemporaryObject(binaryOpNodeComponent, testCase, { operatorKind: kind, left: left || null, right: right || null });
+    }
+    function makeRollingMean(window, input) {
+        return createTemporaryObject(rollingMeanNodeComponent, testCase, { window: window || 10, input: input || null });
+    }
+    function makeUnary(kind, input) {
+        return createTemporaryObject(unaryOpNodeComponent, testCase, { operatorKind: kind, input: input || null });
+    }
+    function makeRollingMeanWithPrimitive(window, metric) {
+        return Qt.createQmlObject(
+            'import KovaaksStatsViewer; EditableRollingMeanNode { window: ' + window
+            + '; input: EditablePrimitiveNode { metric: "' + metric + '" } }', testCase, "rollingMeanWithPrimitive");
+    }
+
+    function test_emptyModelShowsRootKindChooser() {
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel() });
         verify(waitForRendering(editor));
-        verify(findByObjectName(editor, "operatorComboBox_node-1") !== null);
-        verify(findByObjectName(editor, "kindChooser_node-1_left") !== null);
-        verify(findByObjectName(editor, "kindChooser_node-1_right") !== null);
+        verify(findByObjectName(editor, "kindChooser_root") !== null);
     }
-    function test_changingConstantSpinBoxCallsUpdateFieldWithValueField() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "constant",
-                value: 1
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        const spin = findByObjectName(editor, "constantSpinBox_node-1");
+    function test_choosingRootKindCallsReplaceChild() {
+        const model = makeFakeModel();
+        const editor = createTemporaryObject(editorComponent, testCase, { model: model });
+        const chooser = findByObjectName(editor, "kindChooser_root");
+        chooser.currentIndex = 1;
+        findByObjectName(editor, "addNodeButton_root").clicked();
+        compare(model.replaceCalls[0].parent, null);
+        compare(model.replaceCalls[0].slot, "root");
+        compare(model.replaceCalls[0].kind, "constant");
+    }
+    function test_primitiveRootRendersMetricComboBoxAndWritesNode() {
+        const node = makePrimitive("kills");
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        verify(waitForRendering(editor));
+        const combo = findByObjectName(editor, "metricComboBox");
+        compare(combo.currentText, "kills");
+        combo.currentIndex = 1;
+        combo.activated(1);
+        compare(node.metric, "shots");
+    }
+    function test_constantRootRendersSpinBoxAndWritesNode() {
+        const node = createTemporaryObject(constantNodeComponent, testCase, { value: 1 });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        const spin = findByObjectName(editor, "constantSpinBox");
+        compare(spin.value, 1);
         spin.value = 8;
         spin.valueModified();
-        compare(model.updateCalls[0], {
-            id: "node-1",
-            field: "value",
-            value: 8
-        });
+        compare(node.value, 8);
     }
-    function test_changingCountSpinBoxCallsUpdateFieldWithCountFieldWhenSelectionIsRecentRuns() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "averageAcrossRuns",
-                selection: {
-                    kind: "recentRuns",
-                    count: 6
-                },
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        const spin = findByObjectName(editor, "selectionValueSpinBox_node-1");
-        spin.value = 9;
-        spin.valueModified();
-        compare(model.updateCalls[0].field, "count");
+    function test_binaryRootRendersOperatorAndChildSlots() {
+        const node = makeBinary("add");
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        verify(waitForRendering(editor));
+        verify(findByObjectName(editor, "operatorComboBox") !== null);
+        verify(findByObjectName(editor, "kindChooser_left") !== null);
+        verify(findByObjectName(editor, "kindChooser_right") !== null);
     }
-    function test_changingOperatorComboBoxCallsChangeBinaryOperator() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "add",
-                left: {},
-                right: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        const combo = findByObjectName(editor, "operatorComboBox_node-1");
+    function test_changingOperatorWritesNodeKind() {
+        const node = makeBinary("add");
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        const combo = findByObjectName(editor, "operatorComboBox");
         combo.currentIndex = 3;
         combo.activated(3);
-        compare(model.binaryCalls[0], {
-            id: "node-1",
-            kind: "divide"
-        });
-        model.changeBinaryOperator("node-1", "subtract");
-        wait(20);
-        compare(combo.currentText, "subtract");
+        compare(node.kind, "divide");
     }
-    function test_changingPercentSpinBoxCallsUpdateFieldWithPercentFieldWhenSelectionIsTopPercentile() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "averageAcrossRuns",
-                selection: {
-                    kind: "topPercentile",
-                    percent: 15
-                },
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        const spin = findByObjectName(editor, "selectionValueSpinBox_node-1");
-        spin.value = 20;
-        spin.valueModified();
-        compare(model.updateCalls[0].field, "percent");
+    function test_childKindChooserCallsReplaceChildWithParentAndSlot() {
+        const node = makeBinary("add");
+        const model = makeFakeModel({ root: node, selected: node });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: model });
+        findByObjectName(editor, "addNodeButton_left").clicked();
+        compare(model.replaceCalls[0].parent, node);
+        compare(model.replaceCalls[0].slot, "left");
+        compare(model.replaceCalls[0].kind, "primitive");
     }
-    function test_changingSelectionKindComboCallsChangeSelectionKind() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "averageAcrossRuns",
-                selection: {
-                    kind: "recentRuns",
-                    count: 6
-                },
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        const combo = findByObjectName(editor, "selectionKindComboBox_node-1");
-        combo.currentIndex = 1;
-        combo.activated(1);
-        compare(model.selectionKindCalls[0], {
-            id: "node-1",
-            kind: "topPercentile"
-        });
-        compare(findByObjectName(editor, "selectionValueSpinBox_node-1").value, 10);
-    }
-    function test_changingWindowSpinBoxCallsUpdateFieldWithWindowField() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "rollingMean",
-                window: 10,
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        const spin = findByObjectName(editor, "windowSpinBox_node-1");
+    function test_rollingMeanRootRendersWindowAndWritesNode() {
+        const node = makeRollingMean(12);
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        const spin = findByObjectName(editor, "windowSpinBox");
+        compare(spin.value, 12);
         spin.value = 15;
         spin.valueModified();
-        compare(model.updateCalls[0], {
-            id: "node-1",
-            field: "window",
-            value: 15
-        });
+        compare(node.window, 15);
     }
-    function test_choosingKindAndClickingAddCallsReplaceChildWithEmptyParentIdAndRootSlot() {
-        const model = makeFakeModel();
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        const chooser = findByObjectName(editor, "kindChooser__root");
-        chooser.currentIndex = 1;
-        mouseClick(findByObjectName(editor, "addNodeButton__root"));
-        compare(model.replaceCalls[0], {
-            parentId: "",
-            slot: "root",
-            kind: "constant"
-        });
-    }
-    function test_clickingFoldedChipCallsSelectWithChildNodeId() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "rollingMean",
-                window: 10,
-                input: {
-                    id: "node-2",
-                    kind: "primitive",
-                    metric: "hits"
-                }
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        const label = findByText(editor, "hits");
-        const point = label.mapToItem(editor, 1, 1);
-        mouseClick(editor, point.x, point.y);
-        compare(model.selectCalls[0], "node-2");
-    }
-    function test_clickingWrapCallsWrapSelectedWithChosenKind() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "primitive",
-                metric: "score"
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        const combo = findByObjectName(editor, "wrapKindComboBox");
+    function test_averageAcrossRunsWritesSelectionAndSelectionValue() {
+        const node = createTemporaryObject(averageNodeComponent, testCase, { count: 6 });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        const combo = findByObjectName(editor, "selectionKindComboBox");
+        const spin = findByObjectName(editor, "selectionValueSpinBox");
+        compare(spin.value, 6);
         combo.currentIndex = 1;
-        mouseClick(findByObjectName(editor, "wrapNodeButton"));
+        combo.activated(1);
+        compare(node.selectionKind, "topPercentile");
+        compare(spin.value, 10);
+        spin.value = 20;
+        spin.valueModified();
+        compare(node.percent, 20);
+    }
+    function test_unaryRootRendersNoFieldEditor() {
+        const node = makeUnary("projectRateToFinal");
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        verify(findByObjectName(editor, "metricComboBox") === null);
+        verify(findByObjectName(editor, "windowSpinBox") === null);
+    }
+    function test_deleteAndWrapDispatchStructuralOperations() {
+        const node = makePrimitive();
+        const model = makeFakeModel({ root: node, selected: node });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: model });
+        findByObjectName(editor, "deleteNodeButton").clicked();
+        compare(model.deleteCalls[0], node);
+        findByObjectName(editor, "wrapKindComboBox").currentIndex = 1;
+        findByObjectName(editor, "wrapNodeButton").clicked();
         compare(model.wrapCalls[0], "rollingMean");
     }
-    function test_constantRootRendersSpinBoxBoundToNodeValue() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "constant",
-                value: 42
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
+    function test_collapsedAncestorRendersFoldedChipAndSelectsChild() {
+        const root = makeRollingMeanWithPrimitive(9, "hits");
+        const leaf = root.input;
+        const model = makeFakeModel({ root: root, selected: root, parentOverrides: new Map([[leaf, root]]) });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: model });
         verify(waitForRendering(editor));
-        compare(findByObjectName(editor, "constantSpinBox_node-1").value, 42);
+        const chip = findByObjectName(editor, "foldedChip_0_input");
+        verify(chip !== null);
+        chip.selected();
+        compare(model.selected, leaf);
+        verify(findByObjectName(editor, "pathCard_0") !== null);
+        verify(findByObjectName(editor, "pathCard_1") !== null);
     }
-    function test_deleteButtonCallsDeleteNodeWithFocusedNodeId() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "primitive",
-                metric: "score"
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
+    function test_selectingAncestorCardChangesFocusedEditor() {
+        const root = makeRollingMeanWithPrimitive(9, "hits");
+        const leaf = root.input;
+        const model = makeFakeModel({ root: root, selected: leaf, parentOverrides: new Map([[leaf, root]]) });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: model });
         verify(waitForRendering(editor));
-        mouseClick(findByObjectName(editor, "deleteNodeButton_node-1"));
-        compare(model.deleteCalls[0], "node-1");
+        verify(findByObjectName(editor, "metricComboBox") !== null);
+        findByObjectName(editor, "pathCard_0").selected();
+        verify(findByObjectName(editor, "windowSpinBox") !== null);
     }
-    function test_emptyChildSlotRendersKindChooserForThatSlot() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "add",
-                left: {},
-                right: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(findByObjectName(editor, "kindChooser_node-1_left") !== null);
-    }
-    function test_emptyModelShowsRootKindChooser() {
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: makeFakeModel()
-        });
-        verify(waitForRendering(editor));
-        verify(findByObjectName(editor, "kindChooser__root") !== null);
-    }
-    function test_implicitSizeReflectsContentEvenWithoutAnExplicitSizeBinding() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "primitive",
-                metric: "score"
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(implicitSizeEditorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        wait(20);
-        verify(editor.implicitWidth > 0);
-        verify(editor.implicitHeight > 0);
-    }
-    function test_modelWithPopulatedRootAndAnExistingSelectionDoesNotCallSelectAgain() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "primitive",
-                metric: "score"
-            },
-            selectedNodeId: "node-1"
-        });
-        createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        wait(20);
-        compare(model.selectCalls.length, 0);
-    }
-    function test_ancestorCardsReportNaturalHeightInsteadOfStretchingToFillAvailableSpace() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "rollingMean",
-                window: 10,
-                input: {
-                    id: "node-2",
-                    kind: "primitive",
-                    metric: "score"
-                }
-            },
-            selectedNodeId: "node-2"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        wait(20);
-        const outerCard = findByObjectName(editor, "pathCard_node-1");
-        verify(outerCard !== null);
-        verify(outerCard.height < editor.height * 0.3);
-    }
-    function test_deepChainScrollsInsteadOfClippingOrExpandingPastAnExplicitHeight() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1", kind: "rollingMean", window: 1,
-                input: { id: "node-2", kind: "rollingMean", window: 2,
-                    input: { id: "node-3", kind: "rollingMean", window: 3,
-                        input: { id: "node-4", kind: "rollingMean", window: 4,
-                            input: { id: "node-5", kind: "primitive", metric: "score" }
-                        }
-                    }
-                }
-            },
-            selectedNodeId: "node-5"
-        });
-        const editor = createTemporaryObject(shortEditorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        wait(20);
-        compare(editor.height, 120);
-        const scrollView = findByObjectName(editor, "expressionTreeScrollView");
-        verify(scrollView !== null);
-        const rootCard = findByObjectName(editor, "pathCard_node-1");
-        verify(rootCard !== null);
-        verify(rootCard.height > editor.height);
-        verify(scrollView.contentHeight > scrollView.height);
-        const contentYBeforeScroll = scrollView.contentItem.contentY;
-        scrollView.contentItem.contentY = scrollView.contentHeight - scrollView.height;
-        wait(20);
-        verify(scrollView.contentItem.contentY > contentYBeforeScroll);
-    }
-    function test_modelWithPopulatedRootAndNoSelectionAutoSelectsRootOnComponentCompleted() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "primitive",
-                metric: "score"
-            }
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: makeFakeModel()
-        });
-        editor.model = model;
-        verify(waitForRendering(editor));
-        wait(20);
-        compare(model.selectCalls, ["node-1"]);
-        verify(findByObjectName(editor, "metricComboBox_node-1") !== null);
-    }
-    function test_nestedSelectionRendersCollapsedAncestorCardAboveFocusedCard() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "rollingMean",
-                window: 10,
-                input: {
-                    id: "node-2",
-                    kind: "primitive",
-                    metric: "hits"
-                }
-            },
-            selectedNodeId: "node-2"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        wait(20);
-        verify(findByObjectName(editor, "windowSpinBox_node-1") === null);
-        verify(findByObjectName(editor, "metricComboBox_node-2") !== null);
-    }
-    function test_populatedChildSlotRendersFoldedChipShowingDescribeText() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "rollingMean",
-                window: 10,
-                input: {
-                    id: "node-2",
-                    kind: "primitive",
-                    metric: "hits"
-                }
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        verify(findByText(editor, "hits") !== null);
-    }
-    function test_primitiveMetricWritesThroughTheModel() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "primitive",
-                metric: "score"
-            }
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: makeFakeModel()
-        });
-        editor.model = model;
-        verify(waitForRendering(editor));
-        wait(20);
-        const combo = findByObjectName(editor, "metricComboBox_node-1");
-        verify(combo !== null);
-        combo.activated(1);
-        compare(model.updateCalls[0].field, "metric");
-    }
-    function test_primitiveRootRendersMetricComboBoxBoundToNodeMetric() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "primitive",
-                metric: "kills"
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        compare(findByObjectName(editor, "metricComboBox_node-1").currentText, "kills");
-    }
-    function test_projectRateToFinalRootRendersNoFieldEditor() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "projectRateToFinal",
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(findByObjectName(editor, "metricComboBox_node-1") === null);
-        verify(findByObjectName(editor, "windowSpinBox_node-1") === null);
-    }
-    function test_projectedFinalValueRootRendersNoFieldEditor() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "projectedFinalValue",
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(findByObjectName(editor, "metricComboBox_node-1") === null);
-        verify(findByObjectName(editor, "windowSpinBox_node-1") === null);
-    }
-    function test_rebindingToADifferentModelWithPopulatedRootAndNoSelectionAlsoAutoSelectsRoot() {
-        const first = makeFakeModel();
-        const second = makeFakeModel({
-            root: {
-                id: "node-2",
-                kind: "primitive",
-                metric: "hits"
-            }
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: first
-        });
-        editor.model = second;
-        wait(20);
-        compare(second.selectCalls, ["node-2"]);
-    }
-    function test_rollingMeanRootRendersWindowSpinBox() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "rollingMean",
-                window: 12,
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        compare(findByObjectName(editor, "windowSpinBox_node-1").value, 12);
-    }
-    function test_runningSumRootRendersNoFieldEditor() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "runningSum",
-                input: {}
-            },
-            selectedNodeId: "node-1"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(findByObjectName(editor, "metricComboBox_node-1") === null);
-        verify(findByObjectName(editor, "windowSpinBox_node-1") === null);
-    }
-    function test_selectingAnAncestorCardHeaderCallsSelectWithThatNodeId() {
-        // TODO (2026/08/21): This test fails non-deterministically.
-        //  Update: I have made changes to try and fix this, will wait for more runs to verify it never fails anymore.
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "rollingMean",
-                window: 10,
-                input: {
-                    id: "node-2",
-                    kind: "primitive",
-                    metric: "hits"
-                }
-            },
-            selectedNodeId: "node-2"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
-        verify(waitForRendering(editor));
-        const label = findByText(editor, "Rolling mean");
-        const point = label.mapToItem(editor, 1, 1);
-        mouseClick(editor, point.x, point.y);
-        compare(model.selectCalls[0], "node-1");
-        tryVerify(function(){return findByObjectName(editor, "metricComboBox_node-2") === null});
+    function test_modelWithRootAndNoSelectionAutoSelectsRoot() {
+        const node = makePrimitive();
+        const model = makeFakeModel({ root: node });
+        createTemporaryObject(editorComponent, testCase, { model: model });
+        tryCompare(model, "selected", node);
     }
     function test_swappingInAPopulatedPrimitiveModelLogsNoWarnings() {
         failOnWarning(/.?/);
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: makeFakeModel()
-        });
-        editor.model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "primitive",
-                metric: "score"
-            },
-            selectedNodeId: "node-1"
-        });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel() });
+        const node = makePrimitive();
+        editor.model = makeFakeModel({ root: node, selected: node });
         verify(waitForRendering(editor));
-        wait(20);
-        verify(findByObjectName(editor, "metricComboBox_node-1") !== null);
+        verify(findByObjectName(editor, "metricComboBox") !== null);
     }
-    function test_switchingBetweenTwoDeepSelectionsUpdatesAlreadyMountedCollapsedCards() {
-        const model = makeFakeModel({
-            root: {
-                id: "node-1",
-                kind: "rollingMean",
-                window: 10,
-                input: {
-                    id: "node-2",
-                    kind: "add",
-                    left: {
-                        id: "node-3",
-                        kind: "primitive",
-                        metric: "hits"
-                    },
-                    right: {
-                        id: "node-4",
-                        kind: "primitive",
-                        metric: "shots"
-                    }
-                }
-            },
-            selectedNodeId: "node-3"
-        });
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: model
-        });
+    function test_editingDeeplyNestedSubtractOfProjectRateToFinalOfRollingMeanDoesNotThrowRangeError() {
+        const root = Qt.createQmlObject(
+            'import KovaaksStatsViewer; EditableBinaryOpNode { operatorKind: "subtract"; '
+            + 'left: EditableUnaryOpNode { operatorKind: "projectRateToFinal"; '
+            + 'input: EditableRollingMeanNode { window: 10; input: EditablePrimitiveNode { metric: "score" } } } '
+            + 'right: EditableUnaryOpNode { operatorKind: "projectRateToFinal"; '
+            + 'input: EditableRollingMeanNode { window: 10; input: EditablePrimitiveNode { metric: "score" } } } }',
+            testCase, "deepExpression");
+        const leftProject = root.left;
+        const leftRolling = leftProject.input;
+        const leftLeaf = leftRolling.input;
+        const rightProject = root.right;
+        const rightRolling = rightProject.input;
+        const rightLeaf = rightRolling.input;
+        const parents = new Map([[leftProject, root], [leftRolling, leftProject], [leftLeaf, leftRolling], [rightProject, root], [rightRolling, rightProject], [rightLeaf, rightRolling]]);
+        const model = makeFakeModel({ root: root, selected: root, parentOverrides: parents });
+
+        failOnWarning(/RangeError: Maximum call stack size exceeded/);
+        const editor = createTemporaryObject(editorComponent, testCase, { model: model });
         verify(waitForRendering(editor));
+
+        function selectChip(cardIndex, slot) {
+            const chip = findByObjectName(editor, "foldedChip_" + cardIndex + "_" + slot);
+            verify(chip !== null);
+            chip.selected();
+            wait(20);
+        }
+        selectChip(0, "left");
+        selectChip(1, "input");
+        selectChip(2, "input");
+        findByObjectName(editor, "pathCard_0").selected();
         wait(20);
-        verify(findByObjectName(editor, "metricComboBox_node-3") !== null);
-        model.select("node-4");
-        wait(20);
-        verify(findByObjectName(editor, "metricComboBox_node-3") === null);
-        verify(findByObjectName(editor, "metricComboBox_node-4") !== null);
-    }
-    function test_wrapControlVisibleOnlyWhenANodeIsSelected() {
-        const empty = makeFakeModel();
-        const editor = createTemporaryObject(editorComponent, testCase, {
-            model: empty
-        });
-        verify(findByObjectName(editor, "wrapNodeButton").visible === false);
-        empty.replaceChild("", "root", "primitive");
-        wait(20);
-        verify(findByObjectName(editor, "wrapNodeButton").visible);
+        selectChip(0, "right");
+        selectChip(1, "input");
+        selectChip(2, "input");
     }
 
     height: 500
@@ -660,207 +223,45 @@ TestCase {
     when: windowShown
     width: 600
 
-    Component {
-        id: editorComponent
+    Component { id: editorComponent; ExpressionTreeEditor { height: 400; width: 500 } }
+    Component { id: primitiveNodeComponent; EditablePrimitiveNode {} }
+    Component { id: constantNodeComponent; EditableConstantNode {} }
+    Component { id: binaryOpNodeComponent; EditableBinaryOpNode {} }
+    Component { id: unaryOpNodeComponent; EditableUnaryOpNode {} }
+    Component { id: rollingMeanNodeComponent; EditableRollingMeanNode {} }
+    Component { id: averageNodeComponent; EditableAverageAcrossRunsNode {} }
 
-        ExpressionTreeEditor {
-            height: 400
-            width: 500
-        }
-    }
-    Component {
-        id: implicitSizeEditorComponent
-
-        ExpressionTreeEditor {
-        }
-    }
-    Component {
-        id: shortEditorComponent
-
-        ExpressionTreeEditor {
-            height: 120
-            width: 400
-        }
-    }
     Component {
         id: fakeModelComponent
 
         QtObject {
-            property var binaryCalls: []
-            property var deleteCalls: []
-            property int nextId: 1
+            property var root: null
+            property var selected: null
             property var nodeKinds: ["primitive", "constant", "add", "subtract", "multiply", "divide", "runningSum", "rollingMean", "projectedFinalValue", "projectRateToFinal", "averageAcrossRuns"]
             property var primitiveMetrics: ["score", "shots", "hits", "kills", "dmg"]
-            property var replaceCalls: []
-            property var root: ({})
-            property var selectCalls: []
-            property string selectedNodeId: ""
-            property var selectionKindCalls: []
-            property int treeRevision: 0
-            property var updateCalls: []
+            property var deleteCalls: []
             property var wrapCalls: []
+            property var replaceCalls: []
+            property var parentOverrides: new Map()
 
-            function ancestorChain(id) {
-                return pathTo(id, root, []) || [];
-            }
-            function changeBinaryOperator(id, kind) {
-                binaryCalls.push({
-                    id: id,
-                    kind: kind
-                });
-                const location = locationFor(id);
-                if (!location || !isBinary(kind))
-                    return;
-                location.node.kind = kind;
-                touch();
-            }
-            function changeSelectionKind(id, kind) {
-                selectionKindCalls.push({
-                    id: id,
-                    kind: kind
-                });
-                const location = locationFor(id);
-                if (!location || location.node.kind !== "averageAcrossRuns")
-                    return;
-                location.node.selection = kind === "recentRuns" ? {
-                    kind: kind,
-                    count: 5
-                } : {
-                    kind: kind,
-                    percent: 10
-                };
-                touch();
+            function isBinary(kind) {
+                return kind === "add" || kind === "subtract" || kind === "multiply" || kind === "divide";
             }
             function childSlotsFor(kind) {
-                return isBinary(kind) ? ["left", "right"] : ["runningSum", "rollingMean", "projectedFinalValue", "projectRateToFinal", "averageAcrossRuns"].indexOf(kind) >= 0 ? ["input"] : [];
+                if (isBinary(kind)) return ["left", "right"];
+                if (kind === "runningSum" || kind === "rollingMean" || kind === "projectedFinalValue" || kind === "projectRateToFinal" || kind === "averageAcrossRuns") return ["input"];
+                return [];
             }
-            function deleteNode(id) {
-                deleteCalls.push(id);
-                const location = locationFor(id);
-                if (!location)
-                    return;
-                if (location.parent) {
-                    location.parent[location.slot] = {};
-                    selectedNodeId = location.parent.id;
-                } else {
-                    root = {};
-                    selectedNodeId = "";
-                }
-                touch();
+            function describe(node) { return node ? node.kind : "…"; }
+            function ancestorChain(node) {
+                const chain = [];
+                for (let current = node; current; current = parentOverrides.get(current)) chain.unshift(current);
+                return chain;
             }
-            function describe(node) {
-                return node.kind === "primitive" ? node.metric : node.kind;
-            }
-            function findLocation(id, node, parent, slot) {
-                if (!node || !node.kind)
-                    return null;
-                if (node.id === id)
-                    return {
-                        node: node,
-                        parent: parent,
-                        slot: slot
-                    };
-                if (isBinary(node.kind))
-                    return findLocation(id, node.left, node, "left") || findLocation(id, node.right, node, "right");
-                return findLocation(id, node.input, node, "input");
-            }
-            function isBinary(kind) {
-                return ["add", "subtract", "multiply", "divide"].indexOf(kind) >= 0;
-            }
-            function locationFor(id) {
-                return findLocation(id, root, null, "root");
-            }
-            function makeNode(kind) {
-                const node = {
-                    id: "node-" + nextId++,
-                    kind: kind
-                };
-                if (kind === "primitive")
-                    node.metric = "score";
-                else if (kind === "constant")
-                    node.value = 0;
-                else if (isBinary(kind)) {
-                    node.left = {};
-                    node.right = {};
-                } else {
-                    node.input = {};
-                    if (kind === "rollingMean")
-                        node.window = 10;
-                    if (kind === "averageAcrossRuns")
-                        node.selection = {
-                            kind: "recentRuns",
-                            count: 5
-                        };
-                }
-                return node;
-            }
-            function pathTo(id, node, path) {
-                if (!node || !node.kind)
-                    return null;
-                const extended = path.concat([node]);
-                if (node.id === id)
-                    return extended;
-                if (isBinary(node.kind))
-                    return pathTo(id, node.left, extended) || pathTo(id, node.right, extended);
-                return pathTo(id, node.input, extended);
-            }
-            function replaceChild(parentId, slot, kind) {
-                replaceCalls.push({
-                    parentId: parentId,
-                    slot: slot,
-                    kind: kind
-                });
-                const replacement = makeNode(kind);
-                if (slot === "root")
-                    root = replacement;
-                else {
-                    const parent = locationFor(parentId);
-                    if (!parent)
-                        return;
-                    parent.node[slot] = replacement;
-                }
-                selectedNodeId = replacement.id;
-                touch();
-            }
-            function select(id) {
-                selectCalls.push(id);
-                selectedNodeId = id;
-            }
-            function touch() {
-                treeRevision++;
-            }
-            function updateField(id, field, value) {
-                updateCalls.push({
-                    id: id,
-                    field: field,
-                    value: value
-                });
-                const location = locationFor(id);
-                if (!location)
-                    return;
-                if (location.node.kind === "averageAcrossRuns" && (field === "count" || field === "percent"))
-                    location.node.selection[field] = value;
-                else
-                    location.node[field] = value;
-                touch();
-            }
-            function wrapSelected(kind) {
-                wrapCalls.push(kind);
-                const location = locationFor(selectedNodeId);
-                if (!location)
-                    return;
-                const wrapper = makeNode(kind);
-                if (isBinary(kind))
-                    wrapper.left = location.node;
-                else
-                    wrapper.input = location.node;
-                if (location.parent)
-                    location.parent[location.slot] = wrapper;
-                else
-                    root = wrapper;
-                selectedNodeId = wrapper.id;
-                touch();
-            }
+            function select(node) { selected = node; }
+            function deleteNode(node) { deleteCalls.push(node); }
+            function wrapSelected(kind) { wrapCalls.push(kind); }
+            function replaceChild(parent, slot, kind) { replaceCalls.push({ parent: parent, slot: slot, kind: kind }); }
         }
     }
 }

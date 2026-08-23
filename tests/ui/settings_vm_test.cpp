@@ -330,8 +330,9 @@ namespace {
         std::unique_ptr<SeriesExpressionEditorModel> editor(view_model->beginExpressionEdit("3"));
 
         ASSERT_NE(editor, nullptr);
-        EXPECT_EQ(editor->root().value("kind"), "primitive");
-        EXPECT_EQ(editor->root().value("metric"), "hits");
+        auto *root = qobject_cast<EditablePrimitiveNode *>(editor->root());
+        ASSERT_NE(root, nullptr);
+        EXPECT_EQ(root->metric(), "hits");
     }
 
     TEST_F(SettingsViewModelTest, BeginExpressionEditReturnsEditorWithEmptyRootForUnknownId) {
@@ -339,7 +340,7 @@ namespace {
         std::unique_ptr<SeriesExpressionEditorModel> editor(view_model->beginExpressionEdit("999"));
 
         ASSERT_NE(editor, nullptr);
-        EXPECT_TRUE(editor->root().isEmpty());
+        EXPECT_EQ(editor->root(), nullptr);
     }
 
     TEST_F(SettingsViewModelTest, BeginExpressionEditReturnsANewInstanceOnEveryCall) {

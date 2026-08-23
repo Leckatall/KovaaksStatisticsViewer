@@ -10,9 +10,8 @@
 #include <QSettings>
 #include <QTemporaryDir>
 
-#include "components/graph_canvas.h"
-#include "presentation/completion_history_vm.h"
 #include "usecases/i_session_controller.h"
+#include "qml_registration.h"
 
 class UiQmlTestSetup : public QObject {
     Q_OBJECT
@@ -32,9 +31,7 @@ public slots:
         }
 
         qRegisterMetaType<ksv::application::ISessionController *>();
-        qmlRegisterUncreatableType<ksv::presentation::CompletionHistoryViewModel>(
-            "KovaaksStatsViewer", 1, 0, "CompletionHistoryViewModel", "Created in C++");
-        qmlRegisterType<ksv::ui::GraphCanvas>("KovaaksStatsViewer", 1, 0, "GraphCanvas");
+        ksv::declare_metatypes();
     }
 };
 

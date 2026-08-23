@@ -1,200 +1,212 @@
 #include <gtest/gtest.h>
 
+#include <QSignalSpy>
+
+#include "editable_expression_node.h"
 #include "series_expression_editor_model.h"
 #include "series_expression_qml.h"
 
 using ksv::application::PrimitiveMetric;
+using ksv::application::RecentRuns;
 using ksv::application::add;
 using ksv::application::averageAcrossRuns;
 using ksv::application::numericConstant;
 using ksv::application::primitive;
 using ksv::application::rollingMean;
-using ksv::application::RecentRuns;
+using ksv::presentation::EditableAverageAcrossRunsNode;
+using ksv::presentation::EditableBinaryOpNode;
+using ksv::presentation::EditableConstantNode;
+using ksv::presentation::EditableExpressionNode;
+using ksv::presentation::EditablePrimitiveNode;
+using ksv::presentation::EditableRollingMeanNode;
 using ksv::presentation::SeriesExpressionEditorModel;
 using ksv::presentation::expressionMap;
 using ksv::presentation::parseExpression;
 
 namespace {
-    QVariantMap child(const QVariantMap &node, const char *slot) { return node.value(slot).toMap(); }
+    void primitiveRoot(SeriesExpressionEditorModel &model) { model.replaceChild(nullptr, "root", "primitive"); }
 
-    void primitiveRoot(SeriesExpressionEditorModel &model) { model.replaceChild({}, "root", "primitive"); }
-
-    TEST(SeriesExpressionEditorModelTest, DefaultConstructedModelHasEmptyRootAndNoSelection) {
+    TEST(SeriesExpressionEditorModelTest, DefaultConstructedModelHasNoRootAndNoSelection) {
         SeriesExpressionEditorModel model;
-        EXPECT_TRUE(model.root().isEmpty());
-        EXPECT_TRUE(model.selectedNodeId().isEmpty());
+        EXPECT_EQ(model.root(), nullptr);
+        EXPECT_EQ(model.selected(), nullptr);
         EXPECT_FALSE(model.toExpression());
     }
 
     TEST(SeriesExpressionEditorModelTest, LoadFromPrimitiveExpressionPopulatesRootWithLowercaseMetric) {
         SeriesExpressionEditorModel model;
         model.loadFrom(primitive(PrimitiveMetric::Hits));
-        EXPECT_EQ(model.root().value("metric"), "hits");
+        auto *root = qobject_cast<EditablePrimitiveNode *>(model.root());
+        ASSERT_NE(root, nullptr);
+        EXPECT_EQ(root->metric(), "hits");
     }
 
-    TEST(SeriesExpressionEditorModelTest, LoadFromNestedExpressionAssignsEveryNodeAUniqueId) {
+    TEST(SeriesExpressionEditorModelTest, LoadFromNestedExpressionSetsParentPointersThroughoutTheTree) {
         SeriesExpressionEditorModel model;
         model.loadFrom(rollingMean(add(primitive(PrimitiveMetric::Hits), primitive(PrimitiveMetric::Shots)), 4));
-        const auto root = model.root();
-        EXPECT_NE(root.value("id"), child(root, "input").value("id"));
-        EXPECT_NE(child(root, "input").value("id"), child(child(root, "input"), "left").value("id"));
+        auto *root = qobject_cast<EditableRollingMeanNode *>(model.root());
+        ASSERT_NE(root, nullptr);
+        auto *addNode = qobject_cast<EditableBinaryOpNode *>(root->input());
+        ASSERT_NE(addNode, nullptr);
+        EXPECT_EQ(addNode->parentNode(), root);
+        EXPECT_EQ(addNode->left()->parentNode(), addNode);
     }
 
-    TEST(SeriesExpressionEditorModelTest, MapShapesKeepEditorIdsSeparateFromPersistence) {
+    TEST(SeriesExpressionEditorModelTest, ToExpressionMapOmitsParentBookkeepingAndParses) {
         SeriesExpressionEditorModel model;
         primitiveRoot(model);
-        const auto editable = model.root();
         const auto persistent = model.toExpressionMap();
-        EXPECT_TRUE(editable.contains("id"));
-        EXPECT_TRUE(editable.contains("metric"));
-        EXPECT_FALSE(editable.contains("primitiveMetric"));
         EXPECT_FALSE(persistent.contains("id"));
         EXPECT_TRUE(persistent.contains("primitiveMetric"));
         EXPECT_TRUE(parseExpression(persistent));
     }
 
-    TEST(SeriesExpressionEditorModelTest, AncestorChainReturnsEditableShapeNodesWithIdAndMetricField) {
+    TEST(SeriesExpressionEditorModelTest, AncestorChainReturnsRootToTargetPath) {
         SeriesExpressionEditorModel model;
         model.loadFrom(rollingMean(primitive(PrimitiveMetric::Score), 10));
-        const auto input = child(model.root(), "input");
-        const auto path = model.ancestorChain(input.value("id").toString());
+        auto *input = qobject_cast<EditableRollingMeanNode *>(model.root())->input();
+        const auto path = model.ancestorChain(input);
         ASSERT_EQ(path.size(), 2);
-        EXPECT_TRUE(path.last().toMap().contains("id"));
-        EXPECT_TRUE(path.last().toMap().contains("metric"));
+        EXPECT_EQ(path.first().value<EditableExpressionNode *>(), model.root());
+        EXPECT_EQ(path.last().value<EditableExpressionNode *>(), input);
     }
 
-    TEST(SeriesExpressionEditorModelTest, ToExpressionMapNestedShapeParsesSuccessfully) {
+    TEST(SeriesExpressionEditorModelTest, AncestorChainOfANodeNotInTheTreeIsEmpty) {
         SeriesExpressionEditorModel model;
-        model.replaceChild({}, "root", "rollingMean");
-        model.replaceChild(model.selectedNodeId(), "input", "primitive");
-        const auto map = model.toExpressionMap();
-        EXPECT_FALSE(map.contains("id"));
-        EXPECT_FALSE(child(map, "input").contains("id"));
-        EXPECT_TRUE(parseExpression(map));
+        model.loadFrom(primitive(PrimitiveMetric::Score));
+        EditablePrimitiveNode detached;
+        EXPECT_TRUE(model.ancestorChain(&detached).isEmpty());
+        EXPECT_TRUE(model.ancestorChain(nullptr).isEmpty());
     }
 
     TEST(SeriesExpressionEditorModelTest, ReplaceChildSupportsRootBinaryUnaryAndDefaults) {
         SeriesExpressionEditorModel model;
-        model.replaceChild({}, "root", "add");
-        const auto rootId = model.selectedNodeId();
-        model.replaceChild(rootId, "left", "constant");
-        EXPECT_DOUBLE_EQ(child(model.root(), "left").value("value").toDouble(), 0.0);
-        model.replaceChild(rootId, "right", "rollingMean");
-        const auto rolling = child(model.root(), "right");
-        EXPECT_EQ(rolling.value("window").toUInt(), 10U);
-        const auto before = model.treeRevision();
-        model.replaceChild(rolling.value("id").toString(), "input", "averageAcrossRuns");
-        EXPECT_GT(model.treeRevision(), before);
-        const auto average = child(child(model.root(), "right"), "input");
-        EXPECT_EQ(average.value("selection").toMap().value("kind"), "recentRuns");
-        EXPECT_EQ(average.value("selection").toMap().value("count").toUInt(), 5U);
+        model.replaceChild(nullptr, "root", "add");
+        auto *root = qobject_cast<EditableBinaryOpNode *>(model.selected());
+        model.replaceChild(root, "left", "constant");
+        EXPECT_DOUBLE_EQ(qobject_cast<EditableConstantNode *>(root->left())->value(), 0.0);
+        model.replaceChild(root, "right", "rollingMean");
+        auto *rolling = qobject_cast<EditableRollingMeanNode *>(root->right());
+        ASSERT_NE(rolling, nullptr);
+        EXPECT_EQ(rolling->window(), 10U);
+        model.replaceChild(rolling, "input", "averageAcrossRuns");
+        auto *average = qobject_cast<EditableAverageAcrossRunsNode *>(rolling->input());
+        ASSERT_NE(average, nullptr);
+        EXPECT_EQ(average->selectionKind(), "recentRuns");
+        EXPECT_EQ(average->count(), 5U);
+    }
+
+    TEST(SeriesExpressionEditorModelTest, ReplaceChildWithMismatchedSlotIsANoOpAndDoesNotLeak) {
+        SeriesExpressionEditorModel model;
+        model.replaceChild(nullptr, "root", "rollingMean");
+        auto *root = model.selected();
+        model.replaceChild(root, "left", "primitive");
+        EXPECT_EQ(qobject_cast<EditableRollingMeanNode *>(root)->input(), nullptr);
+    }
+
+    TEST(SeriesExpressionEditorModelTest, ReplaceChildWithNullParentAndNonRootSlotIsANoOp) {
+        SeriesExpressionEditorModel model;
+        model.replaceChild(nullptr, "left", "add");
+        EXPECT_EQ(model.root(), nullptr);
+        EXPECT_EQ(model.selected(), nullptr);
     }
 
     TEST(SeriesExpressionEditorModelTest, IncompleteUnaryNodesAreNotSaveableButCompleteNodesRoundTrip) {
         SeriesExpressionEditorModel model;
-        model.replaceChild({}, "root", "rollingMean");
+        model.replaceChild(nullptr, "root", "rollingMean");
         EXPECT_FALSE(model.toExpression());
-        const auto rollingId = model.selectedNodeId();
-        model.replaceChild(rollingId, "input", "primitive");
+        model.replaceChild(model.selected(), "input", "primitive");
         const auto parsed = model.toExpression();
         ASSERT_TRUE(parsed);
         EXPECT_EQ(expressionMap(*parsed).value("window").toUInt(), 10U);
 
         SeriesExpressionEditorModel average;
-        average.replaceChild({}, "root", "averageAcrossRuns");
+        average.replaceChild(nullptr, "root", "averageAcrossRuns");
         EXPECT_FALSE(average.toExpression());
-        average.replaceChild(average.selectedNodeId(), "input", "primitive");
+        average.replaceChild(average.selected(), "input", "primitive");
         EXPECT_TRUE(average.toExpression());
     }
 
-    TEST(SeriesExpressionEditorModelTest, DeleteNodeClearsRootOrChildAndUnknownIsNoOp) {
+    TEST(SeriesExpressionEditorModelTest, DeleteNodeClearsRootOrChildAndSelectsParent) {
         SeriesExpressionEditorModel model;
-        model.replaceChild({}, "root", "add");
-        const auto rootId = model.selectedNodeId();
-        model.replaceChild(rootId, "left", "primitive");
-        model.deleteNode(child(model.root(), "left").value("id").toString());
-        EXPECT_TRUE(child(model.root(), "left").isEmpty());
-        EXPECT_EQ(model.selectedNodeId(), rootId);
-        const auto revision = model.treeRevision();
-        model.deleteNode("missing");
-        EXPECT_EQ(model.treeRevision(), revision);
-        model.deleteNode(rootId);
-        EXPECT_TRUE(model.root().isEmpty());
-        EXPECT_TRUE(model.selectedNodeId().isEmpty());
+        model.replaceChild(nullptr, "root", "add");
+        auto *root = qobject_cast<EditableBinaryOpNode *>(model.selected());
+        model.replaceChild(root, "left", "primitive");
+        model.deleteNode(root->left());
+        EXPECT_EQ(root->left(), nullptr);
+        EXPECT_EQ(model.selected(), root);
+        model.deleteNode(nullptr);
+        EXPECT_EQ(model.root(), root);
+        model.deleteNode(root);
+        EXPECT_EQ(model.root(), nullptr);
+        EXPECT_EQ(model.selected(), nullptr);
     }
 
     TEST(SeriesExpressionEditorModelTest, WrapSelectedPreservesNodeAndUsesSharedDefaults) {
         SeriesExpressionEditorModel model;
         primitiveRoot(model);
+        auto *originalPrimitive = model.root();
         model.wrapSelected("rollingMean");
-        const auto rolling = model.root();
-        EXPECT_EQ(rolling.value("window").toUInt(), 10U);
-        EXPECT_EQ(child(rolling, "input").value("kind"), "primitive");
+        auto *rolling = qobject_cast<EditableRollingMeanNode *>(model.root());
+        ASSERT_NE(rolling, nullptr);
+        EXPECT_EQ(rolling->window(), 10U);
+        EXPECT_EQ(rolling->input(), originalPrimitive);
         model.wrapSelected("add");
-        EXPECT_EQ(model.root().value("kind"), "add");
-        EXPECT_EQ(child(model.root(), "left").value("kind"), "rollingMean");
+        auto *added = qobject_cast<EditableBinaryOpNode *>(model.root());
+        ASSERT_NE(added, nullptr);
+        EXPECT_EQ(added->left(), rolling);
     }
 
     TEST(SeriesExpressionEditorModelTest, WrapSelectedWithNoSelectionIsANoOp) {
         SeriesExpressionEditorModel model;
-        const auto revision = model.treeRevision();
-
         model.wrapSelected("rollingMean");
-
-        EXPECT_TRUE(model.root().isEmpty());
-        EXPECT_EQ(model.treeRevision(), revision);
+        EXPECT_EQ(model.root(), nullptr);
     }
 
-    TEST(SeriesExpressionEditorModelTest, ChangeBinaryOperatorPreservesChildrenAndRejectsInvalidTargets) {
-        SeriesExpressionEditorModel model;
-        model.replaceChild({}, "root", "add");
-        const auto id = model.selectedNodeId();
-        model.replaceChild(id, "left", "primitive");
-        model.replaceChild(id, "right", "constant");
-        model.changeBinaryOperator(id, "divide");
-        EXPECT_EQ(model.root().value("kind"), "divide");
-        EXPECT_EQ(child(model.root(), "left").value("kind"), "primitive");
-        model.changeBinaryOperator(id, "rollingMean");
-        model.changeBinaryOperator("missing", "add");
-        EXPECT_EQ(model.root().value("kind"), "divide");
-    }
-
-    TEST(SeriesExpressionEditorModelTest, UpdateFieldAndSelectionKindChangeTheCorrectFields) {
-        SeriesExpressionEditorModel model;
-        model.replaceChild({}, "root", "constant");
-        model.updateField(model.selectedNodeId(), "value", 3.5);
-        EXPECT_DOUBLE_EQ(model.root().value("value").toDouble(), 3.5);
-        primitiveRoot(model);
-        model.updateField(model.selectedNodeId(), "metric", "kills");
-        EXPECT_EQ(model.root().value("metric"), "kills");
-        model.wrapSelected("rollingMean");
-        model.updateField(model.selectedNodeId(), "window", 7);
-        EXPECT_EQ(model.root().value("window").toUInt(), 7U);
-        model.wrapSelected("averageAcrossRuns");
-        model.updateField(model.selectedNodeId(), "count", 8);
-        EXPECT_EQ(model.root().value("selection").toMap().value("count").toUInt(), 8U);
-        model.changeSelectionKind(model.selectedNodeId(), "topPercentile");
-        model.updateField(model.selectedNodeId(), "percent", 25.0);
-        EXPECT_DOUBLE_EQ(model.root().value("selection").toMap().value("percent").toDouble(), 25.0);
-        model.changeSelectionKind(model.selectedNodeId(), "recentRuns");
-        EXPECT_EQ(model.root().value("selection").toMap().value("count").toUInt(), 5U);
-    }
-
-    TEST(SeriesExpressionEditorModelTest, ChangeSelectionKindIgnoresNonAverageAcrossRunsNode) {
+    TEST(SeriesExpressionEditorModelTest, WrapSelectedWithALeafKindPreservesRootAndSelection) {
         SeriesExpressionEditorModel model;
         primitiveRoot(model);
-        const auto before = model.root();
-
-        model.changeSelectionKind(model.selectedNodeId(), "topPercentile");
-
-        EXPECT_EQ(model.root(), before);
+        auto *originalPrimitive = model.root();
+        model.wrapSelected("constant");
+        EXPECT_EQ(model.root(), originalPrimitive);
+        EXPECT_EQ(model.selected(), originalPrimitive);
     }
 
-    TEST(SeriesExpressionEditorModelTest, DescribeAndMetadataMatchTheEditorContract) {
+    TEST(SeriesExpressionEditorModelTest, WrapSelectedOnARightChildRestoresItToTheRightSlot) {
         SeriesExpressionEditorModel model;
-        EXPECT_EQ(model.describe({}), QString::fromUtf8("…"));
+        model.replaceChild(nullptr, "root", "add");
+        auto *root = qobject_cast<EditableBinaryOpNode *>(model.selected());
+        model.replaceChild(root, "left", "primitive");
+        model.replaceChild(root, "right", "constant");
+        model.select(root->right());
+        model.wrapSelected("rollingMean");
+        EXPECT_NE(root->right(), nullptr);
+        EXPECT_EQ(qobject_cast<EditableRollingMeanNode *>(root->right())->kind(), "rollingMean");
+        ASSERT_NE(root->left(), nullptr);
+        EXPECT_EQ(root->left()->kind(), "primitive");
+    }
+
+    TEST(SeriesExpressionEditorModelTest, SameShapeOperatorChangeIsAPropertyWriteThatPreservesChildren) {
+        SeriesExpressionEditorModel model;
+        model.replaceChild(nullptr, "root", "add");
+        auto *root = qobject_cast<EditableBinaryOpNode *>(model.selected());
+        model.replaceChild(root, "left", "primitive");
+        model.replaceChild(root, "right", "constant");
+        auto *left = root->left();
+        root->setKind("divide");
+        EXPECT_EQ(root->kind(), "divide");
+        EXPECT_EQ(root->left(), left);
+    }
+
+    TEST(SeriesExpressionEditorModelTest, DescribeDelegatesToTheNodeAndHandlesNull) {
+        SeriesExpressionEditorModel model;
+        EXPECT_EQ(model.describe(nullptr), QString::fromUtf8("…"));
         model.loadFrom(rollingMean(primitive(PrimitiveMetric::Score), 9));
         EXPECT_EQ(model.describe(model.root()), "RollingMean(score, window: 9)");
+    }
+
+    TEST(SeriesExpressionEditorModelTest, MetadataMatchesTheEditorContract) {
+        SeriesExpressionEditorModel model;
         EXPECT_TRUE(model.isBinary("multiply"));
         EXPECT_FALSE(model.isBinary("rollingMean"));
         EXPECT_EQ(model.childSlotsFor("add"), (QStringList{"left", "right"}));
@@ -204,14 +216,12 @@ namespace {
         EXPECT_EQ(model.primitiveMetrics(), (QStringList{"score", "shots", "hits", "kills", "dmg"}));
     }
 
-    TEST(SeriesExpressionEditorModelTest, AncestorChainAndSelectFollowTheRootToTargetPath) {
+    TEST(SeriesExpressionEditorModelTest, SelectSetsTheSelectedProperty) {
         SeriesExpressionEditorModel model;
         model.loadFrom(rollingMean(primitive(PrimitiveMetric::Score), 3));
-        const auto inputId = child(model.root(), "input").value("id").toString();
-        EXPECT_EQ(model.ancestorChain(inputId).size(), 2);
-        EXPECT_TRUE(model.ancestorChain("missing").isEmpty());
-        model.select(inputId);
-        EXPECT_EQ(model.selectedNodeId(), inputId);
+        auto *input = qobject_cast<EditableRollingMeanNode *>(model.root())->input();
+        model.select(input);
+        EXPECT_EQ(model.selected(), input);
     }
 
     TEST(SeriesExpressionEditorModelTest, ToExpressionRoundTripsEverySupportedNodeKind) {
@@ -222,5 +232,40 @@ namespace {
         const auto result = model.toExpression();
         ASSERT_TRUE(result);
         EXPECT_EQ(expressionMap(*result), expressionMap(expression));
+    }
+
+    TEST(SeriesExpressionEditorModelTest, RootChangedAndSelectedChangedFireOnlyWhenTheValueActuallyChanges) {
+        SeriesExpressionEditorModel model;
+        QSignalSpy rootSpy(&model, &SeriesExpressionEditorModel::rootChanged);
+        QSignalSpy selectedSpy(&model, &SeriesExpressionEditorModel::selectedChanged);
+        model.replaceChild(nullptr, "root", "primitive");
+        EXPECT_EQ(rootSpy.count(), 1);
+        EXPECT_EQ(selectedSpy.count(), 1);
+        model.select(model.root());
+        EXPECT_EQ(selectedSpy.count(), 1);
+    }
+
+    TEST(SeriesExpressionEditorModelTest, ReplaceChildClearsSelectedBeforeTheOldSubtreeIsDestroyed) {
+        SeriesExpressionEditorModel model;
+        model.replaceChild(nullptr, "root", "rollingMean");
+        auto *root = qobject_cast<EditableRollingMeanNode *>(model.selected());
+        model.replaceChild(root, "input", "primitive");
+        auto *innerNode = root->input();
+        model.select(innerNode);
+        bool sawDanglingSelection = false;
+        QObject::connect(&model, &SeriesExpressionEditorModel::selectedChanged, &model, [&] {
+            sawDanglingSelection = sawDanglingSelection || model.selected() == innerNode;
+        });
+        model.replaceChild(nullptr, "root", "constant");
+        EXPECT_FALSE(sawDanglingSelection);
+    }
+
+    TEST(SeriesExpressionEditorModelTest, WrapSelectedOnTheRootFiresRootChangedExactlyOnce) {
+        SeriesExpressionEditorModel model;
+        primitiveRoot(model);
+        QSignalSpy rootSpy(&model, &SeriesExpressionEditorModel::rootChanged);
+        model.wrapSelected("rollingMean");
+        EXPECT_EQ(rootSpy.count(), 1);
+        EXPECT_NE(model.root(), nullptr);
     }
 }

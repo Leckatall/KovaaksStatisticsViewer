@@ -2,30 +2,11 @@
 
 #include "series_expression_qml.h"
 
-#include <cmath>
 #include <type_traits>
 
 namespace ksv::presentation {
-    struct SeriesExpressionEditorModel::MutableExprNode {
-        QString id;
-        QString kind;
-        QString primitiveMetric;
-        double value = 0.0;
-        std::shared_ptr<MutableExprNode> left;
-        std::shared_ptr<MutableExprNode> right;
-        std::shared_ptr<MutableExprNode> input;
-        uint32_t window = 0;
-        QString selectionKind;
-        uint32_t selectionCount = 0;
-        double selectionPercent = 0.0;
-    };
-
     SeriesExpressionEditorModel::SeriesExpressionEditorModel(QObject *parent) : QObject(parent) {}
     SeriesExpressionEditorModel::~SeriesExpressionEditorModel() = default;
-
-    QVariantMap SeriesExpressionEditorModel::root() const { return nodeToEditableMap(m_root); }
-    QString SeriesExpressionEditorModel::selectedNodeId() const { return m_selected_node_id; }
-    int SeriesExpressionEditorModel::treeRevision() const { return m_tree_revision; }
 
     QStringList SeriesExpressionEditorModel::nodeKinds() const {
         return {"primitive", "constant", "add", "subtract", "multiply", "divide", "runningSum", "rollingMean",
@@ -47,235 +28,256 @@ namespace ksv::presentation {
         return {};
     }
 
-    std::shared_ptr<SeriesExpressionEditorModel::MutableExprNode>
-    SeriesExpressionEditorModel::makeNode(const QString &kind) {
-        if (!nodeKinds().contains(kind)) return {};
-        auto node = std::make_shared<MutableExprNode>();
-        node->id = QString("node-%1").arg(m_next_id++);
-        node->kind = kind;
-        if (kind == "primitive") node->primitiveMetric = primitiveMetrics().front();
-        else if (kind == "rollingMean") node->window = 10;
-        else if (kind == "averageAcrossRuns") {
-            node->selectionKind = "recentRuns";
-            node->selectionCount = 5;
+    EditableExpressionNode *SeriesExpressionEditorModel::makeNode(const QString &kind) {
+        if (kind == "primitive") return new EditablePrimitiveNode();
+        if (kind == "constant") return new EditableConstantNode();
+        if (kind == "add" || kind == "subtract" || kind == "multiply" || kind == "divide") {
+            auto *node = new EditableBinaryOpNode();
+            node->setKind(kind);
+            return node;
         }
-        return node;
+        if (kind == "rollingMean") return new EditableRollingMeanNode();
+        if (kind == "averageAcrossRuns") return new EditableAverageAcrossRunsNode();
+        if (kind == "runningSum" || kind == "projectedFinalValue" || kind == "projectRateToFinal") {
+            auto *node = new EditableUnaryOpNode();
+            node->setKind(kind);
+            return node;
+        }
+        return nullptr;
     }
 
-    bool SeriesExpressionEditorModel::findLocation(const QString &id, const std::shared_ptr<MutableExprNode> &node,
-                                                    std::shared_ptr<MutableExprNode> *parent, QString *slot) const {
-        if (!node) return false;
-        if (node->id == id) return true;
-        const auto search = [&](const std::shared_ptr<MutableExprNode> &child, const QString &childSlot) {
-            if (!findLocation(id, child, parent, slot)) return false;
-            if (parent && !*parent) *parent = node;
-            if (slot && slot->isEmpty()) *slot = childSlot;
+    QString SeriesExpressionEditorModel::slotOf(EditableExpressionNode *parent, EditableExpressionNode *child) {
+        if (auto *binary = qobject_cast<EditableBinaryOpNode *>(parent)) {
+            if (binary->left() == child) return "left";
+            if (binary->right() == child) return "right";
+            return {};
+        }
+        if (qobject_cast<EditableUnaryOpNode *>(parent) || qobject_cast<EditableRollingMeanNode *>(parent) ||
+            qobject_cast<EditableAverageAcrossRunsNode *>(parent)) return "input";
+        return {};
+    }
+
+    bool SeriesExpressionEditorModel::setChildInParent(EditableExpressionNode *parent, const QString &slot,
+                                                        EditableExpressionNode *node) {
+        if (auto *binary = qobject_cast<EditableBinaryOpNode *>(parent); binary && slot == "left") {
+            binary->setLeft(node);
             return true;
-        };
-        if (isBinary(node->kind)) return search(node->left, "left") || search(node->right, "right");
-        return search(node->input, "input");
+        }
+        if (auto *binary = qobject_cast<EditableBinaryOpNode *>(parent); binary && slot == "right") {
+            binary->setRight(node);
+            return true;
+        }
+        if (auto *unary = qobject_cast<EditableUnaryOpNode *>(parent); unary && slot == "input") {
+            unary->setInput(node);
+            return true;
+        }
+        if (auto *rollingMean = qobject_cast<EditableRollingMeanNode *>(parent); rollingMean && slot == "input") {
+            rollingMean->setInput(node);
+            return true;
+        }
+        if (auto *average = qobject_cast<EditableAverageAcrossRunsNode *>(parent); average && slot == "input") {
+            average->setInput(node);
+            return true;
+        }
+        return false;
     }
 
-    std::shared_ptr<SeriesExpressionEditorModel::MutableExprNode>
-    SeriesExpressionEditorModel::findNode(const QString &id) const {
-        std::shared_ptr<MutableExprNode> parent;
-        QString slot;
-        if (!findLocation(id, m_root, &parent, &slot)) return {};
-        if (!parent) return m_root;
-        return slot == "left" ? parent->left : slot == "right" ? parent->right : parent->input;
+    void SeriesExpressionEditorModel::setRoot(EditableExpressionNode *node) {
+        if (m_root.get() == node) return;
+        m_root.reset(node);
+        if (m_root) m_root->setParentNode(nullptr);
+        emit rootChanged();
     }
 
-    void SeriesExpressionEditorModel::touch() { ++m_tree_revision; emit treeChanged(); }
-
-    void SeriesExpressionEditorModel::select(const QString &id) {
-        if (!findNode(id)) return;
-        m_selected_node_id = id;
-        emit treeChanged();
+    void SeriesExpressionEditorModel::setSelected(EditableExpressionNode *node) {
+        if (m_selected == node) return;
+        m_selected = node;
+        emit selectedChanged();
     }
 
-    void SeriesExpressionEditorModel::replaceChild(const QString &parentId, const QString &slot, const QString &kind) {
-        const auto replacement = makeNode(kind);
+    void SeriesExpressionEditorModel::select(EditableExpressionNode *node) { setSelected(node); }
+
+    void SeriesExpressionEditorModel::replaceChild(EditableExpressionNode *parent, const QString &slot,
+                                                    const QString &kind) {
+        auto *replacement = makeNode(kind);
         if (!replacement) return;
-        if (slot == "root") m_root = replacement;
-        else {
-            const auto parent = findNode(parentId);
-            if (!parent || !childSlotsFor(parent->kind).contains(slot)) return;
-            if (slot == "left") parent->left = replacement;
-            else if (slot == "right") parent->right = replacement;
-            else parent->input = replacement;
+        if (!parent) {
+            if (slot != "root") {
+                delete replacement;
+                return;
+            }
+        } else if (!childSlotsFor(parent->kind()).contains(slot)) {
+            delete replacement;
+            return;
         }
-        m_selected_node_id = replacement->id;
-        touch();
+        setSelected(nullptr);
+        if (!parent) setRoot(replacement);
+        else setChildInParent(parent, slot, replacement);
+        setSelected(replacement);
     }
 
-    void SeriesExpressionEditorModel::deleteNode(const QString &id) {
-        std::shared_ptr<MutableExprNode> parent;
-        QString slot;
-        if (!findLocation(id, m_root, &parent, &slot)) return;
+    std::unique_ptr<EditableExpressionNode> SeriesExpressionEditorModel::detachFromParent(EditableExpressionNode *node) {
+        if (!node) return nullptr;
+        auto *parent = node->parentNode();
         if (!parent) {
-            m_root.reset();
-            m_selected_node_id.clear();
-        } else {
-            if (slot == "left") parent->left.reset();
-            else if (slot == "right") parent->right.reset();
-            else parent->input.reset();
-            m_selected_node_id = parent->id;
+            if (m_root.get() != node) return nullptr;
+            auto detached = std::move(m_root);
+            emit rootChanged();
+            return detached;
         }
-        touch();
+        const auto slot = slotOf(parent, node);
+        if (auto *binary = qobject_cast<EditableBinaryOpNode *>(parent)) {
+            if (slot == "left") return binary->takeLeft();
+            if (slot == "right") return binary->takeRight();
+        } else if (auto *unary = qobject_cast<EditableUnaryOpNode *>(parent); unary && slot == "input") {
+            return unary->takeInput();
+        } else if (auto *rollingMean = qobject_cast<EditableRollingMeanNode *>(parent); rollingMean && slot == "input") {
+            return rollingMean->takeInput();
+        } else if (auto *average = qobject_cast<EditableAverageAcrossRunsNode *>(parent); average && slot == "input") {
+            return average->takeInput();
+        }
+        return nullptr;
+    }
+
+    void SeriesExpressionEditorModel::deleteNode(EditableExpressionNode *node) {
+        if (!node) return;
+        auto *parent = node->parentNode();
+        auto detached = detachFromParent(node);
+        if (!detached) return;
+        setSelected(parent);
     }
 
     void SeriesExpressionEditorModel::wrapSelected(const QString &kind) {
-        const auto selected = findNode(m_selected_node_id);
-        const auto wrapper = makeNode(kind);
-        if (!selected || !wrapper) return;
-        std::shared_ptr<MutableExprNode> parent;
-        QString slot;
-        findLocation(m_selected_node_id, m_root, &parent, &slot);
-        if (isBinary(kind)) wrapper->left = selected;
-        else if (childSlotsFor(kind).contains("input")) wrapper->input = selected;
-        else return;
-        if (!parent) m_root = wrapper;
-        else if (slot == "left") parent->left = wrapper;
-        else if (slot == "right") parent->right = wrapper;
-        else parent->input = wrapper;
-        m_selected_node_id = wrapper->id;
-        touch();
+        if (!m_selected) return;
+        auto *wrapper = makeNode(kind);
+        if (!wrapper) return;
+        const bool wrapperHasChildSlot = isBinary(kind) || childSlotsFor(kind).contains("input");
+        if (!wrapperHasChildSlot) {
+            delete wrapper;
+            return;
+        }
+        auto *parent = m_selected->parentNode();
+        const auto slot = parent ? slotOf(parent, m_selected) : QString();
+        std::unique_ptr<EditableExpressionNode> detachedSelected;
+        if (parent) {
+            detachedSelected = detachFromParent(m_selected);
+        } else if (m_root.get() == m_selected) {
+            detachedSelected = std::move(m_root);
+        }
+        if (!detachedSelected) {
+            delete wrapper;
+            return;
+        }
+        if (auto *binary = qobject_cast<EditableBinaryOpNode *>(wrapper)) {
+            binary->setLeft(detachedSelected.release());
+        } else if (auto *unary = qobject_cast<EditableUnaryOpNode *>(wrapper)) {
+            unary->setInput(detachedSelected.release());
+        } else if (auto *rollingMean = qobject_cast<EditableRollingMeanNode *>(wrapper)) {
+            rollingMean->setInput(detachedSelected.release());
+        } else if (auto *average = qobject_cast<EditableAverageAcrossRunsNode *>(wrapper)) {
+            average->setInput(detachedSelected.release());
+        }
+        if (!parent) setRoot(wrapper);
+        else setChildInParent(parent, slot, wrapper);
+        setSelected(wrapper);
     }
 
-    void SeriesExpressionEditorModel::changeBinaryOperator(const QString &id, const QString &kind) {
-        const auto node = findNode(id);
-        if (!node || !isBinary(node->kind) || !isBinary(kind)) return;
-        node->kind = kind;
-        touch();
+    QString SeriesExpressionEditorModel::describe(EditableExpressionNode *node) const {
+        return node ? node->describe() : QString::fromUtf8("…");
     }
 
-    void SeriesExpressionEditorModel::updateField(const QString &id, const QString &field, const QVariant &value) {
-        const auto node = findNode(id);
-        if (!node) return;
-        if (node->kind == "primitive" && field == "metric" && primitiveMetrics().contains(value.toString())) node->primitiveMetric = value.toString();
-        else if (node->kind == "constant" && field == "value") node->value = value.toDouble();
-        else if (node->kind == "rollingMean" && field == "window") node->window = value.toUInt();
-        else if (node->kind == "averageAcrossRuns" && field == "count" && node->selectionKind == "recentRuns") node->selectionCount = value.toUInt();
-        else if (node->kind == "averageAcrossRuns" && field == "percent" && node->selectionKind == "topPercentile") node->selectionPercent = value.toDouble();
-        else return;
-        touch();
-    }
-
-    void SeriesExpressionEditorModel::changeSelectionKind(const QString &id, const QString &kind) {
-        const auto node = findNode(id);
-        if (!node || node->kind != "averageAcrossRuns" || (kind != "recentRuns" && kind != "topPercentile")) return;
-        node->selectionKind = kind;
-        node->selectionCount = kind == "recentRuns" ? 5 : 0;
-        node->selectionPercent = kind == "topPercentile" ? 10.0 : 0.0;
-        touch();
-    }
-
-    QVariantMap SeriesExpressionEditorModel::nodeToEditableMap(const std::shared_ptr<MutableExprNode> &node) const {
+    QVariantList SeriesExpressionEditorModel::ancestorChain(EditableExpressionNode *node) const {
         if (!node) return {};
-        QVariantMap map{{"id", node->id}, {"kind", node->kind}};
-        if (node->kind == "primitive") map["metric"] = node->primitiveMetric;
-        else if (node->kind == "constant") map["value"] = node->value;
-        else if (node->kind == "rollingMean") { map["window"] = node->window; map["input"] = nodeToEditableMap(node->input); }
-        else if (node->kind == "averageAcrossRuns") {
-            map["input"] = nodeToEditableMap(node->input);
-            map["selection"] = node->selectionKind == "recentRuns"
-                ? QVariantMap{{"kind", "recentRuns"}, {"count", node->selectionCount}}
-                : QVariantMap{{"kind", "topPercentile"}, {"percent", node->selectionPercent}};
-        } else if (isBinary(node->kind)) { map["left"] = nodeToEditableMap(node->left); map["right"] = nodeToEditableMap(node->right); }
-        else if (childSlotsFor(node->kind).contains("input")) map["input"] = nodeToEditableMap(node->input);
+        QVariantList path;
+        for (auto *current = node; current; current = current->parentNode())
+            path.prepend(QVariant::fromValue(current));
+        if (path.isEmpty() || path.first().value<EditableExpressionNode *>() != m_root.get()) return {};
+        return path;
+    }
+
+    QVariantMap SeriesExpressionEditorModel::nodeToPersistenceMap(EditableExpressionNode *node) const {
+        if (!node) return {};
+        QVariantMap map{{"kind", node->kind()}};
+        if (auto *primitive = qobject_cast<EditablePrimitiveNode *>(node)) {
+            map["primitiveMetric"] = primitive->metric();
+        } else if (auto *constant = qobject_cast<EditableConstantNode *>(node)) {
+            map["value"] = constant->value();
+        } else if (auto *binary = qobject_cast<EditableBinaryOpNode *>(node)) {
+            map["left"] = nodeToPersistenceMap(binary->left());
+            map["right"] = nodeToPersistenceMap(binary->right());
+        } else if (auto *unary = qobject_cast<EditableUnaryOpNode *>(node)) {
+            map["input"] = nodeToPersistenceMap(unary->input());
+        } else if (auto *rollingMean = qobject_cast<EditableRollingMeanNode *>(node)) {
+            map["window"] = rollingMean->window();
+            map["input"] = nodeToPersistenceMap(rollingMean->input());
+        } else if (auto *average = qobject_cast<EditableAverageAcrossRunsNode *>(node)) {
+            map["input"] = nodeToPersistenceMap(average->input());
+            map["selection"] = average->selectionKind() == "recentRuns"
+                ? QVariantMap{{"kind", "recentRuns"}, {"count", average->count()}}
+                : QVariantMap{{"kind", "topPercentile"}, {"percent", average->percent()}};
+        }
         return map;
     }
 
-    QVariantMap SeriesExpressionEditorModel::nodeToPersistenceMap(const std::shared_ptr<MutableExprNode> &node) const {
-        if (!node) return {};
-        QVariantMap map{{"kind", node->kind}};
-        if (node->kind == "primitive") map["primitiveMetric"] = node->primitiveMetric;
-        else if (node->kind == "constant") map["value"] = node->value;
-        else if (node->kind == "rollingMean") { map["window"] = node->window; map["input"] = nodeToPersistenceMap(node->input); }
-        else if (node->kind == "averageAcrossRuns") {
-            map["input"] = nodeToPersistenceMap(node->input);
-            map["selection"] = node->selectionKind == "recentRuns"
-                ? QVariantMap{{"kind", "recentRuns"}, {"count", node->selectionCount}}
-                : QVariantMap{{"kind", "topPercentile"}, {"percent", node->selectionPercent}};
-        } else if (isBinary(node->kind)) { map["left"] = nodeToPersistenceMap(node->left); map["right"] = nodeToPersistenceMap(node->right); }
-        else if (childSlotsFor(node->kind).contains("input")) map["input"] = nodeToPersistenceMap(node->input);
-        return map;
+    QVariantMap SeriesExpressionEditorModel::toExpressionMap() const { return nodeToPersistenceMap(m_root.get()); }
+
+    std::optional<application::Expression> SeriesExpressionEditorModel::toExpression() const {
+        return parseExpression(toExpressionMap());
     }
 
-    QVariantMap SeriesExpressionEditorModel::toExpressionMap() const { return nodeToPersistenceMap(m_root); }
-    std::optional<application::Expression> SeriesExpressionEditorModel::toExpression() const { return parseExpression(toExpressionMap()); }
-
-    bool SeriesExpressionEditorModel::pathTo(const QString &id, const std::shared_ptr<MutableExprNode> &node,
-                                              QList<std::shared_ptr<MutableExprNode>> &path) const {
-        if (!node) return false;
-        path.append(node);
-        if (node->id == id) return true;
-        const bool found = isBinary(node->kind)
-            ? pathTo(id, node->left, path) || pathTo(id, node->right, path)
-            : pathTo(id, node->input, path);
-        if (!found) path.removeLast();
-        return found;
-    }
-
-    QVariantList SeriesExpressionEditorModel::ancestorChain(const QString &id) const {
-        QList<std::shared_ptr<MutableExprNode>> path;
-        if (!pathTo(id, m_root, path)) return {};
-        QVariantList result;
-        for (const auto &node: path) result.append(nodeToEditableMap(node));
-        return result;
-    }
-
-    QString SeriesExpressionEditorModel::describe(const QVariantMap &node) const {
-        if (node.isEmpty()) return QString::fromUtf8("…");
-        const auto kind = node.value("kind").toString();
-        if (kind == "primitive") return node.value("metric").toString();
-        if (kind == "constant") return QString::number(node.value("value").toDouble());
-        if (isBinary(kind)) {
-            const auto symbols = QMap<QString, QString>{{"add", "+"}, {"subtract", QString::fromUtf8("−")}, {"multiply", QString::fromUtf8("×")}, {"divide", QString::fromUtf8("÷")}};
-            return describe(node.value("left").toMap()) + " " + symbols.value(kind) + " " + describe(node.value("right").toMap());
-        }
-        const auto label = QMap<QString, QString>{{"runningSum", "RunningSum"}, {"rollingMean", "RollingMean"}, {"projectedFinalValue", "ProjectedFinalValue"}, {"projectRateToFinal", "ProjectRateToFinal"}, {"averageAcrossRuns", "AverageAcrossRuns"}}.value(kind);
-        if (kind == "rollingMean") return QString("%1(%2, window: %3)").arg(label, describe(node.value("input").toMap())).arg(node.value("window").toUInt());
-        if (kind == "averageAcrossRuns") {
-            const auto selection = node.value("selection").toMap();
-            const auto text = selection.value("kind").toString() == "recentRuns"
-                ? QString("recent %1").arg(selection.value("count").toUInt())
-                : QString("top %1%").arg(selection.value("percent").toDouble());
-            return QString("%1(%2, over: %3)").arg(label, describe(node.value("input").toMap()), text);
-        }
-        return QString("%1(%2)").arg(label, describe(node.value("input").toMap()));
-    }
-
-    std::shared_ptr<SeriesExpressionEditorModel::MutableExprNode>
-    SeriesExpressionEditorModel::nodeFromExpression(const application::Expression &expression) {
-        if (!expression) return {};
-        return std::visit([this](const auto &value) -> std::shared_ptr<MutableExprNode> {
+    EditableExpressionNode *SeriesExpressionEditorModel::nodeFromExpression(const application::Expression &expression) {
+        if (!expression) return nullptr;
+        return std::visit([this](const auto &value) -> EditableExpressionNode * {
             using Node = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<Node, application::PrimitiveReference>) {
-                auto node = makeNode("primitive"); node->primitiveMetric = primitiveMetrics().at(static_cast<int>(value.metric)); return node;
+                auto *node = new EditablePrimitiveNode();
+                node->setMetric(primitiveMetrics().at(static_cast<int>(value.metric)));
+                return node;
             } else if constexpr (std::is_same_v<Node, application::NumericConstant>) {
-                auto node = makeNode("constant"); node->value = value.value; return node;
-            } else if constexpr (std::is_same_v<Node, application::Add> || std::is_same_v<Node, application::Subtract> || std::is_same_v<Node, application::Multiply> || std::is_same_v<Node, application::Divide>) {
-                const auto kind = std::is_same_v<Node, application::Add> ? "add" : std::is_same_v<Node, application::Subtract> ? "subtract" : std::is_same_v<Node, application::Multiply> ? "multiply" : "divide";
-                auto node = makeNode(kind); node->left = nodeFromExpression(value.left); node->right = nodeFromExpression(value.right); return node;
-            } else {
-                const auto kind = std::is_same_v<Node, application::RunningSum> ? "runningSum" : std::is_same_v<Node, application::RollingMean> ? "rollingMean" : std::is_same_v<Node, application::ProjectedFinalValue> ? "projectedFinalValue" : std::is_same_v<Node, application::ProjectRateToFinal> ? "projectRateToFinal" : "averageAcrossRuns";
-                auto node = makeNode(kind); node->input = nodeFromExpression(value.input);
-                if constexpr (std::is_same_v<Node, application::RollingMean>) node->window = value.window;
-                if constexpr (std::is_same_v<Node, application::AverageAcrossRuns>) std::visit([&](const auto &selection) {
+                auto *node = new EditableConstantNode();
+                node->setValue(value.value);
+                return node;
+            } else if constexpr (std::is_same_v<Node, application::Add> || std::is_same_v<Node, application::Subtract> ||
+                                 std::is_same_v<Node, application::Multiply> || std::is_same_v<Node, application::Divide>) {
+                auto *node = new EditableBinaryOpNode();
+                node->setKind(std::is_same_v<Node, application::Add> ? "add"
+                    : std::is_same_v<Node, application::Subtract> ? "subtract"
+                    : std::is_same_v<Node, application::Multiply> ? "multiply" : "divide");
+                node->setLeft(nodeFromExpression(value.left));
+                node->setRight(nodeFromExpression(value.right));
+                return node;
+            } else if constexpr (std::is_same_v<Node, application::RollingMean>) {
+                auto *node = new EditableRollingMeanNode();
+                node->setWindow(value.window);
+                node->setInput(nodeFromExpression(value.input));
+                return node;
+            } else if constexpr (std::is_same_v<Node, application::AverageAcrossRuns>) {
+                auto *node = new EditableAverageAcrossRunsNode();
+                node->setInput(nodeFromExpression(value.input));
+                std::visit([&](const auto &selection) {
                     using Selection = std::decay_t<decltype(selection)>;
-                    if constexpr (std::is_same_v<Selection, application::RecentRuns>) { node->selectionKind = "recentRuns"; node->selectionCount = selection.count; }
-                    else { node->selectionKind = "topPercentile"; node->selectionPercent = selection.percent; }
+                    if constexpr (std::is_same_v<Selection, application::RecentRuns>) {
+                        node->setSelectionKind("recentRuns");
+                        node->setCount(selection.count);
+                    } else {
+                        node->setSelectionKind("topPercentile");
+                        node->setPercent(selection.percent);
+                    }
                 }, value.selection);
+                return node;
+            } else {
+                auto *node = new EditableUnaryOpNode();
+                node->setKind(std::is_same_v<Node, application::RunningSum> ? "runningSum"
+                    : std::is_same_v<Node, application::ProjectedFinalValue> ? "projectedFinalValue"
+                    : "projectRateToFinal");
+                node->setInput(nodeFromExpression(value.input));
                 return node;
             }
         }, expression->value());
     }
 
     void SeriesExpressionEditorModel::loadFrom(const application::Expression &expression) {
-        m_next_id = 1;
-        m_root = nodeFromExpression(expression);
-        m_selected_node_id.clear();
-        touch();
+        setSelected(nullptr);
+        setRoot(nodeFromExpression(expression));
     }
 }

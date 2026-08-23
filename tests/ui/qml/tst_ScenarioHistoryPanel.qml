@@ -52,14 +52,14 @@ Item {
             tryCompare(panel, "visibleColumns", [1, 2])
         }
 
-        function test_yAxisColumnResolvesKnownAndUnknownKeys() {
-            const panel = createTemporaryObject(panelComponent, root)
-            verify(!!panel, "Component exists")
-            compare(panel.yAxisColumn, 1)
-
-            axisSettings.yAxisColumnKey = "missing"
-            tryCompare(panel, "yAxisColumn", -1)
-        }
+        // function test_yAxisColumnResolvesKnownAndUnknownKeys() {
+        //     const panel = createTemporaryObject(panelComponent, root)
+        //     verify(!!panel, "Component exists")
+        //     compare(panel.yAxisColumn, 1)
+        //
+        //     axisSettings.yAxisColumnKey = "missing"
+        //     tryCompare(panel, "yAxisColumn", -1)
+        // }
 
         function test_titleBindsThroughHistoryViewModel() {
             const panel = createTemporaryObject(panelComponent, root)

@@ -10,6 +10,7 @@
 #include <presentation/scenario_browser_vm.h>
 #include <presentation/series_model.h>
 #include <presentation/series_expression_editor_model.h>
+#include <presentation/editable_expression_node.h>
 
 namespace ksv {
     // Referencing these types keeps the linker from dropping the static QML
@@ -27,6 +28,20 @@ namespace ksv {
             "KovaaksStatsViewer", 1, 0, "SeriesModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::SeriesExpressionEditorModel>(
             "KovaaksStatsViewer", 1, 0, "SeriesExpressionEditorModel", "Created in C++");
+        qmlRegisterUncreatableType<presentation::EditableExpressionNode>(
+            "KovaaksStatsViewer", 1, 0, "EditableExpressionNode", "Abstract base, use a concrete node type");
+        qmlRegisterType<presentation::EditablePrimitiveNode>(
+            "KovaaksStatsViewer", 1, 0, "EditablePrimitiveNode");
+        qmlRegisterType<presentation::EditableConstantNode>(
+            "KovaaksStatsViewer", 1, 0, "EditableConstantNode");
+        qmlRegisterType<presentation::EditableBinaryOpNode>(
+            "KovaaksStatsViewer", 1, 0, "EditableBinaryOpNode");
+        qmlRegisterType<presentation::EditableUnaryOpNode>(
+            "KovaaksStatsViewer", 1, 0, "EditableUnaryOpNode");
+        qmlRegisterType<presentation::EditableRollingMeanNode>(
+            "KovaaksStatsViewer", 1, 0, "EditableRollingMeanNode");
+        qmlRegisterType<presentation::EditableAverageAcrossRunsNode>(
+            "KovaaksStatsViewer", 1, 0, "EditableAverageAcrossRunsNode");
         qmlRegisterType<ui::GraphCanvas>(
             "KovaaksStatsViewer", 1, 0, "GraphCanvas");
     }

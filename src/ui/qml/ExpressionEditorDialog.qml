@@ -19,6 +19,7 @@ Dialog {
 
     // Popups are clipped by this surface, which can differ from the window's size.
     readonly property int overlayMargin: 40
+    implicitWidth: 400
     width: Overlay.overlay ? Math.min(implicitWidth, Math.max(0, Overlay.overlay.width - overlayMargin)) : implicitWidth
     height: Overlay.overlay ? Math.min(implicitHeight, Math.max(0, Overlay.overlay.height - overlayMargin)) : implicitHeight
 

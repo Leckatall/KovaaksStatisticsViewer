@@ -9,6 +9,7 @@ add_executable(ui_tests
     graph_vm_test.cpp
     playtime_graph_vm_test.cpp
     completion_history_vm_test.cpp
+    editable_expression_node_test.cpp
     session_vm_test.cpp
     settings_vm_test.cpp
     series_expression_editor_model_test.cpp
