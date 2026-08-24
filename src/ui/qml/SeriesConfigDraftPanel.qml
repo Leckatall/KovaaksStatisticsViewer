@@ -10,6 +10,7 @@ Pane {
     property var sourceRows: settingsVm.allSeriesConfigs
     property var displayRows: []
     property var colorTarget: null
+    property var axisNameTarget: null
     property string draggedSeriesId: ""
     property int dragOriginIndex: -1
     property int dragPreviewIndex: -1
@@ -19,6 +20,24 @@ Pane {
     property real dragRowHeight: 0
     readonly property alias colorDialog: colorDialog
     readonly property alias expressionDialog: expressionDialog
+    readonly property alias newAxisDialog: newAxisDialog
+    readonly property alias newAxisNameField: newAxisNameField
+    readonly property var axisComboModel: {
+        const items = [{
+            text: qsTr("Independent"),
+            value: ""
+        }]
+        for (const axis of settingsVm.allAxes)
+            items.push({
+                text: axis.name,
+                value: axis.id
+            })
+        items.push({
+            text: qsTr("+ New axis..."),
+            value: "__new__"
+        })
+        return items
+    }
 
     objectName: "seriesConfigDraftPanel"
     spacing: 8
@@ -28,6 +47,18 @@ Pane {
     }
     function updateSeries(row, name, color) {
         settingsVm.updateComputedSeries(row.id, name, color, row.width, row.enabled, row.expression)
+    }
+    function axisComboIndexFor(yAxisId) {
+        const id = yAxisId || ""
+        return axisComboModel.findIndex(function (item) { return item.value === id })
+    }
+    function handleAxisSelection(row, value) {
+        if (value === "__new__") {
+            root.axisNameTarget = row
+            newAxisDialog.open()
+            return
+        }
+        root.settingsVm.updateSeriesAxis(row.id, value)
     }
     function previewMove(position) {
         dragPreviewIndex = Math.max(0, Math.min(displayRows.length - 1, position))
@@ -55,6 +86,25 @@ Pane {
         onAccepted: if (root.colorTarget) root.updateSeries(root.colorTarget, root.colorTarget.name, selectedColor)
     }
     ExpressionEditorDialog { id: expressionDialog; settingsVm: root.settingsVm }
+    Dialog {
+        id: newAxisDialog
+        objectName: "newAxisDialog"
+        title: qsTr("New axis")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+
+        TextField {
+            id: newAxisNameField
+            objectName: "newAxisNameField"
+            placeholderText: qsTr("Axis name")
+        }
+
+        onAccepted: {
+            const result = root.settingsVm.createAxis(newAxisNameField.text)
+            if (result && result.succeeded && root.axisNameTarget)
+                root.settingsVm.updateSeriesAxis(root.axisNameTarget.id, result.createdAxisId)
+            newAxisNameField.text = ""
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -105,7 +155,7 @@ Pane {
                         id: lineRow
                         required property var modelData
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 5
                         z: root.draggedSeriesId === modelData.id ? 1 : 0
                         transform: Translate { y: root.previewOffset(lineRow.modelData.id) }
 
@@ -187,6 +237,7 @@ Pane {
                             Layout.fillWidth: true
                             text: lineRow.modelData.name
                             onEditingFinished: root.updateSeries(lineRow.modelData, text, lineRow.modelData.color)
+                            Component.onCompleted: cursorPosition = 0
                         }
                         Button {
                             objectName: "editExpressionButton_" + lineRow.modelData.id
@@ -200,9 +251,22 @@ Pane {
                                 expressionDialog.open()
                             }
                         }
+                        ComboBox {
+                            id: axisCombo
+                            objectName: "axisCombo_" + lineRow.modelData.id
+                            model: root.axisComboModel
+                            textRole: "text"
+                            valueRole: "value"
+                            implicitContentWidthPolicy: ComboBox.WidestText
+                            Layout.minimumWidth: implicitContentWidth + (padding * 2) + 10
+                            Layout.preferredWidth: implicitContentWidth + (padding * 2) + 20
+                            currentIndex: root.axisComboIndexFor(lineRow.modelData.yAxisId)
+                            onActivated: root.handleAxisSelection(lineRow.modelData, root.axisComboModel[currentIndex].value)
+                        }
                         Button {
                             objectName: "deleteSeriesButton_" + lineRow.modelData.id
                             text: qsTr("Delete")
+                            Layout.preferredWidth: contentItem.implicitWidth + (padding * 2)
                             onClicked: root.settingsVm.removeComputedSeries(lineRow.modelData.id)
                         }
                         Switch {

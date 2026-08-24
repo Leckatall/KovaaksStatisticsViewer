@@ -113,6 +113,9 @@ namespace ksv::presentation {
         map["requiresReload"] = result.requiresReload;
         map["failure"] = result.failure ? QVariant(static_cast<int>(*result.failure)) : QVariant();
         map["createdId"] = result.createdId ? QVariant(QString::number(result.createdId->value)) : QVariant();
+        map["createdAxisId"] = result.createdAxisId
+                                 ? QVariant(QString::number(result.createdAxisId->value))
+                                 : QVariant();
         QVariantList errors;
         for (const auto &error: result.errors)
             errors.append(QVariantMap{{"code", static_cast<int>(error.code)}, {"path", QString::fromStdString(error.path)}});
@@ -122,6 +125,6 @@ namespace ksv::presentation {
 
     QVariantMap invalidMutationMap() {
         return {{"succeeded", false}, {"failure", "invalidRequest"}, {"requiresReload", false},
-                {"createdId", QVariant()}, {"validationErrors", QVariantList{}}};
+                {"createdId", QVariant()}, {"createdAxisId", QVariant()}, {"validationErrors", QVariantList{}}};
     }
 }

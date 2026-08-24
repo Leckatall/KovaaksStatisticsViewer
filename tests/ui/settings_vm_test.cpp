@@ -111,14 +111,17 @@ namespace {
             return {};
         }
         MutationResult createComputed(const CreateComputedSeriesRequest &) override { return {}; }
-        MutationResult updateSeries(const UpdateSeriesRequest &) override { return {}; }
+        MutationResult updateSeries(const UpdateSeriesRequest &request) override {
+            lastUpdateSeriesRequest = request;
+            return {};
+        }
         MutationResult removeComputed(SeriesId) override { return {}; }
         MutationResult reorder(const SeriesId id, const uint32_t position) override {
             lastReorder = std::pair{id, position};
             return {};
         }
         [[nodiscard]] std::vector<AxisConfig> getAllAxes() const override { return axes; }
-        MutationResult createAxis(const CreateAxisRequest &) override { ++createAxisCalls; return {}; }
+        MutationResult createAxis(const CreateAxisRequest &) override { ++createAxisCalls; return createAxisResult; }
         MutationResult deleteAxis(AxisId) override { ++deleteAxisCalls; return {}; }
         void onChanged(std::function<void()> callback) override { callback_ = std::move(callback); }
 
@@ -131,6 +134,7 @@ namespace {
         std::vector<AxisConfig> axes;
         std::optional<std::pair<SeriesId, bool>> lastSetEnabled;
         std::optional<std::pair<SeriesId, uint32_t>> lastReorder;
+        std::optional<UpdateSeriesRequest> lastUpdateSeriesRequest;
         std::function<void()> callback_;
 
         int createAxisCalls = 0;
@@ -140,6 +144,7 @@ namespace {
         int discardDraftCalls = 0;
         bool pendingChanges = false;
         MutationResult commitDraftResult;
+        MutationResult createAxisResult;
     };
 
     class SettingsViewModelTest : public testing::Test {
@@ -270,6 +275,69 @@ namespace {
         EXPECT_EQ(row["id"].toString(), "1");
         EXPECT_EQ(row["name"].toString(), "Score");
         EXPECT_TRUE(row["enabled"].toBool());
+    }
+
+    TEST_F(SettingsViewModelTest, GetAllAxesReturnsIdAndName) {
+        seriesManagement->axes = {AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity}};
+        const auto view_model = make_view_model();
+
+        const auto result = view_model->getAllAxes();
+
+        ASSERT_EQ(result.size(), 1);
+        const auto row = result.first().toMap();
+        EXPECT_EQ(row["id"].toString(), "2");
+        EXPECT_EQ(row["name"].toString(), "Score Family");
+    }
+
+    TEST_F(SettingsViewModelTest, CreateAxisForwardsNameToTheSeriesManagementUseCase) {
+        const auto view_model = make_view_model();
+
+        view_model->createAxis("Custom");
+
+        EXPECT_EQ(seriesManagement->createAxisCalls, 1);
+    }
+
+    TEST_F(SettingsViewModelTest, UpdateSeriesAxisWithAnIdSetsYAxisIdOnTheRequest) {
+        const auto view_model = make_view_model();
+
+        view_model->updateSeriesAxis("7", "2");
+
+        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest.has_value());
+        EXPECT_EQ(seriesManagement->lastUpdateSeriesRequest->id.value, 7U);
+        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest->yAxisId.has_value());
+        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest->yAxisId->has_value());
+        EXPECT_EQ(seriesManagement->lastUpdateSeriesRequest->yAxisId->value().value, 2U);
+    }
+
+    TEST_F(SettingsViewModelTest, UpdateSeriesAxisWithEmptyStringClearsYAxisId) {
+        const auto view_model = make_view_model();
+
+        view_model->updateSeriesAxis("7", "");
+
+        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest.has_value());
+        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest->yAxisId.has_value());
+        EXPECT_FALSE(seriesManagement->lastUpdateSeriesRequest->yAxisId->has_value());
+    }
+
+    TEST_F(SettingsViewModelTest, GetAllSeriesConfigsIncludesYAxisId) {
+        seriesManagement->configs = {
+            SeriesConfig{SeriesId{7}, {"Score Total", {}, true, 0}, primitive(PrimitiveMetric::Score), AxisId{2}}
+        };
+        const auto view_model = make_view_model();
+
+        const auto result = view_model->getAllSeriesConfigs();
+
+        ASSERT_EQ(result.size(), 1);
+        EXPECT_EQ(result.first().toMap()["yAxisId"].toString(), "2");
+    }
+
+    TEST_F(SettingsViewModelTest, CreateAxisReturnsCreatedAxisIdAsAString) {
+        seriesManagement->createAxisResult = MutationResult{{}, std::nullopt, false, std::nullopt, AxisId{9}};
+        const auto view_model = make_view_model();
+
+        const auto result = view_model->createAxis("Custom");
+
+        EXPECT_EQ(result["createdAxisId"].toString(), "9");
     }
 
     TEST_F(SettingsViewModelTest, SetSeriesEnabledForwardsToTheSeriesManagementUseCase) {

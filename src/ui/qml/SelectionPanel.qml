@@ -46,7 +46,7 @@ ColumnLayout {
     signal sortRequested(int field, bool ascending)
     signal scenarioSortRequested(int field, bool ascending)
 
-    ToolButton {
+    Button {
         objectName: "recentToggleButton"
         Layout.fillWidth: true
         visible: root.recentSectionVisible

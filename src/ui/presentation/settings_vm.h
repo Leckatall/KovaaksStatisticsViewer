@@ -22,6 +22,7 @@ namespace ksv::presentation {
         Q_PROPERTY(QUrl profilePath READ getProfilePath WRITE setProfilePath NOTIFY profilePathChanged)
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
         Q_PROPERTY(QVariantList allSeriesConfigs READ getAllSeriesConfigs NOTIFY seriesConfigurationChanged)
+        Q_PROPERTY(QVariantList allAxes READ getAllAxes NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(bool pendingChanges READ hasPendingChanges NOTIFY pendingChangesChanged)
 
     public:
@@ -51,6 +52,9 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap removeComputedSeries(const QString &id);
         Q_INVOKABLE QVariantMap reorderSeries(const QString &id, int displayPosition);
         Q_INVOKABLE SeriesExpressionEditorModel *beginExpressionEdit(const QString &id);
+        Q_INVOKABLE [[nodiscard]] QVariantList getAllAxes() const;
+        Q_INVOKABLE QVariantMap createAxis(const QString &name);
+        Q_INVOKABLE QVariantMap updateSeriesAxis(const QString &id, const QString &axisId);
 
         [[nodiscard]] bool hasPendingChanges() const { return m_series_management->hasPendingChanges(); }
         Q_INVOKABLE void beginSeriesDraft() { m_series_management->beginDraft(); }

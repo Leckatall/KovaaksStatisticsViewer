@@ -55,6 +55,7 @@ namespace ksv::presentation {
                 {"displayPosition", config.presentation.displayPosition},
                 {"isPrimitive", config.isPrimitive()},
                 {"expression", expressionMap(config.expression)},
+                {"yAxisId", config.yAxisId ? QString::number(config.yAxisId->value) : QString()},
             });
         }
         return result;
@@ -123,6 +124,38 @@ namespace ksv::presentation {
             }
         }
         return editor;
+    }
+
+    QVariantList SettingsViewModel::getAllAxes() const {
+        QVariantList result;
+        for (const auto &axis: m_series_management->getAllAxes()) {
+            result.append(QVariantMap{
+                {"id", QString::number(axis.id.value)},
+                {"name", QString::fromStdString(axis.name)}
+            });
+        }
+        return result;
+    }
+
+    QVariantMap SettingsViewModel::createAxis(const QString &name) {
+        return mutationMap(m_series_management->createAxis({name.toStdString()}));
+    }
+
+    QVariantMap SettingsViewModel::updateSeriesAxis(const QString &id, const QString &axisId) {
+        bool ok = false;
+        const auto value = id.toULongLong(&ok);
+        if (!ok) return invalidMutationMap();
+        application::UpdateSeriesRequest request;
+        request.id = {value};
+        if (axisId.isEmpty()) {
+            request.yAxisId = std::optional<application::AxisId>{std::nullopt};
+        } else {
+            bool axisOk = false;
+            const auto axisValue = axisId.toULongLong(&axisOk);
+            if (!axisOk) return invalidMutationMap();
+            request.yAxisId = std::optional<application::AxisId>{application::AxisId{axisValue}};
+        }
+        return mutationMap(m_series_management->updateSeries(request));
     }
 
     QVariantMap SettingsViewModel::commitSeriesDraft() {

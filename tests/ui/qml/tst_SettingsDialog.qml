@@ -25,6 +25,7 @@ TestCase {
                 {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
                 {id: "2", name: "Accuracy", color: "#00ffff", enabled: false, displayPosition: 1}
             ],
+            allAxes: [],
             setSeriesEnabledCalls: 0,
             lastSetSeriesEnabledId: null,
             lastSetSeriesEnabledValue: null,

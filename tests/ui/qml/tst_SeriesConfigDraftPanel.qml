@@ -33,6 +33,7 @@ TestCase {
                     enabled: true,
                     displayPosition: 0,
                     isPrimitive: true,
+                    yAxisId: "",
                     expression: {
                         kind: "primitive",
                         primitiveMetric: "score"
@@ -47,6 +48,9 @@ TestCase {
             updateCalls: [],
             removeCalls: [],
             reorderCalls: [],
+            allAxes: [],
+            createAxisCalls: [],
+            updateSeriesAxisCalls: [],
             beginSeriesDraft: function () {},
             commitSeriesDraft: function () {
                 this.commitDraftCalls++;
@@ -71,6 +75,19 @@ TestCase {
             },
             reorderSeries: function () {
                 this.reorderCalls.push(Array.from(arguments));
+            },
+            createAxis: function () {
+                this.createAxisCalls.push(Array.from(arguments));
+                return {
+                    succeeded: true,
+                    createdAxisId: "9"
+                };
+            },
+            updateSeriesAxis: function () {
+                this.updateSeriesAxisCalls.push(Array.from(arguments));
+                return {
+                    succeeded: true
+                };
             },
             beginExpressionEdit: function () {
                 return {
@@ -191,6 +208,77 @@ TestCase {
             kind: "primitive",
             primitiveMetric: "score"
         });
+    }
+    function test_axisComboDefaultsToIndependentWhenRowHasNoYAxisId() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: makeFakeSettingsVm()
+        });
+        verify(waitForRendering(panel));
+        const combo = findByObjectName(panel, "axisCombo_1");
+        verify(combo !== null);
+        compare(combo.currentText, "Independent");
+    }
+    function test_selectingAnExistingAxisCallsUpdateSeriesAxis() {
+        const vm = makeFakeSettingsVm({
+            allAxes: [{
+                id: "2",
+                name: "Score Family"
+            }]
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm
+        });
+        verify(waitForRendering(panel));
+        const combo = findByObjectName(panel, "axisCombo_1");
+        panel.handleAxisSelection(panel.displayRows[0], "2");
+        compare(panel.settingsVm.updateSeriesAxisCalls[0], ["1", "2"]);
+    }
+    function test_selectingIndependentClearsAnAssignedAxis() {
+        const vm = makeFakeSettingsVm({
+            allAxes: [{
+                id: "2",
+                name: "Score Family"
+            }],
+            allSeriesConfigs: [{
+                id: "1",
+                name: "Score",
+                color: "#009600",
+                width: 2,
+                enabled: true,
+                displayPosition: 0,
+                isPrimitive: true,
+                yAxisId: "2",
+                expression: {
+                    kind: "primitive",
+                    primitiveMetric: "score"
+                }
+            }]
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm
+        });
+        verify(waitForRendering(panel));
+        const combo = findByObjectName(panel, "axisCombo_1");
+        compare(combo.currentText, "Score Family");
+        panel.handleAxisSelection(panel.displayRows[0], "");
+        compare(panel.settingsVm.updateSeriesAxisCalls[0], ["1", ""]);
+    }
+    function test_selectingCreateNewAxisOpensDialogAndCommitsOnAccept() {
+        const vm = makeFakeSettingsVm({
+            allAxes: []
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm
+        });
+        verify(waitForRendering(panel));
+        const combo = findByObjectName(panel, "axisCombo_1");
+        panel.handleAxisSelection(panel.displayRows[0], "__new__");
+        const dialog = panel.newAxisDialog;
+        verify(dialog !== null);
+        panel.newAxisNameField.text = "Custom";
+        dialog.accepted();
+        compare(panel.settingsVm.createAxisCalls[0], ["Custom"]);
+        compare(panel.settingsVm.updateSeriesAxisCalls[0], ["1", "9"]);
     }
     function test_clickingDiscardCallsDiscardSeriesDraft() {
         const panel = createTemporaryObject(panelComponent, testCase, {
@@ -601,6 +689,7 @@ TestCase {
 
         QtObject {
             property var allSeriesConfigs: []
+            property var allAxes: []
             property bool pendingChanges: false
             function reorderSeries(id, position) {
                 const configs = allSeriesConfigs.slice().sort(function(a, b) { return a.displayPosition - b.displayPosition })
