@@ -46,6 +46,7 @@ namespace ksv::presentation {
         QList<QPointF> points;
         std::optional<AxisModel> xAxis;
         std::optional<AxisModel> yAxis;
+        std::optional<uint64_t> yAxisId;
 
         [[nodiscard]] std::optional<std::pair<qreal, qreal>> displayRange() const {
             if (points.isEmpty()) return std::nullopt;

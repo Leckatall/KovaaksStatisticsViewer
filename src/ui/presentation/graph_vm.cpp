@@ -7,7 +7,6 @@
 #include <qurl.h>
 #include <QDebug>
 #include <algorithm>
-#include <array>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -15,30 +14,21 @@
 
 namespace ksv::presentation {
     namespace {
-        struct AxisDescriptor {
-            ValueTransform transform;
-            AxisModel::Options options;
-        };
-
-        // Only series that can't derive a sensible axis on their own get grouped here; everything
-        // else (Score, Shots, Kills, Dmg, and any user computed series) falls through to
-        // SeriesModel::deriveYAxis()'s per-series default via GraphCanvas::yAxisFor().
-        enum YAxis { AccuracyAxis, ScoreFamilyAxis, YAxisCount };
-
-        const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{
-            {
-                {ValueTransform::percentage(), {}},
-                {ValueTransform::identity(), {}},
+        ValueTransform transformFor(const application::AxisTransformKind kind) {
+            switch (kind) {
+                case application::AxisTransformKind::Identity: return ValueTransform::identity();
+                case application::AxisTransformKind::Percentage: return ValueTransform::percentage();
             }
-        };
+            return ValueTransform::identity();
+        }
 
-        // column == SeriesId::value for the built-in series (see fetchMetadata()/fetchData()).
-        std::optional<YAxis> yAxisFor(const int column) {
-            switch (column) {
-                // case 2: return AccuracyAxis; // Accuracy
-                case 7: case 8: case 9: return ScoreFamilyAxis; // Score Total / Expected Final Score / (5s)
-                default: return std::nullopt;
-            }
+        AxisModel::Options axisOptionsFor(const application::AxisModelOptions &options) {
+            return AxisModel::Options{
+                options.baseline == application::AxisModelOptions::Baseline::Zero
+                    ? AxisModel::Baseline::Zero
+                    : AxisModel::Baseline::HugData,
+                options.integral, options.targetTicks, options.fallbackSpan
+            };
         }
 
         ValueTransform secondsDelegate() {
@@ -65,21 +55,21 @@ namespace ksv::presentation {
     QList<SeriesModel *> GraphViewModel::series(const QList<int> &columns) const {
         QList<SeriesModel *> result;
         result.reserve(columns.size());
-        std::array<std::vector<int>, YAxisCount> membersByAxis;
+        QHash<uint64_t, std::vector<int>> membersByAxis;
         for (SeriesModel *series: m_seriesById) {
             if (!columns.contains(series->column())) continue;
             result.append(series);
-            if (const auto axis = yAxisFor(series->column())) membersByAxis[*axis].push_back(result.size() - 1);
+            if (series->yAxisId) membersByAxis[*series->yAxisId].push_back(result.size() - 1);
         }
-        for (int axis = 0; axis < YAxisCount; ++axis) {
-            const auto &indices = membersByAxis[axis];
-            if (indices.empty()) continue;
+        for (auto it = membersByAxis.constBegin(); it != membersByAxis.constEnd(); ++it) {
+            const auto axisIt = m_axesById.constFind(it.key());
+            if (axisIt == m_axesById.constEnd()) continue;
             std::vector<const SeriesModel *> members;
-            members.reserve(indices.size());
-            for (const int index: indices) members.push_back(result[index]);
-            const auto &descriptor = kYAxisMeta[axis];
-            const AxisModel yAxis = axisForSeries(members, descriptor.options, descriptor.transform);
-            for (const int index: indices) result[index]->yAxis = yAxis;
+            members.reserve(it.value().size());
+            for (const int index: it.value()) members.push_back(result[index]);
+            const AxisModel yAxis = axisForSeries(members, axisOptionsFor(axisIt->options),
+                                                  transformFor(axisIt->transformKind));
+            for (const int index: it.value()) result[index]->yAxis = yAxis;
         }
         return result;
     }
@@ -128,10 +118,13 @@ namespace ksv::presentation {
     }
 
     void GraphViewModel::fetchMetadata() {
-        auto series_list = m_graphUseCase->get_resolved_graph().series;
+        const auto resolved = m_graphUseCase->get_resolved_graph();
+        m_axesById.clear();
+        for (const auto &axis: resolved.axes) m_axesById.insert(axis.id.value, axis);
+
         qDeleteAll(m_seriesById);
         m_seriesById.clear();
-        for (const auto &entry: series_list) {
+        for (const auto &entry: resolved.series) {
             if (!entry.config.presentation.enabled) continue;
             const auto entry_id = QString::number(entry.config.id.value);
             auto *series = new SeriesModel(this);
@@ -141,11 +134,13 @@ namespace ksv::presentation {
                                      entry.config.presentation.lineStyle.color.green,
                                      entry.config.presentation.lineStyle.color.blue,
                                      entry.config.presentation.lineStyle.color.alpha));
-            series->transform = entry_id == "2" ? ValueTransform::percentage() : ValueTransform::identity();
+            series->transform = transformFor(entry.config.transformKind);
+            series->yAxisId = entry.config.yAxisId
+                                  ? std::optional<uint64_t>{entry.config.yAxisId->value}
+                                  : std::nullopt;
             series->setColumn(entry_id.toInt());
-            // TODO(18/08/26): transform and yAxisId should be stored as part of seriesConfig
-            // series->transform = entry.config.presentation.lineStyle.transform;
-            // TODO(18/08/26): displayPosition and width support in SeriesModel
+            // TODO(2026-08-18): Remove once SeriesModel gains displayPosition/width support by replacing
+            // this placeholder with assignments from entry.config.presentation.
             // series->displayPosition = entry.config.presentation.displayPosition;
             m_seriesById[entry_id] = series;
         }
@@ -187,6 +182,7 @@ namespace ksv::presentation {
                     m_seriesById[id] = entrySeries;
                 }
                 entrySeries->points = points;
+                entrySeries->yAxis = entrySeries->deriveYAxis();
                 entrySeries->setColumn(static_cast<int>(entry_id));
 
                 m_allSeriesList.append(entrySeries);

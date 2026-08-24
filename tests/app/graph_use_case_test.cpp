@@ -165,6 +165,19 @@ namespace {
         EXPECT_EQ(graph.series.size(), graph.times.size());
     }
 
+    TEST_F(GraphUseCaseTest, ResolvedGraphIncludesAllConfiguredAxes) {
+        fake_store->axes = {
+            AxisConfig{AxisId{1}, "Accuracy", {}, AxisTransformKind::Percentage},
+            AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity}
+        };
+
+        const auto resolved = use_case.get_resolved_graph();
+
+        ASSERT_EQ(resolved.axes.size(), 2U);
+        EXPECT_EQ(resolved.axes[0].name, "Accuracy");
+        EXPECT_EQ(resolved.axes[1].name, "Score Family");
+    }
+
     TEST_F(GraphUseCaseTest, AverageUnavailableRemainsConfiguredWithoutPoints) {
         const auto graph = use_case.get_resolved_graph();
         EXPECT_TRUE(graph.series.empty() || !graph.series.front().values.has_value());

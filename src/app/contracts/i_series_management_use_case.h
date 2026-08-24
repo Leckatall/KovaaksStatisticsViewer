@@ -17,6 +17,9 @@ namespace ksv::application {
         virtual MutationResult updateSeries(const UpdateSeriesRequest &) = 0;
         virtual MutationResult removeComputed(SeriesId) = 0;
         virtual MutationResult reorder(SeriesId, uint32_t position) = 0;
+        [[nodiscard]] virtual std::vector<AxisConfig> getAllAxes() const = 0;
+        virtual MutationResult createAxis(const CreateAxisRequest &) = 0;
+        virtual MutationResult deleteAxis(AxisId) = 0;
         virtual void onChanged(std::function<void()> callback) = 0;
 
         virtual void beginDraft() = 0;

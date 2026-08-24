@@ -17,6 +17,9 @@ namespace ksv::application {
         MutationResult updateSeries(const UpdateSeriesRequest &request) override { return m_store->updateSeries(request); }
         MutationResult removeComputed(const SeriesId id) override { return m_store->removeComputed(id); }
         MutationResult reorder(const SeriesId id, const uint32_t position) override { return m_store->reorder(id, position); }
+        [[nodiscard]] std::vector<AxisConfig> getAllAxes() const override { return m_store->getAllAxes(); }
+        MutationResult createAxis(const CreateAxisRequest &request) override { return m_store->createAxis(request); }
+        MutationResult deleteAxis(const AxisId id) override { return m_store->deleteAxis(id); }
         void onChanged(std::function<void()> callback) override { m_store->onChanged(std::move(callback)); }
 
         void beginDraft() override { m_store->beginDraft(); }

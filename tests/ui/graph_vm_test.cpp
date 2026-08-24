@@ -159,6 +159,7 @@ namespace {
     TEST_F(GraphViewModelTest, SeriesGroupsTheScoreFamilyOntoOneSharedAxis) {
         ResolvedGraph resolved;
         resolved.times = {0.0F, 1.0F};
+        resolved.axes = defaultAxisConfigs();
         for (const auto &config: defaultSeriesConfigs()) {
             if (config.id.value == kScoreTotal || config.id.value == kExpectedFinalScore)
                 resolved.series.push_back({config, std::vector<double>{1.0, 2.0}});
@@ -172,6 +173,98 @@ namespace {
         ASSERT_TRUE(series[1]->yAxis.has_value());
         EXPECT_DOUBLE_EQ(series[0]->yAxis->min(), series[1]->yAxis->min());
         EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
+    }
+
+    TEST_F(GraphViewModelTest, TwoComputedSeriesShareAUserCreatedAxis) {
+        const AxisConfig customAxis{AxisId{5}, "Custom", {}, AxisTransformKind::Identity};
+        const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0), customAxis.id};
+        const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0), customAxis.id};
+
+        ResolvedGraph resolved;
+        resolved.times = {0.0F, 1.0F};
+        resolved.axes = {customAxis};
+        resolved.series = {{first, std::vector<double>{2.0, 4.0}}, {second, std::vector<double>{10.0, 20.0}}};
+        fake_use_case->resolved_graph_to_return = resolved;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({10, 11});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->min(), series[1]->yAxis->min());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
+        EXPECT_LE(series[0]->yAxis->min(), 2.0);
+        EXPECT_GE(series[0]->yAxis->max(), 20.0);
+    }
+
+    TEST_F(GraphViewModelTest, AComputedSeriesCanShareAnAxisWithABuiltInSeries) {
+        const AxisConfig sharedAxis{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity};
+        auto scoreTotal = defaultSeriesConfigs()[6];
+        scoreTotal.yAxisId = sharedAxis.id;
+        const SeriesConfig computed{SeriesId{10}, {"Custom", {}, true, 1}, numericConstant(1.0), sharedAxis.id};
+
+        ResolvedGraph resolved;
+        resolved.times = {0.0F, 1.0F};
+        resolved.axes = {sharedAxis};
+        resolved.series = {{scoreTotal, std::vector<double>{5.0, 6.0}}, {computed, std::vector<double>{1.0, 1.0}}};
+        fake_use_case->resolved_graph_to_return = resolved;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({kScoreTotal, 10});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->min(), series[1]->yAxis->min());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
+    }
+
+    TEST_F(GraphViewModelTest, UngroupedSeriesEachKeepTheirOwnIndependentAxis) {
+        const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0)};
+        const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0)};
+
+        ResolvedGraph resolved;
+        resolved.times = {0.0F, 1.0F};
+        resolved.series = {{first, std::vector<double>{2.0, 4.0}}, {second, std::vector<double>{100.0, 200.0}}};
+        fake_use_case->resolved_graph_to_return = resolved;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({10, 11});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_NE(series[0]->yAxis->max(), series[1]->yAxis->max());
+    }
+
+    TEST_F(GraphViewModelTest, SeriesTransformKindScalesDisplayedValues) {
+        const SeriesConfig accuracy = defaultSeriesConfigs()[1];
+        ResolvedGraph resolved;
+        resolved.times = {0.0F};
+        resolved.series = {{accuracy, std::vector<double>{0.5}}};
+        fake_use_case->resolved_graph_to_return = resolved;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({kAccuracy});
+        ASSERT_EQ(series.size(), 1);
+        ASSERT_TRUE(series[0]->displayRange().has_value());
+        EXPECT_DOUBLE_EQ(series[0]->displayRange()->first, 50.0);
+    }
+
+    TEST_F(GraphViewModelTest, GroupedAxisTransformKindFormatsTheSharedAxis) {
+        const AxisConfig percentAxis{AxisId{5}, "Percent", {}, AxisTransformKind::Percentage};
+        const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0), percentAxis.id};
+        const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0), percentAxis.id};
+
+        ResolvedGraph resolved;
+        resolved.times = {0.0F};
+        resolved.axes = {percentAxis};
+        resolved.series = {{first, std::vector<double>{0.5}}, {second, std::vector<double>{0.5}}};
+        fake_use_case->resolved_graph_to_return = resolved;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({10, 11});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        EXPECT_EQ(series[0]->yAxis->formatTick(50.0), "50%");
     }
 
     // ScoreFamilySharesAnAxisForTheRequestedVisibleSubset, AccuracyRemainsIndependentAndFormatsAsPercentage,

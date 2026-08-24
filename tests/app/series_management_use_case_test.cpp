@@ -53,6 +53,32 @@ namespace {
         EXPECT_EQ(useCase.getAll().size(), 2U);
     }
 
+    TEST(SeriesManagementUseCaseTest, GetAllAxesForwardsFromStore) {
+        const auto store = std::make_shared<FakeSeriesConfigStore>();
+        store->axes = {AxisConfig{AxisId{1}, "Accuracy", {}, AxisTransformKind::Percentage}};
+        SeriesManagementUseCase useCase(store);
+
+        EXPECT_EQ(useCase.getAllAxes().size(), 1U);
+    }
+
+    TEST(SeriesManagementUseCaseTest, CreateAxisDelegatesToStore) {
+        const auto store = std::make_shared<FakeSeriesConfigStore>();
+        SeriesManagementUseCase useCase(store);
+
+        useCase.createAxis({"Custom"});
+
+        EXPECT_EQ(store->createAxisCalls, 1);
+    }
+
+    TEST(SeriesManagementUseCaseTest, DeleteAxisDelegatesToStore) {
+        const auto store = std::make_shared<FakeSeriesConfigStore>();
+        SeriesManagementUseCase useCase(store);
+
+        useCase.deleteAxis(AxisId{3});
+
+        EXPECT_EQ(store->deleteAxisCalls, 1);
+    }
+
     TEST(SeriesManagementUseCaseTest, SetSeriesEnabledUpdatesOnlyThePresentationEnabledField) {
         const auto store = std::make_shared<FakeSeriesConfigStore>();
         SeriesManagementUseCase useCase(store);

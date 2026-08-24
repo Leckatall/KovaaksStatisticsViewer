@@ -7,6 +7,7 @@
 
 #include <QObject>
 #include <QColor>
+#include <QHash>
 #include <QPointF>
 #include <QQmlListProperty>
 #include <QVariantList>
@@ -79,6 +80,7 @@ namespace ksv::presentation {
         QList<QMap<int, qreal>> m_data;
         AxisModel m_timeAxis{};
         QMap<QString, SeriesModel *> m_seriesById;
+        QHash<uint64_t, application::AxisConfig> m_axesById;
         // Backs the allSeries QQmlListProperty; rebuilt (not just re-sorted) by fetchMetadata()/
         // fetchData() to match resolved.series' order — QMap<QString,...> iteration order (lexical
         // by id string) is not the display order QML expects.

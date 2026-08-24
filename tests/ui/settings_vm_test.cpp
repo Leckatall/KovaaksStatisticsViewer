@@ -117,6 +117,9 @@ namespace {
             lastReorder = std::pair{id, position};
             return {};
         }
+        [[nodiscard]] std::vector<AxisConfig> getAllAxes() const override { return axes; }
+        MutationResult createAxis(const CreateAxisRequest &) override { ++createAxisCalls; return {}; }
+        MutationResult deleteAxis(AxisId) override { ++deleteAxisCalls; return {}; }
         void onChanged(std::function<void()> callback) override { callback_ = std::move(callback); }
 
         void beginDraft() override { ++beginDraftCalls; }
@@ -125,10 +128,13 @@ namespace {
         [[nodiscard]] bool hasPendingChanges() const override { return pendingChanges; }
 
         std::vector<SeriesConfig> configs;
+        std::vector<AxisConfig> axes;
         std::optional<std::pair<SeriesId, bool>> lastSetEnabled;
         std::optional<std::pair<SeriesId, uint32_t>> lastReorder;
         std::function<void()> callback_;
 
+        int createAxisCalls = 0;
+        int deleteAxisCalls = 0;
         int beginDraftCalls = 0;
         int commitDraftCalls = 0;
         int discardDraftCalls = 0;

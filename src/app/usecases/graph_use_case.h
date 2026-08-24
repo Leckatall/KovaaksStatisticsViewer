@@ -56,6 +56,7 @@ namespace ksv::application {
                 values = m_average->evaluate(run, config.expression);
                 result.series.push_back({config, std::move(values)});
             }
+            result.axes = m_store->getAllAxes();
             return result;
         }
 

@@ -15,5 +15,6 @@ namespace ksv::application {
     struct ResolvedGraph {
         std::vector<float> times;
         std::vector<ResolvedGraphSeries> series;
+        std::vector<AxisConfig> axes;
     };
 }
