@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -32,6 +33,39 @@ namespace ksv::application {
     };
 
     inline constexpr SeriesId kFirstUserComputedSeriesId{10};
+
+    struct AxisId {
+        uint64_t value = 0;
+
+        auto operator<=>(const AxisId &) const = default;
+    };
+
+    // This keeps the app contract independent from ui::ValueTransform, whose formatter is a std::function.
+    enum class AxisTransformKind {
+        Identity,
+        Percentage
+    };
+
+    struct AxisModelOptions {
+        enum class Baseline {
+            Zero,
+            HugData
+        };
+
+        Baseline baseline = Baseline::HugData;
+        bool integral = false;
+        int targetTicks = 10;
+        double fallbackSpan = 1.0;
+    };
+
+    struct AxisConfig {
+        AxisId id;
+        std::string name;
+        AxisModelOptions options;
+        AxisTransformKind transformKind = AxisTransformKind::Identity;
+    };
+
+    inline constexpr AxisId kFirstUserAxisId{3};
 
     struct RgbaColor {
         uint8_t red = 0;
@@ -157,6 +191,8 @@ namespace ksv::application {
         SeriesId id;
         SeriesPresentation presentation;
         Expression expression;
+        std::optional<AxisId> yAxisId;
+        AxisTransformKind transformKind = AxisTransformKind::Identity;
 
         [[nodiscard]] bool isPrimitive() const {
             return expression && std::holds_alternative<PrimitiveReference>(expression->value());
@@ -197,4 +233,6 @@ namespace ksv::application {
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs);
 
     [[nodiscard]] std::vector<SeriesConfig> defaultSeriesConfigs();
+
+    [[nodiscard]] std::vector<AxisConfig> defaultAxisConfigs();
 }

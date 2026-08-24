@@ -13,6 +13,28 @@
 using namespace ksv::application;
 
 namespace {
+    TEST(SeriesConfigTest, SeriesConfigDefaultsToNoAxisAndIdentityTransform) {
+        const SeriesConfig config{SeriesId{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)};
+
+        EXPECT_FALSE(config.yAxisId.has_value());
+        EXPECT_EQ(config.transformKind, AxisTransformKind::Identity);
+    }
+
+    TEST(SeriesConfigTest, AxisConfigHoldsIdNameOptionsAndTransformKind) {
+        const AxisConfig axis{
+            AxisId{5}, "Custom axis", {AxisModelOptions::Baseline::Zero, true, 6, 2.0},
+            AxisTransformKind::Percentage
+        };
+
+        EXPECT_EQ(axis.id.value, 5U);
+        EXPECT_EQ(axis.name, "Custom axis");
+        EXPECT_EQ(axis.options.baseline, AxisModelOptions::Baseline::Zero);
+        EXPECT_TRUE(axis.options.integral);
+        EXPECT_EQ(axis.options.targetTicks, 6);
+        EXPECT_DOUBLE_EQ(axis.options.fallbackSpan, 2.0);
+        EXPECT_EQ(axis.transformKind, AxisTransformKind::Percentage);
+    }
+
     TEST(SeriesConfigTest, DefaultsContainTheCompleteCatalogueInDisplayOrder) {
         const auto configs = defaultSeriesConfigs();
 
@@ -51,6 +73,40 @@ namespace {
             EXPECT_EQ(configs[index].presentation.name, expectedNames[index]);
             EXPECT_EQ(configs[index].presentation.lineStyle.color, expectedColors[index]);
             EXPECT_DOUBLE_EQ(configs[index].presentation.lineStyle.width, 2.0);
+        }
+    }
+
+    TEST(SeriesConfigTest, DefaultAxesAreAccuracyAndScoreFamilyWithFixedIds) {
+        const auto axes = defaultAxisConfigs();
+
+        ASSERT_EQ(axes.size(), 2U);
+        EXPECT_EQ(axes[0].id.value, 1U);
+        EXPECT_EQ(axes[0].name, "Accuracy");
+        EXPECT_EQ(axes[0].transformKind, AxisTransformKind::Percentage);
+        EXPECT_EQ(axes[1].id.value, 2U);
+        EXPECT_EQ(axes[1].name, "Score Family");
+        EXPECT_EQ(axes[1].transformKind, AxisTransformKind::Identity);
+        EXPECT_EQ(kFirstUserAxisId.value, 3U);
+    }
+
+    TEST(SeriesConfigTest, DefaultSeriesAssignScoreFamilyAxisAndAccuracyTransform) {
+        const auto configs = defaultSeriesConfigs();
+        const auto axes = defaultAxisConfigs();
+        const auto scoreFamilyAxisId = axes[1].id;
+
+        EXPECT_FALSE(configs[1].yAxisId.has_value());
+        EXPECT_EQ(configs[1].transformKind, AxisTransformKind::Percentage);
+
+        for (const size_t index: {6U, 7U, 8U}) {
+            EXPECT_EQ(configs[index].id.value, index + 1);
+            ASSERT_TRUE(configs[index].yAxisId.has_value());
+            EXPECT_EQ(*configs[index].yAxisId, scoreFamilyAxisId);
+            EXPECT_EQ(configs[index].transformKind, AxisTransformKind::Identity);
+        }
+
+        for (const size_t index: {0U, 2U, 3U, 4U, 5U}) {
+            EXPECT_FALSE(configs[index].yAxisId.has_value());
+            EXPECT_EQ(configs[index].transformKind, AxisTransformKind::Identity);
         }
     }
 

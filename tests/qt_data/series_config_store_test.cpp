@@ -44,6 +44,22 @@ namespace {
         int writes = 0;
     };
 
+    QString legacyV1Document() {
+        const QJsonArray series{
+            QJsonObject{{"id", "1"}, {"presentation", QJsonObject{{"name", "Score"}, {"enabled", true},
+                {"displayPosition", 0.0}, {"lineStyle", QJsonObject{{"color", QJsonArray{0, 150, 0, 255}}, {"width", 2.0}}}}},
+                {"expression", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}}},
+            QJsonObject{{"id", "2"}, {"presentation", QJsonObject{{"name", "Accuracy"}, {"enabled", true},
+                {"displayPosition", 1.0}, {"lineStyle", QJsonObject{{"color", QJsonArray{0, 255, 255, 255}}, {"width", 2.0}}}}},
+                {"expression", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "hits"}}}},
+            QJsonObject{{"id", "7"}, {"presentation", QJsonObject{{"name", "Score Total"}, {"enabled", true},
+                {"displayPosition", 2.0}, {"lineStyle", QJsonObject{{"color", QJsonArray{128, 0, 128, 255}}, {"width", 2.0}}}}},
+                {"expression", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}}}
+        };
+        return QString::fromUtf8(QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"nextComputedSeriesId", "10"},
+            {"series", series}}).toJson(QJsonDocument::Compact));
+    }
+
     class SeriesConfigStoreTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSettingsService> settings = std::make_shared<FakeSettingsService>();
@@ -76,7 +92,7 @@ namespace {
         EXPECT_EQ(reopened.getAll().size(), expected.size());
     }
 
-    TEST_F(SeriesConfigStoreTest, RejectsMalformedProjectRateToFinalExpressionInV1) {
+    TEST_F(SeriesConfigStoreTest, RejectsMalformedProjectRateToFinalExpression) {
         const std::array malformedExpressions{
             QJsonObject{{"kind", "projectRateToFinal"}},
             QJsonObject{
@@ -260,5 +276,183 @@ namespace {
         makeStore();
         EXPECT_EQ(store->getAll().size(), 9U);
         EXPECT_EQ(settings->quarantined, (std::vector<std::string>{"{}"}));
+    }
+
+    TEST_F(SeriesConfigStoreTest, SchemaVersionTwoDocumentIncludesAxesAndNextAxisId) {
+        makeStore();
+        const auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        EXPECT_EQ(root["schemaVersion"].toInt(), 2);
+        EXPECT_EQ(root["nextAxisId"].toString(), "3");
+        ASSERT_TRUE(root["axes"].isArray());
+        EXPECT_EQ(root["axes"].toArray().size(), 2);
+        const auto firstSeries = root["series"].toArray()[0].toObject();
+        EXPECT_TRUE(firstSeries["yAxisId"].isNull());
+        EXPECT_EQ(firstSeries["transformKind"].toString(), "identity");
+    }
+
+    TEST_F(SeriesConfigStoreTest, MigratesV1DocumentToV2InMemory) {
+        settings->document = legacyV1Document().toStdString();
+        makeStore();
+        const auto configs = store->getAll();
+        const auto axes = store->getAllAxes();
+        ASSERT_EQ(axes.size(), 2U);
+        const auto accuracy = std::ranges::find(configs, SeriesId{2}, &SeriesConfig::id);
+        ASSERT_NE(accuracy, configs.end());
+        EXPECT_FALSE(accuracy->yAxisId);
+        EXPECT_EQ(accuracy->transformKind, AxisTransformKind::Percentage);
+        const auto scoreTotal = std::ranges::find(configs, SeriesId{7}, &SeriesConfig::id);
+        ASSERT_NE(scoreTotal, configs.end());
+        EXPECT_EQ(scoreTotal->yAxisId, axes[1].id);
+        const auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        EXPECT_EQ(root["schemaVersion"].toInt(), 1);
+    }
+
+    TEST_F(SeriesConfigStoreTest, MigratesEveryScoreFamilySeriesToTheSharedAxis) {
+        makeStore();
+        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        root["schemaVersion"] = 1;
+        root.remove("axes");
+        root.remove("nextAxisId");
+        auto series = root["series"].toArray();
+        for (qsizetype index = 0; index < series.size(); ++index) {
+            auto config = series[index].toObject();
+            config.remove("yAxisId");
+            config.remove("transformKind");
+            series[index] = config;
+        }
+        root["series"] = series;
+        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+
+        SeriesConfigStore migrated(settings);
+        const auto configs = migrated.getAll();
+        const auto scoreFamily = migrated.getAllAxes()[1].id;
+        for (const auto id: {SeriesId{7}, SeriesId{8}, SeriesId{9}}) {
+            const auto config = std::ranges::find(configs, id, &SeriesConfig::id);
+            ASSERT_NE(config, configs.end());
+            EXPECT_EQ(config->yAxisId, scoreFamily);
+        }
+    }
+
+    TEST_F(SeriesConfigStoreTest, MigratesEmptyV1DocumentWithDefaultAxes) {
+        settings->document = QString::fromUtf8(QJsonDocument(QJsonObject{{"schemaVersion", 1},
+            {"nextComputedSeriesId", "1"}, {"series", QJsonArray{}}}).toJson(QJsonDocument::Compact)).toStdString();
+        makeStore();
+        EXPECT_TRUE(store->getAll().empty());
+        EXPECT_EQ(store->getAllAxes().size(), 2U);
+    }
+
+    TEST_F(SeriesConfigStoreTest, RejectsDuplicateAxisIdsAndNonPositiveFallbackSpan) {
+        makeStore();
+        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        auto axes = root["axes"].toArray();
+        auto duplicate = axes[0].toObject();
+        duplicate["id"] = axes[1].toObject()["id"];
+        axes[0] = duplicate;
+        root["axes"] = axes;
+        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+        SeriesConfigStore duplicateReopened(settings);
+        EXPECT_EQ(duplicateReopened.getAllAxes().size(), 2U);
+
+        for (const auto span: {0.0, -1.0}) {
+            root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+            axes = root["axes"].toArray();
+            auto axis = axes[0].toObject();
+            auto options = axis["options"].toObject();
+            options["fallbackSpan"] = span;
+            axis["options"] = options;
+            axes[0] = axis;
+            root["axes"] = axes;
+            settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+            SeriesConfigStore spanReopened(settings);
+            EXPECT_EQ(spanReopened.getAllAxes().size(), 2U);
+        }
+    }
+
+    TEST_F(SeriesConfigStoreTest, CreatesDeletesAndPersistsAxes) {
+        makeStore();
+        const auto created = store->createAxis({"Custom"});
+        ASSERT_TRUE(created.succeeded());
+        ASSERT_TRUE(created.createdAxisId);
+        EXPECT_EQ(created.createdAxisId->value, 3U);
+        const auto second = store->createAxis({"Another"});
+        ASSERT_TRUE(second.createdAxisId);
+        EXPECT_EQ(second.createdAxisId->value, 4U);
+        ASSERT_TRUE(store->updateSeries({.id = SeriesId{1}, .yAxisId = created.createdAxisId}).succeeded());
+        SeriesConfigStore reopened(settings);
+        EXPECT_EQ(reopened.getAllAxes().size(), 4U);
+        const auto reopenedConfigs = reopened.getAll();
+        const auto reopenedScore = std::ranges::find(reopenedConfigs, SeriesId{1}, &SeriesConfig::id);
+        ASSERT_NE(reopenedScore, reopenedConfigs.end());
+        EXPECT_EQ(reopenedScore->yAxisId, created.createdAxisId);
+        ASSERT_TRUE(store->deleteAxis(*created.createdAxisId).succeeded());
+        const auto configs = store->getAll();
+        const auto score = std::ranges::find(configs, SeriesId{1}, &SeriesConfig::id);
+        ASSERT_NE(score, configs.end());
+        EXPECT_FALSE(score->yAxisId);
+    }
+
+    TEST_F(SeriesConfigStoreTest, RejectsUnknownAxisAndCanClearAxisAssignment) {
+        makeStore();
+        EXPECT_EQ(store->updateSeries({.id = SeriesId{1}, .yAxisId = AxisId{999}}).failure,
+                  StoreMutationFailureCode::UnknownAxisId);
+        EXPECT_EQ(store->deleteAxis(AxisId{999}).failure, StoreMutationFailureCode::UnknownAxisId);
+        ASSERT_TRUE(store->updateSeries({.id = SeriesId{7}, .yAxisId = std::optional<AxisId>{std::nullopt}}).succeeded());
+        const auto configs = store->getAll();
+        const auto score = std::ranges::find(configs, SeriesId{7}, &SeriesConfig::id);
+        ASSERT_NE(score, configs.end());
+        EXPECT_FALSE(score->yAxisId);
+    }
+
+    TEST_F(SeriesConfigStoreTest, DraftPersistsAxesAndAssignmentsOnlyOnCommit) {
+        makeStore();
+        store->beginDraft();
+        const auto created = store->createAxis({"Draft"});
+        ASSERT_TRUE(created.createdAxisId);
+        ASSERT_TRUE(store->updateSeries({.id = SeriesId{1}, .yAxisId = created.createdAxisId}).succeeded());
+        SeriesConfigStore beforeCommit(settings);
+        EXPECT_EQ(beforeCommit.getAllAxes().size(), 2U);
+        const auto beforeConfigs = beforeCommit.getAll();
+        const auto beforeScore = std::ranges::find(beforeConfigs, SeriesId{1}, &SeriesConfig::id);
+        ASSERT_NE(beforeScore, beforeConfigs.end());
+        EXPECT_FALSE(beforeScore->yAxisId);
+        ASSERT_TRUE(store->commitDraft().succeeded());
+        SeriesConfigStore afterCommit(settings);
+        EXPECT_EQ(afterCommit.getAllAxes().size(), 3U);
+        const auto afterConfigs = afterCommit.getAll();
+        const auto afterScore = std::ranges::find(afterConfigs, SeriesId{1}, &SeriesConfig::id);
+        ASSERT_NE(afterScore, afterConfigs.end());
+        EXPECT_EQ(afterScore->yAxisId, created.createdAxisId);
+    }
+
+    TEST_F(SeriesConfigStoreTest, DiscardDraftRestoresAxesAndSeriesAssignments) {
+        makeStore();
+        store->beginDraft();
+        const auto created = store->createAxis({"Draft"});
+        ASSERT_TRUE(created.createdAxisId);
+        ASSERT_TRUE(store->updateSeries({.id = SeriesId{1}, .yAxisId = created.createdAxisId}).succeeded());
+        ASSERT_TRUE(store->hasPendingChanges());
+        store->discardDraft();
+
+        EXPECT_FALSE(store->hasPendingChanges());
+        EXPECT_EQ(store->getAllAxes().size(), 2U);
+        const auto configs = store->getAll();
+        const auto score = std::ranges::find(configs, SeriesId{1}, &SeriesConfig::id);
+        ASSERT_NE(score, configs.end());
+        EXPECT_FALSE(score->yAxisId);
+    }
+
+    TEST_F(SeriesConfigStoreTest, RejectsMalformedExpressionInLegacyV1DocumentAndReseeds) {
+        auto root = QJsonDocument::fromJson(legacyV1Document().toUtf8()).object();
+        auto series = root["series"].toArray();
+        auto malformed = series[2].toObject();
+        malformed["expression"] = QJsonObject{{"kind", "projectRateToFinal"}};
+        series[2] = malformed;
+        root["series"] = series;
+        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+
+        makeStore();
+
+        EXPECT_EQ(store->getAll().size(), 9U);
+        EXPECT_GT(settings->writes, 0);
     }
 }

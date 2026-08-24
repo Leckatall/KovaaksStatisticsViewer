@@ -46,12 +46,17 @@ namespace {
         MutationResult reorder(SeriesId, uint32_t) override { notify(); return {}; }
         void onChanged(std::function<void()> callback) override { callbacks.push_back(std::move(callback)); }
 
+        [[nodiscard]] std::vector<AxisConfig> getAllAxes() const override { return axes; }
+        MutationResult createAxis(const CreateAxisRequest &) override { notify(); return {}; }
+        MutationResult deleteAxis(AxisId) override { notify(); return {}; }
+
         void beginDraft() override {}
         MutationResult commitDraft() override { return {}; }
         void discardDraft() override {}
         [[nodiscard]] bool hasPendingChanges() const override { return false; }
 
         std::vector<SeriesConfig> configs;
+        std::vector<AxisConfig> axes;
         std::vector<std::function<void()> > callbacks;
 
     private:

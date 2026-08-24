@@ -18,13 +18,20 @@ namespace {
         }
         void onChanged(std::function<void()> callback) override { callbacks.push_back(std::move(callback)); }
 
+        [[nodiscard]] std::vector<AxisConfig> getAllAxes() const override { return axes; }
+        MutationResult createAxis(const CreateAxisRequest &) override { ++createAxisCalls; return {}; }
+        MutationResult deleteAxis(AxisId) override { ++deleteAxisCalls; return {}; }
+
         void beginDraft() override { ++beginDraftCalls; }
         MutationResult commitDraft() override { ++commitDraftCalls; return {}; }
         void discardDraft() override { ++discardDraftCalls; }
         [[nodiscard]] bool hasPendingChanges() const override { return pendingChanges; }
 
         std::vector<SeriesConfig> configs;
+        std::vector<AxisConfig> axes;
         int createComputedCalls = 0;
+        int createAxisCalls = 0;
+        int deleteAxisCalls = 0;
         std::optional<UpdateSeriesRequest> lastUpdateSeriesRequest;
         std::optional<SeriesId> lastRemovedId;
         std::optional<SeriesId> lastReorderedId;

@@ -233,7 +233,9 @@ namespace ksv::application {
             SeriesConfig{
                 SeriesId{2},
                 {"Accuracy", line({0, 255, 255, 255}), true, 1},
-                divide(primitive(PrimitiveMetric::Hits), primitive(PrimitiveMetric::Shots))
+                divide(primitive(PrimitiveMetric::Hits), primitive(PrimitiveMetric::Shots)),
+                std::nullopt,
+                AxisTransformKind::Percentage
             },
             SeriesConfig{
                 SeriesId{3},
@@ -258,16 +260,26 @@ namespace ksv::application {
             SeriesConfig{
                 SeriesId{7},
                 {"Score Total", line({128, 0, 128, 255}), true, 6},
-                runningSum(primitive(PrimitiveMetric::Score))
+                runningSum(primitive(PrimitiveMetric::Score)),
+                AxisId{2}
             },
             SeriesConfig{
                 SeriesId{8}, {"Expected Final Score", line({255, 0, 255, 255}), true, 7},
-                projectedFinalValue(runningSum(primitive(PrimitiveMetric::Score)))
+                projectedFinalValue(runningSum(primitive(PrimitiveMetric::Score))),
+                AxisId{2}
             },
             SeriesConfig{
                 SeriesId{9}, {"Expected Final Score (5s)", line({0, 191, 255, 255}), true, 8},
-                projectRateToFinal(rollingMean(primitive(PrimitiveMetric::Score), 5))
+                projectRateToFinal(rollingMean(primitive(PrimitiveMetric::Score), 5)),
+                AxisId{2}
             }
+        };
+    }
+
+    std::vector<AxisConfig> defaultAxisConfigs() {
+        return {
+            AxisConfig{AxisId{1}, "Accuracy", {}, AxisTransformKind::Percentage},
+            AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity}
         };
     }
 }

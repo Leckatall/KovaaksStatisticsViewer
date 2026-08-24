@@ -11,7 +11,9 @@ namespace ksv::application {
         UnknownSeriesId,
         DisplayPositionOutOfRange,
         ComputedSeriesIdExhausted,
-        PersistenceWriteFailed
+        PersistenceWriteFailed,
+        UnknownAxisId,
+        AxisIdExhausted
     };
 
     struct MutationResult {
@@ -19,6 +21,7 @@ namespace ksv::application {
         std::optional<StoreMutationFailureCode> failure;
         bool requiresReload = false;
         std::optional<SeriesId> createdId;
+        std::optional<AxisId> createdAxisId;
 
         [[nodiscard]] bool succeeded() const { return errors.empty() && !failure.has_value(); }
     };
@@ -38,6 +41,13 @@ namespace ksv::application {
         SeriesId id;
         std::optional<UpdatedSeriesPresentation> presentation;
         std::optional<Expression> expression;
+        // Outer optional: whether this patch touches yAxisId at all. Inner optional: the new value,
+        // which may itself be null (independent axis).
+        std::optional<std::optional<AxisId>> yAxisId;
+    };
+
+    struct CreateAxisRequest {
+        std::string name;
     };
 
     class ISeriesConfigStore {
@@ -49,6 +59,10 @@ namespace ksv::application {
         virtual MutationResult removeComputed(SeriesId) = 0;
         virtual MutationResult reorder(SeriesId, uint32_t position) = 0;
         virtual void onChanged(std::function<void()> callback) = 0;
+
+        [[nodiscard]] virtual std::vector<AxisConfig> getAllAxes() const = 0;
+        virtual MutationResult createAxis(const CreateAxisRequest &) = 0;
+        virtual MutationResult deleteAxis(AxisId) = 0;
 
         virtual void beginDraft() = 0;
         virtual MutationResult commitDraft() = 0;
