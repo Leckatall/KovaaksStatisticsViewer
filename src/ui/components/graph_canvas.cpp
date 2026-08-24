@@ -207,7 +207,7 @@ namespace ksv::ui {
         for (const auto *s: series) {
             QVariantMap entry;
             entry["name"] = s->name();
-            entry["color"] = s->color().name();
+            entry["color"] = s->color();
             entry["value"] = s->formattedValueAtX(dataX);
             const auto sample = s->sampleAtX(dataX);
             entry["valueRaw"] = sample ? sample->y() : QVariant();
