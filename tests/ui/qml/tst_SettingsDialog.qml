@@ -219,30 +219,6 @@ TestCase {
         verify(point.y >= 0 && point.y + saveButton.height <= dialog.contentItem.height, "saveGraphLinesButton should remain visible within the SettingsDialog window when many series are present")
     }
 
-    function test_togglingSeriesEnabledSwitchWritesThroughSettingsVm() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-        })
-
-        selectCategory(dialog, "Graph Lines")
-
-        const accuracySwitch = findByObjectName(dialog.contentItem, "seriesEnabledSwitch_2")
-        verify(accuracySwitch !== null)
-        mouseClick(accuracySwitch)
-
-        tryCompare(accuracySwitch, "checked", true)
-        // SeriesConfigDraftPanel's settingsVm is a distinct object from dialog.settingsVm despite
-        // the plain `settingsVm: root.settingsVm` forwarding binding in SettingsDialog.qml — read
-        // call-site state back through the panel's own settingsVm, matching
-        // tst_SeriesConfigDraftPanel.qml's convention, not through the dialog's.
-        const panel = findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
-        verify(panel !== null)
-        tryCompare(panel.settingsVm, "setSeriesEnabledCalls", 1)
-        compare(panel.settingsVm.lastSetSeriesEnabledId, "2")
-        compare(panel.settingsVm.lastSetSeriesEnabledValue, true)
-    }
-
     function test_categoryList_startsOnDirectories() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),

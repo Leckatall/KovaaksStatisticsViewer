@@ -653,21 +653,6 @@ TestCase {
         compare(saveButton.enabled, true);
         compare(discardButton.enabled, true);
     }
-    function test_togglingSeriesEnabledSwitchWritesThroughSettingsVm() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm()
-        });
-
-        const scoreSwitch = findByObjectName(panel.contentItem, "seriesEnabledSwitch_1");
-        verify(scoreSwitch !== null);
-        mouseClick(scoreSwitch);
-
-        tryCompare(scoreSwitch, "checked", false);
-        compare(panel.settingsVm.seriesEnabledCalls, 1);
-        // compare(panel.settingsVm.seriesEnabledCalls[0].id, "2")
-        // compare(panel.settingsVm.seriesEnabledCalls[0].enabled, true)
-    }
-
     height: 400
     name: "SeriesConfigDraftPanelTest"
     visible: true

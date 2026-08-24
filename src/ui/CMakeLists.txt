@@ -35,6 +35,7 @@ qt_add_qml_module(ksv_ui
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
             qml/SeriesConfigDraftPanel.qml
+            qml/SeriesConfigEditorDelegate.qml
             qml/ExpressionTreeEditor.qml
             qml/FieldEditors.qml
             qml/PathCard.qml

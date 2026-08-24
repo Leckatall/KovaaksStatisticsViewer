@@ -45,13 +45,6 @@ Pane {
     function refreshRows() {
         displayRows = sourceRows.slice().sort(function(a, b) { return a.displayPosition - b.displayPosition })
     }
-    function updateSeries(row, name, color) {
-        settingsVm.updateComputedSeries(row.id, name, color, row.width, row.enabled, row.expression)
-    }
-    function axisComboIndexFor(yAxisId) {
-        const id = yAxisId || ""
-        return axisComboModel.findIndex(function (item) { return item.value === id })
-    }
     function handleAxisSelection(row, value) {
         if (value === "__new__") {
             root.axisNameTarget = row
@@ -83,7 +76,7 @@ Pane {
     ColorDialog {
         id: colorDialog
         options: ColorDialog.ShowAlphaChannel
-        onAccepted: if (root.colorTarget) root.updateSeries(root.colorTarget, root.colorTarget.name, selectedColor)
+        onAccepted: if (root.colorTarget) root.settingsVm.updateComputedSeries(root.colorTarget.id, root.colorTarget.name, selectedColor, root.colorTarget.width, root.colorTarget.enabled, root.colorTarget.expression)
     }
     ExpressionEditorDialog { id: expressionDialog; settingsVm: root.settingsVm }
     Dialog {
@@ -151,129 +144,29 @@ Pane {
                 Repeater {
                     model: root.displayRows
 
-                    RowLayout {
-                        id: lineRow
-                        required property var modelData
-                        Layout.fillWidth: true
-                        spacing: 5
-                        z: root.draggedSeriesId === modelData.id ? 1 : 0
-                        transform: Translate { y: root.previewOffset(lineRow.modelData.id) }
-
-                        Rectangle {
-                            id: dragHandle
-                            objectName: "seriesDragHandle_" + lineRow.modelData.id
-                            Layout.preferredWidth: 12
-                            Layout.preferredHeight: 24
-                            color: root.palette.mid
-                            radius: 2
-                            DragHandler {
-                                id: drag
-                                target: null
-                                dragThreshold: 0
-                                grabPermissions: PointerHandler.CanTakeOverFromAnything
-                                onActiveChanged: {
-                                    if (active) {
-                                        root.draggedSeriesId = lineRow.modelData.id
-                                        root.dragOriginIndex = root.displayRows.findIndex(function(row) { return row.id === lineRow.modelData.id })
-                                        root.dragPreviewIndex = root.dragOriginIndex
-                                        root.dragRowHeight = Math.max(lineRow.height, 1)
-                                        root.dragRawTranslationY = 0
-                                        root.dragStartPointerY = dragHandle.mapToItem(seriesListScrollView, 0, 0).y
-                                        seriesListScrollView.autoScrollAccumulatedDelta = 0
-                                        seriesListScrollView.autoScrollDirection = 0
-                                    } else if (root.draggedSeriesId === lineRow.modelData.id) {
-                                        const seriesId = lineRow.modelData.id
-                                        const targetPosition = root.dragPreviewIndex
-                                        root.draggedSeriesId = ""
-                                        root.dragOriginIndex = -1
-                                        root.dragPreviewIndex = -1
-                                        root.dragTranslationY = 0
-                                        root.dragRawTranslationY = 0
-                                        root.dragStartPointerY = 0
-                                        root.dragRowHeight = 0
-                                        seriesListScrollView.autoScrollAccumulatedDelta = 0
-                                        seriesListScrollView.autoScrollDirection = 0
-                                        // reorderSeries() can synchronously reset the Repeater (allSeriesConfigs ->
-                                        // sourceRows -> displayRows), destroying this delegate mid-call; nothing above
-                                        // this line touches root or lineRow again, and nothing may be added after it.
-                                        root.settingsVm.reorderSeries(seriesId, targetPosition)
-                                    }
-                                }
-                                onTranslationChanged: {
-                                    root.dragRawTranslationY = translation.y
-                                    root.dragTranslationY = translation.y + seriesListScrollView.autoScrollAccumulatedDelta
-                                    root.previewMove(root.dragOriginIndex + Math.round(root.dragTranslationY / root.dragRowHeight))
-
-                                    const pointerY = root.dragStartPointerY + translation.y
-                                    if (pointerY < seriesListScrollView.autoScrollEdgeThreshold)
-                                        seriesListScrollView.autoScrollDirection = -1
-                                    else if (pointerY > seriesListScrollView.height - seriesListScrollView.autoScrollEdgeThreshold)
-                                        seriesListScrollView.autoScrollDirection = 1
-                                    else
-                                        seriesListScrollView.autoScrollDirection = 0
-                                }
-                            }
+                    SeriesConfigEditorDelegate {
+                        displayRows: root.displayRows
+                        dragState: root
+                        scrollView: seriesListScrollView
+                        axisComboModel: root.axisComboModel
+                        onColorRequested: row => {
+                            root.colorTarget = row
+                            colorDialog.selectedColor = row.color
+                            colorDialog.open()
                         }
-                        Rectangle {
-                            objectName: "seriesColorSwatch_" + lineRow.modelData.id
-                            Layout.preferredWidth: 16
-                            Layout.preferredHeight: 16
-                            border.color: root.palette.mid
-                            border.width: 1
-                            color: lineRow.modelData.color
-                            radius: 4
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    root.colorTarget = lineRow.modelData
-                                    colorDialog.selectedColor = lineRow.modelData.color
-                                    colorDialog.open()
-                                }
-                            }
+                        onNameUpdateRequested: (row, name) => root.settingsVm.updateComputedSeries(row.id, name, row.color, row.width, row.enabled, row.expression)
+                        onExpressionEditRequested: row => {
+                            expressionDialog.seriesId = row.id
+                            expressionDialog.seriesName = row.name
+                            expressionDialog.seriesColor = row.color
+                            expressionDialog.seriesWidth = row.width
+                            expressionDialog.seriesEnabled = row.enabled
+                            expressionDialog.open()
                         }
-                        TextField {
-                            id: nameField
-                            objectName: "seriesNameField_" + lineRow.modelData.id
-                            Layout.fillWidth: true
-                            text: lineRow.modelData.name
-                            onEditingFinished: root.updateSeries(lineRow.modelData, text, lineRow.modelData.color)
-                            Component.onCompleted: cursorPosition = 0
-                        }
-                        Button {
-                            objectName: "editExpressionButton_" + lineRow.modelData.id
-                            text: qsTr("Edit expression")
-                            onClicked: {
-                                expressionDialog.seriesId = lineRow.modelData.id
-                                expressionDialog.seriesName = lineRow.modelData.name
-                                expressionDialog.seriesColor = lineRow.modelData.color
-                                expressionDialog.seriesWidth = lineRow.modelData.width
-                                expressionDialog.seriesEnabled = lineRow.modelData.enabled
-                                expressionDialog.open()
-                            }
-                        }
-                        ComboBox {
-                            id: axisCombo
-                            objectName: "axisCombo_" + lineRow.modelData.id
-                            model: root.axisComboModel
-                            textRole: "text"
-                            valueRole: "value"
-                            implicitContentWidthPolicy: ComboBox.WidestText
-                            Layout.minimumWidth: implicitContentWidth + (padding * 2) + 10
-                            Layout.preferredWidth: implicitContentWidth + (padding * 2) + 20
-                            currentIndex: root.axisComboIndexFor(lineRow.modelData.yAxisId)
-                            onActivated: root.handleAxisSelection(lineRow.modelData, root.axisComboModel[currentIndex].value)
-                        }
-                        Button {
-                            objectName: "deleteSeriesButton_" + lineRow.modelData.id
-                            text: qsTr("Delete")
-                            Layout.preferredWidth: contentItem.implicitWidth + (padding * 2)
-                            onClicked: root.settingsVm.removeComputedSeries(lineRow.modelData.id)
-                        }
-                        Switch {
-                            checked: lineRow.modelData.enabled
-                            objectName: "seriesEnabledSwitch_" + lineRow.modelData.id
-                            onToggled: root.settingsVm.setSeriesEnabled(lineRow.modelData.id, checked)
-                        }
+                        onAxisSelectionRequested: (row, value) => root.handleAxisSelection(row, value)
+                        onSeriesRemovalRequested: row => root.settingsVm.removeComputedSeries(row.id)
+                        onSeriesEnabledRequested: (row, enabled) => root.settingsVm.setSeriesEnabled(row.id, enabled)
+                        onReorderRequested: (seriesId, targetPosition) => root.settingsVm.reorderSeries(seriesId, targetPosition)
                     }
                 }
             }
