@@ -17,7 +17,7 @@ namespace ksv::ui {
     public:
         struct Style {
             qreal lineWidth = 3;
-            qreal markerRadius = 2;
+            qreal markerRadius = 1;
             QColor markerColor{"white"};
         };
 
