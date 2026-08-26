@@ -16,7 +16,6 @@ target_sources(ksv_contracts PUBLIC
         i_graph_use_case.h
         i_playtime_graph_use_case.h
         i_completion_history_use_case.h
-        i_graph_column_preferences.h
         i_average_line_use_case.h
         i_series_management_use_case.h
 )

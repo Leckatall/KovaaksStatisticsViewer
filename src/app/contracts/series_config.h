@@ -224,10 +224,6 @@ namespace ksv::application {
         std::string path;
     };
 
-    class SeriesConfigValidator {
-
-    };
-
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfig(const SeriesConfig &config);
 
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs);

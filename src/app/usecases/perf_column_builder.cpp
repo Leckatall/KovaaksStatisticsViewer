@@ -21,7 +21,6 @@ namespace ksv::application {
         };
 
         struct BuildContext {
-            const domain::ScenarioPerf &perf;
             const std::vector<Bucket> &buckets;
         };
 
@@ -136,7 +135,7 @@ namespace ksv::application {
         }
         result.times = projection.times;
 
-        const BuildContext context{perf, buckets};
+        const BuildContext context{buckets};
         for (const auto &def: kColumnDefinitions) result.columns[def.id] = def.derive(context);
 
         return result;

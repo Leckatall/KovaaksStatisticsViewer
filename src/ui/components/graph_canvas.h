@@ -76,7 +76,6 @@ namespace ksv::ui {
 
         presentation::GraphViewModelBase *m_graphVm = nullptr;
         QVariantList m_visibleColumns;
-        QQmlListProperty<int> m_hiddenSeriesIds;
         int m_yAxisColumn = -1;
     };
 }

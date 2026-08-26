@@ -52,23 +52,23 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 - [ ] **Track and display highscore data per scenario** `[Easy]` `[High]`
   - [ ] Compute and store the highscore for each scenario in `UserProfile`
   - [ ] Display the highscore prominently when a scenario is selected
-  - [ ] Show highscore progression over time (when each new PB was set)
+  - [x] Show highscore progression over time (when each new PB was set)
 
 - [ ] **Compare a specific run against scenario averages** `[Medium]` `[High]`
   - [ ] Compute rolling/overall average score curve for a scenario
   - [ ] Overlay the average curve on the graph alongside the selected run
   - [ ] Show delta stats (how far above/below average this run was)
 
-- [ ] **Show aggregate data alongside most recent performance** `[Medium]` `[High]`
-  - [ ] Compute aggregate stats (mean, median, std dev) for a scenario
+- [x] **Show aggregate data alongside most recent performance** `[Medium]` `[High]`
+  - [x] Compute aggregate stats (mean, median, std dev) for a scenario
   - [ ] Add a stats summary panel next to the graph
   - [ ] Highlight the most recent run's stats relative to the aggregate
 
-- [ ] **Pull top-percentile performances as a comparison baseline** `[Medium]` `[Medium]`
-  - [ ] Identify top N% of runs for a scenario from local data
-  - [ ] Compute an averaged "best performance" curve from those runs
-  - [ ] Allow the user to configure the percentile threshold (e.g. top 10%, top 5%)
-  - [ ] Overlay the baseline on the graph as a reference line
+- [x] **Pull top-percentile performances as a comparison baseline** `[Medium]` `[Medium]`
+  - [x] Identify top N% of runs for a scenario from local data
+  - [x] Compute an averaged "best performance" curve from those runs
+  - [x] Allow the user to configure the percentile threshold (e.g. top 10%, top 5%)
+  - [x] Overlay the baseline on the graph as a reference line
 
 - [ ] **Fetch leaderboard percentile data per scenario** *(stretch)* `[Very Hard]` `[Medium]`
   - [ ] Reverse-engineer or find an API for Kovaaks leaderboard data

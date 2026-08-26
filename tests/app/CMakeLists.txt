@@ -5,7 +5,6 @@ add_executable(app_tests
         qt_test_main.cpp
         completion_history_use_case_test.cpp
         graph_column_test.cpp
-        graph_column_preferences_test.cpp
         series_config_test.cpp
         graph_use_case_test.cpp
         perf_column_builder_test.cpp
