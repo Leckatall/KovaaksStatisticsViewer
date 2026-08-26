@@ -34,12 +34,6 @@ namespace ksv::presentation {
         }
         [[nodiscard]] AxisModel xAxis() const override { return m_xAxis; }
 
-        [[nodiscard]] QVariantList plottableColumns() const override { return {int(Playtime)}; }
-        [[nodiscard]] QVariantMap axisBounds() const override;
-        [[nodiscard]] QList<qreal> axisTicks(int column) const override;
-        [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
-
-        [[nodiscard]] int xColumn() const override { return Date; }
         [[nodiscard]] int yAxisColumn() const override { return Playtime; }
 
     public slots:
@@ -52,10 +46,7 @@ namespace ksv::presentation {
         static constexpr int kWindowDays = 3;
 
         std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;
-        // UTC epoch milliseconds and minutes, ordered by day.
-        QList<QPointF> m_points;
         AxisModel m_xAxis;
-        AxisModel m_yAxis;
         SeriesModel *m_series; // raw seconds + a seconds->minutes transform
     };
 }

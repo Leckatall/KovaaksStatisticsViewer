@@ -9,8 +9,6 @@ target_sources(ksv_contracts PUBLIC
         completion_history.h
         scenario_summary.h
         run_performance.h
-        graph_column.h
-        graph_series.h
         resolved_graph.h
         series_config.h
         i_graph_use_case.h
@@ -18,6 +16,7 @@ target_sources(ksv_contracts PUBLIC
         i_completion_history_use_case.h
         i_average_line_use_case.h
         i_series_management_use_case.h
+        i_scenario_browser_use_case.h
 )
 
 target_include_directories(ksv_contracts PUBLIC

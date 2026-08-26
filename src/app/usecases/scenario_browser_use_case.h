@@ -20,11 +20,16 @@ namespace ksv::application {
                               std::shared_ptr<IProfileService> profile_service)
             : m_session_controller(std::move(session_controller)),
               m_profile_service(std::move(profile_service)) {
+            m_connections.push_back(QObject::connect(
+                m_session_controller.get(), &ISessionController::currentPerfChanged,
+                [this] { notifyChanged(); }));
+            m_connections.push_back(QObject::connect(
+                m_session_controller.get(), &ISessionController::profileChanged,
+                [this] { notifyChanged(); }));
         }
 
         ~ScenarioBrowserUseCase() override {
-            QObject::disconnect(m_current_perf_connection);
-            QObject::disconnect(m_profile_connection);
+            for (const auto &connection: m_connections) QObject::disconnect(connection);
         }
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override {
@@ -80,18 +85,15 @@ namespace ksv::application {
             m_session_controller->setCurrentPerf(run_id);
         }
 
-        void onChanged(QObject *context, std::function<void()> callback) override {
-            QObject::disconnect(m_current_perf_connection);
-            QObject::disconnect(m_profile_connection);
-            m_current_perf_connection = QObject::connect(
-                m_session_controller.get(), &ISessionController::currentPerfChanged,
-                context, callback);
-            m_profile_connection = QObject::connect(
-                m_session_controller.get(), &ISessionController::profileChanged,
-                context, std::move(callback));
+        void onChanged(std::function<void()> callback) override {
+            m_callbacks.push_back(std::move(callback));
         }
 
     private:
+        void notifyChanged() const {
+            for (const auto &callback: m_callbacks) callback();
+        }
+
         [[nodiscard]] static std::vector<RunPerformance> withPersonalBest(
             const std::vector<domain::RunData> &ascending) {
             std::vector<RunPerformance> result;
@@ -117,8 +119,8 @@ namespace ksv::application {
 
         std::shared_ptr<ISessionController> m_session_controller;
         std::shared_ptr<IProfileService> m_profile_service;
-        QMetaObject::Connection m_current_perf_connection;
-        QMetaObject::Connection m_profile_connection;
+        std::vector<QMetaObject::Connection> m_connections;
+        std::vector<std::function<void()>> m_callbacks;
     };
 }
 

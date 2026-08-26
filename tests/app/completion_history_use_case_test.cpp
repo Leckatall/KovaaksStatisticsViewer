@@ -9,82 +9,14 @@
 #include <vector>
 
 #include "usecases/completion_history_use_case.h"
+#include "fake_profile_service.h"
+#include "fake_session_controller.h"
 
 using namespace ksv::application;
 using namespace ksv::domain;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakeSessionController final : public ISessionController {
-    public:
-        ScenarioPerf current_perf;
-
-        std::vector<ScenarioId> getScenarioList() override { return {}; }
-        void generateProfileFromDirectory() override {}
-        void setCurrentPerfToLatest() override {}
-        void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
-        void setCurrentPerf(const std::string &) override {}
-        void setCurrentPerf(const ScenarioRunId &) override {}
-        [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
-        [[nodiscard]] bool isBuildInProgress() const override { return false; }
-
-        void changeRun(const std::string &hash, const long long start_time) {
-            current_perf.run_id.scenario_id = {.name = "Scenario " + hash, .hash = hash};
-            current_perf.run_id.start_time = start_time;
-            emit currentPerfChanged();
-        }
-
-        void notifyProfileChanged() { emit profileChanged(); }
-    };
-
-    class FakeProfileService final : public IProfileService {
-    public:
-        mutable int completion_history_calls = 0;
-        mutable ScenarioId requested_scenario;
-        std::vector<RunData> completion_history;
-
-        void generateProfileFromDirectory() override {}
-        void loadProfile() override {}
-        void onBuildRequested(std::function<void()>) override {}
-        void beginProfileBuild() override {}
-        void applyBuiltProfile(UserProfile) override {}
-        [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return {}; }
-        [[nodiscard]] ScenarioPerf getPerf(const std::string &) const override { return {}; }
-        [[nodiscard]] ScenarioPerf getLatestPerf() const override { return {}; }
-        [[nodiscard]] std::optional<ScenarioPerf> getMostRecentPerf(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &, std::size_t) const override {
-            return {};
-        }
-        [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &) const override { return {}; }
-        [[nodiscard]] std::vector<RunData>
-        getCompletionHistory(const ScenarioId &scenario) const override {
-            ++completion_history_calls;
-            requested_scenario = scenario;
-            return completion_history;
-        }
-        [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &, std::size_t) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t) const override { return {}; }
-        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
-        getRollingTimeAverage(int) const override { return {}; }
-        [[nodiscard]] bool isProfileLoaded() const override { return true; }
-        void onProfileChanged(std::function<void()>) override {}
-    };
-
     class CompletionHistoryUseCaseTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSessionController> session = std::make_shared<FakeSessionController>();

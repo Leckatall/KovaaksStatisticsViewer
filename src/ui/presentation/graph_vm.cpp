@@ -46,12 +46,6 @@ namespace ksv::presentation {
         m_graphUseCase->onSeriesConfigChanged([this] { fetchMetadata(); });
     }
 
-    void GraphViewModel::setData(QList<QMap<int, qreal> > data) {
-        m_data = std::move(data);
-        emit dataUpdated();
-        recomputeBounds();
-    }
-
     QList<SeriesModel *> GraphViewModel::series(const QList<int> &columns) const {
         QList<SeriesModel *> result;
         result.reserve(columns.size());
@@ -74,31 +68,15 @@ namespace ksv::presentation {
         return result;
     }
 
-    QVariantMap GraphViewModel::axisBounds() const {
-        return {{QString::number(kTimeColumn), QPointF(m_timeAxis.min(), m_timeAxis.max())}};
-    }
-
-    QList<qreal> GraphViewModel::axisTicks(const int column) const {
-        return column == kTimeColumn ? m_timeAxis.ticks() : QList<qreal>{};
-    }
-
-    QList<QPointF> GraphViewModel::seriesPoints(const int column) const {
-        QList<QPointF> points;
-        points.reserve(m_data.size());
-        for (const auto &row: m_data) points.append(QPointF(row[kTimeColumn], row[column]));
-        return points;
-    }
-
     void GraphViewModel::recomputeBounds() {
         // Time: zero floor, integral steps (whole seconds)
         const AxisModel::Options timeOpts{AxisModel::Baseline::Zero, /*integral=*/true};
 
         AxisModel newTimeAxis;
-        if (m_data.isEmpty()) {
+        if (m_times.empty()) {
             newTimeAxis = AxisModel::forRange(0.0, 60.0, timeOpts);
         } else {
-            qreal hi = m_data.front()[kTimeColumn];
-            for (const auto &row: m_data) hi = std::max(hi, row[kTimeColumn]);
+            const qreal hi = *std::ranges::max_element(m_times);
             newTimeAxis = AxisModel::forRange(0.0, hi, timeOpts);
         }
         newTimeAxis = newTimeAxis.withDelegate(secondsDelegate());
@@ -155,75 +133,40 @@ namespace ksv::presentation {
         }
 
         const auto resolved = m_graphUseCase->get_resolved_graph();
-        if (!resolved.series.empty() || !resolved.times.empty()) {
-            m_allSeriesList.clear();
-            m_enabledSeriesIds.clear();
-            QList<QMap<int, qreal> > rows(int(resolved.times.size()));
-            for (int i = 0; i < rows.size(); ++i) rows[i][kTimeColumn] = resolved.times[static_cast<size_t>(i)];
-
-            for (const auto &entry: resolved.series) {
-                const auto &presentation = entry.config.presentation;
-                const auto &entry_id = entry.config.id.value;
-                const QString id = QString::number(entry_id);
-                const auto values = entry.values.value_or({});
-                QList<QPointF> points;
-                points.reserve(resolved.times.size());
-                for (int i = 0; i < rows.size(); ++i) {
-                    points.append(QPointF(resolved.times[i], values[i]));
-                }
-
-                // fetchMetadata() only creates entries for enabled series; this preserves the
-                // original QMap<QString,SeriesModel>::operator[] auto-vivification behavior for
-                // any id fetchData() sees that fetchMetadata() didn't (e.g. a disabled series
-                // still present in resolved.series).
-                SeriesModel *entrySeries = m_seriesById.value(id, nullptr);
-                if (!entrySeries) {
-                    entrySeries = new SeriesModel(this);
-                    m_seriesById[id] = entrySeries;
-                }
-                entrySeries->points = points;
-                entrySeries->yAxis = entrySeries->deriveYAxis();
-                entrySeries->setColumn(static_cast<int>(entry_id));
-
-                m_allSeriesList.append(entrySeries);
-                m_enabledSeriesIds.append(id);
+        m_allSeriesList.clear();
+        m_enabledSeriesIds.clear();
+        for (const auto &entry: resolved.series) {
+            const auto &entry_id = entry.config.id.value;
+            const QString id = QString::number(entry_id);
+            const auto values = entry.values.value_or({});
+            QList<QPointF> points;
+            points.reserve(resolved.times.size());
+            for (int i = 0; i < int(resolved.times.size()); ++i) {
+                const double value = i < int(values.size()) ? values[i] : 0.0;
+                points.append(QPointF(resolved.times[i], value));
             }
-            emit seriesConfigurationChanged();
-            setData(std::move(rows));
-            return;
-        }
 
-        // TODO(2026-08-19): Deprecated, unwanted fallback. Dead in production — App::App() always
-        // wires GraphUseCase with a SeriesConfigStore, so get_resolved_graph() above is never empty
-        // there. This branch (and the ColumnId->SeriesId table below it) exists only because ~15
-        // tests in graph_vm_test.cpp still drive GraphViewModel via the legacy GraphSeries/
-        // get_series() path instead of resolved_graph_to_return. Once those tests migrate to the
-        // SeriesConfig-backed path, delete this whole branch, get_series(), GraphSeries, and this
-        // file's use of application::ColumnId.
-        const application::GraphSeries seriesData = m_graphUseCase->get_series();
-
-        QList<QMap<int, qreal> > rows(int(seriesData.times.size()));
-        for (int i = 0; i < int(seriesData.times.size()); ++i) rows[i][kTimeColumn] = seriesData.times[i];
-
-        // Maps the legacy fixed ColumnId set onto the real built-in SeriesIds from
-        // defaultSeriesConfigs(). Hits (SeriesId 4) has no ColumnId and is skipped — it was never
-        // part of this legacy set.
-        static constexpr std::array<std::pair<application::ColumnId, int>, 8> kLegacyColumnToSeriesId{
-            {
-                {application::ColumnId::Score, 1}, {application::ColumnId::Accuracy, 2},
-                {application::ColumnId::Shots, 3}, {application::ColumnId::Kills, 5},
-                {application::ColumnId::Dmg, 6}, {application::ColumnId::ScoreTotal, 7},
-                {application::ColumnId::ExpectedFinalScore, 8}, {application::ColumnId::ExpectedFinalScoreRecent, 9},
+            // fetchMetadata() only creates entries for enabled series; this preserves the
+            // original QMap<QString,SeriesModel>::operator[] auto-vivification behavior for
+            // any id fetchData() sees that fetchMetadata() didn't (e.g. a disabled series
+            // still present in resolved.series, or fetchData() called directly without a
+            // preceding fetchMetadata() picking up the same config).
+            SeriesModel *entrySeries = m_seriesById.value(id, nullptr);
+            if (!entrySeries) {
+                entrySeries = new SeriesModel(this);
+                m_seriesById[id] = entrySeries;
             }
-        };
-        for (const auto &[legacyColumn, seriesId]: kLegacyColumnToSeriesId) {
-            const auto it = seriesData.columns.find(legacyColumn);
-            if (it == seriesData.columns.end()) continue;
-            const auto &values = it->second;
-            for (int i = 0; i < rows.size() && i < int(values.size()); ++i) rows[i][seriesId] = values[i];
-        }
+            entrySeries->points = points;
+            entrySeries->yAxis = entrySeries->deriveYAxis();
+            entrySeries->setColumn(static_cast<int>(entry_id));
 
-        setData(std::move(rows));
+            m_allSeriesList.append(entrySeries);
+            m_enabledSeriesIds.append(id);
+        }
+        emit seriesConfigurationChanged();
+        m_times = resolved.times;
+        emit dataUpdated();
+        recomputeBounds();
     }
 
     void GraphViewModel::fetchData(const QString &scenario_id) {

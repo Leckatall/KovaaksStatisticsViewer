@@ -30,12 +30,6 @@ MenuBar {
             onTriggered: loadPerformanceFileRequested()
         }
 
-        // Action {
-        //     text: qsTr("&Save")
-        // }
-        // Action {
-        //     text: qsTr("Save &As...")
-        // }
         Action {
             id: settingsAction
             text: qsTr("&Settings")

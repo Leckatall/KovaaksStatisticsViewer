@@ -9,9 +9,11 @@
 #include <unordered_map>
 
 #include "profile_builder.h"
+#include "fake_file_service.h"
 
 using namespace ksv::data;
 using namespace ksv::application;
+using namespace ksv::tests_support;
 
 namespace {
     ksv::domain::ScenarioPerf make_perf(const std::string &hash, const long long start_time,
@@ -23,37 +25,6 @@ namespace {
         perf.add_data(0.0F, ksv::domain::SCORE, score);
         return perf;
     }
-
-    class FakeFileService : public IFileService {
-    public:
-        std::vector<ksv::domain::ScenarioPerf> perfs_to_return;
-        std::set<std::size_t> throw_for_indices;
-        std::vector<std::string> source_roots{"fake/kovaaks"};
-
-        [[nodiscard]] std::vector<PerfFile> listPerfFiles() const override {
-            std::vector<PerfFile> paths;
-            for (std::size_t i = 0; i < perfs_to_return.size(); ++i) {
-                paths.push_back({source_roots.front(), "FPSAimTrainer/performances",
-                                 "listed-perf-" + std::to_string(i)});
-            }
-            return paths;
-        }
-
-        [[nodiscard]] ksv::domain::ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
-            const auto name = std::filesystem::path(filename).filename().string();
-            const auto index = std::stoul(name.substr(std::string("listed-perf-").size()));
-            if (throw_for_indices.contains(index)) throw std::invalid_argument("File does not exist");
-            return perfs_to_return.at(index);
-        }
-
-        [[nodiscard]] ksv::domain::ScenarioPerf getLatestPerf() const override {
-            return {};
-        }
-
-        [[nodiscard]] std::vector<std::string> sourceRoots() const override { return source_roots; }
-
-        void onFilesChanged(std::function<void(const PerfFile &)>) override {}
-    };
 
     class ProfileBuilderTest : public testing::Test {
     protected:

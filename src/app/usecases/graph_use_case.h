@@ -9,7 +9,6 @@
 
 #include "contracts/i_graph_use_case.h"
 #include "i_session_controller.h"
-#include "perf_column_builder.h"
 #include "bucketed_run.h"
 #include "../contracts/i_average_line_use_case.h"
 #include "../../data/interfaces/i_series_config_store.h"
@@ -30,10 +29,6 @@ namespace ksv::application {
         }
         void load_latest_perf() override {
             m_session_controller->setCurrentPerfToLatest();
-        }
-
-        GraphSeries get_series() override {
-            return PerfColumnBuilder::build(m_session_controller->getCurrentPerf());
         }
 
         std::string get_run_label() override {

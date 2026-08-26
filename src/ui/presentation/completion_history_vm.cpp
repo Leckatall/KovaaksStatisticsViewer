@@ -47,16 +47,6 @@ namespace ksv::presentation {
             {"Misses", QColor("#E53935"), CountAxis},
         }};
 
-        AxisModel axisForColumn(const QList<SeriesModel *> &series, const int column) {
-            const int axis = kColumnMeta[column].yAxis;
-            std::vector<const SeriesModel *> members;
-            for (int member = CompletionHistoryViewModel::Score;
-                 member < CompletionHistoryViewModel::ColumnCount; ++member) {
-                if (kColumnMeta[member].yAxis == axis) members.push_back(series[member - CompletionHistoryViewModel::Score]);
-            }
-            const auto &descriptor = kYAxisMeta[axis];
-            return axisForSeries(members, descriptor.options, descriptor.transform);
-        }
     }
 
     CompletionHistoryViewModel::CompletionHistoryViewModel(
@@ -94,33 +84,6 @@ namespace ksv::presentation {
             for (const int index: indices) result[index]->yAxis = yAxis;
         }
         return result;
-    }
-
-    QVariantList CompletionHistoryViewModel::plottableColumns() const {
-        QVariantList columns;
-        for (int column = Score; column < ColumnCount; ++column) columns.append(column);
-        return columns;
-    }
-
-    QVariantMap CompletionHistoryViewModel::axisBounds() const {
-        QVariantMap bounds;
-        bounds[QString::number(RunIndex)] = QPointF(m_x_axis.min(), m_x_axis.max());
-        for (int column = Score; column < ColumnCount; ++column) {
-            const AxisModel y_axis = axisForColumn(m_series, column);
-            bounds[QString::number(column)] = QPointF(y_axis.min(), y_axis.max());
-        }
-        return bounds;
-    }
-
-    QList<qreal> CompletionHistoryViewModel::axisTicks(const int column) const {
-        if (column == RunIndex) return m_x_axis.ticks();
-        if (column < Score || column >= ColumnCount) return {};
-        return axisForColumn(m_series, column).ticks();
-    }
-
-    QList<QPointF> CompletionHistoryViewModel::seriesPoints(const int column) const {
-        if (column < Score || column >= ColumnCount) return {};
-        return m_points[column];
     }
 
     void CompletionHistoryViewModel::refresh() {

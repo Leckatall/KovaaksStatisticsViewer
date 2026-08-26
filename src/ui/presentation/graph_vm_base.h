@@ -8,10 +8,7 @@
 #include <QColor>
 #include <QList>
 #include <QObject>
-#include <QPointF>
 #include <QString>
-#include <QVariantList>
-#include <QVariantMap>
 #include <cmath>
 
 #include "axis_model.h"
@@ -31,16 +28,6 @@ namespace ksv::presentation {
         // Shared X axis all series are plotted against
         [[nodiscard]] virtual AxisModel xAxis() const = 0;
 
-        // TODO(2026-08-14): Remove with the remaining legacy graph-interface methods.
-        [[nodiscard]] virtual QVariantList plottableColumns() const { return {}; }
-
-        [[nodiscard]] virtual QVariantMap axisBounds() const = 0;
-
-        [[nodiscard]] virtual QList<qreal> axisTicks(int column) const = 0;
-
-        [[nodiscard]] virtual QList<QPointF> seriesPoints(int column) const = 0;
-
-        [[nodiscard]] virtual int xColumn() const = 0;
         [[nodiscard]] virtual int yAxisColumn() const = 0;
 
     signals:

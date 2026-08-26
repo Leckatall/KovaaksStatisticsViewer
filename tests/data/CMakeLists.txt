@@ -31,6 +31,7 @@ add_executable(profile_service_tests
 )
 
 target_link_libraries(profile_service_tests PRIVATE
+    tests_support
     ksv_data
     GTest::gtest_main
 )
@@ -43,6 +44,7 @@ add_executable(profile_builder_tests
 )
 
 target_link_libraries(profile_builder_tests PRIVATE
+    tests_support
     ksv_data
     GTest::gtest_main
 )

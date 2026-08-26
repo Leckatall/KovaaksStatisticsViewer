@@ -27,11 +27,8 @@ namespace ksv::qt_data {
     public:
         explicit FileService(std::shared_ptr<application::ISettingsService> settings_service, std::shared_ptr<application::IProtoDecoder> decoder, QObject *parent = nullptr);
 
-        // [[nodiscard]] std::vector<std::string> get_files_in_dir(std::string_view dir) const;
-
         [[nodiscard]] std::vector<application::PerfFile> listPerfFiles() const override;
         [[nodiscard]] domain::ScenarioPerf getPerfFromFile(std::string_view filename) const override;
-        [[nodiscard]] domain::ScenarioPerf getLatestPerf() const override;
         [[nodiscard]] std::vector<std::string> sourceRoots() const override;
 
         void onFilesChanged(std::function<void(const application::PerfFile &)> callback) override {

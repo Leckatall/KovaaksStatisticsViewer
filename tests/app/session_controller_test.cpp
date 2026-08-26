@@ -13,157 +13,15 @@
 #include <unordered_map>
 
 #include "session_controller.h"
+#include "fake_file_service.h"
+#include "fake_profile_service.h"
+#include "fake_settings_service.h"
 
 using namespace ksv::application;
 using namespace ksv::domain;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakeSettingsService : public ISettingsService {
-    public:
-        std::vector<std::string> dirs{"C:/Kovaaks"};
-        std::string profile_path = "C:/Profile/profile.pb";
-
-        [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
-        [[nodiscard]] bool isKovaaksDirSet() const override { return true; }
-        void setKovaaksDirs(const std::vector<std::string> &new_dirs) override { dirs = new_dirs; }
-        [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
-        void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
-        void onProfilePathChanged(std::function<void()>) override {}
-        void onKovaaksDirsChanged(std::function<void()>) override {}
-        [[nodiscard]] bool hasSeriesConfigDocument() const override { return false; }
-        [[nodiscard]] std::string getSeriesConfigDocument() const override { return {}; }
-        void setSeriesConfigDocument(const std::string &) override {}
-        void quarantineSeriesConfigDocument(const std::string &) override {}
-        [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override { return {}; }
-    };
-
-    class FakeProfileService : public IProfileService {
-    public:
-        mutable int generate_call_count = 0;
-        bool profile_loaded = false;
-        std::vector<ScenarioId> scenario_list;
-        std::unordered_map<std::string, ScenarioPerf> perf_by_path;
-        std::unordered_map<ScenarioRunId, ScenarioPerf> run_by_id;
-        ScenarioPerf latest_perf;
-        std::function<void()> stored_callback;
-
-        void generateProfileFromDirectory() override { ++generate_call_count; }
-
-        void loadProfile() override { ++generate_call_count; }
-
-        [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return scenario_list; }
-
-        [[nodiscard]] ScenarioPerf getPerf(const std::string &path) const override { return perf_by_path.at(path); }
-
-        [[nodiscard]] ScenarioPerf getLatestPerf() const override { return latest_perf; }
-
-        [[nodiscard]] std::optional<ScenarioPerf> getMostRecentPerf(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-
-        std::unordered_map<std::string, std::vector<ScenarioPerf>> most_recent_perfs_by_hash;
-
-        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &scenario,
-                                                                    const std::size_t count) const override {
-            const auto it = most_recent_perfs_by_hash.find(scenario.hash);
-            if (it == most_recent_perfs_by_hash.end()) return {};
-            const auto n = std::min(count, it->second.size());
-            return {it->second.end() - static_cast<std::ptrdiff_t>(n), it->second.end()};
-        }
-        [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &scenario) const override {
-            const auto it = most_recent_perfs_by_hash.find(scenario.hash);
-            return it == most_recent_perfs_by_hash.end() ? std::vector<ScenarioPerf>{} : it->second;
-        }
-
-        [[nodiscard]] std::vector<RunData>
-        getCompletionHistory(const ScenarioId &) const override { return {}; }
-
-        [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &, std::size_t) const override {
-            return std::nullopt;
-        }
-
-        [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &run_id) const override {
-            const auto it = run_by_id.find(run_id);
-            if (it == run_by_id.end()) return std::nullopt;
-            return it->second;
-        }
-
-        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-
-        [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override { return std::nullopt; }
-
-        [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override { return std::nullopt; }
-
-        [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t) const override { return {}; }
-
-        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
-        getRollingTimeAverage(int) const override { return {}; }
-
-        [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
-
-        void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
-
-        void onBuildRequested(std::function<void()> callback) override {
-            stored_build_requester = std::move(callback);
-        }
-
-        void beginProfileBuild() override { ++begin_build_count; }
-
-        void applyBuiltProfile(ksv::domain::UserProfile profile) override {
-            ++apply_count;
-            applied_profile = std::move(profile);
-            scenario_list = applied_profile->getScenarioList();
-            profile_loaded = true;
-            if (stored_callback) stored_callback();
-        }
-
-        std::function<void()> stored_build_requester;
-        int begin_build_count = 0;
-        int apply_count = 0;
-        std::optional<ksv::domain::UserProfile> applied_profile;
-    };
-
-    // Blocks inside the build so a test can observe the in-flight window deterministically
-    // instead of racing the worker thread.
-    class FakeFileService : public IFileService {
-    public:
-        std::vector<ScenarioPerf> perfs_to_return;
-        std::vector<std::string> source_roots{"C:/Kovaaks"};
-        QSemaphore scan_gate;
-        QSemaphore scan_entered;
-        bool gate_scan = false;
-
-        [[nodiscard]] std::vector<PerfFile> listPerfFiles() const override {
-            if (gate_scan) {
-                const_cast<QSemaphore &>(scan_entered).release();
-                const_cast<QSemaphore &>(scan_gate).acquire();
-            }
-            std::vector<PerfFile> paths;
-            for (std::size_t i = 0; i < perfs_to_return.size(); ++i) {
-                paths.push_back({source_roots.front(), "FPSAimTrainer/performances",
-                                 "listed-perf-" + std::to_string(i)});
-            }
-            return paths;
-        }
-
-        [[nodiscard]] ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
-            const std::string path(filename);
-            if (const auto it = perfs_by_path.find(path); it != perfs_by_path.end()) return it->second;
-            const auto name = std::filesystem::path(path).filename().string();
-            return perfs_to_return.at(std::stoul(name.substr(std::string("listed-perf-").size())));
-        }
-
-        [[nodiscard]] ScenarioPerf getLatestPerf() const override { return {}; }
-
-        [[nodiscard]] std::vector<std::string> sourceRoots() const override { return source_roots; }
-
-        void onFilesChanged(std::function<void(const PerfFile &)>) override {}
-
-        std::unordered_map<std::string, ScenarioPerf> perfs_by_path;
-    };
-
     ScenarioPerf make_perf(const std::string &hash, const long long start_time, const float score = 0.0F,
                             const int shots = 0, const int hits = 0, const float duration = 0.0F) {
         ScenarioPerf perf;
@@ -179,9 +37,18 @@ namespace {
 
     class SessionControllerTest : public testing::Test {
     protected:
-        std::shared_ptr<FakeSettingsService> fake_settings_service = std::make_shared<FakeSettingsService>();
+        std::shared_ptr<FakeSettingsService> fake_settings_service = [] {
+            auto settings = std::make_shared<FakeSettingsService>();
+            settings->dirs = {"C:/Kovaaks"};
+            settings->profile_path = "C:/Profile/profile.pb";
+            return settings;
+        }();
         std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
-        std::shared_ptr<FakeFileService> fake_file_service = std::make_shared<FakeFileService>();
+        std::shared_ptr<FakeFileService> fake_file_service = [] {
+            auto service = std::make_shared<FakeFileService>();
+            service->source_roots = {"C:/Kovaaks"};
+            return service;
+        }();
 
         std::unique_ptr<SessionController> make_controller() {
             return std::make_unique<SessionController>(fake_settings_service, fake_profile_service,

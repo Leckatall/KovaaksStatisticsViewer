@@ -111,11 +111,6 @@ namespace {
         [[nodiscard]] presentation::AxisModel xAxis() const override {
             return presentation::AxisModel::forRange(0.0, 10.0);
         }
-        [[nodiscard]] QVariantList plottableColumns() const override { return {0}; }
-        [[nodiscard]] QVariantMap axisBounds() const override { return {}; }
-        [[nodiscard]] QList<qreal> axisTicks(int) const override { return {}; }
-        [[nodiscard]] QList<QPointF> seriesPoints(int) const override { return {}; }
-        [[nodiscard]] int xColumn() const override { return 0; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
     };
 
@@ -179,11 +174,6 @@ namespace {
         [[nodiscard]] presentation::AxisModel xAxis() const override {
             return presentation::AxisModel::forRange(0.0, 10.0);
         }
-        [[nodiscard]] QVariantList plottableColumns() const override { return {0}; }
-        [[nodiscard]] QVariantMap axisBounds() const override { return {}; }
-        [[nodiscard]] QList<qreal> axisTicks(int) const override { return {}; }
-        [[nodiscard]] QList<QPointF> seriesPoints(int) const override { return {}; }
-        [[nodiscard]] int xColumn() const override { return 0; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
 
     private:
@@ -232,11 +222,6 @@ namespace {
         [[nodiscard]] presentation::AxisModel xAxis() const override {
             return presentation::AxisModel::forRange(0.0, 10.0);
         }
-        [[nodiscard]] QVariantList plottableColumns() const override { return {0, 1}; }
-        [[nodiscard]] QVariantMap axisBounds() const override { return {}; }
-        [[nodiscard]] QList<qreal> axisTicks(int) const override { return {}; }
-        [[nodiscard]] QList<QPointF> seriesPoints(int) const override { return {}; }
-        [[nodiscard]] int xColumn() const override { return 0; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
     };
 

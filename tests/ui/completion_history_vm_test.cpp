@@ -42,8 +42,8 @@ namespace {
 
         view_model.refresh();
 
-        const auto score = view_model.seriesPoints(CompletionHistoryViewModel::Score);
-        const auto misses = view_model.seriesPoints(CompletionHistoryViewModel::Misses);
+        const auto score = view_model.series({CompletionHistoryViewModel::Score}).front()->points;
+        const auto misses = view_model.series({CompletionHistoryViewModel::Misses}).front()->points;
         ASSERT_EQ(score.size(), 2);
         ASSERT_EQ(misses.size(), 2);
         EXPECT_DOUBLE_EQ(score[0].x(), 1.0);
@@ -67,12 +67,10 @@ namespace {
         setHistory();
         view_model.refresh();
 
-        const auto accuracy_points = view_model.seriesPoints(CompletionHistoryViewModel::Accuracy);
-        ASSERT_EQ(accuracy_points.size(), 2);
-        EXPECT_DOUBLE_EQ(accuracy_points[0].y(), 0.45);
-
         const auto accuracy_series = view_model.series({CompletionHistoryViewModel::Accuracy});
         ASSERT_EQ(accuracy_series.size(), 1);
+        ASSERT_EQ(accuracy_series.front()->points.size(), 2);
+        EXPECT_DOUBLE_EQ(accuracy_series.front()->points[0].y(), 0.45);
         EXPECT_EQ(accuracy_series.front()->formattedValueAtX(1.0), "45%");
     }
 
@@ -94,36 +92,11 @@ namespace {
         EXPECT_GE(series[1]->yAxis->max(), 25.0);
     }
 
-    TEST_F(CompletionHistoryViewModelTest, LegacyAxesAreAvailableForEveryColumn) {
-        setHistory();
-        view_model.refresh();
-
-        for (int column = CompletionHistoryViewModel::RunIndex;
-             column < CompletionHistoryViewModel::ColumnCount; ++column) {
-            const auto bounds = view_model.axisBounds()[QString::number(column)].toPointF();
-            const auto ticks = view_model.axisTicks(column);
-            EXPECT_LT(bounds.x(), bounds.y());
-            EXPECT_GE(ticks.size(), 2);
-        }
-    }
-
     TEST_F(CompletionHistoryViewModelTest, RunIndexHasNoDrawableSeries) {
         setHistory();
         view_model.refresh();
 
         EXPECT_TRUE(view_model.series({CompletionHistoryViewModel::RunIndex}).isEmpty());
-        EXPECT_TRUE(view_model.seriesPoints(CompletionHistoryViewModel::RunIndex).isEmpty());
-    }
-
-    TEST_F(CompletionHistoryViewModelTest, EmptyHistoryHasNonDegenerateAxes) {
-        view_model.refresh();
-
-        const auto bounds = view_model.axisBounds();
-        for (int column = CompletionHistoryViewModel::RunIndex;
-             column < CompletionHistoryViewModel::ColumnCount; ++column) {
-            const QPointF range = bounds[QString::number(column)].toPointF();
-            EXPECT_LT(range.x(), range.y());
-        }
     }
 
     TEST_F(CompletionHistoryViewModelTest, RefreshAlwaysEmitsDataAndBoundsSignals) {

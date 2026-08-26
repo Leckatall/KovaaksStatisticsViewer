@@ -89,18 +89,4 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
         return m_settings_service->getKovaaksDirs();
     }
 
-    domain::ScenarioPerf FileService::getLatestPerf() const {
-        // DEPRECATED: Access through profile service now
-        const auto perf_dirs = perfDirs();
-        if (perf_dirs.empty()) {
-            qDebug() << "Could not cd to performances dir";
-            return {};
-        }
-        const auto &perf_dir = perf_dirs.front().directory;
-        auto files = perf_dir.entryList(QDir::Files, QDir::Time);
-        if (files.isEmpty()) return {};
-        const auto latest_file = files.takeFirst();
-        qDebug() << "Latest file: " << latest_file;
-        return getPerfFromFile(perf_dir.absoluteFilePath(latest_file).toStdString());
-    }
 }

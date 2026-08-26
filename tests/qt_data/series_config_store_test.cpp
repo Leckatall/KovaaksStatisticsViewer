@@ -10,40 +10,14 @@
 
 #include "data/interfaces/i_settings_service.h"
 #include "qt_data/series_config_store.h"
+#include "fake_settings_service.h"
 
 using namespace ksv;
 using namespace application;
 using namespace qt_data;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakeSettingsService final : public ISettingsService {
-    public:
-        [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return {}; }
-        [[nodiscard]] bool isKovaaksDirSet() const override { return false; }
-        void setKovaaksDirs(const std::vector<std::string> &) override {}
-        [[nodiscard]] std::string getProfilePath() const override { return {}; }
-        void setProfilePath(const std::string &) override {}
-        void onProfilePathChanged(std::function<void()>) override {}
-        void onKovaaksDirsChanged(std::function<void()>) override {}
-        [[nodiscard]] bool hasSeriesConfigDocument() const override { return document.has_value(); }
-        [[nodiscard]] std::string getSeriesConfigDocument() const override { return document.value_or(""); }
-        void setSeriesConfigDocument(const std::string &json) override {
-            document = json;
-            ++writes;
-        }
-        void quarantineSeriesConfigDocument(const std::string &invalidJson) override {
-            quarantined.push_back(invalidJson);
-        }
-        [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override {
-            return legacyDisabledColumns;
-        }
-
-        std::optional<std::string> document;
-        std::vector<std::string> quarantined;
-        std::vector<std::string> legacyDisabledColumns;
-        int writes = 0;
-    };
-
     QString legacyV1Document() {
         const QJsonArray series{
             QJsonObject{{"id", "1"}, {"presentation", QJsonObject{{"name", "Score"}, {"enabled", true},
@@ -116,7 +90,7 @@ namespace {
 
             SeriesConfigStore reopened(settings);
             EXPECT_EQ(reopened.getAll().size(), 9U);
-            EXPECT_GT(settings->writes, 1);
+            EXPECT_GT(settings->document_writes, 1);
         }
     }
 
@@ -124,7 +98,7 @@ namespace {
         settings->document = "{\"schemaVersion\":1,\"nextComputedSeriesId\":\"5\",\"series\":[\"";
         makeStore();
         EXPECT_EQ(store->getAll().size(), 9U);
-        EXPECT_GT(settings->writes, 0);
+        EXPECT_GT(settings->document_writes, 0);
     }
 
     TEST_F(SeriesConfigStoreTest, LeavesLegacySettingsAndAxisSettingsUntouched) {
@@ -147,11 +121,11 @@ namespace {
         makeStore();
         store->beginDraft();
         ASSERT_TRUE(store->createComputed(request()).succeeded());
-        const int writesAfterMutation = settings->writes;
+        const int writesAfterMutation = settings->document_writes;
 
         SeriesConfigStore reopened(settings);
         EXPECT_EQ(reopened.getAll().size(), 9U);
-        EXPECT_EQ(settings->writes, writesAfterMutation);
+        EXPECT_EQ(settings->document_writes, writesAfterMutation);
     }
 
     TEST_F(SeriesConfigStoreTest, DiscardDraftRestoresPreDraftStateAndFiresOnChangedOnce) {
@@ -178,11 +152,11 @@ namespace {
         store->beginDraft();
         ASSERT_TRUE(store->createComputed(request()).succeeded());
         ASSERT_TRUE(store->createComputed(request()).succeeded());
-        const int writesDuringDraft = settings->writes;
+        const int writesDuringDraft = settings->document_writes;
 
         ASSERT_TRUE(store->commitDraft().succeeded());
 
-        EXPECT_EQ(settings->writes, writesDuringDraft + 1);
+        EXPECT_EQ(settings->document_writes, writesDuringDraft + 1);
         SeriesConfigStore reopened(settings);
         EXPECT_EQ(reopened.getAll().size(), 11U);
     }
@@ -208,14 +182,14 @@ namespace {
 
     TEST_F(SeriesConfigStoreTest, CommitOrDiscardDraftWithNoActiveDraftIsANoOp) {
         makeStore();
-        const int writesBefore = settings->writes;
+        const int writesBefore = settings->document_writes;
         int notifications = 0;
         store->onChanged([&] { ++notifications; });
 
         EXPECT_TRUE(store->commitDraft().succeeded());
         store->discardDraft();
 
-        EXPECT_EQ(settings->writes, writesBefore);
+        EXPECT_EQ(settings->document_writes, writesBefore);
         EXPECT_EQ(notifications, 0);
     }
 
@@ -453,6 +427,6 @@ namespace {
         makeStore();
 
         EXPECT_EQ(store->getAll().size(), 9U);
-        EXPECT_GT(settings->writes, 0);
+        EXPECT_GT(settings->document_writes, 0);
     }
 }

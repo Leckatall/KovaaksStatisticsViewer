@@ -18,6 +18,7 @@ add_executable(ui_tests
 )
 
 target_link_libraries(ui_tests PRIVATE
+    tests_support
     ksv_ui
     ksv_app
     ksv_data

@@ -7,7 +7,6 @@
 #include <functional>
 #include <string>
 
-#include "graph_series.h"
 #include "resolved_graph.h"
 
 namespace ksv::application {
@@ -18,8 +17,6 @@ namespace ksv::application {
         virtual void load_perf(std::string_view filename) = 0;
 
         virtual void load_latest_perf() = 0;
-
-        virtual GraphSeries get_series() = 0;
 
         virtual std::string get_run_label() = 0;
 

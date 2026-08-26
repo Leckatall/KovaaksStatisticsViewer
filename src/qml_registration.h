@@ -5,11 +5,7 @@
 
 #include <ui/components/graph_canvas.h>
 #include <presentation/completion_history_vm.h>
-#include <presentation/graph_vm.h>
 #include <presentation/playtime_graph_vm.h>
-#include <presentation/scenario_browser_vm.h>
-#include <presentation/series_model.h>
-#include <presentation/series_expression_editor_model.h>
 #include <presentation/editable_expression_node.h>
 
 namespace ksv {
@@ -17,17 +13,10 @@ namespace ksv {
     // module's auto-registration objects (ksv_ui is built NO_PLUGIN). Called
     // from every executable that loads the QML module.
     inline void declare_metatypes() {
-        // TODO: I believe registering uncreatable type lines are unnecessary I will remove if this is verified with testing
         qmlRegisterUncreatableType<presentation::PlaytimeGraphViewModel>(
             "KovaaksStatsViewer", 1, 0, "PlaytimeGraphViewModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::CompletionHistoryViewModel>(
             "KovaaksStatsViewer", 1, 0, "CompletionHistoryViewModel", "Created in C++");
-        qmlRegisterUncreatableType<presentation::ScenarioBrowserViewModel>(
-            "KovaaksStatsViewer", 1, 0, "ScenarioBrowserViewModel", "Created in C++");
-        qmlRegisterUncreatableType<presentation::SeriesModel>(
-            "KovaaksStatsViewer", 1, 0, "SeriesModel", "Created in C++");
-        qmlRegisterUncreatableType<presentation::SeriesExpressionEditorModel>(
-            "KovaaksStatsViewer", 1, 0, "SeriesExpressionEditorModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::EditableExpressionNode>(
             "KovaaksStatsViewer", 1, 0, "EditableExpressionNode", "Abstract base, use a concrete node type");
         qmlRegisterType<presentation::EditablePrimitiveNode>(

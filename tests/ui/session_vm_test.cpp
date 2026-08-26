@@ -7,33 +7,14 @@
 #include <QSignalSpy>
 
 #include "session_vm.h"
+#include "fake_session_controller.h"
 
 using namespace ksv::presentation;
 using namespace ksv::application;
 using namespace ksv::domain;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakeSessionController : public ISessionController {
-    public:
-        std::vector<ScenarioId> scenario_list;
-        int generate_call_count = 0;
-        ScenarioPerf current_perf;
-
-        std::vector<ScenarioId> getScenarioList() override { return scenario_list; }
-
-        void generateProfileFromDirectory() override { generate_call_count++; }
-
-        void setCurrentPerf(const ScenarioPerf &perf) override { current_perf = perf; }
-        void setCurrentPerfToLatest() override {}
-        void setCurrentPerf(const std::string &filename) override {}
-        void setCurrentPerf(const ScenarioRunId &) override {}
-        [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
-
-        bool build_in_progress = false;
-        [[nodiscard]] bool isBuildInProgress() const override { return build_in_progress; }
-
-    };
-
     class SessionViewModelTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSessionController> fake_controller = std::make_shared<FakeSessionController>();

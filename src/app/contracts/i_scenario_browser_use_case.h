@@ -5,8 +5,6 @@
 #include <functional>
 #include <vector>
 
-#include <QObject>
-
 #include "contracts/scenario_summary.h"
 #include "contracts/run_performance.h"
 #include "domain/scenario_perf.h"
@@ -23,7 +21,7 @@ namespace ksv::application {
         [[nodiscard]] virtual domain::ScenarioPerf getCurrentPerf() const = 0;
 
         virtual void selectRun(const domain::ScenarioRunId &run_id) = 0;
-        virtual void onChanged(QObject *context, std::function<void()> callback) = 0;
+        virtual void onChanged(std::function<void()> callback) = 0;
     };
 }
 

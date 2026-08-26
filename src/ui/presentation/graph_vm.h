@@ -8,12 +8,11 @@
 #include <QObject>
 #include <QColor>
 #include <QHash>
-#include <QPointF>
 #include <QQmlListProperty>
 #include <QVariantList>
-#include <QVariantMap>
 #include <qqmlintegration.h>
 #include <ranges>
+#include <vector>
 
 #include "axis_model.h"
 #include "graph_vm_base.h"
@@ -24,13 +23,10 @@ namespace ksv::presentation {
         Q_OBJECT
         Q_PROPERTY(QQmlListProperty<SeriesModel> allSeries READ allSeries NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantList enabledSeriesIds READ enabledSeriesIds NOTIFY seriesConfigurationChanged)
-        Q_PROPERTY(QVariantMap axisBounds READ axisBounds NOTIFY boundsChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
 
     public:
         explicit GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase, QObject *parent = nullptr);
-
-        void setData(QList<QMap<int, qreal>> data);
 
         [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override;
         [[nodiscard]] AxisModel xAxis() const override { return m_timeAxis; }
@@ -41,16 +37,8 @@ namespace ksv::presentation {
 
         [[nodiscard]] QVariantList enabledSeriesIds() const { return m_enabledSeriesIds; }
 
-        // Unused by any real caller (GraphCanvas gets axis info via series()/xAxis()); kept minimal
-        // only to satisfy GraphViewModelBase's pure-virtual contract.
-        [[nodiscard]] QVariantMap axisBounds() const override;
-        [[nodiscard]] QList<qreal> axisTicks(int column) const override;
-
         [[nodiscard]] QString scenarioTitle() const { return m_scenarioTitle; }
 
-        [[nodiscard]] QList<QPointF> seriesPoints(int column) const override;
-
-        [[nodiscard]] int xColumn() const override { return kTimeColumn; }
         [[nodiscard]] int yAxisColumn() const override { return kDefaultYAxisSeriesId; }
 
         void recomputeBounds();
@@ -69,15 +57,12 @@ namespace ksv::presentation {
         void seriesConfigurationChanged();
 
     private:
-        // `column` is always a series' own SeriesId::value, never a position — see graph_vm.cpp.
-        // Time has no SeriesId (primitives start at 1), so 0 is reserved for it below.
-        static constexpr int kTimeColumn = 0;
         // Fallback y-axis column when nothing else is specified; the built-in Score primitive, id 1.
         // DEPRECATED: Fallback uses every visible series before this default what is the point of having an axis for a graph with no data
         static constexpr int kDefaultYAxisSeriesId = 1;
 
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
-        QList<QMap<int, qreal>> m_data;
+        std::vector<float> m_times;
         AxisModel m_timeAxis{};
         QMap<QString, SeriesModel *> m_seriesById;
         QHash<uint64_t, application::AxisConfig> m_axesById;

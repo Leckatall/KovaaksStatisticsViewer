@@ -4,14 +4,13 @@ add_library(ksv_app STATIC
         app.cpp
         usecases/graph_use_case.h
         usecases/series_management_use_case.h
-        usecases/perf_column_builder.h
-        usecases/perf_column_builder.cpp
         usecases/bucketed_run.h
         usecases/bucketed_run.cpp
         usecases/average_line_use_case.h
         usecases/average_line_use_case.cpp
         usecases/playtime_graph_use_case.h
         usecases/completion_history_use_case.h
+        usecases/scenario_browser_use_case.h
         profile_build_worker.cpp
         profile_build_worker.h
         session_controller.cpp

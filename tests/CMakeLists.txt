@@ -1,5 +1,6 @@
 set(env{TEST_FILE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/examples)
 
+add_subdirectory(support)
 add_subdirectory(domain)
 add_subdirectory(data)
 add_subdirectory(qt_data)

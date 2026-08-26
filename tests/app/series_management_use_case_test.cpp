@@ -1,48 +1,12 @@
 #include <gtest/gtest.h>
 
 #include "usecases/series_management_use_case.h"
+#include "fake_series_config_store.h"
 
 using namespace ksv::application;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakeSeriesConfigStore final : public ISeriesConfigStore {
-    public:
-        [[nodiscard]] std::vector<SeriesConfig> getAll() const override { return configs; }
-        MutationResult createComputed(const CreateComputedSeriesRequest &) override { ++createComputedCalls; return {}; }
-        MutationResult updateSeries(const UpdateSeriesRequest &request) override { lastUpdateSeriesRequest = request; return {}; }
-        MutationResult removeComputed(const SeriesId id) override { lastRemovedId = id; return {}; }
-        MutationResult reorder(const SeriesId id, const uint32_t position) override {
-            lastReorderedId = id;
-            lastReorderPosition = position;
-            return {};
-        }
-        void onChanged(std::function<void()> callback) override { callbacks.push_back(std::move(callback)); }
-
-        [[nodiscard]] std::vector<AxisConfig> getAllAxes() const override { return axes; }
-        MutationResult createAxis(const CreateAxisRequest &) override { ++createAxisCalls; return {}; }
-        MutationResult deleteAxis(AxisId) override { ++deleteAxisCalls; return {}; }
-
-        void beginDraft() override { ++beginDraftCalls; }
-        MutationResult commitDraft() override { ++commitDraftCalls; return {}; }
-        void discardDraft() override { ++discardDraftCalls; }
-        [[nodiscard]] bool hasPendingChanges() const override { return pendingChanges; }
-
-        std::vector<SeriesConfig> configs;
-        std::vector<AxisConfig> axes;
-        int createComputedCalls = 0;
-        int createAxisCalls = 0;
-        int deleteAxisCalls = 0;
-        std::optional<UpdateSeriesRequest> lastUpdateSeriesRequest;
-        std::optional<SeriesId> lastRemovedId;
-        std::optional<SeriesId> lastReorderedId;
-        uint32_t lastReorderPosition = 0;
-        std::vector<std::function<void()>> callbacks;
-        int beginDraftCalls = 0;
-        int commitDraftCalls = 0;
-        int discardDraftCalls = 0;
-        bool pendingChanges = false;
-    };
-
     TEST(SeriesManagementUseCaseTest, GetAllForwardsEveryRowRegardlessOfEnabled) {
         const auto store = std::make_shared<FakeSeriesConfigStore>();
         store->configs = {

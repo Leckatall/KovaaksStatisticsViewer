@@ -5,7 +5,6 @@
 
 #include <gtest/gtest.h>
 
-#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
@@ -18,38 +17,13 @@
 
 #include "file_service.h"
 #include "formats/protobuf/proto_decoder.h"
+#include "fake_settings_service.h"
 
 using namespace ksv::qt_data;
 using namespace ksv::application;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakeSettingsService : public ISettingsService {
-    public:
-        std::vector<std::string> dirs;
-        std::string profile_path;
-
-        [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
-        [[nodiscard]] bool isKovaaksDirSet() const override { return !dirs.empty(); }
-        void setKovaaksDirs(const std::vector<std::string> &new_dirs) override {
-            dirs = new_dirs;
-            for (const auto &callback: kovaaks_dirs_callbacks) callback();
-        }
-        [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
-        void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
-        void onProfilePathChanged(std::function<void()>) override {}
-        void onKovaaksDirsChanged(std::function<void()> callback) override {
-            kovaaks_dirs_callbacks.push_back(std::move(callback));
-        }
-        [[nodiscard]] bool hasSeriesConfigDocument() const override { return false; }
-        [[nodiscard]] std::string getSeriesConfigDocument() const override { return {}; }
-        void setSeriesConfigDocument(const std::string &) override {}
-        void quarantineSeriesConfigDocument(const std::string &) override {}
-        [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override { return {}; }
-
-    private:
-        std::vector<std::function<void()>> kovaaks_dirs_callbacks;
-    };
-
     class FileServiceTest : public testing::Test {
     protected:
         QTemporaryDir temp_dir;
@@ -114,39 +88,6 @@ namespace {
         const auto perf = file_service.getPerfFromFile(path.toStdString());
 
         EXPECT_EQ(perf.run_id.scenario_id.name, "1wall6targets TE");
-    }
-
-    TEST_F(FileServiceTest, GetLatestPerfReturnsEmptyWhenNoFiles) {
-        makePerformancesDir();
-
-        const FileService file_service(settings_service, decoder);
-        const auto perf = file_service.getLatestPerf();
-
-        EXPECT_TRUE(perf.run_id.scenario_id.name.empty());
-    }
-
-    TEST_F(FileServiceTest, GetLatestPerfReturnsMostRecentlyModifiedFile) {
-        makePerformancesDir();
-        const QString older = copyFixtureInto("1wall6targets TE.perf");
-        const QString newer = copyFixtureInto("VT FlyTS Novice S5.perf");
-
-        // Pin modification times explicitly so the test doesn't depend on how
-        // fast the two QFile::copy calls above ran. QFile::setFileTime only
-        // takes effect while the file is open.
-        QFile older_file(older);
-        ASSERT_TRUE(older_file.open(QIODevice::ReadWrite));
-        ASSERT_TRUE(older_file.setFileTime(QDateTime::currentDateTime().addSecs(-3600), QFileDevice::FileModificationTime));
-        older_file.close();
-
-        QFile newer_file(newer);
-        ASSERT_TRUE(newer_file.open(QIODevice::ReadWrite));
-        ASSERT_TRUE(newer_file.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime));
-        newer_file.close();
-
-        const FileService file_service(settings_service, decoder);
-        const auto perf = file_service.getLatestPerf();
-
-        EXPECT_NE(perf.run_id.scenario_id.name, "1wall6targets TE");
     }
 
     TEST_F(FileServiceTest, OnFilesChangedFiresWhenNewFileAppearsInPerformancesDir) {

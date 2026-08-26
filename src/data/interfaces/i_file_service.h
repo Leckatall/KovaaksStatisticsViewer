@@ -31,7 +31,6 @@ namespace ksv::application {
         // report progress, which getAllPerfsFromFiles() could not.
         [[nodiscard]] virtual std::vector<PerfFile> listPerfFiles() const = 0;
         [[nodiscard]] virtual domain::ScenarioPerf getPerfFromFile(std::string_view filename) const = 0;
-        [[nodiscard]] virtual domain::ScenarioPerf getLatestPerf() const = 0;
         [[nodiscard]] virtual std::vector<std::string> sourceRoots() const = 0;
         virtual void onFilesChanged(std::function<void(const PerfFile &)> callback) = 0;
     };

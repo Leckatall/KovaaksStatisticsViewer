@@ -5,71 +5,13 @@
 
 #include "usecases/average_line_use_case.h"
 #include "usecases/bucketed_run.h"
+#include "fake_profile_service.h"
 
 using namespace ksv::application;
 using namespace ksv::domain;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakeProfileService final : public IProfileService {
-    public:
-        std::vector<ScenarioPerf> runs;
-
-        void generateProfileFromDirectory() override {
-        }
-
-        void loadProfile() override {
-        }
-
-        void onBuildRequested(std::function<void()>) override {
-        }
-
-        void beginProfileBuild() override {
-        }
-
-        void applyBuiltProfile(UserProfile) override {
-        }
-
-        [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return {}; }
-        [[nodiscard]] ScenarioPerf getPerf(const std::string &) const override { return {}; }
-        [[nodiscard]] ScenarioPerf getLatestPerf() const override { return {}; }
-        [[nodiscard]] std::optional<ScenarioPerf> getMostRecentPerf(const ScenarioId &) const override { return {}; }
-
-        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &, std::size_t) const override {
-            return {};
-        }
-
-        [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &scenario) const override {
-            std::vector<ScenarioPerf> result;
-            for (const auto &run: runs) if (run.run_id.scenario_id == scenario) result.push_back(run);
-            return result;
-        }
-
-        [[nodiscard]] std::vector<RunData> getCompletionHistory(const ScenarioId &) const override { return {}; }
-
-        [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &, std::size_t) const override {
-            return {};
-        }
-
-        [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &) const override { return {}; }
-        [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override { return {}; }
-
-        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
-            return {};
-        }
-
-        [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override { return {}; }
-        [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t) const override { return {}; }
-
-        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> > getRollingTimeAverage(int) const override {
-            return {};
-        }
-
-        [[nodiscard]] bool isProfileLoaded() const override { return true; }
-
-        void onProfileChanged(std::function<void()>) override {
-        }
-    };
-
     ScenarioPerf run(const long long start, std::initializer_list<double> scores, const std::string hash = "scenario") {
         ScenarioPerf perf;
         perf.run_id = {{"Scenario", hash}, start};

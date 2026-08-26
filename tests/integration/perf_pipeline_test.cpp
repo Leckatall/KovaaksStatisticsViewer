@@ -69,17 +69,6 @@ namespace {
     // .plans/series-config-migration-completion/plans/04-graph-read-model-narrowing.md, which deletes
     // that mapping entirely in favor of the unified SeriesId-keyed model.
 
-    TEST_F(PerfPipelineTest, AxisBoundsAreConsistentForEveryColumn) {
-        graphVm->fetchData(perfUrl);
-
-        const QVariantMap bounds = graphVm->axisBounds();
-        ASSERT_FALSE(bounds.isEmpty());
-        for (auto it = bounds.begin(); it != bounds.end(); ++it) {
-            const QPointF range = it.value().toPointF();
-            EXPECT_LE(range.x(), range.y()) << "axis " << it.key().toStdString() << " has min > max";
-        }
-    }
-
     TEST_F(PerfPipelineTest, ReloadingAllFixturesEachDecodeThroughRealDecoder) {
         // Second fixture through the same live pipeline: proves fetchData re-resolves
         // and rebuilds series rather than caching the first run.

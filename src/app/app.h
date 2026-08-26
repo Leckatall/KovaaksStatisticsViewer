@@ -57,8 +57,6 @@ namespace ksv::application {
         [[nodiscard]] std::shared_ptr<ISeriesConfigStore> seriesConfigStore() const { return m_seriesConfigStore; }
 
     private:
-        // void initConnections();
-        // void setStatusBarMessage() const;
         QQmlApplicationEngine m_engine;
         presentation::GraphViewModel* m_graphVm;
         presentation::PlaytimeGraphViewModel* m_playtimeVm;

@@ -10,99 +10,15 @@
 
 #include "settings_vm.h"
 #include "series_expression_editor_model.h"
+#include "fake_profile_service.h"
+#include "fake_settings_service.h"
 
 using namespace ksv::presentation;
 using namespace ksv::application;
 using namespace ksv::domain;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakeSettingsService : public ISettingsService {
-    public:
-        std::vector<std::string> dirs{"C:/Kovaaks"};
-        bool dir_set = true;
-        std::string profile_path = "C:/Profile/profile.pb";
-
-        [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
-        [[nodiscard]] bool isKovaaksDirSet() const override { return dir_set; }
-
-        void setKovaaksDirs(const std::vector<std::string> &new_dirs) override {
-            dirs = new_dirs;
-            dir_set = true;
-        }
-
-        [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
-        void setProfilePath(const std::string &new_path) override { profile_path = new_path; }
-
-        void onProfilePathChanged(std::function<void()>) override {
-        }
-
-        void onKovaaksDirsChanged(std::function<void()>) override {
-        }
-        [[nodiscard]] bool hasSeriesConfigDocument() const override { return false; }
-        [[nodiscard]] std::string getSeriesConfigDocument() const override { return {}; }
-        void setSeriesConfigDocument(const std::string &) override {}
-        void quarantineSeriesConfigDocument(const std::string &) override {}
-        [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override { return {}; }
-    };
-
-    class FakeProfileService : public IProfileService {
-    public:
-        bool profile_loaded = false;
-        std::function<void()> stored_callback;
-
-        void generateProfileFromDirectory() override {
-        }
-
-        void loadProfile() override {
-        }
-
-        void onBuildRequested(std::function<void()>) override {
-        }
-
-        void beginProfileBuild() override {
-        }
-
-        void applyBuiltProfile(ksv::domain::UserProfile) override {
-        }
-
-        [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return {}; }
-        [[nodiscard]] ScenarioPerf getPerf(const std::string &) const override { return {}; }
-        [[nodiscard]] ScenarioPerf getLatestPerf() const override { return {}; }
-
-        [[nodiscard]] std::optional<ScenarioPerf> getMostRecentPerf(
-            const ScenarioId &) const override { return std::nullopt; }
-
-        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(
-            const ScenarioId &, std::size_t) const override { return {}; }
-
-        [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &) const override { return {}; }
-
-        [[nodiscard]] std::vector<RunData>
-        getCompletionHistory(const ScenarioId &) const override { return {}; }
-
-        [[nodiscard]] std::optional<float> getAverageScore(
-            const ScenarioId &, std::size_t) const override { return std::nullopt; }
-
-        [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &) const override { return std::nullopt; }
-
-        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-
-        [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override { return std::nullopt; }
-
-        [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override { return std::nullopt; }
-
-        [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t) const override { return {}; }
-
-        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
-        getRollingTimeAverage(int) const override { return {}; }
-
-        [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
-
-        void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
-    };
-
     class FakeSeriesManagementUseCase final : public ISeriesManagementUseCase {
     public:
         [[nodiscard]] std::vector<SeriesConfig> getAll() const override { return configs; }
@@ -149,7 +65,12 @@ namespace {
 
     class SettingsViewModelTest : public testing::Test {
     protected:
-        std::shared_ptr<FakeSettingsService> fake_service = std::make_shared<FakeSettingsService>();
+        std::shared_ptr<FakeSettingsService> fake_service = [] {
+            auto settings = std::make_shared<FakeSettingsService>();
+            settings->dirs = {"C:/Kovaaks"};
+            settings->profile_path = "C:/Profile/profile.pb";
+            return settings;
+        }();
         std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
         std::shared_ptr<FakeSeriesManagementUseCase> seriesManagement = std::make_shared<FakeSeriesManagementUseCase>();
         std::unique_ptr<SettingsViewModel> make_view_model() {
@@ -186,7 +107,7 @@ namespace {
     }
 
     TEST_F(SettingsViewModelTest, KovaaksDirSetReflectsServiceValueAtConstruction) {
-        fake_service->dir_set = false;
+        fake_service->dirs.clear();
         const auto view_model = make_view_model();
 
         EXPECT_FALSE(view_model->isKovaaksDirSet());
@@ -202,7 +123,7 @@ namespace {
     }
 
     TEST_F(SettingsViewModelTest, KovaaksDirSetBecomesTrueAfterSetKovaaksDir) {
-        fake_service->dir_set = false;
+        fake_service->dirs.clear();
         const auto view_model = make_view_model();
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::kovaaksDirChanged);
 

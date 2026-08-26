@@ -83,7 +83,7 @@ namespace {
         EXPECT_FLOAT_EQ(perf.data[0].score, 10.0F);
         EXPECT_FLOAT_EQ(perf.data[1].score, 20.0F);
     }
-    // TODO (16/08/2026): Create implementation that matches this test
+    // TODO(2026-08-16): Create implementation that matches this test
     // TEST_F(ProtoDecoderTest, DecodeFileDoesNotThrowWhenFileIsMissing) {
     //     // Correct contract: a missing file is a normal "nothing to decode" case
     //     // for the caller to detect from the returned (effectively empty/default)

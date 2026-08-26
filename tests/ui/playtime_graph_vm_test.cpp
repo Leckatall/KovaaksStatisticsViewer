@@ -40,7 +40,9 @@ namespace {
     }
 
     TEST_F(PlaytimeGraphViewModelTest, StartsEmpty) {
-        EXPECT_TRUE(view_model.seriesPoints(PlaytimeGraphViewModel::Playtime).isEmpty());
+        const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
+        ASSERT_FALSE(series.isEmpty());
+        EXPECT_TRUE(series.front()->points.isEmpty());
     }
 
     TEST_F(PlaytimeGraphViewModelTest, RefreshConvertsSecondsToMinutesKeepingTheDateTimeAsX) {
@@ -48,7 +50,9 @@ namespace {
 
         view_model.refresh();
 
-        const auto points = view_model.seriesPoints(PlaytimeGraphViewModel::Playtime);
+        const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
+        ASSERT_FALSE(series.isEmpty());
+        const auto points = series.front()->displayPoints();
         ASSERT_EQ(points.size(), 2);
         EXPECT_DOUBLE_EQ(points[0].x(), epochDayMs(19500));
         EXPECT_DOUBLE_EQ(points[0].y(), 30.0); // 1800s / 60
@@ -60,44 +64,17 @@ namespace {
         fake->series = {{19500, 1800.0}, {19501, 900.0}};
         view_model.refresh();
 
-        const auto plottable = view_model.plottableColumns();
-        ASSERT_EQ(plottable.size(), 1);
-        EXPECT_EQ(plottable[0].toInt(), int(PlaytimeGraphViewModel::Playtime));
-
+        EXPECT_FALSE(view_model.series({PlaytimeGraphViewModel::Playtime}).isEmpty());
         // The Date column carries no drawable series of its own.
-        EXPECT_TRUE(view_model.seriesPoints(PlaytimeGraphViewModel::Date).isEmpty());
-    }
-
-    TEST_F(PlaytimeGraphViewModelTest, AxisBoundsSpanDaysAndStartYAtZeroOnNiceNumbers) {
-        // TODO: This should not break if the default target tick count is changed. Have it set the target ticks in the test
-        // fake->series = {{19500, 1800.0}, {19502, 3600.0}}; // 30 min, 60 min
-        // view_model.refresh();
-        //
-        // const auto bounds = view_model.axisBounds();
-        // const auto xBounds = bounds[QString::number(PlaytimeGraphViewModel::Date)].toPointF();
-        // const auto yBounds = bounds[QString::number(PlaytimeGraphViewModel::Playtime)].toPointF();
-        //
-        // EXPECT_DOUBLE_EQ(xBounds.x(), epochDayMs(19500));
-        // EXPECT_DOUBLE_EQ(xBounds.y(), epochDayMs(19502));
-        // EXPECT_EQ(view_model.axisTicks(PlaytimeGraphViewModel::Date),
-        //           (QList<qreal>{epochDayMs(19500), epochDayMs(19501), epochDayMs(19502)}));
-        //
-        // // Y is zero-based and rounds up to a nice value with round ticks.
-        // EXPECT_DOUBLE_EQ(yBounds.x(), 0.0);
-        // EXPECT_DOUBLE_EQ(yBounds.y(), 60.0);
-        // const auto yTicks = view_model.axisTicks(PlaytimeGraphViewModel::Playtime);
-        // ASSERT_GE(yTicks.size(), 2);
-        // EXPECT_DOUBLE_EQ(yTicks.front(), 0.0);
-        // EXPECT_DOUBLE_EQ(yTicks.back(), 60.0);
+        EXPECT_TRUE(view_model.series({PlaytimeGraphViewModel::Date}).isEmpty());
     }
 
     TEST_F(PlaytimeGraphViewModelTest, SinglePointExpandsXAxisToSurroundingCalendarDays) {
         fake->series = {{19500, 1800.0}};
         view_model.refresh();
 
-        const auto xBounds = view_model.axisBounds()[QString::number(PlaytimeGraphViewModel::Date)].toPointF();
-        EXPECT_DOUBLE_EQ(xBounds.x(), epochDayMs(19499));
-        EXPECT_DOUBLE_EQ(xBounds.y(), epochDayMs(19501));
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), epochDayMs(19499));
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), epochDayMs(19501));
     }
 
     TEST_F(PlaytimeGraphViewModelTest, RefreshEmitsDataUpdatedAndBoundsChanged) {

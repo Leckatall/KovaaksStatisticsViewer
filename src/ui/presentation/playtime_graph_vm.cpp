@@ -34,43 +34,22 @@ namespace ksv::presentation {
         refresh();
     }
 
-    QVariantMap PlaytimeGraphViewModel::axisBounds() const {
-        QVariantMap map;
-        map[QString::number(Date)] = QPointF(m_xAxis.min(), m_xAxis.max());
-        map[QString::number(Playtime)] = QPointF(m_yAxis.min(), m_yAxis.max());
-        return map;
-    }
-
-    QList<qreal> PlaytimeGraphViewModel::axisTicks(const int column) const {
-        if (column == Date) return m_xAxis.ticks();
-        if (column == Playtime) return m_yAxis.ticks();
-        return {};
-    }
-
-    QList<QPointF> PlaytimeGraphViewModel::seriesPoints(const int column) const {
-        if (column != Playtime) return {};
-        return m_points;
-    }
-
     void PlaytimeGraphViewModel::refresh() {
         const auto rollingPlaytime = m_useCase->get_rolling_playtime(kWindowDays);
 
-        m_points.clear();
-        m_points.reserve(int(rollingPlaytime.size()));
         QList<QPointF> rawSecondsPoints;
         rawSecondsPoints.reserve(int(rollingPlaytime.size()));
         for (const auto &[epoch_day, avg_seconds]: rollingPlaytime) {
             const qreal epochMs = epochDayToUtcMs(epoch_day);
-            m_points.append(QPointF(epochMs, avg_seconds / 60.0));
             rawSecondsPoints.append(QPointF(epochMs, avg_seconds));
         }
 
-        if (m_points.isEmpty()) {
+        if (rawSecondsPoints.isEmpty()) {
             const qreal nowMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
             m_xAxis = AxisModel::forDateTimeRange(nowMs, nowMs);
         } else {
-            const qreal xlo = m_points.first().x();
-            const qreal xhi = m_points.last().x();
+            const qreal xlo = rawSecondsPoints.first().x();
+            const qreal xhi = rawSecondsPoints.last().x();
             m_xAxis = AxisModel::forDateTimeRange(xlo, xhi, {.targetTicks = 10});
         }
         m_xAxis = m_xAxis.withDelegate(dateDelegate());
@@ -82,8 +61,6 @@ namespace ksv::presentation {
         m_series->transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
         m_series->yAxisOptions = {.baseline = AxisModel::Baseline::Zero};
         m_series->setData(rawSecondsPoints);
-        m_yAxis = *m_series->yAxis;
-
         emit dataUpdated();
         emit boundsChanged();
     }

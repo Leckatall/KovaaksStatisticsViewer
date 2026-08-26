@@ -72,6 +72,8 @@ ApplicationWindow {
             width: window.width - 48
             spacing: 24
 
+            // TODO(2026-08-26): Restore once gallery showcase work resumes — parked, not replaced;
+            // no live equivalent covers these components in the gallery in the meantime
             // Showcase {
             //     label: "DashboardGraphCanvas"
             //     cellWidth: 600; cellHeight: 360
@@ -261,6 +263,9 @@ ApplicationWindow {
         }
     }
 
+    // TODO(2026-08-26): Restore once gallery SettingsDialog wiring is updated to match current
+    // SettingsDialog.qml properties — parked, not replaced; the gallery has no SettingsDialog
+    // showcase in the meantime
     // SettingsDialog {
     //     id: settingsDialog
     //     settingsVm: window.settingsVm

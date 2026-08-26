@@ -31,13 +31,11 @@ namespace {
     public:
         std::vector<std::string> load_perf_calls;
         int load_latest_perf_calls = 0;
-        GraphSeries series_to_return;
         ResolvedGraph resolved_graph_to_return;
         std::string run_label;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
         void load_latest_perf() override { load_latest_perf_calls++; }
-        GraphSeries get_series() override { return series_to_return; }
         std::string get_run_label() override { return run_label; }
 
         void onCurrentPerfChanged(std::function<void()>) override {
@@ -53,21 +51,21 @@ namespace {
         std::shared_ptr<FakeGraphUseCase> fake_use_case = std::make_shared<FakeGraphUseCase>();
         GraphViewModel view_model{fake_use_case};
 
-        // Already-resampled series, one value per whole second, matching what
-        // GraphUseCase::get_series() (via PerfColumnBuilder) would return.
+        // One value per whole second, using the built-in Score/Accuracy SeriesConfigs.
         void setSampleData() {
-            fake_use_case->series_to_return.times = {0.0F, 1.0F, 2.0F};
-            fake_use_case->series_to_return.columns[ColumnId::Score] = {10.0F, 20.0F, 30.0F};
-            fake_use_case->series_to_return.columns[ColumnId::Accuracy] = {0.5F, 0.6F, 0.7F};
+            ResolvedGraph resolved;
+            resolved.times = {0.0F, 1.0F, 2.0F};
+            for (const auto &config: defaultSeriesConfigs()) {
+                if (config.id.value == kScore) resolved.series.push_back({config, std::vector<double>{10.0, 20.0, 30.0}});
+                else if (config.id.value == kAccuracy) resolved.series.push_back({config, std::vector<double>{0.5, 0.6, 0.7}});
+            }
+            fake_use_case->resolved_graph_to_return = resolved;
         }
     };
 
     TEST_F(GraphViewModelTest, StartsEmptyWithDefaultBounds) {
-        EXPECT_TRUE(view_model.seriesPoints(kScore).isEmpty());
-        const auto bounds = view_model.axisBounds();
-        const auto timeBounds = bounds[QString::number(kTime)].toPointF();
-        EXPECT_DOUBLE_EQ(timeBounds.x(), 0.0);
-        EXPECT_DOUBLE_EQ(timeBounds.y(), 60.0);
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 0.0);
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 60.0);
     }
 
     TEST_F(GraphViewModelTest, FetchDataRefreshesSeriesWithoutLoadingPerf) {
@@ -76,16 +74,13 @@ namespace {
         view_model.fetchData();
 
         EXPECT_TRUE(fake_use_case->load_perf_calls.empty());
-        EXPECT_EQ(view_model.seriesPoints(kScore).size(), 3);
     }
 
     TEST_F(GraphViewModelTest, FetchDataWithEmptyIdIsIgnoredAndDoesNotLoadPerf) {
-        setSampleData();
-
         view_model.fetchData("");
 
         EXPECT_TRUE(fake_use_case->load_perf_calls.empty());
-        EXPECT_TRUE(view_model.seriesPoints(kScore).isEmpty());
+        EXPECT_TRUE(view_model.series({kScore}).isEmpty());
     }
 
     TEST_F(GraphViewModelTest, FetchLatestDataCallsLoadLatestPerfOnUseCase) {
@@ -95,8 +90,6 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, FetchDataWithScenarioIdCallsLoadPerfWithLocalPath) {
-        setSampleData();
-
         view_model.fetchData(QUrl::fromLocalFile("C:/perfs/run.perf").toString());
 
         ASSERT_EQ(fake_use_case->load_perf_calls.size(), 1);
@@ -108,10 +101,9 @@ namespace {
 
         view_model.fetchData();
 
-        // seriesPoints packs each row as {time, value}, so x() is Time.
-        EXPECT_EQ(view_model.seriesPoints(kScore)[0].x(), 0.0);
-        EXPECT_EQ(view_model.seriesPoints(kScore)[1].y(), 20.0);
-        EXPECT_NEAR(view_model.seriesPoints(kAccuracy)[2].y(), 0.7, 1e-6);
+        const auto accuracy = view_model.series({kAccuracy});
+        ASSERT_FALSE(accuracy.isEmpty());
+        EXPECT_NEAR(accuracy.front()->points[2].y(), 0.7, 1e-6);
     }
 
     TEST_F(GraphViewModelTest, FetchDataUpdatesScenarioTitleFromUseCase) {
@@ -147,13 +139,11 @@ namespace {
         // times {0,1,2}, scores {10,20,30}, accuracies {0.5,0.6,0.7}.
         setSampleData();
         view_model.fetchData();
-        const auto bounds = view_model.axisBounds();
-        const auto timeBounds = bounds[QString::number(kTime)].toPointF();
 
         // Time is zero-based and integral: whole-second ticks 0,1,2.
-        EXPECT_DOUBLE_EQ(timeBounds.x(), 0.0);
-        EXPECT_DOUBLE_EQ(timeBounds.y(), 2.0);
-        EXPECT_EQ(view_model.axisTicks(kTime), (QList<qreal>{0.0, 1.0, 2.0}));
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 0.0);
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 2.0);
+        EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{0.0, 1.0, 2.0}));
     }
 
     TEST_F(GraphViewModelTest, SeriesGroupsTheScoreFamilyOntoOneSharedAxis) {
@@ -278,41 +268,35 @@ namespace {
     // See .plans/series-config-migration-completion/plans/04-graph-read-model-narrowing.md.
 
     TEST_F(GraphViewModelTest, FetchDataPopulatesShotsKillsAndDmgColumns) {
-        setSampleData();
-        fake_use_case->series_to_return.columns[ColumnId::Shots] = {5.0F, 10.0F, 15.0F};
-        fake_use_case->series_to_return.columns[ColumnId::Kills] = {1.0F, 2.0F, 3.0F};
-        fake_use_case->series_to_return.columns[ColumnId::Dmg] = {100.0F, 200.0F, 300.0F};
+        ResolvedGraph resolved;
+        resolved.times = {0.0F, 1.0F, 2.0F};
+        for (const auto &config: defaultSeriesConfigs()) {
+            if (config.id.value == kShots) resolved.series.push_back({config, std::vector<double>{5.0, 10.0, 15.0}});
+            else if (config.id.value == kKills) resolved.series.push_back({config, std::vector<double>{1.0, 2.0, 3.0}});
+            else if (config.id.value == kDmg) resolved.series.push_back({config, std::vector<double>{100.0, 200.0, 300.0}});
+        }
+        fake_use_case->resolved_graph_to_return = resolved;
 
         view_model.fetchData();
 
-        EXPECT_EQ(view_model.seriesPoints(kShots)[0].y(), 5);
-        EXPECT_EQ(view_model.seriesPoints(kKills)[1].y(), 2);
-        EXPECT_EQ(view_model.seriesPoints(kDmg)[2].y(), 300.0);
+        EXPECT_EQ(view_model.series({kShots}).front()->points[0].y(), 5);
+        EXPECT_EQ(view_model.series({kKills}).front()->points[1].y(), 2);
+        EXPECT_EQ(view_model.series({kDmg}).front()->points[2].y(), 300.0);
     }
 
-    // A misbehaving use case could return a column shorter than the times
-    // array (PerfColumnBuilder itself never does - every column it produces
-    // has exactly one entry per second); the VM must not read out of bounds
-    // and instead defaults the missing rows to zero.
-    TEST_F(GraphViewModelTest, FetchDataDefaultsMissingTrailingValuesToZero) {
-        setSampleData();
-        fake_use_case->series_to_return.columns[ColumnId::Shots] = {5.0F};
-        fake_use_case->series_to_return.columns[ColumnId::Dmg] = {100.0F};
+    // FetchDataDefaultsMissingTrailingValuesToZero removed: it tested a legacy QMap
+    // auto-vivification default that only applied to the deleted GraphSeries/get_series() path.
+    // fetchData()'s resolved-graph branch now defaults missing/short values to 0.0 directly
+    // (see graph_vm.cpp), since entry.values can be an empty vector when a computed series'
+    // expression can't be evaluated (e.g. IAverageLineUseCase::evaluate() returns nullopt).
 
-        view_model.fetchData();
-
-        EXPECT_EQ(view_model.seriesPoints(kShots)[0].y(), 5);
-        EXPECT_EQ(view_model.seriesPoints(kShots)[1].y(), 0);
-        EXPECT_EQ(view_model.seriesPoints(kShots)[2].y(), 0);
-        EXPECT_EQ(view_model.seriesPoints(kKills)[0].y(), 0);
-        EXPECT_EQ(view_model.seriesPoints(kDmg)[1].y(), 0.0);
-    }
-
-    TEST_F(GraphViewModelTest, SeriesPointsReturnsTimeValuePairsInRowOrder) {
+    TEST_F(GraphViewModelTest, SeriesReturnsTimeValuePairsInRowOrder) {
         setSampleData();
         view_model.fetchData();
 
-        const auto points = view_model.seriesPoints(kScore);
+        const auto series = view_model.series({kScore});
+        ASSERT_FALSE(series.isEmpty());
+        const auto &points = series.front()->points;
         ASSERT_EQ(points.size(), 3);
         EXPECT_DOUBLE_EQ(points[0].x(), 0.0);
         EXPECT_DOUBLE_EQ(points[0].y(), 10.0);
@@ -322,13 +306,9 @@ namespace {
         EXPECT_DOUBLE_EQ(points[2].y(), 30.0);
     }
 
-    TEST_F(GraphViewModelTest, SeriesPointsReturnsEmptyWhenNoDataLoaded) {
-        EXPECT_TRUE(view_model.seriesPoints(kScore).isEmpty());
+    TEST_F(GraphViewModelTest, SeriesReturnsEmptyWhenNoDataLoaded) {
+        EXPECT_TRUE(view_model.series({kScore}).isEmpty());
     }
-
-    // There's no structural "out of range" left for seriesPoints() once column is a SeriesId rather
-    // than a dense enum — an unrecognized column simply has no populated rows, which
-    // FetchDataDefaultsMissingTrailingValuesToZero already covers for columns real data omitted.
 
     // AccuracySeriesFormattedValueAtXShowsPercent and SeriesReturnsOnlyRequestedColumnsInRequestedOrder
     // removed: series(columns) always returns empty for the same reason as the tests removed above.
@@ -391,7 +371,7 @@ namespace {
         view_model.fetchMetadata();
 
         EXPECT_EQ(view_model.columnForSeriesId("9"), kExpectedFinalScoreRecent);
-        EXPECT_FALSE(view_model.seriesPoints(kExpectedFinalScoreRecent).isEmpty());
+        ASSERT_FALSE(view_model.series({kExpectedFinalScoreRecent}).isEmpty());
         EXPECT_EQ(view_model.series({kExpectedFinalScoreRecent}).front()->name(), "Expected Final Score (5s)");
 
         // A mid-list series (Kills, SeriesId 5) renders under its own name, not the next series'.

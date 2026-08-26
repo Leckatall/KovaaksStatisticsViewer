@@ -5,6 +5,7 @@
 #include "scenario_browser_vm.h"
 
 #include <algorithm>
+#include <QPointer>
 
 namespace ksv::presentation {
     ScenarioBrowserViewModel::ScenarioBrowserViewModel(
@@ -14,7 +15,8 @@ namespace ksv::presentation {
                            m_model(new ScenarioListModel(this)),
                            m_run_model(new RunListModel(this)),
                            m_recent_runs_model(new RunListModel(this)) {
-        m_scenario_browser_use_case->onChanged(this, [this] { refresh(); });
+        const QPointer<ScenarioBrowserViewModel> self(this);
+        m_scenario_browser_use_case->onChanged([self] { if (self) self->refresh(); });
         refresh();
     }
 

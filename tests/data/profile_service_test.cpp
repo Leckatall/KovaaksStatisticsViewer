@@ -9,9 +9,12 @@
 #include <unordered_map>
 
 #include "profile_service.h"
+#include "fake_file_service.h"
+#include "fake_settings_service.h"
 
 using namespace ksv::data;
 using namespace ksv::application;
+using namespace ksv::tests_support;
 
 namespace {
     ksv::domain::ScenarioPerf make_perf(const std::string &hash, const long long start_time,
@@ -44,76 +47,6 @@ namespace {
         for (const auto &root: roots) profile.ensureSource(root, "FPSAimTrainer/performances");
         return profile;
     }
-
-    class FakeFileService : public IFileService {
-    public:
-        std::vector<ksv::domain::ScenarioPerf> perfs_to_return;
-        std::unordered_map<std::string, ksv::domain::ScenarioPerf> perfs_by_path;
-        std::set<std::string> paths_to_throw_for;
-        ksv::domain::ScenarioPerf latest_perf;
-        std::vector<std::string> source_roots{"fake/kovaaks"};
-        std::function<void(const PerfFile &)> stored_callback;
-
-        // perfs_to_return is addressed through synthetic paths so the builder can walk
-        // it one file at a time, the same shape as the real directory listing.
-        [[nodiscard]] std::vector<PerfFile> listPerfFiles() const override {
-            std::vector<PerfFile> paths;
-            for (std::size_t i = 0; i < perfs_to_return.size(); ++i) {
-                paths.push_back(perf_file("listed-perf-" + std::to_string(i), source_roots.front()));
-            }
-            return paths;
-        }
-
-        [[nodiscard]] ksv::domain::ScenarioPerf getPerfFromFile(const std::string_view filename) const override {
-            const std::string path(filename);
-            if (paths_to_throw_for.contains(path)) throw std::invalid_argument("File does not exist");
-            if (const auto it = perfs_by_path.find(path); it != perfs_by_path.end()) return it->second;
-            const auto name = std::filesystem::path(path).filename().string();
-            if (const auto it = perfs_by_path.find(name); it != perfs_by_path.end()) return it->second;
-            return perfs_to_return.at(std::stoul(name.substr(std::string("listed-perf-").size())));
-        }
-
-        [[nodiscard]] ksv::domain::ScenarioPerf getLatestPerf() const override {
-            return latest_perf;
-        }
-
-        [[nodiscard]] std::vector<std::string> sourceRoots() const override { return source_roots; }
-
-        void onFilesChanged(std::function<void(const PerfFile &)> callback) override {
-            stored_callback = std::move(callback);
-        }
-    };
-
-    // Drives ProfileService's profile-path handling: setProfilePath() stores the
-    // new path and fires the change callback, exactly like the real SettingsService.
-    class FakeSettingsService : public ISettingsService {
-    public:
-        std::vector<std::string> kovaaks_dirs{"fake/kovaaks"};
-        std::string profile_path = "test_profile.pb";
-        std::function<void()> profile_path_changed;
-
-        [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return kovaaks_dirs; }
-        [[nodiscard]] bool isKovaaksDirSet() const override { return true; }
-        void setKovaaksDirs(const std::vector<std::string> &dirs) override { kovaaks_dirs = dirs; }
-        [[nodiscard]] std::string getProfilePath() const override { return profile_path; }
-
-        void setProfilePath(const std::string &path) override {
-            profile_path = path;
-            if (profile_path_changed) profile_path_changed();
-        }
-
-        void onProfilePathChanged(std::function<void()> callback) override {
-            profile_path_changed = std::move(callback);
-        }
-
-        void onKovaaksDirsChanged(std::function<void()>) override {
-        }
-        [[nodiscard]] bool hasSeriesConfigDocument() const override { return false; }
-        [[nodiscard]] std::string getSeriesConfigDocument() const override { return {}; }
-        void setSeriesConfigDocument(const std::string &) override {}
-        void quarantineSeriesConfigDocument(const std::string &) override {}
-        [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override { return {}; }
-    };
 
     class FakeProfileSerializer : public IProfileSerializer {
     public:
@@ -148,7 +81,12 @@ namespace {
     protected:
         std::shared_ptr<FakeFileService> fake_file_service = std::make_shared<FakeFileService>();
         std::shared_ptr<FakeProfileSerializer> fake_serializer = std::make_shared<FakeProfileSerializer>();
-        std::shared_ptr<FakeSettingsService> fake_settings = std::make_shared<FakeSettingsService>();
+        std::shared_ptr<FakeSettingsService> fake_settings = [] {
+            auto settings = std::make_shared<FakeSettingsService>();
+            settings->dirs = {"fake/kovaaks"};
+            settings->profile_path = "test_profile.pb";
+            return settings;
+        }();
         ProfileService profile_service{fake_file_service, fake_serializer, fake_settings};
 
         void TearDown() override {
@@ -195,22 +133,22 @@ namespace {
     TEST_F(ProfileServiceTest, RegistersFilesChangedCallbackOnConstruction) {
         // ProfileService should subscribe to IFileService::onFilesChanged so new
         // files picked up by the watcher get folded into the profile automatically.
-        ASSERT_TRUE(static_cast<bool>(fake_file_service->stored_callback));
+        EXPECT_EQ(fake_file_service->callbackCount(), 1);
 
         fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
         fake_file_service->perfs_by_path["watched.perf"] = make_perf("hash-3", 400);
-        fake_file_service->stored_callback(perf_file("watched.perf"));
+        fake_file_service->notifyFilesChanged(perf_file("watched.perf"));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
     }
 
     TEST_F(ProfileServiceTest, FilesChangedCallbackBeforeProfileLoadedDoesNotCrash) {
-        ASSERT_TRUE(static_cast<bool>(fake_file_service->stored_callback));
+        EXPECT_EQ(fake_file_service->callbackCount(), 1);
 
         fake_file_service->perfs_by_path["watched.perf"] = make_perf("hash-1", 100);
-        fake_file_service->stored_callback(perf_file("watched.perf"));
+        fake_file_service->notifyFilesChanged(perf_file("watched.perf"));
 
         EXPECT_FALSE(profile_service.isProfileLoaded());
         EXPECT_TRUE(profile_service.getScenarioList().empty());
@@ -225,11 +163,6 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetLatestPerfIsEmptyBeforeProfileGenerated) {
-        // GetLatestPerf now reads from the in-memory UserProfile rather than
-        // asking IFileService directly, so it has nothing to report until the
-        // profile has been generated at least once.
-        fake_file_service->latest_perf = make_perf("hash-latest", 999);
-
         const auto perf = profile_service.getLatestPerf();
 
         EXPECT_TRUE(perf.run_id.scenario_id.hash.empty());

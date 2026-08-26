@@ -9,6 +9,7 @@ add_executable(qt_data_tests
 )
 
 target_link_libraries(qt_data_tests PRIVATE
+    tests_support
     ksv_qt_data
     ksv_data
     ksv_domain

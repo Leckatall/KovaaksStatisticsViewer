@@ -2,7 +2,6 @@
 
 function makeFakeGraphVm() {
     return {
-        plottableColumns: [1, 2],
         allColumns: [1, 2],
         enabledColumns: [1, 2],
         allSeries: [

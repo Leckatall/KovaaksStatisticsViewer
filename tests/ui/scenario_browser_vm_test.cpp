@@ -45,7 +45,7 @@ namespace {
             set_current_perf_run_id_calls.push_back(run_id);
         }
 
-        void onChanged(QObject *, std::function<void()> callback) override { change_callback = std::move(callback); }
+        void onChanged(std::function<void()> callback) override { change_callback = std::move(callback); }
 
         void notifyChanged() const { if (change_callback) change_callback(); }
 
