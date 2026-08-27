@@ -4,6 +4,93 @@ The technical record — every change, user-visible or not. For the user-facing 
 [RELEASE_NOTES.md](RELEASE_NOTES.md). Pending entries live as fragments in `changelog.d/` and are
 assembled into both files at version bump.
 
+## v0.6.0-beta
+
+### Added
+
+#### Graphing
+- Series colors gain an adjustable alpha channel.
+- Custom graph lines can share a Y-axis with each other and with built-in series instead of always getting their own; new axis picker in the series-config panel, backed by `AxisConfig`/`AxisId` and a v2 schema migration that carries existing groupings over unchanged.
+- Visual expression-tree editor for building and editing graph-line expressions, plus in-place series CRUD (reorder, rename, recolor, re-express, add, delete). Edits preview as a draft and apply only on confirm.
+- Graph-series settings persist across launches: versioned series-configuration store with computed-ID allocation, legacy visibility migration, and corrupt-settings quarantine/recovery.
+- Foundations for historical average graph lines — one-second run bucketing and reusable expression evaluation; `SeriesConfig` Qt-free primitive/base records and immutable computed-expression trees, with structured model validation of presentation, expression, identity, catalogue, and display-order invariants.
+
+#### Settings
+- Series configuration is manageable through `SettingsViewModel` via `SeriesManagementUseCase`, separate from the graph read model.
+- Graph-line edits in Settings stay pending until Save or Discard — the dashboard graph updates live while editing, but nothing is written to disk until confirmed. `SeriesConfigStore` gains `beginDraft`/`commitDraft`/`discardDraft`/`hasPendingChanges`; `SettingsDialog` is now an `ApplicationWindow` so it can intercept every close path and prompt on unsaved changes.
+
+### Changed
+
+#### Graphing
+- Main graph series are resolved through the persisted series configuration and presented with stable identities; `GraphUseCase` owns series resolution and mutations, `GraphViewModel` adapts results to Qt types.
+- Graph-line enablement (persisted, in Settings) is now separate from per-line dashboard visibility (temporary, on the main graph), the latter keyed by stable series ID through a new `VisualSettingsManager`; legacy graph-line and axis preferences migrate without disabling configured series.
+- Graph data loads only enabled series and no longer exposes legacy graph mutation controls — the graph read model is now read-only.
+- Series configuration delegates document persistence, quarantine, and legacy disabled-column migration to the app-wide `ISettingsService`; its dedicated QSettings backend was removed.
+- `SeriesModel` is promoted to a QObject exposing `id`/`name`/`color`/`column` as `Q_PROPERTY`s directly to QML via `QQmlListProperty`; the deprecated `columnName`/`columnColor`/`columnKey` base-class callbacks are removed. Scenario-history column visibility and Y-axis choice reset to defaults once, because settings now key off `SeriesModel::id` rather than the old `columnKey()` string.
+- Shared-axis configuration is represented by `AxisConfig`, and series can reference a shared Y-axis.
+- Corrected the seeded projected-score expressions to preserve the legacy graph columns; added the unreleased `ProjectRateToFinal` expression and its V1 JSON tag.
+- Extracted the graph-series configuration row into `SeriesConfigEditorDelegate.qml`, preserving its editing and drag-reordering behavior.
+
+#### Settings
+- Series-configuration edits use one unified `updateSeries` store operation for both primitive and computed series; the split-type update APIs are gone.
+- `SeriesConfig` rows no longer split into a protected "base" category and an editable "computed" one — primitive rows can be renamed, re-expressed, and deleted, and name validation runs on every row.
+- `SeriesExpressionEditorModel` owns a typed `EditableExpressionNode` tree with pointer-based structural editing and targeted root/selection notifications; serialization walks the typed nodes.
+- Removed a dead persistence-failure branch from `SeriesConfigStore`; Release builds now gate `qDebug()` output via `QT_NO_DEBUG_OUTPUT`.
+
+#### Architecture
+- `IScenarioBrowserUseCase::onChanged` drops its `QObject*` context parameter, matching `ISeriesManagementUseCase`; `i_scenario_browser_use_case.h` is now Qt-free and covered by the header-set guard. Plus small CMake/QML-registration consistency fixes.
+
+#### User Interface
+- Series-configuration rows use a contrasting darkened surface, a brighter 2×3-dot grip, hover highlighting, and a compact `ƒₓ` expression-editor control (with tooltip and accessible name) to clarify their editing affordances.
+
+### Fixed
+
+#### Scenario & run selection
+- Reactivating an already-active scenario hash under a different name no longer lets the view model's cached name drift from the domain's first-name-wins identity policy.
+
+#### Graphing
+- Several graph lines (Kills, Dmg, Score Total, Expected Final Score, and the "(5s)" variant) rendered under the wrong name/color, or not at all, once `Hits` got its own config entry. Plot slots now key off `SeriesId` instead of display position; `GraphViewModel::Column` and its static presentation table are removed, and Y-axis grouping keys by `SeriesId` with a per-series fallback.
+- The scenario-history graph no longer renders a Y-axis when there is no data.
+- The hover info box now respects series-color alpha.
+- `UserProfile::rollingTimeAverageFor()` no longer allocates a dense per-calendar-day vector across the full first-to-last-run range; output is bounded by recorded play days, with identical results for every existing case.
+- `GraphUseCase::load_perf()` builds a length-bounded `std::string` from its `string_view` argument instead of reading to the next NUL byte; a stray diagnostic line was removed.
+
+#### Settings
+- `AverageAccrossRuns` no longer raises an error when instantiated.
+- A series' enabled state now persists.
+- The expression-editor dialog sizes itself to the expression being edited and scrolls instead of clipping when it overflows the window.
+- The graph-line list in Settings scrolls instead of pushing the add/error/Save/Discard controls off-window; dragging near the edge auto-scrolls while preserving the reorder target.
+- Reopening Settings after saving graph-line changes starts a fresh draft, so further edits can be saved again instead of persisting immediately with Save/Discard stuck disabled.
+- Dragging to reorder a graph line no longer throws and leaves rows rendering on top of each other; drag state is reset before the model-resetting reorder call, with a regression test.
+- Fixed a crash when editing deeply nested computed-series expressions; the nested-cards layout is replaced with a flat list.
+
+#### Data & Profile
+- A rejected `ScenarioPerf::add_data()` call (e.g. a float passed for `SHOTS`) no longer leaves a zero-valued phantom data point at that timestamp.
+- `UserProfile::getAverageScore()` accumulates in `double`, so small run scores are no longer silently dropped once the running total crosses float32's 8-ULP range.
+- Fixed a crash when KovaaKs renamed or deleted a newly discovered `.perf` file before it could be decoded; `ProfileService`/`ProfileBuilder` now skip and log the unavailable file.
+- Fixed the app failing to find a KovaaKs install when no directory had ever been configured — the hardcoded default is no longer round-tripped through `QUrl`, which was misparsing the `C:` drive letter as a URL scheme.
+
+#### Build & packaging
+- Release builds no longer open a console window alongside the app — `ksv` links as a GUI-subsystem binary in Release (`WIN32_EXECUTABLE`), console-subsystem in Debug so `qDebug()`/`qWarning()` still surface during development.
+- `qDebug()` output from library code (`App`, `FileService`, `SeriesConfigStore`, …) is now suppressed in Release. `QT_NO_DEBUG_OUTPUT` moved from a `ksv`-only PRIVATE definition, which the per-layer static libs did not inherit, to a directory-scoped one applied before `add_subdirectory()`.
+
+#### User Interface
+- Hiding a graph line now stays hidden after restart; the "seen series IDs" set is persisted in a `Settings` block instead of resetting to empty each launch.
+- Help > About shows the app name and version instead of a placeholder.
+
+### Removed
+
+#### Graphing
+- Deleted `GraphViewModel::fetchData()`'s legacy fallback branch and the entire `GraphSeries`/`PerfColumnBuilder`/`ColumnId` pipeline it was the last caller of; `IGraphUseCase`/`GraphUseCase` lose `get_series()`. Fixed a latent bug this exposed: `seriesPoints()` had returned an all-zero `y()` for non-time columns since the SeriesConfig migration.
+- `GraphViewModelBase`'s five unused legacy read-model methods (`plottableColumns`, `axisBounds`, `axisTicks`, `seriesPoints`, `xColumn`) and their backing storage.
+- `IGraphLineConfig`, `qt_data::GraphLineConfig`, the `GraphColumnPreferences` use case + `IGraphColumnPreferences`, and the empty `SeriesConfigValidator` — all superseded by `ISeriesConfigStore` with no remaining callers.
+
+#### Data & Profile
+- `IFileService::getLatestPerf()` — unused; the live path is `IProfileService::getLatestPerf()` on a different interface.
+
+#### Architecture
+- Cleaned up unmarked commented-out code across `app.h`, `file_service.h`, and `AppMenuBar.qml`; `Gallery.qml`'s parked blocks now carry a retiring `TODO`, and a stale-code marker date format was fixed.
+
 ## v0.5.1-beta
 
 ### Added

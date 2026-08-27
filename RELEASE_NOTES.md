@@ -2,6 +2,44 @@
 
 What's new for people using the app. For the technical record, see [CHANGELOG.md](CHANGELOG.md).
 
+## v0.6.0-beta
+
+### Features & changes
+
+#### Graphing
+- Added option to change the alpha value of series colors
+- Graph-series settings now persist safely across launches.
+- Build and edit graph-line expressions with a visual tree editor, and manage graph lines in place — reorder, rename, recolor, edit expressions, add, or delete them. Edits are previewed as a draft and only applied when you confirm, or discarded if you cancel.
+- Custom graph lines can now share a Y-axis with each other and with built-in series, instead of always getting their own independent axis.
+- Main graph series are now resolved through the persisted series configuration and presented with stable identities.
+- Graph data now loads only enabled series and no longer exposes legacy graph mutation controls.
+- Graph line enablement is now separate from per-line dashboard visibility, and visibility has its own temporary control distinct from whether a line is enabled.
+- Series configuration now uses the app-wide settings service.
+- Scenario-history column visibility and Y-axis choice reset to defaults once, due to an internal settings-key format change.
+
+#### Settings
+- Series configuration can now be managed through the settings view model.
+- Graph line changes in Settings now stay pending until you hit Save or Discard — the dashboard graph updates live as you edit, but nothing is written to disk until you confirm.
+- Series configuration edits now use one unified store update operation.
+
+#### User Interface
+- Series configuration rows now use a contrasting background, a brighter six-dot grip, hover highlights, and compact expression-editor controls to make their editing affordances clear.
+
+### Bug fixes
+- fixed a bug where the history graph would always render a y-axis even against no data
+- Several graph lines (Kills, Dmg, Score Total, Expected Final Score, and the "(5s)" variant) were rendering under the wrong name/color or not at all.
+- Added alpha support to the hover info box
+- The expression editor dialog now resizes itself to fit the expression you're editing, and scrolls instead of clipping when it's too big for the window.
+- The graph line list in Settings no longer pushes the Save/Discard buttons off-window when you have a lot of series — it scrolls instead.
+- Reopening Settings after saving graph line changes now lets you edit and save again — previously every further edit persisted immediately and the Save/Discard buttons stayed disabled.
+- Fixed a bug where reordering a graph line by dragging it could throw an error and leave the series list rendering rows on top of each other until you dragged something else.
+- Fixed a crash when editing certain deeply nested computed-series expressions. Unfortunately this required removing the nested cards layout. Now they are listed.
+- Fixed a crash that could happen right as a scenario run's stats file appeared on disk.
+- Fixed the app failing to find your KovaaKs install when no directory had ever been explicitly configured.
+- The app no longer opens a separate terminal window alongside its main window.
+- Hiding a graph line now stays hidden after restarting the app.
+- The Help > About dialog now shows the app name and version instead of a placeholder.
+
 ## v0.5.1-beta
 
 ### Features & changes

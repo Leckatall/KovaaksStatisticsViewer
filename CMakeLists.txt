@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(KovaaksStatsViewer VERSION 0.5.1)
+project(KovaaksStatsViewer VERSION 0.6.0)
 
 # project(VERSION) accepts numeric fields only, so the pre-release suffix lives here. This file is the
 # single source of the version: scripts/version.ps1 parses the project() call and the set() below out
@@ -38,6 +38,11 @@ qt_standard_project_setup()
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
+# qDebug()/qCDebug() calls compile to nothing in Release. Must be set here, before the
+# add_subdirectory() calls: the per-layer static libs (ksv_app, ksv_ui, ...) don't inherit
+# compile definitions scoped PRIVATE to the ksv executable target.
+add_compile_definitions($<$<CONFIG:Release>:QT_NO_DEBUG_OUTPUT>)
+
 # Add subdirectories for modular libraries
 add_subdirectory(src/domain)
 add_subdirectory(src/app/contracts)
@@ -56,7 +61,10 @@ add_executable(ksv
 
 
 target_compile_definitions(ksv PRIVATE KSV_VERSION="${KSV_VERSION}")
-target_compile_definitions(ksv PRIVATE $<$<CONFIG:Release>:QT_NO_DEBUG_OUTPUT>)
+
+# GUI subsystem in Release so Windows spawns no console window; console-subsystem in Debug
+# so qDebug()/qWarning() keep landing in the run window.
+set_target_properties(ksv PROPERTIES WIN32_EXECUTABLE $<CONFIG:Release>)
 
 # Link libraries to main executable
 target_link_libraries(ksv PRIVATE
