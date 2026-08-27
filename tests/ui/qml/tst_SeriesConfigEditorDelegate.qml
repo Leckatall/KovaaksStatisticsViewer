@@ -46,6 +46,46 @@ TestCase {
         return null
     }
 
+    function findByObjectNamePrefix(root, prefix, matches) {
+        if (root.objectName && root.objectName.startsWith(prefix))
+            matches.push(root)
+        for (const child of root.children || [])
+            findByObjectNamePrefix(child, prefix, matches)
+    }
+
+    function test_dragHandleShowsSixDotsInTwoColumnsAndThreeRows() {
+        const delegate = createDelegate()
+        const handle = findByObjectName(delegate, "seriesDragHandle_" + row.id)
+        verify(handle !== null)
+
+        const dots = []
+        findByObjectNamePrefix(handle, "seriesDragHandleDot_" + row.id + "_", dots)
+        compare(dots.length, 6)
+
+        for (let index = 0; index < dots.length; ++index) {
+            compare(dots[index].width, 3)
+            compare(dots[index].height, 3)
+            compare(dots[index].color, delegate.dragHandleDotColor)
+            compare(dots[index].x, 1.5 + (index % 2) * 6)
+            compare(dots[index].y, 4.5 + Math.floor(index / 2) * 6)
+        }
+    }
+
+    function test_delegateLightensOnHover() {
+        const delegate = createDelegate()
+        compare(delegate.radius, 6)
+        verify(delegate.restingColor !== delegate.palette.window)
+        compare(delegate.color, delegate.restingColor)
+
+        mouseMove(delegate, 1, 1)
+        tryVerify(function() { return delegate.hovered })
+        compare(delegate.color, delegate.hoverColor)
+
+        mouseMove(delegate, 1, delegate.height + 10)
+        tryVerify(function() { return !delegate.hovered })
+        compare(delegate.color, delegate.restingColor)
+    }
+
     function test_actionSignalsExposeTheirPayload() {
         const delegate = createDelegate()
 

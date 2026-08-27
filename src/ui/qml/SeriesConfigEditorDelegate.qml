@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-RowLayout {
+Rectangle {
     id: root
 
     required property var modelData
@@ -11,6 +11,10 @@ RowLayout {
     required property var dragState
     required property var scrollView
     required property var axisComboModel
+    property bool hovered: hoverHandler.hovered
+    readonly property color restingColor: palette.base
+    readonly property color hoverColor: Qt.lighter(restingColor, 1.12)
+    readonly property color dragHandleDotColor: palette.light
     property real previewOffset: {
         if (!dragState.draggedSeriesId || dragState.dragOriginIndex < 0 || dragState.dragPreviewIndex < 0)
             return 0
@@ -34,7 +38,10 @@ RowLayout {
     signal reorderRequested(string seriesId, int targetPosition)
 
     Layout.fillWidth: true
-    spacing: 5
+    implicitWidth: content.implicitWidth + 12
+    implicitHeight: content.implicitHeight + 8
+    color: hovered ? hoverColor : restingColor
+    radius: 6
     z: dragState.draggedSeriesId === row.id ? 1 : 0
     transform: Translate { y: root.previewOffset }
 
@@ -43,19 +50,43 @@ RowLayout {
         return axisComboModel.findIndex(function(item) { return item.value === id })
     }
 
-    Rectangle {
+    HoverHandler {
+        id: hoverHandler
+    }
+
+    RowLayout {
+        id: content
+        anchors.fill: parent
+        anchors.margins: 4
+        spacing: 5
+
+    Item {
         id: dragHandle
         objectName: "seriesDragHandle_" + root.row.id
         Layout.preferredWidth: 12
         Layout.preferredHeight: 24
-        color: root.palette.mid
-        radius: 2
+
+        Repeater {
+            model: 6
+
+            Rectangle {
+                objectName: "seriesDragHandleDot_" + root.row.id + "_" + index
+                width: 3
+                height: 3
+                x: 1.5 + (index % 2) * 6
+                y: 4.5 + Math.floor(index / 2) * 6
+                color: root.dragHandleDotColor
+                radius: width / 2
+                Accessible.ignored: true
+            }
+        }
 
         DragHandler {
             id: drag
             target: null
             dragThreshold: 0
             grabPermissions: PointerHandler.CanTakeOverFromAnything
+            cursorShape: Qt.PointingHandCursor
 
             onActiveChanged: {
                 if (active) {
@@ -126,7 +157,13 @@ RowLayout {
 
     Button {
         objectName: "editExpressionButton_" + root.row.id
-        text: qsTr("Edit expression")
+        text: qsTr("ƒx")
+
+        Layout.preferredWidth: contentItem.implicitWidth + (padding * 2)
+        Accessible.name: qsTr("Edit Expression")
+        ToolTip.visible: hovered
+        ToolTip.delay: 500
+        ToolTip.text: qsTr("Edit Expression")
         onClicked: root.expressionEditRequested(root.row)
     }
 
@@ -154,5 +191,6 @@ RowLayout {
         checked: root.row.enabled
         objectName: "seriesEnabledSwitch_" + root.row.id
         onToggled: root.seriesEnabledRequested(root.row, checked)
+    }
     }
 }

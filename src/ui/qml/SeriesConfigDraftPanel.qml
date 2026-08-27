@@ -139,7 +139,7 @@ Pane {
 
             ColumnLayout {
                 width: seriesListScrollView.availableWidth
-                spacing: 8
+                spacing: 5
 
                 Repeater {
                     model: root.displayRows
