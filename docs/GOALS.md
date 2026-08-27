@@ -141,3 +141,27 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
   - [x] Improve hover tooltip with more contextual data
   - [x] Add ability to toggle individual series on/off
   - [ ] Support exporting graphs as images
+
+---
+
+## 8. Custom Series
+
+> *Making user-defined series easier to create, reuse, and present.*
+
+- [ ] **Provide useful default expressions for user series** `[Easy]` `[High]`
+  - [ ] Define a set of sensible default expressions for new user-created series
+  - [ ] Select an appropriate default when the user adds a series
+
+- [ ] **Customise series line rendering** `[Medium]` `[Medium]`
+  - [ ] Expose rendering options for a series line, such as colour, width, and style
+  - [ ] Persist the selected rendering options with the series configuration
+  - [ ] Apply the options consistently in graph rendering and the legend
+
+- [ ] **Duplicate an existing series** `[Easy]` `[Medium]`
+  - [ ] Add a copy action to each user series
+  - [ ] Create an editable duplicate that preserves the source series configuration
+
+- [ ] **Add a text source editor for series expressions** `[Medium]` `[High]`
+  - [ ] Display a text representation beneath `ExpressionTreeEditor`
+  - [ ] Make the text representation the source of truth for the expression tree
+  - [ ] Support copying and pasting expressions between series
