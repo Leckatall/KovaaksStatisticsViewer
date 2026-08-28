@@ -42,6 +42,13 @@ namespace {
         }
         ResolvedGraph get_resolved_graph() override { return resolved_graph_to_return; }
 
+        // Stubs to satisfy the interface while GraphViewModel still reads get_resolved_graph();
+        // Task 2 replaces this fake wholesale once the view model migrates to these accessors.
+        std::vector<SeriesConfig> getSeriesConfigs() override { return {}; }
+        std::optional<SeriesPoints> getSeriesValues(SeriesId) override { return std::nullopt; }
+        std::vector<AxisConfig> getAxes() override { return {}; }
+        double getRunDuration() override { return 0.0; }
+
         void onSeriesConfigChanged(std::function<void()>) override {
         }
     };
