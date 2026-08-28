@@ -319,8 +319,13 @@ namespace ksv::qt_data {
                 const auto object = item.toObject();
                 const auto presentation = decodePresentation(object["presentation"]);
                 const auto id = decimalId(object["id"], false);
-                const auto expression = decodeExpression(object["expression"]);
-                if (!presentation || !id || !expression) return std::nullopt;
+                if (!presentation || !id) return std::nullopt;
+                Expression expression;
+                if (!object["expression"].isNull()) {
+                    const auto decoded = decodeExpression(object["expression"]);
+                    if (!decoded) return std::nullopt;
+                    expression = *decoded;
+                }
                 std::optional<AxisId> yAxisId;
                 auto transformKind = AxisTransformKind::Identity;
                 if (expectAxisFields) {
@@ -335,7 +340,7 @@ namespace ksv::qt_data {
                     if (!kind) return std::nullopt;
                     transformKind = *kind;
                 } else if (!exactKeys(object, {"id", "presentation", "expression"})) return std::nullopt;
-                configs.emplace_back(SeriesConfig{{*id}, *presentation, *expression, yAxisId, transformKind});
+                configs.emplace_back(SeriesConfig{{*id}, *presentation, expression, yAxisId, transformKind});
             }
             return configs;
         }
@@ -345,7 +350,8 @@ namespace ksv::qt_data {
             QJsonArray series;
             for (const auto &config: configs)
                 series.append(QJsonObject{{"id", QString::number(config.id.value)},
-                    {"presentation", encodePresentation(config.presentation)}, {"expression", encodeExpression(config.expression)},
+                    {"presentation", encodePresentation(config.presentation)},
+                    {"expression", config.expression ? QJsonValue(encodeExpression(config.expression)) : QJsonValue()},
                     {"yAxisId", config.yAxisId ? QJsonValue(QString::number(config.yAxisId->value)) : QJsonValue()},
                     {"transformKind", transformKindTag(config.transformKind)}});
             QJsonArray axesArray;

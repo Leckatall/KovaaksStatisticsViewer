@@ -66,6 +66,43 @@ namespace {
         EXPECT_EQ(reopened.getAll().size(), expected.size());
     }
 
+    TEST_F(SeriesConfigStoreTest, CreatesAndRoundTripsABlankSeriesAsAnExplicitJsonNull) {
+        makeStore();
+        const auto created = store->createComputed({{"Blank", {{1, 2, 3, 255}, 2.0}, true}, {}});
+        ASSERT_TRUE(created.succeeded());
+        const auto id = *created.createdId;
+
+        const auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        bool sawNullExpression = false;
+        for (const auto &item: root["series"].toArray()) {
+            const auto object = item.toObject();
+            if (object["id"].toString() == QString::number(id.value)) {
+                EXPECT_TRUE(object.contains("expression"));
+                EXPECT_TRUE(object["expression"].isNull());
+                sawNullExpression = true;
+            }
+        }
+        EXPECT_TRUE(sawNullExpression);
+
+        SeriesConfigStore reopened(settings);
+        const auto configs = reopened.getAll();
+        const auto blank = std::ranges::find(configs, id, &SeriesConfig::id);
+        ASSERT_NE(blank, configs.end());
+        EXPECT_FALSE(blank->expression);
+    }
+
+    TEST_F(SeriesConfigStoreTest, UpdatingASeriesToABlankExpressionSucceedsAndPersists) {
+        makeStore();
+        const auto id = *store->createComputed(request()).createdId;
+        ASSERT_TRUE(store->updateSeries({id, std::nullopt, Expression{}}).succeeded());
+
+        SeriesConfigStore reopened(settings);
+        const auto configs = reopened.getAll();
+        const auto blank = std::ranges::find(configs, id, &SeriesConfig::id);
+        ASSERT_NE(blank, configs.end());
+        EXPECT_FALSE(blank->expression);
+    }
+
     TEST_F(SeriesConfigStoreTest, RejectsMalformedProjectRateToFinalExpression) {
         const std::array malformedExpressions{
             QJsonObject{{"kind", "projectRateToFinal"}},

@@ -134,8 +134,13 @@ namespace ksv::application {
             if (config.id.value == 0) {
                 errors.push_back({SeriesConfigValidationCode::InvalidComputedSeriesId, std::string(root) + ".id"});
             }
-            size_t node_count = 0;
-            validateExpression(config.expression, std::string(root) + ".expression", 1, node_count, errors);
+            // A null top-level expression is a deliberately blank series (plots nothing). A null
+            // operand *inside* an expression is still a missing input — validateExpression keeps
+            // reporting that via its recursive validate_input calls.
+            if (config.expression) {
+                size_t node_count = 0;
+                validateExpression(config.expression, std::string(root) + ".expression", 1, node_count, errors);
+            }
             return errors;
         }
 
@@ -171,11 +176,6 @@ namespace ksv::application {
 
     Expression averageAcrossRuns(Expression input, const RunSelection selection) {
         return makeExpression(AverageAcrossRuns{std::move(input), selection});
-    }
-
-    std::vector<ValidationError> validateSeriesConfig(const SeriesConfig &config) {
-        // TODO: Unused?
-        return validateConfig(config, "record");
     }
 
     std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs) {

@@ -132,15 +132,15 @@ namespace {
 
     TEST(SeriesConfigTest, ProjectRateToFinalParticipatesInValidationLimits) {
         const SeriesConfig missing{SeriesId{9}, {"Missing", {}, true, 0}, projectRateToFinal({})};
-        const auto missingErrors = validateSeriesConfig(missing);
+        const auto missingErrors = validateSeriesConfigs({missing});
         EXPECT_TRUE(std::ranges::any_of(missingErrors, [](const ValidationError &error) {
             return error.code == SeriesConfigValidationCode::MissingExpressionInput && error.path ==
-                   "record.expression.input";
+                   "records[0].expression.input";
         }));
 
         Expression deep = primitive(PrimitiveMetric::Score);
         for (size_t index = 0; index < 16; ++index) deep = projectRateToFinal(deep);
-        const auto deepErrors = validateSeriesConfig(SeriesConfig{SeriesId{10}, {"Deep", {}, true, 0}, deep});
+        const auto deepErrors = validateSeriesConfigs({SeriesConfig{SeriesId{10}, {"Deep", {}, true, 0}, deep}});
         EXPECT_TRUE(std::ranges::any_of(deepErrors, [](const ValidationError &error) {
             return error.code == SeriesConfigValidationCode::ExpressionDepthLimit;
         }));
@@ -151,7 +151,7 @@ namespace {
         configs[1].id = SeriesId{0};
         configs[1].presentation.name = " ";
         configs[1].presentation.lineStyle.width = std::numeric_limits<double>::infinity();
-        configs[1].expression = {};
+        configs[1].expression = runningSum({});
 
         const auto errors = validateSeriesConfigs(configs);
         EXPECT_TRUE(std::ranges::any_of(errors, [](const ValidationError &error) {
@@ -167,7 +167,20 @@ namespace {
         }));
         EXPECT_TRUE(std::ranges::any_of(errors, [](const ValidationError &error) {
             return error.code == SeriesConfigValidationCode::MissingExpressionInput && error.path ==
-                   "records[1].expression";
+                   "records[1].expression.input";
+        }));
+    }
+
+    TEST(SeriesConfigTest, BlankTopLevelExpressionIsAllowedButNestedMissingOperandIsNot) {
+        auto configs = defaultSeriesConfigs();
+        configs[0].expression = {};
+        EXPECT_TRUE(validateSeriesConfigs(configs).empty());
+
+        configs[1].expression = add({}, primitive(PrimitiveMetric::Score));
+        const auto errors = validateSeriesConfigs(configs);
+        EXPECT_TRUE(std::ranges::any_of(errors, [](const ValidationError &error) {
+            return error.code == SeriesConfigValidationCode::MissingExpressionInput &&
+                   error.path == "records[1].expression.left";
         }));
     }
 
@@ -211,9 +224,9 @@ namespace {
     TEST(SeriesConfigTest, CopiedExpressionsContainOnlyPrimitiveLeaves) {
         const auto source = divide(primitive(PrimitiveMetric::Hits), primitive(PrimitiveMetric::Shots));
         const auto copy = source;
-        const SeriesConfig config{SeriesId{99}, {"Copy", {}, true, 9}, copy};
+        const SeriesConfig config{SeriesId{99}, {"Copy", {}, true, 0}, copy};
 
-        ASSERT_TRUE(validateSeriesConfig(config).empty());
+        ASSERT_TRUE(validateSeriesConfigs({config}).empty());
         const auto &expression = std::get<Divide>(config.expression->value());
         EXPECT_EQ(std::get<PrimitiveReference>(expression.left->value()).metric, PrimitiveMetric::Hits);
         EXPECT_EQ(std::get<PrimitiveReference>(expression.right->value()).metric, PrimitiveMetric::Shots);
@@ -226,7 +239,7 @@ namespace {
             averageAcrossRuns(numericConstant(std::numeric_limits<double>::quiet_NaN()), TopPercentile{101.0})
         };
 
-        const auto errors = validateSeriesConfig(config);
+        const auto errors = validateSeriesConfigs({config});
         const auto hasCode = [&errors](const SeriesConfigValidationCode code) {
             return std::ranges::any_of(errors, [code](const ValidationError &error) { return error.code == code; });
         };
@@ -239,7 +252,7 @@ namespace {
             SeriesId{10}, {std::string(121, 'x'), {}, true, 1},
             averageAcrossRuns(primitive(PrimitiveMetric::Score), RecentRuns{0})
         };
-        const auto recentErrors = validateSeriesConfig(recent);
+        const auto recentErrors = validateSeriesConfigs({recent});
         EXPECT_TRUE(std::ranges::any_of(recentErrors, [](const ValidationError &error) {
             return error.code == SeriesConfigValidationCode::ComputedNameTooLong;
         }));
@@ -251,7 +264,7 @@ namespace {
     TEST(SeriesConfigTest, IndividualValidationEnforcesExpressionDepthAndNodeLimits) {
         Expression deep = primitive(PrimitiveMetric::Score);
         for (size_t index = 0; index < 16; ++index) deep = runningSum(deep);
-        const auto deepErrors = validateSeriesConfig(SeriesConfig{SeriesId{9}, {"Deep", {}, true, 0}, deep});
+        const auto deepErrors = validateSeriesConfigs({SeriesConfig{SeriesId{9}, {"Deep", {}, true, 0}, deep}});
         EXPECT_TRUE(std::ranges::any_of(deepErrors, [](const ValidationError &error) {
             return error.code == SeriesConfigValidationCode::ExpressionDepthLimit;
         }));
@@ -261,7 +274,7 @@ namespace {
             return add(completeTree(levels - 1), completeTree(levels - 1));
         };
         const Expression large = completeTree(8);
-        const auto largeErrors = validateSeriesConfig(SeriesConfig{SeriesId{10}, {"Large", {}, true, 0}, large});
+        const auto largeErrors = validateSeriesConfigs({SeriesConfig{SeriesId{10}, {"Large", {}, true, 0}, large}});
         EXPECT_TRUE(std::ranges::any_of(largeErrors, [](const ValidationError &error) {
             return error.code == SeriesConfigValidationCode::ExpressionNodeLimit;
         }));

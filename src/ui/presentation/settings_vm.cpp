@@ -69,14 +69,18 @@ namespace ksv::presentation {
 
     QVariantMap SettingsViewModel::createComputedSeries(const QString &name, const QColor &color, const double width,
                                                          const bool enabled, const QVariantMap &expression) {
-        const auto parsed = parseExpression(expression);
-        if (!parsed) return invalidMutationMap();
+        application::Expression parsed;
+        if (!expression.isEmpty()) {
+            const auto result = parseExpression(expression);
+            if (!result) return invalidMutationMap();
+            parsed = *result;
+        }
         return mutationMap(m_series_management->createComputed({
             {name.toStdString(),
              {{static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
                static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())}, width},
              enabled},
-            *parsed
+            parsed
         }));
     }
 
@@ -85,8 +89,13 @@ namespace ksv::presentation {
                                                          const QVariantMap &expression) {
         bool ok = false;
         const auto value = id.toULongLong(&ok);
-        const auto parsed = parseExpression(expression);
-        if (!ok || !parsed) return invalidMutationMap();
+        if (!ok) return invalidMutationMap();
+        application::Expression parsed;
+        if (!expression.isEmpty()) {
+            const auto result = parseExpression(expression);
+            if (!result) return invalidMutationMap();
+            parsed = *result;
+        }
         application::UpdateSeriesRequest request;
         request.id = {value};
         request.presentation = application::UpdatedSeriesPresentation{
@@ -95,7 +104,7 @@ namespace ksv::presentation {
                                      static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())}, width},
             enabled
         };
-        request.expression = *parsed;
+        request.expression = parsed;
         return mutationMap(m_series_management->updateSeries(request));
     }
 

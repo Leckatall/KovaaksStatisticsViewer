@@ -192,7 +192,7 @@ TestCase {
         compare(call[4], true);
         compare(call[5], vm.allSeriesConfigs[0].expression);
     }
-    function test_addSeriesButtonCallsCreateComputedSeriesWithStubDefaults() {
+    function test_addSeriesButtonCreatesABlankSeriesWithoutAuthoringAnExpression() {
         const vm = makeFakeSettingsVm();
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: vm
@@ -204,10 +204,7 @@ TestCase {
         compare(call[1], "#4CAF50");
         compare(call[2], 2);
         compare(call[3], true);
-        compare(call[4], {
-            kind: "primitive",
-            primitiveMetric: "score"
-        });
+        compare(call[4], {});
     }
     function test_axisComboDefaultsToIndependentWhenRowHasNoYAxisId() {
         const panel = createTemporaryObject(panelComponent, testCase, {
