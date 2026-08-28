@@ -8,6 +8,7 @@
 
 #include <type_traits>
 
+#include "app/contracts/expression_dsl.h"
 #include "settings_vm.h"
 #include "series_expression_editor_model.h"
 #include "fake_profile_service.h"
@@ -26,7 +27,10 @@ namespace {
             lastSetEnabled = std::pair{id, enabled};
             return {};
         }
-        MutationResult createComputed(const CreateComputedSeriesRequest &) override { return {}; }
+        MutationResult createComputed(const CreateComputedSeriesRequest &request) override {
+            lastCreateComputedRequest = request;
+            return {};
+        }
         MutationResult updateSeries(const UpdateSeriesRequest &request) override {
             lastUpdateSeriesRequest = request;
             return {};
@@ -50,6 +54,7 @@ namespace {
         std::vector<AxisConfig> axes;
         std::optional<std::pair<SeriesId, bool>> lastSetEnabled;
         std::optional<std::pair<SeriesId, uint32_t>> lastReorder;
+        std::optional<CreateComputedSeriesRequest> lastCreateComputedRequest;
         std::optional<UpdateSeriesRequest> lastUpdateSeriesRequest;
         std::function<void()> callback_;
 
@@ -196,6 +201,47 @@ namespace {
         EXPECT_EQ(row["id"].toString(), "1");
         EXPECT_EQ(row["name"].toString(), "Score");
         EXPECT_TRUE(row["enabled"].toBool());
+        EXPECT_EQ(row["expression"].toString(), "SCORE");
+    }
+
+    TEST_F(SettingsViewModelTest, GetAllSeriesConfigsEmitsAnEmptyDslStringForBlankExpression) {
+        seriesManagement->configs = {
+            SeriesConfig{{1}, {"Blank", {{0, 150, 0, 255}, 2.0}, true, 0}, {}},
+        };
+        const auto view_model = make_view_model();
+
+        const auto result = view_model->getAllSeriesConfigs();
+
+        ASSERT_EQ(result.size(), 1);
+        EXPECT_EQ(result.first().toMap()["expression"].toString(), "");
+    }
+
+    TEST_F(SettingsViewModelTest, CreateComputedSeriesDecodesDslExpression) {
+        const auto view_model = make_view_model();
+
+        view_model->createComputedSeries("Derived", "#123456", 2.0, true, "Add(SCORE, HITS)");
+
+        ASSERT_TRUE(seriesManagement->lastCreateComputedRequest);
+        EXPECT_EQ(encodeExpressionDsl(seriesManagement->lastCreateComputedRequest->expression), "Add(SCORE, HITS)");
+    }
+
+    TEST_F(SettingsViewModelTest, UpdateComputedSeriesTreatsEmptyDslAsABlankExpression) {
+        const auto view_model = make_view_model();
+
+        view_model->updateComputedSeries("7", "Derived", "#123456", 2.0, true, "");
+
+        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest);
+        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest->expression);
+        EXPECT_FALSE(*seriesManagement->lastUpdateSeriesRequest->expression);
+    }
+
+    TEST_F(SettingsViewModelTest, UpdateComputedSeriesRejectsMalformedNonblankDsl) {
+        const auto view_model = make_view_model();
+
+        const auto result = view_model->updateComputedSeries("7", "Derived", "#123456", 2.0, true, "Add(SCORE)");
+
+        EXPECT_FALSE(result.value("succeeded").toBool());
+        EXPECT_FALSE(seriesManagement->lastUpdateSeriesRequest);
     }
 
     TEST_F(SettingsViewModelTest, GetAllAxesReturnsIdAndName) {

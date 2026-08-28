@@ -46,9 +46,9 @@ namespace ksv::presentation {
         Q_INVOKABLE [[nodiscard]] QVariantList getAllSeriesConfigs() const;
         Q_INVOKABLE QVariantMap setSeriesEnabled(const QString &id, bool enabled);
         Q_INVOKABLE QVariantMap createComputedSeries(const QString &name, const QColor &color, double width,
-                                                      bool enabled, const QVariantMap &expression);
+                                                      bool enabled, const QString &expression);
         Q_INVOKABLE QVariantMap updateComputedSeries(const QString &id, const QString &name, const QColor &color,
-                                                      double width, bool enabled, const QVariantMap &expression);
+                                                      double width, bool enabled, const QString &expression);
         Q_INVOKABLE QVariantMap removeComputedSeries(const QString &id);
         Q_INVOKABLE QVariantMap reorderSeries(const QString &id, int displayPosition);
         Q_INVOKABLE SeriesExpressionEditorModel *beginExpressionEdit(const QString &id);

@@ -3,10 +3,41 @@
 //
 
 #include "settings_vm.h"
-#include "series_expression_qml.h"
 #include "series_expression_editor_model.h"
 
+#include "app/contracts/expression_dsl.h"
+
 namespace ksv::presentation {
+    namespace {
+        std::optional<application::Expression> decodeTransportExpression(const QString &text) {
+            if (text.isEmpty()) return application::Expression{};
+            const auto decoded = application::decodeExpressionDsl(text.toStdString());
+            if (!decoded || !*decoded) return std::nullopt;
+            return *decoded;
+        }
+
+        QVariantMap mutationMap(const application::MutationResult &result) {
+            QVariantMap map;
+            map["succeeded"] = result.succeeded();
+            map["requiresReload"] = result.requiresReload;
+            map["failure"] = result.failure ? QVariant(static_cast<int>(*result.failure)) : QVariant();
+            map["createdId"] = result.createdId ? QVariant(QString::number(result.createdId->value)) : QVariant();
+            map["createdAxisId"] = result.createdAxisId
+                                     ? QVariant(QString::number(result.createdAxisId->value))
+                                     : QVariant();
+            QVariantList errors;
+            for (const auto &error: result.errors)
+                errors.append(QVariantMap{{"code", static_cast<int>(error.code)}, {"path", QString::fromStdString(error.path)}});
+            map["validationErrors"] = errors;
+            return map;
+        }
+
+        QVariantMap invalidMutationMap() {
+            return {{"succeeded", false}, {"failure", "invalidRequest"}, {"requiresReload", false},
+                    {"createdId", QVariant()}, {"createdAxisId", QVariant()}, {"validationErrors", QVariantList{}}};
+        }
+    }
+
     SettingsViewModel::SettingsViewModel(
         std::shared_ptr<application::ISettingsService> settings_service,
         std::shared_ptr<application::IProfileService> profile_service,
@@ -54,7 +85,7 @@ namespace ksv::presentation {
                 {"enabled", config.presentation.enabled},
                 {"displayPosition", config.presentation.displayPosition},
                 {"isPrimitive", config.isPrimitive()},
-                {"expression", expressionMap(config.expression)},
+                {"expression", QString::fromStdString(application::encodeExpressionDsl(config.expression))},
                 {"yAxisId", config.yAxisId ? QString::number(config.yAxisId->value) : QString()},
             });
         }
@@ -68,34 +99,26 @@ namespace ksv::presentation {
     }
 
     QVariantMap SettingsViewModel::createComputedSeries(const QString &name, const QColor &color, const double width,
-                                                         const bool enabled, const QVariantMap &expression) {
-        application::Expression parsed;
-        if (!expression.isEmpty()) {
-            const auto result = parseExpression(expression);
-            if (!result) return invalidMutationMap();
-            parsed = *result;
-        }
+                                                         const bool enabled, const QString &expression) {
+        const auto parsed = decodeTransportExpression(expression);
+        if (!parsed) return invalidMutationMap();
         return mutationMap(m_series_management->createComputed({
             {name.toStdString(),
              {{static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
                static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())}, width},
              enabled},
-            parsed
+            *parsed
         }));
     }
 
     QVariantMap SettingsViewModel::updateComputedSeries(const QString &id, const QString &name, const QColor &color,
                                                          const double width, const bool enabled,
-                                                         const QVariantMap &expression) {
+                                                         const QString &expression) {
         bool ok = false;
         const auto value = id.toULongLong(&ok);
         if (!ok) return invalidMutationMap();
-        application::Expression parsed;
-        if (!expression.isEmpty()) {
-            const auto result = parseExpression(expression);
-            if (!result) return invalidMutationMap();
-            parsed = *result;
-        }
+        const auto parsed = decodeTransportExpression(expression);
+        if (!parsed) return invalidMutationMap();
         application::UpdateSeriesRequest request;
         request.id = {value};
         request.presentation = application::UpdatedSeriesPresentation{
@@ -104,7 +127,7 @@ namespace ksv::presentation {
                                      static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())}, width},
             enabled
         };
-        request.expression = parsed;
+        request.expression = *parsed;
         return mutationMap(m_series_management->updateSeries(request));
     }
 
