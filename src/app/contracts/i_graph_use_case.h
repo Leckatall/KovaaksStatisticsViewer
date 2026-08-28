@@ -7,7 +7,7 @@
 #include <functional>
 #include <string>
 
-#include "resolved_graph.h"
+#include "graph_info.h"
 
 namespace ksv::application {
     class IGraphUseCase {
@@ -22,7 +22,11 @@ namespace ksv::application {
 
         virtual void onCurrentPerfChanged(std::function<void()> callback) = 0;
 
-        [[nodiscard]] virtual ResolvedGraph get_resolved_graph() = 0;
+        [[nodiscard]] virtual std::vector<SeriesConfig> getSeriesConfigs() = 0;
+        [[nodiscard]] virtual std::optional<SeriesPoints> getSeriesValues(SeriesId id) = 0;
+        [[nodiscard]] virtual std::vector<AxisConfig> getAxes() = 0;
+        [[nodiscard]] virtual double getRunDuration() = 0;
+
         virtual void onSeriesConfigChanged(std::function<void()>) = 0;
     };
 }

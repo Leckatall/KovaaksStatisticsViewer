@@ -4,6 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <map>
+#include <optional>
+
 #include <QSignalSpy>
 #include <QUrl>
 
@@ -27,22 +30,40 @@ namespace {
     constexpr int kExpectedFinalScoreRecent = 9;
     constexpr int kInvalidColumn = 9999;
 
+    SeriesPoints pts(const std::vector<double> &times, const std::vector<double> &ys) {
+        SeriesPoints points;
+        for (size_t i = 0; i < ys.size(); ++i) points.emplace_back(times[i], ys[i]);
+        return points;
+    }
+
     class FakeGraphUseCase : public IGraphUseCase {
     public:
         std::vector<std::string> load_perf_calls;
         int load_latest_perf_calls = 0;
-        ResolvedGraph resolved_graph_to_return;
         std::string run_label;
+
+        std::vector<SeriesConfig> series_configs;
+        std::map<uint64_t, std::optional<SeriesPoints>> series_values;
+        std::vector<AxisConfig> axes;
+        double run_duration = 0.0;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
         void load_latest_perf() override { load_latest_perf_calls++; }
         std::string get_run_label() override { return run_label; }
+        void onCurrentPerfChanged(std::function<void()>) override {}
+        void onSeriesConfigChanged(std::function<void()>) override {}
 
-        void onCurrentPerfChanged(std::function<void()>) override {
+        std::vector<SeriesConfig> getSeriesConfigs() override { return series_configs; }
+        std::optional<SeriesPoints> getSeriesValues(const SeriesId id) override {
+            const auto it = series_values.find(id.value);
+            return it == series_values.end() ? std::nullopt : it->second;
         }
-        ResolvedGraph get_resolved_graph() override { return resolved_graph_to_return; }
+        std::vector<AxisConfig> getAxes() override { return axes; }
+        double getRunDuration() override { return run_duration; }
 
-        void onSeriesConfigChanged(std::function<void()>) override {
+        void addSeries(const SeriesConfig &config, const SeriesPoints &points) {
+            series_configs.push_back(config);
+            series_values[config.id.value] = points;
         }
     };
 
@@ -53,13 +74,11 @@ namespace {
 
         // One value per whole second, using the built-in Score/Accuracy SeriesConfigs.
         void setSampleData() {
-            ResolvedGraph resolved;
-            resolved.times = {0.0F, 1.0F, 2.0F};
-            for (const auto &config: defaultSeriesConfigs()) {
-                if (config.id.value == kScore) resolved.series.push_back({config, std::vector<double>{10.0, 20.0, 30.0}});
-                else if (config.id.value == kAccuracy) resolved.series.push_back({config, std::vector<double>{0.5, 0.6, 0.7}});
+            for (const auto &config : defaultSeriesConfigs()) {
+                if (config.id.value == kScore) fake_use_case->addSeries(config, pts({0, 1, 2}, {10, 20, 30}));
+                else if (config.id.value == kAccuracy) fake_use_case->addSeries(config, pts({0, 1, 2}, {0.5, 0.6, 0.7}));
             }
-            fake_use_case->resolved_graph_to_return = resolved;
+            fake_use_case->run_duration = 2.0;
         }
     };
 
@@ -136,25 +155,20 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, RecomputeBoundsSnapsTheTimeAxisToNiceNumbers) {
-        // times {0,1,2}, scores {10,20,30}, accuracies {0.5,0.6,0.7}.
         setSampleData();
         view_model.fetchData();
 
-        // Time is zero-based and integral: whole-second ticks 0,1,2.
         EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 0.0);
         EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 2.0);
         EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{0.0, 1.0, 2.0}));
     }
 
     TEST_F(GraphViewModelTest, SeriesGroupsTheScoreFamilyOntoOneSharedAxis) {
-        ResolvedGraph resolved;
-        resolved.times = {0.0F, 1.0F};
-        resolved.axes = defaultAxisConfigs();
-        for (const auto &config: defaultSeriesConfigs()) {
+        fake_use_case->axes = defaultAxisConfigs();
+        for (const auto &config : defaultSeriesConfigs())
             if (config.id.value == kScoreTotal || config.id.value == kExpectedFinalScore)
-                resolved.series.push_back({config, std::vector<double>{1.0, 2.0}});
-        }
-        fake_use_case->resolved_graph_to_return = resolved;
+                fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
+        fake_use_case->run_duration = 1.0;
         view_model.fetchMetadata();
 
         const auto series = view_model.series({kScoreTotal, kExpectedFinalScore});
@@ -170,11 +184,10 @@ namespace {
         const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0), customAxis.id};
         const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0), customAxis.id};
 
-        ResolvedGraph resolved;
-        resolved.times = {0.0F, 1.0F};
-        resolved.axes = {customAxis};
-        resolved.series = {{first, std::vector<double>{2.0, 4.0}}, {second, std::vector<double>{10.0, 20.0}}};
-        fake_use_case->resolved_graph_to_return = resolved;
+        fake_use_case->axes = {customAxis};
+        fake_use_case->addSeries(first, pts({0, 1}, {2, 4}));
+        fake_use_case->addSeries(second, pts({0, 1}, {10, 20}));
+        fake_use_case->run_duration = 1.0;
         view_model.fetchMetadata();
 
         const auto series = view_model.series({10, 11});
@@ -193,11 +206,10 @@ namespace {
         scoreTotal.yAxisId = sharedAxis.id;
         const SeriesConfig computed{SeriesId{10}, {"Custom", {}, true, 1}, numericConstant(1.0), sharedAxis.id};
 
-        ResolvedGraph resolved;
-        resolved.times = {0.0F, 1.0F};
-        resolved.axes = {sharedAxis};
-        resolved.series = {{scoreTotal, std::vector<double>{5.0, 6.0}}, {computed, std::vector<double>{1.0, 1.0}}};
-        fake_use_case->resolved_graph_to_return = resolved;
+        fake_use_case->axes = {sharedAxis};
+        fake_use_case->addSeries(scoreTotal, pts({0, 1}, {5, 6}));
+        fake_use_case->addSeries(computed, pts({0, 1}, {1, 1}));
+        fake_use_case->run_duration = 1.0;
         view_model.fetchMetadata();
 
         const auto series = view_model.series({kScoreTotal, 10});
@@ -212,10 +224,9 @@ namespace {
         const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0)};
         const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0)};
 
-        ResolvedGraph resolved;
-        resolved.times = {0.0F, 1.0F};
-        resolved.series = {{first, std::vector<double>{2.0, 4.0}}, {second, std::vector<double>{100.0, 200.0}}};
-        fake_use_case->resolved_graph_to_return = resolved;
+        fake_use_case->addSeries(first, pts({0, 1}, {2, 4}));
+        fake_use_case->addSeries(second, pts({0, 1}, {100, 200}));
+        fake_use_case->run_duration = 1.0;
         view_model.fetchMetadata();
 
         const auto series = view_model.series({10, 11});
@@ -227,10 +238,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, SeriesTransformKindScalesDisplayedValues) {
         const SeriesConfig accuracy = defaultSeriesConfigs()[1];
-        ResolvedGraph resolved;
-        resolved.times = {0.0F};
-        resolved.series = {{accuracy, std::vector<double>{0.5}}};
-        fake_use_case->resolved_graph_to_return = resolved;
+        fake_use_case->addSeries(accuracy, pts({0}, {0.5}));
         view_model.fetchMetadata();
 
         const auto series = view_model.series({kAccuracy});
@@ -244,11 +252,9 @@ namespace {
         const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0), percentAxis.id};
         const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0), percentAxis.id};
 
-        ResolvedGraph resolved;
-        resolved.times = {0.0F};
-        resolved.axes = {percentAxis};
-        resolved.series = {{first, std::vector<double>{0.5}}, {second, std::vector<double>{0.5}}};
-        fake_use_case->resolved_graph_to_return = resolved;
+        fake_use_case->axes = {percentAxis};
+        fake_use_case->addSeries(first, pts({0}, {0.5}));
+        fake_use_case->addSeries(second, pts({0}, {0.5}));
         view_model.fetchMetadata();
 
         const auto series = view_model.series({10, 11});
@@ -257,25 +263,13 @@ namespace {
         EXPECT_EQ(series[0]->yAxis->formatTick(50.0), "50%");
     }
 
-    // ScoreFamilySharesAnAxisForTheRequestedVisibleSubset, AccuracyRemainsIndependentAndFormatsAsPercentage,
-    // and SeriesRecordsItsSourceColumn removed: series(columns) always returns empty against data
-    // loaded through fetchData()'s legacy get_series() path, because series()'s per-column body is
-    // currently commented out (graph_vm.cpp only builds m_seriesById from the resolved-graph path).
-    // See .plans/series-config-migration-completion/plans/04-graph-read-model-narrowing.md.
-
-    // AllColumnsMayBeDisabledWithoutHidingSeriesData removed: its series({Score}) assertion always
-    // returns empty for the same reason as the tests removed above.
-    // See .plans/series-config-migration-completion/plans/04-graph-read-model-narrowing.md.
-
     TEST_F(GraphViewModelTest, FetchDataPopulatesShotsKillsAndDmgColumns) {
-        ResolvedGraph resolved;
-        resolved.times = {0.0F, 1.0F, 2.0F};
-        for (const auto &config: defaultSeriesConfigs()) {
-            if (config.id.value == kShots) resolved.series.push_back({config, std::vector<double>{5.0, 10.0, 15.0}});
-            else if (config.id.value == kKills) resolved.series.push_back({config, std::vector<double>{1.0, 2.0, 3.0}});
-            else if (config.id.value == kDmg) resolved.series.push_back({config, std::vector<double>{100.0, 200.0, 300.0}});
+        for (const auto &config : defaultSeriesConfigs()) {
+            if (config.id.value == kShots) fake_use_case->addSeries(config, pts({0, 1, 2}, {5, 10, 15}));
+            else if (config.id.value == kKills) fake_use_case->addSeries(config, pts({0, 1, 2}, {1, 2, 3}));
+            else if (config.id.value == kDmg) fake_use_case->addSeries(config, pts({0, 1, 2}, {100, 200, 300}));
         }
-        fake_use_case->resolved_graph_to_return = resolved;
+        fake_use_case->run_duration = 2.0;
 
         view_model.fetchData();
 
@@ -283,12 +277,6 @@ namespace {
         EXPECT_EQ(view_model.series({kKills}).front()->points[1].y(), 2);
         EXPECT_EQ(view_model.series({kDmg}).front()->points[2].y(), 300.0);
     }
-
-    // FetchDataDefaultsMissingTrailingValuesToZero removed: it tested a legacy QMap
-    // auto-vivification default that only applied to the deleted GraphSeries/get_series() path.
-    // fetchData()'s resolved-graph branch now defaults missing/short values to 0.0 directly
-    // (see graph_vm.cpp), since entry.values can be an empty vector when a computed series'
-    // expression can't be evaluated (e.g. IAverageLineUseCase::evaluate() returns nullopt).
 
     TEST_F(GraphViewModelTest, SeriesReturnsTimeValuePairsInRowOrder) {
         setSampleData();
@@ -310,10 +298,6 @@ namespace {
         EXPECT_TRUE(view_model.series({kScore}).isEmpty());
     }
 
-    // AccuracySeriesFormattedValueAtXShowsPercent and SeriesReturnsOnlyRequestedColumnsInRequestedOrder
-    // removed: series(columns) always returns empty for the same reason as the tests removed above.
-    // See .plans/series-config-migration-completion/plans/04-graph-read-model-narrowing.md.
-
     TEST_F(GraphViewModelTest, SeriesOmitsColumnsWithNoDrawableSeries) {
         setSampleData();
         view_model.fetchData();
@@ -330,23 +314,15 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, AdaptsResolvedSeriesAndExcludesUnavailableFromBounds) {
-        fake_use_case->resolved_graph_to_return = {};
         view_model.fetchData();
         EXPECT_TRUE(view_model.enabledSeriesIds().isEmpty());
     }
 
     TEST_F(GraphViewModelTest, ResolvesColumnsForEnabledSeriesIds) {
-        fake_use_case->resolved_graph_to_return = {
-            {0.0F, 1.0F},
-            {{
-                {
-                    {1},
-                    {"Score", {{0, 150, 0, 255}, 2.0}, true, 0},
-                    primitive(PrimitiveMetric::Score)
-                },
-                std::vector<double>{10.0, 20.0}
-            }}
-        };
+        fake_use_case->addSeries(
+            SeriesConfig{{1}, {"Score", {{0, 150, 0, 255}, 2.0}, true, 0}, primitive(PrimitiveMetric::Score)},
+            pts({0, 1}, {10, 20}));
+        fake_use_case->run_duration = 1.0;
 
         view_model.fetchData();
 
@@ -357,16 +333,11 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, ExpectedFinalScoreRecentRendersUnderItsOwnColumnDespiteHitsOccupyingASlot) {
-        // Regression coverage for the bug fixed here: with `Hits` present as its own (disabled)
-        // SeriesConfig entry at displayPosition 3, the old displayPosition-derived column arithmetic
-        // shifted every later built-in series by one, sending "Expected Final Score (5s)" out of
-        // range entirely and rendering Kills/Dmg/Score Total/Expected Final Score under each other's
-        // name/color. column is now the series' own SeriesId, so this can no longer happen.
-        ResolvedGraph resolved;
-        resolved.times = {0.0F, 1.0F};
-        for (const auto &config: defaultSeriesConfigs())
-            resolved.series.push_back({config, std::vector<double>{1.0, 2.0}});
-        fake_use_case->resolved_graph_to_return = resolved;
+        // Regression coverage: column is the series' own SeriesId, so a mid-list (disabled) Hits entry
+        // can no longer shift later built-ins under each other's name/color.
+        for (const auto &config : defaultSeriesConfigs())
+            fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
+        fake_use_case->run_duration = 1.0;
 
         view_model.fetchMetadata();
 
@@ -374,9 +345,7 @@ namespace {
         ASSERT_FALSE(view_model.series({kExpectedFinalScoreRecent}).isEmpty());
         EXPECT_EQ(view_model.series({kExpectedFinalScoreRecent}).front()->name(), "Expected Final Score (5s)");
 
-        // A mid-list series (Kills, SeriesId 5) renders under its own name, not the next series'.
         EXPECT_EQ(view_model.columnForSeriesId("5"), kKills);
         EXPECT_EQ(view_model.series({kKills}).front()->name(), "Kills");
     }
-
 }

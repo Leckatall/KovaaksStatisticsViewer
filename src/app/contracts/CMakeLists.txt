@@ -10,7 +10,7 @@ target_sources(ksv_contracts PUBLIC
         completion_history.h
         scenario_summary.h
         run_performance.h
-        resolved_graph.h
+        graph_info.h
         series_config.h
         expression_dsl.h
         i_graph_use_case.h

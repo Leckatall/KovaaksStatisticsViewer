@@ -62,7 +62,6 @@ namespace ksv::presentation {
         static constexpr int kDefaultYAxisSeriesId = 1;
 
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
-        std::vector<float> m_times;
         AxisModel m_timeAxis{};
         QMap<QString, SeriesModel *> m_seriesById;
         QHash<uint64_t, application::AxisConfig> m_axesById;

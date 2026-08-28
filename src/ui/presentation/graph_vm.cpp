@@ -72,13 +72,10 @@ namespace ksv::presentation {
         // Time: zero floor, integral steps (whole seconds)
         const AxisModel::Options timeOpts{AxisModel::Baseline::Zero, /*integral=*/true};
 
-        AxisModel newTimeAxis;
-        if (m_times.empty()) {
-            newTimeAxis = AxisModel::forRange(0.0, 60.0, timeOpts);
-        } else {
-            const qreal hi = *std::ranges::max_element(m_times);
-            newTimeAxis = AxisModel::forRange(0.0, hi, timeOpts);
-        }
+        const double hi = m_graphUseCase->getRunDuration();
+        AxisModel newTimeAxis = hi > 0.0
+                                    ? AxisModel::forRange(0.0, hi, timeOpts)
+                                    : AxisModel::forRange(0.0, 60.0, timeOpts);
         newTimeAxis = newTimeAxis.withDelegate(secondsDelegate());
 
         if (qFuzzyCompare(1.0 + m_timeAxis.min(), 1.0 + newTimeAxis.min()) &&
@@ -96,30 +93,31 @@ namespace ksv::presentation {
     }
 
     void GraphViewModel::fetchMetadata() {
-        const auto resolved = m_graphUseCase->get_resolved_graph();
+        const auto configs = m_graphUseCase->getSeriesConfigs();
+        const auto axes = m_graphUseCase->getAxes();
+
         m_axesById.clear();
-        for (const auto &axis: resolved.axes) m_axesById.insert(axis.id.value, axis);
+        for (const auto &axis: axes) m_axesById.insert(axis.id.value, axis);
 
         qDeleteAll(m_seriesById);
         m_seriesById.clear();
-        for (const auto &entry: resolved.series) {
-            if (!entry.config.presentation.enabled) continue;
-            const auto entry_id = QString::number(entry.config.id.value);
+        for (const auto &config: configs) {
+            const auto entry_id = QString::number(config.id.value);
             auto *series = new SeriesModel(this);
             series->setId(entry_id);
-            series->setName(QString::fromStdString(entry.config.presentation.name));
-            series->setColor(QColor(entry.config.presentation.lineStyle.color.red,
-                                     entry.config.presentation.lineStyle.color.green,
-                                     entry.config.presentation.lineStyle.color.blue,
-                                     entry.config.presentation.lineStyle.color.alpha));
-            series->transform = transformFor(entry.config.transformKind);
-            series->yAxisId = entry.config.yAxisId
-                                  ? std::optional<uint64_t>{entry.config.yAxisId->value}
+            series->setName(QString::fromStdString(config.presentation.name));
+            series->setColor(QColor(config.presentation.lineStyle.color.red,
+                                     config.presentation.lineStyle.color.green,
+                                     config.presentation.lineStyle.color.blue,
+                                     config.presentation.lineStyle.color.alpha));
+            series->transform = transformFor(config.transformKind);
+            series->yAxisId = config.yAxisId
+                                  ? std::optional<uint64_t>{config.yAxisId->value}
                                   : std::nullopt;
             series->setColumn(entry_id.toInt());
             // TODO(2026-08-18): Remove once SeriesModel gains displayPosition/width support by replacing
-            // this placeholder with assignments from entry.config.presentation.
-            // series->displayPosition = entry.config.presentation.displayPosition;
+            // this placeholder with assignments from config.presentation.
+            // series->displayPosition = config.presentation.displayPosition;
             m_seriesById[entry_id] = series;
         }
         fetchData();
@@ -132,25 +130,21 @@ namespace ksv::presentation {
             emit scenarioTitleChanged(); // Seems redundant
         }
 
-        const auto resolved = m_graphUseCase->get_resolved_graph();
+        const auto configs = m_graphUseCase->getSeriesConfigs();
         m_allSeriesList.clear();
         m_enabledSeriesIds.clear();
-        for (const auto &entry: resolved.series) {
-            const auto &entry_id = entry.config.id.value;
+        for (const auto &config: configs) {
+            const auto entry_id = config.id.value;
             const QString id = QString::number(entry_id);
-            const auto values = entry.values.value_or({});
+            const auto values = m_graphUseCase->getSeriesValues(config.id);
             QList<QPointF> points;
-            points.reserve(resolved.times.size());
-            for (int i = 0; i < int(resolved.times.size()); ++i) {
-                const double value = i < int(values.size()) ? values[i] : 0.0;
-                points.append(QPointF(resolved.times[i], value));
+            if (values) {
+                points.reserve(static_cast<int>(values->size()));
+                for (const auto &[x, y]: *values) points.append(QPointF(x, y));
             }
 
-            // fetchMetadata() only creates entries for enabled series; this preserves the
-            // original QMap<QString,SeriesModel>::operator[] auto-vivification behavior for
-            // any id fetchData() sees that fetchMetadata() didn't (e.g. a disabled series
-            // still present in resolved.series, or fetchData() called directly without a
-            // preceding fetchMetadata() picking up the same config).
+            // fetchData() may run without a preceding fetchMetadata() (e.g. called directly), so
+            // create any SeriesModel the id map doesn't already hold.
             SeriesModel *entrySeries = m_seriesById.value(id, nullptr);
             if (!entrySeries) {
                 entrySeries = new SeriesModel(this);
@@ -164,7 +158,6 @@ namespace ksv::presentation {
             m_enabledSeriesIds.append(id);
         }
         emit seriesConfigurationChanged();
-        m_times = resolved.times;
         emit dataUpdated();
         recomputeBounds();
     }
