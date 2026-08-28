@@ -52,42 +52,6 @@ namespace {
         EXPECT_EQ(fake_session_controller->set_current_perf_filename_calls[0], "some/file.perf");
     }
 
-    TEST_F(GraphUseCaseTest, ResolvesBaseAndComputedConfigsAsPeers) {
-        const auto graph = use_case.get_resolved_graph();
-        EXPECT_EQ(graph.series.size(), graph.times.size());
-    }
-
-    TEST_F(GraphUseCaseTest, ResolvedGraphIncludesAllConfiguredAxes) {
-        fake_store->axes = {
-            AxisConfig{AxisId{1}, "Accuracy", {}, AxisTransformKind::Percentage},
-            AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity}
-        };
-
-        const auto resolved = use_case.get_resolved_graph();
-
-        ASSERT_EQ(resolved.axes.size(), 2U);
-        EXPECT_EQ(resolved.axes[0].name, "Accuracy");
-        EXPECT_EQ(resolved.axes[1].name, "Score Family");
-    }
-
-    TEST_F(GraphUseCaseTest, AverageUnavailableRemainsConfiguredWithoutPoints) {
-        const auto graph = use_case.get_resolved_graph();
-        EXPECT_TRUE(graph.series.empty() || !graph.series.front().values.has_value());
-    }
-
-    TEST_F(GraphUseCaseTest, ResolvedGraphNeverIncludesADisabledSeriesAndNeverEvaluatesItsExpression) {
-        fake_store->configs = {
-            SeriesConfig{{1}, {"Enabled", {}, true, 0}, primitive(PrimitiveMetric::Score)},
-            SeriesConfig{{2}, {"Disabled", {}, false, 1}, primitive(PrimitiveMetric::Shots)},
-        };
-
-        const auto resolved = use_case.get_resolved_graph();
-
-        ASSERT_EQ(resolved.series.size(), 1U);
-        EXPECT_EQ(resolved.series.front().config.id.value, 1U);
-        EXPECT_EQ(fake_average->evaluateCallCount, 1);
-    }
-
     ScenarioPerf perfWithSeconds(const std::string &hash) {
         ScenarioPerf perf;
         perf.run_id = {{.name = "S", .hash = hash}, 1000};

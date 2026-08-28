@@ -53,9 +53,6 @@ namespace {
         void onCurrentPerfChanged(std::function<void()>) override {}
         void onSeriesConfigChanged(std::function<void()>) override {}
 
-        // Task 3 removes get_resolved_graph() from IGraphUseCase; until then the fake must define it.
-        ResolvedGraph get_resolved_graph() override { return {}; }
-
         std::vector<SeriesConfig> getSeriesConfigs() override { return series_configs; }
         std::optional<SeriesPoints> getSeriesValues(const SeriesId id) override {
             const auto it = series_values.find(id.value);

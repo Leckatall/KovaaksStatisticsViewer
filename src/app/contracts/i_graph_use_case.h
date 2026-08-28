@@ -8,7 +8,6 @@
 #include <string>
 
 #include "graph_info.h"
-#include "resolved_graph.h"
 
 namespace ksv::application {
     class IGraphUseCase {
@@ -22,8 +21,6 @@ namespace ksv::application {
         virtual std::string get_run_label() = 0;
 
         virtual void onCurrentPerfChanged(std::function<void()> callback) = 0;
-
-        [[nodiscard]] virtual ResolvedGraph get_resolved_graph() = 0;
 
         [[nodiscard]] virtual std::vector<SeriesConfig> getSeriesConfigs() = 0;
         [[nodiscard]] virtual std::optional<SeriesPoints> getSeriesValues(SeriesId id) = 0;

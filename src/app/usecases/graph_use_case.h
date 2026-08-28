@@ -43,21 +43,6 @@ namespace ksv::application {
                               m_session_controller.get(), std::move(callback));
         }
 
-        [[nodiscard]] ResolvedGraph get_resolved_graph() override {
-            ResolvedGraph result;
-            const auto run = m_session_controller->getCurrentPerf();
-            const auto bucketed = bucketRun(run);
-            result.times = bucketed.times;
-            for (const SeriesConfig &config : m_store->getAll()) {
-                if (!config.presentation.enabled) continue;
-                std::optional<std::vector<double>> values;
-                values = m_average->evaluate(run, config.expression);
-                result.series.push_back({config, std::move(values)});
-            }
-            result.axes = m_store->getAllAxes();
-            return result;
-        }
-
         [[nodiscard]] std::vector<SeriesConfig> getSeriesConfigs() override {
             std::vector<SeriesConfig> result;
             for (const auto &config : m_store->getAll())
