@@ -10,8 +10,8 @@
 
 namespace ksv::qt_data {
     FileService::FileService(std::shared_ptr<application::ISettingsService> settings_service,
-        std::shared_ptr<application::IProtoDecoder> decoder, QObject *parent): QObject(parent),
-m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
+        std::shared_ptr<application::IProtoDecoder> decoder, std::shared_ptr<data::IStatsCsvParser> stats_parser, QObject *parent): QObject(parent),
+m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)), m_stats_parser(std::move(stats_parser)){
         watchPerfDirs();
         connect(&m_watcher, &QFileSystemWatcher::directoryChanged,
                 this, [this](const QString &directory) { handleDirectoryChanged(directory); });
@@ -81,8 +81,24 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)){
         return paths;
     }
 
-    domain::ScenarioPerf FileService::getPerfFromFile(const std::string_view filename) const {
+    std::vector<application::StatsFile> FileService::listStatsFiles() const {
+        std::vector<application::StatsFile> paths;
+        for (const auto &root : sourceRoots()) {
+            QDir directory(QString::fromStdString(root));
+            if (!directory.cd("FPSAimTrainer/stats")) continue;
+            for (const auto &file : directory.entryList({"*.csv"}, QDir::Files)) {
+                paths.push_back({root, "FPSAimTrainer/stats", file.toStdString()});
+            }
+        }
+        return paths;
+    }
+
+    domain::Run FileService::getPerfFromFile(const std::string_view filename) const {
         return m_decoder->decode_file(filename);
+    }
+
+    std::optional<data::ParsedStatsCsv> FileService::getStatsFromFile(const std::filesystem::path &path) const {
+        return m_stats_parser->parseFile(path);
     }
 
     std::vector<std::string> FileService::sourceRoots() const {

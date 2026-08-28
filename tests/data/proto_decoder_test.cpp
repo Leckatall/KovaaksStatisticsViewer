@@ -31,7 +31,6 @@ namespace {
 
     TEST_F(ProtoDecoderTest, decode) {
         auto perf = decoder.decode(make_perf_log());
-        perf.print();
         EXPECT_EQ(perf.run_id.scenario_id.name, "testing");
         EXPECT_EQ(perf.run_id.start_time, 0LL);
         EXPECT_EQ(perf.scenario_length, 69.0F);
@@ -39,16 +38,15 @@ namespace {
 
     TEST_F(ProtoDecoderTest, decode_file) {
         auto perf = decoder.decode_file(get_test_file_path());
-        perf.print();
         EXPECT_EQ(perf.run_id.scenario_id.name, "1wall6targets TE");
         EXPECT_EQ(perf.run_id.start_time, 1783733140000LL);
         EXPECT_EQ(perf.scenario_length, 60.0F);
-        EXPECT_EQ(perf.source, ksv::domain::SourceFileRef{});
+        EXPECT_FALSE(perf.sources.perf.has_value());
     }
 
     TEST_F(ProtoDecoderTest, decodeDoesNotSetSourceFile) {
         const auto perf = decoder.decode(make_perf_log());
-        EXPECT_EQ(perf.source, ksv::domain::SourceFileRef{});
+        EXPECT_FALSE(perf.sources.perf.has_value());
     }
 
     TEST_F(ProtoDecoderTest, decodeSkipsUnsetOptionalFields) {
@@ -60,10 +58,12 @@ namespace {
 
         const auto perf = decoder.decode(log);
 
-        ASSERT_EQ(perf.data.size(), 1);
-        EXPECT_EQ(perf.data[0].shots, 10);
-        EXPECT_EQ(perf.data[0].hits, 0);
-        EXPECT_EQ(perf.data[0].misses, 0);
+        ASSERT_TRUE(perf.performance.has_value());
+        ASSERT_EQ(perf.performance->samples.size(), 1);
+        EXPECT_EQ(perf.performance->samples[0].shots, 10);
+        EXPECT_EQ(perf.performance->samples[0].hits, 0);
+        EXPECT_EQ(perf.performance->samples[0].misses, 0);
+        EXPECT_EQ(perf.totals().shots, 10);
     }
 
     TEST_F(ProtoDecoderTest, decodeHandlesMultipleEntries) {
@@ -79,15 +79,17 @@ namespace {
 
         const auto perf = decoder.decode(log);
 
-        ASSERT_EQ(perf.data.size(), 2);
-        EXPECT_FLOAT_EQ(perf.data[0].score, 10.0F);
-        EXPECT_FLOAT_EQ(perf.data[1].score, 20.0F);
+        ASSERT_TRUE(perf.performance.has_value());
+        ASSERT_EQ(perf.performance->samples.size(), 2);
+        EXPECT_FLOAT_EQ(perf.performance->samples[0].score, 10.0F);
+        EXPECT_FLOAT_EQ(perf.performance->samples[1].score, 20.0F);
+        EXPECT_FLOAT_EQ(perf.totals().score, 30.0F);
     }
     // TODO(2026-08-16): Create implementation that matches this test
     // TEST_F(ProtoDecoderTest, DecodeFileDoesNotThrowWhenFileIsMissing) {
     //     // Correct contract: a missing file is a normal "nothing to decode" case
     //     // for the caller to detect from the returned (effectively empty/default)
-    //     // ScenarioPerf - like decodeFileOfCorruptDataDoesNotThrow below - not an
+    //     // Run - like decodeFileOfCorruptDataDoesNotThrow below - not an
     //     // exception across the decode_file() boundary.
     //     EXPECT_NO_THROW(decoder.decode_file("this/file/does/not/exist.perf"));
     // }
@@ -100,9 +102,9 @@ namespace {
         }
 
         // Documents current behavior: a failed parse is only logged to stderr,
-        // decode_file still returns a (effectively empty/default) ScenarioPerf
+        // decode_file still returns a (effectively empty/default) Run
         // rather than signaling an error to the caller.
-        ksv::domain::ScenarioPerf perf;
+        ksv::domain::Run perf;
         EXPECT_NO_THROW(perf = decoder.decode_file(corrupt_path.string()));
         EXPECT_TRUE(perf.run_id.scenario_id.name.empty());
 

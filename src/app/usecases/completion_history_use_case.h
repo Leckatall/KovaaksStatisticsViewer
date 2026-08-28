@@ -27,7 +27,7 @@ namespace ksv::application {
         }
 
         CompletionHistory get_history() override {
-            const auto scenario = m_session_controller->getCurrentPerf().run_id.scenario_id;
+            const auto scenario = m_session_controller->getCurrentRun().run_id.scenario_id;
             if (scenario.hash.empty()) return {};
 
             CompletionHistory history;
@@ -39,11 +39,11 @@ namespace ksv::application {
                 history.rows.push_back({
                     .run_index = static_cast<int>(i + 1),
                     .start_time_ms = row.run_id.start_time,
-                    .score = row.score,
-                    .accuracy = row.accuracy(),
-                    .shots = static_cast<double>(row.shots),
-                    .hits = static_cast<double>(row.hits),
-                    .misses = static_cast<double>(row.misses),
+                    .score = row.totals.score,
+                    .accuracy = row.totals.accuracy(),
+                    .shots = static_cast<double>(row.totals.shots),
+                    .hits = static_cast<double>(row.totals.hits),
+                    .misses = static_cast<double>(row.totals.misses),
                 });
             }
             return history;
@@ -55,7 +55,7 @@ namespace ksv::application {
             m_last_scenario_hash = currentScenarioHash();
 
             m_current_perf_connection = QObject::connect(
-                m_session_controller.get(), &ISessionController::currentPerfChanged,
+                m_session_controller.get(), &ISessionController::currentRunChanged,
                 m_session_controller.get(), [this, callback] {
                     const std::string scenario_hash = currentScenarioHash();
                     if (scenario_hash == m_last_scenario_hash) return;
@@ -72,7 +72,7 @@ namespace ksv::application {
 
     private:
         [[nodiscard]] std::string currentScenarioHash() const {
-            return m_session_controller->getCurrentPerf().run_id.scenario_id.hash;
+            return m_session_controller->getCurrentRun().run_id.scenario_id.hash;
         }
 
         std::shared_ptr<ISessionController> m_session_controller;

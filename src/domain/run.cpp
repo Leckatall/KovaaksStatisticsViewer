@@ -1,13 +1,11 @@
-//
-// Created by Lecka on 29/07/2026.
-//
+#include "run.h"
 
-#include "scenario_perf.h"
+#include <stdexcept>
+#include <type_traits>
 
 namespace ksv::domain {
-
     template<typename T>
-    void ScenarioPerf::add_data(const float time, const DataPointType type, T value) {
+    void Performance::add_data(const float time, const DataPointType type, T value) {
         switch (type) {
             case SHOTS:
             case HITS:
@@ -26,7 +24,7 @@ namespace ksv::domain {
                 throw std::invalid_argument("Unknown DataPointType");
         }
 
-        ScenarioDataPoint& point = get_data_point(time);
+        ScenarioDataPoint &point = get_data_point(time);
         switch (type) {
             case SHOTS: point.shots += static_cast<int>(value); break;
             case HITS: point.hits += static_cast<int>(value); break;
@@ -38,19 +36,17 @@ namespace ksv::domain {
         }
     }
 
-    ScenarioDataPoint& ScenarioPerf::get_data_point(const float time) {
-        for (auto &point: data) {
+    ScenarioDataPoint &Performance::get_data_point(const float time) {
+        for (auto &point: samples) {
             if (point.time == time) {
                 return point;
             }
         }
-        const auto point = ScenarioDataPoint(time);
-        data.push_back(point);
-        return data.back();
+        samples.emplace_back(time);
+        return samples.back();
     }
 
-    template void ScenarioPerf::add_data<int>(float time, DataPointType type, int value);
-    template void ScenarioPerf::add_data<unsigned int>(float time, DataPointType type, unsigned int value);
-    template void ScenarioPerf::add_data<float>(float time, DataPointType type, float value);
+    template void Performance::add_data<int>(float time, DataPointType type, int value);
+    template void Performance::add_data<unsigned int>(float time, DataPointType type, unsigned int value);
+    template void Performance::add_data<float>(float time, DataPointType type, float value);
 }
-

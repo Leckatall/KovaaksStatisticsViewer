@@ -11,6 +11,7 @@
 
 #include "user_profile.h"
 #include "data/interfaces/i_file_service.h"
+#include "data/interfaces/i_run_ingestor.h"
 
 // UserProfile crosses a thread boundary as a queued signal argument, so Qt needs a
 // metatype for it. It is declared here rather than beside the type because domain
@@ -22,7 +23,8 @@ namespace ksv::application {
         Q_OBJECT
 
     public:
-        explicit ProfileBuildWorker(std::shared_ptr<IFileService> file_service, QObject *parent = nullptr);
+        ProfileBuildWorker(std::shared_ptr<IFileService> file_service,
+                           std::shared_ptr<data::IRunIngestor> ingestor, QObject *parent = nullptr);
 
     public slots:
         void build();
@@ -33,6 +35,7 @@ namespace ksv::application {
 
     private:
         std::shared_ptr<IFileService> m_file_service;
+        std::shared_ptr<data::IRunIngestor> m_ingestor;
     };
 }
 

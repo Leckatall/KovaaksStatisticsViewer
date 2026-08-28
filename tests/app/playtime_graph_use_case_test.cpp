@@ -23,21 +23,21 @@ namespace {
         void beginProfileBuild() override {}
         void applyBuiltProfile(ksv::domain::UserProfile) override {}
         [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return {}; }
-        [[nodiscard]] ScenarioPerf getPerf(const std::string &) const override { return {}; }
-        [[nodiscard]] ScenarioPerf getLatestPerf() const override { return {}; }
-        [[nodiscard]] std::optional<ScenarioPerf> getMostRecentPerf(const ScenarioId &) const override {
+        [[nodiscard]] Run getPerf(const std::string &) const override { return {}; }
+        [[nodiscard]] Run getLatestRun() const override { return {}; }
+        [[nodiscard]] std::optional<Run> getMostRecentRun(const ScenarioId &) const override {
             return std::nullopt;
         }
-        [[nodiscard]] std::vector<ScenarioPerf> getMostRecentPerfs(const ScenarioId &, std::size_t) const override {
+        [[nodiscard]] std::vector<Run> getMostRecentRuns(const ScenarioId &, std::size_t) const override {
             return {};
         }
-        [[nodiscard]] std::vector<ScenarioPerf> getRunsForScenario(const ScenarioId &) const override { return {}; }
-        [[nodiscard]] std::vector<RunData>
+        [[nodiscard]] std::vector<Run> getRunsForScenario(const ScenarioId &) const override { return {}; }
+        [[nodiscard]] std::vector<RunSummary>
         getCompletionHistory(const ScenarioId &) const override { return {}; }
         [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &, std::size_t) const override {
             return std::nullopt;
         }
-        [[nodiscard]] std::optional<ScenarioPerf> getRun(const ScenarioRunId &) const override {
+        [[nodiscard]] std::optional<Run> getCurrentRun(const ScenarioRunId &) const override {
             return std::nullopt;
         }
         [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
@@ -49,7 +49,7 @@ namespace {
         [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override {
             return std::nullopt;
         }
-        [[nodiscard]] std::vector<ScenarioPerf> getRecentRuns(std::size_t) const override { return {}; }
+        [[nodiscard]] std::vector<Run> getRecentRuns(std::size_t) const override { return {}; }
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
         getRollingTimeAverage(const int window_days) const override {
             const_cast<FakePlaytimeProfileService *>(this)->last_window_days = window_days;

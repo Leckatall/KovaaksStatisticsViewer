@@ -1,0 +1,81 @@
+edition = "2023";
+
+package profile;
+
+message File {
+  Header header = 1;
+  Store store = 2;
+}
+
+message Header {
+  uint32 version = 1;
+  int64 created_at = 2;
+  string name = 3;
+}
+
+message Store {
+  repeated Run runs = 1;
+  repeated SourceDirectory sources = 2;
+}
+
+message SourceDirectory {
+  uint32 id = 1;
+  uint32 parent_id = 2;
+  string path = 3;
+}
+
+message SourceFileRef {
+  uint32 directory_id = 1;
+  string filename = 2;
+}
+
+message RunTotals {
+  float score = 1;
+  int32 shots = 2;
+  int32 hits = 3;
+  int32 misses = 4;
+  int32 kills = 5;
+}
+
+message Performance {
+  repeated ScenarioDataPoint samples = 1;
+}
+
+message Stats {
+  string sens_scale = 1;
+  float horiz_sens = 2;
+  float vert_sens = 3;
+  int32 dpi = 4;
+  float fov = 5;
+  string fov_scale = 6;
+  string resolution = 7;
+  float resolution_scale = 8;
+  float avg_fps = 9;
+}
+
+message Run {
+  ScenarioId scenario_id = 1;
+  int64 start_time = 2;
+  float scenario_length = 3;
+  Performance performance = 4;
+  RunTotals totals = 5;
+  SourceFileRef perf_source = 6;
+  SourceFileRef csv_source = 7;
+  Stats stats = 8;
+}
+
+message ScenarioId {
+  string name = 1;
+  string hash = 2;
+}
+
+message ScenarioDataPoint {
+  float time = 1;
+  int32 shots = 2;
+  int32 hits = 3;
+  int32 misses = 4;
+  float dmg = 5;
+  float dmg_possible = 6;
+  float score = 7;
+  int32 kills = 8;
+}

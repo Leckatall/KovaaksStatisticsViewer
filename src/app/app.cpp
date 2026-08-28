@@ -14,8 +14,11 @@
 #include "settings_service.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "formats/protobuf/profile_serializer.h"
+#include "formats/protobuf/migration/profile_v3_migrator.h"
+#include "formats/csv/stats_csv_parser.h"
 #include "qt_data/file_service.h"
 #include "../data/profile_service.h"
+#include "../data/run_ingestor.h"
 #include "usecases/graph_use_case.h"
 #include "usecases/average_line_use_case.h"
 #include "series_config_store.h"
@@ -29,33 +32,40 @@ namespace ksv::application {
     App::App(QObject *parent)
         : App(std::make_shared<qt_data::SettingsService>(),
               std::make_shared<data::ProtoDecoder>(),
-              parent) {}
+              nullptr, parent) {}
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
              std::shared_ptr<IProtoDecoder> decoder,
+             std::shared_ptr<data::IStatsCsvParser> statsParser,
              QObject *parent)
         : App(settingsService, decoder,
-              std::make_shared<qt_data::SeriesConfigStore>(settingsService), parent) {}
+              std::make_shared<qt_data::SeriesConfigStore>(settingsService), std::move(statsParser), parent) {}
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
              std::shared_ptr<IProtoDecoder> decoder,
              std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
+             std::shared_ptr<data::IStatsCsvParser> statsParser,
              QObject *parent) : QObject(parent) {
         qDebug() << "App Started. This message should not appear in release builds";
         m_protoDecoder = std::move(decoder);
 
         m_settingsService = std::move(settingsService);
         m_seriesConfigStore = std::move(seriesConfigStore);
+        m_statsParser = statsParser ? std::move(statsParser) : std::make_shared<data::StatsCsvParser>();
         m_seriesManagementUseCase = std::make_shared<SeriesManagementUseCase>(m_seriesConfigStore);
-        m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder);
+        m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder, m_statsParser);
+        m_runIngestor = std::make_shared<data::RunIngestor>(m_fileService);
 
         m_profileService = std::make_shared<data::ProfileService>(
-            m_fileService, std::make_shared<data::ProfileSerializer>(), m_settingsService);
+            m_fileService,
+            std::make_shared<data::ProfileSerializer>(std::make_shared<data::ProfileV3Migrator>(m_runIngestor)),
+            m_settingsService, m_runIngestor);
 
         // SessionController installs the build requester, so it has to exist before the
         // first loadProfile() — otherwise a missing stored profile builds synchronously and blocks
         // startup for as long as a full directory scan takes.
-        m_sessionController = std::make_shared<SessionController>(m_settingsService, m_profileService, m_fileService);
+        m_sessionController = std::make_shared<SessionController>(
+            m_settingsService, m_profileService, m_fileService, m_runIngestor);
         m_profileService->loadProfile();
 
         auto averageUseCase = std::make_shared<AverageLineUseCase>(m_profileService);
@@ -64,7 +74,7 @@ namespace ksv::application {
         // Re-pull the series when currentPerf changes for any reason (file load, run selection, latest-on-startup)
         m_graphUseCase->onCurrentPerfChanged([this] { m_graphVm->fetchData(); });
         // SessionController already loaded the latest perf in its own constructor, before the
-        // connection above existed, so that first currentPerfChanged was never observed here.
+        // connection above existed, so that first currentRunChanged was never observed here.
         m_graphVm->fetchData();
 
         m_playtimeUseCase = std::make_shared<PlaytimeGraphUseCase>(m_profileService);

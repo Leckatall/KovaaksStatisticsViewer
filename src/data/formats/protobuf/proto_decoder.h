@@ -8,15 +8,15 @@
 #include "formats/protobuf/schema/perf.pb.h"
 #include <fstream>
 
-#include <scenario_perf.h>
+#include <run.h>
 
 #include "interfaces/i_proto_decoder.h"
 
 namespace ksv::data {
     class ProtoDecoder: public application::IProtoDecoder {
     public:
-        domain::ScenarioPerf decode(const perf::PerfLog& perfLog) override;
-        domain::ScenarioPerf decode_file(std::string_view filename) override;
+        domain::Run decode(const perf::PerfLog& perfLog) override;
+        domain::Run decode_file(std::string_view filename) override;
     };
 }
 

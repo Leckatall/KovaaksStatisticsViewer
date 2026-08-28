@@ -17,6 +17,7 @@
 
 #include "file_service.h"
 #include "formats/protobuf/proto_decoder.h"
+#include "data/interfaces/i_stats_csv_parser.h"
 #include "fake_settings_service.h"
 
 using namespace ksv::qt_data;
@@ -24,6 +25,18 @@ using namespace ksv::application;
 using namespace ksv::tests_support;
 
 namespace {
+    class RecordingStatsParser final : public ksv::data::IStatsCsvParser {
+    public:
+        mutable std::filesystem::path last_path;
+        std::optional<ksv::data::ParsedStatsCsv> to_return;
+
+        [[nodiscard]] std::optional<ksv::data::ParsedStatsCsv> parseFile(
+            const std::filesystem::path &path) const override {
+            last_path = path;
+            return to_return;
+        }
+    };
+
     class FileServiceTest : public testing::Test {
     protected:
         QTemporaryDir temp_dir;
@@ -43,8 +56,22 @@ namespace {
             return QDir(temp_dir.path()).absoluteFilePath("FPSAimTrainer/performances");
         }
 
+        [[nodiscard]] QString stats_dir() const {
+            return QDir(temp_dir.path()).absoluteFilePath("FPSAimTrainer/stats");
+        }
+
         void makePerformancesDir() const {
             ASSERT_TRUE(QDir().mkpath(performances_dir()));
+        }
+
+        void makeStatsDir() const {
+            ASSERT_TRUE(QDir().mkpath(stats_dir()));
+        }
+
+        void writeStatsFile(const QString &name) const {
+            QFile file(QDir(stats_dir()).absoluteFilePath(name));
+            ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+            file.write("placeholder");
         }
 
         [[nodiscard]] QString copyFixtureInto(const QString &fixture_name) const {
@@ -180,5 +207,56 @@ namespace {
         std::set<std::string> roots;
         for (const auto &file : notified_files) roots.insert(file.root);
         EXPECT_EQ(roots, (std::set<std::string>{temp_dir.path().toStdString(), second_root.path().toStdString()}));
+    }
+
+    TEST_F(FileServiceTest, ListStatsFilesEnumeratesOnlyCsvInStatsDir) {
+        makeStatsDir();
+        writeStatsFile("A Stats.csv");
+        writeStatsFile("B Stats.csv");
+        writeStatsFile("notes.txt");
+
+        const FileService file_service(settings_service, decoder);
+        const auto stats = file_service.listStatsFiles();
+
+        ASSERT_EQ(stats.size(), 2);
+        std::set<std::string> names;
+        for (const auto &entry : stats) {
+            EXPECT_EQ(entry.subdir, "FPSAimTrainer/stats");
+            EXPECT_EQ(entry.root, temp_dir.path().toStdString());
+            EXPECT_TRUE(QFile::exists(QString::fromStdString(entry.absolutePath())));
+            names.insert(entry.filename);
+        }
+        EXPECT_EQ(names, (std::set<std::string>{"A Stats.csv", "B Stats.csv"}));
+    }
+
+    TEST_F(FileServiceTest, GetStatsFromFileDelegatesToTheInjectedParser) {
+        auto parser = std::make_shared<RecordingStatsParser>();
+        parser->to_return = ksv::data::ParsedStatsCsv{.scenario_id = {.name = "S", .hash = "abc"}};
+        const FileService file_service(settings_service, decoder, parser);
+
+        const auto result = file_service.getStatsFromFile("some/dir/S Stats.csv");
+
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->scenario_id.hash, "abc");
+        EXPECT_EQ(parser->last_path, std::filesystem::path("some/dir/S Stats.csv"));
+    }
+
+    TEST_F(FileServiceTest, WatcherIgnoresFilesAddedToStatsDir) {
+        makePerformancesDir();
+        makeStatsDir();
+        FileService file_service(settings_service, decoder);
+
+        std::vector<PerfFile> notified_files;
+        file_service.onFilesChanged([&](const PerfFile &file) { notified_files.push_back(file); });
+
+        writeStatsFile("New Run Stats.csv");
+        std::ignore = QTest::qWaitFor([&] { return !notified_files.empty(); }, 750);
+        EXPECT_TRUE(notified_files.empty());
+
+        // The watcher is alive: a real .perf arrival still fires.
+        std::ignore = copyFixtureInto("1wall6targets TE.perf");
+        std::ignore = QTest::qWaitFor([&] { return !notified_files.empty(); }, 5000);
+        ASSERT_EQ(notified_files.size(), 1);
+        EXPECT_EQ(notified_files[0].filename, "1wall6targets TE.perf");
     }
 }

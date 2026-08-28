@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "app/contracts/series_config.h"
-#include "domain/scenario_perf.h"
+#include "domain/run.h"
 
 namespace ksv::application {
     struct BucketedRun {
@@ -17,5 +17,5 @@ namespace ksv::application {
         [[nodiscard]] const std::vector<double> &valuesFor(PrimitiveMetric metric) const;
     };
 
-    [[nodiscard]] BucketedRun bucketRun(const domain::ScenarioPerf &perf);
+    [[nodiscard]] BucketedRun bucketRun(const domain::Run &perf);
 }

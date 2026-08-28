@@ -18,19 +18,35 @@ namespace {
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }
 
-    ksv::domain::ScenarioPerf make_perf(const std::string &name, const std::string &hash,
+    ksv::domain::Run make_perf(const std::string &name, const std::string &hash,
                                         const long long start_time, const float scenario_length,
                                         const ksv::domain::SourceFileRef source = {}) {
-        ksv::domain::ScenarioPerf perf;
+        ksv::domain::Run perf;
         perf.run_id.scenario_id.name = name;
         perf.run_id.scenario_id.hash = hash;
         perf.run_id.start_time = start_time;
         perf.scenario_length = scenario_length;
-        perf.source = source;
-        perf.add_data(0.0F, ksv::domain::SHOTS, 5);
-        perf.add_data(0.0F, ksv::domain::HITS, 4);
-        perf.add_data(1.5F, ksv::domain::SCORE, 42.0F);
+        perf.sources.perf = source;
+        perf.performance.emplace();
+        perf.performance->add_data(0.0F, ksv::domain::SHOTS, 5);
+        perf.performance->add_data(0.0F, ksv::domain::HITS, 4);
+        perf.performance->add_data(1.5F, ksv::domain::SCORE, 42.0F);
+        perf.stored_totals = {.score = 42.0F, .shots = 5, .hits = 4};
         return perf;
+    }
+
+    ksv::domain::Stats make_stats() {
+        return {
+            .sens_scale = "Valorant",
+            .horiz_sens = 0.31F,
+            .vert_sens = 0.31F,
+            .dpi = 1600,
+            .fov = 103.0F,
+            .fov_scale = "Overwatch",
+            .resolution = "1920x1080",
+            .resolution_scale = 100.0F,
+            .avg_fps = 240.5F,
+        };
     }
 
     class ProfileSerializerTest : public testing::Test {
@@ -77,9 +93,9 @@ namespace {
             {{7}, {}, "C:/Kovaaks"},
             {{12}, {7}, "FPSAimTrainer/performances"}
         }}};
-        profile.addScenarioPerf(make_perf("Scenario A", "hash-a", 100, 60.0F, {{12}, "run1.perf"}));
-        profile.addScenarioPerf(make_perf("Scenario A", "hash-a", 200, 60.0F, {{12}, "run2.perf"}));
-        profile.addScenarioPerf(make_perf("Scenario B", "hash-b", 300, 30.0F, {{12}, "run3.perf"}));
+        profile.addRun(make_perf("Scenario A", "hash-a", 100, 60.0F, {{12}, "run1.perf"}));
+        profile.addRun(make_perf("Scenario A", "hash-a", 200, 60.0F, {{12}, "run2.perf"}));
+        profile.addRun(make_perf("Scenario B", "hash-b", 300, 30.0F, {{12}, "run3.perf"}));
 
         ASSERT_TRUE(serializer.save(profile, store_path));
         const auto loaded = serializer.load(store_path);
@@ -90,25 +106,108 @@ namespace {
         EXPECT_EQ(loaded_profile.getScenarioList().size(), 2);
 
         const auto scenario_a = ksv::domain::ScenarioId{.name = "Scenario A", .hash = "hash-a"};
-        const auto runs_a = loaded_profile.getMostRecentPerfs(scenario_a, 10);
+        const auto runs_a = loaded_profile.getMostRecentRuns(scenario_a, 10);
         ASSERT_EQ(runs_a.size(), 2);
         EXPECT_EQ(runs_a[0].run_id.start_time, 100LL);
         EXPECT_EQ(runs_a[1].run_id.start_time, 200LL);
         EXPECT_FLOAT_EQ(runs_a[1].scenario_length, 60.0F);
-        EXPECT_EQ(runs_a[1].source, (ksv::domain::SourceFileRef{{12}, "run2.perf"}));
-        EXPECT_EQ(loaded_profile.sources().resolve(runs_a[1].source),
+        ASSERT_TRUE(runs_a[1].sources.perf.has_value());
+        EXPECT_EQ(*runs_a[1].sources.perf, (ksv::domain::SourceFileRef{{12}, "run2.perf"}));
+        EXPECT_EQ(loaded_profile.sources().resolve(*runs_a[1].sources.perf),
                   "C:/Kovaaks/FPSAimTrainer/performances/run2.perf");
 
-        ASSERT_EQ(runs_a[1].data.size(), 2);
-        EXPECT_EQ(runs_a[1].data[0].shots, 5);
-        EXPECT_EQ(runs_a[1].data[0].hits, 4);
-        EXPECT_FLOAT_EQ(runs_a[1].data[1].time, 1.5F);
-        EXPECT_FLOAT_EQ(runs_a[1].data[1].score, 42.0F);
+        ASSERT_TRUE(runs_a[1].performance.has_value());
+        ASSERT_EQ(runs_a[1].performance->samples.size(), 2);
+        EXPECT_EQ(runs_a[1].performance->samples[0].shots, 5);
+        EXPECT_EQ(runs_a[1].performance->samples[0].hits, 4);
+        EXPECT_FLOAT_EQ(runs_a[1].performance->samples[1].time, 1.5F);
+        EXPECT_FLOAT_EQ(runs_a[1].performance->samples[1].score, 42.0F);
+        EXPECT_FLOAT_EQ(runs_a[1].totals().score, 42.0F);
 
         const auto scenario_b = ksv::domain::ScenarioId{.name = "Scenario B", .hash = "hash-b"};
-        const auto perf_b = loaded_profile.getMostRecentPerf(scenario_b);
+        const auto perf_b = loaded_profile.getMostRecentRun(scenario_b);
         ASSERT_TRUE(perf_b.has_value());
         EXPECT_FLOAT_EQ(perf_b->scenario_length, 30.0F);
+    }
+
+    TEST_F(ProfileSerializerTest, RoundTripsAllThreeRunShapes) {
+        ksv::domain::UserProfile profile{ksv::domain::SourceRegistry{{
+            {{1}, {}, "C:/Kovaaks"},
+            {{2}, {1}, "FPSAimTrainer/performances"},
+            {{3}, {1}, "FPSAimTrainer/stats"}
+        }}};
+
+        ksv::domain::Run paired;
+        paired.run_id = {{"Paired", "hash-paired"}, 1000};
+        paired.scenario_length = 60.0F;
+        paired.stored_totals = {.score = 12.5F, .shots = 8, .hits = 6, .misses = 2, .kills = 5};
+        paired.sources.perf = {{2}, "paired.perf"};
+        paired.sources.csv = {{3}, "paired.csv"};
+        paired.performance.emplace();
+        paired.performance->add_data(0.5F, ksv::domain::SHOTS, 3);
+        paired.performance->add_data(0.5F, ksv::domain::SCORE, 7.0F);
+        paired.stats = make_stats();
+
+        ksv::domain::Run csv_only;
+        csv_only.run_id = {{"CsvOnly", "hash-csv"}, 2000};
+        csv_only.scenario_length = 59.8F;
+        csv_only.stored_totals = {.score = 99.0F, .shots = 10, .hits = 9, .misses = 1, .kills = 9};
+        csv_only.sources.csv = {{3}, "csvonly.csv"};
+        csv_only.stats = make_stats();
+
+        ksv::domain::Run perf_only;
+        perf_only.run_id = {{"PerfOnly", "hash-perf"}, 3000};
+        perf_only.scenario_length = 30.0F;
+        perf_only.stored_totals = {.score = 5.0F, .shots = 4, .hits = 3, .misses = 1, .kills = 0};
+        perf_only.sources.perf = {{2}, "perfonly.perf"};
+        perf_only.performance.emplace();
+        perf_only.performance->add_data(1.0F, ksv::domain::HITS, 3);
+
+        profile.addRun(paired);
+        profile.addRun(csv_only);
+        profile.addRun(perf_only);
+
+        ASSERT_TRUE(serializer.save(profile, store_path));
+        const auto loaded = serializer.load(store_path);
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(loaded));
+        const auto &out = std::get<ksv::domain::UserProfile>(loaded);
+
+        const auto loaded_paired = out.getMostRecentRun({"Paired", "hash-paired"});
+        ASSERT_TRUE(loaded_paired.has_value());
+        EXPECT_EQ(loaded_paired->run_id, paired.run_id);
+        EXPECT_FLOAT_EQ(loaded_paired->scenario_length, 60.0F);
+        EXPECT_EQ(loaded_paired->totals(), paired.stored_totals);
+        ASSERT_TRUE(loaded_paired->sources.perf.has_value());
+        ASSERT_TRUE(loaded_paired->sources.csv.has_value());
+        EXPECT_EQ(*loaded_paired->sources.perf, (ksv::domain::SourceFileRef{{2}, "paired.perf"}));
+        EXPECT_EQ(*loaded_paired->sources.csv, (ksv::domain::SourceFileRef{{3}, "paired.csv"}));
+        ASSERT_TRUE(loaded_paired->performance.has_value());
+        ASSERT_EQ(loaded_paired->performance->samples.size(), 1U);
+        EXPECT_FLOAT_EQ(loaded_paired->performance->samples[0].time, 0.5F);
+        EXPECT_EQ(loaded_paired->performance->samples[0].shots, 3);
+        EXPECT_FLOAT_EQ(loaded_paired->performance->samples[0].score, 7.0F);
+        ASSERT_TRUE(loaded_paired->stats.has_value());
+        EXPECT_EQ(*loaded_paired->stats, make_stats());
+
+        const auto loaded_csv = out.getMostRecentRun({"CsvOnly", "hash-csv"});
+        ASSERT_TRUE(loaded_csv.has_value());
+        EXPECT_EQ(loaded_csv->totals(), csv_only.stored_totals);
+        EXPECT_FALSE(loaded_csv->performance.has_value());
+        EXPECT_FALSE(loaded_csv->sources.perf.has_value());
+        ASSERT_TRUE(loaded_csv->sources.csv.has_value());
+        EXPECT_EQ(*loaded_csv->sources.csv, (ksv::domain::SourceFileRef{{3}, "csvonly.csv"}));
+        ASSERT_TRUE(loaded_csv->stats.has_value());
+        EXPECT_EQ(*loaded_csv->stats, make_stats());
+
+        const auto loaded_perf = out.getMostRecentRun({"PerfOnly", "hash-perf"});
+        ASSERT_TRUE(loaded_perf.has_value());
+        EXPECT_EQ(loaded_perf->totals(), perf_only.stored_totals);
+        EXPECT_FALSE(loaded_perf->stats.has_value());
+        EXPECT_FALSE(loaded_perf->sources.csv.has_value());
+        ASSERT_TRUE(loaded_perf->sources.perf.has_value());
+        ASSERT_TRUE(loaded_perf->performance.has_value());
+        ASSERT_EQ(loaded_perf->performance->samples.size(), 1U);
+        EXPECT_EQ(loaded_perf->performance->samples[0].hits, 3);
     }
 
     TEST_F(ProfileSerializerTest, RoundTripOfEmptyProfileHasNoScenarios) {
@@ -128,7 +227,7 @@ namespace {
         const auto header = serializer.readHeader(store_path);
 
         ASSERT_TRUE(header.has_value());
-        EXPECT_EQ(header->version, 3U);
+        EXPECT_EQ(header->version, 4U);
         EXPECT_GT(header->created_at, 0);
         EXPECT_EQ(header->name, "default");
     }
@@ -194,8 +293,8 @@ namespace {
     }
 
     TEST_F(ProfileSerializerTest, ReadHeaderDoesNotParseTheStoreBody) {
-        store::ProfileStoreFile file;
-        file.mutable_header()->set_version(3);
+        profile::File file;
+        file.mutable_header()->set_version(4);
         file.mutable_header()->set_created_at(1);
         file.mutable_header()->set_name("default");
         std::ofstream output(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
@@ -207,7 +306,7 @@ namespace {
         const auto header = serializer.readHeader(store_path);
 
         ASSERT_TRUE(header.has_value());
-        EXPECT_EQ(header->version, 3U);
+        EXPECT_EQ(header->version, 4U);
         EXPECT_EQ(header->created_at, 1);
         EXPECT_EQ(header->name, "default");
     }
@@ -229,7 +328,7 @@ namespace {
     }
 
     TEST_F(ProfileSerializerTest, LoadRejectsStoreWithMismatchedSchemaVersion) {
-        store::ProfileStoreFile file;
+        profile::File file;
         file.mutable_header()->set_version(1);
         auto *run = file.mutable_store()->add_runs();
         run->mutable_scenario_id()->set_name("Scenario A");
@@ -249,8 +348,77 @@ namespace {
         EXPECT_EQ(read_file(quarantined.front()), original_bytes);
     }
 
+    class StubMigrator final : public ksv::data::IProfileMigrator {
+    public:
+        std::uint32_t seen_from_version = 0;
+        bool succeed = true;
+
+        [[nodiscard]] std::optional<ksv::domain::UserProfile> migrate(
+            const std::filesystem::path &, const std::uint32_t from_version) const override {
+            const_cast<StubMigrator *>(this)->seen_from_version = from_version;
+            if (!succeed) return std::nullopt;
+            ksv::domain::UserProfile profile{ksv::domain::SourceRegistry{{{{1}, {}, "C:/Kovaaks"}}}};
+            ksv::domain::Run run;
+            run.run_id = {{"Migrated", "hash-m"}, 42};
+            run.scenario_length = 30.0F;
+            run.stored_totals = {.score = 7.0F, .shots = 2, .hits = 2};
+            run.sources.perf = {{1}, "m.perf"};
+            profile.addRun(run);
+            return profile;
+        }
+    };
+
+    TEST_F(ProfileSerializerTest, DelegatesLegacyVersionToMigratorThenRewritesAtomically) {
+        profile::File legacy;
+        legacy.mutable_header()->set_version(3);
+        legacy.mutable_header()->set_created_at(11);
+        legacy.mutable_header()->set_name("legacy");
+        std::ofstream out(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        legacy.SerializeToOstream(&out);
+        out.close();
+
+        auto stub = std::make_shared<StubMigrator>();
+        ksv::data::ProfileSerializer migrating{stub};
+
+        const auto loaded = migrating.load(store_path);
+
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(loaded));
+        EXPECT_EQ(stub->seen_from_version, 3U);
+        EXPECT_EQ(std::get<ksv::domain::UserProfile>(loaded).getScenarioList().size(), 1U);
+
+        // The v3 file on disk is replaced by a readable v4 store.
+        const auto header = migrating.readHeader(store_path);
+        ASSERT_TRUE(header.has_value());
+        EXPECT_EQ(header->version, 4U);
+        EXPECT_FALSE(std::filesystem::exists(temp_path()));
+        EXPECT_TRUE(quarantine_files("version-mismatch").empty());
+
+        const auto reloaded = migrating.load(store_path);
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(reloaded));
+        EXPECT_EQ(std::get<ksv::domain::UserProfile>(reloaded).getScenarioList().size(), 1U);
+    }
+
+    TEST_F(ProfileSerializerTest, QuarantinesWhenMigratorCannotApply) {
+        profile::File legacy;
+        legacy.mutable_header()->set_version(3);
+        std::ofstream out(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        legacy.SerializeToOstream(&out);
+        out.close();
+        const auto original_bytes = read_file(store_path);
+
+        auto stub = std::make_shared<StubMigrator>();
+        stub->succeed = false;
+        ksv::data::ProfileSerializer migrating{stub};
+
+        EXPECT_EQ(std::get<ksv::application::ProfileLoadError>(migrating.load(store_path)),
+                  ksv::application::ProfileLoadError::VersionMismatch);
+        const auto quarantined = quarantine_files("version-mismatch");
+        ASSERT_EQ(quarantined.size(), 1);
+        EXPECT_EQ(read_file(quarantined.front()), original_bytes);
+    }
+
     TEST_F(ProfileSerializerTest, LoadQuarantinesLegacyStoreAsUnparseable) {
-        store::Run legacy_run;
+        profile::Run legacy_run;
         auto *run = &legacy_run;
         run->mutable_scenario_id()->set_name("Scenario A");
         run->mutable_scenario_id()->set_hash("hash-a");

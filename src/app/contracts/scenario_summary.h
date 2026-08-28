@@ -7,7 +7,7 @@
 
 #include <chrono>
 
-#include "domain/scenario_perf.h"
+#include "domain/run.h"
 
 namespace ksv::application {
     struct ScenarioSummary {

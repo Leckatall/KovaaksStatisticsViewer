@@ -14,15 +14,13 @@ using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
-    ScenarioPerf makePerf(const std::string &hash, const long long start_time, const float score = 0.0F,
+    ksv::domain::Run makeRun(const std::string &hash, const long long start_time, const float score = 0.0F,
                           const int shots = 0, const int hits = 0, const float duration = 0.0F) {
-        ScenarioPerf perf;
+        ksv::domain::Run perf;
         perf.run_id.scenario_id = {.name = "Scenario " + hash, .hash = hash};
         perf.run_id.start_time = start_time;
         perf.scenario_length = duration;
-        perf.add_data(0.0F, SCORE, score);
-        if (shots != 0) perf.add_data(0.0F, SHOTS, shots);
-        if (hits != 0) perf.add_data(0.0F, HITS, hits);
+        perf.stored_totals = {.score = score, .shots = shots, .hits = hits, .misses = shots - hits};
         return perf;
     }
 
@@ -51,15 +49,15 @@ namespace {
         const ScenarioId scenario{.name = "1wall6", .hash = "hash-1"};
         profile->run_counts[scenario] = 2;
         profile->perfs_by_scenario[scenario] = {
-            makePerf("hash-1", 100, 50.0F, 10, 5), makePerf("hash-1", 200, 75.0F, 20, 15)
+            makeRun("hash-1", 100, 50.0F, 10, 5), makeRun("hash-1", 200, 75.0F, 20, 15)
         };
 
         const auto runs = use_case.getRunsForScenario(scenario);
 
         ASSERT_EQ(runs.size(), 2);
         EXPECT_EQ(runs[0].data.run_id.start_time, 200);
-        EXPECT_FLOAT_EQ(runs[0].data.score, 75.0F);
-        EXPECT_DOUBLE_EQ(runs[0].data.accuracy(), 0.75);
+        EXPECT_FLOAT_EQ(runs[0].data.totals.score, 75.0F);
+        EXPECT_DOUBLE_EQ(runs[0].data.totals.accuracy(), 0.75);
         EXPECT_EQ(runs[1].data.run_id.start_time, 100);
         EXPECT_TRUE(runs[0].personal_best);
         EXPECT_TRUE(runs[1].personal_best);
@@ -69,10 +67,10 @@ namespace {
         const ScenarioId scenario{.name = "1wall6", .hash = "hash-1"};
         profile->run_counts[scenario] = 4;
         profile->perfs_by_scenario[scenario] = {
-            makePerf("hash-1", 100, 50.0F),
-            makePerf("hash-1", 200, 75.0F),
-            makePerf("hash-1", 300, 75.0F),
-            makePerf("hash-1", 400, 60.0F),
+            makeRun("hash-1", 100, 50.0F),
+            makeRun("hash-1", 200, 75.0F),
+            makeRun("hash-1", 300, 75.0F),
+            makeRun("hash-1", 400, 60.0F),
         };
 
         const auto runs = use_case.getRunsForScenario(scenario);
@@ -89,29 +87,29 @@ namespace {
     }
 
     TEST_F(ScenarioBrowserUseCaseTest, MapsRecentRuns) {
-        profile->recent_runs = {makePerf("hash-1", 300, 75.0F, 20, 15, 45.0F)};
+        profile->recent_runs = {makeRun("hash-1", 300, 75.0F, 20, 15, 45.0F)};
 
         const auto runs = use_case.getRecentRuns(5);
 
         ASSERT_EQ(runs.size(), 1);
         EXPECT_EQ(runs[0].data.run_id.scenario_id.name, "Scenario hash-1");
         EXPECT_EQ(runs[0].data.run_id.start_time, 300);
-        EXPECT_FLOAT_EQ(runs[0].data.score, 75.0F);
+        EXPECT_FLOAT_EQ(runs[0].data.totals.score, 75.0F);
     }
 
     TEST_F(ScenarioBrowserUseCaseTest, MarksRecentRunsAgainstTheirOwnScenarioHistory) {
         const ScenarioId first{.name = "Scenario hash-1", .hash = "hash-1"};
         const ScenarioId second{.name = "Scenario hash-2", .hash = "hash-2"};
-        const auto first_early = makePerf("hash-1", 100, 100.0F).getRunData();
-        const auto first_recent = makePerf("hash-1", 300, 90.0F).getRunData();
-        const auto second_early = makePerf("hash-2", 150, 10.0F).getRunData();
-        const auto second_recent = makePerf("hash-2", 200, 20.0F).getRunData();
+        const auto first_early = makeRun("hash-1", 100, 100.0F);
+        const auto first_recent = makeRun("hash-1", 300, 90.0F);
+        const auto second_early = makeRun("hash-2", 150, 10.0F);
+        const auto second_recent = makeRun("hash-2", 200, 20.0F);
         profile->recent_runs = {
-            makePerf("hash-1", 300, 90.0F),
-            makePerf("hash-2", 200, 20.0F),
+            makeRun("hash-1", 300, 90.0F),
+            makeRun("hash-2", 200, 20.0F),
         };
-        profile->completion_history_by_scenario[first] = {first_early, first_recent};
-        profile->completion_history_by_scenario[second] = {second_early, second_recent};
+        profile->completion_history_by_scenario[first] = {{first_early.run_id, first_early.totals()}, {first_recent.run_id, first_recent.totals()}};
+        profile->completion_history_by_scenario[second] = {{second_early.run_id, second_early.totals()}, {second_recent.run_id, second_recent.totals()}};
 
         const auto runs = use_case.getRecentRuns(2);
 
@@ -123,7 +121,7 @@ namespace {
     }
 
     TEST_F(ScenarioBrowserUseCaseTest, DelegatesCurrentRunSelectionAndChangeNotifications) {
-        session->current_perf = makePerf("hash-1", 100);
+        session->current_run = makeRun("hash-1", 100);
         int changes = 0;
         use_case.onChanged([&changes] { ++changes; });
 
@@ -131,7 +129,7 @@ namespace {
         use_case.selectRun(run_id);
         session->notifyChanged();
 
-        EXPECT_EQ(use_case.getCurrentPerf().run_id.start_time, 100);
+        EXPECT_EQ(use_case.getCurrentRun().run_id.start_time, 100);
         ASSERT_TRUE(session->selected_run.has_value());
         EXPECT_EQ(*session->selected_run, run_id);
         EXPECT_EQ(changes, 2);

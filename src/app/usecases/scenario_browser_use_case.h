@@ -21,7 +21,7 @@ namespace ksv::application {
             : m_session_controller(std::move(session_controller)),
               m_profile_service(std::move(profile_service)) {
             m_connections.push_back(QObject::connect(
-                m_session_controller.get(), &ISessionController::currentPerfChanged,
+                m_session_controller.get(), &ISessionController::currentRunChanged,
                 [this] { notifyChanged(); }));
             m_connections.push_back(QObject::connect(
                 m_session_controller.get(), &ISessionController::profileChanged,
@@ -54,11 +54,11 @@ namespace ksv::application {
         [[nodiscard]] std::vector<RunPerformance> getRunsForScenario(
             const domain::ScenarioId &scenario) const override {
             const auto count = m_profile_service->getRunCount(scenario).value_or(0);
-            const auto perfs = m_profile_service->getMostRecentPerfs(scenario, count);
+            const auto perfs = m_profile_service->getMostRecentRuns(scenario, count);
 
-            std::vector<domain::RunData> history;
+            std::vector<domain::RunSummary> history;
             history.reserve(perfs.size());
-            for (const auto &perf: perfs) history.push_back(perf.getRunData());
+            for (const auto &run: perfs) history.push_back({run.run_id, run.totals()});
             auto runs = withPersonalBest(std::move(history));
             std::ranges::reverse(runs);
             return runs;
@@ -69,20 +69,20 @@ namespace ksv::application {
 
             std::vector<RunPerformance> summaries;
             summaries.reserve(perfs.size());
-            for (const auto &perf: perfs) {
-                const auto data = perf.getRunData();
+            for (const auto &run: perfs) {
+                const domain::RunSummary data{run.run_id, run.totals()};
                 const auto history = m_profile_service->getCompletionHistory(data.run_id.scenario_id);
                 summaries.push_back({data, isPersonalBest(history, data)});
             }
             return summaries;
         }
 
-        [[nodiscard]] domain::ScenarioPerf getCurrentPerf() const override {
-            return m_session_controller->getCurrentPerf();
+        [[nodiscard]] domain::Run getCurrentRun() const override {
+            return m_session_controller->getCurrentRun();
         }
 
         void selectRun(const domain::ScenarioRunId &run_id) override {
-            m_session_controller->setCurrentPerf(run_id);
+            m_session_controller->setCurrentRun(run_id);
         }
 
         void onChanged(std::function<void()> callback) override {
@@ -95,24 +95,24 @@ namespace ksv::application {
         }
 
         [[nodiscard]] static std::vector<RunPerformance> withPersonalBest(
-            const std::vector<domain::RunData> &ascending) {
+            const std::vector<domain::RunSummary> &ascending) {
             std::vector<RunPerformance> result;
             result.reserve(ascending.size());
             std::optional<float> highest_score;
             for (const auto &data: ascending) {
-                const bool personal_best = !highest_score || data.score > *highest_score;
-                if (personal_best) highest_score = data.score;
+                const bool personal_best = !highest_score || data.totals.score > *highest_score;
+                if (personal_best) highest_score = data.totals.score;
                 result.push_back({data, personal_best});
             }
             return result;
         }
 
-        [[nodiscard]] static bool isPersonalBest(const std::vector<domain::RunData> &ascending_history,
-                                                  const domain::RunData &target) {
+        [[nodiscard]] static bool isPersonalBest(const std::vector<domain::RunSummary> &ascending_history,
+                                                  const domain::RunSummary &target) {
             std::optional<float> highest_score;
             for (const auto &data: ascending_history) {
-                if (data.run_id == target.run_id) return !highest_score || target.score > *highest_score;
-                if (!highest_score || data.score > *highest_score) highest_score = data.score;
+                if (data.run_id == target.run_id) return !highest_score || target.totals.score > *highest_score;
+                if (!highest_score || data.totals.score > *highest_score) highest_score = data.totals.score;
             }
             return false;
         }

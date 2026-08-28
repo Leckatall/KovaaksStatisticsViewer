@@ -1,6 +1,6 @@
 edition = "2023";
 
-package store;
+package profile_v3;
 
 message ProfileStoreFile {
   StoreHeader header = 1;

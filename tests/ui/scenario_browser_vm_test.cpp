@@ -24,7 +24,7 @@ namespace {
         std::vector<RunPerformance> recent_runs;
         std::size_t last_recent_runs_count = 0;
         ScenarioId last_runs_for_scenario_query;
-        ScenarioPerf current_perf;
+        ksv::domain::Run current_run;
         std::vector<ScenarioRunId> set_current_perf_run_id_calls;
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return scenario_summaries; }
@@ -39,7 +39,7 @@ namespace {
             return recent_runs;
         }
 
-        [[nodiscard]] ScenarioPerf getCurrentPerf() const override { return current_perf; }
+        [[nodiscard]] ksv::domain::Run getCurrentRun() const override { return current_run; }
 
         void selectRun(const ScenarioRunId &run_id) override {
             set_current_perf_run_id_calls.push_back(run_id);
@@ -73,17 +73,17 @@ namespace {
                          const float score, const float accuracy) {
         RunPerformance run;
         run.data.run_id = ScenarioRunId{.scenario_id = ScenarioId{.name = scenario_name, .hash = hash}, .start_time = start_time};
-        run.data.score = score;
-        run.data.shots = 100;
-        run.data.hits = static_cast<int>(accuracy * run.data.shots + 0.5F);
+        run.data.totals.score = score;
+        run.data.totals.shots = 100;
+        run.data.totals.hits = static_cast<int>(accuracy * run.data.totals.shots + 0.5F);
         return run;
     }
 
     RunPerformance make_run_full(const std::string &scenario_name, const std::string &hash, const long long start_time,
                                  const float score, const int shots, const int hits) {
         RunPerformance run = make_run(scenario_name, hash, start_time, score, 0.0F);
-        run.data.shots = shots;
-        run.data.hits = hits;
+        run.data.totals.shots = shots;
+        run.data.totals.hits = hits;
         return run;
     }
 
@@ -274,14 +274,14 @@ namespace {
     }
 
     TEST_F(ScenarioBrowserViewModelTest, CurrentRunIdentityTracksCurrentPerf) {
-        fake_controller->current_perf.run_id = make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F).data.run_id;
+        fake_controller->current_run.run_id = make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F).data.run_id;
         ScenarioBrowserViewModel view_model(fake_controller);
         const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::currentRunChanged);
 
         EXPECT_EQ(view_model.currentRunHash(), QString("hash-2"));
         EXPECT_EQ(view_model.currentRunStartTimeMs(), 1000.0);
 
-        fake_controller->current_perf.run_id = make_run("Pasu", "hash-3", 2000, 8000.0F, 0.9F).data.run_id;
+        fake_controller->current_run.run_id = make_run("Pasu", "hash-3", 2000, 8000.0F, 0.9F).data.run_id;
         fake_controller->notifyChanged();
 
         EXPECT_EQ(view_model.currentRunHash(), QString("hash-3"));

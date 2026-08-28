@@ -21,6 +21,7 @@
 #include "formats/protobuf/profile_serializer.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "profile_service.h"
+#include "run_ingestor.h"
 
 #include "integration_env.h"
 
@@ -50,6 +51,7 @@ namespace {
         integration::TestEnv env;
         std::shared_ptr<data::ProtoDecoder> decoder = std::make_shared<data::ProtoDecoder>();
         std::shared_ptr<qt_data::FileService> fileService;
+        std::shared_ptr<data::RunIngestor> ingestor;
         std::shared_ptr<data::ProfileSerializer> serializer = std::make_shared<data::ProfileSerializer>();
         std::shared_ptr<data::ProfileService> profileService;
 
@@ -60,7 +62,8 @@ namespace {
             ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
 
             fileService = std::make_shared<qt_data::FileService>(env.settings, decoder);
-            profileService = std::make_shared<data::ProfileService>(fileService, serializer, env.settings);
+            ingestor = std::make_shared<data::RunIngestor>(fileService);
+            profileService = std::make_shared<data::ProfileService>(fileService, serializer, env.settings, ingestor);
         }
     };
 
@@ -87,7 +90,8 @@ namespace {
         ASSERT_TRUE(QDir(env.performancesDir()).removeRecursively());
 
         const auto reloadFileService = std::make_shared<qt_data::FileService>(env.settings, decoder);
-        data::ProfileService reloaded(reloadFileService, std::make_shared<data::ProfileSerializer>(), env.settings);
+        data::ProfileService reloaded(reloadFileService, std::make_shared<data::ProfileSerializer>(), env.settings,
+                                      std::make_shared<data::RunIngestor>(reloadFileService));
         reloaded.loadProfile();
 
         EXPECT_EQ(reloaded.getScenarioList().size(), originalCount);
@@ -95,7 +99,7 @@ namespace {
 
     TEST_F(ProfileCascadeTest, MismatchedStoreVersionRebuildsFromDirectory) {
         // Plant a store stamped with an incompatible version at the configured path.
-        store::ProfileStoreFile stale;
+        profile::File stale;
         stale.mutable_header()->set_version(1);
         auto *run = stale.mutable_store()->add_runs();
         run->mutable_scenario_id()->set_name("Should Not Appear");
@@ -142,7 +146,7 @@ namespace {
         ASSERT_EQ(profile.getAllRunRecords().size(), 2);
         std::set<std::string> resolved_roots;
         for (const auto &run : profile.getAllRunRecords()) {
-            const auto resolved = profile.sources().resolve(run.source);
+            const auto resolved = run.sources.perf ? profile.sources().resolve(*run.sources.perf) : std::nullopt;
             ASSERT_TRUE(resolved.has_value());
             resolved_roots.insert(std::filesystem::path(*resolved).parent_path().parent_path().parent_path()
                                       .generic_string());
@@ -150,5 +154,62 @@ namespace {
         EXPECT_EQ(resolved_roots,
                   (std::set<std::string>{QDir::fromNativeSeparators(env.dir.path()).toStdString(),
                                          QDir::fromNativeSeparators(second_root.path()).toStdString()}));
+    }
+
+    TEST_F(ProfileCascadeTest, PairedPerfAndCsvFixtureProduceOneRunWithCanonicalCsvTotals) {
+        ASSERT_TRUE(env.makeStatsDir());
+        ASSERT_FALSE(env.copyFixtureIntoStats("1wall6targets TE.csv").isEmpty());
+
+        data::ProtoDecoder decoder_for_check;
+        const auto perf_fallback = decoder_for_check.decode_file(
+            QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf").toStdString());
+
+        profileService->generateProfileFromDirectory();
+        const auto stored = serializer->load(env.profileStorePath().toStdString());
+        ASSERT_TRUE(std::holds_alternative<domain::UserProfile>(stored));
+        const auto &profile = std::get<domain::UserProfile>(stored);
+
+        const domain::ScenarioId scenario{.name = "1wall6targets TE", .hash = "3e50391f3c3f484c10a4b8fb362ded17"};
+        const auto runs = profile.getRunsForScenario(scenario);
+        ASSERT_EQ(runs.size(), 1U) << "a paired perf+CSV must fold into one run, not two";
+        const auto &run = runs.front();
+
+        EXPECT_EQ(run.totals().shots, 180);
+        EXPECT_EQ(run.totals().hits, 166);
+        EXPECT_EQ(run.totals().misses, 14);
+        EXPECT_EQ(run.totals().kills, 166);
+        EXPECT_NEAR(run.totals().score, perf_fallback.totals().score, 1e-4F);
+        ASSERT_TRUE(run.performance.has_value());
+        EXPECT_FALSE(run.performance->samples.empty());
+        ASSERT_TRUE(run.stats.has_value());
+        EXPECT_EQ(run.stats->sens_scale, "Valorant");
+        EXPECT_TRUE(run.sources.perf.has_value());
+        EXPECT_TRUE(run.sources.csv.has_value());
+    }
+
+    TEST_F(ProfileCascadeTest, CsvOnlyTimestampedFixtureAppearsInReloadedScenarioHistory) {
+        ASSERT_TRUE(QFile::remove(QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf")));
+        ASSERT_TRUE(QFile::remove(QDir(env.performancesDir()).absoluteFilePath("VT FlyTS Novice S5.perf")));
+        ASSERT_TRUE(env.makeStatsDir());
+        ASSERT_FALSE(env.copyFixtureIntoStats(
+            "1wall6targets TE.csv",
+            "1wall6targets TE - Challenge - 2026.08.27-02.26.40 Stats.csv").isEmpty());
+
+        profileService->generateProfileFromDirectory();
+        const auto stored = serializer->load(env.profileStorePath().toStdString());
+        ASSERT_TRUE(std::holds_alternative<domain::UserProfile>(stored));
+        const auto &profile = std::get<domain::UserProfile>(stored);
+
+        const domain::ScenarioId scenario{.name = "1wall6targets TE", .hash = "3e50391f3c3f484c10a4b8fb362ded17"};
+        const auto runs = profile.getRunsForScenario(scenario);
+        ASSERT_EQ(runs.size(), 1U);
+        const auto &run = runs.front();
+
+        EXPECT_FALSE(run.performance.has_value());
+        EXPECT_FALSE(run.sources.perf.has_value());
+        ASSERT_TRUE(run.sources.csv.has_value());
+        ASSERT_TRUE(run.stats.has_value());
+        EXPECT_EQ(run.totals().shots, 180);
+        EXPECT_NEAR(run.scenario_length, 59.852F, 0.05F);
     }
 }

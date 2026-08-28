@@ -14,14 +14,16 @@
 #include "interfaces/i_file_service.h"
 #include "interfaces/i_profile_service.h"
 #include "interfaces/i_profile_serializer.h"
+#include "interfaces/i_run_ingestor.h"
 #include "interfaces/i_settings_service.h"
 
 namespace ksv::data {
     class ProfileService : public application::IProfileService {
     public:
-        explicit ProfileService(std::shared_ptr<application::IFileService> file_service,
-                                std::shared_ptr<application::IProfileSerializer> serializer,
-                                std::shared_ptr<application::ISettingsService> settings_service);
+        ProfileService(std::shared_ptr<application::IFileService> file_service,
+                       std::shared_ptr<application::IProfileSerializer> serializer,
+                       std::shared_ptr<application::ISettingsService> settings_service,
+                       std::shared_ptr<IRunIngestor> ingestor);
 
         void generateProfileFromDirectory() override;
 
@@ -41,26 +43,26 @@ namespace ksv::data {
 
         [[nodiscard]] std::vector<domain::ScenarioId> getScenarioList() const override;
 
-        [[nodiscard]] domain::ScenarioPerf getPerf(const std::string &path) const override;
+        [[nodiscard]] domain::Run getPerf(const std::string &path) const override;
 
-        [[nodiscard]] domain::ScenarioPerf getLatestPerf() const override;
+        [[nodiscard]] domain::Run getLatestRun() const override;
 
-        [[nodiscard]] std::optional<domain::ScenarioPerf> getMostRecentPerf(
+        [[nodiscard]] std::optional<domain::Run> getMostRecentRun(
             const domain::ScenarioId &scenario) const override;
 
-        [[nodiscard]] std::vector<domain::ScenarioPerf> getMostRecentPerfs(
+        [[nodiscard]] std::vector<domain::Run> getMostRecentRuns(
             const domain::ScenarioId &scenario, std::size_t count) const override;
 
-        [[nodiscard]] std::vector<domain::ScenarioPerf> getRunsForScenario(
+        [[nodiscard]] std::vector<domain::Run> getRunsForScenario(
             const domain::ScenarioId &scenario) const override;
 
-        [[nodiscard]] std::vector<domain::RunData>
+        [[nodiscard]] std::vector<domain::RunSummary>
         getCompletionHistory(const domain::ScenarioId &scenario) const override;
 
         [[nodiscard]] std::optional<float> getAverageScore(
             const domain::ScenarioId &scenario, std::size_t count) const override;
 
-        [[nodiscard]] std::optional<domain::ScenarioPerf> getRun(
+        [[nodiscard]] std::optional<domain::Run> getCurrentRun(
             const domain::ScenarioRunId &run_id) const override;
 
         [[nodiscard]] std::optional<std::size_t> getRunCount(
@@ -72,7 +74,7 @@ namespace ksv::data {
         [[nodiscard]] std::optional<double> getTotalTime(
             const domain::ScenarioId &scenario) const override;
 
-        [[nodiscard]] std::vector<domain::ScenarioPerf> getRecentRuns(std::size_t count) const override;
+        [[nodiscard]] std::vector<domain::Run> getRecentRuns(std::size_t count) const override;
 
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
         getRollingTimeAverage(int window_days) const override;
@@ -102,6 +104,7 @@ namespace ksv::data {
         std::shared_ptr<application::IFileService> m_file_service;
         std::shared_ptr<application::IProfileSerializer> m_serializer;
         std::shared_ptr<application::ISettingsService> m_settings_service;
+        std::shared_ptr<IRunIngestor> m_ingestor;
 
         std::vector<std::function<void()> > m_callbacks;
     };

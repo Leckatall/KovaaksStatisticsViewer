@@ -9,14 +9,13 @@
 #include "fake_session_controller.h"
 
 using namespace ksv::application;
-using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
     class FakeAverageLineUseCase final : public IAverageLineUseCase {
     public:
         [[nodiscard]] std::optional<std::vector<double> > evaluate(
-            const ScenarioPerf &, const Expression &) const override { ++evaluateCallCount; return result; }
+            const ksv::domain::Run &, const Expression &) const override { ++evaluateCallCount; return result; }
 
         std::optional<std::vector<double> > result;
         mutable int evaluateCallCount = 0;
@@ -52,12 +51,13 @@ namespace {
         EXPECT_EQ(fake_session_controller->set_current_perf_filename_calls[0], "some/file.perf");
     }
 
-    ScenarioPerf perfWithSeconds(const std::string &hash) {
-        ScenarioPerf perf;
-        perf.run_id = {{.name = "S", .hash = hash}, 1000};
-        perf.data.emplace_back(1.0F);
-        perf.data.emplace_back(2.0F);
-        return perf;
+    ksv::domain::Run runWithSeconds(const std::string &hash) {
+        ksv::domain::Run run;
+        run.run_id = {{.name = "S", .hash = hash}, 1000};
+        run.performance.emplace();
+        run.performance->samples.emplace_back(1.0F);
+        run.performance->samples.emplace_back(2.0F);
+        return run;
     }
 
     TEST_F(GraphUseCaseTest, GetSeriesConfigsReturnsEnabledOnly) {
@@ -73,7 +73,7 @@ namespace {
     }
 
     TEST_F(GraphUseCaseTest, GetSeriesValuesFoldsBucketTimesIntoPoints) {
-        fake_session_controller->current_perf = perfWithSeconds("a");
+        fake_session_controller->current_run = runWithSeconds("a");
         fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
         fake_average->result = std::vector<double>{7.0, 9.0};
 
@@ -88,7 +88,7 @@ namespace {
     }
 
     TEST_F(GraphUseCaseTest, GetSeriesValuesReturnsNulloptWhenEvaluationFails) {
-        fake_session_controller->current_perf = perfWithSeconds("a");
+        fake_session_controller->current_run = runWithSeconds("a");
         fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
         fake_average->result = std::nullopt;
 
@@ -96,7 +96,7 @@ namespace {
     }
 
     TEST_F(GraphUseCaseTest, GetSeriesValuesReturnsNulloptForUnknownId) {
-        fake_session_controller->current_perf = perfWithSeconds("a");
+        fake_session_controller->current_run = runWithSeconds("a");
         fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
         fake_average->result = std::vector<double>{7.0, 9.0};
 
@@ -117,22 +117,34 @@ namespace {
     }
 
     TEST_F(GraphUseCaseTest, GetRunDurationReturnsRunMaxTime) {
-        fake_session_controller->current_perf = perfWithSeconds("a");
+        fake_session_controller->current_run = runWithSeconds("a");
 
         EXPECT_DOUBLE_EQ(use_case.getRunDuration(), 2.0);
     }
 
     TEST_F(GraphUseCaseTest, GetRunDurationRefreshesAfterRunChange) {
-        fake_session_controller->current_perf = perfWithSeconds("a");
+        fake_session_controller->current_run = runWithSeconds("a");
         EXPECT_DOUBLE_EQ(use_case.getRunDuration(), 2.0);
 
-        ScenarioPerf longer;
+        ksv::domain::Run longer;
         longer.run_id = {{.name = "S", .hash = "b"}, 2000};
-        longer.data.emplace_back(1.0F);
-        longer.data.emplace_back(2.0F);
-        longer.data.emplace_back(3.0F);
-        fake_session_controller->current_perf = longer;
+        longer.performance.emplace();
+        longer.performance->samples.emplace_back(1.0F);
+        longer.performance->samples.emplace_back(2.0F);
+        longer.performance->samples.emplace_back(3.0F);
+        fake_session_controller->current_run = longer;
 
         EXPECT_DOUBLE_EQ(use_case.getRunDuration(), 3.0);
+    }
+
+    TEST_F(GraphUseCaseTest, CsvOnlyCurrentRunProducesEmptyGraphData) {
+        fake_session_controller->current_run.run_id = {{.name = "S", .hash = "csv"}, 1000};
+        fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
+        fake_average->result = std::vector<double>{};
+
+        EXPECT_DOUBLE_EQ(use_case.getRunDuration(), 0.0);
+        const auto points = use_case.getSeriesValues(SeriesId{1});
+        ASSERT_TRUE(points.has_value());
+        EXPECT_TRUE(points->empty());
     }
 }

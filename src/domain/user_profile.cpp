@@ -14,31 +14,31 @@ namespace ksv::domain {
     UserProfile::UserProfile(SourceRegistry sources) : m_sources(std::move(sources)) {
     }
 
-    bool UserProfile::addScenarioPerf(const ScenarioPerf &perf) {
-        if (m_run_index.contains(perf.run_id)) {
-            std::cerr << "Duplicate run_id for scenario '" << perf.run_id.scenario_id.name
-                    << "' at start_time " << perf.run_id.start_time << ", skipping." << std::endl;
+    bool UserProfile::addRun(const Run &run) {
+        if (m_run_index.contains(run.run_id)) {
+            std::cerr << "Duplicate run_id for scenario '" << run.run_id.scenario_id.name
+                    << "' at start_time " << run.run_id.start_time << ", skipping." << std::endl;
             return false;
         }
 
         const std::size_t index = m_runs.size();
-        m_runs.push_back(perf);
-        m_run_index.emplace(perf.run_id, index);
+        m_runs.push_back(run);
+        m_run_index.emplace(run.run_id, index);
 
-        const ScenarioId &scenario = perf.run_id.scenario_id;
+        const ScenarioId &scenario = run.run_id.scenario_id;
         auto &indices = m_scenario_index[scenario];
-        const auto insert_pos = std::ranges::upper_bound(indices, perf.run_id.start_time, {},
+        const auto insert_pos = std::ranges::upper_bound(indices, run.run_id.start_time, {},
                                                          [this](const std::size_t idx) {
                                                              return m_runs[idx].run_id.start_time;
                                                          });
         indices.insert(insert_pos, index);
 
         auto &aggregate = m_scenario_aggregate[scenario];
-        aggregate.total_time_seconds += perf.scenario_length;
+        aggregate.total_time_seconds += run.scenario_length;
         aggregate.run_count += 1;
-        m_total_time_all_scenarios += perf.scenario_length;
+        m_total_time_all_scenarios += run.scenario_length;
 
-        if (!m_most_recent_index || perf.run_id.start_time > m_runs[*m_most_recent_index].run_id.start_time) {
+        if (!m_most_recent_index || run.run_id.start_time > m_runs[*m_most_recent_index].run_id.start_time) {
             m_most_recent_index = index;
         }
 
@@ -54,25 +54,25 @@ namespace ksv::domain {
         return keys;
     }
 
-    std::optional<ScenarioPerf> UserProfile::getMostRecentPerf() const {
+    std::optional<Run> UserProfile::getLatestRun() const {
         if (!m_most_recent_index) return std::nullopt;
         return m_runs[*m_most_recent_index];
     }
 
-    std::optional<ScenarioPerf> UserProfile::getMostRecentPerf(const ScenarioId &scenario) const {
+    std::optional<Run> UserProfile::getMostRecentRun(const ScenarioId &scenario) const {
         const auto it = m_scenario_index.find(scenario);
         if (it == m_scenario_index.end() || it->second.empty()) return std::nullopt;
         return m_runs[it->second.back()];
     }
 
-    std::vector<ScenarioPerf>
-    UserProfile::getMostRecentPerfs(const ScenarioId &scenario, const std::size_t count) const {
+    std::vector<Run>
+    UserProfile::getMostRecentRuns(const ScenarioId &scenario, const std::size_t count) const {
         const auto it = m_scenario_index.find(scenario);
         if (it == m_scenario_index.end() || count == 0) return {};
         const auto &indices = it->second;
         const auto n = std::min(count, indices.size());
 
-        std::vector<ScenarioPerf> result;
+        std::vector<Run> result;
         result.reserve(n);
         for (auto idx_it = indices.end() - static_cast<std::ptrdiff_t>(n); idx_it != indices.end(); ++idx_it) {
             result.push_back(m_runs[*idx_it]);
@@ -80,38 +80,38 @@ namespace ksv::domain {
         return result;
     }
 
-    std::vector<ScenarioPerf> UserProfile::getRunsForScenario(const ScenarioId &scenario) const {
+    std::vector<Run> UserProfile::getRunsForScenario(const ScenarioId &scenario) const {
         const auto it = m_scenario_index.find(scenario);
         if (it == m_scenario_index.end()) return {};
-        std::vector<ScenarioPerf> result;
+        std::vector<Run> result;
         result.reserve(it->second.size());
         for (const auto index: it->second) result.push_back(m_runs[index]);
         return result;
     }
 
-    std::vector<RunData> UserProfile::getCompletionHistory(const ScenarioId &scenario) const {
+    std::vector<RunSummary> UserProfile::getCompletionHistory(const ScenarioId &scenario) const {
         const auto it = m_scenario_index.find(scenario);
         if (it == m_scenario_index.end()) return {};
 
-        std::vector<RunData> result;
+        std::vector<RunSummary> result;
         result.reserve(it->second.size());
         for (const std::size_t idx: it->second) {
-            const auto &perf = m_runs[idx];
-            result.push_back(perf.getRunData());
+            const auto &run = m_runs[idx];
+            result.push_back({run.run_id, run.totals()});
         }
         return result;
     }
 
     std::optional<float> UserProfile::getAverageScore(const ScenarioId &scenario, const std::size_t count) const {
-        const auto recent = getMostRecentPerfs(scenario, count);
+        const auto recent = getMostRecentRuns(scenario, count);
         if (recent.empty()) return std::nullopt;
 
         double total = 0.0;
-        for (const auto &perf: recent) total += perf.getRunData().score;
+        for (const auto &run: recent) total += run.totals().score;
         return static_cast<float>(total / static_cast<double>(recent.size()));
     }
 
-    std::optional<ScenarioPerf> UserProfile::getRun(const ScenarioRunId &run_id) const {
+    std::optional<Run> UserProfile::getCurrentRun(const ScenarioRunId &run_id) const {
         const auto it = m_run_index.find(run_id);
         if (it == m_run_index.end()) return std::nullopt;
         return m_runs[it->second];
@@ -174,14 +174,14 @@ namespace ksv::domain {
 
         std::vector<std::pair<sys_days, double> > daily_totals;
         for (const auto idx: sorted_indices) {
-            const auto &perf = m_runs[idx];
+            const auto &run = m_runs[idx];
             // Skip pre-epoch timestamps (malformed/test data) to avoid stretching axis back to 1970
-            if (perf.run_id.start_time <= 0) continue;
-            const auto day = perf.run_id.startDay();
+            if (run.run_id.start_time <= 0) continue;
+            const auto day = run.run_id.startDay();
             if (!daily_totals.empty() && daily_totals.back().first == day) {
-                daily_totals.back().second += perf.scenario_length;
+                daily_totals.back().second += run.scenario_length;
             } else {
-                daily_totals.emplace_back(day, perf.scenario_length);
+                daily_totals.emplace_back(day, run.scenario_length);
             }
         }
 
@@ -220,7 +220,7 @@ namespace ksv::domain {
         return result;
     }
 
-    const std::vector<ScenarioPerf> &UserProfile::getAllRunRecords() const {
+    const std::vector<Run> &UserProfile::getAllRunRecords() const {
         return m_runs;
     }
 }

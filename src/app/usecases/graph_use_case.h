@@ -31,15 +31,15 @@ namespace ksv::application {
             m_session_controller->setCurrentPerf(std::string(filename));
         }
         void load_latest_perf() override {
-            m_session_controller->setCurrentPerfToLatest();
+            m_session_controller->setCurrentRunToLatest();
         }
 
         std::string get_run_label() override {
-            return m_session_controller->getCurrentPerf().run_id.toString();
+            return m_session_controller->getCurrentRun().run_id.toString();
         }
 
         void onCurrentPerfChanged(std::function<void()> callback) override {
-            QObject::connect(m_session_controller.get(), &ISessionController::currentPerfChanged,
+            QObject::connect(m_session_controller.get(), &ISessionController::currentRunChanged,
                               m_session_controller.get(), std::move(callback));
         }
 
@@ -53,7 +53,7 @@ namespace ksv::application {
         [[nodiscard]] std::optional<SeriesPoints> getSeriesValues(const SeriesId id) override {
             for (const auto &config : m_store->getAll()) {
                 if (config.id != id) continue;
-                const auto ys = m_average->evaluate(m_session_controller->getCurrentPerf(), config.expression);
+                const auto ys = m_average->evaluate(m_session_controller->getCurrentRun(), config.expression);
                 if (!ys) return std::nullopt;
                 const auto &buckets = referenceBuckets();
                 const auto count = std::min(buckets.times.size(), ys->size());
@@ -81,7 +81,7 @@ namespace ksv::application {
         // a valid hit. AverageLineUseCase::evaluate() buckets the run again internally by design —
         // this cache only removes the separate bucketing for point x-values and the run duration.
         const BucketedRun &referenceBuckets() {
-            const auto perf = m_session_controller->getCurrentPerf();
+            const auto perf = m_session_controller->getCurrentRun();
             if (!m_cachedRunId || *m_cachedRunId != perf.run_id) {
                 m_cachedBuckets = bucketRun(perf);
                 m_cachedRunId = perf.run_id;

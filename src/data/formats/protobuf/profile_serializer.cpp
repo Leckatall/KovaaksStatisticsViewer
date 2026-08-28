@@ -19,11 +19,11 @@
 
 namespace ksv::data {
     namespace {
-        // Bumped when store.proto changes incompatibly so rejected stores are quarantined instead of silently mis-parsed.
-        constexpr std::uint32_t kStoreVersion = 3;
+        // Bumped when profile.proto changes incompatibly so rejected stores are quarantined instead of silently mis-parsed.
+        constexpr std::uint32_t kStoreVersion = 4;
         constexpr std::size_t kHeaderPrefixSize = 4096;
 
-        std::optional<store::StoreHeader> readProtoHeader(const std::filesystem::path& path) {
+        std::optional<profile::Header> readProtoHeader(const std::filesystem::path& path) {
             std::ifstream input(path, std::ios::in | std::ios::binary);
             if (!input) return std::nullopt;
 
@@ -40,7 +40,7 @@ namespace ksv::data {
             int header_size = 0;
             if (!coded_input.ReadVarintSizeAsInt(&header_size)) return std::nullopt;
             const auto limit = coded_input.PushLimit(header_size);
-            store::StoreHeader header;
+            profile::Header header;
             const bool parsed = header.MergeFromCodedStream(&coded_input) && coded_input.ConsumedEntireMessage();
             coded_input.PopLimit(limit);
             if (!parsed) return std::nullopt;
@@ -101,12 +101,15 @@ namespace ksv::data {
         }
     }
 
+    ProfileSerializer::ProfileSerializer(std::shared_ptr<IProfileMigrator> migrator)
+        : m_migrator(std::move(migrator)) {}
+
     bool ProfileSerializer::save(const domain::UserProfile &profile, const std::filesystem::path &path) {
         const auto previous_header = readHeader(path);
         const auto now = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
-        store::UserProfileStore proto;
+        profile::Store proto;
 
         for (const auto &source : profile.sources().entries()) {
             auto *source_proto = proto.add_sources();
@@ -115,29 +118,58 @@ namespace ksv::data {
             source_proto->set_path(source.path);
         }
 
-        for (const auto &perf: profile.getAllRunRecords()) {
-            auto *run_proto = proto.add_runs();
-            run_proto->mutable_scenario_id()->set_name(perf.run_id.scenario_id.name);
-            run_proto->mutable_scenario_id()->set_hash(perf.run_id.scenario_id.hash);
-            run_proto->set_start_time(perf.run_id.start_time);
-            run_proto->set_scenario_length(perf.scenario_length);
-            run_proto->set_source_directory_id(perf.source.directory.value);
-            run_proto->set_source_filename(perf.source.filename);
+        const auto writeSourceRef = [](profile::SourceFileRef *ref, const domain::SourceFileRef &source) {
+            ref->set_directory_id(source.directory.value);
+            ref->set_filename(source.filename);
+        };
 
-            for (const auto &point: perf.data) {
-                auto *data_point = run_proto->add_data();
-                data_point->set_time(point.time);
-                data_point->set_shots(point.shots);
-                data_point->set_hits(point.hits);
-                data_point->set_misses(point.misses);
-                data_point->set_dmg(point.dmg);
-                data_point->set_dmg_possible(point.dmg_possible);
-                data_point->set_score(point.score);
-                data_point->set_kills(point.kills);
+        for (const auto &run: profile.getAllRunRecords()) {
+            auto *run_proto = proto.add_runs();
+            run_proto->mutable_scenario_id()->set_name(run.run_id.scenario_id.name);
+            run_proto->mutable_scenario_id()->set_hash(run.run_id.scenario_id.hash);
+            run_proto->set_start_time(run.run_id.start_time);
+            run_proto->set_scenario_length(run.scenario_length);
+
+            auto *totals = run_proto->mutable_totals();
+            totals->set_score(run.stored_totals.score);
+            totals->set_shots(run.stored_totals.shots);
+            totals->set_hits(run.stored_totals.hits);
+            totals->set_misses(run.stored_totals.misses);
+            totals->set_kills(run.stored_totals.kills);
+
+            if (run.sources.perf) writeSourceRef(run_proto->mutable_perf_source(), *run.sources.perf);
+            if (run.sources.csv) writeSourceRef(run_proto->mutable_csv_source(), *run.sources.csv);
+
+            if (run.performance) {
+                auto *performance = run_proto->mutable_performance();
+                for (const auto &point: run.performance->samples) {
+                    auto *data_point = performance->add_samples();
+                    data_point->set_time(point.time);
+                    data_point->set_shots(point.shots);
+                    data_point->set_hits(point.hits);
+                    data_point->set_misses(point.misses);
+                    data_point->set_dmg(point.dmg);
+                    data_point->set_dmg_possible(point.dmg_possible);
+                    data_point->set_score(point.score);
+                    data_point->set_kills(point.kills);
+                }
+            }
+
+            if (run.stats) {
+                auto *stats = run_proto->mutable_stats();
+                stats->set_sens_scale(run.stats->sens_scale);
+                stats->set_horiz_sens(run.stats->horiz_sens);
+                stats->set_vert_sens(run.stats->vert_sens);
+                stats->set_dpi(run.stats->dpi);
+                stats->set_fov(run.stats->fov);
+                stats->set_fov_scale(run.stats->fov_scale);
+                stats->set_resolution(run.stats->resolution);
+                stats->set_resolution_scale(run.stats->resolution_scale);
+                stats->set_avg_fps(run.stats->avg_fps);
             }
         }
 
-        store::ProfileStoreFile file;
+        profile::File file;
         auto* header = file.mutable_header();
         header->set_version(kStoreVersion);
         header->set_created_at(previous_header && previous_header->created_at != 0
@@ -200,11 +232,21 @@ namespace ksv::data {
             return application::ProfileLoadError::Unparseable;
         }
         if (header->version != kStoreVersion) {
+            if (header->version < kStoreVersion && m_migrator) {
+                auto migrated = m_migrator->migrate(path, header->version);
+                if (!migrated) {
+                    quarantineRejectedFile(path, "version-mismatch");
+                    return application::ProfileLoadError::VersionMismatch;
+                }
+                // save() renames a temp file into place, so a failed rewrite leaves the legacy file intact.
+                if (!save(*migrated, path)) return application::ProfileLoadError::VersionMismatch;
+                return std::move(*migrated);
+            }
             quarantineRejectedFile(path, "version-mismatch");
             return application::ProfileLoadError::VersionMismatch;
         }
 
-        store::ProfileStoreFile file;
+        profile::File file;
         std::ifstream input(path, std::ios::in | std::ios::binary);
         if (!file.ParseFromIstream(&input)) {
             input.close();
@@ -226,26 +268,58 @@ namespace ksv::data {
         }
         domain::UserProfile profile{domain::SourceRegistry{std::move(sources)}};
         for (const auto &run_proto: proto.runs()) {
-            domain::ScenarioPerf perf{};
-            perf.run_id.scenario_id.name = run_proto.scenario_id().name();
-            perf.run_id.scenario_id.hash = run_proto.scenario_id().hash();
-            perf.run_id.start_time = run_proto.start_time();
-            perf.scenario_length = run_proto.scenario_length();
-            perf.source.directory = {run_proto.source_directory_id()};
-            perf.source.filename = run_proto.source_filename();
+            domain::Run run{};
+            run.run_id.scenario_id.name = run_proto.scenario_id().name();
+            run.run_id.scenario_id.hash = run_proto.scenario_id().hash();
+            run.run_id.start_time = run_proto.start_time();
+            run.scenario_length = run_proto.scenario_length();
 
-            for (const auto &data_point: run_proto.data()) {
-                auto point = domain::ScenarioDataPoint(data_point.time());
-                point.shots = data_point.shots();
-                point.hits = data_point.hits();
-                point.misses = data_point.misses();
-                point.dmg = data_point.dmg();
-                point.dmg_possible = data_point.dmg_possible();
-                point.score = data_point.score();
-                point.kills = data_point.kills();
-                perf.data.push_back(point);
+            const auto &totals = run_proto.totals();
+            run.stored_totals = {
+                .score = totals.score(),
+                .shots = totals.shots(),
+                .hits = totals.hits(),
+                .misses = totals.misses(),
+                .kills = totals.kills(),
+            };
+
+            if (run_proto.has_perf_source()) {
+                run.sources.perf = {{run_proto.perf_source().directory_id()}, run_proto.perf_source().filename()};
             }
-            profile.addScenarioPerf(perf);
+            if (run_proto.has_csv_source()) {
+                run.sources.csv = {{run_proto.csv_source().directory_id()}, run_proto.csv_source().filename()};
+            }
+
+            if (run_proto.has_performance()) {
+                auto &performance = run.performance.emplace();
+                for (const auto &data_point: run_proto.performance().samples()) {
+                    auto point = domain::ScenarioDataPoint(data_point.time());
+                    point.shots = data_point.shots();
+                    point.hits = data_point.hits();
+                    point.misses = data_point.misses();
+                    point.dmg = data_point.dmg();
+                    point.dmg_possible = data_point.dmg_possible();
+                    point.score = data_point.score();
+                    point.kills = data_point.kills();
+                    performance.samples.push_back(point);
+                }
+            }
+
+            if (run_proto.has_stats()) {
+                const auto &stats = run_proto.stats();
+                run.stats = domain::Stats{
+                    .sens_scale = stats.sens_scale(),
+                    .horiz_sens = stats.horiz_sens(),
+                    .vert_sens = stats.vert_sens(),
+                    .dpi = stats.dpi(),
+                    .fov = stats.fov(),
+                    .fov_scale = stats.fov_scale(),
+                    .resolution = stats.resolution(),
+                    .resolution_scale = stats.resolution_scale(),
+                    .avg_fps = stats.avg_fps(),
+                };
+            }
+            profile.addRun(run);
         }
         return profile;
     }

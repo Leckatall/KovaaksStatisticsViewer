@@ -102,7 +102,7 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::refreshCurrentRun() {
-        const auto &run_id = m_scenario_browser_use_case->getCurrentPerf().run_id;
+        const auto &run_id = m_scenario_browser_use_case->getCurrentRun().run_id;
         const QString hash = QString::fromStdString(run_id.scenario_id.hash);
         const double start_time_ms = static_cast<double>(run_id.start_time);
         if (m_current_run_hash == hash && m_current_run_start_time_ms == start_time_ms)
@@ -130,12 +130,12 @@ namespace ksv::presentation {
         switch (m_run_sort_field) {
             case RunSortField::Score:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
-                    return ascending ? a.data.score < b.data.score : a.data.score > b.data.score;
+                    return ascending ? a.data.totals.score < b.data.totals.score : a.data.totals.score > b.data.totals.score;
                 });
                 break;
             case RunSortField::Accuracy:
                 std::ranges::stable_sort(runs, [ascending](const auto &a, const auto &b) {
-                    return ascending ? a.data.accuracy() < b.data.accuracy() : a.data.accuracy() > b.data.accuracy();
+                    return ascending ? a.data.totals.accuracy() < b.data.totals.accuracy() : a.data.totals.accuracy() > b.data.totals.accuracy();
                 });
                 break;
             case RunSortField::Date:

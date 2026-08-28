@@ -24,8 +24,8 @@ namespace {
         CompletionHistoryUseCase use_case{session, profile};
 
         void setCurrentScenario(const std::string &hash = "scenario-1", const long long start_time = 300) const {
-            session->current_perf.run_id.scenario_id = {.name = "Scenario One", .hash = hash};
-            session->current_perf.run_id.start_time = start_time;
+            session->current_run.run_id.scenario_id = {.name = "Scenario One", .hash = hash};
+            session->current_run.run_id.start_time = start_time;
         }
     };
 
@@ -33,9 +33,9 @@ namespace {
         setCurrentScenario();
         profile->completion_history = {
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
-             .shots = 10, .hits = 4, .misses = 6, .score = 25.0F},
+             .totals = {.score = 25.0F, .shots = 10, .hits = 4, .misses = 6}},
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 200},
-             .shots = 20, .hits = 15, .misses = 5, .score = 75.0F},
+             .totals = {.score = 75.0F, .shots = 20, .hits = 15, .misses = 5}},
         };
 
         const auto history = use_case.get_history();
@@ -57,7 +57,7 @@ namespace {
         setCurrentScenario();
         profile->completion_history = {
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
-             .shots = 0, .hits = 0},
+             .totals = {.shots = 0, .hits = 0}},
         };
 
         const auto history = use_case.get_history();

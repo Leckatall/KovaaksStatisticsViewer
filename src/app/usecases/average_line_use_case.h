@@ -11,7 +11,7 @@ namespace ksv::application {
         explicit AverageLineUseCase(std::shared_ptr<IProfileService> profileService);
 
         [[nodiscard]] std::optional<std::vector<double> > evaluate(
-            const domain::ScenarioPerf &referenceRun, const Expression &expression) const override;
+            const domain::Run &referenceRun, const Expression &expression) const override;
 
     private:
         std::shared_ptr<IProfileService> m_profileService;

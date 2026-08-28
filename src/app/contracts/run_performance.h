@@ -1,11 +1,11 @@
 #ifndef KOVAAKSSTATISTICSVIEWER_APP_RUN_PERFORMANCE_H
 #define KOVAAKSSTATISTICSVIEWER_APP_RUN_PERFORMANCE_H
 
-#include "domain/scenario_perf.h"
+#include "domain/run.h"
 
 namespace ksv::application {
     struct RunPerformance {
-        domain::RunData data;
+        domain::RunSummary data;
         bool personal_best = false;
     };
 }

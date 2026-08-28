@@ -16,18 +16,20 @@ namespace ksv::application {
         throw std::invalid_argument("Unknown primitive metric");
     }
 
-    BucketedRun bucketRun(const domain::ScenarioPerf &perf) {
+    BucketedRun bucketRun(const domain::Run &run) {
         BucketedRun result;
-        if (perf.data.empty()) return result;
+        if (!run.performance) return result;
+        const auto &samples = run.performance->samples;
+        if (samples.empty()) return result;
         int maximum = 0;
-        for (const auto &point: perf.data) maximum = std::max(maximum, static_cast<int>(std::lround(point.time)));
+        for (const auto &point: samples) maximum = std::max(maximum, static_cast<int>(std::lround(point.time)));
         const auto size = static_cast<size_t>(maximum + 1);
         result.score.resize(size);
         result.shots.resize(size);
         result.hits.resize(size);
         result.kills.resize(size);
         result.dmg.resize(size);
-        for (const auto &point: perf.data) {
+        for (const auto &point: samples) {
             const auto index = static_cast<size_t>(std::clamp(static_cast<int>(std::lround(point.time)), 0, maximum));
             result.score[index] += point.score;
             result.shots[index] += point.shots;

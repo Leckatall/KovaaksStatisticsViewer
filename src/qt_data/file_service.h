@@ -17,6 +17,8 @@
 #include "user_profile.h"
 #include "app/usecases/i_session_controller.h"
 #include "data/interfaces/i_proto_decoder.h"
+#include "data/interfaces/i_stats_csv_parser.h"
+#include "data/formats/csv/stats_csv_parser.h"
 #include "data/interfaces/i_file_service.h"
 #include "interfaces/i_settings_service.h"
 
@@ -25,10 +27,12 @@ namespace ksv::qt_data {
         Q_OBJECT
 
     public:
-        explicit FileService(std::shared_ptr<application::ISettingsService> settings_service, std::shared_ptr<application::IProtoDecoder> decoder, QObject *parent = nullptr);
+        explicit FileService(std::shared_ptr<application::ISettingsService> settings_service, std::shared_ptr<application::IProtoDecoder> decoder, std::shared_ptr<data::IStatsCsvParser> stats_parser = std::make_shared<data::StatsCsvParser>(), QObject *parent = nullptr);
 
         [[nodiscard]] std::vector<application::PerfFile> listPerfFiles() const override;
-        [[nodiscard]] domain::ScenarioPerf getPerfFromFile(std::string_view filename) const override;
+        [[nodiscard]] std::vector<application::StatsFile> listStatsFiles() const override;
+        [[nodiscard]] domain::Run getPerfFromFile(std::string_view filename) const override;
+        [[nodiscard]] std::optional<data::ParsedStatsCsv> getStatsFromFile(const std::filesystem::path &path) const override;
         [[nodiscard]] std::vector<std::string> sourceRoots() const override;
 
         void onFilesChanged(std::function<void(const application::PerfFile &)> callback) override {
@@ -55,6 +59,7 @@ namespace ksv::qt_data {
 
         std::shared_ptr<application::ISettingsService> m_settings_service;
         std::shared_ptr<application::IProtoDecoder> m_decoder;
+        std::shared_ptr<data::IStatsCsvParser> m_stats_parser;
 
         QFileSystemWatcher m_watcher;
         std::vector<std::function<void(const application::PerfFile &)>> m_callbacks;

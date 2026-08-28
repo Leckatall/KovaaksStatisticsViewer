@@ -200,10 +200,10 @@ namespace {
         second_run.run_id.start_time += 1000;
         domain::UserProfile profile;
         const auto source = profile.ensureSource(env.dir.path().toStdString(), "FPSAimTrainer/performances");
-        first_run.source = {source, std::filesystem::path(perfFile.toStdString()).filename().string()};
-        second_run.source = first_run.source;
-        ASSERT_TRUE(profile.addScenarioPerf(first_run));
-        ASSERT_TRUE(profile.addScenarioPerf(second_run));
+        first_run.sources.perf = {{source, std::filesystem::path(perfFile.toStdString()).filename().string()}};
+        second_run.sources.perf = first_run.sources.perf;
+        ASSERT_TRUE(profile.addRun(first_run));
+        ASSERT_TRUE(profile.addRun(second_run));
 
         app->profileService()->applyBuiltProfile(std::move(profile));
 

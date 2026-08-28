@@ -29,16 +29,27 @@ if (WIN32 AND Protobuf_PROTOC_EXECUTABLE)
 endif()
 
 add_library(ksv_data STATIC
+        formats/csv/run_filename.cpp
+        formats/csv/run_filename.h
+        formats/csv/stats_csv_parser.cpp
+        formats/csv/stats_csv_parser.h
         formats/protobuf/proto_decoder.cpp
         formats/protobuf/proto_decoder.h
         formats/protobuf/profile_serializer.cpp
         formats/protobuf/profile_serializer.h
+        formats/protobuf/migration/profile_v3_migrator.cpp
+        formats/protobuf/migration/profile_v3_migrator.h
         profile_builder.cpp
         profile_builder.h
         profile_service.cpp
         profile_service.h
+        run_ingestor.cpp
+        run_ingestor.h
 
         interfaces/i_proto_decoder.h
+        interfaces/i_run_ingestor.h
+        interfaces/i_stats_csv_parser.h
+        interfaces/i_profile_migrator.h
         interfaces/i_profile_service.h
         interfaces/i_profile_serializer.h
         interfaces/i_settings_service.h
@@ -47,7 +58,8 @@ add_library(ksv_data STATIC
 
 set(PROTO_FILES
         ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/perf.proto
-        ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/store.proto
+        ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/schema/profile.proto
+        ${PROJECT_SOURCE_DIR}/src/data/formats/protobuf/migration/profile_v3.proto
 )
 
 target_link_libraries(ksv_data PUBLIC

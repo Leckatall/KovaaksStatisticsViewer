@@ -22,10 +22,10 @@ namespace ksv::presentation {
             case HashRole: return QString::fromStdString(run.data.run_id.scenario_id.hash);
             case RunLabelRole: return QString::fromStdString(run.data.run_id.toString());
             case StartTimeMsRole: return static_cast<qint64>(run.data.run_id.start_time);
-            case ScoreRole: return run.data.score;
-            case AccuracyRole: return run.data.accuracy();
-            case ShotsRole: return run.data.shots;
-            case HitsRole: return run.data.hits;
+            case ScoreRole: return run.data.totals.score;
+            case AccuracyRole: return run.data.totals.accuracy();
+            case ShotsRole: return run.data.totals.shots;
+            case HitsRole: return run.data.totals.hits;
             case PersonalBestRole: return run.personal_best;
             default: return {};
         }

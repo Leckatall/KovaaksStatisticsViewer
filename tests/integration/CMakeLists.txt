@@ -34,7 +34,7 @@ set(TEST_FILES_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../examples"
 )
 
-foreach(fixture "1wall6targets TE.perf" "VT FlyTS Novice S5.perf")
+foreach(fixture "1wall6targets TE.perf" "VT FlyTS Novice S5.perf" "1wall6targets TE.csv")
     configure_file(
         "${TEST_FILES_DIR}/${fixture}"
         "${CMAKE_CURRENT_BINARY_DIR}/examples/${fixture}"

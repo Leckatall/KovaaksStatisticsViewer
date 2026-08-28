@@ -44,15 +44,28 @@ namespace ksv::integration {
             return QDir(dir.path()).absoluteFilePath("FPSAimTrainer/performances");
         }
 
+        [[nodiscard]] QString statsDir() const {
+            return QDir(dir.path()).absoluteFilePath("FPSAimTrainer/stats");
+        }
+
         [[nodiscard]] QString profileStorePath() const {
             return QDir(dir.path()).absoluteFilePath("store/profile.pb");
         }
 
         bool makePerformancesDir() const { return QDir().mkpath(performancesDir()); }
+        bool makeStatsDir() const { return QDir().mkpath(statsDir()); }
 
         // Returns the copied file's absolute path, or empty on failure.
         [[nodiscard]] QString copyFixtureIntoPerformances(const QString &fixtureName) const {
             const QString dest = QDir(performancesDir()).absoluteFilePath(fixtureName);
+            return QFile::copy(fixturePath(fixtureName), dest) ? dest : QString();
+        }
+
+        // Copies a fixture into FPSAimTrainer/stats/, optionally under a different
+        // name so it can be placed at the ` Stats.csv` sibling a live perf expects.
+        [[nodiscard]] QString copyFixtureIntoStats(const QString &fixtureName,
+                                                   const QString &destName = {}) const {
+            const QString dest = QDir(statsDir()).absoluteFilePath(destName.isEmpty() ? fixtureName : destName);
             return QFile::copy(fixturePath(fixtureName), dest) ? dest : QString();
         }
     };

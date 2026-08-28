@@ -1,6 +1,6 @@
 add_library(ksv_domain STATIC
-    scenario_perf.cpp
-    scenario_perf.h
+    run.cpp
+    run.h
         source_directory.cpp
         source_directory.h
         user_profile.cpp

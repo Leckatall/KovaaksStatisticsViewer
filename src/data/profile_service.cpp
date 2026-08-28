@@ -16,10 +16,12 @@
 namespace ksv::data {
     ProfileService::ProfileService(std::shared_ptr<application::IFileService> file_service,
                                    std::shared_ptr<application::IProfileSerializer> serializer,
-                                   std::shared_ptr<application::ISettingsService> settings_service)
+                                   std::shared_ptr<application::ISettingsService> settings_service,
+                                   std::shared_ptr<IRunIngestor> ingestor)
         : m_file_service(std::move(file_service)),
           m_serializer(std::move(serializer)),
-          m_settings_service(std::move(settings_service)) {
+          m_settings_service(std::move(settings_service)),
+          m_ingestor(std::move(ingestor)) {
         m_profile = nullptr;
         m_filepath = m_settings_service->getProfilePath();
         ensureParentDir();
@@ -37,7 +39,7 @@ namespace ksv::data {
     }
 
     void ProfileService::generateProfileFromDirectory() {
-        setProfile(ProfileBuilder{m_file_service}.build());
+        setProfile(ProfileBuilder{m_file_service, m_ingestor}.build());
         saveProfile();
     }
 
@@ -76,16 +78,9 @@ namespace ksv::data {
 
         bool replayed = false;
         for (const auto &perf_file: pending) {
-            domain::ScenarioPerf perf;
-            try {
-                perf = m_file_service->getPerfFromFile(perf_file.absolutePath());
-            } catch (const std::exception &e) {
-                std::cerr << "Skipping " << perf_file.absolutePath() << ": " << e.what() << std::endl;
-                continue;
-            }
-            perf.source = {m_profile->ensureSource(perf_file.root, perf_file.subdir), perf_file.filename};
-            if (m_profile->getRun(perf.run_id)) continue;
-            replayed |= m_profile->addScenarioPerf(perf);
+            const auto run = m_ingestor->buildLiveRun(*m_profile, perf_file);
+            if (!run || m_profile->getCurrentRun(run->run_id)) continue;
+            replayed |= m_profile->addRun(*run);
         }
         if (replayed) notifyProfileChanged();
         saveProfile();
@@ -109,15 +104,9 @@ namespace ksv::data {
             return;
         }
         if (!m_profile) return;
-        domain::ScenarioPerf perf;
-        try {
-            perf = m_file_service->getPerfFromFile(perf_file.absolutePath());
-        } catch (const std::exception &e) {
-            std::cerr << "Skipping " << perf_file.absolutePath() << ": " << e.what() << std::endl;
-            return;
-        }
-        perf.source = {m_profile->ensureSource(perf_file.root, perf_file.subdir), perf_file.filename};
-        m_profile->addScenarioPerf(perf);
+        const auto run = m_ingestor->buildLiveRun(*m_profile, perf_file);
+        if (!run) return;
+        m_profile->addRun(*run);
         notifyProfileChanged();
         saveProfile();
     }
@@ -137,32 +126,32 @@ namespace ksv::data {
         return m_profile->getScenarioList();
     }
 
-    domain::ScenarioPerf ProfileService::getPerf(const std::string &path) const {
+    domain::Run ProfileService::getPerf(const std::string &path) const {
         return m_file_service->getPerfFromFile(path);
     }
 
-    domain::ScenarioPerf ProfileService::getLatestPerf() const {
+    domain::Run ProfileService::getLatestRun() const {
         if (!m_profile) return {};
-        return m_profile->getMostRecentPerf().value_or(domain::ScenarioPerf{});
+        return m_profile->getLatestRun().value_or(domain::Run{});
     }
 
-    std::optional<domain::ScenarioPerf> ProfileService::getMostRecentPerf(const domain::ScenarioId &scenario) const {
+    std::optional<domain::Run> ProfileService::getMostRecentRun(const domain::ScenarioId &scenario) const {
         if (!m_profile) return std::nullopt;
-        return m_profile->getMostRecentPerf(scenario);
+        return m_profile->getMostRecentRun(scenario);
     }
 
-    std::vector<domain::ScenarioPerf> ProfileService::getMostRecentPerfs(const domain::ScenarioId &scenario,
+    std::vector<domain::Run> ProfileService::getMostRecentRuns(const domain::ScenarioId &scenario,
                                                                          const std::size_t count) const {
         if (!m_profile) return {};
-        return m_profile->getMostRecentPerfs(scenario, count);
+        return m_profile->getMostRecentRuns(scenario, count);
     }
 
-    std::vector<domain::ScenarioPerf> ProfileService::getRunsForScenario(const domain::ScenarioId &scenario) const {
+    std::vector<domain::Run> ProfileService::getRunsForScenario(const domain::ScenarioId &scenario) const {
         if (!m_profile) return {};
         return m_profile->getRunsForScenario(scenario);
     }
 
-    std::vector<domain::RunData> ProfileService::getCompletionHistory(const domain::ScenarioId &scenario) const {
+    std::vector<domain::RunSummary> ProfileService::getCompletionHistory(const domain::ScenarioId &scenario) const {
         if (!m_profile) return {};
         return m_profile->getCompletionHistory(scenario);
     }
@@ -173,9 +162,9 @@ namespace ksv::data {
         return m_profile->getAverageScore(scenario, count);
     }
 
-    std::optional<domain::ScenarioPerf> ProfileService::getRun(const domain::ScenarioRunId &run_id) const {
+    std::optional<domain::Run> ProfileService::getCurrentRun(const domain::ScenarioRunId &run_id) const {
         if (!m_profile) return std::nullopt;
-        return m_profile->getRun(run_id);
+        return m_profile->getCurrentRun(run_id);
     }
 
     std::optional<std::size_t> ProfileService::getRunCount(const domain::ScenarioId &scenario) const {
@@ -193,7 +182,7 @@ namespace ksv::data {
         return m_profile->getTotalTime(scenario);
     }
 
-    std::vector<domain::ScenarioPerf> ProfileService::getRecentRuns(const std::size_t count) const {
+    std::vector<domain::Run> ProfileService::getRecentRuns(const std::size_t count) const {
         if (!m_profile || count == 0) return {};
         const auto &runs = m_profile->getAllRunRecords();
 
@@ -204,7 +193,7 @@ namespace ksv::data {
         });
 
         const auto n = std::min(count, indices.size());
-        std::vector<domain::ScenarioPerf> result;
+        std::vector<domain::Run> result;
         result.reserve(n);
         for (std::size_t i = 0; i < n; ++i) {
             result.push_back(runs[indices[i]]);

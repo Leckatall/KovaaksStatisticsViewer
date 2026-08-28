@@ -99,16 +99,16 @@ namespace {
     }
 
     TEST_F(SessionViewModelTest, GetCurrentPerfReturnsControllersCurrentPerf) {
-        fake_controller->current_perf.run_id.scenario_id = ScenarioId{.name = "Long Jump", .hash = "hash-1"};
+        fake_controller->current_run.run_id.scenario_id = ScenarioId{.name = "Long Jump", .hash = "hash-1"};
         SessionViewModel view_model(fake_controller);
 
-        EXPECT_EQ(view_model.getCurrentPerf().run_id.scenario_id.name, "Long Jump");
+        EXPECT_EQ(view_model.getCurrentRun().run_id.scenario_id.name, "Long Jump");
     }
 
     TEST_F(SessionViewModelTest, GetCurrentPerfScenarioReturnsScenarioName) {
-        fake_controller->current_perf.run_id.scenario_id = ScenarioId{.name = "Air Angelic", .hash = "hash-2"};
+        fake_controller->current_run.run_id.scenario_id = ScenarioId{.name = "Air Angelic", .hash = "hash-2"};
         SessionViewModel view_model(fake_controller);
 
-        EXPECT_EQ(view_model.getCurrentPerfScenario(), QString("Air Angelic"));
+        EXPECT_EQ(view_model.getCurrentRunScenario(), QString("Air Angelic"));
     }
 }

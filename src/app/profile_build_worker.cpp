@@ -7,8 +7,9 @@
 #include "profile_builder.h"
 
 namespace ksv::application {
-    ProfileBuildWorker::ProfileBuildWorker(std::shared_ptr<IFileService> file_service, QObject *parent)
-        : QObject(parent), m_file_service(std::move(file_service)) {
+    ProfileBuildWorker::ProfileBuildWorker(std::shared_ptr<IFileService> file_service,
+                                           std::shared_ptr<data::IRunIngestor> ingestor, QObject *parent)
+        : QObject(parent), m_file_service(std::move(file_service)), m_ingestor(std::move(ingestor)) {
     }
 
     void ProfileBuildWorker::build() {
@@ -23,6 +24,6 @@ namespace ksv::application {
             emit progress(static_cast<int>(done), static_cast<int>(total));
         };
 
-        emit finished(data::ProfileBuilder{m_file_service}.build(report));
+        emit finished(data::ProfileBuilder{m_file_service, m_ingestor}.build(report));
     }
 }

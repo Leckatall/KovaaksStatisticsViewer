@@ -69,11 +69,11 @@ namespace {
 
         app->sessionController()->setCurrentPerf(file.toStdString());
 
-        EXPECT_EQ(app->sessionController()->getCurrentPerf().run_id.scenario_id.name, "1wall6targets TE");
+        EXPECT_EQ(app->sessionController()->getCurrentRun().run_id.scenario_id.name, "1wall6targets TE");
     }
 
     TEST_F(CompositionRootTest, CurrentPerfChangeCascadesToGraphViewModelReload) {
-        // App wires sessionController->currentPerfChanged -> graphVm->fetchData() so the
+        // App wires sessionController->currentRunChanged -> graphVm->fetchData() so the
         // graph reloads whenever currentPerf changes for any reason, not just file loads.
         const QString file = QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf");
 

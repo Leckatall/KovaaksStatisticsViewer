@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "domain/scenario_perf.h"
+#include "domain/run.h"
 #include "domain/user_profile.h"
 
 namespace ksv::application {
@@ -39,26 +39,26 @@ namespace ksv::application {
 
         [[nodiscard]] virtual std::vector<domain::ScenarioId> getScenarioList() const = 0;
 
-        [[nodiscard]] virtual domain::ScenarioPerf getPerf(const std::string &path) const = 0;
+        [[nodiscard]] virtual domain::Run getPerf(const std::string &path) const = 0;
 
-        [[nodiscard]] virtual domain::ScenarioPerf getLatestPerf() const = 0;
+        [[nodiscard]] virtual domain::Run getLatestRun() const = 0;
 
-        [[nodiscard]] virtual std::optional<domain::ScenarioPerf> getMostRecentPerf(
+        [[nodiscard]] virtual std::optional<domain::Run> getMostRecentRun(
             const domain::ScenarioId &scenario) const = 0;
 
-        [[nodiscard]] virtual std::vector<domain::ScenarioPerf> getMostRecentPerfs(
+        [[nodiscard]] virtual std::vector<domain::Run> getMostRecentRuns(
             const domain::ScenarioId &scenario, std::size_t count) const = 0;
 
-        [[nodiscard]] virtual std::vector<domain::ScenarioPerf> getRunsForScenario(
+        [[nodiscard]] virtual std::vector<domain::Run> getRunsForScenario(
             const domain::ScenarioId &scenario) const = 0;
 
-        [[nodiscard]] virtual std::vector<domain::RunData>
+        [[nodiscard]] virtual std::vector<domain::RunSummary>
         getCompletionHistory(const domain::ScenarioId &scenario) const = 0;
 
         [[nodiscard]] virtual std::optional<float> getAverageScore(
             const domain::ScenarioId &scenario, std::size_t count) const = 0;
 
-        [[nodiscard]] virtual std::optional<domain::ScenarioPerf> getRun(
+        [[nodiscard]] virtual std::optional<domain::Run> getCurrentRun(
             const domain::ScenarioRunId &run_id) const = 0;
 
         [[nodiscard]] virtual std::optional<std::size_t> getRunCount(
@@ -71,7 +71,7 @@ namespace ksv::application {
             const domain::ScenarioId &scenario) const = 0;
 
         // Newest-first, capped at count.
-        [[nodiscard]] virtual std::vector<domain::ScenarioPerf> getRecentRuns(std::size_t count) const = 0;
+        [[nodiscard]] virtual std::vector<domain::Run> getRecentRuns(std::size_t count) const = 0;
 
         [[nodiscard]] virtual std::vector<std::pair<std::chrono::sys_days, double> >
         getRollingTimeAverage(int window_days) const = 0;

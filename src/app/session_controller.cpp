@@ -10,13 +10,14 @@ namespace ksv::application {
     SessionController::SessionController(std::shared_ptr<ISettingsService> settings_service,
                                          std::shared_ptr<IProfileService> profile_service,
                                          std::shared_ptr<IFileService> file_service,
+                                         std::shared_ptr<data::IRunIngestor> ingestor,
                                          QObject *parent) : ISessionController(parent),
                                                             m_settings_service(std::move(settings_service)),
                                                             m_profile_service(std::move(profile_service)),
                                                             m_file_service(std::move(file_service)) {
         qRegisterMetaType<domain::UserProfile>();
 
-        m_build_worker = new ProfileBuildWorker(m_file_service);
+        m_build_worker = new ProfileBuildWorker(m_file_service, std::move(ingestor));
         m_build_worker->moveToThread(&m_build_thread);
         connect(&m_build_thread, &QThread::finished, m_build_worker, &QObject::deleteLater);
         connect(this, &SessionController::buildRequested, m_build_worker, &ProfileBuildWorker::build);
@@ -24,9 +25,9 @@ namespace ksv::application {
         connect(m_build_worker, &ProfileBuildWorker::progress, this, &ISessionController::buildProgress);
         m_build_thread.start();
 
-        SessionController::setCurrentPerfToLatest();
+        SessionController::setCurrentRunToLatest();
         m_profile_service->onProfileChanged([this] {
-            setCurrentPerfToLatest();
+            setCurrentRunToLatest();
             emit profileChanged();
         });
         m_profile_service->onBuildRequested([this] { startBuild(); });
@@ -68,24 +69,24 @@ namespace ksv::application {
         emit buildFinished();
     }
 
-    void SessionController::setCurrentPerf(const domain::ScenarioPerf &perf) {
-        if (m_current_perf.run_id == perf.run_id) return;
-        m_current_perf = perf;
-        emit currentPerfChanged();
+    void SessionController::setCurrentRun(const domain::Run &run) {
+        if (m_current_run.run_id == run.run_id) return;
+        m_current_run = run;
+        emit currentRunChanged();
     }
 
     void SessionController::setCurrentPerf(const std::string &filename) {
-        setCurrentPerf(m_profile_service->getPerf(filename));
+        setCurrentRun(m_profile_service->getPerf(filename));
     }
 
-    void SessionController::setCurrentPerf(const domain::ScenarioRunId &run_id) {
-        if (const auto perf = m_profile_service->getRun(run_id)) {
-            setCurrentPerf(*perf);
+    void SessionController::setCurrentRun(const domain::ScenarioRunId &run_id) {
+        if (const auto run = m_profile_service->getCurrentRun(run_id)) {
+            setCurrentRun(*run);
         }
     }
 
-    void SessionController::setCurrentPerfToLatest() {
-        setCurrentPerf(m_profile_service->getLatestPerf());
+    void SessionController::setCurrentRunToLatest() {
+        setCurrentRun(m_profile_service->getLatestRun());
     }
 
 }

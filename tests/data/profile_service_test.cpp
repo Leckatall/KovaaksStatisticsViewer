@@ -4,11 +4,18 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <set>
+#include <sstream>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 #include "profile_service.h"
+#include "run_ingestor.h"
 #include "fake_file_service.h"
 #include "fake_settings_service.h"
 
@@ -17,13 +24,13 @@ using namespace ksv::application;
 using namespace ksv::tests_support;
 
 namespace {
-    ksv::domain::ScenarioPerf make_perf(const std::string &hash, const long long start_time,
+    ksv::domain::Run make_perf(const std::string &hash, const long long start_time,
                                         const float score = 0.0F) {
-        ksv::domain::ScenarioPerf perf;
+        ksv::domain::Run perf;
         perf.run_id.scenario_id.name = "Scenario " + hash;
         perf.run_id.scenario_id.hash = hash;
         perf.run_id.start_time = start_time;
-        perf.add_data(0.0F, ksv::domain::SCORE, score);
+        perf.stored_totals.score = score;
         return perf;
     }
 
@@ -41,6 +48,23 @@ namespace {
     PerfFile perf_file(const std::string &filename, const std::string &root = "fake/kovaaks") {
         return {root, "FPSAimTrainer/performances", filename};
     }
+
+    // RunIngestor::buildLiveRun() probes the CSV sibling on the real filesystem, so
+    // the live-pairing tests need a real KovaaK's-shaped directory.
+    std::filesystem::path live_root() {
+        return std::filesystem::temp_directory_path() / "ksv_profile_service_live_test";
+    }
+
+    class CerrCapture {
+    public:
+        CerrCapture() : m_previous(std::cerr.rdbuf(m_sink.rdbuf())) {}
+        ~CerrCapture() { std::cerr.rdbuf(m_previous); }
+        [[nodiscard]] std::string str() const { return m_sink.str(); }
+
+    private:
+        std::ostringstream m_sink;
+        std::streambuf *m_previous;
+    };
 
     ksv::domain::UserProfile profile_for_roots(const std::vector<std::string> &roots) {
         ksv::domain::UserProfile profile;
@@ -87,10 +111,13 @@ namespace {
             settings->profile_path = "test_profile.pb";
             return settings;
         }();
-        ProfileService profile_service{fake_file_service, fake_serializer, fake_settings};
+        std::shared_ptr<IRunIngestor> ingestor = std::make_shared<RunIngestor>(fake_file_service);
+        ProfileService profile_service{fake_file_service, fake_serializer, fake_settings, ingestor};
 
         void TearDown() override {
             std::filesystem::remove_all(new_profile_dir());
+            std::error_code ignored;
+            std::filesystem::remove_all(live_root(), ignored);
         }
     };
 
@@ -163,7 +190,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetLatestPerfIsEmptyBeforeProfileGenerated) {
-        const auto perf = profile_service.getLatestPerf();
+        const auto perf = profile_service.getLatestRun();
 
         EXPECT_TRUE(perf.run_id.scenario_id.hash.empty());
     }
@@ -174,7 +201,7 @@ namespace {
         };
         profile_service.generateProfileFromDirectory();
 
-        const auto perf = profile_service.getLatestPerf();
+        const auto perf = profile_service.getLatestRun();
 
         EXPECT_EQ(perf.run_id.scenario_id.hash, "hash-2");
         EXPECT_EQ(perf.run_id.start_time, 300);
@@ -187,7 +214,7 @@ namespace {
         fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 500);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
-        const auto perf = profile_service.getLatestPerf();
+        const auto perf = profile_service.getLatestRun();
 
         EXPECT_EQ(perf.run_id.scenario_id.hash, "hash-2");
         EXPECT_EQ(perf.run_id.start_time, 500);
@@ -195,7 +222,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GetMostRecentPerfIsNulloptBeforeProfileGenerated) {
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
-        EXPECT_FALSE(profile_service.getMostRecentPerf(scenario).has_value());
+        EXPECT_FALSE(profile_service.getMostRecentRun(scenario).has_value());
     }
 
     TEST_F(ProfileServiceTest, GetMostRecentPerfDelegatesToProfile) {
@@ -205,7 +232,7 @@ namespace {
         profile_service.generateProfileFromDirectory();
 
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
-        const auto perf = profile_service.getMostRecentPerf(scenario);
+        const auto perf = profile_service.getMostRecentRun(scenario);
 
         ASSERT_TRUE(perf.has_value());
         EXPECT_EQ(perf->run_id.start_time, 300);
@@ -216,7 +243,7 @@ namespace {
         profile_service.generateProfileFromDirectory();
 
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "unknown"};
-        EXPECT_FALSE(profile_service.getMostRecentPerf(scenario).has_value());
+        EXPECT_FALSE(profile_service.getMostRecentRun(scenario).has_value());
     }
 
     TEST_F(ProfileServiceTest, GetAverageScoreIsNulloptBeforeProfileGenerated) {
@@ -239,7 +266,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GetMostRecentPerfsIsEmptyBeforeProfileGenerated) {
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
-        EXPECT_TRUE(profile_service.getMostRecentPerfs(scenario, 2).empty());
+        EXPECT_TRUE(profile_service.getMostRecentRuns(scenario, 2).empty());
     }
 
     TEST_F(ProfileServiceTest, GetMostRecentPerfsDelegatesToProfile) {
@@ -249,7 +276,7 @@ namespace {
         profile_service.generateProfileFromDirectory();
 
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
-        const auto recent = profile_service.getMostRecentPerfs(scenario, 2);
+        const auto recent = profile_service.getMostRecentRuns(scenario, 2);
 
         ASSERT_EQ(recent.size(), 2);
         EXPECT_EQ(recent[0].run_id.start_time, 200);
@@ -260,7 +287,7 @@ namespace {
         const auto run_id = ksv::domain::ScenarioRunId{
             .scenario_id = {.name = "?", .hash = "hash-1"}, .start_time = 100
         };
-        EXPECT_FALSE(profile_service.getRun(run_id).has_value());
+        EXPECT_FALSE(profile_service.getCurrentRun(run_id).has_value());
     }
 
     TEST_F(ProfileServiceTest, GetRunDelegatesToProfile) {
@@ -270,7 +297,7 @@ namespace {
         const auto run_id = ksv::domain::ScenarioRunId{
             .scenario_id = {.name = "?", .hash = "hash-2"}, .start_time = 200
         };
-        const auto perf = profile_service.getRun(run_id);
+        const auto perf = profile_service.getCurrentRun(run_id);
 
         ASSERT_TRUE(perf.has_value());
         EXPECT_EQ(perf->run_id.scenario_id.hash, "hash-2");
@@ -313,9 +340,9 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetTotalTimeDelegatesToProfile) {
-        ksv::domain::ScenarioPerf perf_a = make_perf("hash-1", 100);
+        ksv::domain::Run perf_a = make_perf("hash-1", 100);
         perf_a.scenario_length = 10.0F;
-        ksv::domain::ScenarioPerf perf_b = make_perf("hash-1", 200);
+        ksv::domain::Run perf_b = make_perf("hash-1", 200);
         perf_b.scenario_length = 15.0F;
         fake_file_service->perfs_to_return = {perf_a, perf_b};
         profile_service.generateProfileFromDirectory();
@@ -402,9 +429,60 @@ namespace {
         EXPECT_EQ(fake_serializer->save_count, saves_before);
     }
 
+    TEST_F(ProfileServiceTest, AddPerfFileAttachesCsvStatsAndTotalsWhenTheSiblingExists) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+
+        const auto root = live_root();
+        std::filesystem::create_directories(root / "FPSAimTrainer" / "stats");
+        { std::ofstream(root / "FPSAimTrainer" / "stats" / "live_run Stats.csv") << "placeholder"; }
+
+        const auto arrived = perf_file("live_run.perf", root.generic_string());
+        ksv::domain::Run decoded{
+            .run_id = {.scenario_id = {.name = "Scenario hash-2", .hash = "hash-2"}, .start_time = 300}};
+        decoded.performance.emplace();
+        decoded.stored_totals = {.score = 77.0F, .shots = 10, .hits = 8, .misses = 2};
+        fake_file_service->perfs_by_path[arrived.absolutePath()] = decoded;
+        fake_file_service->stats_by_path.emplace("live_run Stats.csv", ksv::data::ParsedStatsCsv{
+            .scenario_id = {.name = "Scenario hash-2", .hash = "hash-2"},
+            .totals = {.score = 77.0F, .shots = 10, .hits = 8, .misses = 2},
+            .stats = {.dpi = 400}});
+
+        profile_service.addPerfFileToProfile(arrived);
+
+        const auto run = profile_service.getCurrentRun({{"Scenario hash-2", "hash-2"}, 300});
+        ASSERT_TRUE(run.has_value());
+        ASSERT_TRUE(run->stats.has_value());
+        EXPECT_EQ(run->stats->dpi, 400);
+        EXPECT_EQ(run->totals().score, 77.0F);
+        EXPECT_TRUE(run->sources.csv.has_value());
+    }
+
+    TEST_F(ProfileServiceTest, AddPerfFileWithoutASiblingAddsPerfOnlyAndLogsTheDerivedStatsPath) {
+        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+
+        const auto arrived = perf_file("orphan.perf");
+        fake_file_service->perfs_by_path[arrived.absolutePath()] = make_perf("hash-2", 300);
+
+        std::string logged;
+        {
+            const CerrCapture capture;
+            profile_service.addPerfFileToProfile(arrived);
+            logged = capture.str();
+        }
+
+        const auto run = profile_service.getCurrentRun({{"Scenario hash-2", "hash-2"}, 300});
+        ASSERT_TRUE(run.has_value());
+        EXPECT_FALSE(run->stats.has_value());
+        EXPECT_FALSE(run->sources.csv.has_value());
+        EXPECT_NE(logged.find("FPSAimTrainer/stats"), std::string::npos);
+        EXPECT_NE(logged.find("orphan Stats.csv"), std::string::npos);
+    }
+
     TEST_F(ProfileServiceTest, LoadProfileUsesStoreWhenAvailableAndSkipsDirectoryScan) {
         ksv::domain::UserProfile stored;
-        stored.addScenarioPerf(make_perf("hash-stored", 500));
+        stored.addRun(make_perf("hash-stored", 500));
         fake_serializer->profile_to_load = stored;
         // If the store is genuinely being used instead of a directory scan,
         // this perf (only reachable via getAllPerfsFromFiles) should never appear.
@@ -421,7 +499,7 @@ namespace {
     // would turn every startup into a write.
     TEST_F(ProfileServiceTest, LoadProfileFromStoreDoesNotSave) {
         ksv::domain::UserProfile stored;
-        stored.addScenarioPerf(make_perf("hash-stored", 500));
+        stored.addRun(make_perf("hash-stored", 500));
         fake_serializer->profile_to_load = stored;
 
         profile_service.loadProfile();
@@ -472,16 +550,17 @@ namespace {
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         auto built = profile_for_roots(fake_file_service->source_roots);
-        built.addScenarioPerf(make_perf("hash-1", 100));
+        built.addRun(make_perf("hash-1", 100));
         profile_service.applyBuiltProfile(std::move(built));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
         EXPECT_EQ(fake_serializer->save_count, 1);
         ASSERT_TRUE(fake_serializer->last_saved_profile.has_value());
-        const auto replayed = fake_serializer->last_saved_profile->getRun(
+        const auto replayed = fake_serializer->last_saved_profile->getCurrentRun(
             ksv::domain::ScenarioRunId{{"Scenario hash-2", "hash-2"}, 300});
         ASSERT_TRUE(replayed.has_value());
-        EXPECT_EQ(fake_serializer->last_saved_profile->sources().resolve(replayed->source),
+        ASSERT_TRUE(replayed->sources.perf.has_value());
+        EXPECT_EQ(fake_serializer->last_saved_profile->sources().resolve(*replayed->sources.perf),
                   "fake/kovaaks/FPSAimTrainer/performances/new_run.perf");
     }
 
@@ -494,11 +573,11 @@ namespace {
         profile_service.addPerfFileToProfile(perf_file("surviving.perf"));
 
         auto built = profile_for_roots(fake_file_service->source_roots);
-        built.addScenarioPerf(make_perf("hash-1", 100));
+        built.addRun(make_perf("hash-1", 100));
         profile_service.applyBuiltProfile(std::move(built));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
-        EXPECT_TRUE(profile_service.getRun({{"Scenario hash-2", "hash-2"}, 300}).has_value());
+        EXPECT_TRUE(profile_service.getCurrentRun({{"Scenario hash-2", "hash-2"}, 300}).has_value());
     }
 
     // A file that landed before the build's directory scan is already in the result;
@@ -510,7 +589,7 @@ namespace {
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         auto built = profile_for_roots(fake_file_service->source_roots);
-        built.addScenarioPerf(perf);
+        built.addRun(perf);
         profile_service.applyBuiltProfile(std::move(built));
 
         const auto scenarios = profile_service.getScenarioList();
@@ -525,7 +604,7 @@ namespace {
 
         profile_service.beginProfileBuild();
         auto stale = profile_for_roots({"D:/SomeOtherKovaaksDir"});
-        stale.addScenarioPerf(make_perf("hash-stale", 500));
+        stale.addRun(make_perf("hash-stale", 500));
         profile_service.applyBuiltProfile(std::move(stale));
 
         const auto scenarios = profile_service.getScenarioList();
@@ -546,7 +625,7 @@ namespace {
 
         profile_service.beginProfileBuild();
         auto rebuilt = profile_for_roots(fake_file_service->source_roots);
-        rebuilt.addScenarioPerf(make_perf("hash-1", 100));
+        rebuilt.addRun(make_perf("hash-1", 100));
         profile_service.applyBuiltProfile(std::move(rebuilt));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
@@ -566,7 +645,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, IsProfileLoadedTrueAfterLoadProfileFromStore) {
         ksv::domain::UserProfile stored;
-        stored.addScenarioPerf(make_perf("hash-stored", 500));
+        stored.addRun(make_perf("hash-stored", 500));
         fake_serializer->profile_to_load = stored;
 
         profile_service.loadProfile();
@@ -576,7 +655,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, ProfilePathChangeReloadsFromStoreAtNewLocation) {
         ksv::domain::UserProfile stored;
-        stored.addScenarioPerf(make_perf("hash-stored", 500));
+        stored.addRun(make_perf("hash-stored", 500));
         fake_serializer->profile_to_load = stored;
 
         // Changing the setting notifies ProfileService, which repoints its store.
@@ -627,7 +706,7 @@ namespace {
         EXPECT_EQ(runs[0].run_id.start_time, 100);
         EXPECT_EQ(runs[1].run_id.start_time, 300);
 
-        ProfileService unloaded(fake_file_service, fake_serializer, fake_settings);
+        ProfileService unloaded(fake_file_service, fake_serializer, fake_settings, ingestor);
         EXPECT_TRUE(unloaded.getRunsForScenario({.name = "?", .hash = "hash-1"}).empty());
     }
 }

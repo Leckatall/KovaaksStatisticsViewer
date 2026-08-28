@@ -14,16 +14,16 @@ namespace ksv::application {
             return std::ranges::all_of(values, [](const double value) { return std::isfinite(value); });
         }
 
-        std::optional<Values> evaluateNode(const domain::ScenarioPerf &, const BucketedRun &, const Expression &,
+        std::optional<Values> evaluateNode(const domain::Run &, const BucketedRun &, const Expression &,
                                            const IProfileService &);
 
-        std::optional<Values> evaluateAverage(const domain::ScenarioPerf &reference,
+        std::optional<Values> evaluateAverage(const domain::Run &reference,
                                               const BucketedRun &referenceBuckets,
                                               const AverageAcrossRuns &node, const IProfileService &profiles) {
             const auto referenceValues = evaluateNode(reference, referenceBuckets, node.input, profiles);
             if (!referenceValues) return std::nullopt;
             struct Candidate {
-                domain::ScenarioPerf perf;
+                domain::Run perf;
                 Values values;
             };
             std::vector<Candidate> candidates;
@@ -46,13 +46,13 @@ namespace ksv::application {
                     if (candidates.size() > selection.count) candidates.resize(selection.count);
                 } else {
                     std::ranges::stable_sort(candidates, [](const Candidate &left, const Candidate &right) {
-                        return left.perf.getRunData().score > right.perf.getRunData().score;
+                        return left.perf.totals().score > right.perf.totals().score;
                     });
                     const auto count = static_cast<size_t>(std::ceil(selection.percent * candidates.size() / 100.0));
                     if (count < candidates.size()) {
-                        const auto cutoff = candidates[count - 1].perf.getRunData().score;
+                        const auto cutoff = candidates[count - 1].perf.totals().score;
                         const auto end = std::ranges::find_if(candidates, [cutoff](const Candidate &candidate) {
-                            return candidate.perf.getRunData().score < cutoff;
+                            return candidate.perf.totals().score < cutoff;
                         });
                         candidates.erase(end, candidates.end());
                     }
@@ -66,7 +66,7 @@ namespace ksv::application {
             return finite(result) ? std::optional{std::move(result)} : std::nullopt;
         }
 
-        std::optional<Values> evaluateNode(const domain::ScenarioPerf &perf, const BucketedRun &buckets,
+        std::optional<Values> evaluateNode(const domain::Run &perf, const BucketedRun &buckets,
                                            const Expression &expression, const IProfileService &profiles) {
             if (!expression) return std::nullopt;
             return std::visit([&](const auto &node) -> std::optional<Values> {
@@ -121,7 +121,7 @@ namespace ksv::application {
         std::move(profileService)) {
     }
 
-    std::optional<std::vector<double> > AverageLineUseCase::evaluate(const domain::ScenarioPerf &referenceRun,
+    std::optional<std::vector<double> > AverageLineUseCase::evaluate(const domain::Run &referenceRun,
                                                                      const Expression &expression) const {
         return evaluateNode(referenceRun, bucketRun(referenceRun), expression, *m_profileService);
     }

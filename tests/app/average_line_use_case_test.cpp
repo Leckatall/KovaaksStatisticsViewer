@@ -12,13 +12,15 @@ using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
-    ScenarioPerf run(const long long start, std::initializer_list<double> scores, const std::string hash = "scenario") {
-        ScenarioPerf perf;
+    ksv::domain::Run run(const long long start, std::initializer_list<double> scores, const std::string hash = "scenario") {
+        ksv::domain::Run perf;
         perf.run_id = {{"Scenario", hash}, start};
+        perf.performance.emplace();
         float time = 1.0F;
         for (const auto score: scores) {
-            perf.data.emplace_back(time);
-            perf.data.back().score = static_cast<float>(score);
+            perf.performance->samples.emplace_back(time);
+            perf.performance->samples.back().score = static_cast<float>(score);
+            perf.stored_totals.score += static_cast<float>(score);
             ++time;
         }
         return perf;
@@ -29,12 +31,13 @@ namespace {
     }
 
     TEST(BucketedRunTest, MatchesPerfColumnBuilderPrimitiveProjection) {
-        ScenarioPerf perf;
-        perf.data = {ScenarioDataPoint{0.1F}, ScenarioDataPoint{1.0F}};
-        perf.data[0].score = 99.0F;
-        perf.data[1].score = 10.0F;
-        perf.data[1].shots = 2;
-        perf.data[1].hits = 1;
+        ksv::domain::Run perf;
+        perf.performance.emplace();
+        perf.performance->samples = {ksv::domain::ScenarioDataPoint{0.1F}, ksv::domain::ScenarioDataPoint{1.0F}};
+        perf.performance->samples[0].score = 99.0F;
+        perf.performance->samples[1].score = 10.0F;
+        perf.performance->samples[1].shots = 2;
+        perf.performance->samples[1].hits = 1;
 
         const auto buckets = bucketRun(perf);
         ASSERT_EQ(buckets.times, (std::vector<float>{1.0F}));

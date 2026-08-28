@@ -11,14 +11,16 @@
 
 #include "user_profile.h"
 #include "interfaces/i_file_service.h"
+#include "interfaces/i_run_ingestor.h"
 
 namespace ksv::data {
     class ProfileBuilder {
     public:
-        // Called after each file is folded in, with (files done, files total).
+        // Called after each group is folded in, with (groups done, groups total).
         using ProgressCallback = std::function<void(std::size_t, std::size_t)>;
 
-        explicit ProfileBuilder(std::shared_ptr<application::IFileService> file_service);
+        ProfileBuilder(std::shared_ptr<application::IFileService> file_service,
+                       std::shared_ptr<IRunIngestor> ingestor);
 
         [[nodiscard]] domain::UserProfile build(const ProgressCallback& on_progress = {}) const;
 
@@ -26,6 +28,7 @@ namespace ksv::data {
         // Held by value rather than by reference so a copy of the builder can outlive
         // the caller's stack frame once build() runs on a worker thread.
         std::shared_ptr<application::IFileService> m_file_service;
+        std::shared_ptr<IRunIngestor> m_ingestor;
     };
 }
 
