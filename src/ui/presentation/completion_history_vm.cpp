@@ -33,7 +33,7 @@ namespace ksv::presentation {
         }
 
         const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{{
-            {ValueTransform::identity(), {.baseline = AxisModel::Baseline::Zero}},
+            {ValueTransform::identity(), {}},
             {ValueTransform::percentage(), {}},
             {ValueTransform::identity(), {.baseline = AxisModel::Baseline::Zero}},
         }};
