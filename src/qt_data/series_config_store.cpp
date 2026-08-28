@@ -1,5 +1,7 @@
 #include "series_config_store.h"
 
+#include "app/contracts/expression_dsl.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -13,19 +15,12 @@ namespace ksv::qt_data {
     namespace {
         using namespace application;
 
-        QString metricTag(const PrimitiveMetric metric) {
-            switch (metric) {
-                case PrimitiveMetric::Score: return "score";
-                case PrimitiveMetric::Shots: return "shots";
-                case PrimitiveMetric::Hits: return "hits";
-                case PrimitiveMetric::Kills: return "kills";
-                case PrimitiveMetric::Dmg: return "dmg";
-            }
-            return {};
-        }
-
         std::optional<PrimitiveMetric> metricFromTag(const QString &tag) {
-            for (const auto metric: kPrimitiveMetrics) if (metricTag(metric) == tag) return metric;
+            if (tag == "score") return PrimitiveMetric::Score;
+            if (tag == "shots") return PrimitiveMetric::Shots;
+            if (tag == "hits") return PrimitiveMetric::Hits;
+            if (tag == "kills") return PrimitiveMetric::Kills;
+            if (tag == "dmg") return PrimitiveMetric::Dmg;
             return std::nullopt;
         }
 
@@ -66,28 +61,7 @@ namespace ksv::qt_data {
             return value.toDouble();
         }
 
-        QJsonObject encodeExpression(const Expression &expression);
-
         std::optional<Expression> decodeExpression(const QJsonValue &value);
-
-        template<typename Node>
-        QJsonObject encodeBinaryExpression(const char *kind, const Node &node) {
-            return {{"kind", kind}, {"left", encodeExpression(node.left)}, {"right", encodeExpression(node.right)}};
-        }
-
-        template<typename Node>
-        QJsonObject encodeUnaryExpression(const char *kind, const Node &node) {
-            return {{"kind", kind}, {"input", encodeExpression(node.input)}};
-        }
-
-        QJsonObject encodeSelection(const RunSelection &selection) {
-            return std::visit([](const auto &item) -> QJsonObject {
-                using Selection = std::decay_t<decltype(item)>;
-                if constexpr (std::same_as<Selection, RecentRuns>)
-                    return {{"kind", "recentRuns"}, {"count", static_cast<double>(item.count)}};
-                else return {{"kind", "topPercentile"}, {"percent", item.percent}};
-            }, selection);
-        }
 
         QJsonObject encodeStyle(const LineStyle &style) {
             return {
@@ -138,44 +112,6 @@ namespace ksv::qt_data {
             return SeriesPresentation{
                 object["name"].toString().toStdString(), *style, object["enabled"].toBool(), *position
             };
-        }
-
-        QJsonObject encodeExpression(const Expression &expression) {
-            return std::visit([](const auto &node) -> QJsonObject {
-                using Node = std::decay_t<decltype(node)>;
-                if constexpr (std::same_as<Node, PrimitiveReference>)
-                    return {
-                        {"kind", "primitive"}, {"primitiveMetric", metricTag(node.metric)}
-                    };
-                else if constexpr (std::same_as<Node, NumericConstant>)
-                    return {
-                        {"kind", "constant"}, {"value", node.value}
-                    };
-                else if constexpr (std::same_as<Node, Add>)
-                    return encodeBinaryExpression("add", node);
-                else if constexpr (std::same_as<Node, Subtract>)
-                    return encodeBinaryExpression("subtract", node);
-                else if constexpr (std::same_as<Node, Multiply>)
-                    return encodeBinaryExpression("multiply", node);
-                else if constexpr (std::same_as<Node, Divide>)
-                    return encodeBinaryExpression("divide", node);
-                else if constexpr (std::same_as<Node, RunningSum>)
-                    return encodeUnaryExpression("runningSum", node);
-                else if constexpr (std::same_as<Node, RollingMean>)
-                    return {
-                        {"kind", "rollingMean"}, {"input", encodeExpression(node.input)},
-                        {"window", static_cast<double>(node.window)}
-                    };
-                else if constexpr (std::same_as<Node, ProjectedFinalValue>)
-                    return encodeUnaryExpression("projectedFinalValue", node);
-                else if constexpr (std::same_as<Node, ProjectRateToFinal>)
-                    return encodeUnaryExpression("projectRateToFinal", node);
-                else
-                    return {
-                        {"kind", "averageAcrossRuns"}, {"input", encodeExpression(node.input)},
-                        {"selection", encodeSelection(node.selection)}
-                    };
-            }, expression->value());
         }
 
         using BinaryExpressionFactory = Expression (*)(Expression, Expression);
@@ -311,7 +247,8 @@ namespace ksv::qt_data {
             return AxisConfig{{*id}, object["name"].toString().toStdString(), *options, *transformKind};
         }
 
-        std::optional<std::vector<SeriesConfig>> decodeSeriesArray(const QJsonValue &value, const bool expectAxisFields) {
+        std::optional<std::vector<SeriesConfig>> decodeSeriesArray(const QJsonValue &value, const bool expectAxisFields,
+                                                                    const bool expressionIsDsl = false) {
             if (!value.isArray()) return std::nullopt;
             std::vector<SeriesConfig> configs;
             for (const auto &item: value.toArray()) {
@@ -321,7 +258,12 @@ namespace ksv::qt_data {
                 const auto id = decimalId(object["id"], false);
                 if (!presentation || !id) return std::nullopt;
                 Expression expression;
-                if (!object["expression"].isNull()) {
+                if (expressionIsDsl) {
+                    if (!object["expression"].isString()) return std::nullopt;
+                    const auto decoded = decodeExpressionDsl(object["expression"].toString().toStdString());
+                    if (!decoded) return std::nullopt;
+                    expression = *decoded;
+                } else if (!object["expression"].isNull()) {
                     const auto decoded = decodeExpression(object["expression"]);
                     if (!decoded) return std::nullopt;
                     expression = *decoded;
@@ -351,12 +293,12 @@ namespace ksv::qt_data {
             for (const auto &config: configs)
                 series.append(QJsonObject{{"id", QString::number(config.id.value)},
                     {"presentation", encodePresentation(config.presentation)},
-                    {"expression", config.expression ? QJsonValue(encodeExpression(config.expression)) : QJsonValue()},
+                    {"expression", QString::fromStdString(encodeExpressionDsl(config.expression))},
                     {"yAxisId", config.yAxisId ? QJsonValue(QString::number(config.yAxisId->value)) : QJsonValue()},
                     {"transformKind", transformKindTag(config.transformKind)}});
             QJsonArray axesArray;
             for (const auto &axis: axes) axesArray.append(encodeAxis(axis));
-            return QString::fromUtf8(QJsonDocument(QJsonObject{{"schemaVersion", 2},
+            return QString::fromUtf8(QJsonDocument(QJsonObject{{"schemaVersion", 3},
                 {"nextComputedSeriesId", QString::number(next.value)}, {"series", series}, {"axes", axesArray},
                 {"nextAxisId", QString::number(nextAxisId.value)}}).toJson(QJsonDocument::Indented));
         }
@@ -377,24 +319,19 @@ namespace ksv::qt_data {
             return {std::move(configs), nextSeriesId, std::move(axes), kFirstUserAxisId};
         }
 
-        std::optional<Document> decode(const QString &raw) {
-            QJsonParseError error;
-            const auto document = QJsonDocument::fromJson(raw.toUtf8(), &error);
-            if (error.error != QJsonParseError::NoError || !document.isObject()) return {};
-            const auto root = document.object();
-            if (!root["schemaVersion"].isDouble()) return {};
-            const auto version = root["schemaVersion"].toDouble();
-            if (version == 1) {
-                if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series"})) return {};
-                const auto nextId = decimalId(root["nextComputedSeriesId"], false);
-                auto configs = decodeSeriesArray(root["series"], false);
-                if (!nextId || !configs || !validateSeriesConfigs(*configs).empty()) return {};
-                uint64_t maximumId = 0;
-                for (const auto &config: *configs) maximumId = std::max(maximumId, config.id.value);
-                if (*nextId <= maximumId) return {};
-                return migrateV1ToV2(std::move(*configs), SeriesId{*nextId});
-            }
-            if (version != 2 || !exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series", "axes", "nextAxisId"})) return {};
+        std::optional<Document> migrateV1ToV3(const QJsonObject &root) {
+            if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series"})) return {};
+            const auto nextId = decimalId(root["nextComputedSeriesId"], false);
+            auto configs = decodeSeriesArray(root["series"], false);
+            if (!nextId || !configs || !validateSeriesConfigs(*configs).empty()) return {};
+            uint64_t maximumId = 0;
+            for (const auto &config: *configs) maximumId = std::max(maximumId, config.id.value);
+            if (*nextId <= maximumId) return {};
+            return migrateV1ToV2(std::move(*configs), SeriesId{*nextId});
+        }
+
+        std::optional<Document> decodeVersionedDocument(const QJsonObject &root, const bool expressionIsDsl) {
+            if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series", "axes", "nextAxisId"})) return {};
             const auto nextSeriesId = decimalId(root["nextComputedSeriesId"], false);
             const auto nextAxisId = decimalId(root["nextAxisId"], false);
             if (!nextSeriesId || !nextAxisId || !root["axes"].isArray()) return {};
@@ -409,7 +346,7 @@ namespace ksv::qt_data {
             for (const auto &axis: axes) axisIds.push_back(axis.id.value);
             std::ranges::sort(axisIds);
             if (std::ranges::adjacent_find(axisIds) != axisIds.end()) return {};
-            auto configs = decodeSeriesArray(root["series"], true);
+            auto configs = decodeSeriesArray(root["series"], true, expressionIsDsl);
             if (!configs || !validateSeriesConfigs(*configs).empty()) return {};
             uint64_t maximumSeriesId = 0;
             for (const auto &config: *configs) {
@@ -421,6 +358,27 @@ namespace ksv::qt_data {
             for (const auto &axis: axes) maximumAxisId = std::max(maximumAxisId, axis.id.value);
             if (*nextAxisId <= maximumAxisId) return {};
             return Document{std::move(*configs), SeriesId{*nextSeriesId}, std::move(axes), AxisId{*nextAxisId}};
+        }
+
+        std::optional<Document> migrateV2ToV3(const QJsonObject &root) {
+            return decodeVersionedDocument(root, false);
+        }
+
+        std::optional<Document> decodeV3(const QJsonObject &root) {
+            return decodeVersionedDocument(root, true);
+        }
+
+        std::optional<Document> decode(const QString &raw) {
+            QJsonParseError error;
+            const auto document = QJsonDocument::fromJson(raw.toUtf8(), &error);
+            if (error.error != QJsonParseError::NoError || !document.isObject()) return {};
+            const auto root = document.object();
+            if (!root["schemaVersion"].isDouble()) return {};
+            const auto version = root["schemaVersion"].toDouble();
+            if (version == 1) return migrateV1ToV3(root);
+            if (version == 2) return migrateV2ToV3(root);
+            if (version == 3) return decodeV3(root);
+            return {};
         }
 
         void normalizeDisplayPositions(std::vector<SeriesConfig> &configs) {

@@ -8,6 +8,7 @@
 #include <array>
 #include <ranges>
 
+#include "app/contracts/expression_dsl.h"
 #include "data/interfaces/i_settings_service.h"
 #include "qt_data/series_config_store.h"
 #include "fake_settings_service.h"
@@ -66,23 +67,23 @@ namespace {
         EXPECT_EQ(reopened.getAll().size(), expected.size());
     }
 
-    TEST_F(SeriesConfigStoreTest, CreatesAndRoundTripsABlankSeriesAsAnExplicitJsonNull) {
+    TEST_F(SeriesConfigStoreTest, CreatesAndRoundTripsABlankSeriesAsAnEmptyDslString) {
         makeStore();
         const auto created = store->createComputed({{"Blank", {{1, 2, 3, 255}, 2.0}, true}, {}});
         ASSERT_TRUE(created.succeeded());
         const auto id = *created.createdId;
 
         const auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
-        bool sawNullExpression = false;
+        bool sawBlankDslExpression = false;
         for (const auto &item: root["series"].toArray()) {
             const auto object = item.toObject();
             if (object["id"].toString() == QString::number(id.value)) {
                 EXPECT_TRUE(object.contains("expression"));
-                EXPECT_TRUE(object["expression"].isNull());
-                sawNullExpression = true;
+                EXPECT_EQ(object["expression"].toString(), "");
+                sawBlankDslExpression = true;
             }
         }
-        EXPECT_TRUE(sawNullExpression);
+        EXPECT_TRUE(sawBlankDslExpression);
 
         SeriesConfigStore reopened(settings);
         const auto configs = reopened.getAll();
@@ -289,16 +290,68 @@ namespace {
         EXPECT_EQ(settings->quarantined, (std::vector<std::string>{"{}"}));
     }
 
-    TEST_F(SeriesConfigStoreTest, SchemaVersionTwoDocumentIncludesAxesAndNextAxisId) {
+    TEST_F(SeriesConfigStoreTest, SchemaVersionThreeDocumentIncludesAxesAndNextAxisId) {
         makeStore();
         const auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 2);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 3);
         EXPECT_EQ(root["nextAxisId"].toString(), "3");
         ASSERT_TRUE(root["axes"].isArray());
         EXPECT_EQ(root["axes"].toArray().size(), 2);
         const auto firstSeries = root["series"].toArray()[0].toObject();
         EXPECT_TRUE(firstSeries["yAxisId"].isNull());
         EXPECT_EQ(firstSeries["transformKind"].toString(), "identity");
+    }
+
+    TEST_F(SeriesConfigStoreTest, LoadsV3DslExpressions) {
+        makeStore();
+        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        root["schemaVersion"] = 3;
+        auto series = root["series"].toArray();
+        auto score = series[0].toObject();
+        score["expression"] = "Add(SCORE, 2)";
+        series[0] = score;
+        root["series"] = series;
+        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+
+        SeriesConfigStore reopened(settings);
+        const auto configs = reopened.getAll();
+        const auto loaded = std::ranges::find(configs, SeriesId{1}, &SeriesConfig::id);
+        ASSERT_NE(loaded, configs.end());
+        EXPECT_EQ(encodeExpressionDsl(loaded->expression), "Add(SCORE, 2)");
+    }
+
+    TEST_F(SeriesConfigStoreTest, LoadsV2NestedJsonExpressions) {
+        makeStore();
+        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        root["schemaVersion"] = 2;
+        auto series = root["series"].toArray();
+        auto score = series[0].toObject();
+        score["expression"] = QJsonObject{{"kind", "add"},
+                                            {"left", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}},
+                                            {"right", QJsonObject{{"kind", "constant"}, {"value", 2.0}}}};
+        root["series"] = QJsonArray{score};
+        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+
+        SeriesConfigStore reopened(settings);
+        const auto configs = reopened.getAll();
+        const auto loaded = std::ranges::find(configs, SeriesId{1}, &SeriesConfig::id);
+        ASSERT_NE(loaded, configs.end());
+        EXPECT_EQ(encodeExpressionDsl(loaded->expression), "Add(SCORE, 2)");
+    }
+
+    TEST_F(SeriesConfigStoreTest, RejectsMalformedV3DslExpressionsAndReseeds) {
+        makeStore();
+        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        auto series = root["series"].toArray();
+        auto score = series[0].toObject();
+        score["expression"] = "Add(SCORE,)";
+        series[0] = score;
+        root["series"] = series;
+        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+
+        SeriesConfigStore reopened(settings);
+        EXPECT_EQ(reopened.getAll().size(), 9U);
+        EXPECT_GT(settings->document_writes, 1);
     }
 
     TEST_F(SeriesConfigStoreTest, MigratesV1DocumentToV2InMemory) {
