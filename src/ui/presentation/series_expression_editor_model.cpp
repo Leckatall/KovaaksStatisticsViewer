@@ -1,11 +1,10 @@
 #include "series_expression_editor_model.h"
 
-#include "series_expression_qml.h"
-
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QMetaMethod>
 #include <QMetaProperty>
+#include <cmath>
 #include <type_traits>
 
 #include "app/contracts/expression_dsl.h"
@@ -204,34 +203,52 @@ namespace ksv::presentation {
         return path;
     }
 
-    QVariantMap SeriesExpressionEditorModel::nodeToPersistenceMap(EditableExpressionNode *node) const {
-        if (!node) return {};
-        QVariantMap map{{"kind", node->kind()}};
+    std::optional<application::Expression> SeriesExpressionEditorModel::nodeToExpression(EditableExpressionNode *node) const {
+        if (!node) return std::nullopt;
         if (auto *primitive = qobject_cast<EditablePrimitiveNode *>(node)) {
-            map["primitiveMetric"] = primitive->metric();
+            const int metric = primitiveMetrics().indexOf(primitive->metric());
+            if (metric < 0) return std::nullopt;
+            return application::primitive(application::kPrimitiveMetrics[static_cast<size_t>(metric)]);
         } else if (auto *constant = qobject_cast<EditableConstantNode *>(node)) {
-            map["value"] = constant->value();
+            if (!std::isfinite(constant->value())) return std::nullopt;
+            return application::numericConstant(constant->value());
         } else if (auto *binary = qobject_cast<EditableBinaryOpNode *>(node)) {
-            map["left"] = nodeToPersistenceMap(binary->left());
-            map["right"] = nodeToPersistenceMap(binary->right());
+            const auto left = nodeToExpression(binary->left());
+            const auto right = nodeToExpression(binary->right());
+            if (!left || !right) return std::nullopt;
+            if (binary->kind() == "add") return application::add(*left, *right);
+            if (binary->kind() == "subtract") return application::subtract(*left, *right);
+            if (binary->kind() == "multiply") return application::multiply(*left, *right);
+            if (binary->kind() == "divide") return application::divide(*left, *right);
+            return std::nullopt;
         } else if (auto *unary = qobject_cast<EditableUnaryOpNode *>(node)) {
-            map["input"] = nodeToPersistenceMap(unary->input());
+            const auto input = nodeToExpression(unary->input());
+            if (!input) return std::nullopt;
+            if (unary->kind() == "runningSum") return application::runningSum(*input);
+            if (unary->kind() == "projectedFinalValue") return application::projectedFinalValue(*input);
+            if (unary->kind() == "projectRateToFinal") return application::projectRateToFinal(*input);
+            return std::nullopt;
         } else if (auto *rollingMean = qobject_cast<EditableRollingMeanNode *>(node)) {
-            map["window"] = rollingMean->window();
-            map["input"] = nodeToPersistenceMap(rollingMean->input());
+            const auto input = nodeToExpression(rollingMean->input());
+            if (!input || rollingMean->window() == 0) return std::nullopt;
+            return application::rollingMean(*input, rollingMean->window());
         } else if (auto *average = qobject_cast<EditableAverageAcrossRunsNode *>(node)) {
-            map["input"] = nodeToPersistenceMap(average->input());
-            map["selection"] = average->selectionKind() == "recentRuns"
-                ? QVariantMap{{"kind", "recentRuns"}, {"count", average->count()}}
-                : QVariantMap{{"kind", "topPercentile"}, {"percent", average->percent()}};
+            const auto input = nodeToExpression(average->input());
+            if (!input) return std::nullopt;
+            if (average->selectionKind() == "recentRuns") {
+                if (average->count() == 0) return std::nullopt;
+                return application::averageAcrossRuns(*input, application::RecentRuns{average->count()});
+            }
+            if (average->selectionKind() == "topPercentile") {
+                if (!std::isfinite(average->percent())) return std::nullopt;
+                return application::averageAcrossRuns(*input, application::TopPercentile{average->percent()});
+            }
         }
-        return map;
+        return std::nullopt;
     }
 
-    QVariantMap SeriesExpressionEditorModel::toExpressionMap() const { return nodeToPersistenceMap(m_root.get()); }
-
     std::optional<application::Expression> SeriesExpressionEditorModel::toExpression() const {
-        return parseExpression(toExpressionMap());
+        return nodeToExpression(m_root.get());
     }
 
     EditableExpressionNode *SeriesExpressionEditorModel::nodeFromExpression(const application::Expression &expression) {

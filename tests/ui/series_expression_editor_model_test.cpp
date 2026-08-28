@@ -1,18 +1,28 @@
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include <QSignalSpy>
 
+#include "app/contracts/expression_dsl.h"
 #include "editable_expression_node.h"
 #include "series_expression_editor_model.h"
-#include "series_expression_qml.h"
 
 using ksv::application::PrimitiveMetric;
 using ksv::application::RecentRuns;
+using ksv::application::TopPercentile;
 using ksv::application::add;
 using ksv::application::averageAcrossRuns;
+using ksv::application::divide;
+using ksv::application::encodeExpressionDsl;
+using ksv::application::multiply;
 using ksv::application::numericConstant;
 using ksv::application::primitive;
+using ksv::application::projectRateToFinal;
+using ksv::application::projectedFinalValue;
 using ksv::application::rollingMean;
+using ksv::application::runningSum;
+using ksv::application::subtract;
 using ksv::presentation::EditableAverageAcrossRunsNode;
 using ksv::presentation::EditableBinaryOpNode;
 using ksv::presentation::EditableConstantNode;
@@ -20,8 +30,6 @@ using ksv::presentation::EditableExpressionNode;
 using ksv::presentation::EditablePrimitiveNode;
 using ksv::presentation::EditableRollingMeanNode;
 using ksv::presentation::SeriesExpressionEditorModel;
-using ksv::presentation::expressionMap;
-using ksv::presentation::parseExpression;
 
 namespace {
     void primitiveRoot(SeriesExpressionEditorModel &model) { model.replaceChild(nullptr, "root", "primitive"); }
@@ -104,15 +112,6 @@ namespace {
         EXPECT_EQ(addNode->left()->parentNode(), addNode);
     }
 
-    TEST(SeriesExpressionEditorModelTest, ToExpressionMapOmitsParentBookkeepingAndParses) {
-        SeriesExpressionEditorModel model;
-        primitiveRoot(model);
-        const auto persistent = model.toExpressionMap();
-        EXPECT_FALSE(persistent.contains("id"));
-        EXPECT_TRUE(persistent.contains("primitiveMetric"));
-        EXPECT_TRUE(parseExpression(persistent));
-    }
-
     TEST(SeriesExpressionEditorModelTest, AncestorChainReturnsRootToTargetPath) {
         SeriesExpressionEditorModel model;
         model.loadFrom(rollingMean(primitive(PrimitiveMetric::Score), 10));
@@ -170,13 +169,19 @@ namespace {
         model.replaceChild(model.selected(), "input", "primitive");
         const auto parsed = model.toExpression();
         ASSERT_TRUE(parsed);
-        EXPECT_EQ(expressionMap(*parsed).value("window").toUInt(), 10U);
+        EXPECT_EQ(encodeExpressionDsl(*parsed), "RollingMean(window: 10, SCORE)");
 
         SeriesExpressionEditorModel average;
         average.replaceChild(nullptr, "root", "averageAcrossRuns");
         EXPECT_FALSE(average.toExpression());
         average.replaceChild(average.selected(), "input", "primitive");
         EXPECT_TRUE(average.toExpression());
+
+        SeriesExpressionEditorModel binary;
+        binary.replaceChild(nullptr, "root", "add");
+        auto *addNode = qobject_cast<EditableBinaryOpNode *>(binary.root());
+        binary.replaceChild(addNode, "left", "primitive");
+        EXPECT_FALSE(binary.toExpression());
     }
 
     TEST(SeriesExpressionEditorModelTest, DeleteNodeClearsRootOrChildAndSelectsParent) {
@@ -277,13 +282,27 @@ namespace {
     }
 
     TEST(SeriesExpressionEditorModelTest, ToExpressionRoundTripsEverySupportedNodeKind) {
-        const auto expression = averageAcrossRuns(
-            rollingMean(add(primitive(PrimitiveMetric::Score), numericConstant(2.0)), 5), RecentRuns{3});
-        SeriesExpressionEditorModel model;
-        model.loadFrom(expression);
-        const auto result = model.toExpression();
-        ASSERT_TRUE(result);
-        EXPECT_EQ(expressionMap(*result), expressionMap(expression));
+        const std::array expressions{
+            primitive(PrimitiveMetric::Score),
+            numericConstant(2.0),
+            add(primitive(PrimitiveMetric::Score), numericConstant(2.0)),
+            subtract(primitive(PrimitiveMetric::Score), primitive(PrimitiveMetric::Hits)),
+            multiply(primitive(PrimitiveMetric::Score), numericConstant(0.5)),
+            divide(primitive(PrimitiveMetric::Hits), primitive(PrimitiveMetric::Shots)),
+            runningSum(primitive(PrimitiveMetric::Score)),
+            projectedFinalValue(primitive(PrimitiveMetric::Score)),
+            projectRateToFinal(primitive(PrimitiveMetric::Score)),
+            rollingMean(primitive(PrimitiveMetric::Score), 5),
+            averageAcrossRuns(primitive(PrimitiveMetric::Score), RecentRuns{3}),
+            averageAcrossRuns(primitive(PrimitiveMetric::Hits), TopPercentile{12.5}),
+        };
+        for (const auto &expression: expressions) {
+            SeriesExpressionEditorModel model;
+            model.loadFrom(expression);
+            const auto result = model.toExpression();
+            ASSERT_TRUE(result);
+            EXPECT_EQ(encodeExpressionDsl(*result), encodeExpressionDsl(expression));
+        }
     }
 
     TEST(SeriesExpressionEditorModelTest, RootChangedAndSelectedChangedFireOnlyWhenTheValueActuallyChanges) {

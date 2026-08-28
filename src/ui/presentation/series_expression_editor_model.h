@@ -3,7 +3,6 @@
 #include <QObject>
 #include <QStringList>
 #include <QVariantList>
-#include <QVariantMap>
 
 #include <memory>
 #include <optional>
@@ -40,7 +39,6 @@ namespace ksv::presentation {
         [[nodiscard]] QStringList nodeKinds() const;
         [[nodiscard]] QStringList primitiveMetrics() const;
         [[nodiscard]] std::optional<application::Expression> toExpression() const;
-        Q_INVOKABLE [[nodiscard]] QVariantMap toExpressionMap() const;
 
         // Canonical DSL text of the current expression, empty when it is incomplete/invalid.
         Q_INVOKABLE [[nodiscard]] QString toDslText() const;
@@ -67,7 +65,7 @@ namespace ksv::presentation {
         static bool setChildInParent(EditableExpressionNode *parent, const QString &slot,
                                                     EditableExpressionNode *node);
         [[nodiscard]] std::unique_ptr<EditableExpressionNode> detachFromParent(EditableExpressionNode *node);
-        [[nodiscard]] QVariantMap nodeToPersistenceMap(EditableExpressionNode *node) const;
+        [[nodiscard]] std::optional<application::Expression> nodeToExpression(EditableExpressionNode *node) const;
         [[nodiscard]] EditableExpressionNode *nodeFromExpression(const application::Expression &expression);
 
         std::unique_ptr<EditableExpressionNode> m_root;
