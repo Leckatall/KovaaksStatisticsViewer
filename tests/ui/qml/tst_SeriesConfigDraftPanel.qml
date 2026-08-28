@@ -34,10 +34,7 @@ TestCase {
                     displayPosition: 0,
                     isPrimitive: true,
                     yAxisId: "",
-                    expression: {
-                        kind: "primitive",
-                        primitiveMetric: "score"
-                    }
+                    expression: "SCORE"
                 }
             ],
             pendingChanges: false,
@@ -115,12 +112,7 @@ TestCase {
                     changeBinaryOperator: function () {},
                     updateField: function () {},
                     changeSelectionKind: function () {},
-                    toExpressionMap: function () {
-                        return {
-                            kind: "primitive",
-                            primitiveMetric: "score"
-                        };
-                    }
+                    toDslText: function () { return "SCORE"; }
                 };
             }
         }, overrides);
@@ -136,10 +128,7 @@ TestCase {
                 enabled: false,
                 displayPosition: 1,
                 isPrimitive: false,
-                expression: {
-                    kind: "constant",
-                    value: 2
-                }
+                expression: "2"
             },
             {
                 id: "1",
@@ -149,10 +138,7 @@ TestCase {
                 enabled: true,
                 displayPosition: 0,
                 isPrimitive: true,
-                expression: {
-                    kind: "primitive",
-                    primitiveMetric: "score"
-                }
+                expression: "SCORE"
             }
         ];
     }
@@ -167,10 +153,7 @@ TestCase {
                 enabled: true,
                 displayPosition: i,
                 isPrimitive: true,
-                expression: {
-                    kind: "primitive",
-                    primitiveMetric: "score"
-                }
+                expression: "SCORE"
             });
         }
         return rows;
@@ -204,7 +187,7 @@ TestCase {
         compare(call[1], "#4CAF50");
         compare(call[2], 2);
         compare(call[3], true);
-        compare(call[4], {});
+        compare(call[4], "");
     }
     function test_axisComboDefaultsToIndependentWhenRowHasNoYAxisId() {
         const panel = createTemporaryObject(panelComponent, testCase, {
@@ -245,10 +228,7 @@ TestCase {
                 displayPosition: 0,
                 isPrimitive: true,
                 yAxisId: "2",
-                expression: {
-                    kind: "primitive",
-                    primitiveMetric: "score"
-                }
+                expression: "SCORE"
             }]
         });
         const panel = createTemporaryObject(panelComponent, testCase, {
@@ -360,10 +340,7 @@ TestCase {
                 enabled: true,
                 displayPosition: 2,
                 isPrimitive: false,
-                expression: {
-                    kind: "constant",
-                    value: 3
-                }
+                expression: "3"
             },
             {
                 id: "4",
@@ -373,10 +350,7 @@ TestCase {
                 enabled: true,
                 displayPosition: 3,
                 isPrimitive: false,
-                expression: {
-                    kind: "constant",
-                    value: 4
-                }
+                expression: "4"
             }
         ]);
         const vm = makeFakeSettingsVm({

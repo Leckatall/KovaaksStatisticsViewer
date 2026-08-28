@@ -46,7 +46,7 @@ TestCase {
             changeBinaryOperator: function () {},
             updateField: function () {},
             changeSelectionKind: function () {},
-            toExpressionMap: function () {
+            toDslText: function () {
                 return expression;
             }
         };
@@ -59,10 +59,7 @@ TestCase {
             beginExpressionEdit: function (id) {
                 this.beginExpressionEditCalls.push(id);
                 this.next++;
-                return fakeEditor({
-                    kind: "constant",
-                    value: this.next
-                });
+                return fakeEditor(String(this.next));
             },
             updateComputedSeries: function () {
                 this.updateCalls.push(Array.from(arguments));
@@ -96,7 +93,7 @@ TestCase {
             changeBinaryOperator: function () {},
             updateField: function () {},
             changeSelectionKind: function () {},
-            toExpressionMap: function () { return root; }
+            toDslText: function () { return "SCORE"; }
         };
     }
     function makeDialog(vm) {
@@ -125,7 +122,7 @@ TestCase {
         dialog.accept();
         compare(dialog.settingsVm.updateCalls.length, 1);
         compare(dialog.settingsVm.updateCalls[0][0], "7");
-        compare(dialog.settingsVm.updateCalls[0][5].value, 1);
+        compare(dialog.settingsVm.updateCalls[0][5], "1");
     }
     function test_closingWithoutAcceptingDoesNotCallUpdateComputedSeries() {
         const vm = fakeVm();

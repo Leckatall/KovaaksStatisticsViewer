@@ -174,7 +174,7 @@ Pane {
         Button {
             objectName: "addSeriesButton"
             text: qsTr("Add series")
-            onClicked: root.settingsVm.createComputedSeries(qsTr("New Series"), "#4CAF50", 2.0, true, {})
+            onClicked: root.settingsVm.createComputedSeries(qsTr("New Series"), "#4CAF50", 2.0, true, "")
         }
         Label {
             id: seriesDraftErrorLabel

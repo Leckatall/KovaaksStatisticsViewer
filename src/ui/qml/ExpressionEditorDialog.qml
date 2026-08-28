@@ -27,7 +27,7 @@ Dialog {
         editorModel = settingsVm.beginExpressionEdit(seriesId)
     }
     onVisibleChanged: if (visible) beginEditing()
-    onAccepted: settingsVm.updateComputedSeries(seriesId, seriesName, seriesColor, seriesWidth, seriesEnabled, editorModel.toExpressionMap())
+    onAccepted: settingsVm.updateComputedSeries(seriesId, seriesName, seriesColor, seriesWidth, seriesEnabled, editorModel.toDslText())
 
     contentItem: ColumnLayout {
         spacing: 8
