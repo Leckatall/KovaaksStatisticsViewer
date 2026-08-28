@@ -105,8 +105,14 @@ namespace {
         EXPECT_EQ(encodeExpressionDsl(*decoded), "AverageAcrossRuns(over: top 10%, HITS)");
     }
 
+    TEST(ExpressionDslDecode, DecodesBlankTextAsABlankExpression) {
+        const auto decoded = decodeExpressionDsl("");
+        ASSERT_TRUE(decoded.has_value());
+        EXPECT_FALSE(*decoded);
+        EXPECT_EQ(encodeExpressionDsl(*decoded), "");
+    }
+
     TEST(ExpressionDslDecode, RejectsMalformedInput) {
-        EXPECT_FALSE(decodeExpressionDsl("").has_value());
         EXPECT_FALSE(decodeExpressionDsl("Bogus(SCORE)").has_value());
         EXPECT_FALSE(decodeExpressionDsl("Add(SCORE)").has_value());              // too few args
         EXPECT_FALSE(decodeExpressionDsl("Add(SCORE, HITS, KILLS)").has_value()); // too many args

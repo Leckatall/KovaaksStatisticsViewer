@@ -232,6 +232,7 @@ namespace ksv::application {
     }
 
     std::optional<Expression> decodeExpressionDsl(const std::string_view text) {
+        if (text.empty()) return Expression{};
         return Parser(text).parseComplete();
     }
 }
