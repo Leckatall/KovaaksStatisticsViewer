@@ -21,8 +21,20 @@ Item {
     implicitHeight: mainColumn.implicitHeight
     implicitWidth: mainColumn.implicitWidth
 
-    Component.onCompleted: if (rootItem.model && rootItem.model.root && !rootItem.model.selected) rootItem.model.select(rootItem.model.root)
-    onModelChanged: if (rootItem.model && rootItem.model.root && !rootItem.model.selected) rootItem.model.select(rootItem.model.root)
+    function selectRootIfUnselected() {
+        if (rootItem.model && rootItem.model.root && !rootItem.model.selected)
+            rootItem.model.select(rootItem.model.root);
+    }
+
+    Component.onCompleted: rootItem.selectRootIfUnselected()
+    onModelChanged: rootItem.selectRootIfUnselected()
+
+    // The tree renders off the selected node's ancestor chain, and loadFrom (e.g. Paste) clears the
+    // selection while swapping the root — without this the editor would show nothing until reopened.
+    Connections {
+        target: rootItem.model
+        function onRootChanged() { rootItem.selectRootIfUnselected() }
+    }
 
     ColumnLayout {
         id: mainColumn
@@ -160,6 +172,19 @@ Item {
                 text: qsTr("Wrap")
 
                 onClicked: rootItem.model.wrapSelected(wrapperKind.currentText)
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: !!rootItem.model && !!rootItem.model.root
+
+            Label { text: qsTr("Text:") }
+            TextField {
+                Layout.fillWidth: true
+                objectName: "expressionDslField"
+                readOnly: true
+                selectByMouse: true
+                text: rootItem.model ? rootItem.model.dslText : ""
             }
         }
     }

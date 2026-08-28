@@ -2,7 +2,13 @@
 
 #include "series_expression_qml.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QMetaMethod>
+#include <QMetaProperty>
 #include <type_traits>
+
+#include "app/contracts/expression_dsl.h"
 
 namespace ksv::presentation {
     SeriesExpressionEditorModel::SeriesExpressionEditorModel(QObject *parent) : QObject(parent) {}
@@ -114,6 +120,7 @@ namespace ksv::presentation {
         if (!parent) setRoot(replacement);
         else setChildInParent(parent, slot, replacement);
         setSelected(replacement);
+        refreshDslObservers();
     }
 
     std::unique_ptr<EditableExpressionNode> SeriesExpressionEditorModel::detachFromParent(EditableExpressionNode *node) {
@@ -145,6 +152,7 @@ namespace ksv::presentation {
         auto detached = detachFromParent(node);
         if (!detached) return;
         setSelected(parent);
+        refreshDslObservers();
     }
 
     void SeriesExpressionEditorModel::wrapSelected(const QString &kind) {
@@ -180,6 +188,7 @@ namespace ksv::presentation {
         if (!parent) setRoot(wrapper);
         else setChildInParent(parent, slot, wrapper);
         setSelected(wrapper);
+        refreshDslObservers();
     }
 
     QString SeriesExpressionEditorModel::describe(EditableExpressionNode *node) const {
@@ -276,8 +285,48 @@ namespace ksv::presentation {
         }, expression->value());
     }
 
+    void SeriesExpressionEditorModel::observeSubtree(EditableExpressionNode *node) {
+        if (!node) return;
+        static const QMetaMethod dslChanged = QMetaMethod::fromSignal(&SeriesExpressionEditorModel::dslTextChanged);
+        const QMetaObject *meta = node->metaObject();
+        for (int index = 0; index < meta->propertyCount(); ++index) {
+            if (const QMetaProperty property = meta->property(index); property.hasNotifySignal())
+                connect(node, property.notifySignal(), this, dslChanged, Qt::UniqueConnection);
+        }
+        for (const QString &slot: childSlotsFor(node->kind()))
+            observeSubtree(node->property(slot.toUtf8().constData()).value<EditableExpressionNode *>());
+    }
+
+    void SeriesExpressionEditorModel::refreshDslObservers() {
+        observeSubtree(m_root.get());
+        emit dslTextChanged();
+    }
+
     void SeriesExpressionEditorModel::loadFrom(const application::Expression &expression) {
         setSelected(nullptr);
         setRoot(nodeFromExpression(expression));
+        refreshDslObservers();
+    }
+
+    QString SeriesExpressionEditorModel::toDslText() const {
+        const auto expression = toExpression();
+        if (!expression) return {};
+        return QString::fromStdString(application::encodeExpressionDsl(*expression));
+    }
+
+    bool SeriesExpressionEditorModel::applyDslText(const QString &text) {
+        const auto expression = application::decodeExpressionDsl(text.toStdString());
+        if (!expression) return false;
+        loadFrom(*expression);
+        return true;
+    }
+
+    void SeriesExpressionEditorModel::copyToClipboard() const {
+        if (auto *clipboard = QGuiApplication::clipboard()) clipboard->setText(toDslText());
+    }
+
+    bool SeriesExpressionEditorModel::pasteFromClipboard() {
+        auto *clipboard = QGuiApplication::clipboard();
+        return clipboard && applyDslText(clipboard->text());
     }
 }

@@ -1,5 +1,6 @@
 add_library(ksv_contracts STATIC
         series_config.cpp
+        expression_dsl.cpp
 )
 
 target_sources(ksv_contracts PUBLIC
@@ -11,6 +12,7 @@ target_sources(ksv_contracts PUBLIC
         run_performance.h
         resolved_graph.h
         series_config.h
+        expression_dsl.h
         i_graph_use_case.h
         i_playtime_graph_use_case.h
         i_completion_history_use_case.h

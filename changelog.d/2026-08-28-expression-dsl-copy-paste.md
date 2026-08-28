@@ -1,0 +1,8 @@
+---
+type: added
+area: Graphing
+user: See a series' expression as a compact one-line text in the editor, and copy/paste it to reuse on another series or share it with someone else.
+---
+`encodeExpressionDsl`/`decodeExpressionDsl` in `ksv_contracts` — a Qt-free canonical text codec for `application::Expression`: all-prefix `Name(args)`, PascalCase node names, FULLUPPER metric leaves, bare `std::to_chars` constant leaves, and a required `window:` / `over:` label on the one scalar/selection parameter of `RollingMean` / `AverageAcrossRuns` (expression inputs stay positional). decode is a case-insensitive, whitespace-insensitive recursive descent that rejects malformed input; encode is canonical so a decode of an encode re-encodes byte-identically.
+`SeriesExpressionEditorModel` gains `toDslText`/`applyDslText` plus thin `copyToClipboard`/`pasteFromClipboard` glue, and a NOTIFYing `dslText` property that stays live by chaining every node's property-change signals (field editors write node properties directly) through to `dslTextChanged`. `ExpressionEditorDialog.qml` gets Copy/Paste controls with an inline paste-error label; `ExpressionTreeEditor.qml` gets a read-only text field showing `dslText`, and now reselects the root on `rootChanged` so a Paste (which clears the selection while swapping the root) repopulates the tree view instead of leaving it blank until reopened.
+Additive only — the two existing JSON codecs (`series_config_store` persistence, `series_expression_qml` transport) are untouched, and a differential test pins the DSL to the JSON codec across the shipped defaults so the JSON path can be retired later with confidence.

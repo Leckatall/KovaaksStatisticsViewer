@@ -26,6 +26,58 @@ using ksv::presentation::parseExpression;
 namespace {
     void primitiveRoot(SeriesExpressionEditorModel &model) { model.replaceChild(nullptr, "root", "primitive"); }
 
+    TEST(SeriesExpressionEditorModelTest, ToDslTextEncodesTheCurrentExpression) {
+        SeriesExpressionEditorModel model;
+        model.loadFrom(rollingMean(add(primitive(PrimitiveMetric::Hits), numericConstant(2.0)), 4));
+        EXPECT_EQ(model.toDslText(), "RollingMean(window: 4, Add(HITS, 2))");
+    }
+
+    TEST(SeriesExpressionEditorModelTest, ToDslTextIsEmptyWhenExpressionIncomplete) {
+        SeriesExpressionEditorModel model;
+        EXPECT_EQ(model.toDslText(), QString());
+    }
+
+    TEST(SeriesExpressionEditorModelTest, ApplyDslTextRebuildsTheTreeFromValidText) {
+        SeriesExpressionEditorModel model;
+        EXPECT_TRUE(model.applyDslText("RollingMean(window: 4, HITS)"));
+        auto *root = qobject_cast<EditableRollingMeanNode *>(model.root());
+        ASSERT_NE(root, nullptr);
+        EXPECT_EQ(root->window(), 4U);
+        EXPECT_EQ(qobject_cast<EditablePrimitiveNode *>(root->input())->metric(), "hits");
+    }
+
+    TEST(SeriesExpressionEditorModelTest, DslTextPropertyReflectsTheCurrentExpression) {
+        SeriesExpressionEditorModel model;
+        model.loadFrom(rollingMean(primitive(PrimitiveMetric::Score), 4));
+        EXPECT_EQ(model.property("dslText").toString(), "RollingMean(window: 4, SCORE)");
+    }
+
+    TEST(SeriesExpressionEditorModelTest, DslTextChangedFiresWhenAFieldEditMutatesANode) {
+        SeriesExpressionEditorModel model;
+        model.loadFrom(rollingMean(primitive(PrimitiveMetric::Score), 4));
+        QSignalSpy spy(&model, &SeriesExpressionEditorModel::dslTextChanged);
+
+        qobject_cast<EditableRollingMeanNode *>(model.root())->setWindow(9);
+
+        EXPECT_GE(spy.count(), 1);
+        EXPECT_EQ(model.toDslText(), "RollingMean(window: 9, SCORE)");
+    }
+
+    TEST(SeriesExpressionEditorModelTest, DslTextChangedFiresOnStructuralMutation) {
+        SeriesExpressionEditorModel model;
+        QSignalSpy spy(&model, &SeriesExpressionEditorModel::dslTextChanged);
+        model.replaceChild(nullptr, "root", "primitive");
+        EXPECT_GE(spy.count(), 1);
+    }
+
+    TEST(SeriesExpressionEditorModelTest, ApplyDslTextLeavesTreeUnchangedOnInvalidText) {
+        SeriesExpressionEditorModel model;
+        model.loadFrom(primitive(PrimitiveMetric::Score));
+        auto *before = model.root();
+        EXPECT_FALSE(model.applyDslText("not a valid expression("));
+        EXPECT_EQ(model.root(), before);
+    }
+
     TEST(SeriesExpressionEditorModelTest, DefaultConstructedModelHasNoRootAndNoSelection) {
         SeriesExpressionEditorModel model;
         EXPECT_EQ(model.root(), nullptr);
@@ -202,7 +254,7 @@ namespace {
         SeriesExpressionEditorModel model;
         EXPECT_EQ(model.describe(nullptr), QString::fromUtf8("…"));
         model.loadFrom(rollingMean(primitive(PrimitiveMetric::Score), 9));
-        EXPECT_EQ(model.describe(model.root()), "RollingMean(score, window: 9)");
+        EXPECT_EQ(model.describe(model.root()), "RollingMean(window: 9, score)");
     }
 
     TEST(SeriesExpressionEditorModelTest, MetadataMatchesTheEditorContract) {

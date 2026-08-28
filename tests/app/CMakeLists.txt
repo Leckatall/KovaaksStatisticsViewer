@@ -5,6 +5,7 @@ add_executable(app_tests
         qt_test_main.cpp
         completion_history_use_case_test.cpp
         series_config_test.cpp
+        expression_dsl_test.cpp
         graph_use_case_test.cpp
         average_line_use_case_test.cpp
         playtime_graph_use_case_test.cpp

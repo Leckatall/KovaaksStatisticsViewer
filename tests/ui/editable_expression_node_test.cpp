@@ -186,7 +186,7 @@ namespace {
         EditableRollingMeanNode node;
         node.setWindow(9);
         node.setInput(new EditablePrimitiveNode());
-        EXPECT_EQ(node.describe(), "RollingMean(score, window: 9)");
+        EXPECT_EQ(node.describe(), "RollingMean(window: 9, score)");
     }
 
     TEST(EditableAverageAcrossRunsNodeTest, DefaultsToRecentRunsCountFive) {
@@ -248,9 +248,9 @@ namespace {
     TEST(EditableAverageAcrossRunsNodeTest, DescribeReflectsRecentRunsOrTopPercentile) {
         EditableAverageAcrossRunsNode node;
         node.setInput(new EditablePrimitiveNode());
-        EXPECT_EQ(node.describe(), "AverageAcrossRuns(score, over: recent 5)");
+        EXPECT_EQ(node.describe(), "AverageAcrossRuns(over: recent 5, score)");
         node.setSelectionKind("topPercentile");
         node.setPercent(15.0);
-        EXPECT_EQ(node.describe(), "AverageAcrossRuns(score, over: top 15%)");
+        EXPECT_EQ(node.describe(), "AverageAcrossRuns(over: top 15%, score)");
     }
 }

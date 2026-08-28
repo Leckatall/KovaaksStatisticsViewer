@@ -217,6 +217,32 @@ TestCase {
         selectChip(2, "input");
     }
 
+    function test_dslFieldDisplaysAndTracksModelDslText() {
+        const node = makePrimitive("kills");
+        const model = makeFakeModel({ root: node, selected: node, dslText: "KILLS" });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: model });
+        verify(waitForRendering(editor));
+        const field = findByObjectName(editor, "expressionDslField");
+        verify(field !== null);
+        compare(field.text, "KILLS");
+        model.dslText = "SCORE";
+        compare(field.text, "SCORE");
+    }
+
+    function test_rootReplacedWithoutSelectionReselectsRoot() {
+        const first = makePrimitive("score");
+        const model = makeFakeModel({ root: first, selected: first });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: model });
+        verify(waitForRendering(editor));
+
+        // Mirror loadFrom()/Paste: clear the selection, then swap in a new root.
+        const second = makePrimitive("hits");
+        model.selected = null;
+        model.root = second;
+
+        compare(model.selected, second);
+    }
+
     height: 500
     name: "ExpressionTreeEditorTest"
     visible: true
@@ -243,6 +269,7 @@ TestCase {
             property var wrapCalls: []
             property var replaceCalls: []
             property var parentOverrides: new Map()
+            property string dslText: ""
 
             function isBinary(kind) {
                 return kind === "add" || kind === "subtract" || kind === "multiply" || kind === "divide";

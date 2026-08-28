@@ -141,7 +141,7 @@ namespace ksv::presentation {
 
     QString EditableRollingMeanNode::describe() const {
         const auto input_text = m_input ? m_input->describe() : QString::fromUtf8("…");
-        return QString("RollingMean(%1, window: %2)").arg(input_text).arg(m_window);
+        return QString("RollingMean(window: %1, %2)").arg(m_window).arg(input_text);
     }
 
     std::unique_ptr<EditableExpressionNode> EditableRollingMeanNode::takeInput() {
@@ -192,7 +192,7 @@ namespace ksv::presentation {
         const auto text = m_selection_kind == "recentRuns"
             ? QString("recent %1").arg(m_count)
             : QString("top %1%").arg(m_percent);
-        return QString("AverageAcrossRuns(%1, over: %2)").arg(input_text, text);
+        return QString("AverageAcrossRuns(over: %1, %2)").arg(text, input_text);
     }
 
     std::unique_ptr<EditableExpressionNode> EditableAverageAcrossRunsNode::takeInput() {

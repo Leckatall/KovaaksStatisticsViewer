@@ -29,13 +29,48 @@ Dialog {
     onVisibleChanged: if (visible) beginEditing()
     onAccepted: settingsVm.updateComputedSeries(seriesId, seriesName, seriesColor, seriesWidth, seriesEnabled, editorModel.toExpressionMap())
 
-    contentItem: Loader {
-        id: treeEditorLoader
-        active: root.editorModel !== null
-        sourceComponent: Component {
-            ExpressionTreeEditor {
-                objectName: "expressionEditorTreeEditor"
-                model: root.editorModel
+    contentItem: ColumnLayout {
+        spacing: 8
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Button {
+                objectName: "copyExpressionButton"
+                text: qsTr("Copy")
+                enabled: root.editorModel && root.editorModel.root !== null
+                onClicked: root.editorModel.copyToClipboard()
+            }
+            Button {
+                objectName: "pasteExpressionButton"
+                text: qsTr("Paste")
+                enabled: root.editorModel !== null
+                onClicked: pasteError.visible = !root.editorModel.pasteFromClipboard()
+            }
+            Item { Layout.fillWidth: true }
+        }
+
+        Label {
+            id: pasteError
+            objectName: "pasteErrorLabel"
+            Layout.fillWidth: true
+            visible: false
+            wrapMode: Text.WordWrap
+            color: "#b3261e"
+            text: qsTr("Clipboard did not contain a valid expression.")
+        }
+
+        Loader {
+            id: treeEditorLoader
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            active: root.editorModel !== null
+            sourceComponent: Component {
+                ExpressionTreeEditor {
+                    objectName: "expressionEditorTreeEditor"
+                    model: root.editorModel
+                }
             }
         }
     }
