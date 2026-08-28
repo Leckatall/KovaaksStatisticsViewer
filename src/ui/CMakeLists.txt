@@ -54,8 +54,6 @@ qt_add_qml_module(ksv_ui
             presentation/graph_vm_base.h
             presentation/graph_vm.h
             presentation/graph_vm.cpp
-            presentation/series_expression_qml.h
-            presentation/series_expression_qml.cpp
             presentation/series_expression_editor_model.h
             presentation/series_expression_editor_model.cpp
             presentation/editable_expression_node.h

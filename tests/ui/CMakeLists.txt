@@ -13,7 +13,6 @@ add_executable(ui_tests
     session_vm_test.cpp
     settings_vm_test.cpp
     series_expression_editor_model_test.cpp
-    expression_dsl_differential_test.cpp
     monotone_spline_test.cpp
     scenario_browser_vm_test.cpp
 )
