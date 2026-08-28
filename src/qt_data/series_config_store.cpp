@@ -29,10 +29,6 @@ namespace ksv::qt_data {
             if (std::ranges::all_of(keys, [&](const auto &key) { return object.contains(key); })) return true;
 
             return false;
-            // for (const auto key: keys) {
-            //     if (!object.contains(QLatin1String(key))) return false;
-            // }
-            // return true;
         }
 
         std::optional<uint64_t> decimalId(const QJsonValue &value, const bool zeroAllowed) {

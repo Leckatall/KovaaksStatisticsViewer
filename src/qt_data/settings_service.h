@@ -40,10 +40,6 @@ namespace ksv::qt_data {
         void writeDirListSetting(const QString &key, const std::vector<std::string> &dirs);
 
         QSettings m_settings;
-        // The profile build worker reads the Kovaaks dir off-thread while the UI thread
-        // is still reading and writing settings. QSettings is reentrant but not
-        // thread-safe on a shared instance, so every touch of m_settings takes this.
-        // The change callbacks are fired outside it — they re-enter the getters.
         mutable QMutex m_settings_mutex;
         std::vector<std::function<void()>> m_profile_path_callbacks;
         std::vector<std::function<void()>> m_kovaaks_dirs_callbacks;

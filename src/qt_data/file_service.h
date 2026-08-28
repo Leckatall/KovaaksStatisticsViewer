@@ -48,9 +48,6 @@ namespace ksv::qt_data {
             for (auto& cb : m_callbacks) cb(file);
         }
 
-        // QFileSystemWatcher::directoryChanged only reports the watched directory's own
-        // path, not which file changed inside it, so new files are found by diffing
-        // entryList() snapshots taken before and after the signal fires.
         void handleDirectoryChanged(const QString &directory);
 
         void watchPerfDirs();

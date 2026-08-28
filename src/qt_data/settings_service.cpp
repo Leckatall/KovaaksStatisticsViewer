@@ -29,9 +29,6 @@ namespace ksv::qt_data {
     }
 
     std::vector<std::string> SettingsService::readDirListSetting(const QString &key) const {
-        // No lock here: this is a private helper whose only caller (getKovaaksDirs) already
-        // holds m_settings_mutex. m_settings_mutex is a plain QMutex (non-recursive), so
-        // locking it again here would deadlock the calling thread.
         const auto stored = m_settings.value(key).toStringList();
         std::vector<std::string> result;
         result.reserve(stored.size());
