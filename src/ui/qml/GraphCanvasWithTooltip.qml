@@ -72,13 +72,6 @@ Item {
             scale: 0
 
             Component.onCompleted: scale = 1
-
-            Behavior on scale {
-                NumberAnimation {
-                    duration: 120
-                    easing.type: Easing.OutCubic
-                }
-            }
         }
     }
     Rectangle {
