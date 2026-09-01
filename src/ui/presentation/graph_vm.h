@@ -23,8 +23,14 @@ namespace ksv::presentation {
         Q_PROPERTY(QQmlListProperty<SeriesModel> allSeries READ allSeries NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantList enabledSeriesIds READ enabledSeriesIds NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
+        Q_PROPERTY(ContentState contentState READ contentState NOTIFY contentStateChanged)
 
     public:
+        // What the runtime graph can honestly say about the run it holds: nothing selected, a run with
+        // no plottable performance data (CSV-only or a missing .perf), or a run ready to draw.
+        enum ContentState { NoRunSelected, NoPerformanceData, HasData };
+        Q_ENUM(ContentState)
+
         explicit GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase, QObject *parent = nullptr);
 
         [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override;
@@ -37,6 +43,8 @@ namespace ksv::presentation {
         [[nodiscard]] QVariantList enabledSeriesIds() const { return m_enabledSeriesIds; }
 
         [[nodiscard]] QString scenarioTitle() const { return m_scenarioTitle; }
+
+        [[nodiscard]] ContentState contentState() const { return m_contentState; }
 
         [[nodiscard]] int yAxisColumn() const override { return kDefaultYAxisSeriesId; }
 
@@ -54,6 +62,7 @@ namespace ksv::presentation {
     signals:
         void scenarioTitleChanged();
         void seriesConfigurationChanged();
+        void contentStateChanged();
 
     private:
         // Fallback y-axis column when nothing else is specified; the built-in Score primitive, id 1.
@@ -70,6 +79,7 @@ namespace ksv::presentation {
         mutable QList<SeriesModel *> m_allSeriesList;
         QString m_scenarioTitle;
         QVariantList m_enabledSeriesIds;
+        ContentState m_contentState = NoRunSelected;
     };
 }
 

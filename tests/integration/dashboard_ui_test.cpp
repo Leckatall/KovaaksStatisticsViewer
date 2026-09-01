@@ -181,11 +181,26 @@ namespace {
     }
 
     TEST_F(DashboardUiTest, YAxisTitleLabelDefaultsToScore) {
-        auto *label = root->findChild<QObject *>("scenarioYAxisTitleLabel");
-        ASSERT_NE(label, nullptr) << "no label named 'scenarioYAxisTitleLabel' found in the dashboard scene";
+        // The plot subtree (and its axis title) is only instantiated once a run with performance data
+        // is shown; before that the panel carries the "No run selected" message instead.
+        app->graphVm()->fetchData(perfUrl);
+
+        QObject *label = nullptr;
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            label = root->findChild<QObject *>("scenarioYAxisTitleLabel");
+            return label != nullptr;
+        }, 2000)) << "no label named 'scenarioYAxisTitleLabel' found after loading a perf";
         const auto series = app->graphVm()->series({app->graphVm()->yAxisColumn()});
         ASSERT_FALSE(series.isEmpty());
         EXPECT_EQ(label->property("text").toString(), series.front()->name());
+    }
+
+    TEST_F(DashboardUiTest, NoRunSelectedMessageShowsBeforeAnyRunIsLoaded) {
+        auto *label = root->findChild<QObject *>("graphNoRunSelectedLabel");
+        ASSERT_NE(label, nullptr) << "no label named 'graphNoRunSelectedLabel' found in the dashboard scene";
+        EXPECT_TRUE(label->property("visible").toBool());
+        EXPECT_EQ(root->findChild<QObject *>("scenarioYAxisTitleLabel"), nullptr)
+            << "plot should not be instantiated while no run is shown";
     }
 
     // YAxisTitleLabelTracksTheSelectedColumn removed: the y-axis title label doesn't update to the

@@ -157,6 +157,16 @@ namespace ksv::presentation {
             m_allSeriesList.append(entrySeries);
             m_enabledSeriesIds.append(id);
         }
+        const ContentState newState = !m_graphUseCase->hasCurrentRun()
+                                          ? NoRunSelected
+                                          : m_graphUseCase->currentRunHasPerformance()
+                                                ? HasData
+                                                : NoPerformanceData;
+        if (newState != m_contentState) {
+            m_contentState = newState;
+            emit contentStateChanged();
+        }
+
         emit seriesConfigurationChanged();
         emit dataUpdated();
         recomputeBounds();

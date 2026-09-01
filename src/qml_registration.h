@@ -4,6 +4,7 @@
 #include <QtQml>
 
 #include <ui/components/graph_canvas.h>
+#include <presentation/graph_vm.h>
 #include <presentation/completion_history_vm.h>
 #include <presentation/playtime_graph_vm.h>
 #include <presentation/editable_expression_node.h>
@@ -13,6 +14,8 @@ namespace ksv {
     // module's auto-registration objects (ksv_ui is built NO_PLUGIN). Called
     // from every executable that loads the QML module.
     inline void declare_metatypes() {
+        qmlRegisterUncreatableType<presentation::GraphViewModel>(
+            "KovaaksStatsViewer", 1, 0, "GraphViewModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::PlaytimeGraphViewModel>(
             "KovaaksStatsViewer", 1, 0, "PlaytimeGraphViewModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::CompletionHistoryViewModel>(

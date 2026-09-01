@@ -46,10 +46,14 @@ namespace {
         std::map<uint64_t, std::optional<SeriesPoints>> series_values;
         std::vector<AxisConfig> axes;
         double run_duration = 0.0;
+        bool has_current_run = false;
+        bool has_performance = false;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
         void load_latest_perf() override { load_latest_perf_calls++; }
         std::string get_run_label() override { return run_label; }
+        bool hasCurrentRun() const override { return has_current_run; }
+        bool currentRunHasPerformance() const override { return has_performance; }
         void onCurrentPerfChanged(std::function<void()>) override {}
         void onSeriesConfigChanged(std::function<void()>) override {}
 
@@ -330,6 +334,44 @@ namespace {
         EXPECT_EQ(view_model.columnForSeriesId("1"), kScore);
         EXPECT_EQ(view_model.seriesIdForColumn(kScore), "1");
         EXPECT_EQ(view_model.columnForSeriesId("missing"), -1);
+    }
+
+    TEST_F(GraphViewModelTest, ContentStateStartsAtNoRunSelected) {
+        EXPECT_EQ(view_model.contentState(), GraphViewModel::NoRunSelected);
+    }
+
+    TEST_F(GraphViewModelTest, ContentStateIsHasDataWhenRunHasPerformance) {
+        setSampleData();
+        fake_use_case->has_current_run = true;
+        fake_use_case->has_performance = true;
+
+        const QSignalSpy spy(&view_model, &GraphViewModel::contentStateChanged);
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.contentState(), GraphViewModel::HasData);
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(GraphViewModelTest, ContentStateIsNoPerformanceForCsvOnlyRun) {
+        fake_use_case->has_current_run = true;
+        fake_use_case->has_performance = false;
+
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.contentState(), GraphViewModel::NoPerformanceData);
+    }
+
+    TEST_F(GraphViewModelTest, ContentStateReturnsToNoRunSelectedWhenRunCleared) {
+        fake_use_case->has_current_run = true;
+        fake_use_case->has_performance = true;
+        view_model.fetchData();
+        ASSERT_EQ(view_model.contentState(), GraphViewModel::HasData);
+
+        fake_use_case->has_current_run = false;
+        fake_use_case->has_performance = false;
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.contentState(), GraphViewModel::NoRunSelected);
     }
 
     TEST_F(GraphViewModelTest, ExpectedFinalScoreRecentRendersUnderItsOwnColumnDespiteHitsOccupyingASlot) {

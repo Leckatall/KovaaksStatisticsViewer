@@ -137,6 +137,25 @@ namespace {
         EXPECT_DOUBLE_EQ(use_case.getRunDuration(), 3.0);
     }
 
+    TEST_F(GraphUseCaseTest, HasCurrentRunIsFalseForDefaultRun) {
+        EXPECT_FALSE(use_case.hasCurrentRun());
+        EXPECT_FALSE(use_case.currentRunHasPerformance());
+    }
+
+    TEST_F(GraphUseCaseTest, PerfRunHasCurrentRunAndPerformance) {
+        fake_session_controller->current_run = runWithSeconds("a");
+
+        EXPECT_TRUE(use_case.hasCurrentRun());
+        EXPECT_TRUE(use_case.currentRunHasPerformance());
+    }
+
+    TEST_F(GraphUseCaseTest, CsvOnlyRunHasCurrentRunButNoPerformance) {
+        fake_session_controller->current_run.run_id = {{.name = "S", .hash = "csv"}, 1000};
+
+        EXPECT_TRUE(use_case.hasCurrentRun());
+        EXPECT_FALSE(use_case.currentRunHasPerformance());
+    }
+
     TEST_F(GraphUseCaseTest, CsvOnlyCurrentRunProducesEmptyGraphData) {
         fake_session_controller->current_run.run_id = {{.name = "S", .hash = "csv"}, 1000};
         fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};

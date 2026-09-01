@@ -38,6 +38,13 @@ namespace ksv::application {
             return m_session_controller->getCurrentRun().run_id.toString();
         }
 
+        [[nodiscard]] bool hasCurrentRun() const override {
+            return !m_session_controller->getCurrentRun().run_id.scenario_id.hash.empty();
+        }
+        [[nodiscard]] bool currentRunHasPerformance() const override {
+            return m_session_controller->getCurrentRun().performance.has_value();
+        }
+
         void onCurrentPerfChanged(std::function<void()> callback) override {
             QObject::connect(m_session_controller.get(), &ISessionController::currentRunChanged,
                               m_session_controller.get(), std::move(callback));

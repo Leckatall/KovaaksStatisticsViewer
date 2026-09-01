@@ -20,6 +20,12 @@ namespace ksv::application {
 
         virtual std::string get_run_label() = 0;
 
+        // A run is "displayed" when one is selected; a default-constructed current run (empty id) is not.
+        [[nodiscard]] virtual bool hasCurrentRun() const = 0;
+        // Whether the displayed run carries loaded per-tick performance data — false for CSV-only runs
+        // and for runs whose .perf source is gone, both of which leave the runtime graph unplottable.
+        [[nodiscard]] virtual bool currentRunHasPerformance() const = 0;
+
         virtual void onCurrentPerfChanged(std::function<void()> callback) = 0;
 
         [[nodiscard]] virtual std::vector<SeriesConfig> getSeriesConfigs() = 0;

@@ -61,23 +61,55 @@ Frame {
             objectName: "scenarioTitleLabel"
             text: root.graphVm.scenarioTitle
         }
-        RowLayout {
-            Layout.fillWidth: true
+        // One always-present, always-filling slot so the plot and the empty-state messages occupy the
+        // exact same area — the panel's height must not change with contentState.
+        Item {
             Layout.fillHeight: true
-            spacing: 0
+            Layout.fillWidth: true
+            objectName: "graphContentArea"
 
-            YAxisTitle {
-                labelObjectName: "scenarioYAxisTitleLabel"
-                plotArea: canvasWithTooltip.plotArea
-                text: root.nameForColumn(canvasWithTooltip.labelledYAxisColumn)
+            Loader {
+                anchors.fill: parent
+                active: root.graphVm.contentState === GraphViewModel.HasData
+                sourceComponent: Component {
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: 0
+
+                        YAxisTitle {
+                            labelObjectName: "scenarioYAxisTitleLabel"
+                            plotArea: canvasWithTooltip.plotArea
+                            text: root.nameForColumn(canvasWithTooltip.labelledYAxisColumn)
+                        }
+                        GraphCanvasWithTooltip {
+                            id: canvasWithTooltip
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            graphVm: root.graphVm
+                            visibleColumns: root.visibleColumns
+                            yAxisColumn: root.yAxisColumn
+                        }
+                    }
+                }
             }
-            GraphCanvasWithTooltip {
-                id: canvasWithTooltip
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                graphVm: root.graphVm
-                visibleColumns: root.visibleColumns
-                yAxisColumn: root.yAxisColumn
+
+            Label {
+                anchors.centerIn: parent
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                objectName: "graphNoPerformanceLabel"
+                text: qsTr("Selected run does not support performance analysis.")
+                visible: root.graphVm.contentState === GraphViewModel.NoPerformanceData
+                wrapMode: Text.WordWrap
+            }
+
+            Label {
+                anchors.centerIn: parent
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                objectName: "graphNoRunSelectedLabel"
+                text: qsTr("No run selected.")
+                visible: root.graphVm.contentState === GraphViewModel.NoRunSelected
             }
         }
     }
