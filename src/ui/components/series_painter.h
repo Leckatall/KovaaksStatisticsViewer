@@ -19,6 +19,7 @@ namespace ksv::ui {
             qreal lineWidth = 3;
             qreal markerRadius = 1;
             QColor markerColor{"white"};
+            bool showMarkers = false;
         };
 
         static void paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor,

@@ -26,8 +26,10 @@ namespace ksv::ui {
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
 
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(style.markerColor);
-        for (const auto &p: pixelPoints) painter.drawEllipse(p, style.markerRadius, style.markerRadius);
+        if (style.showMarkers) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(style.markerColor);
+            for (const auto &p: pixelPoints) painter.drawEllipse(p, style.markerRadius, style.markerRadius);
+        }
     }
 }

@@ -53,6 +53,34 @@ Item {
         y: plotArea.y
         z: 100
     }
+    Repeater {
+        model: hoverArea.hoverInfo.valid ? hoverArea.hoverInfo.series : []
+
+        Rectangle {
+            required property var modelData
+
+            readonly property bool hasPosition: modelData.pixelY !== undefined && modelData.pixelY !== null
+
+            width: 10
+            height: width
+            radius: width / 2
+            color: modelData.color
+            visible: hasPosition
+            x: hoverArea.hoverInfo.pixelX - width / 2
+            y: modelData.pixelY - height / 2
+            z: 101
+            scale: 0
+
+            Component.onCompleted: scale = 1
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 120
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+    }
     Rectangle {
         id: tooltipBox
 
@@ -68,6 +96,7 @@ Item {
         height: tooltipContent.implicitHeight + 12
         x: (idealX + width > parent.width) ? hoverArea.mouseX - width - 14 : idealX
         y: Math.max(0, Math.min(idealY, parent.height - height))
+        z: 102
 
         Column {
             id: tooltipContent

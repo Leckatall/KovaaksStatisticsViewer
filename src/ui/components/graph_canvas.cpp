@@ -211,6 +211,7 @@ namespace ksv::ui {
             entry["value"] = s->formattedValueAtX(dataX);
             const auto sample = s->sampleAtX(dataX);
             entry["valueRaw"] = sample ? sample->y() : QVariant();
+            entry["pixelY"] = sample ? toPixel(*sample, rect, xAxisFor(*s), yAxisFor(*s)).y() : QVariant();
             seriesList.append(entry);
         }
         result["series"] = seriesList;

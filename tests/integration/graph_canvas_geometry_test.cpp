@@ -73,6 +73,23 @@ namespace {
         EXPECT_FALSE(result.value("series").toList().isEmpty());
     }
 
+    TEST_F(GraphCanvasGeometryTest, ValuesAtXReportsEachSeriesPixelYWithinPlotArea) {
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kAccuracySeriesId});
+        const QRectF rect = canvas.property("plotArea").toRectF();
+
+        const QVariantMap result = canvas.valuesAtX(rect.center().x());
+
+        ASSERT_TRUE(result.value("valid").toBool());
+        const QVariantList series = result.value("series").toList();
+        ASSERT_EQ(series.size(), 2);
+        for (const QVariant &value: series) {
+            const QVariantMap entry = value.toMap();
+            ASSERT_TRUE(entry.contains("pixelY"));
+            EXPECT_GE(entry.value("pixelY").toReal(), rect.top());
+            EXPECT_LE(entry.value("pixelY").toReal(), rect.bottom());
+        }
+    }
+
     TEST_F(GraphCanvasGeometryTest, NearestPointHitsAKnownScorePixel) {
         const auto series = graphVm->series(QList<int>{kScoreSeriesId});
         ASSERT_FALSE(series.isEmpty());
