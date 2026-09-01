@@ -29,11 +29,9 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
 
 > *Expanding what data the app can read and how it stores processed results.*
 
-- [ ] **Implement CSV input support** `[Medium]` `[Medium]`
-  - [ ] Define a CSV parser that produces `domain::ScenarioPerf` from Kovaaks CSV exports
-  - [ ] Create an `ICsvDecoder` interface alongside existing `IProtoDecoder`
-  - [ ] Auto-detect file format (`.perf` protobuf vs `.csv`) in `FileService`
-  - [ ] Add tests for CSV parsing edge cases (missing fields, encoding quirks)
+- [x] **Implement CSV input support** `[Medium]` `[Medium]`
+  - [x] Define a CSV parser that produces `domain::ScenarioPerf` from Kovaaks CSV exports
+  - [x] Add tests for CSV parsing edge cases (missing fields, encoding quirks)
 
 - [ ] **Richer profile persistence and control** `[Hard]` `[High]`
   - [ ] Support multiple named profiles (e.g. different Kovaaks accounts or data sets)
@@ -100,7 +98,7 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
   - [x] Aggregate playtime per day/week/month
   - [x] Display playtime as a bar chart (time per period) or line chart (rolling window)
   - [x] Decide on visualisation approach: bar chart of time-per-period vs. rolling-window line graph (or offer both)
-  - [ ]  Extract non-paused playtime from Kovaaks application memory
+  - [ ] Extract non-paused playtime from Kovaaks application memory
 
 ---
 

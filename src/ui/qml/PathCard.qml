@@ -52,8 +52,14 @@ Rectangle {
                 Item { Layout.fillWidth: true }
                 Button {
                     objectName: "deleteNodeButton"
-                    text: qsTr("Delete")
-
+                    icon.source: "icons/trash-2.svg"
+                    icon.width: 16
+                    icon.height: 16
+                    display: AbstractButton.IconOnly
+                    Accessible.name: qsTr("Delete")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: qsTr("Delete")
                     onClicked: card.deleteRequested()
                 }
             }

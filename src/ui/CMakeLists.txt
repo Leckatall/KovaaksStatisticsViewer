@@ -45,6 +45,11 @@ qt_add_qml_module(ksv_ui
             qml/AboutDialog.qml
             qml/DirectoryPickerRow.qml
             qml/FirstRunBanner.qml
+        RESOURCES
+            qml/icons/copy.svg
+            qml/icons/clipboard-paste.svg
+            qml/icons/trash-2.svg
+            qml/icons/square-function.svg
         SOURCES
             presentation/axis_model.h
             presentation/axis_model.cpp

@@ -86,6 +86,20 @@ TestCase {
         compare(delegate.color, delegate.restingColor)
     }
 
+    function test_expressionAndDeleteButtonsRenderIconsNotText() {
+        const delegate = createDelegate()
+
+        const fx = findByObjectName(delegate, "editExpressionButton_" + row.id)
+        verify(fx !== null)
+        compare(fx.text, "")
+        verify(fx.icon.source.toString().endsWith("square-function.svg"))
+
+        const del = findByObjectName(delegate, "deleteSeriesButton_" + row.id)
+        verify(del !== null)
+        compare(del.text, "")
+        verify(del.icon.source.toString().endsWith("trash-2.svg"))
+    }
+
     function test_actionSignalsExposeTheirPayload() {
         const delegate = createDelegate()
 

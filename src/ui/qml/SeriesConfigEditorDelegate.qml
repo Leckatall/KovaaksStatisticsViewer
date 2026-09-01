@@ -157,7 +157,10 @@ Rectangle {
 
     Button {
         objectName: "editExpressionButton_" + root.row.id
-        text: qsTr("ƒx")
+        icon.source: "icons/square-function.svg"
+        icon.width: 16
+        icon.height: 16
+        display: AbstractButton.IconOnly
 
         Layout.preferredWidth: contentItem.implicitWidth + (padding * 2)
         Accessible.name: qsTr("Edit Expression")
@@ -182,8 +185,15 @@ Rectangle {
 
     Button {
         objectName: "deleteSeriesButton_" + root.row.id
-        text: qsTr("Delete")
+        icon.source: "icons/trash-2.svg"
+        icon.width: 16
+        icon.height: 16
+        display: AbstractButton.IconOnly
         Layout.preferredWidth: contentItem.implicitWidth + (padding * 2)
+        Accessible.name: qsTr("Delete Series")
+        ToolTip.visible: hovered
+        ToolTip.delay: 500
+        ToolTip.text: qsTr("Delete Series")
         onClicked: root.seriesRemovalRequested(root.row)
     }
 

@@ -38,14 +38,28 @@ Dialog {
 
             Button {
                 objectName: "copyExpressionButton"
-                text: qsTr("Copy")
+                icon.source: "icons/copy.svg"
+                icon.width: 16
+                icon.height: 16
+                display: AbstractButton.IconOnly
                 enabled: root.editorModel && root.editorModel.root !== null
+                Accessible.name: qsTr("Copy")
+                ToolTip.visible: hovered
+                ToolTip.delay: 500
+                ToolTip.text: qsTr("Copy")
                 onClicked: root.editorModel.copyToClipboard()
             }
             Button {
                 objectName: "pasteExpressionButton"
-                text: qsTr("Paste")
+                icon.source: "icons/clipboard-paste.svg"
+                icon.width: 16
+                icon.height: 16
+                display: AbstractButton.IconOnly
                 enabled: root.editorModel !== null
+                Accessible.name: qsTr("Paste")
+                ToolTip.visible: hovered
+                ToolTip.delay: 500
+                ToolTip.text: qsTr("Paste")
                 onClicked: pasteError.visible = !root.editorModel.pasteFromClipboard()
             }
             Item { Layout.fillWidth: true }

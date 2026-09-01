@@ -12,7 +12,6 @@
 #include <QVariantList>
 #include <qqmlintegration.h>
 #include <ranges>
-#include <vector>
 
 #include "axis_model.h"
 #include "graph_vm_base.h"

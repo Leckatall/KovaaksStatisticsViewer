@@ -26,6 +26,7 @@ find_package(Qt6 REQUIRED COMPONENTS
         Quick
         Qml
         QuickControls2
+        Svg  # qsvg image-format plugin, for SVG button icons
         Test  # Add for testing
         QuickTest
 )
@@ -73,6 +74,7 @@ target_link_libraries(ksv PRIVATE
         Qt6::Quick
         Qt6::Qml
         Qt6::QuickControls2
+        Qt6::Svg
         ksv_app
         ksv_ui
         ksv_data
