@@ -1,81 +1,38 @@
 //
-// PlaytimeGraphUseCase tests using a hand-written fake IProfileService.
+// PlaytimeGraphUseCase tests over the shared FakeProfileService.
 //
 
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <memory>
 
 #include "usecases/playtime_graph_use_case.h"
 
+#include "fake_profile_service.h"
+
 using namespace ksv::application;
 using namespace ksv::domain;
+using namespace ksv::tests_support;
 
 namespace {
-    class FakePlaytimeProfileService : public IProfileService {
-    public:
-        std::vector<std::pair<std::chrono::sys_days, double>> rolling;
-        int last_window_days = 0;
-
-        void generateProfileFromDirectory() override {}
-        void loadProfile() override {}
-        void onBuildRequested(std::function<void()>) override {}
-        void beginProfileBuild() override {}
-        void applyBuiltProfile(ksv::domain::UserProfile) override {}
-        [[nodiscard]] std::vector<ScenarioId> getScenarioList() const override { return {}; }
-        [[nodiscard]] Run getPerf(const std::string &) const override { return {}; }
-        [[nodiscard]] Run getLatestRun() const override { return {}; }
-        [[nodiscard]] std::optional<Run> getMostRecentRun(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::vector<Run> getMostRecentRuns(const ScenarioId &, std::size_t) const override {
-            return {};
-        }
-        [[nodiscard]] std::vector<Run> getRunsForScenario(const ScenarioId &) const override { return {}; }
-        [[nodiscard]] std::vector<RunSummary>
-        getCompletionHistory(const ScenarioId &) const override { return {}; }
-        [[nodiscard]] std::optional<float> getAverageScore(const ScenarioId &, std::size_t) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::optional<Run> getCurrentRun(const ScenarioRunId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::optional<std::size_t> getRunCount(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::optional<double> getTotalTime(const ScenarioId &) const override {
-            return std::nullopt;
-        }
-        [[nodiscard]] std::vector<Run> getRecentRuns(std::size_t) const override { return {}; }
-        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
-        getRollingTimeAverage(const int window_days) const override {
-            const_cast<FakePlaytimeProfileService *>(this)->last_window_days = window_days;
-            return rolling;
-        }
-        [[nodiscard]] bool isProfileLoaded() const override { return true; }
-        void onProfileChanged(std::function<void()>) override {}
-    };
-
     std::chrono::sys_days day(const long long days_since_epoch) {
         return std::chrono::sys_days{} + std::chrono::days{days_since_epoch};
     }
 
     class PlaytimeGraphUseCaseTest : public testing::Test {
     protected:
-        std::shared_ptr<FakePlaytimeProfileService> fake = std::make_shared<FakePlaytimeProfileService>();
+        std::shared_ptr<FakeProfileService> fake = std::make_shared<FakeProfileService>();
         PlaytimeGraphUseCase use_case{fake};
     };
 
     TEST_F(PlaytimeGraphUseCaseTest, PassesWindowDaysThroughToProfile) {
         use_case.get_rolling_playtime(3);
-        EXPECT_EQ(fake->last_window_days, 3);
+        EXPECT_EQ(fake->rolling_time_average_window_days, 3);
     }
 
     TEST_F(PlaytimeGraphUseCaseTest, MapsSysDaysToDaysSinceEpochPreservingSeconds) {
-        fake->rolling = {{day(19500), 1800.0}, {day(19501), 2400.0}};
+        fake->rolling_time_average = {{day(19500), 1800.0}, {day(19501), 2400.0}};
 
         const auto result = use_case.get_rolling_playtime(3);
 

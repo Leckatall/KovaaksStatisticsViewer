@@ -12,6 +12,7 @@ target_include_directories(domain_tests PRIVATE
 )
 
 target_link_libraries(domain_tests PRIVATE
+    tests_support_domain
     ksv_domain
     GTest::gtest_main
 )

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <ranges>
 
 #include "app/contracts/expression_dsl.h"
@@ -42,6 +43,14 @@ namespace {
 
         void makeStore() { store = std::make_unique<SeriesConfigStore>(settings); }
 
+        [[nodiscard]] QJsonObject docObject() const {
+            return QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        }
+
+        void writeDoc(const QJsonObject &root) const {
+            settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+        }
+
         static CreateComputedSeriesRequest request() {
             return {{"Custom", {{1, 2, 3, 255}, 2.0}, true}, numericConstant(4.0)};
         }
@@ -50,8 +59,7 @@ namespace {
     TEST_F(SeriesConfigStoreTest, SeedsApprovedDefaultsAndNextId) {
         makeStore();
         EXPECT_EQ(store->getAll().size(), 9U);
-        const auto document = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8());
-        EXPECT_EQ(document.object()["nextComputedSeriesId"].toString(), "10");
+        EXPECT_EQ(docObject()["nextComputedSeriesId"].toString(), "10");
     }
 
     TEST_F(SeriesConfigStoreTest, RoundTripsEverySeriesAndExpressionNode) {
@@ -73,7 +81,7 @@ namespace {
         ASSERT_TRUE(created.succeeded());
         const auto id = *created.createdId;
 
-        const auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        const auto root = docObject();
         bool sawBlankDslExpression = false;
         for (const auto &item: root["series"].toArray()) {
             const auto object = item.toObject();
@@ -117,14 +125,13 @@ namespace {
         for (const auto &expression: malformedExpressions) {
             settings = std::make_shared<FakeSettingsService>();
             makeStore();
-            auto document = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8());
-            auto root = document.object();
+            auto root = docObject();
             auto series = root["series"].toArray();
             auto computed = series[7].toObject();
             computed["expression"] = expression;
             series[7] = computed;
             root["series"] = series;
-            settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+            writeDoc(root);
 
             SeriesConfigStore reopened(settings);
             EXPECT_EQ(reopened.getAll().size(), 9U);
@@ -151,9 +158,43 @@ namespace {
         EXPECT_EQ(store->createComputed(request()).createdId->value, 11U);
     }
 
-    // CreateAllocatesMaximumIdThenBecomesExhausted removed: fails with "bad optional access" against
-    // the current default catalogue/decode logic and needs investigation beyond a literal-value fix.
-    // See .plans/series-config-migration-completion/plans/05-store-api-collapse.md.
+    TEST_F(SeriesConfigStoreTest, AllocatesMaximumSeriesIdThenPersistsExhaustion) {
+        makeStore();
+        auto root = docObject();
+        root["nextComputedSeriesId"] = QString::number(std::numeric_limits<uint64_t>::max());
+        writeDoc(root);
+
+        SeriesConfigStore maximumIdStore(settings);
+        const auto created = maximumIdStore.createComputed(request());
+
+        ASSERT_TRUE(created.succeeded());
+        ASSERT_TRUE(created.createdId);
+        EXPECT_EQ(created.createdId->value, std::numeric_limits<uint64_t>::max());
+        EXPECT_TRUE(docObject()["nextComputedSeriesId"].isNull());
+        SeriesConfigStore reopened(settings);
+        const auto exhausted = reopened.createComputed(request());
+        ASSERT_TRUE(exhausted.failure);
+        EXPECT_EQ(*exhausted.failure, StoreMutationFailureCode::ComputedSeriesIdExhausted);
+    }
+
+    TEST_F(SeriesConfigStoreTest, AllocatesMaximumAxisIdThenPersistsExhaustion) {
+        makeStore();
+        auto root = docObject();
+        root["nextAxisId"] = QString::number(std::numeric_limits<uint64_t>::max());
+        writeDoc(root);
+
+        SeriesConfigStore maximumIdStore(settings);
+        const auto created = maximumIdStore.createAxis({"Maximum"});
+
+        ASSERT_TRUE(created.succeeded());
+        ASSERT_TRUE(created.createdAxisId);
+        EXPECT_EQ(created.createdAxisId->value, std::numeric_limits<uint64_t>::max());
+        EXPECT_TRUE(docObject()["nextAxisId"].isNull());
+        SeriesConfigStore reopened(settings);
+        const auto exhausted = reopened.createAxis({"After maximum"});
+        ASSERT_TRUE(exhausted.failure);
+        EXPECT_EQ(*exhausted.failure, StoreMutationFailureCode::AxisIdExhausted);
+    }
 
     TEST_F(SeriesConfigStoreTest, DraftMutationDoesNotReachDiskUntilCommitted) {
         makeStore();
@@ -271,9 +312,14 @@ namespace {
         EXPECT_EQ(notifications, 0);
     }
 
-    // ReorderingToCurrentPositionIsSuccessfulNoOp removed: its reorder(PrimitiveMetric::Score, 0)
-    // call no longer compiles against reorder(SeriesId, uint32_t). See
-    // .plans/series-config-migration-completion/plans/05-store-api-collapse.md.
+    TEST_F(SeriesConfigStoreTest, ReorderingToCurrentPositionIsSuccessfulNoOp) {
+        makeStore();
+        const auto writes = settings->document_writes;
+        // Score seeds at displayPosition 0, so this asks for the position it already holds.
+        EXPECT_TRUE(store->reorder(SeriesId{1}, 0).succeeded());
+        EXPECT_EQ(settings->document_writes, writes);
+    }
+
 
     TEST_F(SeriesConfigStoreTest, ValidationFailureLeavesStateAndNextIdUnchanged) {
         makeStore();
@@ -292,7 +338,7 @@ namespace {
 
     TEST_F(SeriesConfigStoreTest, SchemaVersionThreeDocumentIncludesAxesAndNextAxisId) {
         makeStore();
-        const auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        const auto root = docObject();
         EXPECT_EQ(root["schemaVersion"].toInt(), 3);
         EXPECT_EQ(root["nextAxisId"].toString(), "3");
         ASSERT_TRUE(root["axes"].isArray());
@@ -304,14 +350,14 @@ namespace {
 
     TEST_F(SeriesConfigStoreTest, LoadsV3DslExpressions) {
         makeStore();
-        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        auto root = docObject();
         root["schemaVersion"] = 3;
         auto series = root["series"].toArray();
         auto score = series[0].toObject();
         score["expression"] = "Add(SCORE, 2)";
         series[0] = score;
         root["series"] = series;
-        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+        writeDoc(root);
 
         SeriesConfigStore reopened(settings);
         const auto configs = reopened.getAll();
@@ -322,7 +368,7 @@ namespace {
 
     TEST_F(SeriesConfigStoreTest, LoadsV2NestedJsonExpressions) {
         makeStore();
-        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        auto root = docObject();
         root["schemaVersion"] = 2;
         auto series = root["series"].toArray();
         auto score = series[0].toObject();
@@ -330,7 +376,7 @@ namespace {
                                             {"left", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}},
                                             {"right", QJsonObject{{"kind", "constant"}, {"value", 2.0}}}};
         root["series"] = QJsonArray{score};
-        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+        writeDoc(root);
 
         SeriesConfigStore reopened(settings);
         const auto configs = reopened.getAll();
@@ -341,13 +387,13 @@ namespace {
 
     TEST_F(SeriesConfigStoreTest, RejectsMalformedV3DslExpressionsAndReseeds) {
         makeStore();
-        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        auto root = docObject();
         auto series = root["series"].toArray();
         auto score = series[0].toObject();
         score["expression"] = "Add(SCORE,)";
         series[0] = score;
         root["series"] = series;
-        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+        writeDoc(root);
 
         SeriesConfigStore reopened(settings);
         EXPECT_EQ(reopened.getAll().size(), 9U);
@@ -367,13 +413,13 @@ namespace {
         const auto scoreTotal = std::ranges::find(configs, SeriesId{7}, &SeriesConfig::id);
         ASSERT_NE(scoreTotal, configs.end());
         EXPECT_EQ(scoreTotal->yAxisId, axes[1].id);
-        const auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        const auto root = docObject();
         EXPECT_EQ(root["schemaVersion"].toInt(), 1);
     }
 
     TEST_F(SeriesConfigStoreTest, MigratesEveryScoreFamilySeriesToTheSharedAxis) {
         makeStore();
-        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        auto root = docObject();
         root["schemaVersion"] = 1;
         root.remove("axes");
         root.remove("nextAxisId");
@@ -385,7 +431,7 @@ namespace {
             series[index] = config;
         }
         root["series"] = series;
-        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+        writeDoc(root);
 
         SeriesConfigStore migrated(settings);
         const auto configs = migrated.getAll();
@@ -407,18 +453,18 @@ namespace {
 
     TEST_F(SeriesConfigStoreTest, RejectsDuplicateAxisIdsAndNonPositiveFallbackSpan) {
         makeStore();
-        auto root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+        auto root = docObject();
         auto axes = root["axes"].toArray();
         auto duplicate = axes[0].toObject();
         duplicate["id"] = axes[1].toObject()["id"];
         axes[0] = duplicate;
         root["axes"] = axes;
-        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+        writeDoc(root);
         SeriesConfigStore duplicateReopened(settings);
         EXPECT_EQ(duplicateReopened.getAllAxes().size(), 2U);
 
         for (const auto span: {0.0, -1.0}) {
-            root = QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
+            root = docObject();
             axes = root["axes"].toArray();
             auto axis = axes[0].toObject();
             auto options = axis["options"].toObject();
@@ -426,7 +472,7 @@ namespace {
             axis["options"] = options;
             axes[0] = axis;
             root["axes"] = axes;
-            settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+            writeDoc(root);
             SeriesConfigStore spanReopened(settings);
             EXPECT_EQ(spanReopened.getAllAxes().size(), 2U);
         }
@@ -512,7 +558,7 @@ namespace {
         malformed["expression"] = QJsonObject{{"kind", "projectRateToFinal"}};
         series[2] = malformed;
         root["series"] = series;
-        settings->document = QJsonDocument(root).toJson(QJsonDocument::Compact).toStdString();
+        writeDoc(root);
 
         makeStore();
 

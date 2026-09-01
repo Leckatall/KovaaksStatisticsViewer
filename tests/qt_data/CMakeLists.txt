@@ -2,7 +2,7 @@ find_package(GTest CONFIG REQUIRED)
 include(GoogleTest)
 
 add_executable(qt_data_tests
-    qt_test_main.cpp
+    ../support/qt_gtest_main.cpp
     settings_service_test.cpp
     file_service_test.cpp
     series_config_store_test.cpp

@@ -2,6 +2,8 @@ import QtQuick
 import QtTest
 import QtQuick.Dialogs
 import "../../../src/ui/qml"
+import "ItemLookup.js" as ItemLookup
+import "TestDoubles.js" as TestDoubles
 
 TestCase {
     id: testCase
@@ -17,31 +19,15 @@ TestCase {
     }
 
     function makeFakeSettingsVm(overrides) {
-        return Object.assign({
+        return TestDoubles.makeFakeSettingsVm(Object.assign({
             kovaaksDir: "file:///C:/Kovaaks",
             profilePath: "file:///C:/Profile/profile.pb",
             profileLoaded: false,
             allSeriesConfigs: [
                 {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
                 {id: "2", name: "Accuracy", color: "#00ffff", enabled: false, displayPosition: 1}
-            ],
-            allAxes: [],
-            setSeriesEnabledCalls: 0,
-            lastSetSeriesEnabledId: null,
-            lastSetSeriesEnabledValue: null,
-            setSeriesEnabled: function (id, enabled) {
-                this.setSeriesEnabledCalls++
-                this.lastSetSeriesEnabledId = id
-                this.lastSetSeriesEnabledValue = enabled
-            },
-            pendingChanges: false,
-            beginDraftCalls: 0,
-            beginSeriesDraft: function () { this.beginDraftCalls++ },
-            commitDraftCalls: 0,
-            commitSeriesDraft: function () { this.commitDraftCalls++; this.pendingChanges = false; return {succeeded: true} },
-            discardSeriesDraftCalls: 0,
-            discardSeriesDraft: function () { this.discardSeriesDraftCalls++; this.pendingChanges = false }
-        }, overrides)
+            ]
+        }, overrides))
     }
 
     function makeFakeSessionVm(overrides) {
@@ -51,22 +37,6 @@ TestCase {
             profileBuildInProgress: false,
             profileBuildProgress: 0
         }, overrides)
-    }
-
-    // TestCase.findChild doesn't reliably reach items nested under
-    // StackLayout pages / ListView delegates in this tree (confirmed by
-    // inspection: the target items exist, are visible, but findChild still
-    // returns null), so all lookups in this file walk the tree by hand.
-    function findByObjectName(root, name) {
-        if (!root) return null
-        if (root.objectName === name) return root
-        if (root.children) {
-            for (const child of root.children) {
-                const found = findByObjectName(child, name)
-                if (found) return found
-            }
-        }
-        return null
     }
 
     // Opens the dialog and waits for its Popup content (created on open,
@@ -86,7 +56,7 @@ TestCase {
     }
 
     function selectCategory(dialog, categoryName) {
-        const item = findByObjectName(dialog.contentItem, "categoryItem_" + categoryName)
+        const item = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_" + categoryName)
         verify(item !== null, "no category item named 'categoryItem_" + categoryName + "' found in SettingsDialog")
         mouseClick(item)
         // StackLayout doesn't flip the new page's `visible` synchronously
@@ -101,7 +71,7 @@ TestCase {
             visualSettings: visualSettings
         })
 
-        const field = findByObjectName(dialog.contentItem, "kovaaksDirField")
+        const field = ItemLookup.findByObjectName(dialog.contentItem, "kovaaksDirField")
         verify(field !== null, "no field named 'kovaaksDirField' found in SettingsDialog")
         compare(field.text, "D:/CustomDir", "kovaaksDirField should show settingsVm.kovaaksDir with the file:// scheme stripped")
     }
@@ -113,11 +83,11 @@ TestCase {
             visualSettings: visualSettings
         })
 
-        const field = findByObjectName(dialog.contentItem, "profilePathField")
+        const field = ItemLookup.findByObjectName(dialog.contentItem, "profilePathField")
         verify(field !== null, "no field named 'profilePathField' found in SettingsDialog Directories category")
         compare(field.text, "D:/CustomProfile/profile.pb", "profilePathField should show settingsVm.profilePath with the file:// scheme stripped")
 
-        const statusLabel = findByObjectName(dialog.contentItem, "profileLoadedLabel")
+        const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
         verify(statusLabel !== null, "no label named 'profileLoadedLabel' found in SettingsDialog Directories category")
         compare(statusLabel.text, "Profile status: Loaded", "profileLoadedLabel should reflect settingsVm.profileLoaded === true")
     }
@@ -129,7 +99,7 @@ TestCase {
             visualSettings: visualSettings
         })
 
-        const statusLabel = findByObjectName(dialog.contentItem, "profileLoadedLabel")
+        const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
         verify(statusLabel !== null, "no label named 'profileLoadedLabel' found in SettingsDialog Profile category")
         compare(statusLabel.text, "Profile status: Not loaded", "profileLoadedLabel should reflect settingsVm.profileLoaded === false")
     }
@@ -141,7 +111,7 @@ TestCase {
             visualSettings: visualSettings
         })
 
-        const button = findByObjectName(dialog.contentItem, "generateProfileButton")
+        const button = ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton")
         verify(button !== null, "no button named 'generateProfileButton' found in SettingsDialog Profile category")
         mouseClick(button)
 
@@ -155,7 +125,7 @@ TestCase {
             visualSettings: visualSettings
         })
 
-        const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
+        const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
         verify(bar !== null, "no progress bar named 'profileBuildProgressBar' found in SettingsDialog Profile category")
         compare(bar.visible, false, "the progress bar should be hidden while no build is running")
     }
@@ -167,7 +137,7 @@ TestCase {
             visualSettings: visualSettings
         })
 
-        const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
+        const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
         verify(bar !== null, "no progress bar named 'profileBuildProgressBar' found in SettingsDialog Profile category")
         compare(bar.visible, true, "the progress bar should be visible while a build is running")
         compare(bar.value, 0.4, "the progress bar should bind to sessionVm.profileBuildProgress")
@@ -182,7 +152,7 @@ TestCase {
             visualSettings: visualSettings
         })
 
-        const bar = findByObjectName(dialog.contentItem, "profileBuildProgressBar")
+        const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
         compare(bar.indeterminate, true, "a build with no progress yet should render as indeterminate")
     }
 
@@ -194,8 +164,8 @@ TestCase {
 
         selectCategory(dialog, "Graph Lines")
 
-        const scoreSwitch = findByObjectName(dialog.contentItem, "seriesEnabledSwitch_1")
-        const accuracySwitch = findByObjectName(dialog.contentItem, "seriesEnabledSwitch_2")
+        const scoreSwitch = ItemLookup.findByObjectName(dialog.contentItem, "seriesEnabledSwitch_1")
+        const accuracySwitch = ItemLookup.findByObjectName(dialog.contentItem, "seriesEnabledSwitch_2")
         verify(scoreSwitch !== null)
         verify(accuracySwitch !== null)
         compare(scoreSwitch.checked, true)
@@ -213,7 +183,7 @@ TestCase {
         })
         selectCategory(dialog, "Graph Lines")
 
-        const saveButton = findByObjectName(dialog.contentItem, "saveGraphLinesButton")
+        const saveButton = ItemLookup.findByObjectName(dialog.contentItem, "saveGraphLinesButton")
         verify(saveButton !== null, "no item named 'saveGraphLinesButton' found in SettingsDialog")
         const point = saveButton.mapToItem(dialog.contentItem, 0, 0)
         verify(point.y >= 0 && point.y + saveButton.height <= dialog.contentItem.height, "saveGraphLinesButton should remain visible within the SettingsDialog window when many series are present")
@@ -263,7 +233,7 @@ TestCase {
         dialog.close()
 
         tryCompare(dialog, "visible", false)
-        compare(dialog.settingsVm.discardSeriesDraftCalls, 0)
+        compare(dialog.settingsVm.discardDraftCalls, 0)
     }
 
     function test_closingWithPendingChangesShowsConfirmPromptAndStaysOpenUntilResolved() {
@@ -288,7 +258,7 @@ TestCase {
         tryCompare(dialog.discardChangesPrompt, "visible", true)
         dialog.discardChangesPrompt.buttonClicked(MessageDialog.Discard, MessageDialog.DestructiveRole)
 
-        tryCompare(dialog.settingsVm, "discardSeriesDraftCalls", 1)
+        tryCompare(dialog.settingsVm, "discardDraftCalls", 1)
         tryCompare(dialog, "visible", false)
     }
 
@@ -318,7 +288,7 @@ TestCase {
 
         compare(dialog.visible, true)
         compare(dialog.settingsVm.commitDraftCalls, 0)
-        compare(dialog.settingsVm.discardSeriesDraftCalls, 0)
+        compare(dialog.settingsVm.discardDraftCalls, 0)
     }
 
     function test_switchingCategoriesDoesNotRetriggerDraftLifecycle() {
@@ -331,7 +301,7 @@ TestCase {
         selectCategory(dialog, "Directories")
         selectCategory(dialog, "Graph Lines")
 
-        compare(dialog.settingsVm.discardSeriesDraftCalls, 0)
+        compare(dialog.settingsVm.discardDraftCalls, 0)
     }
 
     function test_openingDialogCallsBeginSeriesDraft() {
@@ -340,7 +310,7 @@ TestCase {
             sessionVm: makeFakeSessionVm(),
         })
 
-        const panel = findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
+        const panel = ItemLookup.findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
         verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
         compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should be called when the dialog is opened")
     }
@@ -351,7 +321,7 @@ TestCase {
             sessionVm: makeFakeSessionVm(),
         })
 
-        const panel = findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
+        const panel = ItemLookup.findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
         verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
         compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should have fired on the first open()")
 
@@ -370,7 +340,7 @@ TestCase {
             sessionVm: makeFakeSessionVm(),
         })
 
-        const panel = findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
+        const panel = ItemLookup.findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
         verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
         compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should have fired on the first open()")
 

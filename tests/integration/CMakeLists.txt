@@ -16,6 +16,8 @@ add_executable(integration_tests
 )
 
 target_link_libraries(integration_tests PRIVATE
+    tests_support
+    tests_support_domain
     ksv_ui
     ksv_app
     ksv_qt_data

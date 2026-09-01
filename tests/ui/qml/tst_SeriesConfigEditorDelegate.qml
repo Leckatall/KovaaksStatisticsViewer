@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtTest
 import "../../../src/ui/qml"
+import "ItemLookup.js" as ItemLookup
 
 TestCase {
     id: testCase
@@ -35,31 +36,13 @@ TestCase {
         return delegate
     }
 
-    function findByObjectName(root, name) {
-        if (root.objectName === name)
-            return root
-        for (const child of root.children || []) {
-            const found = findByObjectName(child, name)
-            if (found)
-                return found
-        }
-        return null
-    }
-
-    function findByObjectNamePrefix(root, prefix, matches) {
-        if (root.objectName && root.objectName.startsWith(prefix))
-            matches.push(root)
-        for (const child of root.children || [])
-            findByObjectNamePrefix(child, prefix, matches)
-    }
-
     function test_dragHandleShowsSixDotsInTwoColumnsAndThreeRows() {
         const delegate = createDelegate()
-        const handle = findByObjectName(delegate, "seriesDragHandle_" + row.id)
+        const handle = ItemLookup.findByObjectName(delegate, "seriesDragHandle_" + row.id)
         verify(handle !== null)
 
         const dots = []
-        findByObjectNamePrefix(handle, "seriesDragHandleDot_" + row.id + "_", dots)
+        ItemLookup.findByObjectNamePrefix(handle, "seriesDragHandleDot_" + row.id + "_", dots)
         compare(dots.length, 6)
 
         for (let index = 0; index < dots.length; ++index) {
@@ -89,12 +72,12 @@ TestCase {
     function test_expressionAndDeleteButtonsRenderIconsNotText() {
         const delegate = createDelegate()
 
-        const fx = findByObjectName(delegate, "editExpressionButton_" + row.id)
+        const fx = ItemLookup.findByObjectName(delegate, "editExpressionButton_" + row.id)
         verify(fx !== null)
         compare(fx.text, "")
         verify(fx.icon.source.toString().endsWith("square-function.svg"))
 
-        const del = findByObjectName(delegate, "deleteSeriesButton_" + row.id)
+        const del = ItemLookup.findByObjectName(delegate, "deleteSeriesButton_" + row.id)
         verify(del !== null)
         compare(del.text, "")
         verify(del.icon.source.toString().endsWith("trash-2.svg"))

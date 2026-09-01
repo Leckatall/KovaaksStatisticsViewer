@@ -31,62 +31,104 @@
 using namespace ksv;
 
 namespace {
-    class DashboardUiTest : public testing::Test {
-    protected:
+    // Built-in SeriesId from defaultSeriesConfigs() -- GraphCanvas' y-axis column is
+    // always a series' SeriesId, not a position.
+    constexpr int kAccuracySeriesId = 2;
+
+    // A temp KovaaKs dir with the fixture perf in it, a wired App, and the real
+    // Main.qml scene loaded through App::start().
+    struct DashboardScene {
         integration::TestEnv env;
         std::unique_ptr<application::App> app;
-        QQmlApplicationEngine engine;
         QObject *root = nullptr;
-        QString perfUrl;
         QString perfFile;
+        QString perfUrl;
 
-        void SetUp() override {
-            ASSERT_TRUE(env.valid());
-            ASSERT_TRUE(env.makePerformancesDir());
-            const QString file = env.copyFixtureIntoPerformances("1wall6targets TE.perf");
-            ASSERT_FALSE(file.isEmpty());
-            perfFile = file;
-            perfUrl = QUrl::fromLocalFile(file).toString();
+        // Returns the first thing that went wrong, or an empty string on success --
+        // ASSERT_* cannot be used in a non-void function.
+        [[nodiscard]] QString build() {
+            if (!env.valid()) return "temp dir invalid";
+            if (!env.makePerformancesDir()) return "could not create performances dir";
+            perfFile = env.copyFixtureIntoPerformances("1wall6targets TE.perf");
+            if (perfFile.isEmpty()) return "could not copy the perf fixture";
+            perfUrl = QUrl::fromLocalFile(perfFile).toString();
 
             app = std::make_unique<application::App>(
                 env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
-            engine.setInitialProperties({
-                {"graphVm", QVariant::fromValue(app->graphVm())},
-                {"playtimeVm", QVariant::fromValue(app->playtimeVm())},
-                {"historyVm", QVariant::fromValue(app->completionHistoryVm())},
-                {"sessionVm", QVariant::fromValue(app->sessionVm())},
-                {"settingsVm", QVariant::fromValue(app->settingsVm())},
-                {"scenarioBrowserVm", QVariant::fromValue(app->scenarioBrowserVm())},
-            });
-            engine.loadFromModule("KovaaksStatsViewer", "Main");
-            ASSERT_FALSE(engine.rootObjects().isEmpty()) << "Main.qml failed to load";
-            root = engine.rootObjects().first();
+            if (app->start() != 0) return "Main.qml failed to load";
+            root = app->engine()->rootObjects().first();
+            return {};
         }
 
-        [[nodiscard]] ui::GraphCanvas *dashboardCanvas() const {
-            for (auto *c: root->findChildren<ui::GraphCanvas *>()) {
-                if (c->graphVm() == app->graphVm()) return c;
-            }
-            return nullptr;
-        }
-
-        [[nodiscard]] ui::GraphCanvas *historyCanvas() const {
+        [[nodiscard]] ui::GraphCanvas *canvasFor(const presentation::GraphViewModelBase *vm) const {
             for (auto *canvas: root->findChildren<ui::GraphCanvas *>()) {
-                if (canvas->graphVm() == app->completionHistoryVm()) return canvas;
+                if (canvas->graphVm() == vm) return canvas;
             }
             return nullptr;
         }
     };
 
+    // These tests share one App and one Main.qml scene: standing the whole thing up
+    // per test dominated this suite's runtime, and none of them needs a pristine
+    // profile. What they DO mutate is UI state, so SetUp() puts the dialog and the
+    // visible-series set back before each one. Tests that need an untouched scene use
+    // DashboardCleanSceneTest below instead.
+    class DashboardUiTest : public testing::Test {
+    protected:
+        static std::unique_ptr<DashboardScene> scene;
+
+        static void SetUpTestSuite() {
+            scene = std::make_unique<DashboardScene>();
+            const QString error = scene->build();
+            ASSERT_TRUE(error.isEmpty()) << error.toStdString();
+        }
+
+        static void TearDownTestSuite() { scene.reset(); }
+
+        void SetUp() override {
+            if (auto *dialog = scene->root->findChild<QObject *>("settingsDialog")) {
+                if (dialog->property("visible").toBool()) {
+                    QMetaObject::invokeMethod(dialog, "close");
+                    QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000);
+                }
+                dialog->setProperty("currentCategory", 0);
+            }
+            if (auto *visualSettings = scene->root->findChild<QObject *>("visualSettings")) {
+                visualSettings->setProperty("visibleSeriesIds", scene->app->graphVm()->enabledSeriesIds());
+            }
+        }
+
+        [[nodiscard]] static QObject *root() { return scene->root; }
+        [[nodiscard]] static application::App *app() { return scene->app.get(); }
+        [[nodiscard]] static QString perfUrl() { return scene->perfUrl; }
+        [[nodiscard]] static ui::GraphCanvas *dashboardCanvas() {
+            return scene->canvasFor(scene->app->graphVm());
+        }
+    };
+
+    std::unique_ptr<DashboardScene> DashboardUiTest::scene;
+
+    // For assertions that only hold on a scene nothing else has touched -- one asserts
+    // the plot subtree has never been instantiated, the other replaces the profile.
+    class DashboardCleanSceneTest : public testing::Test {
+    protected:
+        DashboardScene scene;
+
+        void SetUp() override {
+            const QString error = scene.build();
+            ASSERT_TRUE(error.isEmpty()) << error.toStdString();
+        }
+    };
+
     TEST_F(DashboardUiTest, SettingsMenuActionOpensTheSettingsDialog) {
-        auto *menuBar = root->property("menuBar").value<QObject *>();
+        auto *menuBar = root()->property("menuBar").value<QObject *>();
         ASSERT_NE(menuBar, nullptr);
 
         ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "settingsRequested"));
 
         QObject *dialog = nullptr;
         const bool opened = QTest::qWaitFor([&] {
-            dialog = root->findChild<QObject *>("settingsDialog");
+            dialog = root()->findChild<QObject *>("settingsDialog");
             return dialog != nullptr && dialog->property("visible").toBool();
         }, 3000);
 
@@ -95,13 +137,13 @@ namespace {
     }
 
     TEST_F(DashboardUiTest, ReopeningSettingsDialogAfterCloseWorks) {
-        auto *menuBar = root->property("menuBar").value<QObject *>();
+        auto *menuBar = root()->property("menuBar").value<QObject *>();
         ASSERT_NE(menuBar, nullptr);
 
         ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "settingsRequested"));
         QObject *dialog = nullptr;
         ASSERT_TRUE(QTest::qWaitFor([&] {
-            dialog = root->findChild<QObject *>("settingsDialog");
+            dialog = root()->findChild<QObject *>("settingsDialog");
             return dialog != nullptr && dialog->property("visible").toBool();
         }, 3000));
 
@@ -114,19 +156,19 @@ namespace {
     }
 
     TEST_F(DashboardUiTest, DashboardFiltersEnabledSeriesThroughVisibleSettings) {
-        app->graphVm()->fetchData(perfUrl);
+        app()->graphVm()->fetchData(perfUrl());
 
         auto *canvas = dashboardCanvas();
         ASSERT_NE(canvas, nullptr);
-        QObject *visualSettings = root->findChild<QObject *>("visualSettings");
+        QObject *visualSettings = root()->findChild<QObject *>("visualSettings");
         ASSERT_NE(visualSettings, nullptr);
 
-        const auto enabledIds = app->graphVm()->enabledSeriesIds();
-        const auto selected = std::find_if(enabledIds.cbegin(), enabledIds.cend(), [this](const QVariant &id) {
-            return app->graphVm()->columnForSeriesId(id.toString()) != -1;
+        const auto enabledIds = app()->graphVm()->enabledSeriesIds();
+        const auto selected = std::find_if(enabledIds.cbegin(), enabledIds.cend(), [](const QVariant &id) {
+            return app()->graphVm()->columnForSeriesId(id.toString()) != -1;
         });
         ASSERT_NE(selected, enabledIds.cend());
-        const int selectedColumn = app->graphVm()->columnForSeriesId(selected->toString());
+        const int selectedColumn = app()->graphVm()->columnForSeriesId(selected->toString());
 
         visualSettings->setProperty("visibleSeriesIds", QVariantList{*selected});
 
@@ -136,11 +178,11 @@ namespace {
     }
 
     TEST_F(DashboardUiTest, ConfigureActionsOpenGraphLinesSettingsCategory) {
-        auto *menuBar = root->property("menuBar").value<QObject *>();
+        auto *menuBar = root()->property("menuBar").value<QObject *>();
         ASSERT_NE(menuBar, nullptr);
         ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "configureGraphLinesRequested"));
 
-        auto *dialog = root->findChild<QObject *>("settingsDialog");
+        auto *dialog = root()->findChild<QObject *>("settingsDialog");
         ASSERT_NE(dialog, nullptr);
         ASSERT_TRUE(QTest::qWaitFor([&] {
             return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 1;
@@ -150,7 +192,7 @@ namespace {
         ASSERT_TRUE(QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000));
         dialog->setProperty("currentCategory", 0);
 
-        auto *button = root->findChild<QObject *>("configureGraphLinesButton");
+        auto *button = root()->findChild<QObject *>("configureGraphLinesButton");
         ASSERT_NE(button, nullptr);
         ASSERT_TRUE(QMetaObject::invokeMethod(button, "clicked"));
         EXPECT_TRUE(QTest::qWaitFor([&] {
@@ -159,9 +201,9 @@ namespace {
     }
 
     TEST_F(DashboardUiTest, FetchingPerfPopulatesDashboardTitleAndGraph) {
-        app->graphVm()->fetchData(perfUrl);
+        app()->graphVm()->fetchData(perfUrl());
 
-        auto *titleLabel = root->findChild<QObject *>("scenarioTitleLabel");
+        auto *titleLabel = root()->findChild<QObject *>("scenarioTitleLabel");
         ASSERT_NE(titleLabel, nullptr);
         ASSERT_TRUE(QTest::qWaitFor([&] {
             return titleLabel->property("text").toString().contains("1wall6targets TE");
@@ -183,45 +225,70 @@ namespace {
     TEST_F(DashboardUiTest, YAxisTitleLabelDefaultsToScore) {
         // The plot subtree (and its axis title) is only instantiated once a run with performance data
         // is shown; before that the panel carries the "No run selected" message instead.
-        app->graphVm()->fetchData(perfUrl);
+        app()->graphVm()->fetchData(perfUrl());
 
         QObject *label = nullptr;
         ASSERT_TRUE(QTest::qWaitFor([&] {
-            label = root->findChild<QObject *>("scenarioYAxisTitleLabel");
+            label = root()->findChild<QObject *>("scenarioYAxisTitleLabel");
             return label != nullptr;
         }, 2000)) << "no label named 'scenarioYAxisTitleLabel' found after loading a perf";
-        const auto series = app->graphVm()->series({app->graphVm()->yAxisColumn()});
+        const auto series = app()->graphVm()->series({app()->graphVm()->yAxisColumn()});
         ASSERT_FALSE(series.isEmpty());
         EXPECT_EQ(label->property("text").toString(), series.front()->name());
     }
 
-    TEST_F(DashboardUiTest, NoRunSelectedMessageShowsBeforeAnyRunIsLoaded) {
-        auto *label = root->findChild<QObject *>("graphNoRunSelectedLabel");
+    TEST_F(DashboardCleanSceneTest, NoRunSelectedMessageShowsBeforeAnyRunIsLoaded) {
+        auto *label = scene.root->findChild<QObject *>("graphNoRunSelectedLabel");
         ASSERT_NE(label, nullptr) << "no label named 'graphNoRunSelectedLabel' found in the dashboard scene";
         EXPECT_TRUE(label->property("visible").toBool());
-        EXPECT_EQ(root->findChild<QObject *>("scenarioYAxisTitleLabel"), nullptr)
+        EXPECT_EQ(scene.root->findChild<QObject *>("scenarioYAxisTitleLabel"), nullptr)
             << "plot should not be instantiated while no run is shown";
     }
 
-    // YAxisTitleLabelTracksTheSelectedColumn removed: the y-axis title label doesn't update to the
-    // selected column, part of the same DashboardGraphCanvas.qml/axis-settings rewiring tracked in
-    // .plans/series-config-migration-completion/plans/03-qml-visible-enabled-split.md.
+    // Its own scene: this is the one test that repoints the canvas' y-axis column, and
+    // YAxisTitleLabelDefaultsToScore reads that same state.
+    TEST_F(DashboardCleanSceneTest, YAxisTitleLabelTracksTheSelectedColumn) {
+        auto *app = scene.app.get();
+        app->graphVm()->fetchData(scene.perfUrl);
 
-    TEST_F(DashboardUiTest, ScenarioHistoryCanvasUsesTheCompletionHistoryViewModel) {
+        auto *canvas = scene.canvasFor(app->graphVm());
+        ASSERT_NE(canvas, nullptr);
+        QObject *label = nullptr;
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            label = scene.root->findChild<QObject *>("scenarioYAxisTitleLabel");
+            return label != nullptr;
+        }, 2000)) << "no label named 'scenarioYAxisTitleLabel' found after loading a perf";
+
+        canvas->setYAxisColumn(kAccuracySeriesId);
+
+        const auto accuracy = app->graphVm()->series({kAccuracySeriesId});
+        ASSERT_FALSE(accuracy.isEmpty());
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return label->property("text").toString() == accuracy.front()->name();
+        }, 2000)) << "axis title stayed on '" << label->property("text").toString().toStdString()
+                  << "' after the y-axis column moved to " << accuracy.front()->name().toStdString();
+    }
+
+    TEST_F(DashboardCleanSceneTest, ScenarioHistoryCanvasUsesTheCompletionHistoryViewModel) {
+        auto *app = scene.app.get();
         ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
-        data::ProtoDecoder decoder;
-        auto first_run = decoder.decode_file(perfFile.toStdString());
+
+        // Take the run the live pipeline already decoded rather than standing up a
+        // second ProtoDecoder over the same file.
+        auto first_run = app->profileService()->getLatestRun();
+        ASSERT_EQ(first_run.run_id.scenario_id.name, "1wall6targets TE");
         auto second_run = first_run;
         second_run.run_id.start_time += 1000;
         domain::UserProfile profile;
-        const auto source = profile.ensureSource(env.dir.path().toStdString(), "FPSAimTrainer/performances");
-        first_run.sources.perf = {{source, std::filesystem::path(perfFile.toStdString()).filename().string()}};
+        const auto source = profile.ensureSource(scene.env.rootPath().toStdString(), "FPSAimTrainer/performances");
+        first_run.sources.perf = {{source, std::filesystem::path(scene.perfFile.toStdString()).filename().string()}};
         second_run.sources.perf = first_run.sources.perf;
         ASSERT_TRUE(profile.addRun(first_run));
         ASSERT_TRUE(profile.addRun(second_run));
 
         app->profileService()->applyBuiltProfile(std::move(profile));
 
+        const auto historyCanvas = [this, app] { return scene.canvasFor(app->completionHistoryVm()); };
         ASSERT_TRUE(QTest::qWaitFor([&] { return historyCanvas() != nullptr; }, 3000));
         EXPECT_EQ(historyCanvas()->graphVm(), app->completionHistoryVm());
     }
@@ -238,19 +305,9 @@ namespace {
         settings->setProfilePath(QDir(tempDir.path()).filePath("profile.pb").toStdString());
         const auto seriesConfigStore = std::make_shared<qt_data::SeriesConfigStore>(settings);
         application::App app(settings, std::make_shared<data::ProtoDecoder>(), seriesConfigStore);
-        QQmlApplicationEngine engine;
-        engine.setInitialProperties({
-            {"graphVm", QVariant::fromValue(app.graphVm())},
-            {"playtimeVm", QVariant::fromValue(app.playtimeVm())},
-            {"historyVm", QVariant::fromValue(app.completionHistoryVm())},
-            {"sessionVm", QVariant::fromValue(app.sessionVm())},
-            {"settingsVm", QVariant::fromValue(app.settingsVm())},
-            {"scenarioBrowserVm", QVariant::fromValue(app.scenarioBrowserVm())},
-        });
-        engine.loadFromModule("KovaaksStatsViewer", "Main");
-        ASSERT_FALSE(engine.rootObjects().isEmpty()) << "Main.qml failed to load";
+        ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
 
-        auto *root = engine.rootObjects().first();
+        auto *root = app.engine()->rootObjects().first();
         auto *banner = root->findChild<QObject *>("firstRunBanner");
         auto *dialog = root->findChild<QObject *>("kovaaksFolderDialog");
         ASSERT_NE(banner, nullptr);

@@ -1,29 +1,14 @@
 import QtQuick
 import QtTest
 import "../../../src/ui/qml"
+import "ItemLookup.js" as ItemLookup
+import "TestDoubles.js" as TestDoubles
 
 TestCase {
     id: testCase
 
-    // TestCase.findChild doesn't reliably reach items nested under Repeater
-    // delegates in this tree (same issue documented in tst_SettingsDialog.qml),
-    // so lookups here walk the tree by hand.
-    function findByObjectName(root, name) {
-        if (!root)
-            return null;
-        if (root.objectName === name)
-            return root;
-        if (root.children) {
-            for (const child of root.children) {
-                const found = findByObjectName(child, name);
-                if (found)
-                    return found;
-            }
-        }
-        return null;
-    }
     function makeFakeSettingsVm(overrides) {
-        const vm = Object.assign({
+        return TestDoubles.makeFakeSettingsVm(Object.assign({
             allSeriesConfigs: [
                 {
                     id: "1",
@@ -37,30 +22,12 @@ TestCase {
                     expression: "SCORE"
                 }
             ],
-            pendingChanges: false,
-            commitDraftCalls: 0,
-            discardDraftCalls: 0,
-            seriesEnabledCalls: 0,
             createCalls: [],
             updateCalls: [],
             removeCalls: [],
             reorderCalls: [],
-            allAxes: [],
             createAxisCalls: [],
             updateSeriesAxisCalls: [],
-            beginSeriesDraft: function () {},
-            commitSeriesDraft: function () {
-                this.commitDraftCalls++;
-                return {
-                    succeeded: true
-                };
-            },
-            discardSeriesDraft: function () {
-                this.discardDraftCalls++;
-            },
-            setSeriesEnabled: function () {
-                this.seriesEnabledCalls++;
-            },
             createComputedSeries: function () {
                 this.createCalls.push(Array.from(arguments));
             },
@@ -115,8 +82,7 @@ TestCase {
                     toDslText: function () { return "SCORE"; }
                 };
             }
-        }, overrides);
-        return vm;
+        }, overrides));
     }
     function rowsOutOfOrder() {
         return [
@@ -164,7 +130,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        mouseClick(findByObjectName(panel, "seriesColorSwatch_1"));
+        mouseClick(ItemLookup.findByObjectName(panel, "seriesColorSwatch_1"));
         panel.colorDialog.selectedColor = "#123456";
         panel.colorDialog.accepted();
         const call = panel.settingsVm.updateCalls[0];
@@ -181,7 +147,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        findByObjectName(panel, "addSeriesButton").clicked();
+        ItemLookup.findByObjectName(panel, "addSeriesButton").clicked();
         const call = panel.settingsVm.createCalls[0];
         compare(call[0], "New Series");
         compare(call[1], "#4CAF50");
@@ -194,7 +160,7 @@ TestCase {
             settingsVm: makeFakeSettingsVm()
         });
         verify(waitForRendering(panel));
-        const combo = findByObjectName(panel, "axisCombo_1");
+        const combo = ItemLookup.findByObjectName(panel, "axisCombo_1");
         verify(combo !== null);
         compare(combo.currentText, "Independent");
     }
@@ -209,7 +175,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        const combo = findByObjectName(panel, "axisCombo_1");
+        const combo = ItemLookup.findByObjectName(panel, "axisCombo_1");
         panel.handleAxisSelection(panel.displayRows[0], "2");
         compare(panel.settingsVm.updateSeriesAxisCalls[0], ["1", "2"]);
     }
@@ -235,7 +201,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        const combo = findByObjectName(panel, "axisCombo_1");
+        const combo = ItemLookup.findByObjectName(panel, "axisCombo_1");
         compare(combo.currentText, "Score Family");
         panel.handleAxisSelection(panel.displayRows[0], "");
         compare(panel.settingsVm.updateSeriesAxisCalls[0], ["1", ""]);
@@ -248,7 +214,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        const combo = findByObjectName(panel, "axisCombo_1");
+        const combo = ItemLookup.findByObjectName(panel, "axisCombo_1");
         panel.handleAxisSelection(panel.displayRows[0], "__new__");
         const dialog = panel.newAxisDialog;
         verify(dialog !== null);
@@ -265,7 +231,7 @@ TestCase {
         });
         verify(waitForRendering(panel));
 
-        mouseClick(findByObjectName(panel, "discardGraphLineChangesButton"));
+        mouseClick(ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton"));
 
         compare(panel.settingsVm.discardDraftCalls, 1);
     }
@@ -277,7 +243,7 @@ TestCase {
         });
         verify(waitForRendering(panel));
 
-        mouseClick(findByObjectName(panel, "saveGraphLinesButton"));
+        mouseClick(ItemLookup.findByObjectName(panel, "saveGraphLinesButton"));
 
         compare(panel.settingsVm.commitDraftCalls, 1);
     }
@@ -286,7 +252,7 @@ TestCase {
             settingsVm: makeFakeSettingsVm()
         });
         verify(waitForRendering(panel));
-        mouseClick(findByObjectName(panel, "seriesColorSwatch_1"));
+        mouseClick(ItemLookup.findByObjectName(panel, "seriesColorSwatch_1"));
         compare(panel.colorDialog.selectedColor.toString(), "#009600");
     }
     function test_deleteButtonCallsRemoveComputedSeriesWithRowId() {
@@ -295,7 +261,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        findByObjectName(panel, "deleteSeriesButton_1").clicked();
+        ItemLookup.findByObjectName(panel, "deleteSeriesButton_1").clicked();
         compare(panel.settingsVm.removeCalls[0], ["1"]);
     }
     function test_deleteButtonWorksIdenticallyOnAPrimitiveRow() {
@@ -306,7 +272,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        findByObjectName(panel, "deleteSeriesButton_1").clicked();
+        ItemLookup.findByObjectName(panel, "deleteSeriesButton_1").clicked();
         compare(panel.settingsVm.removeCalls[0], ["1"]);
     }
     function test_draggingARowDoesNotCallReorderSeriesUntilReleased() {
@@ -317,7 +283,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        const handle = findByObjectName(panel, "seriesDragHandle_1");
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_1");
         const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
         const rowHeight = handle.parent.height;
         mousePress(panel, start.x, start.y);
@@ -360,7 +326,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        const handle = findByObjectName(panel, "seriesDragHandle_1");
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_1");
         const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
         const rowHeight = handle.parent.height;
         mousePress(panel, start.x, start.y);
@@ -389,8 +355,8 @@ TestCase {
         });
         verify(waitForRendering(panel));
 
-        const scrollView = findByObjectName(panel, "seriesListScrollView");
-        const handle = findByObjectName(panel, "seriesDragHandle_0");
+        const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_0");
         const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
         const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
 
@@ -418,9 +384,9 @@ TestCase {
         });
         verify(waitForRendering(panel));
 
-        const handle = findByObjectName(panel, "seriesDragHandle_0");
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_0");
         const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
-        const scrollView = findByObjectName(panel, "seriesListScrollView");
+        const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
         const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
         mousePress(panel, start.x, start.y);
         wait(20);
@@ -444,9 +410,9 @@ TestCase {
         });
         verify(waitForRendering(panel));
 
-        const handle = findByObjectName(panel, "seriesDragHandle_0");
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_0");
         const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
-        const scrollView = findByObjectName(panel, "seriesListScrollView");
+        const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
         const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
 
         mousePress(panel, start.x, start.y);
@@ -467,7 +433,7 @@ TestCase {
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: vm
         });
-        mouseClick(findByObjectName(panel, "editExpressionButton_2"));
+        mouseClick(ItemLookup.findByObjectName(panel, "editExpressionButton_2"));
         tryCompare(panel.expressionDialog, "visible", true);
         compare(panel.expressionDialog.seriesId, "2");
         compare(panel.expressionDialog.seriesName, "Second");
@@ -480,7 +446,7 @@ TestCase {
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: vm
         });
-        mouseClick(findByObjectName(panel, "editExpressionButton_1"));
+        mouseClick(ItemLookup.findByObjectName(panel, "editExpressionButton_1"));
         tryCompare(panel.expressionDialog, "visible", true);
         compare(panel.expressionDialog.seriesId, "1");
     }
@@ -490,7 +456,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        const field = findByObjectName(panel, "seriesNameField_1");
+        const field = ItemLookup.findByObjectName(panel, "seriesNameField_1");
         field.text = "New score";
         field.editingFinished();
         const call = panel.settingsVm.updateCalls[0];
@@ -509,10 +475,10 @@ TestCase {
         });
         verify(waitForRendering(panel));
         for (const id of ["1", "2"]) {
-            verify(findByObjectName(panel, "seriesColorSwatch_" + id) !== null);
-            verify(findByObjectName(panel, "seriesNameField_" + id) !== null);
-            verify(findByObjectName(panel, "editExpressionButton_" + id) !== null);
-            verify(findByObjectName(panel, "deleteSeriesButton_" + id) !== null);
+            verify(ItemLookup.findByObjectName(panel, "seriesColorSwatch_" + id) !== null);
+            verify(ItemLookup.findByObjectName(panel, "seriesNameField_" + id) !== null);
+            verify(ItemLookup.findByObjectName(panel, "editExpressionButton_" + id) !== null);
+            verify(ItemLookup.findByObjectName(panel, "deleteSeriesButton_" + id) !== null);
         }
     }
     function test_manySeriesRowsScrollInsteadOfPushingSaveButtonOutOfBounds() {
@@ -525,10 +491,10 @@ TestCase {
         });
         verify(waitForRendering(panel));
 
-        const scrollView = findByObjectName(panel, "seriesListScrollView");
+        const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
         verify(scrollView !== null, "expected a seriesListScrollView wrapping the series rows");
 
-        const saveButton = findByObjectName(panel, "saveGraphLinesButton");
+        const saveButton = ItemLookup.findByObjectName(panel, "saveGraphLinesButton");
         verify(saveButton !== null);
         const point = saveButton.mapToItem(panel, 0, 0);
         verify(point.y >= 0 && point.y + saveButton.height <= panel.height, "saveGraphLinesButton should stay within the panel's bounds when many series are present");
@@ -548,7 +514,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        const handle = findByObjectName(panel, "seriesDragHandle_1");
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_1");
         const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
         const rowHeight = handle.parent.height;
         mousePress(panel, start.x, start.y);
@@ -572,7 +538,7 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        const handle = findByObjectName(panel, "seriesDragHandle_1");
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_1");
         const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
         const rowHeight = handle.parent.height;
         mousePress(panel, start.x, start.y);
@@ -604,8 +570,8 @@ TestCase {
         });
         verify(waitForRendering(panel));
 
-        const saveButton = findByObjectName(panel, "saveGraphLinesButton");
-        const discardButton = findByObjectName(panel, "discardGraphLineChangesButton");
+        const saveButton = ItemLookup.findByObjectName(panel, "saveGraphLinesButton");
+        const discardButton = ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton");
         verify(saveButton !== null);
         verify(discardButton !== null);
         compare(saveButton.enabled, false);
@@ -619,8 +585,8 @@ TestCase {
         });
         verify(waitForRendering(panel));
 
-        const saveButton = findByObjectName(panel, "saveGraphLinesButton");
-        const discardButton = findByObjectName(panel, "discardGraphLineChangesButton");
+        const saveButton = ItemLookup.findByObjectName(panel, "saveGraphLinesButton");
+        const discardButton = ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton");
         compare(saveButton.enabled, true);
         compare(discardButton.enabled, true);
     }

@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 
 #include "formats/protobuf/proto_decoder.h"
 
@@ -94,19 +95,14 @@ namespace {
     //     EXPECT_NO_THROW(decoder.decode_file("this/file/does/not/exist.perf"));
     // }
 
-    TEST_F(ProtoDecoderTest, decodeFileOfCorruptDataDoesNotThrow) {
+    TEST_F(ProtoDecoderTest, decodeFileOfCorruptDataSignalsFailure) {
         const auto corrupt_path = std::filesystem::path{TEST_FILES_DIR} / "corrupt.perf";
         {
             std::ofstream out(corrupt_path, std::ios::binary);
             out << "this is not a valid protobuf message";
         }
 
-        // Documents current behavior: a failed parse is only logged to stderr,
-        // decode_file still returns a (effectively empty/default) Run
-        // rather than signaling an error to the caller.
-        ksv::domain::Run perf;
-        EXPECT_NO_THROW(perf = decoder.decode_file(corrupt_path.string()));
-        EXPECT_TRUE(perf.run_id.scenario_id.name.empty());
+        EXPECT_THROW(decoder.decode_file(corrupt_path.string()), std::runtime_error);
 
         std::filesystem::remove(corrupt_path);
     }

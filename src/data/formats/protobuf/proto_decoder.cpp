@@ -4,6 +4,8 @@
 
 #include "proto_decoder.h"
 
+#include <stdexcept>
+
 namespace ksv::data {
     domain::Run ProtoDecoder::decode(const perf::PerfLog &perfLog) {
         domain::Run run;
@@ -37,9 +39,7 @@ namespace ksv::data {
         perf::PerfLog perfLog;
         if (!std::filesystem::exists(filename)) throw std::invalid_argument("File does not exist");
         std::fstream input(filename.data(), std::ios::in | std::ios::binary);
-        if (!perfLog.ParseFromIstream(&input)) {
-            std::cerr << "Failed to parse file." << std::endl;
-        }
+        if (!perfLog.ParseFromIstream(&input)) throw std::runtime_error("Failed to parse perf file");
         return decode(perfLog);
     }
 

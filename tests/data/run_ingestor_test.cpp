@@ -1,12 +1,13 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <iostream>
-#include <sstream>
 #include <string>
 
 #include "data/run_ingestor.h"
+#include "cerr_capture.h"
 #include "fake_file_service.h"
+
+using ksv::tests_support::CerrCapture;
 
 namespace {
     ksv::application::PerfFile perf(const std::string_view filename, const std::string_view root = "root") {
@@ -16,18 +17,6 @@ namespace {
     ksv::application::StatsFile csv(const std::string_view filename, const std::string_view root = "root") {
         return {.root = std::string(root), .subdir = "FPSAimTrainer/stats", .filename = std::string(filename)};
     }
-
-    // RAII redirect of std::cerr so diagnostic-only logging can be asserted on.
-    class CerrCapture {
-    public:
-        CerrCapture() : m_previous(std::cerr.rdbuf(m_sink.rdbuf())) {}
-        ~CerrCapture() { std::cerr.rdbuf(m_previous); }
-        [[nodiscard]] std::string str() const { return m_sink.str(); }
-
-    private:
-        std::ostringstream m_sink;
-        std::streambuf *m_previous;
-    };
 
     ksv::data::ParsedStatsCsv fixtureCsv() {
         using namespace std::chrono;
@@ -116,7 +105,7 @@ namespace {
         EXPECT_FALSE(run->sources.csv.has_value());
     }
 
-    TEST(RunIngestorTest, PairedHashOrCountMismatchIsLoggedButRunIsKept) {
+    TEST(RunIngestorTest, PairedHashMismatchKeepsPerfDataAndSkipsCsvEnrichment) {
         auto files = std::make_shared<ksv::tests_support::FakeFileService>();
         ksv::domain::Run perf_run{.run_id = {.scenario_id = {.name = "Perf", .hash = "perf-hash"}, .start_time = 7},
                                   .scenario_length = 60.0F};
@@ -136,8 +125,10 @@ namespace {
         }
 
         ASSERT_TRUE(run);
-        EXPECT_EQ(run->totals().score, 99.0F);
+        EXPECT_EQ(run->totals().score, 10.0F);
         EXPECT_TRUE(run->performance.has_value());
+        EXPECT_FALSE(run->stats.has_value());
+        EXPECT_FALSE(run->sources.csv.has_value());
         EXPECT_NE(logged.find("differ"), std::string::npos);
     }
 

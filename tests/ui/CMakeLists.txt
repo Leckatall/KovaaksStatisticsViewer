@@ -2,7 +2,7 @@ find_package(GTest CONFIG REQUIRED)
 include(GoogleTest)
 
 add_executable(ui_tests
-    qt_test_main.cpp
+    ../support/qt_gtest_main.cpp
     axis_model_test.cpp
     value_transform_test.cpp
     series_model_test.cpp

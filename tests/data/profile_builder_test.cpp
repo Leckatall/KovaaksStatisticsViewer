@@ -13,22 +13,13 @@
 #include "profile_builder.h"
 #include "run_ingestor.h"
 #include "fake_file_service.h"
+#include "run_builders.h"
 
 using namespace ksv::data;
 using namespace ksv::application;
 using namespace ksv::tests_support;
 
 namespace {
-    ksv::domain::Run make_perf(const std::string &hash, const long long start_time,
-                                        const float score = 0.0F) {
-        ksv::domain::Run perf;
-        perf.run_id.scenario_id.name = "Scenario " + hash;
-        perf.run_id.scenario_id.hash = hash;
-        perf.run_id.start_time = start_time;
-        perf.stored_totals.score = score;
-        return perf;
-    }
-
     class ProfileBuilderTest : public testing::Test {
     protected:
         std::shared_ptr<FakeFileService> fake_file_service = std::make_shared<FakeFileService>();
@@ -48,7 +39,7 @@ namespace {
 
     TEST_F(ProfileBuilderTest, BuildAggregatesEveryPerfFromTheDirectory) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100), make_perf("hash-1", 200), make_perf("hash-2", 300)
+            makeRun("hash-1", 100), makeRun("hash-1", 200), makeRun("hash-2", 300)
         };
 
         const auto profile = builder.build();
@@ -65,7 +56,7 @@ namespace {
 
     TEST_F(ProfileBuilderTest, BuildReportsProgressOncePerFile) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100), make_perf("hash-2", 200), make_perf("hash-3", 300)
+            makeRun("hash-1", 100), makeRun("hash-2", 200), makeRun("hash-3", 300)
         };
 
         std::vector<std::pair<std::size_t, std::size_t>> reports;
@@ -81,7 +72,7 @@ namespace {
 
     TEST_F(ProfileBuilderTest, BuildSkipsAFileThatVanishedDuringDecodeButAggregatesTheRest) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100), make_perf("hash-2", 200), make_perf("hash-3", 300)
+            makeRun("hash-1", 100), makeRun("hash-2", 200), makeRun("hash-3", 300)
         };
         fake_file_service->throw_for_indices.insert(1);
 
@@ -103,7 +94,7 @@ namespace {
     }
 
     TEST_F(ProfileBuilderTest, BuildIsRepeatable) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
 
         const auto first = builder.build();
         const auto second = builder.build();
@@ -133,7 +124,7 @@ namespace {
     }
 
     TEST_F(ProfileBuilderTest, BuildPairsPerfWithItsStatsSiblingIntoOneRun) {
-        auto paired_perf = make_perf("hash-1", 100, 42.0F);
+        auto paired_perf = makeRun("hash-1", 100, 42.0F);
         paired_perf.performance.emplace();
         fake_file_service->perfs_to_return = {paired_perf};
         fake_file_service->stats_files = {stats_file("listed-perf-0 Stats.csv")};
@@ -168,7 +159,7 @@ namespace {
     }
 
     TEST_F(ProfileBuilderTest, BuildReportsProgressOncePerGroupAcrossMixedGroupKinds) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100, 1.0F), make_perf("hash-2", 200)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100, 1.0F), makeRun("hash-2", 200)};
         fake_file_service->stats_files = {
             stats_file("listed-perf-0 Stats.csv"),
             stats_file("Solo - Challenge - 2026.08.27-02.26.40 Stats.csv")};
@@ -188,7 +179,7 @@ namespace {
     }
 
     TEST_F(ProfileBuilderTest, BuildRegistersBothPerfAndStatsSourceDirsForARootWithCsv) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100, 1.0F)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100, 1.0F)};
         fake_file_service->stats_files = {stats_file("listed-perf-0 Stats.csv")};
         fake_file_service->stats_by_path.emplace("listed-perf-0 Stats.csv", csv_totals("hash-1", 1.0F));
 

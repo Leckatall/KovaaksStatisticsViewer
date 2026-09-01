@@ -283,8 +283,8 @@ namespace ksv::qt_data {
             return configs;
         }
 
-        QString encode(const std::vector<SeriesConfig> &configs, const SeriesId &next,
-                       const std::vector<AxisConfig> &axes, const AxisId &nextAxisId) {
+        QString encode(const std::vector<SeriesConfig> &configs, const std::optional<SeriesId> next,
+                       const std::vector<AxisConfig> &axes, const std::optional<AxisId> nextAxisId) {
             QJsonArray series;
             for (const auto &config: configs)
                 series.append(QJsonObject{{"id", QString::number(config.id.value)},
@@ -295,16 +295,23 @@ namespace ksv::qt_data {
             QJsonArray axesArray;
             for (const auto &axis: axes) axesArray.append(encodeAxis(axis));
             return QString::fromUtf8(QJsonDocument(QJsonObject{{"schemaVersion", 3},
-                {"nextComputedSeriesId", QString::number(next.value)}, {"series", series}, {"axes", axesArray},
-                {"nextAxisId", QString::number(nextAxisId.value)}}).toJson(QJsonDocument::Indented));
+                {"nextComputedSeriesId", next ? QJsonValue(QString::number(next->value)) : QJsonValue()}, {"series", series},
+                {"axes", axesArray}, {"nextAxisId", nextAxisId ? QJsonValue(QString::number(nextAxisId->value)) : QJsonValue()}}
+                ).toJson(QJsonDocument::Indented));
         }
 
         struct Document {
             std::vector<SeriesConfig> configs;
-            SeriesId nextSeriesId;
+            std::optional<SeriesId> nextSeriesId;
             std::vector<AxisConfig> axes;
-            AxisId nextAxisId;
+            std::optional<AxisId> nextAxisId;
         };
+
+        std::optional<std::optional<uint64_t>> optionalDecimalId(const QJsonValue &value) {
+            if (value.isNull()) return std::optional<uint64_t>{};
+            const auto id = decimalId(value, false);
+            return id ? std::optional{*id} : std::nullopt;
+        }
 
         Document migrateV1ToV2(std::vector<SeriesConfig> configs, const SeriesId nextSeriesId) {
             auto axes = defaultAxisConfigs();
@@ -328,8 +335,8 @@ namespace ksv::qt_data {
 
         std::optional<Document> decodeVersionedDocument(const QJsonObject &root, const bool expressionIsDsl) {
             if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series", "axes", "nextAxisId"})) return {};
-            const auto nextSeriesId = decimalId(root["nextComputedSeriesId"], false);
-            const auto nextAxisId = decimalId(root["nextAxisId"], false);
+            const auto nextSeriesId = optionalDecimalId(root["nextComputedSeriesId"]);
+            const auto nextAxisId = optionalDecimalId(root["nextAxisId"]);
             if (!nextSeriesId || !nextAxisId || !root["axes"].isArray()) return {};
             std::vector<AxisConfig> axes;
             for (const auto &item: root["axes"].toArray()) {
@@ -349,11 +356,13 @@ namespace ksv::qt_data {
                 maximumSeriesId = std::max(maximumSeriesId, config.id.value);
                 if (config.yAxisId && std::ranges::none_of(axes, [&](const auto &axis) { return axis.id == *config.yAxisId; })) return {};
             }
-            if (*nextSeriesId <= maximumSeriesId) return {};
+            if (nextSeriesId->has_value() ? **nextSeriesId <= maximumSeriesId : maximumSeriesId != UINT64_MAX) return {};
             uint64_t maximumAxisId = 0;
             for (const auto &axis: axes) maximumAxisId = std::max(maximumAxisId, axis.id.value);
-            if (*nextAxisId <= maximumAxisId) return {};
-            return Document{std::move(*configs), SeriesId{*nextSeriesId}, std::move(axes), AxisId{*nextAxisId}};
+            if (nextAxisId->has_value() ? **nextAxisId <= maximumAxisId : maximumAxisId != UINT64_MAX) return {};
+            const auto nextSeries = nextSeriesId->has_value() ? std::optional{SeriesId{**nextSeriesId}} : std::nullopt;
+            const auto nextAxis = nextAxisId->has_value() ? std::optional{AxisId{**nextAxisId}} : std::nullopt;
+            return Document{std::move(*configs), nextSeries, std::move(axes), nextAxis};
         }
 
         std::optional<Document> migrateV2ToV3(const QJsonObject &root) {
@@ -377,6 +386,38 @@ namespace ksv::qt_data {
             return {};
         }
 
+        bool sameAxisOptions(const AxisModelOptions &left, const AxisModelOptions &right) {
+            return left.baseline == right.baseline && left.integral == right.integral &&
+                   left.targetTicks == right.targetTicks && left.fallbackSpan == right.fallbackSpan;
+        }
+
+        bool sameConfigs(const std::vector<SeriesConfig> &left, const std::vector<SeriesConfig> &right) {
+            if (left.size() != right.size()) return false;
+            for (size_t index = 0; index < left.size(); ++index) {
+                const auto &[leftId, leftPresentation, leftExpression, leftAxis, leftTransform] = left[index];
+                const auto &[rightId, rightPresentation, rightExpression, rightAxis, rightTransform] = right[index];
+                if (leftId != rightId || leftPresentation.name != rightPresentation.name ||
+                    leftPresentation.lineStyle.color != rightPresentation.lineStyle.color ||
+                    leftPresentation.lineStyle.width != rightPresentation.lineStyle.width ||
+                    leftPresentation.enabled != rightPresentation.enabled ||
+                    leftPresentation.displayPosition != rightPresentation.displayPosition || leftAxis != rightAxis ||
+                    leftTransform != rightTransform || encodeExpressionDsl(leftExpression) != encodeExpressionDsl(rightExpression))
+                    return false;
+            }
+            return true;
+        }
+
+        bool sameAxes(const std::vector<AxisConfig> &left, const std::vector<AxisConfig> &right) {
+            if (left.size() != right.size()) return false;
+            for (size_t index = 0; index < left.size(); ++index) {
+                if (left[index].id != right[index].id || left[index].name != right[index].name ||
+                    !sameAxisOptions(left[index].options, right[index].options) ||
+                    left[index].transformKind != right[index].transformKind)
+                    return false;
+            }
+            return true;
+        }
+
         void normalizeDisplayPositions(std::vector<SeriesConfig> &configs) {
             for (size_t index = 0; index < configs.size(); ++index)
                 configs[index].presentation.displayPosition = static_cast<uint32_t>(index);
@@ -389,8 +430,8 @@ namespace ksv::qt_data {
         ensureLoadedLocked();
     }
 
-    void SeriesConfigStore::writeLocked(const std::vector<SeriesConfig> &configs, const SeriesId &next,
-                                        const std::vector<AxisConfig> &axes, const AxisId &nextAxisId) const {
+    void SeriesConfigStore::writeLocked(const std::vector<SeriesConfig> &configs, const std::optional<SeriesId> next,
+                                        const std::vector<AxisConfig> &axes, const std::optional<AxisId> nextAxisId) const {
         m_settingsService->setSeriesConfigDocument(encode(configs, next, axes, nextAxisId).toStdString());
     }
 
@@ -412,7 +453,7 @@ namespace ksv::qt_data {
             if (std::ranges::find(disabled, std::string(legacyKey)) != disabled.end())
                 m_configs[recordIndex].presentation.enabled = false;
         }
-        writeLocked(m_configs, m_next.value(), m_axes, m_nextAxisId.value());
+        writeLocked(m_configs, m_next, m_axes, m_nextAxisId);
         m_requiresReload = false;
     }
 
@@ -461,8 +502,8 @@ namespace ksv::qt_data {
         return std::distance(m_configs.begin(), index);
     }
 
-    MutationResult SeriesConfigStore::commitLocked(std::vector<SeriesConfig> configs, SeriesId next,
-                                                   std::vector<AxisConfig> axes, AxisId nextAxisId,
+    MutationResult SeriesConfigStore::commitLocked(std::vector<SeriesConfig> configs, std::optional<SeriesId> next,
+                                                   std::vector<AxisConfig> axes, std::optional<AxisId> nextAxisId,
                                                    std::optional<SeriesId> createdSeriesId,
                                                    std::optional<AxisId> createdAxisId) {
         const auto errors = validateSeriesConfigs(configs);
@@ -479,14 +520,14 @@ namespace ksv::qt_data {
     void SeriesConfigStore::beginDraft() {
         QMutexLocker lock(&m_mutex);
         ensureLoadedLocked();
-        m_draftBaseline = {m_configs, m_next.value(), m_axes, m_nextAxisId.value()};
+        m_draftBaseline = {m_configs, m_next, m_axes, m_nextAxisId};
         m_draftActive = true;
     }
 
     MutationResult SeriesConfigStore::commitDraft() {
         QMutexLocker lock(&m_mutex);
         if (!m_draftActive) return {};
-        writeLocked(m_configs, m_next.value(), m_axes, m_nextAxisId.value());
+        writeLocked(m_configs, m_next, m_axes, m_nextAxisId);
         m_draftBaseline.reset();
         m_draftActive = false;
         return {};
@@ -508,17 +549,21 @@ namespace ksv::qt_data {
         QMutexLocker lock(&m_mutex);
         if (!m_draftActive) return false;
         const auto &[configs, next, axes, nextAxisId] = *m_draftBaseline;
-        return encode(m_configs, m_next.value(), m_axes, m_nextAxisId.value()) != encode(configs, next, axes, nextAxisId);
+        return !sameConfigs(m_configs, configs) || m_next != next || !sameAxes(m_axes, axes) || m_nextAxisId != nextAxisId;
     }
 
     MutationResult SeriesConfigStore::mutateLocked(
-        const std::function<MutationResult(std::vector<SeriesConfig> &)> &mutate) {
+        const std::function<MutationResult(std::vector<SeriesConfig> &, std::optional<SeriesId> &,
+                                            std::vector<AxisConfig> &, std::optional<AxisId> &)> &mutate) {
         std::vector<std::function<void()> > callbacks;
         MutationResult result; {
             QMutexLocker lock(&m_mutex);
             ensureLoadedLocked();
             auto configs = m_configs;
-            result = mutate(configs);
+            auto next = m_next;
+            auto axes = m_axes;
+            auto nextAxisId = m_nextAxisId;
+            result = mutate(configs, next, axes, nextAxisId);
             if (result.succeeded()) callbacks = m_callbacks;
         }
         for (auto &callback: callbacks) callback();
@@ -526,9 +571,9 @@ namespace ksv::qt_data {
     }
 
     MutationResult SeriesConfigStore::createComputed(const CreateComputedSeriesRequest &request) {
-        return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
-            if (!m_next) return {{}, StoreMutationFailureCode::ComputedSeriesIdExhausted};
-            const auto id = *m_next;
+        return mutateLocked([&](auto &configs, auto &next, auto &axes, auto &nextAxisId) -> MutationResult {
+            if (!next) return {{}, StoreMutationFailureCode::ComputedSeriesIdExhausted};
+            const auto id = *next;
             configs.emplace_back(SeriesConfig{
                 id,
                 {
@@ -537,13 +582,13 @@ namespace ksv::qt_data {
                 },
                 request.expression
             });
-            const auto next = id.value == UINT64_MAX ? std::nullopt : std::optional{SeriesId{id.value + 1}};
-            return commitLocked(std::move(configs), next.value(), m_axes, m_nextAxisId.value(), id);
+            next = id.value == UINT64_MAX ? std::nullopt : std::optional{SeriesId{id.value + 1}};
+            return commitLocked(std::move(configs), next, std::move(axes), nextAxisId, id);
         });
     }
 
     application::MutationResult SeriesConfigStore::updateSeries(const application::UpdateSeriesRequest &request) {
-        return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
+        return mutateLocked([&](auto &configs, auto &next, auto &axes, auto &nextAxisId) -> MutationResult {
             const auto index = indexOfLocked(request.id);
             if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
             auto &config = configs[*index];
@@ -556,27 +601,27 @@ namespace ksv::qt_data {
             if (request.expression) config.expression = request.expression.value();
             if (request.yAxisId) {
                 if (request.yAxisId->has_value() &&
-                    std::ranges::none_of(m_axes, [&](const auto &axis) { return axis.id == request.yAxisId->value(); }))
+                    std::ranges::none_of(axes, [&](const auto &axis) { return axis.id == request.yAxisId->value(); }))
                     return {{}, StoreMutationFailureCode::UnknownAxisId};
                 config.yAxisId = *request.yAxisId;
             }
-            return commitLocked(std::move(configs), m_next.value(), m_axes, m_nextAxisId.value());
+            return commitLocked(std::move(configs), next, std::move(axes), nextAxisId);
         });
     }
 
     MutationResult SeriesConfigStore::removeComputed(const SeriesId id) {
-        return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
+        return mutateLocked([&](auto &configs, auto &next, auto &axes, auto &nextAxisId) -> MutationResult {
             const auto index = indexOfLocked(id);
             if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
             configs.erase(configs.begin() + *index);
             normalizeDisplayPositions(configs);
-            return commitLocked(std::move(configs), m_next.value(), m_axes, m_nextAxisId.value());
+            return commitLocked(std::move(configs), next, std::move(axes), nextAxisId);
         });
     }
 
     MutationResult SeriesConfigStore::reorder(SeriesId reference,
                                               const uint32_t position) {
-        return mutateLocked([&](std::vector<SeriesConfig> &configs) -> MutationResult {
+        return mutateLocked([&](auto &configs, auto &next, auto &axes, auto &nextAxisId) -> MutationResult {
             const auto index = indexOfLocked(reference);
             if (!index) return {{}, StoreMutationFailureCode::UnknownSeriesId};
             if (position >= configs.size()) return {{}, StoreMutationFailureCode::DisplayPositionOutOfRange};
@@ -585,48 +630,27 @@ namespace ksv::qt_data {
             configs.erase(configs.begin() + *index);
             configs.insert(configs.begin() + position, record);
             normalizeDisplayPositions(configs);
-            return commitLocked(std::move(configs), m_next.value(), m_axes, m_nextAxisId.value());
+            return commitLocked(std::move(configs), next, std::move(axes), nextAxisId);
         });
     }
 
     MutationResult SeriesConfigStore::createAxis(const CreateAxisRequest &request) {
-        std::vector<std::function<void()>> callbacks;
-        MutationResult result; {
-            QMutexLocker lock(&m_mutex);
-            ensureLoadedLocked();
-            if (!m_nextAxisId) {
-                result = {{}, StoreMutationFailureCode::AxisIdExhausted};
-            } else {
-                const auto id = *m_nextAxisId;
-                auto axes = m_axes;
-                axes.push_back(AxisConfig{id, request.name, {}, AxisTransformKind::Identity});
-                const auto next = id.value == UINT64_MAX ? std::nullopt : std::optional{AxisId{id.value + 1}};
-                result = commitLocked(m_configs, m_next.value(), std::move(axes), next.value(), std::nullopt, id);
-                if (result.succeeded()) callbacks = m_callbacks;
-            }
-        }
-        for (auto &callback: callbacks) callback();
-        return result;
+        return mutateLocked([&](auto &configs, auto &next, auto &axes, auto &nextAxisId) -> MutationResult {
+            if (!nextAxisId) return {{}, StoreMutationFailureCode::AxisIdExhausted};
+            const auto id = *nextAxisId;
+            axes.push_back(AxisConfig{id, request.name, {}, AxisTransformKind::Identity});
+            nextAxisId = id.value == UINT64_MAX ? std::nullopt : std::optional{AxisId{id.value + 1}};
+            return commitLocked(std::move(configs), next, std::move(axes), nextAxisId, std::nullopt, id);
+        });
     }
 
     MutationResult SeriesConfigStore::deleteAxis(const AxisId id) {
-        std::vector<std::function<void()>> callbacks;
-        MutationResult result; {
-            QMutexLocker lock(&m_mutex);
-            ensureLoadedLocked();
-            const auto index = std::ranges::find_if(m_axes, [&](const auto &axis) { return axis.id == id; });
-            if (index == m_axes.end()) {
-                result = {{}, StoreMutationFailureCode::UnknownAxisId};
-            } else {
-                auto axes = m_axes;
-                axes.erase(axes.begin() + std::distance(m_axes.begin(), index));
-                auto configs = m_configs;
-                for (auto &config: configs) if (config.yAxisId == id) config.yAxisId = std::nullopt;
-                result = commitLocked(std::move(configs), m_next.value(), std::move(axes), m_nextAxisId.value());
-                if (result.succeeded()) callbacks = m_callbacks;
-            }
-        }
-        for (auto &callback: callbacks) callback();
-        return result;
+        return mutateLocked([&](auto &configs, auto &next, auto &axes, auto &nextAxisId) -> MutationResult {
+            const auto index = std::ranges::find_if(axes, [&](const auto &axis) { return axis.id == id; });
+            if (index == axes.end()) return {{}, StoreMutationFailureCode::UnknownAxisId};
+            axes.erase(index);
+            for (auto &config: configs) if (config.yAxisId == id) config.yAxisId = std::nullopt;
+            return commitLocked(std::move(configs), next, std::move(axes), nextAxisId);
+        });
     }
 }

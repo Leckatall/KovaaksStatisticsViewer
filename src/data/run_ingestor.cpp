@@ -44,8 +44,12 @@ namespace ksv::data {
             const auto parsed = m_file_service->getStatsFromFile(csv->absolutePath());
             if (!parsed && !result) return std::nullopt;
             if (parsed) {
-                if (result && (result->run_id.scenario_id.hash != parsed->scenario_id.hash ||
-                    result->stored_totals.hits != parsed->totals.hits || result->stored_totals.misses != parsed->totals.misses ||
+                if (result && result->run_id.scenario_id.hash != parsed->scenario_id.hash) {
+                    std::cerr << "Perf/CSV totals or identity differ for " << csv->absolutePath() << std::endl;
+                    return result;
+                }
+                if (result && (result->stored_totals.hits != parsed->totals.hits ||
+                    result->stored_totals.misses != parsed->totals.misses ||
                     std::abs(result->stored_totals.score - parsed->totals.score) > 1e-4F)) {
                     std::cerr << "Perf/CSV totals or identity differ for " << csv->absolutePath() << std::endl;
                 }
@@ -85,6 +89,10 @@ namespace ksv::data {
         if (!std::filesystem::exists(csv.absolutePath())) return run;
         const auto parsed = m_file_service->getStatsFromFile(csv.absolutePath());
         if (!parsed) return run;
+        if (run.run_id.scenario_id.hash != parsed->scenario_id.hash) {
+            std::cerr << "Perf/CSV totals or identity differ for " << csv.absolutePath() << std::endl;
+            return run;
+        }
         run.stored_totals = parsed->totals;
         run.stats = parsed->stats;
         run.sources.csv = {{profile.ensureSource(csv.root, csv.subdir), csv.filename}};

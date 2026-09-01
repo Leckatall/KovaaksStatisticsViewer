@@ -1,20 +1,26 @@
 // .pragma library
 
-function makeFakeGraphVm() {
-    return {
-        allColumns: [1, 2],
-        enabledColumns: [1, 2],
-        allSeries: [
-            {id: "1", name: "Score", color: "#00ff00", column: 1},
-            {id: "2", name: "Accuracy", color: "#00ff00", column: 2}
-        ],
-        enabledSeriesIds: ["1", "2"],
-        fetchDataCalls: [],
-        fetchLatestDataCalls: 0,
-        columnYAxis: function (id) { return id },
-        fetchData: function (scenarioId) { this.fetchDataCalls.push(scenarioId) },
-        fetchLatestData: function () { this.fetchLatestDataCalls++ }
-    }
+// The shared draft/enable machinery every settings-VM double needs. Callers pass
+// their own fixture rows (allSeriesConfigs) and any extra surface through overrides.
+function makeFakeSettingsVm(overrides) {
+    return Object.assign({
+        allAxes: [],
+        pendingChanges: false,
+        setSeriesEnabledCalls: 0,
+        lastSetSeriesEnabledId: null,
+        lastSetSeriesEnabledValue: null,
+        setSeriesEnabled: function (id, enabled) {
+            this.setSeriesEnabledCalls++
+            this.lastSetSeriesEnabledId = id
+            this.lastSetSeriesEnabledValue = enabled
+        },
+        beginDraftCalls: 0,
+        beginSeriesDraft: function () { this.beginDraftCalls++ },
+        commitDraftCalls: 0,
+        commitSeriesDraft: function () { this.commitDraftCalls++; this.pendingChanges = false; return {succeeded: true} },
+        discardDraftCalls: 0,
+        discardSeriesDraft: function () { this.discardDraftCalls++; this.pendingChanges = false }
+    }, overrides)
 }
 
 function makeFakeHistoryVm() {

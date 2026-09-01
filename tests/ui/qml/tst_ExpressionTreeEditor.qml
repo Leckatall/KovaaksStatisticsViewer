@@ -2,28 +2,11 @@ import QtQuick
 import QtTest
 import KovaaksStatsViewer
 import "../../../src/ui/qml"
+import "ItemLookup.js" as ItemLookup
 
 TestCase {
     id: testCase
 
-    function findByObjectName(root, name) {
-        if (!root) return null;
-        if (root.objectName === name) return root;
-        for (const child of root.children || []) {
-            const found = findByObjectName(child, name);
-            if (found) return found;
-        }
-        return null;
-    }
-    function findByText(root, text) {
-        if (!root) return null;
-        if (root.text === text) return root;
-        for (const child of root.children || []) {
-            const found = findByText(child, text);
-            if (found) return found;
-        }
-        return null;
-    }
     function makeFakeModel(overrides) {
         return createTemporaryObject(fakeModelComponent, testCase, overrides || {});
     }
@@ -48,14 +31,14 @@ TestCase {
     function test_emptyModelShowsRootKindChooser() {
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel() });
         verify(waitForRendering(editor));
-        verify(findByObjectName(editor, "kindChooser_root") !== null);
+        verify(ItemLookup.findByObjectName(editor, "kindChooser_root") !== null);
     }
     function test_choosingRootKindCallsReplaceChild() {
         const model = makeFakeModel();
         const editor = createTemporaryObject(editorComponent, testCase, { model: model });
-        const chooser = findByObjectName(editor, "kindChooser_root");
+        const chooser = ItemLookup.findByObjectName(editor, "kindChooser_root");
         chooser.currentIndex = 1;
-        findByObjectName(editor, "addNodeButton_root").clicked();
+        ItemLookup.findByObjectName(editor, "addNodeButton_root").clicked();
         compare(model.replaceCalls[0].parent, null);
         compare(model.replaceCalls[0].slot, "root");
         compare(model.replaceCalls[0].kind, "constant");
@@ -64,7 +47,7 @@ TestCase {
         const node = makePrimitive("kills");
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
         verify(waitForRendering(editor));
-        const combo = findByObjectName(editor, "metricComboBox");
+        const combo = ItemLookup.findByObjectName(editor, "metricComboBox");
         compare(combo.currentText, "kills");
         combo.currentIndex = 1;
         combo.activated(1);
@@ -73,7 +56,7 @@ TestCase {
     function test_constantRootRendersSpinBoxAndWritesNode() {
         const node = createTemporaryObject(constantNodeComponent, testCase, { value: 1 });
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
-        const spin = findByObjectName(editor, "constantSpinBox");
+        const spin = ItemLookup.findByObjectName(editor, "constantSpinBox");
         compare(spin.value, 1);
         spin.value = 8;
         spin.valueModified();
@@ -83,14 +66,14 @@ TestCase {
         const node = makeBinary("add");
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
         verify(waitForRendering(editor));
-        verify(findByObjectName(editor, "operatorComboBox") !== null);
-        verify(findByObjectName(editor, "kindChooser_left") !== null);
-        verify(findByObjectName(editor, "kindChooser_right") !== null);
+        verify(ItemLookup.findByObjectName(editor, "operatorComboBox") !== null);
+        verify(ItemLookup.findByObjectName(editor, "kindChooser_left") !== null);
+        verify(ItemLookup.findByObjectName(editor, "kindChooser_right") !== null);
     }
     function test_changingOperatorWritesNodeKind() {
         const node = makeBinary("add");
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
-        const combo = findByObjectName(editor, "operatorComboBox");
+        const combo = ItemLookup.findByObjectName(editor, "operatorComboBox");
         combo.currentIndex = 3;
         combo.activated(3);
         compare(node.kind, "divide");
@@ -99,7 +82,7 @@ TestCase {
         const node = makeBinary("add");
         const model = makeFakeModel({ root: node, selected: node });
         const editor = createTemporaryObject(editorComponent, testCase, { model: model });
-        findByObjectName(editor, "addNodeButton_left").clicked();
+        ItemLookup.findByObjectName(editor, "addNodeButton_left").clicked();
         compare(model.replaceCalls[0].parent, node);
         compare(model.replaceCalls[0].slot, "left");
         compare(model.replaceCalls[0].kind, "primitive");
@@ -107,7 +90,7 @@ TestCase {
     function test_rollingMeanRootRendersWindowAndWritesNode() {
         const node = makeRollingMean(12);
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
-        const spin = findByObjectName(editor, "windowSpinBox");
+        const spin = ItemLookup.findByObjectName(editor, "windowSpinBox");
         compare(spin.value, 12);
         spin.value = 15;
         spin.valueModified();
@@ -116,8 +99,8 @@ TestCase {
     function test_averageAcrossRunsWritesSelectionAndSelectionValue() {
         const node = createTemporaryObject(averageNodeComponent, testCase, { count: 6 });
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
-        const combo = findByObjectName(editor, "selectionKindComboBox");
-        const spin = findByObjectName(editor, "selectionValueSpinBox");
+        const combo = ItemLookup.findByObjectName(editor, "selectionKindComboBox");
+        const spin = ItemLookup.findByObjectName(editor, "selectionValueSpinBox");
         compare(spin.value, 6);
         combo.currentIndex = 1;
         combo.activated(1);
@@ -130,17 +113,17 @@ TestCase {
     function test_unaryRootRendersNoFieldEditor() {
         const node = makeUnary("projectRateToFinal");
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
-        verify(findByObjectName(editor, "metricComboBox") === null);
-        verify(findByObjectName(editor, "windowSpinBox") === null);
+        verify(ItemLookup.findByObjectName(editor, "metricComboBox") === null);
+        verify(ItemLookup.findByObjectName(editor, "windowSpinBox") === null);
     }
     function test_deleteAndWrapDispatchStructuralOperations() {
         const node = makePrimitive();
         const model = makeFakeModel({ root: node, selected: node });
         const editor = createTemporaryObject(editorComponent, testCase, { model: model });
-        findByObjectName(editor, "deleteNodeButton").clicked();
+        ItemLookup.findByObjectName(editor, "deleteNodeButton").clicked();
         compare(model.deleteCalls[0], node);
-        findByObjectName(editor, "wrapKindComboBox").currentIndex = 1;
-        findByObjectName(editor, "wrapNodeButton").clicked();
+        ItemLookup.findByObjectName(editor, "wrapKindComboBox").currentIndex = 1;
+        ItemLookup.findByObjectName(editor, "wrapNodeButton").clicked();
         compare(model.wrapCalls[0], "rollingMean");
     }
     function test_collapsedAncestorRendersFoldedChipAndSelectsChild() {
@@ -149,12 +132,12 @@ TestCase {
         const model = makeFakeModel({ root: root, selected: root, parentOverrides: new Map([[leaf, root]]) });
         const editor = createTemporaryObject(editorComponent, testCase, { model: model });
         verify(waitForRendering(editor));
-        const chip = findByObjectName(editor, "foldedChip_0_input");
+        const chip = ItemLookup.findByObjectName(editor, "foldedChip_0_input");
         verify(chip !== null);
         chip.selected();
         compare(model.selected, leaf);
-        verify(findByObjectName(editor, "pathCard_0") !== null);
-        verify(findByObjectName(editor, "pathCard_1") !== null);
+        verify(ItemLookup.findByObjectName(editor, "pathCard_0") !== null);
+        verify(ItemLookup.findByObjectName(editor, "pathCard_1") !== null);
     }
     function test_selectingAncestorCardChangesFocusedEditor() {
         const root = makeRollingMeanWithPrimitive(9, "hits");
@@ -162,9 +145,9 @@ TestCase {
         const model = makeFakeModel({ root: root, selected: leaf, parentOverrides: new Map([[leaf, root]]) });
         const editor = createTemporaryObject(editorComponent, testCase, { model: model });
         verify(waitForRendering(editor));
-        verify(findByObjectName(editor, "metricComboBox") !== null);
-        findByObjectName(editor, "pathCard_0").selected();
-        verify(findByObjectName(editor, "windowSpinBox") !== null);
+        verify(ItemLookup.findByObjectName(editor, "metricComboBox") !== null);
+        ItemLookup.findByObjectName(editor, "pathCard_0").selected();
+        verify(ItemLookup.findByObjectName(editor, "windowSpinBox") !== null);
     }
     function test_modelWithRootAndNoSelectionAutoSelectsRoot() {
         const node = makePrimitive();
@@ -178,7 +161,7 @@ TestCase {
         const node = makePrimitive();
         editor.model = makeFakeModel({ root: node, selected: node });
         verify(waitForRendering(editor));
-        verify(findByObjectName(editor, "metricComboBox") !== null);
+        verify(ItemLookup.findByObjectName(editor, "metricComboBox") !== null);
     }
     function test_editingDeeplyNestedSubtractOfProjectRateToFinalOfRollingMeanDoesNotThrowRangeError() {
         const root = Qt.createQmlObject(
@@ -202,7 +185,7 @@ TestCase {
         verify(waitForRendering(editor));
 
         function selectChip(cardIndex, slot) {
-            const chip = findByObjectName(editor, "foldedChip_" + cardIndex + "_" + slot);
+            const chip = ItemLookup.findByObjectName(editor, "foldedChip_" + cardIndex + "_" + slot);
             verify(chip !== null);
             chip.selected();
             wait(20);
@@ -210,7 +193,7 @@ TestCase {
         selectChip(0, "left");
         selectChip(1, "input");
         selectChip(2, "input");
-        findByObjectName(editor, "pathCard_0").selected();
+        ItemLookup.findByObjectName(editor, "pathCard_0").selected();
         wait(20);
         selectChip(0, "right");
         selectChip(1, "input");
@@ -222,7 +205,7 @@ TestCase {
         const model = makeFakeModel({ root: node, selected: node, dslText: "KILLS" });
         const editor = createTemporaryObject(editorComponent, testCase, { model: model });
         verify(waitForRendering(editor));
-        const field = findByObjectName(editor, "expressionDslField");
+        const field = ItemLookup.findByObjectName(editor, "expressionDslField");
         verify(field !== null);
         compare(field.text, "KILLS");
         model.dslText = "SCORE";

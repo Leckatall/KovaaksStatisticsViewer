@@ -9,7 +9,10 @@
 #include "run.h"
 #include "user_profile.h"
 
+#include "run_builders.h"
+
 using namespace ksv::domain;
+using ksv::tests_support::makeRun;
 
 namespace {
     TEST(PerformanceTest, AddDataInsertsNewSampleForUnseenTime) {
@@ -70,19 +73,7 @@ namespace {
         EXPECT_EQ(run_id.toString(), "Air Angelic");
     }
 
-    class UserProfileTest : public testing::Test {
-    protected:
-        static ksv::domain::Run makeRun(const std::string &hash, const long long start_time, const float score = 0.0F) {
-            ksv::domain::Run run;
-            run.run_id.scenario_id.name = "Scenario " + hash;
-            run.run_id.scenario_id.hash = hash;
-            run.run_id.start_time = start_time;
-            run.stored_totals.score = score;
-            return run;
-        }
-    };
-
-    TEST_F(UserProfileTest, GroupsMultipleRunsUnderSameScenario) {
+    TEST(UserProfileTest, GroupsMultipleRunsUnderSameScenario) {
         UserProfile profile;
         profile.addRun(makeRun("scenario-1", 100));
         profile.addRun(makeRun("scenario-1", 200));
@@ -92,7 +83,7 @@ namespace {
         EXPECT_EQ(scenarios[0].hash, "scenario-1");
     }
 
-    TEST_F(UserProfileTest, GetLatestRunPicksLatestAcrossScenarios) {
+    TEST(UserProfileTest, GetLatestRunPicksLatestAcrossScenarios) {
         UserProfile profile;
         profile.addRun(makeRun("scenario-1", 100));
         profile.addRun(makeRun("scenario-2", 300));
@@ -104,7 +95,7 @@ namespace {
         EXPECT_EQ(latest->run_id.start_time, 300);
     }
 
-    TEST_F(UserProfileTest, GetMostRecentRunsReturnsUpToCountInChronologicalOrder) {
+    TEST(UserProfileTest, GetMostRecentRunsReturnsUpToCountInChronologicalOrder) {
         UserProfile profile;
         profile.addRun(makeRun("scenario-1", 300));
         profile.addRun(makeRun("scenario-1", 100));
@@ -117,7 +108,7 @@ namespace {
         EXPECT_EQ(recent[1].run_id.start_time, 400);
     }
 
-    TEST_F(UserProfileTest, CompletionHistoryUsesStoredTotals) {
+    TEST(UserProfileTest, CompletionHistoryUsesStoredTotals) {
         UserProfile profile;
         auto run = makeRun("scenario-1", 100, 97.0F);
         run.stored_totals = {.score = 97.0F, .shots = 12, .hits = 9, .misses = 3, .kills = 4};
@@ -134,7 +125,7 @@ namespace {
         EXPECT_EQ(history[0].totals, run.totals());
     }
 
-    TEST_F(UserProfileTest, AverageScoreUsesStoredTotals) {
+    TEST(UserProfileTest, AverageScoreUsesStoredTotals) {
         UserProfile profile;
         profile.addRun(makeRun("scenario-1", 100, 10.0F));
         profile.addRun(makeRun("scenario-1", 200, 20.0F));
@@ -145,7 +136,7 @@ namespace {
         EXPECT_FLOAT_EQ(*average, 25.0F);
     }
 
-    TEST_F(UserProfileTest, GetCurrentRunLooksUpByRunId) {
+    TEST(UserProfileTest, GetCurrentRunLooksUpByRunId) {
         UserProfile profile;
         profile.addRun(makeRun("scenario-1", 100));
 
@@ -156,14 +147,14 @@ namespace {
         EXPECT_EQ(run->run_id.start_time, 100);
     }
 
-    TEST_F(UserProfileTest, DuplicateRunIdIsSkippedAndReturnsFalse) {
+    TEST(UserProfileTest, DuplicateRunIdIsSkippedAndReturnsFalse) {
         UserProfile profile;
         EXPECT_TRUE(profile.addRun(makeRun("scenario-1", 100)));
         EXPECT_FALSE(profile.addRun(makeRun("scenario-1", 100)));
         EXPECT_EQ(profile.getRunCount(ScenarioId{.name = "?", .hash = "scenario-1"}), 1);
     }
 
-    TEST_F(UserProfileTest, TotalTimeAndRunCountRemainAggregatedPerScenario) {
+    TEST(UserProfileTest, TotalTimeAndRunCountRemainAggregatedPerScenario) {
         UserProfile profile;
         auto first = makeRun("scenario-1", 100);
         first.scenario_length = 30.0F;
@@ -176,7 +167,7 @@ namespace {
         EXPECT_EQ(profile.getRunCount(ScenarioId{.name = "?", .hash = "scenario-1"}), 2);
     }
 
-    TEST_F(UserProfileTest, RollingTimeAverageSkipsRunsWithNonPositiveStartTime) {
+    TEST(UserProfileTest, RollingTimeAverageSkipsRunsWithNonPositiveStartTime) {
         UserProfile profile;
         constexpr long long kMsPerDay = 86400000;
         constexpr long long kBaseDay = 19000;

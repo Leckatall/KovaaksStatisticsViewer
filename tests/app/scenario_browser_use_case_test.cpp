@@ -8,22 +8,13 @@
 #include "usecases/scenario_browser_use_case.h"
 #include "fake_profile_service.h"
 #include "fake_session_controller.h"
+#include "run_builders.h"
 
 using namespace ksv::application;
 using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
-    ksv::domain::Run makeRun(const std::string &hash, const long long start_time, const float score = 0.0F,
-                          const int shots = 0, const int hits = 0, const float duration = 0.0F) {
-        ksv::domain::Run perf;
-        perf.run_id.scenario_id = {.name = "Scenario " + hash, .hash = hash};
-        perf.run_id.start_time = start_time;
-        perf.scenario_length = duration;
-        perf.stored_totals = {.score = score, .shots = shots, .hits = hits, .misses = shots - hits};
-        return perf;
-    }
-
     class ScenarioBrowserUseCaseTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSessionController> session = std::make_shared<FakeSessionController>();

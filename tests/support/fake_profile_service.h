@@ -20,19 +20,18 @@ namespace ksv::tests_support {
         int begin_build_count = 0;
         int apply_count = 0;
         bool profile_loaded = false;
-        std::vector<domain::ScenarioId> scenario_list;
         std::vector<domain::ScenarioId> scenarios;
         std::vector<domain::Run> runs;
         std::unordered_map<std::string, domain::Run> perf_by_path;
         std::unordered_map<domain::ScenarioRunId, domain::Run> run_by_id;
         domain::Run latest_run;
-        std::unordered_map<std::string, std::vector<domain::Run>> most_recent_perfs_by_hash;
         std::unordered_map<domain::ScenarioId, std::vector<domain::Run>> perfs_by_scenario;
         std::unordered_map<domain::ScenarioId, std::vector<domain::RunSummary>> completion_history_by_scenario;
-        std::vector<domain::RunSummary> completion_history;
         std::unordered_map<domain::ScenarioId, std::size_t> run_counts;
         std::unordered_map<domain::ScenarioId, double> total_times;
         std::vector<domain::Run> recent_runs;
+        std::vector<std::pair<std::chrono::sys_days, double>> rolling_time_average;
+        mutable int rolling_time_average_window_days = 0;
         mutable int completion_history_calls = 0;
         mutable domain::ScenarioId requested_scenario;
         std::function<void()> stored_callback;
@@ -47,14 +46,12 @@ namespace ksv::tests_support {
         void applyBuiltProfile(domain::UserProfile profile) override {
             ++apply_count;
             applied_profile = std::move(profile);
-            scenario_list = applied_profile->getScenarioList();
+            scenarios = applied_profile->getScenarioList();
             profile_loaded = true;
             notifyProfileChanged();
         }
 
-        [[nodiscard]] std::vector<domain::ScenarioId> getScenarioList() const override {
-            return scenarios.empty() ? scenario_list : scenarios;
-        }
+        [[nodiscard]] std::vector<domain::ScenarioId> getScenarioList() const override { return scenarios; }
 
         [[nodiscard]] domain::Run getPerf(const std::string &path) const override { return perf_by_path.at(path); }
         [[nodiscard]] domain::Run getLatestRun() const override { return latest_run; }
@@ -66,11 +63,8 @@ namespace ksv::tests_support {
 
         [[nodiscard]] std::vector<domain::Run> getMostRecentRuns(
             const domain::ScenarioId &scenario, const std::size_t count) const override {
-            const auto by_hash = most_recent_perfs_by_hash.find(scenario.hash);
-            const auto by_scenario = perfs_by_scenario.find(scenario);
-            const auto &source = by_hash != most_recent_perfs_by_hash.end() ? by_hash->second
-                               : by_scenario != perfs_by_scenario.end() ? by_scenario->second
-                               : empty_perfs;
+            const auto it = perfs_by_scenario.find(scenario);
+            const auto &source = it != perfs_by_scenario.end() ? it->second : empty_perfs;
             const auto n = std::min(count, source.size());
             return {source.end() - static_cast<std::ptrdiff_t>(n), source.end()};
         }
@@ -78,7 +72,6 @@ namespace ksv::tests_support {
         [[nodiscard]] std::vector<domain::Run> getRunsForScenario(
             const domain::ScenarioId &scenario) const override {
             if (const auto it = perfs_by_scenario.find(scenario); it != perfs_by_scenario.end()) return it->second;
-            if (const auto it = most_recent_perfs_by_hash.find(scenario.hash); it != most_recent_perfs_by_hash.end()) return it->second;
             std::vector<domain::Run> result;
             for (const auto &run: runs) if (run.run_id.scenario_id == scenario) result.push_back(run);
             return result;
@@ -88,10 +81,8 @@ namespace ksv::tests_support {
             const domain::ScenarioId &scenario) const override {
             ++completion_history_calls;
             requested_scenario = scenario;
-            if (const auto it = completion_history_by_scenario.find(scenario); it != completion_history_by_scenario.end()) {
-                return it->second;
-            }
-            return completion_history;
+            const auto it = completion_history_by_scenario.find(scenario);
+            return it == completion_history_by_scenario.end() ? std::vector<domain::RunSummary>{} : it->second;
         }
 
         [[nodiscard]] std::optional<float> getAverageScore(const domain::ScenarioId &, std::size_t) const override {
@@ -123,8 +114,10 @@ namespace ksv::tests_support {
             return result;
         }
 
-        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>> getRollingTimeAverage(int) const override {
-            return {};
+        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
+        getRollingTimeAverage(const int window_days) const override {
+            rolling_time_average_window_days = window_days;
+            return rolling_time_average;
         }
 
         [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }

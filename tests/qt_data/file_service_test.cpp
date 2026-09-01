@@ -19,6 +19,7 @@
 #include "formats/protobuf/proto_decoder.h"
 #include "data/interfaces/i_stats_csv_parser.h"
 #include "fake_settings_service.h"
+#include "kovaaks_dir.h"
 
 using namespace ksv::qt_data;
 using namespace ksv::application;
@@ -39,7 +40,7 @@ namespace {
 
     class FileServiceTest : public testing::Test {
     protected:
-        QTemporaryDir temp_dir;
+        ksv::tests_support::KovaaksDir kovaaks;
         std::shared_ptr<FakeSettingsService> settings_service = std::make_shared<FakeSettingsService>();
         std::shared_ptr<ksv::data::ProtoDecoder> decoder = std::make_shared<ksv::data::ProtoDecoder>();
 
@@ -48,35 +49,23 @@ namespace {
         }
 
         void SetUp() override {
-            ASSERT_TRUE(temp_dir.isValid());
-            settings_service->dirs = {temp_dir.path().toStdString()};
+            ASSERT_TRUE(kovaaks.valid());
+            settings_service->dirs = {kovaaks.root().toStdString()};
         }
 
-        [[nodiscard]] QString performances_dir() const {
-            return QDir(temp_dir.path()).absoluteFilePath("FPSAimTrainer/performances");
-        }
+        [[nodiscard]] QString performances_dir() const { return kovaaks.performancesDir(); }
+        [[nodiscard]] QString stats_dir() const { return kovaaks.statsDir(); }
 
-        [[nodiscard]] QString stats_dir() const {
-            return QDir(temp_dir.path()).absoluteFilePath("FPSAimTrainer/stats");
-        }
-
-        void makePerformancesDir() const {
-            ASSERT_TRUE(QDir().mkpath(performances_dir()));
-        }
-
-        void makeStatsDir() const {
-            ASSERT_TRUE(QDir().mkpath(stats_dir()));
-        }
+        void makePerformancesDir() const { ASSERT_TRUE(kovaaks.makePerformancesDir()); }
+        void makeStatsDir() const { ASSERT_TRUE(kovaaks.makeStatsDir()); }
 
         void writeStatsFile(const QString &name) const {
-            QFile file(QDir(stats_dir()).absoluteFilePath(name));
-            ASSERT_TRUE(file.open(QIODevice::WriteOnly));
-            file.write("placeholder");
+            ASSERT_TRUE(kovaaks.writeIntoStats(name, "placeholder"));
         }
 
         [[nodiscard]] QString copyFixtureInto(const QString &fixture_name) const {
-            const QString dest = QDir(performances_dir()).absoluteFilePath(fixture_name);
-            EXPECT_TRUE(QFile::copy(fixture_path(fixture_name), dest));
+            const QString dest = kovaaks.copyIntoPerformances(fixture_path(fixture_name));
+            EXPECT_FALSE(dest.isEmpty());
             return dest;
         }
     };
@@ -133,7 +122,7 @@ namespace {
         std::ignore = QTest::qWaitFor([&] { return notified; }, 5000);
 
         ASSERT_TRUE(notified);
-        EXPECT_EQ(notified_file.root, temp_dir.path().toStdString());
+        EXPECT_EQ(notified_file.root, kovaaks.root().toStdString());
         EXPECT_EQ(notified_file.filename, "1wall6targets TE.perf");
         EXPECT_EQ(notified_file.absolutePath(), QDir::fromNativeSeparators(new_file).toStdString());
     }
@@ -206,7 +195,7 @@ namespace {
         ASSERT_EQ(notified_files.size(), 2);
         std::set<std::string> roots;
         for (const auto &file : notified_files) roots.insert(file.root);
-        EXPECT_EQ(roots, (std::set<std::string>{temp_dir.path().toStdString(), second_root.path().toStdString()}));
+        EXPECT_EQ(roots, (std::set<std::string>{kovaaks.root().toStdString(), second_root.path().toStdString()}));
     }
 
     TEST_F(FileServiceTest, ListStatsFilesEnumeratesOnlyCsvInStatsDir) {
@@ -222,7 +211,7 @@ namespace {
         std::set<std::string> names;
         for (const auto &entry : stats) {
             EXPECT_EQ(entry.subdir, "FPSAimTrainer/stats");
-            EXPECT_EQ(entry.root, temp_dir.path().toStdString());
+            EXPECT_EQ(entry.root, kovaaks.root().toStdString());
             EXPECT_TRUE(QFile::exists(QString::fromStdString(entry.absolutePath())));
             names.insert(entry.filename);
         }

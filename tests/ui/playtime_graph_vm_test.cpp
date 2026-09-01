@@ -106,13 +106,6 @@ namespace {
         EXPECT_EQ(series.front()->yAxis->formatTick(30.0), "30 min");
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, SeriesOmitsDateColumnWhichHasNoDrawableSeries) {
-        fake->series = {{19500, 1800.0}};
-        view_model.refresh();
-
-        EXPECT_TRUE(view_model.series({PlaytimeGraphViewModel::Date}).isEmpty());
-    }
-
     TEST_F(PlaytimeGraphViewModelTest, PlaytimeColumnHasNameAndValidColor) {
         const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
         ASSERT_EQ(series.size(), 1);

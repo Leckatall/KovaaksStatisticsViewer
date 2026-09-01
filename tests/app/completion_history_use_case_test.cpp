@@ -31,7 +31,7 @@ namespace {
 
     TEST_F(CompletionHistoryUseCaseTest, MapsCompletionRowsAndAssignsOneBasedRunIndices) {
         setCurrentScenario();
-        profile->completion_history = {
+        profile->completion_history_by_scenario[{.name = "Scenario One", .hash = "scenario-1"}] = {
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
              .totals = {.score = 25.0F, .shots = 10, .hits = 4, .misses = 6}},
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 200},
@@ -55,7 +55,7 @@ namespace {
 
     TEST_F(CompletionHistoryUseCaseTest, AccuracyIsZeroWhenShotsAreZero) {
         setCurrentScenario();
-        profile->completion_history = {
+        profile->completion_history_by_scenario[{.name = "Scenario One", .hash = "scenario-1"}] = {
             {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
              .totals = {.shots = 0, .hits = 0}},
         };

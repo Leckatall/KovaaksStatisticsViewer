@@ -3,22 +3,10 @@ import QtQuick.Controls
 import QtTest
 import KovaaksStatsViewer
 import "../../../src/ui/qml"
+import "ItemLookup.js" as ItemLookup
 
 TestCase {
     id: testCase
-
-    function findByObjectName(root, name) {
-        if (!root)
-            return null;
-        if (root.objectName === name)
-            return root;
-        for (const child of root.children || []) {
-            const found = findByObjectName(child, name);
-            if (found)
-                return found;
-        }
-        return null;
-    }
 
     function fakeEditor(expression) {
         return {
@@ -153,9 +141,9 @@ TestCase {
         compare(dialog.height, Math.max(0, Overlay.overlay.height - dialog.overlayMargin));
         const treeEditor = findChild(dialog, "expressionEditorTreeEditor");
         verify(treeEditor !== null);
-        const scrollView = findByObjectName(treeEditor, "expressionTreeScrollView");
+        const scrollView = ItemLookup.findByObjectName(treeEditor, "expressionTreeScrollView");
         verify(scrollView !== null);
-        verify(findByObjectName(treeEditor, "pathCard_0") !== null);
+        verify(ItemLookup.findByObjectName(treeEditor, "pathCard_0") !== null);
         verify(scrollView.contentHeight > scrollView.height);
         const contentYBeforeScroll = scrollView.contentItem.contentY;
         scrollView.contentItem.contentY = scrollView.contentHeight - scrollView.height;

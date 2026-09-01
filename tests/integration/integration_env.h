@@ -16,57 +16,74 @@
 #include <QString>
 #include <QTemporaryDir>
 
-#include "settings_service.h"
+#include "file_service.h"
+#include "formats/protobuf/profile_serializer.h"
+#include "formats/protobuf/proto_decoder.h"
+#include "profile_service.h"
+#include "run_ingestor.h"
+#include "kovaaks_dir.h"
 #include "series_config_store.h"
+#include "settings_service.h"
 
 namespace ksv::integration {
     inline QString fixturePath(const QString &name) {
         return QDir(TEST_FILES_DIR).absoluteFilePath(name);
     }
 
+    // The FileService -> RunIngestor -> ProfileService chain App::App() builds,
+    // with every handle kept so tests can drive the layers individually.
+    struct ProfileStack {
+        std::shared_ptr<data::ProtoDecoder> decoder;
+        std::shared_ptr<qt_data::FileService> fileService;
+        std::shared_ptr<data::RunIngestor> ingestor;
+        std::shared_ptr<data::ProfileSerializer> serializer;
+        std::shared_ptr<data::ProfileService> profileService;
+    };
+
     // Owns a temp dir shaped like a real KovaaKs install and a SettingsService
     // (IniFormat, already redirected to a temp registry by the suite main).
     struct TestEnv {
-        QTemporaryDir dir;
+        tests_support::KovaaksDir kovaaks;
         std::shared_ptr<qt_data::SettingsService> settings =
             std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
         std::shared_ptr<qt_data::SeriesConfigStore> seriesConfigStore =
             std::make_shared<qt_data::SeriesConfigStore>(settings);
 
         TestEnv() {
-            settings->setKovaaksDirs({dir.path().toStdString()});
+            settings->setKovaaksDirs({rootPath().toStdString()});
             settings->setProfilePath(profileStorePath().toStdString());
         }
 
-        [[nodiscard]] bool valid() const { return dir.isValid(); }
+        [[nodiscard]] bool valid() const { return kovaaks.valid(); }
+        [[nodiscard]] QString rootPath() const { return kovaaks.root(); }
 
-        [[nodiscard]] QString performancesDir() const {
-            return QDir(dir.path()).absoluteFilePath("FPSAimTrainer/performances");
+        // A fresh stack each call: the reload tests need a second one built
+        // over the same settings and store path.
+        [[nodiscard]] ProfileStack makeProfileStack() const {
+            auto decoder = std::make_shared<data::ProtoDecoder>();
+            auto fileService = std::make_shared<qt_data::FileService>(settings, decoder);
+            auto ingestor = std::make_shared<data::RunIngestor>(fileService);
+            auto serializer = std::make_shared<data::ProfileSerializer>();
+            return {decoder, fileService, ingestor, serializer,
+                    std::make_shared<data::ProfileService>(fileService, serializer, settings, ingestor)};
         }
 
-        [[nodiscard]] QString statsDir() const {
-            return QDir(dir.path()).absoluteFilePath("FPSAimTrainer/stats");
-        }
+        [[nodiscard]] QString performancesDir() const { return kovaaks.performancesDir(); }
+        [[nodiscard]] QString statsDir() const { return kovaaks.statsDir(); }
+        [[nodiscard]] bool makePerformancesDir() const { return kovaaks.makePerformancesDir(); }
+        [[nodiscard]] bool makeStatsDir() const { return kovaaks.makeStatsDir(); }
 
         [[nodiscard]] QString profileStorePath() const {
-            return QDir(dir.path()).absoluteFilePath("store/profile.pb");
+            return QDir(rootPath()).absoluteFilePath("store/profile.pb");
         }
 
-        bool makePerformancesDir() const { return QDir().mkpath(performancesDir()); }
-        bool makeStatsDir() const { return QDir().mkpath(statsDir()); }
-
-        // Returns the copied file's absolute path, or empty on failure.
         [[nodiscard]] QString copyFixtureIntoPerformances(const QString &fixtureName) const {
-            const QString dest = QDir(performancesDir()).absoluteFilePath(fixtureName);
-            return QFile::copy(fixturePath(fixtureName), dest) ? dest : QString();
+            return kovaaks.copyIntoPerformances(fixturePath(fixtureName));
         }
 
-        // Copies a fixture into FPSAimTrainer/stats/, optionally under a different
-        // name so it can be placed at the ` Stats.csv` sibling a live perf expects.
         [[nodiscard]] QString copyFixtureIntoStats(const QString &fixtureName,
                                                    const QString &destName = {}) const {
-            const QString dest = QDir(statsDir()).absoluteFilePath(destName.isEmpty() ? fixtureName : destName);
-            return QFile::copy(fixturePath(fixtureName), dest) ? dest : QString();
+            return kovaaks.copyIntoStats(fixturePath(fixtureName), destName);
         }
     };
 }

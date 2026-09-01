@@ -7,9 +7,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <set>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -18,22 +16,14 @@
 #include "run_ingestor.h"
 #include "fake_file_service.h"
 #include "fake_settings_service.h"
+#include "cerr_capture.h"
+#include "run_builders.h"
 
 using namespace ksv::data;
 using namespace ksv::application;
 using namespace ksv::tests_support;
 
 namespace {
-    ksv::domain::Run make_perf(const std::string &hash, const long long start_time,
-                                        const float score = 0.0F) {
-        ksv::domain::Run perf;
-        perf.run_id.scenario_id.name = "Scenario " + hash;
-        perf.run_id.scenario_id.hash = hash;
-        perf.run_id.start_time = start_time;
-        perf.stored_totals.score = score;
-        return perf;
-    }
-
     // setProfilePath() now creates its target file's parent directory for real, so
     // tests that repoint it must use a real (temp) path rather than a drive that may
     // not exist.
@@ -54,17 +44,6 @@ namespace {
     std::filesystem::path live_root() {
         return std::filesystem::temp_directory_path() / "ksv_profile_service_live_test";
     }
-
-    class CerrCapture {
-    public:
-        CerrCapture() : m_previous(std::cerr.rdbuf(m_sink.rdbuf())) {}
-        ~CerrCapture() { std::cerr.rdbuf(m_previous); }
-        [[nodiscard]] std::string str() const { return m_sink.str(); }
-
-    private:
-        std::ostringstream m_sink;
-        std::streambuf *m_previous;
-    };
 
     ksv::domain::UserProfile profile_for_roots(const std::vector<std::string> &roots) {
         ksv::domain::UserProfile profile;
@@ -127,7 +106,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GenerateProfileFromDirectoryRegistersFileServiceRoots) {
         fake_file_service->source_roots = {"D:/Kovaaks"};
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
 
         profile_service.generateProfileFromDirectory();
 
@@ -138,7 +117,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GenerateProfileFromDirectoryBuildsScenarioList) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100), make_perf("hash-2", 200)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100), makeRun("hash-2", 200)};
 
         profile_service.generateProfileFromDirectory();
 
@@ -147,10 +126,10 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, AddPerfFileToProfileAddsIncrementally) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
-        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         const auto scenarios = profile_service.getScenarioList();
@@ -162,10 +141,10 @@ namespace {
         // files picked up by the watcher get folded into the profile automatically.
         EXPECT_EQ(fake_file_service->callbackCount(), 1);
 
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
-        fake_file_service->perfs_by_path["watched.perf"] = make_perf("hash-3", 400);
+        fake_file_service->perfs_by_path["watched.perf"] = makeRun("hash-3", 400);
         fake_file_service->notifyFilesChanged(perf_file("watched.perf"));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
@@ -174,7 +153,7 @@ namespace {
     TEST_F(ProfileServiceTest, FilesChangedCallbackBeforeProfileLoadedDoesNotCrash) {
         EXPECT_EQ(fake_file_service->callbackCount(), 1);
 
-        fake_file_service->perfs_by_path["watched.perf"] = make_perf("hash-1", 100);
+        fake_file_service->perfs_by_path["watched.perf"] = makeRun("hash-1", 100);
         fake_file_service->notifyFilesChanged(perf_file("watched.perf"));
 
         EXPECT_FALSE(profile_service.isProfileLoaded());
@@ -182,7 +161,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetPerfDelegatesToFileService) {
-        fake_file_service->perfs_by_path["some/path.perf"] = make_perf("hash-1", 100);
+        fake_file_service->perfs_by_path["some/path.perf"] = makeRun("hash-1", 100);
 
         const auto perf = profile_service.getPerf("some/path.perf");
 
@@ -197,7 +176,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GetLatestPerfReturnsMostRecentByStartTimeAcrossScenarios) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100), make_perf("hash-2", 300), make_perf("hash-1", 200)
+            makeRun("hash-1", 100), makeRun("hash-2", 300), makeRun("hash-1", 200)
         };
         profile_service.generateProfileFromDirectory();
 
@@ -208,10 +187,10 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetLatestPerfReflectsIncrementallyAddedRuns) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
-        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 500);
+        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 500);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         const auto perf = profile_service.getLatestRun();
@@ -227,7 +206,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GetMostRecentPerfDelegatesToProfile) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100), make_perf("hash-1", 300), make_perf("hash-1", 200)
+            makeRun("hash-1", 100), makeRun("hash-1", 300), makeRun("hash-1", 200)
         };
         profile_service.generateProfileFromDirectory();
 
@@ -239,7 +218,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetMostRecentPerfIsNulloptForUnknownScenario) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "unknown"};
@@ -253,7 +232,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GetAverageScoreDelegatesToProfile) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100, 10.0F), make_perf("hash-1", 200, 20.0F), make_perf("hash-1", 300, 30.0F)
+            makeRun("hash-1", 100, 10.0F), makeRun("hash-1", 200, 20.0F), makeRun("hash-1", 300, 30.0F)
         };
         profile_service.generateProfileFromDirectory();
 
@@ -271,7 +250,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GetMostRecentPerfsDelegatesToProfile) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100), make_perf("hash-1", 300), make_perf("hash-1", 200)
+            makeRun("hash-1", 100), makeRun("hash-1", 300), makeRun("hash-1", 200)
         };
         profile_service.generateProfileFromDirectory();
 
@@ -291,7 +270,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetRunDelegatesToProfile) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100), make_perf("hash-2", 200)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100), makeRun("hash-2", 200)};
         profile_service.generateProfileFromDirectory();
 
         const auto run_id = ksv::domain::ScenarioRunId{
@@ -304,7 +283,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetRunCountDelegatesToProfile) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100), make_perf("hash-1", 200)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100), makeRun("hash-1", 200)};
         profile_service.generateProfileFromDirectory();
 
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
@@ -315,7 +294,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetRunCountIsNulloptForUnknownScenario) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "unknown"};
@@ -323,7 +302,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetLastRunTimeDelegatesToProfile) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100000), make_perf("hash-1", 300000)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100000), makeRun("hash-1", 300000)};
         profile_service.generateProfileFromDirectory();
 
         const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
@@ -340,9 +319,9 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, GetTotalTimeDelegatesToProfile) {
-        ksv::domain::Run perf_a = make_perf("hash-1", 100);
+        ksv::domain::Run perf_a = makeRun("hash-1", 100);
         perf_a.scenario_length = 10.0F;
-        ksv::domain::Run perf_b = make_perf("hash-1", 200);
+        ksv::domain::Run perf_b = makeRun("hash-1", 200);
         perf_b.scenario_length = 15.0F;
         fake_file_service->perfs_to_return = {perf_a, perf_b};
         profile_service.generateProfileFromDirectory();
@@ -360,7 +339,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GetRecentRunsReturnsNewestFirstAcrossScenarios) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100), make_perf("hash-2", 300), make_perf("hash-1", 200)
+            makeRun("hash-1", 100), makeRun("hash-2", 300), makeRun("hash-1", 200)
         };
         profile_service.generateProfileFromDirectory();
 
@@ -374,7 +353,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, GetRecentRunsIsCappedByCount) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 100), make_perf("hash-2", 300), make_perf("hash-1", 200)
+            makeRun("hash-1", 100), makeRun("hash-2", 300), makeRun("hash-1", 200)
         };
         profile_service.generateProfileFromDirectory();
 
@@ -389,17 +368,17 @@ namespace {
         int notify_count = 0;
         profile_service.onProfileChanged([&notify_count] { ++notify_count; });
 
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
         EXPECT_EQ(notify_count, 1);
 
-        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
         EXPECT_EQ(notify_count, 2);
     }
 
     TEST_F(ProfileServiceTest, GenerateProfileFromDirectorySavesToStore) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
 
         profile_service.generateProfileFromDirectory();
 
@@ -407,17 +386,17 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, AddPerfFileToProfileSavesToStore) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
-        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         EXPECT_EQ(fake_serializer->save_count, 2);
     }
 
     TEST_F(ProfileServiceTest, AddPerfFileToProfileSkipsAFileThatVanishedDuringDecode) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
         const auto saves_before = fake_serializer->save_count;
 
@@ -430,7 +409,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, AddPerfFileAttachesCsvStatsAndTotalsWhenTheSiblingExists) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
         const auto root = live_root();
@@ -459,11 +438,11 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, AddPerfFileWithoutASiblingAddsPerfOnlyAndLogsTheDerivedStatsPath) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
         const auto arrived = perf_file("orphan.perf");
-        fake_file_service->perfs_by_path[arrived.absolutePath()] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path[arrived.absolutePath()] = makeRun("hash-2", 300);
 
         std::string logged;
         {
@@ -482,11 +461,11 @@ namespace {
 
     TEST_F(ProfileServiceTest, LoadProfileUsesStoreWhenAvailableAndSkipsDirectoryScan) {
         ksv::domain::UserProfile stored;
-        stored.addRun(make_perf("hash-stored", 500));
+        stored.addRun(makeRun("hash-stored", 500));
         fake_serializer->profile_to_load = stored;
         // If the store is genuinely being used instead of a directory scan,
         // this perf (only reachable via getAllPerfsFromFiles) should never appear.
-        fake_file_service->perfs_to_return = {make_perf("hash-from-disk", 999)};
+        fake_file_service->perfs_to_return = {makeRun("hash-from-disk", 999)};
 
         profile_service.loadProfile();
 
@@ -499,7 +478,7 @@ namespace {
     // would turn every startup into a write.
     TEST_F(ProfileServiceTest, LoadProfileFromStoreDoesNotSave) {
         ksv::domain::UserProfile stored;
-        stored.addRun(make_perf("hash-stored", 500));
+        stored.addRun(makeRun("hash-stored", 500));
         fake_serializer->profile_to_load = stored;
 
         profile_service.loadProfile();
@@ -508,7 +487,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, LoadProfileFallsBackToDirectoryScanWhenNoStore) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
 
         profile_service.loadProfile();
 
@@ -520,7 +499,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, LoadProfileDelegatesToTheBuildRequesterWhenOneIsInstalled) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         int request_count = 0;
         profile_service.onBuildRequested([&request_count] { ++request_count; });
 
@@ -533,11 +512,11 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, PerfFileArrivingDuringABuildIsQueuedNotApplied) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
         profile_service.beginProfileBuild();
-        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 1);
@@ -546,11 +525,11 @@ namespace {
 
     TEST_F(ProfileServiceTest, ApplyBuiltProfileReplaysQueuedPerfFiles) {
         profile_service.beginProfileBuild();
-        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         auto built = profile_for_roots(fake_file_service->source_roots);
-        built.addRun(make_perf("hash-1", 100));
+        built.addRun(makeRun("hash-1", 100));
         profile_service.applyBuiltProfile(std::move(built));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
@@ -569,11 +548,11 @@ namespace {
         const auto vanished = perf_file("vanished.perf");
         fake_file_service->paths_to_throw_for.insert(vanished.absolutePath());
         profile_service.addPerfFileToProfile(vanished);
-        fake_file_service->perfs_by_path["surviving.perf"] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path["surviving.perf"] = makeRun("hash-2", 300);
         profile_service.addPerfFileToProfile(perf_file("surviving.perf"));
 
         auto built = profile_for_roots(fake_file_service->source_roots);
-        built.addRun(make_perf("hash-1", 100));
+        built.addRun(makeRun("hash-1", 100));
         profile_service.applyBuiltProfile(std::move(built));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
@@ -583,7 +562,7 @@ namespace {
     // A file that landed before the build's directory scan is already in the result;
     // replaying it must not double-count the run.
     TEST_F(ProfileServiceTest, ApplyBuiltProfileSkipsQueuedFileAlreadyInTheBuiltProfile) {
-        const auto perf = make_perf("hash-1", 100);
+        const auto perf = makeRun("hash-1", 100);
         profile_service.beginProfileBuild();
         fake_file_service->perfs_by_path["new_run.perf"] = perf;
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
@@ -598,13 +577,13 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, ApplyBuiltProfileDiscardsAResultFromAnotherSourceDirectory) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
         const auto saves_before = fake_serializer->save_count;
 
         profile_service.beginProfileBuild();
         auto stale = profile_for_roots({"D:/SomeOtherKovaaksDir"});
-        stale.addRun(make_perf("hash-stale", 500));
+        stale.addRun(makeRun("hash-stale", 500));
         profile_service.applyBuiltProfile(std::move(stale));
 
         const auto scenarios = profile_service.getScenarioList();
@@ -617,7 +596,7 @@ namespace {
     // follows would have nothing to replay.
     TEST_F(ProfileServiceTest, QueuedPerfFilesSurviveADiscardedBuild) {
         profile_service.beginProfileBuild();
-        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         auto stale = profile_for_roots({"D:/SomeOtherKovaaksDir"});
@@ -625,7 +604,7 @@ namespace {
 
         profile_service.beginProfileBuild();
         auto rebuilt = profile_for_roots(fake_file_service->source_roots);
-        rebuilt.addRun(make_perf("hash-1", 100));
+        rebuilt.addRun(makeRun("hash-1", 100));
         profile_service.applyBuiltProfile(std::move(rebuilt));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
@@ -636,7 +615,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, IsProfileLoadedTrueAfterGenerateProfileFromDirectory) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
 
         profile_service.generateProfileFromDirectory();
 
@@ -645,7 +624,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, IsProfileLoadedTrueAfterLoadProfileFromStore) {
         ksv::domain::UserProfile stored;
-        stored.addRun(make_perf("hash-stored", 500));
+        stored.addRun(makeRun("hash-stored", 500));
         fake_serializer->profile_to_load = stored;
 
         profile_service.loadProfile();
@@ -655,7 +634,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, ProfilePathChangeReloadsFromStoreAtNewLocation) {
         ksv::domain::UserProfile stored;
-        stored.addRun(make_perf("hash-stored", 500));
+        stored.addRun(makeRun("hash-stored", 500));
         fake_serializer->profile_to_load = stored;
 
         // Changing the setting notifies ProfileService, which repoints its store.
@@ -669,7 +648,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, ProfilePathChangeGeneratesFreshProfileWhenNoStoreAtNewLocation) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
 
         fake_settings->setProfilePath(new_profile_path().string());
 
@@ -681,12 +660,12 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, ProfilePathChangeSavesToNewFileOnNextChange) {
-        fake_file_service->perfs_to_return = {make_perf("hash-1", 100)};
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
         fake_settings->setProfilePath(new_profile_path().string());
 
-        fake_file_service->perfs_by_path["new_run.perf"] = make_perf("hash-2", 300);
+        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
         profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
 
         // 1 save from the initial generate, 1 from the path-change's own fallback
@@ -697,7 +676,7 @@ namespace {
 
     TEST_F(ProfileServiceTest, DelegatesScenarioRunsInCompletedOrder) {
         fake_file_service->perfs_to_return = {
-            make_perf("hash-1", 300), make_perf("hash-1", 100), make_perf("hash-2", 200)
+            makeRun("hash-1", 300), makeRun("hash-1", 100), makeRun("hash-2", 200)
         };
         profile_service.generateProfileFromDirectory();
 

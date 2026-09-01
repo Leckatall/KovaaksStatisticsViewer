@@ -12,12 +12,9 @@
 
 #include "formats/protobuf/profile_serializer.h"
 
-namespace {
-    std::string read_file(const std::filesystem::path &path) {
-        std::ifstream input(path, std::ios::in | std::ios::binary);
-        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-    }
+#include "profile_store_files.h"
 
+namespace {
     ksv::domain::Run make_perf(const std::string &name, const std::string &hash,
                                         const long long start_time, const float scenario_length,
                                         const ksv::domain::SourceFileRef source = {}) {
@@ -62,15 +59,7 @@ namespace {
         }
 
         [[nodiscard]] std::vector<std::filesystem::path> quarantine_files(const std::string &reason) const {
-            std::vector<std::filesystem::path> matches;
-            const auto prefix = store_path.stem().string() + "_" + reason + "_";
-            for (const auto &entry: std::filesystem::directory_iterator(store_path.parent_path())) {
-                if (entry.path().extension() == store_path.extension() &&
-                    entry.path().stem().string().starts_with(prefix)) {
-                    matches.push_back(entry.path());
-                }
-            }
-            return matches;
+            return ksv::tests_support::quarantineFiles(store_path, reason);
         }
 
         void TearDown() override {
@@ -257,11 +246,11 @@ namespace {
     TEST_F(ProfileSerializerTest, FailedSavePreservesExistingStore) {
         const ksv::domain::UserProfile profile;
         ASSERT_TRUE(serializer.save(profile, store_path));
-        const auto original_bytes = read_file(store_path);
+        const auto original_bytes = ksv::tests_support::readFile(store_path);
         ASSERT_TRUE(std::filesystem::create_directory(temp_path()));
 
         EXPECT_FALSE(serializer.save(profile, store_path));
-        EXPECT_EQ(read_file(store_path), original_bytes);
+        EXPECT_EQ(ksv::tests_support::readFile(store_path), original_bytes);
         EXPECT_FALSE(std::filesystem::exists(temp_path()));
     }
 
@@ -289,7 +278,7 @@ namespace {
 
         EXPECT_FALSE(serializer.readHeader(store_path).has_value());
         EXPECT_TRUE(std::filesystem::exists(store_path));
-        EXPECT_EQ(read_file(store_path), garbage);
+        EXPECT_EQ(ksv::tests_support::readFile(store_path), garbage);
     }
 
     TEST_F(ProfileSerializerTest, ReadHeaderDoesNotParseTheStoreBody) {
@@ -324,7 +313,7 @@ namespace {
         EXPECT_FALSE(std::filesystem::exists(store_path));
         const auto quarantined = quarantine_files("unparseable");
         ASSERT_EQ(quarantined.size(), 1);
-        EXPECT_EQ(read_file(quarantined.front()), std::string(garbage_bytes, sizeof(garbage_bytes)));
+        EXPECT_EQ(ksv::tests_support::readFile(quarantined.front()), std::string(garbage_bytes, sizeof(garbage_bytes)));
     }
 
     TEST_F(ProfileSerializerTest, LoadRejectsStoreWithMismatchedSchemaVersion) {
@@ -338,14 +327,14 @@ namespace {
         std::ofstream out(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
         file.SerializeToOstream(&out);
         out.close();
-        const auto original_bytes = read_file(store_path);
+        const auto original_bytes = ksv::tests_support::readFile(store_path);
 
         EXPECT_EQ(std::get<ksv::application::ProfileLoadError>(serializer.load(store_path)),
                   ksv::application::ProfileLoadError::VersionMismatch);
         EXPECT_FALSE(std::filesystem::exists(store_path));
         const auto quarantined = quarantine_files("version-mismatch");
         ASSERT_EQ(quarantined.size(), 1);
-        EXPECT_EQ(read_file(quarantined.front()), original_bytes);
+        EXPECT_EQ(ksv::tests_support::readFile(quarantined.front()), original_bytes);
     }
 
     class StubMigrator final : public ksv::data::IProfileMigrator {
@@ -404,7 +393,7 @@ namespace {
         std::ofstream out(store_path, std::ios::out | std::ios::binary | std::ios::trunc);
         legacy.SerializeToOstream(&out);
         out.close();
-        const auto original_bytes = read_file(store_path);
+        const auto original_bytes = ksv::tests_support::readFile(store_path);
 
         auto stub = std::make_shared<StubMigrator>();
         stub->succeed = false;
@@ -414,15 +403,14 @@ namespace {
                   ksv::application::ProfileLoadError::VersionMismatch);
         const auto quarantined = quarantine_files("version-mismatch");
         ASSERT_EQ(quarantined.size(), 1);
-        EXPECT_EQ(read_file(quarantined.front()), original_bytes);
+        EXPECT_EQ(ksv::tests_support::readFile(quarantined.front()), original_bytes);
     }
 
     TEST_F(ProfileSerializerTest, LoadQuarantinesLegacyStoreAsUnparseable) {
         profile::Run legacy_run;
-        auto *run = &legacy_run;
-        run->mutable_scenario_id()->set_name("Scenario A");
-        run->mutable_scenario_id()->set_hash("hash-a");
-        run->set_start_time(100);
+        legacy_run.mutable_scenario_id()->set_name("Scenario A");
+        legacy_run.mutable_scenario_id()->set_hash("hash-a");
+        legacy_run.set_start_time(100);
         const auto run_bytes = legacy_run.SerializeAsString();
         ASSERT_LT(run_bytes.size(), 128U);
 
@@ -453,7 +441,7 @@ namespace {
         const auto quarantined = quarantine_files("unparseable");
         ASSERT_EQ(quarantined.size(), 2);
         std::set<std::string> preserved;
-        for (const auto &path: quarantined) preserved.insert(read_file(path));
+        for (const auto &path: quarantined) preserved.insert(ksv::tests_support::readFile(path));
         EXPECT_EQ(preserved, (std::set<std::string>{first_bytes, second_bytes}));
     }
 }

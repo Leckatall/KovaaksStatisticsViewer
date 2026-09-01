@@ -176,75 +176,48 @@ namespace {
                   (std::vector<QString>{"Microshot", "Smoothbot Invincible", "1wall6targets TE"}));
     }
 
-    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortRunCountAscendingOrdersLowestFirst) {
+    struct ScenarioSortCase {
+        const char *name;
+        ScenarioBrowserViewModel::ScenarioSortField field;
+        bool ascending;
+        std::vector<QString> expectedOrder;
+    };
+
+    class ScenarioSortTest : public ScenarioBrowserViewModelTest,
+                             public testing::WithParamInterface<ScenarioSortCase> {};
+
+    TEST_P(ScenarioSortTest, OrdersScenariosByTheSelectedField) {
         fake_controller->scenario_summaries = {
-            make_summary("1wall6targets TE", "hash-1", 3),
-            make_summary("Microshot", "hash-2", 7),
-            make_summary("Smoothbot Invincible", "hash-3", 5),
+            make_summary("1wall6targets TE", "hash-1", 3, 1000),
+            make_summary("Microshot", "hash-2", 7, 3000),
+            make_summary("Smoothbot Invincible", "hash-3", 5, 2000),
         };
         ScenarioBrowserViewModel view_model(fake_controller);
 
-        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::RUN_COUNT, true);
+        view_model.setScenarioSort(GetParam().field, GetParam().ascending);
 
-        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
-                  (std::vector<QString>{"1wall6targets TE", "Smoothbot Invincible", "Microshot"}));
+        EXPECT_EQ(collectScenarioNames(asListModel(view_model)), GetParam().expectedOrder);
     }
 
-    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortNameDescendingOrdersReverseAlphabetically) {
-        fake_controller->scenario_summaries = {
-            make_summary("1wall6targets TE", "hash-1"),
-            make_summary("Microshot", "hash-2"),
-            make_summary("Smoothbot Invincible", "hash-3"),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-
-        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::NAME, false);
-
-        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
-                  (std::vector<QString>{"Smoothbot Invincible", "Microshot", "1wall6targets TE"}));
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortNameAscendingOrdersAlphabetically) {
-        fake_controller->scenario_summaries = {
-            make_summary("1wall6targets TE", "hash-1"),
-            make_summary("Microshot", "hash-2"),
-            make_summary("Smoothbot Invincible", "hash-3"),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-
-        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::NAME, true);
-
-        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
-                  (std::vector<QString>{"1wall6targets TE", "Microshot", "Smoothbot Invincible"}));
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortLastPlayedDescendingOrdersMostRecentFirst) {
-        fake_controller->scenario_summaries = {
-            make_summary("1wall6targets TE", "hash-1", 1, 1000),
-            make_summary("Microshot", "hash-2", 1, 3000),
-            make_summary("Smoothbot Invincible", "hash-3", 1, 2000),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-
-        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::LAST_PLAYED, false);
-
-        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
-                  (std::vector<QString>{"Microshot", "Smoothbot Invincible", "1wall6targets TE"}));
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, SetScenarioSortLastPlayedAscendingOrdersLeastRecentFirst) {
-        fake_controller->scenario_summaries = {
-            make_summary("1wall6targets TE", "hash-1", 1, 1000),
-            make_summary("Microshot", "hash-2", 1, 3000),
-            make_summary("Smoothbot Invincible", "hash-3", 1, 2000),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-
-        view_model.setScenarioSort(ScenarioBrowserViewModel::ScenarioSortField::LAST_PLAYED, true);
-
-        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
-                  (std::vector<QString>{"1wall6targets TE", "Smoothbot Invincible", "Microshot"}));
-    }
+    INSTANTIATE_TEST_SUITE_P(
+        ScenarioSorts, ScenarioSortTest,
+        testing::Values(
+            ScenarioSortCase{"RunCountAscendingOrdersLowestFirst",
+                             ScenarioBrowserViewModel::ScenarioSortField::RUN_COUNT, true,
+                             {"1wall6targets TE", "Smoothbot Invincible", "Microshot"}},
+            ScenarioSortCase{"NameDescendingOrdersReverseAlphabetically",
+                             ScenarioBrowserViewModel::ScenarioSortField::NAME, false,
+                             {"Smoothbot Invincible", "Microshot", "1wall6targets TE"}},
+            ScenarioSortCase{"NameAscendingOrdersAlphabetically",
+                             ScenarioBrowserViewModel::ScenarioSortField::NAME, true,
+                             {"1wall6targets TE", "Microshot", "Smoothbot Invincible"}},
+            ScenarioSortCase{"LastPlayedDescendingOrdersMostRecentFirst",
+                             ScenarioBrowserViewModel::ScenarioSortField::LAST_PLAYED, false,
+                             {"Microshot", "Smoothbot Invincible", "1wall6targets TE"}},
+            ScenarioSortCase{"LastPlayedAscendingOrdersLeastRecentFirst",
+                             ScenarioBrowserViewModel::ScenarioSortField::LAST_PLAYED, true,
+                             {"1wall6targets TE", "Smoothbot Invincible", "Microshot"}}),
+        [](const testing::TestParamInfo<ScenarioSortCase> &info) { return info.param.name; });
 
     TEST_F(ScenarioBrowserViewModelTest, RefreshReappliesConfiguredScenarioSort) {
         fake_controller->scenario_summaries = {
@@ -404,49 +377,19 @@ namespace {
         EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{3000, 2000, 1000}));
     }
 
-    TEST_F(ScenarioBrowserViewModelTest, SetSortDateAscendingOrdersOldestFirst) {
-        fake_controller->runs_for_scenario = {
-            make_run("Microshot", "hash-2", 3000, 8500.0F, 0.9F),
-            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
-            make_run("Microshot", "hash-2", 2000, 7500.0F, 0.85F),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-        view_model.activateScenario("hash-2", "Microshot");
+    struct RunSortCase {
+        const char *name;
+        ScenarioBrowserViewModel::RunSortField field;
+        bool ascending;
+        std::vector<long long> expectedStartTimes;
+    };
 
-        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Date, true);
+    class RunSortTest : public ScenarioBrowserViewModelTest,
+                        public testing::WithParamInterface<RunSortCase> {};
 
-        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 2000, 3000}));
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, SetSortScoreDescendingOrdersHighestFirst) {
-        fake_controller->runs_for_scenario = {
-            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
-            make_run("Microshot", "hash-2", 2000, 9000.0F, 0.9F),
-            make_run("Microshot", "hash-2", 3000, 8000.0F, 0.85F),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-        view_model.activateScenario("hash-2", "Microshot");
-
-        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Score, false);
-
-        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 3000, 1000}));
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, SetSortScoreAscendingOrdersLowestFirst) {
-        fake_controller->runs_for_scenario = {
-            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
-            make_run("Microshot", "hash-2", 2000, 9000.0F, 0.9F),
-            make_run("Microshot", "hash-2", 3000, 8000.0F, 0.85F),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-        view_model.activateScenario("hash-2", "Microshot");
-
-        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Score, true);
-
-        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{1000, 3000, 2000}));
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, SetSortAccuracyDescendingHandlesShotsZeroGuard) {
+    // The zero-shots run (start_time 2000) is what pins the accuracy guard: it must
+    // sort as the lowest accuracy rather than dividing by zero.
+    TEST_P(RunSortTest, OrdersRunsByTheSelectedField) {
         fake_controller->runs_for_scenario = {
             make_run_full("Microshot", "hash-2", 1000, 7000.0F, 100, 80),
             make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0, 0),
@@ -455,24 +398,25 @@ namespace {
         ScenarioBrowserViewModel view_model(fake_controller);
         view_model.activateScenario("hash-2", "Microshot");
 
-        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Accuracy, false);
+        view_model.setRunSort(GetParam().field, GetParam().ascending);
 
-        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{3000, 1000, 2000}));
+        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), GetParam().expectedStartTimes);
     }
 
-    TEST_F(ScenarioBrowserViewModelTest, SetSortAccuracyAscendingHandlesShotsZeroGuard) {
-        fake_controller->runs_for_scenario = {
-            make_run_full("Microshot", "hash-2", 1000, 7000.0F, 100, 80),
-            make_run_full("Microshot", "hash-2", 2000, 9000.0F, 0, 0),
-            make_run_full("Microshot", "hash-2", 3000, 8000.0F, 50, 47),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-        view_model.activateScenario("hash-2", "Microshot");
-
-        view_model.setRunSort(ScenarioBrowserViewModel::RunSortField::Accuracy, true);
-
-        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{2000, 1000, 3000}));
-    }
+    INSTANTIATE_TEST_SUITE_P(
+        RunSorts, RunSortTest,
+        testing::Values(
+            RunSortCase{"DateAscendingOrdersOldestFirst",
+                        ScenarioBrowserViewModel::RunSortField::Date, true, {1000, 2000, 3000}},
+            RunSortCase{"ScoreDescendingOrdersHighestFirst",
+                        ScenarioBrowserViewModel::RunSortField::Score, false, {2000, 3000, 1000}},
+            RunSortCase{"ScoreAscendingOrdersLowestFirst",
+                        ScenarioBrowserViewModel::RunSortField::Score, true, {1000, 3000, 2000}},
+            RunSortCase{"AccuracyDescendingHandlesShotsZeroGuard",
+                        ScenarioBrowserViewModel::RunSortField::Accuracy, false, {3000, 1000, 2000}},
+            RunSortCase{"AccuracyAscendingHandlesShotsZeroGuard",
+                        ScenarioBrowserViewModel::RunSortField::Accuracy, true, {2000, 1000, 3000}}),
+        [](const testing::TestParamInfo<RunSortCase> &info) { return info.param.name; });
 
     TEST_F(ScenarioBrowserViewModelTest, SetSortScoreDescendingIsStableForTies) {
         fake_controller->runs_for_scenario = {

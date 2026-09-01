@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../../src/ui/qml"
+import "ItemLookup.js" as ItemLookup
 
 TestCase {
     id: testCase
@@ -11,15 +12,6 @@ TestCase {
         FirstRunBanner {}
     }
 
-    function findByObjectName(item, objectName) {
-        if (item.objectName === objectName) return item
-        for (const child of item.children) {
-            const match = findByObjectName(child, objectName)
-            if (match) return match
-        }
-        return null
-    }
-
     function test_chooseFolderRequested_emittedWhenButtonClicked() {
         const banner = createTemporaryObject(bannerComponent, testCase)
         verify(banner !== null, "FirstRunBanner failed to instantiate")
@@ -27,7 +19,7 @@ TestCase {
         let emitted = 0
         banner.chooseFolderRequested.connect(() => emitted++)
 
-        const button = findByObjectName(banner, "chooseKovaaksFolderButton")
+        const button = ItemLookup.findByObjectName(banner, "chooseKovaaksFolderButton")
         verify(button !== null, "no choose-folder button found")
         button.click()
 

@@ -24,46 +24,34 @@
 #include "run_ingestor.h"
 
 #include "integration_env.h"
+#include "profile_store_files.h"
 
 using namespace ksv;
+using ksv::tests_support::quarantineFiles;
+using ksv::tests_support::readFile;
 
 namespace {
-    std::string readFile(const std::filesystem::path &path) {
-        std::ifstream input(path, std::ios::in | std::ios::binary);
-        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-    }
-
-    std::vector<std::filesystem::path> quarantineFiles(const std::filesystem::path &profilePath,
-                                                        const std::string &reason) {
-        std::vector<std::filesystem::path> matches;
-        const auto prefix = profilePath.stem().string() + "_" + reason + "_";
-        for (const auto &entry: std::filesystem::directory_iterator(profilePath.parent_path())) {
-            if (entry.path().extension() == profilePath.extension() &&
-                entry.path().stem().string().starts_with(prefix)) {
-                matches.push_back(entry.path());
-            }
-        }
-        return matches;
-    }
+    // The 1wall6targets fixture's score total. Its perf and its paired CSV happen to
+    // agree on score to well within this test's tolerance, so decoding the perf here to
+    // derive the expectation -- as this test used to -- discriminated nothing: it is the
+    // shots/hits/misses/kills assertions above that prove the CSV totals won.
+    constexpr float kPairedRunScore = 153.088882F;
 
     class ProfileCascadeTest : public testing::Test {
     protected:
         integration::TestEnv env;
-        std::shared_ptr<data::ProtoDecoder> decoder = std::make_shared<data::ProtoDecoder>();
-        std::shared_ptr<qt_data::FileService> fileService;
-        std::shared_ptr<data::RunIngestor> ingestor;
-        std::shared_ptr<data::ProfileSerializer> serializer = std::make_shared<data::ProfileSerializer>();
+        integration::ProfileStack stack;
+        std::shared_ptr<data::ProfileSerializer> serializer;
         std::shared_ptr<data::ProfileService> profileService;
 
         void SetUp() override {
             ASSERT_TRUE(env.valid());
             ASSERT_TRUE(env.makePerformancesDir());
             ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
-            ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
 
-            fileService = std::make_shared<qt_data::FileService>(env.settings, decoder);
-            ingestor = std::make_shared<data::RunIngestor>(fileService);
-            profileService = std::make_shared<data::ProfileService>(fileService, serializer, env.settings, ingestor);
+            stack = env.makeProfileStack();
+            serializer = stack.serializer;
+            profileService = stack.profileService;
         }
     };
 
@@ -71,7 +59,7 @@ namespace {
         int notify_count = 0;
         profileService->onProfileChanged([&] { ++notify_count; });
 
-        const QString newPath = QDir(env.dir.path()).absoluteFilePath("relocated/profile.pb");
+        const QString newPath = QDir(env.rootPath()).absoluteFilePath("relocated/profile.pb");
         env.settings->setProfilePath(newPath.toStdString());
 
         EXPECT_GE(notify_count, 1);
@@ -89,12 +77,10 @@ namespace {
         // must have loaded them from the store, not re-scanned the (now empty) dir.
         ASSERT_TRUE(QDir(env.performancesDir()).removeRecursively());
 
-        const auto reloadFileService = std::make_shared<qt_data::FileService>(env.settings, decoder);
-        data::ProfileService reloaded(reloadFileService, std::make_shared<data::ProfileSerializer>(), env.settings,
-                                      std::make_shared<data::RunIngestor>(reloadFileService));
-        reloaded.loadProfile();
+        const auto reloaded = env.makeProfileStack().profileService;
+        reloaded->loadProfile();
 
-        EXPECT_EQ(reloaded.getScenarioList().size(), originalCount);
+        EXPECT_EQ(reloaded->getScenarioList().size(), originalCount);
     }
 
     TEST_F(ProfileCascadeTest, MismatchedStoreVersionRebuildsFromDirectory) {
@@ -129,14 +115,13 @@ namespace {
     }
 
     TEST_F(ProfileCascadeTest, GeneratesAndReloadsRunsFromTwoSourceRoots) {
-        ASSERT_TRUE(QFile::remove(QDir(env.performancesDir()).absoluteFilePath("VT FlyTS Novice S5.perf")));
         QTemporaryDir second_root;
         ASSERT_TRUE(second_root.isValid());
         const auto second_performances = QDir(second_root.path()).absoluteFilePath("FPSAimTrainer/performances");
         ASSERT_TRUE(QDir().mkpath(second_performances));
         ASSERT_TRUE(QFile::copy(integration::fixturePath("VT FlyTS Novice S5.perf"),
                                QDir(second_performances).absoluteFilePath("VT FlyTS Novice S5.perf")));
-        env.settings->setKovaaksDirs({env.dir.path().toStdString(), second_root.path().toStdString()});
+        env.settings->setKovaaksDirs({env.rootPath().toStdString(), second_root.path().toStdString()});
 
         profileService->generateProfileFromDirectory();
         const auto stored = serializer->load(env.profileStorePath().toStdString());
@@ -152,17 +137,13 @@ namespace {
                                       .generic_string());
         }
         EXPECT_EQ(resolved_roots,
-                  (std::set<std::string>{QDir::fromNativeSeparators(env.dir.path()).toStdString(),
+                  (std::set<std::string>{QDir::fromNativeSeparators(env.rootPath()).toStdString(),
                                          QDir::fromNativeSeparators(second_root.path()).toStdString()}));
     }
 
     TEST_F(ProfileCascadeTest, PairedPerfAndCsvFixtureProduceOneRunWithCanonicalCsvTotals) {
         ASSERT_TRUE(env.makeStatsDir());
         ASSERT_FALSE(env.copyFixtureIntoStats("1wall6targets TE.csv").isEmpty());
-
-        data::ProtoDecoder decoder_for_check;
-        const auto perf_fallback = decoder_for_check.decode_file(
-            QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf").toStdString());
 
         profileService->generateProfileFromDirectory();
         const auto stored = serializer->load(env.profileStorePath().toStdString());
@@ -178,7 +159,7 @@ namespace {
         EXPECT_EQ(run.totals().hits, 166);
         EXPECT_EQ(run.totals().misses, 14);
         EXPECT_EQ(run.totals().kills, 166);
-        EXPECT_NEAR(run.totals().score, perf_fallback.totals().score, 1e-4F);
+        EXPECT_NEAR(run.totals().score, kPairedRunScore, 1e-4F);
         ASSERT_TRUE(run.performance.has_value());
         EXPECT_FALSE(run.performance->samples.empty());
         ASSERT_TRUE(run.stats.has_value());
@@ -189,7 +170,6 @@ namespace {
 
     TEST_F(ProfileCascadeTest, CsvOnlyTimestampedFixtureAppearsInReloadedScenarioHistory) {
         ASSERT_TRUE(QFile::remove(QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf")));
-        ASSERT_TRUE(QFile::remove(QDir(env.performancesDir()).absoluteFilePath("VT FlyTS Novice S5.perf")));
         ASSERT_TRUE(env.makeStatsDir());
         ASSERT_FALSE(env.copyFixtureIntoStats(
             "1wall6targets TE.csv",

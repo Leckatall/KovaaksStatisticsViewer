@@ -28,6 +28,19 @@ namespace {
     constexpr int kScoreSeriesId = 1;
     constexpr int kAccuracySeriesId = 2;
 
+    void configureCanvas(GraphCanvas &canvas, presentation::GraphViewModelBase *vm, const QVariantList &columns) {
+        canvas.setWidth(800);
+        canvas.setHeight(600);
+        canvas.setGraphVm(vm);
+        canvas.setVisibleColumns(columns);
+    }
+
+    std::unique_ptr<GraphCanvas> makeCanvas(presentation::GraphViewModelBase &vm, const QVariantList &columns) {
+        auto canvas = std::make_unique<GraphCanvas>();
+        configureCanvas(*canvas, &vm, columns);
+        return canvas;
+    }
+
     QPointF toPixel(const QPointF &display, const QRectF &rect,
                     const presentation::AxisModel &xAxis, const presentation::AxisModel &yAxis) {
         const qreal xt = xAxis.normalizedPosition(display.x());
@@ -35,30 +48,46 @@ namespace {
         return {rect.left() + xt * rect.width(), rect.bottom() - yt * rect.height()};
     }
 
+    // No test here mutates the view model, so the App and its one decode are built once
+    // for the suite. The canvas is NOT shared -- every test reconfigures its visible
+    // columns and y-axis column, so each gets its own.
     class GraphCanvasGeometryTest : public testing::Test {
     protected:
-        integration::TestEnv env;
-        std::unique_ptr<application::App> app;
-        GraphViewModel *graphVm = nullptr;
-        GraphCanvas canvas;
+        static std::unique_ptr<integration::TestEnv> env;
+        static std::unique_ptr<application::App> app;
+        static GraphViewModel *graphVm;
 
-        void SetUp() override {
-            ASSERT_TRUE(env.valid());
-            ASSERT_TRUE(env.makePerformancesDir());
-            const QString file = env.copyFixtureIntoPerformances("1wall6targets TE.perf");
+        static void SetUpTestSuite() {
+            env = std::make_unique<integration::TestEnv>();
+            ASSERT_TRUE(env->valid());
+            ASSERT_TRUE(env->makePerformancesDir());
+            const QString file = env->copyFixtureIntoPerformances("1wall6targets TE.perf");
             ASSERT_FALSE(file.isEmpty());
 
             app = std::make_unique<application::App>(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
+                env->settings, std::make_shared<data::ProtoDecoder>(), env->seriesConfigStore);
             graphVm = app->graphVm();
             graphVm->fetchData(QUrl::fromLocalFile(file).toString());
+        }
 
-            canvas.setWidth(800);
-            canvas.setHeight(600);
-            canvas.setGraphVm(graphVm);
-            canvas.setVisibleColumns(QVariantList{kScoreSeriesId});
+        // App holds shared_ptrs to services built over env's settings, so it goes first.
+        static void TearDownTestSuite() {
+            graphVm = nullptr;
+            app.reset();
+            env.reset();
+        }
+
+        GraphCanvas canvas;
+
+        void SetUp() override {
+            ASSERT_NE(graphVm, nullptr);
+            configureCanvas(canvas, graphVm, QVariantList{kScoreSeriesId});
         }
     };
+
+    std::unique_ptr<integration::TestEnv> GraphCanvasGeometryTest::env;
+    std::unique_ptr<application::App> GraphCanvasGeometryTest::app;
+    GraphViewModel *GraphCanvasGeometryTest::graphVm = nullptr;
 
     TEST_F(GraphCanvasGeometryTest, ValuesAtXReportsWithinPlotArea) {
         const QRectF rect = canvas.property("plotArea").toRectF();
@@ -133,18 +162,14 @@ namespace {
 
     TEST_F(GraphCanvasGeometryTest, YAxisDerivedFromSeriesDataWhenUnset) {
         NoYAxisVm vm;
-        GraphCanvas fallbackCanvas;
-        fallbackCanvas.setWidth(800);
-        fallbackCanvas.setHeight(600);
-        fallbackCanvas.setGraphVm(&vm);
-        fallbackCanvas.setVisibleColumns(QVariantList{0});
+        const auto fallbackCanvas = makeCanvas(vm, QVariantList{0});
 
-        const QRectF rect = fallbackCanvas.property("plotArea").toRectF();
+        const QRectF rect = fallbackCanvas->property("plotArea").toRectF();
         const auto s = vm.series({0}).front();
         const auto yAxis = s->deriveYAxis();
         const QPointF expected = toPixel(s->displayPoints().back(), rect, vm.xAxis(), yAxis);
 
-        const QVariantMap hit = fallbackCanvas.nearestPoint(expected.x(), expected.y());
+        const QVariantMap hit = fallbackCanvas->nearestPoint(expected.x(), expected.y());
 
         ASSERT_TRUE(hit.value("valid").toBool())
             << "nearestPoint should map y against the y-axis derived from series data; "
@@ -199,21 +224,13 @@ namespace {
 
     TEST_F(GraphCanvasGeometryTest, LeftMarginGrowsWithWiderTickLabels) {
         FixedRangeVm narrowVm(1.0);
-        GraphCanvas narrowCanvas;
-        narrowCanvas.setWidth(800);
-        narrowCanvas.setHeight(600);
-        narrowCanvas.setGraphVm(&narrowVm);
-        narrowCanvas.setVisibleColumns(QVariantList{0});
+        const auto narrowCanvas = makeCanvas(narrowVm, QVariantList{0});
 
         FixedRangeVm wideVm(123456.0);
-        GraphCanvas wideCanvas;
-        wideCanvas.setWidth(800);
-        wideCanvas.setHeight(600);
-        wideCanvas.setGraphVm(&wideVm);
-        wideCanvas.setVisibleColumns(QVariantList{0});
+        const auto wideCanvas = makeCanvas(wideVm, QVariantList{0});
 
-        const qreal narrowLeft = narrowCanvas.property("plotArea").toRectF().left();
-        const qreal wideLeft = wideCanvas.property("plotArea").toRectF().left();
+        const qreal narrowLeft = narrowCanvas->property("plotArea").toRectF().left();
+        const qreal wideLeft = wideCanvas->property("plotArea").toRectF().left();
 
         EXPECT_GT(wideLeft, narrowLeft)
             << "left margin should grow to fit wider y-axis tick text instead of staying fixed";
@@ -244,16 +261,11 @@ namespace {
 
     TEST_F(GraphCanvasGeometryTest, LabelledAxisUsesTheVisibleSeriesSet) {
         VisibleSetAxisVm vm;
-        GraphCanvas canvas;
-        canvas.setWidth(800);
-        canvas.setHeight(600);
-        canvas.setGraphVm(&vm);
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        const qreal singleLeft = canvas->property("plotArea").toRectF().left();
 
-        canvas.setVisibleColumns(QVariantList{0});
-        const qreal singleLeft = canvas.property("plotArea").toRectF().left();
-
-        canvas.setVisibleColumns(QVariantList{0, 1});
-        const qreal sharedLeft = canvas.property("plotArea").toRectF().left();
+        canvas->setVisibleColumns(QVariantList{0, 1});
+        const qreal sharedLeft = canvas->property("plotArea").toRectF().left();
 
         EXPECT_GT(sharedLeft, singleLeft);
     }

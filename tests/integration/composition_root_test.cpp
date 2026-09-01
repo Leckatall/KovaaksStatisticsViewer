@@ -23,26 +23,36 @@
 using namespace ksv;
 
 namespace {
+    // One App for the whole suite. Building it runs loadProfile(), which asks
+    // SessionController for a build on its worker thread when no store is available,
+    // and the result only lands once the event loop spins -- a wait every test used to
+    // repeat for a structurally identical graph. The tests that mutate the wired state
+    // (current run, profile) each re-establish their own starting point rather than
+    // relying on a fresh graph.
     class CompositionRootTest : public testing::Test {
     protected:
-        integration::TestEnv env;
-        std::unique_ptr<application::App> app;
+        static std::unique_ptr<integration::TestEnv> env;
+        static std::unique_ptr<application::App> app;
 
-        void SetUp() override {
-            ASSERT_TRUE(env.valid());
-            ASSERT_TRUE(env.makePerformancesDir());
-            ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
-            ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
+        static void SetUpTestSuite() {
+            env = std::make_unique<integration::TestEnv>();
+            ASSERT_TRUE(env->valid());
+            ASSERT_TRUE(env->makePerformancesDir());
+            ASSERT_FALSE(env->copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+            ASSERT_FALSE(env->copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
 
-            // App::App() runs loadProfile(), which asks SessionController for a build
-            // on its worker thread when no store is available. The result only lands once the event
-            // loop spins, so every test here starts by waiting for it.
             app = std::make_unique<application::App>(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
+                env->settings, std::make_shared<data::ProtoDecoder>(), env->seriesConfigStore);
             ASSERT_TRUE(waitForProfile());
         }
 
-        [[nodiscard]] bool waitForProfile() const {
+        // App holds shared_ptrs to services built over env's settings, so it goes first.
+        static void TearDownTestSuite() {
+            app.reset();
+            env.reset();
+        }
+
+        [[nodiscard]] static bool waitForProfile() {
             QElapsedTimer timer;
             timer.start();
             while (!app->profileService()->isProfileLoaded()) {
@@ -51,7 +61,14 @@ namespace {
             }
             return true;
         }
+
+        [[nodiscard]] static QString fixture(const QString &name) {
+            return QDir(env->performancesDir()).absoluteFilePath(name);
+        }
     };
+
+    std::unique_ptr<integration::TestEnv> CompositionRootTest::env;
+    std::unique_ptr<application::App> CompositionRootTest::app;
 
     TEST_F(CompositionRootTest, ConstructionBuildsProfileFromTheKovaaksDirectory) {
         EXPECT_TRUE(app->profileService()->isProfileLoaded());
@@ -65,9 +82,7 @@ namespace {
     }
 
     TEST_F(CompositionRootTest, SetCurrentPerfResolvesThroughFileServiceAndDecoder) {
-        const QString file = QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf");
-
-        app->sessionController()->setCurrentPerf(file.toStdString());
+        app->sessionController()->setCurrentPerf(fixture("1wall6targets TE.perf").toStdString());
 
         EXPECT_EQ(app->sessionController()->getCurrentRun().run_id.scenario_id.name, "1wall6targets TE");
     }
@@ -75,12 +90,14 @@ namespace {
     TEST_F(CompositionRootTest, CurrentPerfChangeCascadesToGraphViewModelReload) {
         // App wires sessionController->currentRunChanged -> graphVm->fetchData() so the
         // graph reloads whenever currentPerf changes for any reason, not just file loads.
-        const QString file = QDir(env.performancesDir()).absoluteFilePath("1wall6targets TE.perf");
+        // setCurrentRun ignores a run_id it is already on, and this suite shares one App,
+        // so park on the other fixture first to guarantee the call below is a real change.
+        app->sessionController()->setCurrentPerf(fixture("VT FlyTS Novice S5.perf").toStdString());
 
         QSignalSpy spy(app->graphVm(), &presentation::GraphViewModelBase::dataUpdated);
         ASSERT_TRUE(spy.isValid());
 
-        app->sessionController()->setCurrentPerf(file.toStdString());
+        app->sessionController()->setCurrentPerf(fixture("1wall6targets TE.perf").toStdString());
 
         EXPECT_GE(spy.count(), 1);
     }

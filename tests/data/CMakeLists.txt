@@ -104,6 +104,7 @@ add_executable(profile_serializer_tests
 )
 
 target_link_libraries(profile_serializer_tests PRIVATE
+    tests_support_domain
     ksv_data
     GTest::gtest_main
 )

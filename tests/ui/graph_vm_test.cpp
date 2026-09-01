@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <map>
 #include <optional>
 
@@ -29,6 +30,15 @@ namespace {
     constexpr int kExpectedFinalScore = 8;
     constexpr int kExpectedFinalScoreRecent = 9;
     constexpr int kInvalidColumn = 9999;
+
+    SeriesConfig defaultConfig(const int id) {
+        const auto configs = defaultSeriesConfigs();
+        const auto it = std::ranges::find_if(configs, [id](const SeriesConfig &c) {
+            return c.id.value == static_cast<uint64_t>(id);
+        });
+        if (it == configs.end()) throw std::out_of_range("no default series with that id");
+        return *it;
+    }
 
     SeriesPoints pts(const std::vector<double> &times, const std::vector<double> &ys) {
         SeriesPoints points;
@@ -206,7 +216,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, AComputedSeriesCanShareAnAxisWithABuiltInSeries) {
         const AxisConfig sharedAxis{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity};
-        auto scoreTotal = defaultSeriesConfigs()[6];
+        auto scoreTotal = defaultConfig(kScoreTotal);
         scoreTotal.yAxisId = sharedAxis.id;
         const SeriesConfig computed{SeriesId{10}, {"Custom", {}, true, 1}, numericConstant(1.0), sharedAxis.id};
 
@@ -241,7 +251,7 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, SeriesTransformKindScalesDisplayedValues) {
-        const SeriesConfig accuracy = defaultSeriesConfigs()[1];
+        const SeriesConfig accuracy = defaultConfig(kAccuracy);
         fake_use_case->addSeries(accuracy, pts({0}, {0.5}));
         view_model.fetchMetadata();
 

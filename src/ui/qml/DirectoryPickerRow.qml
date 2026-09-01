@@ -1,7 +1,7 @@
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// A labeled, read-only path field (directory or file) with a "Browse..."
+// A labelled, read-only path field (directory or file) with a "Browse..."
 // button, shared by SettingsDialog's path-setting rows.
 ColumnLayout {
     id: root

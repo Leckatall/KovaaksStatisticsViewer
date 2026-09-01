@@ -2,9 +2,19 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <stdexcept>
 
 namespace ksv::application {
+    namespace {
+        constexpr int kMaximumBucketedSeconds = 3600;
+
+        std::optional<int> bucketIndexFor(const float time) {
+            if (!std::isfinite(time) || time < 0.0F || time > static_cast<float>(kMaximumBucketedSeconds)) return {};
+            return static_cast<int>(std::lround(time));
+        }
+    }
+
     const std::vector<double> &BucketedRun::valuesFor(const PrimitiveMetric metric) const {
         switch (metric) {
             case PrimitiveMetric::Score: return score;
@@ -22,7 +32,9 @@ namespace ksv::application {
         const auto &samples = run.performance->samples;
         if (samples.empty()) return result;
         int maximum = 0;
-        for (const auto &point: samples) maximum = std::max(maximum, static_cast<int>(std::lround(point.time)));
+        for (const auto &point: samples) {
+            if (const auto index = bucketIndexFor(point.time)) maximum = std::max(maximum, *index);
+        }
         const auto size = static_cast<size_t>(maximum + 1);
         result.score.resize(size);
         result.shots.resize(size);
@@ -30,7 +42,9 @@ namespace ksv::application {
         result.kills.resize(size);
         result.dmg.resize(size);
         for (const auto &point: samples) {
-            const auto index = static_cast<size_t>(std::clamp(static_cast<int>(std::lround(point.time)), 0, maximum));
+            const auto bucket = bucketIndexFor(point.time);
+            if (!bucket) continue;
+            const auto index = static_cast<size_t>(*bucket);
             result.score[index] += point.score;
             result.shots[index] += point.shots;
             result.hits[index] += point.hits;
