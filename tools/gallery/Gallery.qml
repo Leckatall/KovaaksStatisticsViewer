@@ -1,8 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "expression_tree_mockup" as ExpressionTreeMockup
-// import QtCore
 import KovaaksStatsViewer
 
 // Dev component gallery. gallery_main.cpp exposes the real VMs through the
@@ -17,22 +15,21 @@ ApplicationWindow {
 
     readonly property var graphVm: galleryGraphVm
     readonly property var playtimeVm: galleryPlaytimeVm
+    readonly property var historyVm: galleryHistoryVm
     readonly property var sessionVm: gallerySessionVm
     readonly property var settingsVm: gallerySettingsVm
     readonly property var scenarioBrowserVm: galleryScenarioBrowserVm
+    readonly property var datasetNames: galleryDatasetNames
+    readonly property var datasetPaths: galleryDatasetPaths
+    readonly property var expressionTreeModel: window.settingsVm.beginExpressionEdit("9")
 
     // Mirrors Main.qml's accent.
     palette.accent: "#00BCD4"
     palette.highlight: "#00838F"
 
-    // Mirrors Main.qml's columnVisibilitySettings; a plain object is enough here.
-    property var columnVisibility: ({
-        score: true, accuracy: true, shots: true, kills: true, dmg: true,
-        scoreTotal: true, expectedFinalScore: true, expectedFinalScoreRecent: true
-    })
-
-    // Mirrors Main.qml's graphAxisSettings; a plain object is enough here.
-    property var graphAxisSettings: ({yAxisColumnKey: "score"})
+    VisualSettingsManager {
+        id: visualSettings
+    }
 
     // A labelled, sized cell. Components like ControlPanel have no implicit
     // size of their own, so every showcase gets explicit dimensions.
@@ -72,27 +69,55 @@ ApplicationWindow {
             width: window.width - 48
             spacing: 24
 
-            // TODO(2026-08-26): Restore once gallery showcase work resumes — parked, not replaced;
-            // no live equivalent covers these components in the gallery in the meantime
-            // Showcase {
-            //     label: "DashboardGraphCanvas"
-            //     cellWidth: 600; cellHeight: 360
-            //     DashboardGraphCanvas {
-            //         anchors.fill: parent
-            //         graphVm: window.graphVm
-            //         columnVisibility: window.columnVisibility
-            //         graphAxisSettings: window.graphAxisSettings
-            //     }
-            // }
+            Showcase {
+                label: "Dataset"
+                cellWidth: 600; cellHeight: 72
+                ComboBox {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    objectName: "galleryDatasetSelector"
+                    model: window.datasetNames
+                    currentIndex: {
+                        const currentPath = window.settingsVm.profilePath.toString()
+                        for (let index = 0; index < window.datasetPaths.length; ++index) {
+                            if (window.datasetPaths[index].toString() === currentPath) return index
+                        }
+                        return 0
+                    }
+                    onActivated: index => window.settingsVm.setProfilePath(window.datasetPaths[index])
+                }
+            }
 
-            // Showcase {
-            //     label: "PlaytimeGraphPanel"
-            //     cellWidth: 600; cellHeight: 360
-            //     PlaytimeGraphPanel {
-            //         anchors.fill: parent
-            //         playtimeVm: window.playtimeVm
-            //     }
-            // }
+            Showcase {
+                label: "DashboardGraphCanvas"
+                cellWidth: 600; cellHeight: 360
+                DashboardGraphCanvas {
+                    anchors.fill: parent
+                    graphVm: window.graphVm
+                    visualSettings: visualSettings
+                }
+            }
+
+            Showcase {
+                label: "PlaytimeGraphPanel"
+                cellWidth: 600; cellHeight: 360
+                PlaytimeGraphPanel {
+                    anchors.fill: parent
+                    playtimeVm: window.playtimeVm
+                }
+            }
+
+            Showcase {
+                label: "ScenarioHistoryPanel"
+                cellWidth: 600; cellHeight: 360
+                ScenarioHistoryPanel {
+                    anchors.fill: parent
+                    historyVm: window.historyVm
+                    columnVisibility: visualSettings.historyColumnVisibility
+                    historyAxisSettings: visualSettings
+                }
+            }
 
             // Showcase {
             //     label: "ControlPanel"
@@ -210,54 +235,11 @@ ApplicationWindow {
             // }
 
             Showcase {
-                label: "Expression Tree — Cards (mockup)"
+                label: "ExpressionTreeEditor"
                 cellWidth: 640; cellHeight: 520
-                ExpressionTreeMockup.ExpressionTreeMockModel { id: cardsTreeModel }
-                ColumnLayout {
+                ExpressionTreeEditor {
                     anchors.fill: parent
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Repeater {
-                            model: cardsTreeModel.exampleNames
-                            delegate: Button {
-                                required property int index
-                                required property string modelData
-                                text: modelData
-                                onClicked: cardsTreeModel.loadExample(index)
-                            }
-                        }
-                    }
-                    ExpressionTreeMockup.ExpressionTreeCardsMockup {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        model: cardsTreeModel
-                    }
-                }
-            }
-
-            Showcase {
-                label: "Expression Tree — Breadcrumb (mockup)"
-                cellWidth: 640; cellHeight: 520
-                ExpressionTreeMockup.ExpressionTreeMockModel { id: breadcrumbTreeModel }
-                ColumnLayout {
-                    anchors.fill: parent
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Repeater {
-                            model: breadcrumbTreeModel.exampleNames
-                            delegate: Button {
-                                required property int index
-                                required property string modelData
-                                text: modelData
-                                onClicked: breadcrumbTreeModel.loadExample(index)
-                            }
-                        }
-                    }
-                    ExpressionTreeMockup.ExpressionTreeBreadcrumbMockup {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        model: breadcrumbTreeModel
-                    }
+                    model: window.expressionTreeModel
                 }
             }
         }
@@ -274,4 +256,13 @@ ApplicationWindow {
     //     columnVisibility: window.columnVisibility
     //     graphAxisSettings: window.graphAxisSettings
     // }
+
+    Connections {
+        target: window.graphVm
+        function onSeriesConfigurationChanged() {
+            visualSettings.syncVisibleSeriesIds(window.graphVm.enabledSeriesIds)
+        }
+    }
+
+    Component.onCompleted: visualSettings.syncVisibleSeriesIds(window.graphVm.enabledSeriesIds)
 }

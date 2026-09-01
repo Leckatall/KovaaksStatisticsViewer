@@ -20,10 +20,10 @@ namespace ksv::ui {
         enum class Orientation { Horizontal, Vertical };
 
         struct Style {
-            QColor gridColor{"#2A2A2A"};
-            QColor textColor{"white"};
+            QColor gridColor{"#3D3D3D"};
+            QColor textColor = QColor(255, 255, 255, 255*0.6);
             int fontPointSize = 8;
-            qreal labelGap = 4;
+            qreal labelGap = 3;
         };
 
         static void paint(QPainter &painter, const QRectF &plot, Orientation orientation,
