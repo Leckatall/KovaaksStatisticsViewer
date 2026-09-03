@@ -37,8 +37,10 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
   - [ ] Support multiple named profiles (e.g. different Kovaaks accounts or data sets)
   - [ ] Add UI for profile switching in settings
   - [ ] Allow import/export of profile data for backup or sharing
-  - [ ] Handle profile migration when the cache schema changes between versions
-  - [ ] Add support for additional profile data sources (e.g. scrapping Kovaaks runtime mem, csv files, etc.)
+  - [x] Handle profile migration when the cache schema changes between versions
+  - [ ] Add support for additional profile data sources
+    - [x] csv files
+    - [ ] Scrapping Kovaaks runtime mem
   - [ ] Allow profiles to store groupings of scenarios
 
 ---
@@ -132,7 +134,7 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
   - [ ] Add a dark/light theme toggle
   - [x] Polish graph styling (grid lines, axis labels, tick formatting, legend)
   - [x] Add loading indicators for profile generation and data processing
-  - [ ] Improve layout responsiveness for different window sizes
+  - [x] Improve layout responsiveness for different window sizes
 
 - [ ] **Graph interaction improvements** `[Medium]` `[Medium]`
   - [ ] Add zoom and pan to graphs
