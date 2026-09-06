@@ -1,0 +1,11 @@
+[project]
+name = "ksv-architecture-tools"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["markdown-it-py", "PyYAML"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["scripts/tests"]
