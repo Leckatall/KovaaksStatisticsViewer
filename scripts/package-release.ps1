@@ -22,10 +22,9 @@
     passed, so a release is always built from scratch - see the comment above
     the build section for why.
 
-    Tool paths below default to this machine's current setup (CLion's
-    bundled MinGW/Ninja + the vcpkg instance CLion manages). Override
-    via parameters if your environment differs, e.g. when running this
-    from CI.
+    Tool paths come from toolchain.defaults.env, toolchain.local.env, and
+    process environment variables, in that order. Explicit parameters remain
+    the highest-precedence overrides for compatibility with existing callers.
 
 .EXAMPLE
     ./scripts/package-release.ps1
@@ -42,14 +41,19 @@ param(
     [string]$BuildDir,
     [string]$DistDir,
 
-    [string]$VcpkgToolchain = "C:/Users/Lecka/.vcpkg-clion/vcpkg (1)/scripts/buildsystems/vcpkg.cmake",
-    [string]$VcpkgTriplet   = "x64-mingw-dynamic",
-    [string]$VcpkgBinDir    = "C:/Users/Lecka/.vcpkg-clion/vcpkg (1)/installed/x64-mingw-dynamic/bin",
+    [string]$VcpkgToolchain,
+    [string]$VcpkgTriplet,
+    [string]$VcpkgBinDir,
 
-    [string]$MingwBinDir = "C:/Program Files/JetBrains/CLion 2024.1.1/bin/mingw/bin",
-    [string]$NinjaExe    = "C:/Program Files/JetBrains/CLion 2024.1.1/bin/ninja/win/x64/ninja.exe",
+    [string]$MingwBinDir,
+    [string]$CCompiler,
+    [string]$CxxCompiler,
+    [string]$CMakeExe,
+    [string]$NinjaExe,
 
-    [string]$QtBinDir = "C:/Qt/6.11.1/mingw_64/bin",
+    [string]$QtBinDir,
+    [string]$Qt6Dir,
+    [string]$ProtocExe,
 
     [switch]$SkipBuild,
     [switch]$Incremental,
@@ -85,6 +89,36 @@ if ($SkipBuild -and $Incremental) {
 if (-not $RepoRoot) { $RepoRoot = (Resolve-Path "$PSScriptRoot/..").Path }
 if (-not $BuildDir) { $BuildDir = Join-Path $RepoRoot "build-release" }
 
+. (Join-Path $PSScriptRoot "toolchain-config.ps1")
+$toolchainOverrides = @{}
+if ($PSBoundParameters.ContainsKey("VcpkgToolchain")) { $toolchainOverrides.KSV_VCPKG_TOOLCHAIN = $VcpkgToolchain }
+if ($PSBoundParameters.ContainsKey("VcpkgTriplet")) { $toolchainOverrides.KSV_VCPKG_TRIPLET = $VcpkgTriplet }
+if ($PSBoundParameters.ContainsKey("VcpkgBinDir")) { $toolchainOverrides.KSV_VCPKG_BIN_DIR = $VcpkgBinDir }
+if ($PSBoundParameters.ContainsKey("MingwBinDir")) {
+    $toolchainOverrides.KSV_C_COMPILER = Join-Path $MingwBinDir "gcc.exe"
+    $toolchainOverrides.KSV_CXX_COMPILER = Join-Path $MingwBinDir "c++.exe"
+}
+if ($PSBoundParameters.ContainsKey("CCompiler")) { $toolchainOverrides.KSV_C_COMPILER = $CCompiler }
+if ($PSBoundParameters.ContainsKey("CxxCompiler")) { $toolchainOverrides.KSV_CXX_COMPILER = $CxxCompiler }
+if ($PSBoundParameters.ContainsKey("CMakeExe")) { $toolchainOverrides.KSV_CMAKE_EXE = $CMakeExe }
+if ($PSBoundParameters.ContainsKey("NinjaExe")) { $toolchainOverrides.KSV_NINJA_EXE = $NinjaExe }
+if ($PSBoundParameters.ContainsKey("QtBinDir")) { $toolchainOverrides.KSV_QT_BIN_DIR = $QtBinDir }
+if ($PSBoundParameters.ContainsKey("Qt6Dir")) { $toolchainOverrides.KSV_QT6_DIR = $Qt6Dir }
+if ($PSBoundParameters.ContainsKey("ProtocExe")) { $toolchainOverrides.KSV_PROTOC_EXE = $ProtocExe }
+
+$toolchain = Get-KsvToolchainConfig -Overrides $toolchainOverrides
+$VcpkgToolchain = $toolchain.VcpkgToolchain
+$VcpkgTriplet = $toolchain.VcpkgTriplet
+$VcpkgBinDir = $toolchain.VcpkgBinDir
+$CCompiler = $toolchain.CCompiler
+$CxxCompiler = $toolchain.CxxCompiler
+$CMakeExe = $toolchain.CMakeExe
+$NinjaExe = $toolchain.NinjaExe
+$QtBinDir = $toolchain.QtBinDir
+$Qt6Dir = $toolchain.Qt6Dir
+$ProtocExe = $toolchain.ProtocExe
+$MingwBinDir = Split-Path -Parent $CxxCompiler
+
 if (-not $Version) {
     $Version = & (Join-Path $PSScriptRoot "version.ps1") -RepoRoot $RepoRoot
 }
@@ -98,18 +132,7 @@ Write-Host "Version : $Version"
 Write-Host "Repo    : $RepoRoot"
 Write-Host "Dist    : $DistDir"
 
-Assert-PathExists $VcpkgToolchain "vcpkg toolchain file"
-Assert-PathExists $MingwBinDir    "MinGW bin dir"
-Assert-PathExists $NinjaExe       "Ninja executable"
-Assert-PathExists $QtBinDir       "Qt bin dir"
-
-$CxxCompiler = Join-Path $MingwBinDir "c++.exe"
-$CCompiler   = Join-Path $MingwBinDir "gcc.exe"
-Assert-PathExists $CxxCompiler "MinGW c++ compiler"
-Assert-PathExists $CCompiler   "MinGW gcc compiler"
-
 Assert-PathExists (Join-Path $QtBinDir "windeployqt.exe") "windeployqt"
-Assert-PathExists $VcpkgBinDir "vcpkg triplet bin dir"
 
 if ($ValidateOnly) {
     Write-Host "`n== Environment OK ==" -ForegroundColor Green
@@ -135,13 +158,15 @@ if (-not $SkipBuild) {
     }
 
     Write-Host "`n-- Configuring (Release) --" -ForegroundColor Cyan
-    cmake -B $BuildDir -S $RepoRoot -G Ninja `
+    & $CMakeExe -B $BuildDir -S $RepoRoot -G Ninja `
         -DCMAKE_BUILD_TYPE=Release `
         -DCMAKE_MAKE_PROGRAM="$NinjaExe" `
         -DCMAKE_CXX_COMPILER="$CxxCompiler" `
         -DCMAKE_C_COMPILER="$CCompiler" `
         -DCMAKE_TOOLCHAIN_FILE="$VcpkgToolchain" `
         -DVCPKG_TARGET_TRIPLET="$VcpkgTriplet" `
+        -DProtobuf_PROTOC_EXECUTABLE="$ProtocExe" `
+        -DQt6_DIR="$Qt6Dir" `
         -DBUILD_TESTING=OFF
     if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 
@@ -154,7 +179,12 @@ if (-not $SkipBuild) {
     foreach ($expected in @(
         @{ Key = "CMAKE_BUILD_TYPE";      Value = "Release" },
         @{ Key = "VCPKG_TARGET_TRIPLET";  Value = $VcpkgTriplet },
-        @{ Key = "CMAKE_CXX_COMPILER";    Value = $CxxCompiler }
+        @{ Key = "CMAKE_MAKE_PROGRAM";    Value = $NinjaExe },
+        @{ Key = "CMAKE_C_COMPILER";      Value = $CCompiler },
+        @{ Key = "CMAKE_CXX_COMPILER";    Value = $CxxCompiler },
+        @{ Key = "CMAKE_TOOLCHAIN_FILE";  Value = $VcpkgToolchain },
+        @{ Key = "Protobuf_PROTOC_EXECUTABLE"; Value = $ProtocExe },
+        @{ Key = "Qt6_DIR";               Value = $Qt6Dir }
     )) {
         $pattern = "(?m)^$([regex]::Escape($expected.Key)):[^=]*=(.*)$"
         if ($Cache -notmatch $pattern) {
@@ -167,7 +197,7 @@ if (-not $SkipBuild) {
     }
 
     Write-Host "`n-- Building --" -ForegroundColor Cyan
-    cmake --build $BuildDir
+    & $CMakeExe --build $BuildDir
     if ($LASTEXITCODE -ne 0) { throw "CMake build failed" }
 } else {
     Write-Host "`n-- Skipping build (using existing $BuildDir) --" -ForegroundColor Yellow

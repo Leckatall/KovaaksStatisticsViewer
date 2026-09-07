@@ -181,7 +181,9 @@ Implementation anchors: [`src/data/formats/protobuf/schema/profile.proto`](../..
 
 ## Build, deployment, and development topology
 
-The application uses C++20, CMake, Ninja, Qt 6.11.1, MinGW, and vcpkg-provided Protocol Buffers. The checked-in configuration is currently tied to Windows-specific Qt and toolchain locations.
+The application uses C++20, CMake, Ninja, Qt 6.11.1, MinGW, and vcpkg-provided Protocol Buffers. `scripts/toolchain.defaults.env` records the canonical Windows toolchain, while process environment values and the ignored `scripts/toolchain.local.env` provide controlled overrides.
+
+The sanctioned Debug path is `uv run python scripts/build_and_test.py`. It configures and validates a repository-local `build-agent/` tree, fingerprints the resolved tools and runtime dependencies before incremental reuse, and retains full phase logs under `.temp/build-and-test/`. The runner consumes native stdout itself: success is summarized, while compiler, linker, GoogleTest, and QML failures are selected and printed without a separate log-read step. Focused logical scopes run the corresponding GoogleTest or Qt Quick Test executable with low-noise framework settings; the default path builds every target and runs the complete CTest suite. Builds are fixed at eight parallel compiler jobs. Protocol Buffer generation uses a build-local `protoc` runtime assembled from the resolved vcpkg and compiler installations, so configuring does not mutate the dependency installation.
 
 The Release packaging script:
 
@@ -195,7 +197,7 @@ The compiler-matched MinGW DLL copies are part of the deployment architecture: m
 
 Tests mirror the production layers, with integration tests constructing the real object graph against fixture files. Qt Quick Tests cover QML behavior. The development-only gallery loads the real application wiring against disposable data and supports QML preview; it is excluded from Release builds.
 
-Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/package-release.ps1`](../../scripts/package-release.ps1), [`tests/`](../../tests/), and [`tools/gallery/`](../../tools/gallery/).
+Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/build_and_test.py`](../../scripts/build_and_test.py), [`scripts/toolchain.defaults.env`](../../scripts/toolchain.defaults.env), [`scripts/package-release.ps1`](../../scripts/package-release.ps1), [`tests/`](../../tests/), and [`tools/gallery/`](../../tools/gallery/).
 
 ## Cross-cutting quality responses
 
@@ -212,7 +214,7 @@ Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/pack
 - The KovaaK’s `.perf` schema contains fields whose meanings remain unknown or inferred. A producer-format change may require decoder and schema investigation.
 - Live ingestion watches the performance directories, not the stats directories. CSV enrichment is opportunistic when the matching file exists at performance-file arrival; a later CSV-only arrival is incorporated on a subsequent full rebuild rather than through its own live notification.
 - The supported profile migration path is specifically version 3 to version 4. Other incompatible versions are quarantined and rebuilt from configured sources where possible.
-- Build and packaging defaults contain machine-specific Windows tool paths, limiting reproducibility outside the configured development machine without explicit overrides.
+- The tracked toolchain defaults remain machine-specific Windows paths. Other environments must provide the same tools through process environment values or an ignored local override file; dependency versions are detected and fingerprinted rather than provisioned or pinned.
 - Static QML type availability depends on maintaining the manual registration list in `declare_metatypes()`.
 - Shutdown during an active full build waits for that build because the worker operation is not interruptible.
 

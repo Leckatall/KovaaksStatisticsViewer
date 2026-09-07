@@ -14,7 +14,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # Qt Configuration
-set(Qt6_DIR C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6)
+if(NOT Qt6_DIR)
+    set(Qt6_DIR C:/Qt/6.11.1/mingw_64/lib/cmake/Qt6 CACHE PATH "Qt6 package directory")
+endif()
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)

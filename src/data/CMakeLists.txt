@@ -1,31 +1,34 @@
 
 find_package(Protobuf REQUIRED)
 
-# vcpkg's protoc.exe (tools/protobuf/) doesn't ship next to the DLLs it needs
-# to run, so invoking it from an environment that doesn't already have those
-# on PATH (anything other than CLion's configured terminal) fails with
-# STATUS_DLL_NOT_FOUND when protobuf_generate() runs it below. It needs two
-# separate sets of DLLs: the protobuf/abseil runtime from vcpkg's own
-# installed/<triplet>/bin/, and the MinGW runtime (libgcc_s_seh-1,
-# libstdc++-6 -> libwinpthread-1) since it's itself a MinGW-built binary.
-# Copy both alongside it once at configure time so protoc.exe is runnable
-# standalone, same fix as the libwinpthread-1.dll copy for myapp.exe in the
-# top-level CMakeLists.txt.
-if (WIN32 AND Protobuf_PROTOC_EXECUTABLE)
+set(_ksv_protoc_executable protobuf::protoc)
+if(WIN32 AND Protobuf_PROTOC_EXECUTABLE)
+    # protoc is a MinGW executable whose runtime DLLs live outside tools/protobuf in a vcpkg install.
+    # Stage the complete runtime beside a build-local copy instead of mutating the dependency install.
+    set(_ksv_protoc_runtime_dir "${CMAKE_CURRENT_BINARY_DIR}/protoc-runtime")
+    file(MAKE_DIRECTORY "${_ksv_protoc_runtime_dir}")
     get_filename_component(_protoc_dir "${Protobuf_PROTOC_EXECUTABLE}" DIRECTORY)
-
     get_filename_component(_vcpkg_triplet_bin_dir "${_protoc_dir}/../../bin" ABSOLUTE)
-    file(GLOB _protobuf_runtime_dlls "${_vcpkg_triplet_bin_dir}/libprotobuf*.dll" "${_vcpkg_triplet_bin_dir}/libprotoc.dll")
-    if (_protobuf_runtime_dlls)
-        file(COPY ${_protobuf_runtime_dlls} DESTINATION "${_protoc_dir}")
-    endif()
-
     get_filename_component(_mingw_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
-    foreach(_mingw_runtime_dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll)
-        if (EXISTS "${_mingw_bin_dir}/${_mingw_runtime_dll}")
-            file(COPY "${_mingw_bin_dir}/${_mingw_runtime_dll}" DESTINATION "${_protoc_dir}")
+
+    set(_ksv_protoc_runtime_files
+        "${Protobuf_PROTOC_EXECUTABLE}"
+        "${_vcpkg_triplet_bin_dir}/libabseil_dll.dll"
+        "${_vcpkg_triplet_bin_dir}/libprotobuf-lite.dll"
+        "${_vcpkg_triplet_bin_dir}/libprotobuf.dll"
+        "${_vcpkg_triplet_bin_dir}/libprotoc.dll"
+        "${_mingw_bin_dir}/libgcc_s_seh-1.dll"
+        "${_mingw_bin_dir}/libstdc++-6.dll"
+        "${_mingw_bin_dir}/libwinpthread-1.dll"
+    )
+    foreach(_runtime_file IN LISTS _ksv_protoc_runtime_files)
+        if(NOT EXISTS "${_runtime_file}")
+            message(FATAL_ERROR "Required protoc runtime file not found: ${_runtime_file}")
         endif()
+        get_filename_component(_runtime_name "${_runtime_file}" NAME)
+        file(COPY_FILE "${_runtime_file}" "${_ksv_protoc_runtime_dir}/${_runtime_name}" ONLY_IF_DIFFERENT)
     endforeach()
+    set(_ksv_protoc_executable "${_ksv_protoc_runtime_dir}/protoc.exe")
 endif()
 
 add_library(ksv_data STATIC
@@ -69,6 +72,7 @@ target_link_libraries(ksv_data PUBLIC
 )
 
 protobuf_generate(TARGET ksv_data PROTO_SRCS PROTO_HDRS
+        PROTOC_EXE "${_ksv_protoc_executable}"
         PROTOS ${PROTO_FILES})
 
 
