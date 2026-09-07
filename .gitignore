@@ -46,6 +46,7 @@ build/
 Build/
 build-*/
 cmake-*/
+**/__pycache__/
 
 # Release directories
 dist/
