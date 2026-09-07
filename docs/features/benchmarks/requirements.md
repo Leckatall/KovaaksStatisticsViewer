@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: approved
 ---
 
 # Scenario benchmark tracking
