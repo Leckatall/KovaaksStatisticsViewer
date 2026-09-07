@@ -14,6 +14,7 @@ add_executable(app_tests
         session_controller_test.cpp
         series_management_use_case_test.cpp
         benchmark_library_service_test.cpp
+        benchmark_draft_test.cpp
 )
 
 target_link_libraries(app_tests PRIVATE

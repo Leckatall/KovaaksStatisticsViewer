@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "usecases/benchmark_library_service.h"
+#include "counting_ids.h"
 #include "fake_benchmark_repository.h"
 
 using namespace ksv::application;
@@ -18,7 +19,7 @@ namespace {
 TEST(BenchmarkLibraryService, ConstructionLoadsTheStartupSnapshotAndBumpsRevision) {
     auto repo = std::make_shared<FakeBenchmarkRepository>();
     repo->nextScan = {snapshotWith("a.json"), std::nullopt};
-    BenchmarkLibraryService service(repo);
+    BenchmarkLibraryService service(repo, nullptr, countingIds());
     EXPECT_EQ(repo->scanCount, 1);
     ASSERT_TRUE(service.snapshot().has_value());
     EXPECT_EQ(service.snapshot()->entries.size(), 1U);
@@ -29,7 +30,7 @@ TEST(BenchmarkLibraryService, ConstructionLoadsTheStartupSnapshotAndBumpsRevisio
 TEST(BenchmarkLibraryService, RefreshPublishesAndAdvancesRevision) {
     auto repo = std::make_shared<FakeBenchmarkRepository>();
     repo->nextScan = {snapshotWith("a.json"), std::nullopt};
-    BenchmarkLibraryService service(repo);
+    BenchmarkLibraryService service(repo, nullptr, countingIds());
 
     int published = 0;
     service.onChanged([&] { ++published; });
@@ -44,7 +45,7 @@ TEST(BenchmarkLibraryService, RefreshPublishesAndAdvancesRevision) {
 TEST(BenchmarkLibraryService, DirectoryFailurePreservesLastSnapshotAndReportsError) {
     auto repo = std::make_shared<FakeBenchmarkRepository>();
     repo->nextScan = {snapshotWith("a.json"), std::nullopt};
-    BenchmarkLibraryService service(repo);
+    BenchmarkLibraryService service(repo, nullptr, countingIds());
     const auto revisionBefore = service.revision();
 
     int published = 0;

@@ -9,6 +9,7 @@
 #include <qcoreapplication.h>
 #include <QGuiApplication>
 #include <QQmlContext>
+#include <QUuid>
 #include <QStandardPaths>
 
 #include "session_controller.h"
@@ -25,6 +26,7 @@
 #include "series_config_store.h"
 #include "usecases/benchmark_library_service.h"
 #include "qt_data/benchmark_repository.h"
+#include "qt_data/playlist_reader.h"
 #include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
 #include "usecases/scenario_browser_use_case.h"
@@ -103,7 +105,10 @@ namespace ksv::application {
             : std::make_shared<qt_data::BenchmarkRepository>(
                   (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
                       .toStdString());
-        m_benchmarkLibraryService = std::make_shared<BenchmarkLibraryService>(m_benchmarkRepository);
+        m_benchmarkLibraryService = std::make_shared<BenchmarkLibraryService>(
+            m_benchmarkRepository, std::make_shared<qt_data::PlaylistReader>(),
+            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
+        m_benchmarkManagerVm = new presentation::BenchmarkManagerViewModel(m_benchmarkLibraryService, this);
     }
 
     int App::start() {
@@ -113,7 +118,8 @@ namespace ksv::application {
             {"historyVm", QVariant::fromValue(m_completionHistoryVm)},
             {"sessionVm", QVariant::fromValue(m_sessionVm)},
             {"settingsVm", QVariant::fromValue(m_settingsVm)},
-            {"scenarioBrowserVm", QVariant::fromValue(m_scenarioBrowserVm)}
+            {"scenarioBrowserVm", QVariant::fromValue(m_scenarioBrowserVm)},
+            {"benchmarkManagerVm", QVariant::fromValue(m_benchmarkManagerVm)}
         });
         m_engine.loadFromModule("KovaaksStatsViewer", "Main");
         if (m_engine.rootObjects().isEmpty()) return -1;

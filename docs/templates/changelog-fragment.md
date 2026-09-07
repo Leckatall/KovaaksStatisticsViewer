@@ -19,7 +19,7 @@ Shares axis calculation with `GraphViewModel` via `AxisModel`.
 The body is developer detail: which classes, which layers, what a future reader could not recover from the diff.
 Keep it rich — for a fix, spell out the old-bug mechanism in full.
 Do not hand-wrap the body to a fixed line width.
-Use a single newline freely to put related implementation points on separate, identifiable lines while keeping them grouped in the same fragment; use a blank line only when the points are genuinely separate paragraphs or changes.
+Use a single newline freely to put related implementation points on separate, identifiable lines while keeping them grouped in the same fragment;
 CHANGELOG.md summarizes this body down to a scannable bullet and drops that mechanism, so the fragment (and its commit) is the canonical detailed record; nothing else preserves it once the fragment is deleted at version bump.
 
 **`user` is optional, and it is the whole user-facing/internal distinction.** Include it only if someone using the app would notice the change, and write it in their vocabulary, not the codebase's — it is copied verbatim into the release notes. Refactors, tests, tooling and build changes omit it entirely. Nothing is ever written twice: one fragment feeds both outputs.

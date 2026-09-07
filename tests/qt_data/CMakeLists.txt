@@ -7,6 +7,7 @@ add_executable(qt_data_tests
     file_service_test.cpp
     series_config_store_test.cpp
     benchmark_repository_test.cpp
+    playlist_reader_test.cpp
 )
 
 target_link_libraries(qt_data_tests PRIVATE
@@ -29,6 +30,11 @@ configure_file(
 configure_file(
     "${TEST_FILES_DIR}/VT FlyTS Novice S5.perf"
     "${CMAKE_CURRENT_BINARY_DIR}/examples/VT FlyTS Novice S5.perf"
+    COPYONLY
+)
+configure_file(
+    "${TEST_FILES_DIR}/Viscose Benchmarks Beta - Intermediate.json"
+    "${CMAKE_CURRENT_BINARY_DIR}/examples/Viscose Benchmarks Beta - Intermediate.json"
     COPYONLY
 )
 

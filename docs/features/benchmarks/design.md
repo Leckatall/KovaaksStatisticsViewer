@@ -332,7 +332,7 @@ Average-rank history emits an end-of-day point only when a benchmark scenario es
 
 **Design subset:** Single draft lifecycle, playlist reader and deduplication report, manual scenario creation, tier/threshold editor, hierarchy editor, validation presentation, directory and refresh actions, and modal close behavior.
 
-**Intentional deferrals:** Automatic hash reconciliation and benchmark-wide tracking results.
+**Intentional deferrals:** Automatic hash reconciliation, the manager's profile-known scenario picker (the `addKnownScenario` service command ships so slice 3's reconciliation workflow can drive it, but no catalogue-backed picker UI exists until then; name-only additions auto-resolve after reconciliation), and benchmark-wide tracking results.
 
 **Dependencies:** Trustworthy library slice and the existing profile scenario catalogue for optional known-scenario selection.
 

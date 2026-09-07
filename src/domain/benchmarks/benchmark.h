@@ -1,6 +1,7 @@
 #ifndef KOVAAKSSTATSVIEWER_BENCHMARK_H
 #define KOVAAKSSTATSVIEWER_BENCHMARK_H
 
+#include <compare>
 #include <optional>
 #include <string>
 #include <vector>
@@ -12,11 +13,13 @@ namespace ksv::domain {
         TierId id;
         std::string name;
         BenchmarkColor color;
+        auto operator<=>(const Tier &) const = default;
     };
 
     struct Threshold {
         TierId tierId;
         double score = 0.0;
+        auto operator<=>(const Threshold &) const = default;
     };
 
     struct ScenarioEntry {
@@ -24,6 +27,7 @@ namespace ksv::domain {
         std::string name;                  // retained display label; never replaced by the hash
         std::optional<std::string> hash;   // persisted scenario mapping when resolved
         std::vector<Threshold> thresholds; // one per tier when complete; decoded as-is for validation
+        auto operator<=>(const ScenarioEntry &) const = default;
     };
 
     struct Subcategory {
@@ -31,6 +35,7 @@ namespace ksv::domain {
         std::string name;
         BenchmarkColor color;
         std::vector<ScenarioEntry> scenarios;
+        auto operator<=>(const Subcategory &) const = default;
     };
 
     // A complete category holds EITHER direct scenarios OR subcategories. Both vectors exist so a
@@ -42,6 +47,7 @@ namespace ksv::domain {
         BenchmarkColor color;
         std::vector<ScenarioEntry> scenarios;
         std::vector<Subcategory> subcategories;
+        auto operator<=>(const Category &) const = default;
     };
 
     struct Benchmark {
@@ -50,6 +56,7 @@ namespace ksv::domain {
         std::vector<Tier> tiers;                // ordered ladder
         std::vector<ScenarioEntry> uncategorized;
         std::vector<Category> categories;       // ordered user-created categories
+        auto operator<=>(const Benchmark &) const = default;
     };
 }
 

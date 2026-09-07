@@ -16,6 +16,8 @@ add_executable(ui_tests
     monotone_spline_test.cpp
     series_painter_test.cpp
     scenario_browser_vm_test.cpp
+    benchmark_issue_text_test.cpp
+    benchmark_manager_vm_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE

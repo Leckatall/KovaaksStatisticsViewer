@@ -20,6 +20,7 @@ target_sources(ksv_contracts PUBLIC
         i_series_management_use_case.h
         i_scenario_browser_use_case.h
         benchmark_library_snapshot.h
+        playlist_seed.h
         i_benchmark_library_service.h
 )
 

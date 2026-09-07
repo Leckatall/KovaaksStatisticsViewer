@@ -14,6 +14,7 @@ MenuBar {
     signal settingsRequested()
     signal configureGraphLinesRequested()
     signal loadPerformanceFileRequested()
+    signal manageBenchmarksRequested()
     signal quitRequested()
     signal aboutRequested()
 
@@ -134,6 +135,14 @@ MenuBar {
         Action {
             text: qsTr("&About")
             onTriggered: aboutRequested()
+        }
+    }
+    Menu {
+        title: qsTr("&Benchmarks")
+        Action {
+            objectName: "manageBenchmarksAction"
+            text: qsTr("&Manage Benchmarks...")
+            onTriggered: root.manageBenchmarksRequested()
         }
     }
 }

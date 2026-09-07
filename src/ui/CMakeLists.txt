@@ -34,6 +34,7 @@ qt_add_qml_module(ksv_ui
             qml/ScenarioRunItem.qml
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
+            qml/BenchmarkManagerDialog.qml
             qml/SeriesConfigDraftPanel.qml
             qml/SeriesConfigEditorDelegate.qml
             qml/ExpressionTreeEditor.qml
@@ -78,6 +79,12 @@ qt_add_qml_module(ksv_ui
             presentation/session_vm.cpp
             presentation/settings_vm.h
             presentation/settings_vm.cpp
+            presentation/benchmark_issue_text.h
+            presentation/benchmark_issue_text.cpp
+            presentation/benchmark_tree_node.h
+            presentation/benchmark_tree_node.cpp
+            presentation/benchmark_manager_vm.h
+            presentation/benchmark_manager_vm.cpp
             presentation/scenario_list_model.h
             presentation/scenario_list_model.cpp
             presentation/run_list_model.h

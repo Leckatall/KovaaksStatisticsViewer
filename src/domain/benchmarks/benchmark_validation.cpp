@@ -1,6 +1,7 @@
 #include "benchmark_validation.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <ranges>
@@ -9,6 +10,12 @@
 
 namespace ksv::domain {
     namespace {
+        // Matches the blank-name precondition BenchmarkLibraryService::saveDraft enforces, so a
+        // whitespace-only name cannot validate as Trackable and then be refused by the save.
+        bool isBlank(const std::string &text) {
+            return std::ranges::all_of(text, [](unsigned char ch) { return std::isspace(ch) != 0; });
+        }
+
         void collectEntries(const Benchmark &def, std::vector<const ScenarioEntry *> &out) {
             for (const auto &e: def.uncategorized) out.push_back(&e);
             for (const auto &category: def.categories) {
@@ -53,7 +60,7 @@ namespace ksv::domain {
         CompletenessResult result;
         auto &issues = result.issues;
 
-        if (def.name.empty()) issues.push_back({BenchmarkIssueCode::MissingName, def.id});
+        if (isBlank(def.name)) issues.push_back({BenchmarkIssueCode::MissingName, def.id});
         if (def.tiers.empty()) issues.push_back({BenchmarkIssueCode::NoTiers, def.id});
 
         std::unordered_set<std::string> tierNames;

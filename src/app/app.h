@@ -14,6 +14,7 @@
 #include "scenario_browser_vm.h"
 #include "session_vm.h"
 #include "settings_vm.h"
+#include "benchmark_manager_vm.h"
 #include "interfaces/i_proto_decoder.h"
 #include "../data/interfaces/i_file_service.h"
 #include "../data/interfaces/i_run_ingestor.h"
@@ -57,6 +58,9 @@ namespace ksv::application {
         [[nodiscard]] presentation::SessionViewModel* sessionVm() const { return m_sessionVm; }
         [[nodiscard]] presentation::SettingsViewModel* settingsVm() const { return m_settingsVm; }
         [[nodiscard]] presentation::ScenarioBrowserViewModel* scenarioBrowserVm() const { return m_scenarioBrowserVm; }
+        [[nodiscard]] presentation::BenchmarkManagerViewModel* benchmarkManagerVm() const {
+            return m_benchmarkManagerVm;
+        }
         [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
         [[nodiscard]] std::shared_ptr<ISessionController> sessionController() const { return m_sessionController; }
@@ -73,6 +77,7 @@ namespace ksv::application {
         presentation::SessionViewModel* m_sessionVm;
         presentation::SettingsViewModel* m_settingsVm;
         presentation::ScenarioBrowserViewModel* m_scenarioBrowserVm;
+        presentation::BenchmarkManagerViewModel* m_benchmarkManagerVm = nullptr;
 
         std::shared_ptr<ISettingsService> m_settingsService;
         std::shared_ptr<ISeriesConfigStore> m_seriesConfigStore;

@@ -29,6 +29,7 @@ ApplicationWindow {
     required property var sessionVm
     required property var settingsVm
     required property var scenarioBrowserVm
+    required property var benchmarkManagerVm
 
     FolderDialog {
         id: folderDialog
@@ -55,6 +56,11 @@ ApplicationWindow {
         id: aboutDialog
     }
 
+    BenchmarkManagerDialog {
+        id: benchmarkManagerDialog
+        benchmarkManagerVm: root.benchmarkManagerVm
+    }
+
     menuBar: AppMenuBar {
         graphVm: root.graphVm
         historyVm: root.historyVm
@@ -63,6 +69,7 @@ ApplicationWindow {
         onSettingsRequested: settingsDialog.open()
         onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
         onLoadPerformanceFileRequested: perfFileDialog.open()
+        onManageBenchmarksRequested: benchmarkManagerDialog.open()
         onQuitRequested: Qt.quit()
         onAboutRequested: aboutDialog.open()
     }
