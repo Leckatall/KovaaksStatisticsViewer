@@ -3,6 +3,7 @@ include(GoogleTest)
 
 add_executable(domain_tests
     domain_test.cpp
+    benchmark_validation_test.cpp
     gallery_dataset_test.cpp
     ../../tools/gallery/gallery_dataset.cpp
 )

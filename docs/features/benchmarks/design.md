@@ -50,9 +50,9 @@ The main window becomes a visible two-workspace shell: **Scenarios** retains the
 
 ## Design elements and responsibilities
 
-### Benchmark definition model
+### Benchmark model
 
-The Qt-free definition model owns the current editable meaning of one benchmark:
+The Qt-free benchmark model owns the current editable meaning of one benchmark:
 
 - `BenchmarkId`, `TierId`, `GroupId`, and `ScenarioEntryId` are immutable opaque UUID values.
 - A benchmark has a non-empty display name when complete, an ordered tier ladder, one fixed neutral Uncategorized collection, and ordered user-created categories. Uncategorized has no editable category identity or color.
@@ -65,11 +65,11 @@ Stable IDs separate identity from display order and editable names. Thresholds r
 
 ### Benchmark validator
 
-The validator is pure domain behavior and returns all known issues in one pass. Each issue has a stable code, a user-facing message, and the closest available benchmark, tier, group, or scenario-entry ID. It classifies a successfully decoded definition as either **Incomplete** or **Trackable**.
+The validator is pure domain behavior and returns all known issues in one pass. Each issue has a stable code and the closest available benchmark, tier, group, or scenario-entry ID; the user-facing message is derived in presentation, matching the existing `ValidationError` convention. It classifies a successfully decoded definition as either **Incomplete** or **Trackable**.
 
 Incomplete conditions include the product-level setup and consistency rules: missing names, scenarios, or tiers; duplicate tier names or scenario membership; missing, duplicate, non-finite, negative, or non-increasing thresholds; empty user-created groups; mixed direct scenarios and subcategories; and multiple entries resolving to the same hash. Uncategorized may be empty. Unresolved, ambiguous, and mapped-but-unavailable scenarios do not make a structurally complete benchmark incomplete; they remain unplayed inputs to tracking.
 
-Unsafe representation failures are rejected before domain validation and reported as **Invalid**. Examples include malformed JSON, wrong field types, duplicate stable IDs, dangling tier references, an unsupported structural shape, or failed migration. A readable version newer than the application supports is **Unsupported** rather than invalid.
+Unsafe representation failures are rejected before domain validation and reported as **Invalid**. Examples include malformed JSON, wrong field types, duplicate stable IDs, dangling tier references, or an unsupported structural shape. A readable version newer than the application supports is **Unsupported** rather than invalid.
 
 ### Benchmark evaluator
 
@@ -90,9 +90,9 @@ Scenario history, matching state, recent averages, personal bests, and playtime 
 The repository:
 
 - enumerates one JSON document per benchmark and returns a complete candidate library snapshot;
-- decodes the current schema, applies supported migration chains, and distinguishes loaded, invalid, and unsupported file entries;
+- decodes the current schema and distinguishes loaded, invalid, and unsupported file entries;
 - writes through a temporary sibling and atomic replacement;
-- retains a digest of the bytes admitted at refresh and requires that digest as a precondition for later replacement, migration, or deletion;
+- retains a digest of the bytes admitted at refresh and requires that digest as a precondition for later replacement or deletion;
 - deletes a specifically identified file only after presentation has obtained user confirmation;
 - exposes the managed directory path for the Open Directory action; and
 - reports file and directory failures as data rather than silently logging and continuing with stale state.
@@ -116,7 +116,7 @@ The application-level library service is the sole publication and mutation autho
 - exact-name scenario reconciliation against the accepted profile catalogue; and
 - callbacks for library, draft, diagnostics, and availability changes.
 
-All save, delete, migration, and automatic-resolution mutations are transactional from the service's perspective: the admitted content digest must still match and disk must succeed before the accepted snapshot and its revision change. A draft may be saved while incomplete but cannot be saved when it cannot form an unambiguous editable model. KSV-generated documents also require a non-empty benchmark name before save, including a playlist import whose source supplied no usable name; an externally authored blank-name document still loads as incomplete so the manager can repair it.
+All save, delete, and automatic-resolution mutations are transactional from the service's perspective: the admitted content digest must still match and disk must succeed before the accepted snapshot and its revision change. A draft may be saved while incomplete but cannot be saved when it cannot form an unambiguous editable model. KSV-generated documents also require a non-empty benchmark name before save, including a playlist import whose source supplied no usable name; an externally authored blank-name document still loads as incomplete so the manager can repair it.
 
 ### Tracking use case and presentation
 
@@ -226,11 +226,11 @@ The accepted library snapshot is a map of canonical managed file entry to either
 
 The snapshot contains no historical file versions and no derived benchmark projections. Tracking selection is by `BenchmarkId`, never list position or filename. If refresh removes that ID, makes it invalid, or reveals an ID conflict, the tracking use case publishes an unavailable state and clears its projection.
 
-### Migration and recovery
+### Version gating and recovery
 
-A newer schema version is reported unsupported and never rewritten. An older version is migrated only through an explicit supported chain. Migration validates the current-shape result and atomically replaces the source only after every step succeeds. A parse, migration, validation, or replacement failure leaves the original bytes in place and publishes a problem entry rather than claiming the benchmark loaded.
+A newer schema version is reported **Unsupported** and never rewritten. Only the current schema version is supported; no prior version exists, so this implementation contains no migration chain. The document nonetheless carries `schemaVersion` so a later release can add migration without a format change. A parse or validation failure leaves the original bytes in place and publishes a problem entry rather than claiming the benchmark loaded.
 
-Ordinary saves use the same temporary-file replacement boundary. Before replacing, migrating, or deleting an existing file, the repository verifies that its current bytes match the digest admitted by the last successful scan or write. A mismatch reports an external-modification conflict and requires refresh; it never overwrites, recreates, merges, or deletes the changed file. A failed precondition, write, rename, or delete does not update the accepted snapshot. Refresh after manual edits is the only admission path for those edits; the service does not merge them with an active draft. No file watcher is installed.
+Ordinary saves use a temporary-file replacement boundary. Before replacing or deleting an existing file, the repository verifies that its current bytes match the digest admitted by the last successful scan or write. A mismatch reports an external-modification conflict and requires refresh; it never overwrites, recreates, merges, or deletes the changed file. A failed precondition, write, rename, or delete does not update the accepted snapshot. Refresh after manual edits is the only admission path for those edits; the service does not merge them with an active draft. No file watcher is installed.
 
 ## Failure and quality behavior
 
@@ -239,7 +239,7 @@ Ordinary saves use the same temporary-file replacement boundary. Before replacin
 - Directory-level enumeration failure preserves the last accepted snapshot and produces a library-level error because no authoritative candidate could be established.
 - File-level failure produces a problem entry and does not block unrelated files. Diagnostics identify the file and, when safely available, its benchmark name and stable element location.
 - A malformed playlist or missing usable scenario list produces an import error without creating or mutating a draft.
-- Save, migration, automatic-resolution, and delete failures preserve the accepted in-memory and on-disk definition.
+- Save, automatic-resolution, and delete failures preserve the accepted in-memory and on-disk definition.
 - An external-modification conflict prevents any cached definition from overwriting or deleting bytes that have not passed through refresh.
 - Deletion requires an explicit confirmation naming the benchmark or problem file. Cancellation changes nothing.
 - A selected definition that disappears or becomes a problem publishes an unavailable tracking state rather than retaining cached results.
@@ -274,7 +274,7 @@ The feature reads user-selected playlist JSON and KSV-managed local benchmark fi
 | Recent performance | Latest-five raw-score average and explicit sample count per scenario | Zero-through-six-run evaluator tests |
 | Benchmark playtime | Unique resolved-hash filtering and shared three-day rolling calculation | Duplicate-hash validation plus filtered duration/rolling tests |
 | Manager and tracking surfaces | Main benchmark workspace plus modal single-draft manager | View-model tests, Qt Quick Tests, and real composition smoke coverage |
-| Failure, migration, and stale-state behavior | Atomic persistence, content preconditions, candidate acceptance, problem entries, unavailable selection | Corrupt/newer/older files, external modifications, failed replacement, deletion, and refresh transition tests |
+| Failure and stale-state behavior | Atomic persistence, content preconditions, candidate acceptance, problem entries, unavailable selection | Corrupt and newer-version files, external modifications, failed replacement, deletion, and refresh transition tests |
 
 Verification should follow the repository's layered test structure. Domain rules belong in Qt-free GoogleTests; repository and playlist behavior use deterministic temporary paths; application tests use fake profile and repository ports; view-model and QML behavior use their existing suites; final integration coverage constructs the real composition graph. UI behavior is verified through automated Qt tests rather than driving the running application.
 
@@ -316,15 +316,15 @@ Average-rank history emits an end-of-day point only when a benchmark scenario es
 
 **Observable outcome:** Compatible benchmark files in the managed directory load independently as trackable, incomplete, invalid, or unsupported entries, and explicit refresh replaces the library without stale definitions.
 
-**Design subset:** Definition identities and structures, decode/classification boundary, completeness validator, repository snapshots, atomic persistence, migration contract, and library publication.
+**Design subset:** Definition identities and structures, decode/classification boundary, completeness validator, repository snapshots, atomic persistence, `schemaVersion` gating, and library publication.
 
 **Intentional deferrals:** Playlist import, profile resolution, calculations, editing UI, and tracking UI.
 
 **Dependencies:** Existing application-data path conventions and composition-root injection.
 
-**Main uncertainty:** The first canonical JSON shape and the minimum migration harness needed before a historical schema exists.
+**Main uncertainty:** The first canonical JSON shape, and fixing the `schemaVersion` value and its gating boundary now so a later migration has a stable starting point.
 
-**Completion evidence:** Deterministic round trips, per-file isolation, duplicate-ID conflicts, supported/unsupported versions, external-modification conflicts, failed-write preservation, and authoritative refresh transitions.
+**Completion evidence:** Deterministic round trips, per-file isolation, duplicate-ID conflicts, current-version load and newer-version rejection, external-modification conflicts, failed-write preservation, and authoritative refresh transitions.
 
 ### 2. Recoverable benchmark authoring
 

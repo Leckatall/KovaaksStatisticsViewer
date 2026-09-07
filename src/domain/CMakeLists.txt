@@ -5,6 +5,10 @@ add_library(ksv_domain STATIC
         source_directory.h
         user_profile.cpp
         user_profile.h
+        benchmarks/benchmark_ids.h
+        benchmarks/benchmark.h
+        benchmarks/benchmark_validation.h
+        benchmarks/benchmark_validation.cpp
 )
 
 target_include_directories(ksv_domain PUBLIC

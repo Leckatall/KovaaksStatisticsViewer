@@ -16,6 +16,8 @@ add_library(ksv_app STATIC
         session_controller.cpp
         session_controller.h
         usecases/i_session_controller.h
+        usecases/benchmark_library_service.cpp
+        usecases/benchmark_library_service.h
 )
 
 target_link_libraries(ksv_app PUBLIC

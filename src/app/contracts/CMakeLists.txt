@@ -19,6 +19,8 @@ target_sources(ksv_contracts PUBLIC
         i_average_line_use_case.h
         i_series_management_use_case.h
         i_scenario_browser_use_case.h
+        benchmark_library_snapshot.h
+        i_benchmark_library_service.h
 )
 
 target_include_directories(ksv_contracts PUBLIC

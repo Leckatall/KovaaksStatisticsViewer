@@ -27,6 +27,7 @@ target_sources(tests_support INTERFACE
         fake_profile_service.h
         fake_session_controller.h
         fake_series_config_store.h
+        fake_benchmark_repository.h
         kovaaks_dir.h
 )
 

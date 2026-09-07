@@ -9,6 +9,9 @@ add_library(ksv_qt_data STATIC
         series_config_store.cpp
         series_config_store.h
         ../data/interfaces/i_series_config_store.h
+        benchmark_repository.cpp
+        benchmark_repository.h
+        ../data/interfaces/i_benchmark_repository.h
 )
 
 target_link_libraries(ksv_qt_data PUBLIC

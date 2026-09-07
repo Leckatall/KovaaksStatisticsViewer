@@ -13,6 +13,7 @@ add_executable(integration_tests
     axis_painter_test.cpp
     qml_smoke_test.cpp
     dashboard_ui_test.cpp
+    benchmark_composition_test.cpp
 )
 
 target_link_libraries(integration_tests PRIVATE

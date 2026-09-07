@@ -9,6 +9,7 @@
 #include <qcoreapplication.h>
 #include <QGuiApplication>
 #include <QQmlContext>
+#include <QStandardPaths>
 
 #include "session_controller.h"
 #include "settings_service.h"
@@ -22,6 +23,8 @@
 #include "usecases/graph_use_case.h"
 #include "usecases/average_line_use_case.h"
 #include "series_config_store.h"
+#include "usecases/benchmark_library_service.h"
+#include "qt_data/benchmark_repository.h"
 #include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
 #include "usecases/scenario_browser_use_case.h"
@@ -39,12 +42,14 @@ namespace ksv::application {
              std::shared_ptr<data::IStatsCsvParser> statsParser,
              QObject *parent)
         : App(settingsService, decoder,
-              std::make_shared<qt_data::SeriesConfigStore>(settingsService), std::move(statsParser), parent) {}
+              std::make_shared<qt_data::SeriesConfigStore>(settingsService), std::move(statsParser),
+              nullptr, parent) {}
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
              std::shared_ptr<IProtoDecoder> decoder,
              std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
              std::shared_ptr<data::IStatsCsvParser> statsParser,
+             std::shared_ptr<IBenchmarkRepository> benchmarkRepository,
              QObject *parent) : QObject(parent) {
         qDebug() << "App Started. This message should not appear in release builds";
         m_protoDecoder = std::move(decoder);
@@ -92,6 +97,13 @@ namespace ksv::application {
             m_settingsService, m_profileService, m_seriesManagementUseCase, this);
         m_scenarioBrowserUseCase = std::make_shared<ScenarioBrowserUseCase>(m_sessionController, m_profileService);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_scenarioBrowserUseCase, this);
+
+        m_benchmarkRepository = benchmarkRepository
+            ? std::move(benchmarkRepository)
+            : std::make_shared<qt_data::BenchmarkRepository>(
+                  (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
+                      .toStdString());
+        m_benchmarkLibraryService = std::make_shared<BenchmarkLibraryService>(m_benchmarkRepository);
     }
 
     int App::start() {

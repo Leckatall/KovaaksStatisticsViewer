@@ -21,6 +21,8 @@
 #include "interfaces/i_settings_service.h"
 #include "data/interfaces/i_series_config_store.h"
 #include "usecases/i_session_controller.h"
+#include "../data/interfaces/i_benchmark_repository.h"
+#include "contracts/i_benchmark_library_service.h"
 #include "contracts/i_playtime_graph_use_case.h"
 #include "contracts/i_completion_history_use_case.h"
 #include "contracts/i_scenario_browser_use_case.h"
@@ -42,6 +44,7 @@ namespace ksv::application {
             std::shared_ptr<IProtoDecoder> decoder,
             std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
             std::shared_ptr<data::IStatsCsvParser> statsParser = nullptr,
+            std::shared_ptr<IBenchmarkRepository> benchmarkRepository = nullptr,
             QObject* parent = nullptr);
         int start();
         QQmlApplicationEngine* engine() {return &m_engine;}
@@ -58,6 +61,9 @@ namespace ksv::application {
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
         [[nodiscard]] std::shared_ptr<ISessionController> sessionController() const { return m_sessionController; }
         [[nodiscard]] std::shared_ptr<ISeriesConfigStore> seriesConfigStore() const { return m_seriesConfigStore; }
+        [[nodiscard]] std::shared_ptr<IBenchmarkLibraryService> benchmarkLibraryService() const {
+            return m_benchmarkLibraryService;
+        }
 
     private:
         QQmlApplicationEngine m_engine;
@@ -81,6 +87,8 @@ namespace ksv::application {
         std::shared_ptr<ICompletionHistoryUseCase> m_completionHistoryUseCase;
         std::shared_ptr<IScenarioBrowserUseCase> m_scenarioBrowserUseCase;
         std::shared_ptr<IProtoDecoder> m_protoDecoder;
+        std::shared_ptr<IBenchmarkRepository> m_benchmarkRepository;
+        std::shared_ptr<IBenchmarkLibraryService> m_benchmarkLibraryService;
     };
 }
 
