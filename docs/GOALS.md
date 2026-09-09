@@ -142,6 +142,12 @@ Checkable goals grouped by implementation area. Sub-goals break each feature int
   - [x] Add ability to toggle individual series on/off
   - [ ] Support exporting graphs as images
 
+- [ ] **Table-based benchmark score entry** `[Medium]` `[High]`
+  - [ ] Replace the current per-field benchmark input with an editable table/grid (`TableView` + `editDelegate`, cell selection)
+  - [ ] Paste scores directly from Excel/Sheets — needs a C++ clipboard bridge (`QClipboard` isn't exposed to QML) feeding TSV parsing, reusing the CSV import logic from §2
+  - [ ] Map pasted columns onto benchmark scenario fields
+  - Note: many benchmarks already ship an Excel sheet for viewing/entering scores, so paste-from-spreadsheet is the natural entry path
+
 ---
 
 ## 8. Custom Series
