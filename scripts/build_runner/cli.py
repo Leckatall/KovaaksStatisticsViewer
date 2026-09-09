@@ -14,6 +14,7 @@ from .config import (
     resolve_toolchain,
     safe_remove_build_tree,
 )
+from .locking import build_tree_lock
 from .orchestrator import BUILD_JOBS, run_pipeline
 
 
@@ -65,16 +66,17 @@ def main(arguments: Sequence[str] | None = None) -> int:
         fingerprint = build_fingerprint(toolchain)
         build_dir = repo_root / "build-agent"
         fingerprint_path = build_dir / ".ksv-toolchain-fingerprint.json"
-        if args.clean or (build_dir.exists() and not fingerprint_matches(fingerprint_path, fingerprint)):
-            safe_remove_build_tree(build_dir, repo_root)
-        return run_pipeline(
-            args,
-            repo_root=repo_root,
-            log_dir=log_dir,
-            toolchain=toolchain,
-            process_environment=os.environ,
-            fingerprint=fingerprint,
-        )
+        with build_tree_lock(repo_root / ".temp" / "build-agent.lock"):
+            if args.clean or (build_dir.exists() and not fingerprint_matches(fingerprint_path, fingerprint)):
+                safe_remove_build_tree(build_dir, repo_root)
+            return run_pipeline(
+                args,
+                repo_root=repo_root,
+                log_dir=log_dir,
+                toolchain=toolchain,
+                process_environment=os.environ,
+                fingerprint=fingerprint,
+            )
     except (ToolchainError, OSError, ValueError) as error:
         log_dir.mkdir(parents=True, exist_ok=True)
         runner_log.write_text(str(error) + "\n", encoding="utf-8")
