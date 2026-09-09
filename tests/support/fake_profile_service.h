@@ -29,12 +29,19 @@ namespace ksv::tests_support {
         std::unordered_map<domain::ScenarioId, std::vector<domain::RunSummary>> completion_history_by_scenario;
         std::unordered_map<domain::ScenarioId, std::size_t> run_counts;
         std::unordered_map<domain::ScenarioId, double> total_times;
+        std::unordered_map<domain::ScenarioId, std::chrono::sys_seconds> last_run_times;
         std::vector<domain::Run> recent_runs;
         std::vector<std::pair<std::chrono::sys_days, double>> rolling_time_average;
         mutable int rolling_time_average_window_days = 0;
+        std::vector<domain::RunFact> run_facts;
+        std::vector<std::pair<std::chrono::sys_days, double>> filtered_rolling_time_average;
+        mutable int filtered_rolling_window_days = 0;
+        mutable std::vector<domain::ScenarioId> requested_fact_scenarios;
+        mutable std::vector<domain::ScenarioId> requested_rolling_scenarios;
+        mutable int fact_request_count = 0;
         mutable int completion_history_calls = 0;
         mutable domain::ScenarioId requested_scenario;
-        std::function<void()> stored_callback;
+        std::vector<std::function<void()>> stored_callbacks;
         std::function<void()> stored_build_requester;
         std::optional<domain::UserProfile> applied_profile;
 
@@ -99,8 +106,10 @@ namespace ksv::tests_support {
             return it == run_counts.end() ? std::nullopt : std::optional{it->second};
         }
 
-        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(const domain::ScenarioId &) const override {
-            return std::nullopt;
+        [[nodiscard]] std::optional<std::chrono::sys_seconds> getLastRunTime(
+            const domain::ScenarioId &scenario) const override {
+            const auto it = last_run_times.find(scenario);
+            return it == last_run_times.end() ? std::nullopt : std::optional{it->second};
         }
 
         [[nodiscard]] std::optional<double> getTotalTime(const domain::ScenarioId &scenario) const override {
@@ -120,9 +129,28 @@ namespace ksv::tests_support {
             return rolling_time_average;
         }
 
+        [[nodiscard]] std::vector<domain::RunFact> getRunFacts(
+            const std::vector<domain::ScenarioId> &scenarios) const override {
+            ++fact_request_count;
+            requested_fact_scenarios = scenarios;
+            return run_facts;
+        }
+
+        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
+        getRollingTimeAverage(const std::vector<domain::ScenarioId> &scenarios,
+                              const int window_days) const override {
+            requested_rolling_scenarios = scenarios;
+            filtered_rolling_window_days = window_days;
+            return filtered_rolling_time_average;
+        }
+
         [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }
-        void onProfileChanged(std::function<void()> callback) override { stored_callback = std::move(callback); }
-        void notifyProfileChanged() const { if (stored_callback) stored_callback(); }
+        void onProfileChanged(std::function<void()> callback) override {
+            stored_callbacks.push_back(std::move(callback));
+        }
+        void notifyProfileChanged() const {
+            for (const auto &callback: stored_callbacks) callback();
+        }
 
     private:
         inline static const std::vector<domain::Run> empty_perfs;

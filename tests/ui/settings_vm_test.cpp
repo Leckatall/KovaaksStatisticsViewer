@@ -175,11 +175,11 @@ namespace {
 
     TEST_F(SettingsViewModelTest, ProfileLoadedEmitsWhenProfileServiceNotifiesChange) {
         const auto view_model = make_view_model();
-        ASSERT_TRUE(static_cast<bool>(fake_profile_service->stored_callback));
+        ASSERT_FALSE(fake_profile_service->stored_callbacks.empty());
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::profileLoadedChanged);
         fake_profile_service->profile_loaded = true;
-        fake_profile_service->stored_callback();
+        fake_profile_service->notifyProfileChanged();
 
         EXPECT_EQ(spy.count(), 1);
         EXPECT_TRUE(view_model->isProfileLoaded());

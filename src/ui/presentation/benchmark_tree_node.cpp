@@ -21,8 +21,11 @@ namespace ksv::presentation {
     }
 
     BenchmarkScenarioNode::BenchmarkScenarioNode(QString nodeId, QString name, bool hasHash,
-                                                 QVariantList thresholds, QObject *parent)
+                                                 QVariantList thresholds, QString matchState,
+                                                 QVariantList candidates, QObject *parent)
         : BenchmarkTreeNode(std::move(nodeId), QStringLiteral("scenario"), std::move(name), parent),
           m_hasHash(hasHash),
-          m_thresholds(std::move(thresholds)) {}
+          m_thresholds(std::move(thresholds)),
+          m_matchState(std::move(matchState)),
+          m_candidates(std::move(candidates)) {}
 }

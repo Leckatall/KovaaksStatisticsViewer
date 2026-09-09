@@ -333,6 +333,49 @@ namespace {
         EXPECT_DOUBLE_EQ(*total, 25.0);
     }
 
+    TEST_F(ProfileServiceTest, GetRunFactsIsEmptyBeforeProfileGenerated) {
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        EXPECT_TRUE(profile_service.getRunFacts({scenario}).empty());
+    }
+
+    TEST_F(ProfileServiceTest, GetRunFactsDelegatesToProfile) {
+        ksv::domain::Run perf_a = makeRun("hash-1", 100, 10.0F);
+        perf_a.scenario_length = 30.0F;
+        ksv::domain::Run perf_b = makeRun("hash-2", 200, 20.0F);
+        perf_b.scenario_length = 45.0F;
+        fake_file_service->perfs_to_return = {perf_a, perf_b};
+        profile_service.generateProfileFromDirectory();
+
+        const auto facts = profile_service.getRunFacts({{"?", "hash-2"}});
+
+        ASSERT_EQ(facts.size(), 1U);
+        EXPECT_EQ(facts[0].run_id.scenario_id.hash, "hash-2");
+        EXPECT_FLOAT_EQ(facts[0].score, 20.0F);
+        EXPECT_FLOAT_EQ(facts[0].duration_seconds, 45.0F);
+    }
+
+    TEST_F(ProfileServiceTest, FilteredRollingTimeAverageIsEmptyBeforeProfileGenerated) {
+        const auto scenario = ksv::domain::ScenarioId{.name = "?", .hash = "hash-1"};
+        EXPECT_TRUE(profile_service.getRollingTimeAverage(
+            std::vector<ksv::domain::ScenarioId>{scenario}, 3).empty());
+    }
+
+    TEST_F(ProfileServiceTest, FilteredRollingTimeAverageDelegatesToProfile) {
+        constexpr long long day = 86'400'000LL;
+        ksv::domain::Run perf_a = makeRun("hash-1", 100 * day);
+        perf_a.scenario_length = 60.0F;
+        ksv::domain::Run perf_b = makeRun("hash-2", 100 * day);
+        perf_b.scenario_length = 600.0F;
+        fake_file_service->perfs_to_return = {perf_a, perf_b};
+        profile_service.generateProfileFromDirectory();
+
+        const auto series = profile_service.getRollingTimeAverage(
+            std::vector<ksv::domain::ScenarioId>{{"?", "hash-1"}}, 3);
+
+        ASSERT_EQ(series.size(), 1U);
+        EXPECT_DOUBLE_EQ(series[0].second, 60.0);
+    }
+
     TEST_F(ProfileServiceTest, GetRecentRunsIsEmptyBeforeProfileGenerated) {
         EXPECT_TRUE(profile_service.getRecentRuns(5).empty());
     }

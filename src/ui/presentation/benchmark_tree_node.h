@@ -67,17 +67,23 @@ namespace ksv::presentation {
         // One entry per tier in ladder order; hasValue distinguishes an entered threshold
         // from the empty slot the editor shows for it.
         Q_PROPERTY(QVariantList thresholds READ thresholds CONSTANT)
+        Q_PROPERTY(QString matchState READ matchState CONSTANT)
+        Q_PROPERTY(QVariantList candidates READ candidates CONSTANT)
 
     public:
         BenchmarkScenarioNode(QString nodeId, QString name, bool hasHash, QVariantList thresholds,
-                              QObject *parent = nullptr);
+                              QString matchState, QVariantList candidates, QObject *parent = nullptr);
 
         [[nodiscard]] bool hasHash() const { return m_hasHash; }
         [[nodiscard]] const QVariantList &thresholds() const { return m_thresholds; }
+        [[nodiscard]] const QString &matchState() const { return m_matchState; }
+        [[nodiscard]] const QVariantList &candidates() const { return m_candidates; }
 
     private:
         bool m_hasHash;
         QVariantList m_thresholds;
+        QString m_matchState;
+        QVariantList m_candidates;
     };
 }
 

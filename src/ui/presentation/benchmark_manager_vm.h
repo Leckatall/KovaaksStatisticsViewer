@@ -35,6 +35,8 @@ namespace ksv::presentation {
         Q_PROPERTY(ksv::presentation::BenchmarkGroupNode *root READ root NOTIFY draftChanged)
         Q_PROPERTY(QVariantList tiers READ tiers NOTIFY draftChanged)
         Q_PROPERTY(bool refreshFailed READ refreshFailed NOTIFY libraryChanged)
+        Q_PROPERTY(QVariantList scenarioCatalogue READ scenarioCatalogue NOTIFY libraryChanged)
+        Q_PROPERTY(bool resolutionWriteFailed READ resolutionWriteFailed NOTIFY libraryChanged)
         Q_PROPERTY(QString managedDirectoryPath READ managedDirectoryPath CONSTANT)
 
     public:
@@ -55,6 +57,8 @@ namespace ksv::presentation {
         [[nodiscard]] BenchmarkGroupNode *root() const { return m_root.get(); }
         [[nodiscard]] const QVariantList &tiers() const { return m_tiers; }
         [[nodiscard]] bool refreshFailed() const { return m_service->lastRefreshFailed(); }
+        [[nodiscard]] const QVariantList &scenarioCatalogue() const { return m_scenarioCatalogue; }
+        [[nodiscard]] bool resolutionWriteFailed() const { return m_service->lastResolutionWriteFailed(); }
         [[nodiscard]] QString managedDirectoryPath() const {
             return QString::fromStdString(m_service->managedDirectoryPath());
         }
@@ -76,6 +80,7 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap addUnplayedScenario(const QString &name);
         Q_INVOKABLE QVariantMap addKnownScenario(const QString &name, const QString &hash);
         Q_INVOKABLE QVariantMap renameScenario(const QString &id, const QString &name);
+        Q_INVOKABLE QVariantMap setScenarioHash(const QString &entryId, const QString &hash);
         Q_INVOKABLE QVariantMap removeScenario(const QString &id);
         Q_INVOKABLE QVariantMap setThreshold(const QString &entryId, const QString &tierId, double score);
         Q_INVOKABLE QVariantMap clearThreshold(const QString &entryId, const QString &tierId);
@@ -102,6 +107,7 @@ namespace ksv::presentation {
         QVariantList m_libraryEntries;
         QVariantList m_validationIssues;
         QVariantList m_tiers;
+        QVariantList m_scenarioCatalogue;
         std::unique_ptr<BenchmarkGroupNode> m_root;
     };
 }

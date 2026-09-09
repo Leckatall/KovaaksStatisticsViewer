@@ -8,6 +8,7 @@ target_sources(tests_support_domain INTERFACE
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
         FILES
         run_builders.h
+        benchmark_builders.h
         cerr_capture.h
         profile_store_files.h
 )

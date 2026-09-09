@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <map>
+#include <unordered_set>
 #include <utility>
 
 namespace ksv::application {
@@ -85,14 +87,42 @@ namespace ksv::application {
             };
             return palette[index % std::size(palette)];
         }
+
+        std::vector<std::pair<domain::ScenarioEntryId, std::string>> computeAutoMappings(
+            const domain::Benchmark &benchmark,
+            const std::map<std::string, std::vector<domain::ScenarioCandidate>> &byName) {
+            std::unordered_set<std::string> taken;
+            forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
+                for (const auto &entry: entries)
+                    if (entry.hash) taken.insert(*entry.hash);
+                return false;
+            });
+            std::vector<std::pair<domain::ScenarioEntryId, std::string>> mappings;
+            forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
+                for (const auto &entry: entries) {
+                    if (entry.hash) continue;
+                    const auto found = byName.find(entry.name);
+                    if (found == byName.end() || found->second.size() != 1) continue;
+                    const auto &hash = found->second.front().hash;
+                    if (taken.contains(hash)) continue;
+                    taken.insert(hash);
+                    mappings.push_back({entry.id, hash});
+                }
+                return false;
+            });
+            return mappings;
+        }
     }
 
     BenchmarkLibraryService::BenchmarkLibraryService(std::shared_ptr<IBenchmarkRepository> repository,
                                                      std::shared_ptr<IPlaylistReader> playlistReader,
+                                                     std::shared_ptr<IProfileService> profileService,
                                                      std::function<std::string()> idFactory)
         : m_repository(std::move(repository)),
           m_playlistReader(std::move(playlistReader)),
-          m_idFactory(std::move(idFactory)) {
+          m_idFactory(std::move(idFactory)),
+          m_profileService(std::move(profileService)) {
+        m_profileService->onProfileChanged([this] { reconcileFromProfile(); });
         refresh();
     }
 
@@ -107,6 +137,129 @@ namespace ksv::application {
         }
         m_snapshot = result.snapshot;
         m_lastRefreshFailed = false;
+        reconcileInternal();
+        publish();
+    }
+
+    BenchmarkLibraryService::ScenarioCatalogue BenchmarkLibraryService::buildCatalogue() const {
+        ScenarioCatalogue catalogue;
+        for (const auto &scenario: m_profileService->getScenarioList()) {
+            catalogue.knownHashes.insert(scenario.hash);
+            catalogue.byName[scenario.name].push_back(
+                {scenario.hash, static_cast<int>(m_profileService->getRunCount(scenario).value_or(0)),
+                 m_profileService->getLastRunTime(scenario)});
+        }
+        for (auto &[_, candidates]: catalogue.byName)
+            std::ranges::sort(candidates, {}, &domain::ScenarioCandidate::hash);
+        return catalogue;
+    }
+
+    std::vector<domain::ScenarioResolution> BenchmarkLibraryService::resolveAgainst(
+        const domain::Benchmark &benchmark, const ScenarioCatalogue &catalogue) const {
+        std::vector<domain::ScenarioResolution> resolutions;
+        forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
+            for (const auto &entry: entries) {
+                domain::ScenarioResolution resolution{entry.id};
+                if (entry.hash) {
+                    resolution.hash = entry.hash;
+                    resolution.state = catalogue.knownHashes.contains(*entry.hash)
+                        ? domain::ScenarioMatchState::Resolved : domain::ScenarioMatchState::MappedUnavailable;
+                } else if (const auto found = catalogue.byName.find(entry.name); found != catalogue.byName.end()) {
+                    resolution.candidates = found->second;
+                    resolution.state = found->second.size() == 1
+                        ? domain::ScenarioMatchState::AutoMappable : domain::ScenarioMatchState::Ambiguous;
+                }
+                resolutions.push_back(std::move(resolution));
+            }
+            return false;
+        });
+        return resolutions;
+    }
+
+    std::vector<domain::ScenarioId> BenchmarkLibraryService::scenarioCatalogue() const {
+        auto scenarios = m_profileService->getScenarioList();
+        std::ranges::sort(scenarios, [](const auto &left, const auto &right) {
+            return left.name != right.name ? left.name < right.name : left.hash < right.hash;
+        });
+        return scenarios;
+    }
+
+    std::vector<domain::ScenarioResolution> BenchmarkLibraryService::resolutionsFor(
+        const domain::BenchmarkId &id) const {
+        if (!m_snapshot) return {};
+        const auto catalogue = buildCatalogue();
+        for (const auto &entry: m_snapshot->entries) {
+            const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content);
+            if (loaded && loaded->benchmark.id == id) return resolveAgainst(loaded->benchmark, catalogue);
+        }
+        return {};
+    }
+
+    std::vector<domain::ScenarioResolution> BenchmarkLibraryService::draftResolutions() const {
+        return m_draft ? resolveAgainst(m_draft->benchmark, buildCatalogue())
+                       : std::vector<domain::ScenarioResolution>{};
+    }
+
+    bool BenchmarkLibraryService::reconcileInternal() {
+        if (!m_snapshot) return false;
+        const auto catalogue = buildCatalogue();
+        m_lastResolutionWriteFailed = false;
+        struct PendingWrite { std::string filename; std::string digest; domain::Benchmark benchmark; };
+        std::vector<PendingWrite> pending;
+        for (const auto &entry: m_snapshot->entries) {
+            const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content);
+            if (!loaded || (m_draft && m_draft->dirty && m_draft->benchmark.id == loaded->benchmark.id)) continue;
+            const auto mappings = computeAutoMappings(loaded->benchmark, catalogue.byName);
+            if (mappings.empty()) continue;
+            auto updated = loaded->benchmark;
+            for (const auto &[id, hash]: mappings)
+                if (auto *target = findEntry(updated, id)) target->hash = hash;
+            pending.push_back({entry.filename, entry.digest, std::move(updated)});
+        }
+        bool changed = false;
+        for (auto &write: pending) {
+            const auto result = m_repository->write(write.benchmark, write.filename, write.digest);
+            if (!result.succeeded()) {
+                m_lastResolutionWriteFailed = true;
+                continue;
+            }
+            upsertSnapshotEntry(write.filename, *result.digest,
+                LoadedBenchmark{write.benchmark, domain::validateBenchmark(write.benchmark)});
+            changed = true;
+        }
+        return changed;
+    }
+
+    void BenchmarkLibraryService::syncDraftToSnapshot() {
+        // Never touches a dirty draft. reconcileInternal() skips that benchmark's own file, but it
+        // may still have written a different one and reported a change, and adopting the snapshot
+        // here would silently discard the user's unsaved edits. saveDraft() clears the flag before
+        // it calls this, so its own path is unaffected.
+        if (!m_draft || m_draft->dirty || !m_draft->baselineFilename || !m_snapshot) return;
+        for (const auto &entry: m_snapshot->entries) {
+            if (entry.filename != *m_draft->baselineFilename) continue;
+            const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content);
+            if (!loaded) return;
+            m_draft->benchmark = loaded->benchmark;
+            m_draft->baseline = loaded->benchmark;
+            m_draft->baselineDigest = entry.digest;
+            m_draft->validation = loaded->completeness;
+            m_draft->dirty = false;
+            return;
+        }
+    }
+
+    void BenchmarkLibraryService::reconcileFromProfile() {
+        if (reconcileInternal() && m_draft) {
+            // A clean draft open on a benchmark whose file was just rewritten must adopt the new
+            // content and digest, or its next save fails the content precondition against a change
+            // this service itself made.
+            syncDraftToSnapshot();
+            notifyDraftChanged();
+        }
+        // Published even when no file changed: resolution state is derived from the profile, so a
+        // hash appearing or a second same-name scenario arriving changes what the library reports
+        // without touching a single byte on disk.
         publish();
     }
 
@@ -149,6 +302,7 @@ namespace ksv::application {
     void BenchmarkLibraryService::discardDraft() {
         m_draft.reset();
         notifyDraftChanged();
+        if (reconcileInternal()) publish();
     }
 
     PlaylistImportResult BenchmarkLibraryService::importPlaylist(const std::string &path) {
@@ -262,6 +416,16 @@ namespace ksv::application {
         auto *entry = findEntry(m_draft->benchmark, id);
         if (!entry) return {BenchmarkDraftError::UnknownEntry};
         entry->name = name;
+        revalidateDraft();
+        return {};
+    }
+
+    BenchmarkDraftResult BenchmarkLibraryService::setScenarioHash(
+        const domain::ScenarioEntryId &id, const std::optional<std::string> &hash) {
+        if (!m_draft) return {BenchmarkDraftError::NoDraft};
+        auto *entry = findEntry(m_draft->benchmark, id);
+        if (!entry) return {BenchmarkDraftError::UnknownEntry};
+        entry->hash = hash;
         revalidateDraft();
         return {};
     }
@@ -433,11 +597,12 @@ namespace ksv::application {
                         : std::optional{BenchmarkSaveError::WriteFailed}};
         }
         upsertSnapshotEntry(filename, *result.digest, LoadedBenchmark{m_draft->benchmark, m_draft->validation});
-        publish();
         m_draft->baselineFilename = filename;
         m_draft->baselineDigest = *result.digest;
         m_draft->baseline = m_draft->benchmark;
         m_draft->dirty = false;
+        if (reconcileInternal()) syncDraftToSnapshot();
+        publish();
         notifyDraftChanged();
         return {};
     }

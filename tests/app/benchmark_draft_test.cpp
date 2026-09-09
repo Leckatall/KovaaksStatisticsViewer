@@ -8,6 +8,7 @@
 #include "counting_ids.h"
 #include "fake_benchmark_repository.h"
 #include "fake_playlist_reader.h"
+#include "fake_profile_service.h"
 
 using namespace ksv::application;
 using namespace ksv::domain;
@@ -17,7 +18,8 @@ namespace {
     std::shared_ptr<BenchmarkLibraryService> makeService(std::shared_ptr<FakeBenchmarkRepository> repo,
                                                          std::shared_ptr<FakePlaylistReader> reader = nullptr) {
         return std::make_shared<BenchmarkLibraryService>(
-            repo, reader ? std::move(reader) : std::make_shared<FakePlaylistReader>(), countingIds());
+            repo, reader ? std::move(reader) : std::make_shared<FakePlaylistReader>(),
+            std::make_shared<FakeProfileService>(), countingIds());
     }
 
     Benchmark loadedBenchmark() {

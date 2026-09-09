@@ -1,7 +1,10 @@
 #include "benchmark_manager_vm.h"
 
 #include <algorithm>
+#include <QDateTime>
+#include <QTimeZone>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 
@@ -62,8 +65,37 @@ namespace ksv::presentation {
             }, target);
         }
 
-        std::unique_ptr<BenchmarkScenarioNode> makeScenarioNode(const domain::ScenarioEntry &entry,
-                                                                const std::vector<domain::Tier> &tiers) {
+        QString matchStateText(const domain::ScenarioMatchState state) {
+            switch (state) {
+                case domain::ScenarioMatchState::Resolved: return QStringLiteral("resolved");
+                case domain::ScenarioMatchState::MappedUnavailable: return QStringLiteral("mappedUnavailable");
+                case domain::ScenarioMatchState::Unresolved: return QStringLiteral("unresolved");
+                case domain::ScenarioMatchState::Ambiguous: return QStringLiteral("ambiguous");
+                case domain::ScenarioMatchState::AutoMappable: return QStringLiteral("autoMappable");
+            }
+            return QStringLiteral("unresolved");
+        }
+
+        QVariantList candidateList(const std::vector<domain::ScenarioCandidate> &candidates) {
+            QVariantList list;
+            list.reserve(static_cast<qsizetype>(candidates.size()));
+            for (const auto &candidate: candidates) {
+                const auto played = candidate.lastPlayed
+                    ? QDateTime::fromSecsSinceEpoch(candidate.lastPlayed->time_since_epoch().count(),
+                                                    QTimeZone::utc())
+                    : QDateTime();
+                list.push_back(QVariantMap{
+                    {"hash", QString::fromStdString(candidate.hash)},
+                    {"runCount", candidate.runCount},
+                    {"lastPlayed", played},
+                });
+            }
+            return list;
+        }
+
+        std::unique_ptr<BenchmarkScenarioNode> makeScenarioNode(
+            const domain::ScenarioEntry &entry, const std::vector<domain::Tier> &tiers,
+            const domain::ScenarioResolution *resolution) {
             QVariantList thresholds;
             thresholds.reserve(static_cast<qsizetype>(tiers.size()));
             for (const auto &tier: tiers) {
@@ -79,7 +111,11 @@ namespace ksv::presentation {
             }
             return std::make_unique<BenchmarkScenarioNode>(idString(entry.id),
                                                            QString::fromStdString(entry.name),
-                                                           entry.hash.has_value(), std::move(thresholds));
+                                                           entry.hash.has_value(), std::move(thresholds),
+                                                           matchStateText(resolution ? resolution->state
+                                                                                     : domain::ScenarioMatchState::Unresolved),
+                                                           resolution ? candidateList(resolution->candidates)
+                                                                      : QVariantList{});
         }
     }
 
@@ -123,23 +159,30 @@ namespace ksv::presentation {
     }
 
     void BenchmarkManagerViewModel::rebuildTree(const std::optional<domain::Benchmark> &draft) {
+        const auto resolutions = m_service->draftResolutions();
+        std::unordered_map<std::string, const domain::ScenarioResolution *> byEntry;
+        for (const auto &resolution: resolutions) byEntry.emplace(resolution.entryId.value, &resolution);
+        const auto lookup = [&](const domain::ScenarioEntry &entry) -> const domain::ScenarioResolution * {
+            const auto found = byEntry.find(entry.id.value);
+            return found == byEntry.end() ? nullptr : found->second;
+        };
         auto rebuilt = std::make_unique<BenchmarkGroupNode>(QString(), QStringLiteral("uncategorized"),
                                                             tr("Uncategorized"), QColor());
         if (draft) {
             for (const auto &entry: draft->uncategorized)
-                rebuilt->appendChild(makeScenarioNode(entry, draft->tiers));
+                rebuilt->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
             for (const auto &category: draft->categories) {
                 auto categoryNode = std::make_unique<BenchmarkGroupNode>(
                     idString(category.id), QStringLiteral("category"),
                     QString::fromStdString(category.name), toQColor(category.color));
                 for (const auto &entry: category.scenarios)
-                    categoryNode->appendChild(makeScenarioNode(entry, draft->tiers));
+                    categoryNode->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
                 for (const auto &sub: category.subcategories) {
                     auto subNode = std::make_unique<BenchmarkGroupNode>(
                         idString(sub.id), QStringLiteral("subcategory"),
                         QString::fromStdString(sub.name), toQColor(sub.color));
                     for (const auto &entry: sub.scenarios)
-                        subNode->appendChild(makeScenarioNode(entry, draft->tiers));
+                        subNode->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
                     categoryNode->appendChild(std::move(subNode));
                 }
                 rebuilt->appendChild(std::move(categoryNode));
@@ -152,6 +195,12 @@ namespace ksv::presentation {
     }
 
     void BenchmarkManagerViewModel::rebuildLibrary() {
+        m_scenarioCatalogue.clear();
+        for (const auto &scenario: m_service->scenarioCatalogue())
+            m_scenarioCatalogue.push_back(QVariantMap{
+                {"name", QString::fromStdString(scenario.name)},
+                {"hash", QString::fromStdString(scenario.hash)},
+            });
         m_libraryEntries.clear();
         const auto snapshot = m_service->snapshot();
         if (!snapshot) return;
@@ -288,6 +337,12 @@ namespace ksv::presentation {
     QVariantMap BenchmarkManagerViewModel::renameScenario(const QString &id, const QString &name) {
         return toResultMap(m_service->renameScenario(domain::ScenarioEntryId{id.toStdString()},
                                                      name.toStdString()));
+    }
+
+    QVariantMap BenchmarkManagerViewModel::setScenarioHash(const QString &entryId, const QString &hash) {
+        return toResultMap(m_service->setScenarioHash(
+            domain::ScenarioEntryId{entryId.toStdString()},
+            hash.isEmpty() ? std::nullopt : std::optional{hash.toStdString()}));
     }
 
     QVariantMap BenchmarkManagerViewModel::removeScenario(const QString &id) {

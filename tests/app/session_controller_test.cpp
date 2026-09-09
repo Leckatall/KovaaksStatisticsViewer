@@ -179,10 +179,10 @@ namespace {
     TEST_F(SessionControllerTest, RegistersOnProfileChangedCallbackThatRefreshesLatestPerf) {
         fake_profile_service->latest_run = makeRun("hash-1", 100);
         const auto controller = make_controller();
-        ASSERT_TRUE(static_cast<bool>(fake_profile_service->stored_callback));
+        ASSERT_FALSE(fake_profile_service->stored_callbacks.empty());
 
         fake_profile_service->latest_run = makeRun("hash-2", 200);
-        fake_profile_service->stored_callback();
+        fake_profile_service->notifyProfileChanged();
 
         EXPECT_EQ(controller->getCurrentRun().run_id.scenario_id.hash, "hash-2");
     }

@@ -1,20 +1,24 @@
 #pragma once
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "contracts/i_benchmark_library_service.h"
 #include "data/interfaces/i_benchmark_repository.h"
 #include "data/interfaces/i_playlist_reader.h"
+#include "data/interfaces/i_profile_service.h"
 
 namespace ksv::application {
     class BenchmarkLibraryService final : public IBenchmarkLibraryService {
     public:
         BenchmarkLibraryService(std::shared_ptr<IBenchmarkRepository> repository,
                                 std::shared_ptr<IPlaylistReader> playlistReader,
+                                std::shared_ptr<IProfileService> profileService,
                                 std::function<std::string()> idFactory);
 
         [[nodiscard]] std::optional<BenchmarkLibrarySnapshot> snapshot() const override { return m_snapshot; }
@@ -25,6 +29,11 @@ namespace ksv::application {
         [[nodiscard]] std::string managedDirectoryPath() const override {
             return m_repository->managedDirectoryPath();
         }
+        [[nodiscard]] std::vector<domain::ScenarioId> scenarioCatalogue() const override;
+        [[nodiscard]] std::vector<domain::ScenarioResolution> resolutionsFor(
+            const domain::BenchmarkId &id) const override;
+        [[nodiscard]] std::vector<domain::ScenarioResolution> draftResolutions() const override;
+        [[nodiscard]] bool lastResolutionWriteFailed() const override { return m_lastResolutionWriteFailed; }
 
         void beginNewDraft() override;
         [[nodiscard]] bool openDraft(const domain::BenchmarkId &id) override;
@@ -56,6 +65,8 @@ namespace ksv::application {
         BenchmarkDraftResult addUnplayedScenario(const std::string &name) override;
         BenchmarkDraftResult addKnownScenario(const std::string &name, const std::string &hash) override;
         BenchmarkDraftResult renameScenario(const domain::ScenarioEntryId &id, const std::string &name) override;
+        BenchmarkDraftResult setScenarioHash(const domain::ScenarioEntryId &id,
+                                             const std::optional<std::string> &hash) override;
         BenchmarkDraftResult removeScenario(const domain::ScenarioEntryId &id) override;
         BenchmarkDraftResult setThreshold(const domain::ScenarioEntryId &entryId,
                                           const domain::TierId &tierId, double score) override;
@@ -85,19 +96,32 @@ namespace ksv::application {
             bool dirty = false;
         };
 
+        struct ScenarioCatalogue {
+            std::map<std::string, std::vector<domain::ScenarioCandidate>> byName;
+            std::unordered_set<std::string> knownHashes;
+        };
+
         std::string newId() const { return m_idFactory(); }
         void revalidateDraft();
         void notifyDraftChanged();
         void publish();
         void upsertSnapshotEntry(const std::string &filename, const std::string &digest,
                                  LoadedBenchmark content);
+        [[nodiscard]] ScenarioCatalogue buildCatalogue() const;
+        [[nodiscard]] std::vector<domain::ScenarioResolution> resolveAgainst(
+            const domain::Benchmark &benchmark, const ScenarioCatalogue &catalogue) const;
+        bool reconcileInternal();
+        void reconcileFromProfile();
+        void syncDraftToSnapshot();
 
         std::shared_ptr<IBenchmarkRepository> m_repository;
         std::shared_ptr<IPlaylistReader> m_playlistReader;
         std::function<std::string()> m_idFactory;
+        std::shared_ptr<IProfileService> m_profileService;
         std::optional<BenchmarkLibrarySnapshot> m_snapshot;
         uint64_t m_revision = 0;
         bool m_lastRefreshFailed = false;
+        bool m_lastResolutionWriteFailed = false;
         std::vector<std::function<void()>> m_callbacks;
         std::optional<Draft> m_draft;
         std::vector<std::function<void()>> m_draftCallbacks;

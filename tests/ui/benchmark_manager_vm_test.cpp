@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <QColor>
+#include <QDateTime>
 #include <QSet>
 #include <QUrl>
 #include <QVariantMap>
@@ -10,8 +11,10 @@
 #include "presentation/benchmark_manager_vm.h"
 #include "usecases/benchmark_library_service.h"
 #include "counting_ids.h"
+#include "benchmark_builders.h"
 #include "fake_benchmark_repository.h"
 #include "fake_playlist_reader.h"
+#include "fake_profile_service.h"
 
 using namespace ksv::application;
 using namespace ksv::domain;
@@ -22,12 +25,17 @@ namespace {
     struct Fixture {
         std::shared_ptr<FakeBenchmarkRepository> repo = std::make_shared<FakeBenchmarkRepository>();
         std::shared_ptr<FakePlaylistReader> reader = std::make_shared<FakePlaylistReader>();
+        std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
         std::shared_ptr<BenchmarkLibraryService> service;
         std::unique_ptr<BenchmarkManagerViewModel> vm;
 
         Fixture() {
             repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-            service = std::make_shared<BenchmarkLibraryService>(repo, reader, countingIds());
+            rebuild();
+        }
+
+        void rebuild() {
+            service = std::make_shared<BenchmarkLibraryService>(repo, reader, profile, countingIds());
             vm = std::make_unique<BenchmarkManagerViewModel>(service);
         }
     };
@@ -40,6 +48,16 @@ namespace {
     const BenchmarkGroupNode *groupChild(const BenchmarkGroupNode *group, qsizetype index) {
         return qobject_cast<const BenchmarkGroupNode *>(
             group->children().at(index).value<BenchmarkTreeNode *>());
+    }
+
+    BenchmarkLibrarySnapshot savedBenchmark(const std::vector<ScenarioEntry> &entries) {
+        Benchmark benchmark;
+        benchmark.id = BenchmarkId{"b1"};
+        benchmark.name = "Saved";
+        benchmark.uncategorized = entries;
+        BenchmarkLibrarySnapshot snapshot;
+        snapshot.entries.push_back({"b1.json", "d1", LoadedBenchmark{benchmark, validateBenchmark(benchmark)}});
+        return snapshot;
     }
 }
 
@@ -231,4 +249,133 @@ TEST(BenchmarkManagerVm, RefreshFailedSurfacesAfterDirectoryFailure) {
 
     EXPECT_TRUE(f.vm->refreshFailed());
     EXPECT_TRUE(f.vm->managedDirectoryPath() == QString::fromStdString(f.repo->directory));
+}
+
+TEST(BenchmarkManagerResolution, ScenarioNodesCarryTheirMatchState) {
+    Fixture fixture;
+    fixture.profile->scenarios = {{"Alpha", "h1"}};
+    fixture.repo->nextScan = {savedBenchmark({benchmarkEntry("e1", "Alpha", std::string{"h1"}, {}),
+                                              benchmarkEntry("e2", "Beta", std::nullopt, {}),
+                                              benchmarkEntry("e3", "Gamma", std::string{"gone"}, {})}),
+                              std::nullopt};
+    fixture.rebuild();
+    ASSERT_TRUE(fixture.vm->openBenchmark("b1"));
+
+    EXPECT_EQ(scenarioChild(fixture.vm->root(), 0)->matchState(), QStringLiteral("resolved"));
+    EXPECT_EQ(scenarioChild(fixture.vm->root(), 1)->matchState(), QStringLiteral("unresolved"));
+    EXPECT_EQ(scenarioChild(fixture.vm->root(), 2)->matchState(), QStringLiteral("mappedUnavailable"));
+}
+
+TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
+    Fixture fixture;
+    const ScenarioId first{"Alpha", "ha"};
+    const ScenarioId second{"Alpha", "hb"};
+    fixture.profile->scenarios = {second, first};
+    fixture.profile->run_counts[first] = 3;
+    fixture.profile->run_counts[second] = 7;
+    fixture.profile->last_run_times[first] = std::chrono::sys_seconds{std::chrono::seconds{1'700'000'000}};
+    fixture.repo->nextScan = {savedBenchmark({benchmarkEntry("e1", "Alpha", std::nullopt, {})}), std::nullopt};
+    fixture.rebuild();
+    ASSERT_TRUE(fixture.vm->openBenchmark("b1"));
+
+    const auto *node = scenarioChild(fixture.vm->root(), 0);
+    EXPECT_EQ(node->matchState(), QStringLiteral("ambiguous"));
+    ASSERT_EQ(node->candidates().size(), 2);
+    const auto candidate = node->candidates().at(0).toMap();
+    EXPECT_EQ(candidate.value("hash").toString(), QStringLiteral("ha"));
+    EXPECT_EQ(candidate.value("runCount").toInt(), 3);
+    EXPECT_EQ(candidate.value("lastPlayed").toDateTime().toSecsSinceEpoch(), 1'700'000'000);
+    EXPECT_FALSE(node->candidates().at(1).toMap().value("lastPlayed").toDateTime().isValid());
+}
+
+TEST(BenchmarkManagerResolution, AnAutoMappableNodeReportsItsSingleCandidate) {
+    Fixture fixture;
+    fixture.profile->scenarios = {{"Alpha", "h1"}};
+    fixture.repo->nextScan = {savedBenchmark({benchmarkEntry("e1", "Alpha", std::nullopt, {})}), std::nullopt};
+    fixture.repo->nextWrite = {std::nullopt, BenchmarkWriteFailure::WriteFailed};
+    fixture.rebuild();
+    ASSERT_TRUE(fixture.vm->openBenchmark("b1"));
+
+    const auto *node = scenarioChild(fixture.vm->root(), 0);
+    EXPECT_EQ(node->matchState(), QStringLiteral("autoMappable"));
+    ASSERT_EQ(node->candidates().size(), 1);
+    EXPECT_EQ(node->candidates().at(0).toMap().value("hash").toString(), QStringLiteral("h1"));
+    EXPECT_TRUE(fixture.vm->resolutionWriteFailed());
+}
+
+TEST(BenchmarkManagerResolution, TheScenarioCatalogueIsExposedSortedForThePicker) {
+    Fixture fixture;
+    fixture.profile->scenarios = {{"Beta", "h2"}, {"Alpha", "hb"}, {"Alpha", "ha"}};
+    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    fixture.rebuild();
+
+    const auto catalogue = fixture.vm->scenarioCatalogue();
+
+    ASSERT_EQ(catalogue.size(), 3);
+    EXPECT_EQ(catalogue.at(0).toMap().value("name").toString(), QStringLiteral("Alpha"));
+    EXPECT_EQ(catalogue.at(0).toMap().value("hash").toString(), QStringLiteral("ha"));
+    EXPECT_EQ(catalogue.at(1).toMap().value("hash").toString(), QStringLiteral("hb"));
+    EXPECT_EQ(catalogue.at(2).toMap().value("name").toString(), QStringLiteral("Beta"));
+}
+
+TEST(BenchmarkManagerResolution, SetScenarioHashChoosesAmongAmbiguousCandidates) {
+    Fixture fixture;
+    fixture.profile->scenarios = {{"Alpha", "ha"}, {"Alpha", "hb"}};
+    fixture.repo->nextScan = {savedBenchmark({benchmarkEntry("e1", "Alpha", std::nullopt, {})}), std::nullopt};
+    fixture.rebuild();
+    ASSERT_TRUE(fixture.vm->openBenchmark("b1"));
+
+    const auto result = fixture.vm->setScenarioHash("e1", "hb");
+
+    EXPECT_TRUE(result.value("ok").toBool());
+    EXPECT_TRUE(fixture.vm->dirty());
+    const auto *node = scenarioChild(fixture.vm->root(), 0);
+    EXPECT_EQ(node->matchState(), QStringLiteral("resolved"));
+    EXPECT_TRUE(node->hasHash());
+}
+
+TEST(BenchmarkManagerResolution, AnEmptyHashClearsTheMapping) {
+    Fixture fixture;
+    fixture.profile->scenarios = {{"Alpha", "h-new"}};
+    fixture.repo->nextScan = {savedBenchmark({benchmarkEntry("e1", "Alpha", std::string{"h-old"}, {})}), std::nullopt};
+    fixture.rebuild();
+    ASSERT_TRUE(fixture.vm->openBenchmark("b1"));
+    ASSERT_EQ(scenarioChild(fixture.vm->root(), 0)->matchState(), QStringLiteral("mappedUnavailable"));
+
+    EXPECT_TRUE(fixture.vm->setScenarioHash("e1", "").value("ok").toBool());
+
+    const auto *node = scenarioChild(fixture.vm->root(), 0);
+    EXPECT_EQ(node->matchState(), QStringLiteral("autoMappable"));
+    EXPECT_FALSE(node->hasHash());
+}
+
+TEST(BenchmarkManagerResolution, SetScenarioHashReportsAnUnknownEntry) {
+    Fixture fixture;
+    fixture.repo->nextScan = {savedBenchmark({benchmarkEntry("e1", "Alpha", std::nullopt, {})}), std::nullopt};
+    fixture.rebuild();
+    ASSERT_TRUE(fixture.vm->openBenchmark("b1"));
+
+    const auto result = fixture.vm->setScenarioHash("nope", "h1");
+
+    EXPECT_FALSE(result.value("ok").toBool());
+    EXPECT_FALSE(result.value("error").toString().isEmpty());
+}
+
+TEST(BenchmarkManagerResolution, ScenarioNodesOutsideUncategorizedAlsoCarryTheirState) {
+    Fixture fixture;
+    fixture.profile->scenarios = {{"Nested", "hn"}};
+    Benchmark benchmark;
+    benchmark.id = BenchmarkId{"b1"};
+    benchmark.name = "Saved";
+    Category category{GroupId{"c1"}, "C", {}, {}, {}};
+    category.scenarios.push_back(benchmarkEntry("d1", "Nested", std::string{"hn"}, {}));
+    benchmark.categories.push_back(category);
+    BenchmarkLibrarySnapshot snapshot;
+    snapshot.entries.push_back({"b1.json", "d1", LoadedBenchmark{benchmark, validateBenchmark(benchmark)}});
+    fixture.repo->nextScan = {snapshot, std::nullopt};
+    fixture.rebuild();
+    ASSERT_TRUE(fixture.vm->openBenchmark("b1"));
+
+    const auto *categoryNode = groupChild(fixture.vm->root(), 0);
+    EXPECT_EQ(scenarioChild(categoryNode, 0)->matchState(), QStringLiteral("resolved"));
 }

@@ -9,6 +9,10 @@ add_library(ksv_domain STATIC
         benchmarks/benchmark.h
         benchmarks/benchmark_validation.h
         benchmarks/benchmark_validation.cpp
+        benchmarks/benchmark_evaluator.h
+        benchmarks/benchmark_evaluator.cpp
+        benchmarks/benchmark_resolution.h
+        benchmarks/benchmark_projection.h
 )
 
 target_include_directories(ksv_domain PUBLIC

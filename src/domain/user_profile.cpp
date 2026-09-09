@@ -8,6 +8,7 @@
 #include <iostream>
 #include <numeric>
 #include <ranges>
+#include <unordered_set>
 #include <utility>
 
 namespace ksv::domain {
@@ -166,8 +167,45 @@ namespace ksv::domain {
         return rollingTimeAverageFor(all_indices, window_days);
     }
 
+    std::vector<std::size_t> UserProfile::mergedRunIndices(const std::vector<ScenarioId> &scenarios) const {
+        const std::unordered_set<ScenarioId> unique(scenarios.begin(), scenarios.end());
+        std::vector<std::size_t> indices;
+        for (const auto &scenario: unique) {
+            const auto it = m_scenario_index.find(scenario);
+            if (it == m_scenario_index.end()) continue;
+            indices.insert(indices.end(), it->second.begin(), it->second.end());
+        }
+        // TODO: Is this necessary?
+        // The run index breaks start_time ties, and addRun assigns it from m_runs.size() so it can
+        // never tie itself. That is what keeps the order independent of the set's traversal order,
+        // which is unspecified, and of the sort, which is not stable.
+        std::ranges::sort(indices, [this](const std::size_t lhs, const std::size_t rhs) {
+            const auto left = m_runs[lhs].run_id.start_time;
+            const auto right = m_runs[rhs].run_id.start_time;
+            return left != right ? left < right : lhs < rhs;
+        });
+        return indices;
+    }
+
+    std::vector<RunFact> UserProfile::getRunFacts(const std::vector<ScenarioId> &scenarios) const {
+        const auto indices = mergedRunIndices(scenarios);
+        std::vector<RunFact> facts;
+        facts.reserve(indices.size());
+        for (const auto idx: indices) {
+            const auto &run = m_runs[idx];
+            facts.push_back({run.run_id, run.totals().score, run.scenario_length});
+        }
+        return facts;
+    }
+
+    std::vector<std::pair<std::chrono::sys_days, double> >
+    UserProfile::getRollingTimeAverage(const std::vector<ScenarioId> &scenarios, const int window_days) const {
+        return rollingTimeAverageFor(mergedRunIndices(scenarios), window_days);
+    }
+
     std::vector<std::pair<std::chrono::sys_days, double> >
     UserProfile::rollingTimeAverageFor(const std::vector<std::size_t> &sorted_indices, const int window_days) const {
+        // TODO: Maybe add support for unsorted indices? Why do they need to be sorted?
         using namespace std::chrono;
         std::vector<std::pair<sys_days, double> > result;
         if (window_days <= 0 || sorted_indices.empty()) return result;

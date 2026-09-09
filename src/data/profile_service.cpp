@@ -206,4 +206,17 @@ namespace ksv::data {
         if (!m_profile) return {};
         return m_profile->getRollingTimeAverage(window_days);
     }
+
+    std::vector<domain::RunFact>
+    ProfileService::getRunFacts(const std::vector<domain::ScenarioId> &scenarios) const {
+        if (!m_profile) return {};
+        return m_profile->getRunFacts(scenarios);
+    }
+
+    std::vector<std::pair<std::chrono::sys_days, double> >
+    ProfileService::getRollingTimeAverage(const std::vector<domain::ScenarioId> &scenarios,
+                                          const int window_days) const {
+        if (!m_profile) return {};
+        return m_profile->getRollingTimeAverage(scenarios, window_days);
+    }
 }

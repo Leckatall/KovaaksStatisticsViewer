@@ -136,6 +136,12 @@ namespace ksv::domain {
         ScenarioRunId run_id;
         RunTotals totals;
     };
+
+    struct RunFact {
+        ScenarioRunId run_id;
+        float score = 0.0F;
+        float duration_seconds = 0.0F;
+    };
 }
 
 namespace std {

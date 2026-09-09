@@ -60,9 +60,16 @@ namespace ksv::domain {
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
         getRollingTimeAverage(int window_days) const;
 
+        [[nodiscard]] std::vector<RunFact> getRunFacts(const std::vector<ScenarioId> &scenarios) const;
+
+        [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
+        getRollingTimeAverage(const std::vector<ScenarioId> &scenarios, int window_days) const;
+
         [[nodiscard]] const std::vector<Run> &getAllRunRecords() const;
 
     private:
+        [[nodiscard]] std::vector<std::size_t> mergedRunIndices(const std::vector<ScenarioId> &scenarios) const;
+
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double> >
         rollingTimeAverageFor(const std::vector<std::size_t> &sorted_indices, int window_days) const;
 

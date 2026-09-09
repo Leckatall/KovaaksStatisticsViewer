@@ -76,6 +76,12 @@ namespace ksv::application {
         [[nodiscard]] virtual std::vector<std::pair<std::chrono::sys_days, double> >
         getRollingTimeAverage(int window_days) const = 0;
 
+        [[nodiscard]] virtual std::vector<domain::RunFact> getRunFacts(
+            const std::vector<domain::ScenarioId> &scenarios) const = 0;
+
+        [[nodiscard]] virtual std::vector<std::pair<std::chrono::sys_days, double> >
+        getRollingTimeAverage(const std::vector<domain::ScenarioId> &scenarios, int window_days) const = 0;
+
         [[nodiscard]] virtual bool isProfileLoaded() const = 0;
 
         virtual void onProfileChanged(std::function<void()> callback) = 0;

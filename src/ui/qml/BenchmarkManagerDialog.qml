@@ -91,8 +91,8 @@ ApplicationWindow {
             const result = root.benchmarkManagerVm.importPlaylist(url)
             root.importStatus = result.ok
                 ? (result.skipped.length > 0
-                   ? qsTr("Imported — skipped %n duplicate(s).", "", result.skipped.length)
-                   : qsTr("Imported."))
+                    ? qsTr("Imported — skipped %n duplicate(s).", "", result.skipped.length)
+                    : qsTr("Imported."))
                 : result.error
         })
     }
@@ -106,13 +106,18 @@ ApplicationWindow {
     }
 
     function classificationColor(classification) {
-        return ({ Trackable: "#4CAF50", Incomplete: "#FFA726", Invalid: "#E53935", Unsupported: "#9E9E9E" })[classification] || "#9E9E9E"
+        return ({
+            Trackable: "#4CAF50",
+            Incomplete: "#FFA726",
+            Invalid: "#E53935",
+            Unsupported: "#9E9E9E"
+        })[classification] || "#9E9E9E"
     }
 
     function focusColor(nodeId) {
         return root.focusTargetId !== "" && root.focusTargetId === nodeId
-               ? Qt.alpha(root.palette.accent, 0.25)
-               : "transparent"
+            ? Qt.alpha(root.palette.accent, 0.25)
+            : "transparent"
     }
 
     footer: DialogButtonBox {
@@ -202,10 +207,12 @@ ApplicationWindow {
     Menu {
         id: moveMenu
         property string scenarioId
+
         function openFor(nodeId) {
             moveMenu.scenarioId = nodeId
             moveMenu.popup()
         }
+
         Instantiator {
             model: root.flattenGroupTargets()
             delegate: MenuItem {
@@ -219,13 +226,13 @@ ApplicationWindow {
     }
 
     function flattenGroupTargets() {
-        const targets = [{ id: "", label: qsTr("Uncategorized") }]
+        const targets = [{id: "", label: qsTr("Uncategorized")}]
         const treeRoot = root.benchmarkManagerVm.root
         if (!treeRoot) return targets
         for (const category of root.childGroups(treeRoot)) {
-            targets.push({ id: category.nodeId, label: category.name })
+            targets.push({id: category.nodeId, label: category.name})
             for (const sub of root.childGroups(category))
-                targets.push({ id: sub.nodeId, label: category.name + " / " + sub.name })
+                targets.push({id: sub.nodeId, label: category.name + " / " + sub.name})
         }
         return targets
     }
@@ -237,7 +244,9 @@ ApplicationWindow {
         property string swatchKind
         property string swatchId
         property color swatchColor
-        background: Rectangle { color: colorSwatchButton.swatchColor; radius: 4 }
+        background: Rectangle {
+            color: colorSwatchButton.swatchColor; radius: 4
+        }
         onClicked: {
             colorDialog.targetKind = colorSwatchButton.swatchKind
             colorDialog.targetId = colorSwatchButton.swatchId
@@ -287,7 +296,9 @@ ApplicationWindow {
                         Layout.preferredWidth: 72
                         placeholderText: "—"
                         text: thresholdRow.modelData.hasValue ? thresholdRow.modelData.score : ""
-                        validator: DoubleValidator { bottom: 0; decimals: 6 }
+                        validator: DoubleValidator {
+                            bottom: 0; decimals: 6
+                        }
                         onEditingFinished: {
                             if (text.trim() === "") {
                                 root.benchmarkManagerVm.clearThreshold(
@@ -301,7 +312,9 @@ ApplicationWindow {
                     }
                 }
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
             Button {
                 objectName: "moveScenarioButton_" + scenarioRow.modelData.nodeId
                 text: qsTr("Move...")
@@ -340,7 +353,9 @@ ApplicationWindow {
                     swatchId: subcategoryCard.modelData.nodeId
                     swatchColor: subcategoryCard.modelData.color
                 }
-                Label { text: qsTr("Subcategory") ; color: subcategoryCard.palette.placeholderText }
+                Label {
+                    text: qsTr("Subcategory"); color: subcategoryCard.palette.placeholderText
+                }
                 TextField {
                     Layout.fillWidth: true
                     text: subcategoryCard.modelData.name
@@ -358,7 +373,8 @@ ApplicationWindow {
 
         Repeater {
             model: root.childScenarios(subcategoryCard.modelData)
-            delegate: ScenarioRow {}
+            delegate: ScenarioRow {
+            }
         }
     }
 
@@ -387,7 +403,9 @@ ApplicationWindow {
                     swatchId: categoryCard.modelData.nodeId
                     swatchColor: categoryCard.modelData.color
                 }
-                Label { text: qsTr("Category") ; color: categoryCard.palette.placeholderText }
+                Label {
+                    text: qsTr("Category"); color: categoryCard.palette.placeholderText
+                }
                 TextField {
                     Layout.fillWidth: true
                     text: categoryCard.modelData.name
@@ -401,16 +419,16 @@ ApplicationWindow {
                     enabled: categoryCard.index > 0
                     onClicked:
                         root.benchmarkManagerVm.reorderCategory(categoryCard.modelData.nodeId,
-                                                                categoryCard.index - 1)
+                            categoryCard.index - 1)
                 }
                 Button {
                     objectName: "moveCategoryDown_" + categoryCard.modelData.nodeId
                     text: qsTr("↓")
                     enabled: root.benchmarkManagerVm.root
-                             && categoryCard.index < root.childGroups(root.benchmarkManagerVm.root).length - 1
+                        && categoryCard.index < root.childGroups(root.benchmarkManagerVm.root).length - 1
                     onClicked:
                         root.benchmarkManagerVm.reorderCategory(categoryCard.modelData.nodeId,
-                                                                categoryCard.index + 1)
+                            categoryCard.index + 1)
                 }
                 TextField {
                     id: newSubcategoryField
@@ -425,7 +443,7 @@ ApplicationWindow {
                     enabled: newSubcategoryField.text.trim() !== ""
                     onClicked: {
                         root.benchmarkManagerVm.addSubcategory(categoryCard.modelData.nodeId,
-                                                               newSubcategoryField.text)
+                            newSubcategoryField.text)
                         newSubcategoryField.clear()
                     }
                 }
@@ -439,11 +457,13 @@ ApplicationWindow {
 
         Repeater {
             model: root.childScenarios(categoryCard.modelData)
-            delegate: ScenarioRow {}
+            delegate: ScenarioRow {
+            }
         }
         Repeater {
             model: root.childGroups(categoryCard.modelData)
-            delegate: SubcategoryCard {}
+            delegate: SubcategoryCard {
+            }
         }
     }
 
@@ -520,7 +540,7 @@ ApplicationWindow {
                     visible: root.importStatus !== ""
                     text: root.importStatus
                     color: root.importStatus.toLowerCase().indexOf("imported") === 0
-                           ? root.palette.windowText : "#E57373"
+                        ? root.palette.windowText : "#E57373"
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                 }
@@ -623,7 +643,7 @@ ApplicationWindow {
                         height: 8
                         radius: 4
                         color: root.classificationColor(root.benchmarkManagerVm.draftTrackable
-                                                        ? "Trackable" : "Incomplete")
+                            ? "Trackable" : "Incomplete")
                     }
                     Button {
                         objectName: "saveButton"
@@ -722,29 +742,34 @@ ApplicationWindow {
                     font.bold: true
                     visible: root.benchmarkManagerVm.validationIssues.length > 0
                 }
-                ColumnLayout {
-                    id: validationPanel
-                    objectName: "validationPanel"
+                ScrollView {
                     Layout.fillWidth: true
-                    spacing: 2
-                    visible: root.benchmarkManagerVm.validationIssues.length > 0
+                    Layout.fillHeight: true
+                    clip: true
+                    ColumnLayout {
+                        id: validationPanel
+                        objectName: "validationPanel"
+                        Layout.fillWidth: true
+                        spacing: 2
+                        visible: root.benchmarkManagerVm.validationIssues.length > 0
 
-                    Repeater {
-                        model: root.benchmarkManagerVm.validationIssues
-                        delegate: Button {
-                            id: validationIssue
-                            required property var modelData
-                            required property int index
-                            objectName: "validationIssue_" + index
-                            flat: true
-                            Layout.fillWidth: true
-                            contentItem: Text {
-                                text: "• " + validationIssue.modelData.message
-                                horizontalAlignment: Text.AlignLeft
-                                elide: Text.ElideRight
-                                color: validationIssue.palette.buttonText
+                        Repeater {
+                            model: root.benchmarkManagerVm.validationIssues
+                            delegate: Button {
+                                id: validationIssue
+                                required property var modelData
+                                required property int index
+                                objectName: "validationIssue_" + index
+                                flat: true
+                                Layout.fillWidth: true
+                                contentItem: Text {
+                                    text: "• " + validationIssue.modelData.message
+                                    horizontalAlignment: Text.AlignLeft
+                                    elide: Text.ElideRight
+                                    color: validationIssue.palette.buttonText
+                                }
+                                onClicked: root.focusTargetId = validationIssue.modelData.targetId
                             }
-                            onClicked: root.focusTargetId = validationIssue.modelData.targetId
                         }
                     }
                 }
@@ -788,20 +813,22 @@ ApplicationWindow {
                                 text: qsTr("Scenarios start in Uncategorized; use Move... to organize them.")
                                 color: hierarchyColumn.palette.placeholderText
                                 visible: root.benchmarkManagerVm.root
-                                         && root.childScenarios(root.benchmarkManagerVm.root).length === 0
-                                         && root.childGroups(root.benchmarkManagerVm.root).length === 0
+                                    && root.childScenarios(root.benchmarkManagerVm.root).length === 0
+                                    && root.childGroups(root.benchmarkManagerVm.root).length === 0
                             }
                         }
 
                         Repeater {
                             model: root.benchmarkManagerVm.root
-                                   ? root.childScenarios(root.benchmarkManagerVm.root) : []
-                            delegate: ScenarioRow {}
+                                ? root.childScenarios(root.benchmarkManagerVm.root) : []
+                            delegate: ScenarioRow {
+                            }
                         }
                         Repeater {
                             model: root.benchmarkManagerVm.root
-                                   ? root.childGroups(root.benchmarkManagerVm.root) : []
-                            delegate: CategoryCard {}
+                                ? root.childGroups(root.benchmarkManagerVm.root) : []
+                            delegate: CategoryCard {
+                            }
                         }
                     }
                 }

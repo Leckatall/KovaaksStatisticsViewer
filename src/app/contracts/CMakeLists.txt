@@ -22,6 +22,7 @@ target_sources(ksv_contracts PUBLIC
         benchmark_library_snapshot.h
         playlist_seed.h
         i_benchmark_library_service.h
+        i_benchmark_tracking_use_case.h
 )
 
 target_include_directories(ksv_contracts PUBLIC

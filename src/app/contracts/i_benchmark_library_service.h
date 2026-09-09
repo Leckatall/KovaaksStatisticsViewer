@@ -9,7 +9,9 @@
 #include <vector>
 
 #include "benchmark_library_snapshot.h"
+#include "benchmarks/benchmark_resolution.h"
 #include "playlist_seed.h"
+#include "run.h"
 
 namespace ksv::application {
     enum class BenchmarkDraftError {
@@ -58,6 +60,11 @@ namespace ksv::application {
         virtual void refresh() = 0;
         virtual void onChanged(std::function<void()> callback) = 0;
         [[nodiscard]] virtual std::string managedDirectoryPath() const = 0;
+        [[nodiscard]] virtual std::vector<domain::ScenarioId> scenarioCatalogue() const = 0;
+        [[nodiscard]] virtual std::vector<domain::ScenarioResolution> resolutionsFor(
+            const domain::BenchmarkId &id) const = 0;
+        [[nodiscard]] virtual std::vector<domain::ScenarioResolution> draftResolutions() const = 0;
+        [[nodiscard]] virtual bool lastResolutionWriteFailed() const = 0;
 
         // ---- Single active manager draft -----------------------------------------
         //
@@ -88,6 +95,8 @@ namespace ksv::application {
         virtual BenchmarkDraftResult addUnplayedScenario(const std::string &name) = 0;
         virtual BenchmarkDraftResult addKnownScenario(const std::string &name, const std::string &hash) = 0;
         virtual BenchmarkDraftResult renameScenario(const domain::ScenarioEntryId &id, const std::string &name) = 0;
+        virtual BenchmarkDraftResult setScenarioHash(const domain::ScenarioEntryId &id,
+                                                     const std::optional<std::string> &hash) = 0;
         virtual BenchmarkDraftResult removeScenario(const domain::ScenarioEntryId &id) = 0;
         virtual BenchmarkDraftResult setThreshold(const domain::ScenarioEntryId &entryId,
                                                   const domain::TierId &tierId, double score) = 0;

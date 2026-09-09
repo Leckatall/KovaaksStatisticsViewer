@@ -25,6 +25,7 @@
 #include "usecases/average_line_use_case.h"
 #include "series_config_store.h"
 #include "usecases/benchmark_library_service.h"
+#include "usecases/benchmark_tracking_use_case.h"
 #include "qt_data/benchmark_repository.h"
 #include "qt_data/playlist_reader.h"
 #include "usecases/completion_history_use_case.h"
@@ -68,6 +69,17 @@ namespace ksv::application {
             std::make_shared<data::ProfileSerializer>(std::make_shared<data::ProfileV3Migrator>(m_runIngestor)),
             m_settingsService, m_runIngestor);
 
+        m_benchmarkRepository = benchmarkRepository
+            ? std::move(benchmarkRepository)
+            : std::make_shared<qt_data::BenchmarkRepository>(
+                  (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
+                      .toStdString());
+        m_benchmarkLibraryService = std::make_shared<BenchmarkLibraryService>(
+            m_benchmarkRepository, std::make_shared<qt_data::PlaylistReader>(), m_profileService,
+            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
+        m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
+            m_benchmarkLibraryService, m_profileService);
+
         // SessionController installs the build requester, so it has to exist before the
         // first loadProfile() — otherwise a missing stored profile builds synchronously and blocks
         // startup for as long as a full directory scan takes.
@@ -100,14 +112,6 @@ namespace ksv::application {
         m_scenarioBrowserUseCase = std::make_shared<ScenarioBrowserUseCase>(m_sessionController, m_profileService);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_scenarioBrowserUseCase, this);
 
-        m_benchmarkRepository = benchmarkRepository
-            ? std::move(benchmarkRepository)
-            : std::make_shared<qt_data::BenchmarkRepository>(
-                  (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
-                      .toStdString());
-        m_benchmarkLibraryService = std::make_shared<BenchmarkLibraryService>(
-            m_benchmarkRepository, std::make_shared<qt_data::PlaylistReader>(),
-            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
         m_benchmarkManagerVm = new presentation::BenchmarkManagerViewModel(m_benchmarkLibraryService, this);
     }
 
