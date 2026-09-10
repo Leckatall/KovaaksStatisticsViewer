@@ -31,11 +31,15 @@ namespace ksv::domain {
     struct BenchmarkIssue {
         BenchmarkIssueCode code;
         IssueTarget target;
+
+        friend bool operator==(const BenchmarkIssue &, const BenchmarkIssue &) = default;
     };
 
     struct CompletenessResult {
         Completeness completeness = Completeness::Incomplete;
         std::vector<BenchmarkIssue> issues;
+
+        friend bool operator==(const CompletenessResult &, const CompletenessResult &) = default;
     };
 
     [[nodiscard]] CompletenessResult validateBenchmark(const Benchmark &definition);

@@ -18,6 +18,9 @@ add_executable(ui_tests
     scenario_browser_vm_test.cpp
     benchmark_issue_text_test.cpp
     benchmark_manager_vm_test.cpp
+    benchmark_tracking_vm_test.cpp
+    benchmark_history_vm_test.cpp
+    benchmark_breakdown_model_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE

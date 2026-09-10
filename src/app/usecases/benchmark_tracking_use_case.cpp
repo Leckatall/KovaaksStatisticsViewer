@@ -23,6 +23,31 @@ namespace ksv::application {
             }
             return found;
         }
+
+        BenchmarkChoice choiceFor(const BenchmarkFileEntry &entry) {
+            BenchmarkChoice choice;
+            choice.filename = entry.filename;
+            if (const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content)) {
+                choice.id = loaded->benchmark.id;
+                choice.displayName = loaded->benchmark.name.empty() ? entry.filename : loaded->benchmark.name;
+                choice.classification = loaded->completeness.completeness == domain::Completeness::Trackable
+                                            ? BenchmarkChoiceClassification::Trackable
+                                            : BenchmarkChoiceClassification::Incomplete;
+                choice.selectable = true;
+                return choice;
+            }
+            const auto &problem = std::get<ProblemBenchmark>(entry.content);
+            choice.id = problem.id;
+            choice.displayName = problem.displayName && !problem.displayName->empty()
+                                     ? *problem.displayName
+                                     : entry.filename;
+            choice.classification = problem.problem == BenchmarkFileProblem::Unsupported
+                                        ? BenchmarkChoiceClassification::Unsupported
+                                        : BenchmarkChoiceClassification::Invalid;
+            choice.schemaVersion = problem.schemaVersion;
+            choice.selectable = false;
+            return choice;
+        }
     }
 
     BenchmarkTrackingUseCase::BenchmarkTrackingUseCase(
@@ -39,11 +64,13 @@ namespace ksv::application {
             refresh();
             notifyChanged();
         });
+        refresh();
     }
 
     void BenchmarkTrackingUseCase::select(const domain::BenchmarkId &id) {
         if (m_selected && *m_selected == id) return;
         m_selected = id;
+        m_lastKnownSelectedDisplayName.clear();
         refresh();
         notifyChanged();
     }
@@ -51,6 +78,7 @@ namespace ksv::application {
     void BenchmarkTrackingUseCase::clearSelection() {
         if (!m_selected) return;
         m_selected.reset();
+        m_lastKnownSelectedDisplayName.clear();
         refresh();
         notifyChanged();
     }
@@ -60,33 +88,60 @@ namespace ksv::application {
     }
 
     void BenchmarkTrackingUseCase::refresh() {
+        const auto revision = m_library->revision();
+        if (!m_librarySnapshotValid || revision != m_librarySnapshotRevision) {
+            m_librarySnapshot = m_library->snapshot();
+            m_librarySnapshotRevision = revision;
+            m_librarySnapshotValid = true;
+        }
+        const auto &library = m_librarySnapshot;
+
+        m_snapshot = {};
+        m_snapshot.libraryRevision = revision;
+        m_snapshot.selectedId = m_selected;
+        if (library) {
+            for (const auto &entry: library->entries) m_snapshot.choices.push_back(choiceFor(entry));
+        }
+
         if (!m_selected) {
             m_state = BenchmarkTrackingState::NoSelection;
             m_projection = {};
+            m_snapshot.availability = m_state;
             return;
         }
 
-        // Any library or profile change drops the whole cache, so a surviving entry is always
-        // current for the definition it was built from -- presence is the only check a hit needs.
+        m_snapshot.lastKnownSelectedDisplayName = m_lastKnownSelectedDisplayName;
+        for (const auto &choice: m_snapshot.choices) {
+            if (choice.id == m_selected) {
+                m_lastKnownSelectedDisplayName = choice.displayName;
+                m_snapshot.lastKnownSelectedDisplayName = choice.displayName;
+                break;
+            }
+        }
+
+        const LoadedBenchmark *loaded = library ? findLoaded(*library, *m_selected) : nullptr;
+
         if (const auto cached = m_cache.find(*m_selected); cached != m_cache.end()) {
+            // Any library or profile change drops the whole cache, so a surviving entry is always
+            // current for the definition it was built from -- presence is the only check a hit needs.
             m_projection = cached->second;
             m_state = BenchmarkTrackingState::Ready;
-            return;
-        }
-
-        const auto snapshot = m_library->snapshot();
-        const auto *loaded = snapshot ? findLoaded(*snapshot, *m_selected) : nullptr;
-        if (!loaded) {
+        } else if (!loaded) {
             m_state = BenchmarkTrackingState::Unavailable;
             m_projection = {};
-            return;
+        } else {
+            m_projection = evaluate(*loaded);
+            m_state = BenchmarkTrackingState::Ready;
+            // Only Ready results are cached, so a benchmark that reappears is evaluated rather than
+            // served a remembered absence.
+            m_cache[*m_selected] = m_projection;
         }
 
-        m_projection = evaluate(*loaded);
-        m_state = BenchmarkTrackingState::Ready;
-        // Only Ready results are cached, so a benchmark that reappears is evaluated rather than
-        // served a remembered absence.
-        m_cache[*m_selected] = m_projection;
+        m_snapshot.availability = m_state;
+        if (m_state == BenchmarkTrackingState::Ready) {
+            if (loaded) m_snapshot.selectedLoaded = *loaded;
+            m_snapshot.projection = m_projection;
+        }
     }
 
     domain::BenchmarkProjection BenchmarkTrackingUseCase::evaluate(const LoadedBenchmark &loaded) const {

@@ -25,6 +25,7 @@
 #include "usecases/average_line_use_case.h"
 #include "series_config_store.h"
 #include "usecases/benchmark_library_service.h"
+#include "usecases/benchmark_manager_use_case.h"
 #include "usecases/benchmark_tracking_use_case.h"
 #include "qt_data/benchmark_repository.h"
 #include "qt_data/playlist_reader.h"
@@ -112,7 +113,9 @@ namespace ksv::application {
         m_scenarioBrowserUseCase = std::make_shared<ScenarioBrowserUseCase>(m_sessionController, m_profileService);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_scenarioBrowserUseCase, this);
 
-        m_benchmarkManagerVm = new presentation::BenchmarkManagerViewModel(m_benchmarkLibraryService, this);
+        m_benchmarkManagerUseCase = std::make_shared<BenchmarkManagerUseCase>(m_benchmarkLibraryService);
+        m_benchmarkManagerVm = new presentation::BenchmarkManagerViewModel(m_benchmarkManagerUseCase, this);
+        m_benchmarkTrackingVm = new presentation::BenchmarkTrackingViewModel(m_benchmarkTrackingUseCase, this);
     }
 
     int App::start() {
@@ -123,7 +126,8 @@ namespace ksv::application {
             {"sessionVm", QVariant::fromValue(m_sessionVm)},
             {"settingsVm", QVariant::fromValue(m_settingsVm)},
             {"scenarioBrowserVm", QVariant::fromValue(m_scenarioBrowserVm)},
-            {"benchmarkManagerVm", QVariant::fromValue(m_benchmarkManagerVm)}
+            {"benchmarkManagerVm", QVariant::fromValue(m_benchmarkManagerVm)},
+            {"benchmarkTrackingVm", QVariant::fromValue(m_benchmarkTrackingVm)}
         });
         m_engine.loadFromModule("KovaaksStatsViewer", "Main");
         if (m_engine.rootObjects().isEmpty()) return -1;

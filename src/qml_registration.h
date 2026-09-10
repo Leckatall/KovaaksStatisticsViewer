@@ -10,6 +10,9 @@
 #include <presentation/editable_expression_node.h>
 #include <presentation/benchmark_manager_vm.h>
 #include <presentation/benchmark_tree_node.h>
+#include <presentation/benchmark_tracking_vm.h>
+#include <presentation/benchmark_history_vm.h>
+#include <presentation/benchmark_breakdown_model.h>
 
 namespace ksv {
     // Referencing these types keeps the linker from dropping the static QML
@@ -46,6 +49,12 @@ namespace ksv {
             "KovaaksStatsViewer", 1, 0, "BenchmarkScenarioNode");
         qmlRegisterType<ui::GraphCanvas>(
             "KovaaksStatsViewer", 1, 0, "GraphCanvas");
+        qmlRegisterUncreatableType<presentation::BenchmarkTrackingViewModel>(
+            "KovaaksStatsViewer", 1, 0, "BenchmarkTrackingViewModel", "Created in C++");
+        qmlRegisterUncreatableType<presentation::BenchmarkHistoryViewModel>(
+            "KovaaksStatsViewer", 1, 0, "BenchmarkHistoryViewModel", "Created in C++");
+        qmlRegisterUncreatableType<presentation::BenchmarkBreakdownModel>(
+            "KovaaksStatsViewer", 1, 0, "BenchmarkBreakdownModel", "Created in C++");
     }
 }
 

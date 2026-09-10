@@ -8,7 +8,11 @@
 
 #include <gtest/gtest.h>
 
+#include <QFile>
+#include <QObject>
+#include <QRegularExpression>
 #include <QString>
+#include <QVariant>
 #include <QtGlobal>
 #include <memory>
 #include <vector>
@@ -64,5 +68,36 @@ namespace {
         for (const auto &msg: g_messages) {
             EXPECT_FALSE(looksLikeLoadFailure(msg)) << "QML load/binding failure: " << msg.toStdString();
         }
+    }
+
+    bool mainQmlRequires(const QString &propertyName) {
+        QFile file(QStringLiteral(KSV_UI_QML_DIR "/Main.qml"));
+        if (!file.open(QIODevice::ReadOnly)) return false;
+        const QString source = QString::fromUtf8(file.readAll());
+        return QRegularExpression(
+                   QStringLiteral("required\\s+property\\s+[\\w.<>]+\\s+%1\\b").arg(propertyName))
+            .match(source)
+            .hasMatch();
+    }
+
+    TEST(QmlSmokeTest, MainRequiresBothBenchmarkViewModels) {
+        integration::TestEnv env;
+        ASSERT_TRUE(env.valid());
+
+        EXPECT_TRUE(mainQmlRequires(QStringLiteral("benchmarkTrackingVm")))
+            << "Main.qml must declare benchmarkTrackingVm as a required property";
+        EXPECT_TRUE(mainQmlRequires(QStringLiteral("benchmarkManagerVm")))
+            << "Main.qml must declare benchmarkManagerVm as a required property";
+
+        application::App app(
+            env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
+        ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
+        ASSERT_FALSE(app.engine()->rootObjects().isEmpty());
+
+        auto *root = app.engine()->rootObjects().first();
+        EXPECT_EQ(root->property("benchmarkTrackingVm").value<QObject *>(),
+                  static_cast<QObject *>(app.benchmarkTrackingVm()));
+        EXPECT_EQ(root->property("benchmarkManagerVm").value<QObject *>(),
+                  static_cast<QObject *>(app.benchmarkManagerVm()));
     }
 }

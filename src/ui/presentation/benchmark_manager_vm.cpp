@@ -8,13 +8,11 @@
 #include <utility>
 #include <variant>
 
+#include "benchmark_format.h"
+
 namespace ksv::presentation {
     namespace {
         QString idString(const auto &id) { return QString::fromStdString(id.value); }
-
-        QColor toQColor(const domain::BenchmarkColor &color) {
-            return {color.red, color.green, color.blue, color.alpha};
-        }
 
         domain::BenchmarkColor toDomainColor(const QColor &color) {
             return {static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
@@ -117,135 +115,146 @@ namespace ksv::presentation {
                                                            resolution ? candidateList(resolution->candidates)
                                                                       : QVariantList{});
         }
+
+        std::unique_ptr<BenchmarkGroupNode> buildTree(
+            const std::optional<domain::Benchmark> &draft,
+            const std::vector<domain::ScenarioResolution> &resolutions) {
+            std::unordered_map<std::string, const domain::ScenarioResolution *> byEntry;
+            for (const auto &resolution: resolutions) byEntry.emplace(resolution.entryId.value, &resolution);
+            const auto lookup = [&](const domain::ScenarioEntry &entry) -> const domain::ScenarioResolution * {
+                const auto found = byEntry.find(entry.id.value);
+                return found == byEntry.end() ? nullptr : found->second;
+            };
+            auto root = std::make_unique<BenchmarkGroupNode>(QString(), QStringLiteral("uncategorized"),
+                                                             QObject::tr("Uncategorized"), QColor());
+            if (draft) {
+                for (const auto &entry: draft->uncategorized)
+                    root->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
+                for (const auto &category: draft->categories) {
+                    auto categoryNode = std::make_unique<BenchmarkGroupNode>(
+                        idString(category.id), QStringLiteral("category"),
+                        QString::fromStdString(category.name), toQColor(category.color));
+                    for (const auto &entry: category.scenarios)
+                        categoryNode->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
+                    for (const auto &sub: category.subcategories) {
+                        auto subNode = std::make_unique<BenchmarkGroupNode>(
+                            idString(sub.id), QStringLiteral("subcategory"),
+                            QString::fromStdString(sub.name), toQColor(sub.color));
+                        for (const auto &entry: sub.scenarios)
+                            subNode->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
+                        categoryNode->appendChild(std::move(subNode));
+                    }
+                    root->appendChild(std::move(categoryNode));
+                }
+            }
+            return root;
+        }
+
+        QVariantList buildLibraryEntries(const std::optional<application::BenchmarkLibrarySnapshot> &snapshot) {
+            QVariantList entries;
+            if (!snapshot) return entries;
+            for (const auto &entry: snapshot->entries) {
+                QVariantMap row;
+                row["filename"] = QString::fromStdString(entry.filename);
+                if (const auto *loaded = std::get_if<application::LoadedBenchmark>(&entry.content)) {
+                    row["id"] = idString(loaded->benchmark.id);
+                    const auto name = QString::fromStdString(loaded->benchmark.name);
+                    row["name"] = name.isEmpty() ? row["filename"] : name;
+                    row["classification"] = loaded->completeness.completeness == domain::Completeness::Trackable
+                                                ? QStringLiteral("Trackable")
+                                                : QStringLiteral("Incomplete");
+                    row["openable"] = true;
+                } else {
+                    const auto &problem = std::get<application::ProblemBenchmark>(entry.content);
+                    row["id"] = problem.id ? idString(*problem.id) : QString();
+                    const auto name = problem.displayName ? QString::fromStdString(*problem.displayName) : QString();
+                    row["name"] = !name.isEmpty() ? name : row["filename"];
+                    row["classification"] = problem.problem == application::BenchmarkFileProblem::Unsupported
+                                                ? QStringLiteral("Unsupported")
+                                                : QStringLiteral("Invalid");
+                    row["openable"] = false;
+                }
+                // Problem entries have no trustworthy id+digest pair for the remove precondition,
+                // so they are never offered for deletion.
+                row["deletable"] = std::holds_alternative<application::LoadedBenchmark>(entry.content);
+                entries.push_back(row);
+            }
+            return entries;
+        }
     }
 
     BenchmarkManagerViewModel::BenchmarkManagerViewModel(
-        std::shared_ptr<application::IBenchmarkLibraryService> service, QObject *parent)
-        : QObject(parent), m_service(std::move(service)) {
-        m_service->onDraftChanged([this] { rebuildDraftState(); });
-        m_service->onChanged([this] {
-            rebuildLibrary();
+        std::shared_ptr<application::IBenchmarkManagerUseCase> useCase, QObject *parent)
+        : QObject(parent), m_useCase(std::move(useCase)) {
+        m_useCase->onChanged([this] {
+            adaptState();
+            emit draftChanged();
             emit libraryChanged();
         });
-        rebuildDraftState();
-        rebuildLibrary();
+        adaptState();
     }
 
-    void BenchmarkManagerViewModel::rebuildDraftState() {
-        const auto draft = m_service->draft();
-        m_benchmarkName = draft ? QString::fromStdString(draft->name) : QString();
-        m_draftId = draft ? idString(draft->id) : QString();
+    void BenchmarkManagerViewModel::adaptState() {
+        const application::BenchmarkManagerState &state = m_useCase->state();
 
-        m_validationIssues.clear();
-        if (m_service->hasDraft()) {
-            for (const auto &issue: m_service->draftValidation().issues)
-                m_validationIssues.push_back(QVariantMap{
+        QString benchmarkName = state.draft ? QString::fromStdString(state.draft->name) : QString();
+        QString draftId = state.draft ? idString(state.draft->id) : QString();
+
+        QVariantList validationIssues;
+        if (state.draft) {
+            for (const auto &issue: state.draftCompleteness.issues)
+                validationIssues.push_back(QVariantMap{
                     {"message", benchmarkIssueText(issue.code)},
                     {"targetId", QString::fromStdString(targetIdString(issue.target))},
                 });
         }
-        m_tiers.clear();
-        if (draft) {
-            for (const auto &tier: draft->tiers)
-                m_tiers.push_back(QVariantMap{
+
+        QVariantList tiers;
+        if (state.draft) {
+            for (const auto &tier: state.draft->tiers)
+                tiers.push_back(QVariantMap{
                     {"id", idString(tier.id)},
                     {"name", QString::fromStdString(tier.name)},
                     {"color", toQColor(tier.color)},
                 });
         }
 
-        rebuildTree(draft);
-        emit draftChanged();
-    }
-
-    void BenchmarkManagerViewModel::rebuildTree(const std::optional<domain::Benchmark> &draft) {
-        const auto resolutions = m_service->draftResolutions();
-        std::unordered_map<std::string, const domain::ScenarioResolution *> byEntry;
-        for (const auto &resolution: resolutions) byEntry.emplace(resolution.entryId.value, &resolution);
-        const auto lookup = [&](const domain::ScenarioEntry &entry) -> const domain::ScenarioResolution * {
-            const auto found = byEntry.find(entry.id.value);
-            return found == byEntry.end() ? nullptr : found->second;
-        };
-        auto rebuilt = std::make_unique<BenchmarkGroupNode>(QString(), QStringLiteral("uncategorized"),
-                                                            tr("Uncategorized"), QColor());
-        if (draft) {
-            for (const auto &entry: draft->uncategorized)
-                rebuilt->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
-            for (const auto &category: draft->categories) {
-                auto categoryNode = std::make_unique<BenchmarkGroupNode>(
-                    idString(category.id), QStringLiteral("category"),
-                    QString::fromStdString(category.name), toQColor(category.color));
-                for (const auto &entry: category.scenarios)
-                    categoryNode->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
-                for (const auto &sub: category.subcategories) {
-                    auto subNode = std::make_unique<BenchmarkGroupNode>(
-                        idString(sub.id), QStringLiteral("subcategory"),
-                        QString::fromStdString(sub.name), toQColor(sub.color));
-                    for (const auto &entry: sub.scenarios)
-                        subNode->appendChild(makeScenarioNode(entry, draft->tiers, lookup(entry)));
-                    categoryNode->appendChild(std::move(subNode));
-                }
-                rebuilt->appendChild(std::move(categoryNode));
-            }
-        }
-        // Move-assign so m_root points at the new tree before the old one is destroyed: QML
-        // re-reads `root` on the draftChanged notification while stale delegates may still
-        // touch the previous tree.
-        m_root = std::move(rebuilt);
-    }
-
-    void BenchmarkManagerViewModel::rebuildLibrary() {
-        m_scenarioCatalogue.clear();
-        for (const auto &scenario: m_service->scenarioCatalogue())
-            m_scenarioCatalogue.push_back(QVariantMap{
+        QVariantList scenarioCatalogue;
+        for (const auto &scenario: state.scenarioCatalogue)
+            scenarioCatalogue.push_back(QVariantMap{
                 {"name", QString::fromStdString(scenario.name)},
                 {"hash", QString::fromStdString(scenario.hash)},
             });
-        m_libraryEntries.clear();
-        const auto snapshot = m_service->snapshot();
-        if (!snapshot) return;
-        for (const auto &entry: snapshot->entries) {
-            QVariantMap row;
-            row["filename"] = QString::fromStdString(entry.filename);
-            if (const auto *loaded = std::get_if<application::LoadedBenchmark>(&entry.content)) {
-                row["id"] = idString(loaded->benchmark.id);
-                const auto name = QString::fromStdString(loaded->benchmark.name);
-                row["name"] = name.isEmpty() ? row["filename"] : name;
-                row["classification"] = loaded->completeness.completeness == domain::Completeness::Trackable
-                                            ? QStringLiteral("Trackable")
-                                            : QStringLiteral("Incomplete");
-                row["openable"] = true;
-            } else {
-                const auto &problem = std::get<application::ProblemBenchmark>(entry.content);
-                row["id"] = problem.id ? idString(*problem.id) : QString();
-                const auto name = problem.displayName ? QString::fromStdString(*problem.displayName) : QString();
-                row["name"] = !name.isEmpty() ? name : row["filename"];
-                row["classification"] = problem.problem == application::BenchmarkFileProblem::Unsupported
-                                            ? QStringLiteral("Unsupported")
-                                            : QStringLiteral("Invalid");
-                row["openable"] = false;
-            }
-            // Problem entries have no trustworthy id+digest pair for the remove precondition,
-            // so they are never offered for deletion.
-            row["deletable"] = std::holds_alternative<application::LoadedBenchmark>(entry.content);
-            m_libraryEntries.push_back(row);
-        }
+
+        QVariantList libraryEntries = buildLibraryEntries(state.library);
+        auto root = buildTree(state.draft, state.draftResolutions);
+
+        // One notification installs one coherent revision: every projection is built from the
+        // single state() read above, then swapped in together before any signal is emitted, so a
+        // QML re-read never sees a half-updated mix of old and new fields.
+        m_benchmarkName = std::move(benchmarkName);
+        m_draftId = std::move(draftId);
+        m_validationIssues = std::move(validationIssues);
+        m_tiers = std::move(tiers);
+        m_scenarioCatalogue = std::move(scenarioCatalogue);
+        m_libraryEntries = std::move(libraryEntries);
+        m_root = std::move(root);
     }
 
     void BenchmarkManagerViewModel::beginNewBenchmark() {
-        m_service->beginNewDraft();
+        m_useCase->beginNewDraft();
     }
 
     bool BenchmarkManagerViewModel::openBenchmark(const QString &id) {
-        return m_service->openDraft(domain::BenchmarkId{id.toStdString()});
+        return m_useCase->openDraft(domain::BenchmarkId{id.toStdString()});
     }
 
     void BenchmarkManagerViewModel::discard() {
-        m_service->discardDraft();
+        m_useCase->discardDraft();
     }
 
     QVariantMap BenchmarkManagerViewModel::importPlaylist(const QUrl &file) {
-        const auto result = m_service->importPlaylist(file.toLocalFile().toStdString());
+        const auto result = m_useCase->importPlaylist(file.toLocalFile().toStdString());
         if (result.failure) {
             switch (*result.failure) {
                 case application::PlaylistImportFailure::FileUnreadable:
@@ -264,7 +273,7 @@ namespace ksv::presentation {
     }
 
     QVariantMap BenchmarkManagerViewModel::save() {
-        const auto result = m_service->saveDraft();
+        const auto result = m_useCase->saveDraft();
         if (result.error) {
             switch (*result.error) {
                 case application::BenchmarkSaveError::NoDraft:
@@ -282,7 +291,7 @@ namespace ksv::presentation {
     }
 
     QVariantMap BenchmarkManagerViewModel::deleteBenchmark(const QString &id) {
-        const auto result = m_service->deleteBenchmark(domain::BenchmarkId{id.toStdString()});
+        const auto result = m_useCase->deleteBenchmark(domain::BenchmarkId{id.toStdString()});
         if (result.error) {
             switch (*result.error) {
                 case application::BenchmarkDeleteError::NotFound:
@@ -298,91 +307,91 @@ namespace ksv::presentation {
     }
 
     void BenchmarkManagerViewModel::setBenchmarkName(const QString &name) {
-        m_service->renameBenchmark(name.toStdString());
+        m_useCase->renameBenchmark(name.toStdString());
     }
 
     void BenchmarkManagerViewModel::refresh() {
-        m_service->refresh();
+        m_useCase->refresh();
     }
 
     QVariantMap BenchmarkManagerViewModel::addTier(const QString &name) {
-        return toResultMap(m_service->addTier(name.toStdString()));
+        return toResultMap(m_useCase->addTier(name.toStdString()));
     }
 
     QVariantMap BenchmarkManagerViewModel::renameTier(const QString &id, const QString &name) {
-        return toResultMap(m_service->renameTier(domain::TierId{id.toStdString()}, name.toStdString()));
+        return toResultMap(m_useCase->renameTier(domain::TierId{id.toStdString()}, name.toStdString()));
     }
 
     QVariantMap BenchmarkManagerViewModel::setTierColor(const QString &id, const QColor &color) {
-        return toResultMap(m_service->setTierColor(domain::TierId{id.toStdString()}, toDomainColor(color)));
+        return toResultMap(m_useCase->setTierColor(domain::TierId{id.toStdString()}, toDomainColor(color)));
     }
 
     QVariantMap BenchmarkManagerViewModel::reorderTier(const QString &id, int position) {
-        return toResultMap(m_service->reorderTier(domain::TierId{id.toStdString()},
+        return toResultMap(m_useCase->reorderTier(domain::TierId{id.toStdString()},
                                                   static_cast<size_t>(std::max(position, 0))));
     }
 
     QVariantMap BenchmarkManagerViewModel::removeTier(const QString &id) {
-        return toResultMap(m_service->removeTier(domain::TierId{id.toStdString()}));
+        return toResultMap(m_useCase->removeTier(domain::TierId{id.toStdString()}));
     }
 
     QVariantMap BenchmarkManagerViewModel::addUnplayedScenario(const QString &name) {
-        return toResultMap(m_service->addUnplayedScenario(name.toStdString()));
+        return toResultMap(m_useCase->addUnplayedScenario(name.toStdString()));
     }
 
     QVariantMap BenchmarkManagerViewModel::addKnownScenario(const QString &name, const QString &hash) {
-        return toResultMap(m_service->addKnownScenario(name.toStdString(), hash.toStdString()));
+        return toResultMap(m_useCase->addKnownScenario(name.toStdString(), hash.toStdString()));
     }
 
     QVariantMap BenchmarkManagerViewModel::renameScenario(const QString &id, const QString &name) {
-        return toResultMap(m_service->renameScenario(domain::ScenarioEntryId{id.toStdString()},
+        return toResultMap(m_useCase->renameScenario(domain::ScenarioEntryId{id.toStdString()},
                                                      name.toStdString()));
     }
 
     QVariantMap BenchmarkManagerViewModel::setScenarioHash(const QString &entryId, const QString &hash) {
-        return toResultMap(m_service->setScenarioHash(
+        return toResultMap(m_useCase->setScenarioHash(
             domain::ScenarioEntryId{entryId.toStdString()},
             hash.isEmpty() ? std::nullopt : std::optional{hash.toStdString()}));
     }
 
     QVariantMap BenchmarkManagerViewModel::removeScenario(const QString &id) {
-        return toResultMap(m_service->removeScenario(domain::ScenarioEntryId{id.toStdString()}));
+        return toResultMap(m_useCase->removeScenario(domain::ScenarioEntryId{id.toStdString()}));
     }
 
     QVariantMap BenchmarkManagerViewModel::setThreshold(const QString &entryId, const QString &tierId,
                                                         double score) {
-        return toResultMap(m_service->setThreshold(domain::ScenarioEntryId{entryId.toStdString()},
+        return toResultMap(m_useCase->setThreshold(domain::ScenarioEntryId{entryId.toStdString()},
                                                    domain::TierId{tierId.toStdString()}, score));
     }
 
     QVariantMap BenchmarkManagerViewModel::clearThreshold(const QString &entryId, const QString &tierId) {
-        return toResultMap(m_service->clearThreshold(domain::ScenarioEntryId{entryId.toStdString()},
+        return toResultMap(m_useCase->clearThreshold(domain::ScenarioEntryId{entryId.toStdString()},
                                                      domain::TierId{tierId.toStdString()}));
     }
 
     QVariantMap BenchmarkManagerViewModel::addCategory(const QString &name) {
-        return toResultMap(m_service->addCategory(name.toStdString()));
+        return toResultMap(m_useCase->addCategory(name.toStdString()));
     }
 
     QVariantMap BenchmarkManagerViewModel::renameGroup(const QString &id, const QString &name) {
-        return toResultMap(m_service->renameGroup(domain::GroupId{id.toStdString()}, name.toStdString()));
+        return toResultMap(m_useCase->renameGroup(domain::GroupId{id.toStdString()}, name.toStdString()));
     }
 
     QVariantMap BenchmarkManagerViewModel::setGroupColor(const QString &id, const QColor &color) {
-        return toResultMap(m_service->setGroupColor(domain::GroupId{id.toStdString()}, toDomainColor(color)));
+        return toResultMap(m_useCase->setGroupColor(domain::GroupId{id.toStdString()}, toDomainColor(color)));
     }
 
     QVariantMap BenchmarkManagerViewModel::reorderCategory(const QString &id, int position) {
-        return toResultMap(m_service->reorderCategory(domain::GroupId{id.toStdString()},
+        return toResultMap(m_useCase->reorderCategory(domain::GroupId{id.toStdString()},
                                                       static_cast<size_t>(std::max(position, 0))));
     }
 
     QVariantMap BenchmarkManagerViewModel::removeCategory(const QString &id) {
-        return toResultMap(m_service->removeCategory(domain::GroupId{id.toStdString()}));
+        return toResultMap(m_useCase->removeCategory(domain::GroupId{id.toStdString()}));
     }
 
     QVariantMap BenchmarkManagerViewModel::addSubcategory(const QString &categoryId, const QString &name) {
-        return toResultMap(m_service->addSubcategory(domain::GroupId{categoryId.toStdString()},
+        return toResultMap(m_useCase->addSubcategory(domain::GroupId{categoryId.toStdString()},
                                                      name.toStdString()));
     }
 
@@ -391,6 +400,6 @@ namespace ksv::presentation {
             targetGroupId.isEmpty()
                 ? application::DraftGroupTarget{std::monostate{}}
                 : application::DraftGroupTarget{domain::GroupId{targetGroupId.toStdString()}};
-        return toResultMap(m_service->moveScenario(domain::ScenarioEntryId{entryId.toStdString()}, target));
+        return toResultMap(m_useCase->moveScenario(domain::ScenarioEntryId{entryId.toStdString()}, target));
     }
 }

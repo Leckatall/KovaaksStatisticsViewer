@@ -10,8 +10,10 @@
 namespace ksv::application {
     enum class BenchmarkTrackingState { NoSelection, Unavailable, Ready };
 
+    struct BenchmarkWorkspaceSnapshot;
+
     // Asynchronous-ready by construction: no command returns a projection. A consumer selects,
-    // waits for onChanged, then reads projection(). Moving evaluation onto a worker later would
+    // waits for onChanged, then reads snapshot(). Moving evaluation onto a worker later would
     // change only when the callback fires, not the shape any caller depends on.
     class IBenchmarkTrackingUseCase {
     public:
@@ -19,6 +21,8 @@ namespace ksv::application {
 
         virtual void select(const domain::BenchmarkId &id) = 0;
         virtual void clearSelection() = 0;
+        // Valid until the next select/clearSelection or service callback; never retained by callers.
+        [[nodiscard]] virtual const BenchmarkWorkspaceSnapshot &snapshot() const = 0;
         // The selected id is kept even while the state is Unavailable, so a benchmark that
         // reappears on the next refresh comes back without the user reselecting it.
         [[nodiscard]] virtual std::optional<domain::BenchmarkId> selected() const = 0;

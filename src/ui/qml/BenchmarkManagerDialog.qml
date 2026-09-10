@@ -27,6 +27,13 @@ ApplicationWindow {
     property string importStatus: ""
     property var pendingAction: null
 
+    // A mapping edit or a save on an opened (from-library) definition must clear the
+    // retrospective reinterpretation warning first; the confirmed action is parked here.
+    property var pendingRetrospectiveAction: null
+    property string knownScenarioFilter: ""
+    property string selectedKnownScenarioHash: ""
+    property string selectedKnownScenarioName: ""
+
     function selectedRow() {
         const entries = root.benchmarkManagerVm.libraryEntries
         if (!root.selectedEntryFilename || !entries) return null
@@ -82,8 +89,61 @@ ApplicationWindow {
     }
 
     function requestSave() {
-        if (root.benchmarkManagerVm.draftFromLibrary) retrospectivePrompt.open()
-        else doSave()
+        root.runRetrospective(() => root.doSave())
+    }
+
+    // Edits to a saved definition reinterpret past results, so they pass through the
+    // retrospective warning; a never-saved draft applies the action immediately.
+    function runRetrospective(action) {
+        if (root.benchmarkManagerVm.draftFromLibrary) {
+            root.pendingRetrospectiveAction = action
+            retrospectivePrompt.open()
+        } else {
+            action()
+        }
+    }
+
+    function requestMappingEdit(entryId, hash) {
+        root.runRetrospective(() => root.benchmarkManagerVm.setScenarioHash(entryId, hash))
+    }
+
+    function matchStateLabel(state) {
+        return ({
+            resolved: qsTr("Resolved"),
+            mappedUnavailable: qsTr("Mapped, unavailable"),
+            unresolved: qsTr("Unresolved"),
+            ambiguous: qsTr("Ambiguous"),
+            autoMappable: qsTr("Pending automatic mapping")
+        })[state] || qsTr("Unresolved")
+    }
+
+    function offersMappingEdit(state) {
+        return state === "resolved" || state === "mappedUnavailable"
+    }
+
+    function candidateText(candidate) {
+        const parts = [String(candidate.hash),
+                       qsTr("%n run(s)", "", candidate.runCount || 0)]
+        const played = candidate.lastPlayed
+        if (played && !isNaN(new Date(played).getTime()))
+            parts.push(Qt.formatDate(played, "yyyy-MM-dd"))
+        return parts.join(" · ")
+    }
+
+    function filteredCatalogue() {
+        const query = root.knownScenarioFilter.trim().toLowerCase()
+        if (query === "") return []
+        const catalogue = root.benchmarkManagerVm.scenarioCatalogue || []
+        return catalogue.filter(entry => entry.name.toLowerCase().indexOf(query) !== -1)
+    }
+
+    function addSelectedKnownScenario() {
+        if (root.selectedKnownScenarioHash === "") return
+        root.benchmarkManagerVm.addKnownScenario(root.selectedKnownScenarioName,
+                                                 root.selectedKnownScenarioHash)
+        root.knownScenarioFilter = ""
+        root.selectedKnownScenarioHash = ""
+        root.selectedKnownScenarioName = ""
     }
 
     function importFromUrl(url) {
@@ -154,8 +214,13 @@ ApplicationWindow {
         informativeText: qsTr("Thresholds, membership, tier order, and hierarchy all feed the historical graphs.")
         buttons: MessageDialog.Save | MessageDialog.Cancel
         onButtonClicked: function (button) {
-            if (button === MessageDialog.Save) root.doSave()
-            else root.pendingAction = null
+            const action = root.pendingRetrospectiveAction
+            root.pendingRetrospectiveAction = null
+            if (button === MessageDialog.Save) {
+                if (action) action()
+            } else {
+                root.pendingAction = null
+            }
         }
     }
 
@@ -257,73 +322,137 @@ ApplicationWindow {
     component ScenarioRow: Rectangle {
         id: scenarioRow
         required property var modelData
+        // Candidates for an ambiguous entry are shown up front; for a resolved or
+        // mapped-unavailable entry they stay hidden until "Change mapping" is pressed.
+        property bool mappingCandidatesShown: scenarioRow.modelData.matchState === "ambiguous"
         objectName: "treeNode_" + scenarioRow.modelData.nodeId
         color: root.focusColor(scenarioRow.modelData.nodeId)
         radius: 4
-        implicitHeight: scenarioLayout.implicitHeight + 8
+        implicitHeight: scenarioBody.implicitHeight + 8
         Layout.fillWidth: true
 
-        RowLayout {
-            id: scenarioLayout
+        ColumnLayout {
+            id: scenarioBody
             anchors.fill: parent
             anchors.margins: 4
-            spacing: 8
+            spacing: 4
 
-            TextField {
-                Layout.preferredWidth: 170
-                text: scenarioRow.modelData.name
-                selectByMouse: true
-                onEditingFinished:
-                    root.benchmarkManagerVm.renameScenario(scenarioRow.modelData.nodeId, text)
-            }
-            Label {
-                text: scenarioRow.modelData.hasHash ? "" : qsTr("unresolved")
-                color: scenarioRow.palette.placeholderText
-                visible: !scenarioRow.modelData.hasHash
-            }
-            Repeater {
-                model: scenarioRow.modelData.thresholds
-                delegate: RowLayout {
-                    id: thresholdRow
-                    required property var modelData
-                    spacing: 4
-                    Label {
-                        text: thresholdRow.modelData.tierName
-                        Layout.alignment: Qt.AlignVCenter
-                    }
-                    TextField {
-                        objectName: "thresholdField_" + scenarioRow.modelData.nodeId + "_" + thresholdRow.modelData.tierId
-                        Layout.preferredWidth: 72
-                        placeholderText: "—"
-                        text: thresholdRow.modelData.hasValue ? thresholdRow.modelData.score : ""
-                        validator: DoubleValidator {
-                            bottom: 0; decimals: 6
+            RowLayout {
+                id: scenarioLayout
+                Layout.fillWidth: true
+                spacing: 8
+
+                TextField {
+                    Layout.preferredWidth: 170
+                    text: scenarioRow.modelData.name
+                    selectByMouse: true
+                    onEditingFinished:
+                        root.benchmarkManagerVm.renameScenario(scenarioRow.modelData.nodeId, text)
+                }
+                Repeater {
+                    model: scenarioRow.modelData.thresholds
+                    delegate: RowLayout {
+                        id: thresholdRow
+                        required property var modelData
+                        spacing: 4
+                        Label {
+                            text: thresholdRow.modelData.tierName
+                            Layout.alignment: Qt.AlignVCenter
                         }
-                        onEditingFinished: {
-                            if (text.trim() === "") {
-                                root.benchmarkManagerVm.clearThreshold(
-                                    scenarioRow.modelData.nodeId, thresholdRow.modelData.tierId)
-                            } else if (!isNaN(parseFloat(text))) {
-                                root.benchmarkManagerVm.setThreshold(
-                                    scenarioRow.modelData.nodeId, thresholdRow.modelData.tierId,
-                                    parseFloat(text))
+                        TextField {
+                            objectName: "thresholdField_" + scenarioRow.modelData.nodeId + "_" + thresholdRow.modelData.tierId
+                            Layout.preferredWidth: 72
+                            placeholderText: "—"
+                            text: thresholdRow.modelData.hasValue ? thresholdRow.modelData.score : ""
+                            validator: DoubleValidator {
+                                bottom: 0; decimals: 6
+                            }
+                            onEditingFinished: {
+                                if (text.trim() === "") {
+                                    root.benchmarkManagerVm.clearThreshold(
+                                        scenarioRow.modelData.nodeId, thresholdRow.modelData.tierId)
+                                } else if (!isNaN(parseFloat(text))) {
+                                    root.benchmarkManagerVm.setThreshold(
+                                        scenarioRow.modelData.nodeId, thresholdRow.modelData.tierId,
+                                        parseFloat(text))
+                                }
                             }
                         }
                     }
                 }
+                Item {
+                    Layout.fillWidth: true
+                }
+                Button {
+                    objectName: "moveScenarioButton_" + scenarioRow.modelData.nodeId
+                    text: qsTr("Move...")
+                    onClicked: moveMenu.openFor(scenarioRow.modelData.nodeId)
+                }
+                Button {
+                    objectName: "removeScenario_" + scenarioRow.modelData.nodeId
+                    text: qsTr("Remove")
+                    onClicked: root.benchmarkManagerVm.removeScenario(scenarioRow.modelData.nodeId)
+                }
             }
-            Item {
+
+            RowLayout {
+                id: resolutionLayout
                 Layout.fillWidth: true
+                spacing: 8
+
+                Label {
+                    objectName: "matchLabel_" + scenarioRow.modelData.nodeId
+                    text: root.matchStateLabel(scenarioRow.modelData.matchState)
+                    color: scenarioRow.palette.placeholderText
+                }
+                Button {
+                    objectName: "changeMappingButton_" + scenarioRow.modelData.nodeId
+                    text: qsTr("Change mapping")
+                    visible: root.offersMappingEdit(scenarioRow.modelData.matchState)
+                    Accessible.name: qsTr("Change the scenario mapping for %1").arg(scenarioRow.modelData.name)
+                    onClicked: scenarioRow.mappingCandidatesShown = !scenarioRow.mappingCandidatesShown
+                }
+                Button {
+                    objectName: "clearMappingButton_" + scenarioRow.modelData.nodeId
+                    text: qsTr("Clear mapping")
+                    visible: root.offersMappingEdit(scenarioRow.modelData.matchState)
+                    Accessible.name: qsTr("Clear the scenario mapping for %1").arg(scenarioRow.modelData.name)
+                    onClicked: root.requestMappingEdit(scenarioRow.modelData.nodeId, "")
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
             }
-            Button {
-                objectName: "moveScenarioButton_" + scenarioRow.modelData.nodeId
-                text: qsTr("Move...")
-                onClicked: moveMenu.openFor(scenarioRow.modelData.nodeId)
-            }
-            Button {
-                objectName: "removeScenario_" + scenarioRow.modelData.nodeId
-                text: qsTr("Remove")
-                onClicked: root.benchmarkManagerVm.removeScenario(scenarioRow.modelData.nodeId)
+
+            // The candidate rows stay in the layout whenever the entry has any, so their
+            // geometry is settled at first render; "Change mapping" only arms them for
+            // selection (ambiguous entries are armed from the start). Keeping the size stable
+            // means a test that clicks a candidate straight after arming it still lands on it.
+            Item {
+                id: candidateArea
+                Layout.fillWidth: true
+                Layout.leftMargin: 24
+                clip: true
+                Layout.preferredHeight: candidateRepeater.count * 40
+
+                Repeater {
+                    id: candidateRepeater
+                    model: scenarioRow.modelData.candidates || []
+                    delegate: ItemDelegate {
+                        id: candidateOption
+                        required property var modelData
+                        required property int index
+                        objectName: "candidateOption_" + scenarioRow.modelData.nodeId + "_" + candidateOption.modelData.hash
+                        y: candidateOption.index * 40
+                        width: candidateArea.width
+                        height: 40
+                        enabled: scenarioRow.mappingCandidatesShown
+                        opacity: scenarioRow.mappingCandidatesShown ? 1 : 0.4
+                        text: root.candidateText(candidateOption.modelData)
+                        Accessible.name: qsTr("Map %1 to %2").arg(scenarioRow.modelData.name).arg(candidateOption.text)
+                        onClicked: root.requestMappingEdit(scenarioRow.modelData.nodeId, candidateOption.modelData.hash)
+                    }
+                }
             }
         }
     }
@@ -660,6 +789,27 @@ ApplicationWindow {
                     }
                 }
 
+                // Non-modal: the editor stays fully usable while this is shown. It is bound
+                // straight to the flag, so the next reconciliation that publishes without a
+                // write failure clears it on its own.
+                Rectangle {
+                    objectName: "resolutionFailureBanner"
+                    visible: root.benchmarkManagerVm.resolutionWriteFailed
+                    Layout.fillWidth: true
+                    implicitHeight: resolutionFailureText.implicitHeight + 12
+                    radius: 4
+                    color: "#5D4037"
+                    Label {
+                        id: resolutionFailureText
+                        objectName: "resolutionFailureBannerLabel"
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        wrapMode: Text.WordWrap
+                        color: "#FFFFFF"
+                        text: qsTr("Automatic scenario resolution could not be written. Your mappings are unchanged; the manager retries on the next refresh.")
+                    }
+                }
+
                 Label {
                     text: qsTr("Tiers")
                     font.pixelSize: 14
@@ -815,6 +965,49 @@ ApplicationWindow {
                                 visible: root.benchmarkManagerVm.root
                                     && root.childScenarios(root.benchmarkManagerVm.root).length === 0
                                     && root.childGroups(root.benchmarkManagerVm.root).length === 0
+                            }
+                        }
+
+                        // Profile-known scenarios are added by hash, so equal display names in the
+                        // catalogue stay distinguishable; the free-text row above still adds an
+                        // as-yet-unplayed scenario by name only.
+                        RowLayout {
+                            spacing: 6
+                            TextField {
+                                id: knownScenarioPicker
+                                objectName: "knownScenarioPicker"
+                                placeholderText: qsTr("Find a played scenario")
+                                Layout.preferredWidth: 200
+                                activeFocusOnTab: true
+                                Accessible.name: qsTr("Find a played scenario to add by name")
+                                onTextEdited: root.knownScenarioFilter = text
+                                onEditingFinished: root.knownScenarioFilter = text
+                            }
+                            Button {
+                                id: addKnownScenarioButton
+                                objectName: "addKnownScenarioButton"
+                                text: qsTr("Add Known Scenario")
+                                activeFocusOnTab: true
+                                Accessible.name: qsTr("Add the selected played scenario")
+                                onClicked: root.addSelectedKnownScenario()
+                            }
+                        }
+
+                        Repeater {
+                            model: root.filteredCatalogue()
+                            delegate: ItemDelegate {
+                                id: knownScenarioOption
+                                required property var modelData
+                                objectName: "knownScenarioOption_" + knownScenarioOption.modelData.hash
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 24
+                                highlighted: root.selectedKnownScenarioHash === knownScenarioOption.modelData.hash
+                                text: knownScenarioOption.modelData.name + "  ·  " + knownScenarioOption.modelData.hash
+                                Accessible.name: qsTr("Select played scenario %1").arg(knownScenarioOption.text)
+                                onClicked: {
+                                    root.selectedKnownScenarioHash = knownScenarioOption.modelData.hash
+                                    root.selectedKnownScenarioName = knownScenarioOption.modelData.name
+                                }
                             }
                         }
 

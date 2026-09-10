@@ -29,6 +29,7 @@ target_sources(tests_support INTERFACE
         fake_session_controller.h
         fake_series_config_store.h
         fake_benchmark_repository.h
+        fake_benchmark_manager_use_case.h
         fake_playlist_reader.h
         counting_ids.h
         kovaaks_dir.h

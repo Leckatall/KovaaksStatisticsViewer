@@ -11,14 +11,16 @@
 #include <memory>
 #include <optional>
 
-#include "app/contracts/i_benchmark_library_service.h"
+#include "app/contracts/benchmark_manager_state.h"
+#include "app/contracts/i_benchmark_manager_use_case.h"
 #include "presentation/benchmark_issue_text.h"
 #include "presentation/benchmark_tree_node.h"
 
 namespace ksv::presentation {
-    // Adapts the single-draft BenchmarkLibraryService for the manager dialog. The service
-    // is the mutation authority; this class rebuilds a display tree of read-only nodes from
-    // the draft and routes every QML edit back through a service command.
+    // Adapts IBenchmarkManagerUseCase for the manager dialog. The use case owns one coherent
+    // BenchmarkManagerState per notification; this class reads it once per onChanged, rebuilds a
+    // display tree of read-only nodes plus every Qt projection, and routes each QML edit straight
+    // back to a use-case command.
     class BenchmarkManagerViewModel : public QObject {
         Q_OBJECT
         QML_ELEMENT
@@ -40,15 +42,16 @@ namespace ksv::presentation {
         Q_PROPERTY(QString managedDirectoryPath READ managedDirectoryPath CONSTANT)
 
     public:
-        explicit BenchmarkManagerViewModel(std::shared_ptr<application::IBenchmarkLibraryService> service,
+        explicit BenchmarkManagerViewModel(std::shared_ptr<application::IBenchmarkManagerUseCase> useCase,
                                            QObject *parent = nullptr);
 
-        [[nodiscard]] bool hasDraft() const { return m_service->hasDraft(); }
-        [[nodiscard]] bool dirty() const { return m_service->draftDirty(); }
-        [[nodiscard]] bool draftFromLibrary() const { return m_service->draftFromLibrary(); }
+        [[nodiscard]] bool hasDraft() const { return m_useCase->state().draft.has_value(); }
+        [[nodiscard]] bool dirty() const { return m_useCase->state().draftDirty; }
+        [[nodiscard]] bool draftFromLibrary() const { return m_useCase->state().draftFromLibrary; }
         [[nodiscard]] bool draftTrackable() const {
-            return m_service->hasDraft() &&
-                   m_service->draftValidation().completeness == domain::Completeness::Trackable;
+            const auto &state = m_useCase->state();
+            return state.draft.has_value() &&
+                   state.draftCompleteness.completeness == domain::Completeness::Trackable;
         }
         [[nodiscard]] const QString &benchmarkName() const { return m_benchmarkName; }
         [[nodiscard]] const QString &draftId() const { return m_draftId; }
@@ -56,11 +59,11 @@ namespace ksv::presentation {
         [[nodiscard]] const QVariantList &validationIssues() const { return m_validationIssues; }
         [[nodiscard]] BenchmarkGroupNode *root() const { return m_root.get(); }
         [[nodiscard]] const QVariantList &tiers() const { return m_tiers; }
-        [[nodiscard]] bool refreshFailed() const { return m_service->lastRefreshFailed(); }
+        [[nodiscard]] bool refreshFailed() const { return m_useCase->state().refreshFailed; }
         [[nodiscard]] const QVariantList &scenarioCatalogue() const { return m_scenarioCatalogue; }
-        [[nodiscard]] bool resolutionWriteFailed() const { return m_service->lastResolutionWriteFailed(); }
+        [[nodiscard]] bool resolutionWriteFailed() const { return m_useCase->state().resolutionWriteFailed; }
         [[nodiscard]] QString managedDirectoryPath() const {
-            return QString::fromStdString(m_service->managedDirectoryPath());
+            return QString::fromStdString(m_useCase->state().managedDirectoryPath);
         }
 
         Q_INVOKABLE void beginNewBenchmark();
@@ -97,11 +100,9 @@ namespace ksv::presentation {
         void libraryChanged();
 
     private:
-        void rebuildDraftState();
-        void rebuildTree(const std::optional<domain::Benchmark> &draft);
-        void rebuildLibrary();
+        void adaptState();
 
-        std::shared_ptr<application::IBenchmarkLibraryService> m_service;
+        std::shared_ptr<application::IBenchmarkManagerUseCase> m_useCase;
         QString m_benchmarkName;
         QString m_draftId;
         QVariantList m_libraryEntries;

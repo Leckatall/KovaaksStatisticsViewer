@@ -20,6 +20,8 @@ add_library(ksv_app STATIC
         usecases/benchmark_library_service.h
         usecases/benchmark_tracking_use_case.h
         usecases/benchmark_tracking_use_case.cpp
+        usecases/benchmark_manager_use_case.h
+        usecases/benchmark_manager_use_case.cpp
 )
 
 target_link_libraries(ksv_app PUBLIC

@@ -282,4 +282,182 @@ TestCase {
         compare(scenarioField.text, "", "the scenario field should clear after adding")
         compare(tierField.text, "", "the tier field should clear after adding")
     }
+
+    // ---- M2: known-scenario and mapping-resolution controls ---------------
+
+    function test_bothFreeTextAndKnownScenarioAddPathsAreOffered() {
+        const dialog = openWithFake({
+            hasDraft: true,
+            scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
+        })
+
+        verify(find(dialog, "newScenarioField") !== null,
+               "the free-text Add unplayed scenario path must remain")
+        verify(find(dialog, "addScenarioButton") !== null,
+               "the free-text add button must remain")
+        verify(find(dialog, "knownScenarioPicker") !== null,
+               "a catalogue-backed known-scenario picker must exist beside the free-text field")
+        verify(find(dialog, "addKnownScenarioButton") !== null,
+               "the known-scenario add button must exist")
+    }
+
+    function test_knownScenarioPickerFiltersCatalogueAndAddsByHash() {
+        const dialog = openWithFake({
+            hasDraft: true,
+            scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
+        })
+
+        const picker = find(dialog, "knownScenarioPicker")
+        verify(picker !== null, "no knownScenarioPicker found")
+        picker.forceActiveFocus()
+        picker.text = "1w4ts"
+        picker.editingFinished()
+
+        // Both "1w4ts" rows survive the filter; each is addressable by its own hash.
+        const optionA = find(dialog, "knownScenarioOption_hash-a")
+        const optionB = find(dialog, "knownScenarioOption_hash-b")
+        verify(optionA !== null && optionB !== null,
+               "duplicate names must be offered as distinct hash-keyed options")
+        verify(find(dialog, "knownScenarioOption_hash-c") === null,
+               "non-matching catalogue rows must be filtered out")
+
+        mouseClick(optionB)
+        mouseClick(find(dialog, "addKnownScenarioButton"))
+
+        tryVerify(() => vm(dialog).addKnownScenarioCalls.length === 1)
+        compare(vm(dialog).addKnownScenarioCalls[0], ["1w4ts", "hash-b"])
+    }
+
+    function test_everyMatchingStateRendersItsTextualLabel() {
+        const dialog = openWithFake({
+            hasDraft: true,
+            root: TestDoubles.benchmarkManagerResolutionTree(),
+            tiers: [{id: "t1", name: "Gold", color: "#FFD700"}]
+        })
+
+        compare(find(dialog, "matchLabel_s-res").text, "Resolved")
+        compare(find(dialog, "matchLabel_s-map").text, "Mapped, unavailable")
+        compare(find(dialog, "matchLabel_s-unr").text, "Unresolved")
+        compare(find(dialog, "matchLabel_s-amb").text, "Ambiguous")
+        compare(find(dialog, "matchLabel_s-auto").text, "Pending automatic mapping")
+    }
+
+    function test_ambiguousCandidateMetadataShownAndSelectionSetsHash() {
+        const dialog = openWithFake({
+            hasDraft: true,
+            root: TestDoubles.benchmarkManagerResolutionTree()
+        })
+
+        const candidateB = find(dialog, "candidateOption_s-amb_hash-b")
+        verify(candidateB !== null, "each ambiguity candidate must render as a selectable row")
+        verify(candidateB.text.indexOf("hash-b") !== -1, "the candidate hash must be recognizable")
+        verify(candidateB.text.indexOf("7") !== -1, "the candidate run count must be shown")
+        verify(candidateB.text.indexOf("2024") !== -1, "the candidate last-played date must be shown")
+
+        mouseClick(candidateB)
+
+        tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
+        compare(vm(dialog).setScenarioHashCalls[0], ["s-amb", "hash-b"])
+    }
+
+    function test_changeMappingRoutesThroughSetScenarioHash() {
+        const dialog = openWithFake({
+            hasDraft: true,
+            root: TestDoubles.benchmarkManagerResolutionTree()
+        })
+
+        const changeButton = find(dialog, "changeMappingButton_s-res")
+        verify(changeButton !== null, "a resolved scenario must offer Change mapping")
+        mouseClick(changeButton)
+
+        const candidate = find(dialog, "candidateOption_s-res_hash-a")
+        verify(candidate !== null, "Change mapping must expose candidate hashes to pick from")
+        mouseClick(candidate)
+
+        tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
+        compare(vm(dialog).setScenarioHashCalls[0][0], "s-res")
+        compare(vm(dialog).setScenarioHashCalls[0][1], "hash-a")
+    }
+
+    function test_clearMappingPassesNoHashAndKeepsEntryThresholdsAndPlacement() {
+        const dialog = openWithFake({
+            hasDraft: true,
+            root: TestDoubles.benchmarkManagerResolutionTree(),
+            tiers: [{id: "t1", name: "Gold", color: "#FFD700"}]
+        })
+
+        const clearButton = find(dialog, "clearMappingButton_s-map")
+        verify(clearButton !== null, "a mapped scenario must offer Clear mapping")
+        mouseClick(clearButton)
+
+        tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
+        compare(vm(dialog).setScenarioHashCalls[0][0], "s-map")
+        compare(vm(dialog).setScenarioHashCalls[0][1], "", "Clear mapping passes no hash")
+
+        // The row, its thresholds and its hierarchy placement are untouched by a clear.
+        verify(find(dialog, "treeNode_s-map") !== null, "the scenario entry must remain")
+        verify(find(dialog, "thresholdField_s-map_t1") !== null, "thresholds must be retained")
+    }
+
+    function test_retrospectiveWarningPrecedesAMappingEditOnASavedDraft() {
+        const dialog = openWithFake({
+            hasDraft: true, dirty: true, draftFromLibrary: true,
+            root: TestDoubles.benchmarkManagerResolutionTree()
+        })
+
+        mouseClick(find(dialog, "candidateOption_s-amb_hash-b"))
+
+        tryCompare(dialog.retrospectivePrompt, "visible", true)
+        compare(vm(dialog).setScenarioHashCalls.length, 0,
+                "a mapping edit on a saved definition must wait for the retrospective warning")
+
+        dialog.retrospectivePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
+
+        tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
+        compare(vm(dialog).setScenarioHashCalls[0], ["s-amb", "hash-b"])
+    }
+
+    function test_automaticResolutionFailureBannerIsNonModalAndClearsOnNextPublication() {
+        const failing = openWithFake({
+            hasDraft: true,
+            resolutionWriteFailed: true,
+            root: TestDoubles.benchmarkManagerResolutionTree()
+        })
+
+        const banner = find(failing, "resolutionFailureBanner")
+        verify(banner !== null, "an automatic-resolution write failure must surface a banner")
+        tryCompare(banner, "visible", true)
+        // Non-modal: the rest of the editor stays usable while the banner is shown.
+        compare(find(failing, "addScenarioButton").enabled, true,
+                "the failure banner must not block the editor")
+
+        const recovered = openWithFake({
+            hasDraft: true,
+            resolutionWriteFailed: false,
+            root: TestDoubles.benchmarkManagerResolutionTree()
+        })
+        const clearedBanner = find(recovered, "resolutionFailureBanner")
+        verify(clearedBanner === null || clearedBanner.visible === false,
+               "the banner must clear once a later reconciliation publishes without failure")
+    }
+
+    function test_knownScenarioControlsAreKeyboardAndAccessibilityOrdered() {
+        const dialog = openWithFake({
+            hasDraft: true,
+            scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
+        })
+
+        const picker = find(dialog, "knownScenarioPicker")
+        const addButton = find(dialog, "addKnownScenarioButton")
+        verify(picker !== null && addButton !== null, "known-scenario controls must exist")
+
+        compare(picker.activeFocusOnTab, true, "the picker must be reachable by keyboard")
+        compare(addButton.activeFocusOnTab, true, "the add button must be reachable by keyboard")
+        verify(String(picker.Accessible.name) !== "", "the picker must carry an accessible name")
+        verify(String(addButton.Accessible.name) !== "", "the add button must carry an accessible name")
+
+        picker.forceActiveFocus()
+        compare(picker.nextItemInFocusChain(), addButton,
+                "tab order must run from the picker to its add button")
+    }
 }

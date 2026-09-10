@@ -30,6 +30,7 @@ ApplicationWindow {
     required property var settingsVm
     required property var scenarioBrowserVm
     required property var benchmarkManagerVm
+    required property var benchmarkTrackingVm
 
     FolderDialog {
         id: folderDialog
@@ -56,8 +57,13 @@ ApplicationWindow {
         id: aboutDialog
     }
 
+    // Reachable as `mainWindow.benchmarkManagerDialog` because the manager is a
+    // separate ApplicationWindow, not part of this window's item tree.
+    property alias benchmarkManagerDialog: benchmarkManagerDialog
+
     BenchmarkManagerDialog {
         id: benchmarkManagerDialog
+        objectName: "benchmarkManagerDialog"
         benchmarkManagerVm: root.benchmarkManagerVm
     }
 
@@ -84,63 +90,55 @@ ApplicationWindow {
             onChooseFolderRequested: folderDialog.open()
         }
 
-        GridLayout {
+        TabBar {
+            id: workspaceTabBar
+            objectName: "workspaceTabBar"
+            Layout.fillWidth: true
+            focusPolicy: Qt.StrongFocus
+            Keys.priority: Keys.BeforeItem
+            Keys.onRightPressed: event => {
+                workspaceTabBar.currentIndex =
+                    Math.min(workspaceTabBar.currentIndex + 1, workspaceTabBar.count - 1)
+                event.accepted = true
+            }
+            Keys.onLeftPressed: event => {
+                workspaceTabBar.currentIndex = Math.max(workspaceTabBar.currentIndex - 1, 0)
+                event.accepted = true
+            }
+
+            TabButton {
+                objectName: "scenariosTab"
+                text: qsTr("Scenarios")
+                Accessible.name: "Scenarios"
+            }
+            TabButton {
+                objectName: "benchmarksTab"
+                text: qsTr("Benchmarks")
+                Accessible.name: "Benchmarks"
+            }
+        }
+
+        StackLayout {
+            id: workspaceStack
+            objectName: "workspaceStack"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: 5
+            currentIndex: workspaceTabBar.currentIndex
 
-            ColumnLayout {
-                Layout.row: 1; Layout.column: 2
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-
-                DashboardGraphCanvas {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: visualSettings.scenarioGraphVisible
-                    graphVm: root.graphVm
-                    visualSettings: visualSettings
-                }
-                PlaytimeGraphPanel {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: visualSettings.playtimeGraphVisible
-                    playtimeVm: root.playtimeVm
-                }
-                ScenarioHistoryPanel {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: visualSettings.scenarioHistoryGraphVisible
-                    historyVm: root.historyVm
-                    columnVisibility: visualSettings.historyColumnVisibility
-                    historyAxisSettings: visualSettings
-                }
-            }
-            ControlPanel {
-                Layout.row: 1; Layout.column: 1
-                visible: visualSettings.controlPanelVisible
+            ScenarioWorkspace {
+                objectName: "scenarioWorkspace"
                 graphVm: root.graphVm
+                playtimeVm: root.playtimeVm
+                historyVm: root.historyVm
+                scenarioBrowserVm: root.scenarioBrowserVm
                 visualSettings: visualSettings
-                onConfigureLinesRequested: settingsDialog.openGraphLines()
+                onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
             }
-            SelectionPanel {
-                Layout.row: 1; Layout.column: 0
-                Layout.fillHeight: true
-                visible: visualSettings.selectionPanelVisible
-                recentSectionVisible: visualSettings.recentRunsSectionVisible
-                scenarioBrowserSectionVisible: visualSettings.scenarioBrowserSectionVisible
-                widestScenarioName: root.scenarioBrowserVm.longestScenarioName
-                maximumPanelWidth: root.width / 3
-                currentRunHash: root.scenarioBrowserVm.currentRunHash
-                currentRunStartTimeMs: root.scenarioBrowserVm.currentRunStartTimeMs
-                scenarioModel: root.scenarioBrowserVm.scenarioModel
-                runModel: root.scenarioBrowserVm.runModel
-                recentRunModel: root.scenarioBrowserVm.recentRunsModel
-                onSearchEdited: text => root.scenarioBrowserVm.setSearchText(text)
-                onScenarioActivated: (hash, name) => root.scenarioBrowserVm.activateScenario(hash, name)
-                onRunSelected: (hash, startTimeMs) => root.scenarioBrowserVm.selectRun(hash, startTimeMs)
-                onSortRequested: (field, ascending) => root.scenarioBrowserVm.setRunSort(field, ascending)
-                onScenarioSortRequested: (field, ascending) => root.scenarioBrowserVm.setScenarioSort(field, ascending)
+
+            BenchmarkWorkspace {
+                objectName: "benchmarkWorkspace"
+                trackingVm: root.benchmarkTrackingVm
+                onManageBenchmarksRequested: benchmarkManagerDialog.open()
             }
         }
     }

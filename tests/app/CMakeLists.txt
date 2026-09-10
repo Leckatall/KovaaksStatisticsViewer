@@ -17,6 +17,7 @@ add_executable(app_tests
         benchmark_draft_test.cpp
     benchmark_reconciliation_test.cpp
     benchmark_tracking_use_case_test.cpp
+    benchmark_manager_use_case_test.cpp
 )
 
 target_link_libraries(app_tests PRIVATE

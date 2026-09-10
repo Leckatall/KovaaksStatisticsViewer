@@ -20,6 +20,13 @@ qt_add_qml_module(ksv_ui
         OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/KovaaksStatsViewer
         QML_FILES
             qml/Main.qml
+            qml/ScenarioWorkspace.qml
+            qml/BenchmarkWorkspace.qml
+            qml/BenchmarkStatusSummary.qml
+            qml/BenchmarkBlockerList.qml
+            qml/BenchmarkHistoryCard.qml
+            qml/BenchmarkBreakdownView.qml
+            qml/BenchmarkBreakdownNode.qml
             qml/VisualSettingsManager.qml
             qml/DashboardGraphCanvas.qml
             qml/PlaytimeGraphPanel.qml
@@ -81,10 +88,20 @@ qt_add_qml_module(ksv_ui
             presentation/settings_vm.cpp
             presentation/benchmark_issue_text.h
             presentation/benchmark_issue_text.cpp
+            presentation/benchmark_format.h
+            presentation/benchmark_format.cpp
+            presentation/date_axis.h
+            presentation/date_axis.cpp
             presentation/benchmark_tree_node.h
             presentation/benchmark_tree_node.cpp
             presentation/benchmark_manager_vm.h
             presentation/benchmark_manager_vm.cpp
+            presentation/benchmark_history_vm.h
+            presentation/benchmark_history_vm.cpp
+            presentation/benchmark_breakdown_model.h
+            presentation/benchmark_breakdown_model.cpp
+            presentation/benchmark_tracking_vm.h
+            presentation/benchmark_tracking_vm.cpp
             presentation/scenario_list_model.h
             presentation/scenario_list_model.cpp
             presentation/run_list_model.h

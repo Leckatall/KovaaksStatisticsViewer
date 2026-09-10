@@ -15,6 +15,7 @@
 #include "session_vm.h"
 #include "settings_vm.h"
 #include "benchmark_manager_vm.h"
+#include "benchmark_tracking_vm.h"
 #include "interfaces/i_proto_decoder.h"
 #include "../data/interfaces/i_file_service.h"
 #include "../data/interfaces/i_run_ingestor.h"
@@ -24,6 +25,7 @@
 #include "usecases/i_session_controller.h"
 #include "../data/interfaces/i_benchmark_repository.h"
 #include "contracts/i_benchmark_library_service.h"
+#include "contracts/i_benchmark_manager_use_case.h"
 #include "contracts/i_benchmark_tracking_use_case.h"
 #include "contracts/i_playtime_graph_use_case.h"
 #include "contracts/i_completion_history_use_case.h"
@@ -62,6 +64,9 @@ namespace ksv::application {
         [[nodiscard]] presentation::BenchmarkManagerViewModel* benchmarkManagerVm() const {
             return m_benchmarkManagerVm;
         }
+        [[nodiscard]] presentation::BenchmarkTrackingViewModel* benchmarkTrackingVm() const {
+            return m_benchmarkTrackingVm;
+        }
         [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
         [[nodiscard]] std::shared_ptr<ISessionController> sessionController() const { return m_sessionController; }
@@ -71,6 +76,9 @@ namespace ksv::application {
         }
         [[nodiscard]] std::shared_ptr<IBenchmarkTrackingUseCase> benchmarkTrackingUseCase() const {
             return m_benchmarkTrackingUseCase;
+        }
+        [[nodiscard]] std::shared_ptr<IBenchmarkManagerUseCase> benchmarkManagerUseCase() const {
+            return m_benchmarkManagerUseCase;
         }
 
     private:
@@ -82,6 +90,7 @@ namespace ksv::application {
         presentation::SettingsViewModel* m_settingsVm;
         presentation::ScenarioBrowserViewModel* m_scenarioBrowserVm;
         presentation::BenchmarkManagerViewModel* m_benchmarkManagerVm = nullptr;
+        presentation::BenchmarkTrackingViewModel* m_benchmarkTrackingVm = nullptr;
 
         std::shared_ptr<ISettingsService> m_settingsService;
         std::shared_ptr<ISeriesConfigStore> m_seriesConfigStore;
@@ -99,6 +108,7 @@ namespace ksv::application {
         std::shared_ptr<IBenchmarkRepository> m_benchmarkRepository;
         std::shared_ptr<IBenchmarkLibraryService> m_benchmarkLibraryService;
         std::shared_ptr<IBenchmarkTrackingUseCase> m_benchmarkTrackingUseCase;
+        std::shared_ptr<IBenchmarkManagerUseCase> m_benchmarkManagerUseCase;
     };
 }
 
