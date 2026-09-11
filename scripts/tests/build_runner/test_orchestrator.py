@@ -182,13 +182,16 @@ def test_compiler_failure_is_reduced_and_ends_with_summary(
     assert result == 1
     assert output == [
         "",
-        "FAILED (build)",
-        "Target: src/domain/CMakeFiles/ksv_domain.dir/run.cpp.obj\n"
-        "src/domain/run.cpp:54:1: error: 'this_is_a_deliberate_compiler_error' does not name a type\n"
-        "   54 | this_is_a_deliberate_compiler_error\n"
-        "      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-        "Scope domain | jobs 8 | phase build | 3.0s | FAIL",
-        f"Full log: {repo / '.temp' / 'run' / 'build.log'}",
+        "FAILED (build) | scope domain | 1 diagnostic | 3.0s",
+        f"paths relative to {repo.resolve().as_posix()}",
+        "target src/domain/CMakeFiles/ksv_domain.dir/run.cpp.obj",
+        "",
+        "B1",
+        "  src/domain/run.cpp:54:1: error: 'this_is_a_deliberate_compiler_error' does not name a type",
+        "     54 | this_is_a_deliberate_compiler_error",
+        "        | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "",
+        f"log (read only if the above is insufficient): {(repo / '.temp' / 'run' / 'build.log').as_posix()}",
     ]
 
 
@@ -225,13 +228,14 @@ def test_silent_gtest_crash_is_named_without_requiring_a_log_read(
     )
 
     assert result == 1
-    assert output[0:3] == [
-        "",
-        "FAILED (test)",
-        "Runner domain_tests exited with code 3221225477 (0xC0000005: access violation) "
-        "before reporting a test failure.\nSelected tests: AgentFaultInjection.DeliberateCrash",
+    assert output[1] == "FAILED (test) | scope domain | 1 of 1 failed | 5.0s"
+    assert "(domain_tests wrote no usable report; recovered from console output)" in output
+    start = output.index("R1")
+    assert output[start + 1 : start + 3] == [
+        "  Runner domain_tests exited with code 3221225477 (0xC0000005: access violation) "
+        "before reporting a test failure.",
+        "  Selected tests: AgentFaultInjection.DeliberateCrash",
     ]
-    assert output[-2] == "Scope domain | jobs 8 | tests 1 | failed runners 1 | 5.0s | FAIL"
     assert output[-1].endswith("domain_tests.log")
 
 

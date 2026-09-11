@@ -65,6 +65,9 @@ compile_commands.json
 *.bak
 *.swp
 
+# Captured runner output that the build_runner tests parse; these are inputs, not temporary files.
+!scripts/tests/build_runner/fixtures/*.log
+
 # vcpkg
 vcpkg_installed/
 scripts/toolchain.local.env

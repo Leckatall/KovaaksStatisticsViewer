@@ -1,0 +1,10 @@
+> cmake.exe --build C:/repo/build-agent --parallel 8 --target domain_tests
+[1/14] Automatic MOC and UIC for target ksv_domain
+[2/14] Building CXX object src/domain/CMakeFiles/ksv_domain.dir/run.cpp.obj
+FAILED: [code=1] src/domain/CMakeFiles/ksv_domain.dir/run.cpp.obj
+C:/toolchain/c++.exe -very-long-command -c C:/repo/src/domain/run.cpp
+C:/repo/src/domain/run.cpp:54:1: error: 'this_is_a_deliberate_compiler_error' does not name a type
+   54 | this_is_a_deliberate_compiler_error
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[3/14] Building CXX object src/domain/CMakeFiles/ksv_domain.dir/user_profile.cpp.obj
+ninja: build stopped: subcommand failed.

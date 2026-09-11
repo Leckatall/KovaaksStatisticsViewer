@@ -1,0 +1,8 @@
+> C:/repo/build-agent/ui_qml_tests.exe -input C:/repo/tests/ui/qml -silent
+ENV QT_QPA_PLATFORM=offscreen
+Testing ui_qml_tests
+FAIL!  : ui_qml_tests::AgentQmlFault::test_deliberateAssertionFailure() deliberate QML assertion diagnostic
+   Actual   (): 1
+   Expected (): 2
+C:/repo/tests/ui/qml/tst_AgentFault.qml(8) : failure location
+Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 406ms

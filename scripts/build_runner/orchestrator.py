@@ -5,11 +5,18 @@ from pathlib import Path
 import re
 import time
 from typing import Callable, Mapping
+from xml.etree import ElementTree
 
 from .catalog import RunnerSpec, catalog_for_scope, matches_pattern, parse_gtest_list, parse_qml_functions
 from .config import Toolchain, ToolchainError, assert_cache, write_fingerprint
 from .diagnostics import reduce_build_failure, reduce_configure_failure, reduce_test_failure
+from .failures import Failure, render_diagnostic_report, render_test_report
+from .parsers import failures_from_ctest, parse_ctest_junit, parse_gtest_xml, parse_qt_txt
 from .process import CommandResult, describe_exit_code, run_command
+
+
+# A runner killed mid-report leaves a truncated file; ElementTree raises a SyntaxError subclass for it.
+UNUSABLE_REPORT = (OSError, ValueError, ElementTree.ParseError)
 
 
 Execute = Callable[..., CommandResult]
@@ -19,22 +26,6 @@ BUILD_JOBS = 8
 
 def _summary_duration(started: float, clock: Callable[[], float]) -> float:
     return max(0.0, clock() - started)
-
-
-def _phase_failure(
-    *,
-    kind: str,
-    diagnostic: str,
-    scope: str,
-    elapsed: float,
-    log_path: Path,
-    emit: Emit,
-) -> None:
-    emit("")
-    emit(f"FAILED ({kind})")
-    emit(diagnostic)
-    emit(f"Scope {scope} | jobs {BUILD_JOBS} | phase {kind} | {elapsed:.1f}s | FAIL")
-    emit(f"Full log: {log_path}")
 
 
 def _command_environment(
@@ -103,34 +94,27 @@ def _configure_command(repo_root: Path, build_dir: Path, toolchain: Toolchain) -
     ]
 
 
-def _silent_runner_failure(runner: RunnerSpec, exit_code: int, selected: list[str]) -> str:
+def _silent_runner_failure(runner: RunnerSpec, exit_code: int, selected: list[str]) -> Failure:
     if len(selected) <= 10:
         selection = ", ".join(selected)
     else:
         selection = f"{len(selected)} tests in scope"
-    return (
-        f"Runner {runner.target} exited with code {describe_exit_code(exit_code)} "
-        "before reporting a test failure.\n"
-        f"Selected tests: {selection}"
+    return Failure(
+        test="",
+        message=(
+            f"Runner {runner.target} exited with code {describe_exit_code(exit_code)} "
+            "before reporting a test failure.\n"
+            f"Selected tests: {selection}"
+        ),
     )
 
 
-def _has_test_diagnostic(output: str) -> bool:
-    return bool(re.search(r"(?m)(:\d+: Failure$|^FAIL!\s+:|\*\*\*(?:Failed|Exception|Timeout|Not Run))", output))
-
-
-def _read_qml_ctest_failures(build_dir: Path, repo_root: Path) -> list[tuple[str, Path]]:
-    last_failed = build_dir / "Testing" / "Temporary" / "LastTestsFailed.log"
-    if not last_failed.is_file():
+def _read_report(read: Callable[[], list[Failure]]) -> list[Failure]:
+    """A runner that died mid-report leaves no usable file; the caller falls back to its output."""
+    try:
+        return read()
+    except UNUSABLE_REPORT:
         return []
-    qml_logs = build_dir / "tests" / "ui" / "qml-test-logs"
-    failures: list[tuple[str, Path]] = []
-    for line in last_failed.read_text(encoding="utf-8", errors="replace").splitlines():
-        name = re.sub(r"^\d+:", "", line).strip()
-        log_path = qml_logs / f"{name}.txt"
-        if name.startswith("tst_") and log_path.is_file():
-            failures.append((reduce_test_failure(log_path.read_text(encoding="utf-8", errors="replace"), repo_root), log_path))
-    return failures
 
 
 def run_pipeline(
@@ -150,6 +134,10 @@ def run_pipeline(
     runners = catalog_for_scope(args.scope)
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    def report(lines: list[str]) -> None:
+        for line in lines:
+            emit(line)
+
     configure_log = log_dir / "configure.log"
     configure = _invoke(
         execute,
@@ -164,13 +152,15 @@ def run_pipeline(
         emit=emit,
     )
     if configure.exit_code:
-        _phase_failure(
-            kind="configure",
-            diagnostic=reduce_configure_failure(configure.output, repo_root),
-            scope=args.scope,
-            elapsed=_summary_duration(started, clock),
-            log_path=configure_log,
-            emit=emit,
+        report(
+            render_diagnostic_report(
+                reduce_configure_failure(configure.output, repo_root),
+                kind="configure",
+                scope=args.scope,
+                elapsed=_summary_duration(started, clock),
+                repo_root=repo_root,
+                log_paths=[configure_log],
+            )
         )
         return configure.exit_code
 
@@ -201,13 +191,15 @@ def run_pipeline(
         emit=emit,
     )
     if build.exit_code:
-        _phase_failure(
-            kind="build",
-            diagnostic=reduce_build_failure(build.output, repo_root),
-            scope=args.scope,
-            elapsed=_summary_duration(started, clock),
-            log_path=build_log,
-            emit=emit,
+        report(
+            render_diagnostic_report(
+                reduce_build_failure(build.output, repo_root),
+                kind="build",
+                scope=args.scope,
+                elapsed=_summary_duration(started, clock),
+                repo_root=repo_root,
+                log_paths=[build_log],
+            )
         )
         return build.exit_code
 
@@ -234,13 +226,15 @@ def run_pipeline(
             emit=emit,
         )
         if listed.exit_code:
-            _phase_failure(
-                kind="test",
-                diagnostic=reduce_test_failure(listed.output, repo_root),
-                scope=args.scope,
-                elapsed=_summary_duration(started, clock),
-                log_path=list_log,
-                emit=emit,
+            report(
+                render_test_report(
+                    reduce_test_failure(listed.output, repo_root),
+                    scope=args.scope,
+                    total=0,
+                    elapsed=_summary_duration(started, clock),
+                    repo_root=repo_root,
+                    log_paths=[list_log],
+                )
             )
             return listed.exit_code
         count_match = re.search(r"Total Tests:\s+(\d+)", listed.output)
@@ -253,9 +247,10 @@ def run_pipeline(
             return 0
 
         ctest_log = log_dir / "ctest.log"
+        junit_path = log_dir / "ctest.xml"
         tested = _invoke(
             execute,
-            [ctest_exe, "--test-dir", build_dir, "--output-on-failure"],
+            [ctest_exe, "--test-dir", build_dir, "--output-on-failure", "--output-junit", junit_path],
             log_path=ctest_log,
             repo_root=repo_root,
             process_environment=process_environment,
@@ -266,21 +261,27 @@ def run_pipeline(
             emit=emit,
         )
         if tested.exit_code:
-            diagnostics = [reduce_test_failure(tested.output, repo_root)]
-            extra_logs: list[Path] = []
-            for diagnostic, qml_log in _read_qml_ctest_failures(build_dir, repo_root):
-                diagnostics.append(diagnostic)
-                extra_logs.append(qml_log)
-            emit("")
-            emit("FAILED (test)")
-            for diagnostic in diagnostics:
-                if diagnostic:
-                    emit(diagnostic)
-            elapsed = _summary_duration(started, clock)
-            emit(f"Scope all | jobs {BUILD_JOBS} | tests {test_count} | {elapsed:.1f}s | FAIL")
-            emit(f"Full log: {ctest_log}")
-            for qml_log in extra_logs:
-                emit(f"Full log: {qml_log}")
+            qml_log_dir = build_dir / "tests" / "ui" / "qml-test-logs"
+            failures: list[Failure] = []
+            note = ""
+            if junit_path.is_file():
+                cases, reported_total = _read_ctest_junit(junit_path, repo_root, qml_log_dir)
+                failures = cases
+                test_count = reported_total or test_count
+            if not failures:
+                failures = reduce_test_failure(tested.output, repo_root)
+                note = "(CTest wrote no usable JUnit report; recovered from console output)"
+            report(
+                render_test_report(
+                    failures,
+                    scope=args.scope,
+                    total=test_count,
+                    elapsed=_summary_duration(started, clock),
+                    repo_root=repo_root,
+                    log_paths=[ctest_log],
+                    notes=[note] if note else [],
+                )
+            )
             return tested.exit_code
         elapsed = _summary_duration(started, clock)
         emit(f"Scope all | jobs {BUILD_JOBS} | tests {test_count} | {elapsed:.1f}s | PASS")
@@ -312,16 +313,18 @@ def run_pipeline(
             emit=emit,
         )
         if enumeration.exit_code:
-            diagnostic = reduce_test_failure(enumeration.output, repo_root)
-            if not _has_test_diagnostic(enumeration.output):
-                diagnostic = _silent_runner_failure(runner, enumeration.exit_code, [])
-            _phase_failure(
-                kind="test",
-                diagnostic=diagnostic,
-                scope=args.scope,
-                elapsed=_summary_duration(started, clock),
-                log_path=enumeration_log,
-                emit=emit,
+            failures = reduce_test_failure(enumeration.output, repo_root)
+            if not any(failure.location for failure in failures):
+                failures = [_silent_runner_failure(runner, enumeration.exit_code, [])]
+            report(
+                render_test_report(
+                    failures,
+                    scope=args.scope,
+                    total=0,
+                    elapsed=_summary_duration(started, clock),
+                    repo_root=repo_root,
+                    log_paths=[enumeration_log],
+                )
             )
             return enumeration.exit_code
         discovered = (
@@ -346,8 +349,9 @@ def run_pipeline(
         emit(f"Total: {len(selected)}")
         return 0
 
-    failed_runners = 0
+    failures = []
     failed_logs: list[Path] = []
+    notes: list[str] = []
     for runner in runners:
         runner_tests = [test for selected_runner, test in selected if selected_runner.target == runner.target]
         if not runner_tests:
@@ -355,11 +359,11 @@ def run_pipeline(
         executable = build_dir / runner.relative_path
         if runner.kind == "gtest":
             test_log = log_dir / f"{runner.target}.log"
-            xml_path = log_dir / f"{runner.target}.xml"
+            report_path = log_dir / f"{runner.target}.xml"
             test_command: list[str | Path] = [
                 executable,
                 "--gtest_brief=1",
-                f"--gtest_output=xml:{xml_path}",
+                f"--gtest_output=xml:{report_path}",
             ]
             if args.match:
                 test_command.append(f"--gtest_filter={':'.join(runner_tests)}")
@@ -388,32 +392,48 @@ def run_pipeline(
             phase="test",
             emit=emit,
         )
-        diagnostic_output = result.output
-        if runner.kind == "qml":
-            report_path = log_dir / f"{runner.target}.log"
-            if report_path.is_file():
-                report_output = report_path.read_text(encoding="utf-8", errors="replace")
-                diagnostic_output = "\n".join(part for part in (diagnostic_output, report_output) if part)
-                report_path.write_text(diagnostic_output + "\n", encoding="utf-8")
-                test_log = report_path
-        if result.exit_code:
-            failed_runners += 1
-            failed_logs.append(test_log)
-            emit("")
-            emit("FAILED (test)")
-            if _has_test_diagnostic(diagnostic_output):
-                emit(reduce_test_failure(diagnostic_output, repo_root))
-            else:
-                emit(_silent_runner_failure(runner, result.exit_code, runner_tests))
+        if runner.kind == "qml" and report_path.is_file():
+            report_output = report_path.read_text(encoding="utf-8", errors="replace")
+            merged = "\n".join(part for part in (result.output, report_output) if part)
+            report_path.write_text(merged + "\n", encoding="utf-8")
+            test_log = report_path
+        if not result.exit_code:
+            continue
+        failed_logs.append(test_log)
+        if runner.kind == "gtest":
+            reported = _read_report(lambda: parse_gtest_xml(report_path, repo_root))
+        else:
+            reported = _read_report(
+                lambda: parse_qt_txt(report_path.read_text(encoding="utf-8", errors="replace"), repo_root)
+            )
+        if not reported:
+            reported = reduce_test_failure(result.output, repo_root)
+            if not any(failure.location for failure in reported):
+                reported = [_silent_runner_failure(runner, result.exit_code, runner_tests)]
+            notes.append(f"({runner.target} wrote no usable report; recovered from console output)")
+        failures.extend(reported)
 
     elapsed = _summary_duration(started, clock)
-    if failed_runners:
-        emit(
-            f"Scope {args.scope} | jobs {BUILD_JOBS} | tests {len(selected)} | "
-            f"failed runners {failed_runners} | {elapsed:.1f}s | FAIL"
+    if failures:
+        report(
+            render_test_report(
+                failures,
+                scope=args.scope,
+                total=len(selected),
+                elapsed=elapsed,
+                repo_root=repo_root,
+                log_paths=failed_logs,
+                notes=notes,
+            )
         )
-        for path in failed_logs:
-            emit(f"Full log: {path}")
         return 1
     emit(f"Scope {args.scope} | jobs {BUILD_JOBS} | tests {len(selected)} | {elapsed:.1f}s | PASS")
     return 0
+
+
+def _read_ctest_junit(junit_path: Path, repo_root: Path, qml_log_dir: Path) -> tuple[list[Failure], int]:
+    try:
+        cases, total = parse_ctest_junit(junit_path)
+    except UNUSABLE_REPORT:
+        return [], 0
+    return failures_from_ctest(cases, repo_root, qml_log_dir), total

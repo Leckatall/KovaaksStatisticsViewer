@@ -1,0 +1,7 @@
+> cmake.exe --build C:/repo/build-agent --parallel 8 --target domain_tests
+[10/10] Linking CXX executable domain_tests.exe
+FAILED: [code=1] domain_tests.exe tests/domain/domain_tests[1]_tests.cmake
+C:/Windows/System32/cmd.exe /C "c++.exe -very-long-link-command"
+C:/toolchain/bin/ld.exe: required symbol `ksv_deliberate_missing_symbol' not defined
+collect2.exe: error: ld returned 1 exit status
+ninja: build stopped: subcommand failed.

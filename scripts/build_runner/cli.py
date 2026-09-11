@@ -83,7 +83,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         print("")
         print("FAILED (runner)")
         print(error)
-        print(f"Full log: {runner_log}")
+        print(f"log (read only if the above is insufficient): {runner_log.as_posix()}")
         return 1
     except Exception as error:
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -91,5 +91,5 @@ def main(arguments: Sequence[str] | None = None) -> int:
         print("")
         print("FAILED (runner)")
         print(f"{type(error).__name__}: {error}")
-        print(f"Full log: {runner_log}")
+        print(f"log (read only if the above is insufficient): {runner_log.as_posix()}")
         return 1

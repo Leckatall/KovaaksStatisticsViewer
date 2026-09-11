@@ -1,0 +1,15 @@
+Testing ui_qml_tests
+FAIL!  : ui_qml_tests::BenchmarkWorkspaceStateTest::test_emptyLibraryOffersCreateOrImport() 'BenchmarkWorkspace.qml did not load: file:///C:/repo/src/ui/qml/BenchmarkWorkspace.qml: No such file or directory
+' returned FALSE. ()
+C:\repo\tests\ui\qml\tst_BenchmarkWorkspace.qml(46) : failure location
+FAIL!  : ui_qml_tests::BenchmarkWorkspaceStateTest::test_headerIsPresentInEveryState(empty) 'BenchmarkWorkspace.qml did not load: file:///C:/repo/src/ui/qml/BenchmarkWorkspace.qml: No such file or directory
+' returned FALSE. ()
+C:\repo\tests\ui\qml\tst_BenchmarkWorkspace.qml(46) : failure location
+FAIL!  : ui_qml_tests::BenchmarkWorkspaceStateTest::test_headerIsPresentInEveryState(problems) 'BenchmarkWorkspace.qml did not load: file:///C:/repo/src/ui/qml/BenchmarkWorkspace.qml: No such file or directory
+' returned FALSE. ()
+C:\repo\tests\ui\qml\tst_BenchmarkWorkspace.qml(46) : failure location
+FAIL!  : ui_qml_tests::OtherCase::test_unrelated() values differ
+   Actual   (): 1
+   Expected (): 2
+C:\repo\tests\ui\qml\tst_Other.qml(12) : failure location
+Totals: 2 passed, 4 failed, 0 skipped, 0 blacklisted, 460ms

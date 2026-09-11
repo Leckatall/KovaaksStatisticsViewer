@@ -1,0 +1,9 @@
+> C:/repo/build-agent/domain_tests.exe --gtest_brief=1
+Running main() from C:/vcpkg/googletest/src/gtest_main.cc
+C:/repo/tests/domain/domain_test.cpp:189: Failure
+Failed
+deliberate assertion diagnostic
+
+[  FAILED  ] AgentFaultInjection.DeliberateAssertionFailure (0 ms)
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 0 tests.

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Win32-ninja" tests="705" failures="2" disabled="0" skipped="0" hostname="host" time="34" timestamp="2026-09-09T06:59:20">
+	<testcase name="BenchmarkDraft.MoveScenarioIntoCategory" classname="BenchmarkDraft.MoveScenarioIntoCategory" time="0.03" status="run">
+		<properties/>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="BenchmarkDraft.MoveScenarioBackToUncategorized" classname="BenchmarkDraft.MoveScenarioBackToUncategorized" time="0.03" status="fail">
+		<failure message="Failed"/>
+		<properties/>
+		<system-out>Note: Google Test filter = BenchmarkDraft.MoveScenarioBackToUncategorized
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[ RUN      ] BenchmarkDraft.MoveScenarioBackToUncategorized
+C:/repo/tests/app/benchmark_draft_test.cpp:408: Failure
+Expected equality of these values:
+  draft.uncategorized.front().id
+  entry
+[  FAILED  ] BenchmarkDraft.MoveScenarioBackToUncategorized (1 ms)
+[==========] 1 test from 1 test suite ran. (1 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] BenchmarkDraft.MoveScenarioBackToUncategorized
+
+ 1 FAILED TEST
+</system-out>
+	</testcase>
+	<testcase name="HangingIntegrationTest" classname="HangingIntegrationTest" time="30.0" status="fail">
+		<failure message="Timeout"/>
+		<properties/>
+		<system-out></system-out>
+	</testcase>
+</testsuite>

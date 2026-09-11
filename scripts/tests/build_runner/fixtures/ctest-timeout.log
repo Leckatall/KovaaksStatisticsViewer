@@ -1,0 +1,10 @@
+> ctest.exe --test-dir C:/repo/build-agent --output-on-failure
+    Start 1: PassingTest
+1/8 Test #1: PassingTest .....................   Passed    0.01 sec
+    Start 7: HangingIntegrationTest
+7/8 Test #7: HangingIntegrationTest .......***Timeout  30.00 sec
+Running main() from C:/vcpkg/googletest/src/gtest_main.cc
+last useful line before timeout
+88% tests passed, 1 tests failed out of 8
+The following tests FAILED:
+      7 - HangingIntegrationTest (Timeout)
