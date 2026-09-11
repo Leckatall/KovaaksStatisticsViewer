@@ -13,6 +13,7 @@
 #include "app/contracts/i_benchmark_tracking_use_case.h"
 #include "benchmark_breakdown_model.h"
 #include "benchmark_history_vm.h"
+#include "date_time_axis.h"
 
 namespace ksv::presentation {
     // Adapts one IBenchmarkTrackingUseCase revision into the benchmark workspace's QML surface:
@@ -74,6 +75,9 @@ namespace ksv::presentation {
         void rebuild();
 
         std::shared_ptr<application::IBenchmarkTrackingUseCase> m_useCase;
+        // Must precede m_rankHistory/m_playtimeHistory: both children hold a non-owning pointer to
+        // this axis and are constructed with a reference to it, so it must outlive them.
+        DateTimeAxis m_historyXAxis;
         BenchmarkHistoryViewModel *m_rankHistory;
         BenchmarkHistoryViewModel *m_playtimeHistory;
         BenchmarkBreakdownModel *m_breakdown;

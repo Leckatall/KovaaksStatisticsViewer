@@ -12,8 +12,8 @@
 
 #include "series_model.h"
 
-using ksv::presentation::AxisModel;
 using ksv::presentation::SeriesModel;
+using ksv::presentation::ValueAxis;
 using ksv::presentation::ValueTransform;
 
 namespace {
@@ -35,7 +35,8 @@ namespace {
         // percentage(); the axis must land on round PERCENT numbers, not
         // round fractions of the raw ratio.
         const ValueTransform transform = ValueTransform::percentage();
-        const AxisModel yAxis = AxisModel::forRange(transform.display(0.12), transform.display(0.87));
+        ValueAxis yAxis;
+        yAxis.setRange(transform.display(0.12), transform.display(0.87));
 
         ASSERT_GE(yAxis.ticks().size(), 2);
         const double step = yAxis.ticks()[1] - yAxis.ticks()[0];
@@ -79,11 +80,11 @@ namespace {
         second.points = {QPointF(0.0, 100.0), QPointF(1.0, 200.0)};
         const std::array<const SeriesModel *, 2> members{&first, &second};
 
-        const AxisModel axis = ksv::presentation::axisForSeries(members, {}, ValueTransform::identity());
+        const ValueAxis axis = ksv::presentation::axisForSeries(members, {}, ValueTransform::identity());
         EXPECT_LE(axis.min(), 10.0);
         EXPECT_GE(axis.max(), 200.0);
 
-        const AxisModel empty = ksv::presentation::axisForSeries({}, {}, ValueTransform::identity());
+        const ValueAxis empty = ksv::presentation::axisForSeries({}, {}, ValueTransform::identity());
         EXPECT_DOUBLE_EQ(empty.min(), 0.0);
         EXPECT_DOUBLE_EQ(empty.max(), 1.0);
     }

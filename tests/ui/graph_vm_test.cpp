@@ -320,6 +320,15 @@ namespace {
         EXPECT_TRUE(view_model.series({kInvalidColumn}).isEmpty());
     }
 
+    TEST_F(GraphViewModelTest, XAxisIdentityIsStableAcrossRefresh) {
+        setSampleData();
+        const Axis *const before = &view_model.xAxis();
+
+        view_model.fetchData();
+
+        EXPECT_EQ(&view_model.xAxis(), before);
+    }
+
     TEST_F(GraphViewModelTest, XAxisDelegateFormatsSecondsWithSuffix) {
         setSampleData();
         view_model.fetchData();

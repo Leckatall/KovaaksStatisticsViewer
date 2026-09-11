@@ -46,7 +46,7 @@ namespace ksv::application {
         Percentage
     };
 
-    struct AxisModelOptions {
+    struct ValueAxisOptions {
         enum class Baseline {
             Zero,
             HugData
@@ -61,7 +61,7 @@ namespace ksv::application {
     struct AxisConfig {
         AxisId id;
         std::string name;
-        AxisModelOptions options;
+        ValueAxisOptions options;
         AxisTransformKind transformKind = AxisTransformKind::Identity;
     };
 

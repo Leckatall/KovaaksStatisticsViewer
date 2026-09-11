@@ -6,11 +6,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 #include <utility>
 #include <vector>
 
-#include "axis_model.h"
-#include "date_axis.h"
+#include "date_time_axis.h"
 #include "benchmark_format.h"
 #include "benchmark_issue_text.h"
 #include "value_transform.h"
@@ -45,13 +45,7 @@ namespace ksv::presentation {
         }
 
         qint64 utcMidnightMs(const std::chrono::sys_days day) {
-            return epochDayToUtcMs(static_cast<long long>(day.time_since_epoch().count()));
-        }
-
-        AxisModel buildSharedDateAxis(const std::vector<qint64> &milliseconds) {
-            if (milliseconds.empty()) return utcDayAxis(0.0, 0.0, false);
-            const auto [lo, hi] = std::minmax_element(milliseconds.begin(), milliseconds.end());
-            return utcDayAxis(static_cast<qreal>(*lo), static_cast<qreal>(*hi), true);
+            return utcDateTimeForEpochDay(static_cast<long long>(day.time_since_epoch().count())).toMSecsSinceEpoch();
         }
 
         QVariantList buildSelectorEntries(const std::vector<application::BenchmarkChoice> &choices) {
@@ -142,8 +136,9 @@ namespace ksv::presentation {
     BenchmarkTrackingViewModel::BenchmarkTrackingViewModel(
         std::shared_ptr<application::IBenchmarkTrackingUseCase> useCase, QObject *parent)
         : QObject(parent), m_useCase(std::move(useCase)),
-          m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, this)),
-          m_playtimeHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, this)),
+          m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, m_historyXAxis, this)),
+          m_playtimeHistory(
+              new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, m_historyXAxis, this)),
           m_breakdown(new BenchmarkBreakdownModel(this)) {
         m_useCase->onChanged([this] { rebuild(); });
         rebuild();
@@ -258,9 +253,15 @@ namespace ksv::presentation {
                 unionMs.push_back(milliseconds);
             }
 
-        const AxisModel sharedXAxis = buildSharedDateAxis(unionMs);
-        m_rankHistory->update(rankPoints, sharedXAxis, rankPresent, tierNames);
-        m_playtimeHistory->update(playtimePoints, sharedXAxis, playtimePresent, {});
+        if (unionMs.empty()) {
+            const QDateTime now = QDateTime::currentDateTimeUtc();
+            std::ignore = m_historyXAxis.setRange(now, now);
+        } else {
+            const auto [lo, hi] = std::minmax_element(unionMs.begin(), unionMs.end());
+            std::ignore = m_historyXAxis.setEpochMillisecondsRange(*lo, *hi);
+        }
+        m_rankHistory->update(rankPoints, rankPresent, tierNames);
+        m_playtimeHistory->update(playtimePoints, playtimePresent, {});
 
         m_breakdown->reset(definition, projection);
 

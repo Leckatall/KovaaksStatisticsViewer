@@ -12,10 +12,12 @@
 #include <QString>
 #include <QVariantMap>
 #include <algorithm>
+#include <memory>
 #include <optional>
 #include <span>
 
-#include "axis_model.h"
+#include "axis.h"
+#include "value_axis.h"
 #include "value_transform.h"
 
 namespace ksv::presentation {
@@ -42,10 +44,10 @@ namespace ksv::presentation {
         void setColumn(const int column) { if (m_column == column) return; m_column = column; emit columnChanged(); }
 
         ValueTransform transform;
-        AxisModel::Options yAxisOptions;
+        ValueAxis::Options yAxisOptions;
         QList<QPointF> points;
-        std::optional<AxisModel> xAxis;
-        std::optional<AxisModel> yAxis;
+        std::shared_ptr<const Axis> xAxis;
+        std::optional<ValueAxis> yAxis;
         std::optional<uint64_t> yAxisId;
 
         [[nodiscard]] std::optional<std::pair<qreal, qreal>> displayRange() const {
@@ -60,11 +62,11 @@ namespace ksv::presentation {
             return std::pair{lo, hi};
         }
 
-        [[nodiscard]] AxisModel deriveYAxis() const {
-            if (const auto range = displayRange()) {
-                return AxisModel::forRange(range->first, range->second, yAxisOptions).withDelegate(transform);
-            }
-            return AxisModel::forRange(0.0, 1.0, yAxisOptions).withDelegate(transform);
+        [[nodiscard]] ValueAxis deriveYAxis() const {
+            ValueAxis axis(yAxisOptions, transform);
+            if (const auto range = displayRange()) axis.setRange(range->first, range->second);
+            else axis.setRange(0.0, 1.0);
+            return axis;
         }
 
         void setData(QList<QPointF> rawPoints) {
@@ -99,8 +101,8 @@ namespace ksv::presentation {
         int m_column = -1;
     };
 
-    [[nodiscard]] inline AxisModel axisForSeries(const std::span<const SeriesModel *const> members,
-                                                  const AxisModel::Options &options,
+    [[nodiscard]] inline ValueAxis axisForSeries(const std::span<const SeriesModel *const> members,
+                                                  const ValueAxis::Options &options,
                                                   const ValueTransform &delegate) {
         std::optional<std::pair<qreal, qreal>> range;
         for (const SeriesModel *series: members) {
@@ -114,8 +116,9 @@ namespace ksv::presentation {
                 range->second = std::max(range->second, memberRange->second);
             }
         }
-        if (!range) return AxisModel::forRange(0.0, 1.0, options).withDelegate(delegate);
-        return AxisModel::forRange(range->first, range->second, options).withDelegate(delegate);
+        ValueAxis axis(options, delegate);
+        axis.setRange(range ? range->first : 0.0, range ? range->second : 1.0);
+        return axis;
     }
 }
 

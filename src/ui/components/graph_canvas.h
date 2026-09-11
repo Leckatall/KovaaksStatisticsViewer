@@ -61,14 +61,14 @@ namespace ksv::ui {
 
         [[nodiscard]] QList<int> visibleColumnIds() const;
 
-        [[nodiscard]] presentation::AxisModel xAxisFor(const presentation::SeriesModel &series) const;
-        [[nodiscard]] presentation::AxisModel yAxisFor(const presentation::SeriesModel &series) const;
+        [[nodiscard]] const presentation::Axis &xAxisFor(const presentation::SeriesModel &series) const;
+        [[nodiscard]] presentation::ValueAxis yAxisFor(const presentation::SeriesModel &series) const;
 
-        // AxisModel for the series whose ticks are drawn on the y axis, if any is currently labelled.
-        [[nodiscard]] std::optional<presentation::AxisModel> labelledYAxis() const;
+        // Y axis for the series whose ticks are drawn on the y axis, if any is currently labelled.
+        [[nodiscard]] std::optional<presentation::ValueAxis> labelledYAxis() const;
 
         [[nodiscard]] static QPointF toPixel(const QPointF &displayPoint, const QRectF &rect,
-                                             const presentation::AxisModel &xAxis, const presentation::AxisModel &yAxis);
+                                             const presentation::Axis &xAxis, const presentation::Axis &yAxis);
 
         void drawAxes(QPainter *painter, const QRectF &rect) const;
 

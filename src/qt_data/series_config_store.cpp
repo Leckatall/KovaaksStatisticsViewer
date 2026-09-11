@@ -194,26 +194,26 @@ namespace ksv::qt_data {
             return std::nullopt;
         }
 
-        QString baselineTag(const AxisModelOptions::Baseline baseline) {
+        QString baselineTag(const ValueAxisOptions::Baseline baseline) {
             switch (baseline) {
-                case AxisModelOptions::Baseline::Zero: return "zero";
-                case AxisModelOptions::Baseline::HugData: return "hugData";
+                case ValueAxisOptions::Baseline::Zero: return "zero";
+                case ValueAxisOptions::Baseline::HugData: return "hugData";
             }
             return {};
         }
 
-        std::optional<AxisModelOptions::Baseline> baselineFromTag(const QString &tag) {
-            if (tag == "zero") return AxisModelOptions::Baseline::Zero;
-            if (tag == "hugData") return AxisModelOptions::Baseline::HugData;
+        std::optional<ValueAxisOptions::Baseline> baselineFromTag(const QString &tag) {
+            if (tag == "zero") return ValueAxisOptions::Baseline::Zero;
+            if (tag == "hugData") return ValueAxisOptions::Baseline::HugData;
             return std::nullopt;
         }
 
-        QJsonObject encodeAxisOptions(const AxisModelOptions &options) {
+        QJsonObject encodeAxisOptions(const ValueAxisOptions &options) {
             return {{"baseline", baselineTag(options.baseline)}, {"integral", options.integral},
                     {"targetTicks", options.targetTicks}, {"fallbackSpan", options.fallbackSpan}};
         }
 
-        std::optional<AxisModelOptions> decodeAxisOptions(const QJsonValue &value) {
+        std::optional<ValueAxisOptions> decodeAxisOptions(const QJsonValue &value) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             if (!exactKeys(object, {"baseline", "integral", "targetTicks", "fallbackSpan"}) ||
@@ -223,7 +223,7 @@ namespace ksv::qt_data {
             const auto targetTicks = boundedInteger<int>(object["targetTicks"]);
             const auto fallbackSpan = finiteNumber(object["fallbackSpan"]);
             if (!baseline || !targetTicks || !fallbackSpan || *fallbackSpan <= 0.0) return std::nullopt;
-            return AxisModelOptions{*baseline, object["integral"].toBool(), *targetTicks, *fallbackSpan};
+            return ValueAxisOptions{*baseline, object["integral"].toBool(), *targetTicks, *fallbackSpan};
         }
 
         QJsonObject encodeAxis(const AxisConfig &axis) {
@@ -386,7 +386,7 @@ namespace ksv::qt_data {
             return {};
         }
 
-        bool sameAxisOptions(const AxisModelOptions &left, const AxisModelOptions &right) {
+        bool sameAxisOptions(const ValueAxisOptions &left, const ValueAxisOptions &right) {
             return left.baseline == right.baseline && left.integral == right.integral &&
                    left.targetTicks == right.targetTicks && left.fallbackSpan == right.fallbackSpan;
         }

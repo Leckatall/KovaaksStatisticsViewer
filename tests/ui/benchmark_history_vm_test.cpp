@@ -13,7 +13,7 @@
 #include "presentation/benchmark_history_vm.h"
 #include "presentation/graph_vm_base.h"
 #include "presentation/series_model.h"
-#include "presentation/axis_model.h"
+#include "presentation/value_axis.h"
 
 #include "fake_benchmark_tracking_use_case.h"
 
@@ -44,6 +44,13 @@ TEST(BenchmarkHistoryViewModel, RankAndPlaytimeAreSeparateChildObjects) {
     ASSERT_NE(vm.rankHistory(), nullptr);
     ASSERT_NE(vm.playtimeHistory(), nullptr);
     EXPECT_NE(static_cast<QObject *>(vm.rankHistory()), static_cast<QObject *>(vm.playtimeHistory()));
+}
+
+TEST(BenchmarkHistoryViewModel, BothHistoriesShareTheSameXAxisAddress) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_EQ(&vm.rankHistory()->xAxis(), &vm.playtimeHistory()->xAxis());
 }
 
 TEST(BenchmarkHistoryViewModel, CalendarDaysConvertToUtcMidnightEpochMs) {
@@ -115,7 +122,7 @@ TEST(BenchmarkHistoryViewModel, RankSeriesSpansUnrankedZeroThroughTierCountWithT
     const auto series = vm.rankHistory()->series({kValueColumn});
     ASSERT_EQ(series.size(), 1);
     ASSERT_TRUE(series.front()->yAxis.has_value());
-    const AxisModel &yAxis = *series.front()->yAxis;
+    const ValueAxis &yAxis = *series.front()->yAxis;
 
     EXPECT_DOUBLE_EQ(yAxis.min(), 0.0);
     EXPECT_DOUBLE_EQ(yAxis.max(), 3.0);

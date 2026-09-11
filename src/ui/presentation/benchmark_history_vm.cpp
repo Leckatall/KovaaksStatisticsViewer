@@ -12,8 +12,9 @@ namespace ksv::presentation {
         const QColor kPlaytimeColor("#4DD0E1");
     }
 
-    BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, QObject *parent)
-        : GraphViewModelBase(parent), m_metric(metric), m_series(new SeriesModel(this)) {
+    BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, const Axis &sharedXAxis,
+                                                         QObject *parent)
+        : GraphViewModelBase(parent), m_metric(metric), m_series(new SeriesModel(this)), m_xAxis(&sharedXAxis) {
     }
 
     QList<SeriesModel *> BenchmarkHistoryViewModel::series(const QList<int> &columns) const {
@@ -24,7 +25,7 @@ namespace ksv::presentation {
         return result;
     }
 
-    AxisModel BenchmarkHistoryViewModel::rankYAxis(const std::vector<QString> &tierNames) {
+    ValueAxis BenchmarkHistoryViewModel::rankYAxis(const std::vector<QString> &tierNames) {
         ValueTransform transform;
         transform.formatter = [tierNames](const qreal value) -> QString {
             const qreal rounded = std::round(value);
@@ -36,15 +37,16 @@ namespace ksv::presentation {
             }
             return ValueTransform().format(value);
         };
-        AxisModel::Options options;
-        options.baseline = AxisModel::Baseline::Zero;
+        ValueAxis::Options options;
+        options.baseline = ValueAxis::Baseline::Zero;
         options.integral = true;
-        return AxisModel::forRange(0.0, static_cast<qreal>(tierNames.size()), options).withDelegate(transform);
+        ValueAxis axis(options, transform);
+        axis.setRange(0.0, static_cast<qreal>(tierNames.size()));
+        return axis;
     }
 
-    void BenchmarkHistoryViewModel::update(const QList<QPointF> &rawPoints, const AxisModel &sharedXAxis,
-                                           const bool present, const std::vector<QString> &rankTierNames) {
-        m_xAxis = sharedXAxis;
+    void BenchmarkHistoryViewModel::update(const QList<QPointF> &rawPoints, const bool present,
+                                           const std::vector<QString> &rankTierNames) {
         m_hasData = present && !rawPoints.isEmpty();
 
         if (!m_hasData) {
@@ -67,7 +69,7 @@ namespace ksv::presentation {
             m_series->setName(tr("Three-day average playtime"));
             m_series->setColor(kPlaytimeColor);
             m_series->transform = ValueTransform::secondsToMinutes();
-            m_series->yAxisOptions = {.baseline = AxisModel::Baseline::Zero};
+            m_series->yAxisOptions = {.baseline = ValueAxis::Baseline::Zero};
             m_series->setData(rawPoints);
         }
 

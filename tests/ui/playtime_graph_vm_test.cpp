@@ -69,6 +69,15 @@ namespace {
         EXPECT_TRUE(view_model.series({PlaytimeGraphViewModel::Date}).isEmpty());
     }
 
+    TEST_F(PlaytimeGraphViewModelTest, XAxisIdentityIsStableAcrossRefresh) {
+        fake->series = {{19500, 1800.0}};
+        const Axis *const before = &view_model.xAxis();
+
+        view_model.refresh();
+
+        EXPECT_EQ(&view_model.xAxis(), before);
+    }
+
     TEST_F(PlaytimeGraphViewModelTest, SinglePointExpandsXAxisToSurroundingCalendarDays) {
         fake->series = {{19500, 1800.0}};
         view_model.refresh();
@@ -89,6 +98,11 @@ namespace {
     }
 
     TEST_F(PlaytimeGraphViewModelTest, XAxisDelegateRendersTheEpochMsAsACalendarDate) {
+        // A 10-day span selects day-granularity ticks (see DateTimeAxis's calendar-interval
+        // selection), so the label carries no time component.
+        fake->series = {{19500, 1800.0}, {19510, 900.0}};
+        view_model.refresh();
+
         const qreal dayValue = epochDayMs(19500);
         const QString expected = QDate(1970, 1, 1).addDays(19500).toString("MMM d");
         EXPECT_EQ(view_model.xAxis().formatTick(dayValue), expected);

@@ -83,7 +83,7 @@ namespace ksv::ui {
         return ids;
     }
 
-    std::optional<presentation::AxisModel> GraphCanvas::labelledYAxis() const {
+    std::optional<presentation::ValueAxis> GraphCanvas::labelledYAxis() const {
         if (!m_graphVm) return std::nullopt;
         const int labelledColumn = labelledYAxisColumn();
         const QList<int> visible = visibleColumnIds();
@@ -109,7 +109,7 @@ namespace ksv::ui {
                                                                           return yAxis->formatTick(v);
                                                                       }) + kLabelExtentPadding);
             }
-            const presentation::AxisModel xAxis = m_graphVm->xAxis();
+            const presentation::Axis &xAxis = m_graphVm->xAxis();
             bottomMargin = std::max(kMinBottomMargin,
                                     AxisPainter::measureLabelExtent(AxisPainter::Orientation::Horizontal, xAxis.ticks(),
                                                                     [&xAxis](const qreal v) {
@@ -124,16 +124,16 @@ namespace ksv::ui {
         };
     }
 
-    presentation::AxisModel GraphCanvas::xAxisFor(const presentation::SeriesModel &series) const {
-        return series.xAxis.value_or(m_graphVm->xAxis());
+    const presentation::Axis &GraphCanvas::xAxisFor(const presentation::SeriesModel &series) const {
+        return series.xAxis ? *series.xAxis : m_graphVm->xAxis();
     }
 
-    presentation::AxisModel GraphCanvas::yAxisFor(const presentation::SeriesModel &series) const {
+    presentation::ValueAxis GraphCanvas::yAxisFor(const presentation::SeriesModel &series) const {
         return series.yAxis.value_or(series.deriveYAxis());
     }
 
     QPointF GraphCanvas::toPixel(const QPointF &displayPoint, const QRectF &rect,
-                                 const presentation::AxisModel &xAxis, const presentation::AxisModel &yAxis) {
+                                 const presentation::Axis &xAxis, const presentation::Axis &yAxis) {
         const qreal xt = xAxis.normalizedPosition(displayPoint.x());
         const qreal yt = yAxis.normalizedPosition(displayPoint.y());
         return {rect.left() + xt * rect.width(), rect.bottom() - yt * rect.height()};
@@ -141,7 +141,7 @@ namespace ksv::ui {
 
     void GraphCanvas::drawAxes(QPainter *painter, const QRectF &rect) const {
         if (!m_graphVm) return;
-        const presentation::AxisModel xAxis = m_graphVm->xAxis();
+        const presentation::Axis &xAxis = m_graphVm->xAxis();
 
         // Only one series' Y axis gets labels; all project against their own axis
         if (const auto yAxis = labelledYAxis()) {
@@ -162,8 +162,8 @@ namespace ksv::ui {
             const QList<QPointF> displayPoints = s->displayPoints();
             if (displayPoints.size() < 2) continue;
 
-            const presentation::AxisModel xAxis = xAxisFor(*s);
-            const presentation::AxisModel yAxis = yAxisFor(*s);
+            const presentation::Axis &xAxis = xAxisFor(*s);
+            const presentation::ValueAxis yAxis = yAxisFor(*s);
 
             QVector<QPointF> pixelPoints;
             pixelPoints.reserve(displayPoints.size());
@@ -190,11 +190,11 @@ namespace ksv::ui {
         const auto &refSeries = *series.front();
 
         const QRectF rect = plotRect();
-        const presentation::AxisModel sharedXAxis = m_graphVm->xAxis();
+        const presentation::Axis &sharedXAxis = m_graphVm->xAxis();
         const qreal t = rect.width() != 0.0 ? (x - rect.left()) / rect.width() : 0.5;
         const qreal dataX = sharedXAxis.valueAt(t);
 
-        const presentation::AxisModel refXAxis = xAxisFor(refSeries);
+        const presentation::Axis &refXAxis = xAxisFor(refSeries);
         const auto refSample = refSeries.sampleAtX(dataX);
         if (!refSample) return result;
 
@@ -228,8 +228,8 @@ namespace ksv::ui {
         qreal bestDistanceSq = kHoverRadius * kHoverRadius;
 
         for (const auto *s: series) {
-            const presentation::AxisModel xAxis = xAxisFor(*s);
-            const presentation::AxisModel yAxis = yAxisFor(*s);
+            const presentation::Axis &xAxis = xAxisFor(*s);
+            const presentation::ValueAxis yAxis = yAxisFor(*s);
             const QList<QPointF> displayPoints = s->displayPoints();
 
             for (const auto &p: displayPoints) {

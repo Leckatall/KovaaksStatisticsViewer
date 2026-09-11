@@ -10,7 +10,7 @@
 #include <memory>
 #include <qqmlintegration.h>
 
-#include "axis_model.h"
+#include "date_time_axis.h"
 #include "graph_vm_base.h"
 #include "app/contracts/i_playtime_graph_use_case.h"
 
@@ -32,7 +32,7 @@ namespace ksv::presentation {
             for (const int c: columns) if (c == Playtime) result.append(m_series);
             return result;
         }
-        [[nodiscard]] AxisModel xAxis() const override { return m_xAxis; }
+        [[nodiscard]] const Axis &xAxis() const override { return m_xAxis; }
 
         [[nodiscard]] int yAxisColumn() const override { return Playtime; }
 
@@ -46,7 +46,7 @@ namespace ksv::presentation {
         static constexpr int kWindowDays = 3;
 
         std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;
-        AxisModel m_xAxis;
+        DateTimeAxis m_xAxis;
         SeriesModel *m_series; // raw seconds + a seconds->minutes transform
     };
 }

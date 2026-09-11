@@ -30,13 +30,13 @@ namespace {
 
     TEST(SeriesConfigTest, AxisConfigHoldsIdNameOptionsAndTransformKind) {
         const AxisConfig axis{
-            AxisId{5}, "Custom axis", {AxisModelOptions::Baseline::Zero, true, 6, 2.0},
+            AxisId{5}, "Custom axis", {ValueAxisOptions::Baseline::Zero, true, 6, 2.0},
             AxisTransformKind::Percentage
         };
 
         EXPECT_EQ(axis.id.value, 5U);
         EXPECT_EQ(axis.name, "Custom axis");
-        EXPECT_EQ(axis.options.baseline, AxisModelOptions::Baseline::Zero);
+        EXPECT_EQ(axis.options.baseline, ValueAxisOptions::Baseline::Zero);
         EXPECT_TRUE(axis.options.integral);
         EXPECT_EQ(axis.options.targetTicks, 6);
         EXPECT_DOUBLE_EQ(axis.options.fallbackSpan, 2.0);

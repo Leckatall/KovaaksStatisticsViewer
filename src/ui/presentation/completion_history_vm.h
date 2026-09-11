@@ -10,7 +10,7 @@
 #include <memory>
 
 #include "app/contracts/i_completion_history_use_case.h"
-#include "axis_model.h"
+#include "value_axis.h"
 #include "graph_vm_base.h"
 
 namespace ksv::presentation {
@@ -29,7 +29,7 @@ namespace ksv::presentation {
             QObject *parent = nullptr);
 
         [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override;
-        [[nodiscard]] AxisModel xAxis() const override { return m_x_axis; }
+        [[nodiscard]] const Axis &xAxis() const override { return m_xAxis; }
         [[nodiscard]] int yAxisColumn() const override { return -1; }
         [[nodiscard]] QString scenarioTitle() const { return m_scenario_title; }
         [[nodiscard]] int runCount() const { return m_run_count; }
@@ -50,7 +50,7 @@ namespace ksv::presentation {
     private:
         std::shared_ptr<application::ICompletionHistoryUseCase> m_use_case;
         std::array<QList<QPointF>, ColumnCount> m_points{};
-        AxisModel m_x_axis;
+        ValueAxis m_xAxis;
         QList<SeriesModel *> m_series;
         QString m_scenario_title;
         int m_run_count = 0;

@@ -42,7 +42,7 @@ namespace {
     }
 
     QPointF toPixel(const QPointF &display, const QRectF &rect,
-                    const presentation::AxisModel &xAxis, const presentation::AxisModel &yAxis) {
+                    const presentation::Axis &xAxis, const presentation::Axis &yAxis) {
         const qreal xt = xAxis.normalizedPosition(display.x());
         const qreal yt = yAxis.normalizedPosition(display.y());
         return {rect.left() + xt * rect.width(), rect.bottom() - yt * rect.height()};
@@ -126,7 +126,7 @@ namespace {
         ASSERT_FALSE(display.isEmpty());
 
         const QRectF rect = canvas.property("plotArea").toRectF();
-        const auto xAxis = graphVm->xAxis();
+        const auto &xAxis = graphVm->xAxis();
         // Score isn't in GraphViewModel's hardcoded axis table, so it derives its own axis the same
         // way GraphCanvas does — see yAxisFor() in graph_canvas.cpp.
         const QPointF pixel = toPixel(display.front(), rect, xAxis,
@@ -146,6 +146,8 @@ namespace {
     // Minimal VM whose single series has NO y-axis, forcing yAxisFor() to derive one.
     class NoYAxisVm : public presentation::GraphViewModelBase {
     public:
+        NoYAxisVm() { m_xAxis.setRange(0.0, 10.0); }
+
         [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &) const override {
             auto *s = new presentation::SeriesModel(const_cast<NoYAxisVm *>(this));
             s->setName("Fallback");
@@ -154,10 +156,11 @@ namespace {
             // Deliberately leave xAxis / yAxis unset.
             return {s};
         }
-        [[nodiscard]] presentation::AxisModel xAxis() const override {
-            return presentation::AxisModel::forRange(0.0, 10.0);
-        }
+        [[nodiscard]] const presentation::Axis &xAxis() const override { return m_xAxis; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
+
+    private:
+        presentation::ValueAxis m_xAxis;
     };
 
     TEST_F(GraphCanvasGeometryTest, YAxisDerivedFromSeriesDataWhenUnset) {
@@ -204,7 +207,7 @@ namespace {
     // Minimal VM whose y-range is caller-controlled, to compare margins for narrow vs. wide tick text.
     class FixedRangeVm : public presentation::GraphViewModelBase {
     public:
-        explicit FixedRangeVm(const qreal yHi) : m_yHi(yHi) {}
+        explicit FixedRangeVm(const qreal yHi) : m_yHi(yHi) { m_xAxis.setRange(0.0, 10.0); }
 
         [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &) const override {
             auto *s = new presentation::SeriesModel(const_cast<FixedRangeVm *>(this));
@@ -213,13 +216,12 @@ namespace {
             s->points = {QPointF(0.0, 0.0), QPointF(10.0, m_yHi)};
             return {s};
         }
-        [[nodiscard]] presentation::AxisModel xAxis() const override {
-            return presentation::AxisModel::forRange(0.0, 10.0);
-        }
+        [[nodiscard]] const presentation::Axis &xAxis() const override { return m_xAxis; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
 
     private:
         qreal m_yHi;
+        presentation::ValueAxis m_xAxis;
     };
 
     TEST_F(GraphCanvasGeometryTest, LeftMarginGrowsWithWiderTickLabels) {
@@ -238,9 +240,12 @@ namespace {
 
     class VisibleSetAxisVm : public presentation::GraphViewModelBase {
     public:
+        VisibleSetAxisVm() { m_xAxis.setRange(0.0, 10.0); }
+
         [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &columns) const override {
             const bool shared = columns.contains(0) && columns.contains(1);
-            const presentation::AxisModel yAxis = presentation::AxisModel::forRange(0.0, shared ? 123456.0 : 1.0);
+            presentation::ValueAxis yAxis;
+            yAxis.setRange(0.0, shared ? 123456.0 : 1.0);
             QList<presentation::SeriesModel *> result;
             for (const int column: columns) {
                 if (column < 0 || column > 1) continue;
@@ -253,10 +258,11 @@ namespace {
             }
             return result;
         }
-        [[nodiscard]] presentation::AxisModel xAxis() const override {
-            return presentation::AxisModel::forRange(0.0, 10.0);
-        }
+        [[nodiscard]] const presentation::Axis &xAxis() const override { return m_xAxis; }
         [[nodiscard]] int yAxisColumn() const override { return 0; }
+
+    private:
+        presentation::ValueAxis m_xAxis;
     };
 
     TEST_F(GraphCanvasGeometryTest, LabelledAxisUsesTheVisibleSeriesSet) {

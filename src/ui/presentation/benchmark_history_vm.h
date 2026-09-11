@@ -8,7 +8,7 @@
 
 #include <vector>
 
-#include "axis_model.h"
+#include "axis.h"
 #include "graph_vm_base.h"
 #include "series_model.h"
 
@@ -32,10 +32,12 @@ namespace ksv::presentation {
         enum Column { Date = 0, Value = 1 };
         Q_ENUM(Column)
 
-        explicit BenchmarkHistoryViewModel(Metric metric, QObject *parent = nullptr);
+        // `sharedXAxis` is owned by the parent BenchmarkTrackingViewModel and must outlive this
+        // object; both history metrics observe the same instance instead of copying it.
+        BenchmarkHistoryViewModel(Metric metric, const Axis &sharedXAxis, QObject *parent = nullptr);
 
         [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override;
-        [[nodiscard]] AxisModel xAxis() const override { return m_xAxis; }
+        [[nodiscard]] const Axis &xAxis() const override { return *m_xAxis; }
         [[nodiscard]] int yAxisColumn() const override { return Value; }
 
         [[nodiscard]] bool hasData() const { return m_hasData; }
@@ -45,19 +47,18 @@ namespace ksv::presentation {
                                            : tr("Three-day average playtime");
         }
 
-        // Called by BenchmarkTrackingViewModel inside one atomic rebuild. `rawPoints` carry
-        // UTC-midnight epoch-ms X and the metric's raw Y (rank position, or playtime seconds).
-        // `present` is false when the metric is suppressed; `rankTierNames` is only read for
-        // AverageRank and sizes the 0..tierCount rank axis.
-        void update(const QList<QPointF> &rawPoints, const AxisModel &sharedXAxis, bool present,
-                    const std::vector<QString> &rankTierNames);
+        // Called by BenchmarkTrackingViewModel inside one atomic rebuild, after it has updated the
+        // shared X axis. `rawPoints` carry UTC-midnight epoch-ms X and the metric's raw Y (rank
+        // position, or playtime seconds). `present` is false when the metric is suppressed;
+        // `rankTierNames` is only read for AverageRank and sizes the 0..tierCount rank axis.
+        void update(const QList<QPointF> &rawPoints, bool present, const std::vector<QString> &rankTierNames);
 
     private:
-        [[nodiscard]] static AxisModel rankYAxis(const std::vector<QString> &tierNames);
+        [[nodiscard]] static ValueAxis rankYAxis(const std::vector<QString> &tierNames);
 
         Metric m_metric;
         SeriesModel *m_series;
-        AxisModel m_xAxis;
+        const Axis *m_xAxis;
         bool m_hasData = false;
     };
 }

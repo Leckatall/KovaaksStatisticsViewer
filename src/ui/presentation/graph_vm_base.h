@@ -11,7 +11,7 @@
 #include <QString>
 #include <cmath>
 
-#include "axis_model.h"
+#include "axis.h"
 #include "series_model.h"
 
 namespace ksv::presentation {
@@ -26,7 +26,7 @@ namespace ksv::presentation {
         [[nodiscard]] virtual QList<SeriesModel *> series(const QList<int> &columns) const = 0;
 
         // Shared X axis all series are plotted against
-        [[nodiscard]] virtual AxisModel xAxis() const = 0;
+        [[nodiscard]] virtual const Axis &xAxis() const = 0;
 
         [[nodiscard]] virtual int yAxisColumn() const = 0;
 

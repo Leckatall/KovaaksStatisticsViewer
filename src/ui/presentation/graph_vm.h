@@ -13,7 +13,7 @@
 #include <qqmlintegration.h>
 #include <ranges>
 
-#include "axis_model.h"
+#include "value_axis.h"
 #include "graph_vm_base.h"
 #include "app/contracts/i_graph_use_case.h"
 
@@ -34,7 +34,7 @@ namespace ksv::presentation {
         explicit GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase, QObject *parent = nullptr);
 
         [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override;
-        [[nodiscard]] AxisModel xAxis() const override { return m_timeAxis; }
+        [[nodiscard]] const Axis &xAxis() const override { return m_timeAxis; }
 
         [[nodiscard]] QQmlListProperty<SeriesModel> allSeries() const {
             return QQmlListProperty<SeriesModel>(const_cast<GraphViewModel *>(this), &m_allSeriesList);
@@ -70,7 +70,7 @@ namespace ksv::presentation {
         static constexpr int kDefaultYAxisSeriesId = 1;
 
         std::shared_ptr<application::IGraphUseCase> m_graphUseCase;
-        AxisModel m_timeAxis{};
+        ValueAxis m_timeAxis;
         QMap<QString, SeriesModel *> m_seriesById;
         QHash<uint64_t, application::AxisConfig> m_axesById;
         // Backs the allSeries QQmlListProperty; rebuilt (not just re-sorted) by fetchMetadata()/

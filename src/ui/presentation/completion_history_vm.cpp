@@ -4,6 +4,7 @@
 #include <QtMath>
 
 #include <array>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -17,7 +18,7 @@ namespace ksv::presentation {
 
         struct AxisDescriptor {
             ValueTransform transform;
-            AxisModel::Options options;
+            ValueAxis::Options options;
         };
 
         enum YAxis {
@@ -35,7 +36,7 @@ namespace ksv::presentation {
         const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{{
             {ValueTransform::identity(), {}},
             {ValueTransform::percentage(), {}},
-            {ValueTransform::identity(), {.baseline = AxisModel::Baseline::Zero}},
+            {ValueTransform::identity(), {.baseline = ValueAxis::Baseline::Zero}},
         }};
 
         const std::array<ColumnMeta, CompletionHistoryViewModel::ColumnCount> kColumnMeta{{
@@ -51,7 +52,9 @@ namespace ksv::presentation {
 
     CompletionHistoryViewModel::CompletionHistoryViewModel(
         std::shared_ptr<application::ICompletionHistoryUseCase> use_case, QObject *parent)
-        : GraphViewModelBase(parent), m_use_case(std::move(use_case)) {
+        : GraphViewModelBase(parent), m_use_case(std::move(use_case)),
+          m_xAxis({.baseline = ValueAxis::Baseline::Zero, .integral = true, .targetTicks = 10},
+                  runIndexTransform()) {
         for (int column = Score; column < ColumnCount; ++column) {
             auto *series_model = new SeriesModel(this);
             series_model->setId(QString::number(column));
@@ -80,7 +83,7 @@ namespace ksv::presentation {
             members.reserve(indices.size());
             for (const int index: indices) members.push_back(result[index]);
             const auto &descriptor = kYAxisMeta[axis];
-            const AxisModel yAxis = axisForSeries(members, descriptor.options, descriptor.transform);
+            const ValueAxis yAxis = axisForSeries(members, descriptor.options, descriptor.transform);
             for (const int index: indices) result[index]->yAxis = yAxis;
         }
         return result;
@@ -110,13 +113,7 @@ namespace ksv::presentation {
             series->yAxis.reset();
         }
 
-        constexpr AxisModel::Options kRunAxis{
-            .baseline = AxisModel::Baseline::Zero,
-            .integral = true,
-            .targetTicks = 10,
-        };
-        m_x_axis = AxisModel::forRange(m_run_count > 0 ? 1.0 : 0.0, m_run_count, kRunAxis)
-                       .withDelegate(runIndexTransform());
+        std::ignore = m_xAxis.setRange(m_run_count > 0 ? 1.0 : 0.0, m_run_count);
 
         emit dataUpdated();
         emit boundsChanged();

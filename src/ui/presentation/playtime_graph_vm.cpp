@@ -4,9 +4,11 @@
 
 #include "playtime_graph_vm.h"
 
-#include <utility>
+#include <QDateTime>
+#include <QTimeZone>
 
-#include "date_axis.h"
+#include <tuple>
+#include <utility>
 
 namespace ksv::presentation {
     namespace {
@@ -25,14 +27,17 @@ namespace ksv::presentation {
         QList<QPointF> rawSecondsPoints;
         rawSecondsPoints.reserve(int(rollingPlaytime.size()));
         for (const auto &[epoch_day, avg_seconds]: rollingPlaytime) {
-            const auto epochMs = static_cast<qreal>(epochDayToUtcMs(epoch_day));
+            const auto epochMs = static_cast<qreal>(utcDateTimeForEpochDay(epoch_day).toMSecsSinceEpoch());
             rawSecondsPoints.append(QPointF(epochMs, avg_seconds));
         }
 
         if (rawSecondsPoints.isEmpty()) {
-            m_xAxis = utcDayAxis(0.0, 0.0, false);
+            const QDateTime now = QDateTime::currentDateTimeUtc();
+            std::ignore = m_xAxis.setRange(now, now);
         } else {
-            m_xAxis = utcDayAxis(rawSecondsPoints.first().x(), rawSecondsPoints.last().x(), true);
+            const QDateTime lo = QDateTime::fromMSecsSinceEpoch(qint64(rawSecondsPoints.first().x()), QTimeZone::utc());
+            const QDateTime hi = QDateTime::fromMSecsSinceEpoch(qint64(rawSecondsPoints.last().x()), QTimeZone::utc());
+            std::ignore = m_xAxis.setRange(lo, hi);
         }
 
         m_series->setId(QString::number(Playtime));
@@ -40,7 +45,7 @@ namespace ksv::presentation {
         m_series->setColor(kPlaytimeColor);
         m_series->setColumn(Playtime);
         m_series->transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
-        m_series->yAxisOptions = {.baseline = AxisModel::Baseline::Zero};
+        m_series->yAxisOptions = {.baseline = ValueAxis::Baseline::Zero};
         m_series->setData(rawSecondsPoints);
         emit dataUpdated();
         emit boundsChanged();

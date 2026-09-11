@@ -22,11 +22,11 @@ namespace ksv::presentation {
             return ValueTransform::identity();
         }
 
-        AxisModel::Options axisOptionsFor(const application::AxisModelOptions &options) {
-            return AxisModel::Options{
-                options.baseline == application::AxisModelOptions::Baseline::Zero
-                    ? AxisModel::Baseline::Zero
-                    : AxisModel::Baseline::HugData,
+        ValueAxis::Options valueAxisOptionsFor(const application::ValueAxisOptions &options) {
+            return ValueAxis::Options{
+                options.baseline == application::ValueAxisOptions::Baseline::Zero
+                    ? ValueAxis::Baseline::Zero
+                    : ValueAxis::Baseline::HugData,
                 options.integral, options.targetTicks, options.fallbackSpan
             };
         }
@@ -40,7 +40,10 @@ namespace ksv::presentation {
 
     GraphViewModel::GraphViewModel(std::shared_ptr<application::IGraphUseCase> graphUseCase,
                                    QObject *parent) : GraphViewModelBase(parent),
-                                                      m_graphUseCase(std::move(graphUseCase)) {
+                                                      m_graphUseCase(std::move(graphUseCase)),
+                                                      m_timeAxis({.baseline = ValueAxis::Baseline::Zero,
+                                                                  .integral = true},
+                                                                 secondsDelegate()) {
         fetchMetadata();
         recomputeBounds();
         m_graphUseCase->onSeriesConfigChanged([this] { fetchMetadata(); });
@@ -61,7 +64,7 @@ namespace ksv::presentation {
             std::vector<const SeriesModel *> members;
             members.reserve(it.value().size());
             for (const int index: it.value()) members.push_back(result[index]);
-            const AxisModel yAxis = axisForSeries(members, axisOptionsFor(axisIt->options),
+            const ValueAxis yAxis = axisForSeries(members, valueAxisOptionsFor(axisIt->options),
                                                   transformFor(axisIt->transformKind));
             for (const int index: it.value()) result[index]->yAxis = yAxis;
         }
@@ -69,22 +72,8 @@ namespace ksv::presentation {
     }
 
     void GraphViewModel::recomputeBounds() {
-        // Time: zero floor, integral steps (whole seconds)
-        const AxisModel::Options timeOpts{AxisModel::Baseline::Zero, /*integral=*/true};
-
-        const double hi = m_graphUseCase->getRunDuration();
-        AxisModel newTimeAxis = hi > 0.0
-                                    ? AxisModel::forRange(0.0, hi, timeOpts)
-                                    : AxisModel::forRange(0.0, 60.0, timeOpts);
-        newTimeAxis = newTimeAxis.withDelegate(secondsDelegate());
-
-        if (qFuzzyCompare(1.0 + m_timeAxis.min(), 1.0 + newTimeAxis.min()) &&
-            qFuzzyCompare(1.0 + m_timeAxis.max(), 1.0 + newTimeAxis.max()))
-            return;
-
-        m_timeAxis = newTimeAxis;
-
-        emit boundsChanged();
+        const qreal hi = m_graphUseCase->getRunDuration();
+        if (m_timeAxis.setRange(0.0, hi > 0.0 ? hi : 60.0)) emit boundsChanged();
     }
 
     void GraphViewModel::fetchLatestData() {

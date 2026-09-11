@@ -59,8 +59,11 @@ qt_add_qml_module(ksv_ui
             qml/icons/trash-2.svg
             qml/icons/square-function.svg
         SOURCES
-            presentation/axis_model.h
-            presentation/axis_model.cpp
+            presentation/axis.h
+            presentation/value_axis.h
+            presentation/value_axis.cpp
+            presentation/date_time_axis.h
+            presentation/date_time_axis.cpp
             presentation/value_transform.h
             presentation/series_model.h
             presentation/series_model.cpp
@@ -90,8 +93,6 @@ qt_add_qml_module(ksv_ui
             presentation/benchmark_issue_text.cpp
             presentation/benchmark_format.h
             presentation/benchmark_format.cpp
-            presentation/date_axis.h
-            presentation/date_axis.cpp
             presentation/benchmark_tree_node.h
             presentation/benchmark_tree_node.cpp
             presentation/benchmark_manager_vm.h

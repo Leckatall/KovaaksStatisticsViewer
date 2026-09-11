@@ -53,6 +53,15 @@ namespace {
         EXPECT_EQ(view_model.runCount(), 2);
     }
 
+    TEST_F(CompletionHistoryViewModelTest, XAxisIdentityIsStableAcrossRefresh) {
+        setHistory();
+        const Axis *const before = &view_model.xAxis();
+
+        view_model.refresh();
+
+        EXPECT_EQ(&view_model.xAxis(), before);
+    }
+
     TEST_F(CompletionHistoryViewModelTest, RunAxisUsesWholeTicksAndRunLabels) {
         setHistory();
         view_model.refresh();
