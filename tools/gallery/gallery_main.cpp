@@ -22,6 +22,7 @@
 
 #include <app/app.h>
 
+#include "logging_setup.h"
 #include "qml_registration.h"
 #include "gallery_dataset.h"
 #include "settings_service.h"
@@ -71,6 +72,7 @@ namespace {
 }
 
 int main(int argc, char *argv[]) {
+    install_debug_message_pattern();
     declare_metatypes();
     QQuickStyle::setStyle("Fusion");
     QGuiApplication qapp(argc, argv);

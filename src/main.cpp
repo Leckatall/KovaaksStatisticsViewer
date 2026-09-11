@@ -9,9 +9,11 @@
 #include <QStyleHints>
 #include <app/app.h>
 
+#include "logging_setup.h"
 #include "qml_registration.h"
 
 int main(int argc, char *argv[]) {
+    ksv::install_debug_message_pattern();
     ksv::declare_metatypes();
     QQuickStyle::setStyle("Fusion");
     QGuiApplication qapp(argc, argv);
