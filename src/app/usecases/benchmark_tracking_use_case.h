@@ -10,14 +10,16 @@
 #include <vector>
 
 #include "contracts/benchmark_workspace_snapshot.h"
-#include "contracts/i_benchmark_library_service.h"
+#include "contracts/i_benchmark_resolution_use_case.h"
 #include "contracts/i_benchmark_tracking_use_case.h"
+#include "data/interfaces/i_benchmarks_service.h"
 #include "data/interfaces/i_profile_service.h"
 
 namespace ksv::application {
     class BenchmarkTrackingUseCase final : public IBenchmarkTrackingUseCase {
     public:
-        BenchmarkTrackingUseCase(std::shared_ptr<IBenchmarkLibraryService> library,
+        BenchmarkTrackingUseCase(std::shared_ptr<data::IBenchmarksService> benchmarks,
+                                 std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
                                  std::shared_ptr<IProfileService> profileService);
 
         void select(const domain::BenchmarkId &id) override;
@@ -35,14 +37,15 @@ namespace ksv::application {
 
         void refresh();
         void notifyChanged() const;
-        [[nodiscard]] domain::BenchmarkProjection evaluate(const LoadedBenchmark &loaded) const;
+        [[nodiscard]] domain::BenchmarkProjection evaluate(const data::LoadedBenchmark &loaded) const;
 
-        std::shared_ptr<IBenchmarkLibraryService> m_library;
+        std::shared_ptr<data::IBenchmarksService> m_benchmarks;
+        std::shared_ptr<IBenchmarkResolutionUseCase> m_resolution;
         std::shared_ptr<IProfileService> m_profileService;
         // Cached whole-library snapshot; the service returns it by value (a deep copy of every
         // definition), so it is re-fetched only when the library revision moves, not on every
         // profile change that merely invalidates projections.
-        std::optional<BenchmarkLibrarySnapshot> m_librarySnapshot;
+        std::optional<data::BenchmarkLibrarySnapshot> m_librarySnapshot;
         std::uint64_t m_librarySnapshotRevision = 0;
         bool m_librarySnapshotValid = false;
         std::optional<domain::BenchmarkId> m_selected;

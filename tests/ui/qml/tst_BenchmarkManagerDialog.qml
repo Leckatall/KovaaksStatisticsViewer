@@ -180,6 +180,19 @@ TestCase {
         tryCompare(vm(dialog), "saveCalls", 1)
     }
 
+    function test_staleBaselineWarning() {
+        const dialog = openWithFake({hasDraft: true, dirty: true, draftFromLibrary: true,
+                                     baselineStale: true, root: makeFakeTree()})
+
+        const warning = find(dialog, "staleBaselineWarning")
+        verify(warning !== null, "the editor must surface a stale-baseline warning")
+        compare(warning.visible, true)
+
+        // The editor is not hidden and Discard stays available.
+        compare(find(dialog, "benchmarkNameField").visible, true)
+        compare(find(dialog, "discardButton").enabled, true)
+    }
+
     function test_deleteRequiresConfirmation() {
         const dialog = openWithFake({libraryEntries: makeEntries()})
 

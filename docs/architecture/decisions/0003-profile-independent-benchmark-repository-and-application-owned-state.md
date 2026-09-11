@@ -1,9 +1,15 @@
 ---
-status: accepted
+status: Superseded by ADR 0005
 date: 2026-09-07
 ---
 
 # 0003: Keep the benchmark repository profile-independent and own accepted state and the draft in the application layer
+
+> **Superseded by [ADR 0005](0005-data-owned-benchmark-service-and-presentation-drafts.md).** The
+> profile-independence of the persistence port is retained, but accepted-library ownership moved from
+> an application-layer service into a Qt-free data-layer `BenchmarksService`, temporary editor state
+> moved into presentation, and the profile join became a dedicated application use case. This record
+> is kept for historical context.
 
 ## Context
 

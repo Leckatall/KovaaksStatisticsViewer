@@ -4,9 +4,9 @@
 #include <string>
 
 #include "benchmarks/benchmark.h"
-#include "contracts/benchmark_library_snapshot.h"
+#include "data/interfaces/benchmark_library_snapshot.h"
 
-namespace ksv::application {
+namespace ksv::data {
     enum class BenchmarkScanFailure { DirectoryUnavailable };
 
     struct BenchmarkScanResult {
@@ -27,9 +27,12 @@ namespace ksv::application {
         std::optional<BenchmarkWriteFailure> failure;
     };
 
-    class IBenchmarkRepository {
+    // Stateless persistence port for the managed benchmark directory. It reports observations and
+    // persistence outcomes; BenchmarksService alone decides whether an outcome changes accepted
+    // memory. No accepted-state authority, no profile behavior, no editor lifecycle.
+    class IBenchmarkStore {
     public:
-        virtual ~IBenchmarkRepository() = default;
+        virtual ~IBenchmarkStore() = default;
 
         // Full re-enumeration + per-file classification. Directory-level failure leaves `snapshot`
         // empty and sets `failure`; the caller keeps its last accepted snapshot.

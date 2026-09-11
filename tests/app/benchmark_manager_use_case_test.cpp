@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -8,618 +7,344 @@
 
 #include "benchmark_builders.h"
 #include "counting_ids.h"
-#include "fake_benchmark_repository.h"
+#include "fake_benchmark_resolution_use_case.h"
+#include "fake_benchmarks_service.h"
 #include "fake_playlist_reader.h"
-#include "fake_profile_service.h"
+#include "contracts/benchmark_editor_seed.h"
 #include "contracts/benchmark_manager_state.h"
-#include "contracts/i_benchmark_manager_use_case.h"
-#include "usecases/benchmark_library_service.h"
 #include "usecases/benchmark_manager_use_case.h"
 
 using namespace ksv;
 using namespace ksv::application;
+using namespace ksv::data;
 using namespace ksv::domain;
 using namespace ksv::tests_support;
 
+// Task P2 seam coverage: the whole-benchmark manager contract composes accepted-library and
+// resolution state, issues editor seeds behind a single edit lease, and forwards whole-value
+// save/delete/resolve calls without retaining a working copy. Task P3 adds deeper behavioural RED.
+
 namespace {
     struct Fixture {
-        std::shared_ptr<FakeBenchmarkRepository> repo = std::make_shared<FakeBenchmarkRepository>();
+        std::shared_ptr<FakeBenchmarksService> benchmarks = std::make_shared<FakeBenchmarksService>();
+        std::shared_ptr<FakeBenchmarkResolutionUseCase> resolution =
+            std::make_shared<FakeBenchmarkResolutionUseCase>();
         std::shared_ptr<FakePlaylistReader> reader = std::make_shared<FakePlaylistReader>();
-        std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
-        std::shared_ptr<BenchmarkLibraryService> service;
         std::unique_ptr<BenchmarkManagerUseCase> manager;
 
-        void known(const std::string &name, const std::string &hash) {
-            profile->scenarios.push_back({name, hash});
-        }
-
         void build() {
-            service = std::make_shared<BenchmarkLibraryService>(repo, reader, profile, countingIds());
-            manager = std::make_unique<BenchmarkManagerUseCase>(service);
+            manager = std::make_unique<BenchmarkManagerUseCase>(benchmarks, resolution, reader,
+                                                                countingIds());
         }
     };
 
-    Benchmark savedBenchmark(const std::string &id, const std::vector<ScenarioEntry> &entries) {
+    Benchmark savedBenchmark(const std::string &id) {
         Benchmark value;
         value.id = BenchmarkId{id};
         value.name = "Saved";
         value.tiers = {benchmarkTier("bronze"), benchmarkTier("silver"), benchmarkTier("gold")};
-        value.uncategorized = entries;
+        value.uncategorized = {benchmarkEntry("e1", "Alpha", std::string{"h1"},
+                                              {{"bronze", 100.0}, {"silver", 200.0}, {"gold", 300.0}})};
         return value;
     }
 
     BenchmarkLibrarySnapshot snapshotOf(const Benchmark &value) {
         BenchmarkLibrarySnapshot snapshot;
-        snapshot.entries.push_back(
-            {value.id.value + ".json", "d-" + value.id.value,
-             LoadedBenchmark{value, validateBenchmark(value)}});
+        snapshot.entries.push_back({value.id.value + ".json", "d-" + value.id.value,
+                                    LoadedBenchmark{value, validateBenchmark(value)}});
         return snapshot;
     }
-
-    std::vector<std::pair<std::string, double> > rungs() {
-        return {{"bronze", 100.0}, {"silver", 200.0}, {"gold", 300.0}};
-    }
 }
 
-TEST(BenchmarkManagerUseCaseState, InitialStateIsIdleWithAcceptedLibraryAndNoDraft) {
+TEST(BenchmarkManagerUseCaseState, ComposesAcceptedAndResolutionStateWithoutAnyDraftFields) {
     Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
+    fixture.benchmarks->revisionValue = 7;
+    fixture.benchmarks->refreshFailed = false;
+    fixture.benchmarks->directory = "/managed/benchmarks";
+    fixture.resolution->snapshotValue.scenarioCatalogue = {ScenarioId{"Alpha", "h1"}};
+    fixture.resolution->snapshotValue.resolutions[BenchmarkId{"b1"}] = {resolvedEntry("e1", "h1")};
+    fixture.resolution->snapshotValue.automaticWriteFailures[BenchmarkId{"b1"}] =
+        AutomaticMappingWriteError::WriteFailed;
     fixture.build();
 
     const auto &state = fixture.manager->state();
     ASSERT_TRUE(state.library.has_value());
-    EXPECT_TRUE(state.library->entries.empty());
-    EXPECT_EQ(state.libraryRevision, fixture.service->revision());
-    EXPECT_EQ(state.managedDirectoryPath, fixture.repo->directory);
-    EXPECT_FALSE(state.draft.has_value());
-    EXPECT_FALSE(state.draftFromLibrary);
-    EXPECT_FALSE(state.draftDirty);
-    EXPECT_TRUE(state.scenarioCatalogue.empty());
-    EXPECT_TRUE(state.draftResolutions.empty());
+    ASSERT_EQ(state.library->entries.size(), 1U);
+    EXPECT_EQ(state.libraryRevision, 7U);
     EXPECT_FALSE(state.refreshFailed);
-    EXPECT_FALSE(state.resolutionWriteFailed);
+    EXPECT_EQ(state.managedDirectoryPath, "/managed/benchmarks");
+    EXPECT_EQ(state.scenarioCatalogue.size(), 1U);
+    ASSERT_EQ(state.resolutions.count(BenchmarkId{"b1"}), 1U);
+    EXPECT_EQ(state.resolutions.at(BenchmarkId{"b1"}).front().state, ScenarioMatchState::Resolved);
+    EXPECT_EQ(state.automaticWriteFailures.count(BenchmarkId{"b1"}), 1U);
+    EXPECT_TRUE(state.resolutionWriteFailed);
 }
 
-TEST(BenchmarkManagerUseCaseState, LibrarySnapshotReplacementPropagatesAsOneCoherentValue) {
+TEST(BenchmarkManagerUseCaseState, EitherServiceOrResolutionPublicationRebuildsStateOnce) {
     Fixture fixture;
-    fixture.known("Alpha", "h1");
-    fixture.known("Beta", "h2");
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.build();
-    ASSERT_TRUE(fixture.manager->state().library->entries.empty());
-
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs()),
-                                         benchmarkEntry("e2", "Beta", std::string{"h2"}, rungs())})),
-        std::nullopt};
-    fixture.service->refresh();
-
-    const auto &state = fixture.manager->state();
-    ASSERT_TRUE(state.library.has_value());
-    ASSERT_EQ(state.library->entries.size(), 1U);
-    EXPECT_EQ(state.library->entries.front().filename, "b1.json");
-    EXPECT_EQ(state.libraryRevision, fixture.service->revision());
-    EXPECT_EQ(state.scenarioCatalogue, fixture.service->scenarioCatalogue());
-}
-
-TEST(BenchmarkManagerUseCaseState, BeginningANewDraftPublishesADirtyIncompleteDraft) {
-    Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.build();
-
-    fixture.service->beginNewDraft();
-
-    const auto &state = fixture.manager->state();
-    ASSERT_TRUE(state.draft.has_value());
-    EXPECT_TRUE(state.draftDirty);
-    EXPECT_FALSE(state.draftFromLibrary);
-    EXPECT_EQ(state.draftCompleteness.completeness, Completeness::Incomplete);
-    EXPECT_FALSE(state.draftCompleteness.issues.empty());
-}
-
-TEST(BenchmarkManagerUseCaseState, OpeningALibraryBenchmarkPublishesACleanFromLibraryDraft) {
-    Fixture fixture;
-    fixture.known("Alpha", "h1");
-    fixture.known("Beta", "h2");
-    const auto value = savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs()),
-                                             benchmarkEntry("e2", "Beta", std::string{"h2"}, rungs())});
-    fixture.repo->nextScan = {snapshotOf(value), std::nullopt};
-    fixture.build();
-
-    ASSERT_TRUE(fixture.service->openDraft(BenchmarkId{"b1"}));
-
-    const auto &state = fixture.manager->state();
-    ASSERT_TRUE(state.draft.has_value());
-    EXPECT_EQ(state.draft->id.value, "b1");
-    EXPECT_TRUE(state.draftFromLibrary);
-    EXPECT_FALSE(state.draftDirty);
-    EXPECT_EQ(state.draftCompleteness.completeness, validateBenchmark(value).completeness);
-}
-
-TEST(BenchmarkManagerUseCaseState, ProfileCatalogueAndDraftResolutionsAreProjectedIntoState) {
-    Fixture fixture;
-    fixture.known("Alpha", "ha");
-    fixture.known("Alpha", "hb");
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::nullopt, {})})),
-        std::nullopt};
-    fixture.build();
-    ASSERT_TRUE(fixture.service->openDraft(BenchmarkId{"b1"}));
-
-    const auto &state = fixture.manager->state();
-    EXPECT_EQ(state.scenarioCatalogue, fixture.service->scenarioCatalogue());
-    ASSERT_EQ(state.draftResolutions.size(), fixture.service->draftResolutions().size());
-    ASSERT_EQ(state.draftResolutions.size(), 1U);
-    const auto &resolution = state.draftResolutions.front();
-    EXPECT_EQ(resolution.entryId.value, "e1");
-    EXPECT_EQ(resolution.state, ScenarioMatchState::Ambiguous);
-    ASSERT_EQ(resolution.candidates.size(), 2U);
-    EXPECT_EQ(resolution.candidates[0].hash, "ha");
-    EXPECT_EQ(resolution.candidates[1].hash, "hb");
-}
-
-TEST(BenchmarkManagerUseCaseState, WholeDirectoryRefreshFailureSurfacesAsADiagnosticAndKeepsAcceptedLibrary) {
-    Fixture fixture;
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())})),
-        std::nullopt};
-    fixture.build();
-    ASSERT_EQ(fixture.manager->state().library->entries.size(), 1U);
-
-    fixture.repo->nextScan = {std::nullopt, BenchmarkScanFailure::DirectoryUnavailable};
-    fixture.service->refresh();
-
-    const auto &state = fixture.manager->state();
-    EXPECT_TRUE(state.refreshFailed);
-    ASSERT_TRUE(state.library.has_value());
-    ASSERT_EQ(state.library->entries.size(), 1U);
-    EXPECT_EQ(state.library->entries.front().filename, "b1.json");
-}
-
-// One profile scenario matches an unmapped entry by name, so reconciliation attempts to persist
-// the automatic mapping; the scripted write failure must reach the manager state as a flag rather
-// than a thrown error or a lost snapshot.
-TEST(BenchmarkManagerUseCaseState, AutomaticResolutionWriteFailureSurfacesInState) {
-    Fixture fixture;
-    fixture.known("Alpha", "h1");
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::nullopt, rungs())})),
-        std::nullopt};
-    fixture.repo->nextWrite = {std::nullopt, BenchmarkWriteFailure::WriteFailed};
-    fixture.build();
-
-    EXPECT_TRUE(fixture.manager->state().resolutionWriteFailed);
-}
-
-TEST(BenchmarkManagerUseCaseState, OneNotificationPerCoherentReplacement) {
-    Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
     fixture.build();
 
     int notifications = 0;
     fixture.manager->onChanged([&] { ++notifications; });
 
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())})),
-        std::nullopt};
-    fixture.service->refresh();
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
+    fixture.benchmarks->revisionValue = 1;
+    fixture.benchmarks->fireChanged();
     EXPECT_EQ(notifications, 1);
 
-    fixture.service->beginNewDraft();
+    fixture.resolution->snapshotValue.scenarioCatalogue = {ScenarioId{"Alpha", "h1"}};
+    fixture.resolution->fireChanged();
+    EXPECT_EQ(notifications, 2);
+
+    // A publication that changes nothing a consumer observes is coalesced away.
+    fixture.resolution->fireChanged();
     EXPECT_EQ(notifications, 2);
 }
 
-// saveDraft() fires both service publication families in one call (library publish + draft change).
-// The manager must coalesce that into a single onChanged for its consumers.
-TEST(BenchmarkManagerUseCaseState, SaveDoesNotDoubleFireAcrossPublicationFamilies) {
+TEST(BenchmarkManagerUseCase, BeginNewBenchmarkReturnsATokenlessSeedAndLeasesItsReservedId) {
     Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
     fixture.build();
-    fixture.service->beginNewDraft();
-    fixture.service->renameBenchmark("Kept");
 
-    int notifications = 0;
-    fixture.manager->onChanged([&] { ++notifications; });
+    const auto seed = fixture.manager->beginNewBenchmark();
 
-    fixture.repo->nextWrite = {std::string{"digest-1"}, std::nullopt};
-    ASSERT_TRUE(fixture.service->saveDraft().ok());
-
-    EXPECT_EQ(notifications, 1);
+    EXPECT_FALSE(seed.token.has_value());
+    EXPECT_FALSE(seed.benchmark.id.value.empty());
+    ASSERT_TRUE(fixture.resolution->editLease.has_value());
+    EXPECT_EQ(*fixture.resolution->editLease, seed.benchmark.id);
 }
 
-// state() hands back a const reference with the same lifetime rule as BenchmarkWorkspaceSnapshot:
-// valid only until the next mutation/callback, never retained. A fresh call after a mutation must
-// observe the new values.
-TEST(BenchmarkManagerUseCaseState, StateReferenceReflectsLatestValuesOnReread) {
+TEST(BenchmarkManagerUseCase, OpenAcceptedReturnsCopyPlusTokenAndLeasesItsId) {
     Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    const auto value = savedBenchmark("b1");
+    fixture.benchmarks->snapshotValue = snapshotOf(value);
     fixture.build();
-    EXPECT_FALSE(fixture.manager->state().draft.has_value());
 
-    fixture.service->beginNewDraft();
+    const auto seed = fixture.manager->openBenchmark(BenchmarkId{"b1"});
 
-    ASSERT_TRUE(fixture.manager->state().draft.has_value());
-    EXPECT_TRUE(fixture.manager->state().draftDirty);
+    ASSERT_TRUE(seed.has_value());
+    EXPECT_EQ(seed->benchmark.id.value, "b1");
+    EXPECT_EQ(seed->benchmark.name, "Saved");
+    ASSERT_TRUE(seed->token.has_value());
+    EXPECT_EQ(seed->token->filename, "b1.json");
+    EXPECT_EQ(seed->token->digest, "d-b1");
+    ASSERT_TRUE(fixture.resolution->editLease.has_value());
+    EXPECT_EQ(fixture.resolution->editLease->value, "b1");
 }
 
-// ---- Task A4: every manager command routed through IBenchmarkManagerUseCase ----------------
-//
-// The use case is the sole application boundary the migrated BenchmarkManagerViewModel talks to,
-// so every authoring/mapping command it invokes today on IBenchmarkLibraryService must exist on
-// IBenchmarkManagerUseCase with the same signature and result type, forward the service's return
-// value unchanged, refresh state() before returning, and — on a scripted service failure — leave
-// the accepted library and the current draft untouched.
-
-namespace {
-    struct DraftIds {
-        domain::TierId tier;
-        domain::TierId otherTier;
-        domain::ScenarioEntryId entry;
-        domain::GroupId category;
-    };
-
-    struct DraftCommandCase {
-        std::string label;
-        std::function<BenchmarkDraftResult(BenchmarkManagerUseCase &, const DraftIds &)> invoke;
-    };
-
-    // Every draft-mutating command the manager dialog drives, each returning BenchmarkDraftResult.
-    // "clearScenarioHash" is the optional-hash clear path: setScenarioHash(entryId, std::nullopt).
-    std::vector<DraftCommandCase> draftCommandCases() {
-        return {
-            {"renameBenchmark",
-             [](BenchmarkManagerUseCase &m, const DraftIds &) { return m.renameBenchmark("Renamed"); }},
-            {"addTier",
-             [](BenchmarkManagerUseCase &m, const DraftIds &) { return m.addTier("Platinum"); }},
-            {"renameTier",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) { return m.renameTier(ids.tier, "Tin"); }},
-            {"setTierColor",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) {
-                 return m.setTierColor(ids.tier, domain::BenchmarkColor{1, 2, 3, 255});
-             }},
-            {"reorderTier",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) { return m.reorderTier(ids.otherTier, 0); }},
-            {"removeTier",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) { return m.removeTier(ids.otherTier); }},
-            {"addUnplayedScenario",
-             [](BenchmarkManagerUseCase &m, const DraftIds &) { return m.addUnplayedScenario("Fresh"); }},
-            {"addKnownScenario",
-             [](BenchmarkManagerUseCase &m, const DraftIds &) { return m.addKnownScenario("Known", "hK"); }},
-            {"renameScenario",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) {
-                 return m.renameScenario(ids.entry, "Renamed Scenario");
-             }},
-            {"setScenarioHash",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) {
-                 return m.setScenarioHash(ids.entry, std::optional<std::string>{"h9"});
-             }},
-            {"clearScenarioHash",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) {
-                 return m.setScenarioHash(ids.entry, std::nullopt);
-             }},
-            {"removeScenario",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) { return m.removeScenario(ids.entry); }},
-            {"setThreshold",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) {
-                 return m.setThreshold(ids.entry, ids.tier, 42.0);
-             }},
-            {"clearThreshold",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) {
-                 return m.clearThreshold(ids.entry, ids.tier);
-             }},
-            {"addCategory",
-             [](BenchmarkManagerUseCase &m, const DraftIds &) { return m.addCategory("Tracking"); }},
-            {"renameGroup",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) { return m.renameGroup(ids.category, "Flicking"); }},
-            {"setGroupColor",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) {
-                 return m.setGroupColor(ids.category, domain::BenchmarkColor{4, 5, 6, 255});
-             }},
-            {"reorderCategory",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) { return m.reorderCategory(ids.category, 0); }},
-            {"addSubcategory",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) { return m.addSubcategory(ids.category, "Sub"); }},
-            {"moveScenario",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) {
-                 return m.moveScenario(ids.entry, DraftGroupTarget{ids.category});
-             }},
-            {"removeCategory",
-             [](BenchmarkManagerUseCase &m, const DraftIds &ids) { return m.removeCategory(ids.category); }},
-        };
-    }
-}
-
-TEST(BenchmarkManagerUseCaseCommands, DraftMutationsForwardOkAndRefreshStateFromTheService) {
-    for (const auto &command: draftCommandCases()) {
-        Fixture fixture;
-        fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-        fixture.build();
-        fixture.service->beginNewDraft();
-        fixture.service->renameBenchmark("Base");
-        DraftIds ids;
-        ids.tier = *fixture.service->addTier("Bronze").createdTier;
-        ids.otherTier = *fixture.service->addTier("Silver").createdTier;
-        ids.entry = *fixture.service->addUnplayedScenario("Scenario One").createdEntry;
-        ASSERT_TRUE(fixture.service->setThreshold(ids.entry, ids.tier, 10.0).ok()) << command.label;
-        ids.category = *fixture.service->addCategory("Category One").createdGroup;
-
-        const auto result = command.invoke(*fixture.manager, ids);
-
-        EXPECT_TRUE(result.ok()) << command.label;
-        EXPECT_EQ(fixture.manager->state().draft, fixture.service->draft()) << command.label;
-        EXPECT_EQ(fixture.manager->state().draftDirty, fixture.service->draftDirty()) << command.label;
-        EXPECT_EQ(fixture.manager->state().draftCompleteness.completeness,
-                  fixture.service->draftValidation().completeness)
-            << command.label;
-        EXPECT_EQ(fixture.manager->state().libraryRevision, fixture.service->revision()) << command.label;
-    }
-}
-
-TEST(BenchmarkManagerUseCaseCommands, DraftMutationErrorsForwardVerbatimAndPreserveLibraryAndDraft) {
+TEST(BenchmarkManagerUseCase, OpenUnknownReturnsNulloptAndChangesNoLease) {
     Fixture fixture;
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())})),
-        std::nullopt};
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
     fixture.build();
+
+    EXPECT_FALSE(fixture.manager->openBenchmark(BenchmarkId{"missing"}).has_value());
+    EXPECT_EQ(fixture.resolution->setEditLeaseCount, 0);
+}
+
+TEST(BenchmarkManagerUseCase, OpenProblemEntryReturnsNulloptAndChangesNoLease) {
+    Fixture fixture;
+    BenchmarkLibrarySnapshot snapshot;
+    snapshot.entries.push_back({"broken.json", "d",
+                                ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt,
+                                                 BenchmarkId{"b1"}, std::nullopt}});
+    fixture.benchmarks->snapshotValue = snapshot;
+    fixture.build();
+
+    EXPECT_FALSE(fixture.manager->openBenchmark(BenchmarkId{"b1"}).has_value());
+    EXPECT_EQ(fixture.resolution->setEditLeaseCount, 0);
+}
+
+TEST(BenchmarkManagerUseCase, CloseEditorReleasesTheLease) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
+    fixture.build();
+    fixture.manager->openBenchmark(BenchmarkId{"b1"});
+
+    fixture.manager->closeEditor();
+
+    EXPECT_FALSE(fixture.resolution->editLease.has_value());
+}
+
+TEST(BenchmarkManagerUseCase, SaveForwardsTheExactValueAndTokenAndReturnsTheOutcomeUnchanged) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
+    fixture.build();
+    const auto value = savedBenchmark("b1");
+    const BenchmarkEditToken token{BenchmarkId{"b1"}, "b1.json", "d-b1"};
+    fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d-b1-new"},
+                                           std::nullopt};
+
+    const auto outcome = fixture.manager->save(value, token);
+
+    ASSERT_EQ(fixture.benchmarks->saveRequests.size(), 1U);
+    EXPECT_EQ(fixture.benchmarks->saveRequests.front().benchmark.id.value, "b1");
+    ASSERT_TRUE(fixture.benchmarks->saveRequests.front().token.has_value());
+    EXPECT_EQ(fixture.benchmarks->saveRequests.front().token->digest, "d-b1");
+    ASSERT_TRUE(outcome.ok());
+    EXPECT_EQ(outcome.token->digest, "d-b1-new");
+}
+
+TEST(BenchmarkManagerUseCase, SaveFailureIsForwardedVerbatim) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
+    fixture.build();
+    fixture.benchmarks->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::Conflict};
+
+    const auto outcome = fixture.manager->save(savedBenchmark("b1"), std::nullopt);
+
+    ASSERT_TRUE(outcome.error.has_value());
+    EXPECT_EQ(*outcome.error, BenchmarkSaveError::Conflict);
+}
+
+TEST(BenchmarkManagerUseCase, ResolveForwardsToStatelessResolutionAndRetainsNothing) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.resolution->resolveResult = {resolvedEntry("e1", "h1")};
+    fixture.build();
+
+    const auto working = savedBenchmark("draft-1");
+    const auto resolved = fixture.manager->resolve(working);
+
+    ASSERT_EQ(resolved.size(), 1U);
+    EXPECT_EQ(resolved.front().state, ScenarioMatchState::Resolved);
+    // The manager state never grows a copy of the supplied working benchmark.
     ASSERT_TRUE(fixture.manager->state().library.has_value());
-    ASSERT_FALSE(fixture.manager->state().draft.has_value());
-    const auto revisionBefore = fixture.manager->state().libraryRevision;
-    const auto entriesBefore = fixture.manager->state().library->entries.size();
-
-    const DraftIds dummy{domain::TierId{"t"}, domain::TierId{"t2"}, domain::ScenarioEntryId{"e"},
-                         domain::GroupId{"g"}};
-
-    for (const auto &command: draftCommandCases()) {
-        const auto result = command.invoke(*fixture.manager, dummy);
-        ASSERT_TRUE(result.error.has_value()) << command.label;
-        EXPECT_EQ(*result.error, BenchmarkDraftError::NoDraft) << command.label;
-        EXPECT_FALSE(fixture.manager->state().draft.has_value()) << command.label;
-        EXPECT_EQ(fixture.manager->state().libraryRevision, revisionBefore) << command.label;
-        ASSERT_TRUE(fixture.manager->state().library.has_value()) << command.label;
-        EXPECT_EQ(fixture.manager->state().library->entries.size(), entriesBefore) << command.label;
-    }
+    EXPECT_TRUE(fixture.manager->state().library->entries.empty());
 }
 
-// Literal "forwarded unchanged": the same command run through the service directly and through
-// the manager yields the same ok()/error and the same shape of created-id.
-TEST(BenchmarkManagerUseCaseCommands, DraftResultIsForwardedFromTheServiceVerbatim) {
-    Fixture viaService;
-    viaService.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    viaService.build();
-    viaService.service->beginNewDraft();
-
-    Fixture viaManager;
-    viaManager.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    viaManager.build();
-    viaManager.manager->beginNewDraft();
-
-    const auto expected = viaService.service->addTier("Gold");
-    const auto actual = viaManager.manager->addTier("Gold");
-
-    EXPECT_EQ(actual.ok(), expected.ok());
-    EXPECT_EQ(actual.error, expected.error);
-    EXPECT_EQ(actual.createdTier.has_value(), expected.createdTier.has_value());
-}
-
-TEST(BenchmarkManagerUseCaseCommands, BeginNewDraftPublishesADirtyIncompleteDraft) {
+TEST(BenchmarkManagerUseCase, DeleteForwardsTheTokenAndReturnsTheOutcomeUnchanged) {
     Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
     fixture.build();
-    int notifications = 0;
-    fixture.manager->onChanged([&] { ++notifications; });
+    const BenchmarkEditToken token{BenchmarkId{"b1"}, "b1.json", "d-b1"};
+    fixture.benchmarks->nextRemoveOutcome = {BenchmarkRemoveError::Conflict};
 
-    fixture.manager->beginNewDraft();
+    const auto outcome = fixture.manager->deleteBenchmark(token);
 
-    ASSERT_TRUE(fixture.manager->state().draft.has_value());
-    EXPECT_TRUE(fixture.manager->state().draftDirty);
-    EXPECT_FALSE(fixture.manager->state().draftFromLibrary);
-    EXPECT_EQ(fixture.manager->state().draftCompleteness.completeness, Completeness::Incomplete);
-    EXPECT_EQ(notifications, 1);
+    ASSERT_EQ(fixture.benchmarks->removeRequests.size(), 1U);
+    EXPECT_EQ(fixture.benchmarks->removeRequests.front().filename, "b1.json");
+    ASSERT_TRUE(outcome.error.has_value());
+    EXPECT_EQ(*outcome.error, BenchmarkRemoveError::Conflict);
 }
 
-TEST(BenchmarkManagerUseCaseCommands, OpenLibraryBenchmarkForwardsTrueAndPublishesAFromLibraryDraft) {
+TEST(BenchmarkManagerUseCase, ImportPlaylistSeedBuildsATokenlessSeedAndLeasesItsId) {
     Fixture fixture;
-    const auto value = savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())});
-    fixture.repo->nextScan = {snapshotOf(value), std::nullopt};
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.reader->nextResult = {PlaylistSeed{std::string{"Voltaic"}, {"a", "b"}, {2}}, std::nullopt};
     fixture.build();
 
-    EXPECT_TRUE(fixture.manager->openDraft(BenchmarkId{"b1"}));
+    const auto result = fixture.manager->importPlaylistSeed("playlist.json");
 
-    ASSERT_TRUE(fixture.manager->state().draft.has_value());
-    EXPECT_EQ(fixture.manager->state().draft->id.value, "b1");
-    EXPECT_TRUE(fixture.manager->state().draftFromLibrary);
-    EXPECT_FALSE(fixture.manager->state().draftDirty);
-}
-
-TEST(BenchmarkManagerUseCaseCommands, OpenUnknownBenchmarkForwardsFalseAndLeavesStateWithoutADraft) {
-    Fixture fixture;
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())})),
-        std::nullopt};
-    fixture.build();
-
-    EXPECT_FALSE(fixture.manager->openDraft(BenchmarkId{"missing"}));
-    EXPECT_FALSE(fixture.manager->state().draft.has_value());
-}
-
-TEST(BenchmarkManagerUseCaseCommands, DiscardDraftClearsTheDraftFromState) {
-    Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.build();
-    fixture.manager->beginNewDraft();
-    ASSERT_TRUE(fixture.manager->state().draft.has_value());
-
-    fixture.manager->discardDraft();
-
-    EXPECT_FALSE(fixture.manager->state().draft.has_value());
-}
-
-TEST(BenchmarkManagerUseCaseCommands, RefreshRescansAndRepublishesTheAcceptedLibrary) {
-    Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.build();
-    const auto scansBefore = fixture.repo->scanCount;
-
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())})),
-        std::nullopt};
-    fixture.manager->refresh();
-
-    EXPECT_EQ(fixture.repo->scanCount, scansBefore + 1);
-    ASSERT_TRUE(fixture.manager->state().library.has_value());
-    ASSERT_EQ(fixture.manager->state().library->entries.size(), 1U);
-    EXPECT_FALSE(fixture.manager->state().refreshFailed);
-    EXPECT_EQ(fixture.manager->state().libraryRevision, fixture.service->revision());
-}
-
-TEST(BenchmarkManagerUseCaseCommands, RefreshFailureForwardsAndPreservesTheAcceptedLibrary) {
-    Fixture fixture;
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())})),
-        std::nullopt};
-    fixture.build();
-
-    fixture.repo->nextScan = {std::nullopt, BenchmarkScanFailure::DirectoryUnavailable};
-    fixture.manager->refresh();
-
-    EXPECT_TRUE(fixture.manager->state().refreshFailed);
-    ASSERT_TRUE(fixture.manager->state().library.has_value());
-    ASSERT_EQ(fixture.manager->state().library->entries.size(), 1U);
-    EXPECT_EQ(fixture.manager->state().library->entries.front().filename, "b1.json");
-}
-
-TEST(BenchmarkManagerUseCaseCommands, ImportPlaylistForwardsResultAndPublishesADraft) {
-    Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.reader->nextResult = {PlaylistSeed{std::string{"Voltaic"}, {"a", "b"}, {}}, std::nullopt};
-    fixture.build();
-
-    const auto result = fixture.manager->importPlaylist("playlist.json");
-
-    EXPECT_TRUE(result.ok());
+    ASSERT_TRUE(result.ok());
     EXPECT_EQ(fixture.reader->lastPath, "playlist.json");
-    ASSERT_TRUE(fixture.manager->state().draft.has_value());
-    EXPECT_EQ(fixture.manager->state().draft->name, "Voltaic");
-    EXPECT_TRUE(fixture.manager->state().draftDirty);
+    ASSERT_TRUE(result.seed.has_value());
+    EXPECT_EQ(result.seed->benchmark.name, "Voltaic");
+    ASSERT_EQ(result.seed->benchmark.uncategorized.size(), 2U);
+    EXPECT_FALSE(result.seed->token.has_value());
+    EXPECT_EQ(result.skippedDuplicateIndices, std::vector<int>{2});
+    ASSERT_TRUE(fixture.resolution->editLease.has_value());
+    EXPECT_EQ(*fixture.resolution->editLease, result.seed->benchmark.id);
 }
 
-TEST(BenchmarkManagerUseCaseCommands, ImportFailureForwardsUnchangedAndPreservesDraftAndLibrary) {
+TEST(BenchmarkManagerUseCase, ImportPlaylistFailureIsForwardedWithoutASeed) {
     Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
     fixture.reader->nextResult = {std::nullopt, PlaylistImportFailure::MalformedJson};
     fixture.build();
-    fixture.manager->beginNewDraft();
-    fixture.manager->renameBenchmark("Kept");
-    const auto draftBefore = fixture.manager->state().draft;
-    const auto revisionBefore = fixture.manager->state().libraryRevision;
 
-    const auto result = fixture.manager->importPlaylist("playlist.json");
+    const auto result = fixture.manager->importPlaylistSeed("playlist.json");
 
+    ASSERT_FALSE(result.ok());
     ASSERT_TRUE(result.failure.has_value());
     EXPECT_EQ(*result.failure, PlaylistImportFailure::MalformedJson);
-    EXPECT_EQ(fixture.manager->state().draft, draftBefore);
-    EXPECT_EQ(fixture.manager->state().libraryRevision, revisionBefore);
+    EXPECT_FALSE(result.seed.has_value());
 }
 
-TEST(BenchmarkManagerUseCaseCommands, SaveForwardsResultAndPublishesTheNewLibraryEntry) {
+TEST(BenchmarkManagerUseCase, RefreshAndManagedDirectoryForwardToTheAcceptedService) {
     Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.benchmarks->directory = "/custom/benchmarks";
     fixture.build();
-    fixture.manager->beginNewDraft();
-    fixture.manager->renameBenchmark("Alpha");
-    ASSERT_TRUE(fixture.manager->addTier("Gold").ok());
-    fixture.repo->nextWrite = {std::string{"digest-1"}, std::nullopt};
 
-    const auto result = fixture.manager->saveDraft();
-
-    ASSERT_TRUE(result.ok());
-    ASSERT_TRUE(fixture.manager->state().library.has_value());
-    ASSERT_EQ(fixture.manager->state().library->entries.size(), 1U);
-    EXPECT_EQ(fixture.manager->state().libraryRevision, fixture.service->revision());
-    EXPECT_FALSE(fixture.manager->state().draftDirty);
+    fixture.manager->refresh();
+    EXPECT_EQ(fixture.benchmarks->refreshCount, 1);
+    EXPECT_EQ(fixture.manager->managedDirectoryPath(), "/custom/benchmarks");
 }
 
-TEST(BenchmarkManagerUseCaseCommands, SaveWriteFailureForwardsUnchangedAndPreservesLibraryAndDraft) {
+// ---- Task P3 behavioural coverage (production delivered under P2's --scope app gate) -----------
+
+TEST(BenchmarkManagerUseCase, ResolveWorkingCopyIsStateless) {
     Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.resolution->resolveResultById["draft-a"] = {resolvedEntry("ea", "ha")};
+    fixture.resolution->resolveResultById["draft-b"] = {ambiguousEntry("eb", {"hb1", "hb2"})};
     fixture.build();
-    fixture.manager->beginNewDraft();
-    fixture.manager->renameBenchmark("Alpha");
-    const auto draftBefore = fixture.manager->state().draft;
-    const auto revisionBefore = fixture.manager->state().libraryRevision;
-    fixture.repo->nextWrite = {std::nullopt, BenchmarkWriteFailure::WriteFailed};
 
-    const auto result = fixture.manager->saveDraft();
+    Benchmark a = savedBenchmark("draft-a");
+    a.name = "Working A";
+    Benchmark b = savedBenchmark("draft-b");
+    b.name = "Working B";
 
-    ASSERT_TRUE(result.error.has_value());
-    EXPECT_EQ(*result.error, BenchmarkSaveError::WriteFailed);
-    EXPECT_EQ(fixture.manager->state().draft, draftBefore);
-    EXPECT_EQ(fixture.manager->state().libraryRevision, revisionBefore);
-    ASSERT_TRUE(fixture.manager->state().library.has_value());
-    EXPECT_TRUE(fixture.manager->state().library->entries.empty());
-}
+    const auto ra = fixture.manager->resolve(a);
+    const auto rb = fixture.manager->resolve(b);
 
-TEST(BenchmarkManagerUseCaseCommands, DeleteForwardsOutcomeAndRepublishesLibraryWithoutTheEntry) {
-    Fixture fixture;
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())})),
-        std::nullopt};
-    fixture.build();
-    fixture.repo->nextRemove = {true, std::nullopt};
+    ASSERT_EQ(ra.size(), 1U);
+    EXPECT_EQ(ra.front().state, ScenarioMatchState::Resolved);
+    ASSERT_EQ(rb.size(), 1U);
+    EXPECT_EQ(rb.front().state, ScenarioMatchState::Ambiguous);
 
-    const auto result = fixture.manager->deleteBenchmark(BenchmarkId{"b1"});
+    // The exact supplied values reached the stateless resolver, in order.
+    ASSERT_EQ(fixture.resolution->resolvedBenchmarks.size(), 2U);
+    EXPECT_EQ(fixture.resolution->resolvedBenchmarks[0].name, "Working A");
+    EXPECT_EQ(fixture.resolution->resolvedBenchmarks[1].name, "Working B");
 
-    ASSERT_TRUE(result.ok());
+    // No later manager state or callback exposes either working copy.
     ASSERT_TRUE(fixture.manager->state().library.has_value());
     EXPECT_TRUE(fixture.manager->state().library->entries.empty());
-    EXPECT_EQ(fixture.manager->state().libraryRevision, fixture.service->revision());
 }
 
-TEST(BenchmarkManagerUseCaseCommands, DeleteConflictForwardsUnchangedAndPreservesLibrary) {
+TEST(BenchmarkManagerUseCase, CloseEditorReleasesLeaseExactlyOnce) {
     Fixture fixture;
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"h1"}, rungs())})),
-        std::nullopt};
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
     fixture.build();
-    const auto revisionBefore = fixture.manager->state().libraryRevision;
-    fixture.repo->nextRemove = {false, BenchmarkWriteFailure::ExternalModificationConflict};
+    fixture.manager->openBenchmark(BenchmarkId{"b1"});
+    const auto leaseSetsAfterOpen = fixture.resolution->setEditLeaseCount;
 
-    const auto result = fixture.manager->deleteBenchmark(BenchmarkId{"b1"});
+    fixture.manager->closeEditor();
 
-    ASSERT_TRUE(result.error.has_value());
-    EXPECT_EQ(*result.error, BenchmarkDeleteError::Conflict);
-    ASSERT_TRUE(fixture.manager->state().library.has_value());
-    ASSERT_EQ(fixture.manager->state().library->entries.size(), 1U);
-    EXPECT_EQ(fixture.manager->state().libraryRevision, revisionBefore);
+    EXPECT_FALSE(fixture.resolution->editLease.has_value());
+    EXPECT_EQ(fixture.resolution->setEditLeaseCount, leaseSetsAfterOpen + 1);
 }
 
-TEST(BenchmarkManagerUseCaseCommands, ManagedDirectoryPathQueryForwardsFromTheService) {
+TEST(BenchmarkManagerUseCase, SaveFailurePreservesTheEditorLease) {
     Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.repo->directory = "/custom/benchmarks";
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
     fixture.build();
+    fixture.manager->openBenchmark(BenchmarkId{"b1"});
+    ASSERT_TRUE(fixture.resolution->editLease.has_value());
+    fixture.benchmarks->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::Conflict};
 
-    EXPECT_EQ(fixture.manager->managedDirectoryPath(), fixture.repo->managedDirectoryPath());
+    const auto outcome = fixture.manager->save(savedBenchmark("b1"),
+                                               BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d-b1"});
+
+    ASSERT_TRUE(outcome.error.has_value());
+    ASSERT_TRUE(fixture.resolution->editLease.has_value());
+    EXPECT_EQ(fixture.resolution->editLease->value, "b1");
 }
 
-// The optional-hash clear path: setScenarioHash(entryId, std::nullopt) drops the mapping and
-// returns the entry to reconciliation, keeping the entry and its thresholds in the draft.
-TEST(BenchmarkManagerUseCaseCommands, ClearScenarioHashReturnsTheEntryToReconciliation) {
+TEST(BenchmarkManagerUseCase, SaveSuccessReturnsAdmittedTokenWithoutAnInterveningAutomaticWrite) {
     Fixture fixture;
-    fixture.known("Alpha", "ha");
-    fixture.known("Alpha", "hb");
-    fixture.repo->nextScan = {
-        snapshotOf(savedBenchmark("b1", {benchmarkEntry("e1", "Alpha", std::string{"ha"}, rungs())})),
-        std::nullopt};
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
     fixture.build();
-    ASSERT_TRUE(fixture.service->openDraft(BenchmarkId{"b1"}));
+    fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d-b1-2"},
+                                           std::nullopt};
 
-    const auto result = fixture.manager->setScenarioHash(ScenarioEntryId{"e1"}, std::nullopt);
+    const auto outcome = fixture.manager->save(savedBenchmark("b1"),
+                                               BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d-b1"});
 
-    ASSERT_TRUE(result.ok());
-    ASSERT_TRUE(fixture.manager->state().draft.has_value());
-    ASSERT_EQ(fixture.manager->state().draft->uncategorized.size(), 1U);
-    EXPECT_FALSE(fixture.manager->state().draft->uncategorized.front().hash.has_value());
-    EXPECT_FALSE(fixture.manager->state().draft->uncategorized.front().thresholds.empty());
-    EXPECT_EQ(fixture.manager->state().draft, fixture.service->draft());
+    ASSERT_TRUE(outcome.ok());
+    EXPECT_EQ(outcome.token->digest, "d-b1-2");
+    EXPECT_TRUE(fixture.benchmarks->batchRequests.empty());  // manager issued no reconciliation batch
 }

@@ -4,6 +4,15 @@ status: in-progress
 
 # Scenario benchmark tracking design
 
+> **Ownership model revised by [ADR 0005](../../architecture/decisions/0005-data-owned-benchmark-service-and-presentation-drafts.md).**
+> As built, the accepted in-memory library is owned by a Qt-free data-layer `BenchmarksService` over
+> an injected `IBenchmarkStore`; the profile join is a dedicated application `BenchmarkResolutionUseCase`;
+> and the editable working copy is owned by `BenchmarkManagerViewModel` over `domain::BenchmarkEditor`,
+> not by an application "library service". The file/schema behavior, reconciliation rules, evaluator
+> contract, and presentation surfaces described below are unchanged; wherever this document says
+> "library service" owns accepted state or a draft, read `BenchmarksService` for accepted state,
+> `BenchmarkResolutionUseCase` for the reconciliation policy, and presentation for the working copy.
+
 ## Purpose and design scope
 
 This document proposes the technical design for [Scenario benchmark tracking](requirements.md). It decides how benchmark definitions are represented and persisted, how the application reconciles name-based membership with hash-based run identity, how benchmark projections are derived from the authoritative profile, and how management and tracking fit into the existing Qt/QML application.
@@ -40,11 +49,11 @@ The design is shaped by these concerns:
 
 The feature adds a benchmark capability spanning the existing layers:
 
-`QML presentation -> benchmark application services and use cases -> benchmark repository and profile ports -> benchmark domain`
+`QML presentation -> benchmark application use cases -> accepted benchmark data service and profile ports -> benchmark domain`
 
-The domain gains immutable identities, definition structures, validation results, and a pure evaluator. A filesystem-backed repository in the Qt data layer owns the managed benchmark directory and playlist decoding. An application-level library service owns the accepted in-memory benchmark snapshot and its single active draft. A tracking use case joins an accepted definition with lightweight facts obtained through `IProfileService`, invokes the evaluator, and publishes a cached projection. Two presentation view models expose management and tracking state to separate QML surfaces.
+The domain gains immutable identities, definition structures, validation results, a pure evaluator, and a pure structural editor (`BenchmarkEditor`). A Qt data-layer `BenchmarkStore` owns the managed benchmark directory, JSON, schema classification, digests, and atomic file operations. A Qt-free data-layer `BenchmarksService` owns the accepted in-memory library, its revision, refresh diagnostics, and coherent publication. An application `BenchmarkResolutionUseCase` joins accepted definitions to `IProfileService` scenario identity, publishes derived resolution state, and submits automatic mappings back through the data service. A tracking use case joins an accepted definition with lightweight profile facts, invokes the evaluator, and publishes a cached projection. Presentation owns the editable working copy; two view models expose management and tracking state to separate QML surfaces.
 
-Definitions and their file diagnostics are loaded at startup. The benchmark library subscribes before the initial profile load so that either a stored profile or a later asynchronous build can trigger scenario reconciliation. The existing requirement that `SessionController` install the profile-build requester before `loadProfile()` remains unchanged.
+Definitions and their file diagnostics are loaded at startup. The resolution use case subscribes to the benchmark and profile change streams before the initial profile load so that either a stored profile or a later asynchronous build can trigger scenario reconciliation. The existing requirement that `SessionController` install the profile-build requester before `loadProfile()` remains unchanged.
 
 The main window becomes a visible two-workspace shell: **Scenarios** retains the existing dashboard, and **Benchmarks** hosts tracking. Management opens from the benchmark workspace or application menu in a resizable window-modal dialog that follows `SettingsDialog` rather than replacing the main workspace.
 
@@ -137,25 +146,29 @@ An explicit refresh follows the same full-snapshot path. The manager rejects the
 ```mermaid
 sequenceDiagram
     participant Q as QML surface
-    participant L as Benchmark library service
-    participant R as Benchmark repository
+    participant BS as BenchmarksService (data)
+    participant R as BenchmarkStore (qt_data)
+    participant RU as BenchmarkResolutionUseCase (app)
     participant P as Profile service
     participant T as Tracking use case
     participant E as Benchmark evaluator
 
-    Q->>L: refresh()
-    L->>R: scan managed directory
+    Q->>BS: refresh()
+    BS->>R: scan managed directory
     alt directory enumeration succeeds
-        R-->>L: complete candidate snapshot
-        L->>L: publish snapshot and reconcile names
-        L-->>T: library changed
+        R-->>BS: complete candidate snapshot
+        BS->>BS: replace accepted snapshot, advance revision, publish
+        BS-->>RU: accepted library changed
+        RU->>P: build catalogue; submit unique auto-mappings via BS
+        BS-->>T: library changed
+        RU-->>T: resolution changed
         T->>P: request lightweight facts for resolved hashes
         T->>E: evaluate current definition and run facts
         E-->>T: immutable projection
         T-->>Q: tracking state changed
     else directory enumeration fails
-        R-->>L: library-level failure
-        L-->>Q: retain snapshot and report refresh failure
+        R-->>BS: library-level failure
+        BS-->>Q: retain snapshot and report refresh failure
     end
 ```
 
@@ -286,9 +299,15 @@ Every benchmark and mutable definition element uses an immutable embedded UUID. 
 
 **ADR recommended:** Embedded identity in independently versioned benchmark files creates a durable persistence and compatibility contract that will be expensive to reverse. Record its alternatives and long-term migration consequences after this design is accepted.
 
-### Profile-independent repository and application-owned reconciliation
+### Profile-independent persistence and a single reconciliation authority
 
-The repository knows files and schema but not the profile. The application library service joins definitions to the profile catalogue, persists unique automatic mappings, and never replaces an existing mapping automatically. This preserves the profile/repository boundary while giving resolution one mutation authority.
+The store knows files and schema but not the profile; the Qt-free `BenchmarksService` owns accepted
+state without a profile dependency. `BenchmarkResolutionUseCase` joins definitions to the profile
+catalogue, persists unique automatic mappings through the data service, and never replaces an
+existing mapping automatically. This keeps the profile join above persistence while giving resolution
+one mutation authority. Recorded and revised in
+[ADR 0003](../../architecture/decisions/0003-profile-independent-benchmark-repository-and-application-owned-state.md)
+and [ADR 0005](../../architecture/decisions/0005-data-owned-benchmark-service-and-presentation-drafts.md).
 
 ### Ephemeral current-definition projections
 

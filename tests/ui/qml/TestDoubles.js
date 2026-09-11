@@ -324,6 +324,7 @@ function makeFakeBenchmarkManagerVm(overrides) {
     return Object.assign({
         hasDraft: false,
         dirty: false,
+        baselineStale: false,
         benchmarkName: "",
         draftId: "",
         draftTrackable: false,

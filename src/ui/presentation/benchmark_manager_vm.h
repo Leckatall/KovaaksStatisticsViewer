@@ -8,24 +8,34 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 
+#include "app/contracts/benchmark_editor_seed.h"
 #include "app/contracts/benchmark_manager_state.h"
 #include "app/contracts/i_benchmark_manager_use_case.h"
+#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_editor.h"
+#include "benchmarks/benchmark_resolution.h"
+#include "benchmarks/benchmark_validation.h"
+#include "data/interfaces/i_benchmarks_service.h"
 #include "presentation/benchmark_issue_text.h"
 #include "presentation/benchmark_tree_node.h"
 
 namespace ksv::presentation {
-    // Adapts IBenchmarkManagerUseCase for the manager dialog. The use case owns one coherent
-    // BenchmarkManagerState per notification; this class reads it once per onChanged, rebuilds a
-    // display tree of read-only nodes plus every Qt projection, and routes each QML edit straight
-    // back to a use-case command.
+    // Adapts IBenchmarkManagerUseCase for the manager dialog. Accepted-library and resolution state
+    // come from the use case's coherent BenchmarkManagerState; the editable working copy, its dirty
+    // baseline, validation, and local editor mutations (over domain::BenchmarkEditor) are owned here.
     class BenchmarkManagerViewModel : public QObject {
         Q_OBJECT
         QML_ELEMENT
         Q_PROPERTY(bool hasDraft READ hasDraft NOTIFY draftChanged)
         Q_PROPERTY(bool dirty READ dirty NOTIFY draftChanged)
+        // The accepted entry this editor's token addresses has changed digest, been removed, or
+        // been reclassified as a problem entry since it was opened or last saved.
+        Q_PROPERTY(bool baselineStale READ baselineStale NOTIFY draftChanged)
         Q_PROPERTY(QString benchmarkName READ benchmarkName NOTIFY draftChanged)
         // Empty when no draft is open; lets the dialog tell a delete that targets the draft
         // being edited from one that targets an unrelated library entry.
@@ -45,13 +55,13 @@ namespace ksv::presentation {
         explicit BenchmarkManagerViewModel(std::shared_ptr<application::IBenchmarkManagerUseCase> useCase,
                                            QObject *parent = nullptr);
 
-        [[nodiscard]] bool hasDraft() const { return m_useCase->state().draft.has_value(); }
-        [[nodiscard]] bool dirty() const { return m_useCase->state().draftDirty; }
-        [[nodiscard]] bool draftFromLibrary() const { return m_useCase->state().draftFromLibrary; }
+        [[nodiscard]] bool hasDraft() const { return m_draft.has_value(); }
+        [[nodiscard]] bool dirty() const { return m_draftDirty; }
+        [[nodiscard]] bool baselineStale() const { return m_baselineStale; }
+        [[nodiscard]] bool draftFromLibrary() const { return m_draftFromLibrary; }
         [[nodiscard]] bool draftTrackable() const {
-            const auto &state = m_useCase->state();
-            return state.draft.has_value() &&
-                   state.draftCompleteness.completeness == domain::Completeness::Trackable;
+            return m_draft.has_value() &&
+                   m_draftCompleteness.completeness == domain::Completeness::Trackable;
         }
         [[nodiscard]] const QString &benchmarkName() const { return m_benchmarkName; }
         [[nodiscard]] const QString &draftId() const { return m_draftId; }
@@ -101,8 +111,30 @@ namespace ksv::presentation {
 
     private:
         void adaptState();
+        void adoptSeed(application::BenchmarkEditorSeed seed, bool fromLibrary, bool dirty);
+        void clearWorkingCopy();
+        void emitChanged();
+        // Runs `op` against a BenchmarkEditor bound to the local working copy, then rebuilds
+        // validation, dirty state, resolution and projections. Returns the QML result map
+        // (`ok` plus `createdId` / `error`).
+        QVariantMap applyEdit(
+            const std::function<domain::BenchmarkEditResult(domain::BenchmarkEditor &)> &op);
+        void recomputeAfterLocalEdit();
 
         std::shared_ptr<application::IBenchmarkManagerUseCase> m_useCase;
+
+        // Presentation-owned working copy. `m_baseline` is the last accepted content this editor
+        // was seeded from or saved to; its absence means a never-saved copy, which is always dirty.
+        std::optional<domain::Benchmark> m_draft;
+        std::optional<domain::Benchmark> m_baseline;
+        std::optional<data::BenchmarkEditToken> m_token;
+        domain::CompletenessResult m_draftCompleteness;
+        std::vector<domain::ScenarioResolution> m_draftResolutions;
+        bool m_draftDirty = false;
+        bool m_draftFromLibrary = false;
+        bool m_baselineStale = false;
+        std::function<std::string()> m_idFactory;
+
         QString m_benchmarkName;
         QString m_draftId;
         QVariantList m_libraryEntries;

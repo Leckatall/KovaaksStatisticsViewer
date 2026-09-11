@@ -13,9 +13,7 @@ add_executable(app_tests
         scenario_browser_use_case_test.cpp
         session_controller_test.cpp
         series_management_use_case_test.cpp
-        benchmark_library_service_test.cpp
-        benchmark_draft_test.cpp
-    benchmark_reconciliation_test.cpp
+    benchmark_resolution_use_case_test.cpp
     benchmark_tracking_use_case_test.cpp
     benchmark_manager_use_case_test.cpp
 )

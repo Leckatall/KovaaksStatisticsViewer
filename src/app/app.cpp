@@ -24,10 +24,11 @@
 #include "usecases/graph_use_case.h"
 #include "usecases/average_line_use_case.h"
 #include "series_config_store.h"
-#include "usecases/benchmark_library_service.h"
+#include "../data/benchmarks_service.h"
+#include "usecases/benchmark_resolution_use_case.h"
 #include "usecases/benchmark_manager_use_case.h"
 #include "usecases/benchmark_tracking_use_case.h"
-#include "qt_data/benchmark_repository.h"
+#include "qt_data/benchmark_store.h"
 #include "qt_data/playlist_reader.h"
 #include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
@@ -53,7 +54,7 @@ namespace ksv::application {
              std::shared_ptr<IProtoDecoder> decoder,
              std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
              std::shared_ptr<data::IStatsCsvParser> statsParser,
-             std::shared_ptr<IBenchmarkRepository> benchmarkRepository,
+             std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
              QObject *parent) : QObject(parent) {
         qDebug() << "App Started. This message should not appear in release builds";
         m_protoDecoder = std::move(decoder);
@@ -70,16 +71,23 @@ namespace ksv::application {
             std::make_shared<data::ProfileSerializer>(std::make_shared<data::ProfileV3Migrator>(m_runIngestor)),
             m_settingsService, m_runIngestor);
 
-        m_benchmarkRepository = benchmarkRepository
-            ? std::move(benchmarkRepository)
-            : std::make_shared<qt_data::BenchmarkRepository>(
+        // Store -> accepted service -> resolution -> manager/tracking, all before the initial
+        // profile load: the resolution use case subscribes to the profile change stream in its
+        // constructor, so either the synchronously loaded profile or a later asynchronous build
+        // triggers reconciliation.
+        m_benchmarkStore = benchmarkStore
+            ? std::move(benchmarkStore)
+            : std::make_shared<qt_data::BenchmarkStore>(
                   (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
                       .toStdString());
-        m_benchmarkLibraryService = std::make_shared<BenchmarkLibraryService>(
-            m_benchmarkRepository, std::make_shared<qt_data::PlaylistReader>(), m_profileService,
+        m_benchmarksService = std::make_shared<data::BenchmarksService>(m_benchmarkStore);
+        m_benchmarkResolutionUseCase = std::make_shared<BenchmarkResolutionUseCase>(
+            m_benchmarksService, m_profileService);
+        m_benchmarkManagerUseCase = std::make_shared<BenchmarkManagerUseCase>(
+            m_benchmarksService, m_benchmarkResolutionUseCase, std::make_shared<qt_data::PlaylistReader>(),
             [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
         m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
-            m_benchmarkLibraryService, m_profileService);
+            m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService);
 
         // SessionController installs the build requester, so it has to exist before the
         // first loadProfile() — otherwise a missing stored profile builds synchronously and blocks
@@ -113,7 +121,6 @@ namespace ksv::application {
         m_scenarioBrowserUseCase = std::make_shared<ScenarioBrowserUseCase>(m_sessionController, m_profileService);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_scenarioBrowserUseCase, this);
 
-        m_benchmarkManagerUseCase = std::make_shared<BenchmarkManagerUseCase>(m_benchmarkLibraryService);
         m_benchmarkManagerVm = new presentation::BenchmarkManagerViewModel(m_benchmarkManagerUseCase, this);
         m_benchmarkTrackingVm = new presentation::BenchmarkTrackingViewModel(m_benchmarkTrackingUseCase, this);
     }

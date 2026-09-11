@@ -220,7 +220,15 @@ Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/buil
 
 ## Decision and design context
 
-No Architecture Decision Records currently exist, so this description does not assign rationale to the observed structures.
+Architecture Decision Records under [`decisions/`](decisions/) record the rationale for
+architecturally significant choices; this description states the as-built structure and defers
+rationale to them. The benchmark subsystem's ownership model is
+[ADR 0005](decisions/0005-data-owned-benchmark-service-and-presentation-drafts.md) (superseding
+[ADR 0003](decisions/0003-profile-independent-benchmark-repository-and-application-owned-state.md)):
+a Qt-free data-layer `BenchmarksService` owns the accepted benchmark library over an injected
+`IBenchmarkStore`, `BenchmarkResolutionUseCase` owns the profile join, and presentation owns the
+editable working copy. `App::App()` constructs store → accepted service → resolution → manager and
+tracking before the initial profile load.
 
 <!-- arch-doc:references:start -->
 [profile-lifecycle]: views/runtime/profile-lifecycle.md

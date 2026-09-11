@@ -789,6 +789,19 @@ ApplicationWindow {
                     }
                 }
 
+                // The accepted file this editor was opened from has changed, been removed, or
+                // become unreadable since. The working copy is kept as-is; a later Save will
+                // return a conflict. The editor stays fully usable.
+                Label {
+                    objectName: "staleBaselineWarning"
+                    visible: root.benchmarkManagerVm.baselineStale
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: "#E57373"
+                    text: qsTr("The saved benchmark this editor was opened from has changed on disk. "
+                               + "Your edits are kept here; saving will report a conflict until you reopen it.")
+                }
+
                 // Non-modal: the editor stays fully usable while this is shown. It is bound
                 // straight to the flag, so the next reconciliation that publishes without a
                 // write failure clears it on its own.

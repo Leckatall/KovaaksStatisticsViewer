@@ -8,10 +8,10 @@
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_validation.h"
 
-// Payload shared by IBenchmarkRepository::scan() (data-layer port) and
-// IBenchmarkLibraryService::snapshot() (presentation contract). It lives in ksv_contracts so the
-// presentation contract does not have to include the data-layer port header to name it.
-namespace ksv::application {
+// Payload shared by IBenchmarkStore::scan() and the accepted-library state IBenchmarksService
+// publishes. It is data-owned vocabulary: presentation and application read it back but never
+// author it.
+namespace ksv::data {
     enum class BenchmarkFileProblem { Invalid, Unsupported };
 
     struct LoadedBenchmark {

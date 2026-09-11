@@ -3,15 +3,15 @@
 #include <memory>
 
 #include "benchmark_builders.h"
-#include "counting_ids.h"
-#include "fake_benchmark_repository.h"
-#include "fake_playlist_reader.h"
+#include "fake_benchmark_store.h"
 #include "fake_profile_service.h"
-#include "usecases/benchmark_library_service.h"
+#include "data/benchmarks_service.h"
+#include "usecases/benchmark_resolution_use_case.h"
 #include "usecases/benchmark_tracking_use_case.h"
 
 using namespace ksv;
 using namespace ksv::application;
+using namespace ksv::data;
 using namespace ksv::domain;
 using namespace ksv::tests_support;
 
@@ -37,10 +37,10 @@ namespace {
     }
 
     struct Fixture {
-        std::shared_ptr<FakeBenchmarkRepository> repo = std::make_shared<FakeBenchmarkRepository>();
-        std::shared_ptr<FakePlaylistReader> reader = std::make_shared<FakePlaylistReader>();
+        std::shared_ptr<FakeBenchmarkStore> repo = std::make_shared<FakeBenchmarkStore>();
         std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
-        std::shared_ptr<BenchmarkLibraryService> library;
+        std::shared_ptr<BenchmarksService> benchmarks;
+        std::shared_ptr<BenchmarkResolutionUseCase> resolution;
         std::unique_ptr<BenchmarkTrackingUseCase> tracking;
 
         void known(const std::string &name, const std::string &hash) {
@@ -48,8 +48,9 @@ namespace {
         }
 
         void build() {
-            library = std::make_shared<BenchmarkLibraryService>(repo, reader, profile, countingIds());
-            tracking = std::make_unique<BenchmarkTrackingUseCase>(library, profile);
+            benchmarks = std::make_shared<BenchmarksService>(repo);
+            resolution = std::make_shared<BenchmarkResolutionUseCase>(benchmarks, profile);
+            tracking = std::make_unique<BenchmarkTrackingUseCase>(benchmarks, resolution, profile);
         }
     };
 
@@ -201,7 +202,7 @@ TEST(BenchmarkTrackingCache, DoesNotServeAnEntryCachedBeforeALibraryChange) {
     fixture.tracking->select(BenchmarkId{"b1"});
     fixture.tracking->select(BenchmarkId{"b2"});
 
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
     const int afterRefresh = fixture.profile->fact_request_count;
     fixture.tracking->select(BenchmarkId{"b1"});
 
@@ -217,10 +218,10 @@ TEST(BenchmarkTrackingCache, ProfileAndLibraryChangesReevaluateAndRemovalIsUnava
     fixture.profile->notifyProfileChanged();
     EXPECT_GT(fixture.profile->fact_request_count, selected);
     const int changed = fixture.profile->fact_request_count;
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
     EXPECT_GT(fixture.profile->fact_request_count, changed);
     fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
 }
 
@@ -243,7 +244,7 @@ TEST(BenchmarkTrackingCache, DefinitionEditReconstructsTheCachedProjection) {
     edited.uncategorized[0] = benchmarkEntry("e1", "Alpha", std::string{"h1"}, halved);
     edited.uncategorized[1] = benchmarkEntry("e2", "Beta", std::string{"h2"}, halved);
     fixture.repo->nextScan = {snapshotFor(edited), std::nullopt};
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
 
     ASSERT_NE(fixture.tracking->projection(), nullptr);
     ASSERT_TRUE(fixture.tracking->projection()->averageRank);
@@ -288,7 +289,7 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, StartupPublishesNoSelectionWithChoicesI
     EXPECT_FALSE(snap.selectedId.has_value());
     EXPECT_FALSE(snap.selectedLoaded.has_value());
     EXPECT_FALSE(snap.projection.has_value());
-    EXPECT_EQ(snap.libraryRevision, fixture.library->revision());
+    EXPECT_EQ(snap.libraryRevision, fixture.benchmarks->revision());
     ASSERT_EQ(snap.choices.size(), 3U);
     EXPECT_EQ(snap.choices[0].filename, "b1.json");
     EXPECT_EQ(snap.choices[1].filename, "broken.json");
@@ -373,7 +374,7 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ReadyTrackableSnapshotCarriesDefinition
     EXPECT_EQ(snap.projection->benchmarkId.value, "b1");
     ASSERT_TRUE(snap.projection->attainedRank.has_value());
     EXPECT_EQ(snap.projection->attainedRank->value, "silver");
-    EXPECT_EQ(snap.libraryRevision, fixture.library->revision());
+    EXPECT_EQ(snap.libraryRevision, fixture.benchmarks->revision());
 }
 
 TEST(BenchmarkTrackingWorkspaceSnapshot, ReadyIncompleteSnapshotCarriesFullCompletenessIssueVector) {
@@ -470,7 +471,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDeletionGoesUnavailableRetaini
     ASSERT_EQ(fixture.tracking->snapshot().lastKnownSelectedDisplayName, "Tracked");
 
     fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Unavailable);
@@ -500,7 +501,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedBecomingUnparseableProblemReta
                               ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt,
                                                std::nullopt, std::nullopt}});
     fixture.repo->nextScan = {broken, std::nullopt};
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Unavailable);
@@ -526,7 +527,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDuplicateIdConflictGoesUnavail
     clash.entries.push_back(loadedEntry(benchmark("b1"), "a.json"));
     clash.entries.push_back(loadedEntry(benchmark("b1"), "b.json"));
     fixture.repo->nextScan = {clash, std::nullopt};
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Unavailable);
@@ -552,9 +553,9 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, WholeDirectoryRefreshFailureKeepsAccep
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
 
     fixture.repo->nextScan = {std::nullopt, BenchmarkScanFailure::DirectoryUnavailable};
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
 
-    ASSERT_TRUE(fixture.library->lastRefreshFailed());
+    ASSERT_TRUE(fixture.benchmarks->lastRefreshFailed());
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
     ASSERT_TRUE(snap.selectedLoaded.has_value());
@@ -597,11 +598,11 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, UnavailableSelectionAutoRecoversWhenSa
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
 
     fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Unavailable);
 
     fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
-    fixture.library->refresh();
+    fixture.benchmarks->refresh();
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);

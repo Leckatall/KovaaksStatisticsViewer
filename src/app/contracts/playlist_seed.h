@@ -4,10 +4,9 @@
 #include <string>
 #include <vector>
 
-// Playlist payload shared by IPlaylistReader (data-layer port) and
-// IBenchmarkLibraryService (application contract). It lives in ksv_contracts so the
-// service contract does not have to include the data-layer port header to name it,
-// mirroring benchmark_library_snapshot.h.
+// Playlist payload shared by IPlaylistReader (data-layer port) and the benchmark manager
+// contract. It lives in ksv_contracts so the contract does not have to include the
+// data-layer port header to name it.
 namespace ksv::application {
     struct PlaylistSeed {
         std::optional<std::string> name;         // usable playlist name when present

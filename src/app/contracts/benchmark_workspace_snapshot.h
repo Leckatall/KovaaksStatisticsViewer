@@ -5,9 +5,9 @@
 #include <string>
 #include <vector>
 
-#include "benchmark_library_snapshot.h"
 #include "benchmarks/benchmark_ids.h"
 #include "benchmarks/benchmark_projection.h"
+#include "data/interfaces/benchmark_library_snapshot.h"
 #include "i_benchmark_tracking_use_case.h"
 
 namespace ksv::application {
@@ -31,7 +31,7 @@ namespace ksv::application {
         std::optional<domain::BenchmarkId> selectedId;
         std::string lastKnownSelectedDisplayName;
         BenchmarkTrackingState availability = BenchmarkTrackingState::NoSelection;
-        std::optional<LoadedBenchmark> selectedLoaded;
+        std::optional<data::LoadedBenchmark> selectedLoaded;
         std::optional<domain::BenchmarkProjection> projection;
     };
 }

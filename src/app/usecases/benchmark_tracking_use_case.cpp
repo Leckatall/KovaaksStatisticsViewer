@@ -9,13 +9,13 @@
 
 namespace ksv::application {
     namespace {
-        // Takes the snapshot by reference: IBenchmarkLibraryService::snapshot() returns by value,
-        // so a pointer into a local copy would dangle the moment that copy died.
-        const LoadedBenchmark *findLoaded(const BenchmarkLibrarySnapshot &snapshot,
-                                          const domain::BenchmarkId &id) {
-            const LoadedBenchmark *found = nullptr;
+        // Takes the snapshot by reference: IBenchmarksService::snapshot() returns by value, so a
+        // pointer into a local copy would dangle the moment that copy died.
+        const data::LoadedBenchmark *findLoaded(const data::BenchmarkLibrarySnapshot &snapshot,
+                                                const domain::BenchmarkId &id) {
+            const data::LoadedBenchmark *found = nullptr;
             for (const auto &entry: snapshot.entries) {
-                const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content);
+                const auto *loaded = std::get_if<data::LoadedBenchmark>(&entry.content);
                 if (!loaded || !(loaded->benchmark.id == id)) continue;
                 // Two files claiming one id resolve to unavailable, never to an arbitrary pick.
                 if (found != nullptr) return nullptr;
@@ -24,10 +24,10 @@ namespace ksv::application {
             return found;
         }
 
-        BenchmarkChoice choiceFor(const BenchmarkFileEntry &entry) {
+        BenchmarkChoice choiceFor(const data::BenchmarkFileEntry &entry) {
             BenchmarkChoice choice;
             choice.filename = entry.filename;
-            if (const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content)) {
+            if (const auto *loaded = std::get_if<data::LoadedBenchmark>(&entry.content)) {
                 choice.id = loaded->benchmark.id;
                 choice.displayName = loaded->benchmark.name.empty() ? entry.filename : loaded->benchmark.name;
                 choice.classification = loaded->completeness.completeness == domain::Completeness::Trackable
@@ -36,12 +36,12 @@ namespace ksv::application {
                 choice.selectable = true;
                 return choice;
             }
-            const auto &problem = std::get<ProblemBenchmark>(entry.content);
+            const auto &problem = std::get<data::ProblemBenchmark>(entry.content);
             choice.id = problem.id;
             choice.displayName = problem.displayName && !problem.displayName->empty()
                                      ? *problem.displayName
                                      : entry.filename;
-            choice.classification = problem.problem == BenchmarkFileProblem::Unsupported
+            choice.classification = problem.problem == data::BenchmarkFileProblem::Unsupported
                                         ? BenchmarkChoiceClassification::Unsupported
                                         : BenchmarkChoiceClassification::Invalid;
             choice.schemaVersion = problem.schemaVersion;
@@ -51,19 +51,19 @@ namespace ksv::application {
     }
 
     BenchmarkTrackingUseCase::BenchmarkTrackingUseCase(
-        std::shared_ptr<IBenchmarkLibraryService> library,
+        std::shared_ptr<data::IBenchmarksService> benchmarks,
+        std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
         std::shared_ptr<IProfileService> profileService)
-        : m_library(std::move(library)), m_profileService(std::move(profileService)) {
-        m_library->onChanged([this] {
+        : m_benchmarks(std::move(benchmarks)), m_resolution(std::move(resolution)),
+          m_profileService(std::move(profileService)) {
+        const auto reevaluate = [this] {
             m_cache.clear();
             refresh();
             notifyChanged();
-        });
-        m_profileService->onProfileChanged([this] {
-            m_cache.clear();
-            refresh();
-            notifyChanged();
-        });
+        };
+        m_benchmarks->onChanged(reevaluate);
+        m_resolution->onChanged(reevaluate);
+        m_profileService->onProfileChanged(reevaluate);
         refresh();
     }
 
@@ -88,9 +88,9 @@ namespace ksv::application {
     }
 
     void BenchmarkTrackingUseCase::refresh() {
-        const auto revision = m_library->revision();
+        const auto revision = m_benchmarks->revision();
         if (!m_librarySnapshotValid || revision != m_librarySnapshotRevision) {
-            m_librarySnapshot = m_library->snapshot();
+            m_librarySnapshot = m_benchmarks->snapshot();
             m_librarySnapshotRevision = revision;
             m_librarySnapshotValid = true;
         }
@@ -119,7 +119,7 @@ namespace ksv::application {
             }
         }
 
-        const LoadedBenchmark *loaded = library ? findLoaded(*library, *m_selected) : nullptr;
+        const data::LoadedBenchmark *loaded = library ? findLoaded(*library, *m_selected) : nullptr;
 
         if (const auto cached = m_cache.find(*m_selected); cached != m_cache.end()) {
             // Any library or profile change drops the whole cache, so a surviving entry is always
@@ -144,8 +144,12 @@ namespace ksv::application {
         }
     }
 
-    domain::BenchmarkProjection BenchmarkTrackingUseCase::evaluate(const LoadedBenchmark &loaded) const {
-        const auto resolutions = m_library->resolutionsFor(loaded.benchmark.id);
+    domain::BenchmarkProjection BenchmarkTrackingUseCase::evaluate(const data::LoadedBenchmark &loaded) const {
+        const auto resolutionSnapshot = m_resolution->snapshot();
+        const auto entry = resolutionSnapshot.resolutions.find(loaded.benchmark.id);
+        const std::vector<domain::ScenarioResolution> resolutions =
+            entry != resolutionSnapshot.resolutions.end() ? entry->second
+                                                          : std::vector<domain::ScenarioResolution>{};
         // Unique resolved hashes only. The name is left empty deliberately: ScenarioId equality,
         // ordering and hashing all ignore it, so the profile lookup needs nothing else.
         std::vector<domain::ScenarioId> scenarios;

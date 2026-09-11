@@ -9,9 +9,10 @@ add_library(ksv_qt_data STATIC
         series_config_store.cpp
         series_config_store.h
         ../data/interfaces/i_series_config_store.h
-        benchmark_repository.cpp
-        benchmark_repository.h
-        ../data/interfaces/i_benchmark_repository.h
+        benchmark_store.cpp
+        benchmark_store.h
+        ../data/interfaces/i_benchmark_store.h
+        ../data/interfaces/benchmark_library_snapshot.h
         playlist_reader.cpp
         playlist_reader.h
         ../data/interfaces/i_playlist_reader.h

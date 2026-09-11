@@ -1,4 +1,4 @@
-#include "benchmark_repository.h"
+#include "benchmark_store.h"
 
 #include <QByteArray>
 #include <QCryptographicHash>
@@ -15,7 +15,7 @@
 
 namespace ksv::qt_data {
     namespace {
-        using namespace application;
+        using namespace data;
         using namespace ksv::domain;
 
         constexpr int kSchemaVersion = 1;
@@ -277,17 +277,17 @@ namespace ksv::qt_data {
         }
     }
 
-    BenchmarkRepository::BenchmarkRepository(std::string directoryPath)
+    BenchmarkStore::BenchmarkStore(std::string directoryPath)
         : m_directory(std::move(directoryPath)) {}
 
-    std::string BenchmarkRepository::managedDirectoryPath() const { return m_directory; }
+    std::string BenchmarkStore::managedDirectoryPath() const { return m_directory; }
 
-    application::BenchmarkScanResult BenchmarkRepository::scan() const {
+    data::BenchmarkScanResult BenchmarkStore::scan() const {
         QDir dir(QString::fromStdString(m_directory));
         if (!dir.exists() && !QDir().mkpath(dir.absolutePath()))
-            return {std::nullopt, BenchmarkScanFailure::DirectoryUnavailable};
+            return {std::nullopt, data::BenchmarkScanFailure::DirectoryUnavailable};
 
-        BenchmarkLibrarySnapshot snapshot;
+        data::BenchmarkLibrarySnapshot snapshot;
         auto names = dir.entryList({"*.json"}, QDir::Files, QDir::Name);  // QDir::Name = deterministic
         for (const auto &name: names) {
             QFile file(dir.absoluteFilePath(name));
@@ -304,38 +304,38 @@ namespace ksv::qt_data {
         return {snapshot, std::nullopt};
     }
 
-    application::BenchmarkWriteResult BenchmarkRepository::write(const domain::Benchmark &definition,
-                                                                const std::string &filename,
-                                                                const std::optional<std::string> &expectedDigest) {
+    data::BenchmarkWriteResult BenchmarkStore::write(const domain::Benchmark &definition,
+                                                     const std::string &filename,
+                                                     const std::optional<std::string> &expectedDigest) {
         QDir dir(QString::fromStdString(m_directory));
         if (!dir.exists() && !QDir().mkpath(dir.absolutePath()))
-            return {std::nullopt, BenchmarkWriteFailure::WriteFailed};
+            return {std::nullopt, data::BenchmarkWriteFailure::WriteFailed};
         const auto path = dir.absoluteFilePath(QString::fromStdString(filename));
 
         const auto onDisk = currentDigest(path);
         // Precondition: a replace must match the admitted digest; a create must find no existing file.
         if (expectedDigest) {
             if (!onDisk || onDisk->toStdString() != *expectedDigest)
-                return {std::nullopt, BenchmarkWriteFailure::ExternalModificationConflict};
+                return {std::nullopt, data::BenchmarkWriteFailure::ExternalModificationConflict};
         } else if (onDisk) {
-            return {std::nullopt, BenchmarkWriteFailure::ExternalModificationConflict};
+            return {std::nullopt, data::BenchmarkWriteFailure::ExternalModificationConflict};
         }
 
         const auto bytes = encode(definition);
         QSaveFile save(path);  // temp sibling + atomic commit
         if (!save.open(QIODevice::WriteOnly) || save.write(bytes) != bytes.size() || !save.commit())
-            return {std::nullopt, BenchmarkWriteFailure::WriteFailed};
+            return {std::nullopt, data::BenchmarkWriteFailure::WriteFailed};
         return {digestOf(bytes).toStdString(), std::nullopt};
     }
 
-    application::BenchmarkDeleteResult BenchmarkRepository::remove(const std::string &filename,
-                                                                  const std::string &expectedDigest) {
+    data::BenchmarkDeleteResult BenchmarkStore::remove(const std::string &filename,
+                                                       const std::string &expectedDigest) {
         const auto path = QDir(QString::fromStdString(m_directory))
                               .absoluteFilePath(QString::fromStdString(filename));
         const auto onDisk = currentDigest(path);
         if (!onDisk || onDisk->toStdString() != expectedDigest)
-            return {false, BenchmarkWriteFailure::ExternalModificationConflict};
-        if (!QFile::remove(path)) return {false, BenchmarkWriteFailure::WriteFailed};
+            return {false, data::BenchmarkWriteFailure::ExternalModificationConflict};
+        if (!QFile::remove(path)) return {false, data::BenchmarkWriteFailure::WriteFailed};
         return {true, std::nullopt};
     }
 }

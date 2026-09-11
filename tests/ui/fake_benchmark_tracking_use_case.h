@@ -154,7 +154,7 @@ namespace ksv::tests_ui {
         snapshot.selectedId = domain::BenchmarkId{"b1"};
         snapshot.lastKnownSelectedDisplayName = "Voltaic";
         snapshot.availability = application::BenchmarkTrackingState::Ready;
-        snapshot.selectedLoaded = application::LoadedBenchmark{
+        snapshot.selectedLoaded = data::LoadedBenchmark{
             definition, domain::CompletenessResult{domain::Completeness::Trackable, {}}};
         snapshot.projection = projection;
         return snapshot;
@@ -227,7 +227,7 @@ namespace ksv::tests_ui {
         snapshot.selectedId = domain::BenchmarkId{"b1"};
         snapshot.lastKnownSelectedDisplayName = "Voltaic";
         snapshot.availability = application::BenchmarkTrackingState::Ready;
-        snapshot.selectedLoaded = application::LoadedBenchmark{
+        snapshot.selectedLoaded = data::LoadedBenchmark{
             definition, domain::CompletenessResult{domain::Completeness::Trackable, {}}};
         snapshot.projection = projection;
         return snapshot;

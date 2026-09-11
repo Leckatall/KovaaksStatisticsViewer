@@ -73,6 +73,19 @@ target_link_libraries(run_ingestor_tests PRIVATE
 ksv_copy_mingw_runtime_dlls(run_ingestor_tests)
 gtest_discover_tests(run_ingestor_tests)
 
+add_executable(benchmarks_service_tests
+    benchmarks_service_test.cpp
+)
+
+target_link_libraries(benchmarks_service_tests PRIVATE
+    tests_support
+    ksv_data
+    GTest::gtest_main
+)
+
+ksv_copy_mingw_runtime_dlls(benchmarks_service_tests)
+gtest_discover_tests(benchmarks_service_tests)
+
 add_executable(profile_service_tests
     profile_service_test.cpp
 )

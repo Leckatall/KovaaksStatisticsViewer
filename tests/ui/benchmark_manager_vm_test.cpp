@@ -13,26 +13,28 @@
 #include <variant>
 
 #include "presentation/benchmark_manager_vm.h"
+#include "contracts/benchmark_editor_seed.h"
 #include "contracts/benchmark_manager_state.h"
-#include "contracts/i_benchmark_library_service.h"
 #include "contracts/i_benchmark_manager_use_case.h"
+#include "contracts/i_benchmark_resolution_use_case.h"
 #include "benchmark_builders.h"
 #include "fake_benchmark_manager_use_case.h"
 
 using namespace ksv::application;
+using namespace ksv::data;
 using namespace ksv::domain;
 using namespace ksv::presentation;
 using namespace ksv::tests_support;
 
 namespace {
-    // M1: the manager view model's only dependency is the ADR-0004 use-case contract; the former
-    // IBenchmarkLibraryService constructor must be gone, so neither shared_ptr is interchangeable.
+    // M1: the manager view model's only dependency is the ADR-0004 use-case contract; no other
+    // shared_ptr is interchangeable with IBenchmarkManagerUseCase.
     static_assert(std::is_constructible_v<BenchmarkManagerViewModel,
                                           std::shared_ptr<IBenchmarkManagerUseCase>>,
                   "BenchmarkManagerViewModel must construct from IBenchmarkManagerUseCase alone");
     static_assert(!std::is_constructible_v<BenchmarkManagerViewModel,
-                                           std::shared_ptr<IBenchmarkLibraryService>>,
-                  "BenchmarkManagerViewModel must not accept IBenchmarkLibraryService");
+                                           std::shared_ptr<IBenchmarkResolutionUseCase>>,
+                  "BenchmarkManagerViewModel must not accept a bare resolution use case");
 
     struct Fixture {
         std::shared_ptr<FakeBenchmarkManagerUseCase> uc =
@@ -55,6 +57,15 @@ namespace {
         return benchmark;
     }
 
+    BenchmarkEditorSeed newSeed(Benchmark benchmark) {
+        return {std::move(benchmark), std::nullopt};
+    }
+
+    BenchmarkEditorSeed librarySeed(Benchmark benchmark) {
+        auto id = benchmark.id;
+        return {std::move(benchmark), BenchmarkEditToken{id, id.value + ".json", "d1"}};
+    }
+
     BenchmarkLibrarySnapshot loadedSnapshot(const std::string &id, const std::string &name) {
         Benchmark benchmark;
         benchmark.id = BenchmarkId{id};
@@ -74,25 +85,32 @@ namespace {
         return qobject_cast<const BenchmarkGroupNode *>(
             group->children().at(index).value<BenchmarkTreeNode *>());
     }
+
+    // No individual mutation command may reach the application boundary; only lifecycle commands do.
+    void expectNoMutationForwarded(const FakeBenchmarkManagerUseCase &uc) {
+        for (const auto &command: uc.commandLog)
+            EXPECT_TRUE(command == "beginNewBenchmark" || command == "openBenchmark" ||
+                        command == "closeEditor" || command == "importPlaylistSeed" ||
+                        command == "save" || command == "deleteBenchmark" || command == "refresh")
+                << "unexpected forwarded command: " << command;
+    }
 }
 
-TEST(BenchmarkManagerVm, BeginNewBenchmarkExposesDirtyIncompleteDraft) {
+TEST(BenchmarkManagerVm, BeginNewBenchmarkCreatesLocalDirtyIncompleteWorkingCopy) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("", {}, {});
-    f.uc->stateValue.draftDirty = true;
-    f.uc->stateValue.draftFromLibrary = false;
-    f.uc->stateValue.draftCompleteness.completeness = Completeness::Incomplete;
+    f.uc->nextNewSeed = newSeed(draftWith("", {}, {}));
     f.build();
+
+    f.vm->beginNewBenchmark();
 
     EXPECT_TRUE(f.vm->hasDraft());
     EXPECT_TRUE(f.vm->dirty());
     EXPECT_FALSE(f.vm->draftTrackable());
     EXPECT_FALSE(f.vm->draftFromLibrary());
     EXPECT_EQ(f.vm->benchmarkName(), QString());
-
-    f.vm->beginNewBenchmark();
     ASSERT_FALSE(f.uc->commandLog.empty());
-    EXPECT_EQ(f.uc->commandLog.back(), "beginNewDraft");
+    EXPECT_EQ(f.uc->commandLog.back(), "beginNewBenchmark");
+    expectNoMutationForwarded(*f.uc);
 }
 
 TEST(BenchmarkManagerVm, LibraryEntriesReflectAcceptedSnapshotClassification) {
@@ -122,36 +140,26 @@ TEST(BenchmarkManagerVm, LibraryEntriesReflectAcceptedSnapshotClassification) {
     EXPECT_FALSE(problemRow["deletable"].toBool());
 }
 
-TEST(BenchmarkManagerVm, ImportPlaylistFailureReturnsErrorMapAndLeavesNoDraft) {
+TEST(BenchmarkManagerVm, ImportPlaylistAdoptsSuccessfulSeedOnly) {
     Fixture f;
-    f.uc->importResult = {PlaylistImportFailure::MalformedJson, {}};
+    f.uc->nextImport = {PlaylistImportFailure::MalformedJson, std::nullopt, {}};
     f.build();
 
-    const auto result = f.vm->importPlaylist(QUrl("file:///tmp/playlist.json"));
-
-    EXPECT_FALSE(result["ok"].toBool());
-    EXPECT_FALSE(result["error"].toString().isEmpty());
+    const auto failure = f.vm->importPlaylist(QUrl("file:///tmp/playlist.json"));
+    EXPECT_FALSE(failure["ok"].toBool());
+    EXPECT_FALSE(failure["error"].toString().isEmpty());
     EXPECT_FALSE(f.vm->hasDraft());
-}
 
-TEST(BenchmarkManagerVm, ImportPlaylistSuccessSeedsDraftAndReportsSkippedDuplicates) {
-    Fixture f;
-    f.uc->importResult = {std::nullopt, {3}};
-    f.build();
+    f.uc->nextImport = {std::nullopt,
+                        newSeed(draftWith("Voltaic", {},
+                                          {benchmarkEntry("a", "a", std::nullopt, {}),
+                                           benchmarkEntry("b", "b", std::nullopt, {}),
+                                           benchmarkEntry("c", "c", std::nullopt, {})})),
+                        {3}};
 
-    const auto result = f.vm->importPlaylist(QUrl::fromLocalFile("/tmp/playlist.json"));
-
-    EXPECT_TRUE(result["ok"].toBool());
-    EXPECT_EQ(result["skipped"].toList().size(), 1);
-
-    // The seeded draft is not part of the command result; it lands on the next publication.
-    f.uc->stateValue.draft = draftWith("Voltaic", {},
-                                       {benchmarkEntry("a", "a", std::nullopt, {}),
-                                        benchmarkEntry("b", "b", std::nullopt, {}),
-                                        benchmarkEntry("c", "c", std::nullopt, {})});
-    f.uc->stateValue.draftDirty = true;
-    f.publish();
-
+    const auto success = f.vm->importPlaylist(QUrl::fromLocalFile("/tmp/playlist.json"));
+    EXPECT_TRUE(success["ok"].toBool());
+    EXPECT_EQ(success["skipped"].toList().size(), 1);
     EXPECT_TRUE(f.vm->hasDraft());
     EXPECT_TRUE(f.vm->dirty());
     EXPECT_EQ(f.vm->benchmarkName(), "Voltaic");
@@ -162,9 +170,10 @@ TEST(BenchmarkManagerVm, ImportPlaylistSuccessSeedsDraftAndReportsSkippedDuplica
 
 TEST(BenchmarkManagerVm, SaveEmptyNameSurfacesEmptyNameError) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("", {}, {});
-    f.uc->saveResult = {BenchmarkSaveError::EmptyName};
+    f.uc->nextNewSeed = newSeed(draftWith("", {}, {}));
+    f.uc->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::EmptyName};
     f.build();
+    f.vm->beginNewBenchmark();
 
     const auto result = f.vm->save();
 
@@ -172,38 +181,59 @@ TEST(BenchmarkManagerVm, SaveEmptyNameSurfacesEmptyNameError) {
     EXPECT_FALSE(result["error"].toString().isEmpty());
 }
 
-TEST(BenchmarkManagerVm, SaveSuccessClearsDirtyAndRefreshesLibrary) {
+TEST(BenchmarkManagerVm, SaveSuccessUpdatesLocalBaselineFromAdmittedToken) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("Alpha", {}, {});
-    f.uc->stateValue.draftDirty = true;
+    f.uc->nextNewSeed = newSeed(draftWith("Alpha", {}, {}));
+    f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"}, std::nullopt};
     f.build();
+    f.vm->beginNewBenchmark();
+    ASSERT_TRUE(f.vm->dirty());
 
     const auto result = f.vm->save();
 
     EXPECT_TRUE(result["ok"].toBool());
-    ASSERT_FALSE(f.uc->commandLog.empty());
-    EXPECT_EQ(f.uc->commandLog.back(), "saveDraft");
+    ASSERT_FALSE(f.uc->saveCalls.empty());
+    EXPECT_EQ(f.uc->saveCalls.back().first.name, "Alpha");
+    EXPECT_EQ(f.uc->commandLog.back(), "save");
 
-    // A successful save drops the draft and republishes the accepted library.
-    f.uc->stateValue.draft.reset();
-    f.uc->stateValue.draftDirty = false;
+    // Editor stays open; the admitted token becomes the new local baseline, so dirty clears.
+    EXPECT_TRUE(f.vm->hasDraft());
+    EXPECT_FALSE(f.vm->dirty());
+    EXPECT_TRUE(f.vm->draftFromLibrary());
+
+    // An external library republication does not re-dirty the saved copy.
     f.uc->stateValue.library = loadedSnapshot("b1", "Alpha");
     f.publish();
-
     EXPECT_FALSE(f.vm->dirty());
-    ASSERT_EQ(f.vm->libraryEntries().size(), 1);
-    EXPECT_EQ(f.vm->libraryEntries().at(0).toMap()["name"].toString(), "Alpha");
+
+    // A further local edit re-dirties against the saved baseline.
+    f.vm->setBenchmarkName("Alpha 2");
+    EXPECT_TRUE(f.vm->dirty());
+}
+
+TEST(BenchmarkManagerVm, DiscardClosesAndForgetsUnsavedWorkingCopy) {
+    Fixture f;
+    f.uc->nextNewSeed = newSeed(draftWith("Draft", {tier("g", "Gold")}, {}));
+    f.build();
+    f.vm->beginNewBenchmark();
+    ASSERT_TRUE(f.vm->hasDraft());
+
+    f.vm->discard();
+
+    EXPECT_FALSE(f.vm->hasDraft());
+    EXPECT_EQ(f.vm->benchmarkName(), QString());
+    EXPECT_EQ(f.vm->draftId(), QString());
+    EXPECT_EQ(f.vm->tiers().size(), 0);
+    EXPECT_EQ(f.vm->root()->children().size(), 0);
+    EXPECT_EQ(f.vm->validationIssues().size(), 0);
+    EXPECT_EQ(f.uc->commandLog.back(), "closeEditor");
 }
 
 TEST(BenchmarkManagerVm, ValidationIssuesMapCodesToText) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("", {}, {});
-    f.uc->stateValue.draftCompleteness.issues = {
-        {BenchmarkIssueCode::MissingName, std::monostate{}},
-        {BenchmarkIssueCode::NoScenarios, std::monostate{}},
-        {BenchmarkIssueCode::NoTiers, std::monostate{}},
-    };
+    f.uc->nextNewSeed = newSeed(draftWith("", {}, {}));
     f.build();
+    f.vm->beginNewBenchmark();
 
     const auto issues = f.vm->validationIssues();
 
@@ -221,8 +251,9 @@ TEST(BenchmarkManagerVm, ValidationIssuesMapCodesToText) {
 TEST(BenchmarkManagerVm, DraftStateRendersScenariosTiersAndThresholds) {
     Fixture f;
     const auto entry = benchmarkEntry("e1", "S", std::nullopt, {{"gold", 100.0}});
-    f.uc->stateValue.draft = draftWith("B", {tier("gold", "Gold")}, {entry});
+    f.uc->nextNewSeed = newSeed(draftWith("B", {tier("gold", "Gold")}, {entry}));
     f.build();
+    f.vm->beginNewBenchmark();
 
     ASSERT_EQ(f.vm->root()->children().size(), 1);
     const auto *node = scenarioChild(f.vm->root(), 0);
@@ -237,19 +268,29 @@ TEST(BenchmarkManagerVm, DraftStateRendersScenariosTiersAndThresholds) {
     EXPECT_EQ(f.vm->tiers().at(0).toMap()["name"].toString(), "Gold");
 }
 
-TEST(BenchmarkManagerVm, SetThresholdForwardsToTheUseCase) {
+TEST(BenchmarkManagerVm, EditorCommandsMutateLocallyThroughBenchmarkEditor) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("B", {tier("gold", "Gold")},
-                                       {benchmarkEntry("e1", "S", std::nullopt, {})});
+    f.uc->nextNewSeed = newSeed(draftWith("B", {tier("gold", "Gold")},
+                                          {benchmarkEntry("e1", "S", std::nullopt, {})}));
     f.build();
+    f.vm->beginNewBenchmark();
+    ASSERT_FALSE(f.vm->dirty() == false);  // new draft is dirty from the start
 
-    const auto result = f.vm->setThreshold("e1", "gold", 250.0);
+    EXPECT_TRUE(f.vm->addUnplayedScenario("S2")["ok"].toBool());
+    EXPECT_TRUE(f.vm->setThreshold("e1", "gold", 250.0)["ok"].toBool());
+    EXPECT_TRUE(f.vm->addCategory("Clicking")["ok"].toBool());
 
-    EXPECT_TRUE(result["ok"].toBool());
-    ASSERT_EQ(f.uc->setThresholdArgs.size(), 1u);
-    EXPECT_EQ(std::get<0>(f.uc->setThresholdArgs[0]), "e1");
-    EXPECT_EQ(std::get<1>(f.uc->setThresholdArgs[0]), "gold");
-    EXPECT_DOUBLE_EQ(std::get<2>(f.uc->setThresholdArgs[0]), 250.0);
+    // Local benchmark and its projections changed, driven by domain::BenchmarkEditor.
+    ASSERT_EQ(f.vm->root()->children().size(), 3);  // S, S2 (uncategorized) + the new Clicking category
+    EXPECT_EQ(scenarioChild(f.vm->root(), 1)->name(), "S2");
+    EXPECT_EQ(groupChild(f.vm->root(), 2)->name(), "Clicking");
+    const auto stored = scenarioChild(f.vm->root(), 0)->thresholds().at(0).toMap();
+    EXPECT_EQ(stored["score"].toDouble(), 250.0);
+    EXPECT_TRUE(stored["hasValue"].toBool());
+    EXPECT_TRUE(f.vm->dirty());
+
+    // No individual mutation command reached the application boundary.
+    expectNoMutationForwarded(*f.uc);
 }
 
 TEST(BenchmarkManagerVm, CategorySubcategoryHierarchyReflectedInTree) {
@@ -263,8 +304,9 @@ TEST(BenchmarkManagerVm, CategorySubcategoryHierarchyReflectedInTree) {
     Subcategory statics{GroupId{"s1"}, "Static", {}, {}};
     category.subcategories = {holder, statics};
     benchmark.categories = {category};
-    f.uc->stateValue.draft = benchmark;
+    f.uc->nextNewSeed = newSeed(benchmark);
     f.build();
+    f.vm->beginNewBenchmark();
 
     ASSERT_EQ(f.vm->root()->children().size(), 1);
     const auto *categoryNode = groupChild(f.vm->root(), 0);
@@ -275,38 +317,49 @@ TEST(BenchmarkManagerVm, CategorySubcategoryHierarchyReflectedInTree) {
     EXPECT_EQ(scenarioChild(holderNode, 0)->name(), "S");
     EXPECT_EQ(groupChild(categoryNode, 1)->children().size(), 0);
 
-    f.vm->addSubcategory("c1", "Static");
-    ASSERT_EQ(f.uc->addSubcategoryArgs.size(), 1u);
-    EXPECT_EQ(f.uc->addSubcategoryArgs[0].first, "c1");
-    EXPECT_EQ(f.uc->addSubcategoryArgs[0].second, "Static");
+    EXPECT_TRUE(f.vm->addSubcategory("c1", "Dynamic")["ok"].toBool());
+    ASSERT_EQ(groupChild(f.vm->root(), 0)->children().size(), 3);
+    EXPECT_EQ(groupChild(groupChild(f.vm->root(), 0), 2)->name(), "Dynamic");
+    expectNoMutationForwarded(*f.uc);
 }
 
-TEST(BenchmarkManagerVm, MoveScenarioForwardsGroupTargetAndUncategorizedByEmptyTarget) {
+TEST(BenchmarkManagerVm, MoveScenarioMutatesLocalWorkingCopy) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("B", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+    Benchmark benchmark = draftWith("B", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+    benchmark.categories = {Category{GroupId{"c1"}, "Clicking", {}, {}, {}}};
+    f.uc->nextNewSeed = newSeed(benchmark);
     f.build();
+    f.vm->beginNewBenchmark();
 
-    f.vm->moveScenario("e1", "c1");
-    f.vm->moveScenario("e1", QString());
+    EXPECT_TRUE(f.vm->moveScenario("e1", "c1")["ok"].toBool());
+    ASSERT_EQ(f.vm->root()->children().size(), 1);  // only the category remains at top level
+    const auto *category = groupChild(f.vm->root(), 0);
+    ASSERT_NE(category, nullptr);
+    ASSERT_EQ(category->children().size(), 1);
+    EXPECT_EQ(scenarioChild(category, 0)->name(), "S");
 
-    ASSERT_EQ(f.uc->moveScenarioArgs.size(), 2u);
-    EXPECT_EQ(f.uc->moveScenarioArgs[0].first, "e1");
-    ASSERT_TRUE(std::holds_alternative<GroupId>(f.uc->moveScenarioArgs[0].second));
-    EXPECT_EQ(std::get<GroupId>(f.uc->moveScenarioArgs[0].second).value, "c1");
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(f.uc->moveScenarioArgs[1].second));
+    EXPECT_TRUE(f.vm->moveScenario("e1", QString())["ok"].toBool());  // empty target = uncategorized
+    ASSERT_EQ(f.vm->root()->children().size(), 2);  // scenario back at top level + the category node
+    EXPECT_EQ(scenarioChild(f.vm->root(), 0)->name(), "S");
+    expectNoMutationForwarded(*f.uc);
 }
 
-TEST(BenchmarkManagerVm, CommandErrorSurfacesInReturnMap) {
+TEST(BenchmarkManagerVm, EditorCommandErrorSurfacesInReturnMap) {
     Fixture f;
-    f.uc->scriptedDraftResults["addTier"] = {BenchmarkDraftError::UnknownTier};
     f.build();
 
-    const auto result = f.vm->addTier("Gold");
+    // No working copy open: a mutation invokable returns a non-empty error map.
+    const auto noDraft = f.vm->addTier("Gold");
+    EXPECT_FALSE(noDraft["ok"].toBool());
+    EXPECT_FALSE(noDraft["error"].toString().isEmpty());
 
-    EXPECT_FALSE(result["ok"].toBool());
-    EXPECT_FALSE(result["error"].toString().isEmpty());
-    ASSERT_EQ(f.uc->addTierNames.size(), 1u);
-    EXPECT_EQ(f.uc->addTierNames[0], "Gold");
+    // With a working copy, a genuine BenchmarkEditor error is surfaced verbatim in the map.
+    f.uc->nextNewSeed = newSeed(draftWith("B", {}, {benchmarkEntry("e1", "S", std::nullopt, {})}));
+    f.vm->beginNewBenchmark();
+    const auto duplicate = f.vm->addUnplayedScenario("S");
+    EXPECT_FALSE(duplicate["ok"].toBool());
+    EXPECT_FALSE(duplicate["error"].toString().isEmpty());
+    expectNoMutationForwarded(*f.uc);
 }
 
 TEST(BenchmarkManagerVm, RefreshFailedSurfacesAfterDirectoryFailure) {
@@ -326,22 +379,17 @@ TEST(BenchmarkManagerVm, RefreshFailedSurfacesAfterDirectoryFailure) {
 
 TEST(BenchmarkManagerVm, OneNotificationInstallsOneCoherentRevision) {
     Fixture f;
-    f.uc->stateValue.draft =
-        draftWith("First", {tier("t0", "Bronze")}, {benchmarkEntry("e0", "Old", std::nullopt, {})});
+    f.uc->nextNewSeed = newSeed(draftWith("Second", {tier("t1", "Gold"), tier("t2", "Plat")},
+                                          {benchmarkEntry("e1", "New", std::string{"h1"}, {})}));
+    f.uc->nextResolveResult = {resolvedEntry("e1", "h1")};
     f.uc->stateValue.scenarioCatalogue = {ScenarioId{"Old", "h0"}};
     f.build();
+    f.vm->beginNewBenchmark();
 
     QSignalSpy draftSpy(f.vm.get(), &BenchmarkManagerViewModel::draftChanged);
     QSignalSpy librarySpy(f.vm.get(), &BenchmarkManagerViewModel::libraryChanged);
 
-    // One publication is one coherent revision: name, ladder, tree, catalogue and the
-    // automatic-resolution failure flag all come from the same state() read and must land
-    // together, not from per-field service reads staggered across callbacks.
     BenchmarkManagerState next;
-    next.draft = draftWith("Second", {tier("t1", "Gold"), tier("t2", "Plat")},
-                           {benchmarkEntry("e1", "New", std::string{"h1"}, {})});
-    next.draftDirty = true;
-    next.draftResolutions = {resolvedEntry("e1", "h1")};
     next.scenarioCatalogue = {ScenarioId{"New", "h1"}, ScenarioId{"Zeta", "hz"}};
     next.resolutionWriteFailed = true;
     next.library = loadedSnapshot("b1", "Second");
@@ -365,13 +413,14 @@ TEST(BenchmarkManagerVm, OneNotificationInstallsOneCoherentRevision) {
 
 TEST(BenchmarkManagerResolution, ScenarioNodesCarryTheirMatchState) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("Saved", {},
-                                       {benchmarkEntry("e1", "Alpha", std::string{"h1"}, {}),
-                                        benchmarkEntry("e2", "Beta", std::nullopt, {}),
-                                        benchmarkEntry("e3", "Gamma", std::string{"gone"}, {})});
-    f.uc->stateValue.draftResolutions = {resolvedEntry("e1", "h1"), unresolvedEntry("e2"),
-                                         mappedUnavailableEntry("e3", "gone")};
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {},
+                                          {benchmarkEntry("e1", "Alpha", std::string{"h1"}, {}),
+                                           benchmarkEntry("e2", "Beta", std::nullopt, {}),
+                                           benchmarkEntry("e3", "Gamma", std::string{"gone"}, {})}));
+    f.uc->nextResolveResult = {resolvedEntry("e1", "h1"), unresolvedEntry("e2"),
+                               mappedUnavailableEntry("e3", "gone")};
     f.build();
+    f.vm->beginNewBenchmark();
 
     EXPECT_EQ(scenarioChild(f.vm->root(), 0)->matchState(), QStringLiteral("resolved"));
     EXPECT_EQ(scenarioChild(f.vm->root(), 1)->matchState(), QStringLiteral("unresolved"));
@@ -380,13 +429,14 @@ TEST(BenchmarkManagerResolution, ScenarioNodesCarryTheirMatchState) {
 
 TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})});
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
     ScenarioResolution ambiguous{ScenarioEntryId{"e1"}, ScenarioMatchState::Ambiguous, std::nullopt, {}};
     ambiguous.candidates.push_back(
         {"ha", 3, std::chrono::sys_seconds{std::chrono::seconds{1'700'000'000}}});
     ambiguous.candidates.push_back({"hb", 7, std::nullopt});
-    f.uc->stateValue.draftResolutions = {ambiguous};
+    f.uc->nextResolveResult = {ambiguous};
     f.build();
+    f.vm->beginNewBenchmark();
 
     const auto *node = scenarioChild(f.vm->root(), 0);
     EXPECT_EQ(node->matchState(), QStringLiteral("ambiguous"));
@@ -400,12 +450,13 @@ TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
 
 TEST(BenchmarkManagerResolution, AnAutoMappableNodeReportsItsSingleCandidate) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})});
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
     ScenarioResolution mappable{ScenarioEntryId{"e1"}, ScenarioMatchState::AutoMappable, std::nullopt, {}};
     mappable.candidates.push_back({"h1", 1, std::nullopt});
-    f.uc->stateValue.draftResolutions = {mappable};
+    f.uc->nextResolveResult = {mappable};
     f.uc->stateValue.resolutionWriteFailed = true;
     f.build();
+    f.vm->beginNewBenchmark();
 
     const auto *node = scenarioChild(f.vm->root(), 0);
     EXPECT_EQ(node->matchState(), QStringLiteral("autoMappable"));
@@ -429,37 +480,39 @@ TEST(BenchmarkManagerResolution, TheScenarioCatalogueIsExposedForThePicker) {
     EXPECT_EQ(catalogue.at(2).toMap().value("name").toString(), QStringLiteral("Beta"));
 }
 
-TEST(BenchmarkManagerResolution, SetScenarioHashForwardsAChosenCandidate) {
+TEST(BenchmarkManagerResolution, SetScenarioHashMutatesLocalWorkingCopy) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})});
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
     f.build();
+    f.vm->beginNewBenchmark();
 
     const auto result = f.vm->setScenarioHash("e1", "hb");
 
     EXPECT_TRUE(result.value("ok").toBool());
-    ASSERT_EQ(f.uc->setScenarioHashArgs.size(), 1u);
-    EXPECT_EQ(f.uc->setScenarioHashArgs[0].first, "e1");
-    ASSERT_TRUE(f.uc->setScenarioHashArgs[0].second.has_value());
-    EXPECT_EQ(*f.uc->setScenarioHashArgs[0].second, "hb");
+    EXPECT_TRUE(scenarioChild(f.vm->root(), 0)->hasHash());
+    EXPECT_TRUE(f.vm->dirty());
+    expectNoMutationForwarded(*f.uc);
 }
 
-TEST(BenchmarkManagerResolution, AnEmptyHashForwardsAClearedMapping) {
+TEST(BenchmarkManagerResolution, SetScenarioHashEmptyClearsLocalMapping) {
     Fixture f;
-    f.uc->stateValue.draft = draftWith("Saved", {},
-                                       {benchmarkEntry("e1", "Alpha", std::string{"h-old"}, {})});
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {},
+                                          {benchmarkEntry("e1", "Alpha", std::string{"h-old"}, {})}));
     f.build();
+    f.vm->beginNewBenchmark();
+    ASSERT_TRUE(scenarioChild(f.vm->root(), 0)->hasHash());
 
     EXPECT_TRUE(f.vm->setScenarioHash("e1", "").value("ok").toBool());
 
-    ASSERT_EQ(f.uc->setScenarioHashArgs.size(), 1u);
-    EXPECT_EQ(f.uc->setScenarioHashArgs[0].first, "e1");
-    EXPECT_FALSE(f.uc->setScenarioHashArgs[0].second.has_value());
+    EXPECT_FALSE(scenarioChild(f.vm->root(), 0)->hasHash());
+    expectNoMutationForwarded(*f.uc);
 }
 
 TEST(BenchmarkManagerResolution, SetScenarioHashReportsAnUnknownEntry) {
     Fixture f;
-    f.uc->scriptedDraftResults["setScenarioHash"] = {BenchmarkDraftError::UnknownEntry};
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
     f.build();
+    f.vm->beginNewBenchmark();
 
     const auto result = f.vm->setScenarioHash("nope", "h1");
 
@@ -475,10 +528,146 @@ TEST(BenchmarkManagerResolution, ScenarioNodesOutsideUncategorizedAlsoCarryTheir
     Category category{GroupId{"c1"}, "C", {}, {}, {}};
     category.scenarios.push_back(benchmarkEntry("d1", "Nested", std::string{"hn"}, {}));
     benchmark.categories.push_back(category);
-    f.uc->stateValue.draft = benchmark;
-    f.uc->stateValue.draftResolutions = {resolvedEntry("d1", "hn")};
+    f.uc->nextNewSeed = newSeed(benchmark);
+    f.uc->nextResolveResult = {resolvedEntry("d1", "hn")};
     f.build();
+    f.vm->beginNewBenchmark();
 
     const auto *categoryNode = groupChild(f.vm->root(), 0);
     EXPECT_EQ(scenarioChild(categoryNode, 0)->matchState(), QStringLiteral("resolved"));
+}
+
+// ---- Task P5: refresh preservation, stale baseline, conflict-safe lifecycle -------------------
+
+TEST(BenchmarkManagerVm, RefreshWhileEditingPreservesWorkingCopy) {
+    Fixture f;
+    Benchmark accepted = draftWith("Alpha", {tier("gold", "Gold")},
+                                   {benchmarkEntry("e1", "S", std::nullopt, {})});
+    f.uc->stateValue.library = [&] {
+        BenchmarkLibrarySnapshot s;
+        s.entries.push_back({"b1.json", "d1", LoadedBenchmark{accepted, validateBenchmark(accepted)}});
+        return s;
+    }();
+    f.uc->nextOpenSeed = librarySeed(accepted);
+    f.build();
+    ASSERT_TRUE(f.vm->openBenchmark("b1"));
+    f.vm->setBenchmarkName("Alpha edited");
+    ASSERT_TRUE(f.vm->dirty());
+    const auto issuesBefore = f.vm->validationIssues().size();
+
+    // A later accepted snapshot with different content is published.
+    Benchmark changed = accepted;
+    changed.name = "Alpha (renamed on disk)";
+    BenchmarkLibrarySnapshot next;
+    next.entries.push_back({"b1.json", "d2", LoadedBenchmark{changed, validateBenchmark(changed)}});
+    f.uc->stateValue.library = next;
+    f.publish();
+
+    EXPECT_EQ(f.vm->benchmarkName(), "Alpha edited");   // working value + local edit preserved
+    EXPECT_TRUE(f.vm->dirty());
+    EXPECT_EQ(f.vm->validationIssues().size(), issuesBefore);
+    ASSERT_EQ(f.vm->libraryEntries().size(), 1);        // library rows reflect the new snapshot
+    EXPECT_EQ(f.vm->libraryEntries().at(0).toMap()["name"].toString(), "Alpha (renamed on disk)");
+}
+
+TEST(BenchmarkManagerVm, ChangedRemovedOrReclassifiedBaselineBecomesStale) {
+    Fixture f;
+    Benchmark accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+    const auto seedSnapshot = [&](const std::string &digest) {
+        BenchmarkLibrarySnapshot s;
+        s.entries.push_back({"b1.json", digest,
+                             LoadedBenchmark{accepted, validateBenchmark(accepted)}});
+        return s;
+    };
+    f.uc->stateValue.library = seedSnapshot("d1");
+    f.uc->nextOpenSeed = librarySeed(accepted);
+    f.build();
+    ASSERT_TRUE(f.vm->openBenchmark("b1"));
+    EXPECT_FALSE(f.vm->baselineStale());
+
+    // Digest changes under the open editor.
+    f.uc->stateValue.library = seedSnapshot("d2");
+    f.publish();
+    EXPECT_TRUE(f.vm->baselineStale());
+    EXPECT_TRUE(f.vm->hasDraft());                       // not rebased or closed
+    EXPECT_EQ(f.vm->benchmarkName(), "Alpha");
+
+    // Entry removed entirely.
+    f.uc->stateValue.library = BenchmarkLibrarySnapshot{};
+    f.publish();
+    EXPECT_TRUE(f.vm->baselineStale());
+    EXPECT_TRUE(f.vm->hasDraft());
+
+    // Entry reclassified as a problem entry.
+    BenchmarkLibrarySnapshot invalid;
+    invalid.entries.push_back({"b1.json", "d3",
+                               ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt,
+                                                BenchmarkId{"b1"}, std::nullopt}});
+    f.uc->stateValue.library = invalid;
+    f.publish();
+    EXPECT_TRUE(f.vm->baselineStale());
+    EXPECT_TRUE(f.vm->hasDraft());
+}
+
+TEST(BenchmarkManagerVm, SaveConflictKeepsWorkingCopyAndOriginalBaseline) {
+    Fixture f;
+    Benchmark accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+    BenchmarkLibrarySnapshot s;
+    s.entries.push_back({"b1.json", "d1", LoadedBenchmark{accepted, validateBenchmark(accepted)}});
+    f.uc->stateValue.library = s;
+    f.uc->nextOpenSeed = librarySeed(accepted);
+    f.build();
+    ASSERT_TRUE(f.vm->openBenchmark("b1"));
+    f.vm->setBenchmarkName("Alpha edited");
+
+    // The accepted digest moves, marking the baseline stale.
+    BenchmarkLibrarySnapshot moved;
+    moved.entries.push_back({"b1.json", "d2", LoadedBenchmark{accepted, validateBenchmark(accepted)}});
+    f.uc->stateValue.library = moved;
+    f.publish();
+    ASSERT_TRUE(f.vm->baselineStale());
+
+    f.uc->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::Conflict};
+    const auto result = f.vm->save();
+
+    EXPECT_FALSE(result["ok"].toBool());
+    EXPECT_FALSE(result["error"].toString().isEmpty());
+    EXPECT_EQ(f.vm->benchmarkName(), "Alpha edited");   // local content still editable / intact
+    EXPECT_TRUE(f.vm->dirty());
+    EXPECT_TRUE(f.vm->baselineStale());
+    ASSERT_FALSE(f.uc->saveCalls.empty());
+    EXPECT_EQ(f.uc->saveCalls.back().second->digest, "d1");  // original admitted token preserved
+}
+
+TEST(BenchmarkManagerVm, DeleteDoesNotSilentlyDestroyOpenWorkingCopy) {
+    for (const auto outcome : {std::optional<BenchmarkRemoveError>{},
+                               std::optional<BenchmarkRemoveError>{BenchmarkRemoveError::Conflict},
+                               std::optional<BenchmarkRemoveError>{BenchmarkRemoveError::WriteFailed}}) {
+        Fixture f;
+        Benchmark accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+        BenchmarkLibrarySnapshot s;
+        s.entries.push_back({"b1.json", "d1", LoadedBenchmark{accepted, validateBenchmark(accepted)}});
+        f.uc->stateValue.library = s;
+        f.uc->nextOpenSeed = librarySeed(accepted);
+        f.build();
+        ASSERT_TRUE(f.vm->openBenchmark("b1"));
+        f.uc->nextRemoveOutcome = {outcome};
+
+        f.vm->deleteBenchmark("b1");
+
+        EXPECT_TRUE(f.vm->hasDraft());                  // never silently destroyed
+        EXPECT_EQ(f.vm->benchmarkName(), "Alpha");
+
+        if (!outcome.has_value()) {
+            // A successful delete removes the accepted entry; the next publication marks the
+            // still-open working copy's baseline stale.
+            f.uc->stateValue.library = BenchmarkLibrarySnapshot{};
+            f.publish();
+            EXPECT_TRUE(f.vm->hasDraft());
+            EXPECT_TRUE(f.vm->baselineStale());
+        } else {
+            // A failed delete leaves accepted and presentation state untouched.
+            EXPECT_FALSE(f.vm->baselineStale());
+        }
+    }
 }
