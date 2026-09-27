@@ -335,7 +335,6 @@ function makeFakeBenchmarkManagerVm(overrides) {
         libraryEntries: [],
         validationIssues: [],
         scenarioCatalogue: [],
-        root: null,
         tiers: [],
         beginNewCalls: 0,
         beginNewBenchmark: function () { this.beginNewCalls++ },
@@ -363,22 +362,24 @@ function makeFakeBenchmarkManagerVm(overrides) {
         refreshCalls: 0,
         refresh: function () { this.refreshCalls++ },
         addTierCalls: [],
-        addTier: function (name) { this.addTierCalls.push(name); return {ok: true, createdId: "tier-1"} },
+        addTier: function (name) { this.commandLog.push("addTier"); this.addTierCalls.push(name); return {ok: true, createdId: "tier-1"} },
         renameTierCalls: [],
         renameTier: function (id, name) { this.renameTierCalls.push([id, name]); return {ok: true} },
         setTierColorCalls: [],
         setTierColor: function (id, color) { this.setTierColorCalls.push([id, color]); return {ok: true} },
         reorderTierCalls: [],
-        reorderTier: function (id, position) { this.reorderTierCalls.push([id, position]); return {ok: true} },
+        reorderTier: function (id, position) { this.commandLog.push("reorderTier"); this.reorderTierCalls.push([id, position]); return {ok: true} },
         removeTierCalls: [],
-        removeTier: function (id) { this.removeTierCalls.push(id); return {ok: true} },
+        removeTier: function (id) { this.commandLog.push("removeTier"); this.removeTierCalls.push(id); return {ok: true} },
         addUnplayedScenarioCalls: [],
         addUnplayedScenario: function (name) {
+            this.commandLog.push("addUnplayedScenario")
             this.addUnplayedScenarioCalls.push(name)
             return {ok: true, createdId: "scenario-1"}
         },
         addKnownScenarioCalls: [],
         addKnownScenario: function (name, hash) {
+            this.commandLog.push("addKnownScenario")
             this.addKnownScenarioCalls.push([name, hash])
             return {ok: true, createdId: "scenario-1"}
         },
@@ -390,7 +391,13 @@ function makeFakeBenchmarkManagerVm(overrides) {
             return {ok: true}
         },
         removeScenarioCalls: [],
-        removeScenario: function (id) { this.removeScenarioCalls.push(id); return {ok: true} },
+        removeScenario: function (id) { this.commandLog.push("removeScenario"); this.removeScenarioCalls.push(id); return {ok: true} },
+        removeScenariosCalls: [],
+        removeScenarios: function (ids) {
+            this.commandLog.push("removeScenarios")
+            this.removeScenariosCalls.push(Array.prototype.slice.call(ids))
+            return {ok: true}
+        },
         setThresholdCalls: [],
         setThreshold: function (entryId, tierId, score) {
             this.setThresholdCalls.push([entryId, tierId, score])
@@ -402,15 +409,15 @@ function makeFakeBenchmarkManagerVm(overrides) {
             return {ok: true}
         },
         addCategoryCalls: [],
-        addCategory: function (name) { this.addCategoryCalls.push(name); return {ok: true, createdId: "category-1"} },
+        addCategory: function (name) { this.commandLog.push("addCategory"); this.addCategoryCalls.push(name); return {ok: true, createdId: "category-1"} },
         renameGroupCalls: [],
         renameGroup: function (id, name) { this.renameGroupCalls.push([id, name]); return {ok: true} },
         setGroupColorCalls: [],
         setGroupColor: function (id, color) { this.setGroupColorCalls.push([id, color]); return {ok: true} },
         reorderCategoryCalls: [],
-        reorderCategory: function (id, position) { this.reorderCategoryCalls.push([id, position]); return {ok: true} },
+        reorderCategory: function (id, position) { this.commandLog.push("reorderCategory"); this.reorderCategoryCalls.push([id, position]); return {ok: true} },
         removeCategoryCalls: [],
-        removeCategory: function (id) { this.removeCategoryCalls.push(id); return {ok: true} },
+        removeCategory: function (id) { this.commandLog.push("removeCategory"); this.removeCategoryCalls.push(id); return {ok: true} },
         addSubcategoryCalls: [],
         addSubcategory: function (categoryId, name) {
             this.addSubcategoryCalls.push([categoryId, name])
@@ -420,8 +427,92 @@ function makeFakeBenchmarkManagerVm(overrides) {
         moveScenario: function (entryId, target) {
             this.moveScenarioCalls.push([entryId, target])
             return {ok: true}
+        },
+        // ---- Table editor surface. `tableModel` is supplied by tests that render rows, from a
+        // BenchmarkTableModelFixture; commandLog records every table-era command in call order.
+        tableModel: null,
+        groups: [],
+        selectedEntryIds: [],
+        currentCell: ({}),
+        canUndo: false,
+        normalizationIssues: [],
+        commandLog: [],
+        editThresholdTextCalls: [],
+        editThresholdText: function (entryId, tierId, text) {
+            this.commandLog.push("editThresholdText")
+            this.editThresholdTextCalls.push([entryId, tierId, text])
+            return {ok: true}
+        },
+        pasteTextCalls: [],
+        pasteResult: null,
+        pasteText: function (destination, text) {
+            this.commandLog.push("pasteText")
+            this.pasteTextCalls.push([destination, text])
+            return this.pasteResult || {ok: true}
+        },
+        undoCalls: 0,
+        undo: function () { this.commandLog.push("undo"); this.undoCalls++; return {ok: true} },
+        assignScenariosCalls: [],
+        assignResult: null,
+        assignScenarios: function (entryIds, target) {
+            this.commandLog.push("assignScenarios")
+            this.assignScenariosCalls.push([entryIds, target])
+            return this.assignResult || {ok: true}
+        },
+        addSubcategoryRelocatingCalls: [],
+        addSubcategoryRelocating: function (categoryId, name, relocation) {
+            this.commandLog.push("addSubcategoryRelocating")
+            this.addSubcategoryRelocatingCalls.push([categoryId, name, relocation])
+            return {ok: true, createdId: "subcategory-1"}
+        },
+        reorderSubcategoryCalls: [],
+        reorderSubcategory: function (id, position) {
+            this.commandLog.push("reorderSubcategory")
+            this.reorderSubcategoryCalls.push([id, position])
+            return {ok: true}
+        },
+        reorderScenarioCalls: [],
+        reorderScenario: function (id, position) {
+            this.commandLog.push("reorderScenario")
+            this.reorderScenarioCalls.push([id, position])
+            return {ok: true}
         }
     }, overrides)
+}
+
+// A dialog fixture: two direct rows in g1, a subcategory p (row c) in g2, an ambiguous-mapped row
+// in Uncategorized, an empty category and an empty subcategory, and a ladder whose second rank is
+// unnamed.
+function benchmarkManagementDesc() {
+    const g1 = {id: "g1", name: "Clicking", color: "#009600"}
+    const g2 = {id: "g2", name: "Tracking", color: "#000096"}
+    const p = {id: "p", name: "Precise", color: "#960000"}
+    return {
+        tiers: [{id: "t1", name: "Gold", color: "#FFD700"}, {id: "t2", name: ""}],
+        rows: [
+            {entryId: "a", name: "1w6ts", category: g1, cells: {t1: {displayText: "100"}}},
+            {entryId: "b", name: "1w4ts", category: g1, cells: {}},
+            {entryId: "c", name: "smoothbot", category: g2, subcategory: p, cells: {}},
+            {entryId: "u-res", name: "resolved one", mappingState: "resolved",
+             mappingCandidates: [benchmarkManagerCandidate("hash-a", 5, new Date(2024, 2, 3))], cells: {}},
+            {entryId: "u-amb", name: "ambiguous one", mappingState: "ambiguous",
+             mappingCandidates: [benchmarkManagerCandidate("hash-a", 3, new Date(2023, 10, 14)),
+                                 benchmarkManagerCandidate("hash-b", 7, new Date(2024, 0, 2))],
+             cells: {}}
+        ]
+    }
+}
+
+function benchmarkManagementGroups() {
+    return [
+        {id: "g1", kind: "category", parentId: "", name: "Clicking", color: "#009600", scenarioCount: 2, issues: []},
+        {id: "g2", kind: "category", parentId: "", name: "Tracking", color: "#000096", scenarioCount: 1, issues: []},
+        {id: "p", kind: "subcategory", parentId: "g2", name: "Precise", color: "#960000", scenarioCount: 1, issues: []},
+        {id: "hollow", kind: "subcategory", parentId: "g2", name: "Hollow", color: "#444444", scenarioCount: 0,
+         issues: ["A subcategory has no scenarios."]},
+        {id: "gE", kind: "category", parentId: "", name: "Empty", color: "#888888", scenarioCount: 0,
+         issues: ["A category has neither scenarios nor subcategories."]}
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -475,5 +566,127 @@ function benchmarkManagerResolutionTree() {
              candidates: [benchmarkManagerCandidate("hash-d", 12, new Date(2024, 5, 1))],
              thresholds: []}
         ]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Benchmark table editor fixtures.
+// ---------------------------------------------------------------------------
+
+// Builds the BenchmarkTableModelFixture projection from a compact description. Each row names its
+// category / subcategory ({id, name, color}, or null for Uncategorized / none) and its cells keyed
+// by tier id; spans are derived from consecutive rows sharing a group id, as the view model does.
+function benchmarkTableProjection(desc) {
+    const tiers = desc.tiers.map(function (tier) {
+        return {id: tier.id, name: tier.name, color: tier.color || "#808080", issues: tier.issues || []}
+    })
+    const rows = desc.rows.map(function (row, index) {
+        const cells = desc.tiers.map(function (tier) {
+            const cell = (row.cells || {})[tier.id] || {}
+            return {
+                displayText: cell.displayText !== undefined ? cell.displayText : "",
+                editText: cell.editText !== undefined ? cell.editText
+                                                      : (cell.displayText !== undefined ? cell.displayText : ""),
+                hasValue: cell.hasValue !== undefined ? cell.hasValue : cell.displayText !== undefined && !cell.inputState,
+                inputState: cell.inputState || "",
+                issues: cell.issues || []
+            }
+        })
+        return {
+            entryId: row.entryId, name: row.name !== undefined ? row.name : "Scenario " + row.entryId,
+            scenarioIssues: row.scenarioIssues || [],
+            category: row.category ? {id: row.category.id, name: row.category.name,
+                                      color: row.category.color || "#336699", issues: row.category.issues || []}
+                                   : {id: "", name: "Uncategorized", issues: []},
+            subcategory: row.subcategory ? {id: row.subcategory.id, name: row.subcategory.name,
+                                            color: row.subcategory.color || "#669933",
+                                            issues: row.subcategory.issues || []}
+                                         : {id: "", name: "", issues: []},
+            mappingState: row.mappingState || "unresolved",
+            mappingCandidates: row.mappingCandidates || [],
+            cells: cells
+        }
+    })
+    const assignSpans = function (key) {
+        let start = 0
+        for (let i = 0; i <= rows.length; ++i) {
+            if (i < rows.length && i > start && rows[i][key].id === rows[start][key].id
+                    && (key !== "subcategory" || rows[i][key].id !== "")) continue
+            for (let j = start; j < i; ++j) {
+                rows[j][key].spanStart = start
+                rows[j][key].spanLength = key === "subcategory" && rows[j][key].id === "" ? 0 : i - start
+            }
+            start = i
+        }
+    }
+    assignSpans("category")
+    assignSpans("subcategory")
+    return {tiers: tiers, rows: rows}
+}
+
+// `count` scenario rows: the first `firstSpan` in category g1, the rest in g2, three tiers, and an
+// invalid retained input at `invalidRow` / t2.
+function benchmarkTableLargeDesc(count, firstSpan, invalidRow) {
+    const rows = []
+    for (let i = 0; i < count; ++i) {
+        const cells = {t1: {displayText: String(i)}, t3: {displayText: String(i + 2)}}
+        cells.t2 = i === invalidRow ? {displayText: "12oops", inputState: "invalid",
+                                        issues: ["Not a number. Saving stores this threshold as missing."]}
+                                    : {displayText: String(i + 1)}
+        rows.push({entryId: "e" + i,
+                   category: i < firstSpan ? {id: "g1", name: "Category g1"} : {id: "g2", name: "Category g2"},
+                   cells: cells})
+    }
+    return {tiers: [{id: "t1", name: "Bronze"}, {id: "t2", name: "Silver"}, {id: "t3", name: "Gold"}], rows: rows}
+}
+
+// A manager double for BenchmarkEditorTable: `tableModel` is a real model fed by the fixture, and
+// every table command is recorded in call order in `commandLog` as well as its own list.
+function makeFakeTableManager(fixture, overrides) {
+    const record = function (vm, name, args) {
+        vm.commandLog.push(name)
+        vm[name + "Calls"].push(args)
+    }
+    return Object.assign({
+        tableModel: fixture.model,
+        groups: [],
+        tiers: [],
+        dirty: false,
+        draftFromLibrary: false,
+        selectedEntryIds: [],
+        currentCell: ({}),
+        canUndo: false,
+        commandLog: [],
+        editThresholdTextCalls: [],
+        editThresholdText: function (entryId, tierId, text) {
+            record(this, "editThresholdText", [entryId, tierId, text]); return {ok: true}
+        },
+        renameScenarioCalls: [],
+        renameScenario: function (id, name) { record(this, "renameScenario", [id, name]); return {ok: true} },
+        renameGroupCalls: [],
+        renameGroup: function (id, name) { record(this, "renameGroup", [id, name]); return {ok: true} },
+        renameTierCalls: [],
+        renameTier: function (id, name) { record(this, "renameTier", [id, name]); return {ok: true} },
+        pasteTextCalls: [],
+        pasteResult: null,
+        pasteText: function (destination, text) {
+            record(this, "pasteText", [destination, text]); return this.pasteResult || {ok: true}
+        },
+        undoCalls: [],
+        undo: function () { record(this, "undo", []); return {ok: true} }
+    }, overrides || {})
+}
+
+// The resolution tree's five matching states as table rows (all in Uncategorized, one tier).
+function benchmarkResolutionDesc() {
+    const tree = benchmarkManagerResolutionTree()
+    return {
+        tiers: [{id: "t1", name: "Gold", color: "#FFD700"}],
+        rows: tree.children.map(function (node) {
+            const threshold = (node.thresholds || []).find(function (t) { return t.tierId === "t1" })
+            return {entryId: node.nodeId, name: node.name, mappingState: node.matchState,
+                    mappingCandidates: node.candidates || [],
+                    cells: threshold ? {t1: {displayText: String(threshold.score)}} : {}}
+        })
     }
 }

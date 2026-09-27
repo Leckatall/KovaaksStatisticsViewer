@@ -5,10 +5,12 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -21,8 +23,10 @@
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"
 #include "data/interfaces/i_benchmarks_service.h"
+#include "presentation/benchmark_cell_input.h"
+#include "presentation/benchmark_clipboard_adapter.h"
 #include "presentation/benchmark_issue_text.h"
-#include "presentation/benchmark_tree_node.h"
+#include "presentation/benchmark_table_model.h"
 
 namespace ksv::presentation {
     // Adapts IBenchmarkManagerUseCase for the manager dialog. Accepted-library and resolution state
@@ -44,12 +48,22 @@ namespace ksv::presentation {
         Q_PROPERTY(bool draftFromLibrary READ draftFromLibrary NOTIFY draftChanged)
         Q_PROPERTY(QVariantList libraryEntries READ libraryEntries NOTIFY libraryChanged)
         Q_PROPERTY(QVariantList validationIssues READ validationIssues NOTIFY draftChanged)
-        Q_PROPERTY(ksv::presentation::BenchmarkGroupNode *root READ root NOTIFY draftChanged)
         Q_PROPERTY(QVariantList tiers READ tiers NOTIFY draftChanged)
         Q_PROPERTY(bool refreshFailed READ refreshFailed NOTIFY libraryChanged)
         Q_PROPERTY(QVariantList scenarioCatalogue READ scenarioCatalogue NOTIFY libraryChanged)
         Q_PROPERTY(bool resolutionWriteFailed READ resolutionWriteFailed NOTIFY libraryChanged)
         Q_PROPERTY(QString managedDirectoryPath READ managedDirectoryPath CONSTANT)
+        Q_PROPERTY(QAbstractItemModel *tableModel READ tableModel CONSTANT)
+        // Every category and subcategory, including empty ones that occupy no table row.
+        Q_PROPERTY(QVariantList groups READ groups NOTIFY draftChanged)
+        Q_PROPERTY(bool canUndo READ canUndo NOTIFY draftChanged)
+        // Stable scenario IDs, never row numbers: rows move when groups change.
+        Q_PROPERTY(QStringList selectedEntryIds READ selectedEntryIds WRITE setSelectedEntryIds
+                   NOTIFY selectionChanged)
+        // {entryId, tierId, columnKind} of the focused cell.
+        Q_PROPERTY(QVariantMap currentCell READ currentCell WRITE setCurrentCell NOTIFY selectionChanged)
+        // Retained invalid inputs a successful Save would store as missing thresholds.
+        Q_PROPERTY(QVariantList normalizationIssues READ normalizationIssues NOTIFY draftChanged)
 
     public:
         explicit BenchmarkManagerViewModel(std::shared_ptr<application::IBenchmarkManagerUseCase> useCase,
@@ -67,7 +81,6 @@ namespace ksv::presentation {
         [[nodiscard]] const QString &draftId() const { return m_draftId; }
         [[nodiscard]] const QVariantList &libraryEntries() const { return m_libraryEntries; }
         [[nodiscard]] const QVariantList &validationIssues() const { return m_validationIssues; }
-        [[nodiscard]] BenchmarkGroupNode *root() const { return m_root.get(); }
         [[nodiscard]] const QVariantList &tiers() const { return m_tiers; }
         [[nodiscard]] bool refreshFailed() const { return m_useCase->state().refreshFailed; }
         [[nodiscard]] const QVariantList &scenarioCatalogue() const { return m_scenarioCatalogue; }
@@ -75,6 +88,15 @@ namespace ksv::presentation {
         [[nodiscard]] QString managedDirectoryPath() const {
             return QString::fromStdString(m_useCase->state().managedDirectoryPath);
         }
+
+        [[nodiscard]] QAbstractItemModel *tableModel() const { return m_tableModel; }
+        [[nodiscard]] const QVariantList &groups() const { return m_groups; }
+        [[nodiscard]] bool canUndo() const { return !m_history.empty(); }
+        [[nodiscard]] const QStringList &selectedEntryIds() const { return m_selectedEntryIds; }
+        void setSelectedEntryIds(const QStringList &ids);
+        [[nodiscard]] const QVariantMap &currentCell() const { return m_currentCell; }
+        void setCurrentCell(const QVariantMap &cell);
+        [[nodiscard]] QVariantList normalizationIssues() const;
 
         Q_INVOKABLE void beginNewBenchmark();
         Q_INVOKABLE bool openBenchmark(const QString &id);
@@ -95,6 +117,9 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap renameScenario(const QString &id, const QString &name);
         Q_INVOKABLE QVariantMap setScenarioHash(const QString &entryId, const QString &hash);
         Q_INVOKABLE QVariantMap removeScenario(const QString &id);
+        // Removes every listed scenario as one edit and one Undo step; an unknown ID rejects the
+        // whole batch and changes nothing.
+        Q_INVOKABLE QVariantMap removeScenarios(const QStringList &entryIds);
         Q_INVOKABLE QVariantMap setThreshold(const QString &entryId, const QString &tierId, double score);
         Q_INVOKABLE QVariantMap clearThreshold(const QString &entryId, const QString &tierId);
         Q_INVOKABLE QVariantMap addCategory(const QString &name);
@@ -105,21 +130,59 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap addSubcategory(const QString &categoryId, const QString &name);
         Q_INVOKABLE QVariantMap moveScenario(const QString &entryId, const QString &targetGroupId);
 
+        Q_INVOKABLE QVariantMap editThresholdText(const QString &entryId, const QString &tierId,
+                                                  const QString &text);
+        // `destination.kind` is "scenario" / "threshold" (with entryId, and tierId for a threshold),
+        // "rankHeader" (with tierId) or "append" for an empty table.
+        Q_INVOKABLE QVariantMap pasteText(const QVariantMap &destination, const QString &text);
+        // An empty `targetGroupId` targets Uncategorized.
+        Q_INVOKABLE QVariantMap assignScenarios(const QStringList &entryIds, const QString &targetGroupId);
+        // `relocation` says where a populated category's direct scenarios go: "uncategorized" or
+        // "newSubcategory" (the subcategory being created).
+        Q_INVOKABLE QVariantMap addSubcategoryRelocating(const QString &categoryId, const QString &name,
+                                                         const QString &relocation);
+        Q_INVOKABLE QVariantMap reorderSubcategory(const QString &id, int position);
+        Q_INVOKABLE QVariantMap reorderScenario(const QString &entryId, int position);
+        Q_INVOKABLE QVariantMap undo();
+        // Read only when the user invokes paste; pasteText() takes the text so tests supply it.
+        Q_INVOKABLE QString clipboardText() const { return m_clipboard->text(); }
+
     signals:
         void draftChanged();
         void libraryChanged();
+        void selectionChanged();
 
     private:
         void adaptState();
         void adoptSeed(application::BenchmarkEditorSeed seed, bool fromLibrary, bool dirty);
         void clearWorkingCopy();
         void emitChanged();
-        // Runs `op` against a BenchmarkEditor bound to the local working copy, then rebuilds
+        void resetSession();
+
+        using CellInputs = std::map<BenchmarkCellKey, BenchmarkCellRecord>;
+        using SessionEdit = std::function<domain::BenchmarkEditResult(domain::BenchmarkEditor &, CellInputs &)>;
+        // Runs `op` against copies of the working copy and its retained input. Only a successful
+        // edit that changed either is committed, as one Undo step, and followed by a rebuild of
         // validation, dirty state, resolution and projections. Returns the QML result map
         // (`ok` plus `createdId` / `error`).
+        QVariantMap applySessionEdit(const SessionEdit &op);
         QVariantMap applyEdit(
             const std::function<domain::BenchmarkEditResult(domain::BenchmarkEditor &)> &op);
         void recomputeAfterLocalEdit();
+
+        // One Undo step: the session exactly as it was before a committed edit. Accepted baseline,
+        // token, library and profile state are deliberately absent; Undo never rewinds them.
+        struct SessionSnapshot {
+            domain::Benchmark draft;
+            CellInputs cellInputs;
+            QStringList selectedEntryIds;
+            QVariantMap currentCell;
+        };
+        // Reconciles the anchors against m_draft, announcing both in one selectionChanged. A lost
+        // row falls back to the row now at `fallbackRow` (where it sat before the table changed),
+        // a lost tier to the Scenario column; a fallback row never joins the selection.
+        void restoreSelection(const QStringList &ids, const QVariantMap &cell, int fallbackRow);
+        void pruneCellInputs();
 
         std::shared_ptr<application::IBenchmarkManagerUseCase> m_useCase;
 
@@ -128,6 +191,12 @@ namespace ksv::presentation {
         std::optional<domain::Benchmark> m_draft;
         std::optional<domain::Benchmark> m_baseline;
         std::optional<data::BenchmarkEditToken> m_token;
+        // Threshold text that could not become a typed score, keyed by stable IDs so it follows
+        // its cell through regrouping. A key here always has no typed threshold in m_draft.
+        CellInputs m_cellInputs;
+        std::vector<SessionSnapshot> m_history;
+        QStringList m_selectedEntryIds;
+        QVariantMap m_currentCell;
         domain::CompletenessResult m_draftCompleteness;
         std::vector<domain::ScenarioResolution> m_draftResolutions;
         bool m_draftDirty = false;
@@ -140,8 +209,10 @@ namespace ksv::presentation {
         QVariantList m_libraryEntries;
         QVariantList m_validationIssues;
         QVariantList m_tiers;
+        QVariantList m_groups;
         QVariantList m_scenarioCatalogue;
-        std::unique_ptr<BenchmarkGroupNode> m_root;
+        BenchmarkTableModel *m_tableModel = nullptr;
+        BenchmarkClipboardAdapter *m_clipboard = nullptr;
     };
 }
 

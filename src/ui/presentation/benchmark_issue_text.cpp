@@ -42,6 +42,12 @@ namespace ksv::presentation {
             case domain::BenchmarkIssueCode::MixedCategoryContent:
                 return QCoreApplication::translate("BenchmarkIssue",
                                                     "A category holds both direct scenarios and subcategories.");
+            case domain::BenchmarkIssueCode::MissingTierName:
+                return QCoreApplication::translate("BenchmarkIssue", "A tier has no name.");
+            case domain::BenchmarkIssueCode::MissingScenarioName:
+                return QCoreApplication::translate("BenchmarkIssue", "A scenario has no name.");
+            case domain::BenchmarkIssueCode::MissingGroupName:
+                return QCoreApplication::translate("BenchmarkIssue", "A category or subcategory has no name.");
         }
         return {};
     }

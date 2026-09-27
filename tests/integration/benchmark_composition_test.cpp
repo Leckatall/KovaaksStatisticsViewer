@@ -5,18 +5,28 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocale>
 #include <QObject>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QUrl>
 #include <QVariant>
 
+#include <algorithm>
+#include <map>
 #include <optional>
 #include <string>
 
 #include "app/app.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "presentation/benchmark_breakdown_model.h"
+#include "presentation/benchmark_issue_text.h"
+#include "presentation/benchmark_manager_vm.h"
+#include "presentation/benchmark_table_model.h"
 #include "presentation/benchmark_tracking_vm.h"
 #include "qt_data/benchmark_store.h"
 #include "qt_data/series_config_store.h"
@@ -427,12 +437,14 @@ namespace {
         std::unique_ptr<App> app;
     };
 
-    // A real App over a temp KovaaKs dir holding the "1wall6targets TE" perf and a temp benchmarks
-    // dir holding `benchmarkJson`, run until the profile has loaded.
-    std::unique_ptr<WiredWorkspace> wireWorkspace(QTemporaryDir &benchmarks, const QByteArray &benchmarkJson) {
+    // A real App over a temp KovaaKs dir holding the "1wall6targets TE" perf (an empty one when
+    // `seedPerf` is false) and a temp benchmarks dir holding `benchmarkJson`, run until the profile
+    // has loaded.
+    std::unique_ptr<WiredWorkspace> wireWorkspace(QTemporaryDir &benchmarks, const QByteArray &benchmarkJson,
+                                                  bool seedPerf = true) {
         auto w = std::make_unique<WiredWorkspace>();
         if (!w->env.valid() || !w->env.makePerformancesDir()) return nullptr;
-        if (w->env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty()) return nullptr;
+        if (seedPerf && w->env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty()) return nullptr;
         if (!benchmarks.isValid()) return nullptr;
         QFile file(QDir(benchmarks.path()).absoluteFilePath("bench.json"));
         if (!file.open(QIODevice::WriteOnly)) return nullptr;
@@ -606,4 +618,372 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
               QStringLiteral("Resolved"));
     EXPECT_NE(remapped.data(presentation::BenchmarkBreakdownModel::PersonalBestTextRole).toString(),
               QStringLiteral("Unplayed"));
+}
+
+// --- Benchmark table editor: real composition ----------------------------------------------------
+
+namespace {
+    using TableRole = presentation::BenchmarkTableModel::Role;
+
+    class DefaultLocaleGuard {
+    public:
+        explicit DefaultLocaleGuard(const QLocale &locale) { QLocale::setDefault(locale); }
+        ~DefaultLocaleGuard() { QLocale::setDefault(m_previous); }
+        DefaultLocaleGuard(const DefaultLocaleGuard &) = delete;
+        DefaultLocaleGuard &operator=(const DefaultLocaleGuard &) = delete;
+
+    private:
+        QLocale m_previous;
+    };
+
+    const QLocale kEnglishGb{QLocale::English, QLocale::UnitedKingdom};
+
+    QVariant tableCell(presentation::BenchmarkManagerViewModel &vm, const QString &entryId, const QString &tierId,
+                       int role) {
+        auto *model = qobject_cast<presentation::BenchmarkTableModel *>(vm.tableModel());
+        const int row = model->rowForEntry(entryId);
+        const int column = tierId.isEmpty() ? 2 : model->columnForTier(tierId);
+        return model->data(model->index(row, column), role);
+    }
+
+    QStringList tableRowIds(presentation::BenchmarkManagerViewModel &vm) {
+        QStringList ids;
+        auto *model = vm.tableModel();
+        for (int row = 0; row < model->rowCount(); ++row)
+            ids.push_back(model->data(model->index(row, 2), TableRole::EntryIdRole).toString());
+        return ids;
+    }
+
+    QVariantMap at(const QString &kind, const QString &entryId = {}, const QString &tierId = {}) {
+        return QVariantMap{{"kind", kind}, {"entryId", entryId}, {"tierId", tierId}};
+    }
+
+    QJsonObject readJson(const QString &path) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) return {};
+        return QJsonDocument::fromJson(file.readAll()).object();
+    }
+
+    QJsonObject jsonEntry(const QJsonObject &root, const QString &id) {
+        const auto match = [&](const QJsonArray &entries) -> QJsonObject {
+            for (const auto &entry: entries)
+                if (entry.toObject().value("id").toString() == id) return entry.toObject();
+            return {};
+        };
+        if (auto found = match(root.value("uncategorized").toArray()); !found.isEmpty()) return found;
+        for (const auto &category: root.value("categories").toArray()) {
+            if (auto found = match(category.toObject().value("scenarios").toArray()); !found.isEmpty()) return found;
+            for (const auto &sub: category.toObject().value("subcategories").toArray())
+                if (auto found = match(sub.toObject().value("scenarios").toArray()); !found.isEmpty()) return found;
+        }
+        return {};
+    }
+
+    // tierId -> score for every stored threshold object; each must be exactly {tierId, number}.
+    std::map<QString, double> storedScores(const QJsonObject &entry) {
+        std::map<QString, double> scores;
+        for (const auto &threshold: entry.value("thresholds").toArray()) {
+            const auto object = threshold.toObject();
+            EXPECT_EQ(object.keys(), (QStringList{"score", "tierId"})) << "no provenance or extra fields";
+            EXPECT_TRUE(object.value("score").isDouble()) << "a stored score is always a number";
+            scores[object.value("tierId").toString()] = object.value("score").toDouble();
+        }
+        return scores;
+    }
+
+    QString appendedTierIds(const presentation::BenchmarkManagerViewModel &vm, int index) {
+        return vm.tiers().at(index).toMap().value("id").toString();
+    }
+}
+
+TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
+    const DefaultLocaleGuard guard{kEnglishGb};
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, hierarchyTrackableJson());
+    ASSERT_NE(w, nullptr);
+    auto *vm = w->app->benchmarkManagerVm();
+    const auto path = QDir(benchmarks.path()).absoluteFilePath("bench.json");
+    const auto schemaBefore = readJson(path).value("schemaVersion");
+
+    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    ASSERT_TRUE(vm->pasteText(at("rankHeader"), "Silver\tGold\tPlatinum\tDiamond")["ok"].toBool());
+    ASSERT_EQ(vm->tiers().size(), 5);
+    QStringList tiers;
+    for (int i = 0; i < 5; ++i) tiers.push_back(appendedTierIds(*vm, i));
+    ASSERT_EQ(tiers.front(), "t1");
+
+    // s1: finite 1, zero, a finite negative that also breaks the increasing order, then two invalid.
+    ASSERT_TRUE(vm->pasteText(at("threshold", "s1", "t1"), "1\t0\t-5\toops\tNaN")["ok"].toBool());
+    // An appended unnamed row: finite neighbours around non-finite spellings.
+    ASSERT_TRUE(vm->pasteText(at("append"), "\t2\tinfinity\t1e9999\t4\t5")["ok"].toBool());
+    const QStringList rows = tableRowIds(*vm);
+    ASSERT_EQ(rows.size(), 2);
+    const QString unnamed = rows.at(1);
+    ASSERT_TRUE(vm->canUndo());
+    ASSERT_EQ(vm->normalizationIssues().size(), 4);
+
+    const auto result = vm->save();
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+
+    // Stored JSON: invalid inputs are simply absent thresholds; everything finite survives as typed.
+    const auto stored = readJson(path);
+    EXPECT_EQ(stored.value("schemaVersion"), schemaBefore);
+    EXPECT_EQ(stored.value("id").toString(), "b-track");
+    const auto s1 = jsonEntry(stored, "s1");
+    EXPECT_EQ(s1.value("name").toString(), "Wall Six");
+    EXPECT_EQ(s1.value("hash").toString(), kWallSixHash);
+    const auto s1Scores = storedScores(s1);
+    EXPECT_EQ(s1Scores, (std::map<QString, double>{{tiers[0], 1.0}, {tiers[1], 0.0}, {tiers[2], -5.0}}));
+    const auto extra = jsonEntry(stored, unnamed);
+    ASSERT_FALSE(extra.isEmpty()) << "the unnamed expansion row is saved with its generated id";
+    EXPECT_EQ(extra.value("name").toString(), QString()) << "no placeholder text is stored as a name";
+    EXPECT_EQ(storedScores(extra), (std::map<QString, double>{{tiers[0], 2.0}, {tiers[3], 4.0}, {tiers[4], 5.0}}));
+    const auto storedTiers = stored.value("tiers").toArray();
+    ASSERT_EQ(storedTiers.size(), 5);
+    EXPECT_EQ(storedTiers.at(1).toObject().value("name").toString(), "Silver");
+    const auto category = stored.value("categories").toArray().at(0).toObject();
+    EXPECT_EQ(category.value("id").toString(), "c1");
+    EXPECT_EQ(category.value("subcategories").toArray().at(0).toObject().value("id").toString(), "sc1");
+
+    // Accepted publication carries the same normalized definition.
+    const auto snapshot = w->app->benchmarksService()->snapshot();
+    ASSERT_TRUE(snapshot.has_value());
+    const auto *loaded = std::get_if<LoadedBenchmark>(&snapshot->entries.front().content);
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_EQ(loaded->completeness.completeness, domain::Completeness::Incomplete);
+
+    // The session adopted the saved candidate: raw input and Undo are gone, cells read as missing.
+    EXPECT_FALSE(vm->canUndo());
+    EXPECT_FALSE(vm->dirty());
+    EXPECT_TRUE(vm->normalizationIssues().isEmpty());
+    const auto missing = presentation::benchmarkIssueText(domain::BenchmarkIssueCode::MissingThreshold);
+    EXPECT_EQ(tableCell(*vm, "s1", tiers[3], TableRole::InputStateRole).toString(), QString());
+    EXPECT_FALSE(tableCell(*vm, "s1", tiers[3], TableRole::HasValueRole).toBool());
+    EXPECT_TRUE(tableCell(*vm, "s1", tiers[3], TableRole::IssuesRole).toStringList().contains(missing));
+
+    // Reopening from accepted data shows the same incomplete definition.
+    vm->discard();
+    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    EXPECT_FALSE(vm->draftTrackable());
+    EXPECT_FALSE(tableCell(*vm, unnamed, tiers[1], TableRole::HasValueRole).toBool());
+    EXPECT_EQ(tableCell(*vm, unnamed, tiers[3], TableRole::DisplayTextRole).toString(), "4");
+    EXPECT_FALSE(vm->canUndo());
+    vm->discard();
+
+    // Tracking treats it as incomplete: no official rank, but the scenario facts remain.
+    auto *tracking = w->app->benchmarkTrackingVm();
+    tracking->selectBenchmark(QStringLiteral("b-track"));
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    EXPECT_EQ(tracking->state(), QStringLiteral("incomplete"));
+    EXPECT_EQ(tracking->attainedRank(), QObject::tr("Unavailable"));
+    const auto *projection = w->app->benchmarkTrackingUseCase()->projection();
+    ASSERT_NE(projection, nullptr);
+    EXPECT_FALSE(projection->attainedRank.has_value());
+    const auto wallSix = std::ranges::find_if(projection->scenarios, [](const auto &scenario) {
+        return scenario.entryId.value == "s1";
+    });
+    ASSERT_NE(wallSix, projection->scenarios.end());
+    EXPECT_EQ(wallSix->matchState, domain::ScenarioMatchState::Resolved);
+    EXPECT_TRUE(wallSix->personalBest.has_value()) << "the mapped scenario keeps its played facts";
+}
+
+TEST(BenchmarkTableComposition, ConflictAndFailedWriteKeepSession) {
+    const DefaultLocaleGuard guard{kEnglishGb};
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, hierarchyTrackableJson());
+    ASSERT_NE(w, nullptr);
+    auto *vm = w->app->benchmarkManagerVm();
+    auto service = w->app->benchmarksService();
+    const auto path = QDir(benchmarks.path()).absoluteFilePath("bench.json");
+
+    // --- Conflict: the accepted file changed on disk behind the open editor.
+    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    ASSERT_TRUE(vm->editThresholdText("s1", "t1", "oops")["ok"].toBool());
+    ASSERT_TRUE(vm->renameScenario("s1", "Renamed")["ok"].toBool());
+    vm->setCurrentCell(QVariantMap{{"entryId", "s1"}, {"tierId", "t1"}});
+    const QByteArray external = externallyEditedJson("b-track");
+    {
+        QFile file(path);
+        ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+        file.write(external);
+    }
+
+    EXPECT_FALSE(vm->save()["ok"].toBool());
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+
+    {
+        QFile file(path);
+        ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+        EXPECT_EQ(file.readAll(), external) << "a conflicting save never overwrites the external edit";
+    }
+    const auto *accepted = std::get_if<LoadedBenchmark>(&service->snapshot()->entries.front().content);
+    ASSERT_NE(accepted, nullptr);
+    EXPECT_EQ(accepted->benchmark.uncategorized.size() + accepted->benchmark.categories.size(), 1U);
+    EXPECT_EQ(accepted->benchmark.name, "Tracked") << "the accepted snapshot is the one before the attempt";
+    EXPECT_EQ(tableCell(*vm, "s1", "t1", TableRole::DisplayTextRole).toString(), "oops");
+    EXPECT_EQ(tableCell(*vm, "s1", {}, TableRole::DisplayTextRole).toString(), "Renamed");
+    EXPECT_EQ(vm->currentCell().value("entryId").toString(), "s1");
+    EXPECT_TRUE(vm->dirty());
+    ASSERT_TRUE(vm->canUndo());
+    ASSERT_TRUE(vm->undo()["ok"].toBool());
+    EXPECT_EQ(tableCell(*vm, "s1", {}, TableRole::DisplayTextRole).toString(), "Wall Six");
+    EXPECT_EQ(tableCell(*vm, "s1", "t1", TableRole::DisplayTextRole).toString(), "oops");
+
+    // Discard, explicit refresh and reopen take the accepted (external) definition.
+    vm->discard();
+    vm->refresh();
+    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    EXPECT_EQ(vm->benchmarkName(), "Externally Edited");
+    EXPECT_FALSE(vm->canUndo());
+    vm->discard();
+
+    // --- Write failure: a never-saved draft whose file name is occupied by a directory.
+    const auto entriesBefore = service->snapshot()->entries.size();
+    vm->beginNewBenchmark();
+    vm->setBenchmarkName("Fresh");
+    ASSERT_TRUE(vm->pasteText(at("append"), "Fresh scenario\t10\tbad")["ok"].toBool());
+    const QString freshId = vm->draftId();
+    const QString freshEntry = tableRowIds(*vm).front();
+    const QString secondTier = appendedTierIds(*vm, 1);
+    ASSERT_TRUE(QDir(benchmarks.path()).mkdir(freshId + ".json"));
+
+    EXPECT_FALSE(vm->save()["ok"].toBool());
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+
+    EXPECT_EQ(service->snapshot()->entries.size(), entriesBefore) << "no accepted entry is invented";
+    EXPECT_EQ(tableCell(*vm, freshEntry, secondTier, TableRole::DisplayTextRole).toString(), "bad");
+    EXPECT_TRUE(vm->dirty());
+    ASSERT_TRUE(vm->canUndo());
+    ASSERT_TRUE(vm->undo()["ok"].toBool());
+    EXPECT_EQ(vm->tableModel()->rowCount(), 0) << "Undo still reverses the paste after the failed write";
+    {
+        QFile file(path);
+        ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+        EXPECT_EQ(file.readAll(), external) << "unrelated accepted files are untouched";
+    }
+
+    vm->discard();
+    EXPECT_FALSE(vm->hasDraft());
+    EXPECT_EQ(service->snapshot()->entries.size(), entriesBefore);
+}
+
+TEST(BenchmarkTableComposition, GroupedPlaylistMappingAndUndo) {
+    const DefaultLocaleGuard guard{kEnglishGb};
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, hierarchyTrackableJson());
+    ASSERT_NE(w, nullptr);
+    auto *vm = w->app->benchmarkManagerVm();
+    auto service = w->app->benchmarksService();
+
+    const auto imported = vm->importPlaylist(
+        QUrl::fromLocalFile(QDir(TEST_FILES_DIR).absoluteFilePath("Viscose Benchmarks Beta - Intermediate.json")));
+    ASSERT_TRUE(imported["ok"].toBool());
+    const QStringList seeded = tableRowIds(*vm);
+    ASSERT_EQ(seeded.size(), 36);
+    vm->setBenchmarkName("Grouped Import");
+    const QString tier = vm->addTier("Bronze")["createdId"].toString();
+    ASSERT_FALSE(tier.isEmpty());
+
+    // Expand, then group two rows chosen out of visible order, then reorder inside the group.
+    ASSERT_TRUE(vm->pasteText(at("append"), "Extra")["ok"].toBool());
+    ASSERT_EQ(tableRowIds(*vm).size(), 37);
+    const QString category = vm->addCategory("Clicking")["createdId"].toString();
+    const QString first = seeded.at(1);
+    const QString third = seeded.at(3);
+    ASSERT_TRUE(vm->assignScenarios({third, first}, category)["ok"].toBool());
+    EXPECT_EQ(tableRowIds(*vm).mid(0, 2), (QStringList{first, third})) << "grouping keeps visible order";
+    ASSERT_TRUE(vm->reorderScenario(third, 0)["ok"].toBool());
+    EXPECT_EQ(tableRowIds(*vm).mid(0, 2), (QStringList{third, first}));
+
+    // Paste lands by the new visible order.
+    ASSERT_TRUE(vm->pasteText(at("threshold", third, tier), "10\n20")["ok"].toBool());
+    EXPECT_EQ(tableCell(*vm, third, tier, TableRole::DisplayTextRole).toString(), "10");
+    EXPECT_EQ(tableCell(*vm, first, tier, TableRole::DisplayTextRole).toString(), "20");
+
+    // A mapping edit resolves against the live profile, and Undo re-resolves after reverting it.
+    ASSERT_TRUE(vm->setScenarioHash(first, kWallSixHash)["ok"].toBool());
+    EXPECT_EQ(tableCell(*vm, first, {}, TableRole::MappingStateRole).toString(), "resolved");
+    ASSERT_TRUE(vm->undo()["ok"].toBool());
+    EXPECT_NE(tableCell(*vm, first, {}, TableRole::MappingStateRole).toString(), "resolved");
+    EXPECT_EQ(tableCell(*vm, first, tier, TableRole::DisplayTextRole).toString(), "20");
+    ASSERT_TRUE(vm->setScenarioHash(first, kWallSixHash)["ok"].toBool());
+
+    // Nothing reaches the library while the draft is being edited.
+    EXPECT_EQ(service->snapshot()->entries.size(), 1U);
+
+    ASSERT_TRUE(vm->save()["ok"].toBool());
+    const QString id = vm->draftId();
+    EXPECT_FALSE(vm->canUndo());
+    vm->discard();
+    ASSERT_TRUE(vm->openBenchmark(id));
+    EXPECT_EQ(tableRowIds(*vm).mid(0, 2), (QStringList{third, first}));
+    EXPECT_EQ(tableCell(*vm, third, tier, TableRole::DisplayTextRole).toString(), "10");
+    EXPECT_EQ(tableCell(*vm, first, tier, TableRole::DisplayTextRole).toString(), "20");
+    EXPECT_EQ(tableCell(*vm, first, {}, TableRole::MappingStateRole).toString(), "resolved");
+    EXPECT_FALSE(vm->canUndo()) << "history is session-only";
+    EXPECT_TRUE(vm->normalizationIssues().isEmpty()) << "no raw input is persisted";
+
+    const auto stored = readJson(QDir(benchmarks.path()).absoluteFilePath(id + ".json"));
+    EXPECT_EQ(jsonEntry(stored, first).value("hash").toString(), kWallSixHash);
+}
+
+// A profile rebuild that makes a leased draft's hashless scenario resolvable must show in the table
+// at once, before any edit or Undo, while the local session and the stored file stay untouched.
+TEST(BenchmarkTableComposition, ProfileRebuildRefreshesLeasedDraftMapping) {
+    const DefaultLocaleGuard guard{kEnglishGb};
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, unmappedJson(), false);
+    ASSERT_NE(w, nullptr);
+    auto *vm = w->app->benchmarkManagerVm();
+    ASSERT_TRUE(vm->openBenchmark("auto-1"));
+    ASSERT_EQ(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "unresolved");
+    ASSERT_TRUE(vm->editThresholdText("s1", "t1", "123")["ok"].toBool());
+    ASSERT_TRUE(vm->addTier("Silver")["ok"].toBool());
+    const auto extraTier = appendedTierIds(*vm, 1);
+    ASSERT_TRUE(vm->editThresholdText("s1", extraTier, "oops")["ok"].toBool());
+    vm->setSelectedEntryIds({"s1"});
+    const QVariantMap current{{"entryId", "s1"}, {"tierId", extraTier}, {"columnKind", 3}};
+    vm->setCurrentCell(current);
+
+    const auto path = QDir(benchmarks.path()).absoluteFilePath("bench.json");
+    const auto readBytes = [&] {
+        QFile file(path);
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    };
+    const auto accepted = [&] {
+        const auto snapshot = w->app->benchmarksService()->snapshot();
+        const auto &entry = snapshot->entries.front();
+        return std::pair{entry.digest, std::get<LoadedBenchmark>(entry.content).benchmark};
+    };
+    const QByteArray bytesBefore = readBytes();
+    ASSERT_FALSE(bytesBefore.isEmpty());
+    const auto acceptedBefore = accepted();
+
+    ASSERT_FALSE(w->env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+    w->app->profileService()->generateProfileFromDirectory();
+    QElapsedTimer timer;
+    timer.start();
+    while (w->app->benchmarkResolutionUseCase()->snapshot().scenarioCatalogue.empty()) {
+        ASSERT_LT(timer.elapsed(), 5000);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+
+    // No edit or Undo has run since the rebuild.
+    EXPECT_NE(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "unresolved");
+    EXPECT_EQ(tableCell(*vm, "s1", "t1", TableRole::DisplayTextRole).toString(), "123");
+    EXPECT_EQ(tableCell(*vm, "s1", extraTier, TableRole::EditTextRole).toString(), "oops");
+    EXPECT_EQ(tableCell(*vm, "s1", extraTier, TableRole::InputStateRole).toString(), "invalid");
+    EXPECT_TRUE(vm->dirty());
+    EXPECT_TRUE(vm->canUndo());
+    EXPECT_EQ(vm->selectedEntryIds(), QStringList{"s1"});
+    EXPECT_EQ(vm->currentCell(), current);
+    EXPECT_EQ(readBytes(), bytesBefore) << "the edit lease keeps the automatic mapping out of the file";
+    EXPECT_EQ(accepted(), acceptedBefore);
+
+    // The earlier local edit is still recoverable, and recomputes against the latest profile.
+    ASSERT_TRUE(vm->undo()["ok"].toBool());
+    EXPECT_EQ(tableCell(*vm, "s1", extraTier, TableRole::InputStateRole).toString(), QString());
+    EXPECT_EQ(tableCell(*vm, "s1", "t1", TableRole::DisplayTextRole).toString(), "123");
+    EXPECT_NE(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "unresolved");
 }

@@ -28,6 +28,8 @@ namespace ksv::tests_support {
         application::PlaylistSeedImport nextImport{};
 
         data::BenchmarkSaveOutcome nextSaveOutcome{};
+        // Runs inside save(), before it returns, to model a publication re-entering the caller.
+        std::function<void()> duringSave;
         data::BenchmarkRemoveOutcome nextRemoveOutcome{};
         mutable std::vector<domain::ScenarioResolution> nextResolveResult;
 
@@ -79,6 +81,7 @@ namespace ksv::tests_support {
             const std::optional<data::BenchmarkEditToken> &token) override {
             commandLog.emplace_back("save");
             saveCalls.emplace_back(benchmark, token);
+            if (duringSave) duringSave();
             return nextSaveOutcome;
         }
         [[nodiscard]] std::vector<domain::ScenarioResolution> resolve(

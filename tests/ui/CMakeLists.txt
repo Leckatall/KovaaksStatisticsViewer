@@ -22,6 +22,10 @@ add_executable(ui_tests
     benchmark_tracking_vm_test.cpp
     benchmark_history_vm_test.cpp
     benchmark_breakdown_model_test.cpp
+    benchmark_table_contract_test.cpp
+    benchmark_cell_input_test.cpp
+    benchmark_clipboard_matrix_test.cpp
+    benchmark_table_workload_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE
@@ -37,6 +41,11 @@ target_link_libraries(ui_tests PRIVATE
     GTest::gtest
 )
 
+target_compile_definitions(ui_tests PRIVATE KSV_GTEST_GUI_APP)
+# The workload measurement reads process private memory (GetProcessMemoryInfo).
+if(WIN32)
+    target_link_libraries(ui_tests PRIVATE psapi)
+endif()
 ksv_copy_mingw_runtime_dlls(ui_tests)
 gtest_discover_tests(ui_tests)
 

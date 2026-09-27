@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import QtQuick.Dialogs
+import KsvTestSupport
 import "../../../src/ui/qml"
 import "ItemLookup.js" as ItemLookup
 import "TestDoubles.js" as TestDoubles
@@ -18,20 +19,9 @@ TestCase {
         BenchmarkManagerDialog {}
     }
 
-    function makeFakeTree() {
-        return {
-            nodeId: "", kind: "uncategorized", name: "Uncategorized",
-            children: [
-                { nodeId: "s1", kind: "scenario", name: "1w6ts", hasHash: false,
-                  thresholds: [{tierId: "t1", tierName: "Gold", score: 100, hasValue: true}] },
-                { nodeId: "c1", kind: "category", name: "Clicking", color: "#009600",
-                  children: [
-                      { nodeId: "sub1", kind: "subcategory", name: "Static", color: "#009600",
-                        children: [{ nodeId: "s2", kind: "scenario", name: "voxTarget",
-                                     hasHash: true, thresholds: [] }] }
-                  ] }
-            ]
-        }
+    Component {
+        id: fixtureComponent
+        BenchmarkTableModelFixture {}
     }
 
     function makeEntries() {
@@ -43,9 +33,9 @@ TestCase {
         ]
     }
 
-    // Assigning a plain JS object to the dialog's `property var` stores a QML-owned copy;
-    // the dialog's handlers mutate that copy, so recorder state is read back through
-    // `dialog.benchmarkManagerVm`, never through the local object passed to openDialog().
+    // Assigning a plain JS object to a `property var` stores a QML-owned copy. The dialog routes
+    // every command through its table's copy (BenchmarkManagerDialog.vm()), so recorder state is
+    // read back through `dialog.editorTable.manager`, never through the object passed in.
     function openDialog(props) {
         const dialog = createTemporaryObject(dialogComponent, testCase, props)
         verify(dialog !== null, "BenchmarkManagerDialog failed to instantiate")
@@ -59,7 +49,20 @@ TestCase {
     }
 
     function vm(dialog) {
-        return dialog.benchmarkManagerVm
+        return dialog.editorTable.manager
+    }
+
+    // `fixtureRef`, when given, receives the fixture so a command double can publish a new
+    // projection through it and genuinely reset the model.
+    function openWithTable(desc, overrides, fixtureRef) {
+        const fixture = createTemporaryObject(fixtureComponent, testCase)
+        if (fixtureRef) fixtureRef.fixture = fixture
+        fixture.setProjection(TestDoubles.benchmarkTableProjection(desc))
+        return openWithFake(Object.assign({hasDraft: true, tableModel: fixture.model}, overrides || {}))
+    }
+
+    function tableCell(dialog, entryId, column) {
+        return ItemLookup.findByObjectName(dialog.contentItem, "cell_" + entryId + "_" + column)
     }
 
     function find(dialog, objectName) {
@@ -182,7 +185,7 @@ TestCase {
 
     function test_staleBaselineWarning() {
         const dialog = openWithFake({hasDraft: true, dirty: true, draftFromLibrary: true,
-                                     baselineStale: true, root: makeFakeTree()})
+                                     baselineStale: true})
 
         const warning = find(dialog, "staleBaselineWarning")
         verify(warning !== null, "the editor must surface a stale-baseline warning")
@@ -229,53 +232,49 @@ TestCase {
     }
 
     function test_clickingValidationIssueHighlightsItsElement() {
-        const dialog = openWithFake({
-            hasDraft: true,
-            root: makeFakeTree(),
-            validationIssues: [{message: "A scenario is missing a threshold for some tier.", targetId: "s1"}]
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
+            validationIssues: [{message: "A scenario is missing a threshold for some tier.",
+                                targetId: "s-unr", tierId: "t1"}]
         })
-
-        const node = find(dialog, "treeNode_s1")
-        verify(node !== null, "no tree node found for scenario s1")
-        compare(node.color.a, 0, "the target should not be highlighted before the issue is clicked")
+        compare(vm(dialog).currentCell.entryId, undefined, "nothing is focused before the issue is clicked")
 
         mouseClick(find(dialog, "validationIssue_0"))
 
-        verify(node.color.a > 0, "clicking a validation issue should highlight the targeted element")
+        tryVerify(() => vm(dialog).currentCell.entryId === "s-unr")
+        compare(vm(dialog).currentCell.tierId, "t1", "the issue focuses its exact threshold cell")
+        compare(tableCell(dialog, "s-unr", "t1").stateLabel, qsTr("Missing threshold"))
     }
 
     function test_reopenedBenchmarkShowsScenariosTiersAndThresholds() {
-        const dialog = openWithFake({
-            hasDraft: true, dirty: true, draftFromLibrary: true,
-            root: makeFakeTree(),
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
+            dirty: true, draftFromLibrary: true,
             tiers: [{id: "t1", name: "Gold", color: "#FFD700"}]
         })
 
-        const scenarioNode = find(dialog, "treeNode_s1")
-        verify(scenarioNode !== null, "reopened scenarios should render in the tree")
-        const thresholdField = find(dialog, "thresholdField_s1_t1")
-        verify(thresholdField !== null, "the saved threshold should render against its tier")
-        compare(thresholdField.text, "100")
-        const tierNameField = find(dialog, "tierName_t1")
-        verify(tierNameField !== null, "the tier ladder should render")
-        compare(tierNameField.text, "Gold")
+        tryVerify(() => tableCell(dialog, "s-res", "scenario") !== null)
+        compare(tableCell(dialog, "s-res", "scenario").cellText, "resolved one")
+        compare(tableCell(dialog, "s-res", "t1").cellText, "90", "the saved threshold renders against its tier")
+        const header = ItemLookup.findByObjectName(dialog.contentItem, "rankHeader_t1")
+        verify(header !== null, "the tier ladder renders as the shared header")
+        compare(header.headerName, "Gold")
     }
 
     function test_thresholdEditingDelegatesToVm() {
-        const dialog = openWithFake({
-            hasDraft: true, root: makeFakeTree(),
-            tiers: [{id: "t1", name: "Gold", color: "#FFD700"}]
-        })
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc())
 
-        const field = find(dialog, "thresholdField_s1_t1")
-        field.forceActiveFocus()
-        field.text = "250"
-        field.editingFinished()
+        verify(dialog.editorTable.focusCell({entryId: "s-res", tierId: "t1"}))
+        keyClick(Qt.Key_Return)
+        tryVerify(() => dialog.editorTable.activeEditor !== null)
+        dialog.editorTable.activeEditor.selectAll()
+        keyClick(Qt.Key_2)
+        keyClick(Qt.Key_5)
+        keyClick(Qt.Key_0)
+        keyClick(Qt.Key_Return)
 
-        tryVerify(() => vm(dialog).setThresholdCalls.length === 1)
-        compare(vm(dialog).setThresholdCalls[0][0], "s1")
-        compare(vm(dialog).setThresholdCalls[0][1], "t1")
-        compare(vm(dialog).setThresholdCalls[0][2], 250)
+        tryVerify(() => vm(dialog).editThresholdTextCalls.length === 1)
+        compare(vm(dialog).editThresholdTextCalls[0], ["s-res", "t1", "250"],
+                "the typed text goes to the view model unconverted")
+        compare(vm(dialog).setThresholdCalls.length, 0, "no JavaScript numeric conversion")
     }
 
     function test_addScenarioAndTierDelegateToVm() {
@@ -342,27 +341,24 @@ TestCase {
     }
 
     function test_everyMatchingStateRendersItsTextualLabel() {
-        const dialog = openWithFake({
-            hasDraft: true,
-            root: TestDoubles.benchmarkManagerResolutionTree(),
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
             tiers: [{id: "t1", name: "Gold", color: "#FFD700"}]
         })
 
-        compare(find(dialog, "matchLabel_s-res").text, "Resolved")
-        compare(find(dialog, "matchLabel_s-map").text, "Mapped, unavailable")
-        compare(find(dialog, "matchLabel_s-unr").text, "Unresolved")
-        compare(find(dialog, "matchLabel_s-amb").text, "Ambiguous")
-        compare(find(dialog, "matchLabel_s-auto").text, "Pending automatic mapping")
+        const expected = {"s-res": "Resolved", "s-map": "Mapped, unavailable", "s-unr": "Unresolved",
+                          "s-amb": "Ambiguous", "s-auto": "Pending automatic mapping"}
+        for (const entryId in expected) {
+            verify(dialog.editorTable.focusCell({entryId: entryId}))
+            tryCompare(find(dialog, "matchLabel"), "text", expected[entryId])
+        }
     }
 
     function test_ambiguousCandidateMetadataShownAndSelectionSetsHash() {
-        const dialog = openWithFake({
-            hasDraft: true,
-            root: TestDoubles.benchmarkManagerResolutionTree()
-        })
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc())
 
-        const candidateB = find(dialog, "candidateOption_s-amb_hash-b")
-        verify(candidateB !== null, "each ambiguity candidate must render as a selectable row")
+        verify(dialog.editorTable.focusCell({entryId: "s-amb"}))
+        tryVerify(() => find(dialog, "candidateOption_hash-b") !== null)
+        const candidateB = find(dialog, "candidateOption_hash-b")
         verify(candidateB.text.indexOf("hash-b") !== -1, "the candidate hash must be recognizable")
         verify(candidateB.text.indexOf("7") !== -1, "the candidate run count must be shown")
         verify(candidateB.text.indexOf("2024") !== -1, "the candidate last-played date must be shown")
@@ -374,17 +370,17 @@ TestCase {
     }
 
     function test_changeMappingRoutesThroughSetScenarioHash() {
-        const dialog = openWithFake({
-            hasDraft: true,
-            root: TestDoubles.benchmarkManagerResolutionTree()
-        })
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc())
 
-        const changeButton = find(dialog, "changeMappingButton_s-res")
-        verify(changeButton !== null, "a resolved scenario must offer Change mapping")
-        mouseClick(changeButton)
-
-        const candidate = find(dialog, "candidateOption_s-res_hash-a")
+        verify(dialog.editorTable.focusCell({entryId: "s-res"}))
+        const changeButton = find(dialog, "changeMappingButton")
+        tryCompare(changeButton, "visible", true)
+        const candidate = find(dialog, "candidateOption_hash-a")
         verify(candidate !== null, "Change mapping must expose candidate hashes to pick from")
+        compare(candidate.enabled, false, "resolved candidates stay disarmed until Change mapping")
+        waitForRendering(dialog.contentItem)
+        mouseClick(changeButton)
+        tryCompare(candidate, "enabled", true)
         mouseClick(candidate)
 
         tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
@@ -393,14 +389,14 @@ TestCase {
     }
 
     function test_clearMappingPassesNoHashAndKeepsEntryThresholdsAndPlacement() {
-        const dialog = openWithFake({
-            hasDraft: true,
-            root: TestDoubles.benchmarkManagerResolutionTree(),
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
             tiers: [{id: "t1", name: "Gold", color: "#FFD700"}]
         })
 
-        const clearButton = find(dialog, "clearMappingButton_s-map")
-        verify(clearButton !== null, "a mapped scenario must offer Clear mapping")
+        verify(dialog.editorTable.focusCell({entryId: "s-map"}))
+        const clearButton = find(dialog, "clearMappingButton")
+        tryCompare(clearButton, "visible", true)
+        waitForRendering(dialog.contentItem)
         mouseClick(clearButton)
 
         tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
@@ -408,17 +404,18 @@ TestCase {
         compare(vm(dialog).setScenarioHashCalls[0][1], "", "Clear mapping passes no hash")
 
         // The row, its thresholds and its hierarchy placement are untouched by a clear.
-        verify(find(dialog, "treeNode_s-map") !== null, "the scenario entry must remain")
-        verify(find(dialog, "thresholdField_s-map_t1") !== null, "thresholds must be retained")
+        verify(tableCell(dialog, "s-map", "scenario") !== null, "the scenario entry must remain")
+        compare(tableCell(dialog, "s-map", "t1").cellText, "80", "thresholds must be retained")
+        compare(vm(dialog).clearThresholdCalls.length, 0)
+        compare(vm(dialog).moveScenarioCalls.length + vm(dialog).assignScenariosCalls.length, 0)
     }
 
     function test_retrospectiveWarningPrecedesAMappingEditOnASavedDraft() {
-        const dialog = openWithFake({
-            hasDraft: true, dirty: true, draftFromLibrary: true,
-            root: TestDoubles.benchmarkManagerResolutionTree()
-        })
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {dirty: true, draftFromLibrary: true})
 
-        mouseClick(find(dialog, "candidateOption_s-amb_hash-b"))
+        verify(dialog.editorTable.focusCell({entryId: "s-amb"}))
+        tryVerify(() => find(dialog, "candidateOption_hash-b") !== null)
+        mouseClick(find(dialog, "candidateOption_hash-b"))
 
         tryCompare(dialog.retrospectivePrompt, "visible", true)
         compare(vm(dialog).setScenarioHashCalls.length, 0,
@@ -433,8 +430,7 @@ TestCase {
     function test_automaticResolutionFailureBannerIsNonModalAndClearsOnNextPublication() {
         const failing = openWithFake({
             hasDraft: true,
-            resolutionWriteFailed: true,
-            root: TestDoubles.benchmarkManagerResolutionTree()
+            resolutionWriteFailed: true
         })
 
         const banner = find(failing, "resolutionFailureBanner")
@@ -446,8 +442,7 @@ TestCase {
 
         const recovered = openWithFake({
             hasDraft: true,
-            resolutionWriteFailed: false,
-            root: TestDoubles.benchmarkManagerResolutionTree()
+            resolutionWriteFailed: false
         })
         const clearedBanner = find(recovered, "resolutionFailureBanner")
         verify(clearedBanner === null || clearedBanner.visible === false,
@@ -472,5 +467,247 @@ TestCase {
         picker.forceActiveFocus()
         compare(picker.nextItemInFocusChain(), addButton,
                 "tab order must run from the picker to its add button")
+    }
+
+    // ---- Committing active input before gates and commands -------------------------------------
+
+    // A double whose threshold edits behave like the session: retained input dirties the draft and
+    // is listed as a Save consequence.
+    function recordingInputOverrides() {
+        return {
+            editThresholdText: function (entryId, tierId, text) {
+                this.commandLog.push("editThresholdText")
+                this.editThresholdTextCalls.push([entryId, tierId, text])
+                this.dirty = true
+                this.normalizationIssues = [{entryId: entryId, tierId: tierId, text: text,
+                                             message: "Not a number. Saving stores this threshold as missing."}]
+                return {ok: true}
+            },
+            save: function () {
+                this.commandLog.push("save")
+                this.saveCalls++
+                return this.saveResult || {ok: true}
+            },
+            setBenchmarkName: function (name) {
+                this.commandLog.push("setBenchmarkName")
+                this.setBenchmarkNameCalls.push(name)
+            },
+            beginNewBenchmark: function () { this.commandLog.push("beginNewBenchmark"); this.beginNewCalls++ }
+        }
+    }
+
+    function typeIntoCell(dialog, entryId, tierId, text) {
+        verify(dialog.editorTable.focusCell({entryId: entryId, tierId: tierId}))
+        keyClick(Qt.Key_Return)
+        tryVerify(() => dialog.editorTable.activeEditor !== null)
+        dialog.editorTable.activeEditor.selectAll()
+        for (const ch of text) keyClick(ch)
+        compare(vm(dialog).editThresholdTextCalls.length, 0, "the text is still only in the editor")
+    }
+
+    function test_activeInputPrecedesSaveAndTransitions() {
+        {
+            const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(),
+                Object.assign({dirty: false, draftFromLibrary: true}, recordingInputOverrides()))
+            typeIntoCell(dialog, "s-res", "t1", "12oops")
+
+            mouseClick(find(dialog, "saveButton"))
+
+            compare(vm(dialog).editThresholdTextCalls, [["s-res", "t1", "12oops"]], "Save commits the editor first")
+            tryCompare(dialog.retrospectivePrompt, "visible", true)
+            verify(String(dialog.retrospectivePrompt.informativeText).indexOf("12oops") !== -1,
+                   "the existing gate names what Save will store as missing")
+            const warning = find(dialog, "normalizationWarning")
+            verify(warning !== null && warning.visible, "the consequence is listed in the editor")
+            verify(warning.text.indexOf("12oops") !== -1)
+
+            dialog.retrospectivePrompt.buttonClicked(MessageDialog.Cancel, MessageDialog.RejectRole)
+            compare(vm(dialog).saveCalls, 0)
+            compare(vm(dialog).discardCalls, 0, "cancel keeps the retained input")
+            compare(vm(dialog).undoCalls, 0)
+            verify(find(dialog, "normalizationWarning").visible)
+        }
+        {
+            // A draft-replacing transition checks dirty only after the editor is committed.
+            const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(),
+                Object.assign({dirty: false}, recordingInputOverrides()))
+            typeIntoCell(dialog, "s-res", "t1", "oops")
+
+            mouseClick(find(dialog, "newBenchmarkButton"))
+
+            compare(vm(dialog).commandLog[0], "editThresholdText")
+            tryCompare(dialog.dirtyClosePrompt, "visible", true)
+            compare(vm(dialog).beginNewCalls, 0, "the now-dirty draft is not replaced silently")
+            dialog.dirtyClosePrompt.buttonClicked(MessageDialog.Cancel, MessageDialog.RejectRole)
+            compare(vm(dialog).beginNewCalls, 0)
+            compare(vm(dialog).discardCalls, 0)
+            compare(dialog.pendingAction, null, "no deferred transition remains armed")
+        }
+        {
+            // The benchmark name field is committed before Save as well.
+            const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(),
+                Object.assign({dirty: true, benchmarkName: "Old"}, recordingInputOverrides()))
+            const nameField = find(dialog, "benchmarkNameField")
+            nameField.forceActiveFocus()
+            nameField.text = "New name"
+
+            dialog.requestSave()
+
+            compare(vm(dialog).commandLog, ["setBenchmarkName", "save"])
+            compare(vm(dialog).setBenchmarkNameCalls, ["New name"])
+        }
+    }
+
+    // An addition double that, like the session, publishes a reshaped projection: the model reset
+    // destroys an editor still open, whose deferred commit would then land after the addition.
+    function resettingAddition(name, ref, result) {
+        return function () {
+            this.commandLog.push(name)
+            this[name + "Calls"].push(Array.prototype.slice.call(arguments))
+            const desc = TestDoubles.benchmarkResolutionDesc()
+            desc.tiers.push({id: "t2", name: "Platinum"})
+            desc.rows.push({entryId: "added", name: "added", cells: {}})
+            ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(desc))
+            return result || {ok: true, createdId: "added"}
+        }
+    }
+
+    function clickWhileEditing(dialog, buttonName) {
+        const button = find(dialog, buttonName)
+        verify(button !== null, "no " + buttonName)
+        button.clicked()
+    }
+
+    function test_activeInputPrecedesStructuralCommands() {
+        const additions = [
+            {name: "addUnplayedScenario", prepare: (dialog) => find(dialog, "newScenarioField").text = "Fresh",
+             run: (dialog) => clickWhileEditing(dialog, "addScenarioButton")},
+            {name: "addKnownScenario", prepare: (dialog) => {
+                dialog.selectedKnownScenarioName = "1w4ts"
+                dialog.selectedKnownScenarioHash = "hash-b"
+            }, run: (dialog) => clickWhileEditing(dialog, "addKnownScenarioButton")},
+            {name: "addTier", prepare: (dialog) => find(dialog, "newTierField").text = "Silver",
+             run: (dialog) => clickWhileEditing(dialog, "addTierButton")},
+            {name: "addCategory", prepare: (dialog) => find(dialog, "newCategoryField").text = "Flicking",
+             run: (dialog) => clickWhileEditing(dialog, "addCategoryButton")}
+        ]
+        const commands = [
+            {name: "assignScenarios", run: (dialog) => {
+                vm(dialog).selectedEntryIds = ["s-res"]
+                dialog.assignSelection("")
+            }},
+            {name: "reorderScenario", run: (dialog) => dialog.moveCurrentRow(1)},
+            {name: "reorderTier", run: (dialog) => {
+                verify(dialog.editorTable.focusCell({tierId: "t2"}))
+                tryCompare(dialog, "currentTierId", "t2")
+                dialog.moveCurrentRankBy(-1)
+            }},
+            {name: "removeScenarios", run: (dialog) => dialog.removeSelectedScenarios()},
+            {name: "removeTier", run: (dialog) => dialog.removeCurrentRank()}
+        ].concat(additions)
+        for (const command of commands) {
+            const desc = TestDoubles.benchmarkResolutionDesc()
+            desc.tiers.push({id: "t2", name: "Platinum"})
+            const ref = {}
+            const overrides = {canUndo: true, tiers: desc.tiers}
+            if (command.prepare) overrides[command.name] = resettingAddition(command.name, ref)
+            const dialog = openWithTable(desc, Object.assign(overrides, recordingInputOverrides()), ref)
+            if (command.prepare) command.prepare(dialog)
+            typeIntoCell(dialog, "s-res", "t1", "oops")
+            // The structural command runs while the editor is still open.
+            verify(dialog.editorTable.activeEditor !== null)
+            const log = vm(dialog).commandLog
+            const before = log.length
+
+            command.run(dialog)
+            wait(50)
+
+            compare(log[before], "editThresholdText", command.name + ": the text is committed first")
+            compare(log.filter(c => c === "editThresholdText").length, 1,
+                    command.name + ": the editor's text is committed exactly once: " + JSON.stringify(log))
+            verify(log.indexOf(command.name) > log.indexOf("editThresholdText"),
+                   command.name + " must follow the commit: " + JSON.stringify(log))
+            compare(vm(dialog).editThresholdTextCalls[0], ["s-res", "t1", "oops"],
+                    "the committed text is addressed by IDs, never by a row or column number")
+
+            // Two Undo steps: the structural command, then the committed text.
+            mouseClick(find(dialog, "undoButton"))
+            mouseClick(find(dialog, "undoButton"))
+            tryCompare(vm(dialog), "undoCalls", 2)
+            compare(log.slice(-2), ["undo", "undo"])
+        }
+    }
+
+    function test_rejectedAdditionKeepsItsInputAndExplains() {
+        const ref = {}
+        const error = "That tier no longer exists."
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), Object.assign({
+            addTier: resettingAddition("addTier", ref, {ok: false, error: error})
+        }, recordingInputOverrides()), ref)
+        const field = find(dialog, "newTierField")
+        field.text = "Silver"
+        typeIntoCell(dialog, "s-res", "t1", "oops")
+
+        clickWhileEditing(dialog, "addTierButton")
+
+        compare(vm(dialog).commandLog.slice(0, 2), ["editThresholdText", "addTier"])
+        tryCompare(find(dialog, "tableStatusLabel"), "text", error)
+        compare(field.text, "Silver", "a rejected addition leaves its input for correction")
+    }
+
+    // An earlier command's rejection must not hide why a later Paste did nothing.
+    function test_pasteExplanationReplacesEarlierRejection() {
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
+            addTier: function (name) { this.commandLog.push("addTier"); return {ok: false, error: "That tier no longer exists."} }
+        })
+        find(dialog, "newTierField").text = "Silver"
+        mouseClick(find(dialog, "addTierButton"))
+        tryCompare(find(dialog, "tableStatusLabel"), "text", "That tier no longer exists.")
+
+        mouseClick(find(dialog, "pasteButton"))
+
+        tryCompare(find(dialog, "tableStatusLabel"), "text",
+                   "Select a scenario cell, threshold cell or rank header before pasting.")
+    }
+
+    // Only an empty table appends; a populated one with nothing focused must not silently grow.
+    function test_pasteWithoutDestinationExplainsAndReadsNoClipboard() {
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
+            clipboardReads: 0,
+            clipboardText: function () { this.clipboardReads++; return "New\t1" }
+        })
+
+        mouseClick(find(dialog, "pasteButton"))
+
+        const message = "Select a scenario cell, threshold cell or rank header before pasting."
+        compare(dialog.editorTable.statusText, message)
+        tryCompare(find(dialog, "tableStatusLabel"), "text", message)
+        compare(vm(dialog).clipboardReads, 0, "the clipboard is not read without a destination")
+        compare(vm(dialog).pasteTextCalls.length, 0)
+        compare(vm(dialog).commandLog, [])
+    }
+
+    function test_failedSaveRetainsInputAndAbandonsDeferredAction() {
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), Object.assign({
+            dirty: true, hasDraft: true,
+            saveResult: {ok: false, error: "Saving failed. The stored benchmark is unchanged."},
+            normalizationIssues: [{entryId: "s-res", tierId: "t1", text: "oops", message: "Not a number."}]
+        }, recordingInputOverrides()))
+
+        mouseClick(find(dialog, "newBenchmarkButton"))
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+        dialog.dirtyClosePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
+
+        tryCompare(vm(dialog), "saveCalls", 1)
+        compare(vm(dialog).beginNewCalls, 0, "a failed save does not run the transition")
+        compare(vm(dialog).discardCalls, 0, "a failed save keeps the session and its input")
+        verify(find(dialog, "normalizationWarning").visible)
+        compare(find(dialog, "saveStatusLabel").text, "Saving failed. The stored benchmark is unchanged.")
+
+        // A later, unrelated successful Save must not run the abandoned transition.
+        vm(dialog).saveResult = {ok: true}
+        mouseClick(find(dialog, "saveButton"))
+        tryCompare(vm(dialog), "saveCalls", 2)
+        compare(vm(dialog).beginNewCalls, 0)
     }
 }

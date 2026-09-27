@@ -13,7 +13,7 @@ TEST(BenchmarkIssueText, EveryCodeHasADistinctNonEmptyMessage) {
         C::DuplicateScenarioMembership, C::DuplicateResolvedHash, C::MissingThreshold,
         C::DuplicateThreshold, C::NonFiniteThreshold, C::NegativeThreshold,
         C::NonIncreasingThreshold, C::EmptyCategory, C::EmptySubcategory,
-        C::MixedCategoryContent,
+        C::MixedCategoryContent, C::MissingTierName, C::MissingScenarioName, C::MissingGroupName,
     };
 
     QSet<QString> seen;

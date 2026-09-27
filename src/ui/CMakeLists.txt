@@ -42,6 +42,7 @@ qt_add_qml_module(ksv_ui
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
             qml/BenchmarkManagerDialog.qml
+            qml/BenchmarkEditorTable.qml
             qml/SeriesConfigDraftPanel.qml
             qml/SeriesConfigEditorDelegate.qml
             qml/ExpressionTreeEditor.qml
@@ -93,10 +94,16 @@ qt_add_qml_module(ksv_ui
             presentation/benchmark_issue_text.cpp
             presentation/benchmark_format.h
             presentation/benchmark_format.cpp
-            presentation/benchmark_tree_node.h
-            presentation/benchmark_tree_node.cpp
             presentation/benchmark_manager_vm.h
             presentation/benchmark_manager_vm.cpp
+            presentation/benchmark_table_model.h
+            presentation/benchmark_table_model.cpp
+            presentation/benchmark_cell_input.h
+            presentation/benchmark_cell_input.cpp
+            presentation/benchmark_clipboard_matrix.h
+            presentation/benchmark_clipboard_matrix.cpp
+            presentation/benchmark_clipboard_adapter.h
+            presentation/benchmark_clipboard_adapter.cpp
             presentation/benchmark_history_vm.h
             presentation/benchmark_history_vm.cpp
             presentation/benchmark_breakdown_model.h

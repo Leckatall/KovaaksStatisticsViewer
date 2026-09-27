@@ -9,7 +9,6 @@
 #include <presentation/playtime_graph_vm.h>
 #include <presentation/editable_expression_node.h>
 #include <presentation/benchmark_manager_vm.h>
-#include <presentation/benchmark_tree_node.h>
 #include <presentation/benchmark_tracking_vm.h>
 #include <presentation/benchmark_history_vm.h>
 #include <presentation/benchmark_breakdown_model.h>
@@ -41,12 +40,6 @@ namespace ksv {
             "KovaaksStatsViewer", 1, 0, "EditableAverageAcrossRunsNode");
         qmlRegisterUncreatableType<presentation::BenchmarkManagerViewModel>(
             "KovaaksStatsViewer", 1, 0, "BenchmarkManagerViewModel", "Created in C++");
-        qmlRegisterUncreatableType<presentation::BenchmarkTreeNode>(
-            "KovaaksStatsViewer", 1, 0, "BenchmarkTreeNode", "Abstract base, built by BenchmarkManagerViewModel");
-        qmlRegisterType<presentation::BenchmarkGroupNode>(
-            "KovaaksStatsViewer", 1, 0, "BenchmarkGroupNode");
-        qmlRegisterType<presentation::BenchmarkScenarioNode>(
-            "KovaaksStatsViewer", 1, 0, "BenchmarkScenarioNode");
         qmlRegisterType<ui::GraphCanvas>(
             "KovaaksStatsViewer", 1, 0, "GraphCanvas");
         qmlRegisterUncreatableType<presentation::BenchmarkTrackingViewModel>(
