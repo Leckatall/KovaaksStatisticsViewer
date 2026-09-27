@@ -159,7 +159,7 @@ sequenceDiagram
         R-->>BS: complete candidate snapshot
         BS->>BS: replace accepted snapshot, advance revision, publish
         BS-->>RU: accepted library changed
-        RU->>P: build catalogue; submit unique auto-mappings via BS
+        RU->>P: build catalogue#59; submit unique auto-mappings via BS
         BS-->>T: library changed
         RU-->>T: resolution changed
         T->>P: request lightweight facts for resolved hashes
