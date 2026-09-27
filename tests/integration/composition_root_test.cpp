@@ -42,7 +42,8 @@ namespace {
             ASSERT_FALSE(env->copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
 
             app = std::make_unique<application::App>(
-                env->settings, std::make_shared<data::ProtoDecoder>(), env->seriesConfigStore);
+                env->settings, std::make_shared<data::ProtoDecoder>(), env->seriesConfigStore,
+                env->statsParser, env->benchmarkStore);
             ASSERT_TRUE(waitForProfile());
         }
 

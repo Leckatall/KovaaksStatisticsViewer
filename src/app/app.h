@@ -43,13 +43,12 @@ namespace ksv::application {
         // deterministic paths instead of the real registry / AppDataLocation.
         App(std::shared_ptr<ISettingsService> settingsService,
             std::shared_ptr<IProtoDecoder> decoder,
-            std::shared_ptr<data::IStatsCsvParser> statsParser = nullptr,
             QObject* parent = nullptr);
         App(std::shared_ptr<ISettingsService> settingsService,
             std::shared_ptr<IProtoDecoder> decoder,
             std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
-            std::shared_ptr<data::IStatsCsvParser> statsParser = nullptr,
-            std::shared_ptr<data::IBenchmarkStore> benchmarkStore = nullptr,
+            std::shared_ptr<data::IStatsCsvParser> statsParser,
+            std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
             QObject* parent = nullptr);
         int start();
         QQmlApplicationEngine* engine() {return &m_engine;}

@@ -54,7 +54,8 @@ namespace {
             perfUrl = QUrl::fromLocalFile(perfFile).toString();
 
             app = std::make_unique<application::App>(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore,
+                env.statsParser, env.benchmarkStore);
             if (app->start() != 0) return "Main.qml failed to load";
             root = app->engine()->rootObjects().first();
             return {};
@@ -304,7 +305,11 @@ namespace {
         const auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
         settings->setProfilePath(QDir(tempDir.path()).filePath("profile.pb").toStdString());
         const auto seriesConfigStore = std::make_shared<qt_data::SeriesConfigStore>(settings);
-        application::App app(settings, std::make_shared<data::ProtoDecoder>(), seriesConfigStore);
+        QTemporaryDir benchmarksDir;
+        ASSERT_TRUE(benchmarksDir.isValid());
+        application::App app(settings, std::make_shared<data::ProtoDecoder>(), seriesConfigStore,
+                             std::make_shared<data::StatsCsvParser>(),
+                             std::make_shared<qt_data::BenchmarkStore>(benchmarksDir.path().toStdString()));
         ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
 
         auto *root = app.engine()->rootObjects().first();

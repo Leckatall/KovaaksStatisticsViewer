@@ -62,7 +62,7 @@ TEST(BenchmarkComposition, RealGraphAutoResolvesAScenarioNameAtStartup) {
     file.close();
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, nullptr, repo);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, env.statsParser, repo);
     QElapsedTimer timer;
     timer.start();
     while (!app.profileService()->isProfileLoaded()) {
@@ -99,7 +99,7 @@ TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
     file.close();
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, nullptr, repo);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, env.statsParser, repo);
     QElapsedTimer timer;
     timer.start();
     while (!app.profileService()->isProfileLoaded()) {
@@ -126,7 +126,8 @@ TEST(BenchmarkComposition, RealGraphReportsUnknownBenchmarkAsUnavailable) {
     auto settings = std::make_shared<tests_support::FakeSettingsService>();
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
-            std::make_shared<qt_data::SeriesConfigStore>(settings), nullptr, repo);
+            std::make_shared<qt_data::SeriesConfigStore>(settings),
+            std::make_shared<StatsCsvParser>(), repo);
     app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"missing"});
     EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Unavailable);
     EXPECT_EQ(app.benchmarkTrackingUseCase()->projection(), nullptr);
@@ -143,7 +144,8 @@ TEST(BenchmarkComposition, RealGraphLoadsManagedBenchmarksAtStartup) {
     auto settings = std::make_shared<tests_support::FakeSettingsService>();
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
-            std::make_shared<qt_data::SeriesConfigStore>(settings), nullptr, repo);
+            std::make_shared<qt_data::SeriesConfigStore>(settings),
+            std::make_shared<StatsCsvParser>(), repo);
 
     const auto service = app.benchmarksService();
     ASSERT_NE(service, nullptr);
@@ -176,7 +178,8 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     auto settings = std::make_shared<tests_support::FakeSettingsService>();
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
-            std::make_shared<qt_data::SeriesConfigStore>(settings), nullptr, repo);
+            std::make_shared<qt_data::SeriesConfigStore>(settings),
+            std::make_shared<StatsCsvParser>(), repo);
 
     auto manager = app.benchmarkManagerUseCase();
     ASSERT_NE(manager, nullptr);
@@ -257,7 +260,8 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
     auto settings = std::make_shared<tests_support::FakeSettingsService>();
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
-            std::make_shared<qt_data::SeriesConfigStore>(settings), nullptr, repo);
+            std::make_shared<qt_data::SeriesConfigStore>(settings),
+            std::make_shared<StatsCsvParser>(), repo);
 
     auto *vm = app.benchmarkManagerVm();
     ASSERT_NE(vm, nullptr);
@@ -315,7 +319,7 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
     }
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, nullptr, repo);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, env.statsParser, repo);
 
     QElapsedTimer timer;
     timer.start();
@@ -437,7 +441,7 @@ namespace {
 
         w->repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
         w->app = std::make_unique<App>(w->env.settings, std::make_shared<data::ProtoDecoder>(),
-                                       w->env.seriesConfigStore, nullptr, w->repo);
+                                       w->env.seriesConfigStore, w->env.statsParser, w->repo);
         QElapsedTimer timer;
         timer.start();
         while (!w->app->profileService()->isProfileLoaded()) {
@@ -484,7 +488,8 @@ TEST(BenchmarkWorkspaceComposition, StartSuppliesBothBenchmarkViewModelsAsRequir
     integration::TestEnv env;
     ASSERT_TRUE(env.valid());
 
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, env.statsParser,
+            env.benchmarkStore);
     ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
 
     ASSERT_FALSE(app.engine()->rootObjects().isEmpty());

@@ -27,8 +27,10 @@
 #include "gallery_dataset.h"
 #include "settings_service.h"
 #include "series_config_store.h"
+#include "formats/csv/stats_csv_parser.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "formats/protobuf/profile_serializer.h"
+#include "qt_data/benchmark_store.h"
 
 using namespace ksv;
 
@@ -90,7 +92,9 @@ int main(int argc, char *argv[]) {
 
     application::App app(
         settings, std::make_shared<data::ProtoDecoder>(),
-        std::make_shared<qt_data::SeriesConfigStore>(settings));
+        std::make_shared<qt_data::SeriesConfigStore>(settings),
+        std::make_shared<data::StatsCsvParser>(),
+        std::make_shared<qt_data::BenchmarkStore>((tmp.path() + "/benchmarks").toStdString()));
     QQmlApplicationEngine* engine = app.engine();
     GalleryQmlSourceInterceptor sourceInterceptor(QStringLiteral(GALLERY_QML_SOURCE_DIR));
     engine->addUrlInterceptor(&sourceInterceptor);

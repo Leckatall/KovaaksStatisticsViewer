@@ -65,7 +65,8 @@ namespace {
             ASSERT_FALSE(file.isEmpty());
 
             app = std::make_unique<application::App>(
-                env->settings, std::make_shared<data::ProtoDecoder>(), env->seriesConfigStore);
+                env->settings, std::make_shared<data::ProtoDecoder>(), env->seriesConfigStore,
+                env->statsParser, env->benchmarkStore);
             graphVm = app->graphVm();
             graphVm->fetchData(QUrl::fromLocalFile(file).toString());
         }

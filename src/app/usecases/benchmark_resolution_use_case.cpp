@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <map>
+#include <ranges>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -159,12 +160,12 @@ namespace ksv::application {
                 {scenario.hash, static_cast<int>(m_profile->getRunCount(scenario).value_or(0)),
                  m_profile->getLastRunTime(scenario)});
         }
-        for (auto &[_, candidates]: catalogue.byName)
+        for (auto &candidates: catalogue.byName | std::views::values)
             std::ranges::sort(candidates, {}, &domain::ScenarioCandidate::hash);
 
         const auto snapshot = m_benchmarks->snapshot();
         std::vector<data::BenchmarkReplacementRequest> requests;
-        std::vector<domain::BenchmarkId> requestOwners;
+        std::vector<domain::BenchmarkId> request_owners;
         if (snapshot) {
             for (const auto &entry: snapshot->entries) {
                 const auto *loaded = std::get_if<data::LoadedBenchmark>(&entry.content);
@@ -182,7 +183,7 @@ namespace ksv::application {
                 requests.push_back({std::move(updated),
                                     data::BenchmarkEditToken{loaded->benchmark.id, entry.filename,
                                                              entry.digest}});
-                requestOwners.push_back(loaded->benchmark.id);
+                request_owners.push_back(loaded->benchmark.id);
             }
         }
 
@@ -190,9 +191,9 @@ namespace ksv::application {
 
         if (requests.empty()) return;
         const auto outcome = m_benchmarks->replaceBatch(requests);
-        for (std::size_t i = 0; i < requestOwners.size() && i < outcome.outcomes.size(); ++i)
+        for (std::size_t i = 0; i < request_owners.size() && i < outcome.outcomes.size(); ++i)
             if (!outcome.outcomes[i].ok())
-                m_snapshot.automaticWriteFailures[requestOwners[i]] =
+                m_snapshot.automaticWriteFailures[request_owners[i]] =
                     toWriteError(outcome.outcomes[i].error);
     }
 }

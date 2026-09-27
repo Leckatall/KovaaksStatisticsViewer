@@ -57,7 +57,8 @@ namespace {
         int startResult = -1;
         {
             application::App app(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore,
+                env.statsParser, env.benchmarkStore);
             startResult = app.start();
         }
 
@@ -90,7 +91,8 @@ namespace {
             << "Main.qml must declare benchmarkManagerVm as a required property";
 
         application::App app(
-            env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore);
+            env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore,
+                env.statsParser, env.benchmarkStore);
         ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
         ASSERT_FALSE(app.engine()->rootObjects().isEmpty());
 

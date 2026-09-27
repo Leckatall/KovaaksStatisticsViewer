@@ -17,9 +17,11 @@
 #include <QTemporaryDir>
 
 #include "file_service.h"
+#include "formats/csv/stats_csv_parser.h"
 #include "formats/protobuf/profile_serializer.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "profile_service.h"
+#include "qt_data/benchmark_store.h"
 #include "run_ingestor.h"
 #include "kovaaks_dir.h"
 #include "series_config_store.h"
@@ -48,13 +50,17 @@ namespace ksv::integration {
             std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
         std::shared_ptr<qt_data::SeriesConfigStore> seriesConfigStore =
             std::make_shared<qt_data::SeriesConfigStore>(settings);
+        std::shared_ptr<data::StatsCsvParser> statsParser = std::make_shared<data::StatsCsvParser>();
+        QTemporaryDir benchmarksDir;
+        std::shared_ptr<qt_data::BenchmarkStore> benchmarkStore =
+            std::make_shared<qt_data::BenchmarkStore>(benchmarksDir.path().toStdString());
 
         TestEnv() {
             settings->setKovaaksDirs({rootPath().toStdString()});
             settings->setProfilePath(profileStorePath().toStdString());
         }
 
-        [[nodiscard]] bool valid() const { return kovaaks.valid(); }
+        [[nodiscard]] bool valid() const { return kovaaks.valid() && benchmarksDir.isValid(); }
         [[nodiscard]] QString rootPath() const { return kovaaks.root(); }
 
         // A fresh stack each call: the reload tests need a second one built

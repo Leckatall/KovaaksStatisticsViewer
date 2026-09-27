@@ -11,6 +11,7 @@
 #include <QQmlContext>
 #include <QUuid>
 #include <QStandardPaths>
+#include <utility>
 
 #include "session_controller.h"
 #include "settings_service.h"
@@ -40,15 +41,19 @@ namespace ksv::application {
     App::App(QObject *parent)
         : App(std::make_shared<qt_data::SettingsService>(),
               std::make_shared<data::ProtoDecoder>(),
-              nullptr, parent) {}
+              parent) {}
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
              std::shared_ptr<IProtoDecoder> decoder,
-             std::shared_ptr<data::IStatsCsvParser> statsParser,
              QObject *parent)
-        : App(settingsService, decoder,
-              std::make_shared<qt_data::SeriesConfigStore>(settingsService), std::move(statsParser),
-              nullptr, parent) {}
+        : App(settingsService,
+              std::move(decoder),
+              std::make_shared<qt_data::SeriesConfigStore>(settingsService),
+              std::make_shared<data::StatsCsvParser>(),
+              std::make_shared<qt_data::BenchmarkStore>(
+                  (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
+                      .toStdString()),
+              parent) {}
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
              std::shared_ptr<IProtoDecoder> decoder,
@@ -61,7 +66,7 @@ namespace ksv::application {
 
         m_settingsService = std::move(settingsService);
         m_seriesConfigStore = std::move(seriesConfigStore);
-        m_statsParser = statsParser ? std::move(statsParser) : std::make_shared<data::StatsCsvParser>();
+        m_statsParser = std::move(statsParser);
         m_seriesManagementUseCase = std::make_shared<SeriesManagementUseCase>(m_seriesConfigStore);
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder, m_statsParser);
         m_runIngestor = std::make_shared<data::RunIngestor>(m_fileService);
@@ -71,15 +76,10 @@ namespace ksv::application {
             std::make_shared<data::ProfileSerializer>(std::make_shared<data::ProfileV3Migrator>(m_runIngestor)),
             m_settingsService, m_runIngestor);
 
-        // Store -> accepted service -> resolution -> manager/tracking, all before the initial
-        // profile load: the resolution use case subscribes to the profile change stream in its
-        // constructor, so either the synchronously loaded profile or a later asynchronous build
-        // triggers reconciliation.
-        m_benchmarkStore = benchmarkStore
-            ? std::move(benchmarkStore)
-            : std::make_shared<qt_data::BenchmarkStore>(
-                  (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
-                      .toStdString());
+        // Built before the initial profile load: the resolution use case subscribes to the profile
+        // change stream in its constructor, so either the synchronously loaded profile or a later
+        // asynchronous build triggers reconciliation.
+        m_benchmarkStore = std::move(benchmarkStore);
         m_benchmarksService = std::make_shared<data::BenchmarksService>(m_benchmarkStore);
         m_benchmarkResolutionUseCase = std::make_shared<BenchmarkResolutionUseCase>(
             m_benchmarksService, m_profileService);
