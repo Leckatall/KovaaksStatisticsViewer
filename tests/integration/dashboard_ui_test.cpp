@@ -8,8 +8,13 @@
 
 #include <gtest/gtest.h>
 
+#include <QColor>
 #include <QDir>
+#include <QFile>
+#include <QImage>
+#include <QPainter>
 #include <QQmlApplicationEngine>
+#include <QRect>
 #include <QRectF>
 #include <QSettings>
 #include <QTest>
@@ -17,12 +22,15 @@
 #include <QUrl>
 #include <QVariant>
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 
 #include "app/app.h"
 #include "components/graph_canvas.h"
 #include "formats/protobuf/proto_decoder.h"
+#include "presentation/benchmark_history_vm.h"
+#include "presentation/benchmark_tracking_vm.h"
 #include "presentation/graph_vm.h"
 #include "settings_service.h"
 
@@ -34,6 +42,22 @@ namespace {
     // Built-in SeriesId from defaultSeriesConfigs() -- GraphCanvas' y-axis column is
     // always a series' SeriesId, not a position.
     constexpr int kAccuracySeriesId = 2;
+
+    [[nodiscard]] int countPixelsNear(const QImage &image, const QRect &area, const QColor &colour) {
+        constexpr int kTolerance = 8;
+        int count = 0;
+        const QRect clipped = area.intersected(image.rect());
+        for (int y = clipped.top(); y <= clipped.bottom(); ++y) {
+            for (int x = clipped.left(); x <= clipped.right(); ++x) {
+                const QColor pixel = image.pixelColor(x, y);
+                if (pixel.alpha() > 200 && std::abs(pixel.red() - colour.red()) <= kTolerance &&
+                    std::abs(pixel.green() - colour.green()) <= kTolerance &&
+                    std::abs(pixel.blue() - colour.blue()) <= kTolerance)
+                    ++count;
+            }
+        }
+        return count;
+    }
 
     // A temp KovaaKs dir with the fixture perf in it, a wired App, and the real
     // Main.qml scene loaded through App::start().
@@ -292,6 +316,75 @@ namespace {
         const auto historyCanvas = [this, app] { return scene.canvasFor(app->completionHistoryVm()); };
         ASSERT_TRUE(QTest::qWaitFor([&] { return historyCanvas() != nullptr; }, 3000));
         EXPECT_EQ(historyCanvas()->graphVm(), app->completionHistoryVm());
+    }
+
+    // Regression: BenchmarkHistoryCard never handed its canvas any visibleColumns, so
+    // series([]) came back empty and nothing was drawn -- yet both axes still painted,
+    // because the x axis is the VM's and the y axis falls back through labelledYAxisColumn()
+    // without the column filter. Scanning pixels rather than the canvas' inputs catches any
+    // other "axes but no line" cause too.
+    TEST(BenchmarkHistoryUiTest, BothHistoryCanvasesPaintTheirSeries) {
+        DashboardScene scene;
+        {
+            QFile file(QDir(scene.env.benchmarksDir.path()).absoluteFilePath("auto.json"));
+            ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+            file.write(R"({
+                "schemaVersion": 1, "id": "auto-1", "name": "Auto",
+                "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
+                "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hash": null,
+                    "thresholds": [ { "tierId": "t1", "score": 100.0 } ] } ],
+                "categories": []
+            })");
+        }
+        const QString error = scene.build();
+        ASSERT_TRUE(error.isEmpty()) << error.toStdString();
+        auto *app = scene.app.get();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
+
+        // Average-rank history only gains a point on a day the personal best improves.
+        auto first_run = app->profileService()->getLatestRun();
+        auto second_run = first_run;
+        second_run.run_id.start_time += 2LL * 24 * 60 * 60 * 1000;
+        second_run.stored_totals.score = first_run.totals().score + 50.0F;
+        domain::UserProfile profile;
+        const auto source = profile.ensureSource(scene.env.rootPath().toStdString(), "FPSAimTrainer/performances");
+        first_run.sources.perf = {{source, std::filesystem::path(scene.perfFile.toStdString()).filename().string()}};
+        second_run.sources.perf = first_run.sources.perf;
+        ASSERT_TRUE(profile.addRun(first_run));
+        ASSERT_TRUE(profile.addRun(second_run));
+        app->profileService()->applyBuiltProfile(std::move(profile));
+
+        auto *tracking = app->benchmarkTrackingVm();
+        tracking->selectBenchmark("auto-1");
+        auto *tabBar = scene.root->findChild<QObject *>("workspaceTabBar");
+        ASSERT_NE(tabBar, nullptr);
+        tabBar->setProperty("currentIndex", 1);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return tracking->state() == "trackable"; }, 3000))
+            << "state: " << tracking->state().toStdString();
+
+        for (auto *vm: {tracking->rankHistory(), tracking->playtimeHistory()}) {
+            const std::string metric = vm->metricName().toStdString();
+            ASSERT_TRUE(vm->hasData()) << metric;
+            const auto series = vm->series({presentation::BenchmarkHistoryViewModel::Value});
+            ASSERT_EQ(series.size(), 1) << metric;
+            ASSERT_GE(series.front()->displayPoints().size(), 2) << metric;
+
+            ui::GraphCanvas *canvas = nullptr;
+            ASSERT_TRUE(QTest::qWaitFor([&] {
+                canvas = scene.canvasFor(vm);
+                return canvas && canvas->width() > 0 && canvas->height() > 0;
+            }, 3000)) << metric << ": no laid-out canvas";
+
+            QImage image(canvas->size().toSize(), QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            {
+                QPainter painter(&image);
+                canvas->paint(&painter);
+            }
+            const QRect plot = canvas->property("plotArea").toRectF().toAlignedRect();
+            EXPECT_GT(countPixelsNear(image, plot, series.front()->color()), 0)
+                << metric << ": axes painted but the series line was not";
+        }
     }
 
     TEST(FirstRunUiTest, BannerOpensFolderDialogAndHidesAfterDirectorySelection) {

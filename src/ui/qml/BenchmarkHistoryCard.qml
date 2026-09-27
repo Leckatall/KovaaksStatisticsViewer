@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import KovaaksStatsViewer
 
 Frame {
     id: root
@@ -52,6 +53,7 @@ Frame {
             sourceComponent: GraphCanvasWithTooltip {
                 objectName: root.namePrefix + "Canvas"
                 graphVm: root.historyModel
+                visibleColumns: [BenchmarkHistoryViewModel.Value]
                 showSeriesNames: true
                 xLabel: qsTr("Date")
             }
