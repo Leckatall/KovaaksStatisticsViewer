@@ -1,6 +1,7 @@
 #ifndef KOVAAKSSTATSVIEWER_BENCHMARK_VALIDATION_H
 #define KOVAAKSSTATSVIEWER_BENCHMARK_VALIDATION_H
 
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -23,7 +24,10 @@ namespace ksv::domain {
         NonIncreasingThreshold,       // thresholds not strictly increasing in tier order
         EmptyCategory,                // user category with neither scenarios nor subcategories
         EmptySubcategory,
-        MixedCategoryContent          // category holds both direct scenarios and subcategories
+        MixedCategoryContent,         // category holds both direct scenarios and subcategories
+        MissingTierName,
+        MissingScenarioName,
+        MissingGroupName              // a user-created category or subcategory
     };
 
     using IssueTarget = std::variant<std::monostate, BenchmarkId, TierId, GroupId, ScenarioEntryId>;
@@ -31,6 +35,9 @@ namespace ksv::domain {
     struct BenchmarkIssue {
         BenchmarkIssueCode code;
         IssueTarget target;
+        // Set alongside an entry target when the issue concerns one threshold cell; empty for
+        // benchmark-, group- and entry-wide issues.
+        std::optional<TierId> tierId{};
 
         friend bool operator==(const BenchmarkIssue &, const BenchmarkIssue &) = default;
     };

@@ -7,6 +7,7 @@
 #include <string>
 #include <variant>
 #include <utility>
+#include <vector>
 
 #include "benchmark.h"
 #include "benchmark_validation.h"
@@ -22,12 +23,20 @@ namespace ksv::domain {
         std::optional<TierId> createdTier;
         std::optional<GroupId> createdGroup;
         std::optional<ScenarioEntryId> createdEntry;
+        std::vector<ScenarioEntryId> createdEntries;
         [[nodiscard]] bool ok() const { return !error.has_value(); }
     };
 
     // monostate targets the fixed Uncategorized collection; a GroupId targets a
     // category or subcategory.
     using EditorGroupTarget = std::variant<std::monostate, GroupId>;
+
+    // Where a category's direct scenarios go when its first subcategory is created, so the
+    // category never becomes mixed without the caller having chosen the outcome. The "new"
+    // subcategory is the one being created, not an extra one.
+    struct RelocateDirectToUncategorized {};
+    struct RelocateDirectToNewSubcategory {};
+    using DirectScenarioRelocation = std::variant<RelocateDirectToUncategorized, RelocateDirectToNewSubcategory>;
 
     // Structural editing over a caller-owned Benchmark, mutated in place. Carries no
     // working-copy, dirty, persistence, or profile state: the caller recomputes dirty
@@ -58,6 +67,17 @@ namespace ksv::domain {
         BenchmarkEditResult removeCategory(const GroupId &id);
         BenchmarkEditResult addSubcategory(const GroupId &categoryId, const std::string &name);
         BenchmarkEditResult moveScenario(const ScenarioEntryId &id, const EditorGroupTarget &to);
+
+        BenchmarkEditResult appendUnnamedScenarios(std::size_t count);
+        // `orderedIds` is already in the caller's visible order; they are appended after the
+        // target's existing entries in that order.
+        BenchmarkEditResult assignScenarios(const std::vector<ScenarioEntryId> &orderedIds,
+                                            const EditorGroupTarget &to);
+        BenchmarkEditResult addSubcategory(const GroupId &categoryId, const std::string &name,
+                                           const DirectScenarioRelocation &relocation);
+        BenchmarkEditResult reorderSubcategory(const GroupId &id, std::size_t position);
+        // Moves an entry within the collection that already holds it.
+        BenchmarkEditResult reorderScenario(const ScenarioEntryId &id, std::size_t position);
 
         [[nodiscard]] CompletenessResult validation() const { return validateBenchmark(m_target); }
 

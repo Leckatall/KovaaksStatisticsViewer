@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ksv::domain {
@@ -72,6 +74,34 @@ namespace ksv::domain {
             });
         }
 
+        // Moves `*it` to `position` within `items`; false when `position` is out of range.
+        template <class T>
+        bool moveToPosition(std::vector<T> &items, typename std::vector<T>::iterator it, std::size_t position) {
+            if (position >= items.size()) return false;
+            T item = std::move(*it);
+            items.erase(it);
+            items.insert(items.begin() + static_cast<std::ptrdiff_t>(position), std::move(item));
+            return true;
+        }
+
+        // Checked before anything is detached, so a rejected move leaves every entry in place.
+        std::optional<BenchmarkEditError> groupTargetError(Benchmark &benchmark, const EditorGroupTarget &to) {
+            const auto *targetGroup = std::get_if<GroupId>(&to);
+            if (!targetGroup) return std::nullopt;
+            const auto *category = findCategory(benchmark, *targetGroup);
+            if (!category && !findSubcategory(benchmark, *targetGroup)) return BenchmarkEditError::UnknownGroup;
+            if (category && !category->subcategories.empty()) return BenchmarkEditError::MixedContent;
+            return std::nullopt;
+        }
+
+        // `to` must already have passed groupTargetError().
+        std::vector<ScenarioEntry> &groupScenarios(Benchmark &benchmark, const EditorGroupTarget &to) {
+            const auto *targetGroup = std::get_if<GroupId>(&to);
+            if (!targetGroup) return benchmark.uncategorized;
+            if (auto *category = findCategory(benchmark, *targetGroup)) return category->scenarios;
+            return findSubcategory(benchmark, *targetGroup)->scenarios;
+        }
+
         // KSV-assigned defaults for new tiers and groups; users may edit any of them.
         BenchmarkColor paletteColor(std::size_t index) {
             static const BenchmarkColor palette[] = {
@@ -111,10 +141,7 @@ namespace ksv::domain {
         auto &tiers = m_target.tiers;
         const auto it = std::ranges::find_if(tiers, [&](const Tier &tier) { return tier.id == id; });
         if (it == tiers.end()) return {BenchmarkEditError::UnknownTier};
-        if (position >= tiers.size()) return {BenchmarkEditError::PositionOutOfRange};
-        const Tier tier = *it;
-        tiers.erase(it);
-        tiers.insert(tiers.begin() + static_cast<std::ptrdiff_t>(position), tier);
+        if (!moveToPosition(tiers, it, position)) return {BenchmarkEditError::PositionOutOfRange};
         return {};
     }
 
@@ -183,6 +210,7 @@ namespace ksv::domain {
     }
 
     BenchmarkEditResult BenchmarkEditor::clearThreshold(const ScenarioEntryId &entryId, const TierId &tierId) {
+        if (!findTier(m_target, tierId)) return {BenchmarkEditError::UnknownTier};
         auto *entry = findEntry(m_target, entryId);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
         std::erase_if(entry->thresholds,
@@ -217,10 +245,7 @@ namespace ksv::domain {
         const auto it = std::ranges::find_if(categories,
                                              [&](const Category &category) { return category.id == id; });
         if (it == categories.end()) return {BenchmarkEditError::UnknownGroup};
-        if (position >= categories.size()) return {BenchmarkEditError::PositionOutOfRange};
-        const Category category = *it;
-        categories.erase(it);
-        categories.insert(categories.begin() + static_cast<std::ptrdiff_t>(position), category);
+        if (!moveToPosition(categories, it, position)) return {BenchmarkEditError::PositionOutOfRange};
         return {};
     }
 
@@ -249,44 +274,81 @@ namespace ksv::domain {
     }
 
     BenchmarkEditResult BenchmarkEditor::addSubcategory(const GroupId &categoryId, const std::string &name) {
+        auto *category = findCategory(m_target, categoryId);
+        if (!category) return {BenchmarkEditError::UnknownGroup};
+        if (!category->scenarios.empty()) return {BenchmarkEditError::MixedContent};
+        return addSubcategory(categoryId, name, RelocateDirectToUncategorized{});
+    }
+
+    BenchmarkEditResult BenchmarkEditor::addSubcategory(const GroupId &categoryId, const std::string &name,
+                                                        const DirectScenarioRelocation &relocation) {
         auto &benchmark = m_target;
         auto *category = findCategory(benchmark, categoryId);
         if (!category) return {BenchmarkEditError::UnknownGroup};
-        const auto requestedId = GroupId{newId()};
-        if (!category->scenarios.empty()) {
-            // Atomic reorganization: the existing direct scenarios land in one new
-            // subcategory, so the category never ends up in a mixed shape.
-            category->subcategories.push_back(Subcategory{
-                GroupId{newId()}, category->name,
-                paletteColor(benchmark.categories.size() + category->subcategories.size()),
-                std::move(category->scenarios)});
-            category->scenarios.clear();
-        }
-        category->subcategories.push_back(Subcategory{
-            requestedId, name,
-            paletteColor(benchmark.categories.size() + category->subcategories.size()), {}});
-        return {std::nullopt, std::nullopt, requestedId};
+        const auto id = GroupId{newId()};
+        std::vector<ScenarioEntry> direct = std::move(category->scenarios);
+        category->scenarios.clear();
+        Subcategory created{id, name, paletteColor(benchmark.categories.size() + category->subcategories.size()), {}};
+        if (std::holds_alternative<RelocateDirectToNewSubcategory>(relocation))
+            created.scenarios = std::move(direct);
+        else
+            for (auto &entry: direct) benchmark.uncategorized.push_back(std::move(entry));
+        category->subcategories.push_back(std::move(created));
+        return {std::nullopt, std::nullopt, id};
     }
 
     BenchmarkEditResult BenchmarkEditor::moveScenario(const ScenarioEntryId &id, const EditorGroupTarget &to) {
+        return assignScenarios({id}, to);
+    }
+
+    BenchmarkEditResult BenchmarkEditor::appendUnnamedScenarios(std::size_t count) {
+        BenchmarkEditResult result;
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto id = ScenarioEntryId{newId()};
+            m_target.uncategorized.push_back(ScenarioEntry{id, {}, std::nullopt, {}});
+            result.createdEntries.push_back(id);
+        }
+        return result;
+    }
+
+    BenchmarkEditResult BenchmarkEditor::assignScenarios(const std::vector<ScenarioEntryId> &orderedIds,
+                                                         const EditorGroupTarget &to) {
         auto &benchmark = m_target;
-        const auto *targetGroup = std::get_if<GroupId>(&to);
-        if (targetGroup) {
-            // Validate before detaching so a rejected move leaves the entry in place.
-            const auto *category = findCategory(benchmark, *targetGroup);
-            if (!category && !findSubcategory(benchmark, *targetGroup))
-                return {BenchmarkEditError::UnknownGroup};
-            if (category && !category->subcategories.empty()) return {BenchmarkEditError::MixedContent};
+        if (const auto error = groupTargetError(benchmark, to)) return {error};
+        std::vector<ScenarioEntryId> unique;
+        for (const auto &id: orderedIds) {
+            if (std::ranges::find(unique, id) != unique.end()) continue;
+            if (!findEntry(benchmark, id)) return {BenchmarkEditError::UnknownEntry};
+            unique.push_back(id);
         }
-        auto entry = detachEntry(benchmark, id);
-        if (!entry) return {BenchmarkEditError::UnknownEntry};
-        if (!targetGroup) {
-            benchmark.uncategorized.push_back(std::move(*entry));
-        } else if (auto *category = findCategory(benchmark, *targetGroup)) {
-            category->scenarios.push_back(std::move(*entry));
-        } else {
-            findSubcategory(benchmark, *targetGroup)->scenarios.push_back(std::move(*entry));
-        }
+        std::vector<ScenarioEntry> moving;
+        moving.reserve(unique.size());
+        for (const auto &id: unique) moving.push_back(*detachEntry(benchmark, id));
+        auto &destination = groupScenarios(benchmark, to);
+        for (auto &entry: moving) destination.push_back(std::move(entry));
         return {};
+    }
+
+    BenchmarkEditResult BenchmarkEditor::reorderSubcategory(const GroupId &id, std::size_t position) {
+        for (auto &category: m_target.categories) {
+            auto &subs = category.subcategories;
+            const auto it = std::ranges::find_if(subs, [&](const Subcategory &sub) { return sub.id == id; });
+            if (it == subs.end()) continue;
+            if (!moveToPosition(subs, it, position)) return {BenchmarkEditError::PositionOutOfRange};
+            return {};
+        }
+        return {BenchmarkEditError::UnknownGroup};
+    }
+
+    BenchmarkEditResult BenchmarkEditor::reorderScenario(const ScenarioEntryId &id, std::size_t position) {
+        std::optional<BenchmarkEditError> error = BenchmarkEditError::UnknownEntry;
+        forEachScenarioList(m_target, [&](std::vector<ScenarioEntry> &entries) {
+            const auto it = std::ranges::find_if(entries, [&](const ScenarioEntry &entry) { return entry.id == id; });
+            if (it == entries.end()) return false;
+            if (moveToPosition(entries, it, position)) error.reset();
+            else error = BenchmarkEditError::PositionOutOfRange;
+            return true;
+        });
+        return {error};
     }
 }

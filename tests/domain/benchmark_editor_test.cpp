@@ -3,8 +3,10 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_editor.h"
@@ -173,7 +175,7 @@ TEST(BenchmarkEditor, RenameScenarioUpdatesTheRetainedDisplayName) {
     EXPECT_EQ(bench.uncategorized.front().name, "new name");
 }
 
-TEST(BenchmarkEditor, AddSubcategoryToPopulatedCategoryMovesDirectScenariosIntoASubcategory) {
+TEST(BenchmarkEditor, AddSubcategoryToPopulatedCategoryMovesDirectScenariosOnlyWhenChosen) {
     Benchmark bench;
     BenchmarkEditor editor{bench, countingIds()};
     editor.renameBenchmark("Bench");
@@ -183,17 +185,17 @@ TEST(BenchmarkEditor, AddSubcategoryToPopulatedCategoryMovesDirectScenariosIntoA
     ASSERT_TRUE(editor.moveScenario(first, category).ok());
     ASSERT_TRUE(editor.moveScenario(second, category).ok());
 
-    const auto result = editor.addSubcategory(category, "Static");
+    EXPECT_EQ(editor.addSubcategory(category, "Static").error, BenchmarkEditError::MixedContent);
+    const auto result = editor.addSubcategory(category, "Static", RelocateDirectToNewSubcategory{});
 
     ASSERT_TRUE(result.ok());
     ASSERT_TRUE(result.createdGroup.has_value());
     ASSERT_EQ(bench.categories.size(), 1U);
     EXPECT_TRUE(bench.categories.front().scenarios.empty());
-    ASSERT_EQ(bench.categories.front().subcategories.size(), 2U);
+    ASSERT_EQ(bench.categories.front().subcategories.size(), 1U);
+    EXPECT_EQ(bench.categories.front().subcategories.front().name, "Static");
     ASSERT_EQ(bench.categories.front().subcategories.front().scenarios.size(), 2U);
     EXPECT_EQ(bench.categories.front().subcategories.front().scenarios.front().name, "s1");
-    EXPECT_EQ(bench.categories.front().subcategories.back().name, "Static");
-    EXPECT_TRUE(bench.categories.front().subcategories.back().scenarios.empty());
     EXPECT_FALSE(hasIssue(editor.validation(), BenchmarkIssueCode::MixedCategoryContent));
 }
 
@@ -269,4 +271,172 @@ TEST(BenchmarkEditor, MoveScenarioToUnknownGroupReturnsUnknownGroup) {
 
     EXPECT_EQ(editor.moveScenario(entry, GroupId{"nope"}).error,
               std::make_optional(BenchmarkEditError::UnknownGroup));
+}
+
+namespace {
+    // An ID factory that fails the test if a rejected command allocates.
+    std::function<std::string()> forbiddenIds() {
+        return [] {
+            ADD_FAILURE() << "a rejected command allocated an ID";
+            return std::string("forbidden");
+        };
+    }
+
+    ScenarioEntry scored(const std::string &id, const std::string &name, std::optional<std::string> hash,
+                         double score) {
+        return ScenarioEntry{ScenarioEntryId{id}, name, std::move(hash), {Threshold{TierId{"t1"}, score}}};
+    }
+
+    std::vector<std::string> idsOf(const std::vector<ScenarioEntry> &entries) {
+        std::vector<std::string> ids;
+        for (const auto &entry: entries) ids.push_back(entry.id.value);
+        return ids;
+    }
+
+    // Visible rows a,b | c,d across two categories; g3 already holds x; g4 has subcategories.
+    Benchmark groupedBench() {
+        Benchmark bench;
+        bench.name = "Bench";
+        bench.tiers = {Tier{TierId{"t1"}, "T1", {}}};
+        bench.categories = {
+            Category{GroupId{"g1"}, "One", {}, {scored("a", "A", "ha", 1), scored("b", "B", "hb", 2)}, {}},
+            Category{GroupId{"g2"}, "Two", {}, {scored("c", "C", "hc", 3), scored("d", "D", std::nullopt, 4)}, {}},
+            Category{GroupId{"g3"}, "Three", {}, {scored("x", "X", "hx", 5)}, {}},
+            Category{GroupId{"g4"}, "Four", {}, {},
+                     {Subcategory{GroupId{"s4"}, "Sub", {}, {scored("y", "Y", std::nullopt, 6)}}}},
+        };
+        return bench;
+    }
+}
+
+TEST(BenchmarkTableRows, RepeatedUnnamedAppend) {
+    Benchmark bench;
+    bench.uncategorized = {ScenarioEntry{ScenarioEntryId{"u0"}, "", std::nullopt, {}},
+                           scored("n1", "Named", "h1", 10)};
+    const auto before = bench.uncategorized;
+    BenchmarkEditor editor{bench, countingIds()};
+
+    const auto result = editor.appendUnnamedScenarios(2);
+
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.createdEntries.size(), 2U);
+    EXPECT_NE(result.createdEntries.at(0), result.createdEntries.at(1));
+    ASSERT_EQ(bench.uncategorized.size(), 4U);
+    EXPECT_EQ(bench.uncategorized.at(0), before.at(0));
+    EXPECT_EQ(bench.uncategorized.at(1), before.at(1));
+    for (std::size_t i = 0; i < 2; ++i) {
+        const auto &created = bench.uncategorized.at(2 + i);
+        EXPECT_EQ(created.id, result.createdEntries.at(i));
+        EXPECT_TRUE(created.name.empty());
+        EXPECT_FALSE(created.hash.has_value());
+        EXPECT_TRUE(created.thresholds.empty());
+    }
+}
+
+TEST(BenchmarkTableAssignment, OrderedAssignment) {
+    Benchmark bench = groupedBench();
+    const Benchmark before = bench;
+    BenchmarkEditor editor{bench, forbiddenIds()};
+
+    const auto result = editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g3"});
+
+    ASSERT_TRUE(result.ok());
+    EXPECT_EQ(idsOf(bench.categories.at(2).scenarios), (std::vector<std::string>{"x", "a", "c"}));
+    EXPECT_EQ(idsOf(bench.categories.at(0).scenarios), std::vector<std::string>{"b"});
+    EXPECT_EQ(idsOf(bench.categories.at(1).scenarios), std::vector<std::string>{"d"});
+    EXPECT_EQ(bench.categories.at(2).scenarios.at(1), before.categories.at(0).scenarios.at(0));
+    EXPECT_EQ(bench.categories.at(2).scenarios.at(2), before.categories.at(1).scenarios.at(0));
+}
+
+TEST(BenchmarkTableAssignment, RejectedBatchIsUnchanged) {
+    const auto attempt = [](const std::vector<ScenarioEntryId> &ids, const EditorGroupTarget &to) {
+        Benchmark bench = groupedBench();
+        const Benchmark before = bench;
+        BenchmarkEditor editor{bench, forbiddenIds()};
+        const auto result = editor.assignScenarios(ids, to);
+        EXPECT_EQ(bench, before);
+        return result.error;
+    };
+
+    EXPECT_EQ(attempt({ScenarioEntryId{"a"}, ScenarioEntryId{"missing"}}, GroupId{"g3"}),
+              BenchmarkEditError::UnknownEntry);
+    EXPECT_EQ(attempt({ScenarioEntryId{"a"}}, GroupId{"nowhere"}), BenchmarkEditError::UnknownGroup);
+    EXPECT_EQ(attempt({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g4"}),
+              BenchmarkEditError::MixedContent);
+}
+
+TEST(BenchmarkTableHierarchy, NoChoiceDoesNotReorganize) {
+    Benchmark bench = groupedBench();
+    const Benchmark before = bench;
+    BenchmarkEditor editor{bench, forbiddenIds()};
+
+    const auto result = editor.addSubcategory(GroupId{"g1"}, "Static");
+
+    EXPECT_EQ(result.error, BenchmarkEditError::MixedContent);
+    EXPECT_EQ(bench, before);
+}
+
+TEST(BenchmarkTableHierarchy, ChosenRelocation) {
+    {
+        Benchmark bench = groupedBench();
+        const auto direct = bench.categories.at(0).scenarios;
+        BenchmarkEditor editor{bench, countingIds()};
+
+        const auto result = editor.addSubcategory(GroupId{"g1"}, "Static", RelocateDirectToNewSubcategory{});
+
+        ASSERT_TRUE(result.ok());
+        const auto &category = bench.categories.at(0);
+        EXPECT_TRUE(category.scenarios.empty());
+        ASSERT_EQ(category.subcategories.size(), 1U);
+        EXPECT_EQ(category.subcategories.front().id, result.createdGroup);
+        EXPECT_EQ(category.subcategories.front().name, "Static");
+        EXPECT_EQ(category.subcategories.front().scenarios, direct);
+        EXPECT_FALSE(hasIssue(editor.validation(), BenchmarkIssueCode::MixedCategoryContent));
+    }
+    {
+        Benchmark bench = groupedBench();
+        bench.uncategorized = {scored("u", "U", std::nullopt, 7)};
+        const auto direct = bench.categories.at(0).scenarios;
+        BenchmarkEditor editor{bench, countingIds()};
+
+        const auto result = editor.addSubcategory(GroupId{"g1"}, "Static", RelocateDirectToUncategorized{});
+
+        ASSERT_TRUE(result.ok());
+        const auto &category = bench.categories.at(0);
+        EXPECT_TRUE(category.scenarios.empty());
+        ASSERT_EQ(category.subcategories.size(), 1U);
+        EXPECT_EQ(category.subcategories.front().id, result.createdGroup);
+        EXPECT_TRUE(category.subcategories.front().scenarios.empty());
+        EXPECT_EQ(idsOf(bench.uncategorized), (std::vector<std::string>{"u", "a", "b"}));
+        EXPECT_EQ(bench.uncategorized.at(1), direct.at(0));
+        EXPECT_EQ(bench.uncategorized.at(2), direct.at(1));
+    }
+}
+
+TEST(BenchmarkTableOrdering, ReorderWithinCollections) {
+    Benchmark bench;
+    bench.tiers = {Tier{TierId{"t1"}, "T1", {}}};
+    bench.categories = {Category{GroupId{"g"}, "G", {}, {}, {
+        Subcategory{GroupId{"p"}, "P", {}, {scored("a", "A", "ha", 1), scored("b", "B", "hb", 2)}},
+        Subcategory{GroupId{"q"}, "Q", {}, {scored("c", "C", "hc", 3)}},
+    }}};
+    const Benchmark before = bench;
+    BenchmarkEditor editor{bench, forbiddenIds()};
+
+    ASSERT_TRUE(editor.reorderSubcategory(GroupId{"q"}, 0).ok());
+    ASSERT_TRUE(editor.reorderScenario(ScenarioEntryId{"b"}, 0).ok());
+
+    const auto &subs = bench.categories.front().subcategories;
+    ASSERT_EQ(subs.size(), 2U);
+    EXPECT_EQ(subs.at(0), before.categories.front().subcategories.at(1));
+    EXPECT_EQ(subs.at(1).id, GroupId{"p"});
+    EXPECT_EQ(idsOf(subs.at(1).scenarios), (std::vector<std::string>{"b", "a"}));
+    EXPECT_EQ(subs.at(1).scenarios.at(0), before.categories.front().subcategories.at(0).scenarios.at(1));
+
+    const Benchmark reordered = bench;
+    EXPECT_EQ(editor.reorderSubcategory(GroupId{"unknown"}, 0).error, BenchmarkEditError::UnknownGroup);
+    EXPECT_EQ(editor.reorderSubcategory(GroupId{"p"}, 2).error, BenchmarkEditError::PositionOutOfRange);
+    EXPECT_EQ(editor.reorderScenario(ScenarioEntryId{"unknown"}, 0).error, BenchmarkEditError::UnknownEntry);
+    EXPECT_EQ(editor.reorderScenario(ScenarioEntryId{"a"}, 2).error, BenchmarkEditError::PositionOutOfRange);
+    EXPECT_EQ(bench, reordered);
 }

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <string>
+#include <vector>
 
 #include "benchmarks/benchmark_validation.h"
 
@@ -130,4 +132,85 @@ TEST(BenchmarkValidation, UnresolvedScenarioDoesNotBlockTrackable) {
     auto def = trackable();
     def.uncategorized[0].hash = std::nullopt;  // unresolved: still structurally complete
     EXPECT_EQ(validateBenchmark(def).completeness, Completeness::Trackable);
+}
+
+namespace {
+    std::vector<BenchmarkIssue> issuesWith(const CompletenessResult &result, BenchmarkIssueCode code) {
+        std::vector<BenchmarkIssue> found;
+        for (const auto &issue: result.issues)
+            if (issue.code == code) found.push_back(issue);
+        return found;
+    }
+
+    std::vector<std::string> tierIdsOf(const std::vector<BenchmarkIssue> &issues) {
+        std::vector<std::string> ids;
+        for (const auto &issue: issues) ids.push_back(issue.tierId ? issue.tierId->value : "<none>");
+        return ids;
+    }
+}
+
+TEST(BenchmarkTableValidation, MissingElementNames) {
+    Benchmark def;
+    def.id = BenchmarkId{"b1"};
+    def.name = "Bench";
+    def.tiers = {tier("t1", " \t"), tier("t2", "Silver")};
+    const std::vector<Threshold> scores{{TierId{"t1"}, 1.0}, {TierId{"t2"}, 2.0}};
+    def.uncategorized = {entry("e1", "", scores), entry("e3", "Named", scores)};
+    Category category{GroupId{"c1"}, "", {}, {}, {}};
+    category.subcategories.push_back(Subcategory{GroupId{"s1"}, "  ", {}, {entry("e2", "Other", scores)}});
+    def.categories = {category};
+
+    const auto result = validateBenchmark(def);
+
+    EXPECT_EQ(result.completeness, Completeness::Incomplete);
+    const auto tierNames = issuesWith(result, BenchmarkIssueCode::MissingTierName);
+    ASSERT_EQ(tierNames.size(), 1U);
+    EXPECT_EQ(tierNames.front().target, IssueTarget{TierId{"t1"}});
+    const auto scenarioNames = issuesWith(result, BenchmarkIssueCode::MissingScenarioName);
+    ASSERT_EQ(scenarioNames.size(), 1U);
+    EXPECT_EQ(scenarioNames.front().target, IssueTarget{ScenarioEntryId{"e1"}});
+    // Uncategorized is neutral and has no user name to be missing; only c1 and s1 qualify.
+    const auto groupNames = issuesWith(result, BenchmarkIssueCode::MissingGroupName);
+    ASSERT_EQ(groupNames.size(), 2U);
+    EXPECT_EQ(groupNames.at(0).target, IssueTarget{GroupId{"c1"}});
+    EXPECT_EQ(groupNames.at(1).target, IssueTarget{GroupId{"s1"}});
+    EXPECT_FALSE(hasCode(result, BenchmarkIssueCode::MissingName));
+}
+
+TEST(BenchmarkTableValidation, ThresholdCellLocations) {
+    Benchmark def;
+    def.id = BenchmarkId{"b1"};
+    def.name = "Bench";
+    def.tiers = {tier("t1", "A"), tier("t2", "B"), tier("t3", "C"), tier("t4", "D")};
+    def.uncategorized = {entry("e", "Scenario", {{TierId{"t2"}, -1.0}, {TierId{"t3"}, 10.0},
+                                                 {TierId{"t3"}, 11.0}, {TierId{"t4"}, 5.0}})};
+
+    const auto result = validateBenchmark(def);
+
+    const auto expectCell = [&](BenchmarkIssueCode code, const std::vector<std::string> &tiers) {
+        const auto issues = issuesWith(result, code);
+        for (const auto &issue: issues) EXPECT_EQ(issue.target, IssueTarget{ScenarioEntryId{"e"}});
+        EXPECT_EQ(tierIdsOf(issues), tiers) << static_cast<int>(code);
+    };
+    expectCell(BenchmarkIssueCode::MissingThreshold, {"t1"});
+    expectCell(BenchmarkIssueCode::NegativeThreshold, {"t2"});
+    expectCell(BenchmarkIssueCode::DuplicateThreshold, {"t3"});
+    expectCell(BenchmarkIssueCode::NonIncreasingThreshold, {"t4"});
+
+    // The offending tier follows the current ladder order, not the order thresholds were stored.
+    def.tiers = {tier("t4", "D"), tier("t3", "C"), tier("t2", "B"), tier("t1", "A")};
+    EXPECT_EQ(tierIdsOf(issuesWith(validateBenchmark(def), BenchmarkIssueCode::NonIncreasingThreshold)),
+              std::vector<std::string>{"t2"});
+
+    Benchmark legacy = trackable();
+    legacy.name.clear();
+    legacy.uncategorized.front().thresholds.front().score = std::numeric_limits<double>::quiet_NaN();
+    legacy.categories.push_back(Category{GroupId{"empty"}, "Empty", {}, {}, {}});
+    const auto legacyResult = validateBenchmark(legacy);
+    EXPECT_EQ(tierIdsOf(issuesWith(legacyResult, BenchmarkIssueCode::NonFiniteThreshold)),
+              std::vector<std::string>{"t1"});
+    EXPECT_EQ(tierIdsOf(issuesWith(legacyResult, BenchmarkIssueCode::MissingName)),
+              std::vector<std::string>{"<none>"});
+    EXPECT_EQ(tierIdsOf(issuesWith(legacyResult, BenchmarkIssueCode::EmptyCategory)),
+              std::vector<std::string>{"<none>"});
 }

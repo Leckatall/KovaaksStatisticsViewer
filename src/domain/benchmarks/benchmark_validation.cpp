@@ -29,30 +29,30 @@ namespace ksv::domain {
                                      std::vector<BenchmarkIssue> &issues) {
             std::unordered_map<std::string, int> perTier;
             for (const auto &threshold: entry.thresholds) {
-                perTier[threshold.tierId.value]++;
+                if (++perTier[threshold.tierId.value] == 2)
+                    issues.push_back({BenchmarkIssueCode::DuplicateThreshold, entry.id, threshold.tierId});
                 if (!std::isfinite(threshold.score))
-                    issues.push_back({BenchmarkIssueCode::NonFiniteThreshold, entry.id});
+                    issues.push_back({BenchmarkIssueCode::NonFiniteThreshold, entry.id, threshold.tierId});
                 else if (threshold.score < 0.0)
-                    issues.push_back({BenchmarkIssueCode::NegativeThreshold, entry.id});
+                    issues.push_back({BenchmarkIssueCode::NegativeThreshold, entry.id, threshold.tierId});
             }
-            for (const auto &[tierId, count]: perTier)
-                if (count > 1) issues.push_back({BenchmarkIssueCode::DuplicateThreshold, entry.id});
 
+            // Each tier whose score fails to exceed the last finite score before it (in current
+            // ladder order) is reported, so the offending cell is addressable.
             double previous = -std::numeric_limits<double>::infinity();
-            bool increasing = true;
             for (const auto &tier: tiers) {
                 const auto found = std::ranges::find_if(
                     entry.thresholds, [&](const auto &t) { return t.tierId == tier.id; });
                 if (found == entry.thresholds.end()) {
-                    issues.push_back({BenchmarkIssueCode::MissingThreshold, entry.id});
+                    issues.push_back({BenchmarkIssueCode::MissingThreshold, entry.id, tier.id});
                     continue;
                 }
                 if (std::isfinite(found->score)) {
-                    if (found->score <= previous) increasing = false;
+                    if (found->score <= previous)
+                        issues.push_back({BenchmarkIssueCode::NonIncreasingThreshold, entry.id, tier.id});
                     previous = found->score;
                 }
             }
-            if (!increasing) issues.push_back({BenchmarkIssueCode::NonIncreasingThreshold, entry.id});
         }
     }
 
@@ -64,11 +64,16 @@ namespace ksv::domain {
         if (def.tiers.empty()) issues.push_back({BenchmarkIssueCode::NoTiers, def.id});
 
         std::unordered_set<std::string> tierNames;
-        for (const auto &tier: def.tiers)
-            if (!tierNames.insert(tier.name).second)
+        for (const auto &tier: def.tiers) {
+            if (isBlank(tier.name)) issues.push_back({BenchmarkIssueCode::MissingTierName, tier.id});
+            else if (!tierNames.insert(tier.name).second)
                 issues.push_back({BenchmarkIssueCode::DuplicateTierName, tier.id});
+        }
 
         for (const auto &category: def.categories) {
+            if (isBlank(category.name)) issues.push_back({BenchmarkIssueCode::MissingGroupName, category.id});
+            for (const auto &sub: category.subcategories)
+                if (isBlank(sub.name)) issues.push_back({BenchmarkIssueCode::MissingGroupName, sub.id});
             const bool hasScenarios = !category.scenarios.empty();
             const bool hasSubcategories = !category.subcategories.empty();
             if (hasScenarios && hasSubcategories)
@@ -87,7 +92,10 @@ namespace ksv::domain {
         std::unordered_set<std::string> names;
         std::unordered_set<std::string> hashes;
         for (const auto *entry: entries) {
-            if (!names.insert(entry->name).second)
+            // Unnamed rows are reported once each as missing names, never as duplicates of one another.
+            if (isBlank(entry->name))
+                issues.push_back({BenchmarkIssueCode::MissingScenarioName, entry->id});
+            else if (!names.insert(entry->name).second)
                 issues.push_back({BenchmarkIssueCode::DuplicateScenarioMembership, entry->id});
             if (entry->hash && !hashes.insert(*entry->hash).second)
                 issues.push_back({BenchmarkIssueCode::DuplicateResolvedHash, entry->id});
