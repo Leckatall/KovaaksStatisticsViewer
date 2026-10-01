@@ -653,6 +653,16 @@ namespace ksv::presentation {
         });
     }
 
+    QVariantMap BenchmarkManagerViewModel::setScenarioIdentity(const QString &id, const QString &name,
+                                                               const QString &hash) {
+        return applyEdit([&](domain::BenchmarkEditor &e) {
+            const auto entryId = domain::ScenarioEntryId{id.toStdString()};
+            const auto renamed = e.renameScenario(entryId, name.toStdString());
+            if (!renamed.ok()) return renamed;
+            return e.setScenarioHash(entryId, hash.toStdString());
+        });
+    }
+
     QVariantMap BenchmarkManagerViewModel::setScenarioHash(const QString &entryId, const QString &hash) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
             return e.setScenarioHash(
@@ -895,7 +905,8 @@ namespace ksv::presentation {
     }
 
     QVariantMap BenchmarkManagerViewModel::assignScenarios(const QStringList &entryIds,
-                                                           const QString &targetGroupId) {
+                                                           const QString &targetGroupId,
+                                                           const QString &beforeEntryId) {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
         // The generic MixedContent text advises relocating a category's own scenarios, which is the
         // wrong remedy when the rows being assigned are what would mix it.
@@ -913,8 +924,10 @@ namespace ksv::presentation {
             const auto found = visibleIndex.find(id.value);
             return found == visibleIndex.end() ? visibleIndex.size() : found->second;
         });
+        std::optional<domain::ScenarioEntryId> before;
+        if (!beforeEntryId.isEmpty()) before = domain::ScenarioEntryId{beforeEntryId.toStdString()};
         return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.assignScenarios(ordered, toGroupTarget(targetGroupId));
+            return e.assignScenarios(ordered, toGroupTarget(targetGroupId), before);
         });
     }
 

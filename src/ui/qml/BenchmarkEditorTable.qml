@@ -39,9 +39,29 @@ FocusScope {
     property bool restoringSelection: false
     // Whether a rank header held focus when the model reset destroyed it.
     property bool restoreHeaderFocus: false
+    property var selectedCellAnchors: []
+    property var dragEntryIds: []
+    property bool draggingRows: false
+    property string hoverDropGroupId: ""
+    // {row, above}: the gap a row drop would land in, while hovering between rows.
+    property var dropInsertion: null
+    property bool addingRank: false
+    property bool addingCategory: false
+    property bool creationAccepted: true
 
     // `kind` is "tier" or "group"; the dialog owns the colour picker.
     signal colorSwatchRequested(string kind, string id, color current)
+    signal addScenarioRequested()
+    signal addCategoryRequested(string name)
+    signal addSubcategoryRequested(string categoryId, string name)
+    signal addRankRequested(string name)
+    // An empty `beforeEntryId` appends to the group.
+    signal moveSelectionRequested(var entryIds, string targetGroupId, string beforeEntryId)
+    signal rowContextRequested(string entryId, real x, real y)
+    signal groupContextRequested(string groupId, real x, real y)
+    signal rankContextRequested(string tierId, real x, real y)
+    signal scenarioIdentityRequested(string entryId, string name, string hash)
+    signal renameGroupRequested(string groupId, string name)
 
     readonly property var kindKeys: ["category", "subcategory", "scenario"]
     readonly property int thresholdKind: 3
@@ -173,10 +193,30 @@ FocusScope {
         return true
     }
 
+    function selectCell(row, column, modifiers) {
+        const model = root.tableModel
+        if (!model) return
+        const index = model.index(row, column)
+        const current = selection.currentIndex
+        if (modifiers & Qt.ShiftModifier && current.valid) {
+            if (!(modifiers & Qt.ControlModifier)) selection.clearSelection()
+            for (let r = Math.min(current.row, row); r <= Math.max(current.row, row); ++r)
+                for (let c = Math.min(current.column, column); c <= Math.max(current.column, column); ++c)
+                    selection.select(model.index(r, c), ItemSelectionModel.Select)
+            selection.setCurrentIndex(index, ItemSelectionModel.NoUpdate)
+        } else if (modifiers & Qt.ControlModifier) {
+            selection.select(index, ItemSelectionModel.Toggle)
+            selection.setCurrentIndex(index, ItemSelectionModel.NoUpdate)
+        } else {
+            selection.setCurrentIndex(index, ItemSelectionModel.ClearAndSelect)
+        }
+        root.viewForColumn(column).forceActiveFocus()
+    }
+
     function groupListItem(groupId) {
         for (let i = 0; i < groupRepeater.count; ++i) {
             const item = groupRepeater.itemAt(i)
-            if (item && item.groupId === groupId) return item
+            if (item && item.groupId === groupId) return item.focusButton
         }
         return null
     }
@@ -226,6 +266,55 @@ FocusScope {
         return false
     }
 
+    function beginScenarioEdit(entryId) {
+        if (!root.focusCell({entryId: entryId, columnKind: 2})) return false
+        const row = root.tableModel.rowForEntry(entryId)
+        if (row < 0) return false
+        identityView.edit(root.tableModel.index(row, 2))
+        return true
+    }
+
+    function beginGroupRename(groupId) {
+        const row = root.tableModel.firstRowOfGroup(groupId)
+        if (row < 0) {
+            const empty = root.groupListItem(groupId)
+            if (!empty) return false
+            empty.parent.renaming = true
+            empty.parent.renameField.text = empty.parent.modelData.name
+            empty.parent.renameField.forceActiveFocus()
+            return true
+        }
+        const group = (root.manager.groups || []).find(item => item.id === groupId)
+        const column = group && group.kind === "subcategory" ? 1 : 0
+        root.moveCurrent(row, column)
+        identityView.edit(root.tableModel.index(row, column))
+        return true
+    }
+
+    function beginSubcategoryCreation(groupId) {
+        const empty = root.groupListItem(groupId)
+        if (empty) {
+            empty.parent.addingSubcategory = true
+            empty.parent.subcategoryField.forceActiveFocus()
+            return true
+        }
+        for (const item of identityView.contentItem.children) {
+            if (item.groupId === groupId && item.columnKind === 0 && item.groupLabelShown) {
+                item.addingSubcategory = true
+                item.subcategoryField.forceActiveFocus()
+                return true
+            }
+        }
+        return false
+    }
+
+    function beginRankRename(tierId) {
+        const header = root.rankHeaderItem(tierId)
+        if (!header) return false
+        header.beginRename()
+        return true
+    }
+
     function refreshCurrentRow() {
         const current = selection.currentIndex
         root.currentRowInfo = current.valid && root.tableModel ? root.tableModel.rowInfo(current.row) : ({})
@@ -259,8 +348,98 @@ FocusScope {
         return ids
     }
 
+    function selectionHasEntry(entryId) {
+        return root.selectedIds().indexOf(entryId) !== -1
+    }
+
+    function canDropOn(groupId) {
+        if (groupId === "") return true
+        const groups = root.manager && root.manager.groups ? root.manager.groups : []
+        const group = groups.find(item => item.id === groupId)
+        return group !== undefined && (group.kind === "subcategory"
+            || group.kind === "category" && !groups.some(item => item.parentId === groupId))
+    }
+
+    function beginRowDrag(entryId) {
+        const selected = root.manager && root.manager.selectedEntryIds ? root.manager.selectedEntryIds : []
+        root.dragEntryIds = selected.indexOf(entryId) !== -1 ? selected.slice() : [entryId]
+        root.draggingRows = true
+    }
+
+    function dropRows(groupId, beforeEntryId) {
+        if (!root.draggingRows || !root.canDropOn(groupId) || root.dragEntryIds.length === 0) return
+        root.moveSelectionRequested(root.dragEntryIds.slice(), groupId, beforeEntryId || "")
+        root.draggingRows = false
+        root.dragEntryIds = []
+    }
+
+    // The item-local point under `scenePoint`, or null when it falls outside the visible item.
+    function localPointIn(item, scenePoint) {
+        if (!item || !item.visible) return null
+        const local = item.mapFromItem(null, scenePoint.x, scenePoint.y)
+        return local.x >= 0 && local.y >= 0 && local.x < item.width && local.y < item.height ? local : null
+    }
+
+    // Whole-group targets, which append: a group list button, a group cell or the Uncategorized zone.
+    function targetAtScene(scenePoint) {
+        for (let i = 0; i < groupRepeater.count; ++i) {
+            const item = groupRepeater.itemAt(i)
+            if (item && root.localPointIn(item.focusButton, scenePoint)) return item.groupId
+        }
+        for (const item of identityView.contentItem.children) {
+            if (item.isGroup && item.groupId !== "" && root.localPointIn(item, scenePoint)) return item.groupId
+        }
+        if (root.localPointIn(uncategorizedDropZone, scenePoint)) return ""
+        return null
+    }
+
+    // The gap above or below the scenario or threshold cell under the point, as the group the row
+    // lives in and the entry the drop lands before ("" for the end of that group).
+    function rowInsertionAtScene(scenePoint) {
+        const model = root.tableModel
+        if (!model) return null
+        const containerOf = info => info.subcategoryId !== "" ? info.subcategoryId : info.categoryId
+        for (const view of [identityView, thresholdView]) {
+            for (const item of view.contentItem.children) {
+                if (item.columnKind === undefined || item.columnKind < 2) continue
+                const local = root.localPointIn(item, scenePoint)
+                if (!local) continue
+                const groupId = containerOf(model.rowInfo(item.row))
+                const above = local.y < item.height / 2
+                let beforeEntryId = item.entryId
+                if (!above) {
+                    const next = model.rowInfo(item.row + 1)
+                    beforeEntryId = next.entryId !== undefined && containerOf(next) === groupId ? next.entryId : ""
+                }
+                return {groupId: groupId, beforeEntryId: beforeEntryId, row: item.row, above: above}
+            }
+        }
+        return null
+    }
+
+    function hoverAtScene(scenePoint) {
+        const target = root.targetAtScene(scenePoint)
+        root.hoverDropGroupId = target !== null && root.canDropOn(target)
+            ? target === "" ? "__uncategorized__" : target : ""
+        const insertion = target === null ? root.rowInsertionAtScene(scenePoint) : null
+        root.dropInsertion = insertion ? {row: insertion.row, above: insertion.above} : null
+    }
+
+    function dropAtScene(scenePoint) {
+        const target = root.targetAtScene(scenePoint)
+        if (target !== null) {
+            root.dropRows(target)
+        } else {
+            const insertion = root.rowInsertionAtScene(scenePoint)
+            if (insertion) root.dropRows(insertion.groupId, insertion.beforeEntryId)
+        }
+        root.hoverDropGroupId = ""
+        root.dropInsertion = null
+    }
+
     function publishSelection() {
         if (!root.manager || !root.tableModel || root.restoringSelection) return
+        root.selectedCellAnchors = selection.selectedIndexes.map(index => root.tableModel.anchorAt(index.row, index.column))
         root.manager.selectedEntryIds = root.selectedIds()
     }
 
@@ -283,8 +462,18 @@ FocusScope {
         const shown = root.selectedIds()
         if (wanted.length !== shown.length || wanted.some(id => shown.indexOf(id) === -1)) {
             selection.clearSelection()
-            for (const id of wanted)
-                selection.select(model.index(model.rowForEntry(id), 2), ItemSelectionModel.Select | ItemSelectionModel.Rows)
+            const anchors = root.selectedCellAnchors
+            const anchorIds = [...new Set(anchors.map(anchor => anchor.entryId))]
+            if (anchors.length > 0 && anchorIds.length === wanted.length
+                    && wanted.every(id => anchorIds.indexOf(id) !== -1)) {
+                for (const anchor of anchors) {
+                    const restored = root.anchorIndex(anchor)
+                    if (restored.valid) selection.select(restored, ItemSelectionModel.Select)
+                }
+            } else {
+                for (const id of wanted)
+                    selection.select(model.index(model.rowForEntry(id), 2), ItemSelectionModel.Select | ItemSelectionModel.Rows)
+            }
         }
         const index = root.anchorIndex(root.manager.currentCell)
         const current = selection.currentIndex
@@ -369,6 +558,7 @@ FocusScope {
         required property int subcategorySpanLength
 
         readonly property bool isGroup: columnKind < 2
+        readonly property bool rowHighlighted: root.selectionHasEntry(entryId)
         readonly property string groupId: columnKind === 0 ? categoryId : columnKind === 1 ? subcategoryId : ""
         readonly property int spanStart: columnKind === 0 ? categorySpanStart : subcategorySpanStart
         readonly property int spanLength: columnKind === 0 ? categorySpanLength : subcategorySpanLength
@@ -386,11 +576,16 @@ FocusScope {
             : inputState === "invalid" ? qsTr("Invalid input")
             : !hasValue ? qsTr("Missing threshold") : ""
         readonly property string stateLabel: valueState !== "" ? valueState : current ? qsTr("Selected") : ""
+        property bool addingSubcategory: false
+        readonly property alias subcategoryField: subcategoryCreationField
 
         objectName: "cell_" + entryId + "_" + root.columnKey(columnKind, tierId)
         implicitWidth: 80
         implicitHeight: root.rowHeight
-        color: selected || current ? Qt.alpha(palette.highlight, current ? 0.35 : 0.2)
+        color: current ? Qt.alpha(palette.highlight, 0.48)
+             : selected ? Qt.alpha(palette.highlight, 0.3)
+             : rowHighlighted ? Qt.alpha(palette.highlight, 0.14)
+             : isGroup && groupId !== "" && root.hoverDropGroupId === groupId ? Qt.alpha(palette.highlight, 0.45)
              : isGroup && groupId !== "" ? Qt.alpha(groupColor, 0.22)
              : palette.base
 
@@ -423,12 +618,20 @@ FocusScope {
             height: 6
             color: cell.inputState !== "" ? "#E53935" : "#FFA726"
         }
+        Rectangle {
+            readonly property var insertion: root.dropInsertion
+            visible: cell.columnKind >= 2 && insertion !== null && insertion.row === cell.row
+            y: insertion && insertion.above ? 0 : parent.height - height
+            width: parent.width
+            height: 2
+            color: cell.palette.highlight
+        }
 
         Label {
             anchors.fill: parent
             anchors.leftMargin: 6
-            anchors.rightMargin: groupSwatch.visible ? groupSwatch.width + 10 : 6
-            visible: !cell.editing
+            anchors.rightMargin: groupSwatch.visible ? groupSwatch.width + (addSubcategoryPlus.visible ? 34 : 10) : 6
+            visible: !cell.editing && !cell.addingSubcategory
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: cell.columnKind === root.thresholdKind ? Text.AlignRight : Text.AlignLeft
             elide: Text.ElideRight
@@ -444,13 +647,97 @@ FocusScope {
         TableSwatch {
             id: groupSwatch
             objectName: "groupSwatch_" + cell.groupId
-            visible: cell.groupLabelShown && cell.groupId !== "" && !cell.editing
+            visible: cell.groupLabelShown && cell.groupId !== "" && !cell.editing && !cell.addingSubcategory
             anchors.right: parent.right
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
             swatchColor: cell.groupColor
             Accessible.name: qsTr("Colour of group %1").arg(cell.groupLabelText)
             onClicked: root.colorSwatchRequested("group", cell.groupId, cell.groupColor)
+        }
+
+        ToolButton {
+            id: addSubcategoryPlus
+            objectName: "addSubcategoryPlus_" + cell.categoryId
+            visible: cell.columnKind === 0 && cell.groupLabelShown && cell.categoryId !== ""
+                     && !cell.editing && !cell.addingSubcategory
+            anchors.right: groupSwatch.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 22
+            height: 22
+            text: "+"
+            focusPolicy: Qt.NoFocus
+            Accessible.name: qsTr("Add subcategory to %1").arg(cell.categoryName)
+            onClicked: {
+                cell.addingSubcategory = true
+                subcategoryCreationField.forceActiveFocus()
+            }
+        }
+
+        TextField {
+            id: subcategoryCreationField
+            objectName: "subcategoryCreationField"
+            visible: cell.addingSubcategory
+            anchors.fill: parent
+            placeholderText: qsTr("Subcategory name")
+            Accessible.name: placeholderText
+            onAccepted: {
+                if (text.trim() === "") return
+                root.creationAccepted = true
+                root.addSubcategoryRequested(cell.categoryId, text)
+                if (root.creationAccepted) {
+                    cell.addingSubcategory = false
+                    text = ""
+                }
+            }
+            Keys.onEscapePressed: {
+                cell.addingSubcategory = false
+                text = ""
+            }
+        }
+
+        DragHandler {
+            id: rowDrag
+            target: null
+            enabled: cell.columnKind >= 2 && !cell.editing
+            onActiveChanged: {
+                if (active) root.beginRowDrag(cell.entryId)
+                else if (root.draggingRows) {
+                    root.dropAtScene(rowDrag.centroid.scenePosition)
+                    root.draggingRows = false
+                    root.dragEntryIds = []
+                    root.dropInsertion = null
+                }
+            }
+            onTranslationChanged: if (active) root.hoverAtScene(rowDrag.centroid.scenePosition)
+        }
+
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: eventPoint => {
+                const point = cell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
+                if (cell.isGroup && cell.groupId !== "") {
+                    root.groupContextRequested(cell.groupId, point.x, point.y)
+                } else if (!cell.isGroup) {
+                    if (!root.selectionHasEntry(cell.entryId))
+                        root.moveCurrent(cell.row, cell.column)
+                    else
+                        selection.setCurrentIndex(root.tableModel.index(cell.row, cell.column), ItemSelectionModel.NoUpdate)
+                    root.rowContextRequested(cell.entryId, point.x, point.y)
+                }
+            }
+        }
+
+        TapHandler {
+            id: selectTap
+            acceptedButtons: Qt.LeftButton
+            enabled: !cell.editing && !cell.addingSubcategory
+            onTapped: root.selectCell(cell.row, cell.column, selectTap.point.modifiers)
+            onDoubleTapped: {
+                root.selectCell(cell.row, cell.column, selectTap.point.modifiers)
+                if (cell.columnKind >= 2 || cell.groupId !== "")
+                    cell.TableView.view.edit(root.tableModel.index(cell.row, cell.column))
+            }
         }
 
         ToolTip.visible: hover.hovered && ((cell.issues || []).length > 0 || cell.valueState !== "")
@@ -471,6 +758,8 @@ FocusScope {
             property string anchorGroup
             property string original
             property TableView ownerView: null
+            property int suggestionIndex: 0
+            readonly property var suggestionPopupView: suggestionPopup
 
             horizontalAlignment: cell.columnKind === root.thresholdKind ? TextInput.AlignRight : TextInput.AlignLeft
             Accessible.name: qsTr("Edit %1").arg(cell.Accessible.name)
@@ -480,6 +769,23 @@ FocusScope {
                 editor.committed = true
                 root.commitCell(editor.kind, editor.anchorEntry, editor.anchorTier, editor.anchorGroup,
                                 editor.text, editor.original)
+            }
+
+            function suggestions() {
+                const query = editor.text.trim().toLowerCase()
+                if (editor.kind !== 2 || query === "" || !root.manager) return []
+                const catalogue = root.manager.scenarioCatalogue || []
+                return catalogue.filter(item => item.name.toLowerCase().indexOf(query) !== -1)
+            }
+
+            function chooseSuggestion(item) {
+                if (!item) return
+                const entryId = editor.anchorEntry
+                editor.cancelled = true
+                suggestionPopup.close()
+                root.activeEditor = null
+                Qt.callLater(root.scenarioIdentityRequested, entryId, item.name, item.hash)
+                editor.ownerView.closeEditor()
             }
 
             Component.onCompleted: {
@@ -504,13 +810,39 @@ FocusScope {
             }
             // Paste and Undo are session commands even mid-edit: they commit the typed text as its
             // own step first, instead of the text field consuming them locally.
-            Keys.onPressed: (event) => root.handleCommandKey(event)
+            Keys.onPressed: (event) => {
+                if (suggestionPopup.opened && event.key === Qt.Key_Down) {
+                    editor.suggestionIndex = Math.min(editor.suggestionIndex + 1, editor.suggestions().length - 1)
+                    event.accepted = true
+                } else if (suggestionPopup.opened && event.key === Qt.Key_Up) {
+                    editor.suggestionIndex = Math.max(editor.suggestionIndex - 1, 0)
+                    event.accepted = true
+                } else if (suggestionPopup.opened && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                    editor.chooseSuggestion(editor.suggestions()[editor.suggestionIndex])
+                    event.accepted = true
+                } else if (suggestionPopup.opened && event.key === Qt.Key_Escape) {
+                    suggestionPopup.close()
+                    event.accepted = true
+                } else {
+                    root.handleCommandKey(event)
+                }
+            }
+            onTextEdited: {
+                editor.suggestionIndex = 0
+                if (editor.suggestions().length > 0) suggestionPopup.open()
+                else suggestionPopup.close()
+            }
             // TableView's editor event filter closes the editor on the Escape key press before
             // Keys sees it; the shortcut override sent ahead of that press is where the text is
             // marked discarded. While the menu is open the override is left unaccepted, so the
             // Escape shortcut below closes the menu instead and no key press reaches TableView.
             Keys.onShortcutOverride: (event) => {
-                if (event.key !== Qt.Key_Escape || editorMenu.opened) return
+                if (suggestionPopup.opened && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                    event.accepted = true
+                    editor.chooseSuggestion(editor.suggestions()[editor.suggestionIndex])
+                    return
+                }
+                if (event.key !== Qt.Key_Escape || editorMenu.opened || suggestionPopup.opened) return
                 editor.cancelled = true
                 event.accepted = true
             }
@@ -542,6 +874,38 @@ FocusScope {
                 MenuSeparator {}
                 MenuItem { focusPolicy: Qt.NoFocus; text: qsTr("Select All"); onTriggered: editor.selectAll() }
             }
+
+            Popup {
+                id: suggestionPopup
+                parent: editor
+                x: 0
+                y: editor.height
+                width: Math.max(editor.width, 240)
+                height: Math.min(suggestionList.contentHeight + 8, 180)
+                popupType: Popup.Item
+                modal: false
+                focus: false
+                closePolicy: Popup.NoAutoClose
+                padding: 4
+                contentItem: ListView {
+                    id: suggestionList
+                    clip: true
+                    model: editor.suggestions()
+                    delegate: ItemDelegate {
+                        id: suggestion
+                        required property var modelData
+                        required property int index
+                        objectName: "scenarioSuggestion_" + suggestion.modelData.hash
+                        width: suggestionList.width
+                        text: qsTr("%1 · %2").arg(suggestion.modelData.name).arg(suggestion.modelData.hash)
+                        highlighted: index === editor.suggestionIndex
+                        focusPolicy: Qt.NoFocus
+                        Accessible.name: qsTr("Use played scenario %1, hash %2")
+                            .arg(suggestion.modelData.name).arg(suggestion.modelData.hash)
+                        onClicked: editor.chooseSuggestion(suggestion.modelData)
+                    }
+                }
+            }
         }
     }
 
@@ -558,27 +922,82 @@ FocusScope {
 
             Repeater {
                 id: groupRepeater
-                model: root.manager && root.manager.groups ? root.manager.groups : []
-                delegate: Button {
+                model: root.manager && root.manager.groups
+                    ? root.manager.groups.filter(group => group.scenarioCount === 0 && group.kind !== "uncategorized") : []
+                delegate: Row {
                     id: groupItem
                     required property var modelData
                     readonly property string groupId: groupItem.modelData.id
-                    objectName: "groupListItem_" + groupItem.modelData.id
-                    flat: true
-                    activeFocusOnTab: true
-                    text: (groupItem.modelData.kind === "subcategory" ? "↳ " : "")
-                        + (groupItem.modelData.name !== "" ? groupItem.modelData.name : qsTr("(unnamed)"))
-                        + (groupItem.modelData.scenarioCount === 0 ? " " + qsTr("(empty)") : "")
-                        + ((groupItem.modelData.issues || []).length > 0 ? " ⚠" : "")
-                    Accessible.name: text
-                    Accessible.description: (groupItem.modelData.issues || []).join("; ")
-                    ToolTip.visible: hovered && (groupItem.modelData.issues || []).length > 0
-                    ToolTip.text: Accessible.description
-                    highlighted: root.focusedGroupId === groupItem.groupId
-                    onActiveFocusChanged: if (activeFocus) root.focusedGroupId = groupItem.groupId
-                    onClicked: {
-                        root.focusedGroupId = groupItem.groupId
-                        root.focusCell({groupId: groupItem.groupId})
+                    readonly property alias focusButton: groupButton
+                    property bool addingSubcategory: false
+                    property bool renaming: false
+                    readonly property alias subcategoryField: emptySubcategoryName
+                    readonly property alias renameField: emptyGroupRenameField
+                    Button {
+                        id: groupButton
+                        objectName: "groupListItem_" + groupItem.groupId
+                        flat: true
+                        visible: !groupItem.renaming
+                        activeFocusOnTab: true
+                        text: (groupItem.modelData.kind === "subcategory" ? "↳ " : "")
+                            + (groupItem.modelData.name !== "" ? groupItem.modelData.name : qsTr("(unnamed)"))
+                            + " " + qsTr("(empty)")
+                            + ((groupItem.modelData.issues || []).length > 0 ? " ⚠" : "")
+                        Accessible.name: text
+                        Accessible.description: (groupItem.modelData.issues || []).join("; ")
+                        ToolTip.visible: hovered && (groupItem.modelData.issues || []).length > 0
+                        ToolTip.text: Accessible.description
+                        highlighted: root.focusedGroupId === groupItem.groupId
+                                     || root.hoverDropGroupId === groupItem.groupId
+                        onActiveFocusChanged: if (activeFocus) root.focusedGroupId = groupItem.groupId
+                        onClicked: root.focusedGroupId = groupItem.groupId
+                        TapHandler {
+                            acceptedButtons: Qt.RightButton
+                            onTapped: {
+                                const p = groupButton.mapToItem(root, 0, groupButton.height)
+                                root.groupContextRequested(groupItem.groupId, p.x, p.y)
+                            }
+                        }
+                    }
+                    ToolButton {
+                        visible: groupItem.modelData.kind === "category" && !groupItem.addingSubcategory && !groupItem.renaming
+                        text: "+"
+                        Accessible.name: qsTr("Add subcategory to %1").arg(groupItem.modelData.name)
+                        onClicked: {
+                            groupItem.addingSubcategory = true
+                            emptySubcategoryName.forceActiveFocus()
+                        }
+                    }
+                    TextField {
+                        id: emptySubcategoryName
+                        visible: groupItem.addingSubcategory
+                        width: 130
+                        placeholderText: qsTr("Subcategory name")
+                        onAccepted: {
+                            if (text.trim() === "") return
+                            root.creationAccepted = true
+                            root.addSubcategoryRequested(groupItem.groupId, text)
+                            if (root.creationAccepted) {
+                                groupItem.addingSubcategory = false
+                                text = ""
+                            }
+                        }
+                        Keys.onEscapePressed: {
+                            groupItem.addingSubcategory = false
+                            text = ""
+                        }
+                    }
+                    TextField {
+                        id: emptyGroupRenameField
+                        objectName: "emptyGroupRenameField_" + groupItem.groupId
+                        visible: groupItem.renaming
+                        width: 140
+                        Accessible.name: qsTr("Group name")
+                        onAccepted: {
+                            root.renameGroupRequested(groupItem.groupId, text)
+                            groupItem.renaming = false
+                        }
+                        Keys.onEscapePressed: groupItem.renaming = false
                     }
                 }
             }
@@ -625,6 +1044,9 @@ FocusScope {
                     boundsBehavior: Flickable.StopAtBounds
                     model: root.tableModel
                     selectionModel: selection
+                    selectionBehavior: TableView.SelectCells
+                    selectionMode: TableView.ExtendedSelection
+                    pointerNavigationEnabled: false
                     syncView: thresholdView
                     syncDirection: Qt.Vertical
                     columnWidthProvider: (column) => column < root.thresholdKind ? root.identityWidths[column] : 0
@@ -653,6 +1075,10 @@ FocusScope {
 
                 // A rankless table has no header cell to select, so this stands in as the paste
                 // destination that appends ranks.
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.headerHeight
+                    spacing: 0
                 FocusScope {
                     id: emptyRankHeader
                     objectName: "emptyRankHeader"
@@ -737,6 +1163,14 @@ FocusScope {
                             onTapped: headerCell.forceActiveFocus()
                             onDoubleTapped: headerCell.beginRename()
                         }
+                        TapHandler {
+                            acceptedButtons: Qt.RightButton
+                            onTapped: eventPoint => {
+                                headerCell.forceActiveFocus()
+                                const point = headerCell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
+                                root.rankContextRequested(headerCell.tierId, point.x, point.y)
+                            }
+                        }
 
                         Rectangle {
                             anchors.fill: parent
@@ -806,6 +1240,43 @@ FocusScope {
                     }
                 }
 
+                ToolButton {
+                    id: addRankPlus
+                    objectName: "addRankPlus"
+                    visible: !root.addingRank
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: root.headerHeight
+                    text: "+"
+                    Accessible.name: qsTr("Add rank")
+                    onClicked: {
+                        root.addingRank = true
+                        rankCreationName.forceActiveFocus()
+                    }
+                }
+                TextField {
+                    id: rankCreationName
+                    objectName: "rankCreationName"
+                    visible: root.addingRank
+                    Layout.preferredWidth: 130
+                    Layout.preferredHeight: root.headerHeight
+                    placeholderText: qsTr("Rank name")
+                    Accessible.name: placeholderText
+                    onAccepted: {
+                        if (text.trim() === "") return
+                        root.creationAccepted = true
+                        root.addRankRequested(text)
+                        if (root.creationAccepted) {
+                            root.addingRank = false
+                            text = ""
+                        }
+                    }
+                    Keys.onEscapePressed: {
+                        root.addingRank = false
+                        text = ""
+                    }
+                }
+                }
+
                 TableView {
                     id: thresholdView
                     objectName: "thresholdView"
@@ -815,6 +1286,9 @@ FocusScope {
                     boundsBehavior: Flickable.StopAtBounds
                     model: root.tableModel
                     selectionModel: selection
+                    selectionBehavior: TableView.SelectCells
+                    selectionMode: TableView.ExtendedSelection
+                    pointerNavigationEnabled: false
                     columnWidthProvider: (column) => column >= root.thresholdKind ? root.thresholdWidth : 0
                     rowHeightProvider: () => root.rowHeight
                     delegate: TableCell {}
@@ -833,6 +1307,70 @@ FocusScope {
                         }
                     }
                 }
+            }
+        }
+
+        Rectangle {
+            id: uncategorizedDropZone
+            objectName: "uncategorizedDropZone"
+            visible: root.draggingRows
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.rowHeight
+            color: Qt.alpha(root.palette.highlight, 0.2)
+            border.color: root.hoverDropGroupId === "__uncategorized__" ? root.palette.highlight : root.palette.mid
+            Label {
+                anchors.centerIn: parent
+                text: qsTr("Move to Uncategorized")
+            }
+        }
+
+        Row {
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.rowHeight
+            spacing: 0
+            ToolButton {
+                id: addCategoryPlus
+                objectName: "addCategoryPlus"
+                visible: !root.addingCategory
+                width: root.identityWidths[0]
+                height: root.rowHeight
+                text: "+"
+                Accessible.name: qsTr("Add category")
+                onClicked: {
+                    root.addingCategory = true
+                    categoryCreationName.forceActiveFocus()
+                }
+            }
+            TextField {
+                id: categoryCreationName
+                objectName: "categoryCreationName"
+                visible: root.addingCategory
+                width: root.identityWidths[0]
+                height: root.rowHeight
+                placeholderText: qsTr("Category name")
+                Accessible.name: placeholderText
+                onAccepted: {
+                    if (text.trim() === "") return
+                    root.creationAccepted = true
+                    root.addCategoryRequested(text)
+                    if (root.creationAccepted) {
+                        root.addingCategory = false
+                        text = ""
+                    }
+                }
+                Keys.onEscapePressed: {
+                    root.addingCategory = false
+                    text = ""
+                }
+            }
+            Item { width: root.identityWidths[1]; height: root.rowHeight }
+            ToolButton {
+                objectName: "addScenarioPlus"
+                width: root.identityWidths[2]
+                height: root.rowHeight
+                text: "+"
+                Accessible.name: qsTr("Add scenario to Uncategorized")
+                onClicked: root.addScenarioRequested()
             }
         }
     }

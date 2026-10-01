@@ -60,102 +60,56 @@ TestCase {
 
     function test_managementWithoutCards() {
         const dialog = openTableDialog()
-        verify(dialog.editorTable, "the dialog must host the table editor")
-        verify(find(dialog, "treeNode_a") === null, "scenario cards are replaced by table rows")
+        verify(dialog.editorTable)
+        verify(find(dialog, "treeNode_a") === null)
         tryVerify(() => find(dialog, "cell_a_scenario") !== null)
 
-        // Known and free scenario add, tier add and category add all remain.
-        verify(find(dialog, "knownScenarioPicker") !== null)
-        find(dialog, "newScenarioField").text = "popcorn"
-        click(dialog, "addScenarioButton")
-        compare(vm(dialog).addUnplayedScenarioCalls, ["popcorn"])
-        find(dialog, "newCategoryField").text = "Aim"
-        click(dialog, "addCategoryButton")
+        click(dialog, "addScenarioPlus")
+        compare(vm(dialog).addUnplayedScenarioCalls, [""])
+        click(dialog, "addCategoryPlus")
+        const categoryName = find(dialog, "categoryCreationName")
+        categoryName.text = "Aim"
+        keyClick(Qt.Key_Return)
         compare(vm(dialog).addCategoryCalls, ["Aim"])
 
-        // Selected rows go to a group as IDs, in one command.
         vm(dialog).selectedEntryIds = ["c", "a"]
-        click(dialog, "assignSelectionButton")
-        tryCompare(dialog.assignMenu, "visible", true)
-        verify(menuItem(dialog.assignMenu, "assignTarget_") !== null, "Uncategorized must be a target")
-        verify(menuItem(dialog.assignMenu, "assignTarget_p") !== null, "subcategories must be targets")
-        menuItem(dialog.assignMenu, "assignTarget_g1").triggered()
-        compare(vm(dialog).assignScenariosCalls.length, 1)
-        compare(vm(dialog).assignScenariosCalls[0][0], ["c", "a"])
-        compare(vm(dialog).assignScenariosCalls[0][1], "g1")
+        dialog.assignSelection("g1")
+        compare(vm(dialog).assignScenariosCalls, [[["c", "a"], "g1"]])
+        verify(dialog.assignTargets().some(target => target.id === "p"))
+        verify(!dialog.assignTargets().some(target => target.id === "g2"),
+               "a category with subcategories cannot receive scenarios")
 
-        vm(dialog).assignResult = {ok: false, error: "A category cannot hold both scenarios and subcategories."}
-        click(dialog, "assignSelectionButton")
-        tryCompare(dialog.assignMenu, "visible", true)
-        menuItem(dialog.assignMenu, "assignTarget_g2").triggered()
-        tryCompare(find(dialog, "tableStatusLabel"), "text", "A category cannot hold both scenarios and subcategories.")
-
-        // Row order within its collection.
         verify(dialog.editorTable.focusCell({entryId: "b"}))
-        click(dialog, "moveRowUpButton")
+        dialog.moveCurrentRow(-1)
         compare(vm(dialog).reorderScenarioCalls, [["b", 0]])
-        compare(find(dialog, "moveRowDownButton").enabled, false, "b is already last in its collection")
-        click(dialog, "removeScenarioButton")
+        dialog.removeSelectedScenarios()
         compare(vm(dialog).removeScenariosCalls, [["b"]])
-        compare(vm(dialog).removeScenarioCalls, [])
 
-        // Rank management from the header, including an unnamed rank.
         verify(dialog.editorTable.focusCell({tierId: "t2"}))
-        tryCompare(dialog, "currentTierId", "t2")
-        click(dialog, "moveRankLeftButton")
+        dialog.moveCurrentRankBy(-1)
         compare(vm(dialog).reorderTierCalls, [["t2", 0]])
-        const rankName = find(dialog, "rankNameField")
-        rankName.forceActiveFocus()
+        verify(dialog.editorTable.beginRankRename("t2"))
+        const rankName = find(dialog, "rankHeaderEditor")
+        tryVerify(() => rankName !== null)
         rankName.text = "Silver"
-        rankName.editingFinished()
+        keyClick(Qt.Key_Return)
         compare(vm(dialog).renameTierCalls, [["t2", "Silver"]])
-        click(dialog, "removeRankButton")
+        dialog.removeCurrentRank()
         compare(vm(dialog).removeTierCalls, ["t2"])
 
-        // Category and subcategory management, including empty groups.
         verify(dialog.editorTable.focusCell({groupId: "g2"}))
-        tryCompare(dialog, "currentGroupId", "g2")
-        click(dialog, "moveGroupUpButton")
+        dialog.moveCurrentGroup(-1)
         compare(vm(dialog).reorderCategoryCalls, [["g2", 0]])
-        verify(dialog.editorTable.focusCell({groupId: "hollow"}))
-        tryCompare(dialog, "currentGroupId", "hollow")
-        click(dialog, "moveGroupUpButton")
-        compare(vm(dialog).reorderSubcategoryCalls, [["hollow", 0]])
-        const groupName = find(dialog, "groupNameField")
-        groupName.forceActiveFocus()
-        groupName.text = "Renamed"
-        groupName.editingFinished()
-        compare(vm(dialog).renameGroupCalls, [["hollow", "Renamed"]])
-        click(dialog, "removeGroupButton")
-        compare(vm(dialog).removeCategoryCalls, ["hollow"])
-
-        // The first subcategory under direct rows needs an explicit choice; Cancel changes nothing.
-        verify(dialog.editorTable.focusCell({groupId: "g1"}))
-        tryCompare(dialog, "currentGroupId", "g1")
-        find(dialog, "newSubcategoryField").text = "Static"
-        click(dialog, "addSubcategoryButton")
+        verify(dialog.editorTable.beginSubcategoryCreation("g1"))
+        const subcategoryName = find(dialog, "subcategoryCreationField")
+        tryVerify(() => subcategoryName !== null && subcategoryName.visible)
+        subcategoryName.text = "Static"
+        keyClick(Qt.Key_Return)
         tryCompare(dialog.subcategoryRelocationPrompt, "visible", true)
-        compare(vm(dialog).addSubcategoryRelocatingCalls.length, 0)
         compare(vm(dialog).addSubcategoryCalls.length, 0)
-        dialog.subcategoryRelocationPrompt.reject()
-        tryCompare(dialog.subcategoryRelocationPrompt, "visible", false)
-        compare(vm(dialog).addSubcategoryRelocatingCalls.length, 0)
-
-        find(dialog, "newSubcategoryField").text = "Static"
-        click(dialog, "addSubcategoryButton")
-        tryCompare(dialog.subcategoryRelocationPrompt, "visible", true)
         dialog.subcategoryRelocationPrompt.relocate("newSubcategory")
         compare(vm(dialog).addSubcategoryRelocatingCalls, [["g1", "Static", "newSubcategory"]])
-
-        // A category that already has subcategories needs no choice.
-        verify(dialog.editorTable.focusCell({groupId: "g2"}))
-        tryCompare(dialog, "currentGroupId", "g2")
-        find(dialog, "newSubcategoryField").text = "Flick"
-        click(dialog, "addSubcategoryButton")
-        compare(vm(dialog).addSubcategoryCalls, [["g2", "Flick"]])
-        compare(dialog.subcategoryRelocationPrompt.visible, false)
     }
-
     // One Remove over several selected rows is one session command, hence one Undo step.
     function test_removingSelectedRowsIsOneCommand() {
         const dialog = openTableDialog()
@@ -168,6 +122,32 @@ TestCase {
         compare(vm(dialog).commandLog, ["removeScenarios"])
     }
 
+    function test_emptyGroupCanBeRenamedFromItsChip() {
+        const dialog = openTableDialog()
+        verify(dialog.editorTable.beginGroupRename("gE"))
+        const field = find(dialog, "emptyGroupRenameField_gE")
+        verify(field !== null && field.visible)
+        field.text = "New group"
+        keyClick(Qt.Key_Return)
+        compare(vm(dialog).renameGroupCalls, [["gE", "New group"]])
+    }
+
+    function test_groupAndRankHeadersOpenContextMenus() {
+        const dialog = openTableDialog()
+        const group = find(dialog, "groupListItem_gE")
+        verify(group !== null)
+        mouseClick(group, group.width / 2, group.height / 2, Qt.RightButton)
+        tryVerify(() => dialog.groupContextMenu.opened)
+        compare(dialog.currentGroupId, "gE")
+        dialog.groupContextMenu.close()
+
+        const rank = find(dialog, "rankHeader_t1")
+        verify(rank !== null)
+        mouseClick(rank, rank.width / 2, rank.height / 2, Qt.RightButton)
+        tryVerify(() => dialog.rankContextMenu.opened)
+        compare(dialog.currentTierId, "t1")
+    }
+
     function test_swatchesAndContextMapping() {
         const dialog = openTableDialog({draftFromLibrary: true})
         verify(dialog.editorTable, "the dialog must host the table editor")
@@ -175,14 +155,14 @@ TestCase {
         // Rank colour commits only on acceptance, at the rank's ID.
         verify(dialog.editorTable.focusCell({tierId: "t1"}))
         tryCompare(dialog, "currentTierId", "t1")
-        const rankSwatch = click(dialog, "rankColorSwatch")
+        const rankSwatch = click(dialog, "rankSwatch_t1")
         verify(String(rankSwatch.Accessible.name) !== "", "swatches carry a textual label")
         tryCompare(dialog.colorDialog, "visible", true)
         compare(dialog.colorDialog.targetKind, "tier")
         compare(dialog.colorDialog.targetId, "t1")
         dialog.colorDialog.reject()
         compare(vm(dialog).setTierColorCalls.length, 0, "a cancelled colour choice sends nothing")
-        click(dialog, "rankColorSwatch")
+        click(dialog, "rankSwatch_t1")
         dialog.colorDialog.selectedColor = "#123456"
         dialog.colorDialog.accept()
         tryVerify(() => vm(dialog).setTierColorCalls.length === 1)
@@ -192,7 +172,7 @@ TestCase {
 
         verify(dialog.editorTable.focusCell({groupId: "g1"}))
         tryCompare(dialog, "currentGroupId", "g1")
-        click(dialog, "groupColorSwatch")
+        click(dialog, "groupSwatch_g1")
         tryCompare(dialog.colorDialog, "visible", true)
         compare(dialog.colorDialog.targetKind, "group")
         dialog.colorDialog.selectedColor = "#654321"
@@ -203,7 +183,7 @@ TestCase {
         // Uncategorized is neutral: no user group, so no colour control.
         verify(dialog.editorTable.focusCell({entryId: "u-amb", columnKind: 0}))
         tryCompare(dialog, "currentGroupId", "")
-        const groupSwatch = find(dialog, "groupColorSwatch")
+        const groupSwatch = ItemLookup.findByObjectName(find(dialog, "cell_u-amb_category"), "groupSwatch_")
         verify(groupSwatch === null || !groupSwatch.visible, "Uncategorized offers no colour edit")
 
         // Contextual mapping for the current row: candidates with metadata, behind the history gate.

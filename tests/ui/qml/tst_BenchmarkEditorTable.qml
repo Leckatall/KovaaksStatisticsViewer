@@ -135,6 +135,189 @@ TestCase {
                "delegate count must follow the viewport, not the row count: " + small + " vs " + large)
     }
 
+    function test_selectionTintAndContextualPlusControls() {
+        const group = {id: "g1", name: "Clicking", color: "#009600"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", category: group, name: "Alpha", cells: {t1: {displayText: "1"}}},
+            {entryId: "b", category: group, name: "Beta", cells: {t1: {displayText: "2"}}}
+        ]}, {groups: [
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, issues: []},
+            {id: "empty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, issues: []},
+            {id: "uncategorized", kind: "uncategorized", parentId: "", name: "Uncategorized", scenarioCount: 0, issues: []}
+        ]})
+
+        verify(table.focusCell({entryId: "a", tierId: "t1"}))
+        tryVerify(() => cellFor(table, "a", "scenario").rowHighlighted)
+        verify(cellFor(table, "a", "t1").current)
+        verify(!cellFor(table, "b", "scenario").rowHighlighted)
+        verify(ItemLookup.findByObjectName(table, "addCategoryPlus") !== null)
+        verify(ItemLookup.findByObjectName(table, "addScenarioPlus") !== null)
+        verify(ItemLookup.findByObjectName(table, "addRankPlus") !== null)
+        verify(ItemLookup.findByObjectName(table, "addSubcategoryPlus_g1") !== null)
+        verify(ItemLookup.findByObjectName(table, "groupListItem_empty") !== null)
+        verify(ItemLookup.findByObjectName(table, "groupListItem_g1") === null)
+        verify(ItemLookup.findByObjectName(table, "groupListItem_uncategorized") === null)
+    }
+
+    function test_dragSelectionMovesRowsOnlyToValidGroupOrUncategorized() {
+        const group = {id: "g1", name: "Clicking"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", category: group, name: "Alpha", cells: {}},
+            {entryId: "b", category: group, name: "Beta", cells: {}},
+            {entryId: "c", name: "Gamma", cells: {}}
+        ]}, {groups: [
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0},
+            {id: "g3", kind: "category", parentId: "", name: "Divided", scenarioCount: 1},
+            {id: "sub", kind: "subcategory", parentId: "g3", name: "Precise", scenarioCount: 1}
+        ]})
+        const moves = []
+        table.moveSelectionRequested.connect((ids, target) => moves.push([ids, target]))
+        verify(table.focusCell({entryId: "a", columnKind: 2}))
+        table.selectionModel.select(table.tableModel.index(table.tableModel.rowForEntry("b"), 2),
+                                    ItemSelectionModel.Select)
+        table.beginRowDrag("a")
+        verify(ItemLookup.findByObjectName(table, "uncategorizedDropZone").visible)
+        table.dropRows("g3")
+        compare(moves.length, 0, "a divided category must reject the drop")
+        const categoryCell = cellFor(table, "a", "category")
+        const categoryPoint = categoryCell.mapToItem(null, categoryCell.width / 2, categoryCell.height / 2)
+        compare(table.targetAtScene(categoryPoint), "g1", "the spanning category cell is a drop target")
+        table.dropRows("g2")
+        compare(moves, [[["a", "b"], "g2"]])
+        table.beginRowDrag("c")
+        const zone = ItemLookup.findByObjectName(table, "uncategorizedDropZone")
+        waitForRendering(table)
+        const zonePoint = zone.mapToItem(null, zone.width / 2, zone.height / 2)
+        table.dropAtScene(zonePoint)
+        compare(moves[1], [["c"], ""])
+    }
+
+    function test_pointerDragOntoEmptyGroupMovesSelectedRows() {
+        const group = {id: "g1", name: "Clicking"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", category: group, name: "Alpha", cells: {}},
+            {entryId: "b", category: group, name: "Beta", cells: {}}
+        ]}, {groups: [
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0}
+        ]})
+        const moves = []
+        const dragStates = []
+        const hoverTargets = []
+        table.moveSelectionRequested.connect((ids, target) => moves.push([ids, target]))
+        table.draggingRowsChanged.connect(() => dragStates.push(table.draggingRows))
+        table.hoverDropGroupIdChanged.connect(() => hoverTargets.push(table.hoverDropGroupId))
+        verify(table.focusCell({entryId: "a", columnKind: 2}))
+        table.selectionModel.select(table.tableModel.index(table.tableModel.rowForEntry("b"), 2),
+                                    ItemSelectionModel.Select)
+        const source = cellFor(table, "a", "scenario")
+        const target = ItemLookup.findByObjectName(table, "groupListItem_g2")
+        verify(source !== null && target !== null)
+        const start = source.mapToItem(table, source.width / 2, source.height / 2)
+        const end = target.mapToItem(table, target.width / 2, target.height / 2)
+        mouseDrag(source, source.width / 2, source.height / 2,
+                  end.x - start.x, end.y - start.y, Qt.LeftButton)
+        verify(dragStates.indexOf(true) !== -1, "the scenario drag handler must activate")
+        verify(hoverTargets.indexOf("g2") !== -1, "the empty group's drop area must receive the drag")
+        tryCompare(moves, "length", 1)
+        compare(moves[0], [["a", "b"], "g2"])
+    }
+
+    function scenePointIn(cell, fraction) {
+        return cell.mapToItem(null, cell.width / 2, cell.height * fraction)
+    }
+
+    function test_rowInsertionTargetsTheGapAboveOrBelowTheHoveredRow() {
+        const group = {id: "g1", name: "Clicking"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", category: group, name: "Alpha", cells: {}},
+            {entryId: "b", category: group, name: "Beta", cells: {}},
+            {entryId: "c", name: "Gamma", cells: {}}
+        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2}]})
+        const insertion = (entryId, column, fraction) => {
+            const found = table.rowInsertionAtScene(scenePointIn(cellFor(table, entryId, column), fraction))
+            return found ? [found.groupId, found.beforeEntryId] : null
+        }
+
+        compare(insertion("b", "scenario", 0.25), ["g1", "b"])
+        compare(insertion("a", "scenario", 0.75), ["g1", "b"])
+        compare(insertion("b", "scenario", 0.75), ["g1", ""], "below a group's last row appends to it")
+        compare(insertion("c", "t1", 0.25), ["", "c"], "threshold cells are row targets too")
+        compare(insertion("a", "category", 0.5), null, "group cells keep their append-to-group meaning")
+    }
+
+    function test_pointerDragBetweenRowsPlacesTheRowAndShowsWhereItLands() {
+        const group = {id: "g1", name: "Clicking"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", category: group, name: "Alpha", cells: {}},
+            {entryId: "b", category: group, name: "Beta", cells: {}},
+            {entryId: "c", name: "Gamma", cells: {}}
+        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2}]})
+        const moves = []
+        const indicators = []
+        table.moveSelectionRequested.connect((ids, target, before) => moves.push([ids, target, before]))
+        table.dropInsertionChanged.connect(() => {
+            if (table.dropInsertion) indicators.push([table.dropInsertion.row, table.dropInsertion.above])
+        })
+        const source = cellFor(table, "c", "scenario")
+        const target = cellFor(table, "a", "scenario")
+        const start = source.mapToItem(table, source.width / 2, source.height / 2)
+        const end = target.mapToItem(table, target.width / 2, target.height * 0.25)
+        mouseDrag(source, source.width / 2, source.height / 2, end.x - start.x, end.y - start.y, Qt.LeftButton)
+
+        tryCompare(moves, "length", 1)
+        compare(moves[0], [["c"], "g1", "a"])
+        verify(indicators.some(i => i[0] === 0 && i[1]), "the line must mark the gap above row a")
+        compare(table.dropInsertion, null, "the line is gone once the drop lands")
+    }
+
+    function test_controlClickSelectsSeparateCellsAndHighlightsBothRows() {
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", name: "Alpha", cells: {t1: {displayText: "1"}}},
+            {entryId: "b", name: "Beta", cells: {t1: {displayText: "2"}}}
+        ]})
+        const first = cellFor(table, "a", "t1")
+        const second = cellFor(table, "b", "scenario")
+        mouseClick(first)
+        mouseClick(second, second.width / 2, second.height / 2, Qt.LeftButton, Qt.ControlModifier)
+        tryCompare(table.manager, "selectedEntryIds", ["a", "b"])
+        verify(first.rowHighlighted && second.rowHighlighted)
+        verify(cellFor(table, "a", "scenario").rowHighlighted)
+    }
+
+    function test_modelResetRestoresTheSelectedCellsByEntryAndRank() {
+        const ref = {}
+        const rows = order => order.map(id => ({entryId: id, name: id, cells: {}}))
+        const tiers = order => order.map(id => ({id: id, name: id}))
+        const table = makeTable({tiers: tiers(["t1", "t2"]), rows: rows(["a", "b"])}, {}, ref)
+        table.selectionModel.select(table.tableModel.index(0, 3), ItemSelectionModel.Select)
+        table.selectionModel.select(table.tableModel.index(1, 4), ItemSelectionModel.Select)
+        tryCompare(table.manager, "selectedEntryIds", ["a", "b"])
+
+        ref.fixture.setProjection(TestDoubles.benchmarkTableProjection({
+            tiers: tiers(["t2", "t1"]), rows: rows(["b", "a"])
+        }))
+        tryVerify(() => table.selectionModel.selectedIndexes.length === 2)
+        const anchors = table.selectionModel.selectedIndexes.map(index => table.tableModel.anchorAt(index.row, index.column))
+        verify(anchors.some(anchor => anchor.entryId === "a" && anchor.tierId === "t1"))
+        verify(anchors.some(anchor => anchor.entryId === "b" && anchor.tierId === "t2"))
+    }
+
+    function test_shiftClickSelectsCellRectangleAcrossRowsAndRanks() {
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}, {id: "t2", name: "Silver"}], rows: [
+            {entryId: "a", name: "Alpha", cells: {}},
+            {entryId: "b", name: "Beta", cells: {}},
+            {entryId: "c", name: "Gamma", cells: {}}
+        ]})
+        const first = cellFor(table, "a", "t1")
+        const last = cellFor(table, "c", "t2")
+        mouseClick(first)
+        mouseClick(last, last.width / 2, last.height / 2, Qt.LeftButton, Qt.ShiftModifier)
+        tryCompare(table.manager, "selectedEntryIds", ["a", "b", "c"])
+        compare(table.selectionModel.selectedIndexes.length, 6)
+    }
+
     function test_keyboardEditAndIssueNavigation() {
         const rows = [
             {entryId: "a", cells: {t1: {displayText: "1,234.5678901234567", editText: "1234.5678901234567"},

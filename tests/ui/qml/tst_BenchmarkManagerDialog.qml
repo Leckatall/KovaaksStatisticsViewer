@@ -277,67 +277,152 @@ TestCase {
         compare(vm(dialog).setThresholdCalls.length, 0, "no JavaScript numeric conversion")
     }
 
-    function test_addScenarioAndTierDelegateToVm() {
-        const dialog = openWithFake({hasDraft: true})
+    function test_tablePlusCreatesBlankScenarioAndInlineNamedRankAndCategory() {
+        const dialog = openWithTable({tiers: [], rows: []})
 
-        const scenarioField = find(dialog, "newScenarioField")
-        scenarioField.text = "1w6ts"
-        mouseClick(find(dialog, "addScenarioButton"))
-        const tierField = find(dialog, "newTierField")
-        tierField.text = "Gold"
-        mouseClick(find(dialog, "addTierButton"))
+        mouseClick(find(dialog, "addScenarioPlus"))
+        tryCompare(vm(dialog), "addUnplayedScenarioCalls", [""])
 
-        tryVerify(() => vm(dialog).addUnplayedScenarioCalls.length === 1)
-        tryVerify(() => vm(dialog).addTierCalls.length === 1)
-        compare(vm(dialog).addUnplayedScenarioCalls, ["1w6ts"])
-        compare(vm(dialog).addTierCalls, ["Gold"])
-        compare(scenarioField.text, "", "the scenario field should clear after adding")
-        compare(tierField.text, "", "the tier field should clear after adding")
+        mouseClick(find(dialog, "addRankPlus"))
+        const rankName = find(dialog, "rankCreationName")
+        verify(rankName && rankName.visible)
+        rankName.text = "Gold"
+        keyClick(Qt.Key_Return)
+        tryCompare(vm(dialog), "addTierCalls", ["Gold"])
+
+        mouseClick(find(dialog, "addCategoryPlus"))
+        const categoryName = find(dialog, "categoryCreationName")
+        verify(categoryName && categoryName.visible)
+        categoryName.text = "Clicking"
+        keyClick(Qt.Key_Return)
+        tryCompare(vm(dialog), "addCategoryCalls", ["Clicking"])
+    }
+
+    function test_newScenarioPlusFocusesBlankUncategorizedName() {
+        const ref = {}
+        const desc = {tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", name: "Existing", cells: {}}
+        ]}
+        const dialog = openWithTable(desc, {
+            addUnplayedScenario: function (name) {
+                this.addUnplayedScenarioCalls.push(name)
+                ref.fixture.setProjection(TestDoubles.benchmarkTableProjection({
+                    tiers: desc.tiers,
+                    rows: desc.rows.concat([{entryId: "new", name: "", cells: {}}])
+                }))
+                return {ok: true, createdId: "new"}
+            }
+        }, ref)
+        mouseClick(find(dialog, "addScenarioPlus"))
+        tryVerify(() => dialog.editorTable.activeEditor !== null)
+        compare(dialog.editorTable.activeEditor.anchorEntry, "new")
+        compare(dialog.editorTable.activeEditor.text, "")
+        compare(vm(dialog).addUnplayedScenarioCalls, [""])
     }
 
     // ---- M2: known-scenario and mapping-resolution controls ---------------
 
-    function test_bothFreeTextAndKnownScenarioAddPathsAreOffered() {
-        const dialog = openWithFake({
-            hasDraft: true,
-            scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
-        })
-
-        verify(find(dialog, "newScenarioField") !== null,
-               "the free-text Add unplayed scenario path must remain")
-        verify(find(dialog, "addScenarioButton") !== null,
-               "the free-text add button must remain")
-        verify(find(dialog, "knownScenarioPicker") !== null,
-               "a catalogue-backed known-scenario picker must exist beside the free-text field")
-        verify(find(dialog, "addKnownScenarioButton") !== null,
-               "the known-scenario add button must exist")
+    function test_creationFieldsCancelWithoutCreating() {
+        const dialog = openWithTable({tiers: [], rows: []})
+        mouseClick(find(dialog, "addRankPlus"))
+        find(dialog, "rankCreationName").text = "Gold"
+        keyClick(Qt.Key_Escape)
+        compare(vm(dialog).addTierCalls.length, 0)
+        mouseClick(find(dialog, "addCategoryPlus"))
+        find(dialog, "categoryCreationName").text = "Clicking"
+        keyClick(Qt.Key_Escape)
+        compare(vm(dialog).addCategoryCalls.length, 0)
     }
 
-    function test_knownScenarioPickerFiltersCatalogueAndAddsByHash() {
-        const dialog = openWithFake({
-            hasDraft: true,
+    function test_selectedRowContextMenuMovesAllSelectedScenarios() {
+        const desc = TestDoubles.benchmarkManagementDesc()
+        const dialog = openWithTable(desc, {
+            groups: [
+                {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, issues: []},
+                {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 1, issues: []}
+            ]
+        })
+        verify(dialog.editorTable.focusCell({entryId: "a", columnKind: 2}))
+        const model = vm(dialog).tableModel
+        dialog.editorTable.selectionModel.select(model.index(model.rowForEntry("b"), 2),
+                                                 ItemSelectionModel.Select)
+        tryCompare(vm(dialog), "selectedEntryIds", ["a", "b"])
+
+        const cell = tableCell(dialog, "a", "scenario")
+        mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+        tryVerify(() => dialog.rowContextMenu.opened)
+        compare(vm(dialog).selectedEntryIds.slice().sort(), ["a", "b"])
+        let target = null
+        for (let i = 0; i < dialog.assignMenu.count; ++i) {
+            if (dialog.assignMenu.itemAt(i).objectName === "assignTarget_g2")
+                target = dialog.assignMenu.itemAt(i)
+        }
+        verify(target !== null, "Move to group must list the available category")
+        target.triggered()
+        tryCompare(vm(dialog), "assignScenariosCalls", [[["a", "b"], "g2"]])
+        verify(find(dialog, "rowActions") === null)
+
+        dialog.editorTable.moveSelectionRequested(["b"], "g1", "a")
+        compare(vm(dialog).assignScenariosCalls[1], [["b"], "g1", "a"], "a row drop forwards its insertion point")
+    }
+
+    function test_nameSuggestionSetsNameAndHashWithoutSeparateRename() {
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
             scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
         })
+        verify(dialog.editorTable.beginScenarioEdit("s-unr"))
+        const editor = dialog.editorTable.activeEditor
+        verify(editor !== null)
+        editor.selectAll()
+        for (const ch of "1w4ts") keyClick(ch)
 
-        const picker = find(dialog, "knownScenarioPicker")
-        verify(picker !== null, "no knownScenarioPicker found")
-        picker.forceActiveFocus()
-        picker.text = "1w4ts"
-        picker.editingFinished()
-
-        // Both "1w4ts" rows survive the filter; each is addressable by its own hash.
-        const optionA = find(dialog, "knownScenarioOption_hash-a")
-        const optionB = find(dialog, "knownScenarioOption_hash-b")
-        verify(optionA !== null && optionB !== null,
-               "duplicate names must be offered as distinct hash-keyed options")
-        verify(find(dialog, "knownScenarioOption_hash-c") === null,
-               "non-matching catalogue rows must be filtered out")
-
+        compare(editor.text, "1w4ts")
+        tryVerify(() => editor.suggestionPopupView.opened)
+        const option = hash => ItemLookup.findByObjectName(editor.suggestionPopupView.contentItem,
+                                                          "scenarioSuggestion_" + hash)
+        tryVerify(() => option("hash-a") !== null && option("hash-b") !== null)
+        const optionB = option("hash-b")
+        verify(option("hash-c") === null)
         mouseClick(optionB)
-        mouseClick(find(dialog, "addKnownScenarioButton"))
 
-        tryVerify(() => vm(dialog).addKnownScenarioCalls.length === 1)
-        compare(vm(dialog).addKnownScenarioCalls[0], ["1w4ts", "hash-b"])
+        tryCompare(vm(dialog), "setScenarioIdentityCalls", [["s-unr", "1w4ts", "hash-b"]])
+        compare(vm(dialog).renameScenarioCalls.length, 0)
+    }
+
+    function test_nameSuggestionOnSavedBenchmarkWaitsForRetrospectiveWarning() {
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
+            draftFromLibrary: true,
+            scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
+        })
+        verify(dialog.editorTable.beginScenarioEdit("s-unr"))
+        const editor = dialog.editorTable.activeEditor
+        editor.selectAll()
+        for (const ch of "popcorn") keyClick(ch)
+        tryVerify(() => editor.suggestionPopupView.opened)
+        const option = ItemLookup.findByObjectName(editor.suggestionPopupView.contentItem,
+                                                    "scenarioSuggestion_hash-c")
+        verify(option !== null)
+        mouseClick(option)
+        tryCompare(dialog.retrospectivePrompt, "visible", true)
+        compare(vm(dialog).setScenarioIdentityCalls.length, 0)
+        dialog.retrospectivePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
+        tryCompare(vm(dialog), "setScenarioIdentityCalls", [["s-unr", "popcorn", "hash-c"]])
+    }
+
+    function test_nameSuggestionSupportsArrowAndEnterSelection() {
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
+            scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
+        })
+        verify(dialog.editorTable.beginScenarioEdit("s-unr"))
+        const editor = dialog.editorTable.activeEditor
+        editor.selectAll()
+        for (const ch of "1w4ts") keyClick(ch)
+        tryVerify(() => editor.suggestionPopupView.opened)
+        keyClick(Qt.Key_Down)
+        compare(editor.suggestionIndex, 1)
+        keyClick(Qt.Key_Return)
+        tryCompare(vm(dialog), "setScenarioIdentityCalls", [["s-unr", "1w4ts", "hash-b"]])
+        compare(vm(dialog).renameScenarioCalls.length, 0)
     }
 
     function test_everyMatchingStateRendersItsTextualLabel() {
@@ -437,7 +522,7 @@ TestCase {
         verify(banner !== null, "an automatic-resolution write failure must surface a banner")
         tryCompare(banner, "visible", true)
         // Non-modal: the rest of the editor stays usable while the banner is shown.
-        compare(find(failing, "addScenarioButton").enabled, true,
+        compare(find(failing, "addScenarioPlus").enabled, true,
                 "the failure banner must not block the editor")
 
         const recovered = openWithFake({
@@ -449,24 +534,13 @@ TestCase {
                "the banner must clear once a later reconciliation publishes without failure")
     }
 
-    function test_knownScenarioControlsAreKeyboardAndAccessibilityOrdered() {
-        const dialog = openWithFake({
-            hasDraft: true,
-            scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
-        })
-
-        const picker = find(dialog, "knownScenarioPicker")
-        const addButton = find(dialog, "addKnownScenarioButton")
-        verify(picker !== null && addButton !== null, "known-scenario controls must exist")
-
-        compare(picker.activeFocusOnTab, true, "the picker must be reachable by keyboard")
-        compare(addButton.activeFocusOnTab, true, "the add button must be reachable by keyboard")
-        verify(String(picker.Accessible.name) !== "", "the picker must carry an accessible name")
-        verify(String(addButton.Accessible.name) !== "", "the add button must carry an accessible name")
-
-        picker.forceActiveFocus()
-        compare(picker.nextItemInFocusChain(), addButton,
-                "tab order must run from the picker to its add button")
+    function test_inlineCreationControlsAreKeyboardAccessible() {
+        const dialog = openWithTable({tiers: [], rows: []})
+        for (const name of ["addScenarioPlus", "addCategoryPlus", "addRankPlus"]) {
+            const control = find(dialog, name)
+            verify(control !== null && control.activeFocusOnTab)
+            verify(String(control.Accessible.name) !== "")
+        }
     }
 
     // ---- Committing active input before gates and commands -------------------------------------
@@ -580,16 +654,19 @@ TestCase {
 
     function test_activeInputPrecedesStructuralCommands() {
         const additions = [
-            {name: "addUnplayedScenario", prepare: (dialog) => find(dialog, "newScenarioField").text = "Fresh",
-             run: (dialog) => clickWhileEditing(dialog, "addScenarioButton")},
-            {name: "addKnownScenario", prepare: (dialog) => {
-                dialog.selectedKnownScenarioName = "1w4ts"
-                dialog.selectedKnownScenarioHash = "hash-b"
-            }, run: (dialog) => clickWhileEditing(dialog, "addKnownScenarioButton")},
-            {name: "addTier", prepare: (dialog) => find(dialog, "newTierField").text = "Silver",
-             run: (dialog) => clickWhileEditing(dialog, "addTierButton")},
-            {name: "addCategory", prepare: (dialog) => find(dialog, "newCategoryField").text = "Flicking",
-             run: (dialog) => clickWhileEditing(dialog, "addCategoryButton")}
+            {name: "addUnplayedScenario", run: (dialog) => clickWhileEditing(dialog, "addScenarioPlus")},
+            {name: "addTier", run: (dialog) => {
+                clickWhileEditing(dialog, "addRankPlus")
+                const field = find(dialog, "rankCreationName")
+                field.text = "Silver"
+                keyClick(Qt.Key_Return)
+            }},
+            {name: "addCategory", run: (dialog) => {
+                clickWhileEditing(dialog, "addCategoryPlus")
+                const field = find(dialog, "categoryCreationName")
+                field.text = "Flicking"
+                keyClick(Qt.Key_Return)
+            }}
         ]
         const commands = [
             {name: "assignScenarios", run: (dialog) => {
@@ -610,9 +687,10 @@ TestCase {
             desc.tiers.push({id: "t2", name: "Platinum"})
             const ref = {}
             const overrides = {canUndo: true, tiers: desc.tiers}
-            if (command.prepare) overrides[command.name] = resettingAddition(command.name, ref)
+            if (command.name === "addTier" || command.name === "addCategory"
+                    || command.name === "addUnplayedScenario")
+                overrides[command.name] = resettingAddition(command.name, ref)
             const dialog = openWithTable(desc, Object.assign(overrides, recordingInputOverrides()), ref)
-            if (command.prepare) command.prepare(dialog)
             typeIntoCell(dialog, "s-res", "t1", "oops")
             // The structural command runs while the editor is still open.
             verify(dialog.editorTable.activeEditor !== null)
@@ -644,11 +722,13 @@ TestCase {
         const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), Object.assign({
             addTier: resettingAddition("addTier", ref, {ok: false, error: error})
         }, recordingInputOverrides()), ref)
-        const field = find(dialog, "newTierField")
+        mouseClick(find(dialog, "addRankPlus"))
+        const field = find(dialog, "rankCreationName")
         field.text = "Silver"
         typeIntoCell(dialog, "s-res", "t1", "oops")
 
-        clickWhileEditing(dialog, "addTierButton")
+        field.forceActiveFocus()
+        keyClick(Qt.Key_Return)
 
         compare(vm(dialog).commandLog.slice(0, 2), ["editThresholdText", "addTier"])
         tryCompare(find(dialog, "tableStatusLabel"), "text", error)
@@ -660,8 +740,9 @@ TestCase {
         const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
             addTier: function (name) { this.commandLog.push("addTier"); return {ok: false, error: "That tier no longer exists."} }
         })
-        find(dialog, "newTierField").text = "Silver"
-        mouseClick(find(dialog, "addTierButton"))
+        mouseClick(find(dialog, "addRankPlus"))
+        find(dialog, "rankCreationName").text = "Silver"
+        keyClick(Qt.Key_Return)
         tryCompare(find(dialog, "tableStatusLabel"), "text", "That tier no longer exists.")
 
         mouseClick(find(dialog, "pasteButton"))

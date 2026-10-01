@@ -69,10 +69,12 @@ namespace ksv::domain {
         BenchmarkEditResult moveScenario(const ScenarioEntryId &id, const EditorGroupTarget &to);
 
         BenchmarkEditResult appendUnnamedScenarios(std::size_t count);
-        // `orderedIds` is already in the caller's visible order; they are appended after the
-        // target's existing entries in that order.
+        // `orderedIds` is already in the caller's visible order and lands in that order: before
+        // `before`, which must be in the target (when it is itself moving, before the next entry
+        // that is not), or after the target's existing entries when absent.
         BenchmarkEditResult assignScenarios(const std::vector<ScenarioEntryId> &orderedIds,
-                                            const EditorGroupTarget &to);
+                                            const EditorGroupTarget &to,
+                                            const std::optional<ScenarioEntryId> &before = std::nullopt);
         BenchmarkEditResult addSubcategory(const GroupId &categoryId, const std::string &name,
                                            const DirectScenarioRelocation &relocation);
         BenchmarkEditResult reorderSubcategory(const GroupId &id, std::size_t position);

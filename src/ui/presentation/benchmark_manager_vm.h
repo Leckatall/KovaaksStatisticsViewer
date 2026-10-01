@@ -115,6 +115,7 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap addUnplayedScenario(const QString &name);
         Q_INVOKABLE QVariantMap addKnownScenario(const QString &name, const QString &hash);
         Q_INVOKABLE QVariantMap renameScenario(const QString &id, const QString &name);
+        Q_INVOKABLE QVariantMap setScenarioIdentity(const QString &id, const QString &name, const QString &hash);
         Q_INVOKABLE QVariantMap setScenarioHash(const QString &entryId, const QString &hash);
         Q_INVOKABLE QVariantMap removeScenario(const QString &id);
         // Removes every listed scenario as one edit and one Undo step; an unknown ID rejects the
@@ -136,7 +137,9 @@ namespace ksv::presentation {
         // "rankHeader" (with tierId) or "append" for an empty table.
         Q_INVOKABLE QVariantMap pasteText(const QVariantMap &destination, const QString &text);
         // An empty `targetGroupId` targets Uncategorized.
-        Q_INVOKABLE QVariantMap assignScenarios(const QStringList &entryIds, const QString &targetGroupId);
+        // An empty `beforeEntryId` appends to the target group.
+        Q_INVOKABLE QVariantMap assignScenarios(const QStringList &entryIds, const QString &targetGroupId,
+                                                const QString &beforeEntryId = QString());
         // `relocation` says where a populated category's direct scenarios go: "uncategorized" or
         // "newSubcategory" (the subcategory being created).
         Q_INVOKABLE QVariantMap addSubcategoryRelocating(const QString &categoryId, const QString &name,

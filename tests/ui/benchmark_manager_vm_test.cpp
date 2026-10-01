@@ -542,6 +542,24 @@ TEST(BenchmarkManagerResolution, SetScenarioHashEmptyClearsLocalMapping) {
     expectNoMutationForwarded(*f.uc);
 }
 
+TEST(BenchmarkManagerResolution, ChoosingPlayedScenarioChangesNameAndHashInOneUndoStep) {
+    Fixture f;
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {},
+                                          {benchmarkEntry("e1", "Old", std::string{"h-old"}, {})}));
+    f.build();
+    f.vm->beginNewBenchmark();
+
+    ASSERT_TRUE(f.vm->setScenarioIdentity("e1", "Played", "h-played").value("ok").toBool());
+    ASSERT_FALSE(f.uc->resolveCalls.empty());
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).name, "Played");
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).hash, std::optional<std::string>("h-played"));
+
+    ASSERT_TRUE(f.vm->undo().value("ok").toBool());
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).name, "Old");
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).hash, std::optional<std::string>("h-old"));
+    EXPECT_FALSE(f.vm->undo().value("ok").toBool());
+}
+
 TEST(BenchmarkManagerResolution, SetScenarioHashReportsAnUnknownEntry) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
@@ -1260,6 +1278,26 @@ TEST(BenchmarkTableUndo, InterleavedBatchAndManualUndo) {
     EXPECT_FALSE(f.vm->undo()["ok"].toBool());
     EXPECT_EQ(f.rowOf(created), -1) << "undoing the paste removed its expansion";
     EXPECT_FALSE(f.vm->dirty());
+}
+
+TEST(BenchmarkTableUndo, PlacedAssignmentIsOneStepAndANoOpPlacementIsNone) {
+    TableFixture f;
+    f.open(projectionBench());
+    const auto original = f.rowIds();
+
+    ASSERT_TRUE(f.vm->assignScenarios({"u", "b"}, "p", "d")["ok"].toBool());
+    EXPECT_EQ(f.rowIds(), (QStringList{"a", "c", "b", "u", "d", "e"})) << "placed in visible order before d";
+
+    ASSERT_TRUE(f.vm->undo()["ok"].toBool());
+    EXPECT_EQ(f.rowIds(), original);
+    EXPECT_FALSE(canUndo(*f.vm));
+
+    // Dropping a row straight back where it already sits changes nothing worth undoing.
+    ASSERT_TRUE(f.vm->assignScenarios({"c"}, "p", "d")["ok"].toBool());
+    EXPECT_EQ(f.rowIds(), original);
+    EXPECT_FALSE(canUndo(*f.vm));
+
+    EXPECT_FALSE(f.vm->assignScenarios({"a"}, "g1", "c")["ok"].toBool()) << "c is not in g1";
 }
 
 TEST(BenchmarkTableUndo, BoundariesAndPublications) {

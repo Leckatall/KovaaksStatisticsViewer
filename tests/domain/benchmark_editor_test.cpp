@@ -348,12 +348,61 @@ TEST(BenchmarkTableAssignment, OrderedAssignment) {
     EXPECT_EQ(bench.categories.at(2).scenarios.at(2), before.categories.at(1).scenarios.at(0));
 }
 
+TEST(BenchmarkTableAssignment, PlacedBeforeAnEntryOfAnotherGroup) {
+    Benchmark bench = groupedBench();
+    const Benchmark before = bench;
+    BenchmarkEditor editor{bench, forbiddenIds()};
+
+    const auto result = editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g2"},
+                                               ScenarioEntryId{"d"});
+
+    ASSERT_TRUE(result.ok());
+    EXPECT_EQ(idsOf(bench.categories.at(1).scenarios), (std::vector<std::string>{"a", "c", "d"}));
+    EXPECT_EQ(idsOf(bench.categories.at(0).scenarios), std::vector<std::string>{"b"});
+    EXPECT_EQ(bench.categories.at(1).scenarios.at(0), before.categories.at(0).scenarios.at(0));
+}
+
+TEST(BenchmarkTableAssignment, PlacedWithinTheSameGroup) {
+    Benchmark bench = groupedBench();
+    BenchmarkEditor editor{bench, forbiddenIds()};
+
+    ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"b"}}, GroupId{"g1"}, ScenarioEntryId{"a"}).ok());
+    EXPECT_EQ(idsOf(bench.categories.at(0).scenarios), (std::vector<std::string>{"b", "a"}));
+
+    ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"b"}}, GroupId{"g1"}).ok());
+    EXPECT_EQ(idsOf(bench.categories.at(0).scenarios), (std::vector<std::string>{"a", "b"}));
+}
+
+// Dropping a dragged block onto one of its own rows must still have a defined landing spot: the
+// first row after it that is not moving, or the end of the group.
+TEST(BenchmarkTableAssignment, PlacedBeforeAMovingEntryAnchorsToTheNextUnmovedEntry) {
+    {
+        Benchmark bench = groupedBench();
+        bench.uncategorized = {scored("u1", "U1", std::nullopt, 7), scored("u2", "U2", std::nullopt, 8),
+                               scored("u3", "U3", std::nullopt, 9)};
+        BenchmarkEditor editor{bench, forbiddenIds()};
+
+        ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"u1"}}, std::monostate{},
+                                           ScenarioEntryId{"u1"}).ok());
+        EXPECT_EQ(idsOf(bench.uncategorized), (std::vector<std::string>{"a", "u1", "u2", "u3"}));
+    }
+    {
+        Benchmark bench = groupedBench();
+        BenchmarkEditor editor{bench, forbiddenIds()};
+
+        ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"d"}, ScenarioEntryId{"a"}}, GroupId{"g2"},
+                                           ScenarioEntryId{"d"}).ok());
+        EXPECT_EQ(idsOf(bench.categories.at(1).scenarios), (std::vector<std::string>{"c", "d", "a"}));
+    }
+}
+
 TEST(BenchmarkTableAssignment, RejectedBatchIsUnchanged) {
-    const auto attempt = [](const std::vector<ScenarioEntryId> &ids, const EditorGroupTarget &to) {
+    const auto attempt = [](const std::vector<ScenarioEntryId> &ids, const EditorGroupTarget &to,
+                            const std::optional<ScenarioEntryId> &placeBefore = std::nullopt) {
         Benchmark bench = groupedBench();
         const Benchmark before = bench;
         BenchmarkEditor editor{bench, forbiddenIds()};
-        const auto result = editor.assignScenarios(ids, to);
+        const auto result = editor.assignScenarios(ids, to, placeBefore);
         EXPECT_EQ(bench, before);
         return result.error;
     };
@@ -361,6 +410,8 @@ TEST(BenchmarkTableAssignment, RejectedBatchIsUnchanged) {
     EXPECT_EQ(attempt({ScenarioEntryId{"a"}, ScenarioEntryId{"missing"}}, GroupId{"g3"}),
               BenchmarkEditError::UnknownEntry);
     EXPECT_EQ(attempt({ScenarioEntryId{"a"}}, GroupId{"nowhere"}), BenchmarkEditError::UnknownGroup);
+    EXPECT_EQ(attempt({ScenarioEntryId{"a"}}, GroupId{"g3"}, ScenarioEntryId{"c"}),
+              BenchmarkEditError::PositionOutOfRange);
     EXPECT_EQ(attempt({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g4"}),
               BenchmarkEditError::MixedContent);
 }

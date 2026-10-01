@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <iterator>
 #include <optional>
 #include <utility>
 #include <variant>
@@ -312,7 +313,8 @@ namespace ksv::domain {
     }
 
     BenchmarkEditResult BenchmarkEditor::assignScenarios(const std::vector<ScenarioEntryId> &orderedIds,
-                                                         const EditorGroupTarget &to) {
+                                                         const EditorGroupTarget &to,
+                                                         const std::optional<ScenarioEntryId> &before) {
         auto &benchmark = m_target;
         if (const auto error = groupTargetError(benchmark, to)) return {error};
         std::vector<ScenarioEntryId> unique;
@@ -321,11 +323,25 @@ namespace ksv::domain {
             if (!findEntry(benchmark, id)) return {BenchmarkEditError::UnknownEntry};
             unique.push_back(id);
         }
+        // Detaching only erases entries, never the containing vectors, so this stays valid.
+        auto &destination = groupScenarios(benchmark, to);
+        const auto entryIs = [](const ScenarioEntryId &id) {
+            return [&id](const ScenarioEntry &entry) { return entry.id == id; };
+        };
+        std::optional<ScenarioEntryId> anchor;
+        if (before) {
+            auto it = std::ranges::find_if(destination, entryIs(*before));
+            if (it == destination.end()) return {BenchmarkEditError::PositionOutOfRange};
+            it = std::find_if(it, destination.end(), [&](const ScenarioEntry &entry) {
+                return std::ranges::find(unique, entry.id) == unique.end();
+            });
+            if (it != destination.end()) anchor = it->id;
+        }
         std::vector<ScenarioEntry> moving;
         moving.reserve(unique.size());
         for (const auto &id: unique) moving.push_back(*detachEntry(benchmark, id));
-        auto &destination = groupScenarios(benchmark, to);
-        for (auto &entry: moving) destination.push_back(std::move(entry));
+        const auto at = anchor ? std::ranges::find_if(destination, entryIs(*anchor)) : destination.end();
+        destination.insert(at, std::make_move_iterator(moving.begin()), std::make_move_iterator(moving.end()));
         return {};
     }
 

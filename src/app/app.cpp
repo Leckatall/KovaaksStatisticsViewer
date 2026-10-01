@@ -75,6 +75,12 @@ namespace ksv::application {
             m_fileService,
             std::make_shared<data::ProfileSerializer>(std::make_shared<data::ProfileV3Migrator>(m_runIngestor)),
             m_settingsService, m_runIngestor);
+        // SessionController installs the build requester, so it has to exist before the
+        // first loadProfile() — otherwise a missing stored profile builds synchronously and blocks
+        // startup for as long as a full directory scan takes.
+        m_sessionController = std::make_shared<SessionController>(
+            m_settingsService, m_profileService, m_fileService, m_runIngestor);
+        m_profileService->loadProfile();
 
         // Built before the initial profile load: the resolution use case subscribes to the profile
         // change stream in its constructor, so either the synchronously loaded profile or a later
@@ -88,13 +94,6 @@ namespace ksv::application {
             [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
         m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
             m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService);
-
-        // SessionController installs the build requester, so it has to exist before the
-        // first loadProfile() — otherwise a missing stored profile builds synchronously and blocks
-        // startup for as long as a full directory scan takes.
-        m_sessionController = std::make_shared<SessionController>(
-            m_settingsService, m_profileService, m_fileService, m_runIngestor);
-        m_profileService->loadProfile();
 
         auto averageUseCase = std::make_shared<AverageLineUseCase>(m_profileService);
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController, m_seriesConfigStore, averageUseCase);

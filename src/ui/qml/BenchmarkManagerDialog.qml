@@ -25,6 +25,9 @@ ApplicationWindow {
     readonly property alias deleteConfirmPrompt: deleteConfirmPrompt
     readonly property alias colorDialog: colorDialog
     readonly property alias assignMenu: assignMenu
+    readonly property alias rowContextMenu: rowContextMenu
+    readonly property alias groupContextMenu: groupContextMenu
+    readonly property alias rankContextMenu: rankContextMenu
     readonly property alias subcategoryRelocationPrompt: subcategoryRelocationPrompt
     readonly property alias editorTable: editorTable
 
@@ -41,9 +44,6 @@ ApplicationWindow {
     // A mapping edit or a save on an opened (from-library) definition must clear the
     // retrospective reinterpretation warning first; the confirmed action is parked here.
     property var pendingRetrospectiveAction: null
-    property string knownScenarioFilter: ""
-    property string selectedKnownScenarioHash: ""
-    property string selectedKnownScenarioName: ""
 
     // ---- Table context -----------------------------------------------------------------------
     readonly property string currentTierId: editorTable.focusedTierId
@@ -66,10 +66,6 @@ ApplicationWindow {
         editorTable.commitActiveEdit()
         if (benchmarkNameField.activeFocus && benchmarkNameField.text !== root.vm().benchmarkName)
             root.vm().setBenchmarkName(benchmarkNameField.text)
-        if (rankNameField.activeFocus && root.currentTierId !== "" && rankNameField.text !== rankNameField.boundText)
-            root.vm().renameTier(root.currentTierId, rankNameField.text)
-        if (groupNameField.activeFocus && root.currentGroupId !== "" && groupNameField.text !== groupNameField.boundText)
-            root.vm().renameGroup(root.currentGroupId, groupNameField.text)
         root.sessionRevision++
     }
 
@@ -168,6 +164,11 @@ ApplicationWindow {
         root.runRetrospective(() => root.vm().setScenarioHash(entryId, hash))
     }
 
+    function requestScenarioIdentity(entryId, name, hash) {
+        root.runRetrospective(() => root.runTableCommand(
+            () => root.vm().setScenarioIdentity(entryId, name, hash)))
+    }
+
     function matchStateLabel(state) {
         return ({
             resolved: qsTr("Resolved"),
@@ -189,33 +190,6 @@ ApplicationWindow {
         if (played && !isNaN(new Date(played).getTime()))
             parts.push(Qt.formatDate(played, "yyyy-MM-dd"))
         return parts.join(" · ")
-    }
-
-    function filteredCatalogue() {
-        const query = root.knownScenarioFilter.trim().toLowerCase()
-        if (query === "") return []
-        const catalogue = root.vm().scenarioCatalogue || []
-        return catalogue.filter(entry => entry.name.toLowerCase().indexOf(query) !== -1)
-    }
-
-    function addSelectedKnownScenario() {
-        const name = root.selectedKnownScenarioName
-        const hash = root.selectedKnownScenarioHash
-        if (hash === "") return
-        const result = root.runTableCommand(() => root.vm().addKnownScenario(name, hash))
-        if (!result || !result.ok) return
-        root.knownScenarioFilter = ""
-        root.selectedKnownScenarioHash = ""
-        root.selectedKnownScenarioName = ""
-    }
-
-    // The submitted text is captured before runTableCommand commits the open edits, and the field
-    // is cleared only once the session accepts it, so a rejected name stays for correction.
-    function addFromField(field, add) {
-        const name = field.text
-        if (name.trim() === "") return
-        const result = root.runTableCommand(() => add(name))
-        if (result && result.ok) field.clear()
     }
 
     function importFromUrl(url) {
@@ -265,9 +239,9 @@ ApplicationWindow {
         const targets = [{id: "", label: qsTr("Uncategorized")}]
         const groups = root.vm().groups || []
         for (const group of groups) {
-            if (group.kind === "category") {
+            if (group.kind === "category" && !groups.some(g => g.parentId === group.id)) {
                 targets.push({id: group.id, label: group.name})
-            } else {
+            } else if (group.kind === "subcategory") {
                 const parent = groups.find(g => g.id === group.parentId)
                 targets.push({id: group.id, label: (parent ? parent.name : "") + " / " + group.name})
             }
@@ -341,7 +315,7 @@ ApplicationWindow {
     // those scenarios go; the manager never reorganizes them invisibly.
     function requestSubcategory(categoryId, name) {
         root.commitActiveEdits()
-        if (name.trim() === "") return
+        if (name.trim() === "") return false
         const groups = root.vm().groups || []
         const category = groups.find(g => g.id === categoryId)
         const hasSubcategories = groups.some(g => g.kind === "subcategory" && g.parentId === categoryId)
@@ -349,9 +323,9 @@ ApplicationWindow {
             subcategoryRelocationPrompt.categoryId = categoryId
             subcategoryRelocationPrompt.subcategoryName = name
             subcategoryRelocationPrompt.open()
-            return
+            return true
         }
-        root.runTableCommand(() => root.vm().addSubcategory(categoryId, name))
+        return root.runTableCommand(() => root.vm().addSubcategory(categoryId, name)).ok
     }
 
     function focusValidationIssue(issue) {
@@ -495,38 +469,77 @@ ApplicationWindow {
     }
 
     Menu {
-        id: assignMenu
-        objectName: "assignMenu"
-
-        Instantiator {
-            model: root.assignTargets()
-            delegate: MenuItem {
-                required property var modelData
-                objectName: "assignTarget_" + modelData.id
-                text: modelData.label
-                onTriggered: root.assignSelection(modelData.id)
+        id: rowContextMenu
+        objectName: "rowContextMenu"
+        Menu {
+            id: assignMenu
+            objectName: "assignMenu"
+            title: qsTr("Move to group")
+            Instantiator {
+                model: root.assignTargets()
+                delegate: MenuItem {
+                    required property var modelData
+                    objectName: "assignTarget_" + modelData.id
+                    text: modelData.label
+                    onTriggered: root.assignSelection(modelData.id)
+                }
+                onObjectAdded: (index, object) => assignMenu.insertItem(index, object)
+                onObjectRemoved: (index, object) => assignMenu.removeItem(object)
             }
-            onObjectAdded: (index, object) => assignMenu.insertItem(index, object)
-            onObjectRemoved: (index, object) => assignMenu.removeItem(object)
+        }
+        MenuItem { text: qsTr("Move up"); enabled: root.currentRowPlacement().position > 0; onTriggered: root.moveCurrentRow(-1) }
+        MenuItem {
+            text: qsTr("Move down")
+            readonly property var placement: root.currentRowPlacement()
+            enabled: placement.position >= 0 && placement.position < placement.size - 1
+            onTriggered: root.moveCurrentRow(1)
+        }
+        MenuSeparator {}
+        MenuItem { text: qsTr("Remove selected scenarios"); onTriggered: root.removeSelectedScenarios() }
+    }
+
+    Menu {
+        id: groupContextMenu
+        objectName: "groupContextMenu"
+        MenuItem {
+            text: qsTr("Add subcategory")
+            visible: root.currentGroup && root.currentGroup.kind === "category"
+            onTriggered: editorTable.beginSubcategoryCreation(root.currentGroupId)
+        }
+        MenuItem { text: qsTr("Rename"); onTriggered: editorTable.beginGroupRename(root.currentGroupId) }
+        MenuItem {
+            text: qsTr("Change colour")
+            onTriggered: if (root.currentGroup) root.openColorDialog("group", root.currentGroupId, root.currentGroup.color)
+        }
+        MenuSeparator {}
+        MenuItem { text: qsTr("Move up"); enabled: root.currentGroupIndex() > 0; onTriggered: root.moveCurrentGroup(-1) }
+        MenuItem {
+            text: qsTr("Move down")
+            enabled: root.currentGroup && root.currentGroupIndex() < root.groupSiblings(root.currentGroup).length - 1
+            onTriggered: root.moveCurrentGroup(1)
+        }
+        MenuItem {
+            text: qsTr("Remove group")
+            onTriggered: root.runTableCommand(() => root.vm().removeCategory(root.currentGroupId))
         }
     }
 
-    component ColorSwatchButton: Button {
-        id: colorSwatchButton
-        property string swatchKind
-        property string swatchId
-        property color swatchColor
-        implicitWidth: 28
-        implicitHeight: 28
-        activeFocusOnTab: true
-        background: Rectangle {
-            color: colorSwatchButton.swatchColor
-            radius: 4
-            border.color: colorSwatchButton.activeFocus ? colorSwatchButton.palette.highlight : colorSwatchButton.palette.mid
-            border.width: colorSwatchButton.activeFocus ? 2 : 1
+    Menu {
+        id: rankContextMenu
+        objectName: "rankContextMenu"
+        MenuItem { text: qsTr("Rename"); onTriggered: editorTable.beginRankRename(root.currentTierId) }
+        MenuItem {
+            text: qsTr("Change colour")
+            onTriggered: if (root.currentTier) root.openColorDialog("tier", root.currentTierId, root.currentTier.color)
         }
-        onClicked: root.openColorDialog(colorSwatchButton.swatchKind, colorSwatchButton.swatchId,
-                                        colorSwatchButton.swatchColor)
+        MenuSeparator {}
+        MenuItem { text: qsTr("Move left"); enabled: root.currentTierIndex > 0; onTriggered: root.moveCurrentRankBy(-1) }
+        MenuItem {
+            text: qsTr("Move right")
+            enabled: root.currentTierIndex >= 0 && root.currentTierIndex < (root.vm().tiers || []).length - 1
+            onTriggered: root.moveCurrentRankBy(1)
+        }
+        MenuItem { text: qsTr("Remove rank"); onTriggered: root.removeCurrentRank() }
     }
 
     function openColorDialog(kind, id, color) {
@@ -813,241 +826,6 @@ ApplicationWindow {
                         .arg(root.normalizationSummary())
                 }
 
-                // ---- Additions ------------------------------------------------------------------
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 6
-                    TextField {
-                        id: newScenarioField
-                        objectName: "newScenarioField"
-                        placeholderText: qsTr("Scenario name")
-                        width: 160
-                    }
-                    Button {
-                        objectName: "addScenarioButton"
-                        text: qsTr("Add Scenario")
-                        onClicked: root.addFromField(newScenarioField, name => root.vm().addUnplayedScenario(name))
-                    }
-                    // Profile-known scenarios are added by hash, so equal display names in the
-                    // catalogue stay distinguishable; the free-text field above still adds an
-                    // as-yet-unplayed scenario by name only.
-                    TextField {
-                        id: knownScenarioPicker
-                        objectName: "knownScenarioPicker"
-                        placeholderText: qsTr("Find a played scenario")
-                        width: 170
-                        activeFocusOnTab: true
-                        Accessible.name: qsTr("Find a played scenario to add by name")
-                        onTextEdited: root.knownScenarioFilter = text
-                        onEditingFinished: root.knownScenarioFilter = text
-                    }
-                    Button {
-                        id: addKnownScenarioButton
-                        objectName: "addKnownScenarioButton"
-                        text: qsTr("Add Known Scenario")
-                        activeFocusOnTab: true
-                        Accessible.name: qsTr("Add the selected played scenario")
-                        onClicked: root.addSelectedKnownScenario()
-                    }
-                    TextField {
-                        id: newTierField
-                        objectName: "newTierField"
-                        placeholderText: qsTr("New tier name")
-                        width: 130
-                    }
-                    Button {
-                        objectName: "addTierButton"
-                        text: qsTr("Add Tier")
-                        onClicked: root.addFromField(newTierField, name => root.vm().addTier(name))
-                    }
-                    TextField {
-                        id: newCategoryField
-                        objectName: "newCategoryField"
-                        placeholderText: qsTr("New category name")
-                        width: 150
-                    }
-                    Button {
-                        objectName: "addCategoryButton"
-                        text: qsTr("Add Category")
-                        onClicked: root.addFromField(newCategoryField, name => root.vm().addCategory(name))
-                    }
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-                    visible: knownOptions.count > 0
-                    Repeater {
-                        id: knownOptions
-                        model: root.filteredCatalogue()
-                        delegate: ItemDelegate {
-                            id: knownScenarioOption
-                            required property var modelData
-                            objectName: "knownScenarioOption_" + knownScenarioOption.modelData.hash
-                            Layout.fillWidth: true
-                            highlighted: root.selectedKnownScenarioHash === knownScenarioOption.modelData.hash
-                            text: knownScenarioOption.modelData.name + "  ·  " + knownScenarioOption.modelData.hash
-                            Accessible.name: qsTr("Select played scenario %1").arg(knownScenarioOption.text)
-                            onClicked: {
-                                root.selectedKnownScenarioHash = knownScenarioOption.modelData.hash
-                                root.selectedKnownScenarioName = knownScenarioOption.modelData.name
-                            }
-                        }
-                    }
-                }
-
-                // ---- Contextual controls --------------------------------------------------------
-                Flow {
-                    objectName: "rowActions"
-                    Layout.fillWidth: true
-                    spacing: 6
-                    Label {
-                        text: qsTr("Rows:")
-                        height: assignSelectionButton.height
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    Button {
-                        id: assignSelectionButton
-                        objectName: "assignSelectionButton"
-                        text: qsTr("Assign to group…")
-                        Accessible.name: qsTr("Assign the selected scenarios to a group")
-                        onClicked: assignMenu.popup(assignSelectionButton, 0, assignSelectionButton.height)
-                    }
-                    Button {
-                        objectName: "moveRowUpButton"
-                        text: qsTr("Move up")
-                        enabled: root.currentRowPlacement().position > 0
-                        Accessible.name: qsTr("Move the current scenario up within its group")
-                        onClicked: root.moveCurrentRow(-1)
-                    }
-                    Button {
-                        objectName: "moveRowDownButton"
-                        readonly property var placement: root.currentRowPlacement()
-                        text: qsTr("Move down")
-                        enabled: placement.position >= 0 && placement.position < placement.size - 1
-                        Accessible.name: qsTr("Move the current scenario down within its group")
-                        onClicked: root.moveCurrentRow(1)
-                    }
-                    Button {
-                        objectName: "removeScenarioButton"
-                        text: qsTr("Remove")
-                        Accessible.name: qsTr("Remove the selected scenarios")
-                        onClicked: root.removeSelectedScenarios()
-                    }
-                }
-
-                Flow {
-                    objectName: "rankActions"
-                    Layout.fillWidth: true
-                    spacing: 6
-                    visible: root.currentTier !== null
-                    Label {
-                        text: qsTr("Rank:")
-                        height: rankSwatch.height
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    ColorSwatchButton {
-                        id: rankSwatch
-                        objectName: "rankColorSwatch"
-                        swatchKind: "tier"
-                        swatchId: root.currentTierId
-                        swatchColor: root.currentTier ? root.currentTier.color : "transparent"
-                        Accessible.name: qsTr("Colour of rank %1").arg(root.currentTier && root.currentTier.name !== ""
-                                                                        ? root.currentTier.name : qsTr("(unnamed)"))
-                    }
-                    BoundField {
-                        id: rankNameField
-                        objectName: "rankNameField"
-                        width: 140
-                        placeholderText: qsTr("Rank name")
-                        boundText: root.currentTier ? root.currentTier.name : ""
-                        Accessible.name: qsTr("Rank name")
-                        onEditingFinished: if (root.currentTierId !== "") root.vm().renameTier(root.currentTierId, text)
-                    }
-                    Button {
-                        objectName: "moveRankLeftButton"
-                        text: qsTr("Move left")
-                        enabled: root.currentTierIndex > 0
-                        onClicked: root.moveCurrentRankBy(-1)
-                    }
-                    Button {
-                        objectName: "moveRankRightButton"
-                        text: qsTr("Move right")
-                        enabled: root.currentTierIndex >= 0
-                                 && root.currentTierIndex < (root.vm().tiers || []).length - 1
-                        onClicked: root.moveCurrentRankBy(1)
-                    }
-                    Button {
-                        objectName: "removeRankButton"
-                        text: qsTr("Remove rank")
-                        onClicked: root.removeCurrentRank()
-                    }
-                }
-
-                Flow {
-                    objectName: "groupActions"
-                    Layout.fillWidth: true
-                    spacing: 6
-                    visible: root.currentGroup !== null
-                    Label {
-                        text: root.currentGroup && root.currentGroup.kind === "subcategory" ? qsTr("Subcategory:") : qsTr("Category:")
-                        height: groupSwatch.height
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    ColorSwatchButton {
-                        id: groupSwatch
-                        objectName: "groupColorSwatch"
-                        swatchKind: "group"
-                        swatchId: root.currentGroupId
-                        swatchColor: root.currentGroup ? root.currentGroup.color : "transparent"
-                        Accessible.name: qsTr("Colour of group %1").arg(root.currentGroup ? root.currentGroup.name : "")
-                    }
-                    BoundField {
-                        id: groupNameField
-                        objectName: "groupNameField"
-                        width: 150
-                        placeholderText: qsTr("Group name")
-                        boundText: root.currentGroup ? root.currentGroup.name : ""
-                        Accessible.name: qsTr("Group name")
-                        onEditingFinished: if (root.currentGroupId !== "") root.vm().renameGroup(root.currentGroupId, text)
-                    }
-                    Button {
-                        objectName: "moveGroupUpButton"
-                        text: qsTr("Move up")
-                        enabled: root.currentGroupIndex() > 0
-                        onClicked: root.moveCurrentGroup(-1)
-                    }
-                    Button {
-                        objectName: "moveGroupDownButton"
-                        text: qsTr("Move down")
-                        enabled: root.currentGroup !== null
-                                 && root.currentGroupIndex() < root.groupSiblings(root.currentGroup).length - 1
-                        onClicked: root.moveCurrentGroup(1)
-                    }
-                    Button {
-                        objectName: "removeGroupButton"
-                        text: qsTr("Remove group")
-                        Accessible.name: qsTr("Remove the group; its scenarios return to Uncategorized")
-                        onClicked: root.runTableCommand(() => root.vm().removeCategory(root.currentGroupId))
-                    }
-                    TextField {
-                        id: newSubcategoryField
-                        objectName: "newSubcategoryField"
-                        visible: root.currentGroup !== null && root.currentGroup.kind === "category"
-                        width: 150
-                        placeholderText: qsTr("Subcategory name")
-                    }
-                    Button {
-                        objectName: "addSubcategoryButton"
-                        visible: newSubcategoryField.visible
-                        text: qsTr("Add Subcategory")
-                        onClicked: {
-                            root.requestSubcategory(root.currentGroupId, newSubcategoryField.text)
-                            newSubcategoryField.clear()
-                        }
-                    }
-                }
-
                 Label {
                     objectName: "tableStatusLabel"
                     readonly property string message: root.tableStatus !== "" ? root.tableStatus : editorTable.statusText
@@ -1160,6 +938,36 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     manager: root.benchmarkManagerVm
                     onColorSwatchRequested: (kind, id, color) => root.openColorDialog(kind, id, color)
+                    onAddScenarioRequested: {
+                        const result = root.runTableCommand(() => root.vm().addUnplayedScenario(""))
+                        if (result && result.ok && result.createdId)
+                            Qt.callLater(() => editorTable.beginScenarioEdit(result.createdId))
+                    }
+                    onAddCategoryRequested: name => {
+                        editorTable.creationAccepted = root.runTableCommand(() => root.vm().addCategory(name)).ok
+                    }
+                    onAddSubcategoryRequested: (categoryId, name) => {
+                        editorTable.creationAccepted = root.requestSubcategory(categoryId, name)
+                    }
+                    onAddRankRequested: name => {
+                        editorTable.creationAccepted = root.runTableCommand(() => root.vm().addTier(name)).ok
+                    }
+                    onMoveSelectionRequested: (entryIds, targetId, beforeId) => root.runTableCommand(
+                        () => root.vm().assignScenarios(entryIds, targetId, beforeId))
+                    onScenarioIdentityRequested: (entryId, name, hash) => root.requestScenarioIdentity(entryId, name, hash)
+                    onRenameGroupRequested: (groupId, name) => root.runTableCommand(
+                        () => root.vm().renameGroup(groupId, name))
+                    onRowContextRequested: (entryId, x, y) => {
+                        rowContextMenu.popup(editorTable, x, y)
+                    }
+                    onGroupContextRequested: (groupId, x, y) => {
+                        editorTable.focusedGroupId = groupId
+                        groupContextMenu.popup(editorTable, x, y)
+                    }
+                    onRankContextRequested: (tierId, x, y) => {
+                        editorTable.focusedTierId = tierId
+                        rankContextMenu.popup(editorTable, x, y)
+                    }
                 }
             }
 

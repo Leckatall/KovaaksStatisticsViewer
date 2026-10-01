@@ -385,6 +385,12 @@ function makeFakeBenchmarkManagerVm(overrides) {
         },
         renameScenarioCalls: [],
         renameScenario: function (id, name) { this.renameScenarioCalls.push([id, name]); return {ok: true} },
+        setScenarioIdentityCalls: [],
+        setScenarioIdentity: function (id, name, hash) {
+            this.commandLog.push("setScenarioIdentity")
+            this.setScenarioIdentityCalls.push([id, name, hash])
+            return {ok: true}
+        },
         setScenarioHashCalls: [],
         setScenarioHash: function (entryId, hash) {
             this.setScenarioHashCalls.push([entryId, hash])
@@ -454,9 +460,9 @@ function makeFakeBenchmarkManagerVm(overrides) {
         undo: function () { this.commandLog.push("undo"); this.undoCalls++; return {ok: true} },
         assignScenariosCalls: [],
         assignResult: null,
-        assignScenarios: function (entryIds, target) {
+        assignScenarios: function (entryIds, target, before) {
             this.commandLog.push("assignScenarios")
-            this.assignScenariosCalls.push([entryIds, target])
+            this.assignScenariosCalls.push(before ? [entryIds, target, before] : [entryIds, target])
             return this.assignResult || {ok: true}
         },
         addSubcategoryRelocatingCalls: [],

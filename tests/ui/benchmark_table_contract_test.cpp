@@ -46,6 +46,7 @@ namespace {
         [[maybe_unused]] BenchmarkEditResult r;
         r = editor.appendUnnamedScenarios(std::size_t{2});
         r = editor.assignScenarios(std::vector<ScenarioEntryId>{}, EditorGroupTarget{});
+        r = editor.assignScenarios(std::vector<ScenarioEntryId>{}, EditorGroupTarget{}, std::optional<ScenarioEntryId>{});
         r = editor.addSubcategory(GroupId{"c"}, "sub", DirectScenarioRelocation{RelocateDirectToUncategorized{}});
         r = editor.addSubcategory(GroupId{"c"}, "sub",
                                   DirectScenarioRelocation{RelocateDirectToNewSubcategory{}});
@@ -97,6 +98,7 @@ namespace {
         m = vm.editThresholdText(QStringLiteral("e"), QStringLiteral("t"), QStringLiteral("1"));
         m = vm.pasteText(QVariantMap{{"kind", "threshold"}}, QStringLiteral("1"));
         m = vm.assignScenarios(QStringList{}, QString());
+        m = vm.assignScenarios(QStringList{}, QString(), QString());
         m = vm.addSubcategoryRelocating(QStringLiteral("c"), QStringLiteral("s"), QStringLiteral("uncategorized"));
         m = vm.reorderSubcategory(QStringLiteral("s"), 0);
         m = vm.reorderScenario(QStringLiteral("e"), 0);
