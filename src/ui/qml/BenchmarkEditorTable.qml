@@ -23,8 +23,22 @@ FocusScope {
 
     property int rowHeight: 30
     property int headerHeight: 34
-    property var identityWidths: [130, 130, 210]
-    property int thresholdWidth: 100
+    property var identityWidths: [130, 120, 200]
+    property int thresholdWidth: 92
+    // Width of the identifying columns inside the threshold view's own column space.
+    readonly property int hiddenThresholdWidth: root.thresholdKind * root.thresholdWidth
+    readonly property int identityTotalWidth: root.identityWidths[0] + root.identityWidths[1] + root.identityWidths[2]
+    // The slot after the last rank header: the "add rank" button, or its name field while one is
+    // being typed. The threshold body keeps a gutter of the same width, so header and body end
+    // together and a rank is never clipped under the button.
+    readonly property int rankSlotWidth: root.addingRank ? 130 : 30
+    // Height of the always-visible horizontal scrollbar, which sits under the threshold body when
+    // the ranks do not all fit.
+    readonly property int horizontalBarReserve: thresholdHorizontalBar.visible ? thresholdHorizontalBar.height : 0
+    readonly property int tableContentHeight: root.headerHeight + thresholdView.rows * root.rowHeight
+                                              + root.horizontalBarReserve
+    // The width the rank columns take when all of them are laid out.
+    readonly property int rankColumnsWidth: Math.max(0, thresholdView.columns - root.thresholdKind) * root.thresholdWidth
 
     // Context for the dialog's rank, group and row controls: the rank or group last focused (by
     // cell, header or group list), and the current row's entry, spans and mapping.
@@ -48,6 +62,8 @@ FocusScope {
     property bool addingRank: false
     property bool addingCategory: false
     property bool creationAccepted: true
+    // The entry whose scenario cell opens for editing once its row has a delegate.
+    property string pendingScenarioEdit: ""
 
     // `kind` is "tier" or "group"; the dialog owns the colour picker.
     signal colorSwatchRequested(string kind, string id, color current)
@@ -268,10 +284,30 @@ FocusScope {
 
     function beginScenarioEdit(entryId) {
         if (!root.focusCell({entryId: entryId, columnKind: 2})) return false
-        const row = root.tableModel.rowForEntry(entryId)
-        if (row < 0) return false
-        identityView.edit(root.tableModel.index(row, 2))
+        if (root.tableModel.rowForEntry(entryId) < 0) return false
+        root.pendingScenarioEdit = entryId
+        pendingEditExpiry.restart()
+        root.runPendingScenarioEdit()
         return true
+    }
+
+    // The table is capped at its content, so a row that was just added lies outside the viewport,
+    // with no delegate yet, until the layout has grown to take it. The edit opens as soon as the
+    // cell is loaded; layout changes of the view retry it.
+    function runPendingScenarioEdit() {
+        const entryId = root.pendingScenarioEdit
+        if (entryId === "") return
+        const row = root.tableModel ? root.tableModel.rowForEntry(entryId) : -1
+        if (row < 0) {
+            root.pendingScenarioEdit = ""
+            return
+        }
+        root.moveCurrent(row, 2)
+        const index = root.tableModel.index(row, 2)
+        if (identityView.itemAtIndex(index) === null) return
+        root.pendingScenarioEdit = ""
+        pendingEditExpiry.stop()
+        identityView.edit(index)
     }
 
     function beginGroupRename(groupId) {
@@ -508,6 +544,20 @@ FocusScope {
         function onSelectionChanged() { root.scheduleSelectionRestore() }
     }
 
+    // Gives up on a pending edit whose cell never appears (for example, the row was removed).
+    Timer {
+        id: pendingEditExpiry
+        interval: 1000
+        onTriggered: root.pendingScenarioEdit = ""
+    }
+
+    Connections {
+        target: identityView
+        function onBottomRowChanged() { root.runPendingScenarioEdit() }
+        function onRowsChanged() { root.runPendingScenarioEdit() }
+        function onHeightChanged() { root.runPendingScenarioEdit() }
+    }
+
     ItemSelectionModel {
         id: selection
         model: root.tableModel
@@ -527,6 +577,22 @@ FocusScope {
             color: swatch.swatchColor
             radius: 3
             border.color: swatch.hovered ? swatch.palette.highlight : swatch.palette.mid
+        }
+    }
+
+    // A labelled "+ Add ..." control that extends the table. It keeps keyboard focus (Tab) and
+    // shows what it does on hover.
+    component AddRowButton: ToolButton {
+        id: addRowButton
+        // A HoverHandler rather than `hovered`: the latter stays false where the platform turns
+        // hover effects off.
+        HoverHandler { id: addRowHover }
+        ToolTip.visible: addRowHover.hovered
+        ToolTip.delay: 400
+        background: Rectangle {
+            color: addRowHover.hovered || addRowButton.activeFocus
+                ? Qt.alpha(addRowButton.palette.highlight, 0.25) : Qt.alpha(addRowButton.palette.button, 0.35)
+            border.color: addRowButton.activeFocus ? addRowButton.palette.highlight : addRowButton.palette.mid
         }
     }
 
@@ -668,6 +734,10 @@ FocusScope {
             text: "+"
             focusPolicy: Qt.NoFocus
             Accessible.name: qsTr("Add subcategory to %1").arg(cell.categoryName)
+            HoverHandler { id: addSubcategoryHover }
+            ToolTip.visible: addSubcategoryHover.hovered
+            ToolTip.delay: 400
+            ToolTip.text: Accessible.name
             onClicked: {
                 cell.addingSubcategory = true
                 subcategoryCreationField.forceActiveFocus()
@@ -963,6 +1033,10 @@ FocusScope {
                         visible: groupItem.modelData.kind === "category" && !groupItem.addingSubcategory && !groupItem.renaming
                         text: "+"
                         Accessible.name: qsTr("Add subcategory to %1").arg(groupItem.modelData.name)
+                        HoverHandler { id: emptyGroupAddHover }
+                        ToolTip.visible: emptyGroupAddHover.hovered
+                        ToolTip.delay: 400
+                        ToolTip.text: Accessible.name
                         onClicked: {
                             groupItem.addingSubcategory = true
                             emptySubcategoryName.forceActiveFocus()
@@ -1003,13 +1077,20 @@ FocusScope {
             }
         }
 
+        // The table is capped at its own content, so the add-category and add-scenario controls
+        // below sit directly under the last row; taller content scrolls inside the cap.
         RowLayout {
+            id: tableBody
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.preferredHeight: root.tableContentHeight
+            Layout.maximumHeight: root.tableContentHeight
             spacing: 0
 
             ColumnLayout {
-                Layout.preferredWidth: root.identityWidths[0] + root.identityWidths[1] + root.identityWidths[2]
+                Layout.preferredWidth: root.identityTotalWidth
+                Layout.minimumWidth: root.identityTotalWidth
+                Layout.maximumWidth: root.identityTotalWidth
                 Layout.fillHeight: true
                 spacing: 0
 
@@ -1066,6 +1147,12 @@ FocusScope {
                         }
                     }
                 }
+
+                // Mirrors the threshold side's scrollbar, so both views are the same height.
+                Item {
+                    Layout.preferredHeight: root.horizontalBarReserve
+                    visible: root.horizontalBarReserve > 0
+                }
             }
 
             ColumnLayout {
@@ -1119,9 +1206,15 @@ FocusScope {
                     objectName: "rankHeader"
                     visible: !emptyRankHeader.visible
                     Layout.fillWidth: true
+                    Layout.maximumWidth: root.rankColumnsWidth
                     Layout.preferredHeight: root.headerHeight
                     clip: true
                     syncView: thresholdView
+                    // The same widths as the body: columns the body has not loaded (the identifying
+                    // ones, once scrolled away) must not fall back to the delegate's implicit width,
+                    // or the header drifts three columns away from its body.
+                    leftMargin: -root.hiddenThresholdWidth
+                    columnWidthProvider: (column) => root.thresholdWidth
                     delegate: FocusScope {
                         id: headerCell
                         required property var model
@@ -1240,102 +1333,151 @@ FocusScope {
                     }
                 }
 
-                ToolButton {
-                    id: addRankPlus
-                    objectName: "addRankPlus"
-                    visible: !root.addingRank
-                    Layout.preferredWidth: 30
+                // Right after the last rank when they all fit, at the end of the header otherwise.
+                Item {
+                    id: rankSlot
+                    Layout.preferredWidth: root.rankSlotWidth
+                    Layout.minimumWidth: root.rankSlotWidth
                     Layout.preferredHeight: root.headerHeight
-                    text: "+"
-                    Accessible.name: qsTr("Add rank")
-                    onClicked: {
-                        root.addingRank = true
-                        rankCreationName.forceActiveFocus()
+
+                    ToolButton {
+                        id: addRankPlus
+                        objectName: "addRankPlus"
+                        visible: !root.addingRank
+                        anchors.fill: parent
+                        text: "+"
+                        Accessible.name: qsTr("Add rank")
+                        HoverHandler { id: addRankHover }
+                        ToolTip.visible: addRankHover.hovered
+                        ToolTip.delay: 400
+                        ToolTip.text: qsTr("Add a rank")
+                        onClicked: {
+                            root.addingRank = true
+                            rankCreationName.forceActiveFocus()
+                        }
                     }
-                }
-                TextField {
-                    id: rankCreationName
-                    objectName: "rankCreationName"
-                    visible: root.addingRank
-                    Layout.preferredWidth: 130
-                    Layout.preferredHeight: root.headerHeight
-                    placeholderText: qsTr("Rank name")
-                    Accessible.name: placeholderText
-                    onAccepted: {
-                        if (text.trim() === "") return
-                        root.creationAccepted = true
-                        root.addRankRequested(text)
-                        if (root.creationAccepted) {
+                    TextField {
+                        id: rankCreationName
+                        objectName: "rankCreationName"
+                        visible: root.addingRank
+                        anchors.fill: parent
+                        placeholderText: qsTr("Rank name")
+                        Accessible.name: placeholderText
+                        onAccepted: {
+                            if (text.trim() === "") return
+                            root.creationAccepted = true
+                            root.addRankRequested(text)
+                            if (root.creationAccepted) {
+                                root.addingRank = false
+                                text = ""
+                            }
+                        }
+                        Keys.onEscapePressed: {
                             root.addingRank = false
                             text = ""
                         }
                     }
-                    Keys.onEscapePressed: {
-                        root.addingRank = false
-                        text = ""
-                    }
+                }
+                Item {
+                    visible: !emptyRankHeader.visible
+                    Layout.fillWidth: true
                 }
                 }
 
-                TableView {
-                    id: thresholdView
-                    objectName: "thresholdView"
+                RowLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    model: root.tableModel
-                    selectionModel: selection
-                    selectionBehavior: TableView.SelectCells
-                    selectionMode: TableView.ExtendedSelection
-                    pointerNavigationEnabled: false
-                    columnWidthProvider: (column) => column >= root.thresholdKind ? root.thresholdWidth : 0
-                    rowHeightProvider: () => root.rowHeight
-                    delegate: TableCell {}
-                    ScrollBar.vertical: ScrollBar {}
-                    ScrollBar.horizontal: ScrollBar {}
+                    spacing: 0
 
-                    onActiveFocusChanged: if (activeFocus) root.headerFocused = false
-                    Keys.onPressed: (event) => root.handleCommandKey(event)
-                    Keys.onLeftPressed: (event) => {
-                        const current = selection.currentIndex
-                        if (current.valid && current.column === root.thresholdKind) {
-                            root.moveCurrent(current.row, root.thresholdKind - 1)
-                            event.accepted = true
-                        } else {
-                            event.accepted = false
+                    ColumnLayout {
+                        id: thresholdBody
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 0
+
+                        TableView {
+                            id: thresholdView
+                            objectName: "thresholdView"
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            model: root.tableModel
+                            selectionModel: selection
+                            selectionBehavior: TableView.SelectCells
+                            selectionMode: TableView.ExtendedSelection
+                            pointerNavigationEnabled: false
+                            // The identifying columns are not drawn here: the view starts past them, and
+                            // every column has the same width, so a long jump of the scrollbar lands on
+                            // exact positions (a zero-width run at the start throws the estimate off).
+                            leftMargin: -root.hiddenThresholdWidth
+                            columnWidthProvider: (column) => root.thresholdWidth
+                            rowHeightProvider: () => root.rowHeight
+                            delegate: TableCell {}
+                            ScrollBar.vertical: ScrollBar {}
+                            // Always shown while the ranks overflow, under the body rather than over its last
+                            // row, so a rank column cut off at the edge is visibly reachable by scrolling.
+                            ScrollBar.horizontal: ScrollBar {
+                                id: thresholdHorizontalBar
+                                objectName: "thresholdHorizontalBar"
+                                parent: thresholdBody
+                                Layout.fillWidth: true
+                                policy: ScrollBar.AlwaysOn
+                                visible: size < 1
+                                implicitHeight: 12
+                                // A track and a lighter thumb: the style's default is too faint
+                                // against the table to read as "there is more to the right".
+                                background: Rectangle {
+                                    color: Qt.alpha(thresholdHorizontalBar.palette.windowText, 0.08)
+                                }
+                                contentItem: Rectangle {
+                                    implicitHeight: 8
+                                    radius: 4
+                                    color: Qt.alpha(thresholdHorizontalBar.palette.windowText,
+                                                    thresholdHorizontalBar.pressed ? 0.8
+                                                    : thresholdHorizontalBar.hovered ? 0.65 : 0.45)
+                                }
+                            }
+
+                            onActiveFocusChanged: if (activeFocus) root.headerFocused = false
+                            Keys.onPressed: (event) => root.handleCommandKey(event)
+                            Keys.onLeftPressed: (event) => {
+                                const current = selection.currentIndex
+                                if (current.valid && current.column === root.thresholdKind) {
+                                    root.moveCurrent(current.row, root.thresholdKind - 1)
+                                    event.accepted = true
+                                } else {
+                                    event.accepted = false
+                                }
+                            }
                         }
+                    }
+
+                    // Matches the add-rank slot above, so header and body end together.
+                    Item {
+                        Layout.preferredWidth: root.rankSlotWidth
+                        Layout.fillHeight: true
                     }
                 }
             }
         }
 
-        Rectangle {
-            id: uncategorizedDropZone
-            objectName: "uncategorizedDropZone"
-            visible: root.draggingRows
-            Layout.fillWidth: true
-            Layout.preferredHeight: root.rowHeight
-            color: Qt.alpha(root.palette.highlight, 0.2)
-            border.color: root.hoverDropGroupId === "__uncategorized__" ? root.palette.highlight : root.palette.mid
-            Label {
-                anchors.centerIn: parent
-                text: qsTr("Move to Uncategorized")
-            }
-        }
-
+        // The controls that extend the table. They sit right under its last row (the table above
+        // is capped at its content), each with a visible label and a tooltip.
         Row {
             Layout.fillWidth: true
             Layout.preferredHeight: root.rowHeight
             spacing: 0
-            ToolButton {
+
+            AddRowButton {
                 id: addCategoryPlus
                 objectName: "addCategoryPlus"
                 visible: !root.addingCategory
                 width: root.identityWidths[0]
                 height: root.rowHeight
-                text: "+"
+                text: qsTr("+ Add category")
                 Accessible.name: qsTr("Add category")
+                ToolTip.text: qsTr("Add a category to group scenarios")
                 onClicked: {
                     root.addingCategory = true
                     categoryCreationName.forceActiveFocus()
@@ -1364,13 +1506,34 @@ FocusScope {
                 }
             }
             Item { width: root.identityWidths[1]; height: root.rowHeight }
-            ToolButton {
+            AddRowButton {
                 objectName: "addScenarioPlus"
                 width: root.identityWidths[2]
                 height: root.rowHeight
-                text: "+"
+                text: qsTr("+ Add scenario")
                 Accessible.name: qsTr("Add scenario to Uncategorized")
+                ToolTip.text: qsTr("Add a scenario to Uncategorized")
                 onClicked: root.addScenarioRequested()
+            }
+        }
+
+        // Takes the space the table leaves, so the controls above stay under the last row.
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+
+        Rectangle {
+            id: uncategorizedDropZone
+            objectName: "uncategorizedDropZone"
+            visible: root.draggingRows
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.rowHeight
+            color: Qt.alpha(root.palette.highlight, 0.2)
+            border.color: root.hoverDropGroupId === "__uncategorized__" ? root.palette.highlight : root.palette.mid
+            Label {
+                anchors.centerIn: parent
+                text: qsTr("Move to Uncategorized")
             }
         }
     }

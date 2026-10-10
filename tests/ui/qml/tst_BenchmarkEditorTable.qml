@@ -123,7 +123,8 @@ TestCase {
 
         // Bounded delegates: after the same scroll path through the same viewport, a table with 10x
         // the rows holds the same number of delegate objects (visible plus TableView's reuse pool).
-        table.thresholdView.contentX = 0
+        // The view starts past the identifying columns it does not draw (a negative left margin).
+        table.thresholdView.contentX = -table.thresholdView.leftMargin
         const small = scrollPathDelegateCount(table, 100, 170)
         table.destroy()
         const big = makeTable(TestDoubles.benchmarkTableLargeDesc(2000, 1500, 1700))
@@ -888,5 +889,113 @@ TestCase {
         compare(destination.kind, "threshold")
         compare(destination.entryId, "a")
         compare(destination.tierId, "t1")
+    }
+
+    // ---- The add controls and horizontal reach ---------------------------------------------
+
+    function tiersNamed(count) {
+        const tiers = []
+        for (let i = 0; i < count; ++i)
+            tiers.push({id: "r" + i, name: "Rank " + i})
+        return tiers
+    }
+
+    function topOf(item, ancestor) {
+        return item.mapToItem(ancestor, 0, 0).y
+    }
+
+    function test_addControlsAreLabelledAndSitDirectlyUnderTheLastRow() {
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", name: "Alpha", cells: {t1: {displayText: "1"}}},
+            {entryId: "b", name: "Beta", cells: {t1: {displayText: "2"}}}
+        ]})
+        const category = ItemLookup.findByObjectName(table, "addCategoryPlus")
+        const scenario = ItemLookup.findByObjectName(table, "addScenarioPlus")
+        verify(category !== null && scenario !== null)
+
+        // A visible label, not a bare glyph, and a tooltip that says what the control does.
+        verify(String(category.text).length > 1 && String(scenario.text).length > 1)
+        verify(String(category.text).toLowerCase().indexOf("category") !== -1, category.text)
+        verify(String(scenario.text).toLowerCase().indexOf("scenario") !== -1, scenario.text)
+        verify(String(category.ToolTip.text).length > 0 && String(scenario.ToolTip.text).length > 0)
+        verify(String(scenario.ToolTip.text).toLowerCase().indexOf("uncategorized") !== -1)
+
+        // The row of controls begins where the table content ends.
+        const lastRow = cellFor(table, "b", "scenario")
+        verify(lastRow !== null)
+        tryVerify(() => {
+            const gap = topOf(category, table) - (topOf(lastRow, table) + lastRow.height)
+            return gap >= 0 && gap <= table.rowHeight
+        }, 2000, "add-category sits under the last row, not at the bottom of the empty area")
+        compare(topOf(scenario, table), topOf(category, table))
+        verify(topOf(category, table) < table.height / 2, "the controls are nowhere near the table's bottom edge")
+    }
+
+    function test_addControlsStayVisibleBelowALongTable() {
+        const table = makeTable(TestDoubles.benchmarkTableLargeDesc(200, 151, 170))
+        const category = ItemLookup.findByObjectName(table, "addCategoryPlus")
+
+        tryVerify(() => topOf(category, table) + category.height <= table.height + 0.5,
+                  2000, "a table taller than the editor scrolls inside its cap and keeps the controls on screen")
+        verify(topOf(category, table) > table.height / 2)
+    }
+
+    function test_addControlsSitUnderTheHeaderOfAnEmptyTable() {
+        const table = makeTable({tiers: [], rows: []})
+        const category = ItemLookup.findByObjectName(table, "addCategoryPlus")
+
+        tryVerify(() => topOf(category, table) <= table.headerHeight + 80)
+        verify(category.visible)
+    }
+
+    function test_ranksBeyondTheViewportAreSignalledAndReachable() {
+        const tiers = tiersNamed(14)
+        const table = makeTable({tiers: tiers, rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const bar = ItemLookup.findByObjectName(table, "thresholdHorizontalBar")
+        verify(bar !== null, "the threshold view must expose its horizontal scrollbar")
+        const view = table.thresholdView
+
+        verify(view.contentWidth > view.width, "fixture must overflow")
+        tryCompare(bar, "visible", true)
+        compare(bar.policy, ScrollBar.AlwaysOn, "the scrollbar is not left to fade away")
+        verify(bar.size < 1)
+        // The bar sits under the body, not over its last row.
+        verify(topOf(bar, table) >= topOf(cellFor(table, "a", "scenario"), table) + table.rowHeight - 0.5)
+
+        // Header and body end together: the last visible header is never clipped by the + control.
+        const header = ItemLookup.findByObjectName(table, "rankHeader")
+        tryVerify(() => Math.abs(header.mapToItem(table, header.width, 0).x
+                                 - view.mapToItem(table, view.width, 0).x) < 1.5)
+
+        // Scrolled to the end, the last rank column is there with the body.
+        view.contentX = view.contentWidth - view.width
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_r13") !== null)
+        const last = ItemLookup.findByObjectName(table, "rankHeader_r13")
+        verify(last.mapToItem(table, last.width, 0).x <= view.mapToItem(table, view.width, 0).x + 0.5,
+               "the last rank is fully inside the viewport")
+    }
+
+    function test_noScrollIndicatorWhenEveryRankFitsAndAddRankFollowsTheLastOne() {
+        const table = makeTable({tiers: tiersNamed(3), rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const bar = ItemLookup.findByObjectName(table, "thresholdHorizontalBar")
+        const plus = ItemLookup.findByObjectName(table, "addRankPlus")
+
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_r2") !== null)
+        compare(bar.visible, false)
+        const last = ItemLookup.findByObjectName(table, "rankHeader_r2")
+        tryVerify(() => {
+            const gap = plus.mapToItem(table, 0, 0).x - last.mapToItem(table, last.width, 0).x
+            return gap >= -0.5 && gap <= 4
+        }, 2000, "the add-rank control follows the last rank when they all fit")
+    }
+
+    function test_identifyingColumnsKeepTheirWidthWhenThereAreNoRanks() {
+        const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const placeholder = ItemLookup.findByObjectName(table, "emptyRankHeader")
+
+        tryVerify(() => placeholder.visible && placeholder.width > 150)
+        const scenario = cellFor(table, "a", "scenario")
+        verify(scenario !== null)
+        compare(table.identityView.width, table.identityWidths[0] + table.identityWidths[1] + table.identityWidths[2])
     }
 }

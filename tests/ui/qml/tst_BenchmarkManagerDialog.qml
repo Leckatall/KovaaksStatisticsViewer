@@ -791,4 +791,213 @@ TestCase {
         tryCompare(vm(dialog), "saveCalls", 2)
         compare(vm(dialog).beginNewCalls, 0)
     }
+
+    // ---- Opening from the Library list: double-click and Enter -----------------------------
+
+    function openableEntries() {
+        return [
+            {id: "bench-A", name: "Alpha", filename: "a.json", classification: "Trackable",
+             openable: true, deletable: true},
+            {id: "bench-B", name: "Beta", filename: "b.json", classification: "Incomplete",
+             openable: true, deletable: true},
+            {id: "", name: "bad.json", filename: "bad.json", classification: "Invalid",
+             openable: false, deletable: false}
+        ]
+    }
+
+    function test_doubleClickingALibraryEntryOpensIt() {
+        const dialog = openWithFake({libraryEntries: openableEntries()})
+
+        mouseDoubleClickSequence(find(dialog, "libraryEntry_1"))
+
+        tryVerify(() => vm(dialog).openCalls.length === 1)
+        compare(vm(dialog).openCalls, ["bench-B"])
+        compare(dialog.selectedEntryFilename, "b.json", "the opened row is also the selected one")
+    }
+
+    function test_doubleClickingAnUnopenableEntryDoesNothing() {
+        const dialog = openWithFake({libraryEntries: openableEntries()})
+
+        mouseDoubleClickSequence(find(dialog, "libraryEntry_2"))
+
+        wait(50)
+        compare(vm(dialog).openCalls.length, 0)
+        compare(dialog.dirtyClosePrompt.visible, false)
+    }
+
+    function test_doubleClickWithUnsavedEditsRaisesTheGuardBeforeOpening() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), dirty: true, hasDraft: true})
+
+        mouseDoubleClickSequence(find(dialog, "libraryEntry_1"))
+
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+        compare(vm(dialog).openCalls.length, 0, "opening must wait for the Save/Discard/Cancel decision")
+
+        dialog.dirtyClosePrompt.buttonClicked(MessageDialog.Discard, MessageDialog.DestructiveRole)
+
+        tryVerify(() => vm(dialog).openCalls.length === 1)
+        compare(vm(dialog).openCalls, ["bench-B"])
+        compare(vm(dialog).discardCalls, 1)
+    }
+
+    function test_cancellingTheGuardAfterADoubleClickOpensNothing() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), dirty: true, hasDraft: true})
+
+        mouseDoubleClickSequence(find(dialog, "libraryEntry_0"))
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+        dialog.dirtyClosePrompt.buttonClicked(MessageDialog.Cancel, MessageDialog.RejectRole)
+
+        wait(50)
+        compare(vm(dialog).openCalls.length, 0)
+        compare(vm(dialog).discardCalls, 0)
+        compare(vm(dialog).saveCalls, 0)
+    }
+
+    function test_savingFromTheGuardOpensTheDoubleClickedEntry() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), dirty: true, hasDraft: true})
+
+        mouseDoubleClickSequence(find(dialog, "libraryEntry_1"))
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+        dialog.dirtyClosePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
+
+        tryCompare(vm(dialog), "saveCalls", 1)
+        tryVerify(() => vm(dialog).openCalls.length === 1)
+        compare(vm(dialog).openCalls, ["bench-B"])
+    }
+
+    function test_enterOpensTheSelectedLibraryEntry() {
+        const dialog = openWithFake({libraryEntries: openableEntries()})
+
+        mouseClick(find(dialog, "libraryEntry_0"))
+        compare(vm(dialog).openCalls.length, 0, "a single click only selects")
+        keyClick(Qt.Key_Return)
+
+        tryVerify(() => vm(dialog).openCalls.length === 1)
+        compare(vm(dialog).openCalls, ["bench-A"])
+    }
+
+    function test_enterWithUnsavedEditsRaisesTheSameGuard() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), dirty: true, hasDraft: true})
+
+        mouseClick(find(dialog, "libraryEntry_0"))
+        keyClick(Qt.Key_Enter)
+
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+        compare(vm(dialog).openCalls.length, 0)
+    }
+
+    function test_enterWithNothingSelectedOrAnUnopenableEntryDoesNothing() {
+        const dialog = openWithFake({libraryEntries: openableEntries()})
+        find(dialog, "libraryList").forceActiveFocus()
+        keyClick(Qt.Key_Return)
+        compare(vm(dialog).openCalls.length, 0, "nothing is selected")
+
+        mouseClick(find(dialog, "libraryEntry_2"))
+        keyClick(Qt.Key_Return)
+        wait(50)
+        compare(vm(dialog).openCalls.length, 0, "an invalid file cannot be opened")
+    }
+
+    function test_arrowKeysMoveTheLibrarySelectionAndEnterOpensIt() {
+        const dialog = openWithFake({libraryEntries: openableEntries()})
+
+        mouseClick(find(dialog, "libraryEntry_0"))
+        keyClick(Qt.Key_Down)
+        compare(dialog.selectedEntryFilename, "b.json")
+        keyClick(Qt.Key_Down)
+        keyClick(Qt.Key_Down)
+        compare(dialog.selectedEntryFilename, "bad.json", "the selection stops at the last entry")
+        keyClick(Qt.Key_Up)
+        compare(dialog.selectedEntryFilename, "b.json")
+        keyClick(Qt.Key_Return)
+
+        tryVerify(() => vm(dialog).openCalls.length === 1)
+        compare(vm(dialog).openCalls, ["bench-B"])
+    }
+
+    // ---- The Library pane and the editor share the window ----------------------------------
+
+    function test_libraryToolbarIsOneRowEvenAtTheNarrowestLibraryWidth() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
+        const names = ["newBenchmarkButton", "importPlaylistButton", "openBenchmarkButton",
+                       "deleteBenchmarkButton", "refreshLibraryButton", "openDirectoryButton"]
+        const pane = find(dialog, "libraryPane")
+
+        for (const width of [dialog.width, dialog.minimumWidth]) {
+            dialog.width = width
+            tryCompare(dialog, "width", width)
+            waitForRendering(dialog.contentItem)
+            const top = find(dialog, names[0]).mapToItem(dialog.contentItem, 0, 0).y
+            for (const name of names) {
+                const button = find(dialog, name)
+                verify(button !== null && button.visible, name + " is missing")
+                compare(button.mapToItem(dialog.contentItem, 0, 0).y, top,
+                        name + " wraps onto another row at dialog width " + width)
+                verify(button.mapToItem(pane, button.width, 0).x <= pane.width + 0.5,
+                       name + " sticks out of the library pane at dialog width " + width)
+            }
+        }
+    }
+
+    function test_benchmarkNameKeepsItsWidthWhenTheEditorIsNarrow() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
+        dialog.width = dialog.minimumWidth
+        tryCompare(dialog, "width", dialog.minimumWidth)
+        waitForRendering(dialog.contentItem)
+        const editor = find(dialog, "editorPane")
+        const nameField = find(dialog, "benchmarkNameField")
+        verify(nameField !== null && nameField.visible)
+        verify(nameField.width >= 160, "the name is squeezed to " + nameField.width)
+        for (const name of ["undoButton", "pasteButton", "saveButton", "discardButton"]) {
+            const button = find(dialog, name)
+            verify(button !== null && button.visible, name + " is missing")
+            verify(button.mapToItem(editor, button.width, 0).x <= editor.width + 0.5,
+                   name + " sticks out of the editor at the narrowest dialog width")
+        }
+    }
+
+    function test_libraryPaneOpensAtItsToolbarWidthAndLeavesTheRestToTheEditor() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
+
+        const pane = find(dialog, "libraryPane")
+        const editor = find(dialog, "editorPane")
+        const toolbar = find(dialog, "libraryToolbar")
+        tryVerify(() => editor.width > 0)
+        // The pane is as wide as its one-row toolbar needs, not a fixed share of the window.
+        verify(Math.abs(pane.width - Math.max(toolbar.implicitWidth, 280)) < 1,
+               "pane " + pane.width + " vs toolbar " + toolbar.implicitWidth)
+        verify(editor.width > dialog.width * 0.6, "the editor has the rest: " + editor.width)
+    }
+
+    function test_libraryToggleHidesTheListForTheEditorAndRestoresIt() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
+        const pane = find(dialog, "libraryPane")
+        const editor = find(dialog, "editorPane")
+        const toggle = find(dialog, "libraryToggleButton")
+        verify(toggle !== null && toggle.visible)
+        compare(pane.visible, true)
+        tryVerify(() => editor.width > 0)
+        const shared = editor.width
+
+        mouseClick(toggle)
+        tryCompare(pane, "visible", false)
+        tryVerify(() => editor.width > shared + 200)
+
+        mouseClick(toggle)
+        tryCompare(pane, "visible", true)
+        tryVerify(() => Math.abs(editor.width - shared) < 1)
+    }
+
+    function test_libraryListShowsWheneverThereIsNoDraft() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
+        const pane = find(dialog, "libraryPane")
+        dialog.libraryCollapsed = true
+        tryCompare(pane, "visible", false)
+
+        // The plain double does not notify; toggling re-evaluates the visibility binding.
+        vm(dialog).hasDraft = false
+        dialog.libraryCollapsed = false
+        dialog.libraryCollapsed = true
+        tryCompare(pane, "visible", true)
+    }
 }
