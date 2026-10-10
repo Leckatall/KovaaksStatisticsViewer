@@ -65,6 +65,9 @@ qt_add_qml_module(ksv_ui
             qml/icons/folder-open.svg
             qml/icons/panel-left-close.svg
             qml/icons/panel-left-open.svg
+            qml/icons/undo-2.svg
+            qml/icons/save.svg
+            qml/icons/x.svg
         SOURCES
             presentation/axis.h
             presentation/value_axis.h

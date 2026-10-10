@@ -956,6 +956,33 @@ TestCase {
         }
     }
 
+    // The editor's actions move between the name row and their own row together: at any width
+    // every button shares one row, and widening again brings them all back beside the name.
+    function test_editorActionsWrapAllOrNothing() {
+        const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
+        const editor = find(dialog, "editorPane")
+        const nameField = find(dialog, "benchmarkNameField")
+        const names = ["undoButton", "pasteButton", "saveButton", "discardButton"]
+        const rowsOf = () => names.map(name => {
+            const button = find(dialog, name)
+            return Math.round(button.mapToItem(editor, 0, button.height / 2).y)
+        })
+        const nameRowY = () => Math.round(nameField.mapToItem(editor, 0, nameField.height / 2).y)
+
+        for (const width of [dialog.minimumWidth, 1180, dialog.minimumWidth, 1400]) {
+            dialog.width = width
+            tryCompare(dialog, "width", width)
+            waitForRendering(dialog.contentItem)
+            const rows = rowsOf()
+            verify(rows.every(y => Math.abs(y - rows[0]) <= 1),
+                   "at width " + width + " the actions are split across rows: " + rows)
+            const inline = Math.abs(rows[0] - nameRowY()) <= 1
+            compare(inline, find(dialog, "editorToolbar").actionsInline,
+                    "at width " + width + " the row does not match actionsInline")
+            if (width >= 1180) verify(inline, "at width " + width + " the actions left the name row")
+        }
+    }
+
     function test_libraryPaneOpensAtItsToolbarWidthAndLeavesTheRestToTheEditor() {
         const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
 

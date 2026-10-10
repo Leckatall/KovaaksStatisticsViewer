@@ -807,17 +807,26 @@ ApplicationWindow {
                     // A closed draft brings the list back, so the next open starts with it shown.
                     onVisibleChanged: if (!visible) root.libraryCollapsed = false
 
-                    // One row when the pane is wide; the name field keeps its own full row when it
-                    // is narrow, so the action buttons can never squeeze the name away.
+                    // The actions sit beside the name while the name can keep a comfortable width,
+                    // and otherwise move to their own row together: never some on each row. The
+                    // actions row has a fixed implicit width, so the switch cannot oscillate.
                     GridLayout {
+                        id: editorToolbar
+                        objectName: "editorToolbar"
+                        readonly property real inlineNameWidth: 240
+                        readonly property bool actionsInline: editorPane.width
+                            >= libraryToggle.implicitWidth + nameRow.spacing + inlineNameWidth
+                               + columnSpacing + editorActions.implicitWidth
                         Layout.fillWidth: true
-                        columns: editorPane.width >= 760 ? 2 : 1
+                        columns: actionsInline ? 2 : 1
                         columnSpacing: 8
                         rowSpacing: 6
                         RowLayout {
+                            id: nameRow
                             Layout.fillWidth: true
                             spacing: 8
                             ToolbarButton {
+                                id: libraryToggle
                                 objectName: "libraryToggleButton"
                                 icon.source: root.libraryCollapsed ? "icons/panel-left-open.svg"
                                                                    : "icons/panel-left-close.svg"
@@ -851,33 +860,33 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Flow {
-                            // Wraps rather than sticking out when the editor pane is narrow; only the narrow
-                            // (single column) layout lets it take the full row.
-                            Layout.fillWidth: parent.columns === 1
+                        RowLayout {
+                            id: editorActions
+                            objectName: "editorActions"
+                            // Inline it sits at the right end of the name row; on its own row it
+                            // stays right-aligned under the name.
                             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                            spacing: 8
-                            RowLayout {
-                                spacing: 8
-                                implicitHeight: undoButton.implicitHeight
-                                Label {
-                                    objectName: "draftStatusBadge"
-                                    text: root.vm().draftTrackable ? qsTr("Trackable") : qsTr("Incomplete")
-                                }
-                                Rectangle {
-                                    width: 8
-                                    height: 8
-                                    radius: 4
-                                    color: root.classificationColor(root.vm().draftTrackable
-                                        ? "Trackable" : "Incomplete")
-                                }
+                            spacing: 4
+                            Label {
+                                objectName: "draftStatusBadge"
+                                Layout.rightMargin: 2
+                                text: root.vm().draftTrackable ? qsTr("Trackable") : qsTr("Incomplete")
                             }
-                            Button {
-                                id: undoButton
+                            Rectangle {
+                                Layout.rightMargin: 8
+                                implicitWidth: 8
+                                implicitHeight: 8
+                                radius: 4
+                                color: root.classificationColor(root.vm().draftTrackable
+                                    ? "Trackable" : "Incomplete")
+                            }
+                            ToolbarButton {
                                 objectName: "undoButton"
-                                text: qsTr("Undo")
+                                icon.source: "icons/undo-2.svg"
+                                display: AbstractButton.IconOnly
                                 enabled: root.sessionRevision >= 0 && root.vm().canUndo === true
                                 Accessible.name: qsTr("Undo the last table edit")
+                                ToolTip.text: qsTr("Undo the last table edit")
                                 onClicked: {
                                     root.commitActiveEdits()
                                     root.tableStatus = ""
@@ -885,10 +894,12 @@ ApplicationWindow {
                                     root.sessionRevision++
                                 }
                             }
-                            Button {
+                            ToolbarButton {
                                 objectName: "pasteButton"
-                                text: qsTr("Paste")
+                                icon.source: "icons/clipboard-paste.svg"
+                                display: AbstractButton.IconOnly
                                 Accessible.name: qsTr("Paste spreadsheet cells at the current cell or rank header")
+                                ToolTip.text: qsTr("Paste spreadsheet cells at the current cell or rank header")
                                 onClicked: {
                                     root.commitActiveEdits()
                                     root.tableStatus = ""
@@ -896,14 +907,20 @@ ApplicationWindow {
                                     root.sessionRevision++
                                 }
                             }
-                            Button {
+                            ToolbarButton {
                                 objectName: "saveButton"
-                                text: qsTr("Save")
+                                icon.source: "icons/save.svg"
+                                display: AbstractButton.IconOnly
+                                Accessible.name: qsTr("Save")
+                                ToolTip.text: qsTr("Save the benchmark")
                                 onClicked: root.requestSave()
                             }
-                            Button {
+                            ToolbarButton {
                                 objectName: "discardButton"
-                                text: qsTr("Discard")
+                                icon.source: "icons/x.svg"
+                                display: AbstractButton.IconOnly
+                                Accessible.name: qsTr("Discard")
+                                ToolTip.text: qsTr("Discard unsaved changes and close the editor")
                                 onClicked: {
                                     root.vm().discard()
                                     root.statusMessage = ""
