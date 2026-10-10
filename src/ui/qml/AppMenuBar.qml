@@ -101,7 +101,8 @@ MenuBar {
             }
         }
         Action {
-            text: qsTr("Control Panel")
+            // The line toggles now sit inside the run graph panel (formerly a separate "Control Panel").
+            text: qsTr("Graph Line Toggles")
             checkable: true
             checked: root.visualSettings ? root.visualSettings.controlPanelVisible : true
             onTriggered: if (root.visualSettings) root.visualSettings.controlPanelVisible = checked

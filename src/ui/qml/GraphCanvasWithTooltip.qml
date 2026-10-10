@@ -10,8 +10,14 @@ Item {
     property int yAxisColumn: -1
     property bool showSeriesNames: true
     property string xLabel: qsTr("Time")
+    // Dot each real data point while the points are sparse enough to tell apart.
+    property bool pointMarkers: false
     readonly property rect plotArea: canvas.plotArea
     readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
+    readonly property var labelledYAxisColumns: canvas.labelledYAxisColumns
+    readonly property bool hasIndependentlyScaledSeries: canvas.hasIndependentlyScaledSeries
+    readonly property color labelledYAxisColor: canvas.labelledYAxisColor
+    readonly property bool pointMarkersShown: canvas.pointMarkersShown
 
     Layout.fillHeight: true
     Layout.fillWidth: true
@@ -23,6 +29,8 @@ Item {
         graphVm: root.graphVm
         visibleColumns: root.visibleColumns
         yAxisColumn: root.yAxisColumn
+        pointMarkers: root.pointMarkers
+        backgroundColor: root.palette.base
     }
     MouseArea {
         id: hoverArea

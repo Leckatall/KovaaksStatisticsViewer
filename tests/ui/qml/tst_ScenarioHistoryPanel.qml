@@ -34,6 +34,18 @@ Item {
         }
     }
 
+    Component {
+        id: fewRunsPanelComponent
+
+        ScenarioHistoryPanel {
+            width: 900
+            height: 600
+            historyVm: Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8})
+            columnVisibility: historyVisibilitySettings.value
+            historyAxisSettings: axisSettings
+        }
+    }
+
     TestCase {
         name: "ScenarioHistoryPanelTest"
         when: windowShown
@@ -60,6 +72,15 @@ Item {
         //     axisSettings.yAxisColumnKey = "missing"
         //     tryCompare(panel, "yAxisColumn", -1)
         // }
+
+        // the history graph asks its canvas to dot each real run (shown while sparse).
+        function test_historyGraphMarksRealRuns() {
+            const panel = createTemporaryObject(fewRunsPanelComponent, root)
+            verify(!!panel, "Component exists")
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            compare(canvas.pointMarkers, true)
+        }
 
         function test_titleBindsThroughHistoryViewModel() {
             const panel = createTemporaryObject(panelComponent, root)

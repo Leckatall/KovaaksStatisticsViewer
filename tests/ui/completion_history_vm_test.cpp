@@ -142,4 +142,43 @@ namespace {
         }
         EXPECT_EQ(ids.size(), CompletionHistoryViewModel::ColumnCount - CompletionHistoryViewModel::Score);
     }
+
+    // The run axis must only label runs that exist: no "#0", nothing past the latest run.
+    TEST_F(CompletionHistoryViewModelTest, RunAxisLabelsOnlyRunsThatExist) {
+        for (const int runs: {2, 4, 8, 224, 360}) {
+            fake->history.rows.clear();
+            for (int i = 1; i <= runs; ++i)
+                fake->history.rows.push_back({.run_index = i, .score = 100.0 + i, .accuracy = 0.5,
+                                              .shots = 10, .hits = 5, .misses = 5});
+            view_model.refresh();
+
+            const auto &axis = view_model.xAxis();
+            ASSERT_FALSE(axis.ticks().isEmpty());
+            EXPECT_DOUBLE_EQ(axis.min(), 1.0) << runs << " runs";
+            EXPECT_DOUBLE_EQ(axis.max(), runs) << runs << " runs";
+            for (const qreal tick: axis.ticks()) {
+                EXPECT_GE(tick, 1.0) << runs << " runs: tick " << axis.formatTick(tick).toStdString();
+                EXPECT_LE(tick, runs) << runs << " runs: tick " << axis.formatTick(tick).toStdString();
+            }
+        }
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FewRunsAreEachTickedFromTheFirstRun) {
+        fake->history.rows.clear();
+        for (int i = 1; i <= 8; ++i)
+            fake->history.rows.push_back({.run_index = i, .score = 3100.0 + 40 * i});
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{1, 2, 3, 4, 5, 6, 7, 8}));
+        EXPECT_EQ(view_model.xAxis().formatTick(view_model.xAxis().ticks().front()), "#1");
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, CountSeriesShareOneAxisIdentity) {
+        const auto series = view_model.series({CompletionHistoryViewModel::Score, CompletionHistoryViewModel::Shots,
+                                               CompletionHistoryViewModel::Hits});
+        ASSERT_EQ(series.size(), 3);
+        ASSERT_TRUE(series[0]->yAxisId && series[1]->yAxisId && series[2]->yAxisId);
+        EXPECT_NE(*series[0]->yAxisId, *series[1]->yAxisId);
+        EXPECT_EQ(*series[1]->yAxisId, *series[2]->yAxisId);
+    }
 }

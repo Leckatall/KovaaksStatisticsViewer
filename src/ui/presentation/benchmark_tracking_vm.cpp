@@ -136,6 +136,8 @@ namespace ksv::presentation {
     BenchmarkTrackingViewModel::BenchmarkTrackingViewModel(
         std::shared_ptr<application::IBenchmarkTrackingUseCase> useCase, QObject *parent)
         : QObject(parent), m_useCase(std::move(useCase)),
+          // Both history metrics are one point per UTC day, so the axis never ticks in hours.
+          m_historyXAxis(DateTimeAxis::Options{.wholeDays = true}),
           m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, m_historyXAxis, this)),
           m_playtimeHistory(
               new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, m_historyXAxis, this)),

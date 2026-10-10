@@ -27,6 +27,10 @@ namespace {
     // SeriesId, not a position, and has no dedicated enum outside the class.
     constexpr int kScoreSeriesId = 1;
     constexpr int kAccuracySeriesId = 2;
+    // Score Total, Expected Final Score and Expected Final Score (5s) share the "Score Family" axis.
+    constexpr int kScoreTotalSeriesId = 7;
+    constexpr int kExpectedFinalSeriesId = 8;
+    constexpr int kExpectedFinal5sSeriesId = 9;
 
     void configureCanvas(GraphCanvas &canvas, presentation::GraphViewModelBase *vm, const QVariantList &columns) {
         canvas.setWidth(800);
@@ -275,5 +279,88 @@ namespace {
         const qreal sharedLeft = canvas->property("plotArea").toRectF().left();
 
         EXPECT_GT(sharedLeft, singleLeft);
+    }
+
+    // --- Which lines the labelled Y axis measures. ---
+
+    TEST_F(GraphCanvasGeometryTest, IndependentlyScaledLinesLeaveTheAxisToItsOwnLine) {
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kAccuracySeriesId});
+        canvas.setYAxisColumn(kScoreSeriesId);
+
+        EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(), QVariantList{kScoreSeriesId});
+        EXPECT_TRUE(canvas.property("hasIndependentlyScaledSeries").toBool());
+        EXPECT_TRUE(canvas.property("labelledYAxisColor").value<QColor>().isValid());
+    }
+
+    TEST_F(GraphCanvasGeometryTest, LinesSharingTheLabelledAxisAreAllMeasuredByIt) {
+        canvas.setVisibleColumns(QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId, kExpectedFinal5sSeriesId});
+        canvas.setYAxisColumn(kScoreTotalSeriesId);
+
+        EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(),
+                  (QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId, kExpectedFinal5sSeriesId}));
+        EXPECT_FALSE(canvas.property("hasIndependentlyScaledSeries").toBool());
+    }
+
+    TEST_F(GraphCanvasGeometryTest, MixedLinesNameOnlyTheSharedGroup) {
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kScoreTotalSeriesId, kExpectedFinalSeriesId});
+        canvas.setYAxisColumn(kExpectedFinalSeriesId);
+
+        EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(),
+                  (QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId}));
+        EXPECT_TRUE(canvas.property("hasIndependentlyScaledSeries").toBool());
+    }
+
+    TEST_F(GraphCanvasGeometryTest, ASingleLineIsNotIndependentlyScaled) {
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId});
+
+        EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(), QVariantList{kScoreSeriesId});
+        EXPECT_FALSE(canvas.property("hasIndependentlyScaledSeries").toBool());
+    }
+
+    // --- Real data points are marked while sparse. ---
+
+    TEST(GraphCanvasMarkersTest, MarkersFitOnlyWhenPointsAreFarEnoughApart) {
+        EXPECT_TRUE(GraphCanvas::markersFit(1, 0.0)) << "a lone point is always marked";
+        EXPECT_TRUE(GraphCanvas::markersFit(8, 600.0));
+        EXPECT_TRUE(GraphCanvas::markersFit(8, 400.0));
+        EXPECT_FALSE(GraphCanvas::markersFit(224, 570.0));
+        EXPECT_FALSE(GraphCanvas::markersFit(0, 600.0));
+    }
+
+    // A run-history-like VM: `count` runs plotted against run index.
+    class RunsVm : public presentation::GraphViewModelBase {
+    public:
+        explicit RunsVm(const int count) : m_series(new presentation::SeriesModel(this)) {
+            m_xAxis.setRange(1.0, count);
+            m_series->setColumn(0);
+            m_series->setColor(Qt::green);
+            QList<QPointF> points;
+            for (int i = 1; i <= count; ++i) points.append(QPointF(i, 100.0 + (i % 7)));
+            m_series->setData(points);
+        }
+
+        [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &columns) const override {
+            return columns.contains(0) ? QList<presentation::SeriesModel *>{m_series} : QList<presentation::SeriesModel *>{};
+        }
+        [[nodiscard]] const presentation::Axis &xAxis() const override { return m_xAxis; }
+        [[nodiscard]] int yAxisColumn() const override { return 0; }
+
+    private:
+        presentation::ValueAxis m_xAxis;
+        presentation::SeriesModel *m_series;
+    };
+
+    TEST(GraphCanvasMarkersTest, FewRunsAreMarkedAndManyRunsStayPlainLines) {
+        RunsVm few(8);
+        RunsVm many(224);
+        const auto fewCanvas = makeCanvas(few, QVariantList{0});
+        const auto manyCanvas = makeCanvas(many, QVariantList{0});
+
+        EXPECT_FALSE(fewCanvas->property("pointMarkersShown").toBool()) << "markers are opt-in";
+
+        fewCanvas->setProperty("pointMarkers", true);
+        manyCanvas->setProperty("pointMarkers", true);
+        EXPECT_TRUE(fewCanvas->property("pointMarkersShown").toBool());
+        EXPECT_FALSE(manyCanvas->property("pointMarkersShown").toBool());
     }
 }

@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <utility>
+#include <vector>
 
 #include "value_axis.h"
 
@@ -167,6 +169,111 @@ namespace {
         EXPECT_TRUE(axis.setRange(10.0, 30.0));
         EXPECT_FALSE(axis.setRange(10.0, 30.0));
         EXPECT_TRUE(axis.setRange(10.0, 40.0));
+    }
+
+    // --- Tick labels at degenerate ranges: adjacent labels must always differ. ---
+
+    void expectAdjacentLabelsDistinct(const Axis &axis) {
+        const auto &ticks = axis.ticks();
+        ASSERT_FALSE(ticks.isEmpty());
+        for (int i = 1; i < ticks.size(); ++i) {
+            EXPECT_NE(axis.formatTick(ticks[i - 1]), axis.formatTick(ticks[i]))
+                << "ticks " << ticks[i - 1] << " and " << ticks[i] << " share the label \""
+                << axis.formatTick(ticks[i]).toStdString() << "\"";
+        }
+    }
+
+    TEST(ValueAxisTest, ZeroSpanMinuteAxisNeverRepeatsALabel) {
+        // The empty playtime graph: no data, zero baseline, whole-minute labels. Sub-minute ticks
+        // used to read "1 min" six times, then "0 min" five times.
+        ValueAxis axis({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
+        axis.setRange(0.0, 0.0);
+        expectAdjacentLabelsDistinct(axis);
+        EXPECT_DOUBLE_EQ(axis.min(), 0.0);
+        EXPECT_GT(axis.max(), 0.0);
+    }
+
+    TEST(ValueAxisTest, SubUnitSpanWithWholeUnitLabelsCoarsensTheStep) {
+        // Under one minute of playtime: the step grows to a whole minute instead of repeating labels.
+        ValueAxis axis({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
+        axis.setRange(0.2, 0.6);
+        expectAdjacentLabelsDistinct(axis);
+        EXPECT_GE(axis.max(), 0.6);
+        for (const qreal tick: axis.ticks()) EXPECT_DOUBLE_EQ(tick, std::round(tick));
+    }
+
+    TEST(ValueAxisTest, SubPercentSpanNeverRepeatsAPercentageLabel) {
+        ValueAxis axis({.baseline = ValueAxis::Baseline::HugData}, ValueTransform::percentage());
+        axis.setRange(63.4, 63.9);
+        expectAdjacentLabelsDistinct(axis);
+        EXPECT_LE(axis.min(), 63.4);
+        EXPECT_GE(axis.max(), 63.9);
+    }
+
+    TEST(ValueAxisTest, SinglePointNeverRepeatsALabel) {
+        for (const qreal value: {0.0, 0.004, 0.5, 1.0, 42.0, 5300.0, 1e6}) {
+            ValueAxis hug({.baseline = ValueAxis::Baseline::HugData});
+            hug.setRange(value, value);
+            expectAdjacentLabelsDistinct(hug);
+            EXPECT_LT(hug.min(), hug.max());
+
+            ValueAxis zero({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
+            zero.setRange(value, value);
+            expectAdjacentLabelsDistinct(zero);
+        }
+    }
+
+    TEST(ValueAxisTest, FractionalSpanWithDefaultFormatterNeverRepeatsALabel) {
+        // The default formatter shows at most one decimal, so a 0.02 step would read "0.5" twice.
+        ValueAxis axis({.baseline = ValueAxis::Baseline::HugData});
+        axis.setRange(0.5, 0.7);
+        expectAdjacentLabelsDistinct(axis);
+    }
+
+    TEST(ValueAxisTest, RangeSweepNeverRepeatsALabel) {
+        const std::vector<std::pair<qreal, qreal>> ranges{
+            {0.0, 0.0}, {0.0, 0.01}, {0.1, 0.15}, {0.99, 1.01}, {1.0, 1.0}, {3.0, 4.0},
+            {60.0, 105.0}, {63.0, 63.5}, {4900.0, 5700.0}, {0.0, 300.0}, {12.0, 12.25}};
+        const std::vector<ValueTransform> transforms{
+            ValueTransform::identity(), ValueTransform::percentage(), ValueTransform::secondsToMinutes()};
+        for (const auto &[lo, hi]: ranges) {
+            for (const auto &transform: transforms) {
+                for (const auto baseline: {ValueAxis::Baseline::Zero, ValueAxis::Baseline::HugData}) {
+                    for (const bool niceBounds: {true, false}) {
+                        ValueAxis axis({.baseline = baseline, .niceBounds = niceBounds}, transform);
+                        axis.setRange(lo, hi);
+                        SCOPED_TRACE(testing::Message() << "range " << lo << ".." << hi);
+                        expectAdjacentLabelsDistinct(axis);
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Exact bounds: no tick outside the data (run-history "#0"). ---
+
+    TEST(ValueAxisTest, ExactBoundsTickEveryRunForFewRuns) {
+        ValueAxis axis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .niceBounds = false});
+        axis.setRange(1.0, 8.0);
+        EXPECT_DOUBLE_EQ(axis.min(), 1.0);
+        EXPECT_DOUBLE_EQ(axis.max(), 8.0);
+        EXPECT_EQ(axis.ticks(), (QList<qreal>{1, 2, 3, 4, 5, 6, 7, 8}));
+    }
+
+    TEST(ValueAxisTest, ExactBoundsNeverTickOutsideTheData) {
+        for (const qreal last: {2.0, 3.0, 11.0, 37.0, 224.0, 360.0, 1001.0}) {
+            ValueAxis axis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .niceBounds = false});
+            axis.setRange(1.0, last);
+            EXPECT_DOUBLE_EQ(axis.min(), 1.0);
+            EXPECT_DOUBLE_EQ(axis.max(), last);
+            ASSERT_FALSE(axis.ticks().isEmpty());
+            for (const qreal tick: axis.ticks()) {
+                EXPECT_GE(tick, 1.0) << "range 1.." << last;
+                EXPECT_LE(tick, last) << "range 1.." << last;
+                EXPECT_DOUBLE_EQ(tick, std::round(tick));
+            }
+            expectAdjacentLabelsDistinct(axis);
+        }
     }
 
     TEST(ValueAxisTest, ChangingOptionsRecomputesTheCurrentRange) {

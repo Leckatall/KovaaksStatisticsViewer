@@ -178,7 +178,7 @@ TestCase {
         historyItem.action.trigger()
         compare(fakeViewSettings.scenarioHistoryGraphVisible, false)
 
-        const controlPanelItem = findMenuItemByText(viewMenu, "Control Panel")
+        const controlPanelItem = findMenuItemByText(viewMenu, "Graph Line Toggles")
         verify(controlPanelItem !== null)
         controlPanelItem.action.trigger()
         compare(fakeViewSettings.controlPanelVisible, false)

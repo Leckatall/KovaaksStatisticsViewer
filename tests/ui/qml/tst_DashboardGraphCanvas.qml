@@ -24,7 +24,14 @@ Item {
         id: fakeVisualSettings
 
         property int graphAxisSeriesId: 0
+        property bool controlPanelVisible: true
         property var isSeriesVisible: function (id) { return true }
+        property var setSeriesVisible: function (id, visible) {}
+    }
+
+    SignalSpy {
+        id: configureSpy
+        signalName: "configureLinesRequested"
     }
 
     Component {
@@ -44,6 +51,56 @@ Item {
 
         function init() {
             fakeGraphVm.contentState = GraphViewModel.HasData
+            fakeGraphVm.scenarioTitle = "Air Angelic"
+            fakeVisualSettings.controlPanelVisible = true
+            configureSpy.clear()
+        }
+
+        function isAncestor(ancestor, item) {
+            for (let p = item; p; p = p.parent) {
+                if (p === ancestor) return true
+            }
+            return false
+        }
+
+        // an unselected run has an empty label; the title must not invent a date for it.
+        function test_noRunTitleCarriesNoDate() {
+            const panel = createTemporaryObject(panelComponent, root)
+            verify(!!panel, "Component exists")
+            fakeGraphVm.contentState = GraphViewModel.NoRunSelected
+            fakeGraphVm.scenarioTitle = ""
+
+            const title = findChild(panel, "scenarioTitleLabel")
+            verify(title.text.length > 0, "the panel keeps a title")
+            verify(!/\d{4}-\d{2}-\d{2}/.test(title.text), "title shows a date: " + title.text)
+            verify(!/\d{2}:\d{2}/.test(title.text), "title shows a time: " + title.text)
+        }
+
+        // the line toggles live inside the per-run graph panel they control.
+        function test_lineTogglesSitInsideThePanel() {
+            const panel = createTemporaryObject(panelComponent, root)
+            verify(!!panel, "Component exists")
+            const toggles = findChild(panel, "graphLineToggles")
+            verify(!!toggles, "toggles exist inside the panel")
+            verify(toggles.visible)
+            verify(isAncestor(panel, findChild(panel, "configureGraphLinesButton")))
+            const content = findChild(panel, "graphContentArea")
+            verify(toggles.y < content.y, "toggles sit above the plot")
+        }
+
+        function test_configureButtonIsForwardedByThePanel() {
+            const panel = createTemporaryObject(panelComponent, root)
+            verify(!!panel, "Component exists")
+            configureSpy.target = panel
+            findChild(panel, "configureGraphLinesButton").clicked()
+            compare(configureSpy.count, 1)
+        }
+
+        function test_lineTogglesFollowTheViewSetting() {
+            const panel = createTemporaryObject(panelComponent, root)
+            verify(!!panel, "Component exists")
+            fakeVisualSettings.controlPanelVisible = false
+            tryCompare(findChild(panel, "graphLineToggles"), "visible", false)
         }
 
         function test_noRunSelectedShowsOnlyItsMessage() {

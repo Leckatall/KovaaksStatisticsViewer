@@ -35,7 +35,7 @@ Item {
         visible: !root.welcomeVisible
 
         ColumnLayout {
-            Layout.row: 1; Layout.column: 2
+            Layout.row: 1; Layout.column: 1
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -45,6 +45,7 @@ Item {
                 visible: root.visualSettings.scenarioGraphVisible
                 graphVm: root.graphVm
                 visualSettings: root.visualSettings
+                onConfigureLinesRequested: root.configureGraphLinesRequested()
             }
             PlaytimeGraphPanel {
                 Layout.fillWidth: true
@@ -60,13 +61,6 @@ Item {
                 columnVisibility: root.visualSettings.historyColumnVisibility
                 historyAxisSettings: root.visualSettings
             }
-        }
-        ControlPanel {
-            Layout.row: 1; Layout.column: 1
-            visible: root.visualSettings.controlPanelVisible
-            graphVm: root.graphVm
-            visualSettings: root.visualSettings
-            onConfigureLinesRequested: root.configureGraphLinesRequested()
         }
         SelectionPanel {
             Layout.row: 1; Layout.column: 0

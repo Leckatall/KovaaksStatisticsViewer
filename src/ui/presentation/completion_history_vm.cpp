@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QtMath>
 
+#include <algorithm>
 #include <array>
 #include <tuple>
 #include <utility>
@@ -53,7 +54,10 @@ namespace ksv::presentation {
     CompletionHistoryViewModel::CompletionHistoryViewModel(
         std::shared_ptr<application::ICompletionHistoryUseCase> use_case, QObject *parent)
         : GraphViewModelBase(parent), m_use_case(std::move(use_case)),
-          m_xAxis({.baseline = ValueAxis::Baseline::Zero, .integral = true, .targetTicks = 10},
+          // Runs are numbered from #1: the axis spans exactly the first to the last run, so it
+          // never labels a run that does not exist (no "#0", nothing past the latest run).
+          m_xAxis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .targetTicks = 10,
+                   .niceBounds = false},
                   runIndexTransform()) {
         for (int column = Score; column < ColumnCount; ++column) {
             auto *series_model = new SeriesModel(this);
@@ -62,6 +66,8 @@ namespace ksv::presentation {
             series_model->setColor(kColumnMeta[column].color);
             series_model->setColumn(column);
             series_model->transform = kYAxisMeta[kColumnMeta[column].yAxis].transform;
+            // Lets the canvas tell which lines share the labelled axis (e.g. Shots/Hits/Misses).
+            series_model->yAxisId = static_cast<uint64_t>(kColumnMeta[column].yAxis);
             m_series.append(series_model);
         }
         refresh();
@@ -113,7 +119,7 @@ namespace ksv::presentation {
             series->yAxis.reset();
         }
 
-        std::ignore = m_xAxis.setRange(m_run_count > 0 ? 1.0 : 0.0, m_run_count);
+        std::ignore = m_xAxis.setRange(1.0, std::max(1, m_run_count));
 
         emit dataUpdated();
         emit boundsChanged();

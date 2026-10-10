@@ -74,9 +74,17 @@ Frame {
                         labelObjectName: "historyYAxisTitleLabel"
                         plotArea: historyCanvas.plotArea
                         text: {
-                            const s = root.seriesForColumn(historyCanvas.labelledYAxisColumn)
-                            return s ? s.name : ""
+                            const names = []
+                            for (const column of historyCanvas.labelledYAxisColumns) {
+                                const s = root.seriesForColumn(column)
+                                if (s) names.push(s.name)
+                            }
+                            return names.join(", ")
                         }
+                        // Other visible lines have their own scale: tie the axis to its line's colour.
+                        textColor: historyCanvas.hasIndependentlyScaledSeries
+                                   ? historyCanvas.labelledYAxisColor
+                                   : Qt.alpha(root.palette.text, 0.6)
                     }
                     GraphCanvasWithTooltip {
                         id: historyCanvas
@@ -87,6 +95,9 @@ Frame {
                         visibleColumns: root.visibleColumns
                         yAxisColumn: root.yAxisColumn
                         xLabel: qsTr("Run")
+                        objectName: "historyGraphCanvas"
+                        // Few runs: dot each real run so it reads apart from the smoothed curve.
+                        pointMarkers: true
                     }
                 }
             }

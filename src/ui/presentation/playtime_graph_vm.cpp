@@ -17,7 +17,8 @@ namespace ksv::presentation {
 
     PlaytimeGraphViewModel::PlaytimeGraphViewModel(std::shared_ptr<application::IPlaytimeGraphUseCase> useCase,
                                                    QObject *parent)
-        : GraphViewModelBase(parent), m_useCase(std::move(useCase)), m_series(new SeriesModel(this)) {
+        : GraphViewModelBase(parent), m_useCase(std::move(useCase)),
+          m_xAxis(DateTimeAxis::Options{.wholeDays = true}), m_series(new SeriesModel(this)) {
         refresh();
     }
 

@@ -8,6 +8,7 @@ Item {
     required property rect plotArea
     property string text: ""
     property string labelObjectName: "yAxisTitleLabel"
+    property color textColor: Qt.alpha(root.palette.text, 0.6)
 
     Layout.preferredWidth: 16
     Layout.fillHeight: true
@@ -17,7 +18,7 @@ Item {
         objectName: root.labelObjectName
         text: root.text
         font.pixelSize: 10
-        color: Qt.alpha(root.palette.text, 0.6)
+        color: root.textColor
         rotation: -90
         width: root.plotArea.height
         height: root.width

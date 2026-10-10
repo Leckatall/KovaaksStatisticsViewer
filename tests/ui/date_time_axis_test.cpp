@@ -128,6 +128,67 @@ namespace {
         }
     }
 
+    void expectAdjacentLabelsDistinct(const DateTimeAxis &axis) {
+        const auto &ticks = axis.ticks();
+        ASSERT_FALSE(ticks.isEmpty());
+        for (int i = 1; i < ticks.size(); ++i) {
+            EXPECT_NE(axis.formatTick(ticks[i - 1]), axis.formatTick(ticks[i]))
+                << "adjacent ticks share the label \"" << axis.formatTick(ticks[i]).toStdString() << "\"";
+        }
+    }
+
+    TEST(DateTimeAxisTest, WholeDayAxisNeverTicksInHours) {
+        // Day-granular data spanning one to three days used to tick every 6 hours ("Aug 25 06:00").
+        for (const int lastDay: {13, 14, 16}) {
+            DateTimeAxis axis({.wholeDays = true});
+            axis.setRange(utc(2026, 8, 13), utc(2026, 8, lastDay));
+            for (const qreal tick: axis.ticks()) {
+                EXPECT_EQ(QDateTime::fromMSecsSinceEpoch(qint64(tick), QTimeZone::utc()).time(), QTime(0, 0));
+                EXPECT_FALSE(axis.formatTick(tick).contains(':'));
+            }
+            expectAdjacentLabelsDistinct(axis);
+        }
+    }
+
+    TEST(DateTimeAxisTest, WholeDaySinglePointTicksTheSurroundingDays) {
+        DateTimeAxis axis({.wholeDays = true});
+        axis.setRange(utc(2026, 8, 13), utc(2026, 8, 13));
+
+        EXPECT_EQ(axis.ticks(), (QList<qreal>{utcMs(QDate(2026, 8, 12)), utcMs(QDate(2026, 8, 13)),
+                                               utcMs(QDate(2026, 8, 14))}));
+        expectAdjacentLabelsDistinct(axis);
+    }
+
+    TEST(DateTimeAxisTest, SubDayLabelsShowTheTimeAndDateOnlyWhereNeeded) {
+        DateTimeAxis axis({.targetTicks = 8, .timeZone = QTimeZone::utc()});
+        axis.setRange(utc(2026, 8, 13, 9, 0), utc(2026, 8, 14, 9, 0));
+        const auto &ticks = axis.ticks();
+        ASSERT_GE(ticks.size(), 3);
+
+        // The first tick anchors the date; later ticks are just the time, or the date at midnight.
+        EXPECT_TRUE(axis.formatTick(ticks.front()).startsWith("Aug 13"));
+        for (int i = 1; i < ticks.size(); ++i) {
+            const QDateTime at = QDateTime::fromMSecsSinceEpoch(qint64(ticks[i]), QTimeZone::utc());
+            const QString label = axis.formatTick(ticks[i]);
+            if (at.time() == QTime(0, 0)) EXPECT_EQ(label, at.toString("MMM d"));
+            else EXPECT_EQ(label, at.toString("HH:mm"));
+        }
+        expectAdjacentLabelsDistinct(axis);
+    }
+
+    TEST(DateTimeAxisTest, RangeSweepNeverRepeatsALabel) {
+        const QDateTime start = utc(2026, 8, 13, 14, 23);
+        for (const qint64 spanMinutes: {0LL, 1LL, 7LL, 60LL, 6 * 60LL, 26 * 60LL, 3 * 24 * 60LL, 40 * 24 * 60LL,
+                                        200 * 24 * 60LL, 3 * 365 * 24 * 60LL}) {
+            for (const bool wholeDays: {false, true}) {
+                DateTimeAxis axis({.wholeDays = wholeDays});
+                axis.setRange(start, start.addSecs(60 * spanMinutes));
+                SCOPED_TRACE(testing::Message() << "span " << spanMinutes << " min, wholeDays " << wholeDays);
+                expectAdjacentLabelsDistinct(axis);
+            }
+        }
+    }
+
     TEST(DateTimeAxisTest, UtcDateTimeForEpochDayZeroIsTheUnixEpoch) {
         EXPECT_EQ(utcDateTimeForEpochDay(0), QDateTime(QDate(1970, 1, 1), QTime(0, 0), QTimeZone::utc()));
     }

@@ -9,13 +9,17 @@
 
 namespace ksv::presentation {
     // Persistent calendar-aware axis: selects minute/hour/day/week/month/year tick spacing from the
-    // configured range and labels ticks accordingly. Named epoch-millisecond overload prevents an
-    // unlabelled qreal overload from obscuring units.
+    // configured range and labels ticks accordingly. Sub-day ticks are labelled with the time only
+    // ("HH:mm"), except the first tick and midnights, which carry the date, so labels stay short.
+    // Named epoch-millisecond overload prevents an unlabelled qreal overload from obscuring units.
     class DateTimeAxis final : public Axis {
     public:
         struct Options {
             int targetTicks = 10;
             QTimeZone timeZone = QTimeZone::utc();
+            // Day-granular data (one point per calendar day): never pick a sub-day tick interval,
+            // so the axis is labelled with dates rather than hours that carry no data.
+            bool wholeDays = false;
         };
 
         // Default arguments referring to Options (a nested type of this class) trigger a GCC 11
