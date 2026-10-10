@@ -76,6 +76,36 @@ TestCase {
         compare(field.text, "D:/CustomDir", "kovaaksDirField should show settingsVm.kovaaksDir with the file:// scheme stripped")
     }
 
+    // a path longer than its field must neither lose its start nor its
+    // end to horizontal scrolling; it wraps so the whole path (including the
+    // final folder / file name) is on screen without editing the field.
+    function test_longPathsWrapSoTheWholePathIsVisible() {
+        const longDir = "C:/Users/Student/CLionProjects/KovaaksStatisticsViewer/.temp/ui-driver/default/some/deeply/nested/folder/data"
+        const longProfile = longDir + "/profile.pb"
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({kovaaksDir: "file:///" + longDir, profilePath: "file:///" + longProfile}),
+            sessionVm: makeFakeSessionVm(),
+            visualSettings: visualSettings
+        })
+
+        const dirField = ItemLookup.findByObjectName(dialog.contentItem, "kovaaksDirField")
+        const profileField = ItemLookup.findByObjectName(dialog.contentItem, "profilePathField")
+        verify(dirField !== null && profileField !== null, "both path fields must exist")
+
+        compare(dirField.text, longDir, "the field must hold the full path")
+        compare(profileField.text, longProfile, "the field must hold the full path")
+        for (const field of [dirField, profileField]) {
+            verify(field.lineCount > 1, "a path longer than the field must wrap onto further lines")
+            verify(field.contentWidth <= field.width,
+                   "the path must not overflow the field horizontally (contentWidth " + field.contentWidth
+                   + " > width " + field.width + ")")
+            verify(field.height >= field.contentHeight,
+                   "every wrapped line must fit inside the field (height " + field.height
+                   + " < contentHeight " + field.contentHeight + ")")
+            compare(field.readOnly, true, "a path field is not editable")
+        }
+    }
+
     function test_directoriesCategory_showsProfilePathAndLoadedState() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profilePath: "file:///D:/CustomProfile/profile.pb", profileLoaded: true}),
@@ -116,6 +146,22 @@ TestCase {
         mouseClick(button)
 
         compare(dialog.sessionVm.generateProfileCalls, 1, "clicking generateProfileButton should call sessionVm.generateProfile() once")
+    }
+
+    // the label matches the app's Title Case buttons and spells
+    // "Kovaaks" and "Directory" the way the rest of the UI does.
+    function test_generateProfileButton_labelIsClearAndConsistentlyCapitalised() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            visualSettings: visualSettings
+        })
+
+        const button = ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton")
+        verify(button !== null, "no button named 'generateProfileButton' found in SettingsDialog Profile category")
+        compare(button.text, "Rebuild Profile from Kovaaks Directory")
+        verify(!/kovaaks/.test(button.text), "'Kovaaks' must be capitalised like the rest of the UI")
+        verify(!/\bdir\b/i.test(button.text), "the abbreviation 'dir' must not be used")
     }
 
     function test_profileBuildProgressBar_hiddenWhenNoBuildIsRunning() {

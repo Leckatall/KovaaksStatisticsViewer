@@ -213,7 +213,7 @@ ApplicationWindow {
 
                     Button {
                         objectName: "generateProfileButton"
-                        text: "Generate Profile from current kovaaks dir"
+                        text: "Rebuild Profile from Kovaaks Directory"
                         enabled: !root.sessionVm.profileBuildInProgress
                         onClicked: root.sessionVm.generateProfile()
                     }
