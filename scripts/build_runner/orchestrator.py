@@ -175,7 +175,9 @@ def run_pipeline(
         "--parallel",
         str(BUILD_JOBS),
     ]
-    if args.scope != "all":
+    if args.target:
+        build_command.extend(["--target", *args.target])
+    elif args.scope != "all":
         build_command.extend(["--target", *(runner.target for runner in runners)])
     build_log = log_dir / "build.log"
     build = _invoke(
@@ -205,7 +207,8 @@ def run_pipeline(
 
     if args.build_only:
         elapsed = _summary_duration(started, clock)
-        emit(f"Scope {args.scope} | jobs {BUILD_JOBS} | tests 0 (build only) | {elapsed:.1f}s | PASS")
+        built = f"Targets {', '.join(args.target)}" if args.target else f"Scope {args.scope}"
+        emit(f"{built} | jobs {BUILD_JOBS} | tests 0 (build only) | {elapsed:.1f}s | PASS")
         return 0
 
     ctest_exe = toolchain.cmake_exe.with_name("ctest.exe")

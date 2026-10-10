@@ -51,6 +51,9 @@ namespace ksv::application {
             std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
             QObject* parent = nullptr);
         int start();
+        // The view models Main.qml declares as required properties. start() hands
+        // them to the engine; dev tools that load Main.qml by URL reuse the map.
+        [[nodiscard]] QVariantMap initialProperties() const;
         QQmlApplicationEngine* engine() {return &m_engine;}
 
         [[nodiscard]] presentation::GraphViewModel* graphVm() const { return m_graphVm; }

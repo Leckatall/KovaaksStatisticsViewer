@@ -195,9 +195,9 @@ The Release packaging script:
 
 The compiler-matched MinGW DLL copies are part of the deployment architecture: multiple installed MinGW runtimes can otherwise satisfy DLL lookup with ABI-incompatible files.
 
-Tests mirror the production layers, with integration tests constructing the real object graph against fixture files. Qt Quick Tests cover QML behavior. The development-only gallery loads the real application wiring against disposable data and supports QML preview; it is excluded from Release builds.
+Tests mirror the production layers, with integration tests constructing the real object graph against fixture files. Qt Quick Tests cover QML behavior. The development-only gallery loads the real application wiring against disposable data and supports QML preview. The development-only UI driver (`ksv_driver`, driven by `scripts/ui_driver.py`) also runs the real wiring against a disposable session. It serves screenshots, item-tree inspection and synthesized input over a localhost socket, so agents can see and exercise the UI. Both tools are excluded from Release builds.
 
-Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/build_and_test.py`](../../scripts/build_and_test.py), [`scripts/toolchain.defaults.env`](../../scripts/toolchain.defaults.env), [`scripts/package-release.ps1`](../../scripts/package-release.ps1), [`tests/`](../../tests/), and [`tools/gallery/`](../../tools/gallery/).
+Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/build_and_test.py`](../../scripts/build_and_test.py), [`scripts/toolchain.defaults.env`](../../scripts/toolchain.defaults.env), [`scripts/package-release.ps1`](../../scripts/package-release.ps1), [`tests/`](../../tests/), [`tools/gallery/`](../../tools/gallery/), and [`tools/driver/`](../../tools/driver/).
 
 ## Cross-cutting quality responses
 

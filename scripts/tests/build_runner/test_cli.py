@@ -29,5 +29,18 @@ def test_build_only_rejects_list_and_match() -> None:
         parse_args(["--scope", "domain", "--build-only", "--match", "*"])
 
 
+def test_target_builds_named_targets_only() -> None:
+    args = parse_args(["--build-only", "--target", "ksv_driver", "--target", "ksv"])
+
+    assert args.target == ["ksv_driver", "ksv"]
+
+
+def test_target_requires_build_only_and_no_scope() -> None:
+    with pytest.raises(UsageError, match="--target requires --build-only"):
+        parse_args(["--target", "ksv_driver"])
+    with pytest.raises(UsageError, match="--target cannot be combined with --scope"):
+        parse_args(["--build-only", "--scope", "domain", "--target", "ksv_driver"])
+
+
 def test_fixed_parallelism_is_eight() -> None:
     assert BUILD_JOBS == 8

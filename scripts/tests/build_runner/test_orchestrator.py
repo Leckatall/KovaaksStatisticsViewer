@@ -115,6 +115,41 @@ def test_focused_success_is_one_line_and_build_parallelism_is_internal(
     assert executor.commands[1][-4:] == ["--parallel", "8", "--target", "domain_tests"]
 
 
+def test_build_only_target_builds_just_the_named_target(
+    toolchain_tree: tuple[Path, dict[str, str]], tmp_path: Path
+) -> None:
+    _, values = toolchain_tree
+    toolchain = make_toolchain(values, tmp_path)
+    repo = tmp_path / "repo"
+    build_dir = repo / "build-agent"
+    build_dir.mkdir(parents=True)
+    executor = FakeExecutor(
+        build_dir,
+        toolchain,
+        [
+            (0, "-- Configuring done"),
+            (0, "ninja: no work to do."),
+        ],
+    )
+    output: list[str] = []
+
+    result = run_pipeline(
+        parse_args(["--build-only", "--target", "ksv_driver"]),
+        repo_root=repo,
+        log_dir=repo / ".temp" / "build-and-test" / "run",
+        toolchain=toolchain,
+        process_environment={},
+        execute=executor,
+        emit=output.append,
+        clock=ticking_clock(10.0, 12.0),
+    )
+
+    assert result == 0
+    assert output == ["Targets ksv_driver | jobs 8 | tests 0 (build only) | 2.0s | PASS"]
+    assert executor.commands[1][-4:] == ["--parallel", "8", "--target", "ksv_driver"]
+    assert len(executor.commands) == 2
+
+
 def test_qml_listing_uses_framework_functions_instead_of_parsing_sources(
     toolchain_tree: tuple[Path, dict[str, str]], tmp_path: Path
 ) -> None:

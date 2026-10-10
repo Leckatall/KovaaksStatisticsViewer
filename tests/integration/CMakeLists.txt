@@ -54,6 +54,12 @@ target_compile_definitions(integration_tests PRIVATE
     KSV_UI_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../src/ui/qml"
 )
 
+# The UI driver core only exists when the dev tools are built (tools/driver).
+if(TARGET ksv_driver_core)
+    target_sources(integration_tests PRIVATE driver_ui_test.cpp)
+    target_link_libraries(integration_tests PRIVATE ksv_driver_core)
+endif()
+
 ksv_copy_mingw_runtime_dlls(integration_tests)
 
 # Same offscreen/software/Fusion env the ui_qml_tests use: these tests build a

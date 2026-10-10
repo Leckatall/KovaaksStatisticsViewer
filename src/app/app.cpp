@@ -124,8 +124,8 @@ namespace ksv::application {
         m_benchmarkTrackingVm = new presentation::BenchmarkTrackingViewModel(m_benchmarkTrackingUseCase, this);
     }
 
-    int App::start() {
-        m_engine.setInitialProperties({
+    QVariantMap App::initialProperties() const {
+        return {
             {"graphVm", QVariant::fromValue(m_graphVm)},
             {"playtimeVm", QVariant::fromValue(m_playtimeVm)},
             {"historyVm", QVariant::fromValue(m_completionHistoryVm)},
@@ -134,7 +134,11 @@ namespace ksv::application {
             {"scenarioBrowserVm", QVariant::fromValue(m_scenarioBrowserVm)},
             {"benchmarkManagerVm", QVariant::fromValue(m_benchmarkManagerVm)},
             {"benchmarkTrackingVm", QVariant::fromValue(m_benchmarkTrackingVm)}
-        });
+        };
+    }
+
+    int App::start() {
+        m_engine.setInitialProperties(initialProperties());
         m_engine.loadFromModule("KovaaksStatsViewer", "Main");
         if (m_engine.rootObjects().isEmpty()) return -1;
         return 0;

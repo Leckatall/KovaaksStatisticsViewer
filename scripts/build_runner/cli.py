@@ -38,6 +38,12 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--clean", action="store_true")
     parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--show-all-output", action="store_true")
+    parser.add_argument(
+        "--target",
+        action="append",
+        metavar="NAME",
+        help="Build only this CMake target (repeatable); requires --build-only, e.g. --target ksv_driver.",
+    )
     args = parser.parse_args(arguments)
     if args.scope == "all" and args.match:
         raise UsageError("--match requires a focused scope; it cannot be used with --scope all.")
@@ -45,6 +51,10 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         raise UsageError("--build-only and --list cannot be combined.")
     if args.build_only and args.match:
         raise UsageError("--build-only and --match cannot be combined.")
+    if args.target and not args.build_only:
+        raise UsageError("--target requires --build-only.")
+    if args.target and args.scope != "all":
+        raise UsageError("--target cannot be combined with --scope; it names the targets to build directly.")
     return args
 
 
