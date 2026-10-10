@@ -90,11 +90,71 @@ ApplicationWindow {
             onChooseFolderRequested: folderDialog.open()
         }
 
+        // A workspace switcher styled as the app's primary navigation: tall tabs,
+        // the active one raised to the content colour with an accent underline, the
+        // inactive one dimmed. Sized by content (not stretched across the window) so
+        // the bar reads as a set of destinations rather than a table header.
+        component WorkspaceTabButton: TabButton {
+            id: tab
+            readonly property int minimumTabWidth: 150
+
+            implicitHeight: 42
+            leftPadding: 24
+            rightPadding: 24
+            // An explicit width stops TabBar from stretching the tabs to fill the window.
+            width: Math.max(minimumTabWidth, implicitContentWidth + leftPadding + rightPadding)
+
+            background: Rectangle {
+                color: tab.checked
+                       ? tab.palette.window
+                       : (tab.hovered ? Qt.alpha(tab.palette.text, 0.08) : "transparent")
+
+                Rectangle {
+                    // Accent underline marks the active workspace.
+                    visible: tab.checked
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 3
+                    color: tab.palette.accent
+                }
+                Rectangle {
+                    // Keyboard focus ring; the bar takes focus for Left/Right switching.
+                    visible: tab.visualFocus
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    color: "transparent"
+                    border.width: 1
+                    border.color: tab.palette.accent
+                }
+            }
+            contentItem: Label {
+                text: tab.text
+                font.pixelSize: 15
+                font.bold: tab.checked
+                color: tab.checked ? tab.palette.text : Qt.alpha(tab.palette.text, 0.62)
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+        }
+
         TabBar {
             id: workspaceTabBar
             objectName: "workspaceTabBar"
             Layout.fillWidth: true
             focusPolicy: Qt.StrongFocus
+            background: Rectangle {
+                color: Qt.darker(workspaceTabBar.palette.window, 1.3)
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: workspaceTabBar.palette.mid
+                }
+            }
             Keys.priority: Keys.BeforeItem
             Keys.onRightPressed: event => {
                 workspaceTabBar.currentIndex =
@@ -106,12 +166,12 @@ ApplicationWindow {
                 event.accepted = true
             }
 
-            TabButton {
+            WorkspaceTabButton {
                 objectName: "scenariosTab"
                 text: qsTr("Scenarios")
                 Accessible.name: "Scenarios"
             }
-            TabButton {
+            WorkspaceTabButton {
                 objectName: "benchmarksTab"
                 text: qsTr("Benchmarks")
                 Accessible.name: "Benchmarks"

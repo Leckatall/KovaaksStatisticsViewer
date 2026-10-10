@@ -121,6 +121,42 @@ TestCase {
         compare(benchmark.visible, false, "Benchmarks workspace should be hidden at startup")
     }
 
+    // -- the tab bar reads as main navigation ---------------------------
+
+    function test_workspaceTabsAreComfortableClickTargets() {
+        const win = createMain()
+        const scenariosTab = find(win, "scenariosTab")
+        const benchmarksTab = find(win, "benchmarksTab")
+        verify(scenariosTab !== null && benchmarksTab !== null, "both workspace tabs must exist")
+
+        // The old strip was ~21px tall and looked like a table header.
+        verify(scenariosTab.height >= 36, "Scenarios tab is only " + scenariosTab.height + "px tall")
+        verify(benchmarksTab.height >= 36, "Benchmarks tab is only " + benchmarksTab.height + "px tall")
+        verify(scenariosTab.width >= 100, "Scenarios tab is only " + scenariosTab.width + "px wide")
+        verify(tabBar(win).height >= 36, "the tab bar must be at least as tall as its tabs")
+    }
+
+    function test_selectedWorkspaceTabIsVisuallyDistinctFromTheOther() {
+        const win = createMain()
+        const scenariosTab = find(win, "scenariosTab")
+        const benchmarksTab = find(win, "benchmarksTab")
+
+        verify(scenariosTab.checked && !benchmarksTab.checked, "Scenarios starts selected")
+        verify(scenariosTab.contentItem.font.bold, "the selected tab's label must be bold")
+        verify(!benchmarksTab.contentItem.font.bold, "the unselected tab's label must not be bold")
+        verify(Qt.colorEqual(scenariosTab.contentItem.color, scenariosTab.palette.text),
+               "the selected tab's label must use the full text colour")
+        verify(!Qt.colorEqual(benchmarksTab.contentItem.color, scenariosTab.contentItem.color),
+               "the unselected tab's label must be dimmed relative to the selected one")
+        verify(!Qt.colorEqual(scenariosTab.background.color, benchmarksTab.background.color),
+               "the selected tab must have a different background from the unselected one")
+
+        tabBar(win).currentIndex = 1
+        tryVerify(() => benchmarksTab.checked && !scenariosTab.checked)
+        verify(benchmarksTab.contentItem.font.bold, "the emphasis must follow the selection")
+        verify(!scenariosTab.contentItem.font.bold, "the emphasis must leave the previously selected tab")
+    }
+
     // -- accessible names + keyboard switching --------------------------------
 
     function test_bothTabsHaveAccessibleNames() {
