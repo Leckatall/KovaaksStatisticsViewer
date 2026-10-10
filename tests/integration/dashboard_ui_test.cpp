@@ -387,7 +387,53 @@ namespace {
         }
     }
 
-    TEST(FirstRunUiTest, BannerOpensFolderDialogAndHidesAfterDirectorySelection) {
+    // Selection through the real pipeline: two imported scenarios, the graphs on the
+    // latest run's scenario; activating the other scenario in the browser moves both
+    // the per-run graph and the run-history graph to it without picking a run.
+    TEST(ScenarioSelectionUiTest, ActivatingAScenarioMovesBothGraphsToIt) {
+        integration::TestEnv env;
+        ASSERT_TRUE(env.valid());
+        ASSERT_TRUE(env.makePerformancesDir());
+        ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+        ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
+        application::App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore,
+                             env.statsParser, env.benchmarkStore);
+        ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
+
+        auto *browser = app.scenarioBrowserVm();
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return app.profileService()->isProfileLoaded() && app.profileService()->getScenarioList().size() == 2;
+        }, 10000));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !browser->activeScenarioHash().isEmpty(); }, 3000));
+
+        const auto current = app.sessionController()->getCurrentRun().run_id.scenario_id;
+        EXPECT_EQ(browser->activeScenarioHash().toStdString(), current.hash)
+            << "the browser starts on the scenario the graphs show";
+
+        domain::ScenarioId other;
+        for (const auto &scenario: app.profileService()->getScenarioList())
+            if (!(scenario == current)) other = scenario;
+        ASSERT_FALSE(other.hash.empty());
+        const auto otherName = QString::fromStdString(other.name);
+
+        browser->activateScenario(QString::fromStdString(other.hash), otherName);
+
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return app.sessionController()->getCurrentRun().run_id.scenario_id == other;
+        }, 3000)) << "selecting a scenario must make one of its runs current";
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return app.completionHistoryVm()->scenarioTitle() == otherName;
+        }, 3000)) << "history graph shows " << app.completionHistoryVm()->scenarioTitle().toStdString();
+        EXPECT_TRUE(app.graphVm()->scenarioTitle().startsWith(otherName))
+            << "per-run graph shows " << app.graphVm()->scenarioTitle().toStdString();
+        EXPECT_EQ(browser->activeScenarioHash().toStdString(), other.hash);
+    }
+
+    // before a folder is configured exactly one call to choose it is shown --
+    // the Scenarios workspace's full welcome when nothing has been imported, or the
+    // banner when runs are already there (e.g. from the default Steam path) -- and it
+    // opens the folder dialog; choosing a folder dismisses both.
+    TEST(FirstRunUiTest, FolderPromptOpensFolderDialogAndHidesAfterDirectorySelection) {
         QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         raw.remove("file/kovaaks");
         raw.remove("file/kovaaksDirs");
@@ -407,17 +453,25 @@ namespace {
 
         auto *root = app.engine()->rootObjects().first();
         auto *banner = root->findChild<QObject *>("firstRunBanner");
+        auto *welcome = root->findChild<QObject *>("firstRunWelcome");
         auto *dialog = root->findChild<QObject *>("kovaaksFolderDialog");
         ASSERT_NE(banner, nullptr);
+        ASSERT_NE(welcome, nullptr);
         ASSERT_NE(dialog, nullptr);
-        EXPECT_TRUE(banner->property("visible").toBool());
 
-        ASSERT_TRUE(QMetaObject::invokeMethod(banner, "chooseFolderRequested"));
+        const bool nothingImported = !app.scenarioBrowserVm()->hasScenarios();
+        EXPECT_EQ(welcome->property("visible").toBool(), nothingImported);
+        EXPECT_EQ(banner->property("visible").toBool(), !nothingImported);
+
+        QObject *prompt = nothingImported ? welcome : banner;
+        ASSERT_TRUE(QMetaObject::invokeMethod(prompt, "chooseFolderRequested"));
         ASSERT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
         dialog->setProperty("visible", false);
 
         app.settingsVm()->setKovaaksDir(QUrl::fromLocalFile("D:/Kovaaks"));
 
-        EXPECT_TRUE(QTest::qWaitFor([&] { return !banner->property("visible").toBool(); }, 3000));
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return !banner->property("visible").toBool() && !welcome->property("visible").toBool();
+        }, 3000));
     }
 }

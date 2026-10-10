@@ -39,6 +39,7 @@ qt_add_qml_module(ksv_ui
             qml/RunListView.qml
             qml/SortControls.qml
             qml/ScenarioRunItem.qml
+            qml/ListScrollBar.qml
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
             qml/BenchmarkManagerDialog.qml
@@ -54,6 +55,7 @@ qt_add_qml_module(ksv_ui
             qml/AboutDialog.qml
             qml/DirectoryPickerRow.qml
             qml/FirstRunBanner.qml
+            qml/FirstRunWelcome.qml
         RESOURCES
             qml/icons/copy.svg
             qml/icons/clipboard-paste.svg

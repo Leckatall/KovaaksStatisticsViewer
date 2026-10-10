@@ -21,8 +21,18 @@ TestCase {
     }
 
     function makeRuns(hash) {
-        return [{hash: hash, runLabel: "run", startTimeMs: 1723200000000,
+        return [{hash: hash, scenarioName: "Scenario " + hash, runLabel: "run", startTimeMs: 1723200000000,
                  score: 8421, accuracy: 0.91, shots: 132, hits: 120, personalBest: false}]
+    }
+
+    // Stands in for ScenarioBrowserViewModel: an activation comes back as the
+    // panel's active scenario.
+    function actLikeTheViewModel(panel) {
+        panel.scenarioActivated.connect((hash, name) => {
+            panel.activeScenarioHash = hash
+            panel.activeScenarioName = name
+        })
+        return panel
     }
 
     function createPanel() {
@@ -32,7 +42,7 @@ TestCase {
             runModel: makeRuns("a"), recentRunModel: makeRuns("recent")
         })
         verify(waitForRendering(panel))
-        return panel
+        return actLikeTheViewModel(panel)
     }
 
     function test_widthIsUnaffectedByScenarioAndRunSelection() {
@@ -43,6 +53,7 @@ TestCase {
             runModel: makeRuns("a"), recentRunModel: makeRuns("recent")
         })
         verify(waitForRendering(panel))
+        actLikeTheViewModel(panel)
         const initialWidth = panel.desiredWidth
 
         const scenarioItem = findChild(panel, "scenarioItem_0")
@@ -59,11 +70,14 @@ TestCase {
     }
 
     function test_widthTracksWidestScenarioNameWithinBounds() {
+        // The bound sits above the panel's chrome (header row with sort controls) so
+        // that an empty name falls back to exactly the chrome width.
         const panel = createTemporaryObject(panelComponent, testCase, {
-            height: 700, maximumPanelWidth: 400, widestScenarioName: "A".repeat(200)
+            height: 700, maximumPanelWidth: 480, widestScenarioName: "A".repeat(200)
         })
         verify(waitForRendering(panel))
-        compare(panel.desiredWidth, 400)
+        verify(panel.chromeWidth < 480, "chrome " + panel.chromeWidth)
+        compare(panel.desiredWidth, 480)
 
         panel.widestScenarioName = ""
         wait(0)
@@ -121,9 +135,9 @@ TestCase {
         const currentTime = 1723200000000
         const nextTime = currentTime + 1
         const runs = [
-            {hash: "a", runLabel: "current", startTimeMs: currentTime,
+            {hash: "a", scenarioName: "Scenario A", runLabel: "current", startTimeMs: currentTime,
              score: 8421, accuracy: 0.91, shots: 132, hits: 120, personalBest: false},
-            {hash: "a", runLabel: "next", startTimeMs: nextTime,
+            {hash: "a", scenarioName: "Scenario A", runLabel: "next", startTimeMs: nextTime,
              score: 8150, accuracy: 0.885, shots: 128, hits: 113, personalBest: false}
         ]
         const panel = createTemporaryObject(panelComponent, testCase, {
@@ -132,6 +146,7 @@ TestCase {
             runModel: runs, recentRunModel: runs
         })
         verify(waitForRendering(panel))
+        actLikeTheViewModel(panel)
 
         const recentToggle = findChild(panel, "recentToggleButton")
         mouseClick(recentToggle, recentToggle.width / 2, recentToggle.height / 2)
@@ -193,5 +208,71 @@ TestCase {
         wait(0)
         compare(findChild(panel, "scenarioSearchPanel").visible, true)
         compare(findChild(panel, "scenarioRunsView").visible, true)
+    }
+    // --- the panel shows the view model's active scenario ---------------
+
+    function test_activeScenarioIsDrivenFromOutside() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            width: 600, height: 700,
+            scenarioModel: [{name: "Scenario A", hash: "a", runCount: 3, lastPlayedMs: 1723200000000},
+                            {name: "Scenario B", hash: "b", runCount: 1, lastPlayedMs: 1723200000000}],
+            runModel: makeRuns("b"), recentRunModel: makeRuns("b"),
+            activeScenarioHash: "b", activeScenarioName: "Scenario B"
+        })
+        verify(waitForRendering(panel))
+        const runs = findChild(panel, "scenarioRunsView")
+        verify(runs.visible, "an active scenario from the view model lists its runs without a click")
+        compare(runs.title, "Scenario B")
+        verify(findChild(panel, "scenarioItem_1").highlighted)
+        verify(!findChild(panel, "scenarioItem_0").highlighted)
+    }
+
+    // --- Recent is bounded, whole-row and visibly scrollable ------------
+
+    function makeRecent(count) {
+        const runs = []
+        for (let i = 0; i < count; ++i)
+            runs.push({hash: "r" + (i % 3), scenarioName: "Scenario " + (i % 3), runLabel: "recent " + i,
+                       startTimeMs: 1723200000000 - i * 60000, score: 5000 - i, accuracy: 0.7,
+                       shots: 100, hits: 70, personalBest: false})
+        return runs
+    }
+
+    function test_expandedRecentIsBoundedAndLeavesTheListsUsable() {
+        const scenarios = []
+        for (let i = 0; i < 12; ++i)
+            scenarios.push({name: "Scenario " + i, hash: "s" + i, runCount: 8, lastPlayedMs: 1723200000000})
+        const runs = []
+        for (let i = 0; i < 30; ++i)
+            runs.push({hash: "s0", scenarioName: "Scenario 0", runLabel: "run " + i,
+                       startTimeMs: 1723200000000 - i * 60000, score: 3000 + i, accuracy: 0.6,
+                       shots: 100, hits: 60, personalBest: false})
+        // About the left column's height in a 1000x640 window.
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            width: 330, height: 540, scenarioModel: scenarios, runModel: runs,
+            recentRunModel: makeRecent(10), activeScenarioHash: "s0", activeScenarioName: "Scenario 0"
+        })
+        verify(waitForRendering(panel))
+        const recentToggle = findChild(panel, "recentToggleButton")
+        mouseClick(recentToggle, recentToggle.width / 2, recentToggle.height / 2)
+        const recent = findChild(panel, "recentRunsView")
+        tryVerify(() => recent.visible)
+        wait(50)
+
+        const recentList = findChild(recent, "runListView")
+        verify(recent.height <= panel.height * 0.3, "Recent takes " + recent.height + "px of " + panel.height)
+        compare(recentList.height % recent.rowHeight, 0, "Recent must end on a whole row, never through a run's text")
+        verify(recentList.height / recent.rowHeight >= 3)
+        verify(recent.scrollable)
+        verify(findChild(recent, "runListScrollBar").visible, "Recent must visibly indicate that it scrolls")
+
+        const scenarioList = findChild(panel, "scenarioListView")
+        const scenarioRow = findChild(panel, "scenarioItem_0")
+        verify(scenarioList.height >= 3 * scenarioRow.height,
+               "scenario list shows " + (scenarioList.height / scenarioRow.height).toFixed(1) + " rows")
+        const runs2 = findChild(panel, "scenarioRunsView")
+        const runList = findChild(runs2, "runListView")
+        verify(runList.height >= 4 * runs2.rowHeight,
+               "run list shows " + (runList.height / runs2.rowHeight).toFixed(1) + " rows")
     }
 }

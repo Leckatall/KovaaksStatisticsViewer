@@ -23,7 +23,15 @@ namespace ksv::presentation {
         Q_PROPERTY(QObject* scenarioModel READ scenarioModel CONSTANT)
         Q_PROPERTY(QObject* runModel READ runModel CONSTANT)
         Q_PROPERTY(QObject* recentRunsModel READ recentRunsModel CONSTANT)
+        // The scenario whose runs are listed. It follows the current run: activating a
+        // scenario makes its latest run current, and a current run of another scenario
+        // (picked from Recent, loaded from a file, or a fresh import) activates that
+        // scenario. The graphs follow the current run, so they always show this scenario.
         Q_PROPERTY(QString activeScenarioHash READ activeScenarioHash NOTIFY activeScenarioChanged)
+        Q_PROPERTY(QString activeScenarioName READ activeScenarioName NOTIFY activeScenarioChanged)
+        // Whether the unfiltered catalogue has any scenario; a search that matches
+        // nothing does not clear it.
+        Q_PROPERTY(bool hasScenarios READ hasScenarios NOTIFY hasScenariosChanged)
         Q_PROPERTY(QString currentRunHash READ currentRunHash NOTIFY currentRunChanged)
         Q_PROPERTY(double currentRunStartTimeMs READ currentRunStartTimeMs NOTIFY currentRunChanged)
         // Drives SelectionPanel's width. Taken from the unfiltered catalogue so that
@@ -48,6 +56,8 @@ namespace ksv::presentation {
         [[nodiscard]] QObject *runModel() const { return m_run_model; }
         [[nodiscard]] QObject *recentRunsModel() const { return m_recent_runs_model; }
         [[nodiscard]] QString activeScenarioHash() const { return m_active_scenario_hash; }
+        [[nodiscard]] QString activeScenarioName() const { return m_active_scenario_name; }
+        [[nodiscard]] bool hasScenarios() const { return !m_all_summaries.empty(); }
         [[nodiscard]] QString currentRunHash() const { return m_current_run_hash; }
         [[nodiscard]] double currentRunStartTimeMs() const { return m_current_run_start_time_ms; }
         [[nodiscard]] QString longestScenarioName() const { return m_longest_scenario_name; }
@@ -63,11 +73,13 @@ namespace ksv::presentation {
         void activeScenarioChanged();
         void currentRunChanged();
         void longestScenarioNameChanged();
+        void hasScenariosChanged();
 
     private:
         void applyFilter();
         void refreshScenarioModel();
         void refreshCurrentRun();
+        void setActiveScenario(const QString &hash, const QString &name);
         void updateLongestScenarioName();
         void refreshRunModel();
         void applyRunSort(std::vector<application::RunPerformance> &runs) const;

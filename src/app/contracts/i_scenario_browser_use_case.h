@@ -21,6 +21,11 @@ namespace ksv::application {
         [[nodiscard]] virtual domain::Run getCurrentRun() const = 0;
 
         virtual void selectRun(const domain::ScenarioRunId &run_id) = 0;
+        // Makes the scenario's most recent run the current run, so every view that
+        // follows the current run (per-run graph, run history) shows this scenario.
+        // A no-op when the current run already belongs to the scenario, or when the
+        // scenario has no runs.
+        virtual void selectScenario(const domain::ScenarioId &scenario) = 0;
         virtual void onChanged(std::function<void()> callback) = 0;
     };
 }

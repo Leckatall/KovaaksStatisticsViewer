@@ -86,7 +86,10 @@ ApplicationWindow {
         FirstRunBanner {
             objectName: "firstRunBanner"
             Layout.fillWidth: true
-            visible: !root.settingsVm.kovaaksDirSet
+            // While the Scenarios workspace shows its full first-run welcome the
+            // banner would only repeat it (and would shift the tab bar when switching
+            // tabs); it remains for a folder-less setup that still has runs to show.
+            visible: !root.settingsVm.kovaaksDirSet && !scenarioWorkspace.welcomeVisible
             onChooseFolderRequested: folderDialog.open()
         }
 
@@ -186,7 +189,10 @@ ApplicationWindow {
             currentIndex: workspaceTabBar.currentIndex
 
             ScenarioWorkspace {
+                id: scenarioWorkspace
                 objectName: "scenarioWorkspace"
+                kovaaksFolderSet: root.settingsVm.kovaaksDirSet
+                onChooseKovaaksFolderRequested: folderDialog.open()
                 graphVm: root.graphVm
                 playtimeVm: root.playtimeVm
                 historyVm: root.historyVm

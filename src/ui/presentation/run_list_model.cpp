@@ -27,6 +27,7 @@ namespace ksv::presentation {
             case ShotsRole: return run.data.totals.shots;
             case HitsRole: return run.data.totals.hits;
             case PersonalBestRole: return run.personal_best;
+            case ScenarioNameRole: return QString::fromStdString(run.data.run_id.scenario_id.name);
             default: return {};
         }
     }
@@ -41,6 +42,7 @@ namespace ksv::presentation {
             {ShotsRole, "shots"},
             {HitsRole, "hits"},
             {PersonalBestRole, "personalBest"},
+            {ScenarioNameRole, "scenarioName"},
         };
     }
 

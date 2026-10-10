@@ -28,6 +28,7 @@ namespace ksv::presentation {
             ShotsRole,
             HitsRole,
             PersonalBestRole,
+            ScenarioNameRole,
         };
 
         explicit RunListModel(QObject *parent = nullptr);

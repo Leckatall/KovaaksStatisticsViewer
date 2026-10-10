@@ -12,6 +12,9 @@ ColumnLayout {
     property string currentRunHash
     property double currentRunStartTimeMs: 0
     property alias searchText: scenarioSearch.searchText
+    // The active scenario comes from the view model (it follows the current run);
+    // the panel only reports clicks through scenarioActivated.
+    property string activeScenarioHash
     property string activeScenarioName
     property bool recentExpanded: false
     property bool recentSectionVisible: true
@@ -29,6 +32,12 @@ ColumnLayout {
     readonly property real desiredWidth: Math.min(root.maximumPanelWidth,
                                                   Math.max(root.chromeWidth,
                                                            nameMetrics.advanceWidth + root.scenarioDelegateChrome))
+
+    // Recent is bounded to whole rows (never a row cut through its text) and to
+    // about a quarter of the panel, so the scenario list and run list below always
+    // keep room; anything beyond that scrolls, with an always-visible scroll bar.
+    readonly property int recentMaximumRows: Math.max(3, Math.min(6, Math.floor(root.height * 0.25 / recentRuns.rowHeight)))
+    readonly property int recentVisibleRows: Math.max(1, Math.min(recentRuns.runCount, recentMaximumRows))
 
     Layout.minimumWidth: root.chromeWidth
     Layout.maximumWidth: root.maximumPanelWidth
@@ -50,7 +59,9 @@ ColumnLayout {
         objectName: "recentToggleButton"
         Layout.fillWidth: true
         visible: root.recentSectionVisible
-        text: (root.recentExpanded ? "▾" : "▸") + " Recent"
+        text: (root.recentExpanded ? "▾ " : "▸ ") + qsTr("Recent")
+              + (recentRuns.runCount > 0 ? "  (" + recentRuns.runCount + ")" : "")
+        Accessible.name: root.recentExpanded ? qsTr("Collapse recent runs") : qsTr("Expand recent runs")
         onClicked: root.recentExpanded = !root.recentExpanded
     }
 
@@ -58,11 +69,14 @@ ColumnLayout {
         id: recentRuns
         objectName: "recentRunsView"
         Layout.fillWidth: true
-        Layout.preferredHeight: root.recentExpanded ? 180 : 0
-        Layout.maximumHeight: root.height / 2
+        Layout.fillHeight: false
+        Layout.preferredHeight: recentRuns.heightForRows(root.recentVisibleRows)
+        Layout.maximumHeight: recentRuns.heightForRows(root.recentVisibleRows)
         visible: root.recentExpanded && root.recentSectionVisible
         title: ""
         showSort: false
+        showScenarioName: true
+        emptyText: qsTr("No runs yet.")
         runModel: root.recentRunModel
         currentRunHash: root.currentRunHash
         currentRunStartTimeMs: root.currentRunStartTimeMs
@@ -73,15 +87,17 @@ ColumnLayout {
         id: scenarioSearch
         objectName: "scenarioSearchPanel"
         Layout.fillWidth: true
+        Layout.fillHeight: true
+        Layout.verticalStretchFactor: 2
+        Layout.minimumHeight: Math.min(160, scenarioSearch.fittedHeight)
+        Layout.maximumHeight: root.activeScenarioName !== "" ? Math.max(Layout.minimumHeight, scenarioSearch.fittedHeight)
+                                                             : Number.POSITIVE_INFINITY
+        Layout.preferredHeight: 0
         visible: root.scenarioBrowserSectionVisible
-        Layout.fillHeight: root.activeScenarioName === ""
-        Layout.preferredHeight: root.activeScenarioName === "" ? 0 : 180
         scenarioModel: root.scenarioModel
+        currentScenarioHash: root.activeScenarioHash
         onSearchEdited: text => root.searchEdited(text)
-        onScenarioActivated: (hash, name) => {
-            root.activeScenarioName = name
-            root.scenarioActivated(hash, name)
-        }
+        onScenarioActivated: (hash, name) => root.scenarioActivated(hash, name)
         onScenarioSortRequested: (field, ascending) => root.scenarioSortRequested(field, ascending)
     }
 
@@ -89,7 +105,10 @@ ColumnLayout {
         id: scenarioRuns
         objectName: "scenarioRunsView"
         Layout.fillWidth: true
-        Layout.preferredHeight: visible ? 220 : 0
+        Layout.fillHeight: true
+        Layout.verticalStretchFactor: 3
+        Layout.minimumHeight: scenarioRuns.heightForRows(3)
+        Layout.preferredHeight: 0
         title: root.activeScenarioName
         visible: root.activeScenarioName !== "" && root.scenarioBrowserSectionVisible
         runModel: root.runModel

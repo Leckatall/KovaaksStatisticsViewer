@@ -39,6 +39,9 @@ TestCase {
     QtObject {
         id: fakeScenarioBrowserVm
         property string longestScenarioName: ""
+        property string activeScenarioHash: ""
+        property string activeScenarioName: ""
+        property bool hasScenarios: true
         property string currentRunHash: ""
         property double currentRunStartTimeMs: 0
         property var scenarioModel: null
@@ -60,6 +63,11 @@ TestCase {
     Component {
         id: mainComponent
         Main {}
+    }
+
+    function cleanup() {
+        fakeSettingsVm.kovaaksDirSet = true
+        fakeScenarioBrowserVm.hasScenarios = true
     }
 
     function createMain() {
@@ -240,5 +248,90 @@ TestCase {
         tryCompare(dialog, "visible", true)
         compare(win.benchmarkManagerDialog, dialog,
                 "both entry points must open the same shared manager dialog instance")
+    }
+    // -- first run puts choosing the folder first ----------------------
+
+    // Every item under `root` whose QML type name starts with `typeName`.
+    function findAllOfType(root, typeName, matches) {
+        matches = matches || []
+        if (!root)
+            return matches
+        if (String(root).startsWith(typeName))
+            matches.push(root)
+        for (const child of root.children || [])
+            findAllOfType(child, typeName, matches)
+        return matches
+    }
+
+    function isShown(item) {
+        for (let it = item; it; it = it.parent)
+            if (!it.visible) return false
+        return true
+    }
+
+    function test_firstRunWithNothingImportedShowsOnlyTheWelcome() {
+        fakeSettingsVm.kovaaksDirSet = false
+        fakeScenarioBrowserVm.hasScenarios = false
+        const win = createMain()
+
+        const welcome = find(win, "firstRunWelcome")
+        verify(welcome !== null, "no firstRunWelcome in the Scenarios workspace")
+        verify(isShown(welcome), "the first-run welcome must be shown")
+        const button = ItemLookup.findByObjectName(welcome, "welcomeChooseKovaaksFolderButton")
+        verify(button !== null && isShown(button), "the welcome must offer choosing the folder")
+
+        const workspace = find(win, "scenarioWorkspace")
+        for (const type of ["DashboardGraphCanvas", "PlaytimeGraphPanel", "ScenarioHistoryPanel", "SelectionPanel"]) {
+            const items = findAllOfType(workspace, type)
+            verify(items.length > 0, "expected the workspace to contain a " + type)
+            for (const item of items)
+                verify(!isShown(item), type + " must not be shown on first run")
+        }
+        verify(!isShown(ItemLookup.findByObjectName(workspace, "scenarioSearchPanel")),
+               "the empty scenario list must not be shown behind the welcome")
+        verify(!find(win, "firstRunBanner").visible,
+               "the banner would only repeat the welcome")
+
+        welcomeSpy.target = workspace
+        button.clicked()
+        compare(welcomeSpy.count, 1, "the welcome button must ask for the folder dialog")
+    }
+
+    SignalSpy {
+        id: welcomeSpy
+        signalName: "chooseKovaaksFolderRequested"
+    }
+
+    function test_firstRunBannerHidesOnTheBenchmarksTabToo() {
+        fakeSettingsVm.kovaaksDirSet = false
+        fakeScenarioBrowserVm.hasScenarios = false
+        const win = createMain()
+        const banner = find(win, "firstRunBanner")
+        const barYOnScenarios = tabBar(win).y
+
+        tabBar(win).currentIndex = 1
+        tryCompare(stack(win), "currentIndex", 1)
+        compare(banner.visible, false)
+        compare(tabBar(win).y, barYOnScenarios, "switching tabs must not move the tab bar")
+    }
+
+    function test_folderNotSetButRunsAvailableShowsWorkspaceAndBanner() {
+        fakeSettingsVm.kovaaksDirSet = false
+        fakeScenarioBrowserVm.hasScenarios = true
+        const win = createMain()
+
+        verify(!isShown(find(win, "firstRunWelcome")), "imported runs must not be hidden behind the welcome")
+        verify(isShown(ItemLookup.findByObjectName(find(win, "scenarioWorkspace"), "scenarioSearchPanel")))
+        verify(find(win, "firstRunBanner").visible, "the banner still asks for the folder")
+    }
+
+    function test_configuredFolderShowsTheWorkspaceWithoutWelcomeOrBanner() {
+        fakeSettingsVm.kovaaksDirSet = true
+        fakeScenarioBrowserVm.hasScenarios = false
+        const win = createMain()
+
+        verify(!isShown(find(win, "firstRunWelcome")))
+        verify(!find(win, "firstRunBanner").visible)
+        verify(isShown(ItemLookup.findByObjectName(find(win, "scenarioWorkspace"), "scenarioSearchPanel")))
     }
 }

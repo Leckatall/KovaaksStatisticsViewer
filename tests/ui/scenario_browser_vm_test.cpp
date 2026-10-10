@@ -26,6 +26,7 @@ namespace {
         ScenarioId last_runs_for_scenario_query;
         ksv::domain::Run current_run;
         std::vector<ScenarioRunId> set_current_perf_run_id_calls;
+        std::vector<ScenarioId> select_scenario_calls;
 
         [[nodiscard]] std::vector<ScenarioSummary> getScenarioSummaries() const override { return scenario_summaries; }
 
@@ -44,6 +45,8 @@ namespace {
         void selectRun(const ScenarioRunId &run_id) override {
             set_current_perf_run_id_calls.push_back(run_id);
         }
+
+        void selectScenario(const ScenarioId &scenario) override { select_scenario_calls.push_back(scenario); }
 
         void onChanged(std::function<void()> callback) override { change_callback = std::move(callback); }
 
@@ -494,5 +497,111 @@ namespace {
         const auto &run_id = fake_controller->set_current_perf_run_id_calls.front();
         EXPECT_EQ(run_id.scenario_id.hash, "hash-2");
         EXPECT_EQ(run_id.start_time, 3000LL);
+    }
+    // --- the active scenario and the current run (which the graphs show) agree ---
+
+    TEST_F(ScenarioBrowserViewModelTest, ActivatingAScenarioAsksTheUseCaseToSelectIt) {
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.activateScenario("hash-2", "Pasu Gallery");
+
+        ASSERT_EQ(fake_controller->select_scenario_calls.size(), 1u);
+        EXPECT_EQ(fake_controller->select_scenario_calls.front().hash, "hash-2");
+        EXPECT_EQ(fake_controller->select_scenario_calls.front().name, "Pasu Gallery");
+        EXPECT_EQ(view_model.activeScenarioName(), QString("Pasu Gallery"));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, ClearingTheActiveScenarioDoesNotSelectAnything) {
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Pasu Gallery");
+
+        view_model.activateScenario("", "");
+
+        EXPECT_EQ(fake_controller->select_scenario_calls.size(), 1u);
+        EXPECT_TRUE(view_model.activeScenarioHash().isEmpty());
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, InitialActiveScenarioIsTheCurrentRunsScenario) {
+        fake_controller->scenario_summaries = {make_summary("1wall6targets Gallery", "hash-1"),
+                                               make_summary("Pasu Gallery", "hash-2")};
+        fake_controller->current_run.run_id = make_run("1wall6targets Gallery", "hash-1", 1000, 1.0F, 0.5F).data.run_id;
+
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        EXPECT_EQ(view_model.activeScenarioHash(), QString("hash-1"));
+        EXPECT_EQ(view_model.activeScenarioName(), QString("1wall6targets Gallery"));
+        EXPECT_EQ(fake_controller->last_runs_for_scenario_query.hash, "hash-1");
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, CurrentRunOfAnotherScenarioActivatesThatScenario) {
+        fake_controller->scenario_summaries = {make_summary("1wall6targets Gallery", "hash-1"),
+                                               make_summary("Pasu Gallery", "hash-2")};
+        fake_controller->current_run.run_id = make_run("1wall6targets Gallery", "hash-1", 1000, 1.0F, 0.5F).data.run_id;
+        ScenarioBrowserViewModel view_model(fake_controller);
+        const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::activeScenarioChanged);
+
+        // e.g. a Recent run of Pasu was picked.
+        fake_controller->runs_for_scenario = {make_run("Pasu Gallery", "hash-2", 2000, 3400.0F, 0.68F)};
+        fake_controller->current_run.run_id = make_run("Pasu Gallery", "hash-2", 2000, 3400.0F, 0.68F).data.run_id;
+        fake_controller->notifyChanged();
+
+        EXPECT_EQ(view_model.activeScenarioHash(), QString("hash-2"));
+        EXPECT_EQ(view_model.activeScenarioName(), QString("Pasu Gallery"));
+        EXPECT_EQ(spy.count(), 1);
+        EXPECT_EQ(fake_controller->last_runs_for_scenario_query.hash, "hash-2");
+        EXPECT_EQ(asRunListModel(view_model)->rowCount(), 1);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, RefreshWithoutARunChangeKeepsTheUsersActivation) {
+        fake_controller->scenario_summaries = {make_summary("1wall6targets Gallery", "hash-1"),
+                                               make_summary("Pasu Gallery", "hash-2")};
+        fake_controller->current_run.run_id = make_run("1wall6targets Gallery", "hash-1", 1000, 1.0F, 0.5F).data.run_id;
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        view_model.activateScenario("hash-2", "Pasu Gallery");
+        fake_controller->notifyChanged();
+
+        EXPECT_EQ(view_model.activeScenarioHash(), QString("hash-2"));
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, ActiveScenarioIsClearedWhenItLeavesTheCatalogue) {
+        fake_controller->scenario_summaries = {make_summary("Pasu Gallery", "hash-2")};
+        ScenarioBrowserViewModel view_model(fake_controller);
+        view_model.activateScenario("hash-2", "Pasu Gallery");
+
+        fake_controller->scenario_summaries.clear();
+        fake_controller->notifyChanged();
+
+        EXPECT_TRUE(view_model.activeScenarioHash().isEmpty());
+        EXPECT_TRUE(view_model.activeScenarioName().isEmpty());
+        EXPECT_EQ(asRunListModel(view_model)->rowCount(), 0);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, HasScenariosTracksTheUnfilteredCatalogue) {
+        ScenarioBrowserViewModel view_model(fake_controller);
+        EXPECT_FALSE(view_model.hasScenarios());
+        const QSignalSpy spy(&view_model, &ScenarioBrowserViewModel::hasScenariosChanged);
+
+        fake_controller->scenario_summaries = {make_summary("Pasu Gallery", "hash-2")};
+        fake_controller->notifyChanged();
+        EXPECT_TRUE(view_model.hasScenarios());
+        EXPECT_EQ(spy.count(), 1);
+
+        // A search that matches nothing empties the list, not the catalogue.
+        view_model.setSearchText("zzz");
+        EXPECT_EQ(asListModel(view_model)->rowCount(), 0);
+        EXPECT_TRUE(view_model.hasScenarios());
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(ScenarioBrowserViewModelTest, RunModelExposesTheScenarioName) {
+        fake_controller->recent_runs = {make_run("Pasu Gallery", "hash-2", 3000, 3400.0F, 0.68F)};
+        ScenarioBrowserViewModel view_model(fake_controller);
+
+        auto *recent_model = asRecentRunsModel(view_model);
+        ASSERT_EQ(recent_model->rowCount(), 1);
+        EXPECT_EQ(recent_model->data(recent_model->index(0, 0), RunListModel::ScenarioNameRole).toString(),
+                  QString("Pasu Gallery"));
+        EXPECT_EQ(recent_model->roleNames().value(RunListModel::ScenarioNameRole), QByteArray("scenarioName"));
     }
 }
