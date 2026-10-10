@@ -98,6 +98,44 @@ namespace ksv::presentation {
             }
         }
 
+        void collectEntries(const domain::Benchmark &definition, QHash<QString, const domain::ScenarioEntry *> &out) {
+            for (const auto &entry: definition.uncategorized) out.insert(q(entry.id.value), &entry);
+            for (const auto &category: definition.categories) {
+                for (const auto &entry: category.scenarios) out.insert(q(entry.id.value), &entry);
+                for (const auto &subcategory: category.subcategories)
+                    for (const auto &entry: subcategory.scenarios) out.insert(q(entry.id.value), &entry);
+            }
+        }
+
+        struct BlockerProgress {
+            double fraction = 0.0;
+            std::optional<domain::TierId> floorTier;
+        };
+
+        // How far a blocking scenario has come from the highest threshold it already meets (or
+        // from zero) toward the score the next tier requires, in [0, 1]. Measuring within that
+        // band rather than from zero keeps scenarios distinguishable: as a plain current/required
+        // ratio almost every blocker would read as a nearly full bar.
+        BlockerProgress blockerProgress(const domain::RankBlocker &blocker, const domain::ScenarioEntry *entry) {
+            BlockerProgress result;
+            if (!blocker.current) return result;
+            const double current = *blocker.current;
+            double floor = 0.0;
+            if (entry) {
+                for (const auto &threshold: entry->thresholds) {
+                    if (threshold.score <= current && threshold.score < blocker.required &&
+                        threshold.score >= floor) {
+                        floor = threshold.score;
+                        result.floorTier = threshold.tierId;
+                    }
+                }
+            }
+            const double span = blocker.required - floor;
+            result.fraction = span > 0.0 ? std::clamp((current - floor) / span, 0.0, 1.0)
+                                         : (current >= blocker.required ? 1.0 : 0.0);
+            return result;
+        }
+
         QString deriveState(const application::BenchmarkWorkspaceSnapshot &snapshot) {
             switch (snapshot.availability) {
                 case application::BenchmarkTrackingState::NoSelection: {
@@ -126,7 +164,8 @@ namespace ksv::presentation {
             if (state == QLatin1String("noSelection"))
                 return QObject::tr("Select a benchmark to see your tracking status.");
             if (state == QLatin1String("unavailable"))
-                return QObject::tr("The selected benchmark is no longer available. Open the Benchmark Manager to repair it.");
+                return QObject::tr("The selected benchmark is no longer available. Its file may have been deleted or "
+                                   "may have a problem.");
             if (state == QLatin1String("incomplete"))
                 return QObject::tr("This benchmark's setup is incomplete. Finish it in the Benchmark Manager to unlock ranks.");
             return QObject::tr("Tracking is up to date.");
@@ -151,6 +190,8 @@ namespace ksv::presentation {
     }
 
     void BenchmarkTrackingViewModel::clearSelection() { m_useCase->clearSelection(); }
+
+    void BenchmarkTrackingViewModel::selectDefaultBenchmark() { m_useCase->selectDefault(); }
 
     void BenchmarkTrackingViewModel::setExpanded(const QString &nodeId, const bool expanded) {
         m_breakdown->setExpanded(nodeId, expanded);
@@ -179,32 +220,43 @@ namespace ksv::presentation {
 
         std::vector<QString> tierNames;
         QHash<QString, QString> tierNameById;
+        QHash<QString, QString> tierColorById;
         const auto indexTiers = [&](const std::vector<domain::Tier> &tiers) {
             for (const auto &tier: tiers) {
                 tierNames.push_back(q(tier.name));
                 tierNameById.insert(q(tier.id.value), q(tier.name));
+                tierColorById.insert(q(tier.id.value), readableTextColor(tier.color).name());
             }
         };
         if (projection) indexTiers(projection->tiers);
         else if (definition) indexTiers(definition->tiers);
 
+        // Sets `name`/`color` to the tier's, or to `fallback` and no colour when the id is absent.
+        const auto resolveTier = [&](const std::optional<domain::TierId> &id, const QString &fallback,
+                                     QString &name, QString &color) {
+            name = fallback;
+            color.clear();
+            if (!id) return;
+            const QString key = q(id->value);
+            if (!tierNameById.contains(key)) return;
+            name = tierNameById.value(key);
+            color = tierColorById.value(key);
+        };
+
         const QString unavailableText = tr("Unavailable");
         if (trackable && projection) {
-            m_attainedRank = projection->attainedRank
-                                 ? tierNameById.value(q(projection->attainedRank->value), tr("Unranked"))
-                                 : tr("Unranked");
-            m_completedRank = projection->completedRank
-                                  ? tierNameById.value(q(projection->completedRank->value), tr("None completed"))
-                                  : tr("None completed");
-            m_nextTier = projection->nextTier
-                             ? tierNameById.value(q(projection->nextTier->value), tr("Highest tier attained"))
-                             : tr("Highest tier attained");
+            resolveTier(projection->attainedRank, tr("Unranked"), m_attainedRank, m_attainedRankColor);
+            resolveTier(projection->completedRank, tr("None completed"), m_completedRank, m_completedRankColor);
+            resolveTier(projection->nextTier, tr("Highest tier attained"), m_nextTier, m_nextTierColor);
             m_averageRank = projection->averageRank ? formatBenchmarkNumber(*projection->averageRank) : unavailableText;
         } else {
             m_attainedRank = unavailableText;
             m_completedRank = unavailableText;
             m_nextTier = unavailableText;
             m_averageRank = unavailableText;
+            m_attainedRankColor.clear();
+            m_completedRankColor.clear();
+            m_nextTierColor.clear();
         }
         m_totalPlaytime = projection ? formatDuration(projection->totalPlaytimeSeconds) : QString();
         m_scenariosAtNextTier = projection ? projection->scenariosAtNextTier : 0;
@@ -218,8 +270,24 @@ namespace ksv::presentation {
             QHash<QString, QString> groupNames;
             collectGroupNames(projection->categories, groupNames);
 
+            QHash<QString, const domain::ScenarioEntry *> entries;
+            if (definition) collectEntries(*definition, entries);
+
             for (const auto &blocker: projection->nextTierBlockers) {
                 QVariantMap map;
+                const BlockerProgress progress =
+                    blockerProgress(blocker, entries.value(q(blocker.entryId.value), nullptr));
+                map[QStringLiteral("progress")] = progress.fraction;
+                map[QStringLiteral("progressColor")] = m_nextTierColor;
+                const QString fromTier = progress.floorTier
+                                             ? tierNameById.value(q(progress.floorTier->value))
+                                             : QString();
+                map[QStringLiteral("progressDescription")] =
+                    fromTier.isEmpty()
+                        ? tr("%1% of the way to %2").arg(std::lround(progress.fraction * 100)).arg(m_nextTier)
+                        : tr("%1% of the way from %2 to %3")
+                              .arg(std::lround(progress.fraction * 100))
+                              .arg(fromTier, m_nextTier);
                 map[QStringLiteral("kind")] = blocker.entryId.value.empty() && blocker.group
                                                   ? QStringLiteral("group")
                                                   : QStringLiteral("scenario");

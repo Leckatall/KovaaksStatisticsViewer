@@ -16,7 +16,11 @@
 
 namespace ksv::presentation {
     // Read-only Uncategorized/category/subcategory/scenario tree rebuilt from the selected benchmark
-    // definition joined with its projection. Node keys are stable benchmark element IDs. The model
+    // definition joined with its projection. Node keys are stable benchmark element IDs. Groups that
+    // hold no scenarios (directly or through subcategories) are left out, including an empty
+    // Uncategorized bucket. A scenario's match state is only reported (matchStateText/Hint) when it
+    // is abnormal; a normally resolved scenario has empty match-state text. Tier names come with
+    // their benchmark-defined colour, adjusted for readability (readableTextColor). The model
     // owns the expansion state that BenchmarkTrackingViewModel::setExpanded drives: groups and
     // subcategories start expanded, expansion survives a same-benchmark projection refresh keyed by
     // group ID, and it resets to those defaults when the selected benchmark ID changes.
@@ -43,6 +47,18 @@ namespace ksv::presentation {
             NextThresholdTextRole,
             MatchStateTextRole,
             ExpandedRole,
+            ScenarioCountRole,
+            HighestTierColorRole,
+            AttainedTierColorRole,
+            NextTierTextRole,
+            NextTierColorRole,
+            MatchStateHintRole,
+        };
+
+        // A tier's display name and readable text colour, keyed by tier id.
+        struct TierStyle {
+            QString name;
+            QColor color;
         };
 
         explicit BenchmarkBreakdownModel(QObject *parent = nullptr);
@@ -73,13 +89,19 @@ namespace ksv::presentation {
             QString name;
             QColor color;
             QString highestTierText;
+            QColor highestTierColor;
+            int scenarioCount = 0;
             bool nextTierBlocker = false;
             QString personalBestText;
             QString recentAverageText;
             int recentSampleCount = 0;
             QString attainedTierText;
+            QColor attainedTierColor;
             QString nextThresholdText;
+            QString nextTierText;
+            QColor nextTierColor;
             QString matchStateText;
+            QString matchStateHint;
             int parent = -1;
             int row = 0;
             std::vector<int> children;
@@ -89,7 +111,7 @@ namespace ksv::presentation {
         void buildTree(const domain::Benchmark &definition, const domain::BenchmarkProjection &projection);
         void addScenario(int parentIndex, const domain::ScenarioEntry &entry,
                          const QHash<QString, const domain::ScenarioProjection *> &scenarios,
-                         const QHash<QString, QString> &tierNames, const QSet<QString> &blockedEntries);
+                         const QHash<QString, TierStyle> &tiers, const QSet<QString> &blockedEntries);
         bool propagateBlocker(int index);
         void rebuildNodeTree();
         [[nodiscard]] QVariantList nodeTreeFor(const std::vector<int> &indices) const;

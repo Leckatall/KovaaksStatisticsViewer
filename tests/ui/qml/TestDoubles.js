@@ -79,7 +79,12 @@ function makeFakeBreakdownNode(overrides) {
         recentSampleCount: 0,
         attainedTierText: "Unranked",
         nextThresholdText: "Highest tier attained",
-        matchStateText: "Resolved",
+        matchStateText: "",
+        matchStateHint: "",
+        nextTierText: "",
+        nextTierColor: "",
+        attainedTierColor: "",
+        highestTierColor: "",
         expanded: true,
         depth: 0,
         children: []
@@ -136,6 +141,10 @@ function makeFakeTrackingVm(overrides) {
         setExpandedCalls: [],
         selectBenchmark: function (id) { this.selectBenchmarkCalls.push(String(id)) },
         clearSelection: function () { this.clearSelectionCalls++ },
+        // The real view model asks the use case to restore the remembered (or only)
+        // benchmark; the double just records the request.
+        selectDefaultBenchmarkCalls: 0,
+        selectDefaultBenchmark: function () { this.selectDefaultBenchmarkCalls++ },
         setExpanded: function (nodeId, expanded) {
             this.setExpandedCalls.push([nodeId, expanded])
             this.breakdown.setExpanded(nodeId, expanded)
@@ -226,7 +235,7 @@ function trackingFixtureIncomplete() {
                 makeFakeBreakdownNode({
                     nodeId: "sc-1", kind: "scenario", name: "1w4ts",
                     personalBestText: "84.2", recentAverageText: "80.1", recentSampleCount: 3,
-                    matchStateText: "Resolved"
+                    matchStateText: ""
                 })
             ]
         })
@@ -250,18 +259,25 @@ function trackingFixtureTrackable() {
         averageRank: "2.75",
         totalPlaytime: "5 h 40 min",
         nextTier: "Platinum",
+        attainedRankColor: "#ffc828",
+        completedRankColor: "#c0c0c8",
+        nextTierColor: "#50dcdc",
         scenariosAtNextTier: 3,
         scenarioCount: 9,
         blockers: [
             {
                 kind: "scenario", scenarioName: "1w4ts", groupName: "Clicking / Static",
                 name: "1w4ts", currentText: "PB 812", requiredText: "needs 900",
-                detail: "PB 812 / needs 900"
+                detail: "PB 812 / needs 900",
+                progress: 0.75, progressColor: "#50dcdc",
+                progressDescription: "75% of the way from Gold to Platinum"
             },
             {
                 kind: "scenario", scenarioName: "popcorn", groupName: "Tracking / Smoothness",
                 name: "popcorn", currentText: "Unplayed", requiredText: "needs 78.0",
-                detail: "Unplayed / needs 78.0"
+                detail: "Unplayed / needs 78.0",
+                progress: 0, progressColor: "#50dcdc",
+                progressDescription: "0% of the way to Platinum"
             },
             {
                 kind: "group", groupName: "Switching", name: "Switching",
@@ -292,7 +308,8 @@ function trackingFixtureTrackable() {
                                     nodeId: "sc-1w4ts", kind: "scenario", name: "1w4ts",
                                     personalBestText: "812", recentAverageText: "790.5",
                                     recentSampleCount: 0, attainedTierText: "Gold",
-                                    nextThresholdText: "Platinum 900", matchStateText: "Resolved",
+                                    attainedTierColor: "#ffc828", nextTierColor: "#50dcdc",
+                                    nextTierText: "Platinum", nextThresholdText: "900", matchStateText: "",
                                     nextTierBlocker: true, depth: 2
                                 })
                             ]
@@ -307,7 +324,8 @@ function trackingFixtureTrackable() {
                             nodeId: "sc-popcorn", kind: "scenario", name: "popcorn",
                             personalBestText: "Unplayed", recentAverageText: "No completed runs",
                             recentSampleCount: 0, attainedTierText: "Unranked",
-                            nextThresholdText: "Bronze 60", matchStateText: "Ambiguous",
+                            nextTierText: "Bronze", nextThresholdText: "60", matchStateText: "Several scenarios match",
+                            matchStateHint: "More than one scenario in your runs has this name.",
                             nextTierBlocker: true, depth: 1
                         })
                     ]

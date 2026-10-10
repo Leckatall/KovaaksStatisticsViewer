@@ -9,10 +9,12 @@
 #include <QColor>
 #include <QHash>
 #include <QSignalSpy>
+#include <algorithm>
 #include <memory>
 
 #include "presentation/benchmark_tracking_vm.h"
 #include "presentation/benchmark_breakdown_model.h"
+#include "presentation/benchmark_format.h"
 
 #include "fake_benchmark_tracking_use_case.h"
 
@@ -89,7 +91,8 @@ TEST(BenchmarkBreakdownModel, ExposesEveryRequiredRole) {
     for (const char *role : {"nodeId", "kind", "name", "color", "highestTierText", "childCount",
                              "nextTierBlocker", "personalBestText", "recentAverageText",
                              "recentSampleCount", "attainedTierText", "nextThresholdText",
-                             "matchStateText", "expanded"})
+                             "matchStateText", "expanded", "scenarioCount", "highestTierColor",
+                             "attainedTierColor", "nextTierText", "nextTierColor", "matchStateHint"})
         EXPECT_NE(roleFor(model, role), -1) << role;
 }
 
@@ -142,11 +145,47 @@ TEST(BenchmarkBreakdownModel, MatchStateLabels) {
     const QModelIndex e2 = model->index(1, 0, model->index(1, 0));
     const QModelIndex e3 = model->index(0, 0, model->index(0, 0, model->index(2, 0)));
 
-    EXPECT_EQ(roleText(model, e1, "matchStateText"), "Resolved");
-    EXPECT_EQ(roleText(model, e2, "matchStateText"), "Mapped, unavailable");
-    EXPECT_EQ(roleText(model, u1, "matchStateText"), "Unresolved");
-    EXPECT_EQ(roleText(model, e3, "matchStateText"), "Ambiguous");
-    EXPECT_EQ(roleText(model, u2, "matchStateText"), "Pending automatic mapping");
+    // A normally resolved scenario reports nothing...
+    EXPECT_TRUE(roleText(model, e1, "matchStateText").isEmpty());
+    EXPECT_TRUE(roleText(model, e1, "matchStateHint").isEmpty());
+    // ...while every abnormal state is reported in the user's terms, with guidance.
+    EXPECT_EQ(roleText(model, e2, "matchStateText"), "No runs of linked scenario");
+    EXPECT_EQ(roleText(model, u1, "matchStateText"), "Not found in your runs");
+    EXPECT_EQ(roleText(model, e3, "matchStateText"), "Several scenarios match");
+    EXPECT_TRUE(roleText(model, u2, "matchStateText").startsWith("Linking to your runs"));
+    for (const QModelIndex &abnormal: {e2, u1, e3, u2})
+        EXPECT_FALSE(roleText(model, abnormal, "matchStateHint").isEmpty());
+    // The resolver's own vocabulary never reaches the user.
+    for (const QModelIndex &index: {e1, e2, u1, e3, u2}) {
+        const QString text = roleText(model, index, "matchStateText");
+        EXPECT_FALSE(text.contains("Resolved") || text.contains("Unresolved") || text.contains("Mapped"))
+            << text.toStdString();
+    }
+}
+
+// a scenario with no runs, or one the resolver could not match, still says so.
+TEST(BenchmarkBreakdownModel, UnplayedAndUnmatchedScenariosStillShowTheirCondition) {
+    auto fake = breakdownFake();
+    BenchmarkTrackingViewModel vm{fake};
+    QAbstractItemModel *model = vm.breakdown();
+
+    // "e2": mapped, but no runs in the profile.
+    const QModelIndex e2 = model->index(1, 0, model->index(1, 0));
+    EXPECT_EQ(roleText(model, e2, "personalBestText"), "Unplayed");
+    EXPECT_FALSE(roleText(model, e2, "matchStateText").isEmpty());
+
+    // A definition entry missing from the projection entirely is reported as not found.
+    auto snapshot = makeBreakdownSnapshot();
+    auto &scenarios = snapshot.projection->scenarios;
+    scenarios.erase(std::remove_if(scenarios.begin(), scenarios.end(),
+                                   [](const ScenarioProjection &s) { return s.entryId.value == "e1"; }),
+                    scenarios.end());
+    fake->snap = snapshot;
+    fake->publish();
+    const QModelIndex e1 = model->index(0, 0, model->index(1, 0));
+    ASSERT_EQ(roleText(model, e1, "nodeId"), "e1");
+    EXPECT_EQ(roleText(model, e1, "matchStateText"), "Not found in your runs");
+    EXPECT_EQ(roleText(model, e1, "personalBestText"), "Unplayed");
 }
 
 TEST(BenchmarkBreakdownModel, UncategorizedIsNeutralWhileGroupsCarryColorAndName) {
@@ -164,6 +203,94 @@ TEST(BenchmarkBreakdownModel, UncategorizedIsNeutralWhileGroupsCarryColorAndName
     const QModelIndex smoothness = model->index(0, 0, model->index(2, 0));
     EXPECT_EQ(model->data(smoothness, colorRole).value<QColor>(), QColor(0, 200, 0));
     EXPECT_EQ(roleText(model, smoothness, "name"), "Smoothness");
+}
+
+// groups without scenarios are not shown; a populated Uncategorized still is.
+TEST(BenchmarkBreakdownModel, EmptyUncategorizedBucketIsHidden) {
+    auto fake = breakdownFake();
+    fake->snap.selectedLoaded->benchmark.uncategorized.clear();
+    fake->snap.projection->uncategorized.clear();
+    BenchmarkTrackingViewModel vm{fake};
+    QAbstractItemModel *model = vm.breakdown();
+
+    ASSERT_EQ(model->rowCount(QModelIndex()), 2);
+    EXPECT_EQ(roleText(model, model->index(0, 0), "name"), "Clicking");
+    EXPECT_EQ(roleText(model, model->index(1, 0), "name"), "Tracking");
+    EXPECT_EQ(vm.breakdown()->nodes().size(), 2);
+}
+
+TEST(BenchmarkBreakdownModel, PopulatedUncategorizedBucketIsShown) {
+    auto fake = breakdownFake();
+    BenchmarkTrackingViewModel vm{fake};
+    QAbstractItemModel *model = vm.breakdown();
+
+    ASSERT_EQ(roleText(model, model->index(0, 0), "kind"), "uncategorized");
+    EXPECT_EQ(model->data(model->index(0, 0), roleFor(model, "scenarioCount")).toInt(), 2);
+}
+
+TEST(BenchmarkBreakdownModel, EmptyCategoriesAndSubcategoriesAreHidden) {
+    auto fake = breakdownFake();
+    auto &definition = fake->snap.selectedLoaded->benchmark;
+    // An empty category, a category whose only subcategory is empty, and an empty subcategory
+    // beside a populated one.
+    definition.categories.push_back(Category{GroupId{"empty"}, "Empty", BenchmarkColor{1, 2, 3}, {}, {}});
+    definition.categories.push_back(Category{GroupId{"hollow"}, "Hollow", BenchmarkColor{1, 2, 3}, {},
+                                             {Subcategory{GroupId{"hollow-sub"}, "Hollow sub", {}, {}}}});
+    definition.categories[1].subcategories.push_back(
+        Subcategory{GroupId{"bare"}, "Bare", BenchmarkColor{9, 9, 9}, {}});
+    BenchmarkTrackingViewModel vm{fake};
+    QAbstractItemModel *model = vm.breakdown();
+
+    ASSERT_EQ(model->rowCount(QModelIndex()), 3); // Uncategorized, Clicking, Tracking
+    for (int row = 0; row < model->rowCount(QModelIndex()); ++row) {
+        const QModelIndex group = model->index(row, 0);
+        EXPECT_GT(model->data(group, roleFor(model, "scenarioCount")).toInt(), 0)
+            << roleText(model, group, "name").toStdString();
+        for (int child = 0; child < model->rowCount(group); ++child) {
+            const QModelIndex sub = model->index(child, 0, group);
+            EXPECT_GT(model->data(sub, roleFor(model, "scenarioCount")).toInt(), 0)
+                << roleText(model, sub, "name").toStdString();
+        }
+    }
+    EXPECT_EQ(model->rowCount(model->index(1, 0)), 2); // Clicking keeps e1, e2; "Bare" is dropped
+    EXPECT_EQ(model->rowCount(model->index(2, 0)), 1); // Tracking keeps only Smoothness
+}
+
+TEST(BenchmarkBreakdownModel, ScenarioCountCountsThroughSubcategories) {
+    auto fake = breakdownFake();
+    BenchmarkTrackingViewModel vm{fake};
+    QAbstractItemModel *model = vm.breakdown();
+    const int count = roleFor(model, "scenarioCount");
+
+    EXPECT_EQ(model->data(model->index(1, 0), count).toInt(), 2); // Clicking: e1, e2
+    EXPECT_EQ(model->data(model->index(2, 0), count).toInt(), 1); // Tracking: via Smoothness
+    EXPECT_EQ(model->data(model->index(0, 0, model->index(2, 0)), count).toInt(), 1);
+}
+
+// tier names come with their benchmark colour, made readable on the dark panels.
+TEST(BenchmarkBreakdownModel, TierNamesCarryReadableTierColours) {
+    auto fake = breakdownFake();
+    auto &tiers = fake->snap.projection->tiers;
+    tiers[0].color = BenchmarkColor{255, 200, 40}; // bright: readable as is
+    tiers[1].color = BenchmarkColor{20, 20, 60};   // Silver: far too dark on a dark panel
+    fake->snap.selectedLoaded->benchmark.tiers = tiers;
+    BenchmarkTrackingViewModel vm{fake};
+    QAbstractItemModel *model = vm.breakdown();
+
+    const QModelIndex clicking = model->index(1, 0);
+    const QModelIndex e1 = model->index(0, 0, clicking); // attained Bronze, next Silver
+    EXPECT_EQ(roleText(model, e1, "attainedTierColor"), QColor(255, 200, 40).name());
+    EXPECT_EQ(roleText(model, e1, "nextTierText"), "Silver");
+    const QColor next(roleText(model, e1, "nextTierColor"));
+    ASSERT_TRUE(next.isValid());
+    EXPECT_GE(contrastRatio(next, darkPanelColor()), 4.5);
+    EXPECT_GT(next.lightness(), QColor(20, 20, 60).lightness());
+    EXPECT_EQ(roleText(model, clicking, "highestTierColor"), QColor(255, 200, 40).name());
+
+    // No tier, no colour: Unranked stays in the normal text colour.
+    const QModelIndex e2 = model->index(1, 0, clicking);
+    EXPECT_EQ(roleText(model, e2, "attainedTierText"), "Unranked");
+    EXPECT_TRUE(roleText(model, e2, "attainedTierColor").isEmpty());
 }
 
 TEST(BenchmarkBreakdownModel, GroupHighestSatisfiedTierAndChildCount) {

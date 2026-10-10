@@ -93,7 +93,7 @@ namespace ksv::application {
             m_benchmarksService, m_benchmarkResolutionUseCase, std::make_shared<qt_data::PlaylistReader>(),
             [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
         m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
-            m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService);
+            m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService, m_settingsService);
 
         auto averageUseCase = std::make_shared<AverageLineUseCase>(m_profileService);
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController, m_seriesConfigStore, averageUseCase);

@@ -18,6 +18,8 @@ Frame {
         property string caption
         property string value
         property string valueObjectName
+        // A tier's readable colour ("#rrggbb"), or "" for values that are not a tier.
+        property string valueColor: ""
         Layout.fillWidth: true
         spacing: 8
 
@@ -30,8 +32,15 @@ Frame {
             objectName: fieldRow.valueObjectName
             text: fieldRow.value
             font.bold: true
+            color: fieldRow.valueColor.length > 0 ? fieldRow.valueColor : root.palette.text
             Accessible.description: fieldRow.caption + ": " + fieldRow.value
         }
+    }
+
+    function _color(name) {
+        if (!root.trackingVm) return ""
+        var value = root.trackingVm[name]
+        return value === undefined || value === null ? "" : String(value)
     }
 
     GridLayout {
@@ -43,11 +52,13 @@ Frame {
         Field {
             caption: qsTr("Attained rank")
             value: root.trackingVm ? root.trackingVm.attainedRank : ""
+            valueColor: root._color("attainedRankColor")
             valueObjectName: "summaryAttainedRank"
         }
         Field {
             caption: qsTr("Completed rank")
             value: root.trackingVm ? root.trackingVm.completedRank : ""
+            valueColor: root._color("completedRankColor")
             valueObjectName: "summaryCompletedRank"
         }
         Field {
@@ -63,6 +74,7 @@ Frame {
         Field {
             caption: qsTr("Next tier")
             value: root.trackingVm ? root.trackingVm.nextTier : ""
+            valueColor: root._color("nextTierColor")
             valueObjectName: "summaryNextTier"
         }
     }

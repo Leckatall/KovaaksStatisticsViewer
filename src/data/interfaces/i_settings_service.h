@@ -27,6 +27,11 @@ namespace ksv::application {
         virtual void setSeriesConfigDocument(const std::string &json) = 0;
         virtual void quarantineSeriesConfigDocument(const std::string &invalidJson) = 0;
         [[nodiscard]] virtual std::vector<std::string> getLegacyDisabledColumnKeys() const = 0;
+
+        // The benchmark the user last chose in the Benchmarks workspace, so the next launch can
+        // show it again. Empty when none has been chosen (or the choice was cleared).
+        [[nodiscard]] virtual std::string getLastSelectedBenchmarkId() const = 0;
+        virtual void setLastSelectedBenchmarkId(const std::string &id) = 0;
     };
 }
 #endif //KOVAAKSSTATSVIEWER_I_SETTINGS_SERVICE_H

@@ -37,10 +37,39 @@ Item {
     }
     readonly property bool _wide: width >= 1000
 
+    // Bodies that carry their own Benchmark Manager action; while one is shown the
+    // header's Manage Benchmarks button would only be a second control for the
+    // same thing.
+    readonly property bool _bodyOwnsManagerAction: _bodyState === "emptyLibrary"
+                                                   || _bodyState === "problemsOnly"
+                                                   || _bodyState === "unavailable"
+                                                   || _bodyState === "incomplete"
+
+    // Opening the workspace with nothing selected shows a benchmark without an
+    // extra click: the use case restores the remembered choice, or picks the only
+    // benchmark there is. Re-checked whenever the workspace becomes visible or the
+    // library changes while it is visible.
+    //
+    // Creation-time triggers are deferred: inside the window's StackLayout this item
+    // still reports visible while it is being created and is only hidden once the
+    // layout runs, so an immediate check would select (and evaluate) a benchmark at
+    // startup before the tab is ever opened. Becoming visible (the tab opening) is
+    // handled at once, so the first frame of the tab already shows the benchmark.
+    function _ensureSelection() {
+        if (!root.visible || !root.trackingVm || root._bodyState !== "noSelection") return
+        if (typeof root.trackingVm.selectDefaultBenchmark === "function")
+            root.trackingVm.selectDefaultBenchmark()
+    }
+    function _scheduleEnsureSelection() { Qt.callLater(root._ensureSelection) }
+    onVisibleChanged: _ensureSelection()
+    onTrackingVmChanged: _scheduleEnsureSelection()
+    Component.onCompleted: _scheduleEnsureSelection()
+
     // Widths in the trackable body derive from this instead of a ScrollView's
     // availableWidth: `width` is assigned directly and takes effect before the
     // first layout polish, so responsive geometry is correct on the same frame.
-    readonly property real _contentWidth: Math.max(0, width - 24)
+    // 16px of body margins plus room for the always-visible scroll bar.
+    readonly property real _contentWidth: Math.max(0, width - 32)
 
     readonly property Component _bodyComponent: {
         switch (_bodyState) {
@@ -53,14 +82,19 @@ Item {
         }
     }
 
-    // --- always-visible header ----------------------------------------------
+    // --- header: selector, status, manager action ---------------------------
+    // Hidden with an empty library: there is nothing to select, and the empty-state
+    // body carries the one explanation and the one action.
     RowLayout {
         id: headerRow
+        objectName: "benchmarkHeader"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 8
         spacing: 12
+        visible: root._hasAnyEntry
+        height: visible ? implicitHeight : 0
 
         Frame {
             id: benchmarkSelector
@@ -79,11 +113,6 @@ Item {
                 Label {
                     text: qsTr("Benchmark")
                     font.bold: true
-                    color: root.palette.placeholderText
-                }
-                Label {
-                    visible: !root._hasAnyEntry
-                    text: qsTr("No benchmark files found.")
                     color: root.palette.placeholderText
                 }
                 Repeater {
@@ -124,21 +153,26 @@ Item {
             }
         }
 
+        // Every other state explains itself in its body, so a status line here
+        // would repeat it; only the tracking state has nothing else to say.
         Label {
             objectName: "benchmarkClassificationLabel"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: {
-                if (!root.trackingVm) return ""
-                var name = root.trackingVm.selectedName
-                var msg = root.trackingVm.stateMessage
-                return name && String(name).length > 0 ? name + " — " + msg : msg
-            }
+            visible: root._bodyState === "trackable"
+            color: root.palette.placeholderText
+            text: root.trackingVm ? String(root.trackingVm.stateMessage || "") : ""
+        }
+        Item {
+            // Keeps the manager button right-aligned while the status line is hidden.
+            Layout.fillWidth: true
+            visible: root._bodyState !== "trackable"
         }
 
         Button {
             objectName: "manageBenchmarksButton"
             text: qsTr("Manage Benchmarks")
+            visible: !root._bodyOwnsManagerAction
             activeFocusOnTab: true
             focusPolicy: Qt.StrongFocus
             onClicked: root.manageBenchmarksRequested()
@@ -150,13 +184,15 @@ Item {
         id: bodyLoader
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: headerRow.bottom
+        anchors.top: headerRow.visible ? headerRow.bottom : parent.top
         anchors.bottom: parent.bottom
         anchors.leftMargin: 8
         anchors.rightMargin: 8
-        anchors.topMargin: 4
+        anchors.topMargin: headerRow.visible ? 4 : 8
         anchors.bottomMargin: 8
         sourceComponent: root._bodyComponent
+        // A library change can land on "nothing selected" while the tab is open.
+        onSourceComponentChanged: root._scheduleEnsureSelection()
     }
 
     // ======================================================================
@@ -178,20 +214,45 @@ Item {
 
     Component {
         id: emptyLibraryComponent
-        ColumnLayout {
+        // One explanation and one primary action, placed where the eye lands.
+        Item {
             objectName: "emptyLibraryBody"
-            spacing: 8
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: qsTr("No benchmarks are installed yet.")
+
+            ColumnLayout {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: Math.max(0, Math.round(parent.height * 0.22))
+                width: Math.min(parent.width - 32, 520)
+                spacing: 12
+
+                Label {
+                    objectName: "emptyLibraryTitle"
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    font.pointSize: emptyLibraryMessage.font.pointSize > 0
+                                    ? emptyLibraryMessage.font.pointSize * 1.4 : 13
+                    font.bold: true
+                    text: qsTr("No benchmarks yet")
+                }
+                Label {
+                    id: emptyLibraryMessage
+                    objectName: "emptyLibraryMessage"
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    color: root.palette.placeholderText
+                    text: qsTr("A benchmark ranks your scores on a set of scenarios against tier thresholds. "
+                               + "Create one, or import a benchmark file, to start tracking.")
+                }
+                Button {
+                    objectName: "createOrImportButton"
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 4
+                    highlighted: true
+                    text: qsTr("Create or import a benchmark")
+                    onClicked: root.manageBenchmarksRequested()
+                }
             }
-            Button {
-                objectName: "createOrImportButton"
-                text: qsTr("Create or import a benchmark")
-                onClicked: root.manageBenchmarksRequested()
-            }
-            Item { Layout.fillHeight: true }
         }
     }
 
@@ -244,8 +305,17 @@ Item {
     Component {
         id: incompleteComponent
         ScrollView {
+            id: incompleteScroll
             contentWidth: availableWidth
             clip: true
+            ScrollBar.vertical: ListScrollBar {
+                // A ScrollView leaves a replacement bar's geometry to the caller.
+                parent: incompleteScroll
+                x: incompleteScroll.width - width
+                y: incompleteScroll.topPadding
+                height: incompleteScroll.availableHeight
+                overflowing: incompleteScroll.contentHeight > incompleteScroll.height + 1
+            }
 
             ColumnLayout {
                 width: root._contentWidth
@@ -317,6 +387,16 @@ Item {
             objectName: "benchmarkWorkspaceScroll"
             contentWidth: availableWidth
             clip: true
+            // Always visible while the content overflows: the breakdown usually
+            // starts below the fold, and the style's own bar only shows mid-scroll.
+            ScrollBar.vertical: ListScrollBar {
+                // A ScrollView leaves a replacement bar's geometry to the caller.
+                parent: benchmarkWorkspaceScroll
+                x: benchmarkWorkspaceScroll.width - width
+                y: benchmarkWorkspaceScroll.topPadding
+                height: benchmarkWorkspaceScroll.availableHeight
+                overflowing: benchmarkWorkspaceScroll.contentHeight > benchmarkWorkspaceScroll.height + 1
+            }
 
             // Explicit x/y placement rather than a Flow: the two history cards
             // stay direct children (the scroll-order test walks them by index) yet
@@ -352,12 +432,20 @@ Item {
                         objectName: "nextTierProgress"
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
+                        font.bold: true
+                        textFormat: Text.StyledText
                         text: {
                             if (!root.trackingVm) return ""
                             var total = root.trackingVm.scenarioCount
                             if (total === undefined || total === null) total = "?"
-                            return qsTr("%1 of %2 scenarios at the next tier")
-                                   .arg(root.trackingVm.scenariosAtNextTier).arg(total)
+                            var line = qsTr("%1 of %2 scenarios at the next tier")
+                                       .arg(root.trackingVm.scenariosAtNextTier).arg(total)
+                            var color = String(root.trackingVm.nextTierColor || "")
+                            if (color.length === 0) return line
+                            return line + " (<font color=\"" + color + "\">"
+                                   + String(root.trackingVm.nextTier).replace(/&/g, "&amp;")
+                                         .replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                                   + "</font>)"
                         }
                     }
                     BenchmarkBlockerList {
@@ -365,6 +453,9 @@ Item {
                         Layout.fillWidth: true
                         blockers: (root.trackingVm && root.trackingVm.blockers)
                                   ? root.trackingVm.blockers : []
+                        nextTierName: root.trackingVm && String(root.trackingVm.nextTierColor || "").length > 0
+                                      ? String(root.trackingVm.nextTier) : ""
+                        nextTierColor: root.trackingVm ? String(root.trackingVm.nextTierColor || "") : ""
                     }
                 }
 

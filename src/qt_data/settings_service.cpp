@@ -11,6 +11,7 @@ namespace ksv::qt_data {
     namespace {
         constexpr auto kSeriesConfigKey = "graph/seriesConfigV1";
         constexpr auto kSeriesConfigQuarantinePrefix = "graph/seriesConfigQuarantine/";
+        constexpr auto kLastSelectedBenchmarkKey = "benchmarks/lastSelectedId";
     }
 
     SettingsService::SettingsService(const QSettings::Format format, QObject *parent) : QObject(parent),
@@ -111,5 +112,17 @@ namespace ksv::qt_data {
         result.reserve(stored.size());
         for (const auto &key: stored) result.push_back(key.toStdString());
         return result;
+    }
+
+    std::string SettingsService::getLastSelectedBenchmarkId() const {
+        const QMutexLocker locker(&m_settings_mutex);
+        return m_settings.value(kLastSelectedBenchmarkKey).toString().toStdString();
+    }
+
+    void SettingsService::setLastSelectedBenchmarkId(const std::string &id) {
+        const QMutexLocker locker(&m_settings_mutex);
+        if (id.empty()) m_settings.remove(kLastSelectedBenchmarkKey);
+        else m_settings.setValue(kLastSelectedBenchmarkKey, QString::fromStdString(id));
+        m_settings.sync();
     }
 }

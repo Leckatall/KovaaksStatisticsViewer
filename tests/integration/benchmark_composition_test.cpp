@@ -547,8 +547,8 @@ TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewM
 
     const QModelIndex scenario = findBreakdownNode(vm->breakdown(), QStringLiteral("Wall Six"));
     ASSERT_TRUE(scenario.isValid()) << "breakdown hierarchy never surfaced the mapped scenario";
-    EXPECT_EQ(scenario.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString(),
-              QStringLiteral("Resolved"));
+    // A normally resolved scenario reports no match state at all.
+    EXPECT_TRUE(scenario.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString().isEmpty());
     EXPECT_FALSE(scenario.data(presentation::BenchmarkBreakdownModel::PersonalBestTextRole)
                      .toString().isEmpty());
 
@@ -585,7 +585,7 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     const QModelIndex unmapped = findBreakdownNode(vm->breakdown(), QStringLiteral("Needs Mapping"));
     ASSERT_TRUE(unmapped.isValid());
     EXPECT_EQ(unmapped.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString(),
-              QStringLiteral("Unresolved"));
+              QStringLiteral("Not found in your runs"));
 
     QSignalSpy changed(vm, &presentation::BenchmarkTrackingViewModel::changed);
 
@@ -614,8 +614,7 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     EXPECT_TRUE(vm->blockers().isEmpty());
     const QModelIndex remapped = findBreakdownNode(vm->breakdown(), QStringLiteral("Needs Mapping"));
     ASSERT_TRUE(remapped.isValid());
-    EXPECT_EQ(remapped.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString(),
-              QStringLiteral("Resolved"));
+    EXPECT_TRUE(remapped.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString().isEmpty());
     EXPECT_NE(remapped.data(presentation::BenchmarkBreakdownModel::PersonalBestTextRole).toString(),
               QStringLiteral("Unplayed"));
 }

@@ -68,9 +68,8 @@ Item {
 
         // -- always-visible header ---------------------------------------
 
-        function test_headerIsPresentInEveryState_data() {
+        function test_headerSelectorIsShownWheneverAnyEntryExists_data() {
             return [
-                {tag: "empty", fx: TestDoubles.trackingFixtureEmptyLibrary()},
                 {tag: "problems", fx: TestDoubles.trackingFixtureProblemsOnly()},
                 {tag: "noselection", fx: TestDoubles.trackingFixtureNoSelection()},
                 {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable()},
@@ -79,15 +78,104 @@ Item {
             ]
         }
 
-        function test_headerIsPresentInEveryState(data) {
+        function test_headerSelectorIsShownWheneverAnyEntryExists(data) {
             const ws = makeWorkspace(data.fx)
             const selector = find(ws, "benchmarkSelector")
-            const classification = find(ws, "benchmarkClassificationLabel")
-            const manage = find(ws, "manageBenchmarksButton")
-            verify(selector !== null, "header benchmark selector missing")
-            verify(classification !== null, "header classification/status label missing")
-            verify(manage !== null, "header Manage Benchmarks button missing")
+            verify(selector !== null && selector.visible, "header benchmark selector missing")
             verify(String(selector.Accessible.name).length > 0, "selector needs an accessible name")
+        }
+
+        // with nothing installed there is nothing to select; the body alone
+        // explains and acts.
+        function test_emptyLibraryHidesTheHeader() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureEmptyLibrary())
+            const header = find(ws, "benchmarkHeader")
+            verify(header !== null, "header row missing")
+            compare(header.visible, false, "an empty library must not show an empty selector")
+        }
+
+        // never two controls that open the Benchmark Manager at once.
+        function test_exactlyOneManagerActionPerState_data() {
+            return [
+                {tag: "empty", fx: TestDoubles.trackingFixtureEmptyLibrary(), action: "createOrImportButton"},
+                {tag: "problems", fx: TestDoubles.trackingFixtureProblemsOnly(), action: "manageBenchmarkFilesButton"},
+                {tag: "noselection", fx: TestDoubles.trackingFixtureNoSelection(), action: "manageBenchmarksButton"},
+                {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable(), action: "repairButton"},
+                {tag: "incomplete", fx: TestDoubles.trackingFixtureIncomplete(), action: "editBenchmarkButton"},
+                {tag: "trackable", fx: TestDoubles.trackingFixtureTrackable(), action: "manageBenchmarksButton"}
+            ]
+        }
+
+        function test_exactlyOneManagerActionPerState(data) {
+            const ws = makeWorkspace(data.fx)
+            const actions = ["manageBenchmarksButton", "createOrImportButton", "manageBenchmarkFilesButton",
+                             "repairButton", "editBenchmarkButton"]
+            const shown = actions.filter(function (name) {
+                const item = find(ws, name)
+                return item !== null && item.visible
+            })
+            compare(shown.length, 1, "visible manager actions: " + shown.join(", "))
+            compare(shown[0], data.action)
+        }
+
+        // Visible, non-empty text of every item, ignoring a control's own content
+        // item (a Button's label repeats the Button's text).
+        function visibleTexts(item, out) {
+            out = out || []
+            if (!item || !item.visible)
+                return out
+            const t = item.text === undefined || item.text === null ? "" : String(item.text)
+            const parentText = item.parent && item.parent.text !== undefined ? String(item.parent.text) : null
+            if (t.length > 0 && t !== parentText && item.width > 0)
+                out.push(t)
+            for (const child of item.children || [])
+                visibleTexts(child, out)
+            return out
+        }
+
+        // no status or instruction message appears twice on the screen.
+        function test_noMessageIsShownTwice_data() {
+            return [
+                {tag: "empty", fx: TestDoubles.trackingFixtureEmptyLibrary()},
+                {tag: "problems", fx: TestDoubles.trackingFixtureProblemsOnly()},
+                {tag: "noselection", fx: TestDoubles.trackingFixtureNoSelection()},
+                {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable()}
+            ]
+        }
+
+        function test_noMessageIsShownTwice(data) {
+            const ws = makeWorkspace(data.fx)
+            wait(0)
+            const texts = visibleTexts(ws)
+            const seen = {}
+            for (const t of texts) {
+                verify(!seen[t], "shown twice: '" + t + "' in " + JSON.stringify(texts))
+                seen[t] = true
+            }
+            // Near-duplicates: at most one visible line may ask the user to select a
+            // benchmark, and at most one may say there are none.
+            const selectLines = texts.filter(function (t) { return /select a benchmark/i.test(t) })
+            verify(selectLines.length <= 1, "repeated selection prompts: " + JSON.stringify(selectLines))
+            const noneLines = texts.filter(function (t) { return /no benchmark/i.test(t) })
+            verify(noneLines.length <= 1, "repeated 'no benchmarks' messages: " + JSON.stringify(noneLines))
+        }
+
+        function test_headerStatusLineOnlyWhileTracking_data() {
+            return [
+                {tag: "problems", fx: TestDoubles.trackingFixtureProblemsOnly(), shown: false},
+                {tag: "noselection", fx: TestDoubles.trackingFixtureNoSelection(), shown: false},
+                {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable(), shown: false},
+                {tag: "incomplete", fx: TestDoubles.trackingFixtureIncomplete(), shown: false},
+                {tag: "trackable", fx: TestDoubles.trackingFixtureTrackable(), shown: true}
+            ]
+        }
+
+        function test_headerStatusLineOnlyWhileTracking(data) {
+            const ws = makeWorkspace(data.fx)
+            const status = find(ws, "benchmarkClassificationLabel")
+            verify(status !== null, "header status label missing")
+            compare(status.visible, data.shown,
+                    "every other state explains itself in its body, so the header must not repeat it")
         }
 
         function test_manageBenchmarksButtonEmitsRequest() {
@@ -112,16 +200,41 @@ Item {
                     "clicking a disabled problem row must not select it")
         }
 
-        function test_neverAutoSelectsTheOnlyEntry() {
-            const only = TestDoubles.trackingFixtureNoSelection()
-            only.selectorEntries = [
-                {id: "bench-A", name: "Voltaic S3", classification: "Trackable", selectable: true}
-            ]
-            const ws = makeWorkspace(only)
+        // showing the workspace with nothing selected asks the view model for
+        // the default (remembered or only) benchmark; which one is the use case's call.
+        function test_shownWithoutSelectionRequestsDefaultBenchmark() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureNoSelection())
+            tryVerify(function () { return ws.trackingVm.selectDefaultBenchmarkCalls >= 1 }, 1000,
+                      "a visible workspace with no selection must request the default benchmark")
             compare(ws.trackingVm.selectBenchmarkCalls.length, 0,
-                    "a single loaded definition must not be auto-selected")
-            verify(find(ws, "noSelectionBody") !== null,
-                   "with one entry and no selection the no-selection body must show")
+                    "the workspace must not pick a benchmark itself")
+        }
+
+        function test_hiddenWorkspaceRequestsDefaultOnlyWhenShown() {
+            const ws = instantiateWorkspace(root)
+            ws.visible = false
+            ws.trackingVm = TestDoubles.makeFakeTrackingVm(TestDoubles.trackingFixtureNoSelection())
+            wait(50)
+            compare(ws.trackingVm.selectDefaultBenchmarkCalls, 0,
+                    "a hidden (not yet opened) workspace must not select anything")
+            ws.visible = true
+            compare(ws.trackingVm.selectDefaultBenchmarkCalls, 1,
+                    "opening the workspace must request the default benchmark at once")
+        }
+
+        function test_existingSelectionIsLeftAlone_data() {
+            return [
+                {tag: "trackable", fx: TestDoubles.trackingFixtureTrackable()},
+                {tag: "empty", fx: TestDoubles.trackingFixtureEmptyLibrary()},
+                {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable()}
+            ]
+        }
+
+        function test_existingSelectionIsLeftAlone(data) {
+            const ws = makeWorkspace(data.fx)
+            wait(50)
+            compare(ws.trackingVm.selectDefaultBenchmarkCalls, 0,
+                    "only the no-selection state asks for a default benchmark")
         }
 
         // -- state bodies ----------------------------------------------------
@@ -129,8 +242,11 @@ Item {
         function test_emptyLibraryOffersCreateOrImport() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureEmptyLibrary())
             verify(find(ws, "emptyLibraryBody") !== null, "empty-library body missing")
-            verify(find(ws, "createOrImportButton") !== null,
+            const action = find(ws, "createOrImportButton")
+            verify(action !== null && action.visible,
                    "empty library must offer 'Create or import a benchmark'")
+            mouseClick(action)
+            compare(root.managerRequests, 1, "the empty-state action opens the Benchmark Manager")
             verify(find(ws, "noSelectionBody") === null,
                    "empty library must not prompt for an impossible selection")
         }
@@ -370,8 +486,9 @@ Item {
             verify(text.indexOf("812") !== -1, "personal best value")
             verify(text.indexOf("790.5") !== -1, "recent average value")
             verify(text.indexOf("Gold") !== -1, "attained tier")
-            verify(text.indexOf("Platinum") !== -1, "next threshold")
-            verify(text.indexOf("Resolved") !== -1, "matching-state label")
+            verify(text.indexOf("Platinum") !== -1, "next tier")
+            verify(text.indexOf("900") !== -1, "next threshold")
+            verify(text.indexOf("Resolved") === -1, "a normal match state is not shown")
 
             verify(find(ws, "breakdownNode_sc-1w4ts_personalBest") !== null
                    && find(ws, "breakdownNode_sc-1w4ts_recentAverage") !== null,
@@ -430,8 +547,18 @@ Item {
             verify(Math.abs(rankPos.x - playtimePos.x) < 4 && playtimePos.y > rankPos.y + 10,
                    "below 1000px content width the history cards stack")
 
-            verify(find(ws, "breakdownNode_sc-1w4ts_twoLineMetrics") !== null,
-                   "narrow layout uses a two-line metric row")
+            verify(find(ws, "breakdownNode_sc-1w4ts_metricsRow") !== null,
+                   "narrow layout keeps the aligned metric columns")
+            const status = find(ws, "breakdownNode_sc-popcorn_matchState")
+            verify(status !== null, "status column missing")
+            verify(status.mapToItem(ws, status.width, 0).x <= ws.width + 1,
+                   "the last column must fit the narrow width: right edge "
+                   + status.mapToItem(ws, status.width, 0).x + " > " + ws.width
+                   + " (x " + status.x + ", w " + status.width + ") cols "
+                   + ["name", "pb", "recent", "rank", "next", "status"].map(function (k) {
+                         const h = find(ws, "breakdownHeader_" + k)
+                         return k + "=" + h.x + "/" + h.width
+                     }).join(" ") + " view " + find(ws, "benchmarkBreakdownView").width)
             verify(find(ws, "breakdownNode_sc-1w4ts_personalBest") !== null
                    && find(ws, "breakdownNode_sc-1w4ts_recentAverage") !== null
                    && find(ws, "breakdownNode_sc-1w4ts_attainedTier") !== null,
@@ -477,6 +604,95 @@ Item {
             const summaryBottom = summary.mapToItem(host, 0, summary.height).y
             const breakdownTop = breakdown.mapToItem(host, 0, 0).y
             verify(breakdownTop >= summaryBottom - 1, "150% font scale must not overlap controls")
+        }
+
+        // -- values share columns across groups, under headers -------
+
+        function test_breakdownValuesLineUpUnderHeadersAcrossGroups_data() {
+            return [
+                {tag: "1200x800", w: 1200, h: 800},
+                {tag: "800x600", w: 800, h: 600}
+            ]
+        }
+
+        function test_breakdownValuesLineUpUnderHeadersAcrossGroups(data) {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), data.w, data.h)
+            const columns = [
+                {header: "breakdownHeader_pb", cell: "personalBest"},
+                {header: "breakdownHeader_recent", cell: "recentAverage"},
+                {header: "breakdownHeader_rank", cell: "attainedTier"},
+                {header: "breakdownHeader_next", cell: "nextThreshold"},
+                {header: "breakdownHeader_status", cell: "matchState"}
+            ]
+            for (const column of columns) {
+                const header = find(ws, column.header)
+                verify(header !== null && header.visible && String(header.text).length > 0,
+                       column.header + " must be a visible heading")
+                const headerX = header.mapToItem(ws, 0, 0).x
+                // sc-1w4ts sits two levels deep (Clicking / Static); sc-popcorn one
+                // level deep in Uncategorized.
+                for (const id of ["sc-1w4ts", "sc-popcorn"]) {
+                    const cell = find(ws, "breakdownNode_" + id + "_" + column.cell)
+                    verify(cell !== null, id + " has no " + column.cell + " cell")
+                    fuzzyCompare(cell.mapToItem(ws, 0, 0).x, headerX, 0.5,
+                                 id + " " + column.cell + " must sit under its heading")
+                    fuzzyCompare(cell.width, header.width, 0.5,
+                                 id + " " + column.cell + " must share its column's width")
+                }
+            }
+        }
+
+        // -- only abnormal match states are shown ---------------------
+
+        function test_onlyAbnormalMatchStatesAreShown() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            const abnormal = find(ws, "breakdownNode_sc-popcorn_matchState")
+            verify(abnormal !== null && abnormal.visible, "the abnormal state cell is missing")
+            compare(abnormal.text, "Several scenarios match")
+            verify(String(abnormal.Accessible.description).length > 0,
+                   "an abnormal state carries guidance on what to do")
+            const normal = find(ws, "breakdownNode_sc-1w4ts_matchState")
+            verify(normal !== null, "status cell missing")
+            verify(String(normal.text).indexOf("Resolved") === -1, "a normal match is not reported")
+        }
+
+        // -- rank names use their tier colours --------------------------
+
+        function test_rankNamesUseTierColours() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            verify(Qt.colorEqual(find(ws, "summaryAttainedRank").color, "#ffc828"),
+                   "summary attained rank uses its tier colour")
+            verify(Qt.colorEqual(find(ws, "summaryCompletedRank").color, "#c0c0c8"),
+                   "summary completed rank uses its tier colour")
+            verify(Qt.colorEqual(find(ws, "summaryNextTier").color, "#50dcdc"),
+                   "summary next tier uses its tier colour")
+            verify(Qt.colorEqual(find(ws, "breakdownNode_sc-1w4ts_attainedTier").color, "#ffc828"),
+                   "breakdown rank uses its tier colour")
+            verify(!Qt.colorEqual(find(ws, "summaryAverageRank").color, "#ffc828"),
+                   "non-tier values keep the normal text colour")
+        }
+
+        // -- next-tier progress is drawn per scenario -------------------
+
+        function test_nextTierProgressIsDrawnPerScenario() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            wait(0)
+            const bar0 = find(ws, "blockerBar_0")
+            const fill0 = find(ws, "blockerFill_0")
+            const bar1 = find(ws, "blockerBar_1")
+            const fill1 = find(ws, "blockerFill_1")
+            verify(bar0 !== null && fill0 !== null && bar1 !== null && fill1 !== null,
+                   "every blocking scenario needs a progress bar")
+            verify(bar0.width > 40, "the bar must have a usable length")
+            fuzzyCompare(fill0.width, bar0.width * 0.75, 1, "the fill reflects the scenario's progress")
+            compare(fill1.visible, false, "an unplayed scenario shows no progress")
+            fuzzyCompare(bar0.mapToItem(ws, 0, 0).x, bar1.mapToItem(ws, 0, 0).x, 0.5,
+                         "bars start at the same x so they can be compared")
+            verify(Qt.colorEqual(fill0.color, "#50dcdc"), "the bar uses the next tier's colour")
+            verify(String(find(ws, "blocker_0").Accessible.description).indexOf("75%") !== -1,
+                   "the bar's progress is described for assistive tech")
+            const progress = String(find(ws, "nextTierProgress").text)
+            verify(progress.indexOf("3 of 9") !== -1, "the overall count is still shown")
         }
 
         // -- focus order ----------------------------------------------

@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <QColor>
 #include <QLocale>
 #include <QSignalSpy>
 #include <QStringList>
@@ -16,6 +17,7 @@
 #include "presentation/graph_vm_base.h"
 #include "presentation/series_model.h"
 #include "presentation/benchmark_issue_text.h"
+#include "presentation/benchmark_format.h"
 
 #include "fake_benchmark_tracking_use_case.h"
 
@@ -254,4 +256,83 @@ TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryBlockersAndGraph
     EXPECT_EQ(stateInNotification, "unavailable");
     EXPECT_EQ(blockersInNotification, 0);
     EXPECT_TRUE(rankLineEmptyInNotification);
+}
+
+// the workspace asks for a default benchmark; the view model only forwards the request
+// and leaves the choice (remembered or sole benchmark) to the use case.
+TEST(BenchmarkTrackingViewModel, SelectDefaultBenchmarkForwardsToTheUseCase) {
+    auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
+    BenchmarkTrackingViewModel vm{fake};
+
+    vm.selectDefaultBenchmark();
+
+    EXPECT_EQ(fake->selectDefaultCalls, 1);
+    EXPECT_TRUE(fake->selectCalls.empty());
+}
+
+// the summary's rank names carry their tier's readable colour; non-tier values do not.
+TEST(BenchmarkTrackingViewModel, SummaryRankNamesCarryTheirTierColours) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.projection->tiers[1].color = BenchmarkColor{192, 192, 200}; // Silver (attained)
+    snapshot.projection->tiers[2].color = BenchmarkColor{255, 200, 40};  // Gold (next)
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_EQ(vm.attainedRankColor(), QColor(192, 192, 200).name());
+    EXPECT_EQ(vm.nextTierColor(), QColor(255, 200, 40).name());
+    EXPECT_TRUE(vm.completedRankColor().isEmpty()) << "'None completed' is not a tier";
+
+    fake->snap.availability = BenchmarkTrackingState::Unavailable;
+    fake->snap.selectedLoaded.reset();
+    fake->snap.projection.reset();
+    fake->publish();
+    EXPECT_TRUE(vm.attainedRankColor().isEmpty());
+    EXPECT_TRUE(vm.nextTierColor().isEmpty());
+}
+
+TEST(BenchmarkTrackingViewModel, DarkTierColoursAreLightenedForReadability) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.projection->tiers[1].color = BenchmarkColor{10, 10, 10};
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    const QColor shown(vm.attainedRankColor());
+    ASSERT_TRUE(shown.isValid());
+    EXPECT_GE(contrastRatio(shown, darkPanelColor()), 4.5);
+}
+
+// each blocking scenario reports how far it has come, from the highest threshold it
+// already meets toward the score the next tier needs.
+TEST(BenchmarkTrackingViewModel, BlockerProgressIsMeasuredFromTheThresholdAlreadyMet) {
+    auto snapshot = makeTrackableSnapshot();
+    // s1: thresholds Bronze 700, Silver 850; PB 800 needs 850 for the blocker.
+    auto &s1 = snapshot.selectedLoaded->benchmark.categories[0].scenarios[0];
+    s1.thresholds = {Threshold{TierId{"t1"}, 700.0}, Threshold{TierId{"t2"}, 850.0},
+                     Threshold{TierId{"t3"}, 1000.0}};
+    snapshot.projection->tiers[2].color = BenchmarkColor{255, 200, 40};
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto blockers = vm.blockers();
+    ASSERT_EQ(blockers.size(), 2);
+    const auto played = blockers.at(0).toMap();
+    EXPECT_NEAR(played.value("progress").toDouble(), (800.0 - 700.0) / (850.0 - 700.0), 1e-9);
+    EXPECT_EQ(played.value("progressColor").toString(), QColor(255, 200, 40).name());
+    EXPECT_TRUE(played.value("progressDescription").toString().contains("67%"));
+    EXPECT_TRUE(played.value("progressDescription").toString().contains("Bronze"));
+
+    // Unplayed: no progress at all.
+    const auto unplayed = blockers.at(1).toMap();
+    EXPECT_DOUBLE_EQ(unplayed.value("progress").toDouble(), 0.0);
+}
+
+TEST(BenchmarkTrackingViewModel, BlockerProgressFallsBackToZeroBasedWhenNoThresholdIsMet) {
+    auto snapshot = makeTrackableSnapshot();
+    auto &s1 = snapshot.selectedLoaded->benchmark.categories[0].scenarios[0];
+    s1.thresholds = {Threshold{TierId{"t1"}, 900.0}, Threshold{TierId{"t2"}, 1000.0}};
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    // PB 800 meets no threshold; the blocker requires 850.
+    EXPECT_NEAR(vm.blockers().at(0).toMap().value("progress").toDouble(), 800.0 / 850.0, 1e-9);
 }

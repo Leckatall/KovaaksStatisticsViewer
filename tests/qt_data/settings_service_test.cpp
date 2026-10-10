@@ -148,4 +148,19 @@ namespace {
         raw.beginGroup("graph/seriesConfigQuarantine");
         EXPECT_EQ(raw.childKeys().size(), 2);
     }
+
+    TEST_F(SettingsServiceTest, LastSelectedBenchmarkSurvivesARestartAndCanBeCleared) {
+        {
+            SettingsService service(QSettings::IniFormat);
+            EXPECT_TRUE(service.getLastSelectedBenchmarkId().empty());
+            service.setLastSelectedBenchmarkId("driver-demo");
+        }
+
+        SettingsService reloaded(QSettings::IniFormat);
+        EXPECT_EQ(reloaded.getLastSelectedBenchmarkId(), "driver-demo");
+
+        reloaded.setLastSelectedBenchmarkId({});
+        const SettingsService cleared(QSettings::IniFormat);
+        EXPECT_TRUE(cleared.getLastSelectedBenchmarkId().empty());
+    }
 }

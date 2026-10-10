@@ -33,6 +33,11 @@ namespace ksv::presentation {
         Q_PROPERTY(QString attainedRank READ attainedRank NOTIFY changed)
         Q_PROPERTY(QString completedRank READ completedRank NOTIFY changed)
         Q_PROPERTY(QString nextTier READ nextTier NOTIFY changed)
+        // Readable text colours ("#rrggbb") of the tiers named by attainedRank/completedRank/
+        // nextTier, or "" when the value is not a tier (Unranked, None completed, ...).
+        Q_PROPERTY(QString attainedRankColor READ attainedRankColor NOTIFY changed)
+        Q_PROPERTY(QString completedRankColor READ completedRankColor NOTIFY changed)
+        Q_PROPERTY(QString nextTierColor READ nextTierColor NOTIFY changed)
         Q_PROPERTY(QString averageRank READ averageRank NOTIFY changed)
         Q_PROPERTY(QString totalPlaytime READ totalPlaytime NOTIFY changed)
         Q_PROPERTY(int scenariosAtNextTier READ scenariosAtNextTier NOTIFY changed)
@@ -55,6 +60,9 @@ namespace ksv::presentation {
         [[nodiscard]] QString attainedRank() const { return m_attainedRank; }
         [[nodiscard]] QString completedRank() const { return m_completedRank; }
         [[nodiscard]] QString nextTier() const { return m_nextTier; }
+        [[nodiscard]] QString attainedRankColor() const { return m_attainedRankColor; }
+        [[nodiscard]] QString completedRankColor() const { return m_completedRankColor; }
+        [[nodiscard]] QString nextTierColor() const { return m_nextTierColor; }
         [[nodiscard]] QString averageRank() const { return m_averageRank; }
         [[nodiscard]] QString totalPlaytime() const { return m_totalPlaytime; }
         [[nodiscard]] int scenariosAtNextTier() const { return m_scenariosAtNextTier; }
@@ -66,6 +74,9 @@ namespace ksv::presentation {
 
         Q_INVOKABLE void selectBenchmark(const QString &id);
         Q_INVOKABLE void clearSelection();
+        // Called when the workspace is shown with nothing selected; the use case decides whether
+        // a remembered or sole benchmark should be shown.
+        Q_INVOKABLE void selectDefaultBenchmark();
         Q_INVOKABLE void setExpanded(const QString &nodeId, bool expanded);
 
     signals:
@@ -91,6 +102,9 @@ namespace ksv::presentation {
         QString m_attainedRank;
         QString m_completedRank;
         QString m_nextTier;
+        QString m_attainedRankColor;
+        QString m_completedRankColor;
+        QString m_nextTierColor;
         QString m_averageRank;
         QString m_totalPlaytime;
         int m_scenariosAtNextTier = 0;

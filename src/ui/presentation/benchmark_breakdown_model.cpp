@@ -11,20 +11,57 @@ namespace ksv::presentation {
     namespace {
         QString q(const std::string &value) { return QString::fromStdString(value); }
 
+        // Tier colours travel as "#rrggbb" or "" so QML can tell "no tier colour" apart; an invalid
+        // QColor reaches QML as opaque black.
+        QString colorText(const QColor &color) { return color.isValid() ? color.name() : QString(); }
+
+        // A normally resolved scenario reports nothing; the user only sees match states they may
+        // need to act on, in their own terms rather than the resolver's.
         QString matchStateLabel(const domain::ScenarioMatchState state) {
             switch (state) {
                 case domain::ScenarioMatchState::Resolved:
-                    return QObject::tr("Resolved");
+                    return {};
                 case domain::ScenarioMatchState::MappedUnavailable:
-                    return QObject::tr("Mapped, unavailable");
+                    return QObject::tr("No runs of linked scenario");
                 case domain::ScenarioMatchState::Unresolved:
-                    return QObject::tr("Unresolved");
+                    return QObject::tr("Not found in your runs");
                 case domain::ScenarioMatchState::Ambiguous:
-                    return QObject::tr("Ambiguous");
+                    return QObject::tr("Several scenarios match");
                 case domain::ScenarioMatchState::AutoMappable:
-                    return QObject::tr("Pending automatic mapping");
+                    return QObject::tr("Linking to your runs…");
             }
             return {};
+        }
+
+        QString matchStateHint(const domain::ScenarioMatchState state) {
+            switch (state) {
+                case domain::ScenarioMatchState::Resolved:
+                    return {};
+                case domain::ScenarioMatchState::MappedUnavailable:
+                    return QObject::tr("This entry is linked to a scenario that has no runs in your profile. "
+                                       "Play it in KovaaK's, or link the entry to another scenario in the "
+                                       "Benchmark Manager.");
+                case domain::ScenarioMatchState::Unresolved:
+                    return QObject::tr("No scenario in your runs has this name. Play it in KovaaK's, or link "
+                                       "the entry to a scenario in the Benchmark Manager.");
+                case domain::ScenarioMatchState::Ambiguous:
+                    return QObject::tr("More than one scenario in your runs has this name. Choose the right "
+                                       "one in the Benchmark Manager.");
+                case domain::ScenarioMatchState::AutoMappable:
+                    return QObject::tr("A matching scenario was found in your runs and is being linked "
+                                       "automatically.");
+            }
+            return {};
+        }
+
+        int scenarioCountOf(const domain::Subcategory &subcategory) {
+            return static_cast<int>(subcategory.scenarios.size());
+        }
+
+        int scenarioCountOf(const domain::Category &category) {
+            int count = static_cast<int>(category.scenarios.size());
+            for (const auto &subcategory: category.subcategories) count += scenarioCountOf(subcategory);
+            return count;
         }
 
         void indexGroups(const std::vector<domain::GroupProjection> &groups,
@@ -87,6 +124,12 @@ namespace ksv::presentation {
             case NextThresholdTextRole: return node.nextThresholdText;
             case MatchStateTextRole: return node.matchStateText;
             case ExpandedRole: return m_expanded.value(node.nodeId, true);
+            case ScenarioCountRole: return node.scenarioCount;
+            case HighestTierColorRole: return colorText(node.highestTierColor);
+            case AttainedTierColorRole: return colorText(node.attainedTierColor);
+            case NextTierTextRole: return node.nextTierText;
+            case NextTierColorRole: return colorText(node.nextTierColor);
+            case MatchStateHintRole: return node.matchStateHint;
             default: return {};
         }
     }
@@ -112,6 +155,12 @@ namespace ksv::presentation {
             {NextThresholdTextRole, "nextThresholdText"},
             {MatchStateTextRole, "matchStateText"},
             {ExpandedRole, "expanded"},
+            {ScenarioCountRole, "scenarioCount"},
+            {HighestTierColorRole, "highestTierColor"},
+            {AttainedTierColorRole, "attainedTierColor"},
+            {NextTierTextRole, "nextTierText"},
+            {NextTierColorRole, "nextTierColor"},
+            {MatchStateHintRole, "matchStateHint"},
         };
     }
 
@@ -165,6 +214,12 @@ namespace ksv::presentation {
             map[QStringLiteral("attainedTierText")] = node.attainedTierText;
             map[QStringLiteral("nextThresholdText")] = node.nextThresholdText;
             map[QStringLiteral("matchStateText")] = node.matchStateText;
+            map[QStringLiteral("matchStateHint")] = node.matchStateHint;
+            map[QStringLiteral("scenarioCount")] = node.scenarioCount;
+            map[QStringLiteral("highestTierColor")] = colorText(node.highestTierColor);
+            map[QStringLiteral("attainedTierColor")] = colorText(node.attainedTierColor);
+            map[QStringLiteral("nextTierText")] = node.nextTierText;
+            map[QStringLiteral("nextTierColor")] = colorText(node.nextTierColor);
             map[QStringLiteral("expanded")] = m_expanded.value(node.nodeId, true);
             map[QStringLiteral("children")] = nodeTreeFor(node.children);
             list.append(map);
@@ -188,13 +243,16 @@ namespace ksv::presentation {
     void BenchmarkBreakdownModel::addScenario(
         const int parentIndex, const domain::ScenarioEntry &entry,
         const QHash<QString, const domain::ScenarioProjection *> &scenarios,
-        const QHash<QString, QString> &tierNames, const QSet<QString> &blockedEntries) {
+        const QHash<QString, TierStyle> &tiers, const QSet<QString> &blockedEntries) {
         Node node;
         node.nodeId = q(entry.id.value);
         node.kind = QStringLiteral("scenario");
+        node.scenarioCount = 1;
 
         const domain::ScenarioProjection *projected = scenarios.value(node.nodeId, nullptr);
         node.name = projected ? q(projected->name) : q(entry.name);
+        node.attainedTierText = tr("Unranked");
+        node.nextThresholdText = tr("Highest tier attained");
         if (projected) {
             node.personalBestText =
                 projected->personalBest ? formatBenchmarkNumber(*projected->personalBest) : tr("Unplayed");
@@ -204,19 +262,28 @@ namespace ksv::presentation {
                 (projected->recentSampleCount >= 1 && projected->recentSampleCount <= 4)
                     ? projected->recentSampleCount
                     : 0;
-            node.attainedTierText = projected->attainedTier
-                                        ? tierNames.value(q(projected->attainedTier->value), tr("Unranked"))
-                                        : tr("Unranked");
-            node.nextThresholdText = projected->nextThreshold
-                                         ? formatBenchmarkNumber(projected->nextThreshold->score)
-                                         : tr("Highest tier attained");
+            if (projected->attainedTier) {
+                const auto found = tiers.constFind(q(projected->attainedTier->value));
+                if (found != tiers.constEnd()) {
+                    node.attainedTierText = found->name;
+                    node.attainedTierColor = found->color;
+                }
+            }
+            if (projected->nextThreshold) {
+                node.nextThresholdText = formatBenchmarkNumber(projected->nextThreshold->score);
+                const auto found = tiers.constFind(q(projected->nextThreshold->tierId.value));
+                if (found != tiers.constEnd()) {
+                    node.nextTierText = found->name;
+                    node.nextTierColor = found->color;
+                }
+            }
             node.matchStateText = matchStateLabel(projected->matchState);
+            node.matchStateHint = matchStateHint(projected->matchState);
         } else {
             node.personalBestText = tr("Unplayed");
             node.recentAverageText = tr("No completed runs");
-            node.attainedTierText = tr("Unranked");
-            node.nextThresholdText = tr("Highest tier attained");
             node.matchStateText = matchStateLabel(domain::ScenarioMatchState::Unresolved);
+            node.matchStateHint = matchStateHint(domain::ScenarioMatchState::Unresolved);
         }
         node.nextTierBlocker = blockedEntries.contains(node.nodeId);
         pushNode(std::move(node), parentIndex);
@@ -224,8 +291,9 @@ namespace ksv::presentation {
 
     void BenchmarkBreakdownModel::buildTree(const domain::Benchmark &definition,
                                             const domain::BenchmarkProjection &projection) {
-        QHash<QString, QString> tierNames;
-        for (const auto &tier: projection.tiers) tierNames.insert(q(tier.id.value), q(tier.name));
+        QHash<QString, TierStyle> tiers;
+        for (const auto &tier: projection.tiers)
+            tiers.insert(q(tier.id.value), TierStyle{q(tier.name), readableTextColor(tier.color)});
 
         QHash<QString, const domain::ScenarioProjection *> scenarios;
         for (const auto &scenario: projection.scenarios) scenarios.insert(q(scenario.entryId.value), &scenario);
@@ -240,41 +308,56 @@ namespace ksv::presentation {
             if (blocker.group) namedGroups.insert(q(blocker.group->value));
         }
 
-        const auto highestTierText = [&](const QString &groupId) -> QString {
-            const domain::GroupProjection *group = groups.value(groupId, nullptr);
-            if (group && group->satisfiedTier) return tierNames.value(q(group->satisfiedTier->value), tr("Unranked"));
-            return tr("Unranked");
+        const auto applyHighestTier = [&](Node &node) {
+            node.highestTierText = tr("Unranked");
+            const domain::GroupProjection *group = groups.value(node.nodeId, nullptr);
+            if (!group || !group->satisfiedTier) return;
+            const auto found = tiers.constFind(q(group->satisfiedTier->value));
+            if (found == tiers.constEnd()) return;
+            node.highestTierText = found->name;
+            node.highestTierColor = found->color;
         };
 
-        Node uncategorized;
-        uncategorized.kind = QStringLiteral("uncategorized");
-        uncategorized.name = tr("Uncategorized");
-        const int uncategorizedIndex = pushNode(std::move(uncategorized), -1);
-        for (const auto &entry: definition.uncategorized)
-            addScenario(uncategorizedIndex, entry, scenarios, tierNames, blockedEntries);
+        // Empty groups carry no information (and an empty Uncategorized bucket is the normal case
+        // for a fully categorised benchmark), so only groups that hold scenarios become nodes.
+        if (!definition.uncategorized.empty()) {
+            Node uncategorized;
+            uncategorized.kind = QStringLiteral("uncategorized");
+            uncategorized.name = tr("Uncategorized");
+            uncategorized.scenarioCount = static_cast<int>(definition.uncategorized.size());
+            const int uncategorizedIndex = pushNode(std::move(uncategorized), -1);
+            for (const auto &entry: definition.uncategorized)
+                addScenario(uncategorizedIndex, entry, scenarios, tiers, blockedEntries);
+        }
 
         for (const auto &category: definition.categories) {
+            const int categoryScenarios = scenarioCountOf(category);
+            if (categoryScenarios == 0) continue;
             Node categoryNode;
             categoryNode.nodeId = q(category.id.value);
             categoryNode.kind = QStringLiteral("category");
             categoryNode.name = q(category.name);
             categoryNode.color = toQColor(category.color);
-            categoryNode.highestTierText = highestTierText(categoryNode.nodeId);
+            categoryNode.scenarioCount = categoryScenarios;
+            applyHighestTier(categoryNode);
             const int categoryIndex = pushNode(std::move(categoryNode), -1);
 
             for (const auto &entry: category.scenarios)
-                addScenario(categoryIndex, entry, scenarios, tierNames, blockedEntries);
+                addScenario(categoryIndex, entry, scenarios, tiers, blockedEntries);
 
             for (const auto &subcategory: category.subcategories) {
+                const int subcategoryScenarios = scenarioCountOf(subcategory);
+                if (subcategoryScenarios == 0) continue;
                 Node subNode;
                 subNode.nodeId = q(subcategory.id.value);
                 subNode.kind = QStringLiteral("subcategory");
                 subNode.name = q(subcategory.name);
                 subNode.color = toQColor(subcategory.color);
-                subNode.highestTierText = highestTierText(subNode.nodeId);
+                subNode.scenarioCount = subcategoryScenarios;
+                applyHighestTier(subNode);
                 const int subIndex = pushNode(std::move(subNode), categoryIndex);
                 for (const auto &entry: subcategory.scenarios)
-                    addScenario(subIndex, entry, scenarios, tierNames, blockedEntries);
+                    addScenario(subIndex, entry, scenarios, tiers, blockedEntries);
             }
         }
 
