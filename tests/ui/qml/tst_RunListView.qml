@@ -51,7 +51,7 @@ TestCase {
         verify(delegate !== null)
         verify(findChild(delegate, "runScore_0").text.indexOf("8421") !== -1)
         verify(findChild(delegate, "runAccuracy_0").text.indexOf("91.0%") !== -1)
-        verify(findChild(delegate, "runDate_0").text.length > 0)
+        compare(findChild(delegate, "runLabel_0").text, "run")
         verify(findChild(delegate, "personalBestBadge_0").visible)
 
         runSelectedSpy.target = view
@@ -79,7 +79,7 @@ TestCase {
 
     function test_sortFieldSelectionEmitsSortRequestedAndReordersRows() {
         const view = createView({runModel: makeSortableRuns()})
-        compare(findChild(view, "runScore_0").text, "8000")
+        compare(findChild(view, "runScore_0").text, "Score 8000")
 
         const combo = findChild(view, "runSortCombo")
         verify(combo !== null)
@@ -109,9 +109,9 @@ TestCase {
         ]
         wait(0)
 
-        compare(findChild(view, "runScore_0").text, "9500")
-        compare(findChild(view, "runScore_1").text, "8000")
-        compare(findChild(view, "runScore_2").text, "7000")
+        compare(findChild(view, "runScore_0").text, "Score 9500")
+        compare(findChild(view, "runScore_1").text, "Score 8000")
+        compare(findChild(view, "runScore_2").text, "Score 7000")
     }
 
     function test_sortDirectionToggleEmitsSortRequestedWithFlippedDirection() {
@@ -129,7 +129,7 @@ TestCase {
         compare(sortRequestedSpy.signalArguments[0][0], 0)
         compare(sortRequestedSpy.signalArguments[0][1], true)
     }
-    // --- dense, scannable rows -----------------------------------------
+    // --- two-line run cards -------------------------------------------
 
     function makeManyRuns(count) {
         const runs = []
@@ -140,43 +140,32 @@ TestCase {
         return runs
     }
 
-    function test_rowsAreAtLeastTwiceAsDenseAsTheOldCards() {
-        const view = createView({runModel: makeManyRuns(12), height: 300})
-        const row = findChild(view, "runItem_0")
-        verify(row !== null)
-        // The old two-line cards took ~60px plus 6px spacing per run.
-        verify(row.height <= 33, "a run row is " + row.height + "px; it must be at most half the old 66px pitch")
-        verify(findChild(view, "runItem_1").y - row.y <= 33)
-    }
-
-    function test_eachRowShowsDateScoreAccuracyAndPersonalBestInColumns() {
+    function test_cardShowsTitleThenScoreAccuracyAndPersonalBest() {
         const view = createView({runModel: makeManyRuns(3)})
-        compare(Qt.formatDateTime(new Date(1723200000000), "yyyy-MM-dd  HH:mm"), findChild(view, "runDate_0").text)
-        compare(findChild(view, "runScore_0").text, "3400")
-        compare(findChild(view, "runAccuracy_0").text, "68.0%")
-        verify(findChild(view, "personalBestBadge_0").visible)
+        const card = findChild(view, "runItem_0")
+        compare(findChild(card, "runLabel_0").text, "Pasu Gallery #0")
+        compare(findChild(card, "runScore_0").text, "Score 3400")
+        compare(findChild(card, "runAccuracy_0").text, "Acc 68.0%")
+        verify(findChild(card, "personalBestBadge_0").visible)
         verify(!findChild(view, "personalBestBadge_1").visible)
-        // One line: every cell shares the row's vertical band.
-        const row = findChild(view, "runItem_0")
-        for (const name of ["runDate_0", "runScore_0", "runAccuracy_0"]) {
-            const cell = findChild(view, name)
-            const top = cell.mapToItem(row, 0, 0).y
-            verify(top >= 0 && top + cell.height <= row.height, name + " must sit on the row's single line")
-        }
-        // The same column starts at the same x in every row.
-        compare(findChild(view, "runScore_1").mapToItem(view, 0, 0).x,
-                findChild(view, "runScore_0").mapToItem(view, 0, 0).x)
-        verify(findChild(view, "runListColumnHeader").visible, "columns are titled")
-        // A single-scenario list does not repeat the scenario name on every row.
-        verify(!findChild(view, "runScenario_0").visible)
+        // Two lines: the title sits above the score line, both inside the card.
+        const title = findChild(card, "runLabel_0").mapToItem(card, 0, 0).y
+        const scoreLine = findChild(card, "runScore_0").mapToItem(card, 0, 0).y
+        verify(scoreLine > title, "the score line must be below the title")
+        verify(scoreLine + findChild(card, "runScore_0").height <= card.height)
+        // Cards are separated, so each reads as its own clickable item.
+        verify(findChild(view, "runItem_1").y - card.y >= card.height + view.cardSpacing - 0.5)
     }
 
-    function test_recentRowsNameTheirScenario() {
-        const view = createView({runModel: makeManyRuns(2), showScenarioName: true, showSort: false, title: ""})
-        const scenario = findChild(view, "runScenario_0")
-        verify(scenario.visible)
-        compare(scenario.text, "Pasu Gallery")
-        verify(findChild(view, "runDate_0").text.length > 0)
+    function test_cardLiftsOnHover() {
+        const view = createView({runModel: makeManyRuns(2)})
+        const card = findChild(view, "runItem_1")
+        mouseMove(view, 1, view.height - 1)
+        tryVerify(() => !card.pointerOver)
+        const rest = card.background.color.toString()
+        mouseMove(card, card.width / 2, card.height / 2)
+        tryVerify(() => card.pointerOver)
+        verify(card.background.color.toString() !== rest, "hovering must visibly change the card")
     }
 
     function test_rowExposesAnAccessibleSummary() {
@@ -185,14 +174,14 @@ TestCase {
         verify(name.indexOf("3400") !== -1 && name.indexOf("68.0%") !== -1 && name.indexOf("personal best") !== -1, name)
     }
 
-    // --- whole-row sizing and a visible scroll bar ---------------
+    // --- whole-card sizing and a visible scroll bar --------------
 
     function test_heightForRowsFitsWholeRowsAndShowsScrollBarWhenOverflowing() {
         const view = createView({runModel: makeManyRuns(10), showSort: false, title: ""})
         view.height = view.heightForRows(4)
         wait(0)
         const list = findChild(view, "runListView")
-        tryCompare(list, "height", 4 * view.rowHeight)
+        tryCompare(list, "height", 4 * view.rowHeight - view.cardSpacing)
         verify(view.scrollable)
         verify(findChild(view, "runListScrollBar").visible, "an overflowing list shows its scroll bar")
 

@@ -261,8 +261,9 @@ TestCase {
 
         const recentList = findChild(recent, "runListView")
         verify(recent.height <= panel.height * 0.3, "Recent takes " + recent.height + "px of " + panel.height)
-        compare(recentList.height % recent.rowHeight, 0, "Recent must end on a whole row, never through a run's text")
-        verify(recentList.height / recent.rowHeight >= 3)
+        compare((recentList.height + recent.cardSpacing) % recent.rowHeight, 0,
+                "Recent must end on a whole card, never through a run's text")
+        verify((recentList.height + recent.cardSpacing) / recent.rowHeight >= 2)
         verify(recent.scrollable)
         verify(findChild(recent, "runListScrollBar").visible, "Recent must visibly indicate that it scrolls")
 
@@ -272,7 +273,7 @@ TestCase {
                "scenario list shows " + (scenarioList.height / scenarioRow.height).toFixed(1) + " rows")
         const runs2 = findChild(panel, "scenarioRunsView")
         const runList = findChild(runs2, "runListView")
-        verify(runList.height >= 4 * runs2.rowHeight,
-               "run list shows " + (runList.height / runs2.rowHeight).toFixed(1) + " rows")
+        verify(runList.height + runs2.cardSpacing >= 2 * runs2.rowHeight,
+               "run list shows " + (runList.height / runs2.rowHeight).toFixed(1) + " cards")
     }
 }

@@ -14,16 +14,16 @@ ColumnLayout {
     property bool showSort: true
     property int sortField: 0
     property bool sortAscending: false
-    // Recent lists runs of every scenario, so it adds a scenario column.
-    property bool showScenarioName: false
-
-    readonly property int rowHeight: Math.ceil(dateProbe.implicitHeight) + 8
+    // Spacing between run cards.
+    readonly property int cardSpacing: 6
+    // One card plus the gap after it, measured from a hidden card so it always matches the
+    // delegate (fonts, padding, PB badge).
+    readonly property int rowHeight: Math.ceil(cardProbe.implicitHeight) + cardSpacing
     readonly property int runCount: !runModel ? 0
                                     : (runModel.count !== undefined ? runModel.count : runModel.length)
-    // Height of the header rows above the list, so a parent can size the list to
-    // a whole number of rows (SelectionPanel bounds Recent this way).
-    readonly property real chromeHeight: (headerRow.visible ? headerRow.implicitHeight + spacing : 0)
-                                         + columnHeader.implicitHeight + spacing
+    // Height of the header row above the list, so a parent can size the list to a
+    // whole number of cards (SelectionPanel bounds Recent this way).
+    readonly property real chromeHeight: headerRow.visible ? headerRow.implicitHeight + spacing : 0
     readonly property bool scrollable: runList.contentHeight > runList.height + 1
 
     signal runSelected(string hash, double startTimeMs)
@@ -33,20 +33,24 @@ ColumnLayout {
         return runCount === 0
     }
 
-    // Height that shows exactly `rows` rows (no row cut through its text).
+    // Height that shows exactly `rows` cards (no card cut through its text).
     function heightForRows(rows) {
-        return chromeHeight + Math.max(1, rows) * rowHeight
+        return chromeHeight + Math.max(1, rows) * rowHeight - cardSpacing
     }
 
-    // Column widths are measured with the same (default) Label font the rows use.
-    readonly property real scoreColumnWidth: Math.ceil(scoreProbe.implicitWidth) + 2
-    readonly property real accuracyColumnWidth: Math.ceil(accuracyProbe.implicitWidth) + 2
-    readonly property real personalBestColumnWidth: 28
-    readonly property real dateColumnWidth: Math.ceil(dateProbe.implicitWidth) + 2
-
-    Label { id: dateProbe; visible: false; text: "May 30, 23:59" }
-    Label { id: scoreProbe; visible: false; text: "000000" }
-    Label { id: accuracyProbe; visible: false; text: "100.0%" }
+    ScenarioRunItem {
+        id: cardProbe
+        // Never shown; index -1 keeps its object names clear of the real runItem_N cards.
+        objectName: "runItemProbe"
+        visible: false
+        index: -1
+        hash: ""
+        runLabel: "Probe (2026-01-01, 00:00:00)"
+        score: 0
+        accuracy: 0
+        personalBest: true
+        startTimeMs: 0
+    }
 
     RowLayout {
         id: headerRow
@@ -92,57 +96,14 @@ ColumnLayout {
         }
     }
 
-    // Column titles, aligned with the cells of ScenarioRunItem.
-    RowLayout {
-        id: columnHeader
-        objectName: "runListColumnHeader"
-        Layout.fillWidth: true
-        Layout.leftMargin: 8
-        Layout.rightMargin: 6 + (runList.ScrollBar.vertical.visible ? runList.ScrollBar.vertical.width : 0)
-        spacing: 8
-        visible: !root.hasNoRuns()
-        opacity: 0.6
-
-        Label {
-            Layout.fillWidth: true
-            Layout.preferredWidth: 0
-            visible: root.showScenarioName
-            font.pixelSize: 11
-            text: qsTr("Scenario")
-        }
-        Label {
-            Layout.fillWidth: !root.showScenarioName
-            Layout.preferredWidth: root.showScenarioName ? root.dateColumnWidth : 0
-            font.pixelSize: 11
-            text: qsTr("Played")
-        }
-        Label {
-            Layout.preferredWidth: root.scoreColumnWidth
-            horizontalAlignment: Text.AlignRight
-            font.pixelSize: 11
-            text: qsTr("Score")
-        }
-        Label {
-            Layout.preferredWidth: root.accuracyColumnWidth
-            horizontalAlignment: Text.AlignRight
-            font.pixelSize: 11
-            text: qsTr("Acc")
-        }
-        Label {
-            Layout.preferredWidth: root.personalBestColumnWidth
-            horizontalAlignment: Text.AlignHCenter
-            font.pixelSize: 11
-            text: qsTr("PB")
-        }
-    }
-
     ListView {
         id: runList
         objectName: "runListView"
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.minimumHeight: root.rowHeight
+        Layout.minimumHeight: root.rowHeight - root.cardSpacing
         clip: true
+        spacing: root.cardSpacing
         boundsBehavior: Flickable.StopAtBounds
         model: root.runModel
 
@@ -154,13 +115,7 @@ ColumnLayout {
         }
 
         delegate: ScenarioRunItem {
-            width: runList.width - (runList.ScrollBar.vertical.visible ? runList.ScrollBar.vertical.width : 0)
-            rowHeight: root.rowHeight
-            showScenarioName: root.showScenarioName
-            dateColumnWidth: root.dateColumnWidth
-            scoreColumnWidth: root.scoreColumnWidth
-            accuracyColumnWidth: root.accuracyColumnWidth
-            personalBestColumnWidth: root.personalBestColumnWidth
+            width: runList.width - (runList.ScrollBar.vertical.visible ? runList.ScrollBar.vertical.width + 2 : 0)
             currentRunHash: root.currentRunHash
             currentRunStartTimeMs: root.currentRunStartTimeMs
             onRunSelected: (hash, startTimeMs) => root.runSelected(hash, startTimeMs)

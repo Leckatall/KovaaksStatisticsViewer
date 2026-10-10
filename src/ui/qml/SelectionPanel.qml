@@ -33,10 +33,10 @@ ColumnLayout {
                                                   Math.max(root.chromeWidth,
                                                            nameMetrics.advanceWidth + root.scenarioDelegateChrome))
 
-    // Recent is bounded to whole rows (never a row cut through its text) and to
-    // about a quarter of the panel, so the scenario list and run list below always
-    // keep room; anything beyond that scrolls, with an always-visible scroll bar.
-    readonly property int recentMaximumRows: Math.max(3, Math.min(6, Math.floor(root.height * 0.25 / recentRuns.rowHeight)))
+    // Recent is bounded to whole run cards (never a card cut through its text) and to
+    // under a third of the panel, so the scenario list and run list below always keep
+    // room; anything beyond that scrolls, with an always-visible scroll bar.
+    readonly property int recentMaximumRows: Math.max(2, Math.min(4, Math.floor(root.height * 0.3 / recentRuns.rowHeight)))
     readonly property int recentVisibleRows: Math.max(1, Math.min(recentRuns.runCount, recentMaximumRows))
 
     Layout.minimumWidth: root.chromeWidth
@@ -75,7 +75,6 @@ ColumnLayout {
         visible: root.recentExpanded && root.recentSectionVisible
         title: ""
         showSort: false
-        showScenarioName: true
         emptyText: qsTr("No runs yet.")
         runModel: root.recentRunModel
         currentRunHash: root.currentRunHash
@@ -107,7 +106,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.verticalStretchFactor: 3
-        Layout.minimumHeight: scenarioRuns.heightForRows(3)
+        Layout.minimumHeight: scenarioRuns.heightForRows(2)
         Layout.preferredHeight: 0
         title: root.activeScenarioName
         visible: root.activeScenarioName !== "" && root.scenarioBrowserSectionVisible
