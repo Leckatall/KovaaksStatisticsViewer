@@ -765,6 +765,32 @@ Item {
             verify(progress.indexOf("3 of 9") !== -1, "the overall count is still shown")
         }
 
+        // the recent average reads against the PB fill on the same chunk scale.
+        function test_recentAverageMarkerSitsOnTheChunkScale() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            // sc-1w4ts: PB fill ends at 3.75; recent 2.5 is halfway through Gold's chunk.
+            fx.progressGrid.rows[1].recentPosition = 2.5
+            fx.progressGrid.rows[1].recentDescription = "Recent average 790.5 · Silver"
+            const ws = makeWorkspace(fx)
+            wait(0)
+            const bar = find(ws, "progressRow_sc-1w4ts_bar")
+            const marker = find(ws, "progressRow_sc-1w4ts_bar_marker")
+            verify(marker !== null && marker.visible, "a row with a recent value shows the marker")
+            const chunk = find(bar, bar.objectName + "_chunk_2")
+            const markerCentre = marker.mapToItem(ws, marker.width / 2, 0).x
+            fuzzyCompare(markerCentre, chunk.mapToItem(ws, chunk.width / 2, 0).x, 1,
+                         "2.5 is the middle of the third chunk")
+            const fill = find(bar, bar.objectName + "_fill_3")
+            verify(markerCentre < fill.mapToItem(ws, fill.width, 0).x, "below the PB: left of the fill's end")
+            verify(marker.height > bar.height, "the tick overhangs the bar so it shows over fill and track")
+            compare(marker.ToolTip.text, "Recent average 790.5 · Silver", "the marker has its own tooltip")
+
+            for (const id of ["sc-popcorn", "sc-pasu"]) {
+                const none = find(ws, "progressRow_" + id + "_bar_marker")
+                verify(none === null || !none.visible, id + " has no recent value and no marker")
+            }
+        }
+
         // -- focus order ----------------------------------------------
 
         function test_visualTabOrderReachesManagerAction() {

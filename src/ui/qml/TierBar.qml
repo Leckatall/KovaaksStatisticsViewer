@@ -71,8 +71,52 @@ Item {
         }
     }
 
+    // --- recent-average marker ------------------------------------------------
+    // A position on the chunk scale (chunk units, 0 = bar start, chunkCount = bar
+    // end), or negative for no marker, with its own tooltip.
+    property real marker: -1
+    property string markerDescription: ""
+
+    // Scale position to x, across the gaps between chunks.
+    function scaleX(position) {
+        if (chunkCount <= 0) return 0
+        const clamped = Math.max(0, Math.min(chunkCount, position))
+        const index = Math.min(chunkCount - 1, Math.floor(clamped))
+        return chunkLeft(index) + (clamped - index) * (chunkRight(index) - chunkLeft(index))
+    }
+
+    Item {
+        id: markerItem
+        objectName: root.objectName.length > 0 ? root.objectName + "_marker" : ""
+        visible: root.marker >= 0 && root.chunkCount > 0
+        // A wider hover target than the tick it centres on.
+        width: 9
+        height: root.height + 6
+        x: Math.round(root.scaleX(root.marker) - width / 2)
+        y: -3
+        z: 1
+        Accessible.role: Accessible.Indicator
+        Accessible.name: root.markerDescription
+
+        // A light tick outlined in the base colour reads both over a fill and over
+        // the empty track, and overhangs the bar so its ends always show.
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 4
+            height: parent.height
+            radius: 1
+            color: root.palette.text
+            border.color: root.palette.base
+            border.width: 1
+        }
+        HoverHandler { id: markerHover }
+        ToolTip.visible: markerHover.hovered && root.markerDescription.length > 0
+        ToolTip.delay: 300
+        ToolTip.text: root.markerDescription
+    }
+
     HoverHandler { id: barHover }
-    ToolTip.visible: barHover.hovered && root.description.length > 0
+    ToolTip.visible: barHover.hovered && !markerHover.hovered && root.description.length > 0
     ToolTip.delay: 300
     ToolTip.text: root.description
 }

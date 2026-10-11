@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "benchmark_format.h"
+#include "benchmarks/benchmark_evaluator.h"
 #include "benchmarks/benchmark_ids.h"
 #include "benchmarks/benchmark_resolution.h"
 
@@ -210,6 +211,20 @@ namespace ksv::presentation {
                 for (const double fill: fills) fillList.push_back(fill);
                 map[QStringLiteral("fills")] = fillList;
 
+                // The recent average on the same chunk scale as the PB fill (-1: no marker).
+                const auto recent = projected ? projected->recentAverage : std::nullopt;
+                const auto recentPosition = tierScalePosition(m_projection.tiers, entry.thresholds, recent);
+                map[QStringLiteral("recentPosition")] = recentPosition ? *recentPosition : -1.0;
+                QString recentTier = QObject::tr("Unranked");
+                if (recentPosition && *recentPosition >= 1.0 && !m_projection.tiers.empty()) {
+                    const auto attained = std::min(static_cast<std::size_t>(std::floor(*recentPosition)),
+                                                   m_projection.tiers.size());
+                    recentTier = q(m_projection.tiers[attained - 1].name);
+                }
+                map[QStringLiteral("recentDescription")] =
+                    recentPosition ? QObject::tr("Recent average %1 · %2").arg(formatBenchmarkNumber(*recent), recentTier)
+                                   : QString();
+
                 // The next tier this scenario's PB has not reached, with the score it needs.
                 QString nextTierText;
                 QString nextTierColor;
@@ -274,6 +289,13 @@ namespace ksv::presentation {
             else if (index == 0 && *upper == 0.0) fills[index] = 1.0; // a zero first threshold is met by any score
         }
         return fills;
+    }
+
+    std::optional<double> tierScalePosition(const std::vector<domain::Tier> &tiers,
+                                            const std::vector<domain::Threshold> &thresholds,
+                                            const std::optional<double> score) {
+        if (!score || !std::isfinite(*score) || !domain::thresholdLadder(tiers, thresholds)) return std::nullopt;
+        return domain::normalizedTierValue(tiers, thresholds, score);
     }
 
     BenchmarkProgressGridModel::BenchmarkProgressGridModel(QObject *parent) : QObject(parent) {}

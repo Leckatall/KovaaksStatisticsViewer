@@ -399,6 +399,9 @@ Item {
                         y: Math.round((rowItem.height - height) / 2)
                         width: root.barWidth
                         height: root.barHeight
+                        marker: rowItem.modelData.recentPosition !== undefined
+                                ? Number(rowItem.modelData.recentPosition) : -1
+                        markerDescription: String(rowItem.modelData.recentDescription || "")
                         tiers: root.tiers
                         fills: rowItem.modelData.fills || []
                         description: String(rowItem.modelData.barDescription || "")

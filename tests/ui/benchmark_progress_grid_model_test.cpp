@@ -113,6 +113,47 @@ TEST(TierChunkFills, FilledLengthMatchesTheDomainNormalizedRank) {
     }
 }
 
+// --- the recent-average marker's position --------------------------------------------------------
+
+TEST(TierScalePosition, PlacesAScoreOnTheSameChunkScaleAsTheFills) {
+    const auto tiers = fiveTiers();
+    const auto thresholds = fiveThresholds();
+    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 500.0), 0.5, 1e-9);   // below the first tier
+    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 3000.0), 3.0, 1e-9);  // exactly on Silver
+    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 5000.0), 4.5, 1e-9);  // mid Gold -> Platinum
+    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 9000.0), 5.0, 1e-9);  // above the top tier
+}
+
+TEST(TierScalePosition, NoPositionWithoutAScoreOrAValidLadder) {
+    EXPECT_FALSE(tierScalePosition(fiveTiers(), fiveThresholds(), std::nullopt).has_value());
+    auto thresholds = fiveThresholds();
+    thresholds.pop_back();
+    EXPECT_FALSE(tierScalePosition(fiveTiers(), thresholds, 2000.0).has_value());
+}
+
+TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheFillEnd) {
+    auto fake = gridFake();
+    // e1: PB 800, recent 780; Bronze 600, Silver 900, Gold 1200.
+    fake->snap.selectedLoaded->benchmark.categories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 900.0}, Threshold{TierId{"t3"}, 1200.0}};
+    BenchmarkTrackingViewModel vm{fake};
+
+    const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
+    double fillEnd = 0.0;
+    for (const QVariant &fill: e1.value("fills").toList()) fillEnd += fill.toDouble();
+    const double recent = e1.value("recentPosition").toDouble();
+    EXPECT_NEAR(recent, 1.0 + 180.0 / 300.0, 1e-9);
+    EXPECT_LT(recent, fillEnd);
+    EXPECT_EQ(e1.value("recentDescription").toString(),
+              QString("Recent average %1 · Bronze").arg(formatBenchmarkNumber(780.0)));
+
+    // No recent value (e2) or no valid ladder (every other row here): no marker.
+    for (const char *id: {"e2", "u1", "e3"}) {
+        EXPECT_LT(rowFor(vm.progressGrid(), id).value("recentPosition").toDouble(), 0.0) << id;
+        EXPECT_TRUE(rowFor(vm.progressGrid(), id).value("recentDescription").toString().isEmpty()) << id;
+    }
+}
+
 // --- the grid ------------------------------------------------------------------------------------
 
 TEST(BenchmarkProgressGridModel, RowsFollowDefinitionOrderUnderSpanningGroups) {
