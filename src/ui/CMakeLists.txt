@@ -25,6 +25,7 @@ qt_add_qml_module(ksv_ui
             qml/BenchmarkStatusSummary.qml
             qml/BenchmarkBlockerList.qml
             qml/BenchmarkHistoryCard.qml
+            qml/ChartTitle.qml
             qml/BenchmarkBreakdownView.qml
             qml/BenchmarkBreakdownNode.qml
             qml/VisualSettingsManager.qml

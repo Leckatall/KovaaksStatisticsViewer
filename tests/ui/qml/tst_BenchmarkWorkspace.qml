@@ -466,6 +466,13 @@ Item {
                    && String(playtimeLine.text).toLowerCase().indexOf("playtime") !== -1,
                    "the playtime line must be identified as three-day average playtime")
 
+            // Card titles share the Scenarios-tab chart title style (ChartTitle).
+            for (const line of [rankLine, playtimeLine]) {
+                compare(line.horizontalAlignment, Text.AlignLeft)
+                compare(line.font.weight, Font.DemiBold)
+                compare(line.font.pixelSize, 14)
+            }
+
             verify(String(rankCard.Accessible.description).toLowerCase().indexOf("rank") !== -1,
                    "rank card description must include its metric name")
             verify(String(playtimeCard.Accessible.description).toLowerCase().indexOf("playtime") !== -1,

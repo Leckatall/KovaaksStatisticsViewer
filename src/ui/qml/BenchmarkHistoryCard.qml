@@ -28,10 +28,9 @@ Frame {
         anchors.fill: parent
         spacing: 4
 
-        Label {
+        ChartTitle {
             objectName: root.namePrefix + "LineName"
             Layout.fillWidth: true
-            font.bold: true
             text: root.metricName
         }
 
