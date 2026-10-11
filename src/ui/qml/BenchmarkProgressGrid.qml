@@ -405,6 +405,10 @@ Item {
                         tiers: root.tiers
                         fills: rowItem.modelData.fills || []
                         description: String(rowItem.modelData.barDescription || "")
+                        missing: rowItem.modelData.missingChunks || []
+                        edgeState: String(rowItem.modelData.edgeState || "")
+                        statusText: String(rowItem.modelData.statusText || "")
+                        aboveTopText: String(rowItem.modelData.aboveTopText || "")
                     }
 
                     ValueCell {

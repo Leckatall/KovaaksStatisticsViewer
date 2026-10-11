@@ -701,6 +701,50 @@ Item {
             verify(String(normal.description).indexOf("Resolved") === -1, "a normal match is not reported")
         }
 
+        // -- tier bar edge states ------------------------------------------
+
+        function test_tierBarEdgeStatesEachHaveTheirOwnLook() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            const rows = fx.progressGrid.rows
+            rows[0].edgeState = "unmatched"                  // sc-popcorn: several scenarios match
+            rows[0].statusText = "Several scenarios match"
+            rows[2].edgeState = "aboveTop"                   // sc-pasu: above Platinum
+            rows[2].aboveTopText = "Above Platinum: 1,040.25 / 1,000"
+            rows[3].missingChunks = [false, false, false, true]  // sc-smooth: no Platinum threshold
+            rows.push(TestDoubles.makeFakeProgressRow({
+                entryId: "sc-new", name: "Brand new", fills: [0, 0, 0, 0],
+                edgeState: "unplayed", statusText: "Unplayed"
+            }))
+            fx.progressGrid.groups[4].span = 2
+            const ws = makeWorkspace(fx)
+            wait(0)
+
+            const unmatched = find(ws, "progressRow_sc-popcorn_bar")
+            verify(find(unmatched, unmatched.objectName + "_outline").visible, "unmatched: outlined bar")
+            compare(find(unmatched, unmatched.objectName + "_status").text, "Several scenarios match")
+            verify(find(unmatched, unmatched.objectName + "_status").visible, "with its status in the bar")
+
+            const unplayed = find(ws, "progressRow_sc-new_bar")
+            const unplayedStatus = find(unplayed, unplayed.objectName + "_status")
+            verify(unplayedStatus.visible && unplayedStatus.text === "Unplayed", "unplayed: a muted label")
+            verify(!find(unplayed, unplayed.objectName + "_outline").visible, "unplayed is not outlined")
+            for (let i = 0; i < 4; ++i)
+                verify(!find(unplayed, unplayed.objectName + "_fill_" + i).visible, "unplayed has no fill")
+
+            const above = find(ws, "progressRow_sc-pasu_bar")
+            const mark = find(above, above.objectName + "_aboveTop")
+            verify(mark.visible, "above the top tier: a mark past the bar's end")
+            verify(mark.mapToItem(ws, mark.width, 0).x > above.mapToItem(ws, above.width, 0).x,
+                   "the mark sits at the bar's end")
+            compare(mark.ToolTip.text, "Above Platinum: 1,040.25 / 1,000")
+            const normal = find(ws, "progressRow_sc-1w4ts_bar")
+            verify(!find(normal, normal.objectName + "_aboveTop").visible, "only above the top tier")
+
+            const smooth = find(ws, "progressRow_sc-smooth_bar")
+            verify(find(smooth, smooth.objectName + "_hatch_3").visible, "a chunk without thresholds is hatched")
+            verify(!find(smooth, smooth.objectName + "_hatch_2").visible, "the others are not")
+        }
+
         // -- rank names use their tier colours --------------------------
 
         function test_rankNamesUseTierColours() {

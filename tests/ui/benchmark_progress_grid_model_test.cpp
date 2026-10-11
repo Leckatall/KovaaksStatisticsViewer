@@ -337,6 +337,61 @@ TEST(BenchmarkProgressGridModel, AnEntryMissingFromTheProjectionIsReportedNotFou
     EXPECT_EQ(e1.value("personalBestText").toString(), "—");
 }
 
+TEST(MissingThresholdChunks, FlagsChunksWithAnUnusableBound) {
+    EXPECT_EQ(missingThresholdChunks(fiveTiers(), fiveThresholds()),
+              (std::vector<bool>{false, false, false, false, false}));
+    auto thresholds = fiveThresholds();
+    thresholds.erase(thresholds.begin() + 2);     // no Silver: Silver's and Gold's chunks
+    thresholds.back().score = 3500.0;             // Platinum 3500 below Gold 4000
+    EXPECT_EQ(missingThresholdChunks(fiveTiers(), thresholds), (std::vector<bool>{false, false, true, true, true}));
+}
+
+TEST(BenchmarkProgressGridModel, EdgeStatesUnplayedUnmatchedAndAboveTheTopTier) {
+    auto fake = gridFake();
+    auto &definition = fake->snap.selectedLoaded->benchmark;
+    // e1 (PB 800, Resolved) above Gold 700; e3 is Ambiguous; e2 has no runs of its linked scenario.
+    definition.categories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 300.0}, Threshold{TierId{"t2"}, 500.0}, Threshold{TierId{"t3"}, 700.0}};
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *grid = vm.progressGrid();
+
+    const QVariantMap e1 = rowFor(grid, "e1");
+    EXPECT_EQ(e1.value("edgeState").toString(), "aboveTop");
+    EXPECT_EQ(e1.value("aboveTopText").toString(),
+              QString("Above Gold: %1 / %2").arg(formatBenchmarkNumber(800.0), formatBenchmarkNumber(700.0)));
+
+    const QVariantMap e2 = rowFor(grid, "e2");
+    EXPECT_EQ(e2.value("edgeState").toString(), "unplayed");
+    EXPECT_EQ(e2.value("statusText").toString(), "Unplayed · no runs of the linked scenario");
+
+    for (const char *id: {"u1", "e3", "u2"}) {
+        const QVariantMap row = rowFor(grid, id);
+        EXPECT_EQ(row.value("edgeState").toString(), "unmatched") << id;
+        EXPECT_EQ(row.value("statusText").toString(), row.value("matchStateText").toString()) << id;
+        for (const QVariant &fill: row.value("fills").toList()) EXPECT_EQ(fill.toDouble(), 0.0) << id;
+    }
+
+    // Exactly on the top threshold is reached, not exceeded.
+    fake->snap.projection->scenarios[2].personalBest = 700.0;
+    fake->publish();
+    EXPECT_TRUE(rowFor(grid, "e1").value("edgeState").toString().isEmpty());
+}
+
+TEST(BenchmarkProgressGridModel, MissingThresholdChunksTravelWithTheRow) {
+    auto fake = gridFake();
+    fake->snap.selectedLoaded->benchmark.categories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t3"}, 1200.0}};
+    BenchmarkTrackingViewModel vm{fake};
+
+    const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
+    QList<bool> missing;
+    for (const QVariant &flag: e1.value("missingChunks").toList()) missing << flag.toBool();
+    EXPECT_EQ(missing, (QList<bool>{false, true, true}));
+    const QVariantList fills = e1.value("fills").toList();
+    EXPECT_EQ(fills.at(1).toDouble(), 0.0);
+    EXPECT_EQ(fills.at(2).toDouble(), 0.0) << "no partial fill in a chunk without a usable bound";
+}
+
 TEST(BenchmarkProgressGridModel, BlockingRowsNameTheNextTierInItsColour) {
     auto fake = gridFake();
     fake->snap.projection->tiers[1].color = BenchmarkColor{192, 192, 200}; // Silver, the next tier

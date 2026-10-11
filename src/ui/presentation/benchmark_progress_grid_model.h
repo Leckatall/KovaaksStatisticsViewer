@@ -24,6 +24,12 @@ namespace ksv::presentation {
                                                          const std::vector<domain::Threshold> &thresholds,
                                                          std::optional<double> score);
 
+    // Per tier chunk, whether a bound it needs is unusable: its own threshold, or the previous
+    // tier's (chunk 0 starts at 0), is missing, duplicated, negative or non-finite, or the two
+    // are not increasing. Such a chunk can never fill; the bar draws it hatched.
+    [[nodiscard]] std::vector<bool> missingThresholdChunks(const std::vector<domain::Tier> &tiers,
+                                                           const std::vector<domain::Threshold> &thresholds);
+
     // The Benchmarks tab's scenario progress grid, rebuilt from the selected definition joined
     // with its projection: one row per scenario in definition order (Uncategorized first, then each
     // category's direct scenarios and its subcategories), the group cells spanning those rows, and

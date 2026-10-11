@@ -253,6 +253,42 @@ namespace ksv::presentation {
                 if (!matchText.isEmpty()) description += QStringLiteral("\n") + matchText + QStringLiteral(": ") + matchHint;
                 map[QStringLiteral("barDescription")] = description;
 
+                // Edge states, each with its own look: an unplayed scenario, a mapping the user
+                // has to fix (with its status), a PB above the top tier, and chunks whose
+                // thresholds are unusable.
+                QVariantList missingList;
+                for (const bool missing: missingThresholdChunks(m_projection.tiers, entry.thresholds))
+                    missingList.push_back(missing);
+                map[QStringLiteral("missingChunks")] = missingList;
+                QString edgeState;
+                QString statusText;
+                QString aboveTopText;
+                const bool mappingNeedsAction = matchState == domain::ScenarioMatchState::Unresolved ||
+                                                matchState == domain::ScenarioMatchState::Ambiguous ||
+                                                matchState == domain::ScenarioMatchState::AutoMappable;
+                if (mappingNeedsAction) {
+                    edgeState = QStringLiteral("unmatched");
+                    statusText = matchText;
+                } else if (!personalBest) {
+                    // A linked scenario without runs is unplayed too; it keeps its reason.
+                    edgeState = QStringLiteral("unplayed");
+                    statusText = matchState == domain::ScenarioMatchState::MappedUnavailable
+                                     ? QObject::tr("Unplayed · no runs of the linked scenario")
+                                     : QObject::tr("Unplayed");
+                } else if (!m_projection.tiers.empty()) {
+                    const auto top = thresholdFor(entry.thresholds, m_projection.tiers.back().id);
+                    const bool allFull = std::all_of(fills.begin(), fills.end(), [](const double fill) { return fill >= 1.0; });
+                    if (top && allFull && *personalBest > *top) {
+                        edgeState = QStringLiteral("aboveTop");
+                        aboveTopText = QObject::tr("Above %1: %2 / %3")
+                                           .arg(q(m_projection.tiers.back().name), formatBenchmarkNumber(*personalBest),
+                                                formatBenchmarkNumber(*top));
+                    }
+                }
+                map[QStringLiteral("edgeState")] = edgeState;
+                map[QStringLiteral("statusText")] = statusText;
+                map[QStringLiteral("aboveTopText")] = aboveTopText;
+
                 // A row whose scenario keeps the benchmark from the next tier.
                 const auto required = m_blockerRequired.constFind(entryId);
                 const bool blocker = required != m_blockerRequired.constEnd() && !m_nextTierName.isEmpty();
@@ -315,5 +351,16 @@ namespace ksv::presentation {
             m_hasSubcategories = builder.hasSubcategories;
         }
         emit changed();
+    }
+
+    std::vector<bool> missingThresholdChunks(const std::vector<domain::Tier> &tiers,
+                                             const std::vector<domain::Threshold> &thresholds) {
+        std::vector<bool> missing(tiers.size(), false);
+        for (std::size_t index = 0; index < tiers.size(); ++index) {
+            const auto upper = thresholdFor(thresholds, tiers[index].id);
+            const auto lower = index == 0 ? std::optional<double>{0.0} : thresholdFor(thresholds, tiers[index - 1].id);
+            missing[index] = !upper || !lower || (index > 0 && *upper <= *lower);
+        }
+        return missing;
     }
 }

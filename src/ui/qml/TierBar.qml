@@ -38,6 +38,72 @@ Item {
         return isNaN(value) ? 0 : Math.max(0, Math.min(1, value))
     }
 
+    // --- edge states -------------------------------------------------------------
+    // One flag per tier: that chunk's thresholds are unusable, so it is hatched.
+    property var missing: []
+    // "" | "unplayed" | "unmatched" | "aboveTop"; statusText labels the first two.
+    property string edgeState: ""
+    property string statusText: ""
+    // Tooltip of the above-the-top-tier mark.
+    property string aboveTopText: ""
+    readonly property color unmatchedColor: "#FFB74D"
+
+    function missingAt(index) {
+        return root.missing && root.missing.length > index && root.missing[index] === true
+    }
+
+    // Unmatched or ambiguous mapping: the bar is only outlined, and says what to fix.
+    Rectangle {
+        objectName: root.objectName.length > 0 ? root.objectName + "_outline" : ""
+        visible: root.edgeState === "unmatched"
+        z: 2
+        anchors.fill: parent
+        radius: 2
+        color: root.palette.base
+        border.color: root.unmatchedColor
+        border.width: 1
+    }
+    // Unplayed or unmatched: a short status inside the (empty) bar.
+    Label {
+        objectName: root.objectName.length > 0 ? root.objectName + "_status" : ""
+        visible: (root.edgeState === "unplayed" || root.edgeState === "unmatched") && root.statusText.length > 0
+        z: 3
+        anchors.centerIn: parent
+        width: Math.min(implicitWidth, Math.max(0, root.width - 8))
+        elide: Text.ElideRight
+        // Sized to the bar so the label stays inside it.
+        font.pixelSize: Math.max(9, Math.round(root.height * 0.7))
+        color: root.edgeState === "unmatched" ? root.unmatchedColor : root.palette.placeholderText
+        font.italic: root.edgeState === "unplayed"
+        text: root.statusText
+    }
+    // Above the top tier: a small mark in the top tier's colour past the bar's end.
+    Item {
+        objectName: root.objectName.length > 0 ? root.objectName + "_aboveTop" : ""
+        visible: root.edgeState === "aboveTop" && root.chunkCount > 0
+        z: 2
+        x: root.width - 3
+        width: 9
+        height: root.height
+        Accessible.role: Accessible.Indicator
+        Accessible.name: root.aboveTopText
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 7
+            height: 7
+            rotation: 45
+            color: root.chunkCount > 0 && root.tiers[root.chunkCount - 1]
+                   ? String(root.tiers[root.chunkCount - 1].barColor || "") : root.palette.highlight
+            border.color: root.palette.base
+            border.width: 1
+        }
+        HoverHandler { id: aboveTopHover }
+        ToolTip.visible: aboveTopHover.hovered && root.aboveTopText.length > 0
+        ToolTip.delay: 300
+        ToolTip.text: root.aboveTopText
+    }
+
     Accessible.role: Accessible.ProgressBar
     Accessible.name: root.description
 
@@ -67,6 +133,25 @@ Item {
                 visible: width > 0
                 color: chunk.tier && String(chunk.tier.barColor || "").length > 0
                        ? chunk.tier.barColor : root.palette.highlight
+            }
+            // Missing thresholds: diagonal hatching instead of any fill.
+            Item {
+                objectName: root.objectName.length > 0 ? root.objectName + "_hatch_" + chunk.index : ""
+                visible: root.missingAt(chunk.index)
+                anchors.fill: parent
+                clip: true
+                Repeater {
+                    model: parent.visible ? Math.ceil((chunk.width + chunk.height) / 6) + 1 : 0
+                    delegate: Rectangle {
+                        required property int index
+                        x: index * 6 - chunk.height
+                        y: -chunk.height / 2
+                        width: 2
+                        height: chunk.height * 2
+                        rotation: 45
+                        color: Qt.alpha(root.palette.text, 0.35)
+                    }
+                }
             }
         }
     }
