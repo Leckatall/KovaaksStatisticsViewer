@@ -30,20 +30,6 @@ namespace ksv::ui {
                 return std::max(a.top(), b.top()) - std::min(a.bottom(), b.bottom());
             return std::max(a.left(), b.left()) - std::min(a.right(), b.right());
         }
-
-        qreal relativeLuminance(const QColor &color) {
-            const auto channel = [](const qreal c) {
-                return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
-            };
-            return 0.2126 * channel(color.redF()) + 0.7152 * channel(color.greenF()) +
-                   0.0722 * channel(color.blueF());
-        }
-
-        qreal contrastRatio(const QColor &a, const QColor &b) {
-            const qreal la = relativeLuminance(a);
-            const qreal lb = relativeLuminance(b);
-            return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
-        }
     }
 
     QFont AxisPainter::tickFont(const Style &style) {
@@ -118,14 +104,6 @@ namespace ksv::ui {
             }
         }
 
-        if (style.axisLineColor.isValid()) {
-            painter.setPen(QPen(style.axisLineColor, 2));
-            if (orientation == Orientation::Vertical)
-                painter.drawLine(QPointF(plot.left(), plot.top()), QPointF(plot.left(), plot.bottom()));
-            else
-                painter.drawLine(QPointF(plot.left(), plot.bottom()), QPointF(plot.right(), plot.bottom()));
-        }
-
         painter.setPen(style.textColor);
         const Qt::Alignment alignment = orientation == Orientation::Vertical
                                             ? (Qt::AlignRight | Qt::AlignVCenter)
@@ -148,18 +126,5 @@ namespace ksv::ui {
             maxWidth = std::max(maxWidth, metrics.horizontalAdvance(formatTick(value)));
         }
         return maxWidth;
-    }
-
-    QColor AxisPainter::legibleOn(const QColor &accent, const QColor &background, const qreal minimumContrast) {
-        if (!accent.isValid() || !background.isValid()) return accent;
-        QColor candidate = accent;
-        candidate.setAlpha(255);
-        for (int step = 1; step <= 20 && contrastRatio(candidate, background) < minimumContrast; ++step) {
-            const qreal mix = step / 20.0; // blend towards white, 5% at a time
-            candidate = QColor::fromRgbF(accent.redF() + (1.0 - accent.redF()) * mix,
-                                         accent.greenF() + (1.0 - accent.greenF()) * mix,
-                                         accent.blueF() + (1.0 - accent.blueF()) * mix);
-        }
-        return candidate;
     }
 }

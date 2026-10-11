@@ -81,10 +81,6 @@ Frame {
                             }
                             return names.join(", ")
                         }
-                        // Other visible lines have their own scale: tie the axis to its line's colour.
-                        textColor: historyCanvas.hasIndependentlyScaledSeries
-                                   ? historyCanvas.labelledYAxisColor
-                                   : Qt.alpha(root.palette.text, 0.6)
                     }
                     GraphCanvasWithTooltip {
                         id: historyCanvas

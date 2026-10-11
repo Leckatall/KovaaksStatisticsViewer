@@ -82,6 +82,15 @@ Item {
             compare(canvas.pointMarkers, true)
         }
 
+        // The rotated Y-axis title names the labelled axis in the default grey, never a series colour.
+        function test_yAxisTitleIsGrey() {
+            const panel = createTemporaryObject(fewRunsPanelComponent, root)
+            verify(!!panel, "Component exists")
+            let label = null
+            tryVerify(() => (label = findChild(panel, "historyYAxisTitleLabel")) !== null, 2000)
+            verify(Qt.colorEqual(label.color, Qt.alpha(label.palette.text, 0.6)), "axis title colour " + label.color)
+        }
+
         function test_titleBindsThroughHistoryViewModel() {
             const panel = createTemporaryObject(panelComponent, root)
             verify(!!panel, "Component exists")

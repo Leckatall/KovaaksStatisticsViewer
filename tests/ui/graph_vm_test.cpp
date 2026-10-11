@@ -355,6 +355,25 @@ namespace {
         EXPECT_EQ(view_model.columnForSeriesId("missing"), -1);
     }
 
+    // series() follows the series config (line-list) order, not the lexical order of the id
+    // strings ("10" < "2" < "9"), and not the order the columns were asked for.
+    TEST_F(GraphViewModelTest, SeriesFollowTheLineListOrder) {
+        const auto config = [](const uint64_t id, const std::string &name, const uint32_t position) {
+            return SeriesConfig{{id}, {name, {{0, 150, 0, 255}, 2.0}, true, position}, primitive(PrimitiveMetric::Score)};
+        };
+        fake_use_case->addSeries(config(9, "Nine", 0), pts({0, 1}, {1, 2}));
+        fake_use_case->addSeries(config(10, "Ten", 1), pts({0, 1}, {1, 2}));
+        fake_use_case->addSeries(config(2, "Two", 2), pts({0, 1}, {1, 2}));
+        fake_use_case->run_duration = 1.0;
+
+        view_model.fetchData();
+
+        QList<int> columns;
+        for (const auto *s: view_model.series({2, 10, 9})) columns.append(s->column());
+        EXPECT_EQ(columns, (QList<int>{9, 10, 2}));
+        EXPECT_EQ(view_model.enabledSeriesIds(), (QVariantList{"9", "10", "2"}));
+    }
+
     TEST_F(GraphViewModelTest, ContentStateStartsAtNoRunSelected) {
         EXPECT_EQ(view_model.contentState(), GraphViewModel::NoRunSelected);
     }

@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <QStringList>
 #include <QUrl>
 #include <QVariantList>
 #include <memory>
@@ -288,8 +289,6 @@ namespace {
         canvas.setYAxisColumn(kScoreSeriesId);
 
         EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(), QVariantList{kScoreSeriesId});
-        EXPECT_TRUE(canvas.property("hasIndependentlyScaledSeries").toBool());
-        EXPECT_TRUE(canvas.property("labelledYAxisColor").value<QColor>().isValid());
     }
 
     TEST_F(GraphCanvasGeometryTest, LinesSharingTheLabelledAxisAreAllMeasuredByIt) {
@@ -298,7 +297,6 @@ namespace {
 
         EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(),
                   (QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId, kExpectedFinal5sSeriesId}));
-        EXPECT_FALSE(canvas.property("hasIndependentlyScaledSeries").toBool());
     }
 
     TEST_F(GraphCanvasGeometryTest, MixedLinesNameOnlyTheSharedGroup) {
@@ -307,14 +305,40 @@ namespace {
 
         EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(),
                   (QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId}));
-        EXPECT_TRUE(canvas.property("hasIndependentlyScaledSeries").toBool());
     }
 
-    TEST_F(GraphCanvasGeometryTest, ASingleLineIsNotIndependentlyScaled) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId});
+    // --- Lines stack in the user's line-list order. ---
 
-        EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(), QVariantList{kScoreSeriesId});
-        EXPECT_FALSE(canvas.property("hasIndependentlyScaledSeries").toBool());
+    // The labelled axis no longer pulls its line to the front: the first series in the list is
+    // painted last (on top) whatever order the columns are made visible in or which line owns the
+    // axis, and the hover readout lists the same series top-of-list first.
+    TEST_F(GraphCanvasGeometryTest, LinesArePaintedBottomOfTheListFirst) {
+        canvas.setVisibleColumns(QVariantList{kScoreTotalSeriesId, kAccuracySeriesId, kScoreSeriesId});
+        canvas.setYAxisColumn(kScoreTotalSeriesId);
+
+        EXPECT_EQ(canvas.paintOrder(), (QList<int>{kScoreTotalSeriesId, kAccuracySeriesId, kScoreSeriesId}));
+
+        const QRectF rect = canvas.property("plotArea").toRectF();
+        const QVariantList hovered = canvas.valuesAtX(rect.center().x()).value("series").toList();
+        QStringList names;
+        for (const auto &entry: hovered) names.append(entry.toMap().value("name").toString());
+        EXPECT_EQ(names, (QStringList{"Score", "Accuracy", "Score Total"}));
+    }
+
+    TEST_F(GraphCanvasGeometryTest, PaintOrderReversesTheEnabledLineList) {
+        QVariantList visible;
+        QList<int> expected;
+        for (const auto &id: graphVm->enabledSeriesIds()) {
+            const int column = graphVm->columnForSeriesId(id.toString());
+            if (graphVm->series({column}).isEmpty()) continue;
+            visible.append(column);
+            expected.prepend(column);
+        }
+        ASSERT_GE(expected.size(), 2);
+        canvas.setVisibleColumns(visible);
+
+        EXPECT_EQ(canvas.paintOrder(), expected);
+        EXPECT_EQ(canvas.paintOrder().back(), kScoreSeriesId) << "Score heads the default list, so it is on top";
     }
 
     // --- Real data points are marked while sparse. ---

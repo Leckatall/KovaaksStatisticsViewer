@@ -91,7 +91,6 @@ namespace ksv::ui {
         if (m_backgroundColor == backgroundColor) return;
         m_backgroundColor = backgroundColor;
         emit backgroundColorChanged();
-        emit labelledYAxisColumnChanged();
         update();
     }
 
@@ -116,42 +115,36 @@ namespace ksv::ui {
         return any;
     }
 
-    GraphCanvas::AxisOwnership GraphCanvas::axisOwnership() const {
-        AxisOwnership ownership;
-        if (!m_graphVm) return ownership;
-        const int labelledColumn = labelledYAxisColumn();
-        const auto series = m_graphVm->series(visibleColumnIds());
-        for (const auto *s: series) {
-            if (s->column() == labelledColumn) {
-                ownership.labelled = s;
-                break;
-            }
-        }
-        if (!ownership.labelled) return ownership;
-        const auto &sharedAxis = ownership.labelled->yAxisId;
-        for (const auto *s: series) {
-            if (s == ownership.labelled || (sharedAxis && s->yAxisId == sharedAxis))
-                ownership.columns.append(s->column());
-            else
-                ownership.othersIndependent = true;
-        }
-        return ownership;
-    }
-
     QVariantList GraphCanvas::labelledYAxisColumns() const {
         QVariantList columns;
-        for (const int column: axisOwnership().columns) columns.append(column);
+        if (!m_graphVm) return columns;
+        const int labelledColumn = labelledYAxisColumn();
+        const auto series = m_graphVm->series(visibleColumnIds());
+        const auto labelled = std::ranges::find_if(series, [labelledColumn](const auto *s) {
+            return s->column() == labelledColumn;
+        });
+        if (labelled == series.end()) return columns;
+        const auto &sharedAxis = (*labelled)->yAxisId;
+        for (const auto *s: series) {
+            if (s == *labelled || (sharedAxis && s->yAxisId == sharedAxis)) columns.append(s->column());
+        }
         return columns;
     }
 
-    bool GraphCanvas::hasIndependentlyScaledSeries() const {
-        return axisOwnership().othersIndependent;
+    QList<const presentation::SeriesModel *> GraphCanvas::seriesInPaintOrder() const {
+        QList<const presentation::SeriesModel *> ordered;
+        if (!m_graphVm) return ordered;
+        // series() is in the user's line-list order; painting it back to front leaves the series
+        // highest in the list on top.
+        const auto series = m_graphVm->series(visibleColumnIds());
+        for (auto it = series.crbegin(); it != series.crend(); ++it) ordered.append(*it);
+        return ordered;
     }
 
-    QColor GraphCanvas::labelledYAxisColor() const {
-        const auto ownership = axisOwnership();
-        if (!ownership.labelled) return {};
-        return AxisPainter::legibleOn(ownership.labelled->color(), m_backgroundColor);
+    QList<int> GraphCanvas::paintOrder() const {
+        QList<int> columns;
+        for (const auto *s: seriesInPaintOrder()) columns.append(s->column());
+        return columns;
     }
 
     QList<int> GraphCanvas::visibleColumnIds() const {
@@ -223,18 +216,11 @@ namespace ksv::ui {
 
         const QRectF bounds(0, 0, width(), height());
 
-        // Only one series' Y axis gets labels; all project against their own axis. When other
-        // visible lines are scaled on their own, the labels and axis line take the labelled
-        // series' colour so the numbers visibly belong to that line only.
+        // Only one series' Y axis gets labels; all project against their own axis.
         if (const auto yAxis = labelledYAxis()) {
-            AxisPainter::Style style;
-            if (const auto ownership = axisOwnership(); ownership.labelled && ownership.othersIndependent) {
-                style.textColor = AxisPainter::legibleOn(ownership.labelled->color(), m_backgroundColor);
-                style.axisLineColor = ownership.labelled->color();
-            }
             AxisPainter::paint(*painter, rect, bounds, AxisPainter::Orientation::Vertical,
                                yAxis->min(), yAxis->max(), yAxis->ticks(),
-                               [&yAxis](const qreal v) { return yAxis->formatTick(v); }, style);
+                               [&yAxis](const qreal v) { return yAxis->formatTick(v); });
         }
         AxisPainter::paint(*painter, rect, bounds, AxisPainter::Orientation::Horizontal,
                            xAxis.min(), xAxis.max(), xAxis.ticks(),
@@ -244,15 +230,8 @@ namespace ksv::ui {
     void GraphCanvas::drawSeries(QPainter *painter, const QRectF &rect) const {
         if (!m_graphVm) return;
 
-        // Lines on the labelled axis are drawn last so the line the numbers belong to is never
-        // hidden under an independently scaled line with the same shape.
-        const QList<int> onLabelledAxis = axisOwnership().columns;
-        QList<const presentation::SeriesModel *> ordered;
-        const auto series = m_graphVm->series(visibleColumnIds());
-        for (const auto *s: series) if (!onLabelledAxis.contains(s->column())) ordered.append(s);
-        for (const auto *s: series) if (onLabelledAxis.contains(s->column())) ordered.append(s);
-
-        for (const auto *s: ordered) {
+        // Each line's markers are painted with it, so they stack the same way as the lines.
+        for (const auto *s: seriesInPaintOrder()) {
             const QList<QPointF> displayPoints = s->displayPoints();
             if (displayPoints.isEmpty()) continue;
 

@@ -64,26 +64,15 @@ Frame {
         radius: 12
     }
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
-        spacing: 4
+        spacing: 6
 
-        Label {
-            id: scenarioTitleLabel
-
-            Layout.fillWidth: true
-            Layout.topMargin: 4
-            elide: Text.ElideRight
-            font.bold: true
-            font.pixelSize: 16
-            horizontalAlignment: Text.AlignHCenter
-            objectName: "scenarioTitleLabel"
-            // The VM's title is empty while no run is selected; the panel keeps a neutral name.
-            text: root.graphVm.scenarioTitle !== "" ? root.graphVm.scenarioTitle : qsTr("Run graph")
-        }
-        // The line toggles sit inside the panel whose lines they switch.
+        // The line legend runs down the panel's left side, beside the title as well as the plot,
+        // so it costs plot width rather than height. It scrolls when the panel is too short.
         ControlPanel {
-            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.preferredWidth: implicitWidth
             objectName: "graphLineToggles"
             visible: root.visualSettings.controlPanelVisible !== false
             graphVm: root.graphVm
@@ -91,70 +80,43 @@ Frame {
 
             onConfigureLinesRequested: root.configureLinesRequested()
         }
-        // One always-present, always-filling slot so the plot and the empty-state messages occupy the
-        // exact same area — the panel's height must not change with contentState.
-        Item {
+        ColumnLayout {
             Layout.fillHeight: true
             Layout.fillWidth: true
-            objectName: "graphContentArea"
+            spacing: 4
 
-            Loader {
-                anchors.fill: parent
-                active: root.graphVm.contentState === GraphViewModel.HasData
-                sourceComponent: Component {
-                    ColumnLayout {
-                        id: plotColumn
+            Label {
+                id: scenarioTitleLabel
 
-                        anchors.fill: parent
-                        spacing: 2
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                elide: Text.ElideRight
+                font.bold: true
+                font.pixelSize: 16
+                horizontalAlignment: Text.AlignHCenter
+                objectName: "scenarioTitleLabel"
+                // The VM's title is empty while no run is selected; the panel keeps a neutral name.
+                text: root.graphVm.scenarioTitle !== "" ? root.graphVm.scenarioTitle : qsTr("Run graph")
+            }
+            // One always-present, always-filling slot so the plot and the empty-state messages occupy
+            // the exact same area — the panel's height must not change with contentState.
+            Item {
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                objectName: "graphContentArea"
 
-                        readonly property string axisNames: root.namesForColumns(canvasWithTooltip.labelledYAxisColumns)
-                        readonly property var axisSeries: root.seriesForColumn(canvasWithTooltip.labelledYAxisColumn)
-
-                        // Lines are scaled independently, so the Y-axis numbers belong only to the
-                        // labelled line(s); say so instead of implying a shared scale.
+                Loader {
+                    anchors.fill: parent
+                    active: root.graphVm.contentState === GraphViewModel.HasData
+                    sourceComponent: Component {
                         RowLayout {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: 4
-                            objectName: "yAxisScaleCaption"
-                            spacing: 5
-                            visible: canvasWithTooltip.hasIndependentlyScaledSeries
-
-                            Rectangle {
-                                Layout.alignment: Qt.AlignVCenter
-                                color: plotColumn.axisSeries ? plotColumn.axisSeries.color : "transparent"
-                                height: 9
-                                radius: 2
-                                width: 9
-                            }
-                            Label {
-                                objectName: "yAxisScaleCaptionAxis"
-                                color: canvasWithTooltip.labelledYAxisColor
-                                font.bold: true
-                                font.pixelSize: 11
-                                text: qsTr("Y axis: %1").arg(plotColumn.axisNames)
-                            }
-                            Label {
-                                Layout.fillWidth: true
-                                objectName: "yAxisScaleCaptionOthers"
-                                color: root.palette.placeholderText
-                                elide: Text.ElideRight
-                                font.pixelSize: 11
-                                text: qsTr("· other lines are each scaled to fit; hover for their values")
-                            }
-                        }
-                        RowLayout {
-                            Layout.fillHeight: true
-                            Layout.fillWidth: true
+                            anchors.fill: parent
                             spacing: 0
 
                             YAxisTitle {
                                 labelObjectName: "scenarioYAxisTitleLabel"
                                 plotArea: canvasWithTooltip.plotArea
-                                text: plotColumn.axisNames
-                                textColor: canvasWithTooltip.hasIndependentlyScaledSeries
-                                           ? canvasWithTooltip.labelledYAxisColor
-                                           : Qt.alpha(root.palette.text, 0.6)
+                                text: root.namesForColumns(canvasWithTooltip.labelledYAxisColumns)
                             }
                             GraphCanvasWithTooltip {
                                 id: canvasWithTooltip
@@ -168,25 +130,25 @@ Frame {
                         }
                     }
                 }
-            }
 
-            Label {
-                anchors.centerIn: parent
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                objectName: "graphNoPerformanceLabel"
-                text: qsTr("Selected run does not support performance analysis.")
-                visible: root.graphVm.contentState === GraphViewModel.NoPerformanceData
-                wrapMode: Text.WordWrap
-            }
+                Label {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    objectName: "graphNoPerformanceLabel"
+                    text: qsTr("Selected run does not support performance analysis.")
+                    visible: root.graphVm.contentState === GraphViewModel.NoPerformanceData
+                    wrapMode: Text.WordWrap
+                }
 
-            Label {
-                anchors.centerIn: parent
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                objectName: "graphNoRunSelectedLabel"
-                text: qsTr("No run selected.")
-                visible: root.graphVm.contentState === GraphViewModel.NoRunSelected
+                Label {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    objectName: "graphNoRunSelectedLabel"
+                    text: qsTr("No run selected.")
+                    visible: root.graphVm.contentState === GraphViewModel.NoRunSelected
+                }
             }
         }
     }

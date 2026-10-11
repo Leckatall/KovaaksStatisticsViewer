@@ -137,15 +137,4 @@ namespace {
         ASSERT_EQ(labels.size(), 1);
         EXPECT_EQ(labels.front().text, "5");
     }
-
-    TEST(AxisPainterLayoutTest, LegibleOnLightensDarkAccentsOnly) {
-        const QColor background("#2d2d2d");
-        const QColor purple(128, 0, 128);
-        const QColor lightened = AxisPainter::legibleOn(purple, background);
-        EXPECT_NE(lightened, purple);
-        EXPECT_GT(lightened.lightnessF(), purple.lightnessF());
-
-        const QColor cyan(0, 255, 255);
-        EXPECT_EQ(AxisPainter::legibleOn(cyan, background), cyan);
-    }
 }

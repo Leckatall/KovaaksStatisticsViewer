@@ -28,20 +28,12 @@ namespace ksv::ui {
         // Every visible column whose line is measured on the labelled Y axis: the labelled series
         // plus any series sharing its axis (same yAxisId).
         Q_PROPERTY(QVariantList labelledYAxisColumns READ labelledYAxisColumns NOTIFY labelledYAxisColumnChanged)
-        // True when some visible line is NOT on the labelled Y axis (it is scaled on its own), so
-        // the axis numbers only belong to labelledYAxisColumns. The Y tick labels and axis line are
-        // then drawn in the labelled series' colour.
-        Q_PROPERTY(bool hasIndependentlyScaledSeries READ hasIndependentlyScaledSeries
-                   NOTIFY labelledYAxisColumnChanged)
-        // The labelled series' colour, lightened if needed to read as text on backgroundColor;
-        // invalid when no series is labelled.
-        Q_PROPERTY(QColor labelledYAxisColor READ labelledYAxisColor NOTIFY labelledYAxisColumnChanged)
         // Mark each real data point with a dot whenever the points are far enough apart to tell
         // apart (few points); dense series stay plain lines.
         Q_PROPERTY(bool pointMarkers READ pointMarkers WRITE setPointMarkers NOTIFY pointMarkersChanged)
         // Whether markers are drawn at the current size and data (pointMarkers and sparse enough).
         Q_PROPERTY(bool pointMarkersShown READ pointMarkersShown NOTIFY plotAreaChanged)
-        // Colour the graph is drawn on; used for marker outlines and legible axis-label colours.
+        // Colour the graph is drawn on; used for marker outlines.
         Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY backgroundColorChanged)
 
     public:
@@ -63,8 +55,6 @@ namespace ksv::ui {
         [[nodiscard]] int labelledYAxisColumn() const;
 
         [[nodiscard]] QVariantList labelledYAxisColumns() const;
-        [[nodiscard]] bool hasIndependentlyScaledSeries() const;
-        [[nodiscard]] QColor labelledYAxisColor() const;
 
         [[nodiscard]] bool pointMarkers() const { return m_pointMarkers; }
         void setPointMarkers(bool pointMarkers);
@@ -76,6 +66,10 @@ namespace ksv::ui {
         // Markers are drawn when consecutive points are at least this many pixels apart on average.
         static constexpr qreal kMinMarkerSpacing = 10.0;
         [[nodiscard]] static bool markersFit(int pointCount, qreal pixelSpan);
+
+        // Visible columns in the order their lines (and markers) are painted: the VM's list order
+        // reversed, so the first series in the user's line list is painted last, on top.
+        [[nodiscard]] QList<int> paintOrder() const;
 
         void paint(QPainter *painter) override;
 
@@ -93,18 +87,11 @@ namespace ksv::ui {
         void backgroundColorChanged();
 
     private:
-        // Which visible series the labelled Y axis measures, and whether any other is drawn.
-        struct AxisOwnership {
-            const presentation::SeriesModel *labelled = nullptr;
-            QList<int> columns;
-            bool othersIndependent = false;
-        };
-
-        [[nodiscard]] AxisOwnership axisOwnership() const;
-
         [[nodiscard]] QRectF plotRect() const;
 
         [[nodiscard]] QList<int> visibleColumnIds() const;
+
+        [[nodiscard]] QList<const presentation::SeriesModel *> seriesInPaintOrder() const;
 
         [[nodiscard]] const presentation::Axis &xAxisFor(const presentation::SeriesModel &series) const;
         [[nodiscard]] presentation::ValueAxis yAxisFor(const presentation::SeriesModel &series) const;

@@ -77,8 +77,9 @@ namespace ksv::presentation {
         QList<SeriesModel *> result;
         result.reserve(columns.size());
         std::array<std::vector<int>, YAxisCount> membersByAxis;
-        for (const int column: columns) {
-            if (column < Score || column >= ColumnCount) continue;
+        // Plottable column order (Score, Accuracy, Shots, Hits, Misses), whatever order was asked for.
+        for (int column = Score; column < ColumnCount; ++column) {
+            if (!columns.contains(column)) continue;
             result.append(m_series[column - Score]);
             membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
         }

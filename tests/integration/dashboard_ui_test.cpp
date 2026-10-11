@@ -13,6 +13,7 @@
 #include <QFile>
 #include <QImage>
 #include <QPainter>
+#include <QQuickItem>
 #include <QQmlApplicationEngine>
 #include <QRect>
 #include <QRectF>
@@ -22,6 +23,7 @@
 #include <QUrl>
 #include <QVariant>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -245,6 +247,72 @@ namespace {
         const QRectF plot = canvas->property("plotArea").toRectF();
         const QVariantMap sample = canvas->valuesAtX(plot.center().x());
         EXPECT_TRUE(sample.value("valid").toBool()) << "dashboard graph has no plotted data at mid-x";
+    }
+
+    // Hover dots stack like the lines: the dot of the series higher in the line list is on top,
+    // while the tooltip keeps listing the series top-of-list first.
+    TEST_F(DashboardUiTest, HoverDotsStackInLineListOrder) {
+        app()->graphVm()->fetchData(perfUrl());
+
+        auto *canvas = dashboardCanvas();
+        ASSERT_NE(canvas, nullptr);
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return canvas->property("plotArea").toRectF().width() > 0.0 && canvas->visibleColumns().size() >= 2;
+        }, 2000)) << "dashboard canvas never showed two or more lines";
+        // The hover area and the dots are siblings of the canvas inside GraphCanvasWithTooltip.
+        QQuickItem *tooltipRoot = canvas->parentItem();
+        ASSERT_NE(tooltipRoot, nullptr);
+        const auto siblingsNamed = [tooltipRoot](const QString &name) {
+            QList<QQuickItem *> found;
+            for (auto *child: tooltipRoot->childItems()) if (child->objectName() == name) found.append(child);
+            return found;
+        };
+        const auto hoverAreas = siblingsNamed("graphHoverArea");
+        ASSERT_EQ(hoverAreas.size(), 1);
+        QQuickItem *hoverArea = hoverAreas.front();
+
+        const QVariantMap info = canvas->valuesAtX(canvas->property("plotArea").toRectF().center().x());
+        ASSERT_TRUE(info.value("valid").toBool());
+        hoverArea->setProperty("hoverInfo", info);
+
+        const QVariantList listed = info.value("series").toList();
+        QList<QQuickItem *> dots;
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            dots = siblingsNamed("graphHoverDot");
+            return dots.size() == listed.size();
+        }, 2000)) << "expected one hover dot per listed series";
+        std::ranges::sort(dots, [](const QQuickItem *a, const QQuickItem *b) { return a->z() > b->z(); });
+        for (int i = 0; i < dots.size(); ++i) {
+            EXPECT_EQ(dots[i]->property("color").value<QColor>(), listed[i].toMap().value("color").value<QColor>())
+                << "dot " << i << " from the top is not the " << i << "-th listed series";
+        }
+
+        hoverArea->setProperty("hoverInfo", QVariantMap{{"valid", false}});
+    }
+
+    // The three Scenarios-tab graph panels split the column equally, whatever their content, and
+    // the visible ones still do when one is hidden.
+    TEST_F(DashboardUiTest, GraphPanelsShareTheColumnEqually) {
+        app()->graphVm()->fetchData(perfUrl());
+
+        auto *run = root()->findChild<QObject *>("scenarioGraphPanel");
+        auto *playtime = root()->findChild<QObject *>("playtimeGraphPanel");
+        auto *history = root()->findChild<QObject *>("scenarioHistoryPanel");
+        QObject *visualSettings = root()->findChild<QObject *>("visualSettings");
+        ASSERT_TRUE(run && playtime && history && visualSettings);
+        const auto height = [](const QObject *item) { return item->property("height").toReal(); };
+
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return height(run) > 0.0 && std::abs(height(run) - height(playtime)) <= 1.0 &&
+                   std::abs(height(run) - height(history)) <= 1.0;
+        }, 2000)) << "panel heights " << height(run) << ", " << height(playtime) << ", " << height(history);
+
+        visualSettings->setProperty("playtimeGraphVisible", false);
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return height(run) > 0.0 && std::abs(height(run) - height(history)) <= 1.0 &&
+                   height(run) > height(playtime);
+        }, 2000)) << "with playtime hidden: " << height(run) << ", " << height(history);
+        visualSettings->setProperty("playtimeGraphVisible", true);
     }
 
     TEST_F(DashboardUiTest, YAxisTitleLabelDefaultsToScore) {

@@ -23,8 +23,6 @@ namespace ksv::ui {
         struct Style {
             QColor gridColor{"#3D3D3D"};
             QColor textColor = QColor(255, 255, 255, 255*0.6);
-            // When valid, the axis line itself (left edge for Vertical) is drawn in this colour.
-            QColor axisLineColor;
             int fontPointSize = 8;
             qreal labelGap = 3;
             // Minimum free space between two neighbouring labels.
@@ -67,11 +65,6 @@ namespace ksv::ui {
                                         const std::function<QString(qreal)> &formatTick) {
             return measureLabelExtent(orientation, ticks, formatTick, Style{});
         }
-
-        // `accent` lightened just enough to read as small text on `background` (WCAG contrast of at
-        // least `minimumContrast`); returned unchanged when it already does.
-        [[nodiscard]] static QColor legibleOn(const QColor &accent, const QColor &background,
-                                              qreal minimumContrast = 4.5);
 
     private:
         [[nodiscard]] static QFont tickFont(const Style &style);

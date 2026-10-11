@@ -15,8 +15,6 @@ Item {
     readonly property rect plotArea: canvas.plotArea
     readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
     readonly property var labelledYAxisColumns: canvas.labelledYAxisColumns
-    readonly property bool hasIndependentlyScaledSeries: canvas.hasIndependentlyScaledSeries
-    readonly property color labelledYAxisColor: canvas.labelledYAxisColor
     readonly property bool pointMarkersShown: canvas.pointMarkersShown
 
     Layout.fillHeight: true
@@ -42,6 +40,7 @@ Item {
         acceptedButtons: Qt.NoButton
         anchors.fill: parent
         hoverEnabled: true
+        objectName: "graphHoverArea"
 
         onExited: hoverInfo = {
             valid: false
@@ -61,12 +60,18 @@ Item {
         y: plotArea.y
         z: 100
     }
+    // The dots stack like the lines: hoverInfo.series is in line-list order (top of the list
+    // first, as the tooltip lists it), so earlier entries get the higher z.
     Repeater {
+        id: hoverDots
+
         model: hoverArea.hoverInfo.valid ? hoverArea.hoverInfo.series : []
 
         Rectangle {
             required property var modelData
+            required property int index
 
+            objectName: "graphHoverDot"
             readonly property bool hasPosition: modelData.pixelY !== undefined && modelData.pixelY !== null
 
             width: 10
@@ -76,7 +81,7 @@ Item {
             visible: hasPosition
             x: hoverArea.hoverInfo.pixelX - width / 2
             y: modelData.pixelY - height / 2
-            z: 101
+            z: 101 + (hoverDots.count - index) / (hoverDots.count + 1)
             scale: 0
 
             Component.onCompleted: scale = 1

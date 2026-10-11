@@ -34,28 +34,38 @@ Item {
         anchors.margins: 5
         visible: !root.welcomeVisible
 
+        // The graph panels split the column equally whatever their content: fill items share the
+        // space in the ratio of their preferred heights, so each states the same one. A hidden
+        // panel drops out and the others share its space.
         ColumnLayout {
             Layout.row: 1; Layout.column: 1
             Layout.fillWidth: true
             Layout.fillHeight: true
+            objectName: "graphPanelColumn"
 
             DashboardGraphCanvas {
+                objectName: "scenarioGraphPanel"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredHeight: 1
                 visible: root.visualSettings.scenarioGraphVisible
                 graphVm: root.graphVm
                 visualSettings: root.visualSettings
                 onConfigureLinesRequested: root.configureGraphLinesRequested()
             }
             PlaytimeGraphPanel {
+                objectName: "playtimeGraphPanel"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredHeight: 1
                 visible: root.visualSettings.playtimeGraphVisible
                 playtimeVm: root.playtimeVm
             }
             ScenarioHistoryPanel {
+                objectName: "scenarioHistoryPanel"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredHeight: 1
                 visible: root.visualSettings.scenarioHistoryGraphVisible
                 historyVm: root.historyVm
                 columnVisibility: root.visualSettings.historyColumnVisibility

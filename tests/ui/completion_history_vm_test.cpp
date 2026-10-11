@@ -101,6 +101,18 @@ namespace {
         EXPECT_GE(series[1]->yAxis->max(), 25.0);
     }
 
+    TEST_F(CompletionHistoryViewModelTest, SeriesFollowThePlottableColumnOrder) {
+        setHistory();
+        view_model.refresh();
+
+        QList<int> columns;
+        for (const auto *s: view_model.series({CompletionHistoryViewModel::Misses, CompletionHistoryViewModel::Score,
+                                               CompletionHistoryViewModel::Accuracy}))
+            columns.append(s->column());
+        EXPECT_EQ(columns, (QList<int>{CompletionHistoryViewModel::Score, CompletionHistoryViewModel::Accuracy,
+                                       CompletionHistoryViewModel::Misses}));
+    }
+
     TEST_F(CompletionHistoryViewModelTest, RunIndexHasNoDrawableSeries) {
         setHistory();
         view_model.refresh();
