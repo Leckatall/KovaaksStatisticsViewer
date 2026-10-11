@@ -58,6 +58,26 @@ TestCase {
         return item
     }
 
+    // The mapping row is always reserved: a hint without a selected scenario, the mapping with
+    // one, and the table stays exactly where it was.
+    function test_selectingAScenarioNeverMovesTheTable() {
+        const dialog = openTableDialog({draftFromLibrary: true})
+        tryVerify(() => find(dialog, "cell_a_scenario") !== null)
+        const table = dialog.editorTable
+        const hint = find(dialog, "mappingHint")
+        tryVerify(() => hint !== null && hint.visible, 2000,
+                  "a hint stands in for the mapping while nothing is selected")
+        waitForRendering(dialog.contentItem)
+        const before = table.mapToItem(dialog.contentItem, 0, 0).y
+
+        click(dialog, "cell_a_scenario")
+        tryCompare(dialog, "currentEntryId", "a")
+        tryVerify(() => find(dialog, "matchLabel") !== null && find(dialog, "matchLabel").visible)
+        waitForRendering(dialog.contentItem)
+        compare(hint.visible, false)
+        compare(table.mapToItem(dialog.contentItem, 0, 0).y, before, "the table did not move")
+    }
+
     function test_managementWithoutCards() {
         const dialog = openTableDialog()
         verify(dialog.editorTable)

@@ -986,12 +986,12 @@ ApplicationWindow {
                     }
 
                     // Mapping details for the current row; candidates for a resolved or mapped entry
-                    // stay disarmed until "Change mapping" is pressed.
+                    // stay disarmed until "Change mapping" is pressed. Its row is always there (a hint
+                    // while no scenario is selected), so selecting a cell never moves the table.
                     Pane {
                         id: mappingPanel
                         objectName: "mappingPanel"
                         Layout.fillWidth: true
-                        visible: root.currentEntryId !== ""
                         padding: 4
                         property bool candidatesArmed: false
                         readonly property string mappingState: root.currentRow && root.currentRow.mappingState ? root.currentRow.mappingState : "unresolved"
@@ -1005,9 +1005,20 @@ ApplicationWindow {
                         ColumnLayout {
                             width: parent.width
                             spacing: 2
+                            Label {
+                                objectName: "mappingHint"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: clearMappingButton.implicitHeight
+                                visible: root.currentEntryId === ""
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                text: qsTr("Select a scenario to see its mapping")
+                                color: root.palette.placeholderText
+                            }
                             // Wraps instead of running past a narrow editor, so the buttons stay reachable.
                             Flow {
                                 Layout.fillWidth: true
+                                visible: root.currentEntryId !== ""
                                 spacing: 8
                                 Label {
                                     height: clearMappingButton.implicitHeight
@@ -1038,7 +1049,7 @@ ApplicationWindow {
                                 }
                             }
                             Repeater {
-                                model: mappingPanel.candidates
+                                model: root.currentEntryId !== "" ? mappingPanel.candidates : []
                                 delegate: ItemDelegate {
                                     id: candidateOption
                                     required property var modelData
