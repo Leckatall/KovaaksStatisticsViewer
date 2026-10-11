@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.build_runner.cli import BUILD_JOBS, UsageError, parse_args
+from scripts.build_runner.cli import UsageError, parse_args
 
 
 def test_cli_defaults_to_all_scope() -> None:
@@ -40,7 +40,3 @@ def test_target_requires_build_only_and_no_scope() -> None:
         parse_args(["--target", "ksv_driver"])
     with pytest.raises(UsageError, match="--target cannot be combined with --scope"):
         parse_args(["--build-only", "--scope", "domain", "--target", "ksv_driver"])
-
-
-def test_fixed_parallelism_is_eight() -> None:
-    assert BUILD_JOBS == 8

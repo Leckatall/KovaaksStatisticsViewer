@@ -42,5 +42,6 @@ def toolchain_tree(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     values = {key: str(path) for key, path in paths.items()}
     values["KSV_VCPKG_TRIPLET"] = "x64-mingw-dynamic"
     defaults = "\n".join(f"{key}={value}" for key, value in values.items()) + "\n"
+    defaults += "KSV_BUILD_JOBS=8\nKSV_BUILD_PRIORITY=normal\n"
     (scripts_dir / "toolchain.defaults.env").write_text(defaults, encoding="utf-8")
     return scripts_dir, values

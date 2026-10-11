@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Callable
 
 from scripts.build_runner.cli import main, parse_args
-from scripts.build_runner.config import Toolchain
+from scripts.build_runner.config import BUILD_PRIORITIES, RunnerSettings, Toolchain
 from scripts.build_runner.orchestrator import run_pipeline
 from scripts.build_runner.process import CommandResult
 
@@ -72,12 +72,15 @@ class FakeExecutor:
         return CommandResult(exit_code, kwargs["log_path"], output)
 
 
+SETTINGS = RunnerSettings(jobs=8)
+
+
 def ticking_clock(*values: float) -> Callable[[], float]:
     ticks = iter(values)
     return lambda: next(ticks)
 
 
-def test_focused_success_is_one_line_and_build_parallelism_is_internal(
+def test_focused_success_is_one_line_and_build_parallelism_comes_from_settings(
     toolchain_tree: tuple[Path, dict[str, str]], tmp_path: Path
 ) -> None:
     _, values = toolchain_tree
@@ -104,6 +107,7 @@ def test_focused_success_is_one_line_and_build_parallelism_is_internal(
         repo_root=repo,
         log_dir=log_dir,
         toolchain=toolchain,
+        settings=RunnerSettings(jobs=3, priority="below_normal"),
         process_environment={},
         execute=executor,
         emit=output.append,
@@ -111,8 +115,11 @@ def test_focused_success_is_one_line_and_build_parallelism_is_internal(
     )
 
     assert result == 0
-    assert output == ["Scope domain | jobs 8 | tests 1 | 5.6s | PASS"]
-    assert executor.commands[1][-4:] == ["--parallel", "8", "--target", "domain_tests"]
+    assert output == ["Scope domain | jobs 3 | tests 1 | 5.6s | PASS"]
+    assert executor.commands[1][-4:] == ["--parallel", "3", "--target", "domain_tests"]
+    assert {invocation["creationflags"] for invocation in executor.invocations} == {
+        BUILD_PRIORITIES["below_normal"]
+    }
 
 
 def test_build_only_target_builds_just_the_named_target(
@@ -138,6 +145,7 @@ def test_build_only_target_builds_just_the_named_target(
         repo_root=repo,
         log_dir=repo / ".temp" / "build-and-test" / "run",
         toolchain=toolchain,
+        settings=SETTINGS,
         process_environment={},
         execute=executor,
         emit=output.append,
@@ -175,6 +183,7 @@ def test_qml_listing_uses_framework_functions_instead_of_parsing_sources(
         repo_root=repo,
         log_dir=repo / ".temp" / "run",
         toolchain=toolchain,
+        settings=SETTINGS,
         process_environment={},
         execute=executor,
         emit=output.append,
@@ -208,6 +217,7 @@ def test_compiler_failure_is_reduced_and_ends_with_summary(
         repo_root=repo,
         log_dir=repo / ".temp" / "run",
         toolchain=toolchain,
+        settings=SETTINGS,
         process_environment={},
         execute=executor,
         emit=output.append,
@@ -256,6 +266,7 @@ def test_silent_gtest_crash_is_named_without_requiring_a_log_read(
         repo_root=repo,
         log_dir=repo / ".temp" / "run",
         toolchain=toolchain,
+        settings=SETTINGS,
         process_environment={},
         execute=executor,
         emit=output.append,

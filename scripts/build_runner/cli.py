@@ -10,12 +10,14 @@ import traceback
 from .config import (
     ToolchainError,
     build_fingerprint,
+    find_local_env,
     fingerprint_matches,
+    resolve_runner_settings,
     resolve_toolchain,
     safe_remove_build_tree,
 )
 from .locking import build_tree_lock
-from .orchestrator import BUILD_JOBS, run_pipeline
+from .orchestrator import run_pipeline
 
 
 SCOPES = ("all", "domain", "data", "qt-data", "app", "ui", "ui-cpp", "qml", "integration")
@@ -73,6 +75,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         toolchain = resolve_toolchain(scripts_dir)
+        settings = resolve_runner_settings(scripts_dir)
+        local_env = find_local_env(scripts_dir)
+        if local_env is not None and local_env.parent != scripts_dir:
+            print(f"local overrides: {local_env.as_posix()} (main worktree)")
         fingerprint = build_fingerprint(toolchain)
         build_dir = repo_root / "build-agent"
         fingerprint_path = build_dir / ".ksv-toolchain-fingerprint.json"
@@ -84,6 +90,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 repo_root=repo_root,
                 log_dir=log_dir,
                 toolchain=toolchain,
+                settings=settings,
                 process_environment=os.environ,
                 fingerprint=fingerprint,
             )

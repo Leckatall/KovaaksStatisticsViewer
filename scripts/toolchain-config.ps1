@@ -68,6 +68,33 @@ function Resolve-KsvToolchainPath {
     return (Resolve-Path -LiteralPath $Path).Path
 }
 
+# This checkout's toolchain.local.env, else the main worktree's, so linked worktrees share one copy.
+# Mirrors find_local_env in scripts/build_runner/config.py.
+function Find-KsvToolchainLocalEnv {
+    $own = Join-Path $script:KsvToolchainConfigRoot "toolchain.local.env"
+    if (Test-Path -LiteralPath $own -PathType Leaf) { return $own }
+
+    $repoRoot = Split-Path -Parent $script:KsvToolchainConfigRoot
+    try {
+        $commonDir = & git -C $repoRoot rev-parse --git-common-dir 2>$null
+    } catch {
+        return $null
+    }
+    if ($LASTEXITCODE -ne 0 -or -not $commonDir) { return $null }
+    if (-not [System.IO.Path]::IsPathRooted($commonDir)) { $commonDir = Join-Path $repoRoot $commonDir }
+    $commonDir = [System.IO.Path]::GetFullPath($commonDir)
+    if ((Split-Path -Leaf $commonDir) -ne ".git") { return $null }
+
+    $mainRoot = Split-Path -Parent $commonDir
+    if ([System.IO.Path]::GetFullPath($mainRoot).TrimEnd("\") -eq [System.IO.Path]::GetFullPath($repoRoot).TrimEnd("\")) {
+        return $null
+    }
+    $scriptsName = Split-Path -Leaf $script:KsvToolchainConfigRoot
+    $shared = Join-Path (Join-Path $mainRoot $scriptsName) "toolchain.local.env"
+    if (Test-Path -LiteralPath $shared -PathType Leaf) { return $shared }
+    return $null
+}
+
 function Get-KsvToolchainConfig {
     param([hashtable]$Overrides = @{})
 
@@ -84,10 +111,16 @@ function Get-KsvToolchainConfig {
         "KSV_QT6_DIR"
     )
 
+    # Build runner settings share the env files; packaging does not use them.
+    $allowedKeys = $keys + @("KSV_BUILD_JOBS", "KSV_BUILD_PRIORITY")
+
     $defaultsPath = Join-Path $script:KsvToolchainConfigRoot "toolchain.defaults.env"
-    $localPath = Join-Path $script:KsvToolchainConfigRoot "toolchain.local.env"
-    $resolved = Read-KsvToolchainEnvFile -Path $defaultsPath -AllowedKeys $keys
-    $local = Read-KsvToolchainEnvFile -Path $localPath -AllowedKeys $keys -Optional
+    $resolved = Read-KsvToolchainEnvFile -Path $defaultsPath -AllowedKeys $allowedKeys
+    $local = @{}
+    $localPath = Find-KsvToolchainLocalEnv
+    if ($localPath) {
+        $local = Read-KsvToolchainEnvFile -Path $localPath -AllowedKeys $allowedKeys
+    }
 
     foreach ($key in $keys) {
         if ($local.ContainsKey($key)) { $resolved[$key] = $local[$key] }

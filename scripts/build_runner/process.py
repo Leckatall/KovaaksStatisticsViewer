@@ -100,6 +100,7 @@ def run_command(
     show_all_output: bool = False,
     phase: str,
     emit: Callable[[str], None] = print,
+    creationflags: int = 0,
 ) -> CommandResult:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     arguments = [str(argument) for argument in command]
@@ -124,6 +125,7 @@ def run_command(
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            creationflags=creationflags,
         )
 
         def read_output() -> None:
