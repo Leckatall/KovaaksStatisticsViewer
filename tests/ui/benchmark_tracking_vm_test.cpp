@@ -300,3 +300,44 @@ TEST(BenchmarkTrackingViewModel, DarkTierColoursAreLightenedForReadability) {
     ASSERT_TRUE(shown.isValid());
     EXPECT_GE(contrastRatio(shown, darkPanelColor()), 4.5);
 }
+
+// --- the summary's average-rank bar --------------------------------------------------------------
+
+namespace {
+    std::vector<double> listToFills(const QVariantList &list) {
+        std::vector<double> fills;
+        for (const QVariant &value: list) fills.push_back(value.toDouble());
+        return fills;
+    }
+}
+
+// averageRank is the mean normalized rank: exactly k ends at chunk k's right edge.
+TEST(RankChunkFills, WholeRanksEndAtTheirChunksRightEdgeAndFractionsFillTheNext) {
+    EXPECT_EQ(rankChunkFills(3.5, 5), (std::vector<double>{1, 1, 1, 0.5, 0}));
+    EXPECT_EQ(rankChunkFills(3.0, 5), (std::vector<double>{1, 1, 1, 0, 0}));
+    EXPECT_EQ(rankChunkFills(0.0, 5), (std::vector<double>{0, 0, 0, 0, 0}));
+    EXPECT_EQ(rankChunkFills(5.0, 5), (std::vector<double>{1, 1, 1, 1, 1}));
+    const auto low = rankChunkFills(0.87, 5);
+    EXPECT_NEAR(low[0], 0.87, 1e-9);
+    EXPECT_EQ(low[1], 0.0);
+}
+
+TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
+    auto snapshot = makeTrackableSnapshot(); // Bronze, Silver, Gold; average 2.5; nothing completed
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{1, 1, 0.5}));
+    EXPECT_EQ(vm.completedRankPosition(), -1.0);
+
+    fake->snap.projection->completedRank = TierId{"t2"};
+    fake->publish();
+    EXPECT_EQ(vm.completedRankPosition(), 2.0) << "the tick ends Silver's chunk";
+
+    fake->snap.availability = BenchmarkTrackingState::Unavailable;
+    fake->snap.selectedLoaded.reset();
+    fake->snap.projection.reset();
+    fake->publish();
+    EXPECT_TRUE(vm.averageRankFills().isEmpty());
+    EXPECT_EQ(vm.completedRankPosition(), -1.0);
+}

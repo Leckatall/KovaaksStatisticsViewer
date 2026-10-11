@@ -204,4 +204,39 @@ Item {
     ToolTip.visible: barHover.hovered && !markerHover.hovered && root.description.length > 0
     ToolTip.delay: 300
     ToolTip.text: root.description
+
+    // --- tier tick -----------------------------------------------------------------
+    // A tick on the boundary after chunk `tick` - 1 (1 = end of the first tier, chunkCount
+    // = the bar's end), or none when below 1, with its own tooltip. Read tickHovered to
+    // keep a surrounding tooltip out of its way.
+    property int tick: -1
+    property string tickDescription: ""
+    readonly property bool tickHovered: tickHover.hovered
+
+    Item {
+        id: tickItem
+        objectName: root.objectName.length > 0 ? root.objectName + "_tick" : ""
+        readonly property real boundaryX: root.tick >= root.chunkCount
+                                          ? root.width
+                                          : (root.chunkRight(root.tick - 1) + root.chunkLeft(root.tick)) / 2
+        visible: root.tick >= 1 && root.chunkCount > 0
+        z: 1
+        width: 9
+        height: root.height + 8
+        x: Math.round(boundaryX - width / 2)
+        y: -4
+        Accessible.role: Accessible.Indicator
+        Accessible.name: root.tickDescription
+
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 2
+            height: parent.height
+            color: root.palette.text
+        }
+        HoverHandler { id: tickHover }
+        ToolTip.visible: tickHover.hovered && root.tickDescription.length > 0
+        ToolTip.delay: 300
+        ToolTip.text: root.tickDescription
+    }
 }

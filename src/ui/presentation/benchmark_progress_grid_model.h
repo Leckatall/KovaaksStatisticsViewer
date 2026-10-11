@@ -13,6 +13,11 @@
 #include "benchmarks/benchmark_projection.h"
 
 namespace ksv::presentation {
+    // A rank on the domain's normalized scale (BenchmarkProjection::averageRank: k = tier k attained,
+    // fractions part-way to the next) as tier bar chunk fills: chunk k (0-based) fills
+    // clamp(rank - k, 0, 1), so exactly k ends at chunk k's right edge.
+    [[nodiscard]] std::vector<double> rankChunkFills(double rank, std::size_t tierCount);
+
     // The fill of each equal-width chunk of a segmented tier bar, one chunk per tier in ladder
     // order. Chunk k covers scores from tier k-1's threshold to tier k's (chunk 0 starts at 0), and
     // fills clamp((score - t[k-1]) / (t[k] - t[k-1]), 0, 1): the same in-tier fraction the domain's

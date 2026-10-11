@@ -325,6 +325,47 @@ Item {
             verify(attained !== completed, "attained and completed rank must be distinct elements")
         }
 
+        // the average rank is drawn on the tier bar, with the completed rank as a tick
+        // and the number in the tooltip.
+        function test_summaryAverageRankIsATierBarWithACompletedRankTick() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            fx.averageRank = "2.75"
+            fx.averageRankFills = [1, 1, 0.75, 0]
+            fx.completedRankPosition = 2      // Silver, the second tier
+            const ws = makeWorkspace(fx)
+            wait(0)
+            const area = find(ws, "summaryAverageRank")
+            const bar = find(ws, "summaryAverageRankBar")
+            verify(bar !== null && bar.visible, "the average rank is a tier bar")
+            compare(bar.chunkCount, 4, "one chunk per tier")
+            for (let i = 0; i < 4; ++i) {
+                const chunk = find(bar, bar.objectName + "_chunk_" + i)
+                const fill = find(bar, bar.objectName + "_fill_" + i)
+                fuzzyCompare(fill.width, chunk.width * fx.averageRankFills[i], 1, "chunk " + i)
+            }
+            const tick = find(bar, bar.objectName + "_tick")
+            verify(tick.visible, "the completed rank is ticked")
+            const tickX = tick.mapToItem(ws, tick.width / 2, 0).x
+            const silverEnd = find(bar, bar.objectName + "_chunk_1")
+            const goldStart = find(bar, bar.objectName + "_chunk_2")
+            verify(tickX >= silverEnd.mapToItem(ws, silverEnd.width, 0).x - 1
+                   && tickX <= goldStart.mapToItem(ws, 0, 0).x + 1, "the tick sits at the end of Silver's chunk")
+            compare(tick.ToolTip.text, "Completed rank: Silver")
+            compare(area.ToolTip.text, "Average rank 2.75", "the number stays in the tooltip")
+            verify(find(ws, "summaryAttainedRank").visible && find(ws, "summaryNextTier").visible,
+                   "attained rank and next tier stay visible as text")
+        }
+
+        function test_summaryWithoutACompletedRankHasNoTick() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            fx.averageRankFills = [0.87, 0, 0, 0]
+            fx.completedRankPosition = -1
+            const ws = makeWorkspace(fx)
+            const bar = find(ws, "summaryAverageRankBar")
+            const tick = find(bar, bar.objectName + "_tick")
+            verify(tick === null || !tick.visible, "nothing completed, no tick")
+        }
+
         // the grid replaces the blocker list: a blocking row carries a marker in
         // the next tier's colour that says what it blocks.
         function test_blockingRowsAreMarkedInTheNextTierColour() {
@@ -788,7 +829,7 @@ Item {
                    "summary next tier uses its tier colour")
             const next = find(ws, "progressRow_sc-1w4ts_next")
             verify(Qt.colorEqual(next.children[1].color, "#50dcdc"), "the grid's next tier uses its tier colour")
-            verify(!Qt.colorEqual(find(ws, "summaryAverageRank").color, "#ffc828"),
+            verify(!Qt.colorEqual(find(ws, "summaryTotalPlaytime").color, "#ffc828"),
                    "non-tier values keep the normal text colour")
         }
 

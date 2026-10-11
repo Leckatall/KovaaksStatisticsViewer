@@ -346,6 +346,14 @@ namespace ksv::presentation {
         };
     }
 
+    std::vector<double> rankChunkFills(const double rank, const std::size_t tierCount) {
+        std::vector<double> fills(tierCount, 0.0);
+        if (!std::isfinite(rank)) return fills;
+        for (std::size_t index = 0; index < tierCount; ++index)
+            fills[index] = std::clamp(rank - static_cast<double>(index), 0.0, 1.0);
+        return fills;
+    }
+
     std::vector<double> scenarioChunkFills(const std::vector<domain::Tier> &tiers,
                                            const std::vector<domain::Threshold> &thresholds,
                                            const std::optional<double> score) {

@@ -39,6 +39,10 @@ namespace ksv::presentation {
         Q_PROPERTY(QString completedRankColor READ completedRankColor NOTIFY changed)
         Q_PROPERTY(QString nextTierColor READ nextTierColor NOTIFY changed)
         Q_PROPERTY(QString averageRank READ averageRank NOTIFY changed)
+        // The average rank as tier bar chunk fills (rankChunkFills), and the completed rank as a
+        // position on that bar's chunk scale (the end of its chunk), or -1 when none is completed.
+        Q_PROPERTY(QVariantList averageRankFills READ averageRankFills NOTIFY changed)
+        Q_PROPERTY(double completedRankPosition READ completedRankPosition NOTIFY changed)
         Q_PROPERTY(QString totalPlaytime READ totalPlaytime NOTIFY changed)
         Q_PROPERTY(int scenariosAtNextTier READ scenariosAtNextTier NOTIFY changed)
         Q_PROPERTY(int scenarioCount READ scenarioCount NOTIFY changed)
@@ -63,6 +67,8 @@ namespace ksv::presentation {
         [[nodiscard]] QString completedRankColor() const { return m_completedRankColor; }
         [[nodiscard]] QString nextTierColor() const { return m_nextTierColor; }
         [[nodiscard]] QString averageRank() const { return m_averageRank; }
+        [[nodiscard]] QVariantList averageRankFills() const { return m_averageRankFills; }
+        [[nodiscard]] double completedRankPosition() const { return m_completedRankPosition; }
         [[nodiscard]] QString totalPlaytime() const { return m_totalPlaytime; }
         [[nodiscard]] int scenariosAtNextTier() const { return m_scenariosAtNextTier; }
         [[nodiscard]] int scenarioCount() const { return m_scenarioCount; }
@@ -103,6 +109,8 @@ namespace ksv::presentation {
         QString m_completedRankColor;
         QString m_nextTierColor;
         QString m_averageRank;
+        QVariantList m_averageRankFills;
+        double m_completedRankPosition = -1.0;
         QString m_totalPlaytime;
         int m_scenariosAtNextTier = 0;
         int m_scenarioCount = 0;
