@@ -193,6 +193,24 @@ TestCase {
         tryCompare(tb, "currentIndex", 0, 2000, "Left arrow must return to the Scenarios tab")
     }
 
+    // Ctrl+F searches scenarios from the Benchmarks tab too: back to Scenarios, caret in the field.
+    function test_ctrlFFocusesTheScenarioSearchFromEitherTab() {
+        const win = createMain()
+        win.requestActivate()
+        tryVerify(() => win.active, 2000, "the Main window never became the active window")
+        const tb = tabBar(win)
+        tb.currentIndex = 1
+        tb.forceActiveFocus()
+        tryCompare(stack(win), "currentIndex", 1)
+
+        keyClick(Qt.Key_F, Qt.ControlModifier)
+
+        tryCompare(tb, "currentIndex", 0, 2000, "Ctrl+F must switch to the Scenarios tab")
+        const field = find(win, "scenarioSearchField")
+        verify(field !== null)
+        tryVerify(() => field.activeFocus, 2000, "Ctrl+F must focus the scenario search field")
+    }
+
     // -- state retention across tab switches ---------------------------------
 
     function test_switchingTabsPreservesWorkspaceInstancesAndState() {

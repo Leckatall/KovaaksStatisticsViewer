@@ -209,6 +209,17 @@ ApplicationWindow {
         }
     }
 
+    // Ctrl+F searches scenarios from either workspace. A window shortcut: Settings and the
+    // Benchmark Manager are their own windows, so it never takes keys from their text fields.
+    Shortcut {
+        objectName: "findScenarioShortcut"
+        sequence: "Ctrl+F"
+        onActivated: {
+            workspaceTabBar.currentIndex = 0
+            scenarioWorkspace.focusScenarioSearch()
+        }
+    }
+
     Connections {
         target: root.graphVm
         function onSeriesConfigurationChanged() {

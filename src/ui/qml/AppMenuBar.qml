@@ -28,12 +28,14 @@ MenuBar {
         Action {
             id: loadPerformanceFileAction
             text: qsTr("&Load Performance File...")
+            shortcut: "Ctrl+O"
             onTriggered: loadPerformanceFileRequested()
         }
 
         Action {
             id: settingsAction
             text: qsTr("&Settings...")
+            shortcut: "Ctrl+,"
             onTriggered: settingsRequested()
         }
         MenuSeparator {

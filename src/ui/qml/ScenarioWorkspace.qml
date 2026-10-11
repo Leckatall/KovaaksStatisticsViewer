@@ -22,6 +22,15 @@ Item {
     signal configureGraphLinesRequested()
     signal chooseKovaaksFolderRequested()
 
+    // Ctrl+F: show the scenario browser if it is hidden, then focus its search field. Nothing to
+    // search on the first-run welcome.
+    function focusScenarioSearch() {
+        if (root.welcomeVisible) return
+        root.visualSettings.selectionPanelVisible = true
+        root.visualSettings.scenarioBrowserSectionVisible = true
+        Qt.callLater(selectionPanel.focusScenarioSearch)
+    }
+
     FirstRunWelcome {
         objectName: "firstRunWelcome"
         anchors.fill: parent
@@ -74,6 +83,7 @@ Item {
             }
         }
         SelectionPanel {
+            id: selectionPanel
             Layout.row: 1; Layout.column: 0
             Layout.fillHeight: true
             visible: root.visualSettings.selectionPanelVisible

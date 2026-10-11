@@ -28,6 +28,12 @@ ColumnLayout {
                                                                 : scenarioList.contentHeight)
 
     signal scenarioActivated(string hash, string name)
+
+    // Ctrl+F: put the caret in the search field with its text selected, ready to replace.
+    function focusSearch() {
+        searchField.forceActiveFocus(Qt.ShortcutFocusReason)
+        searchField.selectAll()
+    }
     signal scenarioSortRequested(int field, bool ascending)
     signal searchEdited(string text)
 

@@ -121,6 +121,13 @@ TestCase {
         compare(emitted, 1, "aboutRequested should fire exactly once when its action is triggered")
     }
 
+    // Ctrl+O and Ctrl+, live on the File menu's actions, so the menu shows them next to the items.
+    function test_fileMenuActionsCarryTheirShortcuts() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        compare(String(findMenuItemByText(menuBar.menuAt(0), "&Load Performance File...").action.shortcut), "Ctrl+O")
+        compare(String(findMenuItemByText(menuBar.menuAt(0), "&Settings...").action.shortcut), "Ctrl+,")
+    }
+
     // Every File-menu item that opens a dialog or picker says so with "...".
     function test_dialogItemsEndInEllipsis() {
         const menuBar = createTemporaryObject(menuBarComponent, testCase)
