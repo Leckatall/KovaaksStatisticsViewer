@@ -133,18 +133,19 @@ MenuBar {
         }
     }
     Menu {
-        title: qsTr("&Help")
-        Action {
-            text: qsTr("&About")
-            onTriggered: aboutRequested()
-        }
-    }
-    Menu {
         title: qsTr("&Benchmarks")
         Action {
             objectName: "manageBenchmarksAction"
             text: qsTr("&Manage Benchmarks...")
             onTriggered: root.manageBenchmarksRequested()
+        }
+    }
+    // Help stays last, as Windows menu bars put it.
+    Menu {
+        title: qsTr("&Help")
+        Action {
+            text: qsTr("&About")
+            onTriggered: aboutRequested()
         }
     }
 }

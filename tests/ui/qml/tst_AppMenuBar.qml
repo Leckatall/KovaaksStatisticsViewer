@@ -114,11 +114,19 @@ TestCase {
         let emitted = 0
         menuBar.aboutRequested.connect(() => emitted++)
 
-        const item = findMenuItemByText(menuBar.menuAt(2), "&About")
-        verify(item !== null, "no menu item with text '&About' found in menuAt(2)")
+        const item = findMenuItemByText(menuBar.menuAt(3), "&About")
+        verify(item !== null, "no menu item with text '&About' found in menuAt(3)")
         item.action.trigger()
 
         compare(emitted, 1, "aboutRequested should fire exactly once when its action is triggered")
+    }
+
+    // Windows convention: File, View, then the app's own menus, Help last.
+    function test_menusFollowWindowsOrder() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        const titles = []
+        for (let i = 0; i < menuBar.count; ++i) titles.push(menuBar.menuAt(i).title)
+        compare(titles, ["&File", "&View", "&Benchmarks", "&Help"])
     }
 
     function test_unrelatedActions_doNotEmitEitherSignal() {
