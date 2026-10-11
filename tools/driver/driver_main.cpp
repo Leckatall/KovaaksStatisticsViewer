@@ -160,6 +160,7 @@ int main(int argc, char *argv[]) {
     applyHeadlessAppLook();
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer");
+    QCoreApplication::setApplicationVersion(KSV_VERSION);
 
     QCommandLineParser parser;
     parser.setApplicationDescription("KSV UI automation host (see tools/driver/README.md).");

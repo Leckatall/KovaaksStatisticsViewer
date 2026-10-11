@@ -57,6 +57,7 @@ target_link_libraries(ksv_driver PRIVATE
 target_compile_definitions(ksv_driver PRIVATE
         KSV_QML_SOURCE_DIR="${CMAKE_SOURCE_DIR}/src/ui/qml"
         KSV_EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/tests/examples"
+        KSV_VERSION="${KSV_VERSION}"
 )
 
 ksv_copy_mingw_runtime_dlls(ksv_driver)

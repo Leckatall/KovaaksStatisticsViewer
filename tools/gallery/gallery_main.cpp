@@ -60,6 +60,7 @@ int main(int argc, char *argv[]) {
     QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer-Gallery");
+    QCoreApplication::setApplicationVersion(KSV_VERSION);
 
     QTemporaryDir tmp;
     const QVariantList datasetPaths = createDatasetProfiles(tmp.path());
