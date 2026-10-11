@@ -753,9 +753,11 @@ Item {
                                  id + " " + column.cell + " must sit under its heading")
                 }
             }
+            // The first tier header also covers the bar's inset.
+            const barInset = find(ws, "benchmarkProgressGrid").barInset
             for (const id of ["sc-1w4ts", "sc-popcorn", "sc-smooth"]) {
                 fuzzyCompare(find(ws, "progressRow_" + id + "_bar").mapToItem(ws, 0, 0).x,
-                             find(ws, "progressTierHeader_0").mapToItem(ws, 0, 0).x, 0.5,
+                             find(ws, "progressTierHeader_0").mapToItem(ws, 0, 0).x + barInset, 0.5,
                              id + " bar starts under the first tier header")
             }
         }
@@ -841,10 +843,12 @@ Item {
             const bars = ["sc-popcorn", "sc-1w4ts", "sc-pasu", "sc-smooth"].map(function (id) {
                 return find(ws, "progressRow_" + id + "_bar")
             })
+            const grid = find(ws, "benchmarkProgressGrid")
             for (let i = 0; i < 4; ++i) {
                 const header = find(ws, "progressTierHeader_" + i)
-                const headerLeft = header.mapToItem(ws, 0, 0).x
-                const headerRight = header.mapToItem(ws, header.width, 0).x
+                // The outer cells also cover the bar's inset; their chunk edge is past it.
+                const headerLeft = header.mapToItem(ws, 0, 0).x + (i === 0 ? grid.barInset : 0)
+                const headerRight = header.mapToItem(ws, header.width, 0).x - (i === 3 ? grid.barInset : 0)
                 for (const bar of bars) {
                     const chunk = find(bar, bar.objectName + "_chunk_" + i)
                     verify(chunk !== null, bar.objectName + " has a chunk per tier")

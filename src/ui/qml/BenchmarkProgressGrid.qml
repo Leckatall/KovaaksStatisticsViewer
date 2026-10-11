@@ -289,16 +289,20 @@ Item {
 
             // One header cell per tier, over its chunk of every bar below, in the
             // editor's tier-header look: swatch and name, underlined in the tier colour.
+            // The first and last cells also cover the bar's inset, so the inset does not
+            // read as a column of its own; every name stays centred over its chunk.
             Repeater {
                 model: root.tiers
                 delegate: Rectangle {
                     id: tierHeader
                     required property var modelData
                     required property int index
+                    readonly property real leadingInset: index === 0 ? root.barInset : 0
+                    readonly property real trailingInset: index === root.tiers.length - 1 ? root.barInset : 0
                     objectName: "progressTierHeader_" + index
-                    x: root.barX + root.tierEdge(index)
+                    x: root.barX + root.tierEdge(index) - leadingInset
                     y: 0
-                    width: root.tierEdge(index + 1) - root.tierEdge(index)
+                    width: root.tierEdge(index + 1) - root.tierEdge(index) + leadingInset + trailingInset
                     height: root.headerHeight
                     color: root.palette.button
                     border.color: root.palette.mid
@@ -315,6 +319,7 @@ Item {
                     Row {
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: -1
+                        anchors.horizontalCenterOffset: (tierHeader.leadingInset - tierHeader.trailingInset) / 2
                         spacing: 6
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
