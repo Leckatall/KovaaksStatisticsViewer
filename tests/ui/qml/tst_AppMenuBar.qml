@@ -72,8 +72,8 @@ TestCase {
         let emitted = 0
         menuBar.setSourceDirRequested.connect(() => emitted++)
 
-        const item = findMenuItemByText(menuBar.menuAt(0), "Set Source &Directory")
-        verify(item !== null, "no menu item with text 'Set Source Directory' found in menuAt(0)")
+        const item = findMenuItemByText(menuBar.menuAt(0), "Set Source &Directory...")
+        verify(item !== null, "no menu item with text 'Set Source Directory...' found in menuAt(0)")
         item.action.trigger()
 
         compare(emitted, 1, "setSourceDirRequested should fire exactly once when its action is triggered")
@@ -86,8 +86,8 @@ TestCase {
         let emitted = 0
         menuBar.settingsRequested.connect(() => emitted++)
 
-        const item = findMenuItemByText(menuBar.menuAt(0), "&Settings")
-        verify(item !== null, "no menu item with text 'Settings' found in menuAt(0)")
+        const item = findMenuItemByText(menuBar.menuAt(0), "&Settings...")
+        verify(item !== null, "no menu item with text 'Settings...' found in menuAt(0)")
         item.action.trigger()
 
         compare(emitted, 1, "settingsRequested should fire exactly once when its action is triggered")
@@ -119,6 +119,13 @@ TestCase {
         item.action.trigger()
 
         compare(emitted, 1, "aboutRequested should fire exactly once when its action is triggered")
+    }
+
+    // Every File-menu item that opens a dialog or picker says so with "...".
+    function test_dialogItemsEndInEllipsis() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        for (const text of ["Set Source &Directory...", "&Load Performance File...", "&Settings..."])
+            verify(findMenuItemByText(menuBar.menuAt(0), text) !== null, "no File menu item '" + text + "'")
     }
 
     // Windows convention: File, View, then the app's own menus, Help last.

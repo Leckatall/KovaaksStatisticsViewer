@@ -22,7 +22,7 @@ MenuBar {
         title: qsTr("&File")
         Action {
             id: setSoruceDirAction
-            text: qsTr("Set Source &Directory")
+            text: qsTr("Set Source &Directory...")
             onTriggered: setSourceDirRequested()
         }
         Action {
@@ -33,7 +33,7 @@ MenuBar {
 
         Action {
             id: settingsAction
-            text: qsTr("&Settings")
+            text: qsTr("&Settings...")
             onTriggered: settingsRequested()
         }
         MenuSeparator {
