@@ -129,6 +129,15 @@ namespace ksv::presentation {
         }
     }
 
+    QVariantList BenchmarkTableModel::tierHeaders() const {
+        QVariantList headers;
+        headers.reserve(static_cast<qsizetype>(m_projection.tiers.size()));
+        for (const auto &tier: m_projection.tiers)
+            headers.append(QVariantMap{{QStringLiteral("name"), tier.name},
+                                       {QStringLiteral("hasIssues"), !tier.issues.isEmpty()}});
+        return headers;
+    }
+
     Qt::ItemFlags BenchmarkTableModel::flags(const QModelIndex &index) const {
         if (!checkIndex(index, CheckIndexOption::IndexIsValid)) return Qt::NoItemFlags;
         const auto &row = m_projection.rows[static_cast<std::size_t>(index.row())];

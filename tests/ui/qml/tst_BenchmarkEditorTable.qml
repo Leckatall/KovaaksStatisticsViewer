@@ -989,6 +989,61 @@ TestCase {
         }, 2000, "the add-rank control follows the last rank when they all fit")
     }
 
+    function headerLabel(header) {
+        for (const child of header.children)
+            if (child.hasOwnProperty("truncated") && child.visible) return child
+        return null
+    }
+
+    // Rank columns share the width the identifying columns leave, equally; when that share would
+    // clip a header they keep the widest header's width and the ranks scroll instead.
+    function test_rankColumnsShareTheSpareWidthButNeverClipTheirHeaders() {
+        const names = ["Iron", "Bronze", "Silver", "Gold", "Platinum"]
+        const table = makeTable({tiers: names.map((name, i) => ({id: "t" + i, name: name})),
+                                 rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const bar = ItemLookup.findByObjectName(table, "thresholdHorizontalBar")
+        const view = table.thresholdView
+        table.width = 1100
+        const share = Math.floor((table.width - table.identityTotalWidth - table.rankSlotWidth) / names.length)
+        verify(share >= table.rankHeaderMinimumWidth,
+               "fixture: the five ranks fit at 1100 (share " + share + ", minimum " + table.rankHeaderMinimumWidth + ")")
+
+        tryCompare(table, "thresholdWidth", share)
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_t4") !== null)
+        for (let i = 0; i < names.length; ++i) {
+            const header = ItemLookup.findByObjectName(table, "rankHeader_t" + i)
+            compare(header.width, share, names[i] + " gets an equal share")
+            verify(!headerLabel(header).truncated, names[i] + " header is not clipped")
+        }
+        compare(bar.visible, false, "everything fits: no scrollbar")
+        // The add-rank control still follows the last rank.
+        const plus = ItemLookup.findByObjectName(table, "addRankPlus")
+        const last = ItemLookup.findByObjectName(table, "rankHeader_t4")
+        const gap = () => plus.mapToItem(table, 0, 0).x - last.mapToItem(table, last.width, 0).x
+        waitForRendering(table)
+        verify(gap() >= -0.5 && gap() <= names.length, "the add-rank control follows the last rank, gap " + gap()
+               + ", plus x " + plus.mapToItem(table, 0, 0).x + ", header width " + last.width)
+
+        table.width = 600
+        tryCompare(table, "thresholdWidth", table.rankHeaderMinimumWidth)
+        tryCompare(bar, "visible", true)
+        view.contentX = view.contentWidth - view.width
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_t4") !== null)
+        tryVerify(() => headerLabel(ItemLookup.findByObjectName(table, "rankHeader_t4")) !== null)
+        verify(!headerLabel(ItemLookup.findByObjectName(table, "rankHeader_t4")).truncated,
+               "the widest header is never clipped")
+
+        // Wide again: the first rank sits right after the identifying columns, header and body.
+        table.width = 1100
+        tryCompare(table, "thresholdWidth", share)
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_t0") !== null
+                        && cellFor(table, "a", "t0") !== null)
+        tryVerify(() => Math.abs(ItemLookup.findByObjectName(table, "rankHeader_t0").mapToItem(table, 0, 0).x
+                                 - table.identityTotalWidth) < 0.5, 2000, "the first rank header follows the scenario column")
+        tryVerify(() => Math.abs(cellFor(table, "a", "t0").mapToItem(table, 0, 0).x - table.identityTotalWidth) < 0.5,
+                  2000, "the first rank cell follows the scenario column")
+    }
+
     function test_identifyingColumnsKeepTheirWidthWhenThereAreNoRanks() {
         const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
         const placeholder = ItemLookup.findByObjectName(table, "emptyRankHeader")

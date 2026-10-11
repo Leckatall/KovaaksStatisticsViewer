@@ -114,6 +114,9 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap anchorAt(int row, int column) const;
         // Row-level roles (entry, group spans, mapping) for contextual controls; empty when out of range.
         Q_INVOKABLE QVariantMap rowInfo(int row) const;
+        // Every tier header in column order as {name, hasIssues}, so the view can size all rank
+        // columns, including ones it has not loaded a delegate for.
+        Q_INVOKABLE QVariantList tierHeaders() const;
 
     private:
         BenchmarkTableProjection m_projection;

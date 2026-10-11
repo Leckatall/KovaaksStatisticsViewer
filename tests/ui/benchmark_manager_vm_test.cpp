@@ -1883,3 +1883,19 @@ TEST(BenchmarkTableNotifications, PublicationsInsideSaveKeepRetryState) {
     EXPECT_EQ(f.cell(f.rowOf("a"), 2, TM::MappingStateRole).toString(), "resolved");
     EXPECT_FALSE(canUndo(*f.vm));
 }
+
+// The editor sizes every rank column from these, including columns it has no delegate for.
+TEST(BenchmarkTableModelHeaders, TierHeadersListEveryRankInColumnOrder) {
+    BenchmarkTableModel model;
+    BenchmarkTableProjection projection;
+    projection.tiers = {{"t1", "Iron", QColor("#828282"), {}},
+                        {"t2", "Platinum", QColor("#50dcdc"), {QStringLiteral("Missing threshold")}}};
+    model.setProjection(projection);
+
+    const QVariantList headers = model.tierHeaders();
+    ASSERT_EQ(headers.size(), 2);
+    EXPECT_EQ(headers[0].toMap().value("name").toString(), "Iron");
+    EXPECT_FALSE(headers[0].toMap().value("hasIssues").toBool());
+    EXPECT_EQ(headers[1].toMap().value("name").toString(), "Platinum");
+    EXPECT_TRUE(headers[1].toMap().value("hasIssues").toBool());
+}

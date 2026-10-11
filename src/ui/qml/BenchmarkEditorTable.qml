@@ -24,9 +24,84 @@ FocusScope {
     property int rowHeight: 30
     property int headerHeight: 34
     property var identityWidths: [130, 120, 200]
-    property int thresholdWidth: 92
-    // Width of the identifying columns inside the threshold view's own column space.
+    // Every rank column has the same width (the scrollbar's position estimate relies on it): an
+    // equal share of what the identifying columns and the add-rank slot leave, but never narrower
+    // than the widest rank header needs, so no header is clipped; below that the ranks scroll.
+    readonly property int tierCount: Math.max(0, thresholdView.columns - root.thresholdKind)
+    readonly property int availableRankWidth: Math.max(0, tableBody.width - root.identityTotalWidth - root.rankSlotWidth)
+    readonly property int thresholdWidth: root.tierCount > 0
+                                          ? Math.max(root.rankHeaderMinimumWidth,
+                                                     Math.floor(root.availableRankWidth / root.tierCount))
+                                          : root.rankHeaderMinimumWidth
+    // The header label's insets: past the swatch (4px margin, 14px swatch, 2px gap) on the left,
+    // 2px on the right.
+    readonly property int rankHeaderLabelLeftInset: 20
+    readonly property int rankHeaderLabelRightInset: 2
+    readonly property int rankHeaderChromeWidth: root.rankHeaderLabelLeftInset + root.rankHeaderLabelRightInset
+    property int tierHeaderRevision: 0
+    readonly property int rankHeaderMinimumWidth: {
+        root.tierHeaderRevision
+        let widest = rankHeaderMetrics.advanceWidth(root.rankHeaderText("", false))
+        const headers = root.tableModel && typeof root.tableModel.tierHeaders === "function"
+                        ? root.tableModel.tierHeaders() : []
+        for (const header of headers)
+            widest = Math.max(widest, rankHeaderMetrics.advanceWidth(root.rankHeaderText(header.name, header.hasIssues)))
+        return Math.ceil(widest) + root.rankHeaderChromeWidth
+    }
+
+    // A new rank width also moves where the ranks start inside the threshold view (it skips the
+    // identifying columns at that width), and a relayout only re-places the columns in view, so the
+    // views are rebuilt from scratch instead, keeping the same ranks in view. Never under an open
+    // cell editor: that waits until the edit ends.
+    property int laidOutThresholdWidth: 0
+    onThresholdWidthChanged: Qt.callLater(root.relayoutRankColumns)
+    onActiveEditorChanged: if (!root.activeEditor) Qt.callLater(root.relayoutRankColumns)
+    function relayoutRankColumns() {
+        const previous = root.laidOutThresholdWidth
+        const width = root.thresholdWidth
+        if (previous === width || root.activeEditor) return
+        root.laidOutThresholdWidth = width
+        if (previous === 0 || !root.tableModel) {
+            thresholdView.forceLayout()
+            rankHeader.forceLayout()
+            return
+        }
+        const scrolledRanks = Math.max(0, thresholdView.contentX + thresholdView.leftMargin) / previous
+        const contentY = thresholdView.contentY
+        const hadFocus = thresholdView.activeFocus
+        // The rebuild may clear the selection model; the manager's anchors put it back.
+        root.restoringSelection = true
+        thresholdView.model = null
+        thresholdView.model = Qt.binding(() => root.tableModel)
+        thresholdView.forceLayout()
+        thresholdView.contentY = contentY
+        thresholdView.contentX = -thresholdView.leftMargin + scrolledRanks * width
+        rankHeader.forceLayout()
+        if (hadFocus) thresholdView.forceActiveFocus()
+        root.scheduleSelectionRestore()
+    }
+
+    function rankHeaderText(name, hasIssues) {
+        return (name !== "" ? name : qsTr("Unnamed")) + (hasIssues ? " ⚠" : "")
+    }
+
+    FontMetrics {
+        id: rankHeaderMetrics
+        font.bold: true
+    }
+    Connections {
+        target: root.tableModel
+        function onModelReset() { root.tierHeaderRevision++ }
+        function onHeaderDataChanged() { root.tierHeaderRevision++ }
+        function onColumnsInserted() { root.tierHeaderRevision++ }
+        function onColumnsRemoved() { root.tierHeaderRevision++ }
+    }
+    // Width of the identifying columns inside the threshold view's own column space. They are as
+    // wide as the ranks: every column the same width keeps the scrollbar's estimate exact.
     readonly property int hiddenThresholdWidth: root.thresholdKind * root.thresholdWidth
+    function thresholdColumnWidth(column) {
+        return root.thresholdWidth
+    }
     readonly property int identityTotalWidth: root.identityWidths[0] + root.identityWidths[1] + root.identityWidths[2]
     // The slot after the last rank header: the "add rank" button, or its name field while one is
     // being typed. The threshold body keeps a gutter of the same width, so header and body end
@@ -1214,7 +1289,7 @@ FocusScope {
                     // ones, once scrolled away) must not fall back to the delegate's implicit width,
                     // or the header drifts three columns away from its body.
                     leftMargin: -root.hiddenThresholdWidth
-                    columnWidthProvider: (column) => root.thresholdWidth
+                    columnWidthProvider: (column) => root.thresholdColumnWidth(column)
                     delegate: FocusScope {
                         id: headerCell
                         required property var model
@@ -1282,7 +1357,7 @@ FocusScope {
                             objectName: "rankSwatch_" + headerCell.tierId
                             visible: headerCell.tierId !== "" && !headerCell.editingName
                             anchors.left: parent.left
-                            anchors.leftMargin: 5
+                            anchors.leftMargin: 4
                             anchors.verticalCenter: parent.verticalCenter
                             swatchColor: headerCell.headerColor
                             Accessible.name: qsTr("Colour of rank %1").arg(headerCell.Accessible.name)
@@ -1320,15 +1395,15 @@ FocusScope {
                         Label {
                             anchors.fill: parent
                             anchors.margins: 4
-                            anchors.leftMargin: 22
+                            anchors.leftMargin: root.rankHeaderLabelLeftInset
+                            anchors.rightMargin: root.rankHeaderLabelRightInset
                             visible: !headerCell.editingName
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
                             font.bold: true
                             font.italic: headerCell.headerName === ""
-                            text: (headerCell.headerName !== "" ? headerCell.headerName : qsTr("Unnamed"))
-                                + (headerCell.headerIssues.length > 0 ? " ⚠" : "")
+                            text: root.rankHeaderText(headerCell.headerName, headerCell.headerIssues.length > 0)
                         }
                     }
                 }
@@ -1407,11 +1482,10 @@ FocusScope {
                             selectionBehavior: TableView.SelectCells
                             selectionMode: TableView.ExtendedSelection
                             pointerNavigationEnabled: false
-                            // The identifying columns are not drawn here: the view starts past them, and
-                            // every column has the same width, so a long jump of the scrollbar lands on
-                            // exact positions (a zero-width run at the start throws the estimate off).
+                            // The identifying columns are not drawn here: the view starts past them (see
+                            // hiddenColumnWidth), and every rank column has the same width.
                             leftMargin: -root.hiddenThresholdWidth
-                            columnWidthProvider: (column) => root.thresholdWidth
+                            columnWidthProvider: (column) => root.thresholdColumnWidth(column)
                             rowHeightProvider: () => root.rowHeight
                             delegate: TableCell {}
                             ScrollBar.vertical: ScrollBar {}

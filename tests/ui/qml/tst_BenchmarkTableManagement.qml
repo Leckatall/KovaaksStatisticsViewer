@@ -153,8 +153,11 @@ TestCase {
         verify(dialog.editorTable, "the dialog must host the table editor")
 
         // Rank colour commits only on acceptance, at the rank's ID.
+        // The rank columns are rebuilt once the dialog settles their width.
+        tryVerify(() => dialog.editorTable.laidOutThresholdWidth === dialog.editorTable.thresholdWidth)
         verify(dialog.editorTable.focusCell({tierId: "t1"}))
         tryCompare(dialog, "currentTierId", "t1")
+        tryVerify(() => find(dialog, "rankSwatch_t1") !== null)
         const rankSwatch = click(dialog, "rankSwatch_t1")
         verify(String(rankSwatch.Accessible.name) !== "", "swatches carry a textual label")
         tryCompare(dialog.colorDialog, "visible", true)
