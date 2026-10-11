@@ -97,10 +97,13 @@ TEST(TierChunkFills, AChunkWithAMissingBoundStaysEmpty) {
     expectFills(scenarioChunkFills(fiveTiers(), thresholds, 4500.0), {1, 1, 0, 0, 0.25});
 }
 
-TEST(TierChunkFills, AChunkWhoseThresholdIsNotAboveThePreviousStaysEmpty) {
+// Bronze below Iron: either may be the wrong one, so every chunk either bounds (Iron, Bronze and
+// Silver, whose lower bound is Bronze) stays empty rather than showing a fill from a doubtful bound.
+TEST(TierChunkFills, ChunksBoundedByAnOutOfOrderThresholdStayEmpty) {
     auto thresholds = fiveThresholds();
     thresholds[1].score = 900.0; // Bronze below Iron
-    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 2500.0), {1, 0, 1600.0 / 2100.0, 0, 0});
+    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 2500.0), {0, 0, 0, 0, 0});
+    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 5000.0), {0, 0, 0, 1, 0.5});
 }
 
 TEST(TierChunkFills, FilledLengthMatchesTheDomainNormalizedRank) {
@@ -372,6 +375,19 @@ TEST(MissingThresholdChunks, FlagsChunksWithAnUnusableBound) {
     thresholds.erase(thresholds.begin() + 2);     // no Silver: Silver's and Gold's chunks
     thresholds.back().score = 3500.0;             // Platinum 3500 below Gold 4000
     EXPECT_EQ(missingThresholdChunks(fiveTiers(), thresholds), (std::vector<bool>{false, false, true, true, true}));
+}
+
+// Iron 1800, Bronze 1200, Silver 2400: either Iron or Bronze is wrong, so no chunk bounded by
+// either may fill; Silver's chunk would otherwise read 66% from the doubtful Bronze bound.
+TEST(MissingThresholdChunks, AnOutOfOrderThresholdHatchesEveryChunkItBounds) {
+    const std::vector<Tier> tiers{Tier{TierId{"iron"}, "Iron", {}}, Tier{TierId{"bronze"}, "Bronze", {}},
+                                  Tier{TierId{"silver"}, "Silver", {}}, Tier{TierId{"gold"}, "Gold", {}}};
+    const std::vector<Threshold> thresholds{Threshold{TierId{"iron"}, 1800.0}, Threshold{TierId{"bronze"}, 1200.0},
+                                            Threshold{TierId{"silver"}, 2400.0}, Threshold{TierId{"gold"}, 3000.0}};
+
+    EXPECT_EQ(missingThresholdChunks(tiers, thresholds), (std::vector<bool>{true, true, true, false}));
+    EXPECT_EQ(scenarioChunkFills(tiers, thresholds, 1995.0), (std::vector<double>{0.0, 0.0, 0.0, 0.0}))
+        << "no chunk shows a fill measured from an out-of-order bound";
 }
 
 TEST(BenchmarkProgressGridModel, EdgeStatesUnplayedUnmatchedAndAboveTheTopTier) {

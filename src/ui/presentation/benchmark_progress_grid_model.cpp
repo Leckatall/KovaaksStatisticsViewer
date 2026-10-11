@@ -367,6 +367,10 @@ namespace ksv::presentation {
             if (span > 0.0) fills[index] = std::clamp((*score - *lower) / span, 0.0, 1.0);
             else if (index == 0 && *upper == 0.0) fills[index] = 1.0; // a zero first threshold is met by any score
         }
+        // A chunk the bar hatches never shows a fill measured from an unusable bound.
+        const auto missing = missingThresholdChunks(tiers, thresholds);
+        for (std::size_t index = 0; index < fills.size(); ++index)
+            if (missing[index]) fills[index] = 0.0;
         return fills;
     }
 
@@ -398,11 +402,22 @@ namespace ksv::presentation {
 
     std::vector<bool> missingThresholdChunks(const std::vector<domain::Tier> &tiers,
                                              const std::vector<domain::Threshold> &thresholds) {
-        std::vector<bool> missing(tiers.size(), false);
-        for (std::size_t index = 0; index < tiers.size(); ++index) {
-            const auto upper = thresholdFor(thresholds, tiers[index].id);
-            const auto lower = index == 0 ? std::optional<double>{0.0} : thresholdFor(thresholds, tiers[index - 1].id);
-            missing[index] = !upper || !lower || (index > 0 && *upper <= *lower);
+        const std::size_t count = tiers.size();
+        std::vector<std::optional<double> > values(count);
+        for (std::size_t index = 0; index < count; ++index) values[index] = thresholdFor(thresholds, tiers[index].id);
+        // A threshold out of order with a neighbour: which of the two is wrong is unknowable, so
+        // neither bounds a chunk the bar may fill.
+        std::vector<bool> outOfOrder(count, false);
+        for (std::size_t index = 0; index < count; ++index) {
+            if (!values[index]) continue;
+            const bool belowPrevious = index > 0 && values[index - 1] && *values[index] <= *values[index - 1];
+            const bool aboveNext = index + 1 < count && values[index + 1] && *values[index + 1] <= *values[index];
+            outOfOrder[index] = belowPrevious || aboveNext;
+        }
+        std::vector<bool> missing(count, false);
+        for (std::size_t index = 0; index < count; ++index) {
+            const bool lowerUsable = index == 0 || (values[index - 1] && !outOfOrder[index - 1]);
+            missing[index] = !values[index] || outOfOrder[index] || !lowerUsable;
         }
         return missing;
     }

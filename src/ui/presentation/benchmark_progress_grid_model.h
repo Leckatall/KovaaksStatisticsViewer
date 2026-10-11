@@ -30,8 +30,9 @@ namespace ksv::presentation {
                                                          std::optional<double> score);
 
     // Per tier chunk, whether a bound it needs is unusable: its own threshold, or the previous
-    // tier's (chunk 0 starts at 0), is missing, duplicated, negative or non-finite, or the two
-    // are not increasing. Such a chunk can never fill; the bar draws it hatched.
+    // tier's (chunk 0 starts at 0), is missing, duplicated, negative or non-finite, or out of order
+    // with a neighbouring threshold (not above the one before it, or not below the one after it;
+    // either of the two may be the wrong one). Such a chunk never fills; the bar draws it hatched.
     [[nodiscard]] std::vector<bool> missingThresholdChunks(const std::vector<domain::Tier> &tiers,
                                                            const std::vector<domain::Threshold> &thresholds);
 
