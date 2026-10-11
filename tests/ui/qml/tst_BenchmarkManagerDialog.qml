@@ -213,9 +213,17 @@ TestCase {
         verify(warning !== null, "the editor must surface a stale-baseline warning")
         compare(warning.visible, true)
 
-        // The editor is not hidden and Discard stays available.
+        // The editor is not hidden, and leaving it still offers Discard through the prompt.
         compare(find(dialog, "benchmarkNameField").visible, true)
-        compare(find(dialog, "discardButton").enabled, true)
+        dialog.close()
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+    }
+
+    // There is no one-click discard: leaving a dirty draft always goes through the prompt.
+    function test_editorHasNoDiscardButton() {
+        const dialog = openWithFake({dirty: true, hasDraft: true})
+        verify(find(dialog, "saveButton") !== null)
+        compare(find(dialog, "discardButton"), null)
     }
 
     function test_deleteRequiresConfirmation() {
@@ -970,7 +978,7 @@ TestCase {
         const nameField = find(dialog, "benchmarkNameField")
         verify(nameField !== null && nameField.visible)
         verify(nameField.width >= 160, "the name is squeezed to " + nameField.width)
-        for (const name of ["undoButton", "pasteButton", "saveButton", "discardButton"]) {
+        for (const name of ["undoButton", "pasteButton", "saveButton"]) {
             const button = find(dialog, name)
             verify(button !== null && button.visible, name + " is missing")
             verify(button.mapToItem(editor, button.width, 0).x <= editor.width + 0.5,
@@ -984,7 +992,7 @@ TestCase {
         const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
         const editor = find(dialog, "editorPane")
         const nameField = find(dialog, "benchmarkNameField")
-        const names = ["undoButton", "pasteButton", "saveButton", "discardButton"]
+        const names = ["undoButton", "pasteButton", "saveButton"]
         const rowsOf = () => names.map(name => {
             const button = find(dialog, name)
             return Math.round(button.mapToItem(editor, 0, button.height / 2).y)

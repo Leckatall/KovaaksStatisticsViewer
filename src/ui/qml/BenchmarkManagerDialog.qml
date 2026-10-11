@@ -924,17 +924,6 @@ ApplicationWindow {
                                 ToolTip.text: qsTr("Save the benchmark")
                                 onClicked: root.requestSave()
                             }
-                            ToolbarButton {
-                                objectName: "discardButton"
-                                icon.source: "icons/x.svg"
-                                display: AbstractButton.IconOnly
-                                Accessible.name: qsTr("Discard")
-                                ToolTip.text: qsTr("Discard unsaved changes and close the editor")
-                                onClicked: {
-                                    root.vm().discard()
-                                    root.statusMessage = ""
-                                }
-                            }
                         }
                     }
 
