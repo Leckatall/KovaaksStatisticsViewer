@@ -47,11 +47,9 @@ namespace ksv::qt_data {
     }
 
     std::vector<std::string> SettingsService::getKovaaksDirs() const {
-        static const QString kDefaultDir = "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer";
-
         const QMutexLocker locker(&m_settings_mutex);
         if (!m_settings.contains("file/kovaaksDirs")) {
-            if (!m_settings.contains("file/kovaaks")) return {kDefaultDir.toStdString()};
+            if (!m_settings.contains("file/kovaaks")) return {m_fallback_kovaaks_dir};
             return {m_settings.value("file/kovaaks").toUrl().toLocalFile().toStdString()};
         }
 
@@ -61,6 +59,11 @@ namespace ksv::qt_data {
     bool SettingsService::isKovaaksDirSet() const {
         const QMutexLocker locker(&m_settings_mutex);
         return m_settings.contains("file/kovaaksDirs") || m_settings.contains("file/kovaaks");
+    }
+
+    void SettingsService::setFallbackKovaaksDir(const std::string &dir) {
+        const QMutexLocker locker(&m_settings_mutex);
+        m_fallback_kovaaks_dir = dir;
     }
 
     void SettingsService::setKovaaksDirs(const std::vector<std::string> &dirs) {

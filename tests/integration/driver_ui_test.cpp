@@ -49,6 +49,47 @@ namespace {
         EXPECT_THROW(driver::parseSelector("win:/foo"), driver::DriverError);
     }
 
+    TEST(DriverSelectorTest, EscapesAndQuotesKeepOperatorCharactersInATerm) {
+        const auto escaped = driver::parseSelector(R"(text:\&File)");
+        ASSERT_EQ(escaped.segments.size(), 1);
+        ASSERT_EQ(escaped.segments[0].terms.size(), 1);
+        EXPECT_EQ(escaped.segments[0].terms[0].value, "&File");
+
+        const auto quoted = driver::parseSelector(R"(text:"Save & close > now @1" & type:Button@2)");
+        ASSERT_EQ(quoted.segments.size(), 1);
+        ASSERT_EQ(quoted.segments[0].terms.size(), 2);
+        EXPECT_EQ(quoted.segments[0].terms[0].value, "Save & close > now @1");
+        EXPECT_EQ(quoted.segments[0].index, 2);
+
+        const auto literalColon = driver::parseSelector(R"(odd\:name)");
+        EXPECT_EQ(literalColon.segments[0].terms[0].kind, driver::SelectorTerm::Kind::Name);
+        EXPECT_EQ(literalColon.segments[0].terms[0].value, "odd:name");
+
+        EXPECT_EQ(driver::parseSelector(R"(a\@3)").segments[0].index, std::nullopt);
+        EXPECT_EQ(driver::parseSelector(R"(back\\slash)").segments[0].terms[0].value, R"(back\slash)");
+        // An unescaped & is still the AND operator.
+        EXPECT_THROW(driver::parseSelector("text:&View"), driver::DriverError);
+        EXPECT_THROW(driver::parseSelector(R"(text:"open)"), driver::DriverError);
+    }
+
+    TEST(DriverSelectorTest, TextTermsIgnoreMnemonicsAndRawTextDoesNot) {
+        EXPECT_EQ(driver::stripMnemonics("&File"), "File");
+        EXPECT_EQ(driver::stripMnemonics("Save && Close"), "Save & Close");
+        EXPECT_EQ(driver::stripMnemonics("Save & close"), "Save & close");
+
+        const auto text = driver::parseSelector(R"(text:"&File")").segments[0].terms[0];
+        EXPECT_TRUE(text.pattern.match(driver::stripMnemonics("&File")).hasMatch());
+        const auto raw = driver::parseSelector(R"(rawtext:\&F*)").segments[0].terms[0];
+        EXPECT_EQ(raw.kind, driver::SelectorTerm::Kind::RawText);
+        EXPECT_TRUE(raw.pattern.match("&File").hasMatch());
+        EXPECT_FALSE(raw.pattern.match("File").hasMatch());
+
+        const auto objects = driver::parseSelector("benchmarkManagerDialog > obj:*Prompt");
+        EXPECT_TRUE(objects.targetsObjects());
+        EXPECT_EQ(objects.segments[1].terms[0].kind, driver::SelectorTerm::Kind::Object);
+        EXPECT_FALSE(driver::parseSelector("text:File").targetsObjects());
+    }
+
     struct DriverScene {
         integration::TestEnv env;
         std::unique_ptr<application::App> app;
@@ -200,6 +241,107 @@ namespace {
                               .toObject().value("rect").toArray();
         EXPECT_NEAR(image.width(), rect[2].toInt(), 1);
         EXPECT_NEAR(image.height(), rect[3].toInt(), 1);
+    }
+
+    TEST_F(DriverUiTest, MnemonicLabelsMatchPlainText) {
+        for (const QString selector: {"text:File", R"(text:\&File)", R"(text:"&File")"}) {
+            const auto result = run("get", {{"selector", selector}, {"property", "text"}});
+            EXPECT_EQ(result.value("value").toString(), "&File") << selector.toStdString();
+            EXPECT_EQ(result.value("target").toObject().value("type").toString(), "MenuBarItem");
+        }
+        EXPECT_EQ(run("find", {{"selector", "rawtext:File"}}).value("count").toInt(), 0);
+    }
+
+    TEST_F(DriverUiTest, NonVisualObjectsCanBeFoundAndInvoked) {
+        const auto dialogs = run("find", {{"selector", "obj:*Dialog"}, {"objects", true}});
+        QStringList names;
+        for (const auto &match: dialogs.value("matches").toArray()) {
+            names.append(match.toObject().value("name").toString());
+            EXPECT_EQ(match.toObject().value("kind").toString(), "object");
+        }
+        EXPECT_TRUE(names.contains("kovaaksFolderDialog")) << names.join(", ").toStdString();
+
+        // Input needs geometry; non-visual objects say so.
+        EXPECT_TRUE(failure("click", {{"selector", "obj:manageBenchmarksAction"}}).value("message").toString()
+                        .contains("non-visual"));
+
+        run("invoke", {{"selector", "obj:manageBenchmarksAction"}, {"method", "trigger"}});
+        auto *manager = scene->root->findChild<QObject *>("benchmarkManagerDialog");
+        ASSERT_NE(manager, nullptr);
+        EXPECT_TRUE(QTest::qWaitFor([&] { return manager->property("visible").toBool(); }, 3000));
+        QMetaObject::invokeMethod(manager, "close");
+        QTest::qWaitFor([&] { return !manager->property("visible").toBool(); }, 3000);
+    }
+
+    TEST_F(DriverUiTest, TypingIntoAFieldAppendsUnlessAskedOtherwise) {
+        run("type", {{"selector", "scenarioSearchField"}, {"text", "Pa"}, {"clear", true}});
+        // Focus elsewhere and move the caret to the start, as a delegate might on completion.
+        scene->root->findChild<QObject *>("scenarioSearchField")->setProperty("cursorPosition", 0);
+        run("type", {{"selector", "scenarioSearchField"}, {"text", "su"}});
+        EXPECT_EQ(run("get", {{"selector", "scenarioSearchField"}, {"property", "text"}}).value("value").toString(), "Pasu");
+
+        run("type", {{"selector", "scenarioSearchField"}, {"text", "x"}, {"atStart", true}});
+        EXPECT_EQ(run("get", {{"selector", "scenarioSearchField"}, {"property", "text"}}).value("value").toString(), "xPasu");
+        run("type", {{"selector", "scenarioSearchField"}, {"text", ""}, {"clear", true}});
+    }
+
+    TEST_F(DriverUiTest, MouseGesturesSpanCommandsAndReleaseAll) {
+        const auto press = run("mouse", {{"action", "press"}, {"point", QJsonArray{400, 400}}});
+        EXPECT_EQ(press.value("held").toArray(), (QJsonArray{"left"}));
+        const auto move = run("mouse", {{"action", "move"}, {"point", QJsonArray{420, 410}}, {"steps", 4}});
+        EXPECT_EQ(move.value("held").toArray(), (QJsonArray{"left"}));
+        EXPECT_TRUE(failure("mouse", {{"action", "press"}, {"point", QJsonArray{420, 410}}})
+                        .value("message").toString().contains("already held"));
+
+        const auto release = run("mouse", {{"action", "release"}});
+        EXPECT_TRUE(release.value("held").toArray().isEmpty());
+        EXPECT_EQ(release.value("pos").toArray(), (QJsonArray{420, 410}));
+        EXPECT_TRUE(failure("mouse", {{"action", "release"}}).value("message").toString().contains("release"));
+
+        run("mouse", {{"action", "press"}, {"point", QJsonArray{400, 400}}});
+        run("mouse", {{"action", "releaseAll"}});
+        EXPECT_TRUE(run("mouse", {{"action", "press"}, {"point", QJsonArray{400, 400}}}).contains("held"));
+        run("mouse", {{"action", "releaseAll"}});
+    }
+
+    TEST_F(DriverUiTest, ClickResultsKeepTheResolvedTargetAndReportChangesAfter) {
+        const auto result = run("click", {{"selector", "benchmarksTab"}});
+
+        const auto target = result.value("target").toObject();
+        EXPECT_EQ(target.value("name").toString(), "benchmarksTab");
+        EXPECT_FALSE(target.value("checked").toBool());
+        ASSERT_TRUE(result.contains("after"));
+        EXPECT_TRUE(result.value("after").toObject().value("checked").toBool());
+    }
+
+    TEST_F(DriverUiTest, DialogFallbackWindowsAreKeyedByTheirDialog) {
+        auto *manager = scene->root->findChild<QObject *>("benchmarkManagerDialog");
+        ASSERT_NE(manager, nullptr);
+        QMetaObject::invokeMethod(manager, "show");
+        ASSERT_TRUE(QTest::qWaitFor([&] { return manager->property("visible").toBool(); }, 3000));
+        run("invoke", {{"selector", "obj:deleteConfirmPrompt"}, {"method", "open"}});
+
+        QJsonObject prompt;
+        QTest::qWaitFor([&] {
+            for (const auto &value: run("windows").value("windows").toArray()) {
+                if (value.toObject().value("key").toString() == "deleteConfirmPrompt") prompt = value.toObject();
+            }
+            return prompt.value("visible").toBool();
+        }, 3000);
+        EXPECT_EQ(prompt.value("kind").toString(), "fallback");
+        EXPECT_EQ(prompt.value("owner").toString(), "deleteConfirmPrompt");
+
+        QTemporaryDir dir;
+        const QString path = QDir(dir.path()).filePath("prompt.png");
+        const auto shot = run("screenshot", {{"path", path}, {"window", "deleteConfirmPrompt"}, {"withContext", true}});
+        EXPECT_EQ(shot.value("context").toString(), "benchmarkManagerDialog");
+        auto *managerWindow = qobject_cast<QQuickWindow *>(manager);
+        ASSERT_NE(managerWindow, nullptr);
+        EXPECT_EQ(QImage(path).size(), managerWindow->size() * managerWindow->devicePixelRatio());
+
+        run("click", {{"selector", "win:deleteConfirmPrompt/text:Cancel"}});
+        QMetaObject::invokeMethod(manager, "close");
+        QTest::qWaitFor([&] { return !manager->property("visible").toBool(); }, 3000);
     }
 
     TEST_F(DriverUiTest, UnknownCommandsAndPropertiesAreReported) {

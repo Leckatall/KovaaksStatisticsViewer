@@ -1,0 +1,18 @@
+---
+type: internal
+area: Build & packaging
+---
+The UI driver can now reach every interaction state: held gestures, realistic hover, selectors for any text or QML object, and stable, honest dialog windows. Reference: `tools/driver/README.md`.
+Deliberate behaviour changes to existing commands:
+- Selector terms can contain operator characters. `\` escapes `& > @ : " \`, and `"..."` quotes a literal run (`text:"Save & close"`). An unescaped `&` is still AND, so `text:&View` is still an empty-term error. `selector.cpp` now lexes the selector into (char, literal) units before splitting on `" > "`, `&` and a trailing `@N`.
+- `text:` and `acc:` ignore mnemonic markers on both sides (`driver::stripMnemonics`: a single `&` before a non-space character is dropped, `&&` becomes `&`), so `text:File` matches the `&File` menu. The new `rawtext:` term matches the raw string.
+- `type --into` puts the caret at the end of the existing text (after `deselect()`), so it appends; `--at-start` puts it at 0. It used to inherit whatever caret the field had, which for `SeriesConfigEditorDelegate.qml` (it sets `cursorPosition = 0` on completion) prepended.
+- `click`, `hover`, `scroll` and `mouse` report the target as resolved (the geometry the input used, its state before the action) plus an `after` record when its state changed; a click that hides its own target (menu item, dialog button) no longer reads as `[hidden]`. `drag` reports both endpoints as resolved.
+New:
+- `obj:` selector terms address non-visual QML objects (Action, Timer, Settings, QtQuick.Dialogs dialogs) by objectName or id, so `invoke "obj:manageBenchmarksAction" trigger` works. The scene walk adds QML-created QObject children (`qmlContext()` set, not a Component, not a style internal) of every visited object only when a selector uses `obj:` or `find --objects` asks; such selectors search hidden objects too. Input commands reject them with a clear error; records carry `kind: object` and no rect.
+- `mouse press|move|release` keeps the cursor position and held buttons per window in `UiDriver::m_pointers`, so a drag can be screenshotted mid-way (editor-table drop line, `uncategorizedDropZone`, Graph Lines reorder preview). `move` interpolates `--steps` moves. `stop` and the end of every `batch` send `mouse releaseAll`. `drag` is now press + interpolated move + release over the same cursor state.
+- `hover` moves through `--steps` (default 8) intermediate positions from the last known cursor position. Headless sessions also turn on `QStyleHints::useHoverEffects`, which the offscreen theme reports as off: Qt Quick Controls then had hover disabled entirely, which is why hovering never highlighted a menu item or opened a cascading submenu. The native Windows theme has it on, so this matches the real app.
+- Top-level windows the app did not declare are keyed by their owner (`UiDriver::windowOwner`): a Popup shown in its own window, or the QtQuick.Dialogs dialog whose QML fallback (`…DialogImpl`) it shows, matched through the impl's parent chain or its title. The headless dirty-close prompt is now `dirtyClosePrompt` instead of `window3`. `windows` entries carry `kind` (`popup`, `fallback`, and `native`/`inline` for a visible dialog with no window) and `owner`. Popup nodes record the window they are really shown in (`item->window()`).
+- `shot` warns about visible dialogs that have no window to capture (`uncapturedDialogs`), and `shot --with-context` paints a dialog window over its transient parent (or main) at its relative position, centred when the offscreen position falls outside the owner.
+- `find --objects` lists only non-visual objects.
+- Window ownership is computed once per command (`m_ownerCache`).

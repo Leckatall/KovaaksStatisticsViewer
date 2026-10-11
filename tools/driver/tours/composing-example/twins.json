@@ -1,0 +1,7 @@
+{
+  "scenarios": [
+    {"name": "Solo Scenario", "runs": 8, "firstDay": 0, "daySpacing": 1},
+    {"name": "Twin Scenario", "hash": "twin-a", "runs": 6, "firstDay": 1, "daySpacing": 2, "shape": "gallery-pasu"},
+    {"name": "Twin Scenario", "hash": "twin-b", "runs": 4, "firstDay": 2, "daySpacing": 3, "shape": "gallery-flyts"}
+  ]
+}

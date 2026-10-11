@@ -1,0 +1,127 @@
+# Every state the 2026-10-11 sweep could not reach, each reached with general
+# session arguments (--setting, --profile-spec, --overlay, --inject, put/rm/edit),
+# held gestures (mouse press/move/release) and stable dialog keys; none of them
+# has driver code of its own. Data files live in tools/driver/tours/unreachable/.
+#
+#   uv run python scripts/ui_driver.py tour unreachable --report
+set M=win:benchmarkManagerDialog
+set S=win:settingsDialog
+set SPECS=${REPO}/tools/driver/specs
+set TWINS=${REPO}/tools/driver/tours/composing-example
+
+# ---- Scenarios ---------------------------------------------------------------
+section scenarios
+# A profile but no KovaaK's folder: remove the folder setting the driver wrote.
+start --dataset rich --setting file/kovaaksDirs=
+shot --name first-run-banner
+
+# 42 scenarios, three with names over 60 characters, one without performance data.
+start --profile-spec "${SPECS}/many-scenarios.json"
+shot --name scenario-list-overflow
+type Long --into scenarioSearchField
+shot --name long-scenario-names
+type "" --into scenarioSearchField --clear
+click "text:Totals Only*"
+shot --name graph-no-performance-data
+
+# ---- Benchmarks tab ------------------------------------------------------------
+section benchmarks
+# The only benchmark file is unreadable.
+start --dataset empty --overlay "${TOUR_DATA}/broken"
+click benchmarksTab --shot=problems-only
+
+# The shown benchmark's file disappears; a library refresh notices.
+start --dataset rich
+click benchmarksTab
+rm benchmarks/driver-demo.json
+eval benchmarkManagerVm.refresh()
+shot --name unavailable
+
+# Missing and non-increasing thresholds; --setting picks it over the demo benchmark.
+start --dataset rich --overlay "${TOUR_DATA}/incomplete" --setting benchmarks/lastSelectedId=incomplete-demo
+click benchmarksTab --shot=incomplete
+
+# Two scenarios share a name, and one row names a scenario that does not exist.
+start --profile-spec "${TWINS}/twins.json" --overlay "${TWINS}/overlay" --setting benchmarks/lastSelectedId=matching-demo
+click benchmarksTab --shot=unresolved-and-ambiguous-rows
+
+# ---- Settings ------------------------------------------------------------------
+section settings
+# Slow every .perf decode so the rebuild is still running when the shot is taken.
+start --dataset fixtures --inject decoder=delay:300
+eval settingsDialog.open()
+click "${S}/generateProfileButton" --settle 50
+shot --window settingsDialog --name rebuild-in-progress
+wait "${S}/profileBuildProgressBar" --gone --timeout 10000
+
+start --dataset rich --inject seriesStore.commitDraft=fail
+eval settingsDialog.open()
+click "${S}/text:Graph Lines"
+type " (x)" --into "${S}/seriesNameField_2" --enter
+click "${S}/saveGraphLinesButton"
+shot --window settingsDialog --name series-draft-error
+# A held drag: the reorder preview exists only while the button is down.
+mouse press "${S}/seriesDragHandle_1"
+mouse move "${S}/seriesDragHandle_3"
+shot --window settingsDialog --name series-drag-preview
+mouse release
+
+# ---- Benchmark Manager ---------------------------------------------------------
+section manager
+# Name-only rows that resolve automatically, with every benchmark write failing.
+start --dataset rich --overlay "${TOUR_DATA}/autoresolve" --inject benchmarkStore.write=fail
+invoke obj:manageBenchmarksAction trigger
+click "${M}/refreshLibraryButton"
+# The failure banner belongs to the editor, so open a draft to see it.
+dblclick "${M}/libraryEntry_* > text:Driver Demo Benchmark"
+shot --window benchmarkManagerDialog --name resolution-write-failed
+
+# Held row drag: drop insertion line and the Move to Uncategorized zone. The
+# release lands outside the table, so nothing moves.
+mouse press "${M}/cell_entry-gallery-pasu_scenario"
+mouse move "${M}/cell_entry-gallery-flyts_scenario"
+shot --window benchmarkManagerDialog --name row-drag-drop-line
+mouse release --at 5 5
+
+# Adding a subcategory to a category that holds scenarios asks where they go.
+click "${M}/addSubcategoryPlus_clicking"
+type Static --into "${M}/subcategoryCreationField" --enter
+shot --window benchmarkManagerDialog --name relocation-prompt
+click "${M}/subcategoryRelocationPrompt > text:Cancel"
+
+# A threshold that is not a number.
+dblclick "${M}/cell_entry-gallery-primary_iron"
+type abc --enter
+shot --window benchmarkManagerDialog --name normalization-warning
+
+# Saving: the retrospective prompt, then the injected write failure.
+click "${M}/saveButton"
+shot --window retrospectivePrompt --with-context --name retrospective-prompt
+click "win:retrospectivePrompt/text:Save"
+shot --window benchmarkManagerDialog --name save-failed
+
+# Closing with unsaved changes; the prompt is keyed by its MessageDialog.
+click "${M}/text:Close"
+shot --window dirtyClosePrompt --with-context --name dirty-close-prompt
+click "win:dirtyClosePrompt/text:Discard"
+
+# The draft's source file changes on disk; a refresh marks the baseline stale.
+invoke obj:manageBenchmarksAction trigger
+dblclick "${M}/libraryEntry_* > text:Driver Demo Benchmark"
+edit benchmarks/driver-demo.json --replace "Driver Demo Benchmark" "Driver Demo Benchmark (edited on disk)"
+click "${M}/refreshLibraryButton"
+shot --window benchmarkManagerDialog --name stale-baseline-warning
+
+click "${M}/libraryEntry_* > text:Auto-resolve Benchmark"
+click "${M}/deleteBenchmarkButton"
+shot --window deleteConfirmPrompt --with-context --name delete-confirm-prompt
+click "win:deleteConfirmPrompt/text:Cancel"
+
+# Validation issues of a benchmark that fails validation.
+start --dataset rich --overlay "${TOUR_DATA}/incomplete" --inject benchmarkStore.scan=fail:after:1
+invoke obj:manageBenchmarksAction trigger
+dblclick "${M}/libraryEntry_* > text:Incomplete Benchmark"
+shot --window benchmarkManagerDialog --name validation-issues
+# The startup scan worked; every later one fails.
+click "${M}/refreshLibraryButton"
+shot --window benchmarkManagerDialog --name refresh-failed

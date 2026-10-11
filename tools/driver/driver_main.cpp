@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QFont>
 #include <QGuiApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPalette>
@@ -32,6 +33,7 @@
 #include <app/app.h>
 
 #include "driver_dataset.h"
+#include "driver_ports.h"
 #include "driver_server.h"
 #include "logging_setup.h"
 #include "message_log.h"
@@ -39,6 +41,7 @@
 #include "qml_source_interceptor.h"
 #include "settings_service.h"
 #include "series_config_store.h"
+#include "session_compose.h"
 #include "ui_driver.h"
 #include "formats/csv/stats_csv_parser.h"
 #include "formats/protobuf/proto_decoder.h"
@@ -99,8 +102,11 @@ namespace {
     };
 
     // Windows' default UI font plus the app palette (for QPainter-drawn items).
+    // The offscreen theme also turns hover effects off, so controls would ignore
+    // the pointer (no hover highlight, no cascading submenus); Windows has them on.
     void applyHeadlessAppLook() {
         if (!isHeadlessPlatform()) return;
+        QGuiApplication::styleHints()->setUseHoverEffects(true);
         QGuiApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
         QPalette palette;
         for (const auto &entry: kWindowsDarkPalette) {
@@ -141,6 +147,9 @@ namespace {
 }
 
 int main(int argc, char *argv[]) {
+    // Without a console, Qt on Windows logs to OutputDebugString; the CLI runs
+    // ksv_driver detached with stderr in <session>/app.log, so send it there.
+    if (qEnvironmentVariableIsEmpty("QT_FORCE_STDERR_LOGGING")) qputenv("QT_FORCE_STDERR_LOGGING", "1");
     install_debug_message_pattern();
     driver::MessageLog::install();
     declare_metatypes();
@@ -161,7 +170,20 @@ int main(int argc, char *argv[]) {
     const QCommandLineOption sizeOption("size", "Main window size, WxH. Default: 1280x800.", "WxH", "1280x800");
     const QCommandLineOption compiledOption("compiled-qml", "Load the compiled QML module instead of src/ui/qml.");
     const QCommandLineOption readyTimeoutOption("ready-timeout-ms", "Max wait for the profile to load.", "ms", "20000");
-    parser.addOptions({sessionOption, datasetOption, sizeOption, compiledOption, readyTimeoutOption});
+    const QCommandLineOption overlayOption(
+        "overlay", "Copy DIR's tree onto the session's data/ after seeding (repeatable, applied in order).", "dir");
+    const QCommandLineOption settingOption(
+        "setting", "Write a QSettings key before the app starts (repeatable). VALUE is JSON when it parses; "
+                   "KEY= removes the key.", "key=value");
+    const QCommandLineOption reapplyOption(
+        "reapply", "Apply --overlay/--setting even when the session was seeded by an earlier start.");
+    const QCommandLineOption profileSpecOption(
+        "profile-spec", "Build profile.pb (and a benchmark) from a JSON spec when seeding; with --dataset empty, "
+                        "first-run or fixtures.", "file");
+    const QCommandLineOption injectOption(
+        "inject", "Fault/latency injection on a port: PORT[.OP]=EFFECT[,EFFECT...] (repeatable).", "spec");
+    parser.addOptions({sessionOption, datasetOption, sizeOption, compiledOption, readyTimeoutOption, overlayOption,
+                       settingOption, reapplyOption, profileSpecOption, injectOption});
     parser.process(qapp);
 
     if (!parser.isSet(sessionOption)) return fail(2, "--session-dir is required");
@@ -170,6 +192,18 @@ int main(int argc, char *argv[]) {
     static const QRegularExpression sizePattern(QStringLiteral("^(\\d+)x(\\d+)$"));
     const auto sizeMatch = sizePattern.match(parser.value(sizeOption));
     if (!sizeMatch.hasMatch()) return fail(2, "--size must look like 1280x800");
+    QList<driver::SettingAssignment> settingAssignments;
+    for (const QString &text: parser.values(settingOption)) {
+        driver::SettingAssignment assignment;
+        if (const QString error = driver::parseSettingAssignment(text, assignment); !error.isEmpty()) {
+            return fail(2, error);
+        }
+        settingAssignments.append(assignment);
+    }
+    auto faults = std::make_shared<driver::FaultPlan>();
+    for (const QString &spec: parser.values(injectOption)) {
+        if (const QString error = faults->add(spec); !error.isEmpty()) return fail(2, error);
+    }
 
     // Every QSettings (SettingsService, QML Settings {}) and AppDataLocation is
     // redirected into the session, so a driver run never touches the real
@@ -181,23 +215,50 @@ int main(int argc, char *argv[]) {
     QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settingsDir);
     QStandardPaths::setTestModeEnabled(true);
 
+    // Composition order (README "Composing a session"): seed the dataset, then
+    // the profile spec, then overlays, then the driver's own settings, then
+    // --setting, then build App with any --inject decorators. A kept session
+    // (seeded by an earlier start) gets none of the data steps again unless
+    // --reapply asks for the overlays and settings.
     const driver::SessionData data{sessionDir.filePath("data")};
-    if (const QString error = driver::seedSessionData(data, dataset, QStringLiteral(KSV_EXAMPLES_DIR));
+    const bool freshSession = !driver::isSeeded(data);
+    const bool compose = freshSession || parser.isSet(reapplyOption);
+    if (const QString error = driver::seedSessionData(data, dataset, QStringLiteral(KSV_EXAMPLES_DIR),
+                                                      parser.value(profileSpecOption));
         !error.isEmpty()) {
         return fail(2, error);
     }
+    if (compose) {
+        for (const QString &overlay: parser.values(overlayOption)) {
+            if (const QString error = driver::applyOverlay(overlay, data.root); !error.isEmpty()) return fail(2, error);
+            qInfo("ksv_driver: overlay %s", qPrintable(QDir::toNativeSeparators(overlay)));
+        }
+    }
 
     auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
-    if (driver::datasetSetsKovaaksDir(dataset) && !settings->isKovaaksDirSet()) {
-        settings->setKovaaksDirs({data.root.toStdString()});
+    // With no folder configured the app falls back to the Steam install path;
+    // keep the session sandboxed by pointing that fallback at nothing.
+    settings->setFallbackKovaaksDir(sessionDir.filePath("no-kovaaks-install").toStdString());
+    if (freshSession) {
+        if (driver::datasetSetsKovaaksDir(dataset)) settings->setKovaaksDirs({data.root.toStdString()});
+        settings->setProfilePath(data.profilePath().toStdString());
     }
-    settings->setProfilePath(data.profilePath().toStdString());
+    if (compose) {
+        for (const auto &assignment: settingAssignments) {
+            if (const QString error = driver::applySetting(assignment, *settings); !error.isEmpty()) {
+                return fail(2, error);
+            }
+            qInfo("ksv_driver: setting %s", qPrintable(assignment.key));
+        }
+    }
 
+    for (const QString &injection: faults->describe()) qInfo("ksv_driver: inject %s", qPrintable(injection));
     application::App app(
-        settings, std::make_shared<data::ProtoDecoder>(),
-        std::make_shared<qt_data::SeriesConfigStore>(settings),
-        std::make_shared<data::StatsCsvParser>(),
-        std::make_shared<qt_data::BenchmarkStore>(data.benchmarksDir().toStdString()));
+        settings, driver::injectDecoder(std::make_shared<data::ProtoDecoder>(), faults),
+        driver::injectSeriesStore(std::make_shared<qt_data::SeriesConfigStore>(settings), faults),
+        driver::injectCsvParser(std::make_shared<data::StatsCsvParser>(), faults),
+        driver::injectBenchmarkStore(std::make_shared<qt_data::BenchmarkStore>(data.benchmarksDir().toStdString()),
+                                     faults));
     QQmlApplicationEngine *engine = app.engine();
 
     const bool compiledQml = parser.isSet(compiledOption);
@@ -234,6 +295,7 @@ int main(int argc, char *argv[]) {
         {"qmlSource", compiledQml ? QStringLiteral("compiled") : QStringLiteral(KSV_QML_SOURCE_DIR)},
         {"sessionDir", sessionDir.absolutePath()},
         {"profileLoaded", profileLoaded},
+        {"injections", QJsonArray::fromStringList(faults->describe())},
     };
     if (!writeSessionFile(sessionDir.filePath("session.json"), session)) {
         return fail(4, "could not write session.json");

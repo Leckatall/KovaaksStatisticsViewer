@@ -26,11 +26,15 @@ namespace ksv::driver {
     // Selector grammar (see tools/driver/README.md):
     //   [win:<window>/] segment ( " > " segment )*
     //   segment := term ( "&" term )* [ "@" N ]
-    //   term    := name-glob | name:<glob> | id:<glob> | text:<glob> | type:<glob> | acc:<glob>
+    //   term    := name-glob | name:<glob> | id:<glob> | text:<glob> | rawtext:<glob>
+    //            | type:<glob> | acc:<glob> | obj:<glob>
     // Later segments match descendants of the previous segment's matches; @N picks
-    // the Nth (0-based) match of that segment.
+    // the Nth (0-based) match of that segment. Inside a term, `\` escapes & > @ : " \
+    // and "..." quotes a literal run (text:"Save & close"). text: and acc: ignore
+    // mnemonic markers (&File matches File; && is a literal &); rawtext: does not.
+    // obj: matches non-visual QML objects (Action, Timer, dialogs) by objectName or id.
     struct SelectorTerm {
-        enum class Kind { Name, Id, Text, Type, Accessible };
+        enum class Kind { Name, Id, Text, RawText, Type, Accessible, Object };
         Kind kind = Kind::Name;
         QString value;
         QRegularExpression pattern;
@@ -45,7 +49,14 @@ namespace ksv::driver {
         QString source;
         QString window;  // empty = every visible window
         QList<SelectorSegment> segments;  // empty = the window's root
+
+        // Whether any term is obj: (the scene walk then includes non-visual objects).
+        [[nodiscard]] bool targetsObjects() const;
     };
 
     [[nodiscard]] Selector parseSelector(const QString &text);
+
+    // Drops mnemonic markers the way a label displays them: a single & before a
+    // character is removed and && becomes &. A trailing & or one before a space stays.
+    [[nodiscard]] QString stripMnemonics(const QString &text);
 }

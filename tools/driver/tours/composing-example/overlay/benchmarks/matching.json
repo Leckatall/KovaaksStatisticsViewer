@@ -1,0 +1,51 @@
+{
+    "schemaVersion": 1,
+    "id": "matching-demo",
+    "name": "Matching Demo",
+    "tiers": [
+        {"id": "bronze", "name": "Bronze", "color": [205, 127, 50, 255]},
+        {"id": "silver", "name": "Silver", "color": [192, 192, 200, 255]},
+        {"id": "gold", "name": "Gold", "color": [255, 200, 40, 255]}
+    ],
+    "uncategorized": [],
+    "categories": [
+        {
+            "id": "matching",
+            "name": "Matching",
+            "color": [0, 188, 212, 255],
+            "scenarios": [
+                {
+                    "id": "entry-solo",
+                    "name": "Solo Scenario",
+                    "hash": "spec-solo-scenario",
+                    "thresholds": [
+                        {"tierId": "bronze", "score": 3000},
+                        {"tierId": "silver", "score": 4500},
+                        {"tierId": "gold", "score": 6000}
+                    ]
+                },
+                {
+                    "id": "entry-twin",
+                    "name": "Twin Scenario",
+                    "hash": null,
+                    "thresholds": [
+                        {"tierId": "bronze", "score": 2000},
+                        {"tierId": "silver", "score": 3000},
+                        {"tierId": "gold", "score": 4000}
+                    ]
+                },
+                {
+                    "id": "entry-ghost",
+                    "name": "Ghost Scenario",
+                    "hash": null,
+                    "thresholds": [
+                        {"tierId": "bronze", "score": 1000},
+                        {"tierId": "silver", "score": 2000},
+                        {"tierId": "gold", "score": 3000}
+                    ]
+                }
+            ],
+            "subcategories": []
+        }
+    ]
+}

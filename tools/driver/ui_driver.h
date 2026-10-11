@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointF>
@@ -33,7 +34,8 @@ namespace ksv::driver {
 
     private:
         // One entry of a flattened scene walk: a QQuickItem, a Popup (whose visual
-        // is its popup item), or a window's root (object = the window).
+        // is its popup item), a window's root (object = the window), or, when a
+        // selector asks for obj:, a non-visual QML object (item = nullptr).
         struct Node {
             QObject *object = nullptr;
             QQuickItem *item = nullptr;
@@ -50,6 +52,23 @@ namespace ksv::driver {
             QPointer<QObject> object;  // guards node after the action ran
         };
 
+        // Where the synthesized cursor is and which buttons it holds, per window,
+        // so gestures can span commands (mouse press ... shot ... mouse release).
+        struct PointerState {
+            QPointF pos;
+            bool known = false;
+            Qt::MouseButtons buttons;
+            Qt::KeyboardModifiers modifiers;
+        };
+
+        // What owns a top-level window that the app did not declare itself: the
+        // Popup shown in it (kind "popup"), or the QtQuick.Dialogs dialog whose
+        // QML fallback it is (kind "fallback").
+        struct WindowOwner {
+            QPointer<QObject> object;
+            QString kind;
+        };
+
         QJsonObject dispatch(const QString &command, const QJsonObject &args);
 
         QJsonObject cmdWindows() const;
@@ -58,6 +77,7 @@ namespace ksv::driver {
         QJsonObject cmdScreenshot(const QJsonObject &args) const;
         QJsonObject cmdClick(const QJsonObject &args);
         QJsonObject cmdHover(const QJsonObject &args);
+        QJsonObject cmdMouse(const QJsonObject &args);
         QJsonObject cmdDrag(const QJsonObject &args);
         QJsonObject cmdScroll(const QJsonObject &args);
         QJsonObject cmdKey(const QJsonObject &args);
@@ -75,20 +95,37 @@ namespace ksv::driver {
         [[nodiscard]] QString windowKey(QQuickWindow *window) const;
         [[nodiscard]] QQuickWindow *resolveWindow(const QString &key) const;
         [[nodiscard]] QJsonObject windowRecord(QQuickWindow *window) const;
+        [[nodiscard]] WindowOwner windowOwner(QQuickWindow *window) const;
+        // Every QML-created QObject reachable from the windows' object trees.
+        [[nodiscard]] QList<QObject *> sceneObjects() const;
+        // Visible QtQuick.Dialogs dialogs that have no window of their own (native).
+        [[nodiscard]] QList<QObject *> windowlessDialogs() const;
+        [[nodiscard]] QString dialogKey(QObject *dialog) const;
 
-        [[nodiscard]] Nodes collect(const QString &windowKey, bool includeHidden) const;
+        [[nodiscard]] Nodes collect(const QString &windowKey, bool includeHidden, bool withObjects = false) const;
         [[nodiscard]] std::vector<int> resolveAll(const Selector &selector, const Nodes &nodes) const;
         [[nodiscard]] Node resolveOne(const QString &selectorText, bool includeHidden) const;
         [[nodiscard]] QJsonObject record(const Node &node, bool withWindow) const;
 
         [[nodiscard]] PointTarget pointTarget(const QJsonValue &spec, const QJsonObject &args) const;
-        // The target's record as it is now (after an action), or as resolved.
-        [[nodiscard]] QJsonValue currentTarget(const PointTarget &target) const;
+        // The target as resolved (before the action) plus, when it changed, an
+        // "after" record of its state now.
+        [[nodiscard]] QJsonObject targetResult(const PointTarget &target) const;
         void prepareForInput(QQuickWindow *window) const;
         static void settle(const QJsonObject &args);
+
+        // Moves the synthesized cursor to `to` through `steps` intermediate moves
+        // from its last position in `window`, as a real pointer would.
+        void moveCursor(QQuickWindow *window, const QPointF &to, int steps);
+        PointerState &pointer(QQuickWindow *window);
+        void releaseAll();
 
         QQmlEngine *m_engine;
         QPointer<QObject> m_mainRoot;
         qint64 m_logCursor = 0;
+        QHash<QQuickWindow *, PointerState> m_pointers;
+        // Window ownership is recomputed once per command (see execute()).
+        mutable QHash<QQuickWindow *, WindowOwner> m_ownerCache;
+        mutable bool m_ownerCacheValid = false;
     };
 }

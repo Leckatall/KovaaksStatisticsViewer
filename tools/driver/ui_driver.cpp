@@ -13,6 +13,7 @@
 #include <QKeySequence>
 #include <QMetaMethod>
 #include <QMetaProperty>
+#include <QPainter>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQmlExpression>
@@ -126,11 +127,50 @@ namespace ksv::driver {
             return {pixels.x(), pixels.y(), pixels.width(), pixels.height()};
         }
 
+        // Neither an item, a popup nor a window: an Action, Timer, Settings, a
+        // QtQuick.Dialogs dialog, ...
+        bool isNonVisual(const QObject *object) {
+            return !qobject_cast<const QQuickItem *>(object) && !isPopup(object) &&
+                   !qobject_cast<const QWindow *>(object);
+        }
+
+        bool isQtDialog(const QObject *object) { return object && object->inherits("QQuickAbstractDialog"); }
+
+        // The QML implementation QtQuick.Dialogs shows when there is no native
+        // dialog (QQuickMessageDialogImpl, QQuickFileDialogImpl, ...): a Popup.
+        bool isDialogImpl(const QObject *object) {
+            for (auto *metaObject = object->metaObject(); metaObject; metaObject = metaObject->superClass()) {
+                if (QLatin1String(metaObject->className()).endsWith(QLatin1String("DialogImpl"))) return true;
+            }
+            return false;
+        }
+
+        // QML-created non-visual objects worth walking: created by a QML context
+        // other than a style's, and not a Component declaration.
+        bool isSceneObject(const QObject *object) {
+            if (!isNonVisual(object) || object->inherits("QQmlComponent")) return false;
+            const QQmlContext *context = qmlContext(object);
+            if (!context) return false;
+            return !isStyleContext(context) || !object->objectName().isEmpty();
+        }
+
         bool nodeVisible(const QObject *object) {
             if (auto *item = qobject_cast<const QQuickItem *>(object)) return item->isVisible();
             if (isPopup(object)) return object->property("visible").toBool();
             if (auto *window = qobject_cast<const QWindow *>(object)) return window->isVisible();
-            return false;
+            // Non-visual objects only count as hidden when they have a visible flag (dialogs).
+            return !hasProperty(object, "visible") || object->property("visible").toBool();
+        }
+
+        QString slug(const QString &text) {
+            static const QRegularExpression separators(QStringLiteral("[^A-Za-z0-9]+"));
+            QString result;
+            bool upper = false;
+            for (const QString &word: stripMnemonics(text).split(separators, Qt::SkipEmptyParts)) {
+                result += upper ? word.left(1).toUpper() + word.mid(1) : word.left(1).toLower() + word.mid(1);
+                upper = true;
+            }
+            return result.left(48);
         }
 
         // ---- value conversion ----------------------------------------------------
@@ -246,17 +286,23 @@ namespace ksv::driver {
             const auto matches = [&](const QString &value) {
                 return !value.isEmpty() && term.pattern.match(value).hasMatch();
             };
+            const auto matchesText = [&](const QString &value) { return matches(stripMnemonics(value)); };
             switch (term.kind) {
                 case SelectorTerm::Kind::Name: return matches(object->objectName());
                 case SelectorTerm::Kind::Id: return matches(qmlId(object));
                 case SelectorTerm::Kind::Text:
+                    return matchesText(stringProperty(object, "text")) || matchesText(stringProperty(object, "title")) ||
+                           matchesText(stringProperty(object, "placeholderText"));
+                case SelectorTerm::Kind::RawText:
                     return matches(stringProperty(object, "text")) || matches(stringProperty(object, "title")) ||
                            matches(stringProperty(object, "placeholderText"));
                 case SelectorTerm::Kind::Type: {
                     const auto chain = typeChain(object);
                     return std::any_of(chain.cbegin(), chain.cend(), matches);
                 }
-                case SelectorTerm::Kind::Accessible: return matches(accessibleName(const_cast<QObject *>(object)));
+                case SelectorTerm::Kind::Accessible: return matchesText(accessibleName(const_cast<QObject *>(object)));
+                case SelectorTerm::Kind::Object:
+                    return isNonVisual(object) && (matches(object->objectName()) || matches(qmlId(object)));
             }
             return false;
         }
@@ -288,13 +334,15 @@ namespace ksv::driver {
     }
 
     QStringList UiDriver::commands() {
-        return {"ping", "windows", "tree", "find", "screenshot", "click", "hover", "drag", "scroll", "key",
+        return {"ping", "windows", "tree", "find", "screenshot", "click", "hover", "mouse", "drag", "scroll", "key",
                 "type", "get", "set", "invoke", "eval", "wait", "resize", "logs"};
     }
 
     QJsonObject UiDriver::execute(const QString &command, const QJsonObject &args) {
         const qint64 before = MessageLog::instance().lastSeq();
+        m_ownerCacheValid = false;
         QJsonObject result = dispatch(command, args);
+        m_ownerCacheValid = false;
         if (command != u"logs") {
             QJsonArray warnings;
             for (const auto &entry: MessageLog::instance().since(before, true, 20)) {
@@ -311,8 +359,11 @@ namespace ksv::driver {
     QJsonObject UiDriver::dispatch(const QString &command, const QJsonObject &args) {
         if (!m_mainRoot) throw DriverError(QStringLiteral("the main window no longer exists"));
         if (command == u"ping") {
+            // logSeq lets a client see whether the app is still logging without
+            // moving the `logs` cursor (the CLI's file commands wait for quiet).
             return {{"pong", true}, {"platform", QGuiApplication::platformName()},
-                    {"pid", QCoreApplication::applicationPid()}};
+                    {"pid", QCoreApplication::applicationPid()},
+                    {"logSeq", static_cast<qint64>(MessageLog::instance().lastSeq())}};
         }
         if (command == u"windows") return cmdWindows();
         if (command == u"tree") return cmdTree(args);
@@ -320,6 +371,7 @@ namespace ksv::driver {
         if (command == u"screenshot") return cmdScreenshot(args);
         if (command == u"click") return cmdClick(args);
         if (command == u"hover") return cmdHover(args);
+        if (command == u"mouse") return cmdMouse(args);
         if (command == u"drag") return cmdDrag(args);
         if (command == u"scroll") return cmdScroll(args);
         if (command == u"key") return cmdKey(args);
@@ -349,10 +401,120 @@ namespace ksv::driver {
         return windows;
     }
 
+    QList<QObject *> UiDriver::sceneObjects() const {
+        QList<QObject *> objects;
+        QSet<const QObject *> visited;
+        std::function<void(QObject *)> walk = [&](QObject *object) {
+            for (QObject *child: object->children()) {
+                if (visited.contains(child)) continue;
+                visited.insert(child);
+                if (isPopup(child) || isSceneObject(child)) objects.append(child);
+                if (!qobject_cast<QWindow *>(child)) walk(child);
+            }
+        };
+        for (auto *window: quickWindows()) {
+            walk(window);
+            if (window->contentItem()) walk(window->contentItem());
+        }
+        return objects;
+    }
+
+    UiDriver::WindowOwner UiDriver::windowOwner(QQuickWindow *window) const {
+        if (!m_ownerCacheValid) {
+            m_ownerCache.clear();
+            m_ownerCacheValid = true;
+        }
+        if (const auto cached = m_ownerCache.constFind(window); cached != m_ownerCache.cend()) return *cached;
+
+        WindowOwner owner;
+        if (window != mainWindow() && window->objectName().isEmpty() && qmlId(window).isEmpty()) {
+            for (QObject *parent = window->parent(); parent && !owner.object; parent = parent->parent()) {
+                if (isPopup(parent)) owner = {parent, QStringLiteral("popup")};
+                else if (isQtDialog(parent)) owner = {parent, QStringLiteral("fallback")};
+            }
+            const QList<QObject *> objects = owner.object ? QList<QObject *>() : sceneObjects();
+            // A Popup the app declared, shown in its own window.
+            for (QObject *object: objects) {
+                if (!isPopup(object)) continue;
+                if (QQuickItem *popupItem = popupItemOf(object); popupItem && popupItem->window() == window) {
+                    owner = {object, QStringLiteral("popup")};
+                    break;
+                }
+            }
+            // A QtQuick.Dialogs dialog's QML fallback is a Popup (…DialogImpl) its
+            // helper creates; report the app's dialog instead. When the impl is not
+            // in the app's object tree, its controls belong to its own QML document,
+            // whose root is the impl Popup.
+            QObject *impl = owner.object && isDialogImpl(owner.object) ? owner.object.data() : nullptr;
+            if (!owner.object && window->contentItem()) {
+                for (QQuickItem *popupItem: window->contentItem()->childItems()) {
+                    for (QQuickItem *child: popupItem->childItems()) {
+                        const QQmlContext *context = qmlContext(child);
+                        if (QObject *root = context ? context->contextObject() : nullptr; root && isDialogImpl(root)) {
+                            impl = root;
+                        }
+                    }
+                }
+            }
+            if (impl) {
+                QObject *dialog = nullptr;
+                for (QObject *parent = impl->parent(); parent && !dialog; parent = parent->parent()) {
+                    if (isQtDialog(parent)) dialog = parent;
+                }
+                QList<QObject *> dialogs;
+                QList<QObject *> visibleDialogs;
+                for (QObject *object: objects.isEmpty() ? sceneObjects() : objects) {
+                    if (!isQtDialog(object)) continue;
+                    dialogs.append(object);
+                    if (object->property("visible").toBool()) visibleDialogs.append(object);
+                }
+                // Prefer an open dialog with the impl's title, then the only open one,
+                // then (for a closed fallback window) any dialog with that title.
+                const QString title = impl->property("title").toString();
+                const auto titled = [&](const QList<QObject *> &candidates) -> QObject * {
+                    for (QObject *candidate: candidates) {
+                        if (!title.isEmpty() && candidate->property("title").toString() == title) return candidate;
+                    }
+                    return nullptr;
+                };
+                if (!dialog) dialog = titled(visibleDialogs);
+                if (!dialog && visibleDialogs.size() == 1) dialog = visibleDialogs.first();
+                if (!dialog) dialog = titled(dialogs);
+                if (dialog) owner = {dialog, QStringLiteral("fallback")};
+            }
+        }
+        m_ownerCache.insert(window, owner);
+        return owner;
+    }
+
+    QString UiDriver::dialogKey(QObject *dialog) const {
+        if (!dialog->objectName().isEmpty()) return dialog->objectName();
+        if (const QString id = qmlId(dialog); !id.isEmpty()) return id;
+        if (const QString title = stringProperty(dialog, "title"); !title.isEmpty()) return slug(title);
+        return slug(displayText(dialog));
+    }
+
+    QList<QObject *> UiDriver::windowlessDialogs() const {
+        QSet<QObject *> owned;
+        for (auto *window: quickWindows()) {
+            if (window->isVisible()) owned.insert(windowOwner(window).object.data());
+        }
+        QList<QObject *> dialogs;
+        for (QObject *object: sceneObjects()) {
+            if (isQtDialog(object) && object->property("visible").toBool() && !owned.contains(object)) {
+                dialogs.append(object);
+            }
+        }
+        return dialogs;
+    }
+
     QString UiDriver::windowKey(QQuickWindow *window) const {
         if (window == mainWindow()) return QStringLiteral("main");
         if (!window->objectName().isEmpty()) return window->objectName();
         if (const QString id = qmlId(window); !id.isEmpty()) return id;
+        if (const WindowOwner owner = windowOwner(window); owner.object) {
+            if (const QString key = dialogKey(owner.object); !key.isEmpty()) return key;
+        }
         return QStringLiteral("window%1").arg(quickWindows().indexOf(window));
     }
 
@@ -370,6 +532,12 @@ namespace ksv::driver {
                 window->title() == key)
                 return window;
         }
+        for (QObject *dialog: windowlessDialogs()) {
+            if (dialogKey(dialog) == key) {
+                throw DriverError(QStringLiteral("'%1' is a native dialog: it has no window the driver can capture "
+                                                 "or send input to (run headless to get the QML fallback)").arg(key));
+            }
+        }
         QJsonArray known;
         for (auto *window: windows) known.append(windowRecord(window));
         throw DriverError(QStringLiteral("no window '%1'").arg(key), {{"windows", known}});
@@ -386,40 +554,77 @@ namespace ksv::driver {
         };
         if (!window->objectName().isEmpty()) record.insert("name", window->objectName());
         if (const QString id = qmlId(window); !id.isEmpty()) record.insert("id", id);
+        if (const WindowOwner owner = windowOwner(window); owner.object) {
+            record.insert("kind", owner.kind);
+            record.insert("owner", dialogKey(owner.object));
+            if (record.value("title").toString().isEmpty()) record.insert("title", displayText(owner.object));
+        }
         return record;
     }
 
     QJsonObject UiDriver::cmdWindows() const {
         QJsonArray windows;
         for (auto *window: quickWindows()) windows.append(windowRecord(window));
+        // A visible dialog without a window was shown natively (visible sessions)
+        // or inside its parent window; either way there is nothing separate to capture.
+        const bool native = QGuiApplication::platformName() == u"windows";
+        for (QObject *dialog: windowlessDialogs()) {
+            windows.append(QJsonObject{
+                {"key", dialogKey(dialog)},
+                {"type", cleanTypeName(dialog->metaObject())},
+                {"title", displayText(dialog)},
+                {"visible", true},
+                {"kind", native ? QStringLiteral("native") : QStringLiteral("inline")},
+                {"owner", dialogKey(dialog)},
+                {"capturable", false},
+            });
+        }
         return {{"windows", windows}};
     }
 
     // ---- scene walk and selectors ------------------------------------------------
 
-    UiDriver::Nodes UiDriver::collect(const QString &windowKeyFilter, const bool includeHidden) const {
+    UiDriver::Nodes UiDriver::collect(const QString &windowKeyFilter, const bool includeHidden,
+                                      const bool withObjects) const {
         Nodes nodes;
         QList<QQuickWindow *> windows;
         if (windowKeyFilter.isEmpty()) windows = quickWindows();
         else windows.append(resolveWindow(windowKeyFilter));
 
+        // Shared across windows: a popup shown in its own window is reached both
+        // through its declaring object and as that window's content; keep the first.
+        QSet<const QObject *> visited;
         for (auto *window: windows) {
             if (!window->isVisible() && !includeHidden) continue;
-            QSet<const QObject *> visited;
             QList<QQuickItem *> skippedPopupItems;
 
             // Items are walked through their visual children; popups through the
             // QObject tree of whatever declared them (their popup items sit under the
             // window overlay, where they are skipped and picked up as orphans later).
-            std::function<void(QObject *, QQuickItem *, int)> visit =
-                [&](QObject *object, QQuickItem *item, const int parent) {
+            std::function<void(QObject *, QQuickItem *, int)> visit;
+            // Non-visual QML objects (obj: selectors) hang off their declaring object.
+            const std::function<void(QObject *, int)> visitObjects = [&](QObject *owner, const int parent) {
+                for (QObject *child: owner->children()) {
+                    if (isPopup(child)) {
+                        visit(child, popupItemOf(child), parent);
+                    } else if (isSceneObject(child) && !visited.contains(child)) {
+                        visited.insert(child);
+                        const int index = static_cast<int>(nodes.size());
+                        nodes.push_back({child, nullptr, parent, window});
+                        visitObjects(child, index);
+                    }
+                }
+            };
+            visit = [&](QObject *object, QQuickItem *item, const int parent) {
                     if (!object || visited.contains(object)) return;
                     visited.insert(object);
                     if (item) visited.insert(item);
                     if (!includeHidden && !nodeVisible(object)) return;
                     if (nodes.size() >= kMaxTreeNodes * 4) return;
                     const int index = static_cast<int>(nodes.size());
-                    nodes.push_back({object, item, parent, window});
+                    // A popup may be shown in a window of its own (Popup.Window).
+                    auto *itemWindow = item && object != window ? qobject_cast<QQuickWindow *>(item->window()) : nullptr;
+                    nodes.push_back({object, item, parent, itemWindow ? itemWindow : window});
                     if (item) {
                         for (QQuickItem *child: item->childItems()) {
                             if (child->inherits("QQuickPopupItem")) {
@@ -431,6 +636,10 @@ namespace ksv::driver {
                     }
                     for (QObject *child: object->children()) {
                         if (isPopup(child)) visit(child, popupItemOf(child), index);
+                    }
+                    if (withObjects) {
+                        visitObjects(object, index);
+                        if (item && item != object) visitObjects(item, index);
                     }
                 };
             const int rootIndex = static_cast<int>(nodes.size());
@@ -481,9 +690,13 @@ namespace ksv::driver {
         return current;
     }
 
-    UiDriver::Node UiDriver::resolveOne(const QString &selectorText, const bool includeHidden) const {
+    UiDriver::Node UiDriver::resolveOne(const QString &selectorText, bool includeHidden) const {
         const Selector selector = parseSelector(selectorText);
-        const Nodes nodes = collect(selector.window, includeHidden);
+        // Non-visual objects have no visibility of their own (and often live in
+        // closed menus), so obj: selectors search everything.
+        const bool objects = selector.targetsObjects();
+        includeHidden = includeHidden || objects;
+        const Nodes nodes = collect(selector.window, includeHidden, objects);
         std::vector<int> matches = resolveAll(selector, nodes);
 
         if (matches.empty()) {
@@ -559,12 +772,16 @@ namespace ksv::driver {
                 record.insert("acc", accessible.left(200));
             }
         }
-        QRectF rect = object == node.window ? QRectF(0, 0, node.window->width(), node.window->height())
-                                            : sceneRect(node.item);
-        record.insert("rect", rectJson(rect));
-        if (object != node.window && node.item &&
-            !rect.intersects(QRectF(0, 0, node.window->width(), node.window->height()))) {
-            record.insert("offscreen", true);
+        if (!node.item && object != node.window) {
+            record.insert("kind", QStringLiteral("object"));  // non-visual: no geometry
+        } else {
+            const QRectF rect = object == node.window ? QRectF(0, 0, node.window->width(), node.window->height())
+                                                      : sceneRect(node.item);
+            record.insert("rect", rectJson(rect));
+            if (object != node.window && node.item &&
+                !rect.intersects(QRectF(0, 0, node.window->width(), node.window->height()))) {
+                record.insert("offscreen", true);
+            }
         }
         if (!nodeVisible(object)) record.insert("visible", false);
         if (hasProperty(object, "enabled") && !object->property("enabled").toBool()) record.insert("enabled", false);
@@ -583,10 +800,14 @@ namespace ksv::driver {
 
     QJsonObject UiDriver::cmdFind(const QJsonObject &args) const {
         const Selector selector = parseSelector(requireString(args, "selector"));
-        const bool includeHidden = args.value("all").toBool();
+        // objects=true lists only non-visual QML objects (Action, Timer, dialogs, ...).
+        const bool onlyObjects = args.value("objects").toBool();
+        const bool objects = onlyObjects || selector.targetsObjects();
+        const bool includeHidden = args.value("all").toBool() || objects;
         const int limit = args.value("limit").toInt(50);
-        const Nodes nodes = collect(selector.window, includeHidden);
-        const auto matches = resolveAll(selector, nodes);
+        const Nodes nodes = collect(selector.window, includeHidden, objects);
+        auto matches = resolveAll(selector, nodes);
+        if (onlyObjects) std::erase_if(matches, [&](const int index) { return nodes[index].item || !isNonVisual(nodes[index].object); });
         QJsonArray records;
         for (const int index: matches) {
             if (records.size() >= limit) break;
@@ -657,6 +878,9 @@ namespace ksv::driver {
         QJsonValue target;
         if (const QString selectorText = args.value("selector").toString(); !selectorText.isEmpty()) {
             const Node node = resolveOne(selectorText, false);
+            if (!node.item && node.object != node.window) {
+                throw DriverError(QStringLiteral("'%1' is non-visual; there is nothing to crop to").arg(selectorText));
+            }
             window = node.window;
             if (node.object != node.window) {
                 const int pad = args.value("pad").toInt(8);
@@ -671,6 +895,29 @@ namespace ksv::driver {
         }
         QImage image = window->grabWindow();
         if (image.isNull()) throw DriverError(QStringLiteral("grabWindow() returned an empty image"));
+        QString contextWindow;
+        if (args.value("withContext").toBool() && crop.isNull() && window != mainWindow()) {
+            // Paint the window over the one it belongs to, where the platform shows it.
+            auto *owner = qobject_cast<QQuickWindow *>(window->transientParent());
+            if (!owner || !owner->isVisible()) owner = mainWindow();
+            if (owner && owner != window && owner->isVisible()) {
+                QImage base = owner->grabWindow();
+                const qreal ratio = base.devicePixelRatio();
+                QPointF offset = QPointF(window->geometry().topLeft() - owner->geometry().topLeft());
+                const QRectF ownerRect(QPointF(0, 0), QSizeF(owner->size()));
+                // Offscreen windows can sit at arbitrary positions; centre the dialog
+                // over its owner when its own position would leave the owner's frame.
+                if (!ownerRect.contains(QRectF(offset, QSizeF(window->size())))) {
+                    offset = QPointF((owner->width() - window->width()) / 2.0, (owner->height() - window->height()) / 2.0);
+                }
+                base = base.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+                QPainter painter(&base);
+                painter.drawImage(QRectF(offset * ratio, QSizeF(window->size()) * ratio), image);
+                painter.end();
+                image = base;
+                contextWindow = windowKey(owner);
+            }
+        }
         if (!crop.isNull()) {
             const qreal ratio = image.devicePixelRatio();
             const QRect pixels = QRectF(crop.x() * ratio, crop.y() * ratio, crop.width() * ratio,
@@ -692,6 +939,10 @@ namespace ksv::driver {
         };
         if (!target.isNull()) result.insert("target", target);
         if (!others.isEmpty()) result.insert("otherVisibleWindows", others);
+        if (!contextWindow.isEmpty()) result.insert("context", contextWindow);
+        QJsonArray uncaptured;
+        for (QObject *dialog: windowlessDialogs()) uncaptured.append(dialogKey(dialog));
+        if (!uncaptured.isEmpty()) result.insert("uncapturedDialogs", uncaptured);
         return result;
     }
 
@@ -710,6 +961,10 @@ namespace ksv::driver {
             const QString selectorText = spec.toString();
             if (selectorText.isEmpty()) throw DriverError(QStringLiteral("missing a selector or [x, y] target"));
             const Node node = resolveOne(selectorText, false);
+            if (!node.item && node.object != node.window) {
+                throw DriverError(QStringLiteral("'%1' is a non-visual %2 with no position; use get, set or invoke on it")
+                                      .arg(selectorText, cleanTypeName(node.object->metaObject())));
+            }
             target.window = node.window;
             // Geometry is only final once the window is exposed at its real size.
             prepareForInput(target.window);
@@ -735,9 +990,52 @@ namespace ksv::driver {
         return target;
     }
 
-    QJsonValue UiDriver::currentTarget(const PointTarget &target) const {
-        if (!target.object) return target.target;
-        return record(target.node, true);
+    QJsonObject UiDriver::targetResult(const PointTarget &target) const {
+        // The target as resolved: the geometry the input used and its state before
+        // the action. A click can hide its own target (a menu item, a dialog
+        // button), so the state now is reported separately, only when it changed.
+        QJsonObject result{{"target", target.target}};
+        if (!target.target.isObject()) return result;
+        const QJsonValue after = target.object ? QJsonValue(record(target.node, true))
+                                               : QJsonValue(QJsonObject{{"destroyed", true}});
+        if (after != target.target) result.insert("after", after);
+        return result;
+    }
+
+    UiDriver::PointerState &UiDriver::pointer(QQuickWindow *window) {
+        // Forget windows that no longer exist (dialog fallbacks come and go).
+        const auto windows = quickWindows();
+        for (auto it = m_pointers.begin(); it != m_pointers.end();) {
+            if (!windows.contains(it.key())) it = m_pointers.erase(it);
+            else ++it;
+        }
+        return m_pointers[window];
+    }
+
+    void UiDriver::moveCursor(QQuickWindow *window, const QPointF &to, const int steps) {
+        PointerState &state = pointer(window);
+        // With nothing known, enter from the window's top-left like a cursor arriving.
+        const QPointF from = state.known ? state.pos : QPointF(0, 0);
+        const int count = std::max(1, steps);
+        for (int step = 1; step <= count; ++step) {
+            const QPointF pos = from + (to - from) * (static_cast<qreal>(step) / count);
+            QTest::mouseMove(window, pos.toPoint());
+            if (step < count) QTest::qWait(16);
+        }
+        state.pos = to;
+        state.known = true;
+    }
+
+    void UiDriver::releaseAll() {
+        for (auto it = m_pointers.begin(); it != m_pointers.end(); ++it) {
+            for (const Qt::MouseButton button: {Qt::LeftButton, Qt::RightButton, Qt::MiddleButton}) {
+                if (!(it->buttons & button)) continue;
+                if (quickWindows().contains(it.key())) {
+                    QTest::mouseRelease(it.key(), button, it->modifiers, it->pos.toPoint());
+                }
+            }
+            it->buttons = Qt::NoButton;
+        }
     }
 
     void UiDriver::prepareForInput(QQuickWindow *window) const {
@@ -765,21 +1063,90 @@ namespace ksv::driver {
         const Qt::MouseButton button = parseButton(args.value("button").toString());
         const Qt::KeyboardModifiers modifiers = parseModifiers(args.value("modifiers").toString());
         const QPoint pos = target.pos.toPoint();
-        QTest::mouseMove(target.window, pos);
+        moveCursor(target.window, target.pos, 1);
         if (args.value("double").toBool()) QTest::mouseDClick(target.window, button, modifiers, pos);
         else QTest::mouseClick(target.window, button, modifiers, pos);
         settle(args);
-        return {{"target", currentTarget(target)}, {"pos", QJsonArray{pos.x(), pos.y()}}};
+        QJsonObject result = targetResult(target);
+        result.insert("pos", QJsonArray{pos.x(), pos.y()});
+        return result;
     }
 
     QJsonObject UiDriver::cmdHover(const QJsonObject &args) {
         const QJsonValue spec = args.contains("point") ? args.value("point") : args.value("selector");
         const PointTarget target = pointTarget(spec, args);
         prepareForInput(target.window);
-        const QPoint pos = target.pos.toPoint();
-        QTest::mouseMove(target.window, pos);
+        // A path of moves, not a jump: hover-delayed behaviour (cascading menus,
+        // tooltips) tracks the pointer's motion.
+        moveCursor(target.window, target.pos, args.value("steps").toInt(8));
         settle(args);
-        return {{"target", currentTarget(target)}, {"pos", QJsonArray{pos.x(), pos.y()}}};
+        const QPoint pos = target.pos.toPoint();
+        QJsonObject result = targetResult(target);
+        result.insert("pos", QJsonArray{pos.x(), pos.y()});
+        return result;
+    }
+
+    QJsonObject UiDriver::cmdMouse(const QJsonObject &args) {
+        const QString action = requireString(args, "action");
+        if (action == u"releaseAll") {
+            releaseAll();
+            settle(args);
+            return {{"action", action}};
+        }
+        if (action != u"press" && action != u"move" && action != u"release") {
+            throw DriverError(QStringLiteral("unknown mouse action '%1' (press, move, release)").arg(action));
+        }
+        // A point or a release with no target stays in the window holding the button.
+        QQuickWindow *holding = nullptr;
+        for (auto it = m_pointers.cbegin(); it != m_pointers.cend(); ++it) {
+            if (it->buttons != Qt::NoButton && quickWindows().contains(it.key())) holding = it.key();
+        }
+        QJsonObject pointArgs = args;
+        if (!args.contains("window") && holding) pointArgs.insert("window", windowKey(holding));
+
+        PointTarget target;
+        if (args.contains("point") || !args.value("selector").toString().isEmpty()) {
+            target = pointTarget(args.contains("point") ? args.value("point") : args.value("selector"), pointArgs);
+        } else if (action == u"release" && holding) {
+            target.window = holding;
+            target.pos = pointer(holding).pos;
+            target.target = QJsonArray{target.pos.x(), target.pos.y()};
+        } else {
+            throw DriverError(QStringLiteral("mouse %1 needs a selector or a point").arg(action));
+        }
+        if (holding && target.window != holding) {
+            throw DriverError(QStringLiteral("a button is held in window '%1'; the target is in '%2'")
+                                  .arg(windowKey(holding), windowKey(target.window)));
+        }
+        prepareForInput(target.window);
+        PointerState &state = pointer(target.window);
+        const Qt::MouseButton button = parseButton(args.value("button").toString());
+        const Qt::KeyboardModifiers modifiers = args.contains("modifiers")
+                                                    ? parseModifiers(args.value("modifiers").toString())
+                                                    : state.modifiers;
+        const int steps = args.value("steps").toInt(action == u"move" ? 12 : 1);
+        moveCursor(target.window, target.pos, steps);
+        if (action == u"press") {
+            if (state.buttons & button) throw DriverError(QStringLiteral("that button is already held; release it first"));
+            QTest::mousePress(target.window, button, modifiers, target.pos.toPoint());
+            state.buttons |= button;
+            state.modifiers = modifiers;
+        } else if (action == u"release") {
+            if (!(state.buttons & button)) throw DriverError(QStringLiteral("no held button to release"));
+            QTest::mouseRelease(target.window, button, modifiers, target.pos.toPoint());
+            state.buttons &= ~Qt::MouseButtons(button);
+        }
+        settle(args);
+        QJsonObject result = targetResult(target);
+        result.insert("action", action);
+        result.insert("pos", QJsonArray{qRound(target.pos.x()), qRound(target.pos.y())});
+        result.insert("window", windowKey(target.window));
+        QJsonArray held;
+        if (state.buttons & Qt::LeftButton) held.append(QStringLiteral("left"));
+        if (state.buttons & Qt::RightButton) held.append(QStringLiteral("right"));
+        if (state.buttons & Qt::MiddleButton) held.append(QStringLiteral("middle"));
+        result.insert("held", held);
+        return result;
     }
 
     QJsonObject UiDriver::cmdDrag(const QJsonObject &args) {
@@ -790,16 +1157,14 @@ namespace ksv::driver {
         const int steps = std::max(2, args.value("steps").toInt(12));
         const Qt::MouseButton button = parseButton(args.value("button").toString());
         const Qt::KeyboardModifiers modifiers = parseModifiers(args.value("modifiers").toString());
-        QTest::mouseMove(from.window, from.pos.toPoint());
+        // press, move and release, as `mouse` does across three commands.
+        moveCursor(from.window, from.pos, 1);
         QTest::mousePress(from.window, button, modifiers, from.pos.toPoint());
-        for (int step = 1; step <= steps; ++step) {
-            const QPointF pos = from.pos + (to.pos - from.pos) * (static_cast<qreal>(step) / steps);
-            QTest::mouseMove(from.window, pos.toPoint());
-            QTest::qWait(16);
-        }
+        moveCursor(from.window, to.pos, steps);
+        QTest::qWait(16);
         QTest::mouseRelease(from.window, button, modifiers, to.pos.toPoint());
         settle(args);
-        return {{"from", currentTarget(from)}, {"to", currentTarget(to)}};
+        return {{"from", from.target}, {"to", to.target}};
     }
 
     QJsonObject UiDriver::cmdScroll(const QJsonObject &args) {
@@ -810,7 +1175,7 @@ namespace ksv::driver {
         const int dx = args.value("dx").toInt(0);
         if (dx == 0 && dy == 0) throw DriverError(QStringLiteral("scroll needs a non-zero dx or dy"));
         const Qt::KeyboardModifiers modifiers = parseModifiers(args.value("modifiers").toString());
-        QTest::mouseMove(target.window, target.pos.toPoint());
+        moveCursor(target.window, target.pos, 1);
         // One wheel notch (120) per unit; positive dy scrolls down, positive dx right.
         const int notches = std::max(std::abs(dx), std::abs(dy));
         for (int notch = 0; notch < notches; ++notch) {
@@ -822,7 +1187,7 @@ namespace ksv::driver {
             QTest::qWait(16);
         }
         settle(args);
-        return {{"target", currentTarget(target)}};
+        return targetResult(target);
     }
 
     QJsonObject UiDriver::cmdKey(const QJsonObject &args) {
@@ -847,9 +1212,19 @@ namespace ksv::driver {
         QQuickWindow *window = nullptr;
         if (const QString selectorText = args.value("selector").toString(); !selectorText.isEmpty()) {
             const Node node = resolveOne(selectorText, false);
+            if (!node.item) throw DriverError(QStringLiteral("'%1' is not an item that can take focus").arg(selectorText));
             window = node.window;
             prepareForInput(window);
-            if (node.item) node.item->forceActiveFocus(Qt::MouseFocusReason);
+            node.item->forceActiveFocus(Qt::MouseFocusReason);
+            // Like clicking at the end of the text: new text is appended unless
+            // --clear replaces it or --at-start asks for the old caret-at-0 behaviour.
+            QObject *editor = window->activeFocusItem() ? window->activeFocusItem() : node.item;
+            if (hasProperty(editor, "cursorPosition")) {
+                if (editor->metaObject()->indexOfMethod("deselect()") >= 0) QMetaObject::invokeMethod(editor, "deselect");
+                const int length = hasProperty(editor, "length") ? editor->property("length").toInt()
+                                                                  : stringProperty(editor, "text").size();
+                editor->setProperty("cursorPosition", args.value("atStart").toBool() ? 0 : length);
+            }
         } else {
             window = qobject_cast<QQuickWindow *>(QGuiApplication::focusWindow());
             if (!window) window = mainWindow();

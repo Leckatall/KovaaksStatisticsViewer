@@ -41,6 +41,17 @@ namespace {
                   (std::vector<std::string>{"C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer"}));
     }
 
+    TEST_F(SettingsServiceTest, FallbackKovaaksDirCanBeReplaced) {
+        SettingsService settings(QSettings::IniFormat);
+
+        settings.setFallbackKovaaksDir("D:/Sandbox/no-kovaaks-install");
+
+        EXPECT_FALSE(settings.isKovaaksDirSet());
+        EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{"D:/Sandbox/no-kovaaks-install"}));
+        settings.setKovaaksDirs({"D:/Games/Configured"});
+        EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{"D:/Games/Configured"}));
+    }
+
     TEST_F(SettingsServiceTest, ReturnsPreviouslyStoredValue) {
         {
             QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");

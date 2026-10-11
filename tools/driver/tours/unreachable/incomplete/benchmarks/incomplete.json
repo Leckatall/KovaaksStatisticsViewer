@@ -1,0 +1,40 @@
+{
+    "schemaVersion": 1,
+    "id": "incomplete-demo",
+    "name": "Incomplete Benchmark",
+    "tiers": [
+        {"id": "iron", "name": "Iron", "color": [130, 130, 140, 255]},
+        {"id": "bronze", "name": "Bronze", "color": [205, 127, 50, 255]},
+        {"id": "silver", "name": "Silver", "color": [192, 192, 200, 255]}
+    ],
+    "uncategorized": [],
+    "categories": [
+        {
+            "id": "mixed",
+            "name": "Needs Work",
+            "color": [233, 30, 99, 255],
+            "scenarios": [
+                {
+                    "id": "entry-missing-threshold",
+                    "name": "Pasu Gallery",
+                    "hash": "gallery-pasu",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 1500},
+                        {"tierId": "bronze", "score": 2200}
+                    ]
+                },
+                {
+                    "id": "entry-non-increasing",
+                    "name": "Smoothbot Gallery",
+                    "hash": "gallery-smoothbot",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 1800},
+                        {"tierId": "bronze", "score": 1200},
+                        {"tierId": "silver", "score": 2400}
+                    ]
+                }
+            ],
+            "subcategories": []
+        }
+    ]
+}

@@ -17,6 +17,8 @@ def describe(record: dict[str, Any]) -> str:
         parts.append(f"placeholder:{json.dumps(record['placeholder'], ensure_ascii=False)}")
     if record.get("acc"):
         parts.append(f"acc:{json.dumps(record['acc'], ensure_ascii=False)}")
+    if record.get("kind") == "object":
+        parts.append("(non-visual)")
     rect = record.get("rect")
     if rect and len(rect) == 4:
         parts.append(f"@{rect[0]},{rect[1]} {rect[2]}x{rect[3]}")
@@ -65,7 +67,14 @@ def window_line(window: dict[str, Any]) -> str:
     state = "visible" if window.get("visible") else "hidden"
     if window.get("active"):
         state += ", active"
-    return f"{window.get('key')}: {json.dumps(window.get('title', ''), ensure_ascii=False)} {rect[2]}x{rect[3]} ({state})"
+    if window.get("kind"):
+        state += f", {window['kind']}"
+        if window.get("owner") and window["owner"] != window.get("key"):
+            state += f" of {window['owner']}"
+    if window.get("capturable") is False:
+        state += ", not capturable"
+    size = f" {rect[2]}x{rect[3]}" if window.get("rect") else ""
+    return f"{window.get('key')}: {json.dumps(window.get('title', ''), ensure_ascii=False)}{size} ({state})"
 
 
 def value_text(value: Any) -> str:

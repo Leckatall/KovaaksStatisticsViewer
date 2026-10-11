@@ -5,12 +5,18 @@
 add_library(ksv_driver_core STATIC
         driver_dataset.cpp
         driver_dataset.h
+        driver_ports.cpp
+        driver_ports.h
+        driver_spec.cpp
+        driver_spec.h
         driver_server.cpp
         driver_server.h
         message_log.cpp
         message_log.h
         selector.cpp
         selector.h
+        session_compose.cpp
+        session_compose.h
         ui_driver.cpp
         ui_driver.h
 )

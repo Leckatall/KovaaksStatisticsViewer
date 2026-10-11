@@ -1,0 +1,5 @@
+[
+  {"area": "Benchmarks", "state": "Unresolved and ambiguous rows in the tracking view", "shot": "matching-rows"},
+  {"area": "Manager", "state": "Ambiguous row: mapping panel", "shot": "ambiguous-row-mapping"},
+  {"area": "Manager", "state": "Unresolved row: mapping panel", "shot": "unresolved-row-mapping"}
+]
