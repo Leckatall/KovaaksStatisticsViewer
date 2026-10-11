@@ -14,6 +14,7 @@
 #include <QImage>
 #include <QPainter>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QQmlApplicationEngine>
 #include <QRect>
 #include <QRectF>
@@ -397,6 +398,59 @@ namespace {
         const auto historyCanvas = [this, app] { return scene.canvasFor(app->completionHistoryVm()); };
         ASSERT_TRUE(QTest::qWaitFor([&] { return historyCanvas() != nullptr; }, 3000));
         EXPECT_EQ(historyCanvas()->graphVm(), app->completionHistoryVm());
+    }
+
+    // A click on the history graph selects the nearest run: the history marks it, the run list's
+    // current item follows it, and the run graph shows it. A click outside the plot does nothing.
+    TEST_F(DashboardCleanSceneTest, ClickingTheHistoryGraphSelectsTheNearestRun) {
+        auto *app = scene.app.get();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
+
+        auto base_run = app->profileService()->getLatestRun();
+        domain::UserProfile profile;
+        const auto source = profile.ensureSource(scene.env.rootPath().toStdString(), "FPSAimTrainer/performances");
+        base_run.sources.perf = {{source, std::filesystem::path(scene.perfFile.toStdString()).filename().string()}};
+        for (int i = 0; i < 3; ++i) {
+            auto run = base_run;
+            run.run_id.start_time += 1000 * i;
+            ASSERT_TRUE(profile.addRun(run));
+        }
+        app->profileService()->applyBuiltProfile(std::move(profile));
+
+        auto *historyVm = app->completionHistoryVm();
+        ui::GraphCanvas *canvas = nullptr;
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            canvas = scene.canvasFor(historyVm);
+            return canvas != nullptr && historyVm->runCount() == 3 && canvas->width() > 0;
+        }, 5000));
+        app->completionHistoryVm()->selectRun(3);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return historyVm->selectedRunIndex() == 3; }, 2000));
+
+        QQuickItem *runList = nullptr;
+        for (auto *item: scene.root->findChildren<QQuickItem *>("runListView"))
+            if (item->property("model").value<QObject *>() == app->scenarioBrowserVm()->runModel()) runList = item;
+        ASSERT_NE(runList, nullptr);
+
+        const QRectF plot = canvas->property("plotArea").toRectF();
+        const auto clickAt = [&](const QPointF &local) {
+            QTest::mouseClick(canvas->window(), Qt::LeftButton, {}, canvas->mapToScene(local).toPoint());
+        };
+
+        // Nearer run #1 than #2: x a fifth of the way across a plot spanning runs 1..3.
+        clickAt({plot.left() + plot.width() * 0.2, plot.center().y()});
+        EXPECT_TRUE(QTest::qWaitFor([&] { return historyVm->selectedRunIndex() == 1; }, 2000))
+            << "selected run index " << historyVm->selectedRunIndex();
+        EXPECT_EQ(canvas->markedX(), 1.0);
+        EXPECT_EQ(app->scenarioBrowserVm()->currentRunStartTimeMs(), static_cast<double>(base_run.run_id.start_time));
+        // The run list is newest first, so run #1 of 3 is its last row.
+        EXPECT_TRUE(QTest::qWaitFor([&] { return runList->property("currentIndex").toInt() == 2; }, 2000))
+            << "run list current index " << runList->property("currentIndex").toInt();
+
+        // Left of the plot, on the y-axis labels: nothing changes.
+        QTest::qWait(500);
+        clickAt({plot.left() / 2, plot.center().y()});
+        QTest::qWait(100);
+        EXPECT_EQ(historyVm->selectedRunIndex(), 1);
     }
 
     // Regression: BenchmarkHistoryCard never handed its canvas any visibleColumns, so

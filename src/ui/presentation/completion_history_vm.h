@@ -37,6 +37,9 @@ namespace ksv::presentation {
         [[nodiscard]] int runCount() const { return m_run_count; }
         [[nodiscard]] int selectedRunIndex() const { return m_selected_run_index; }
 
+        // Selects the run with this 1-based run number (the history graph's x).
+        Q_INVOKABLE void selectRun(int runIndex);
+
         // series objects for Score..Misses; identity is fixed at construction, only points/yAxis
         // mutate per refresh().
         [[nodiscard]] QQmlListProperty<SeriesModel> allSeries() const {

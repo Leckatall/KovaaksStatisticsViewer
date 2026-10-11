@@ -87,6 +87,14 @@ namespace ksv::application {
                 m_session_controller.get(), std::move(callback));
         }
 
+        void select_run(const int run_index) override {
+            const auto scenario = m_session_controller->getCurrentRun().run_id.scenario_id;
+            if (scenario.hash.empty() || run_index < 1) return;
+            const auto completion_history = m_profile_service->getCompletionHistory(scenario);
+            if (static_cast<std::size_t>(run_index) > completion_history.size()) return;
+            m_session_controller->setCurrentRun(completion_history[static_cast<std::size_t>(run_index - 1)].run_id);
+        }
+
     private:
         [[nodiscard]] std::string currentScenarioHash() const {
             return m_session_controller->getCurrentRun().run_id.scenario_id.hash;

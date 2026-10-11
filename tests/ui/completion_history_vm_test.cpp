@@ -22,6 +22,8 @@ namespace {
         void onCurrentScenarioChanged(std::function<void()>) override {}
         std::optional<int> selected_run_index() override { return selected; }
         void onSelectedRunChanged(std::function<void()>) override {}
+        std::vector<int> select_run_calls;
+        void select_run(const int run_index) override { select_run_calls.push_back(run_index); }
     };
 
     class CompletionHistoryViewModelTest : public testing::Test {
@@ -205,6 +207,17 @@ namespace {
         view_model.refresh();
         EXPECT_EQ(view_model.selectedRunIndex(), -1);
         EXPECT_EQ(spy.count(), 2);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, SelectRunForwardsOnlyRunsOnTheGraph) {
+        setHistory();
+        view_model.refresh();
+
+        view_model.selectRun(0);
+        view_model.selectRun(3);
+        view_model.selectRun(2);
+
+        EXPECT_EQ(fake->select_run_calls, std::vector<int>{2});
     }
 
     TEST_F(CompletionHistoryViewModelTest, CountSeriesShareOneAxisIdentity) {

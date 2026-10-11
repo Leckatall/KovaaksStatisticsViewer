@@ -14,7 +14,11 @@ Item {
     property bool pointMarkers: false
     // An x value to mark with a rule and a ring on each line's point there; NaN marks nothing.
     property real markedX: NaN
+    // Whether a left click inside the plot reports the nearest data point's x through pointClicked.
+    property bool clickable: false
     readonly property rect plotArea: canvas.plotArea
+
+    signal pointClicked(real dataX)
     readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
     readonly property var labelledYAxisColumns: canvas.labelledYAxisColumns
     readonly property bool pointMarkersShown: canvas.pointMarkersShown
@@ -40,15 +44,23 @@ Item {
                 valid: false
             })
 
-        acceptedButtons: Qt.NoButton
+        acceptedButtons: root.clickable ? Qt.LeftButton : Qt.NoButton
         anchors.fill: parent
         hoverEnabled: true
         objectName: "graphHoverArea"
+        cursorShape: root.clickable && hoverInfo.valid === true ? Qt.PointingHandCursor : Qt.ArrowCursor
 
         onExited: hoverInfo = {
             valid: false
         }
         onPositionChanged: mouse => hoverInfo = canvas.valuesAtX(mouse.x)
+        onClicked: mouse => {
+            const plot = canvas.plotArea
+            if (mouse.x < plot.x || mouse.x > plot.x + plot.width
+                    || mouse.y < plot.y || mouse.y > plot.y + plot.height) return
+            const info = canvas.valuesAtX(mouse.x)
+            if (info.valid === true) root.pointClicked(info.xRaw)
+        }
     }
     Rectangle {
         id: verticalLine

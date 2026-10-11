@@ -19,6 +19,8 @@ namespace ksv::application {
         virtual std::optional<int> selected_run_index() = 0;
         // Fires on every selected-run change, including one within the same scenario.
         virtual void onSelectedRunChanged(std::function<void()> callback) = 0;
+        // Selects the history's run with this run_index; an index outside the history does nothing.
+        virtual void select_run(int run_index) = 0;
     };
 }
 

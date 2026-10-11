@@ -33,6 +33,22 @@ ColumnLayout {
         return runCount === 0
     }
 
+    // The list's current item follows the selected run, however it was selected (this list,
+    // Recent, the history graph), and is scrolled into view.
+    function syncCurrentToSelection() {
+        const row = (root.runModel && typeof root.runModel.rowOf === "function")
+                    ? root.runModel.rowOf(root.currentRunHash, root.currentRunStartTimeMs) : -1
+        runList.currentIndex = row
+        if (row >= 0) runList.positionViewAtIndex(row, ListView.Contain)
+    }
+    onCurrentRunHashChanged: Qt.callLater(syncCurrentToSelection)
+    onCurrentRunStartTimeMsChanged: Qt.callLater(syncCurrentToSelection)
+    onRunCountChanged: Qt.callLater(syncCurrentToSelection)
+    Connections {
+        target: root.runModel && root.runModel.modelReset !== undefined ? root.runModel : null
+        function onModelReset() { Qt.callLater(root.syncCurrentToSelection) }
+    }
+
     // Height that shows exactly `rows` cards (no card cut through its text).
     function heightForRows(rows) {
         return chromeHeight + Math.max(1, rows) * rowHeight - cardSpacing
@@ -106,6 +122,10 @@ ColumnLayout {
         spacing: root.cardSpacing
         boundsBehavior: Flickable.StopAtBounds
         model: root.runModel
+        // The selected card draws its own highlight; currentIndex only tracks it (see
+        // syncCurrentToSelection), so the view must not animate a second one.
+        highlightFollowsCurrentItem: false
+        Component.onCompleted: Qt.callLater(root.syncCurrentToSelection)
 
         // Always shown while there is more than fits, so a list cut at its last
         // whole row still reads as scrollable.

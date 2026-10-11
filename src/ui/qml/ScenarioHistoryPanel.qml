@@ -100,6 +100,9 @@ Frame {
                         pointMarkers: true
                         // The run selected in the run list / run graph.
                         markedX: root.selectedRunIndex > 0 ? root.selectedRunIndex : NaN
+                        // A click selects the run nearest it.
+                        clickable: true
+                        onPointClicked: dataX => root.historyVm.selectRun(Math.round(dataX))
                     }
                 }
             }
