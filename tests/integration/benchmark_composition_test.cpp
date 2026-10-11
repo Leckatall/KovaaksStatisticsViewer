@@ -23,7 +23,7 @@
 
 #include "app/app.h"
 #include "formats/protobuf/proto_decoder.h"
-#include "presentation/benchmark_breakdown_model.h"
+#include "presentation/benchmark_progress_grid_model.h"
 #include "presentation/benchmark_issue_text.h"
 #include "presentation/benchmark_manager_vm.h"
 #include "presentation/benchmark_table_model.h"
@@ -472,13 +472,9 @@ namespace {
         return declaration.match(source).hasMatch();
     }
 
-    QModelIndex findBreakdownNode(const QAbstractItemModel *model, const QString &name,
-                                  const QModelIndex &parent = {}) {
-        for (int row = 0; row < model->rowCount(parent); ++row) {
-            const QModelIndex idx = model->index(row, 0, parent);
-            if (idx.data(presentation::BenchmarkBreakdownModel::NameRole).toString() == name) return idx;
-            if (const QModelIndex hit = findBreakdownNode(model, name, idx); hit.isValid()) return hit;
-        }
+    QVariantMap findGridRow(const presentation::BenchmarkProgressGridModel *grid, const QString &name) {
+        for (const QVariant &row: grid->rows())
+            if (row.toMap().value(QStringLiteral("name")).toString() == name) return row.toMap();
         return {};
     }
 }
@@ -541,16 +537,15 @@ TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewM
 
     EXPECT_NE(vm->rankHistory(), nullptr);
     EXPECT_NE(vm->playtimeHistory(), nullptr);
-    ASSERT_NE(vm->breakdown(), nullptr);
-    EXPECT_GT(vm->breakdown()->rowCount({}), 0);
+    ASSERT_NE(vm->progressGrid(), nullptr);
+    EXPECT_FALSE(vm->progressGrid()->rows().isEmpty());
     EXPECT_TRUE(vm->playtimeHistory()->hasData());
 
-    const QModelIndex scenario = findBreakdownNode(vm->breakdown(), QStringLiteral("Wall Six"));
-    ASSERT_TRUE(scenario.isValid()) << "breakdown hierarchy never surfaced the mapped scenario";
+    const QVariantMap scenario = findGridRow(vm->progressGrid(), QStringLiteral("Wall Six"));
+    ASSERT_FALSE(scenario.isEmpty()) << "the progress grid never surfaced the mapped scenario";
     // A normally resolved scenario reports no match state at all.
-    EXPECT_TRUE(scenario.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString().isEmpty());
-    EXPECT_FALSE(scenario.data(presentation::BenchmarkBreakdownModel::PersonalBestTextRole)
-                     .toString().isEmpty());
+    EXPECT_TRUE(scenario.value(QStringLiteral("matchStateText")).toString().isEmpty());
+    EXPECT_NE(scenario.value(QStringLiteral("personalBestText")).toString(), QStringLiteral("—"));
 
     // The application projection carries the numeric detail the Qt surface adapts.
     const auto *projection = w->app->benchmarkTrackingUseCase()->projection();
@@ -582,10 +577,9 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     ASSERT_EQ(before->scenarios[0].matchState, domain::ScenarioMatchState::Unresolved);
     ASSERT_FALSE(before->scenarios[0].personalBest.has_value());
 
-    const QModelIndex unmapped = findBreakdownNode(vm->breakdown(), QStringLiteral("Needs Mapping"));
-    ASSERT_TRUE(unmapped.isValid());
-    EXPECT_EQ(unmapped.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString(),
-              QStringLiteral("Not found in your runs"));
+    const QVariantMap unmapped = findGridRow(vm->progressGrid(), QStringLiteral("Needs Mapping"));
+    ASSERT_FALSE(unmapped.isEmpty());
+    EXPECT_EQ(unmapped.value(QStringLiteral("matchStateText")).toString(), QStringLiteral("Not found in your runs"));
 
     QSignalSpy changed(vm, &presentation::BenchmarkTrackingViewModel::changed);
 
@@ -611,12 +605,11 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     EXPECT_GT(after->totalPlaytimeSeconds, 0.0);
 
     EXPECT_EQ(vm->attainedRank(), QStringLiteral("Bronze"));
-    EXPECT_TRUE(vm->blockers().isEmpty());
-    const QModelIndex remapped = findBreakdownNode(vm->breakdown(), QStringLiteral("Needs Mapping"));
-    ASSERT_TRUE(remapped.isValid());
-    EXPECT_TRUE(remapped.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString().isEmpty());
-    EXPECT_NE(remapped.data(presentation::BenchmarkBreakdownModel::PersonalBestTextRole).toString(),
-              QStringLiteral("Unplayed"));
+    const QVariantMap remapped = findGridRow(vm->progressGrid(), QStringLiteral("Needs Mapping"));
+    ASSERT_FALSE(remapped.isEmpty());
+    EXPECT_FALSE(remapped.value(QStringLiteral("blocker")).toBool());
+    EXPECT_TRUE(remapped.value(QStringLiteral("matchStateText")).toString().isEmpty());
+    EXPECT_NE(remapped.value(QStringLiteral("personalBestText")).toString(), QStringLiteral("—"));
 }
 
 // --- Benchmark table editor: real composition ----------------------------------------------------

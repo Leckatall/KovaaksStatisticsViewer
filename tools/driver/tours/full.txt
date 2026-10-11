@@ -61,10 +61,9 @@ key Escape
 # ---- Benchmarks tab ------------------------------------------------------------
 section benchmarks
 click benchmarksTab --shot=trackable
-hover blocker_0 --settle 1200 --shot=blocker-tooltip
+hover "progressRow_*_blocker@0" --settle 1200 --shot=blocker-tooltip
+hover "progressRow_*_bar@0" --settle 1200 --shot=tier-bar-tooltip
 hover rankHistoryCard --offset 300 120 --shot=rank-history-hover
-click breakdownToggle_clicking --shot=breakdown-collapsed
-click breakdownToggle_clicking
 resize 960x700
 shot --name narrow-960x700
 scroll benchmarkWorkspaceScroll --dy 6 --shot=narrow-scrolled

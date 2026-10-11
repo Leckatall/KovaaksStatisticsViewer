@@ -273,10 +273,9 @@ Item {
             verify(find(ws, "repairButton") !== null, "unavailable body must offer the manager repair path")
 
             compare(find(ws, "benchmarkStatusSummary"), null, "no stale status summary in Unavailable")
-            compare(find(ws, "benchmarkBlockerList"), null, "no stale blocker list in Unavailable")
             compare(find(ws, "rankHistoryCard"), null, "no stale rank graph in Unavailable")
             compare(find(ws, "playtimeHistoryCard"), null, "no stale playtime graph in Unavailable")
-            compare(find(ws, "benchmarkBreakdownView"), null, "no stale hierarchy in Unavailable")
+            compare(find(ws, "benchmarkProgressGrid"), null, "no stale progress grid in Unavailable")
         }
 
         function test_incompleteShowsEveryIssueAndOnlySafeFacts() {
@@ -297,6 +296,8 @@ Item {
             }
             compare(find(ws, "rankHistoryCard"), null,
                     "incomplete definitions must not render the average-rank chart")
+            verify(find(ws, "progressRow_sc-1_bar") !== null,
+                   "the incomplete body lists its scenarios in the progress grid too")
         }
 
         function test_trackableShowsAllSeparatelyLabelledSummaryValues() {
@@ -324,27 +325,23 @@ Item {
             verify(attained !== completed, "attained and completed rank must be distinct elements")
         }
 
-        function test_trackableBlockersNameScenarioAndGroupWithCurrentVsRequired() {
+        // the grid replaces the blocker list: a blocking row carries a marker in
+        // the next tier's colour that says what it blocks.
+        function test_blockingRowsAreMarkedInTheNextTierColour() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            verify(find(ws, "benchmarkBlockerList") !== null,
-                   "trackable state must show the authoritative blocker list")
+            wait(0)
+            const markers = findAllPrefixed(ws, "progressRow_").filter(function (item) {
+                return /_blocker$/.test(item.objectName)
+            })
+            compare(markers.length, 2, "one marker per blocking row")
 
-            const rows = findAllPrefixed(ws, "blocker_")
-            compare(rows.length, 3, "every next-tier blocker must be listed")
-
-            const first = find(ws, "blocker_0")
-            const firstText = String(first.text) + " "
-                + String(first.Accessible ? first.Accessible.name : "")
-            verify(firstText.indexOf("1w4ts") !== -1, "scenario blocker must name the scenario")
-            verify(firstText.indexOf("Clicking") !== -1 || firstText.indexOf("Static") !== -1,
-                   "scenario blocker must name its category/subcategory")
-            verify(firstText.indexOf("812") !== -1, "scenario blocker must show the current PB")
-            verify(firstText.indexOf("900") !== -1, "scenario blocker must show the required score")
-
-            verify(String(find(ws, "blocker_1").text).indexOf("Unplayed") !== -1,
-                   "an unplayed scenario blocker must say 'Unplayed', not a score")
-            verify(String(find(ws, "blocker_2").text).indexOf("Switching") !== -1,
-                   "group blocker must name the group")
+            const marker = find(ws, "progressRow_sc-1w4ts_blocker")
+            verify(marker !== null && marker.visible, "the blocking row is marked")
+            verify(String(marker.Accessible.name).indexOf("Blocks Platinum") !== -1,
+                   "the marker says which tier it blocks: " + marker.Accessible.name)
+            verify(String(marker.ToolTip.text).indexOf("Blocks Platinum") !== -1, "and its tooltip does too")
+            verify(Qt.colorEqual(marker.children[0].color, "#50dcdc"), "the marker uses the next tier's colour")
+            verify(find(ws, "progressRow_sc-pasu_blocker") === null, "a row that blocks nothing has no marker")
         }
 
         function test_nextTierProgressShowsCountButNotAsTheRule() {
@@ -415,13 +412,18 @@ Item {
             const progress = indexInColumn(col, "nextTierProgress")
             const rank = indexInColumn(col, "rankHistoryCard")
             const playtime = indexInColumn(col, "playtimeHistoryCard")
-            const breakdown = indexInColumn(col, "benchmarkBreakdownView")
-            verify(summary >= 0 && progress >= 0 && rank >= 0 && playtime >= 0 && breakdown >= 0,
-                   "all four content blocks must be present in the scroll column")
+            const grid = indexInColumn(col, "benchmarkProgressGrid")
+            verify(summary >= 0 && progress >= 0 && rank >= 0 && playtime >= 0 && grid >= 0,
+                   "all content blocks must be present in the scroll column")
             verify(summary < progress, "status summary comes before next-tier progress")
-            verify(progress < rank, "next-tier progress/blockers come before the history cards")
+            verify(grid === progress, "the progress grid sits with the next-tier count")
+            verify(grid < rank, "the progress grid comes before the history cards")
             verify(rank < playtime, "average-rank card comes before rolling-playtime card")
-            verify(playtime < breakdown, "history cards come before the hierarchical breakdown")
+            wait(0)
+            const label = find(ws, "nextTierProgress")
+            const gridItem = find(ws, "benchmarkProgressGrid")
+            verify(label.mapToItem(ws, 0, label.height).y <= gridItem.mapToItem(ws, 0, 0).y + 0.5,
+                   "the 'N of M scenarios at the next tier' line stays above the grid")
         }
 
         function test_horizontalScrollIsNotTheStrategy() {
@@ -479,54 +481,71 @@ Item {
                    "playtime card description must include its metric name")
         }
 
-        // -- hierarchy: metrics, labels, expansion ----------------------
+        // -- progress grid: rows, values, group cells ---------------------
 
-        function test_scenarioDelegateExposesEveryMetricWithMatchingLabel() {
+        function test_scenarioRowExposesEveryValueInItsOwnCell() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            const node = find(ws, "breakdownNode_sc-1w4ts")
-            verify(node !== null, "scenario delegate for sc-1w4ts missing")
-            const text = ItemLookup.findByObjectNamePrefix(node, "", []).map(function (i) {
-                return i.text === undefined ? "" : String(i.text)
-            }).join(" | ")
-
-            verify(text.indexOf("1w4ts") !== -1, "scenario name")
-            verify(text.indexOf("812") !== -1, "personal best value")
-            verify(text.indexOf("790.5") !== -1, "recent average value")
-            verify(text.indexOf("Gold") !== -1, "attained tier")
-            verify(text.indexOf("Platinum") !== -1, "next tier")
-            verify(text.indexOf("900") !== -1, "next threshold")
-            verify(text.indexOf("Resolved") === -1, "a normal match state is not shown")
-
-            verify(find(ws, "breakdownNode_sc-1w4ts_personalBest") !== null
-                   && find(ws, "breakdownNode_sc-1w4ts_recentAverage") !== null,
-                   "personal best and recent average must be distinct labelled fields")
+            const row = find(ws, "progressRow_sc-1w4ts")
+            verify(row !== null, "row for sc-1w4ts missing")
+            compare(find(ws, "progressRow_sc-1w4ts_name").text, "1w4ts")
+            compare(find(ws, "progressRow_sc-1w4ts_personalBest").text, "812")
+            compare(find(ws, "progressRow_sc-1w4ts_recent").text, "790.5")
+            compare(find(ws, "progressRow_sc-1w4ts_next").text, "Platinum 900")
+            const bar = find(ws, "progressRow_sc-1w4ts_bar")
+            verify(bar !== null, "every row has a tier bar")
+            compare(bar.description, "Gold · 75% of the way to Platinum (812 / 900)")
+            compare(bar.Accessible.name, bar.description, "the bar is described for assistive tech")
         }
 
-        function test_topLevelGroupsAndSubcategoriesStartExpanded() {
+        function test_everyScenarioAppearsOnceInDefinitionOrder() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            verify(find(ws, "breakdownNode_sub-static") !== null,
-                   "a subcategory under an expanded category must be visible at start")
-            verify(find(ws, "breakdownNode_sc-1w4ts") !== null,
-                   "a scenario under an expanded subcategory must be visible at start")
+            wait(0)
+            const ids = ["sc-popcorn", "sc-1w4ts", "sc-pasu", "sc-smooth"]
+            let previousY = -1
+            for (const id of ids) {
+                const rows = findAllPrefixed(ws, "progressRow_" + id).filter(function (item) {
+                    return item.objectName === "progressRow_" + id
+                })
+                compare(rows.length, 1, id + " appears exactly once")
+                const y = rows[0].mapToItem(ws, 0, 0).y
+                verify(y > previousY, id + " follows the previous row")
+                previousY = y
+            }
         }
 
-        function test_expansionTogglesByMouseAndKeyboardAndSurvivesRefresh() {
+        function test_groupCellsSpanExactlyTheirRows() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            const toggle = find(ws, "breakdownToggle_cat-click")
-            verify(toggle !== null, "category expansion control missing")
+            wait(0)
+            const spans = [
+                {group: "progressGroup_uncategorized", first: "sc-popcorn", last: "sc-popcorn"},
+                {group: "progressGroup_cat-click", first: "sc-1w4ts", last: "sc-pasu"},
+                {group: "progressGroup_sub-static", first: "sc-1w4ts", last: "sc-1w4ts"},
+                {group: "progressGroup_sub-dynamic", first: "sc-pasu", last: "sc-pasu"},
+                {group: "progressGroup_cat-track", first: "sc-smooth", last: "sc-smooth"}
+            ]
+            for (const span of spans) {
+                const cell = find(ws, span.group)
+                verify(cell !== null && cell.visible, span.group + " missing")
+                const first = find(ws, "progressRow_" + span.first)
+                const last = find(ws, "progressRow_" + span.last)
+                fuzzyCompare(cell.mapToItem(ws, 0, 0).y, first.mapToItem(ws, 0, 0).y, 0.5, span.group + " top")
+                fuzzyCompare(cell.mapToItem(ws, 0, cell.height).y, last.mapToItem(ws, 0, last.height).y, 0.5,
+                             span.group + " bottom")
+            }
+            verify(find(ws, "progressGroup_cat-click_name").font.bold, "group names are bold, as in the editor")
+            compare(find(ws, "progressHeader_subcategory").visible, true,
+                    "a benchmark with subcategories shows the Subcategory column")
+        }
 
-            mouseClick(toggle)
-            compare(ws.trackingVm.setExpandedCalls.length, 1, "mouse toggle must call setExpanded")
-            compare(ws.trackingVm.setExpandedCalls[0][0], "cat-click")
-
-            toggle.forceActiveFocus()
-            keyClick(Qt.Key_Space)
-            compare(ws.trackingVm.setExpandedCalls.length, 2, "keyboard (Space) must also toggle expansion")
-
-            ws.trackingVm.breakdown.node("cat-click").expanded = false
-            ws.trackingVm = ws.trackingVm   // re-assign to simulate a projection refresh notification
-            verify(find(ws, "breakdownNode_cat-click") !== null,
-                   "the category node must remain after a same-benchmark refresh")
+        function test_noSubcategoryColumnWithoutSubcategories() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            fx.progressGrid.hasSubcategories = false
+            fx.progressGrid.groups = fx.progressGrid.groups.filter(function (g) { return g.column === "category" })
+            const ws = makeWorkspace(fx)
+            compare(find(ws, "progressHeader_subcategory").visible, false)
+            fuzzyCompare(find(ws, "progressHeader_scenario").x,
+                         find(ws, "progressHeader_category").x + find(ws, "progressHeader_category").width, 0.5,
+                         "the Scenario column follows Category directly")
         }
 
         // -- responsive layout -----------------------------------------
@@ -540,11 +559,15 @@ Item {
             const playtimePos = playtime.mapToItem(ws, 0, 0)
             verify(Math.abs(rankPos.y - playtimePos.y) < 4 && playtimePos.x > rankPos.x + 10,
                    "at >=1000px content width the two history cards sit side by side")
-            verify(find(ws, "breakdownNode_sc-1w4ts_metricsRow") !== null,
-                   "wide layout uses an aligned metric column row")
+            const grid = find(ws, "benchmarkProgressGrid")
+            // The offscreen test font is wide, so whether the grid fits is the
+            // driver's to check; here the scroll bar shows exactly when it overflows.
+            compare(find(ws, "progressGridScrollBar").visible, grid.overflowing)
+            verify(grid.columns.progress.width >= 4 * grid._measured.chunk + 16,
+                   "the bar column never narrows below one minimum chunk per tier")
         }
 
-        function test_narrowLayoutStacksHistoriesAndUsesTwoLineMetricRows() {
+        function test_narrowLayoutStacksHistoriesAndScrollsTheGridInItsOwnFrame() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 800, 600)
             const rank = find(ws, "rankHistoryCard")
             const playtime = find(ws, "playtimeHistoryCard")
@@ -554,22 +577,29 @@ Item {
             verify(Math.abs(rankPos.x - playtimePos.x) < 4 && playtimePos.y > rankPos.y + 10,
                    "below 1000px content width the history cards stack")
 
-            verify(find(ws, "breakdownNode_sc-1w4ts_metricsRow") !== null,
-                   "narrow layout keeps the aligned metric columns")
-            const status = find(ws, "breakdownNode_sc-popcorn_matchState")
-            verify(status !== null, "status column missing")
-            verify(status.mapToItem(ws, status.width, 0).x <= ws.width + 1,
-                   "the last column must fit the narrow width: right edge "
-                   + status.mapToItem(ws, status.width, 0).x + " > " + ws.width
-                   + " (x " + status.x + ", w " + status.width + ") cols "
-                   + ["name", "pb", "recent", "rank", "next", "status"].map(function (k) {
-                         const h = find(ws, "breakdownHeader_" + k)
-                         return k + "=" + h.x + "/" + h.width
-                     }).join(" ") + " view " + find(ws, "benchmarkBreakdownView").width)
-            verify(find(ws, "breakdownNode_sc-1w4ts_personalBest") !== null
-                   && find(ws, "breakdownNode_sc-1w4ts_recentAverage") !== null
-                   && find(ws, "breakdownNode_sc-1w4ts_attainedTier") !== null,
-                   "narrow layout preserves every required metric value")
+            // The grid never pushes the page sideways: it fits, or it scrolls inside
+            // its own frame with a visible scroll bar.
+            const grid = find(ws, "benchmarkProgressGrid")
+            verify(grid.mapToItem(ws, grid.width, 0).x <= ws.width + 1, "the grid's frame fits the width")
+            const flick = find(ws, "progressGridFlick")
+            if (grid.overflowing) {
+                const bar = find(ws, "progressGridScrollBar")
+                verify(bar !== null && bar.visible, "an overflowing grid shows its horizontal scroll bar")
+                verify(flick.contentWidth > flick.width, "the grid scrolls inside its own frame")
+            } else {
+                verify(flick.contentWidth <= flick.width + 0.5, "a grid that fits does not scroll")
+            }
+            // No tier chunk is narrower than its header's name.
+            for (let i = 0; i < 4; ++i) {
+                const header = find(ws, "progressTierHeader_" + i)
+                const name = find(ws, "progressTierHeader_" + i + "_name")
+                verify(header.width >= name.implicitWidth + 14, "tier " + i + " header fits its name: "
+                       + header.width + " < " + name.implicitWidth)
+            }
+            verify(find(ws, "progressRow_sc-1w4ts_personalBest") !== null
+                   && find(ws, "progressRow_sc-1w4ts_recent") !== null
+                   && find(ws, "progressRow_sc-1w4ts_next") !== null,
+                   "narrow layout preserves every value")
         }
 
         function test_noOverlapOrClippingAtBothSupportedWindowSizes_data() {
@@ -582,13 +612,16 @@ Item {
         function test_noOverlapOrClippingAtBothSupportedWindowSizes(data) {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), data.w, data.h)
             const summary = find(ws, "benchmarkStatusSummary")
-            const breakdown = find(ws, "benchmarkBreakdownView")
-            verify(summary !== null && breakdown !== null, "summary and breakdown must be present")
+            const grid = find(ws, "benchmarkProgressGrid")
+            const rank = find(ws, "rankHistoryCard")
+            verify(summary !== null && grid !== null, "summary and progress grid must be present")
+            wait(0)
 
             const summaryBottom = summary.mapToItem(ws, 0, summary.height).y
-            const breakdownTop = breakdown.mapToItem(ws, 0, 0).y
-            verify(breakdownTop >= summaryBottom - 1,
-                   "summary and breakdown must not overlap at " + data.tag)
+            const gridTop = grid.mapToItem(ws, 0, 0).y
+            verify(gridTop >= summaryBottom - 1, "summary and grid must not overlap at " + data.tag)
+            verify(rank.mapToItem(ws, 0, 0).y >= grid.mapToItem(ws, 0, grid.height).y - 1,
+                   "grid and history cards must not overlap at " + data.tag)
 
             const col = find(ws, "trackableScrollColumn")
             verify(col !== null && col.width <= ws.width + 1, "content must fit the width at " + data.tag)
@@ -605,62 +638,67 @@ Item {
             wait(0)
 
             const summary = ItemLookup.findByObjectName(ws, "benchmarkStatusSummary")
-            const breakdown = ItemLookup.findByObjectName(ws, "benchmarkBreakdownView")
-            verify(summary !== null && breakdown !== null,
+            const grid = ItemLookup.findByObjectName(ws, "benchmarkProgressGrid")
+            verify(summary !== null && grid !== null,
                    "required metrics must remain present at 150% font scale")
             const summaryBottom = summary.mapToItem(host, 0, summary.height).y
-            const breakdownTop = breakdown.mapToItem(host, 0, 0).y
-            verify(breakdownTop >= summaryBottom - 1, "150% font scale must not overlap controls")
+            const gridTop = grid.mapToItem(host, 0, 0).y
+            verify(gridTop >= summaryBottom - 1, "150% font scale must not overlap controls")
+            const name = ItemLookup.findByObjectName(ws, "progressTierHeader_3_name")
+            const header = ItemLookup.findByObjectName(ws, "progressTierHeader_3")
+            verify(header.width >= name.implicitWidth, "tier headers grow with the font: "
+                   + header.width + " < " + name.implicitWidth)
         }
 
         // -- values share columns across groups, under headers -------
 
-        function test_breakdownValuesLineUpUnderHeadersAcrossGroups_data() {
+        function test_gridValuesLineUpUnderHeadersAcrossGroups_data() {
             return [
                 {tag: "1200x800", w: 1200, h: 800},
                 {tag: "800x600", w: 800, h: 600}
             ]
         }
 
-        function test_breakdownValuesLineUpUnderHeadersAcrossGroups(data) {
+        function test_gridValuesLineUpUnderHeadersAcrossGroups(data) {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), data.w, data.h)
+            wait(0)
             const columns = [
-                {header: "breakdownHeader_pb", cell: "personalBest"},
-                {header: "breakdownHeader_recent", cell: "recentAverage"},
-                {header: "breakdownHeader_rank", cell: "attainedTier"},
-                {header: "breakdownHeader_next", cell: "nextThreshold"},
-                {header: "breakdownHeader_status", cell: "matchState"}
+                {header: "progressHeader_pb", cell: "personalBest"},
+                {header: "progressHeader_recent", cell: "recent"},
+                {header: "progressHeader_next", cell: "next"}
             ]
             for (const column of columns) {
                 const header = find(ws, column.header)
                 verify(header !== null && header.visible && String(header.text).length > 0,
                        column.header + " must be a visible heading")
-                const headerX = header.mapToItem(ws, 0, 0).x
-                // sc-1w4ts sits two levels deep (Clicking / Static); sc-popcorn one
-                // level deep in Uncategorized.
-                for (const id of ["sc-1w4ts", "sc-popcorn"]) {
-                    const cell = find(ws, "breakdownNode_" + id + "_" + column.cell)
+                const headerRight = header.mapToItem(ws, header.width, 0).x
+                // Rows under different groups: Uncategorized, Clicking / Static, Tracking.
+                for (const id of ["sc-1w4ts", "sc-popcorn", "sc-smooth"]) {
+                    const cell = find(ws, "progressRow_" + id + "_" + column.cell)
                     verify(cell !== null, id + " has no " + column.cell + " cell")
-                    fuzzyCompare(cell.mapToItem(ws, 0, 0).x, headerX, 0.5,
+                    // Values are right-aligned inside the column's padding.
+                    fuzzyCompare(cell.mapToItem(ws, cell.width, 0).x, headerRight - 8, 0.5,
                                  id + " " + column.cell + " must sit under its heading")
-                    fuzzyCompare(cell.width, header.width, 0.5,
-                                 id + " " + column.cell + " must share its column's width")
                 }
+            }
+            for (const id of ["sc-1w4ts", "sc-popcorn", "sc-smooth"]) {
+                fuzzyCompare(find(ws, "progressRow_" + id + "_bar").mapToItem(ws, 0, 0).x,
+                             find(ws, "progressTierHeader_0").mapToItem(ws, 0, 0).x, 0.5,
+                             id + " bar starts under the first tier header")
             }
         }
 
-        // -- only abnormal match states are shown ---------------------
+        // -- only abnormal match states are reported ---------------------
 
-        function test_onlyAbnormalMatchStatesAreShown() {
+        function test_onlyAbnormalMatchStatesAreReported() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            const abnormal = find(ws, "breakdownNode_sc-popcorn_matchState")
-            verify(abnormal !== null && abnormal.visible, "the abnormal state cell is missing")
-            compare(abnormal.text, "Several scenarios match")
-            verify(String(abnormal.Accessible.description).length > 0,
+            const abnormal = find(ws, "progressRow_sc-popcorn_bar")
+            verify(String(abnormal.description).indexOf("Several scenarios match") !== -1,
+                   "an abnormal state is reported with the bar")
+            verify(String(abnormal.description).indexOf("More than one scenario") !== -1,
                    "an abnormal state carries guidance on what to do")
-            const normal = find(ws, "breakdownNode_sc-1w4ts_matchState")
-            verify(normal !== null, "status cell missing")
-            verify(String(normal.text).indexOf("Resolved") === -1, "a normal match is not reported")
+            const normal = find(ws, "progressRow_sc-1w4ts_bar")
+            verify(String(normal.description).indexOf("Resolved") === -1, "a normal match is not reported")
         }
 
         // -- rank names use their tier colours --------------------------
@@ -673,44 +711,67 @@ Item {
                    "summary completed rank uses its tier colour")
             verify(Qt.colorEqual(find(ws, "summaryNextTier").color, "#50dcdc"),
                    "summary next tier uses its tier colour")
-            verify(Qt.colorEqual(find(ws, "breakdownNode_sc-1w4ts_attainedTier").color, "#ffc828"),
-                   "breakdown rank uses its tier colour")
+            const next = find(ws, "progressRow_sc-1w4ts_next")
+            verify(Qt.colorEqual(next.children[1].color, "#50dcdc"), "the grid's next tier uses its tier colour")
             verify(!Qt.colorEqual(find(ws, "summaryAverageRank").color, "#ffc828"),
                    "non-tier values keep the normal text colour")
         }
 
-        // -- next-tier progress is drawn per scenario -------------------
+        // -- segmented tier bars ------------------------------------------
 
-        function test_nextTierProgressIsDrawnPerScenario() {
+        function test_tierBarsShareChunkBoundariesWithTheTierHeaders() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             wait(0)
-            const bar0 = find(ws, "blockerBar_0")
-            const fill0 = find(ws, "blockerFill_0")
-            const bar1 = find(ws, "blockerBar_1")
-            const fill1 = find(ws, "blockerFill_1")
-            verify(bar0 !== null && fill0 !== null && bar1 !== null && fill1 !== null,
-                   "every blocking scenario needs a progress bar")
-            verify(bar0.width > 40, "the bar must have a usable length")
-            fuzzyCompare(fill0.width, bar0.width * 0.75, 1, "the fill reflects the scenario's progress")
-            compare(fill1.visible, false, "an unplayed scenario shows no progress")
-            fuzzyCompare(bar0.mapToItem(ws, 0, 0).x, bar1.mapToItem(ws, 0, 0).x, 0.5,
-                         "bars start at the same x so they can be compared")
-            verify(Qt.colorEqual(fill0.color, "#50dcdc"), "the bar uses the next tier's colour")
-            verify(String(find(ws, "blocker_0").Accessible.description).indexOf("75%") !== -1,
-                   "the bar's progress is described for assistive tech")
+            const bars = ["sc-popcorn", "sc-1w4ts", "sc-pasu", "sc-smooth"].map(function (id) {
+                return find(ws, "progressRow_" + id + "_bar")
+            })
+            for (let i = 0; i < 4; ++i) {
+                const header = find(ws, "progressTierHeader_" + i)
+                const headerLeft = header.mapToItem(ws, 0, 0).x
+                const headerRight = header.mapToItem(ws, header.width, 0).x
+                for (const bar of bars) {
+                    const chunk = find(bar, bar.objectName + "_chunk_" + i)
+                    verify(chunk !== null, bar.objectName + " has a chunk per tier")
+                    verify(Math.abs(chunk.mapToItem(ws, 0, 0).x - headerLeft) <= 1.5,
+                           bar.objectName + " chunk " + i + " starts under its tier header")
+                    verify(Math.abs(chunk.mapToItem(ws, chunk.width, 0).x - headerRight) <= 1.5,
+                           bar.objectName + " chunk " + i + " ends under its tier header")
+                }
+                const name = find(ws, "progressTierHeader_" + i + "_name")
+                const center = name.mapToItem(ws, name.width / 2, 0).x
+                verify(Math.abs(center - (headerLeft + headerRight) / 2) <= 12,
+                       "tier " + i + " name is centred over its chunk")
+            }
+        }
+
+        function test_tierBarFillsEachChunkInItsTierColour() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            wait(0)
+            const bar = find(ws, "progressRow_sc-1w4ts_bar")
+            verify(bar.height >= 14, "the bar is tall enough to hover")
+            const expected = [1, 1, 1, 0.75]
+            const colours = ["#cd7f32", "#c0c0c8", "#ffc828", "#50dcdc"]
+            for (let i = 0; i < 4; ++i) {
+                const chunk = find(bar, bar.objectName + "_chunk_" + i)
+                const fill = find(bar, bar.objectName + "_fill_" + i)
+                fuzzyCompare(fill.width, chunk.width * expected[i], 1, "chunk " + i + " fill")
+                verify(Qt.colorEqual(fill.color, colours[i]), "chunk " + i + " uses its tier's colour")
+            }
+            const unplayed = find(ws, "progressRow_sc-popcorn_bar")
+            for (let j = 0; j < 4; ++j)
+                compare(find(unplayed, unplayed.objectName + "_fill_" + j).visible, false,
+                        "an unplayed scenario shows no fill")
             const progress = String(find(ws, "nextTierProgress").text)
             verify(progress.indexOf("3 of 9") !== -1, "the overall count is still shown")
         }
 
         // -- focus order ----------------------------------------------
 
-        function test_visualTabOrderReachesManagerActionAndExpansionControls() {
+        function test_visualTabOrderReachesManagerAction() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             const selector = find(ws, "benchmarkSelector")
             const manage = find(ws, "manageBenchmarksButton")
-            const firstToggle = find(ws, "breakdownToggle_cat-click")
-            verify(selector !== null && manage !== null && firstToggle !== null,
-                   "selector, manager action and expansion control must all exist")
+            verify(selector !== null && manage !== null, "selector and manager action must both exist")
 
             selector.forceActiveFocus()
             verify(selector.activeFocus, "benchmark selector must be focusable")

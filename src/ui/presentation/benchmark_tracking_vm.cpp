@@ -91,51 +91,6 @@ namespace ksv::presentation {
             return entries;
         }
 
-        void collectGroupNames(const std::vector<domain::GroupProjection> &groups, QHash<QString, QString> &out) {
-            for (const auto &group: groups) {
-                out.insert(q(group.id.value), q(group.name));
-                collectGroupNames(group.subgroups, out);
-            }
-        }
-
-        void collectEntries(const domain::Benchmark &definition, QHash<QString, const domain::ScenarioEntry *> &out) {
-            for (const auto &entry: definition.uncategorized) out.insert(q(entry.id.value), &entry);
-            for (const auto &category: definition.categories) {
-                for (const auto &entry: category.scenarios) out.insert(q(entry.id.value), &entry);
-                for (const auto &subcategory: category.subcategories)
-                    for (const auto &entry: subcategory.scenarios) out.insert(q(entry.id.value), &entry);
-            }
-        }
-
-        struct BlockerProgress {
-            double fraction = 0.0;
-            std::optional<domain::TierId> floorTier;
-        };
-
-        // How far a blocking scenario has come from the highest threshold it already meets (or
-        // from zero) toward the score the next tier requires, in [0, 1]. Measuring within that
-        // band rather than from zero keeps scenarios distinguishable: as a plain current/required
-        // ratio almost every blocker would read as a nearly full bar.
-        BlockerProgress blockerProgress(const domain::RankBlocker &blocker, const domain::ScenarioEntry *entry) {
-            BlockerProgress result;
-            if (!blocker.current) return result;
-            const double current = *blocker.current;
-            double floor = 0.0;
-            if (entry) {
-                for (const auto &threshold: entry->thresholds) {
-                    if (threshold.score <= current && threshold.score < blocker.required &&
-                        threshold.score >= floor) {
-                        floor = threshold.score;
-                        result.floorTier = threshold.tierId;
-                    }
-                }
-            }
-            const double span = blocker.required - floor;
-            result.fraction = span > 0.0 ? std::clamp((current - floor) / span, 0.0, 1.0)
-                                         : (current >= blocker.required ? 1.0 : 0.0);
-            return result;
-        }
-
         QString deriveState(const application::BenchmarkWorkspaceSnapshot &snapshot) {
             switch (snapshot.availability) {
                 case application::BenchmarkTrackingState::NoSelection: {
@@ -180,7 +135,7 @@ namespace ksv::presentation {
           m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, m_historyXAxis, this)),
           m_playtimeHistory(
               new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, m_historyXAxis, this)),
-          m_breakdown(new BenchmarkBreakdownModel(this)) {
+          m_progressGrid(new BenchmarkProgressGridModel(this)) {
         m_useCase->onChanged([this] { rebuild(); });
         rebuild();
     }
@@ -192,10 +147,6 @@ namespace ksv::presentation {
     void BenchmarkTrackingViewModel::clearSelection() { m_useCase->clearSelection(); }
 
     void BenchmarkTrackingViewModel::selectDefaultBenchmark() { m_useCase->selectDefault(); }
-
-    void BenchmarkTrackingViewModel::setExpanded(const QString &nodeId, const bool expanded) {
-        m_breakdown->setExpanded(nodeId, expanded);
-    }
 
     void BenchmarkTrackingViewModel::rebuild() {
         const application::BenchmarkWorkspaceSnapshot &snapshot = m_useCase->snapshot();
@@ -262,48 +213,6 @@ namespace ksv::presentation {
         m_scenariosAtNextTier = projection ? projection->scenariosAtNextTier : 0;
         m_scenarioCount = projection ? static_cast<int>(projection->scenarios.size()) : 0;
 
-        m_blockers.clear();
-        if (trackable && projection) {
-            QHash<QString, QString> scenarioNames;
-            for (const auto &scenario: projection->scenarios)
-                scenarioNames.insert(q(scenario.entryId.value), q(scenario.name));
-            QHash<QString, QString> groupNames;
-            collectGroupNames(projection->categories, groupNames);
-
-            QHash<QString, const domain::ScenarioEntry *> entries;
-            if (definition) collectEntries(*definition, entries);
-
-            for (const auto &blocker: projection->nextTierBlockers) {
-                QVariantMap map;
-                const BlockerProgress progress =
-                    blockerProgress(blocker, entries.value(q(blocker.entryId.value), nullptr));
-                map[QStringLiteral("progress")] = progress.fraction;
-                map[QStringLiteral("progressColor")] = m_nextTierColor;
-                const QString fromTier = progress.floorTier
-                                             ? tierNameById.value(q(progress.floorTier->value))
-                                             : QString();
-                map[QStringLiteral("progressDescription")] =
-                    fromTier.isEmpty()
-                        ? tr("%1% of the way to %2").arg(std::lround(progress.fraction * 100)).arg(m_nextTier)
-                        : tr("%1% of the way from %2 to %3")
-                              .arg(std::lround(progress.fraction * 100))
-                              .arg(fromTier, m_nextTier);
-                map[QStringLiteral("kind")] = blocker.entryId.value.empty() && blocker.group
-                                                  ? QStringLiteral("group")
-                                                  : QStringLiteral("scenario");
-                map[QStringLiteral("entryId")] = q(blocker.entryId.value);
-                map[QStringLiteral("scenarioName")] = scenarioNames.value(q(blocker.entryId.value),
-                                                                          q(blocker.entryId.value));
-                map[QStringLiteral("groupName")] =
-                    blocker.group ? groupNames.value(q(blocker.group->value), q(blocker.group->value))
-                                  : QString();
-                map[QStringLiteral("currentText")] =
-                    blocker.current ? formatBenchmarkNumber(*blocker.current) : tr("Unplayed");
-                map[QStringLiteral("requiredText")] = formatBenchmarkNumber(blocker.required);
-                m_blockers.push_back(map);
-            }
-        }
-
         const bool rankPresent = trackable && projection && !projection->averageRankHistory.empty();
         std::vector<qint64> unionMs;
         QList<QPointF> rankPoints;
@@ -333,7 +242,7 @@ namespace ksv::presentation {
         m_rankHistory->update(rankPoints, rankPresent, tierNames);
         m_playtimeHistory->update(playtimePoints, playtimePresent, {});
 
-        m_breakdown->reset(definition, projection);
+        m_progressGrid->reset(definition, projection);
 
         emit changed();
     }

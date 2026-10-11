@@ -369,12 +369,11 @@ Item {
                     historyModel: root.trackingVm ? root.trackingVm.playtimeHistory : null
                 }
 
-                BenchmarkBreakdownView {
-                    objectName: "benchmarkBreakdownView"
+                BenchmarkProgressGrid {
+                    objectName: "benchmarkProgressGrid"
                     Layout.fillWidth: true
-                    breakdown: root.trackingVm ? root.trackingVm.breakdown : null
-                    trackingVm: root.trackingVm
-                    wide: root._wide
+                    Layout.preferredHeight: implicitHeight
+                    grid: root.trackingVm ? root.trackingVm.progressGrid : null
                 }
             }
         }
@@ -387,7 +386,7 @@ Item {
             objectName: "benchmarkWorkspaceScroll"
             contentWidth: availableWidth
             clip: true
-            // Always visible while the content overflows: the breakdown usually
+            // Always visible while the content overflows: the history cards usually
             // starts below the fold, and the style's own bar only shows mid-scroll.
             ScrollBar.vertical: ListScrollBar {
                 // A ScrollView leaves a replacement bar's geometry to the caller.
@@ -407,7 +406,8 @@ Item {
                 objectName: "trackableScrollColumn"
                 width: root._contentWidth
                 implicitWidth: width
-                implicitHeight: breakdownView.y + breakdownView.height
+                implicitHeight: root._wide ? rankCard.y + Math.max(rankCard.height, playtimeCard.height)
+                                           : playtimeCard.y + playtimeCard.height
 
                 readonly property real gap: 12
                 readonly property real halfWidth: Math.floor((width - gap) / 2)
@@ -448,14 +448,14 @@ Item {
                                    + "</font>)"
                         }
                     }
-                    BenchmarkBlockerList {
-                        objectName: "benchmarkBlockerList"
+                    // Every scenario with its tier bar; rows that block the next tier
+                    // are marked, so the count above has its reasons right below it.
+                    BenchmarkProgressGrid {
+                        objectName: "benchmarkProgressGrid"
                         Layout.fillWidth: true
-                        blockers: (root.trackingVm && root.trackingVm.blockers)
-                                  ? root.trackingVm.blockers : []
-                        nextTierName: root.trackingVm && String(root.trackingVm.nextTierColor || "").length > 0
-                                      ? String(root.trackingVm.nextTier) : ""
-                        nextTierColor: root.trackingVm ? String(root.trackingVm.nextTierColor || "") : ""
+                        Layout.preferredHeight: implicitHeight
+                        Layout.topMargin: 4
+                        grid: root.trackingVm ? root.trackingVm.progressGrid : null
                     }
                 }
 
@@ -480,19 +480,6 @@ Item {
                     height: Math.max(implicitHeight, 220)
                     namePrefix: "playtimeHistory"
                     historyModel: root.trackingVm ? root.trackingVm.playtimeHistory : null
-                }
-
-                BenchmarkBreakdownView {
-                    id: breakdownView
-                    objectName: "benchmarkBreakdownView"
-                    x: 0
-                    y: (root._wide
-                        ? rankCard.y + Math.max(rankCard.height, playtimeCard.height)
-                        : playtimeCard.y + playtimeCard.height) + trackableScrollColumn.gap
-                    width: trackableScrollColumn.width
-                    breakdown: root.trackingVm ? root.trackingVm.breakdown : null
-                    trackingVm: root.trackingVm
-                    wide: root._wide
                 }
             }
         }

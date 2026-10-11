@@ -1,5 +1,5 @@
 // BenchmarkTrackingViewModel adapts one IBenchmarkTrackingUseCase revision into the workspace's
-// selector, state text, status summary, blockers, and child graph models. These tests drive it
+// selector, state text, status summary, progress grid, and child graph models. These tests drive it
 // through a single fake use case (never a service) and assert on the QML-facing surface.
 
 #include <gtest/gtest.h>
@@ -116,7 +116,7 @@ TEST(BenchmarkTrackingViewModel, UnavailableStateRetainsLastKnownNameAndClearsDe
     EXPECT_EQ(vm.state(), "unavailable");
     EXPECT_EQ(vm.selectedName(), "Voltaic S3");
     EXPECT_FALSE(vm.summaryAvailable());
-    EXPECT_TRUE(vm.blockers().isEmpty());
+    EXPECT_TRUE(vm.progressGrid()->rows().isEmpty());
     EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
     EXPECT_TRUE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }
@@ -205,44 +205,44 @@ TEST(BenchmarkTrackingViewModel, IncompleteDefinitionShowsIssuesAndSuppressesRan
     EXPECT_NE(vm.attainedRank(), "Unranked");
     EXPECT_NE(vm.attainedRank(), "0");
     EXPECT_NE(vm.averageRank(), "0");
-    EXPECT_TRUE(vm.blockers().isEmpty());
+    for (const QVariant &row: vm.progressGrid()->rows())
+        EXPECT_FALSE(row.toMap().value("blocker").toBool()) << "no blocker without an official rank";
     EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
     // Playtime is a safe fact the evaluator can still interpret.
     EXPECT_FALSE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }
 
-TEST(BenchmarkTrackingViewModel, BlockerListResolvesScenarioAndGroupNamesWithCurrentAndRequired) {
+TEST(BenchmarkTrackingViewModel, ProgressGridListsEveryScenarioAndMarksTheBlockers) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
-    const auto blockers = vm.blockers();
-    ASSERT_EQ(blockers.size(), 2);
+    const QVariantList rows = vm.progressGrid()->rows();
+    ASSERT_EQ(rows.size(), 2);
+    // Uncategorized first, then the categories, as the definition orders them.
+    const auto pasu = rows.at(0).toMap();
+    EXPECT_EQ(pasu.value("name").toString(), "pasu");
+    EXPECT_TRUE(pasu.value("blocker").toBool());
+    EXPECT_TRUE(pasu.value("blockerText").toString().startsWith("Blocks Gold"));
+    EXPECT_TRUE(pasu.value("blockerText").toString().contains("900"));
 
-    const auto first = blockers.at(0).toMap();
-    EXPECT_EQ(first.value("scenarioName").toString(), "1w6ts");
-    EXPECT_EQ(first.value("groupName").toString(), "Clicking");
-    EXPECT_TRUE(first.value("currentText").toString().contains("800"));
-    EXPECT_TRUE(first.value("requiredText").toString().contains("850"));
-
-    const auto second = blockers.at(1).toMap();
-    EXPECT_EQ(second.value("scenarioName").toString(), "pasu");
-    EXPECT_EQ(second.value("groupName").toString(), QString());
-    EXPECT_EQ(second.value("currentText").toString(), "Unplayed");
-    EXPECT_TRUE(second.value("requiredText").toString().contains("900"));
+    const auto wall = rows.at(1).toMap();
+    EXPECT_EQ(wall.value("name").toString(), "1w6ts");
+    EXPECT_TRUE(wall.value("blocker").toBool());
+    EXPECT_TRUE(wall.value("personalBestText").toString().contains("800"));
 }
 
-TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryBlockersAndGraphsBeforeNotifying) {
+TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryGridAndGraphsBeforeNotifying) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
-    ASSERT_FALSE(vm.blockers().isEmpty());
+    ASSERT_FALSE(vm.progressGrid()->rows().isEmpty());
     ASSERT_FALSE(vm.rankHistory()->series({kValueColumn}).isEmpty());
 
     QString stateInNotification;
-    int blockersInNotification = -1;
+    int rowsInNotification = -1;
     bool rankLineEmptyInNotification = false;
     QObject::connect(&vm, &BenchmarkTrackingViewModel::changed, [&] {
         stateInNotification = vm.state();
-        blockersInNotification = static_cast<int>(vm.blockers().size());
+        rowsInNotification = static_cast<int>(vm.progressGrid()->rows().size());
         rankLineEmptyInNotification = vm.rankHistory()->series({kValueColumn}).isEmpty();
     });
     const QSignalSpy spy(&vm, &BenchmarkTrackingViewModel::changed);
@@ -254,7 +254,7 @@ TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryBlockersAndGraph
 
     ASSERT_EQ(spy.count(), 1);
     EXPECT_EQ(stateInNotification, "unavailable");
-    EXPECT_EQ(blockersInNotification, 0);
+    EXPECT_EQ(rowsInNotification, 0);
     EXPECT_TRUE(rankLineEmptyInNotification);
 }
 
@@ -299,40 +299,4 @@ TEST(BenchmarkTrackingViewModel, DarkTierColoursAreLightenedForReadability) {
     const QColor shown(vm.attainedRankColor());
     ASSERT_TRUE(shown.isValid());
     EXPECT_GE(contrastRatio(shown, darkPanelColor()), 4.5);
-}
-
-// each blocking scenario reports how far it has come, from the highest threshold it
-// already meets toward the score the next tier needs.
-TEST(BenchmarkTrackingViewModel, BlockerProgressIsMeasuredFromTheThresholdAlreadyMet) {
-    auto snapshot = makeTrackableSnapshot();
-    // s1: thresholds Bronze 700, Silver 850; PB 800 needs 850 for the blocker.
-    auto &s1 = snapshot.selectedLoaded->benchmark.categories[0].scenarios[0];
-    s1.thresholds = {Threshold{TierId{"t1"}, 700.0}, Threshold{TierId{"t2"}, 850.0},
-                     Threshold{TierId{"t3"}, 1000.0}};
-    snapshot.projection->tiers[2].color = BenchmarkColor{255, 200, 40};
-    auto fake = fakeWith(snapshot);
-    BenchmarkTrackingViewModel vm{fake};
-
-    const auto blockers = vm.blockers();
-    ASSERT_EQ(blockers.size(), 2);
-    const auto played = blockers.at(0).toMap();
-    EXPECT_NEAR(played.value("progress").toDouble(), (800.0 - 700.0) / (850.0 - 700.0), 1e-9);
-    EXPECT_EQ(played.value("progressColor").toString(), QColor(255, 200, 40).name());
-    EXPECT_TRUE(played.value("progressDescription").toString().contains("67%"));
-    EXPECT_TRUE(played.value("progressDescription").toString().contains("Bronze"));
-
-    // Unplayed: no progress at all.
-    const auto unplayed = blockers.at(1).toMap();
-    EXPECT_DOUBLE_EQ(unplayed.value("progress").toDouble(), 0.0);
-}
-
-TEST(BenchmarkTrackingViewModel, BlockerProgressFallsBackToZeroBasedWhenNoThresholdIsMet) {
-    auto snapshot = makeTrackableSnapshot();
-    auto &s1 = snapshot.selectedLoaded->benchmark.categories[0].scenarios[0];
-    s1.thresholds = {Threshold{TierId{"t1"}, 900.0}, Threshold{TierId{"t2"}, 1000.0}};
-    auto fake = fakeWith(snapshot);
-    BenchmarkTrackingViewModel vm{fake};
-
-    // PB 800 meets no threshold; the blocker requires 850.
-    EXPECT_NEAR(vm.blockers().at(0).toMap().value("progress").toDouble(), 800.0 / 850.0, 1e-9);
 }

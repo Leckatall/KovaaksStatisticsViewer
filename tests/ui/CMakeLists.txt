@@ -21,7 +21,7 @@ add_executable(ui_tests
     benchmark_manager_vm_test.cpp
     benchmark_tracking_vm_test.cpp
     benchmark_history_vm_test.cpp
-    benchmark_breakdown_model_test.cpp
+    benchmark_progress_grid_model_test.cpp
     benchmark_table_contract_test.cpp
     benchmark_cell_input_test.cpp
     benchmark_clipboard_matrix_test.cpp
