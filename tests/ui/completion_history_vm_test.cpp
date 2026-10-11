@@ -16,9 +16,12 @@ namespace {
     class FakeCompletionHistoryUseCase final : public ICompletionHistoryUseCase {
     public:
         CompletionHistory history;
+        std::optional<int> selected;
 
         CompletionHistory get_history() override { return history; }
         void onCurrentScenarioChanged(std::function<void()>) override {}
+        std::optional<int> selected_run_index() override { return selected; }
+        void onSelectedRunChanged(std::function<void()>) override {}
     };
 
     class CompletionHistoryViewModelTest : public testing::Test {
@@ -183,6 +186,25 @@ namespace {
 
         EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{1, 2, 3, 4, 5, 6, 7, 8}));
         EXPECT_EQ(view_model.xAxis().formatTick(view_model.xAxis().ticks().front()), "#1");
+    }
+
+    // The history graph marks the selected run at its run number; -1 marks nothing.
+    TEST_F(CompletionHistoryViewModelTest, SelectedRunIndexFollowsTheUseCase) {
+        setHistory();
+        view_model.refresh();
+        EXPECT_EQ(view_model.selectedRunIndex(), -1);
+
+        const QSignalSpy spy(&view_model, &CompletionHistoryViewModel::selectedRunIndexChanged);
+        fake->selected = 2;
+        view_model.refreshSelection();
+        EXPECT_EQ(view_model.selectedRunIndex(), 2);
+        view_model.refreshSelection();
+        EXPECT_EQ(spy.count(), 1) << "an unchanged selection does not signal";
+
+        fake->selected = std::nullopt;
+        view_model.refresh();
+        EXPECT_EQ(view_model.selectedRunIndex(), -1);
+        EXPECT_EQ(spy.count(), 2);
     }
 
     TEST_F(CompletionHistoryViewModelTest, CountSeriesShareOneAxisIdentity) {

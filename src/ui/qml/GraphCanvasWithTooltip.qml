@@ -12,6 +12,8 @@ Item {
     property string xLabel: qsTr("Time")
     // Dot each real data point while the points are sparse enough to tell apart.
     property bool pointMarkers: false
+    // An x value to mark with a rule and a ring on each line's point there; NaN marks nothing.
+    property real markedX: NaN
     readonly property rect plotArea: canvas.plotArea
     readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
     readonly property var labelledYAxisColumns: canvas.labelledYAxisColumns
@@ -28,6 +30,7 @@ Item {
         visibleColumns: root.visibleColumns
         yAxisColumn: root.yAxisColumn
         pointMarkers: root.pointMarkers
+        markedX: root.markedX
         backgroundColor: root.palette.base
     }
     MouseArea {

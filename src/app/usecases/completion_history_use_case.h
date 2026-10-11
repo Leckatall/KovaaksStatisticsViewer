@@ -24,6 +24,7 @@ namespace ksv::application {
         ~CompletionHistoryUseCase() override {
             QObject::disconnect(m_current_perf_connection);
             QObject::disconnect(m_profile_connection);
+            QObject::disconnect(m_selected_run_connection);
         }
 
         CompletionHistory get_history() override {
@@ -70,6 +71,22 @@ namespace ksv::application {
                 });
         }
 
+        std::optional<int> selected_run_index() override {
+            const auto current = m_session_controller->getCurrentRun().run_id;
+            if (current.scenario_id.hash.empty()) return std::nullopt;
+            const auto completion_history = m_profile_service->getCompletionHistory(current.scenario_id);
+            for (std::size_t i = 0; i < completion_history.size(); ++i)
+                if (completion_history[i].run_id == current) return static_cast<int>(i + 1);
+            return std::nullopt;
+        }
+
+        void onSelectedRunChanged(std::function<void()> callback) override {
+            QObject::disconnect(m_selected_run_connection);
+            m_selected_run_connection = QObject::connect(
+                m_session_controller.get(), &ISessionController::currentRunChanged,
+                m_session_controller.get(), std::move(callback));
+        }
+
     private:
         [[nodiscard]] std::string currentScenarioHash() const {
             return m_session_controller->getCurrentRun().run_id.scenario_id.hash;
@@ -80,6 +97,7 @@ namespace ksv::application {
         std::string m_last_scenario_hash;
         QMetaObject::Connection m_current_perf_connection;
         QMetaObject::Connection m_profile_connection;
+        QMetaObject::Connection m_selected_run_connection;
     };
 }
 

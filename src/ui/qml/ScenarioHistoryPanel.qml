@@ -28,6 +28,10 @@ Frame {
         return s && !!root.columnVisibility[s.id]
     })
 
+    // The selected run's x position on the history graph, or -1 for none.
+    readonly property int selectedRunIndex: root.historyVm.selectedRunIndex !== undefined
+                                            ? root.historyVm.selectedRunIndex : -1
+
     readonly property int yAxisColumn: {
         const cols = root.visibleColumns;
         for (const column of cols) {
@@ -94,6 +98,8 @@ Frame {
                         objectName: "historyGraphCanvas"
                         // Few runs: dot each real run so it reads apart from the smoothed curve.
                         pointMarkers: true
+                        // The run selected in the run list / run graph.
+                        markedX: root.selectedRunIndex > 0 ? root.selectedRunIndex : NaN
                     }
                 }
             }
