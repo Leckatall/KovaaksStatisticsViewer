@@ -192,6 +192,34 @@ TEST(BenchmarkProgressGridModel, RowsFollowDefinitionOrderUnderSpanningGroups) {
     EXPECT_EQ(grid->groups().size(), 4);
 }
 
+TEST(BenchmarkProgressGridModel, GroupsCarryTheirRankInTheTierColour) {
+    auto fake = gridFake();
+    fake->snap.projection->tiers[0].color = BenchmarkColor{205, 127, 50}; // Bronze
+    fake->snap.projection->tiers[1].color = BenchmarkColor{20, 20, 60};   // Silver: dark
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *grid = vm.progressGrid();
+
+    const QVariantMap clicking = groupFor(grid, "c1");
+    EXPECT_EQ(clicking.value("rankText").toString(), "Bronze");
+    EXPECT_EQ(clicking.value("rankBarColor").toString(), QColor(205, 127, 50).name());
+    const QVariantMap smoothness = groupFor(grid, "sc1");
+    EXPECT_EQ(smoothness.value("rankText").toString(), "Silver");
+    EXPECT_GE(contrastRatio(QColor(smoothness.value("rankColor").toString()), darkPanelColor()), 4.5);
+    EXPECT_NE(clicking.value("rankBarColor"), smoothness.value("rankBarColor"));
+
+    const QVariantMap tracking = groupFor(grid, "c2");
+    EXPECT_EQ(tracking.value("rankText").toString(), "Unranked");
+    EXPECT_TRUE(tracking.value("rankColor").toString().isEmpty()) << "an unranked group gets a neutral chip";
+    EXPECT_TRUE(groupFor(grid, QString()).value("rankText").toString().isEmpty())
+        << "Uncategorized is not ranked as a group";
+
+    // An incomplete benchmark ranks nothing, so no group shows a chip.
+    fake->snap.projection->completeness = Completeness::Incomplete;
+    fake->publish();
+    for (const QVariant &group: grid->groups())
+        EXPECT_TRUE(group.toMap().value("rankText").toString().isEmpty());
+}
+
 TEST(BenchmarkProgressGridModel, GroupsWithoutScenariosAreLeftOut) {
     auto fake = gridFake();
     auto &definition = fake->snap.selectedLoaded->benchmark;

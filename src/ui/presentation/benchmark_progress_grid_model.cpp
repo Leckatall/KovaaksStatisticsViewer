@@ -178,7 +178,42 @@ namespace ksv::presentation {
                 map[QStringLiteral("color")] = color;
                 map[QStringLiteral("start")] = start;
                 map[QStringLiteral("span")] = rowCount() - start;
+                addGroupRank(map, id);
                 groups.push_back(map);
+            }
+
+            // The group's rank chip: the highest tier the group satisfies (the old breakdown's
+            // "highest Silver"), or Unranked. Only a trackable benchmark ranks groups, and
+            // Uncategorized is never ranked as a group, so both get no chip (empty rankText).
+            void addGroupRank(QVariantMap &map, const QString &id) const {
+                QString text;
+                QString color;
+                QString barColor;
+                const domain::GroupProjection *group = findGroup(m_projection.categories, id);
+                if (m_projection.completeness == domain::Completeness::Trackable && group) {
+                    text = QObject::tr("Unranked");
+                    if (group->satisfiedTier) {
+                        for (const auto &tier: m_projection.tiers) {
+                            if (tier.id != *group->satisfiedTier) continue;
+                            text = q(tier.name);
+                            color = readableTextColor(tier.color).name();
+                            barColor = QColor(tier.color.red, tier.color.green, tier.color.blue).name();
+                        }
+                    }
+                }
+                map[QStringLiteral("rankText")] = text;
+                map[QStringLiteral("rankColor")] = color;
+                map[QStringLiteral("rankBarColor")] = barColor;
+            }
+
+            static const domain::GroupProjection *findGroup(const std::vector<domain::GroupProjection> &groups,
+                                                            const QString &id) {
+                if (id.isEmpty()) return nullptr;
+                for (const auto &group: groups) {
+                    if (q(group.id.value) == id) return &group;
+                    if (const auto *found = findGroup(group.subgroups, id)) return found;
+                }
+                return nullptr;
             }
 
             void addScenario(const domain::ScenarioEntry &entry) {

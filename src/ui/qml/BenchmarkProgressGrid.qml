@@ -64,6 +64,25 @@ Item {
         return tiers.length > 0 ? Math.round(index * barWidth / tiers.length) : 0
     }
 
+    // --- group rank chips ---------------------------------------------------------
+    readonly property real rankChipPadding: 6
+    readonly property real rankChipSpacing: 6
+    // The width a group's rank chip adds beside its name (none without a rank).
+    function rankChipSpace(group) {
+        const text = String(group.rankText || "")
+        return text.length > 0 ? rankChipSpacing + 2 * rankChipPadding + chipMetrics.advanceWidth(text) + 2 : 0
+    }
+    Label {
+        id: chipProbe
+        visible: false
+        font.pixelSize: 11
+        text: "0"
+    }
+    FontMetrics {
+        id: chipMetrics
+        font: chipProbe.font
+    }
+
     // Never shown: lend their (inherited) fonts to the measurement, so the columns
     // follow the fonts the cells render with, including scaled fonts.
     Label {
@@ -103,7 +122,7 @@ Item {
         const scenarioHeader = widths.scenario
         for (const group of groups) {
             const key = String(group.column)
-            widths[key] = Math.max(widths[key], boldMetrics.advanceWidth(String(group.name)))
+            widths[key] = Math.max(widths[key], boldMetrics.advanceWidth(String(group.name)) + rankChipSpace(group))
         }
         for (const row of rows) {
             widths.scenario = Math.max(widths.scenario, markerSpace + metrics.advanceWidth(String(row.name)))
@@ -493,15 +512,46 @@ Item {
                         width: 1
                         color: root.palette.mid
                     }
-                    Label {
-                        objectName: groupCell.objectName + "_name"
+                    Row {
                         x: root.cellPadding
                         width: Math.max(0, groupCell.width - 2 * root.cellPadding)
                         height: root.rowHeight
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                        font.bold: true
-                        text: String(groupCell.modelData.name)
+                        spacing: root.rankChipSpacing
+
+                        Label {
+                            objectName: groupCell.objectName + "_name"
+                            width: Math.max(0, Math.min(implicitWidth, parent.width - (rankChip.visible
+                                                        ? rankChip.width + parent.spacing : 0)))
+                            height: parent.height
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                            font.bold: true
+                            text: String(groupCell.modelData.name)
+                        }
+                        // The group's rank in its tier colour; neutral when unranked.
+                        Rectangle {
+                            id: rankChip
+                            readonly property string tierColor: String(groupCell.modelData.rankBarColor || "")
+                            objectName: groupCell.objectName + "_rank"
+                            visible: String(groupCell.modelData.rankText || "").length > 0
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: rankLabel.implicitWidth + 2 * root.rankChipPadding
+                            height: rankLabel.implicitHeight + 4
+                            radius: height / 2
+                            color: tierColor.length > 0 ? Qt.alpha(tierColor, 0.28) : root.palette.base
+                            border.color: tierColor.length > 0 ? tierColor : root.palette.mid
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: qsTr("%1 rank: %2").arg(String(groupCell.modelData.name)).arg(rankLabel.text)
+
+                            Label {
+                                id: rankLabel
+                                anchors.centerIn: parent
+                                font.pixelSize: 11
+                                text: String(groupCell.modelData.rankText || "")
+                                color: String(groupCell.modelData.rankColor || "").length > 0
+                                       ? groupCell.modelData.rankColor : root.palette.placeholderText
+                            }
+                        }
                     }
                 }
             }

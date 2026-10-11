@@ -537,6 +537,37 @@ Item {
                     "a benchmark with subcategories shows the Subcategory column")
         }
 
+        // each group cell shows its rank as a chip in that tier's colour.
+        function test_groupCellsShowTheirRankChip() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            const groups = fx.progressGrid.groups
+            groups[3].rankText = "Gold"        // cat-click
+            groups[3].rankColor = "#ffc828"
+            groups[3].rankBarColor = "#ffc828"
+            groups[4].rankText = "Silver"      // cat-track
+            groups[4].rankColor = "#c0c0c8"
+            groups[4].rankBarColor = "#c0c0c8"
+            groups[1].rankText = "Unranked"    // sub-static
+            const ws = makeWorkspace(fx)
+            wait(0)
+
+            const gold = find(ws, "progressGroup_cat-click_rank")
+            const silver = find(ws, "progressGroup_cat-track_rank")
+            verify(gold.visible && silver.visible, "ranked groups show a chip")
+            verify(Qt.colorEqual(gold.border.color, "#ffc828") && Qt.colorEqual(silver.border.color, "#c0c0c8"),
+                   "each chip uses its tier's colour")
+            verify(!Qt.colorEqual(gold.color, silver.color), "different ranks look different")
+            compare(gold.children[0].text, "Gold")
+            const unranked = find(ws, "progressGroup_sub-static_rank")
+            verify(unranked.visible && Qt.colorEqual(unranked.border.color, ws.palette.mid),
+                   "an unranked group gets a neutral chip")
+            const none = find(ws, "progressGroup_uncategorized_rank")
+            verify(none === null || !none.visible, "no rank, no chip")
+
+            const cell = find(ws, "progressGroup_cat-click")
+            verify(gold.mapToItem(cell, gold.width, 0).x <= cell.width, "the chip fits inside its group cell")
+        }
+
         function test_noSubcategoryColumnWithoutSubcategories() {
             const fx = TestDoubles.trackingFixtureTrackable()
             fx.progressGrid.hasSubcategories = false
