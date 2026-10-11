@@ -234,6 +234,28 @@ TestCase {
         }
     }
 
+    // Where an item's label text starts: the item's left padding plus the content item's own
+    // (Fusion indents a checkable item's label past its check box there).
+    function labelX(menu, text) {
+        const item = findMenuItemByText(menu, text)
+        verify(item !== null, "no menu item '" + text + "'")
+        return item.leftPadding + item.contentItem.leftPadding
+    }
+
+    // Checkable items, submenus and plain actions share one label column in the View menu and
+    // in its mixed Scenario Graph Lines submenu.
+    function test_viewMenuLabelsStartAtTheSameX() {
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const viewMenu = menuBar.menuAt(1)
+        const checkableX = labelX(viewMenu, "Scenario Graph")
+        verify(checkableX > findMenuItemByText(viewMenu, "Scenario Graph").padding, "label indented past the check box")
+        fuzzyCompare(labelX(viewMenu, "Scenario Graph Lines"), checkableX, 1)
+        fuzzyCompare(labelX(viewMenu, "Selection Panel Sections"), checkableX, 1)
+
+        const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
+        fuzzyCompare(labelX(linesMenu, "Configure Lines..."), labelX(linesMenu, "Score"), 1)
+    }
+
     function test_scenarioGraphLinesSubmenu_enabledTracksMasterToggle() {
         fakeViewSettings.scenarioGraphVisible = true
         const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)

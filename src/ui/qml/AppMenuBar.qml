@@ -18,6 +18,12 @@ MenuBar {
     signal quitRequested()
     signal aboutRequested()
 
+    // An item that keeps the check box's column even when it has no check box, so in a menu that
+    // mixes checkable items with submenus and plain actions every label starts at the same x.
+    component AlignedMenuItem: MenuItem {
+        leftPadding: checkable ? padding : padding + (indicator ? indicator.width : 0) + spacing
+    }
+
     Menu {
         title: qsTr("&File")
         Action {
@@ -47,6 +53,7 @@ MenuBar {
     }
     Menu {
         title: qsTr("&View")
+        delegate: AlignedMenuItem {}
 
         Action {
             text: qsTr("Scenario Graph")
@@ -57,6 +64,7 @@ MenuBar {
         Menu {
             objectName: "scenarioGraphLinesMenu"
             title: qsTr("Scenario Graph Lines")
+            delegate: AlignedMenuItem {}
             enabled: root.visualSettings ? root.visualSettings.scenarioGraphVisible : true
             Repeater {
                 model: root.graphVm ? root.graphVm.allSeries : []
