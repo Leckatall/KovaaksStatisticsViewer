@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtCore
 
 ApplicationWindow {
     id: root
@@ -9,8 +10,54 @@ ApplicationWindow {
     title: "Settings"
     flags: Qt.Dialog
     modality: Qt.WindowModal
-    width: 680
-    height: 460
+    width: defaultWidth
+    height: defaultHeight
+    minimumWidth: Math.min(floorWidth, _limitWidth())
+    minimumHeight: Math.min(floorHeight, _limitHeight())
+
+    // Room for the Graph Lines list and full paths. It opens at the size it was last left at
+    // (window/settingsDialog*), never below the floor, and shrinks below the floor only when the
+    // main window and the screen are both too small for it.
+    readonly property int defaultWidth: 860
+    readonly property int defaultHeight: 620
+    readonly property int floorWidth: 680
+    readonly property int floorHeight: 460
+
+    Settings {
+        id: sizeSettings
+        category: "window"
+        property int settingsDialogWidth: 0
+        property int settingsDialogHeight: 0
+    }
+
+    function _limitWidth() {
+        return Math.max(root.screen ? root.screen.desktopAvailableWidth : 0,
+                        root.transientParent ? root.transientParent.width : 0) || root.defaultWidth
+    }
+    function _limitHeight() {
+        return Math.max(root.screen ? root.screen.desktopAvailableHeight : 0,
+                        root.transientParent ? root.transientParent.height : 0) || root.defaultHeight
+    }
+
+    function _fitToScreen() {
+        const wantWidth = sizeSettings.settingsDialogWidth > 0 ? sizeSettings.settingsDialogWidth : defaultWidth
+        const wantHeight = sizeSettings.settingsDialogHeight > 0 ? sizeSettings.settingsDialogHeight : defaultHeight
+        width = Math.min(Math.max(wantWidth, floorWidth), _limitWidth())
+        height = Math.min(Math.max(wantHeight, floorHeight), _limitHeight())
+        // Centred over the main window, kept on its screen.
+        const owner = root.transientParent
+        if (!owner) return
+        const left = root.screen ? root.screen.virtualX : 0
+        const top = root.screen ? root.screen.virtualY : 0
+        x = Math.max(left, owner.x + Math.round((owner.width - width) / 2))
+        y = Math.max(top, owner.y + Math.round((owner.height - height) / 2))
+    }
+
+    onVisibleChanged: {
+        if (visible) return
+        sizeSettings.settingsDialogWidth = width
+        sizeSettings.settingsDialogHeight = height
+    }
 
     required property var settingsVm
     required property var sessionVm
@@ -35,6 +82,7 @@ ApplicationWindow {
 
     function open() {
         root.settingsVm.beginSeriesDraft()
+        if (!visible) _fitToScreen()
         visible = true
         raise()
         requestActivate()

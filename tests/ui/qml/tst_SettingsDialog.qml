@@ -64,6 +64,35 @@ TestCase {
         verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never re-rendered after selecting category '" + categoryName + "'")
     }
 
+    // Opens at 860x620 (bounded only by the room the main window or screen gives it), never
+    // below the old 680x460, and reopens at the size it was left at.
+    function test_opensLargeAndRemembersItsSize() {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
+        const limitWidth = dialog._limitWidth()
+        const limitHeight = dialog._limitHeight()
+        compare(dialog.width, Math.min(860, limitWidth))
+        compare(dialog.height, Math.min(620, limitHeight))
+        verify(dialog.width >= Math.min(680, limitWidth) && dialog.height >= Math.min(460, limitHeight),
+               "never smaller than the old 680x460 while there is room")
+
+        dialog.width = Math.min(700, limitWidth)
+        dialog.height = Math.min(500, limitHeight)
+        dialog.close()
+        dialog.open()
+        compare(dialog.width, Math.min(700, limitWidth), "reopens at the width it was left at")
+        compare(dialog.height, Math.min(500, limitHeight))
+
+        dialog.width = 500
+        dialog.close()
+        dialog.open()
+        compare(dialog.width, Math.min(680, limitWidth), "a remembered size below the floor opens at the floor")
+
+        // Leave the default for the other tests in this process.
+        dialog.width = 860
+        dialog.height = 620
+        dialog.close()
+    }
+
     function test_kovaaksDirField_showsSettingsVmDirWithoutFileScheme() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({kovaaksDir: "file:///D:/CustomDir"}),
