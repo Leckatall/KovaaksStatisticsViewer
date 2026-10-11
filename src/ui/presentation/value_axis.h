@@ -36,7 +36,8 @@ namespace ksv::presentation {
         explicit ValueAxis(Options options);
         ValueAxis(Options options, ValueTransform transform);
 
-        [[nodiscard]] bool setRange(qreal dataLo, qreal dataHi);
+        // Returns true if the resolved range changed; callers that don't care may ignore it.
+        bool setRange(qreal dataLo, qreal dataHi);
         [[nodiscard]] bool setOptions(Options options);
         void setTransform(ValueTransform transform);
         [[nodiscard]] const Options &options() const { return m_options; }
