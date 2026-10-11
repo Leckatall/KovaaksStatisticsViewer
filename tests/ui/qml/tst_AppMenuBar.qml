@@ -189,6 +189,29 @@ TestCase {
         compare(fakeViewSettings.selectionPanelVisible, false)
     }
 
+    function indexOfMenuItem(menu, text) {
+        for (let i = 0; i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.text === text) return i
+        }
+        return -1
+    }
+
+    // The graph entries follow the panels' top-to-bottom order: the two about the selected
+    // scenario, then the all-scenario playtime graph.
+    function test_viewMenuGraphEntriesFollowPanelOrder() {
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const viewMenu = menuBar.menuAt(1)
+        const order = ["Scenario Graph", "Scenario Graph Lines", "Scenario History", "Scenario History Lines",
+                       "Playtime Graph"]
+        let previous = -1
+        for (const text of order) {
+            const index = indexOfMenuItem(viewMenu, text)
+            verify(index > previous, "'" + text + "' at " + index + " should come after index " + previous)
+            previous = index
+        }
+    }
+
     function test_scenarioGraphLinesSubmenu_enabledTracksMasterToggle() {
         fakeViewSettings.scenarioGraphVisible = true
         const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)

@@ -315,6 +315,19 @@ namespace {
         visualSettings->setProperty("playtimeGraphVisible", true);
     }
 
+    // The panels about the selected scenario (run graph, its history) sit together, above the
+    // all-scenario playtime panel.
+    TEST_F(DashboardUiTest, GraphPanelsAreOrderedRunHistoryPlaytime) {
+        auto *run = root()->findChild<QObject *>("scenarioGraphPanel");
+        auto *history = root()->findChild<QObject *>("scenarioHistoryPanel");
+        auto *playtime = root()->findChild<QObject *>("playtimeGraphPanel");
+        ASSERT_TRUE(run && history && playtime);
+        const auto y = [](const QObject *item) { return item->property("y").toReal(); };
+
+        EXPECT_TRUE(QTest::qWaitFor([&] { return y(run) < y(history) && y(history) < y(playtime); }, 2000))
+            << "panel y: run " << y(run) << ", history " << y(history) << ", playtime " << y(playtime);
+    }
+
     TEST_F(DashboardUiTest, YAxisTitleLabelDefaultsToScore) {
         // The plot subtree (and its axis title) is only instantiated once a run with performance data
         // is shown; before that the panel carries the "No run selected" message instead.

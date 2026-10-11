@@ -74,12 +74,6 @@ MenuBar {
             }
         }
         Action {
-            text: qsTr("Playtime Graph")
-            checkable: true
-            checked: root.visualSettings ? root.visualSettings.playtimeGraphVisible : true
-            onTriggered: if (root.visualSettings) root.visualSettings.playtimeGraphVisible = checked
-        }
-        Action {
             text: qsTr("Scenario History")
             checkable: true
             checked: root.visualSettings ? root.visualSettings.scenarioHistoryGraphVisible : true
@@ -99,6 +93,13 @@ MenuBar {
                     onTriggered: root.visualSettings.historyColumnVisibility[modelData.id] = checked
                 }
             }
+        }
+        // The graph entries follow the panels' top-to-bottom order.
+        Action {
+            text: qsTr("Playtime Graph")
+            checkable: true
+            checked: root.visualSettings ? root.visualSettings.playtimeGraphVisible : true
+            onTriggered: if (root.visualSettings) root.visualSettings.playtimeGraphVisible = checked
         }
         Action {
             // The line toggles now sit inside the run graph panel (formerly a separate "Control Panel").

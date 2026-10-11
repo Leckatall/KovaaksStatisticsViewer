@@ -36,7 +36,8 @@ Item {
 
         // The graph panels split the column equally whatever their content: fill items share the
         // space in the ratio of their preferred heights, so each states the same one. A hidden
-        // panel drops out and the others share its space.
+        // panel drops out and the others share its space. The two panels about the selected scenario
+        // come first, then the all-scenario playtime panel.
         ColumnLayout {
             Layout.row: 1; Layout.column: 1
             Layout.fillWidth: true
@@ -53,14 +54,6 @@ Item {
                 visualSettings: root.visualSettings
                 onConfigureLinesRequested: root.configureGraphLinesRequested()
             }
-            PlaytimeGraphPanel {
-                objectName: "playtimeGraphPanel"
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredHeight: 1
-                visible: root.visualSettings.playtimeGraphVisible
-                playtimeVm: root.playtimeVm
-            }
             ScenarioHistoryPanel {
                 objectName: "scenarioHistoryPanel"
                 Layout.fillWidth: true
@@ -70,6 +63,14 @@ Item {
                 historyVm: root.historyVm
                 columnVisibility: root.visualSettings.historyColumnVisibility
                 historyAxisSettings: root.visualSettings
+            }
+            PlaytimeGraphPanel {
+                objectName: "playtimeGraphPanel"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: 1
+                visible: root.visualSettings.playtimeGraphVisible
+                playtimeVm: root.playtimeVm
             }
         }
         SelectionPanel {
