@@ -354,6 +354,12 @@ Item {
             compare(area.ToolTip.text, "Average rank 2.75", "the number stays in the tooltip")
             verify(find(ws, "summaryAttainedRank").visible && find(ws, "summaryNextTier").visible,
                    "attained rank and next tier stay visible as text")
+            // The bar does not push the right-hand column off its half of the card.
+            const summary = find(ws, "benchmarkStatusSummary")
+            const completed = find(ws, "summaryCompletedRank")
+            tryVerify(() => completed.mapToItem(summary, 0, 0).x < summary.width / 2 + 140, 2000,
+                      "the right-hand fields stay in the card's right half, not pushed across it: "
+                      + completed.mapToItem(summary, 0, 0).x + " of " + summary.width)
         }
 
         function test_summaryWithoutACompletedRankHasNoTick() {

@@ -48,6 +48,9 @@ Frame {
         columns: 2
         columnSpacing: 16
         rowSpacing: 6
+        // Two equal halves whatever a field needs, so the wide average-rank bar never pushes
+        // the right-hand fields across the card.
+        uniformCellWidths: true
 
         Field {
             caption: qsTr("Attained rank")
