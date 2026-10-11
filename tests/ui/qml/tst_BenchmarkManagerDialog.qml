@@ -99,6 +99,28 @@ TestCase {
         compare(vm(dialog).discardCalls, 0)
     }
 
+    // "• Unsaved" follows the view model's dirty state: absent on a clean draft, shown after an
+    // edit, gone again once saved (or undone back to the saved copy).
+    function test_unsavedLabelFollowsTheDraftsDirtyState() {
+        const dialog = openWithFake({dirty: false, hasDraft: true, benchmarkName: "Demo"})
+        const label = find(dialog, "unsavedLabel")
+        verify(label !== null, "the editor header has an unsaved-changes label")
+        compare(label.visible, false, "a clean draft shows no label")
+
+        dialog.benchmarkManagerVm = TestDoubles.makeFakeBenchmarkManagerVm({dirty: true, hasDraft: true,
+                                                                             benchmarkName: "Demo"})
+        tryCompare(label, "visible", true)
+        compare(label.text, "• Unsaved")
+        const name = find(dialog, "benchmarkNameField")
+        tryVerify(() => label.mapToItem(dialog.contentItem, 0, 0).x
+                        >= name.mapToItem(dialog.contentItem, name.width, 0).x, 2000,
+                  "the label sits right after the benchmark name")
+
+        dialog.benchmarkManagerVm = TestDoubles.makeFakeBenchmarkManagerVm({dirty: false, hasDraft: true,
+                                                                             benchmarkName: "Demo"})
+        tryCompare(label, "visible", false)
+    }
+
     function test_dirtyCloseRaisesSaveDiscardCancelPrompt() {
         const dialog = openWithFake({dirty: true, hasDraft: true})
 

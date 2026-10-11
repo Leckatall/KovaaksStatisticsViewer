@@ -236,6 +236,23 @@ TEST(BenchmarkManagerVm, SaveSuccessUpdatesLocalBaselineFromAdmittedToken) {
     EXPECT_TRUE(f.vm->dirty());
 }
 
+// The editor's "• Unsaved" label reads dirty(): undoing back to the saved copy clears it.
+TEST(BenchmarkManagerVm, UndoingBackToTheSavedCopyClearsDirty) {
+    Fixture f;
+    f.uc->nextNewSeed = newSeed(draftWith("Alpha", {}, {benchmarkEntry("e1", "Old", std::nullopt, {})}));
+    f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"}, std::nullopt};
+    f.build();
+    f.vm->beginNewBenchmark();
+    ASSERT_TRUE(f.vm->save()["ok"].toBool());
+    ASSERT_FALSE(f.vm->dirty());
+
+    ASSERT_TRUE(f.vm->setScenarioIdentity("e1", "New", "h-new").value("ok").toBool());
+    EXPECT_TRUE(f.vm->dirty());
+
+    ASSERT_TRUE(f.vm->undo().value("ok").toBool());
+    EXPECT_FALSE(f.vm->dirty());
+}
+
 TEST(BenchmarkManagerVm, DiscardClosesAndForgetsUnsavedWorkingCopy) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Draft", {tier("g", "Gold")}, {}));

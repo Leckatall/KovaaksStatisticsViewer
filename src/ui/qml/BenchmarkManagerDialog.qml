@@ -859,6 +859,15 @@ ApplicationWindow {
                                     restoreMode: Binding.RestoreNone
                                 }
                             }
+                            // The view model's own dirty state: it compares the draft with the copy it
+                            // was opened from or saved to, so undoing back to that copy clears it.
+                            Label {
+                                objectName: "unsavedLabel"
+                                visible: root.vm().dirty === true
+                                text: qsTr("• Unsaved")
+                                color: Qt.alpha(root.palette.accent, 0.8)
+                                Accessible.name: qsTr("The benchmark has unsaved changes")
+                            }
                         }
                         RowLayout {
                             id: editorActions
