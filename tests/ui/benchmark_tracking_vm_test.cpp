@@ -216,6 +216,28 @@ TEST(BenchmarkTrackingViewModel, IncompleteDefinitionShowsIssuesAndSuppressesRan
     EXPECT_FALSE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }
 
+// The workspace's progress heading reads hasNextTier and nextTierBlockerCount. A benchmark that is
+// not trackable has no next tier and no blockers, even when its projection still carries them (as
+// it does here, so the check fails if the view model forwards them regardless of the state).
+TEST(BenchmarkTrackingViewModel, NonTrackableBenchmarkHasNoNextTierAndNoBlockers) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    ASSERT_EQ(vm.state(), "trackable");
+    ASSERT_TRUE(vm.hasNextTier());
+    ASSERT_GT(vm.nextTierBlockerCount(), 0);
+
+    fake->snap.selectedLoaded->completeness = CompletenessResult{
+        Completeness::Incomplete, {BenchmarkIssue{BenchmarkIssueCode::MissingThreshold, std::monostate{}}}};
+    fake->snap.projection->completeness = Completeness::Incomplete;
+    ASSERT_TRUE(fake->snap.projection->nextTier.has_value());
+    ASSERT_FALSE(fake->snap.projection->nextTierBlockers.empty());
+    fake->publish();
+
+    EXPECT_EQ(vm.state(), "incomplete");
+    EXPECT_FALSE(vm.hasNextTier());
+    EXPECT_EQ(vm.nextTierBlockerCount(), 0);
+}
+
 TEST(BenchmarkTrackingViewModel, BlockerCountEqualsTheRowsTheGridMarks) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};

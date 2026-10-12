@@ -451,10 +451,28 @@ Item {
                     "Not ranked yet: 4 scenarios block Bronze")
         }
 
-        function test_headingIsHiddenWhenNotTrackable() {
-            const ws = makeWorkspace(TestDoubles.trackingFixtureIncomplete ? TestDoubles.trackingFixtureIncomplete() : {})
+        // A non-trackable benchmark has no rank to progress from, so the heading must not
+        // show. The fixtures carry stale next-tier values on purpose: a heading that read
+        // them regardless of the state would render text.
+        function test_headingIsHiddenWhenNotTrackable_data() {
+            return [
+                {tag: "incomplete", fx: TestDoubles.trackingFixtureIncomplete(), body: "incompleteBody"},
+                {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable(), body: "unavailableBody"}
+            ]
+        }
+        function test_headingIsHiddenWhenNotTrackable(data) {
+            const fx = Object.assign({}, data.fx, {
+                hasNextTier: true, nextTier: "Gold", nextTierColor: "#ffc828", nextTierBlockerCount: 3
+            })
+            verify(String(fx.state).toLowerCase() !== "trackable", "the fixture must not be trackable")
+            verify(fx.summaryAvailable === false, "a non-trackable fixture has no summary")
+
+            const ws = makeWorkspace(fx)
+            verify(find(ws, data.body) !== null, "the " + data.tag + " body must be shown")
+            verify(find(ws, "benchmarkStatusSummary") === null, "no status summary when not trackable")
             const heading = find(ws, "nextTierProgress")
-            verify(heading === null || !heading.visible || String(heading.text) === "")
+            verify(heading === null || !heading.visible,
+                   "the next-tier heading must not show: " + (heading ? heading.text : ""))
         }
     }
 
