@@ -220,6 +220,59 @@ TestCase {
         keyClick(Qt.Key_Escape)
     }
 
+    // Return in the add-subcategory field is the field's own: it used to propagate to the table,
+    // whose edit trigger opened a rename editor on the current category cell, behind the prompt
+    // the Manager opens for a category that already holds scenarios.
+    function test_returnInSubcategoryFieldOpensNoRenameEditor() {
+        const tracking = {id: "g2", name: "Tracking", color: "#960096"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "b", category: tracking, name: "Beta", cells: {}},
+            {entryId: "c", category: tracking, name: "Gamma", cells: {}}
+        ]}, {groups: [
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, issues: []}
+        ]})
+        const requests = []
+        table.addSubcategoryRequested.connect((categoryId, name) => {
+            requests.push([categoryId, name])
+            table.creationAccepted = true
+        })
+
+        const category = cellFor(table, "b", "category")
+        mouseClick(category.face, 20, category.height / 2)
+        tryCompare(table.selectionModel.currentIndex, "column", 0)
+        mouseClick(ItemLookup.findByObjectName(table, "addSubcategoryPlus_g2"))
+        const field = category.subcategoryField
+        tryVerify(() => field.visible && field.activeFocus)
+        keyClick(Qt.Key_S)
+        keyClick(Qt.Key_Return)
+
+        compare(requests, [["g2", "s"]])
+        waitForRendering(table)
+        compare(table.activeEditor, null, "Return in the name field must not reach the table's edit trigger")
+        verify(!field.visible)
+        verify(!field.focus, "the hidden field no longer holds the table's focus")
+        verify(table.identityView.activeFocus)
+        compare(table.selectionModel.currentIndex.row, 0)
+        compare(table.selectionModel.currentIndex.column, 0)
+
+        // Escape closes the field the same way, without creating anything.
+        mouseClick(ItemLookup.findByObjectName(table, "addSubcategoryPlus_g2"))
+        tryVerify(() => field.visible && field.activeFocus)
+        keyClick(Qt.Key_X)
+        keyClick(Qt.Key_Escape)
+        verify(!field.visible)
+        compare(field.text, "")
+        verify(table.identityView.activeFocus)
+        compare(requests.length, 1)
+
+        // Return on the category cell itself still renames it.
+        keyClick(Qt.Key_Return)
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.text, "Tracking")
+        keyClick(Qt.Key_Escape)
+        tryVerify(() => table.activeEditor === null)
+    }
+
     function test_dragSelectionMovesRowsOnlyToValidGroupOrUncategorized() {
         const group = {id: "g1", name: "Clicking"}
         const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [

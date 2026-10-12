@@ -867,19 +867,38 @@ FocusScope {
                 anchors.fill: parent
                 placeholderText: qsTr("Subcategory name")
                 Accessible.name: placeholderText
+                // Focus goes back to the table before the request is sent: the request may open
+                // the Manager's modal "already holds scenarios" prompt, which hands focus back on
+                // closing to whatever held it when it opened, and this field is hidden by then. A
+                // hidden field must not stay the table's focus child either, or focusing the table
+                // (a focus scope) would hand active focus straight back to it.
+                function releaseFocus() {
+                    subcategoryCreationField.focus = false
+                    cell.TableView.view.forceActiveFocus()
+                }
                 onAccepted: {
                     if (text.trim() === "") return
                     root.creationAccepted = true
+                    subcategoryCreationField.releaseFocus()
                     root.addSubcategoryRequested(cell.categoryId, text)
                     if (root.creationAccepted) {
                         cell.addingSubcategory = false
                         text = ""
+                    } else {
+                        subcategoryCreationField.forceActiveFocus()
                     }
                 }
                 Keys.onEscapePressed: {
                     cell.addingSubcategory = false
                     text = ""
+                    subcategoryCreationField.releaseFocus()
                 }
+                // TextInput emits accepted() but leaves Return unaccepted, so it would propagate
+                // to the TableView, whose edit trigger then opens a rename editor on the current
+                // (category) cell, behind the prompt the name may have opened.
+                Keys.priority: Keys.AfterItem
+                Keys.onReturnPressed: (event) => event.accepted = true
+                Keys.onEnterPressed: (event) => event.accepted = true
             }
 
             DragHandler {

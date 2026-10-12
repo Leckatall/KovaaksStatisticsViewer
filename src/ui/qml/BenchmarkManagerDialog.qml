@@ -428,13 +428,22 @@ ApplicationWindow {
         standardButtons: Dialog.Cancel
         property string categoryId
         property string subcategoryName
+        // The group the table focuses once the prompt has closed: the new subcategory when one
+        // was created, otherwise (Cancel, Escape, a failed command) the category it was asked for.
+        property string focusGroupAfterClose
 
         function relocate(choice) {
-            subcategoryRelocationPrompt.close()
             const categoryId = subcategoryRelocationPrompt.categoryId
             const name = subcategoryRelocationPrompt.subcategoryName
-            root.runTableCommand(() => root.vm().addSubcategoryRelocating(categoryId, name, choice))
+            const result = root.runTableCommand(() => root.vm().addSubcategoryRelocating(categoryId, name, choice))
+            if (result && result.ok && result.createdId) subcategoryRelocationPrompt.focusGroupAfterClose = result.createdId
+            subcategoryRelocationPrompt.close()
         }
+
+        onAboutToShow: subcategoryRelocationPrompt.focusGroupAfterClose = subcategoryRelocationPrompt.categoryId
+        // Closing hands focus back to the table, which held it when the prompt opened; once the
+        // popup has finished restoring it, the table moves its current cell to that group.
+        onClosed: Qt.callLater(editorTable.focusCell, {groupId: subcategoryRelocationPrompt.focusGroupAfterClose})
 
         ColumnLayout {
             spacing: 8
