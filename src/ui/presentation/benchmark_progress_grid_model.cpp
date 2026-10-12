@@ -310,7 +310,7 @@ namespace ksv::presentation {
                 for (const bool missing: missingThresholdChunks(m_projection.tiers, entry.thresholds))
                     missingList.push_back(missing);
                 map[QStringLiteral("missingChunks")] = missingList;
-                // The score that reaches each tier, for the start of its chunk ("" when this
+                // The score that reaches each tier, at the end of its chunk ("" when this
                 // entry has no usable threshold for the tier).
                 QVariantList thresholdList;
                 for (const auto &tier: m_projection.tiers) {
@@ -370,15 +370,9 @@ namespace ksv::presentation {
 
     std::vector<double> rankChunkFills(const double rank, const std::size_t tierCount) {
         std::vector<double> fills(tierCount, 0.0);
-        if (!std::isfinite(rank) || tierCount == 0) return fills;
-        const auto top = static_cast<double>(tierCount);
-        for (std::size_t index = 0; index < tierCount; ++index) {
-            const auto tier = static_cast<double>(index + 1); // the rank that enters this chunk
-            if (rank < tier) continue;
-            fills[index] = index + 1 == tierCount || rank >= top
-                               ? 1.0
-                               : std::max(kEnteredChunkFill, std::min(1.0, rank - tier));
-        }
+        if (!std::isfinite(rank)) return fills;
+        for (std::size_t index = 0; index < tierCount; ++index)
+            fills[index] = std::clamp(rank - static_cast<double>(index), 0.0, 1.0);
         return fills;
     }
 
@@ -388,16 +382,12 @@ namespace ksv::presentation {
         std::vector<double> fills(tiers.size(), 0.0);
         if (!score || !std::isfinite(*score)) return fills;
         for (std::size_t index = 0; index < tiers.size(); ++index) {
-            const auto lower = thresholdFor(thresholds, tiers[index].id);
-            if (!lower || *score < *lower) continue;
-            if (index + 1 == tiers.size()) {
-                fills[index] = 1.0;
-                continue;
-            }
-            const auto upper = thresholdFor(thresholds, tiers[index + 1].id);
-            if (!upper) continue;
+            const auto upper = thresholdFor(thresholds, tiers[index].id);
+            const auto lower = index == 0 ? std::optional<double>{0.0} : thresholdFor(thresholds, tiers[index - 1].id);
+            if (!upper || !lower) continue;
             const double span = *upper - *lower;
-            if (span > 0.0) fills[index] = std::max(kEnteredChunkFill, std::min(1.0, (*score - *lower) / span));
+            if (span > 0.0) fills[index] = std::clamp((*score - *lower) / span, 0.0, 1.0);
+            else if (index == 0 && *upper == 0.0) fills[index] = 1.0; // a zero first threshold is met by any score
         }
         // A chunk the bar hatches never shows a fill measured from an unusable bound.
         const auto missing = missingThresholdChunks(tiers, thresholds);
@@ -409,13 +399,8 @@ namespace ksv::presentation {
     std::optional<double> tierScalePosition(const std::vector<domain::Tier> &tiers,
                                             const std::vector<domain::Threshold> &thresholds,
                                             const std::optional<double> score) {
-        if (!score || !std::isfinite(*score) || tiers.empty() || !domain::thresholdLadder(tiers, thresholds))
-            return std::nullopt;
-        // The normalized value counts tiers reached; the bar starts at the first tier's threshold
-        // and its last chunk is the top tier, full once reached.
-        const double rank = domain::normalizedTierValue(tiers, thresholds, score);
-        const auto top = static_cast<double>(tiers.size());
-        return rank >= top ? top : std::max(0.0, rank - 1.0);
+        if (!score || !std::isfinite(*score) || !domain::thresholdLadder(tiers, thresholds)) return std::nullopt;
+        return domain::normalizedTierValue(tiers, thresholds, score);
     }
 
     BenchmarkProgressGridModel::BenchmarkProgressGridModel(QObject *parent) : QObject(parent) {}
@@ -454,7 +439,7 @@ namespace ksv::presentation {
         const auto usable = [&](const std::size_t index) { return values[index] && !outOfOrder[index]; };
         std::vector<bool> missing(count, false);
         for (std::size_t index = 0; index < count; ++index)
-            missing[index] = !usable(index) || (index + 1 < count && !usable(index + 1));
+            missing[index] = !usable(index) || (index > 0 && !usable(index - 1));
         return missing;
     }
 }

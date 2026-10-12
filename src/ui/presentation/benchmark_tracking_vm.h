@@ -40,7 +40,7 @@ namespace ksv::presentation {
         Q_PROPERTY(QString nextTierColor READ nextTierColor NOTIFY changed)
         Q_PROPERTY(QString averageRank READ averageRank NOTIFY changed)
         // The average rank as tier bar chunk fills (rankChunkFills), and the completed rank as a
-        // position on that bar's chunk scale (the start of its chunk), or -1 when none is completed.
+        // position on that bar's chunk scale (the end of its chunk), or -1 when none is completed.
         Q_PROPERTY(QVariantList averageRankFills READ averageRankFills NOTIFY changed)
         Q_PROPERTY(double completedRankPosition READ completedRankPosition NOTIFY changed)
         Q_PROPERTY(QString totalPlaytime READ totalPlaytime NOTIFY changed)

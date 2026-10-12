@@ -2,10 +2,10 @@ import QtQuick
 import QtQuick.Controls
 
 // A segmented tier bar: one equal-width chunk per tier (Iron ... the top tier), each
-// the range in which that tier is the rank held, filled by how far the value has come
-// from that tier's threshold toward the next one's (the top tier's is full once reached),
-// in that tier's colour, over a dim neutral track. The furthest fill is therefore always
-// in the colour of the rank attained. Chunk boundaries come
+// the progress toward that tier, filled by how far the value has come from the previous
+// tier's threshold (0 for the first tier) toward its own, in that tier's colour, over a
+// dim neutral track. A chunk is full exactly when its tier is reached, so the filled
+// length in chunks is the normalized rank (6.37 = six full chunks). Chunk boundaries come
 // from chunkLeft()/chunkRight() alone, so a header laid out with the same functions
 // lines up with every bar. The whole bar is the tooltip's hover target.
 Item {
@@ -39,14 +39,9 @@ Item {
         const value = Number(root.fills && root.fills.length > index ? root.fills[index] : 0)
         return isNaN(value) ? 0 : Math.max(0, Math.min(1, value))
     }
-    // The fill's drawn width in chunk `index`: a chunk the value has entered at all shows
-    // at least a sliver, so a rank reached exactly on its threshold still shows its colour.
-    readonly property real minimumFillWidth: 3
+    // The fill's drawn width in chunk `index`.
     function fillWidthAt(index) {
-        const fill = fillAt(index)
-        if (fill <= 0) return 0
-        const chunkWidth = Math.max(0, chunkRight(index) - chunkLeft(index))
-        return Math.min(chunkWidth, Math.max(minimumFillWidth, Math.round(chunkWidth * fill)))
+        return Math.round(Math.max(0, chunkRight(index) - chunkLeft(index)) * fillAt(index))
     }
 
     // --- edge states -------------------------------------------------------------
@@ -63,7 +58,8 @@ Item {
         return root.missing && root.missing.length > index && root.missing[index] === true
     }
 
-    // One short text per tier, at the start of its chunk (the score that reaches the tier);
+    // One short text per tier, right-aligned at the end of its chunk (the score that reaches
+    // the tier, which completes the chunk);
     // "" or absent for none. Hidden under a hatched chunk and behind a status label.
     property var labels: []
     function labelAt(index) {
@@ -93,11 +89,11 @@ Item {
                                                     - valueLabel.implicitWidth)
                                       : fillEnd + valueGap
     readonly property real valueRight: valueLeft + valueLabel.implicitWidth
-    // Whether a chunk label of `labelWidth` at the start of chunk `index` would touch the value.
+    // Whether a chunk label of `labelWidth` at the end of chunk `index` would touch the value.
     function coversValue(index, labelWidth) {
         if (!valueShown) return false
-        const left = chunkLeft(index) + labelInset
-        const right = left + Math.min(labelWidth, chunkRight(index) - chunkLeft(index) - 2 * labelInset)
+        const right = chunkRight(index) - labelInset
+        const left = right - Math.min(labelWidth, chunkRight(index) - chunkLeft(index) - 2 * labelInset)
         return right > valueLeft - valueGap && left < valueRight + valueGap
     }
     readonly property real labelInset: 3
@@ -221,7 +217,7 @@ Item {
                 visible: width > 0
                 color: chunk.fillColor
             }
-            // The score that reaches this tier, at the start of its chunk. One label dim over
+            // The score that reaches this tier, at the end of its chunk. One label dim over
             // the empty track and one, clipped to the fill, in whichever of dark and light reads
             // on the tier colour, so the number is legible across the fill's edge.
             Label {
@@ -231,7 +227,7 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: root.labelInset
                 anchors.rightMargin: root.labelInset
-                horizontalAlignment: Text.AlignLeft
+                horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
                 font.pixelSize: chunk.labelPixelSize
@@ -248,7 +244,7 @@ Item {
                     height: parent.height
                     leftPadding: root.labelInset
                     rightPadding: root.labelInset
-                    horizontalAlignment: Text.AlignLeft
+                    horizontalAlignment: Text.AlignRight
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                     font.pixelSize: chunk.labelPixelSize
@@ -328,8 +324,9 @@ Item {
     ToolTip.text: root.description
 
     // --- tier tick -----------------------------------------------------------------
-    // A tick on the boundary where chunk `tick` starts (0 = the bar's start, chunkCount =
-    // the bar's end), or none when negative, with its own tooltip. Read tickHovered to
+    // A tick at position `tick` on the chunk scale: the boundary where chunk `tick` - 1
+    // ends and chunk `tick` starts (0 = the bar's start, chunkCount = the bar's end), or
+    // none when negative, with its own tooltip. Read tickHovered to
     // keep a surrounding tooltip out of its way.
     property int tick: -1
     property string tickDescription: ""

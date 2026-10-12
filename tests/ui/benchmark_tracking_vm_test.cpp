@@ -311,16 +311,16 @@ namespace {
     }
 }
 
-// averageRank is the mean normalized rank: exactly k enters tier k's chunk (k - 1), so the
-// furthest fill is in the colour of the rank held.
-TEST(RankChunkFills, WholeRanksEnterTheirTiersChunkAndFractionsFillIt) {
-    EXPECT_EQ(rankChunkFills(3.5, 5), (std::vector<double>{1, 1, 0.5, 0, 0}));
-    EXPECT_EQ(rankChunkFills(3.0, 5), (std::vector<double>{1, 1, kEnteredChunkFill, 0, 0}))
-        << "a rank held exactly still shows its chunk";
+// averageRank is the mean normalized rank: exactly k fills k whole chunks, so 6.37 is six full
+// chunks and 37% of the seventh.
+TEST(RankChunkFills, WholeRanksEndAtTheirChunksRightEdgeAndFractionsFillTheNext) {
+    EXPECT_EQ(rankChunkFills(3.5, 5), (std::vector<double>{1, 1, 1, 0.5, 0}));
+    EXPECT_EQ(rankChunkFills(3.0, 5), (std::vector<double>{1, 1, 1, 0, 0}));
     EXPECT_EQ(rankChunkFills(0.0, 5), (std::vector<double>{0, 0, 0, 0, 0}));
-    EXPECT_EQ(rankChunkFills(0.87, 5), (std::vector<double>{0, 0, 0, 0, 0})) << "below the first tier";
-    EXPECT_EQ(rankChunkFills(4.5, 5), (std::vector<double>{1, 1, 1, 0.5, 0}));
-    EXPECT_EQ(rankChunkFills(5.0, 5), (std::vector<double>{1, 1, 1, 1, 1})) << "the top tier's chunk is full once reached";
+    EXPECT_EQ(rankChunkFills(5.0, 5), (std::vector<double>{1, 1, 1, 1, 1}));
+    const auto low = rankChunkFills(0.87, 5);
+    EXPECT_NEAR(low[0], 0.87, 1e-9) << "below the first tier: part of Iron's chunk";
+    EXPECT_EQ(low[1], 0.0);
 }
 
 TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
@@ -328,12 +328,12 @@ TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
-    EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{1, 0.5, 0}));
+    EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{1, 1, 0.5}));
     EXPECT_EQ(vm.completedRankPosition(), -1.0);
 
     fake->snap.projection->completedRank = TierId{"t2"};
     fake->publish();
-    EXPECT_EQ(vm.completedRankPosition(), 1.0) << "the tick starts Silver's chunk";
+    EXPECT_EQ(vm.completedRankPosition(), 2.0) << "the tick ends Silver's chunk";
 
     fake->snap.availability = BenchmarkTrackingState::Unavailable;
     fake->snap.selectedLoaded.reset();
