@@ -193,15 +193,35 @@ Item {
         Accessible.role: Accessible.Indicator
         Accessible.name: root.aboveTopText
 
-        Rectangle {
+        // A right-pointing chevron ("beyond the bar"); the row's blocker marker stays a diamond.
+        Canvas {
+            id: aboveTopChevron
+            objectName: root.objectName.length > 0 ? root.objectName + "_aboveTopChevron" : ""
             anchors.centerIn: parent
             width: 7
-            height: 7
-            rotation: 45
-            color: root.chunkCount > 0 && root.tiers[root.chunkCount - 1]
-                   ? String(root.tiers[root.chunkCount - 1].barColor || "") : root.palette.highlight
-            border.color: root.palette.base
-            border.width: 1
+            height: 10
+            property color strokeColor: root.chunkCount > 0 && root.tiers[root.chunkCount - 1]
+                                        ? String(root.tiers[root.chunkCount - 1].barColor || "")
+                                        : root.palette.highlight
+            property color haloColor: root.palette.base
+            onStrokeColorChanged: requestPaint()
+            onHaloColorChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.lineCap = "round"
+                ctx.lineJoin = "round"
+                ctx.beginPath()
+                ctx.moveTo(1.5, 1.5)
+                ctx.lineTo(width - 1.5, height / 2)
+                ctx.lineTo(1.5, height - 1.5)
+                ctx.strokeStyle = haloColor
+                ctx.lineWidth = 4
+                ctx.stroke()
+                ctx.strokeStyle = strokeColor
+                ctx.lineWidth = 2
+                ctx.stroke()
+            }
         }
         HoverHandler { id: aboveTopHover }
         ToolTip.visible: aboveTopHover.hovered && root.aboveTopText.length > 0

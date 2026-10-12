@@ -822,6 +822,8 @@ Item {
             verify(mark.mapToItem(ws, mark.width, 0).x > above.mapToItem(ws, above.width, 0).x,
                    "the mark sits at the bar's end")
             compare(mark.ToolTip.text, "Above Platinum: 1,040.25 / 1,000")
+            const chevron = find(mark, above.objectName + "_aboveTopChevron")
+            verify(chevron && chevron.height > chevron.width, "the mark is a chevron, not a diamond")
             const normal = find(ws, "progressRow_sc-1w4ts_bar")
             verify(!find(normal, normal.objectName + "_aboveTop").visible, "only above the top tier")
 
