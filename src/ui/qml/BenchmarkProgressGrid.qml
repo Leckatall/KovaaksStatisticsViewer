@@ -11,7 +11,10 @@ import QtQuick.Controls
 // their names, in the tier's readable colour, so a chunk need be no wider than the
 // widest tier name. When the widths do not fit, the chunks first give up their padding
 // around that name, then the scenario names elide, and the grid then scrolls
-// horizontally inside its own frame.
+// horizontally inside its own frame. The end of the bar matters most, so an
+// overflowing grid opens scrolled to its right end, and the identifying columns
+// (Category, Subcategory, Scenario) stay pinned at the left while the rest scrolls
+// under them.
 Item {
     id: root
 
@@ -40,11 +43,54 @@ Item {
     readonly property real chunkSlack: 4
     readonly property real minimumScenarioWidth: 120
 
+    // Which benchmark the grid shows (any stable key); a change scrolls back to the
+    // right end and forgets the user's own scroll position.
+    property string benchmarkKey
+
     readonly property real tableHeight: headerHeight + rows.length * rowHeight
     readonly property var columns: _layoutColumns(width, _measured)
     readonly property bool overflowing: columns.total > width + 0.5
     readonly property real barX: columns.progress.x + barInset
     readonly property real barWidth: Math.max(0, columns.progress.width - 2 * barInset)
+
+    // --- horizontal scroll and pinned columns ----------------------------------------
+    // Scroll rule: while the grid overflows it follows its right end (on first show,
+    // on a resize, when the benchmark changes) until the user scrolls it somewhere
+    // else. That position is kept, clamped to the new range on a resize, until the
+    // benchmark changes, the grid stops overflowing, or the user scrolls back to the
+    // right end, after which it follows the right end again.
+    readonly property real maximumContentX: Math.max(0, columns.total - width)
+    property bool userScrolled: false
+    property bool _placingScroll: false
+
+    // Category, Subcategory and Scenario stay put while the other columns scroll
+    // under them, so a row stays identifiable at any scroll position. Not when that
+    // would leave less than `minimumScrollingWidth` for the scrolling columns.
+    readonly property real pinnedWidth: columns.scenario.x + columns.scenario.width
+    readonly property real minimumScrollingWidth: 160
+    readonly property bool pinning: overflowing && width - pinnedWidth >= minimumScrollingWidth
+    readonly property real pinOffset: pinning ? Math.max(0, flick.contentX) : 0
+
+    function _placeScroll() {
+        if (!overflowing) userScrolled = false
+        const target = !overflowing ? 0
+                     : userScrolled ? Math.min(Math.max(flick.contentX, 0), maximumContentX)
+                     : maximumContentX
+        if (Math.abs(flick.contentX - target) < 0.01) return
+        _placingScroll = true
+        flick.contentX = target
+        _placingScroll = false
+    }
+    function _noteUserScroll() {
+        if (overflowing) userScrolled = Math.abs(flick.contentX - maximumContentX) > 0.5
+    }
+    onMaximumContentXChanged: _placeScroll()
+    onOverflowingChanged: _placeScroll()
+    onBenchmarkKeyChanged: {
+        userScrolled = false
+        _placeScroll()
+    }
+    Component.onCompleted: _placeScroll()
 
     // The narrowest layout, independent of the width it is given.
     implicitWidth: _layoutColumns(0, _measured).total
@@ -277,6 +323,15 @@ Item {
         interactive: root.overflowing
         clip: true
 
+        // Only a move the user makes (dragging, flicking, the wheel, the scroll bar)
+        // counts; the grid's own moves and the Flickable's bounds fix-ups do not. It is
+        // kept unless it ends back on the right end.
+        onContentXChanged: {
+            if (root._placingScroll || !root.overflowing) return
+            if (moving || horizontalBar.pressed) root._noteUserScroll()
+        }
+        onMovementEnded: root._noteUserScroll()
+
         // Below the table rather than over its last row, and only while it overflows.
         ScrollBar.horizontal: ScrollBar {
             id: horizontalBar
@@ -287,6 +342,7 @@ Item {
             width: root.width
             visible: root.overflowing
             policy: root.overflowing ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+            onPressedChanged: if (!pressed) root._noteUserScroll()
         }
 
         Item {
@@ -298,20 +354,23 @@ Item {
             // --- header ----------------------------------------------------------
             HeaderCell {
                 objectName: "progressHeader_category"
-                x: root.columns.category.x
+                z: 2
+                x: root.columns.category.x + root.pinOffset
                 width: root.columns.category.width
                 text: root.headers.category
             }
             HeaderCell {
                 objectName: "progressHeader_subcategory"
+                z: 2
                 visible: root.hasSubcategories
-                x: root.columns.subcategory.x
+                x: root.columns.subcategory.x + root.pinOffset
                 width: root.columns.subcategory.width
                 text: root.headers.subcategory
             }
             HeaderCell {
                 objectName: "progressHeader_scenario"
-                x: root.columns.scenario.x
+                z: 2
+                x: root.columns.scenario.x + root.pinOffset
                 width: root.columns.scenario.width
                 text: root.headers.scenario
             }
@@ -413,12 +472,26 @@ Item {
                         height: 1
                         color: root.palette.mid
                     }
+                    // The pinned columns' own background, so scrolled cells pass under it.
+                    Rectangle {
+                        z: 1
+                        visible: root.pinning
+                        x: root.pinOffset
+                        width: root.pinnedWidth
+                        height: rowItem.height - 1
+                        color: root.palette.base
+                        HoverHandler { blocking: true }
+                    }
                     Repeater {
                         model: ["category", "subcategory", "scenario", "pbDate", "plays", "progress", "next"]
                         delegate: Rectangle {
                             required property string modelData
+                            readonly property bool pinned: modelData === "category" || modelData === "subcategory"
+                                                           || modelData === "scenario"
                             visible: root.columns[modelData].width > 0
+                            z: pinned ? 2 : 0
                             x: root.columns[modelData].x + root.columns[modelData].width - 1
+                               + (pinned ? root.pinOffset : 0)
                             width: 1
                             height: rowItem.height
                             color: root.palette.mid
@@ -429,7 +502,8 @@ Item {
                     Item {
                         objectName: rowItem.modelData.blocker === true ? "progressRow_" + rowItem.modelData.entryId + "_blocker" : ""
                         visible: rowItem.modelData.blocker === true
-                        x: root.columns.scenario.x + root.cellPadding - 4
+                        z: 2
+                        x: root.columns.scenario.x + root.pinOffset + root.cellPadding - 4
                         width: root.markerSpace
                         height: rowItem.height
                         Accessible.role: Accessible.Indicator
@@ -451,7 +525,8 @@ Item {
                     Label {
                         id: nameLabel
                         objectName: "progressRow_" + rowItem.modelData.entryId + "_name"
-                        x: root.columns.scenario.x + root.cellPadding + root.markerSpace
+                        z: 2
+                        x: root.columns.scenario.x + root.pinOffset + root.cellPadding + root.markerSpace
                         width: Math.max(0, root.columns.scenario.width - 2 * root.cellPadding - root.markerSpace)
                         height: rowItem.height
                         verticalAlignment: Text.AlignVCenter
@@ -542,7 +617,8 @@ Item {
 
                     objectName: "progressGroup_" + (String(modelData.id).length > 0 ? modelData.id : "uncategorized")
                     visible: column.width > 0
-                    x: column.x
+                    z: 3
+                    x: column.x + root.pinOffset
                     y: root.headerHeight + Number(modelData.start) * root.rowHeight
                     width: spansBoth ? column.width + root.columns.subcategory.width : column.width
                     height: Number(modelData.span) * root.rowHeight
@@ -550,6 +626,7 @@ Item {
                     Accessible.role: Accessible.Cell
                     Accessible.name: String(modelData.name)
 
+                    HoverHandler { blocking: root.pinning }
                     Rectangle {
                         anchors.fill: parent
                         visible: groupCell.tint.length > 0
@@ -610,6 +687,21 @@ Item {
                             }
                         }
                     }
+                }
+            }
+
+            // While columns pass under the pinned ones, a soft edge marks where.
+            Rectangle {
+                objectName: "progressGridPinEdge"
+                z: 4
+                visible: root.pinning && root.pinOffset > 0.5
+                x: root.pinOffset + root.pinnedWidth
+                width: 6
+                height: root.tableHeight
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: Qt.alpha(root.palette.shadow, 0.45) }
+                    GradientStop { position: 1; color: Qt.alpha(root.palette.shadow, 0) }
                 }
             }
         }

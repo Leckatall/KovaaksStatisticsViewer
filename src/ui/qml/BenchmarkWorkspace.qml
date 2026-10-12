@@ -399,6 +399,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: implicitHeight
                     grid: root.trackingVm ? root.trackingVm.progressGrid : null
+                    benchmarkKey: root.trackingVm ? root.trackingVm.selectedName : ""
                 }
             }
         }
@@ -489,6 +490,7 @@ Item {
                         Layout.preferredHeight: implicitHeight
                         Layout.topMargin: 4
                         grid: root.trackingVm ? root.trackingVm.progressGrid : null
+                        benchmarkKey: root.trackingVm ? root.trackingVm.selectedName : ""
                     }
                 }
 

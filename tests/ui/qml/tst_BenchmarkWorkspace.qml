@@ -26,6 +26,11 @@ Item {
     }
 
     Component {
+        id: progressGridComponent
+        BenchmarkProgressGrid { }
+    }
+
+    Component {
         id: largeFontHostComponent
         Control {
             anchors.fill: parent
@@ -585,6 +590,9 @@ Item {
         function test_pbDateAndPlaysPrecedeTheBarAndNextTierFollowsIt() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
             wait(0)
+            // Unscrolled, so the pinned columns sit where the layout puts them.
+            find(ws, "progressGridFlick").contentX = 0
+            wait(0)
             const order = ["progressHeader_category", "progressHeader_subcategory", "progressHeader_scenario",
                            "progressHeader_pbDate", "progressHeader_plays", "progressHeader_progress",
                            "progressHeader_next"]
@@ -841,6 +849,142 @@ Item {
                    && find(ws, "progressRow_sc-1w4ts_playCount") !== null
                    && find(ws, "progressRow_sc-1w4ts_next") !== null,
                    "narrow layout preserves every value")
+        }
+
+        // -- horizontal scroll: the right end first, identifying columns pinned --
+
+        // A standalone grid over the trackable fixture. `fit` sizes it to fit; otherwise
+        // it gets `scrolling` px beside its pinned columns, so it overflows and pins.
+        function makeGrid(fit, scrolling) {
+            const data = TestDoubles.trackingFixtureTrackable().progressGrid
+            const probe = createTemporaryObject(progressGridComponent, root, {grid: data, width: 4000})
+            const fitting = probe.implicitWidth
+            const pinned = probe.pinnedWidth
+            probe.destroy()
+            const width = fit ? fitting + 200 : pinned + (scrolling || 220)
+            const grid = createTemporaryObject(progressGridComponent, root,
+                                               {grid: data, width: width, benchmarkKey: "Voltaic S3"})
+            verify(grid !== null, "the grid failed to instantiate")
+            wait(0)
+            if (!fit) {
+                verify(grid.overflowing, "the grid overflows at " + width + " px")
+                verify(grid.pinning, "the grid pins its identifying columns at " + width + " px")
+            }
+            return grid
+        }
+        function gridFlick(grid) { return ItemLookup.findByObjectName(grid, "progressGridFlick") }
+        // A real drag on the bar area, to the right: the content moves back toward its start.
+        function userDrag(grid, dx) {
+            const flick = gridFlick(grid)
+            mouseDrag(flick, flick.width - 40, grid.headerHeight + grid.rowHeight / 2, dx, 0, Qt.LeftButton,
+                      Qt.NoModifier, 20)
+            tryCompare(flick, "moving", false, 5000)
+        }
+
+        function test_overflowingGridOpensAtItsRightEnd() {
+            // Room for Next tier (wide in the test font) and the top tier beside it.
+            const grid = makeGrid(false, 420)
+            const flick = gridFlick(grid)
+            verify(grid.maximumContentX > 0)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5, "opens scrolled to the right end")
+            compare(grid.userScrolled, false)
+            const next = ItemLookup.findByObjectName(grid, "progressHeader_next")
+            fuzzyCompare(next.mapToItem(grid, next.width, 0).x, grid.width, 0.5, "Next tier is the last thing visible")
+            const lastTier = ItemLookup.findByObjectName(grid, "progressTierHeader_" + (grid.tiers.length - 1))
+            const lastRight = lastTier.mapToItem(grid, lastTier.width, 0).x
+            verify(lastRight <= grid.width - next.width + 0.5 && lastRight > grid.pinnedWidth,
+                   "the top tier is in view, beside Next tier and clear of the pinned columns")
+        }
+
+        function test_gridThatFitsDoesNotScrollOrPin() {
+            const grid = makeGrid(true)
+            verify(!grid.overflowing && !grid.pinning)
+            compare(gridFlick(grid).contentX, 0)
+            compare(grid.pinOffset, 0)
+            const edge = ItemLookup.findByObjectName(grid, "progressGridPinEdge")
+            verify(!edge.visible, "no pinned edge on a grid that fits")
+            fuzzyCompare(ItemLookup.findByObjectName(grid, "progressHeader_scenario").mapToItem(grid, 0, 0).x,
+                         grid.columns.scenario.x, 0.5)
+        }
+
+        function test_identifyingColumnsStayPinnedWhileTheRestScrolls() {
+            const grid = makeGrid(false)
+            const flick = gridFlick(grid)
+            verify(flick.contentX > 0)
+            for (const key of ["category", "subcategory", "scenario"]) {
+                const header = ItemLookup.findByObjectName(grid, "progressHeader_" + key)
+                fuzzyCompare(header.mapToItem(grid, 0, 0).x, grid.columns[key].x, 0.5, key + " header stays put")
+                verify(header.z > 0, key + " header draws over the scrolled tier headers")
+            }
+            const pbDate = ItemLookup.findByObjectName(grid, "progressHeader_pbDate")
+            fuzzyCompare(pbDate.mapToItem(grid, 0, 0).x, grid.columns.pbDate.x - flick.contentX, 0.5,
+                         "PB date scrolls under the pinned columns")
+            for (const id of ["sc-popcorn", "sc-1w4ts", "sc-pasu", "sc-smooth"]) {
+                const name = ItemLookup.findByObjectName(grid, "progressRow_" + id + "_name")
+                fuzzyCompare(name.mapToItem(grid, 0, 0).x,
+                             grid.columns.scenario.x + grid.cellPadding + grid.markerSpace, 0.5, id + " name stays put")
+            }
+            const blocker = ItemLookup.findByObjectName(grid, "progressRow_sc-1w4ts_blocker")
+            fuzzyCompare(blocker.mapToItem(grid, 0, 0).x, grid.columns.scenario.x + grid.cellPadding - 4, 0.5,
+                         "the blocker marker stays beside its name")
+            // Group cells, including categories that span the Subcategory column.
+            const flat = ItemLookup.findByObjectName(grid, "progressGroup_cat-track")
+            const split = ItemLookup.findByObjectName(grid, "progressGroup_cat-click")
+            const sub = ItemLookup.findByObjectName(grid, "progressGroup_sub-static")
+            fuzzyCompare(flat.mapToItem(grid, 0, 0).x, grid.columns.category.x, 0.5)
+            fuzzyCompare(flat.width, grid.columns.category.width + grid.columns.subcategory.width, 0.5,
+                         "a spanning category still covers both columns")
+            fuzzyCompare(split.mapToItem(grid, 0, 0).x, grid.columns.category.x, 0.5)
+            fuzzyCompare(sub.mapToItem(grid, 0, 0).x, grid.columns.subcategory.x, 0.5)
+            verify(ItemLookup.findByObjectName(grid, "progressGridPinEdge").visible,
+                   "an edge marks where the columns pass under")
+        }
+
+        function test_resizeFollowsTheRightEndUntilTheUserScrolls() {
+            const grid = makeGrid(false, 300)
+            const flick = gridFlick(grid)
+            grid.width -= 60
+            wait(0)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5, "a narrower grid still shows its right end")
+
+            userDrag(grid, 120)
+            verify(grid.userScrolled, "a drag away from the right end is the user's position")
+            const kept = flick.contentX
+            verify(kept < grid.maximumContentX - 0.5)
+            grid.width -= 40
+            wait(0)
+            fuzzyCompare(flick.contentX, Math.min(kept, grid.maximumContentX), 0.5, "a resize keeps the user's position")
+
+            userDrag(grid, -2000)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5)
+            verify(!grid.userScrolled, "back at the right end, the grid follows it again")
+            grid.width -= 40
+            wait(0)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5)
+        }
+
+        function test_benchmarkChangeReturnsToTheRightEnd() {
+            const grid = makeGrid(false, 300)
+            const flick = gridFlick(grid)
+            userDrag(grid, 120)
+            verify(grid.userScrolled)
+            grid.benchmarkKey = "Revo Novice"
+            wait(0)
+            verify(!grid.userScrolled, "a new benchmark forgets the user's position")
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5, "and opens at its right end")
+        }
+
+        function test_fittingAgainForgetsTheUserPosition() {
+            const grid = makeGrid(false, 300)
+            const flick = gridFlick(grid)
+            userDrag(grid, 120)
+            verify(grid.userScrolled)
+            grid.width = grid.implicitWidth + 4000
+            wait(0)
+            compare(flick.contentX, 0, "a grid that fits sits at its start")
+            grid.width = grid.pinnedWidth + 260
+            wait(0)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5, "overflowing again opens at the right end")
         }
 
         function test_noOverlapOrClippingAtBothSupportedWindowSizes_data() {

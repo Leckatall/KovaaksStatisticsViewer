@@ -1,0 +1,11 @@
+---
+type: changed
+area: Benchmarks
+user: When the benchmark progress grid is too wide for the window, it now opens scrolled to its right end, so the top tiers and Next tier are in view, and the Category, Subcategory and Scenario columns stay in place while the rest of the grid scrolls under them.
+---
+`BenchmarkProgressGrid.qml` keeps its single `Flickable` (`progressGridFlick`) and pins the identifying columns by offsetting them with `pinOffset` (the flick's `contentX` while `pinning`): the Category/Subcategory/Scenario header cells, each row's blocker marker, name label and the pinned columns' grid lines, the group cells (`progressGroup_*`, spanning categories included) and a per-row opaque background over the pinned width. They sit above the scrolling cells by `z`, and the pinned background and group cells carry a blocking `HoverHandler` so tier-bar tooltips do not fire under them. A soft gradient edge (`progressGridPinEdge`) marks where columns pass under while scrolled.
+Pinning applies only while the grid overflows and leaves at least `minimumScrollingWidth` (160 px) beside the pinned columns (`pinnedWidth`); otherwise the whole grid scrolls as before.
+Scroll rule: while overflowing, the grid follows its right end (`maximumContentX`) on first show, on resize and when `benchmarkKey` changes. A user move (contentX changing while the flick is `moving`, or the scroll bar pressed; re-checked on `movementEnded` and scroll-bar release) that ends away from the right end sets `userScrolled`, and that position is kept (clamped on resize) until the benchmark changes, the grid stops overflowing, or the user returns to the right end. The flick's own bounds fix-ups during layout are ignored because they do not happen while moving.
+`BenchmarkWorkspace.qml` passes `trackingVm.selectedName` as `benchmarkKey` (the model object is CONSTANT and only resets per revision, so it cannot tell a benchmark switch from a new run).
+A grid that fits is unchanged (no offset, no edge, contentX 0).
+Tests: `tst_BenchmarkWorkspace.qml` gains standalone-grid tests for the initial right-end position, a fitting grid, pinned headers/names/blocker/group cells, the resize/user-drag rule, benchmark change and fit-then-overflow; the column-order test now checks the unscrolled layout.
