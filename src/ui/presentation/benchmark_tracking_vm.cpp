@@ -223,6 +223,8 @@ namespace ksv::presentation {
 
         m_totalPlaytime = projection ? formatDuration(projection->totalPlaytimeSeconds) : QString();
         m_scenariosAtNextTier = projection ? projection->scenariosAtNextTier : 0;
+        m_hasNextTier = trackable && projection && projection->nextTier.has_value();
+        m_nextTierBlockerCount = m_hasNextTier ? static_cast<int>(projection->nextTierBlockers.size()) : 0;
         m_scenarioCount = projection ? static_cast<int>(projection->scenarios.size()) : 0;
 
         const bool rankPresent = trackable && projection && !projection->averageRankHistory.empty();

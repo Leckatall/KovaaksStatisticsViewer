@@ -121,6 +121,8 @@ function makeFakeTrackingVm(overrides) {
         averageRank: "0",
         totalPlaytime: "<1 min",
         scenariosAtNextTier: 0,
+        nextTierBlockerCount: 0,
+        hasNextTier: false,
         scenarioCount: 0,
         rankHistory: makeFakeHistoryModel({metricName: "Personal-best average rank"}),
         playtimeHistory: makeFakeHistoryModel({metricName: "Three-day average playtime"}),
@@ -246,6 +248,8 @@ function trackingFixtureTrackable() {
         completedRankColor: "#c0c0c8",
         nextTierColor: "#50dcdc",
         scenariosAtNextTier: 3,
+        nextTierBlockerCount: 2,
+        hasNextTier: true,
         scenarioCount: 9,
         rankHistory: makeFakeHistoryModel({
             metricName: "Personal-best average rank", hasData: true,

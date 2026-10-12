@@ -396,13 +396,46 @@ Item {
             verify(find(ws, "progressRow_sc-pasu_blocker") === null, "a row that blocks nothing has no marker")
         }
 
-        function test_nextTierProgressShowsCountButNotAsTheRule() {
+        function test_headingCountsBlockersAndMatchesTheMarkedRows() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            const progress = find(ws, "nextTierProgress")
-            verify(progress !== null, "next-tier progress element missing")
-            const t = String(progress.text)
-            verify(t.indexOf("3") !== -1 && t.indexOf("9") !== -1,
-                   "progress shows scenariosAtNextTier against the total scenario count")
+            wait(0)
+            const markers = findAllPrefixed(ws, "progressRow_").filter(function (item) {
+                return /_blocker$/.test(item.objectName)
+            })
+            const t = String(find(ws, "nextTierProgress").text)
+            compare(t.replace(/<[^>]*>/g, ""), markers.length + " scenarios block Platinum")
+            verify(t.indexOf("#50dcdc") !== -1, "the tier name keeps its colour")
+        }
+
+        function test_headingSingularAndNoNextTierAndUnranked() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            fx.nextTierBlockerCount = 1
+            let ws = makeWorkspace(fx)
+            compare(String(find(ws, "nextTierProgress").text).replace(/<[^>]*>/g, ""), "1 scenario blocks Platinum")
+
+            const top = TestDoubles.trackingFixtureTrackable()
+            top.hasNextTier = false
+            top.nextTier = "Highest tier attained"
+            top.nextTierColor = ""
+            top.nextTierBlockerCount = 0
+            ws = makeWorkspace(top)
+            compare(String(find(ws, "nextTierProgress").text), "Highest tier attained")
+
+            const none = TestDoubles.trackingFixtureTrackable()
+            none.attainedRank = "Unranked"
+            none.attainedRankColor = ""
+            none.nextTier = "Bronze"
+            none.nextTierColor = "#cd7f32"
+            none.nextTierBlockerCount = 4
+            ws = makeWorkspace(none)
+            compare(String(find(ws, "nextTierProgress").text).replace(/<[^>]*>/g, ""),
+                    "Not ranked yet: 4 scenarios block Bronze")
+        }
+
+        function test_headingIsHiddenWhenNotTrackable() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureIncomplete ? TestDoubles.trackingFixtureIncomplete() : {})
+            const heading = find(ws, "nextTierProgress")
+            verify(heading === null || !heading.visible || String(heading.text) === "")
         }
     }
 
@@ -1150,8 +1183,7 @@ Item {
             for (let j = 0; j < 4; ++j)
                 compare(find(unplayed, unplayed.objectName + "_fill_" + j).visible, false,
                         "an unplayed scenario shows no fill")
-            const progress = String(find(ws, "nextTierProgress").text)
-            verify(progress.indexOf("3 of 9") !== -1, "the overall count is still shown")
+            verify(String(find(ws, "nextTierProgress").text).indexOf("block") !== -1, "the heading is still shown")
         }
 
         // the recent average reads against the PB fill on the same chunk scale.

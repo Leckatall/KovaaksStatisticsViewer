@@ -133,6 +133,8 @@ TEST(BenchmarkTrackingViewModel, TrackableSummaryResolvesRanksAndFormatsAverageA
     EXPECT_EQ(vm.averageRank(), QLocale().toString(2.5));
     EXPECT_EQ(vm.totalPlaytime(), "1h 1m");
     EXPECT_EQ(vm.scenariosAtNextTier(), 1);
+    EXPECT_TRUE(vm.hasNextTier());
+    EXPECT_EQ(vm.nextTierBlockerCount(), 2);
 }
 
 TEST(BenchmarkTrackingViewModel, SummaryFallsBackWhenNothingAttainedCompletedOrHigher) {
@@ -146,6 +148,8 @@ TEST(BenchmarkTrackingViewModel, SummaryFallsBackWhenNothingAttainedCompletedOrH
     EXPECT_EQ(vm.attainedRank(), "Unranked");
     EXPECT_EQ(vm.completedRank(), "None completed");
     EXPECT_EQ(vm.nextTier(), "Highest tier attained");
+    EXPECT_FALSE(vm.hasNextTier());
+    EXPECT_EQ(vm.nextTierBlockerCount(), 0);
 }
 
 TEST(BenchmarkTrackingViewModel, TotalPlaytimeUsesMinuteAndHourThresholds) {
@@ -210,6 +214,16 @@ TEST(BenchmarkTrackingViewModel, IncompleteDefinitionShowsIssuesAndSuppressesRan
     EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
     // Playtime is a safe fact the evaluator can still interpret.
     EXPECT_FALSE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
+}
+
+TEST(BenchmarkTrackingViewModel, BlockerCountEqualsTheRowsTheGridMarks) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    int marked = 0;
+    for (const auto &row: vm.progressGrid()->rows())
+        if (row.toMap().value("blocker").toBool()) ++marked;
+    EXPECT_EQ(vm.nextTierBlockerCount(), marked);
 }
 
 TEST(BenchmarkTrackingViewModel, ProgressGridListsEveryScenarioAndMarksTheBlockers) {

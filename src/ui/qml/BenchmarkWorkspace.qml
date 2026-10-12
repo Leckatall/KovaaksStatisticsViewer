@@ -434,18 +434,26 @@ Item {
                         wrapMode: Text.WordWrap
                         font.bold: true
                         textFormat: Text.StyledText
+                        visible: text.length > 0
                         text: {
-                            if (!root.trackingVm) return ""
-                            var total = root.trackingVm.scenarioCount
-                            if (total === undefined || total === null) total = "?"
-                            var line = qsTr("%1 of %2 scenarios at the next tier")
-                                       .arg(root.trackingVm.scenariosAtNextTier).arg(total)
-                            var color = String(root.trackingVm.nextTierColor || "")
-                            if (color.length === 0) return line
-                            return line + " (<font color=\"" + color + "\">"
-                                   + String(root.trackingVm.nextTier).replace(/&/g, "&amp;")
-                                         .replace(/</g, "&lt;").replace(/>/g, "&gt;")
-                                   + "</font>)"
+                            const vm = root.trackingVm
+                            if (!vm || !vm.summaryAvailable) return ""
+                            if (!vm.hasNextTier) return qsTr("Highest tier attained")
+                            const count = vm.nextTierBlockerCount
+                            const color = String(vm.nextTierColor || "")
+                            const tier = color.length === 0 ? String(vm.nextTier)
+                                : "<font color=\"" + color + "\">"
+                                  + String(vm.nextTier).replace(/&/g, "&amp;")
+                                        .replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                                  + "</font>"
+                            // An empty attained colour means Unranked. Ranks are attained per group, so this counts the rows marked as blockers,
+                            // not the scenarios already at the next tier.
+                            let line
+                            if (count === 0) line = qsTr("No scenario blocks %1").arg(tier)
+                            else if (count === 1) line = qsTr("1 scenario blocks %1").arg(tier)
+                            else line = qsTr("%1 scenarios block %2").arg(count).arg(tier)
+                            return String(vm.attainedRankColor || "") === ""
+                                   ? qsTr("Not ranked yet: %1").arg(line) : line
                         }
                     }
                     // Every scenario with its tier bar; rows that block the next tier
