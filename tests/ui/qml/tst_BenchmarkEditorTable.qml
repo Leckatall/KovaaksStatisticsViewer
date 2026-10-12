@@ -160,6 +160,66 @@ TestCase {
         verify(ItemLookup.findByObjectName(table, "groupListItem_uncategorized") === null)
     }
 
+    // A category whose scenarios sit straight under it (and Uncategorized) spans the Subcategory
+    // column; one with subcategories keeps its own cell. The span stays selectable, editable and
+    // reachable from the keyboard, and its add-subcategory control remains.
+    function test_categoryWithoutSubcategoriesSpansTheSubcategoryColumn() {
+        const clicking = {id: "g1", name: "Clicking", color: "#009600"}
+        const tracking = {id: "g2", name: "Tracking", color: "#960096"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", category: clicking, subcategory: {id: "s1", name: "Static"}, name: "Alpha", cells: {}},
+            {entryId: "b", category: tracking, name: "Beta", cells: {}},
+            {entryId: "c", category: tracking, name: "Gamma", cells: {}},
+            {entryId: "d", name: "Delta", cells: {}}
+        ]}, {groups: [
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 1, issues: []},
+            {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 1, issues: []},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, issues: []}
+        ]})
+        const spanWidth = table.identityWidths[0] + table.identityWidths[1]
+
+        const withSubcategory = cellFor(table, "a", "category")
+        verify(!withSubcategory.spansBoth)
+        compare(withSubcategory.face.width, table.identityWidths[0])
+        verify(!cellFor(table, "a", "subcategory").coveredBySpan)
+        compare(cellFor(table, "a", "subcategory").opacity, 1)
+
+        for (const entryId of ["b", "c", "d"]) {
+            const category = cellFor(table, entryId, "category")
+            verify(category.spansBoth, entryId + " has no subcategory, so its category spans")
+            compare(category.face.width, spanWidth)
+            const covered = cellFor(table, entryId, "subcategory")
+            verify(covered.coveredBySpan)
+            compare(covered.opacity, 0)
+            verify(!covered.enabled)
+        }
+        verify(ItemLookup.findByObjectName(table, "addSubcategoryPlus_g2").visible,
+               "a spanning category can still gain a subcategory")
+
+        // A click on the Subcategory column's part of the span selects the category.
+        const tracking0 = cellFor(table, "b", "category")
+        mouseClick(tracking0.face, table.identityWidths[0] + table.identityWidths[1] / 2, tracking0.height / 2)
+        tryCompare(table.selectionModel.currentIndex, "column", 0)
+        compare(table.selectionModel.currentIndex.row, 1)
+        compare(table.focusedGroupId, "g2")
+
+        // The keyboard steps over the covered cell, and never comes to rest on one.
+        keyClick(Qt.Key_Right)
+        compare(table.selectionModel.currentIndex.column, 2)
+        keyClick(Qt.Key_Left)
+        compare(table.selectionModel.currentIndex.column, 0)
+        verify(table.focusCell({entryId: "a", columnKind: 1}))
+        keyClick(Qt.Key_Down)
+        compare(table.selectionModel.currentIndex.row, 1)
+        compare(table.selectionModel.currentIndex.column, 0)
+
+        // The name is edited across the whole span.
+        verify(table.beginGroupRename("g2"))
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.width, spanWidth)
+        keyClick(Qt.Key_Escape)
+    }
+
     function test_dragSelectionMovesRowsOnlyToValidGroupOrUncategorized() {
         const group = {id: "g1", name: "Clicking"}
         const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [

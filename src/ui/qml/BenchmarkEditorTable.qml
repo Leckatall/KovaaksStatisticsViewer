@@ -157,6 +157,26 @@ FocusScope {
     readonly property var kindKeys: ["category", "subcategory", "scenario"]
     readonly property int thresholdKind: 3
 
+    // A row with no subcategory sits straight under its category (or in Uncategorized): the data
+    // layer never mixes direct scenarios and subcategories in one category. Its Category cell then
+    // spans the Subcategory column, which has nothing to show for that row.
+    function spansSubcategory(columnKind, subcategoryId) {
+        return columnKind === 0 && subcategoryId === ""
+    }
+    function coveredBySpan(columnKind, subcategoryId) {
+        return columnKind === 1 && subcategoryId === ""
+    }
+    // The current cell never rests on a covered Subcategory cell: keyboard moves (or a click on
+    // the span, which already lands on the Category cell) end on the spanning Category cell.
+    function redirectCoveredCurrent() {
+        const current = selection.currentIndex
+        if (root.restoringSelection || !current.valid || !root.tableModel) return false
+        if (!root.coveredBySpan(current.column, String(root.tableModel.rowInfo(current.row).subcategoryId || "")))
+            return false
+        root.moveCurrent(current.row, 0)
+        return true
+    }
+
     function columnKey(kind, tierId) {
         return kind === root.thresholdKind ? tierId : root.kindKeys[kind]
     }
@@ -498,7 +518,7 @@ FocusScope {
             if (item && root.localPointIn(item.focusButton, scenePoint)) return item.groupId
         }
         for (const item of identityView.contentItem.children) {
-            if (item.isGroup && item.groupId !== "" && root.localPointIn(item, scenePoint)) return item.groupId
+            if (item.isGroup && item.groupId !== "" && root.localPointIn(item.face, scenePoint)) return item.groupId
         }
         if (root.localPointIn(uncategorizedDropZone, scenePoint)) return ""
         return null
@@ -636,7 +656,7 @@ FocusScope {
     ItemSelectionModel {
         id: selection
         model: root.tableModel
-        onCurrentChanged: root.publishCurrent()
+        onCurrentChanged: if (!root.redirectCoveredCurrent()) root.publishCurrent()
         onSelectionChanged: root.publishSelection()
     }
 
@@ -720,168 +740,190 @@ FocusScope {
         property bool addingSubcategory: false
         readonly property alias subcategoryField: subcategoryCreationField
 
+        // A category cell whose rows have no subcategory (scenarios straight under the category,
+        // or Uncategorized) spans the Subcategory column too; that row's Subcategory cell is
+        // covered: hidden and inert, while the spanning cell draws over it.
+        readonly property bool spansBoth: root.spansSubcategory(columnKind, subcategoryId)
+        readonly property bool coveredBySpan: root.coveredBySpan(columnKind, subcategoryId)
+        // What the cell draws and where it takes pointer input: wider than the cell when it spans.
+        readonly property alias face: face
+
         objectName: "cell_" + entryId + "_" + root.columnKey(columnKind, tierId)
         implicitWidth: 80
         implicitHeight: root.rowHeight
-        color: current ? Qt.alpha(palette.highlight, 0.48)
-             : selected ? Qt.alpha(palette.highlight, 0.3)
-             : rowHighlighted ? Qt.alpha(palette.highlight, 0.14)
-             : isGroup && groupId !== "" && root.hoverDropGroupId === groupId ? Qt.alpha(palette.highlight, 0.45)
-             : isGroup && groupId !== "" ? Qt.alpha(groupColor, 0.22)
-             : palette.base
+        // TableView sizes every cell to its column, so a spanning cell draws past its right edge,
+        // above the covered neighbour.
+        z: spansBoth ? 1 : 0
+        color: "transparent"
+        opacity: coveredBySpan ? 0 : 1
+        enabled: !coveredBySpan
 
         Accessible.role: Accessible.Cell
+        Accessible.ignored: coveredBySpan
         Accessible.name: cellText !== "" ? cellText : unnamedScenario ? qsTr("Unnamed scenario") : valueState
         Accessible.description: [stateLabel].concat(issues || []).filter(t => t !== "").join("; ")
 
         Rectangle {
-            visible: cell.lastRowOfSpan
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: cell.palette.mid
-        }
-        Rectangle {
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.right: parent.right
-            width: 1
-            color: cell.palette.mid
-        }
-        Rectangle {
-            // Retained input and domain issues get a textual explanation too (Accessible and
-            // tooltip); the marker is only a pointer to it.
-            visible: (cell.issues || []).length > 0 || cell.inputState !== ""
-            anchors.top: parent.top
-            anchors.left: parent.left
-            width: 6
-            height: 6
-            color: cell.inputState !== "" ? "#E53935" : "#FFA726"
-        }
-        Rectangle {
-            readonly property var insertion: root.dropInsertion
-            visible: cell.columnKind >= 2 && insertion !== null && insertion.row === cell.row
-            y: insertion && insertion.above ? 0 : parent.height - height
-            width: parent.width
-            height: 2
-            color: cell.palette.highlight
-        }
+            id: face
+            objectName: "cellFace"
+            width: cell.spansBoth ? root.identityWidths[0] + root.identityWidths[1] : cell.width
+            height: cell.height
+            color: cell.current ? Qt.alpha(palette.highlight, 0.48)
+                 : cell.selected ? Qt.alpha(palette.highlight, 0.3)
+                 : cell.rowHighlighted ? Qt.alpha(palette.highlight, 0.14)
+                 : cell.isGroup && cell.groupId !== "" && root.hoverDropGroupId === cell.groupId ? Qt.alpha(palette.highlight, 0.45)
+                 : cell.isGroup && cell.groupId !== "" ? Qt.alpha(cell.groupColor, 0.22)
+                 : palette.base
 
-        Label {
-            anchors.fill: parent
-            anchors.leftMargin: 6
-            anchors.rightMargin: groupSwatch.visible ? groupSwatch.width + (addSubcategoryPlus.visible ? 34 : 10) : 6
-            visible: !cell.editing && !cell.addingSubcategory
-            verticalAlignment: Text.AlignVCenter
-            horizontalAlignment: cell.columnKind === root.thresholdKind ? Text.AlignRight : Text.AlignLeft
-            elide: Text.ElideRight
-            text: cell.cellText !== "" ? cell.cellText
-                : cell.columnKind === root.thresholdKind ? "—"
-                : cell.unnamedScenario ? qsTr("Unnamed scenario") : ""
-            font.italic: cell.inputState !== "" || cell.unnamedScenario
-            font.bold: cell.isGroup
-            color: cell.inputState !== "" ? "#E57373"
-                 : cell.unnamedScenario ? cell.palette.placeholderText : cell.palette.text
-        }
-
-        TableSwatch {
-            id: groupSwatch
-            objectName: "groupSwatch_" + cell.groupId
-            visible: cell.groupLabelShown && cell.groupId !== "" && !cell.editing && !cell.addingSubcategory
-            anchors.right: parent.right
-            anchors.rightMargin: 6
-            anchors.verticalCenter: parent.verticalCenter
-            swatchColor: cell.groupColor
-            Accessible.name: qsTr("Colour of group %1").arg(cell.groupLabelText)
-            onClicked: root.colorSwatchRequested("group", cell.groupId, cell.groupColor)
-        }
-
-        ToolButton {
-            id: addSubcategoryPlus
-            objectName: "addSubcategoryPlus_" + cell.categoryId
-            visible: cell.columnKind === 0 && cell.groupLabelShown && cell.categoryId !== ""
-                     && !cell.editing && !cell.addingSubcategory
-            anchors.right: groupSwatch.left
-            anchors.verticalCenter: parent.verticalCenter
-            width: 22
-            height: 22
-            text: "+"
-            focusPolicy: Qt.NoFocus
-            Accessible.name: qsTr("Add subcategory to %1").arg(cell.categoryName)
-            HoverHandler { id: addSubcategoryHover }
-            ToolTip.visible: addSubcategoryHover.hovered
-            ToolTip.delay: 400
-            ToolTip.text: Accessible.name
-            onClicked: {
-                cell.addingSubcategory = true
-                subcategoryCreationField.forceActiveFocus()
+            Rectangle {
+                visible: cell.lastRowOfSpan
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 1
+                color: cell.palette.mid
             }
-        }
+            Rectangle {
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: parent.right
+                width: 1
+                color: cell.palette.mid
+            }
+            Rectangle {
+                // Retained input and domain issues get a textual explanation too (Accessible and
+                // tooltip); the marker is only a pointer to it.
+                visible: (cell.issues || []).length > 0 || cell.inputState !== ""
+                anchors.top: parent.top
+                anchors.left: parent.left
+                width: 6
+                height: 6
+                color: cell.inputState !== "" ? "#E53935" : "#FFA726"
+            }
+            Rectangle {
+                readonly property var insertion: root.dropInsertion
+                visible: cell.columnKind >= 2 && insertion !== null && insertion.row === cell.row
+                y: insertion && insertion.above ? 0 : parent.height - height
+                width: parent.width
+                height: 2
+                color: cell.palette.highlight
+            }
 
-        TextField {
-            id: subcategoryCreationField
-            objectName: "subcategoryCreationField"
-            visible: cell.addingSubcategory
-            anchors.fill: parent
-            placeholderText: qsTr("Subcategory name")
-            Accessible.name: placeholderText
-            onAccepted: {
-                if (text.trim() === "") return
-                root.creationAccepted = true
-                root.addSubcategoryRequested(cell.categoryId, text)
-                if (root.creationAccepted) {
+            Label {
+                anchors.fill: parent
+                anchors.leftMargin: 6
+                anchors.rightMargin: groupSwatch.visible ? groupSwatch.width + (addSubcategoryPlus.visible ? 34 : 10) : 6
+                visible: !cell.editing && !cell.addingSubcategory
+                verticalAlignment: Text.AlignVCenter
+                horizontalAlignment: cell.columnKind === root.thresholdKind ? Text.AlignRight : Text.AlignLeft
+                elide: Text.ElideRight
+                text: cell.cellText !== "" ? cell.cellText
+                    : cell.columnKind === root.thresholdKind ? "—"
+                    : cell.unnamedScenario ? qsTr("Unnamed scenario") : ""
+                font.italic: cell.inputState !== "" || cell.unnamedScenario
+                font.bold: cell.isGroup
+                color: cell.inputState !== "" ? "#E57373"
+                     : cell.unnamedScenario ? cell.palette.placeholderText : cell.palette.text
+            }
+
+            TableSwatch {
+                id: groupSwatch
+                objectName: "groupSwatch_" + cell.groupId
+                visible: cell.groupLabelShown && cell.groupId !== "" && !cell.editing && !cell.addingSubcategory
+                anchors.right: parent.right
+                anchors.rightMargin: 6
+                anchors.verticalCenter: parent.verticalCenter
+                swatchColor: cell.groupColor
+                Accessible.name: qsTr("Colour of group %1").arg(cell.groupLabelText)
+                onClicked: root.colorSwatchRequested("group", cell.groupId, cell.groupColor)
+            }
+
+            ToolButton {
+                id: addSubcategoryPlus
+                objectName: "addSubcategoryPlus_" + cell.categoryId
+                visible: cell.columnKind === 0 && cell.groupLabelShown && cell.categoryId !== ""
+                         && !cell.editing && !cell.addingSubcategory
+                anchors.right: groupSwatch.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 22
+                height: 22
+                text: "+"
+                focusPolicy: Qt.NoFocus
+                Accessible.name: qsTr("Add subcategory to %1").arg(cell.categoryName)
+                HoverHandler { id: addSubcategoryHover }
+                ToolTip.visible: addSubcategoryHover.hovered
+                ToolTip.delay: 400
+                ToolTip.text: Accessible.name
+                onClicked: {
+                    cell.addingSubcategory = true
+                    subcategoryCreationField.forceActiveFocus()
+                }
+            }
+
+            TextField {
+                id: subcategoryCreationField
+                objectName: "subcategoryCreationField"
+                visible: cell.addingSubcategory
+                anchors.fill: parent
+                placeholderText: qsTr("Subcategory name")
+                Accessible.name: placeholderText
+                onAccepted: {
+                    if (text.trim() === "") return
+                    root.creationAccepted = true
+                    root.addSubcategoryRequested(cell.categoryId, text)
+                    if (root.creationAccepted) {
+                        cell.addingSubcategory = false
+                        text = ""
+                    }
+                }
+                Keys.onEscapePressed: {
                     cell.addingSubcategory = false
                     text = ""
                 }
             }
-            Keys.onEscapePressed: {
-                cell.addingSubcategory = false
-                text = ""
-            }
-        }
 
-        DragHandler {
-            id: rowDrag
-            target: null
-            enabled: cell.columnKind >= 2 && !cell.editing
-            onActiveChanged: {
-                if (active) root.beginRowDrag(cell.entryId)
-                else if (root.draggingRows) {
-                    root.dropAtScene(rowDrag.centroid.scenePosition)
-                    root.draggingRows = false
-                    root.dragEntryIds = []
-                    root.dropInsertion = null
+            DragHandler {
+                id: rowDrag
+                target: null
+                enabled: cell.columnKind >= 2 && !cell.editing
+                onActiveChanged: {
+                    if (active) root.beginRowDrag(cell.entryId)
+                    else if (root.draggingRows) {
+                        root.dropAtScene(rowDrag.centroid.scenePosition)
+                        root.draggingRows = false
+                        root.dragEntryIds = []
+                        root.dropInsertion = null
+                    }
+                }
+                onTranslationChanged: if (active) root.hoverAtScene(rowDrag.centroid.scenePosition)
+            }
+
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                onTapped: eventPoint => {
+                    const point = cell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
+                    if (cell.isGroup && cell.groupId !== "") {
+                        root.groupContextRequested(cell.groupId, point.x, point.y)
+                    } else if (!cell.isGroup) {
+                        if (!root.selectionHasEntry(cell.entryId))
+                            root.moveCurrent(cell.row, cell.column)
+                        else
+                            selection.setCurrentIndex(root.tableModel.index(cell.row, cell.column), ItemSelectionModel.NoUpdate)
+                        root.rowContextRequested(cell.entryId, point.x, point.y)
+                    }
                 }
             }
-            onTranslationChanged: if (active) root.hoverAtScene(rowDrag.centroid.scenePosition)
-        }
 
-        TapHandler {
-            acceptedButtons: Qt.RightButton
-            onTapped: eventPoint => {
-                const point = cell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
-                if (cell.isGroup && cell.groupId !== "") {
-                    root.groupContextRequested(cell.groupId, point.x, point.y)
-                } else if (!cell.isGroup) {
-                    if (!root.selectionHasEntry(cell.entryId))
-                        root.moveCurrent(cell.row, cell.column)
-                    else
-                        selection.setCurrentIndex(root.tableModel.index(cell.row, cell.column), ItemSelectionModel.NoUpdate)
-                    root.rowContextRequested(cell.entryId, point.x, point.y)
+            TapHandler {
+                id: selectTap
+                acceptedButtons: Qt.LeftButton
+                enabled: !cell.editing && !cell.addingSubcategory
+                onTapped: root.selectCell(cell.row, cell.column, selectTap.point.modifiers)
+                onDoubleTapped: {
+                    root.selectCell(cell.row, cell.column, selectTap.point.modifiers)
+                    if (cell.columnKind >= 2 || cell.groupId !== "")
+                        cell.TableView.view.edit(root.tableModel.index(cell.row, cell.column))
                 }
-            }
-        }
-
-        TapHandler {
-            id: selectTap
-            acceptedButtons: Qt.LeftButton
-            enabled: !cell.editing && !cell.addingSubcategory
-            onTapped: root.selectCell(cell.row, cell.column, selectTap.point.modifiers)
-            onDoubleTapped: {
-                root.selectCell(cell.row, cell.column, selectTap.point.modifiers)
-                if (cell.columnKind >= 2 || cell.groupId !== "")
-                    cell.TableView.view.edit(root.tableModel.index(cell.row, cell.column))
             }
         }
 
@@ -906,6 +948,8 @@ FocusScope {
             property int suggestionIndex: 0
             readonly property var suggestionPopupView: suggestionPopup
 
+            // A spanning category's name is edited across the whole span.
+            width: cell.face.width
             horizontalAlignment: cell.columnKind === root.thresholdKind ? TextInput.AlignRight : TextInput.AlignLeft
             Accessible.name: qsTr("Edit %1").arg(cell.Accessible.name)
 
@@ -1211,9 +1255,23 @@ FocusScope {
 
                     onActiveFocusChanged: if (activeFocus) root.headerFocused = false
                     Keys.onPressed: (event) => root.handleCommandKey(event)
+                    Keys.onLeftPressed: (event) => {
+                        const current = selection.currentIndex
+                        if (current.valid && current.column === 2
+                                && root.spansSubcategory(0, String(root.tableModel.rowInfo(current.row).subcategoryId || ""))) {
+                            root.moveCurrent(current.row, 0)
+                            event.accepted = true
+                        } else {
+                            event.accepted = false
+                        }
+                    }
                     Keys.onRightPressed: (event) => {
                         const current = selection.currentIndex
-                        if (current.valid && current.column === root.thresholdKind - 1
+                        if (current.valid && current.column === 0
+                                && root.spansSubcategory(0, String(root.tableModel.rowInfo(current.row).subcategoryId || ""))) {
+                            root.moveCurrent(current.row, 2)
+                            event.accepted = true
+                        } else if (current.valid && current.column === root.thresholdKind - 1
                                 && root.tableModel.columnCount() > root.thresholdKind) {
                             root.moveCurrent(current.row, root.thresholdKind)
                             event.accepted = true
