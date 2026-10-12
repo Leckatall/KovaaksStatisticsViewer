@@ -125,6 +125,17 @@ Item {
         const clear = moved.filter(p => !coversMarker(index, labelWidth, p))
         return clear.length > 0 ? clear[0] : moved.length > 0 ? moved[0] : ""
     }
+    // Whether chunk `index`'s label of `labelWidth` at `placement` sits (even partly) over
+    // the filled part of a chunk the fill covers only partly. Such a label is a score not
+    // yet reached, so it is drawn as a target (outlined) rather than as plain text, which
+    // over the fill would read as a score already reached. A label on a full chunk or over
+    // the empty track keeps the plain look.
+    function labelInPartialFillAt(index, labelWidth, placement) {
+        if (placement.length === 0) return false
+        const fillWidth = fillWidthAt(index)
+        if (fillWidth <= 0 || fillWidth >= chunkRight(index) - chunkLeft(index)) return false
+        return labelSpanLeft(index, labelWidth, placement) < chunkLeft(index) + fillWidth
+    }
     function labelAlignment(placement) {
         return placement === "start" ? Text.AlignLeft
              : placement === "middle" ? Text.AlignHCenter : Text.AlignRight
@@ -250,6 +261,12 @@ Item {
             readonly property bool labelShown: labelText.length > 0 && !root.missingAt(index)
                                                && root.edgeState !== "unplayed" && root.edgeState !== "unmatched"
                                                && labelPlacement.length > 0
+            // The label is a not-yet-reached score over the fill: it gets the target outline.
+            readonly property bool labelIsTarget: labelShown
+                                                  && root.labelInPartialFillAt(index, thresholdLabel.implicitWidth, labelPlacement)
+            // The label's drawn span in this chunk's coordinates (the outline goes around it).
+            readonly property real labelSpanX: root.labelSpanLeft(index, thresholdLabel.implicitWidth, labelPlacement) - x
+            readonly property real labelSpanW: root.labelSpanWidth(index, thresholdLabel.implicitWidth)
             // Scales with the bar, so it keeps its margin in a taller or shorter one.
             readonly property real labelPixelSize: Math.max(8, Math.round(root.height * 0.62))
 
@@ -290,11 +307,38 @@ Item {
                 color: Qt.alpha(root.palette.text, 0.62)
                 text: chunk.labelText
             }
+            // A target label's outline: a thin box around the score, so a score sitting in
+            // the fill reads as the mark still to reach. Drawn twice like the label, dim over
+            // the empty track and in the label's fill colour inside the fill.
+            Rectangle {
+                id: targetOutline
+                objectName: root.objectName.length > 0 ? root.objectName + "_target_" + chunk.index : ""
+                visible: chunk.labelIsTarget
+                x: Math.round(chunk.labelSpanX) - 2
+                y: 1
+                width: Math.round(chunk.labelSpanW) + 4
+                height: Math.max(0, parent.height - 2)
+                radius: 2
+                color: "transparent"
+                border.width: 1
+                border.color: Qt.alpha(root.palette.text, 0.62)
+            }
             Item {
                 visible: chunk.labelShown && fillRect.visible
                 width: fillRect.width
                 height: parent.height
                 clip: true
+                Rectangle {
+                    visible: chunk.labelIsTarget
+                    x: targetOutline.x
+                    y: targetOutline.y
+                    width: targetOutline.width
+                    height: targetOutline.height
+                    radius: targetOutline.radius
+                    color: "transparent"
+                    border.width: 1
+                    border.color: chunk.onFillColor
+                }
                 Label {
                     width: chunk.width
                     height: parent.height

@@ -1135,6 +1135,46 @@ Item {
             compare(placement(markedEnd, 0), "end", "the marker alone never moves a label")
         }
 
+        // -- a threshold label inside a partial fill is styled as a target -------------
+
+        function isTarget(bar, index) {
+            const chunk = find(bar, "probe_chunk_" + index)
+            compare(find(bar, "probe_target_" + index).visible, chunk.labelIsTarget,
+                    "the outline shows exactly for a target label")
+            return chunk.labelIsTarget
+        }
+
+        function test_thresholdLabelInsideAPartialFillIsATarget() {
+            // Chunk 0 spans [0, 99] of a 200 px bar; chunk 1 [101, 200].
+            const moved = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250"})
+            compare(placement(moved, 0), "middle")
+            verify(isTarget(moved, 0), "a label moved into the partial fill reads as a target")
+            verify(!isTarget(moved, 1), "a label over an empty chunk keeps its look")
+            compare(find(moved, "probe_label_0").text, "300", "the text itself is unchanged")
+
+            const start = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890"})
+            compare(placement(start, 0), "start")
+            verify(isTarget(start, 0), "a label moved to the start of a partial fill reads as a target")
+
+            const clear = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250"})
+            compare(placement(clear, 0), "end")
+            verify(!isTarget(clear, 0), "a label over the unfilled part keeps its look")
+
+            const full = makeTierBar({width: 200, fills: [1, 0.85], valueText: "650"})
+            compare(placement(full, 0), "end")
+            verify(!isTarget(full, 0), "a label at the end of a full chunk keeps its look")
+            verify(placement(full, 1) === "middle" || placement(full, 1) === "start", placement(full, 1))
+            verify(isTarget(full, 1), "the partial chunk's moved label is a target")
+
+            const noValue = makeTierBar({width: 200, fills: [0.97, 0]})
+            compare(placement(noValue, 0), "end")
+            verify(isTarget(noValue, 0), "a fill reaching under the label at its end makes it a target too")
+
+            const narrow = makeTierBar({width: 120, fills: [0.3, 0], valueText: "250"})
+            compare(placement(narrow, 0), "")
+            verify(!isTarget(narrow, 0), "a hidden label is never a target")
+        }
+
         // -- rank names use their tier colours --------------------------
 
         function test_rankNamesUseTierColours() {
