@@ -61,6 +61,19 @@ Item {
         next: qsTr("Next tier")
     })
 
+    // A category group whose rows have no subcategory group (scenarios straight under
+    // the category, or Uncategorized) spans the Subcategory column too, rather than
+    // leaving an empty cell beside it. Only meaningful while the grid shows that column.
+    function spansSubcategory(group) {
+        if (!hasSubcategories || String(group.column) !== "category") return false
+        const start = Number(group.start), end = start + Number(group.span)
+        for (const other of groups) {
+            if (String(other.column) === "subcategory" && Number(other.start) >= start && Number(other.start) < end)
+                return false
+        }
+        return true
+    }
+
     function nextText(row) {
         if (!row) return ""
         const tier = String(row.nextTierText || "")
@@ -150,9 +163,13 @@ Item {
             next: boldMetrics.advanceWidth(headers.next)
         }
         const scenarioHeader = widths.scenario
+        // Widest spanning category cell; it may use the Subcategory column's width too.
+        let spanning = 0
         for (const group of groups) {
             const key = String(group.column)
-            widths[key] = Math.max(widths[key], boldMetrics.advanceWidth(String(group.name)) + rankChipSpace(group))
+            const need = boldMetrics.advanceWidth(String(group.name)) + rankChipSpace(group)
+            if (spansSubcategory(group)) spanning = Math.max(spanning, need)
+            else widths[key] = Math.max(widths[key], need)
         }
         for (const row of rows) {
             widths.scenario = Math.max(widths.scenario, markerSpace + metrics.advanceWidth(String(row.name)))
@@ -161,6 +178,8 @@ Item {
             widths.next = Math.max(widths.next, metrics.advanceWidth(nextText(row)))
         }
         for (const key in widths) widths[key] = Math.ceil(widths[key] + 2 * cellPadding)
+        if (spanning > 0)
+            widths.category = Math.max(widths.category, Math.ceil(spanning + 2 * cellPadding) - widths.subcategory)
         // A tier header shows only its name: a chunk is comfortable with some padding
         // around the widest name, and never narrower than that name.
         let tierName = 0
@@ -518,13 +537,14 @@ Item {
                     id: groupCell
                     required property var modelData
                     readonly property var column: root.columns[String(modelData.column)]
+                    readonly property bool spansBoth: root.spansSubcategory(modelData)
                     readonly property string tint: String(modelData.color || "")
 
                     objectName: "progressGroup_" + (String(modelData.id).length > 0 ? modelData.id : "uncategorized")
                     visible: column.width > 0
                     x: column.x
                     y: root.headerHeight + Number(modelData.start) * root.rowHeight
-                    width: column.width
+                    width: spansBoth ? column.width + root.columns.subcategory.width : column.width
                     height: Number(modelData.span) * root.rowHeight
                     color: root.palette.base
                     Accessible.role: Accessible.Cell

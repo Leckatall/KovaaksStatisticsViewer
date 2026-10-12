@@ -680,6 +680,23 @@ Item {
                     "a benchmark with subcategories shows the Subcategory column")
         }
 
+        // A category group with no subcategory groups among its rows covers the
+        // Subcategory column too; one that has subcategories keeps its own width.
+        function test_categoryWithoutSubcategoriesSpansTheSubcategoryColumn() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            wait(0)
+            const category = find(ws, "progressHeader_category")
+            const subcategory = find(ws, "progressHeader_subcategory")
+            const flat = find(ws, "progressGroup_cat-track")
+            const split = find(ws, "progressGroup_cat-click")
+            fuzzyCompare(flat.x, category.x, 0.5)
+            fuzzyCompare(flat.width, category.width + subcategory.width, 0.5, "Tracking covers both columns")
+            fuzzyCompare(find(ws, "progressGroup_uncategorized").width, category.width + subcategory.width, 0.5,
+                         "Uncategorized covers both columns")
+            fuzzyCompare(split.width, category.width, 0.5, "Clicking keeps its own column")
+            fuzzyCompare(find(ws, "progressGroup_sub-static").width, subcategory.width, 0.5)
+        }
+
         // each group cell shows its rank as a chip in that tier's colour.
         function test_groupCellsShowTheirRankChip() {
             const fx = TestDoubles.trackingFixtureTrackable()
