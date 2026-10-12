@@ -67,22 +67,24 @@ namespace {
 
 // --- the bar's fraction mapping ---------------------------------------------------------------
 
-TEST(TierChunkFills, BelowTheFirstTierFillsTheFirstChunkFromZero) {
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 250.0), {0.25, 0, 0, 0, 0});
+TEST(TierChunkFills, BelowTheFirstTierFillsNothing) {
+    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 250.0), {0, 0, 0, 0, 0});
 }
 
-TEST(TierChunkFills, ExactlyOnAThresholdFillsThatTiersChunkAndNothingAfter) {
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 3000.0), {1, 1, 1, 0, 0});
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 1000.0), {1, 0, 0, 0, 0});
+TEST(TierChunkFills, ExactlyOnAThresholdEntersThatTiersChunk) {
+    constexpr double entered = kEnteredChunkFill;
+    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 3000.0), {1, 1, entered, 0, 0});
+    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 1000.0), {entered, 0, 0, 0, 0});
 }
 
-TEST(TierChunkFills, MidTierFillsTheNextChunkByTheInTierFraction) {
-    // Halfway from Gold (4000) to Platinum (6000).
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 5000.0), {1, 1, 1, 1, 0.5});
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 2250.0), {1, 1, 0.25, 0, 0});
+TEST(TierChunkFills, MidTierFillsThatTiersChunkByTheInTierFraction) {
+    // Halfway from Gold (4000) to Platinum (6000): Gold's chunk half full, so the fill ends in Gold.
+    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 5000.0), {1, 1, 1, 0.5, 0});
+    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 2250.0), {1, 0.25, 0, 0, 0});
 }
 
-TEST(TierChunkFills, AboveTheTopTierFillsEveryChunkAndNoMore) {
+TEST(TierChunkFills, TheTopTiersChunkIsFullOnceReached) {
+    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 6000.0), {1, 1, 1, 1, 1});
     expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 9000.0), {1, 1, 1, 1, 1});
 }
 
@@ -93,26 +95,26 @@ TEST(TierChunkFills, NoScoreFillsNothing) {
 TEST(TierChunkFills, AChunkWithAMissingBoundStaysEmpty) {
     auto thresholds = fiveThresholds();
     thresholds.erase(thresholds.begin() + 2); // no Silver threshold
-    // Silver's own chunk and Gold's (which starts at Silver) have no bounds; the rest fill.
-    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 4500.0), {1, 1, 0, 0, 0.25});
+    // Silver's own chunk and Bronze's (which ends at Silver) have no bounds; the rest fill.
+    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 4500.0), {1, 0, 0, 0.25, 0});
 }
 
-// Bronze below Iron: either may be the wrong one, so every chunk either bounds (Iron, Bronze and
-// Silver, whose lower bound is Bronze) stays empty rather than showing a fill from a doubtful bound.
+// Bronze below Iron: either may be the wrong one, so every chunk either bounds (Iron's, which ends
+// at Bronze, and Bronze's) stays empty rather than showing a fill from a doubtful bound.
 TEST(TierChunkFills, ChunksBoundedByAnOutOfOrderThresholdStayEmpty) {
     auto thresholds = fiveThresholds();
     thresholds[1].score = 900.0; // Bronze below Iron
     expectFills(scenarioChunkFills(fiveTiers(), thresholds, 2500.0), {0, 0, 0, 0, 0});
-    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 5000.0), {0, 0, 0, 1, 0.5});
+    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 5000.0), {0, 0, 1, 0.5, 0});
 }
 
-TEST(TierChunkFills, FilledLengthMatchesTheDomainNormalizedRank) {
+TEST(TierChunkFills, FilledLengthMatchesTheMarkerScale) {
     const auto tiers = fiveTiers();
     const auto thresholds = fiveThresholds();
-    for (const double score: {0.0, 1.0, 999.0, 1000.0, 1500.0, 2999.0, 3000.0, 4100.0, 5999.0, 6000.0, 8000.0}) {
+    for (const double score: {1000.0, 1500.0, 2999.0, 3000.0, 4100.0, 5999.0, 6000.0, 8000.0}) {
         const auto fills = scenarioChunkFills(tiers, thresholds, score);
-        EXPECT_NEAR(std::accumulate(fills.begin(), fills.end(), 0.0),
-                    normalizedTierValue(tiers, thresholds, score), 1e-9) << score;
+        EXPECT_NEAR(std::accumulate(fills.begin(), fills.end(), 0.0), *tierScalePosition(tiers, thresholds, score),
+                    1e-5) << score;
     }
 }
 
@@ -121,9 +123,10 @@ TEST(TierChunkFills, FilledLengthMatchesTheDomainNormalizedRank) {
 TEST(TierScalePosition, PlacesAScoreOnTheSameChunkScaleAsTheFills) {
     const auto tiers = fiveTiers();
     const auto thresholds = fiveThresholds();
-    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 500.0), 0.5, 1e-9);   // below the first tier
-    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 3000.0), 3.0, 1e-9);  // exactly on Silver
-    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 5000.0), 4.5, 1e-9);  // mid Gold -> Platinum
+    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 500.0), 0.0, 1e-9);   // below the first tier: bar start
+    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 3000.0), 2.0, 1e-9);  // exactly on Silver: its chunk's start
+    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 5000.0), 3.5, 1e-9);  // mid Gold -> Platinum
+    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 6000.0), 5.0, 1e-9);  // the top tier: bar end
     EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 9000.0), 5.0, 1e-9);  // above the top tier
 }
 
@@ -145,7 +148,7 @@ TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheF
     double fillEnd = 0.0;
     for (const QVariant &fill: e1.value("fills").toList()) fillEnd += fill.toDouble();
     const double recent = e1.value("recentPosition").toDouble();
-    EXPECT_NEAR(recent, 1.0 + 180.0 / 300.0, 1e-9);
+    EXPECT_NEAR(recent, 180.0 / 300.0, 1e-9);
     EXPECT_LT(recent, fillEnd);
     EXPECT_EQ(e1.value("recentDescription").toString(),
               QString("Recent average %1 · Bronze").arg(formatBenchmarkNumber(780.0)));
@@ -300,8 +303,8 @@ TEST(BenchmarkProgressGridModel, BarFillsAndDescriptionPlaceThePersonalBestOnThe
     const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
     const QVariantList fills = e1.value("fills").toList();
     ASSERT_EQ(fills.size(), 3);
-    EXPECT_DOUBLE_EQ(fills.at(0).toDouble(), 1.0);
-    EXPECT_NEAR(fills.at(1).toDouble(), 2.0 / 3.0, 1e-9);
+    EXPECT_NEAR(fills.at(0).toDouble(), 2.0 / 3.0, 1e-9) << "the fill ends in Bronze, the rank held";
+    EXPECT_DOUBLE_EQ(fills.at(1).toDouble(), 0.0);
     EXPECT_DOUBLE_EQ(fills.at(2).toDouble(), 0.0);
     EXPECT_EQ(e1.value("barDescription").toString(),
               QString("Bronze · 66% of the way to Silver (%1 / %2)")
@@ -372,20 +375,20 @@ TEST(MissingThresholdChunks, FlagsChunksWithAnUnusableBound) {
     EXPECT_EQ(missingThresholdChunks(fiveTiers(), fiveThresholds()),
               (std::vector<bool>{false, false, false, false, false}));
     auto thresholds = fiveThresholds();
-    thresholds.erase(thresholds.begin() + 2);     // no Silver: Silver's and Gold's chunks
-    thresholds.back().score = 3500.0;             // Platinum 3500 below Gold 4000
-    EXPECT_EQ(missingThresholdChunks(fiveTiers(), thresholds), (std::vector<bool>{false, false, true, true, true}));
+    thresholds.erase(thresholds.begin() + 2);     // no Silver: Bronze's and Silver's chunks
+    thresholds.back().score = 3500.0;             // Platinum 3500 below Gold 4000: Gold's and Platinum's
+    EXPECT_EQ(missingThresholdChunks(fiveTiers(), thresholds), (std::vector<bool>{false, true, true, true, true}));
 }
 
 // Iron 1800, Bronze 1200, Silver 2400: either Iron or Bronze is wrong, so no chunk bounded by
-// either may fill; Silver's chunk would otherwise read 66% from the doubtful Bronze bound.
+// either may fill rather than show a fill measured from a doubtful bound.
 TEST(MissingThresholdChunks, AnOutOfOrderThresholdHatchesEveryChunkItBounds) {
     const std::vector<Tier> tiers{Tier{TierId{"iron"}, "Iron", {}}, Tier{TierId{"bronze"}, "Bronze", {}},
                                   Tier{TierId{"silver"}, "Silver", {}}, Tier{TierId{"gold"}, "Gold", {}}};
     const std::vector<Threshold> thresholds{Threshold{TierId{"iron"}, 1800.0}, Threshold{TierId{"bronze"}, 1200.0},
                                             Threshold{TierId{"silver"}, 2400.0}, Threshold{TierId{"gold"}, 3000.0}};
 
-    EXPECT_EQ(missingThresholdChunks(tiers, thresholds), (std::vector<bool>{true, true, true, false}));
+    EXPECT_EQ(missingThresholdChunks(tiers, thresholds), (std::vector<bool>{true, true, false, false}));
     EXPECT_EQ(scenarioChunkFills(tiers, thresholds, 1995.0), (std::vector<double>{0.0, 0.0, 0.0, 0.0}))
         << "no chunk shows a fill measured from an out-of-order bound";
 }
@@ -430,8 +433,9 @@ TEST(BenchmarkProgressGridModel, MissingThresholdChunksTravelWithTheRow) {
     const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
     QList<bool> missing;
     for (const QVariant &flag: e1.value("missingChunks").toList()) missing << flag.toBool();
-    EXPECT_EQ(missing, (QList<bool>{false, true, true}));
+    EXPECT_EQ(missing, (QList<bool>{true, true, false}));
     const QVariantList fills = e1.value("fills").toList();
+    EXPECT_EQ(fills.at(0).toDouble(), 0.0) << "no partial fill in a chunk without a usable bound";
     EXPECT_EQ(fills.at(1).toDouble(), 0.0);
     EXPECT_EQ(fills.at(2).toDouble(), 0.0) << "no partial fill in a chunk without a usable bound";
 }

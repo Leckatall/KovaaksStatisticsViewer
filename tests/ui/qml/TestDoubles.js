@@ -216,7 +216,7 @@ function trackingFixtureIncomplete() {
             rows: [
                 makeFakeProgressRow({
                     entryId: "sc-1", name: "1w4ts", personalBestText: "84.2", recentText: "80.1 (3)",
-                    fills: [1, 0.4, 0, 0], barDescription: "Bronze · 40% of the way to Silver (84.2 / 90)"
+                    fills: [0.4, 0, 0, 0], barDescription: "Bronze · 40% of the way to Silver (84.2 / 90)"
                 })
             ],
             groups: [{column: "category", id: "", name: "Uncategorized", color: "", start: 0, span: 1}]
@@ -270,7 +270,7 @@ function trackingFixtureTrackable() {
                 }),
                 makeFakeProgressRow({
                     entryId: "sc-1w4ts", name: "1w4ts", personalBestText: "812", recentText: "790.5",
-                    attainedTierText: "Gold", attainedTierColor: "#ffc828", fills: [1, 1, 1, 0.75],
+                    attainedTierText: "Gold", attainedTierColor: "#ffc828", fills: [1, 1, 0.75, 0],
                     nextTierText: "Platinum", nextTierColor: "#50dcdc", nextThresholdText: "900",
                     barDescription: "Gold · 75% of the way to Platinum (812 / 900)",
                     blocker: true, blockerColor: "#50dcdc", blockerText: "Blocks Platinum (needs 900)"
@@ -283,7 +283,7 @@ function trackingFixtureTrackable() {
                 }),
                 makeFakeProgressRow({
                     entryId: "sc-smooth", name: "Smoothbot", personalBestText: "3,120", recentText: "3,001",
-                    attainedTierText: "Silver", attainedTierColor: "#c0c0c8", fills: [1, 1, 0.2, 0],
+                    attainedTierText: "Silver", attainedTierColor: "#c0c0c8", fills: [1, 0.2, 0, 0],
                     nextTierText: "Gold", nextTierColor: "#ffc828", nextThresholdText: "3,400",
                     barDescription: "Silver · 20% of the way to Gold (3,120 / 3,400)"
                 })

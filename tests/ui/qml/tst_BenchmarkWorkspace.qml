@@ -330,8 +330,8 @@ Item {
         function test_summaryAverageRankIsATierBarWithACompletedRankTick() {
             const fx = TestDoubles.trackingFixtureTrackable()
             fx.averageRank = "2.75"
-            fx.averageRankFills = [1, 1, 0.75, 0]
-            fx.completedRankPosition = 2      // Silver, the second tier
+            fx.averageRankFills = [1, 0.75, 0, 0]
+            fx.completedRankPosition = 1      // Silver, the second tier's chunk
             const ws = makeWorkspace(fx)
             wait(0)
             const area = find(ws, "summaryAverageRank")
@@ -346,10 +346,10 @@ Item {
             const tick = find(bar, bar.objectName + "_tick")
             verify(tick.visible, "the completed rank is ticked")
             const tickX = tick.mapToItem(ws, tick.width / 2, 0).x
-            const silverEnd = find(bar, bar.objectName + "_chunk_1")
-            const goldStart = find(bar, bar.objectName + "_chunk_2")
-            verify(tickX >= silverEnd.mapToItem(ws, silverEnd.width, 0).x - 1
-                   && tickX <= goldStart.mapToItem(ws, 0, 0).x + 1, "the tick sits at the end of Silver's chunk")
+            const bronzeEnd = find(bar, bar.objectName + "_chunk_0")
+            const silverStart = find(bar, bar.objectName + "_chunk_1")
+            verify(tickX >= bronzeEnd.mapToItem(ws, bronzeEnd.width, 0).x - 1
+                   && tickX <= silverStart.mapToItem(ws, 0, 0).x + 1, "the tick sits at the start of Silver's chunk")
             compare(tick.ToolTip.text, "Completed rank: Silver")
             compare(area.ToolTip.text, "Average rank 2.75", "the number stays in the tooltip")
             verify(find(ws, "summaryAttainedRank").visible && find(ws, "summaryNextTier").visible,
@@ -825,9 +825,9 @@ Item {
             verify(!find(smooth, smooth.objectName + "_hatch_2").visible, "the others are not")
         }
 
-        // -- the score that reaches each tier, in the middle of its chunk --------
+        // -- the score that reaches each tier, at the start of its chunk --------
 
-        function test_eachChunkShowsTheScoreThatReachesItsTierCentred() {
+        function test_eachChunkShowsTheScoreThatReachesItsTierAtItsStart() {
             const fx = TestDoubles.trackingFixtureTrackable()
             const rows = fx.progressGrid.rows
             const scores = ["300", "500", "700", "900"]
@@ -848,8 +848,11 @@ Item {
                 const chunk = find(bar, bar.objectName + "_chunk_" + i)
                 verify(label !== null && label.visible, "chunk " + i + " shows its score")
                 compare(label.text, scores[i])
-                fuzzyCompare(label.mapToItem(bar, label.width / 2, 0).x,
-                             chunk.mapToItem(bar, chunk.width / 2, 0).x, 0.5, "chunk " + i + " label is centred")
+                const textLeft = label.mapToItem(bar, 0, 0).x
+                const chunkLeft = chunk.mapToItem(bar, 0, 0).x
+                verify(textLeft >= chunkLeft && textLeft - chunkLeft <= 4,
+                       "chunk " + i + " label starts at its chunk's left edge")
+                compare(label.horizontalAlignment, Text.AlignLeft)
             }
 
             const smooth = find(ws, "progressRow_sc-smooth_bar")
@@ -874,21 +877,21 @@ Item {
             rows[0].personalBestText = "250"                   // sc-popcorn: unplayed
             rows[0].edgeState = "unplayed"
             rows[0].statusText = "Unplayed"
-            rows[3].thresholdTexts = ["300", "500", "3,400", "4,000"]  // sc-smooth: PB 20% into chunk 2
+            rows[3].thresholdTexts = ["300", "3,000", "3,400", "4,000"]  // sc-smooth: PB 20% into chunk 1
             const ws = makeWorkspace(fx)
             wait(0)
 
             const smooth = find(ws, "progressRow_sc-smooth_bar")
             const value = find(smooth, smooth.objectName + "_value")
-            const fill = find(smooth, smooth.objectName + "_fill_2")
+            const fill = find(smooth, smooth.objectName + "_fill_1")
             verify(value.visible, "the PB shows on its bar")
             compare(value.text, "3,120")
             verify(Qt.colorEqual(value.color, "#c0c0c8"), "in the attained tier's colour")
             const fillEnd = fill.mapToItem(smooth, fill.width, 0).x
             const valueLeft = value.mapToItem(smooth, 0, 0).x
             verify(valueLeft > fillEnd && valueLeft - fillEnd < 8, "just past the fill's end")
-            verify(!find(smooth, smooth.objectName + "_label_2").visible, "the tier score under the PB gives way")
-            verify(find(smooth, smooth.objectName + "_label_1").visible, "the others stay")
+            verify(!find(smooth, smooth.objectName + "_label_1").visible, "the tier score under the PB gives way")
+            verify(find(smooth, smooth.objectName + "_label_0").visible, "the others stay")
 
             // A full bar leaves no room past the fill: the PB moves inside its end.
             const pasu = find(ws, "progressRow_sc-pasu_bar")
@@ -951,7 +954,7 @@ Item {
             wait(0)
             const bar = find(ws, "progressRow_sc-1w4ts_bar")
             verify(bar.height >= 14, "the bar is tall enough to hover")
-            const expected = [1, 1, 1, 0.75]
+            const expected = [1, 1, 0.75, 0]
             const colours = ["#cd7f32", "#c0c0c8", "#ffc828", "#50dcdc"]
             for (let i = 0; i < 4; ++i) {
                 const chunk = find(bar, bar.objectName + "_chunk_" + i)
@@ -970,7 +973,7 @@ Item {
         // the recent average reads against the PB fill on the same chunk scale.
         function test_recentAverageMarkerSitsOnTheChunkScale() {
             const fx = TestDoubles.trackingFixtureTrackable()
-            // sc-1w4ts: PB fill ends at 3.75; recent 2.5 is halfway through Gold's chunk.
+            // sc-1w4ts: PB fill ends at 2.75; recent 2.5 is halfway through Gold's chunk.
             fx.progressGrid.rows[1].recentPosition = 2.5
             fx.progressGrid.rows[1].recentDescription = "Recent average 790.5 · Silver"
             const ws = makeWorkspace(fx)
@@ -982,7 +985,7 @@ Item {
             const markerCentre = marker.mapToItem(ws, marker.width / 2, 0).x
             fuzzyCompare(markerCentre, chunk.mapToItem(ws, chunk.width / 2, 0).x, 1,
                          "2.5 is the middle of the third chunk")
-            const fill = find(bar, bar.objectName + "_fill_3")
+            const fill = find(bar, bar.objectName + "_fill_2")
             verify(markerCentre < fill.mapToItem(ws, fill.width, 0).x, "below the PB: left of the fill's end")
             verify(marker.height > bar.height, "the tick overhangs the bar so it shows over fill and track")
             compare(marker.ToolTip.text, "Recent average 790.5 · Silver", "the marker has its own tooltip")

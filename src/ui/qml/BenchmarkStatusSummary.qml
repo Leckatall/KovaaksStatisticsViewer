@@ -64,9 +64,9 @@ Frame {
             valueColor: root._color("completedRankColor")
             valueObjectName: "summaryCompletedRank"
         }
-        // The average rank on the tier bar the progress grid uses: Iron, Bronze and
-        // Silver full and Gold half full at 3.5, with a tick where the completed rank
-        // ends. The number itself is in the tooltip.
+        // The average rank on the tier bar the progress grid uses: Iron and Bronze full
+        // and Silver half full at 3.5, with a tick where the completed rank's chunk
+        // starts. The number itself is in the tooltip.
         RowLayout {
             Layout.fillWidth: true
             spacing: 8

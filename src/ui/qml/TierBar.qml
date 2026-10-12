@@ -2,8 +2,10 @@ import QtQuick
 import QtQuick.Controls
 
 // A segmented tier bar: one equal-width chunk per tier (Iron ... the top tier), each
-// filled by how far the value has come from the previous tier's threshold toward
-// its own, in that tier's colour, over a dim neutral track. Chunk boundaries come
+// the range in which that tier is the rank held, filled by how far the value has come
+// from that tier's threshold toward the next one's (the top tier's is full once reached),
+// in that tier's colour, over a dim neutral track. The furthest fill is therefore always
+// in the colour of the rank attained. Chunk boundaries come
 // from chunkLeft()/chunkRight() alone, so a header laid out with the same functions
 // lines up with every bar. The whole bar is the tooltip's hover target.
 Item {
@@ -37,6 +39,15 @@ Item {
         const value = Number(root.fills && root.fills.length > index ? root.fills[index] : 0)
         return isNaN(value) ? 0 : Math.max(0, Math.min(1, value))
     }
+    // The fill's drawn width in chunk `index`: a chunk the value has entered at all shows
+    // at least a sliver, so a rank reached exactly on its threshold still shows its colour.
+    readonly property real minimumFillWidth: 3
+    function fillWidthAt(index) {
+        const fill = fillAt(index)
+        if (fill <= 0) return 0
+        const chunkWidth = Math.max(0, chunkRight(index) - chunkLeft(index))
+        return Math.min(chunkWidth, Math.max(minimumFillWidth, Math.round(chunkWidth * fill)))
+    }
 
     // --- edge states -------------------------------------------------------------
     // One flag per tier: that chunk's thresholds are unusable, so it is hatched.
@@ -52,7 +63,7 @@ Item {
         return root.missing && root.missing.length > index && root.missing[index] === true
     }
 
-    // One short text per tier, centred in its chunk (the score that reaches the tier);
+    // One short text per tier, at the start of its chunk (the score that reaches the tier);
     // "" or absent for none. Hidden under a hatched chunk and behind a status label.
     property var labels: []
     function labelAt(index) {
@@ -68,8 +79,8 @@ Item {
     // The right edge of the furthest fill, or 0 for none.
     readonly property real fillEnd: {
         for (let i = root.chunkCount - 1; i >= 0; --i) {
-            const fill = root.fillAt(i)
-            if (fill > 0) return root.chunkLeft(i) + Math.round((root.chunkRight(i) - root.chunkLeft(i)) * fill)
+            const fillWidth = root.fillWidthAt(i)
+            if (fillWidth > 0) return root.chunkLeft(i) + fillWidth
         }
         return 0
     }
@@ -82,13 +93,14 @@ Item {
                                                     - valueLabel.implicitWidth)
                                       : fillEnd + valueGap
     readonly property real valueRight: valueLeft + valueLabel.implicitWidth
-    // Whether a centred chunk label of `labelWidth` in chunk `index` would touch the value.
+    // Whether a chunk label of `labelWidth` at the start of chunk `index` would touch the value.
     function coversValue(index, labelWidth) {
         if (!valueShown) return false
-        const centre = (chunkLeft(index) + chunkRight(index)) / 2
-        const half = Math.min(labelWidth, chunkRight(index) - chunkLeft(index) - 4) / 2
-        return centre + half > valueLeft - valueGap && centre - half < valueRight + valueGap
+        const left = chunkLeft(index) + labelInset
+        const right = left + Math.min(labelWidth, chunkRight(index) - chunkLeft(index) - 2 * labelInset)
+        return right > valueLeft - valueGap && left < valueRight + valueGap
     }
+    readonly property real labelInset: 3
 
     Label {
         id: valueLabel
@@ -203,23 +215,23 @@ Item {
             Rectangle {
                 id: fillRect
                 objectName: root.objectName.length > 0 ? root.objectName + "_fill_" + chunk.index : ""
-                width: Math.round(parent.width * chunk.fill)
+                width: root.fillWidthAt(chunk.index)
                 height: parent.height
                 radius: 2
                 visible: width > 0
                 color: chunk.fillColor
             }
-            // The score that reaches this tier, centred in its chunk. One label dim over the
-            // empty track and one, clipped to the fill, in whichever of dark and light reads
+            // The score that reaches this tier, at the start of its chunk. One label dim over
+            // the empty track and one, clipped to the fill, in whichever of dark and light reads
             // on the tier colour, so the number is legible across the fill's edge.
             Label {
                 id: thresholdLabel
                 objectName: root.objectName.length > 0 ? root.objectName + "_label_" + chunk.index : ""
                 visible: chunk.labelShown
                 anchors.fill: parent
-                anchors.leftMargin: 2
-                anchors.rightMargin: 2
-                horizontalAlignment: Text.AlignHCenter
+                anchors.leftMargin: root.labelInset
+                anchors.rightMargin: root.labelInset
+                horizontalAlignment: Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
                 font.pixelSize: chunk.labelPixelSize
@@ -234,9 +246,9 @@ Item {
                 Label {
                     width: chunk.width
                     height: parent.height
-                    leftPadding: 2
-                    rightPadding: 2
-                    horizontalAlignment: Text.AlignHCenter
+                    leftPadding: root.labelInset
+                    rightPadding: root.labelInset
+                    horizontalAlignment: Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                     font.pixelSize: chunk.labelPixelSize
@@ -316,8 +328,8 @@ Item {
     ToolTip.text: root.description
 
     // --- tier tick -----------------------------------------------------------------
-    // A tick on the boundary after chunk `tick` - 1 (1 = end of the first tier, chunkCount
-    // = the bar's end), or none when below 1, with its own tooltip. Read tickHovered to
+    // A tick on the boundary where chunk `tick` starts (0 = the bar's start, chunkCount =
+    // the bar's end), or none when negative, with its own tooltip. Read tickHovered to
     // keep a surrounding tooltip out of its way.
     property int tick: -1
     property string tickDescription: ""
@@ -326,10 +338,11 @@ Item {
     Item {
         id: tickItem
         objectName: root.objectName.length > 0 ? root.objectName + "_tick" : ""
-        readonly property real boundaryX: root.tick >= root.chunkCount
+        readonly property real boundaryX: root.tick <= 0 ? 0
+                                          : root.tick >= root.chunkCount
                                           ? root.width
                                           : (root.chunkRight(root.tick - 1) + root.chunkLeft(root.tick)) / 2
-        visible: root.tick >= 1 && root.chunkCount > 0
+        visible: root.tick >= 0 && root.chunkCount > 0
         z: 1
         width: 9
         height: root.height + 8

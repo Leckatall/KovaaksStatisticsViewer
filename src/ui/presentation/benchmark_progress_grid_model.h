@@ -13,26 +13,33 @@
 #include "benchmarks/benchmark_projection.h"
 
 namespace ksv::presentation {
+    // A segmented tier bar has one equal-width chunk per tier in ladder order, and chunk k is the
+    // range in which tier k is the rank attained: from tier k's threshold up to tier k+1's. The
+    // furthest filled chunk is therefore always in the attained rank's colour. The top tier's chunk
+    // has no upper bound, so it is full once reached; below the first tier the bar is empty.
+
+    // A chunk the score has entered but not moved into never shows a zero fill, so a rank reached
+    // exactly on its threshold still shows its colour (the bar draws such a fill a few pixels wide).
+    inline constexpr double kEnteredChunkFill = 1e-6;
+
     // A rank on the domain's normalized scale (BenchmarkProjection::averageRank: k = tier k attained,
-    // fractions part-way to the next) as tier bar chunk fills: chunk k (0-based) fills
-    // clamp(rank - k, 0, 1), so exactly k ends at chunk k's right edge.
+    // fractions part-way to the next) as tier bar chunk fills: tier k's chunk (k - 1, 0-based) holds
+    // the fraction past k, and the top tier's chunk is full from the top rank on.
     [[nodiscard]] std::vector<double> rankChunkFills(double rank, std::size_t tierCount);
 
-    // The fill of each equal-width chunk of a segmented tier bar, one chunk per tier in ladder
-    // order. Chunk k covers scores from tier k-1's threshold to tier k's (chunk 0 starts at 0), and
-    // fills clamp((score - t[k-1]) / (t[k] - t[k-1]), 0, 1): the same in-tier fraction the domain's
-    // normalized rank uses, so the filled length in chunk units equals ScenarioProjection's
-    // normalizedRank whenever the ladder is valid. A chunk whose bounding thresholds are missing,
-    // duplicated, negative, non-finite or not increasing stays empty, and so does every chunk
-    // without a score.
+    // The fill of each chunk of a scenario's tier bar. Chunk k fills
+    // clamp((score - t[k]) / (t[k+1] - t[k]), 0, 1) once the score reaches t[k], at least
+    // kEnteredChunkFill; the last chunk is full once the score reaches the top threshold. A chunk
+    // whose bounding thresholds are missing, duplicated, negative, non-finite or not increasing
+    // stays empty, and so does every chunk without a score.
     [[nodiscard]] std::vector<double> scenarioChunkFills(const std::vector<domain::Tier> &tiers,
                                                          const std::vector<domain::Threshold> &thresholds,
                                                          std::optional<double> score);
 
-    // Per tier chunk, whether a bound it needs is unusable: its own threshold, or the previous
-    // tier's (chunk 0 starts at 0), is missing, duplicated, negative or non-finite, or out of order
-    // with a neighbouring threshold (not above the one before it, or not below the one after it;
-    // either of the two may be the wrong one). Such a chunk never fills; the bar draws it hatched.
+    // Per tier chunk, whether a bound it needs is unusable: its own threshold, or the next tier's
+    // (the top tier's chunk has none), is missing, duplicated, negative or non-finite, or out of
+    // order with a neighbouring threshold (not above the one before it, or not below the one after
+    // it; either of the two may be the wrong one). Such a chunk never fills; the bar draws it hatched.
     [[nodiscard]] std::vector<bool> missingThresholdChunks(const std::vector<domain::Tier> &tiers,
                                                            const std::vector<domain::Threshold> &thresholds);
 
@@ -77,9 +84,10 @@ namespace ksv::presentation {
     };
 
     // Where `score` sits on a tier bar's chunk scale, in chunk units from 0 (bar start) to the
-    // tier count (bar end): the domain's normalized tier value. No position without a score or
-    // when the ladder is incomplete or not increasing, so a marker is never drawn at a made-up
-    // place.
+    // tier count (bar end), matching scenarioChunkFills: the first threshold at 0, a score part-way
+    // through a tier part-way through its chunk, and the top threshold or above at the bar's end.
+    // A score below the first tier sits at 0. No position without a score or when the ladder is
+    // incomplete or not increasing, so a marker is never drawn at a made-up place.
     [[nodiscard]] std::optional<double> tierScalePosition(const std::vector<domain::Tier> &tiers,
                                                           const std::vector<domain::Threshold> &thresholds,
                                                           std::optional<double> score);

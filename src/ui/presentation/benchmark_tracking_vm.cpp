@@ -210,7 +210,7 @@ namespace ksv::presentation {
             m_nextTierColor.clear();
         }
         // The summary's average-rank bar: averageRank is the mean normalized rank, so exactly k
-        // (tier k attained) ends at chunk k's right edge; the completed rank ticks its chunk's end.
+        // (tier k attained) enters tier k's chunk; the completed rank ticks its chunk's start.
         m_averageRankFills.clear();
         m_completedRankPosition = -1.0;
         if (trackable && projection && projection->averageRank)
@@ -219,7 +219,7 @@ namespace ksv::presentation {
         if (trackable && projection && projection->completedRank)
             for (std::size_t index = 0; index < projection->tiers.size(); ++index)
                 if (projection->tiers[index].id == *projection->completedRank)
-                    m_completedRankPosition = static_cast<double>(index + 1);
+                    m_completedRankPosition = static_cast<double>(index);
 
         m_totalPlaytime = projection ? formatDuration(projection->totalPlaytimeSeconds) : QString();
         m_scenariosAtNextTier = projection ? projection->scenariosAtNextTier : 0;
