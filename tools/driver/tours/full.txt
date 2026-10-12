@@ -68,6 +68,11 @@ resize 960x700
 shot --name narrow-960x700
 scroll benchmarkWorkspaceScroll --dy 6 --shot=narrow-scrolled
 resize 1280x800
+scroll benchmarkWorkspaceScroll --dy -6
+click "selectorEntry_Driver Many Tiers Benchmark" --shot=many-tiers
+resize 960x700
+shot --name many-tiers-960x700
+resize 1280x800
 
 # ---- Datasets ------------------------------------------------------------------
 section datasets
@@ -124,8 +129,8 @@ click "${M}/cell_entry-gallery-smoothbot_scenario" --mods shift --shot=multi-row
 click "${M}/libraryToggleButton" --shot=library-collapsed-toolbar
 hover "${M}/saveButton" --settle 1200 --shot=toolbar-tooltip
 click "${M}/libraryToggleButton"
-click "${M}/addSubcategoryPlus_clicking"
-type Static --into "${M}/subcategoryCreationField" --enter --shot=subcategory-relocation-prompt
+click "${M}/addSubcategoryPlus_tracking"
+type Smooth --into "${M}/subcategoryCreationField" --enter --shot=subcategory-relocation-prompt
 click "${M}/relocateToNewSubcategory" --shot=after-relocation-dirty
 click "${M}/text:Close"
 shot --window dirtyClosePrompt --with-context --name dirty-close-prompt
