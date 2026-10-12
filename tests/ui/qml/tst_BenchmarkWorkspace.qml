@@ -533,6 +533,97 @@ Item {
                    "playtime card description must include its metric name")
         }
 
+        // -- progress grid: column order and tier headers -----------------
+
+        function test_pbDateAndPlaysPrecedeTheBarAndNextTierFollowsIt() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
+            wait(0)
+            const order = ["progressHeader_category", "progressHeader_subcategory", "progressHeader_scenario",
+                           "progressHeader_pbDate", "progressHeader_plays", "progressHeader_progress",
+                           "progressHeader_next"]
+            let previousRight = -1
+            for (const name of order) {
+                const header = find(ws, name)
+                verify(header !== null, name + " missing")
+                const left = header.mapToItem(ws, 0, 0).x
+                verify(Math.abs(left - previousRight) <= 0.5 || previousRight < 0,
+                       name + " follows the previous column directly")
+                previousRight = left + header.width
+            }
+            const bar = find(ws, "progressRow_sc-1w4ts_bar")
+            const plays = find(ws, "progressHeader_plays")
+            verify(bar.mapToItem(ws, 0, 0).x >= plays.mapToItem(ws, plays.width, 0).x,
+                   "the bar sits right of Plays")
+        }
+
+        function test_tierHeadersShowOnlyTheirNameInAReadableTierColour() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
+            wait(0)
+            const grid = find(ws, "benchmarkProgressGrid")
+            const tiers = grid.tiers
+            const seen = []
+            for (let i = 0; i < tiers.length; ++i) {
+                const header = find(ws, "progressTierHeader_" + i)
+                const name = find(ws, "progressTierHeader_" + i + "_name")
+                compare(name.text, tiers[i].name)
+                verify(name.font.bold, "tier names are bold")
+                // No swatch: the header holds only its underline and its name.
+                compare(header.children.length, 2, "tier " + i + " header has no colour swatch")
+                const underline = header.children[0]
+                verify(Qt.colorEqual(underline.color, tiers[i].barColor), "tier " + i + " keeps its tier underline")
+                verify(contrast(name.color, header.color) >= 4.5,
+                       "tier " + i + " name reads on its header: " + name.color + " on " + header.color)
+                for (const other of seen)
+                    verify(!Qt.colorEqual(other, name.color), "tier " + i + " name has its own colour")
+                seen.push(name.color)
+            }
+        }
+
+        function test_readableTierColourKeepsColoursThatReadAndBlendsTheRest() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
+            const grid = find(ws, "benchmarkProgressGrid")
+            // Dark header: gold reads as is; the dark iron grey is lightened until it reads.
+            verify(Qt.colorEqual(grid.readableOn("#ffc828", "#3c3c3c", "#ffffff"), "#ffc828"))
+            const iron = grid.readableOn("#82828c", "#3c3c3c", "#ffffff")
+            verify(!Qt.colorEqual(iron, "#82828c") && contrast(iron, "#3c3c3c") >= 4.5, "iron is lightened")
+            verify(iron.r < 0.9, "iron is lightened only as far as it needs: " + iron)
+            // Light header: gold is darkened toward the dark text colour instead.
+            const gold = grid.readableOn("#ffc828", "#efefef", "#000000")
+            verify(contrast(gold, "#efefef") >= 4.5 && gold.r > gold.b, "gold stays a gold on light: " + gold)
+            verify(Qt.colorEqual(grid.readableOn("", "#3c3c3c", "#ffffff"), "#ffffff"), "no colour: the fallback")
+        }
+
+        // Too little width: the chunks give up their padding around the widest tier name
+        // before any scenario name shortens, and the grid scrolls only after both.
+        function test_chunkPaddingGivesWayBeforeScenarioNames() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
+            const grid = find(ws, "benchmarkProgressGrid")
+            compare(grid.tiers.length, 4)
+            const m = {category: 100, subcategory: 0, scenario: 300, scenarioMinimum: 120, pbDate: 80,
+                       plays: 50, next: 100, chunk: 100, chunkMinimum: 84}
+            // fixed columns 630; bar comfortable 4*100+16 = 416, minimum 4*84+16 = 352
+            let cols = grid._layoutColumns(1046, m)
+            compare(cols.progress.width, 416, "room to spare: comfortable chunks")
+            compare(cols.scenario.width, 300)
+            cols = grid._layoutColumns(1000, m)
+            compare(cols.progress.width, 370, "the chunk padding shrinks first")
+            compare(cols.scenario.width, 300, "scenario names keep their width while padding is left")
+            cols = grid._layoutColumns(950, m)
+            compare(cols.progress.width, 352, "chunks stop at the widest name")
+            compare(cols.scenario.width, 268, "then the scenario names shorten")
+            cols = grid._layoutColumns(700, m)
+            compare(cols.progress.width, 352)
+            compare(cols.scenario.width, 120)
+            verify(cols.total > 700, "and then the grid scrolls")
+        }
+
+        function contrast(a, b) {
+            const linear = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+            const lum = c => 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
+            const la = lum(Qt.color(a)), lb = lum(Qt.color(b))
+            return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+        }
+
         // -- progress grid: rows, values, group cells ---------------------
 
         function test_scenarioRowExposesEveryValueInItsOwnCell() {
@@ -646,7 +737,7 @@ Item {
             // The offscreen test font is wide, so whether the grid fits is the
             // driver's to check; here the scroll bar shows exactly when it overflows.
             compare(find(ws, "progressGridScrollBar").visible, grid.overflowing)
-            verify(grid.columns.progress.width >= 4 * grid._measured.chunk + 16,
+            verify(grid.columns.progress.width >= 4 * grid._measured.chunkMinimum + 16,
                    "the bar column never narrows below one minimum chunk per tier")
         }
 
@@ -676,8 +767,11 @@ Item {
             for (let i = 0; i < 4; ++i) {
                 const header = find(ws, "progressTierHeader_" + i)
                 const name = find(ws, "progressTierHeader_" + i + "_name")
-                verify(header.width >= name.implicitWidth + 14, "tier " + i + " header fits its name: "
+                verify(header.width >= name.implicitWidth, "tier " + i + " header fits its name: "
                        + header.width + " < " + name.implicitWidth)
+                const nameLeft = name.mapToItem(header, 0, 0).x
+                verify(nameLeft >= 0 && nameLeft + name.implicitWidth <= header.width,
+                       "tier " + i + " name lies inside its header")
             }
             verify(find(ws, "progressRow_sc-1w4ts_personalBestDate") !== null
                    && find(ws, "progressRow_sc-1w4ts_playCount") !== null

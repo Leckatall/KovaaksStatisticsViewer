@@ -3,12 +3,15 @@ import QtQuick.Controls
 
 // Every scenario of the selected benchmark in one grid laid out like the
 // Benchmark Manager's editor table: Category, Subcategory (only when the benchmark
-// has subcategories), Scenario, a segmented tier bar under one header cell per tier
-// (which shows the PB and the recent average), PB date, Plays and Next tier. Group cells span the rows of their scenarios and carry
-// the group's tint; a row that keeps the benchmark from its next tier is marked in
-// that tier's colour. Columns are measured over every row, so values line up under
-// their headings. When the minimum widths do not fit, the scenario names elide
-// first and the grid then scrolls horizontally inside its own frame.
+// has subcategories), Scenario, PB date, Plays, a segmented tier bar under one header
+// cell per tier (which shows the PB and the recent average) and Next tier. Group cells
+// span the rows of their scenarios and carry the group's tint; a row that keeps the
+// benchmark from its next tier is marked in that tier's colour. Columns are measured
+// over every row, so values line up under their headings. The tier headers show only
+// their names, in the tier's readable colour, so a chunk need be no wider than the
+// widest tier name. When the widths do not fit, the chunks first give up their padding
+// around that name, then the scenario names elide, and the grid then scrolls
+// horizontally inside its own frame.
 Item {
     id: root
 
@@ -29,6 +32,12 @@ Item {
     // Room in front of every scenario name for the blocker marker, so names align.
     readonly property real markerSpace: 16
     readonly property real maximumChunkWidth: 160
+    // Room on each side of the widest tier name in a comfortable chunk; it is the
+    // first thing given up when the grid is short of width.
+    readonly property real chunkPadding: 6
+    // What is left around the widest name at the narrowest: slack for the chunks'
+    // rounded edges, so a name is never cut off.
+    readonly property real chunkSlack: 4
     readonly property real minimumScenarioWidth: 120
 
     readonly property real tableHeight: headerHeight + rows.length * rowHeight
@@ -56,6 +65,27 @@ Item {
         if (!row) return ""
         const tier = String(row.nextTierText || "")
         return tier.length > 0 ? tier + " " + row.nextThresholdText : String(row.nextThresholdText)
+    }
+
+    // `color` as text on `background`: the colour itself when it reads (WCAG 4.5:1),
+    // otherwise the first 5% step of a blend toward `fallback` (the palette's text
+    // colour for that background) that does. Works for light and dark palettes alike.
+    function readableOn(color, background, fallback) {
+        if (String(color).length === 0) return fallback
+        const linear = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+        const luminance = c => 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
+        const contrast = (a, b) => {
+            const la = luminance(a), lb = luminance(b)
+            return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+        }
+        const base = Qt.color(color), bg = Qt.color(background), to = Qt.color(fallback)
+        for (let step = 0; step <= 20; ++step) {
+            const t = step / 20
+            const mixed = Qt.rgba(base.r + (to.r - base.r) * t, base.g + (to.g - base.g) * t,
+                                  base.b + (to.b - base.b) * t, 1)
+            if (contrast(mixed, bg) >= 4.5) return mixed
+        }
+        return fallback
     }
 
     // The left edge of tier header `index` inside the bar: the same equal shares the
@@ -131,29 +161,36 @@ Item {
             widths.next = Math.max(widths.next, metrics.advanceWidth(nextText(row)))
         }
         for (const key in widths) widths[key] = Math.ceil(widths[key] + 2 * cellPadding)
-        // A tier header shows its swatch and name side by side; no chunk is narrower.
-        let chunk = 0
+        // A tier header shows only its name: a chunk is comfortable with some padding
+        // around the widest name, and never narrower than that name.
+        let tierName = 0
         for (const tier of tiers)
-            chunk = Math.max(chunk, 14 + 6 + boldMetrics.advanceWidth(String(tier.name)) + 2 * 6)
-        widths.chunk = Math.ceil(chunk)
+            tierName = Math.max(tierName, boldMetrics.advanceWidth(String(tier.name)))
+        widths.chunk = Math.ceil(tierName + 2 * chunkPadding)
+        widths.chunkMinimum = Math.ceil(tierName + chunkSlack)
         widths.scenarioMinimum = Math.ceil(Math.max(minimumScenarioWidth, scenarioHeader + 2 * cellPadding))
         return widths
     }
 
     // Every column is as wide as its widest value; the bar takes the remaining width,
-    // between one minimum-width chunk per tier and a cap that keeps it readable on
-    // very wide windows. Too narrow: the scenario names give way first (eliding),
+    // between one comfortable chunk per tier and a cap that keeps it readable on very
+    // wide windows. Too narrow: the chunks give up their padding around the tier names
+    // first (down to the widest name), then the scenario names give way (eliding),
     // then the grid scrolls.
     function _layoutColumns(totalWidth, measured) {
         const count = Math.max(1, tiers.length)
         const category = measured.category
         const subcategory = hasSubcategories ? measured.subcategory : 0
         let scenario = measured.scenario
-        const progressMinimum = count * measured.chunk + 2 * barInset
+        const progressMinimum = count * measured.chunkMinimum + 2 * barInset
+        const progressComfortable = count * measured.chunk + 2 * barInset
         const progressMaximum = count * Math.max(measured.chunk, maximumChunkWidth) + 2 * barInset
         const fixed = category + subcategory + scenario + measured.pbDate + measured.plays + measured.next
-        const progress = Math.min(progressMaximum, Math.max(progressMinimum, totalWidth - fixed))
-        const excess = fixed + progress - totalWidth
+        let progress = Math.min(progressMaximum, Math.max(progressComfortable, totalWidth - fixed))
+        let excess = fixed + progress - totalWidth
+        if (excess > 0)
+            progress -= Math.min(excess, progress - progressMinimum)
+        excess = fixed + progress - totalWidth
         if (excess > 0)
             scenario -= Math.min(excess, Math.max(0, scenario - measured.scenarioMinimum))
 
@@ -166,9 +203,9 @@ Item {
         place("category", category)
         place("subcategory", subcategory)
         place("scenario", scenario)
-        place("progress", progress)
         place("pbDate", measured.pbDate)
         place("plays", measured.plays)
+        place("progress", progress)
         place("next", measured.next)
         cols.total = x
         return cols
@@ -260,12 +297,6 @@ Item {
                 text: root.headers.scenario
             }
             HeaderCell {
-                objectName: "progressHeader_progress"
-                x: root.columns.progress.x
-                width: root.columns.progress.width
-                Accessible.name: root.headers.progress
-            }
-            HeaderCell {
                 objectName: "progressHeader_pbDate"
                 x: root.columns.pbDate.x
                 width: root.columns.pbDate.width
@@ -280,6 +311,12 @@ Item {
                 text: root.headers.plays
             }
             HeaderCell {
+                objectName: "progressHeader_progress"
+                x: root.columns.progress.x
+                width: root.columns.progress.width
+                Accessible.name: root.headers.progress
+            }
+            HeaderCell {
                 objectName: "progressHeader_next"
                 x: root.columns.next.x
                 width: root.columns.next.width
@@ -287,8 +324,9 @@ Item {
                 text: root.headers.next
             }
 
-            // One header cell per tier, over its chunk of every bar below, in the
-            // editor's tier-header look: swatch and name, underlined in the tier colour.
+            // One header cell per tier, over its chunk of every bar below: the tier's
+            // name in its readable colour, underlined in the tier's bar colour. No
+            // swatch: in the viewer it would suggest the colour can be edited here.
             // The first and last cells also cover the bar's inset, so the inset does not
             // read as a column of its own; every name stays centred over its chunk.
             Repeater {
@@ -316,25 +354,15 @@ Item {
                         height: 4
                         color: String(tierHeader.modelData.barColor || "")
                     }
-                    Row {
+                    Label {
+                        objectName: "progressTierHeader_" + tierHeader.index + "_name"
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: -1
                         anchors.horizontalCenterOffset: (tierHeader.leadingInset - tierHeader.trailingInset) / 2
-                        spacing: 6
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 14
-                            height: 14
-                            radius: 3
-                            color: String(tierHeader.modelData.barColor || "")
-                            border.color: root.palette.mid
-                        }
-                        Label {
-                            objectName: "progressTierHeader_" + tierHeader.index + "_name"
-                            anchors.verticalCenter: parent.verticalCenter
-                            font.bold: true
-                            text: String(tierHeader.modelData.name)
-                        }
+                        font.bold: true
+                        text: String(tierHeader.modelData.name)
+                        color: root.readableOn(String(tierHeader.modelData.barColor || ""),
+                                               root.palette.button, root.palette.buttonText)
                     }
                 }
             }
@@ -367,7 +395,7 @@ Item {
                         color: root.palette.mid
                     }
                     Repeater {
-                        model: ["category", "subcategory", "scenario", "progress", "pbDate", "plays", "next"]
+                        model: ["category", "subcategory", "scenario", "pbDate", "plays", "progress", "next"]
                         delegate: Rectangle {
                             required property string modelData
                             visible: root.columns[modelData].width > 0
