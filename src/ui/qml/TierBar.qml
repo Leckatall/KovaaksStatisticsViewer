@@ -59,6 +59,63 @@ Item {
         return root.labels && root.labels.length > index ? String(root.labels[index] || "") : ""
     }
 
+    // --- value label ---------------------------------------------------------------
+    // The value the fill stands for, just past the fill's end in valueColor; inside the
+    // fill's end instead when it would run off the bar. A tier label it would cover is hidden.
+    property string valueText: ""
+    property color valueColor: root.palette.text
+    readonly property real valueGap: 4
+    // The right edge of the furthest fill, or 0 for none.
+    readonly property real fillEnd: {
+        for (let i = root.chunkCount - 1; i >= 0; --i) {
+            const fill = root.fillAt(i)
+            if (fill > 0) return root.chunkLeft(i) + Math.round((root.chunkRight(i) - root.chunkLeft(i)) * fill)
+        }
+        return 0
+    }
+    readonly property bool valueShown: valueText.length > 0 && chunkCount > 0
+                                       && edgeState !== "unplayed" && edgeState !== "unmatched"
+    readonly property bool valueInside: fillEnd + valueGap + valueLabel.implicitWidth
+                                        > width - (edgeState === "aboveTop" ? 4 : 0)
+    readonly property real valueLeft: valueInside
+                                      ? Math.max(0, fillEnd - valueGap - (edgeState === "aboveTop" ? 4 : 0)
+                                                    - valueLabel.implicitWidth)
+                                      : fillEnd + valueGap
+    readonly property real valueRight: valueLeft + valueLabel.implicitWidth
+    // Whether a centred chunk label of `labelWidth` in chunk `index` would touch the value.
+    function coversValue(index, labelWidth) {
+        if (!valueShown) return false
+        const centre = (chunkLeft(index) + chunkRight(index)) / 2
+        const half = Math.min(labelWidth, chunkRight(index) - chunkLeft(index) - 4) / 2
+        return centre + half > valueLeft - valueGap && centre - half < valueRight + valueGap
+    }
+
+    Label {
+        id: valueLabel
+        objectName: root.objectName.length > 0 ? root.objectName + "_value" : ""
+        visible: root.valueShown
+        z: 0.5
+        x: Math.round(root.valueLeft)
+        height: root.height
+        verticalAlignment: Text.AlignVCenter
+        font.pixelSize: Math.max(8, Math.round(root.height * 0.62))
+        font.bold: true
+        // Inside the fill it sits on a tier colour, where the rank colour may not read.
+        color: {
+            if (!root.valueInside) return root.valueColor
+            for (let i = root.chunkCount - 1; i >= 0; --i) {
+                if (root.fillAt(i) > 0) {
+                    const tier = root.tiers[i]
+                    const c = Qt.color(tier && String(tier.barColor || "").length > 0 ? tier.barColor : root.palette.highlight)
+                    return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) > 0.55
+                           ? Qt.rgba(0.1, 0.1, 0.1, 0.9) : Qt.rgba(1, 1, 1, 0.95)
+                }
+            }
+            return root.valueColor
+        }
+        text: root.valueText
+    }
+
     // Unmatched or ambiguous mapping: the bar is only outlined, and says what to fix.
     Rectangle {
         objectName: root.objectName.length > 0 ? root.objectName + "_outline" : ""
@@ -129,6 +186,7 @@ Item {
             readonly property string labelText: root.labelAt(index)
             readonly property bool labelShown: labelText.length > 0 && !root.missingAt(index)
                                                && root.edgeState !== "unplayed" && root.edgeState !== "unmatched"
+                                               && !root.coversValue(index, thresholdLabel.implicitWidth)
             // Scales with the bar, so it keeps its margin in a taller or shorter one.
             readonly property real labelPixelSize: Math.max(8, Math.round(root.height * 0.62))
 
@@ -155,6 +213,7 @@ Item {
             // empty track and one, clipped to the fill, in whichever of dark and light reads
             // on the tier colour, so the number is legible across the fill's edge.
             Label {
+                id: thresholdLabel
                 objectName: root.objectName.length > 0 ? root.objectName + "_label_" + chunk.index : ""
                 visible: chunk.labelShown
                 anchors.fill: parent

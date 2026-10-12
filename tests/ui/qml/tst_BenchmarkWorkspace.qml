@@ -835,8 +835,10 @@ Item {
             rows[0].edgeState = "unplayed"
             rows[0].statusText = "Unplayed"
             rows[1].thresholdTexts = scores                    // sc-1w4ts: every chunk
-            rows[3].thresholdTexts = scores                    // sc-smooth: Platinum hatched
+            rows[1].personalBestText = "—"                     // (no PB label in the way)
+            rows[3].thresholdTexts = scores                   // sc-smooth: Platinum hatched
             rows[3].missingChunks = [false, false, false, true]
+            rows[3].personalBestText = "—"
             const ws = makeWorkspace(fx)
             wait(0)
 
@@ -862,6 +864,41 @@ Item {
             const bare = find(ws, "progressRow_sc-pasu_bar")
             for (let i = 0; i < 4; ++i)
                 verify(!find(bare, bare.objectName + "_label_" + i).visible, "a row without scores shows none")
+        }
+
+        // -- the PB where its fill ends ----------------------------------------------
+
+        function test_personalBestSitsWhereTheFillEnds() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            const rows = fx.progressGrid.rows
+            rows[0].personalBestText = "250"                   // sc-popcorn: unplayed
+            rows[0].edgeState = "unplayed"
+            rows[0].statusText = "Unplayed"
+            rows[3].thresholdTexts = ["300", "500", "3,400", "4,000"]  // sc-smooth: PB 20% into chunk 2
+            const ws = makeWorkspace(fx)
+            wait(0)
+
+            const smooth = find(ws, "progressRow_sc-smooth_bar")
+            const value = find(smooth, smooth.objectName + "_value")
+            const fill = find(smooth, smooth.objectName + "_fill_2")
+            verify(value.visible, "the PB shows on its bar")
+            compare(value.text, "3,120")
+            verify(Qt.colorEqual(value.color, "#c0c0c8"), "in the attained tier's colour")
+            const fillEnd = fill.mapToItem(smooth, fill.width, 0).x
+            const valueLeft = value.mapToItem(smooth, 0, 0).x
+            verify(valueLeft > fillEnd && valueLeft - fillEnd < 8, "just past the fill's end")
+            verify(!find(smooth, smooth.objectName + "_label_2").visible, "the tier score under the PB gives way")
+            verify(find(smooth, smooth.objectName + "_label_1").visible, "the others stay")
+
+            // A full bar leaves no room past the fill: the PB moves inside its end.
+            const pasu = find(ws, "progressRow_sc-pasu_bar")
+            const inside = find(pasu, pasu.objectName + "_value")
+            verify(inside.visible)
+            verify(inside.mapToItem(pasu, inside.width, 0).x <= pasu.width, "stays on the bar")
+            verify(!Qt.colorEqual(inside.color, "#50dcdc"), "readable on the fill rather than in its own colour")
+
+            const unplayed = find(ws, "progressRow_sc-popcorn_bar")
+            verify(!find(unplayed, unplayed.objectName + "_value").visible, "the status text owns an unplayed bar")
         }
 
         // -- rank names use their tier colours --------------------------

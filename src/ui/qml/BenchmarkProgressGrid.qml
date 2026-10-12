@@ -429,6 +429,9 @@ Item {
                         tiers: root.tiers
                         fills: rowItem.modelData.fills || []
                         labels: rowItem.modelData.thresholdTexts || []
+                        valueText: rowItem.modelData.personalBestText !== "—"
+                                   ? String(rowItem.modelData.personalBestText || "") : ""
+                        valueColor: String(rowItem.modelData.attainedTierColor || "") || palette.placeholderText
                         description: String(rowItem.modelData.barDescription || "")
                         missing: rowItem.modelData.missingChunks || []
                         edgeState: String(rowItem.modelData.edgeState || "")
