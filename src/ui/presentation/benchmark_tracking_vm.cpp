@@ -169,14 +169,15 @@ namespace ksv::presentation {
             for (const auto &issue: snapshot.selectedLoaded->completeness.issues)
                 m_completenessIssues << benchmarkIssueText(issue.code);
 
-        std::vector<QString> tierNames;
+        std::vector<RankTier> rankTiers;
         QHash<QString, QString> tierNameById;
         QHash<QString, QString> tierColorById;
         const auto indexTiers = [&](const std::vector<domain::Tier> &tiers) {
             for (const auto &tier: tiers) {
-                tierNames.push_back(q(tier.name));
+                const QColor readable = readableTextColor(tier.color);
+                rankTiers.push_back({q(tier.name), readable});
                 tierNameById.insert(q(tier.id.value), q(tier.name));
-                tierColorById.insert(q(tier.id.value), readableTextColor(tier.color).name());
+                tierColorById.insert(q(tier.id.value), readable.name());
             }
         };
         if (projection) indexTiers(projection->tiers);
@@ -257,7 +258,7 @@ namespace ksv::presentation {
         // of the plotted range, so the current rank reads at the edge.
         if (rankPresent && rankPoints.last().x() < m_historyXAxis.max())
             rankPoints.append(QPointF(m_historyXAxis.max(), rankPoints.last().y()));
-        m_rankHistory->update(rankPoints, rankPresent, tierNames);
+        m_rankHistory->update(rankPoints, rankPresent, rankTiers);
         m_playtimeHistory->update(playtimePoints, playtimePresent, {});
 
         m_progressGrid->reset(definition, projection);

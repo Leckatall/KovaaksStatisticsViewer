@@ -36,6 +36,8 @@ namespace ksv::ui {
         Q_PROPERTY(bool pointMarkersShown READ pointMarkersShown NOTIFY plotAreaChanged)
         // Colour the graph is drawn on; used for marker outlines.
         Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY backgroundColorChanged)
+        // Colour of a series with no colour of its own (a neutral line), and of its tooltip swatch.
+        Q_PROPERTY(QColor foregroundColor READ foregroundColor WRITE setForegroundColor NOTIFY foregroundColorChanged)
         // An x value (in the graph's data units) to mark with a vertical rule and a ring around each
         // visible line's point there; NaN marks nothing.
         Q_PROPERTY(qreal markedX READ markedX WRITE setMarkedX NOTIFY markedXChanged)
@@ -68,6 +70,15 @@ namespace ksv::ui {
         [[nodiscard]] QColor backgroundColor() const { return m_backgroundColor; }
         void setBackgroundColor(const QColor &backgroundColor);
 
+        [[nodiscard]] QColor foregroundColor() const { return m_foregroundColor; }
+        void setForegroundColor(const QColor &foregroundColor);
+
+        // The colour `series` is drawn in: its own, or foregroundColor when it has none.
+        [[nodiscard]] QColor colorFor(const presentation::SeriesModel &series) const;
+
+        // Pen width of a series' reference lines; a little heavier than the 1px gridlines.
+        static constexpr qreal kReferenceLineWidth = 2.0;
+
         [[nodiscard]] qreal markedX() const { return m_markedX; }
         void setMarkedX(qreal markedX);
         [[nodiscard]] QColor markerColor() const { return m_markerColor; }
@@ -95,6 +106,7 @@ namespace ksv::ui {
         void labelledYAxisColumnChanged();
         void pointMarkersChanged();
         void backgroundColorChanged();
+        void foregroundColorChanged();
         void markedXChanged();
         void markerColorChanged();
 
@@ -118,6 +130,8 @@ namespace ksv::ui {
 
         void drawSeries(QPainter *painter, const QRectF &rect) const;
 
+        void drawReferenceLines(QPainter *painter, const QRectF &rect) const;
+
         void drawMarkedX(QPainter *painter, const QRectF &rect) const;
 
         presentation::GraphViewModelBase *m_graphVm = nullptr;
@@ -125,6 +139,7 @@ namespace ksv::ui {
         int m_yAxisColumn = -1;
         bool m_pointMarkers = false;
         QColor m_backgroundColor{"#2d2d2d"};
+        QColor m_foregroundColor{Qt::white};
         qreal m_markedX = std::numeric_limits<qreal>::quiet_NaN();
         QColor m_markerColor{"#E040FB"};
     };

@@ -21,10 +21,18 @@
 #include "value_transform.h"
 
 namespace ksv::presentation {
+    // A horizontal line drawn across the plot at `value` (display units, on the owning series' Y
+    // axis), over the series line, e.g. one per benchmark tier on the rank graph.
+    struct ReferenceLine {
+        qreal value = 0.0;
+        QColor color;
+    };
+
     class SeriesModel : public QObject {
         Q_OBJECT
         Q_PROPERTY(QString id READ id WRITE setId NOTIFY idChanged)
         Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+        // An invalid colour means "neutral": GraphCanvas draws the line in its foregroundColor.
         Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
         Q_PROPERTY(int column READ column WRITE setColumn NOTIFY columnChanged)
 
@@ -45,6 +53,8 @@ namespace ksv::presentation {
 
         ValueTransform transform;
         ValueAxis::Options yAxisOptions;
+        // Painted over the line by GraphCanvas while this series is visible.
+        QList<ReferenceLine> referenceLines;
         QList<QPointF> points;
         std::shared_ptr<const Axis> xAxis;
         std::optional<ValueAxis> yAxis;

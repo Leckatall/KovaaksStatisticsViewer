@@ -36,6 +36,7 @@ Item {
         pointMarkers: root.pointMarkers
         markedX: root.markedX
         backgroundColor: root.palette.base
+        foregroundColor: root.palette.text
     }
     MouseArea {
         id: hoverArea

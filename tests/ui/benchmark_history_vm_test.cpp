@@ -9,6 +9,8 @@
 #include <QTimeZone>
 #include <memory>
 
+#include "components/graph_canvas.h"
+#include "presentation/benchmark_format.h"
 #include "presentation/benchmark_tracking_vm.h"
 #include "presentation/benchmark_history_vm.h"
 #include "presentation/graph_vm_base.h"
@@ -194,4 +196,111 @@ TEST(BenchmarkHistoryViewModel, IncompleteDefinitionHasNoRankLineButKeepsPlaytim
 
     EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
     EXPECT_FALSE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
+}
+
+namespace {
+    Tier coloredTier(const std::string &id, const std::string &name, const BenchmarkColor color) {
+        return {TierId{id}, name, color};
+    }
+
+    BenchmarkWorkspaceSnapshot snapshotWithTiers(std::vector<Tier> tiers) {
+        auto snapshot = makeTrackableSnapshot();
+        snapshot.selectedLoaded->benchmark.tiers = tiers;
+        snapshot.projection->tiers = std::move(tiers);
+        return snapshot;
+    }
+}
+
+TEST(BenchmarkHistoryViewModel, RankSeriesDrawsOneLineInEachTiersColourAtItsLevel) {
+    const BenchmarkColor iron{130, 130, 140, 255};
+    const BenchmarkColor gold{255, 200, 40, 255};
+    const BenchmarkColor dark{20, 20, 60, 255};
+    auto fake = fakeWith(snapshotWithTiers({coloredTier("t1", "Iron", iron), coloredTier("t2", "Gold", gold),
+                                            coloredTier("t3", "Dark", dark)}));
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto series = vm.rankHistory()->series({kValueColumn});
+    ASSERT_EQ(series.size(), 1);
+    const auto &lines = series.front()->referenceLines;
+    ASSERT_EQ(lines.size(), 3);
+    EXPECT_DOUBLE_EQ(lines[0].value, 1.0);
+    EXPECT_DOUBLE_EQ(lines[1].value, 2.0);
+    EXPECT_DOUBLE_EQ(lines[2].value, 3.0);
+    // The same readable colours as the tier names elsewhere on the page.
+    EXPECT_EQ(lines[0].color, readableTextColor(iron));
+    EXPECT_EQ(lines[1].color, readableTextColor(gold));
+    EXPECT_EQ(lines[2].color, readableTextColor(dark));
+    EXPECT_NE(lines[2].color, QColor(20, 20, 60));
+}
+
+TEST(BenchmarkHistoryViewModel, RankSeriesIsNeutralSoItIsNotMistakenForATierLine) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto series = vm.rankHistory()->series({kValueColumn});
+    ASSERT_EQ(series.size(), 1);
+    EXPECT_FALSE(series.front()->color().isValid());
+}
+
+TEST(BenchmarkHistoryViewModel, PlaytimeSeriesKeepsItsColourAndHasNoTierLines) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto series = vm.playtimeHistory()->series({kValueColumn});
+    ASSERT_EQ(series.size(), 1);
+    EXPECT_TRUE(series.front()->color().isValid());
+    EXPECT_TRUE(series.front()->referenceLines.isEmpty());
+}
+
+TEST(BenchmarkHistoryViewModel, RankAxisHasATickAtEveryTierEvenWithManyTiers) {
+    for (const int tierCount: {3, 5, 7, 12, 13, 25}) {
+        std::vector<Tier> tiers;
+        for (int index = 1; index <= tierCount; ++index)
+            tiers.push_back(coloredTier("t" + std::to_string(index), "Tier " + std::to_string(index),
+                                        BenchmarkColor{200, 200, 200, 255}));
+        auto fake = fakeWith(snapshotWithTiers(std::move(tiers)));
+        BenchmarkTrackingViewModel vm{fake};
+
+        const auto series = vm.rankHistory()->series({kValueColumn});
+        ASSERT_EQ(series.size(), 1) << tierCount;
+        ASSERT_TRUE(series.front()->yAxis.has_value()) << tierCount;
+        QList<qreal> expected;
+        for (int k = 0; k <= tierCount; ++k) expected.append(k);
+        EXPECT_EQ(series.front()->yAxis->ticks(), expected) << tierCount;
+        EXPECT_EQ(series.front()->referenceLines.size(), tierCount);
+    }
+}
+
+TEST(BenchmarkHistoryViewModel, CanvasDrawsTheNeutralRankLineInItsForegroundColour) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    ksv::ui::GraphCanvas canvas;
+    canvas.setWidth(400);
+    canvas.setHeight(200);
+    canvas.setGraphVm(vm.rankHistory());
+    canvas.setVisibleColumns({kValueColumn});
+    canvas.setForegroundColor(QColor("#123456"));
+
+    const auto series = vm.rankHistory()->series({kValueColumn});
+    ASSERT_EQ(series.size(), 1);
+    EXPECT_EQ(canvas.colorFor(*series.front()), QColor("#123456"));
+
+    const QRectF plot = canvas.property("plotArea").toRectF();
+    const QVariantMap values = canvas.valuesAtX(plot.left() + 1);
+    ASSERT_TRUE(values.value("valid").toBool());
+    const QVariantList entries = values.value("series").toList();
+    ASSERT_EQ(entries.size(), 1);
+    EXPECT_EQ(entries.front().toMap().value("color").value<QColor>(), QColor("#123456"));
+}
+
+TEST(BenchmarkHistoryViewModel, CanvasKeepsAColouredSeriesOwnColour) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    ksv::ui::GraphCanvas canvas;
+    canvas.setForegroundColor(QColor("#123456"));
+    const auto series = vm.playtimeHistory()->series({kValueColumn});
+    ASSERT_EQ(series.size(), 1);
+    EXPECT_EQ(canvas.colorFor(*series.front()), series.front()->color());
 }

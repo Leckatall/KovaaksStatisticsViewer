@@ -2,13 +2,13 @@
 
 #include <QColor>
 #include <QString>
+#include <algorithm>
 #include <cmath>
 
 #include "value_transform.h"
 
 namespace ksv::presentation {
     namespace {
-        const QColor kRankColor("#FFB74D");
         const QColor kPlaytimeColor("#4DD0E1");
     }
 
@@ -25,7 +25,10 @@ namespace ksv::presentation {
         return result;
     }
 
-    ValueAxis BenchmarkHistoryViewModel::rankYAxis(const std::vector<QString> &tierNames) {
+    ValueAxis BenchmarkHistoryViewModel::rankYAxis(const std::vector<RankTier> &tiers) {
+        std::vector<QString> tierNames;
+        tierNames.reserve(tiers.size());
+        for (const auto &tier: tiers) tierNames.push_back(tier.name);
         ValueTransform transform;
         transform.formatter = [tierNames](const qreal value) -> QString {
             const qreal rounded = std::round(value);
@@ -40,17 +43,23 @@ namespace ksv::presentation {
         ValueAxis::Options options;
         options.baseline = ValueAxis::Baseline::Zero;
         options.integral = true;
+        // One tick per tier (and Unranked), so every tier has a level; the axis painter labels
+        // as many of them as fit without overlapping. Asking for twice as many intervals as tiers
+        // makes the nice step at most 1 (12 intervals over 12 tiers would round up to a step of 2),
+        // and `integral` then lifts it to exactly 1.
+        options.targetTicks = std::max(1, 2 * static_cast<int>(tierNames.size()));
         ValueAxis axis(options, transform);
         axis.setRange(0.0, static_cast<qreal>(tierNames.size()));
         return axis;
     }
 
     void BenchmarkHistoryViewModel::update(const QList<QPointF> &rawPoints, const bool present,
-                                           const std::vector<QString> &rankTierNames) {
+                                           const std::vector<RankTier> &rankTiers) {
         m_hasData = present && !rawPoints.isEmpty();
 
         if (!m_hasData) {
             m_series->points.clear();
+            m_series->referenceLines.clear();
             emit dataUpdated();
             emit boundsChanged();
             return;
@@ -61,10 +70,13 @@ namespace ksv::presentation {
 
         if (m_metric == AverageRank) {
             m_series->setName(tr("Personal-best average rank"));
-            m_series->setColor(kRankColor);
+            m_series->setColor(QColor());
             m_series->transform = ValueTransform::identity();
             m_series->points = rawPoints;
-            m_series->yAxis = rankYAxis(rankTierNames);
+            m_series->yAxis = rankYAxis(rankTiers);
+            m_series->referenceLines.clear();
+            for (std::size_t index = 0; index < rankTiers.size(); ++index)
+                m_series->referenceLines.append({static_cast<qreal>(index + 1), rankTiers[index].color});
         } else {
             m_series->setName(tr("Three-day average playtime"));
             m_series->setColor(kPlaytimeColor);
