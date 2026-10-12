@@ -205,6 +205,20 @@ Item {
                     "clicking a disabled problem row must not select it")
         }
 
+        function test_selectorLabelsOnlyExceptions() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureNoSelection())
+            const entry = find(ws, "selectorEntry_Voltaic S3")
+            verify(entry !== null, "trackable entry missing")
+            compare(entry.text, "Voltaic S3", "a trackable entry shows only its name")
+            const trackableChip = find(ws, "selectorEntryLabel_Voltaic S3")
+            verify(trackableChip !== null)
+            compare(trackableChip.visible, false, "trackable is the normal state and carries no label")
+            const problemChip = find(ws, "selectorEntryLabel_broken.json")
+            verify(problemChip !== null)
+            compare(problemChip.visible, true, "an exception keeps its label")
+            compare(problemChip.kind.toLowerCase(), "invalid")
+        }
+
         // showing the workspace with nothing selected asks the view model for
         // the default (remembered or only) benchmark; which one is the use case's call.
         function test_shownWithoutSelectionRequestsDefaultBenchmark() {

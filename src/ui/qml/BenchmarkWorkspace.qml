@@ -133,10 +133,35 @@ Item {
                             activeFocusOnTab: entryRow.rowSelectable
                             highlighted: root.trackingVm
                                          && root.trackingVm.selectedName === entryRow.modelData.name
-                            text: entryRow.modelData.name + "  —  " + entryRow.modelData.classification
+                            text: entryRow.modelData.name
+                            // A trackable benchmark is the normal case and shows
+                            // only its name; the exceptions get a filled chip.
+                            rightPadding: entryChip.visible ? entryChip.width + 20 : padding
                             onClicked: {
                                 if (entryRow.rowSelectable && String(entryRow.modelData.id).length > 0)
                                     root.trackingVm.selectBenchmark(entryRow.modelData.id)
+                            }
+                        }
+
+                        Rectangle {
+                            id: entryChip
+                            objectName: "selectorEntryLabel_" + entryRow.modelData.name
+                            readonly property string kind: String(entryRow.modelData.classification)
+                            visible: kind.toLowerCase() !== "trackable"
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: chipText.implicitWidth + 14
+                            height: chipText.implicitHeight + 2
+                            radius: height / 2
+                            color: kind.toLowerCase() === "incomplete" ? "#FFB74D" : "#E57373"
+                            Label {
+                                id: chipText
+                                anchors.centerIn: parent
+                                text: entryChip.kind
+                                font.bold: true
+                                font.pixelSize: entryDelegate.font.pixelSize - 1
+                                color: "#1E1E1E"
                             }
                         }
 
