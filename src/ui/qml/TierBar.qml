@@ -60,8 +60,8 @@ Item {
 
     // One short text per tier, right-aligned at the end of its chunk (the score that reaches
     // the tier, which completes the chunk); "" or absent for none. Hidden under a hatched
-    // chunk and behind a status label. Where the value label would cover it, it moves to
-    // its chunk's middle, then to its start; see labelPlacementAt().
+    // chunk and behind a status label. Where the value label or the recent-average marker
+    // would cover it, it moves to its chunk's middle, then to its start; see labelPlacementAt().
     property var labels: []
     function labelAt(index) {
         return root.labels && root.labels.length > index ? String(root.labels[index] || "") : ""
@@ -108,22 +108,25 @@ Item {
         const left = labelSpanLeft(index, labelWidth, placement)
         return left + labelSpanWidth(index, labelWidth) > valueLeft - valueGap && left < valueRight + valueGap
     }
-    // Whether that label would sit under the recent-average marker's tick.
+    // Whether that label would sit under the recent-average marker's tick, or within
+    // markerGap of it. A label that would be a target there is measured with its outline
+    // (targetPad past the text each side), so the box stays clear of the line too.
     function coversMarker(index, labelWidth, placement) {
         if (marker < 0 || chunkCount <= 0) return false
         const x = scaleX(marker)
-        const left = labelSpanLeft(index, labelWidth, placement)
-        return left + labelSpanWidth(index, labelWidth) > x - 4 && left < x + 4
+        const pad = labelInPartialFillAt(index, labelWidth, placement) ? targetPad : 0
+        const left = labelSpanLeft(index, labelWidth, placement) - pad
+        const right = left + labelSpanWidth(index, labelWidth) + 2 * pad
+        return right > x - markerHalfWidth - markerGap && left < x + markerHalfWidth + markerGap
     }
-    // Where chunk `index`'s label of `labelWidth` goes: the end of its chunk, unless the
-    // value label would cover it there. Then the middle, else the start, preferring
-    // whichever of the two is also clear of the marker; "" when the value covers all three.
-    // The value label itself never moves.
+    // Where chunk `index`'s label of `labelWidth` goes: the first of the end of its chunk,
+    // its middle and its start that is clear of both the value label and the recent-average
+    // marker. When none is clear of both, the first clear of the value label, even under
+    // the marker; "" when the value covers all three. The value label itself never moves.
     function labelPlacementAt(index, labelWidth) {
-        if (!coversValue(index, labelWidth, "end")) return "end"
-        const moved = ["middle", "start"].filter(p => !coversValue(index, labelWidth, p))
-        const clear = moved.filter(p => !coversMarker(index, labelWidth, p))
-        return clear.length > 0 ? clear[0] : moved.length > 0 ? moved[0] : ""
+        const clearOfValue = ["end", "middle", "start"].filter(p => !coversValue(index, labelWidth, p))
+        const clear = clearOfValue.filter(p => !coversMarker(index, labelWidth, p))
+        return clear.length > 0 ? clear[0] : clearOfValue.length > 0 ? clearOfValue[0] : ""
     }
     // Whether chunk `index`'s label of `labelWidth` at `placement` sits (even partly) over
     // the filled part of a chunk the fill covers only partly. Such a label is a score not
@@ -141,6 +144,8 @@ Item {
              : placement === "middle" ? Text.AlignHCenter : Text.AlignRight
     }
     readonly property real labelInset: 3
+    // How far a target label's outline reaches past its text on each side.
+    readonly property real targetPad: 2
 
     Label {
         id: valueLabel
@@ -314,9 +319,9 @@ Item {
                 id: targetOutline
                 objectName: root.objectName.length > 0 ? root.objectName + "_target_" + chunk.index : ""
                 visible: chunk.labelIsTarget
-                x: Math.round(chunk.labelSpanX) - 2
+                x: Math.round(chunk.labelSpanX) - root.targetPad
                 y: 1
-                width: Math.round(chunk.labelSpanW) + 4
+                width: Math.round(chunk.labelSpanW) + 2 * root.targetPad
                 height: Math.max(0, parent.height - 2)
                 radius: 2
                 color: "transparent"
@@ -379,6 +384,17 @@ Item {
     // end), or negative for no marker, with its own tooltip.
     property real marker: -1
     property string markerDescription: ""
+    // Half the tick's drawn width, and the gap a threshold label keeps from it.
+    readonly property real markerHalfWidth: 2
+    readonly property real markerGap: 2
+    // The marker passes through the value label, which never moves: the tick is then cut
+    // where the text is and drawn only as its ends above and below the bar, so the value
+    // stays legible and the ends still point at the marker's place.
+    readonly property bool markerCrossesValue: {
+        if (!valueShown || marker < 0 || chunkCount <= 0) return false
+        const x = scaleX(marker)
+        return x + markerHalfWidth + 1 > valueLeft && x - markerHalfWidth - 1 < valueRight
+    }
 
     // Scale position to x, across the gaps between chunks.
     function scaleX(position) {
@@ -403,10 +419,26 @@ Item {
 
         // A light tick outlined in the base colour reads both over a fill and over
         // the empty track, and overhangs the bar so its ends always show.
+        // Cut behind the value label (markerCrossesValue): only the overhanging ends, each
+        // reaching into the bar just short of the text's digits.
+        readonly property real endLength: Math.max(3, 3 + Math.round((root.height - valueLabel.font.pixelSize) / 2) - 1)
         Rectangle {
+            objectName: root.objectName.length > 0 ? root.objectName + "_markerTick" : ""
             anchors.horizontalCenter: parent.horizontalCenter
-            width: 4
-            height: parent.height
+            width: 2 * root.markerHalfWidth
+            height: root.markerCrossesValue ? markerItem.endLength : parent.height
+            radius: 1
+            color: root.palette.text
+            border.color: root.palette.base
+            border.width: 1
+        }
+        Rectangle {
+            objectName: root.objectName.length > 0 ? root.objectName + "_markerTickBottom" : ""
+            visible: root.markerCrossesValue
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            width: 2 * root.markerHalfWidth
+            height: markerItem.endLength
             radius: 1
             color: root.palette.text
             border.color: root.palette.base

@@ -1129,10 +1129,73 @@ Item {
             // Of the moved places, one clear of the recent-average marker wins.
             const marked = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250", marker: 0.5})
             compare(placement(marked, 0), "start", "the middle is under the marker, so the start")
+        }
+
+        // -- a threshold label moves off the recent-average marker -------------------
+
+        function test_thresholdLabelMovesOffTheMarker() {
+            // Chunk 0 spans [0, 99] of a 200 px bar.
+            const markedEnd = makeTierBar({width: 200, fills: [0.2, 0], marker: 0.95})
+            compare(placement(markedEnd, 0), "middle", "the marker over the chunk's end moves the label to the middle")
+            const w = find(markedEnd, "probe_label_0").implicitWidth
+            verify(!markedEnd.coversMarker(0, w, "middle"), "clear of the marker there")
+            compare(placement(markedEnd, 1), "end", "a chunk the marker is not in keeps its label at the end")
+
+            const markedBoth = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250", marker: 0.5})
+            compare(placement(markedBoth, 0), "end", "a marker away from the end leaves the label there")
+
+            // A target label keeps its outline, not just its text, clear of the marker.
+            const probe = makeTierBar({width: 400, fills: [0, 0]})
+            const textLeft = probe.labelSpanLeft(0, find(probe, "probe_label_0").implicitWidth, "end")
+            // 5 px left of the text: clear of the text, not of a target's outline.
+            const nearText = (textLeft - 5) / probe.chunkRight(0)
+            const plain = makeTierBar({width: 400, fills: [0, 0], marker: nearText})
+            compare(placement(plain, 0), "end", "a plain label 5 px from the marker stays put")
+            const target = makeTierBar({width: 400, fills: [0.97, 0], marker: nearText})
+            compare(placement(target, 0), "middle", "a target's outline would touch the marker, so it moves")
+            verify(isTarget(target, 0), "and stays a target in the fill")
+        }
+
+        function test_thresholdLabelStaysUnderTheMarkerOnlyWhenNothingElseIsClear() {
+            // The PB covers the end and middle; the marker the start: avoiding the PB wins.
             const blocked = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890", marker: 0.05})
-            compare(placement(blocked, 0), "start", "under the marker only when nowhere else is clear of the PB")
-            const markedEnd = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250", marker: 0.95})
-            compare(placement(markedEnd, 0), "end", "the marker alone never moves a label")
+            const w = find(blocked, "probe_label_0").implicitWidth
+            verify(blocked.coversMarker(0, w, "start"), "the marker is over the start")
+            compare(placement(blocked, 0), "start", "under the marker rather than under the PB")
+            verify(find(blocked, "probe_label_0").visible)
+
+            // A chunk so narrow the marker reaches every place: the label stays at its end.
+            const narrow = makeTierBar({width: 60, fills: [0, 0], marker: 0.5})
+            const nw = find(narrow, "probe_label_0").implicitWidth
+            verify(["end", "middle", "start"].every(p => narrow.coversMarker(0, nw, p)), "no place is clear")
+            compare(placement(narrow, 0), "end")
+            verify(find(narrow, "probe_label_0").visible)
+        }
+
+        // -- the marker is cut behind the PB it crosses ----------------------------------
+
+        function test_markerCrossingThePersonalBestIsCutBehindIt() {
+            // The PB "250" sits just past a fill ending at 0.3 of chunk 0 ([0, 99]).
+            const crossed = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0.4})
+            const value = find(crossed, "probe_value")
+            const x = crossed.scaleX(0.4)
+            verify(x > value.x && x < value.x + value.width, "the marker passes through the PB text")
+            verify(crossed.markerCrossesValue)
+            const top = find(crossed, "probe_markerTick")
+            const bottom = find(crossed, "probe_markerTickBottom")
+            verify(bottom.visible, "the tick's lower end shows")
+            const marker = find(crossed, "probe_marker")
+            verify(top.mapToItem(crossed, 0, top.height).y < crossed.height / 2 - 3,
+                   "the upper end stops above the text")
+            verify(bottom.mapToItem(crossed, 0, 0).y > crossed.height / 2 + 3, "the lower end starts below it")
+            verify(top.mapToItem(crossed, 0, 0).y < 0 && bottom.mapToItem(crossed, 0, bottom.height).y > crossed.height,
+                   "both ends still overhang the bar")
+            compare(value.x, crossed.valueLeft, "the PB does not move")
+
+            const clear = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0.1})
+            verify(!clear.markerCrossesValue)
+            verify(!find(clear, "probe_markerTickBottom").visible, "a marker clear of the PB is one whole tick")
+            compare(find(clear, "probe_markerTick").height, find(clear, "probe_marker").height)
         }
 
         // -- a threshold label inside a partial fill is styled as a target -------------
