@@ -21,6 +21,11 @@ Item {
     property int managerRequests: 0
 
     Component {
+        id: tierBarComponent
+        TierBar { objectName: "probe"; height: 16 }
+    }
+
+    Component {
         id: largeFontHostComponent
         Control {
             anchors.fill: parent
@@ -894,10 +899,18 @@ Item {
             verify(valueLeft > fillEnd && valueLeft - fillEnd < 8, "just past the fill's end")
             verify(find(smooth, smooth.objectName + "_label_1").visible, "a tier score clear of the PB stays")
 
-            // A PB near its chunk's end would cover that chunk's score: the score gives way.
+            // A PB near its chunk's end would cover that chunk's score: the score moves out of
+            // its way, and the PB stays where the fill ends.
             const near = find(ws, "progressRow_sc-1w4ts_bar")
-            verify(find(near, near.objectName + "_value").visible)
-            verify(!find(near, near.objectName + "_label_3").visible, "the tier score under the PB gives way")
+            const nearValue = find(near, near.objectName + "_value")
+            verify(nearValue.visible)
+            const moved = find(near, near.objectName + "_label_3")
+            const movedChunk = find(near, near.objectName + "_chunk_3")
+            verify(moved.visible, "the tier score under the PB stays visible")
+            verify(movedChunk.labelPlacement === "middle" || movedChunk.labelPlacement === "start",
+                   "it moved off the chunk's end: " + movedChunk.labelPlacement)
+            verify(!near.coversValue(3, moved.implicitWidth, movedChunk.labelPlacement), "clear of the PB")
+            compare(find(near, near.objectName + "_chunk_2").labelPlacement, "end", "the others stay at their ends")
             verify(find(near, near.objectName + "_label_2").visible, "the others stay")
 
             // A full bar leaves no room past the fill: the PB moves inside its end.
@@ -909,6 +922,57 @@ Item {
 
             const unplayed = find(ws, "progressRow_sc-popcorn_bar")
             verify(!find(unplayed, unplayed.objectName + "_value").visible, "the status text owns an unplayed bar")
+        }
+
+        // -- a threshold label moves out of the PB's way ------------------------------
+
+        function makeTierBar(props) {
+            const bar = createTemporaryObject(tierBarComponent, root, {})
+            verify(bar !== null)
+            bar.tiers = [{name: "Iron", barColor: "#80808a"}, {name: "Bronze", barColor: "#cd7f32"}]
+            bar.labels = ["300", "600"]
+            for (const key in props) bar[key] = props[key]
+            wait(0)
+            return bar
+        }
+
+        function placement(bar, index) {
+            return find(bar, "probe_chunk_" + index).labelPlacement
+        }
+
+        function test_thresholdLabelMovesOutOfThePersonalBestsWay() {
+            // Chunk 0 spans [0, 99] of a 200 px bar.
+            const clear = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250"})
+            compare(placement(clear, 0), "end", "a label clear of the PB stays at its chunk's end")
+            compare(find(clear, "probe_label_0").horizontalAlignment, Text.AlignRight)
+
+            const nearEnd = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250"})
+            compare(placement(nearEnd, 0), "middle", "a PB at the chunk's end moves the label to the middle")
+            verify(find(nearEnd, "probe_label_0").visible)
+            compare(find(nearEnd, "probe_label_0").horizontalAlignment, Text.AlignHCenter)
+            compare(placement(nearEnd, 1), "end", "the next chunk's label is unaffected")
+
+            const wide = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890"})
+            verify(!wide.valueInside, "the PB sits past the fill, not inside it")
+            compare(placement(wide, 0), "start", "a PB over the end and middle moves the label to the start")
+            verify(find(wide, "probe_label_0").visible)
+            compare(find(wide, "probe_label_0").horizontalAlignment, Text.AlignLeft)
+            const valueLeft = find(wide, "probe_value").mapToItem(wide, 0, 0).x
+            verify(valueLeft > wide.fillEnd && valueLeft - wide.fillEnd < 8, "the PB stays past the fill's end")
+
+            const narrow = makeTierBar({width: 120, fills: [0.3, 0], valueText: "250"})
+            verify(!narrow.valueInside, "the PB sits past the fill, not inside it")
+            compare(placement(narrow, 0), "", "a narrow chunk the PB covers everywhere hides its label")
+            verify(!find(narrow, "probe_label_0").visible)
+            verify(find(narrow, "probe_value").visible, "the PB still shows")
+
+            // Of the moved places, one clear of the recent-average marker wins.
+            const marked = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250", marker: 0.5})
+            compare(placement(marked, 0), "start", "the middle is under the marker, so the start")
+            const blocked = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890", marker: 0.05})
+            compare(placement(blocked, 0), "start", "under the marker only when nowhere else is clear of the PB")
+            const markedEnd = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250", marker: 0.95})
+            compare(placement(markedEnd, 0), "end", "the marker alone never moves a label")
         }
 
         // -- rank names use their tier colours --------------------------

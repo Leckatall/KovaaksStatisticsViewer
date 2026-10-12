@@ -59,8 +59,9 @@ Item {
     }
 
     // One short text per tier, right-aligned at the end of its chunk (the score that reaches
-    // the tier, which completes the chunk);
-    // "" or absent for none. Hidden under a hatched chunk and behind a status label.
+    // the tier, which completes the chunk); "" or absent for none. Hidden under a hatched
+    // chunk and behind a status label. Where the value label would cover it, it moves to
+    // its chunk's middle, then to its start; see labelPlacementAt().
     property var labels: []
     function labelAt(index) {
         return root.labels && root.labels.length > index ? String(root.labels[index] || "") : ""
@@ -68,7 +69,8 @@ Item {
 
     // --- value label ---------------------------------------------------------------
     // The value the fill stands for, just past the fill's end in valueColor; inside the
-    // fill's end instead when it would run off the bar. A tier label it would cover is hidden.
+    // fill's end instead when it would run off the bar. It never moves for a tier label:
+    // the tier label moves out of its way instead.
     property string valueText: ""
     property color valueColor: root.palette.text
     readonly property real valueGap: 4
@@ -89,12 +91,43 @@ Item {
                                                     - valueLabel.implicitWidth)
                                       : fillEnd + valueGap
     readonly property real valueRight: valueLeft + valueLabel.implicitWidth
-    // Whether a chunk label of `labelWidth` at the end of chunk `index` would touch the value.
-    function coversValue(index, labelWidth) {
+    // The left edge of a chunk label of `labelWidth` in chunk `index` at `placement`
+    // ("end", "middle" or "start"); its width is labelSpanWidth().
+    function labelSpanWidth(index, labelWidth) {
+        return Math.min(labelWidth, Math.max(0, chunkRight(index) - chunkLeft(index) - 2 * labelInset))
+    }
+    function labelSpanLeft(index, labelWidth, placement) {
+        const shown = labelSpanWidth(index, labelWidth)
+        if (placement === "start") return chunkLeft(index) + labelInset
+        if (placement === "middle") return (chunkLeft(index) + chunkRight(index) - shown) / 2
+        return chunkRight(index) - labelInset - shown
+    }
+    // Whether that label would touch the value label.
+    function coversValue(index, labelWidth, placement) {
         if (!valueShown) return false
-        const right = chunkRight(index) - labelInset
-        const left = right - Math.min(labelWidth, chunkRight(index) - chunkLeft(index) - 2 * labelInset)
-        return right > valueLeft - valueGap && left < valueRight + valueGap
+        const left = labelSpanLeft(index, labelWidth, placement)
+        return left + labelSpanWidth(index, labelWidth) > valueLeft - valueGap && left < valueRight + valueGap
+    }
+    // Whether that label would sit under the recent-average marker's tick.
+    function coversMarker(index, labelWidth, placement) {
+        if (marker < 0 || chunkCount <= 0) return false
+        const x = scaleX(marker)
+        const left = labelSpanLeft(index, labelWidth, placement)
+        return left + labelSpanWidth(index, labelWidth) > x - 4 && left < x + 4
+    }
+    // Where chunk `index`'s label of `labelWidth` goes: the end of its chunk, unless the
+    // value label would cover it there. Then the middle, else the start, preferring
+    // whichever of the two is also clear of the marker; "" when the value covers all three.
+    // The value label itself never moves.
+    function labelPlacementAt(index, labelWidth) {
+        if (!coversValue(index, labelWidth, "end")) return "end"
+        const moved = ["middle", "start"].filter(p => !coversValue(index, labelWidth, p))
+        const clear = moved.filter(p => !coversMarker(index, labelWidth, p))
+        return clear.length > 0 ? clear[0] : moved.length > 0 ? moved[0] : ""
+    }
+    function labelAlignment(placement) {
+        return placement === "start" ? Text.AlignLeft
+             : placement === "middle" ? Text.AlignHCenter : Text.AlignRight
     }
     readonly property real labelInset: 3
 
@@ -192,9 +225,11 @@ Item {
             readonly property color onFillColor: (0.299 * fillColor.r + 0.587 * fillColor.g + 0.114 * fillColor.b) > 0.55
                                                  ? Qt.rgba(0.1, 0.1, 0.1, 0.85) : Qt.rgba(1, 1, 1, 0.9)
             readonly property string labelText: root.labelAt(index)
+            // "end" | "middle" | "start": where the label sits, clear of the value; "" for nowhere.
+            readonly property string labelPlacement: root.labelPlacementAt(index, thresholdLabel.implicitWidth)
             readonly property bool labelShown: labelText.length > 0 && !root.missingAt(index)
                                                && root.edgeState !== "unplayed" && root.edgeState !== "unmatched"
-                                               && !root.coversValue(index, thresholdLabel.implicitWidth)
+                                               && labelPlacement.length > 0
             // Scales with the bar, so it keeps its margin in a taller or shorter one.
             readonly property real labelPixelSize: Math.max(8, Math.round(root.height * 0.62))
 
@@ -217,7 +252,8 @@ Item {
                 visible: width > 0
                 color: chunk.fillColor
             }
-            // The score that reaches this tier, at the end of its chunk. One label dim over
+            // The score that reaches this tier, at the end of its chunk (or wherever
+            // labelPlacement moved it). One label dim over
             // the empty track and one, clipped to the fill, in whichever of dark and light reads
             // on the tier colour, so the number is legible across the fill's edge.
             Label {
@@ -227,7 +263,7 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: root.labelInset
                 anchors.rightMargin: root.labelInset
-                horizontalAlignment: Text.AlignRight
+                horizontalAlignment: root.labelAlignment(chunk.labelPlacement)
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
                 font.pixelSize: chunk.labelPixelSize
@@ -244,7 +280,7 @@ Item {
                     height: parent.height
                     leftPadding: root.labelInset
                     rightPadding: root.labelInset
-                    horizontalAlignment: Text.AlignRight
+                    horizontalAlignment: root.labelAlignment(chunk.labelPlacement)
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                     font.pixelSize: chunk.labelPixelSize
