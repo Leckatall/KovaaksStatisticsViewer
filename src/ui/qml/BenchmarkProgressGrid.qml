@@ -428,6 +428,7 @@ Item {
                         markerDescription: String(rowItem.modelData.recentDescription || "")
                         tiers: root.tiers
                         fills: rowItem.modelData.fills || []
+                        labels: rowItem.modelData.thresholdTexts || []
                         description: String(rowItem.modelData.barDescription || "")
                         missing: rowItem.modelData.missingChunks || []
                         edgeState: String(rowItem.modelData.edgeState || "")

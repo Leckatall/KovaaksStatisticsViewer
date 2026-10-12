@@ -436,6 +436,20 @@ TEST(BenchmarkProgressGridModel, MissingThresholdChunksTravelWithTheRow) {
     EXPECT_EQ(fills.at(2).toDouble(), 0.0) << "no partial fill in a chunk without a usable bound";
 }
 
+TEST(BenchmarkProgressGridModel, RowsCarryTheScoreThatReachesEachTier) {
+    auto fake = gridFake();
+    // Gold has no threshold for e1: its text is empty, the others use the shared number format.
+    fake->snap.selectedLoaded->benchmark.categories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 1234.5}};
+    BenchmarkTrackingViewModel vm{fake};
+
+    const QVariantList texts = rowFor(vm.progressGrid(), "e1").value("thresholdTexts").toList();
+    ASSERT_EQ(texts.size(), 3);
+    EXPECT_EQ(texts.at(0).toString(), formatBenchmarkNumber(600.0));
+    EXPECT_EQ(texts.at(1).toString(), formatBenchmarkNumber(1234.5));
+    EXPECT_TRUE(texts.at(2).toString().isEmpty());
+}
+
 TEST(BenchmarkProgressGridModel, BlockingRowsNameTheNextTierInItsColour) {
     auto fake = gridFake();
     fake->snap.projection->tiers[1].color = BenchmarkColor{192, 192, 200}; // Silver, the next tier

@@ -295,6 +295,14 @@ namespace ksv::presentation {
                 for (const bool missing: missingThresholdChunks(m_projection.tiers, entry.thresholds))
                     missingList.push_back(missing);
                 map[QStringLiteral("missingChunks")] = missingList;
+                // The score that reaches each tier, for the middle of its chunk ("" when this
+                // entry has no usable threshold for the tier).
+                QVariantList thresholdList;
+                for (const auto &tier: m_projection.tiers) {
+                    const auto threshold = thresholdFor(entry.thresholds, tier.id);
+                    thresholdList.push_back(threshold ? formatBenchmarkNumber(*threshold) : QString());
+                }
+                map[QStringLiteral("thresholdTexts")] = thresholdList;
                 QString edgeState;
                 QString statusText;
                 QString aboveTopText;

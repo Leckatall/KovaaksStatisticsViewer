@@ -825,6 +825,45 @@ Item {
             verify(!find(smooth, smooth.objectName + "_hatch_2").visible, "the others are not")
         }
 
+        // -- the score that reaches each tier, in the middle of its chunk --------
+
+        function test_eachChunkShowsTheScoreThatReachesItsTierCentred() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            const rows = fx.progressGrid.rows
+            const scores = ["300", "500", "700", "900"]
+            rows[0].thresholdTexts = scores                    // sc-popcorn: unplayed below
+            rows[0].edgeState = "unplayed"
+            rows[0].statusText = "Unplayed"
+            rows[1].thresholdTexts = scores                    // sc-1w4ts: every chunk
+            rows[3].thresholdTexts = scores                    // sc-smooth: Platinum hatched
+            rows[3].missingChunks = [false, false, false, true]
+            const ws = makeWorkspace(fx)
+            wait(0)
+
+            const bar = find(ws, "progressRow_sc-1w4ts_bar")
+            for (let i = 0; i < 4; ++i) {
+                const label = find(bar, bar.objectName + "_label_" + i)
+                const chunk = find(bar, bar.objectName + "_chunk_" + i)
+                verify(label !== null && label.visible, "chunk " + i + " shows its score")
+                compare(label.text, scores[i])
+                fuzzyCompare(label.mapToItem(bar, label.width / 2, 0).x,
+                             chunk.mapToItem(bar, chunk.width / 2, 0).x, 0.5, "chunk " + i + " label is centred")
+            }
+
+            const smooth = find(ws, "progressRow_sc-smooth_bar")
+            verify(find(smooth, smooth.objectName + "_label_2").visible, "a usable chunk keeps its score")
+            verify(!find(smooth, smooth.objectName + "_label_3").visible, "a hatched chunk shows none")
+
+            const unplayed = find(ws, "progressRow_sc-popcorn_bar")
+            for (let i = 0; i < 4; ++i)
+                verify(!find(unplayed, unplayed.objectName + "_label_" + i).visible,
+                       "the status text owns an unplayed bar's middle")
+
+            const bare = find(ws, "progressRow_sc-pasu_bar")
+            for (let i = 0; i < 4; ++i)
+                verify(!find(bare, bare.objectName + "_label_" + i).visible, "a row without scores shows none")
+        }
+
         // -- rank names use their tier colours --------------------------
 
         function test_rankNamesUseTierColours() {

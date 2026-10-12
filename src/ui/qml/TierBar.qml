@@ -52,6 +52,13 @@ Item {
         return root.missing && root.missing.length > index && root.missing[index] === true
     }
 
+    // One short text per tier, centred in its chunk (the score that reaches the tier);
+    // "" or absent for none. Hidden under a hatched chunk and behind a status label.
+    property var labels: []
+    function labelAt(index) {
+        return root.labels && root.labels.length > index ? String(root.labels[index] || "") : ""
+    }
+
     // Unmatched or ambiguous mapping: the bar is only outlined, and says what to fix.
     Rectangle {
         objectName: root.objectName.length > 0 ? root.objectName + "_outline" : ""
@@ -114,6 +121,16 @@ Item {
             required property int index
             readonly property real fill: root.fillAt(index)
             readonly property var tier: root.tiers[index]
+            readonly property color fillColor: tier && String(tier.barColor || "").length > 0
+                                               ? tier.barColor : root.palette.highlight
+            // Dark text on a light tier colour, light text on a dark one.
+            readonly property color onFillColor: (0.299 * fillColor.r + 0.587 * fillColor.g + 0.114 * fillColor.b) > 0.55
+                                                 ? Qt.rgba(0.1, 0.1, 0.1, 0.85) : Qt.rgba(1, 1, 1, 0.9)
+            readonly property string labelText: root.labelAt(index)
+            readonly property bool labelShown: labelText.length > 0 && !root.missingAt(index)
+                                               && root.edgeState !== "unplayed" && root.edgeState !== "unmatched"
+            // Scales with the bar, so it keeps its margin in a taller or shorter one.
+            readonly property real labelPixelSize: Math.max(8, Math.round(root.height * 0.62))
 
             objectName: root.objectName.length > 0 ? root.objectName + "_chunk_" + index : ""
             x: root.chunkLeft(index)
@@ -126,13 +143,47 @@ Item {
                 color: root.trackColor
             }
             Rectangle {
+                id: fillRect
                 objectName: root.objectName.length > 0 ? root.objectName + "_fill_" + chunk.index : ""
                 width: Math.round(parent.width * chunk.fill)
                 height: parent.height
                 radius: 2
                 visible: width > 0
-                color: chunk.tier && String(chunk.tier.barColor || "").length > 0
-                       ? chunk.tier.barColor : root.palette.highlight
+                color: chunk.fillColor
+            }
+            // The score that reaches this tier, centred in its chunk. One label dim over the
+            // empty track and one, clipped to the fill, in whichever of dark and light reads
+            // on the tier colour, so the number is legible across the fill's edge.
+            Label {
+                objectName: root.objectName.length > 0 ? root.objectName + "_label_" + chunk.index : ""
+                visible: chunk.labelShown
+                anchors.fill: parent
+                anchors.leftMargin: 2
+                anchors.rightMargin: 2
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                font.pixelSize: chunk.labelPixelSize
+                color: Qt.alpha(root.palette.text, 0.62)
+                text: chunk.labelText
+            }
+            Item {
+                visible: chunk.labelShown && fillRect.visible
+                width: fillRect.width
+                height: parent.height
+                clip: true
+                Label {
+                    width: chunk.width
+                    height: parent.height
+                    leftPadding: 2
+                    rightPadding: 2
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    font.pixelSize: chunk.labelPixelSize
+                    color: chunk.onFillColor
+                    text: chunk.labelText
+                }
             }
             // Missing thresholds: diagonal hatching instead of any fill.
             Item {
