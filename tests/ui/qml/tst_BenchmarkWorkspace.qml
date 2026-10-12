@@ -535,8 +535,8 @@ Item {
             const row = find(ws, "progressRow_sc-1w4ts")
             verify(row !== null, "row for sc-1w4ts missing")
             compare(find(ws, "progressRow_sc-1w4ts_name").text, "1w4ts")
-            compare(find(ws, "progressRow_sc-1w4ts_personalBest").text, "812")
-            compare(find(ws, "progressRow_sc-1w4ts_recent").text, "790.5")
+            compare(find(ws, "progressRow_sc-1w4ts_personalBestDate").text, "2026-08-14")
+            compare(find(ws, "progressRow_sc-1w4ts_playCount").text, "37")
             compare(find(ws, "progressRow_sc-1w4ts_next").text, "Platinum 900")
             const bar = find(ws, "progressRow_sc-1w4ts_bar")
             verify(bar !== null, "every row has a tier bar")
@@ -674,8 +674,8 @@ Item {
                 verify(header.width >= name.implicitWidth + 14, "tier " + i + " header fits its name: "
                        + header.width + " < " + name.implicitWidth)
             }
-            verify(find(ws, "progressRow_sc-1w4ts_personalBest") !== null
-                   && find(ws, "progressRow_sc-1w4ts_recent") !== null
+            verify(find(ws, "progressRow_sc-1w4ts_personalBestDate") !== null
+                   && find(ws, "progressRow_sc-1w4ts_playCount") !== null
                    && find(ws, "progressRow_sc-1w4ts_next") !== null,
                    "narrow layout preserves every value")
         }
@@ -741,8 +741,8 @@ Item {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), data.w, data.h)
             wait(0)
             const columns = [
-                {header: "progressHeader_pb", cell: "personalBest"},
-                {header: "progressHeader_recent", cell: "recent"},
+                {header: "progressHeader_pbDate", cell: "personalBestDate"},
+                {header: "progressHeader_plays", cell: "playCount"},
                 {header: "progressHeader_next", cell: "next"}
             ]
             for (const column of columns) {

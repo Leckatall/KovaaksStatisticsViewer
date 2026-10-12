@@ -6,6 +6,8 @@
 #include <gtest/gtest.h>
 
 #include <QColor>
+#include <QDateTime>
+#include <QLocale>
 #include <QSignalSpy>
 #include <QVariantList>
 #include <QVariantMap>
@@ -280,17 +282,30 @@ TEST(BenchmarkProgressGridModel, ScenarioValuesShareOneNumberFormat) {
     const QVariantMap e1 = rowFor(grid, "e1");
     EXPECT_EQ(e1.value("name").toString(), "1w6ts");
     EXPECT_EQ(e1.value("personalBestText").toString(), formatBenchmarkNumber(800.0));
-    EXPECT_EQ(e1.value("recentText").toString(), formatBenchmarkNumber(780.0) + " (3)");
     EXPECT_EQ(e1.value("nextTierText").toString(), "Silver");
     EXPECT_EQ(e1.value("nextThresholdText").toString(), formatBenchmarkNumber(850.0));
     EXPECT_EQ(e1.value("attainedTierText").toString(), "Bronze");
 
-    // Five recent runs: no sample count. No runs: a dash in both value columns.
-    EXPECT_EQ(rowFor(grid, "e3").value("recentText").toString(), formatBenchmarkNumber(490.0));
+    // No runs: a dash in every value column.
     const QVariantMap e2 = rowFor(grid, "e2");
     EXPECT_EQ(e2.value("personalBestText").toString(), "—");
-    EXPECT_EQ(e2.value("recentText").toString(), "—");
+    EXPECT_EQ(e2.value("personalBestDateText").toString(), "—");
+    EXPECT_EQ(e2.value("playCountText").toString(), "—");
     EXPECT_EQ(e2.value("attainedTierText").toString(), "Unranked");
+}
+
+TEST(BenchmarkProgressGridModel, RowsCarryThePersonalBestDateAndPlayCount) {
+    auto fake = gridFake();
+    auto &e1 = fake->snap.projection->scenarios[2];
+    ASSERT_EQ(e1.entryId.value, "e1");
+    e1.runCount = 1234;
+    const QDateTime set(QDate(2026, 8, 14), QTime(21, 30));
+    e1.personalBestTime = std::chrono::sys_seconds{std::chrono::seconds{set.toSecsSinceEpoch()}};
+    BenchmarkTrackingViewModel vm{fake};
+
+    const QVariantMap row = rowFor(vm.progressGrid(), "e1");
+    EXPECT_EQ(row.value("personalBestDateText").toString(), "2026-08-14");
+    EXPECT_EQ(row.value("playCountText").toString(), QLocale().toString(1234));
 }
 
 TEST(BenchmarkProgressGridModel, BarFillsAndDescriptionPlaceThePersonalBestOnTheLadder) {

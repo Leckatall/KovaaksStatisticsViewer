@@ -17,6 +17,8 @@ namespace ksv::domain {
         std::string name;
         ScenarioMatchState matchState = ScenarioMatchState::Unresolved;
         std::optional<double> personalBest;
+        // When the PB was first set: the earliest run that scored it.
+        std::optional<std::chrono::sys_seconds> personalBestTime;
         std::optional<double> recentAverage;
         int recentSampleCount = 0;
         int runCount = 0;

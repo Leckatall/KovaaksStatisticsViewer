@@ -81,7 +81,8 @@ function makeFakeProgressRow(overrides) {
         entryId: "n",
         name: "Scenario",
         personalBestText: "—",
-        recentText: "—",
+        personalBestDateText: "—",
+        playCountText: "—",
         attainedTierText: "Unranked",
         attainedTierColor: "",
         fills: [],
@@ -215,7 +216,7 @@ function trackingFixtureIncomplete() {
             tiers: fakeProgressTiers(),
             rows: [
                 makeFakeProgressRow({
-                    entryId: "sc-1", name: "1w4ts", personalBestText: "84.2", recentText: "80.1 (3)",
+                    entryId: "sc-1", name: "1w4ts", personalBestText: "84.2", personalBestDateText: "2026-07-30", playCountText: "3",
                     fills: [0.4, 0, 0, 0], barDescription: "Bronze · 40% of the way to Silver (84.2 / 90)"
                 })
             ],
@@ -269,20 +270,21 @@ function trackingFixtureTrackable() {
                     blocker: true, blockerColor: "#50dcdc", blockerText: "Blocks Platinum (needs 78)"
                 }),
                 makeFakeProgressRow({
-                    entryId: "sc-1w4ts", name: "1w4ts", personalBestText: "812", recentText: "790.5",
+                    entryId: "sc-1w4ts", name: "1w4ts", personalBestText: "812", personalBestDateText: "2026-08-14", playCountText: "37",
                     attainedTierText: "Gold", attainedTierColor: "#ffc828", fills: [1, 1, 0.75, 0],
                     nextTierText: "Platinum", nextTierColor: "#50dcdc", nextThresholdText: "900",
                     barDescription: "Gold · 75% of the way to Platinum (812 / 900)",
                     blocker: true, blockerColor: "#50dcdc", blockerText: "Blocks Platinum (needs 900)"
                 }),
                 makeFakeProgressRow({
-                    entryId: "sc-pasu", name: "Pasu Reload", personalBestText: "1,040.25", recentText: "998 (2)",
+                    entryId: "sc-pasu", name: "Pasu Reload", personalBestText: "1,040.25", personalBestDateText: "2026-08-02",
+                    playCountText: "2",
                     attainedTierText: "Platinum", attainedTierColor: "#50dcdc", fills: [1, 1, 1, 1],
                     nextThresholdText: "Highest tier attained",
                     barDescription: "Platinum · top tier reached (1,040.25 / 1,000)"
                 }),
                 makeFakeProgressRow({
-                    entryId: "sc-smooth", name: "Smoothbot", personalBestText: "3,120", recentText: "3,001",
+                    entryId: "sc-smooth", name: "Smoothbot", personalBestText: "3,120", personalBestDateText: "2026-08-21", playCountText: "1,204",
                     attainedTierText: "Silver", attainedTierColor: "#c0c0c8", fills: [1, 0.2, 0, 0],
                     nextTierText: "Gold", nextTierColor: "#ffc828", nextThresholdText: "3,400",
                     barDescription: "Silver · 20% of the way to Gold (3,120 / 3,400)"

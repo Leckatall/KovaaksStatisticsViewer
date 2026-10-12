@@ -144,6 +144,22 @@ TEST(BenchmarkEvaluator, ProjectsPersonalBestRecentFiveAndTierProgress) {
     EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 18.0);
 }
 
+TEST(BenchmarkEvaluator, PersonalBestTimeIsTheEarliestRunThatScoredIt) {
+    // Out of order on purpose: the later tie (day 9) is listed first.
+    const auto facts = std::vector{benchmarkFact("hash", 9 * kDay, 80.0F), benchmarkFact("hash", 2 * kDay, 50.0F),
+                                   benchmarkFact("hash", 5 * kDay, 80.0F), benchmarkFact("hash", 7 * kDay, 70.0F)};
+    const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
+                                              {resolvedEntry("entry", "hash")}, facts, {});
+    const auto &scenario = scenarioNamed(projection, "entry");
+    EXPECT_DOUBLE_EQ(*scenario.personalBest, 80.0);
+    ASSERT_TRUE(scenario.personalBestTime);
+    EXPECT_EQ(scenario.personalBestTime->time_since_epoch(), std::chrono::seconds{5 * kDay / 1000});
+
+    const auto unplayed = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
+                                            {resolvedEntry("entry", "hash")}, {}, {});
+    EXPECT_FALSE(scenarioNamed(unplayed, "entry").personalBestTime);
+}
+
 TEST(BenchmarkEvaluator, UnplayedAndAutoMappableDoNotClaimCandidateFacts) {
     const auto facts = std::vector{benchmarkFact("hash", kDay, 250.0F)};
     const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},

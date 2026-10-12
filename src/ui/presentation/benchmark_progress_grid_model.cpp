@@ -1,7 +1,9 @@
 #include "benchmark_progress_grid_model.h"
 
 #include <QColor>
+#include <QDateTime>
 #include <QHash>
+#include <QLocale>
 #include <QVariantMap>
 
 #include <algorithm>
@@ -69,13 +71,15 @@ namespace ksv::presentation {
             return {};
         }
 
-        // "5,226.4", plus the sample count when fewer than five runs make up the average.
-        QString recentText(const domain::ScenarioProjection &scenario) {
-            if (!scenario.recentAverage) return QStringLiteral("—");
-            QString text = formatBenchmarkNumber(*scenario.recentAverage);
-            if (scenario.recentSampleCount >= 1 && scenario.recentSampleCount <= 4)
-                text += QObject::tr(" (%1)").arg(scenario.recentSampleCount);
-            return text;
+        // The local day the PB was set, "2026-08-14".
+        QString personalBestDateText(const domain::ScenarioProjection &scenario) {
+            if (!scenario.personalBestTime) return QStringLiteral("—");
+            return QDateTime::fromSecsSinceEpoch(scenario.personalBestTime->time_since_epoch().count())
+                .toString(QStringLiteral("yyyy-MM-dd"));
+        }
+
+        QString playCountText(const domain::ScenarioProjection &scenario) {
+            return scenario.runCount > 0 ? QLocale().toString(scenario.runCount) : QStringLiteral("—");
         }
 
         // Where the PB sits on the ladder, in words: "Silver · 50% of the way to Gold (5,670 / 5,954)".
@@ -235,7 +239,9 @@ namespace ksv::presentation {
                 map[QStringLiteral("name")] = projected ? q(projected->name) : q(entry.name);
                 map[QStringLiteral("personalBestText")] =
                     personalBest ? formatBenchmarkNumber(*personalBest) : QStringLiteral("—");
-                map[QStringLiteral("recentText")] = projected ? recentText(*projected) : QStringLiteral("—");
+                map[QStringLiteral("personalBestDateText")] =
+                    projected ? personalBestDateText(*projected) : QStringLiteral("—");
+                map[QStringLiteral("playCountText")] = projected ? playCountText(*projected) : QStringLiteral("—");
 
                 QString attainedText = QObject::tr("Unranked");
                 QString attainedColor;

@@ -3,8 +3,8 @@ import QtQuick.Controls
 
 // Every scenario of the selected benchmark in one grid laid out like the
 // Benchmark Manager's editor table: Category, Subcategory (only when the benchmark
-// has subcategories), Scenario, a segmented tier bar under one header cell per tier,
-// PB, Recent and Next tier. Group cells span the rows of their scenarios and carry
+// has subcategories), Scenario, a segmented tier bar under one header cell per tier
+// (which shows the PB and the recent average), PB date, Plays and Next tier. Group cells span the rows of their scenarios and carry
 // the group's tint; a row that keeps the benchmark from its next tier is marked in
 // that tier's colour. Columns are measured over every row, so values line up under
 // their headings. When the minimum widths do not fit, the scenario names elide
@@ -47,8 +47,8 @@ Item {
         subcategory: qsTr("Subcategory"),
         scenario: qsTr("Scenario"),
         progress: qsTr("Progress"),
-        pb: qsTr("PB"),
-        recent: qsTr("Recent"),
+        pbDate: qsTr("PB date"),
+        plays: qsTr("Plays"),
         next: qsTr("Next tier")
     })
 
@@ -115,8 +115,8 @@ Item {
             category: boldMetrics.advanceWidth(headers.category),
             subcategory: boldMetrics.advanceWidth(headers.subcategory),
             scenario: boldMetrics.advanceWidth(headers.scenario),
-            pb: boldMetrics.advanceWidth(headers.pb),
-            recent: boldMetrics.advanceWidth(headers.recent),
+            pbDate: boldMetrics.advanceWidth(headers.pbDate),
+            plays: boldMetrics.advanceWidth(headers.plays),
             next: boldMetrics.advanceWidth(headers.next)
         }
         const scenarioHeader = widths.scenario
@@ -126,8 +126,8 @@ Item {
         }
         for (const row of rows) {
             widths.scenario = Math.max(widths.scenario, markerSpace + metrics.advanceWidth(String(row.name)))
-            widths.pb = Math.max(widths.pb, metrics.advanceWidth(String(row.personalBestText)))
-            widths.recent = Math.max(widths.recent, metrics.advanceWidth(String(row.recentText)))
+            widths.pbDate = Math.max(widths.pbDate, metrics.advanceWidth(String(row.personalBestDateText)))
+            widths.plays = Math.max(widths.plays, metrics.advanceWidth(String(row.playCountText)))
             widths.next = Math.max(widths.next, metrics.advanceWidth(nextText(row)))
         }
         for (const key in widths) widths[key] = Math.ceil(widths[key] + 2 * cellPadding)
@@ -151,7 +151,7 @@ Item {
         let scenario = measured.scenario
         const progressMinimum = count * measured.chunk + 2 * barInset
         const progressMaximum = count * Math.max(measured.chunk, maximumChunkWidth) + 2 * barInset
-        const fixed = category + subcategory + scenario + measured.pb + measured.recent + measured.next
+        const fixed = category + subcategory + scenario + measured.pbDate + measured.plays + measured.next
         const progress = Math.min(progressMaximum, Math.max(progressMinimum, totalWidth - fixed))
         const excess = fixed + progress - totalWidth
         if (excess > 0)
@@ -167,8 +167,8 @@ Item {
         place("subcategory", subcategory)
         place("scenario", scenario)
         place("progress", progress)
-        place("pb", measured.pb)
-        place("recent", measured.recent)
+        place("pbDate", measured.pbDate)
+        place("plays", measured.plays)
         place("next", measured.next)
         cols.total = x
         return cols
@@ -266,18 +266,18 @@ Item {
                 Accessible.name: root.headers.progress
             }
             HeaderCell {
-                objectName: "progressHeader_pb"
-                x: root.columns.pb.x
-                width: root.columns.pb.width
+                objectName: "progressHeader_pbDate"
+                x: root.columns.pbDate.x
+                width: root.columns.pbDate.width
                 alignment: Text.AlignRight
-                text: root.headers.pb
+                text: root.headers.pbDate
             }
             HeaderCell {
-                objectName: "progressHeader_recent"
-                x: root.columns.recent.x
-                width: root.columns.recent.width
+                objectName: "progressHeader_plays"
+                x: root.columns.plays.x
+                width: root.columns.plays.width
                 alignment: Text.AlignRight
-                text: root.headers.recent
+                text: root.headers.plays
             }
             HeaderCell {
                 objectName: "progressHeader_next"
@@ -367,7 +367,7 @@ Item {
                         color: root.palette.mid
                     }
                     Repeater {
-                        model: ["category", "subcategory", "scenario", "progress", "pb", "recent", "next"]
+                        model: ["category", "subcategory", "scenario", "progress", "pbDate", "plays", "next"]
                         delegate: Rectangle {
                             required property string modelData
                             visible: root.columns[modelData].width > 0
@@ -440,18 +440,18 @@ Item {
                     }
 
                     ValueCell {
-                        objectName: "progressRow_" + rowItem.modelData.entryId + "_personalBest"
-                        columnX: root.columns.pb.x
-                        columnWidth: root.columns.pb.width
-                        text: String(rowItem.modelData.personalBestText)
-                        Accessible.name: qsTr("PB %1").arg(text)
+                        objectName: "progressRow_" + rowItem.modelData.entryId + "_personalBestDate"
+                        columnX: root.columns.pbDate.x
+                        columnWidth: root.columns.pbDate.width
+                        text: String(rowItem.modelData.personalBestDateText)
+                        Accessible.name: qsTr("PB date %1").arg(text)
                     }
                     ValueCell {
-                        objectName: "progressRow_" + rowItem.modelData.entryId + "_recent"
-                        columnX: root.columns.recent.x
-                        columnWidth: root.columns.recent.width
-                        text: String(rowItem.modelData.recentText)
-                        Accessible.name: qsTr("Recent %1").arg(text)
+                        objectName: "progressRow_" + rowItem.modelData.entryId + "_playCount"
+                        columnX: root.columns.plays.x
+                        columnWidth: root.columns.plays.width
+                        text: String(rowItem.modelData.playCountText)
+                        Accessible.name: qsTr("Plays %1").arg(text)
                     }
                     Row {
                         objectName: "progressRow_" + rowItem.modelData.entryId + "_next"
