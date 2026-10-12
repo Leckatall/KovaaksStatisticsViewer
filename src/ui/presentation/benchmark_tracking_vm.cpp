@@ -253,6 +253,10 @@ namespace ksv::presentation {
             const auto [lo, hi] = std::minmax_element(unionMs.begin(), unionMs.end());
             std::ignore = m_historyXAxis.setEpochMillisecondsRange(*lo, *hi);
         }
+        // A personal-best rank never lapses: hold it flat from its last change to the right-hand edge
+        // of the plotted range, so the current rank reads at the edge.
+        if (rankPresent && rankPoints.last().x() < m_historyXAxis.max())
+            rankPoints.append(QPointF(m_historyXAxis.max(), rankPoints.last().y()));
         m_rankHistory->update(rankPoints, rankPresent, tierNames);
         m_playtimeHistory->update(playtimePoints, playtimePresent, {});
 

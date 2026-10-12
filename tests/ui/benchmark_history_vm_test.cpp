@@ -60,9 +60,27 @@ TEST(BenchmarkHistoryViewModel, CalendarDaysConvertToUtcMidnightEpochMs) {
     const auto series = vm.rankHistory()->series({kValueColumn});
     ASSERT_EQ(series.size(), 1);
     const auto points = series.front()->points;
-    ASSERT_EQ(points.size(), 2);
+    ASSERT_GE(points.size(), 2);
     EXPECT_DOUBLE_EQ(points[0].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 4))));
     EXPECT_DOUBLE_EQ(points[1].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 6))));
+}
+
+TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxis) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
+    // Playtime runs later than the last rank change, and the axis rounds up to a tick.
+    snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 5), 600.0}, {ymd(2024, 3, 20), 1200.0}};
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto series = vm.rankHistory()->series({kValueColumn});
+    ASSERT_EQ(series.size(), 1);
+    const auto points = series.front()->points;
+    ASSERT_EQ(points.size(), 3);
+    EXPECT_DOUBLE_EQ(points[1].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 6))));
+    EXPECT_DOUBLE_EQ(points[2].x(), vm.rankHistory()->xAxis().max());
+    EXPECT_GT(points[2].x(), points[1].x());
+    EXPECT_DOUBLE_EQ(points[2].y(), 2.0);
 }
 
 TEST(BenchmarkHistoryViewModel, BothHistoriesShareTheUnionOfTheirXRanges) {
