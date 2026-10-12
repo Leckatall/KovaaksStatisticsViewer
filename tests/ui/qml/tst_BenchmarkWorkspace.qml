@@ -224,6 +224,36 @@ Item {
             compare(problemChip.kind.toLowerCase(), "invalid")
         }
 
+        // Every exception kind the real view model emits (lowercase) keeps a
+        // visible, labelled pill; only trackable rows show the bare name.
+        function test_selectorLabelsEveryExceptionKind_data() {
+            return [
+                {tag: "incomplete", name: "Half Built", selectable: true},
+                {tag: "invalid", name: "broken.json", selectable: false},
+                {tag: "unsupported", name: "Future Format", selectable: false}
+            ]
+        }
+
+        function test_selectorLabelsEveryExceptionKind(data) {
+            const ws = makeWorkspace({
+                state: "NoSelection",
+                selectorEntries: [
+                    {id: "bench-A", name: "Voltaic S3", classification: "trackable", selectable: true},
+                    {id: data.selectable ? "bench-X" : "", name: data.name,
+                     classification: data.tag, selectable: data.selectable}
+                ]
+            })
+            const chip = find(ws, "selectorEntryLabel_" + data.name)
+            verify(chip !== null, data.tag + " entry has no label")
+            compare(chip.visible, true, "the " + data.tag + " benchmark must keep its label")
+            compare(chip.kind, data.tag)
+            verify(chip.width > 0 && chip.height > 0, "the label must have a size")
+            const row = find(ws, "selectorEntry_" + data.name)
+            compare(row.enabled, data.selectable)
+            verify(row.rightPadding >= chip.width, "the name must leave room for the label")
+            compare(find(ws, "selectorEntryLabel_Voltaic S3").visible, false)
+        }
+
         // showing the workspace with nothing selected asks the view model for
         // the default (remembered or only) benchmark; which one is the use case's call.
         function test_shownWithoutSelectionRequestsDefaultBenchmark() {

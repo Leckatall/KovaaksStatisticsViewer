@@ -80,6 +80,11 @@ TEST(BenchmarkTrackingViewModel, SelectorOrdersLoadedEntriesFirstThenProblemsWit
     EXPECT_EQ(entries.at(4).toMap().value("name").toString(), "p_bad.json");
     EXPECT_FALSE(entries.at(3).toMap().value("selectable").toBool());
     EXPECT_FALSE(entries.at(4).toMap().value("selectable").toBool());
+    // The selector labels every non-trackable entry by this classification string.
+    EXPECT_EQ(entries.at(0).toMap().value("classification").toString(), "incomplete");
+    EXPECT_EQ(entries.at(1).toMap().value("classification").toString(), "trackable");
+    EXPECT_EQ(entries.at(3).toMap().value("classification").toString(), "unsupported");
+    EXPECT_EQ(entries.at(4).toMap().value("classification").toString(), "invalid");
 }
 
 TEST(BenchmarkTrackingViewModel, EmptyLibraryStateExposesInstallGuidance) {
