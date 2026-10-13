@@ -977,6 +977,34 @@ TestCase {
         compare(table.manager.editThresholdTextCalls, [["a", "t1", "12oops"]])
     }
 
+    // With the suggestion list open, the first Escape closes just the list and keeps the editor and
+    // its text; the second cancels the edit. Neither renames the scenario.
+    function test_escapeClosesSuggestionListBeforeDiscarding() {
+        const table = sessionCommandTable()
+        table.manager.scenarioCatalogue = [{name: "Gamma", hash: "hash-g"}, {name: "Gazelle", hash: "hash-z"}]
+        verify(table.focusCell({entryId: "a", columnKind: 2}))
+        keyClick(Qt.Key_Return)
+        tryVerify(() => table.activeEditor !== null)
+        const editor = table.activeEditor
+        editor.selectAll()
+        typeText("Ga")
+        tryVerify(() => editor.suggestionPopupView.opened, 3000, "typing opens the suggestion list")
+
+        keyClick(Qt.Key_Escape)
+
+        tryVerify(() => !editor.suggestionPopupView.opened, 3000, "the first Escape closes the list")
+        wait(50)
+        verify(table.activeEditor === editor, "the editor stays open")
+        compare(editor.text, "Ga")
+        compare(table.manager.commandLog, [])
+
+        keyClick(Qt.Key_Escape)
+
+        tryVerify(() => table.activeEditor === null)
+        wait(50)
+        compare(table.manager.commandLog, [], "Escape never renames the scenario")
+    }
+
     // Undo reveals the restored cell; a rank header that held focus must not take it back later.
     function test_undoFromRankHeaderEndsOnRestoredCell() {
         const ref = {}

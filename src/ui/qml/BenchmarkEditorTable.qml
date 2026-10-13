@@ -1028,9 +1028,6 @@ FocusScope {
                 } else if (suggestionPopup.opened && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
                     editor.chooseSuggestion(editor.suggestions()[editor.suggestionIndex])
                     event.accepted = true
-                } else if (suggestionPopup.opened && event.key === Qt.Key_Escape) {
-                    suggestionPopup.close()
-                    event.accepted = true
                 } else {
                     root.handleCommandKey(event)
                 }
@@ -1042,8 +1039,9 @@ FocusScope {
             }
             // TableView's editor event filter closes the editor on the Escape key press before
             // Keys sees it; the shortcut override sent ahead of that press is where the text is
-            // marked discarded. While the menu is open the override is left unaccepted, so the
-            // Escape shortcut below closes the menu instead and no key press reaches TableView.
+            // marked discarded. While the menu or the suggestion list is open the override is left
+            // unaccepted, so the Escape shortcut below closes it instead and no key press reaches
+            // TableView.
             Keys.onShortcutOverride: (event) => {
                 if (suggestionPopup.opened && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
                     event.accepted = true
@@ -1056,14 +1054,19 @@ FocusScope {
             }
             TableView.onCommit: editor.commitNow()
 
-            // The menu never holds focus (see below), so it cannot close itself on Escape. A window
-            // shortcut outside an open popup is not matched, hence the application context; it is
-            // enabled only while this menu is open.
+            // Neither the menu nor the suggestion list holds focus (see below), so they cannot close
+            // themselves on Escape. A window shortcut outside an open popup is not matched, hence
+            // the application context; it is enabled only while one of them is open. The menu is
+            // the more recent popup, so it closes first.
             Shortcut {
+                objectName: "editorEscapeShortcut"
                 sequence: "Escape"
                 context: Qt.ApplicationShortcut
-                enabled: editorMenu.opened
-                onActivated: editorMenu.close()
+                enabled: editorMenu.opened || suggestionPopup.opened
+                onActivated: {
+                    if (editorMenu.opened) editorMenu.close()
+                    else suggestionPopup.close()
+                }
             }
 
             // Replaces the style's menu, whose Paste and Undo act on the text field alone. Session
