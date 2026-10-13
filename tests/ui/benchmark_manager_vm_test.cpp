@@ -1916,3 +1916,33 @@ TEST(BenchmarkTableModelHeaders, TierHeadersListEveryRankInColumnOrder) {
     EXPECT_EQ(headers[1].toMap().value("name").toString(), "Platinum");
     EXPECT_TRUE(headers[1].toMap().value("hasIssues").toBool());
 }
+
+// The editor sizes the identifying columns from these, including rows it has no delegate for.
+TEST(BenchmarkTableModelHeaders, IdentityTextsListEveryRowInRowOrder) {
+    BenchmarkTableModel model;
+    BenchmarkTableProjection projection;
+    BenchmarkTableRow grouped;
+    grouped.entryId = "a";
+    grouped.name = "1wall6targets";
+    grouped.category = {"c1", "Clicking", QColor("#00bcd4"), 0, 1, {}};
+    grouped.subcategory = {"s1", "Static", QColor("#26a69a"), 0, 1, {}};
+    BenchmarkTableRow uncategorized;
+    uncategorized.entryId = "b";
+    uncategorized.category = {"", "Uncategorized", QColor(), 1, 1, {}};
+    projection.rows = {grouped, uncategorized};
+    model.setProjection(projection);
+
+    const QVariantList texts = model.identityTexts();
+    ASSERT_EQ(texts.size(), 2);
+    const QVariantMap first = texts[0].toMap();
+    EXPECT_EQ(first.value("categoryId").toString(), "c1");
+    EXPECT_EQ(first.value("category").toString(), "Clicking");
+    EXPECT_EQ(first.value("subcategoryId").toString(), "s1");
+    EXPECT_EQ(first.value("subcategory").toString(), "Static");
+    EXPECT_EQ(first.value("scenario").toString(), "1wall6targets");
+    const QVariantMap second = texts[1].toMap();
+    EXPECT_EQ(second.value("categoryId").toString(), "");
+    EXPECT_EQ(second.value("category").toString(), "Uncategorized");
+    EXPECT_EQ(second.value("subcategoryId").toString(), "");
+    EXPECT_EQ(second.value("scenario").toString(), "");
+}

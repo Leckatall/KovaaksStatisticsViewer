@@ -23,7 +23,48 @@ FocusScope {
 
     property int rowHeight: 30
     property int headerHeight: 34
-    property var identityWidths: [130, 120, 200]
+    // The identifying columns' comfortable widths. A table too narrow for them and one rank column
+    // narrows them toward the width their content needs (never below it), each in proportion to
+    // the room it has to spare; minimumTableWidth is where that runs out.
+    readonly property var identityPreferredWidths: [130, 120, 200]
+    readonly property var identityHeaders: [qsTr("Category"), qsTr("Subcategory"), qsTr("Scenario")]
+    property int identityContentRevision: 0
+    readonly property var identityContentWidths: {
+        root.identityContentRevision
+        const bold = text => Math.ceil(identityBoldMetrics.advanceWidth(text))
+        const plain = text => Math.ceil(identityMetrics.advanceWidth(text))
+        // The header labels and the add controls under the columns.
+        const widths = root.identityHeaders.map(text => bold(text) + 12)
+        widths[0] = Math.max(widths[0], Math.ceil(addCategoryPlus.implicitWidth))
+        widths[2] = Math.max(widths[2], Math.ceil(addScenarioPlus.implicitWidth))
+        // A cell's label keeps 6px on either side, or on the right clears a group's swatch (and a
+        // category's add-subcategory button); see TableCell.
+        const rows = root.tableModel && typeof root.tableModel.identityTexts === "function"
+                     ? root.tableModel.identityTexts() : []
+        for (const row of rows) {
+            widths[0] = Math.max(widths[0], bold(row.category) + (row.categoryId !== "" ? 54 : 12))
+            if (row.subcategoryId !== "")
+                widths[1] = Math.max(widths[1], bold(row.subcategory) + 30)
+            widths[2] = Math.max(widths[2], plain(row.scenario !== "" ? row.scenario : qsTr("Unnamed scenario")) + 12)
+        }
+        return widths.map((width, column) => Math.min(width, root.identityPreferredWidths[column]))
+    }
+    readonly property var identityWidths: {
+        const preferred = root.identityPreferredWidths
+        const content = root.identityContentWidths
+        const total = preferred[0] + preferred[1] + preferred[2]
+        const slack = total - (content[0] + content[1] + content[2])
+        const room = tableBody.width - root.rankSlotWidth - root.rankHeaderMinimumWidth
+        if (room >= total || slack <= 0) return preferred
+        const give = Math.min(1, (total - room) / slack)
+        return preferred.map((width, column) => Math.floor(width - (width - content[column]) * give))
+    }
+    onIdentityWidthsChanged: Qt.callLater(identityView.forceLayout)
+    // The narrowest the table can be with every identifying column fitting its content and one
+    // rank column (the widest header's width) in view; the editor never gets narrower.
+    readonly property int minimumTableWidth: root.identityContentWidths[0] + root.identityContentWidths[1]
+                                             + root.identityContentWidths[2] + root.rankSlotWidth
+                                             + root.rankHeaderMinimumWidth
     // Every rank column has the same width (the scrollbar's position estimate relies on it): an
     // equal share of what the identifying columns and the add-rank slot leave, but never narrower
     // than the widest rank header needs, so no header is clipped; below that the ranks scroll.
@@ -112,9 +153,20 @@ FocusScope {
         id: rankHeaderMetrics
         font.bold: true
     }
+    FontMetrics {
+        id: identityBoldMetrics
+        font.bold: true
+    }
+    FontMetrics {
+        id: identityMetrics
+    }
     Connections {
         target: root.tableModel
-        function onModelReset() { root.tierHeaderRevision++ }
+        function onModelReset() {
+            root.tierHeaderRevision++
+            root.identityContentRevision++
+        }
+        function onDataChanged() { root.identityContentRevision++ }
         function onHeaderDataChanged() { root.tierHeaderRevision++ }
         function onColumnsInserted() { root.tierHeaderRevision++ }
         function onColumnsRemoved() { root.tierHeaderRevision++ }
@@ -1265,7 +1317,7 @@ FocusScope {
                 Row {
                     Layout.preferredHeight: root.headerHeight
                     Repeater {
-                        model: [qsTr("Category"), qsTr("Subcategory"), qsTr("Scenario")]
+                        model: root.identityHeaders
                         delegate: Rectangle {
                             required property string modelData
                             required property int index
@@ -1688,6 +1740,7 @@ FocusScope {
             }
             Item { width: root.identityWidths[1]; height: root.rowHeight }
             AddRowButton {
+                id: addScenarioPlus
                 objectName: "addScenarioPlus"
                 width: root.identityWidths[2]
                 height: root.rowHeight

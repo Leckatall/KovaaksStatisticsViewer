@@ -1115,6 +1115,32 @@ TestCase {
         verify(editor.width > dialog.width * 0.6, "the editor has the rest: " + editor.width)
     }
 
+    // Dragging the divider all the way toward the editor stops while the table still has its
+    // identifying columns and one whole rank column in view.
+    function test_squeezedEditorKeepsARankColumnInView() {
+        const names = ["Iron", "Bronze", "Silver", "Gold", "Platinum"]
+        const dialog = openWithTable({tiers: names.map((name, i) => ({id: "t" + i, name: name})),
+                                      rows: [{entryId: "a", name: "Alpha", cells: {}}]},
+                                     {libraryEntries: openableEntries()})
+        const pane = find(dialog, "libraryPane")
+        const editor = find(dialog, "editorPane")
+        const table = dialog.editorTable
+        tryVerify(() => editor.width > 0)
+        verify(table.minimumTableWidth > 360, "fixture: the table needs more than the toolbar's minimum")
+
+        const handle = pane.mapToItem(dialog.contentItem, pane.width + 5, pane.height / 2)
+        mouseDrag(dialog.contentItem, handle.x, handle.y, dialog.width, 0)
+        tryVerify(() => editor.width < 700, 2000, "the divider moved, editor " + editor.width)
+        verify(editor.width >= table.minimumTableWidth - 0.5,
+               "the editor " + editor.width + " is narrower than the table's minimum " + table.minimumTableWidth)
+
+        tryVerify(() => find(dialog, "rankHeader_t0") !== null)
+        const first = find(dialog, "rankHeader_t0")
+        tryVerify(() => first.mapToItem(editor, first.width, 0).x <= editor.width - table.rankSlotWidth + 0.5,
+                  2000, "the first rank column is cut off")
+        tryCompare(find(dialog, "thresholdHorizontalBar"), "visible", true, 2000, "the other ranks scroll")
+    }
+
     function test_libraryToggleHidesTheListForTheEditorAndRestoresIt() {
         const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
         const pane = find(dialog, "libraryPane")

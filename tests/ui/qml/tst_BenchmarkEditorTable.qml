@@ -1261,4 +1261,38 @@ TestCase {
         verify(scenario !== null)
         compare(table.identityView.width, table.identityWidths[0] + table.identityWidths[1] + table.identityWidths[2])
     }
+
+    // Too narrow for the identifying columns and a rank, the identifying columns give way toward
+    // their content, so down to minimumTableWidth the first rank stays whole and nothing is elided.
+    function test_identifyingColumnsShrinkToTheirContentToKeepARankInView() {
+        const table = makeTable({tiers: tiersNamed(4), rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const bar = ItemLookup.findByObjectName(table, "thresholdHorizontalBar")
+        const preferredTotal = table.identityPreferredWidths.reduce((sum, width) => sum + width, 0)
+        table.width = 1100
+        tryCompare(table, "identityTotalWidth", preferredTotal)
+        verify(table.minimumTableWidth < preferredTotal + table.rankSlotWidth + table.rankHeaderMinimumWidth,
+               "fixture: the content fits in less than the comfortable widths")
+
+        table.width = table.minimumTableWidth
+        tryVerify(() => table.identityWidths.every((width, column) => width === table.identityContentWidths[column]),
+                  2000, "identity widths " + table.identityWidths + ", content " + table.identityContentWidths)
+        verify(table.identityTotalWidth < preferredTotal)
+        tryVerify(() => [0, 1, 2].every(column => table.identityView.columnWidth(column) === table.identityWidths[column]),
+                  2000, "the identity view lays out the narrower columns")
+        const scenario = cellFor(table, "a", "scenario")
+        verify(scenario !== null)
+        verify(!headerLabel(scenario.face).truncated, "the scenario name is not elided")
+
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_r0") !== null)
+        const first = ItemLookup.findByObjectName(table, "rankHeader_r0")
+        tryVerify(() => Math.abs(first.mapToItem(table, 0, 0).x - table.identityTotalWidth) < 0.5, 2000,
+                  "the first rank header follows the scenario column")
+        verify(first.mapToItem(table, first.width, 0).x <= table.width - table.rankSlotWidth + 0.5,
+               "the first rank header is whole")
+        verify(!headerLabel(first).truncated)
+        tryCompare(bar, "visible", true, 2000, "the other ranks scroll")
+
+        table.width = 1100
+        tryCompare(table, "identityTotalWidth", preferredTotal)
+    }
 }

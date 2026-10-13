@@ -826,7 +826,8 @@ ApplicationWindow {
                 id: editorPane
                 objectName: "editorPane"
                 SplitView.fillWidth: true
-                SplitView.minimumWidth: 360
+                // Never so narrow that the table loses its last rank column (and its scrollbar).
+                SplitView.minimumWidth: Math.max(360, editorTable.minimumTableWidth)
 
                 ColumnLayout {
                     anchors.fill: parent
