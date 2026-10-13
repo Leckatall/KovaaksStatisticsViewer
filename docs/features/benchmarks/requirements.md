@@ -223,26 +223,26 @@ For this personal/open-source desktop product, successful use and trustworthy an
 
 ## Acceptance criteria
 
-- [ ] Given the representative playlist fixture, importing it preserves its scenario order, offers its playlist name, and creates an incomplete benchmark with every unique scenario in Uncategorized.
-- [ ] Given a manual benchmark, the user can add both known profile scenarios and unplayed scenarios by name.
-- [ ] Given an incomplete benchmark, saving and reopening it preserves all entered work, identifies remaining setup issues, and does not expose official or average-rank calculations as complete results.
-- [ ] Given a benchmark with no name, no scenarios, no tiers, missing thresholds, or an empty user-created category or subcategory, it remains incomplete and cannot present group rank calculations; an empty Uncategorized section does not have this effect.
-- [ ] Given a benchmark with shared ordered tiers, every scenario can store a strictly increasing threshold for each tier, and equality with a threshold qualifies for that tier.
-- [ ] Given scenarios in Uncategorized, each must individually attain a tier before the benchmark can officially attain it.
-- [ ] Given a direct-scenario category, any qualifying scenario satisfies that category; given a category of subcategories, every subcategory requires at least one qualifying scenario.
-- [ ] Given a category with direct scenarios, KSV prevents it from simultaneously containing subcategories.
-- [ ] Given every scenario in the benchmark has attained a tier, the benchmark reports that tier as complete; if any scenario has not attained it, the benchmark does not report that tier as complete.
-- [ ] Given score values between tier thresholds, KSV produces the expected fractional tier values and averages all benchmark scenarios equally, including unplayed scenarios as zero.
-- [ ] Given a score above the highest threshold, average-rank calculation interprets it as the highest tier while retaining the uncapped raw score and personal best.
-- [ ] Given historical runs, the average-rank graph reconstructs the personal-best average at each date and does not decrease unless the benchmark definition changes.
-- [ ] Given more than five runs for a scenario, recent average uses exactly its latest five and does not alter permanent attainment.
-- [ ] Given a selected benchmark, the tracking view shows official and completed ranks, average-rank history, total playtime, three-day rolling playtime, and scenario-level blockers.
-- [ ] Given zero, one, or multiple name matches in the profile, KSV respectively keeps the scenario unresolved, binds it automatically, or exposes an ambiguity requiring user choice.
-- [ ] Given a valid benchmark file copied or edited in the managed directory, refresh loads it without restarting the application.
+- [x] Given the representative playlist fixture, importing it preserves its scenario order, offers its playlist name, and creates an incomplete benchmark with every unique scenario in Uncategorized.
+- [x] Given a manual benchmark, the user can add both known profile scenarios and unplayed scenarios by name.
+- [x] Given an incomplete benchmark, saving and reopening it preserves all entered work, identifies remaining setup issues, and does not expose official or average-rank calculations as complete results.
+- [x] Given a benchmark with no name, no scenarios, no tiers, missing thresholds, or an empty user-created category or subcategory, it remains incomplete and cannot present group rank calculations; an empty Uncategorized section does not have this effect.
+- [x] Given a benchmark with shared ordered tiers, every scenario can store a strictly increasing threshold for each tier, and equality with a threshold qualifies for that tier.
+- [x] Given scenarios in Uncategorized, each must individually attain a tier before the benchmark can officially attain it.
+- [x] Given a direct-scenario category, any qualifying scenario satisfies that category; given a category of subcategories, every subcategory requires at least one qualifying scenario.
+- [x] Given a category with direct scenarios, KSV prevents it from simultaneously containing subcategories.
+- [x] Given every scenario in the benchmark has attained a tier, the benchmark reports that tier as complete; if any scenario has not attained it, the benchmark does not report that tier as complete.
+- [x] Given score values between tier thresholds, KSV produces the expected fractional tier values and averages all benchmark scenarios equally, including unplayed scenarios as zero.
+- [x] Given a score above the highest threshold, average-rank calculation interprets it as the highest tier while retaining the uncapped raw score and personal best.
+- [x] Given historical runs, the average-rank graph reconstructs the personal-best average at each date and does not decrease unless the benchmark definition changes.
+- [x] Given more than five runs for a scenario, recent average uses exactly its latest five and does not alter permanent attainment.
+- [x] Given a selected benchmark, the tracking view shows official and completed ranks, average-rank history, total playtime, three-day rolling playtime, and scenario-level blockers.
+- [x] Given zero, one, or multiple name matches in the profile, KSV respectively keeps the scenario unresolved, binds it automatically, or exposes an ambiguity requiring user choice.
+- [x] Given a valid benchmark file copied or edited in the managed directory, refresh loads it without restarting the application.
 - [ ] Given an invalid benchmark file, the manager shows its name when safely available, otherwise its filename, plus a useful validation reason while continuing to load valid benchmarks.
-- [ ] Given unsaved manager edits, refresh cannot silently replace them.
-- [ ] Given threshold, membership, or hierarchy edits, saved tracking results are recalculated across existing history and the user is warned that interpretation will change.
-- [ ] Given an unsupported newer file version or failed migration/save, KSV preserves recoverable data, reports the failure, and does not claim that the benchmark loaded or saved successfully.
+- [x] Given unsaved manager edits, refresh cannot silently replace them.
+- [x] Given threshold, membership, or hierarchy edits, saved tracking results are recalculated across existing history and the user is warned that interpretation will change.
+- [x] Given an unsupported newer file version or failed migration/save, KSV preserves recoverable data, reports the failure, and does not claim that the benchmark loaded or saved successfully.
 
 ## Assumptions and non-material open questions
 

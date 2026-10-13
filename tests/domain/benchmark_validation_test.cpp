@@ -107,6 +107,36 @@ TEST(BenchmarkValidation, EmptyUserCategoryIsIncompleteButEmptyUncategorizedIsNo
     EXPECT_FALSE(hasCode(validateBenchmark(onlyEmptyUncategorized), BenchmarkIssueCode::EmptyCategory));
 }
 
+TEST(BenchmarkValidation, EmptySubcategoryIsIncomplete) {
+    auto def = trackable();
+    Category category{GroupId{"g1"}, "Cat", {}, {}, {}};
+    category.subcategories = {
+        Subcategory{GroupId{"full"}, "Full", {}, {entry("s2", "Two", {Threshold{TierId{"t1"}, 10.0}})}},
+        Subcategory{GroupId{"empty"}, "Empty", {}, {}}};
+    def.categories.push_back(std::move(category));
+
+    const auto result = validateBenchmark(def);
+
+    EXPECT_EQ(result.completeness, Completeness::Incomplete);
+    const auto empty = std::ranges::find_if(result.issues, [](const auto &issue) {
+        return issue.code == BenchmarkIssueCode::EmptySubcategory;
+    });
+    ASSERT_NE(empty, result.issues.end());
+    EXPECT_EQ(empty->target, IssueTarget{GroupId{"empty"}});
+}
+
+TEST(BenchmarkValidation, AnEmptyUncategorizedSectionLeavesAFullyCategorizedBenchmarkTrackable) {
+    auto def = trackable();
+    Category category{GroupId{"g1"}, "Cat", {}, def.uncategorized, {}};
+    def.uncategorized.clear();
+    def.categories.push_back(std::move(category));
+
+    const auto result = validateBenchmark(def);
+
+    EXPECT_EQ(result.completeness, Completeness::Trackable);
+    EXPECT_TRUE(result.issues.empty());
+}
+
 TEST(BenchmarkValidation, MixedCategoryContentIsIncomplete) {
     auto def = trackable();
     Category mixed{GroupId{"g1"}, "Cat", {}, {entry("s2", "Two", {Threshold{TierId{"t1"}, 10.0}})},
