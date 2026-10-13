@@ -429,6 +429,28 @@ Item {
                    "the incomplete body lists its scenarios in the progress grid too")
         }
 
+        // The incomplete page reads in the trackable page's order: the notice with
+        // its issues and the edit action first, then the progress table, then the
+        // playtime chart.
+        function test_incompletePageListsTheTableBeforeTheChart() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureIncomplete())
+            const top = function (name) {
+                const item = find(ws, name)
+                verify(item !== null, name + " missing")
+                return item.mapToItem(ws, 0, 0).y
+            }
+            const issues = findAllPrefixed(ws, "completenessIssue_")
+            const lastIssue = issues[issues.length - 1].mapToItem(ws, 0, 0).y
+            verify(top("incompleteBody") < top("completenessIssue_0"), "message before its issue list")
+            verify(lastIssue < top("editBenchmarkButton"), "issue list before the edit button")
+            verify(top("editBenchmarkButton") < top("benchmarkProgressGrid"),
+                   "edit button before the progress table")
+            verify(top("benchmarkProgressGrid") < top("incompleteTotalPlaytime"),
+                   "progress table before the playtime summary")
+            verify(top("incompleteTotalPlaytime") < top("playtimeHistoryCard"),
+                   "playtime summary before the chart")
+        }
+
         function test_trackableShowsAllSeparatelyLabelledSummaryValues() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             verify(find(ws, "benchmarkStatusSummary") !== null, "trackable state must show the status summary")

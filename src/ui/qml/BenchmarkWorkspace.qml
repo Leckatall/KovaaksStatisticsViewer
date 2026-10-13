@@ -409,6 +409,15 @@ Item {
                     onClicked: root.manageBenchmarksRequested()
                 }
 
+                // Same order as the trackable page: the table, then the charts.
+                BenchmarkProgressGrid {
+                    objectName: "benchmarkProgressGrid"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: implicitHeight
+                    grid: root.trackingVm ? root.trackingVm.progressGrid : null
+                    benchmarkKey: root.trackingVm ? root.trackingVm.selectedName : ""
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -429,14 +438,6 @@ Item {
                     Layout.minimumHeight: 200
                     namePrefix: "playtimeHistory"
                     historyModel: root.trackingVm ? root.trackingVm.playtimeHistory : null
-                }
-
-                BenchmarkProgressGrid {
-                    objectName: "benchmarkProgressGrid"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: implicitHeight
-                    grid: root.trackingVm ? root.trackingVm.progressGrid : null
-                    benchmarkKey: root.trackingVm ? root.trackingVm.selectedName : ""
                 }
             }
         }
