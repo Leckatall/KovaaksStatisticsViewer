@@ -1252,6 +1252,59 @@ TestCase {
         fuzzyCompare(view.contentX, middle, 0.5, "the user's scroll position is kept")
     }
 
+    function namedTiers(prefix, names) {
+        return names.map((name, i) => ({id: prefix + i, name: name}))
+    }
+
+    // Opening a benchmark whose ranks are wider than the one shown (a model reset that also widens
+    // every rank column) keeps the same number of ranks scrolled past, at the new width: none at
+    // all leaves the first rank right after the scenario column, not part-way into it.
+    function test_resetToWiderOverflowingRanksKeepsWholeRanksScrolled_data() {
+        const short = ["Iron", "Bronze", "Silver", "Gold", "Plat"]
+        const long = []
+        for (let i = 0; i < 12; ++i) long.push("Grandmaster Elite " + i)
+        const shortTwelve = []
+        for (let i = 0; i < 12; ++i) shortTwelve.push("R" + i)
+        return [
+            {tag: "fewer ranks that fit, at the first rank", from: short, to: long, scrolled: 0},
+            {tag: "as many ranks, at the first rank", from: shortTwelve, to: long, scrolled: 0},
+            {tag: "as many ranks, two scrolled past", from: shortTwelve, to: long, scrolled: 2},
+        ]
+    }
+    function test_resetToWiderOverflowingRanksKeepsWholeRanksScrolled(data) {
+        const ref = {}
+        const rows = [{entryId: "a", name: "Alpha", cells: {}}]
+        const table = makeTable({tiers: namedTiers("s", data.from), rows: rows}, undefined, ref)
+        const view = table.thresholdView
+        tryVerify(() => table.laidOutThresholdWidth === table.thresholdWidth && table.laidOutThresholdWidth > 0)
+        const before = table.laidOutThresholdWidth
+        if (data.scrolled > 0) {
+            verify(table.rankScrollRange >= data.scrolled * before, "fixture: the first ranks overflow")
+            view.contentX = rankScrollStart(table) + data.scrolled * before
+            waitForRendering(table)
+        }
+
+        ref.fixture.setProjection(TestDoubles.benchmarkTableProjection({tiers: namedTiers("w", data.to), rows: rows}))
+        tryCompare(view, "columns", 3 + data.to.length)
+        tryVerify(() => table.laidOutThresholdWidth === table.thresholdWidth)
+        verify(table.thresholdWidth > before, "fixture: the new ranks are wider, " + before + " -> " + table.thresholdWidth)
+        verify(table.rankColumnsWidth > table.availableRankWidth, "fixture: the new ranks overflow")
+        waitForRendering(table)
+        wait(50)
+
+        const expected = rankScrollStart(table) + data.scrolled * table.thresholdWidth
+        fuzzyCompare(table.rankScrollStart, rankScrollStart(table), 0.5)
+        fuzzyCompare(view.contentX, expected, 0.5,
+                     "whole ranks scrolled past: contentX " + view.contentX + ", expected " + expected)
+        if (data.scrolled === 0) {
+            tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_w0") !== null && cellFor(table, "a", "w0") !== null)
+            fuzzyCompare(ItemLookup.findByObjectName(table, "rankHeader_w0").mapToItem(table, 0, 0).x,
+                         table.identityTotalWidth, 0.5, "the first rank header follows the scenario column")
+            fuzzyCompare(cellFor(table, "a", "w0").mapToItem(table, 0, 0).x, table.identityTotalWidth, 0.5,
+                         "the first rank cell follows the scenario column")
+        }
+    }
+
     function test_identifyingColumnsKeepTheirWidthWhenThereAreNoRanks() {
         const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
         const placeholder = ItemLookup.findByObjectName(table, "emptyRankHeader")

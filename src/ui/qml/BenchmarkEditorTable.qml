@@ -105,6 +105,7 @@ FocusScope {
         const width = root.thresholdWidth
         if (root.activeEditor) return
         if (previous === width) {
+            root.restoreRankScrollAfterReset()
             root.clampRankScroll()
             return
         }
@@ -115,7 +116,9 @@ FocusScope {
             root.clampRankScroll()
             return
         }
-        const scrolledRanks = Math.max(0, thresholdView.contentX - root.thresholdKind * previous) / previous
+        const scrolledRanks = root.rankScrollOnReset >= 0
+                              ? root.rankScrollOnReset
+                              : Math.max(0, thresholdView.contentX - root.thresholdKind * previous) / previous
         const contentY = thresholdView.contentY
         const hadFocus = thresholdView.activeFocus
         // The rebuild may clear the selection model; the manager's anchors put it back.
@@ -125,9 +128,31 @@ FocusScope {
         thresholdView.forceLayout()
         thresholdView.contentY = contentY
         thresholdView.contentX = root.rankScrollStart + Math.min(scrolledRanks * width, root.rankScrollRange)
+        if (thresholdView.columns === root.tableModel.columnCount()) root.rankScrollOnReset = -1
         rankHeader.forceLayout()
         if (hadFocus) thresholdView.forceActiveFocus()
         root.scheduleSelectionRestore()
+    }
+
+    // A model reset (another benchmark opened, a rank or row added) is rebuilt by the threshold view
+    // on its own schedule, which can come after the relayout above, and that rebuild keeps the
+    // scroll position in columns of the width laid out before it: a wider rank then lands part-way
+    // into a column. So the ranks scrolled past the first are noted when the reset starts and put
+    // back once the view has caught up with the new model at the current width. -1: none pending.
+    property real rankScrollOnReset: -1
+    function noteRankScrollBeforeReset() {
+        const width = root.laidOutThresholdWidth
+        if (width <= 0 || root.rankScrollOnReset >= 0) return
+        root.rankScrollOnReset = Math.max(0, thresholdView.contentX - root.rankScrollStart) / width
+    }
+    function restoreRankScrollAfterReset() {
+        if (root.rankScrollOnReset < 0 || root.activeEditor || !root.tableModel) return
+        if (thresholdView.columns !== root.tableModel.columnCount()
+                || root.laidOutThresholdWidth !== root.thresholdWidth) return
+        const target = root.rankScrollStart + Math.min(root.rankScrollOnReset * root.thresholdWidth,
+                                                       root.rankScrollRange)
+        root.rankScrollOnReset = -1
+        if (Math.abs(target - thresholdView.contentX) > 0.5) thresholdView.contentX = target
     }
 
     // The threshold view's horizontal scroll range: from the first rank right after the scenario
@@ -162,6 +187,7 @@ FocusScope {
     }
     Connections {
         target: root.tableModel
+        function onModelAboutToBeReset() { root.noteRankScrollBeforeReset() }
         function onModelReset() {
             root.tierHeaderRevision++
             root.identityContentRevision++
@@ -1646,6 +1672,7 @@ FocusScope {
                             leftMargin: -root.hiddenThresholdWidth
                             columnWidthProvider: (column) => root.thresholdColumnWidth(column)
                             rowHeightProvider: () => root.rowHeight
+                            onLayoutChanged: root.restoreRankScrollAfterReset()
                             delegate: TableCell {}
                             ScrollBar.vertical: ScrollBar {}
                             // Always shown while the ranks overflow, under the body rather than over its last
