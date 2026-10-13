@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "benchmark_format.h"
 #include "value_transform.h"
 
 namespace ksv::presentation {
@@ -71,7 +72,14 @@ namespace ksv::presentation {
         if (m_metric == AverageRank) {
             m_series->setName(tr("Personal-best average rank"));
             m_series->setColor(QColor());
+            // The hover tooltip reads the rank as a tier and progress, not as a bare number.
             m_series->transform = ValueTransform::identity();
+            std::vector<QString> tierNames;
+            tierNames.reserve(rankTiers.size());
+            for (const auto &tier: rankTiers) tierNames.push_back(tier.name);
+            m_series->transform.formatter = [tierNames](const qreal value) {
+                return describeAverageRank(value, tierNames);
+            };
             m_series->points = rawPoints;
             m_series->yAxis = rankYAxis(rankTiers);
             m_series->referenceLines.clear();

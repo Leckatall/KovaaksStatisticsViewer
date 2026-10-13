@@ -155,6 +155,29 @@ TEST(BenchmarkHistoryViewModel, RankSeriesSpansUnrankedZeroThroughTierCountWithT
     EXPECT_TRUE(series.front()->name().contains("personal-best average rank", Qt::CaseInsensitive));
 }
 
+TEST(BenchmarkHistoryViewModel, RankTooltipValueReadsAsTheTierAndProgressTowardTheNext) {
+    auto snapshot = makeTrackableSnapshot();
+    // Held flat to the right edge, so every x from the first point on samples the last rank.
+    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 0.25}, {ymd(2024, 3, 5), 1.6},
+                                               {ymd(2024, 3, 6), 2.0}, {ymd(2024, 3, 7), 3.0}};
+    snapshot.projection->rollingPlaytime.clear();
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto series = vm.rankHistory()->series({kValueColumn});
+    ASSERT_EQ(series.size(), 1);
+    const auto &rank = *series.front();
+    const auto at = [&](const int day) {
+        return rank.formattedValueAtX(static_cast<double>(utcMidnightMs(ymd(2024, 3, day))));
+    };
+    EXPECT_EQ(at(4), "Unranked · 25% to Bronze");
+    EXPECT_EQ(at(5), "Bronze · 60% to Silver");
+    EXPECT_EQ(at(6), "Silver · 0% to Gold");
+    EXPECT_EQ(at(7), "Gold · top tier reached");
+    // The axis ticks keep their own labels: whole numbers are tier names.
+    EXPECT_EQ(rank.yAxis->formatTick(2.0), "Silver");
+}
+
 TEST(BenchmarkHistoryViewModel, PlaytimeSeriesHasZeroBaselineSecondsToMinutesAndThreeDayLabel) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};

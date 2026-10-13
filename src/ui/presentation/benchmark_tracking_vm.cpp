@@ -200,7 +200,11 @@ namespace ksv::presentation {
             resolveTier(projection->attainedRank, tr("Unranked"), m_attainedRank, m_attainedRankColor);
             resolveTier(projection->completedRank, tr("None completed"), m_completedRank, m_completedRankColor);
             resolveTier(projection->nextTier, tr("Highest tier attained"), m_nextTier, m_nextTierColor);
-            m_averageRank = projection->averageRank ? formatBenchmarkNumber(*projection->averageRank) : unavailableText;
+            std::vector<QString> tierNames;
+            tierNames.reserve(rankTiers.size());
+            for (const auto &tier: rankTiers) tierNames.push_back(tier.name);
+            m_averageRank = projection->averageRank ? describeAverageRank(*projection->averageRank, tierNames)
+                                                    : unavailableText;
         } else {
             m_attainedRank = unavailableText;
             m_completedRank = unavailableText;

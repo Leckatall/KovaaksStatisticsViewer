@@ -116,7 +116,10 @@ Item {
         visible: hoverArea.hoverInfo.valid === true
         width: tooltipContent.implicitWidth + 16
         height: tooltipContent.implicitHeight + 12
-        x: (idealX + width > parent.width) ? hoverArea.mouseX - width - 14 : idealX
+        // Beside the cursor, flipped to its left when the right is short of room; a box wider than
+        // either side (a long tier description) is kept inside the graph, over the cursor, not cut off.
+        x: Math.max(0, Math.min((idealX + width > parent.width) ? hoverArea.mouseX - width - 14 : idealX,
+                                parent.width - width))
         y: Math.max(0, Math.min(idealY, parent.height - height))
         z: 102
 

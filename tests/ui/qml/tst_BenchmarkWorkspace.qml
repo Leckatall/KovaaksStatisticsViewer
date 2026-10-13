@@ -467,7 +467,7 @@ Item {
 
             compare(attained.text, "Gold")
             compare(completed.text, "Silver")
-            compare(avg.text, "2.75")
+            compare(avg.text, "Silver · 75% to Gold")
             compare(playtime.text, "5 h 40 min")
             compare(nextTier.text, "Platinum")
 
@@ -477,10 +477,10 @@ Item {
         }
 
         // the average rank is drawn on the tier bar, with the completed rank as a tick
-        // and the number in the tooltip.
+        // and the tier and progress in the tooltip.
         function test_summaryAverageRankIsATierBarWithACompletedRankTick() {
             const fx = TestDoubles.trackingFixtureTrackable()
-            fx.averageRank = "2.75"
+            fx.averageRank = "Silver · 75% to Gold"
             fx.averageRankFills = [1, 1, 0.75, 0]
             fx.completedRankPosition = 2      // Silver, the second tier: the end of its chunk
             const ws = makeWorkspace(fx)
@@ -502,7 +502,10 @@ Item {
             verify(tickX >= silverEnd.mapToItem(ws, silverEnd.width, 0).x - 1
                    && tickX <= goldStart.mapToItem(ws, 0, 0).x + 1, "the tick sits at the end of Silver's chunk")
             compare(tick.ToolTip.text, "Completed rank: Silver")
-            compare(area.ToolTip.text, "Average rank 2.75", "the number stays in the tooltip")
+            compare(area.ToolTip.text, "Average rank: Silver · 75% to Gold",
+                    "the tier and progress are in the tooltip, not the bare number")
+            compare(area.Accessible.name, "Average rank: Silver · 75% to Gold")
+            compare(area.Accessible.description, "Average rank: Silver · 75% to Gold")
             verify(find(ws, "summaryAttainedRank").visible && find(ws, "summaryNextTier").visible,
                    "attained rank and next tier stay visible as text")
             // The bar does not push the right-hand column off its half of the card.

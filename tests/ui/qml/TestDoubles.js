@@ -241,7 +241,7 @@ function trackingFixtureTrackable() {
         summaryAvailable: true,
         attainedRank: "Gold",
         completedRank: "Silver",
-        averageRank: "2.75",
+        averageRank: "Silver · 75% to Gold",
         totalPlaytime: "5 h 40 min",
         nextTier: "Platinum",
         attainedRankColor: "#ffc828",

@@ -135,7 +135,7 @@ TEST(BenchmarkTrackingViewModel, TrackableSummaryResolvesRanksAndFormatsAverageA
     EXPECT_EQ(vm.attainedRank(), "Silver");
     EXPECT_EQ(vm.completedRank(), "None completed");
     EXPECT_EQ(vm.nextTier(), "Gold");
-    EXPECT_EQ(vm.averageRank(), QLocale().toString(2.5));
+    EXPECT_EQ(vm.averageRank(), "Silver · 50% to Gold");
     EXPECT_EQ(vm.totalPlaytime(), "1h 1m");
     EXPECT_EQ(vm.scenariosAtNextTier(), 1);
     EXPECT_TRUE(vm.hasNextTier());
@@ -173,17 +173,30 @@ TEST(BenchmarkTrackingViewModel, TotalPlaytimeUsesMinuteAndHourThresholds) {
     EXPECT_EQ(playtimeFor(7320.0), "2h 2m");
 }
 
-TEST(BenchmarkTrackingViewModel, AverageRankUsesLocaleWithAtMostTwoFractionDigitsAndNoTrailingZeroes) {
+// The fixture ladder is Bronze, Silver, Gold: rank 0 is Unranked and k is the k-th tier.
+TEST(BenchmarkTrackingViewModel, AverageRankReadsAsTheTierAndProgressTowardTheNext) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
-    fake->snap.projection->averageRank = 2.5;
-    fake->publish();
-    EXPECT_EQ(vm.averageRank(), QLocale().toString(2.5));
-
-    fake->snap.projection->averageRank = 2.718;
-    fake->publish();
-    EXPECT_EQ(vm.averageRank(), QLocale().toString(2.72));
+    const auto averageFor = [&](const double rank) {
+        fake->snap.projection->averageRank = rank;
+        fake->publish();
+        return vm.averageRank();
+    };
+    // Mid-tier: the fraction is progress toward the next tier.
+    EXPECT_EQ(averageFor(1.6), "Bronze · 60% to Silver");
+    EXPECT_EQ(averageFor(2.5), "Silver · 50% to Gold");
+    // Below the first tier.
+    EXPECT_EQ(averageFor(0.25), "Unranked · 25% to Bronze");
+    EXPECT_EQ(averageFor(0.0), "Unranked · 0% to Bronze");
+    // An exact tier boundary has attained that tier and no progress yet.
+    EXPECT_EQ(averageFor(2.0), "Silver · 0% to Gold");
+    // A mean that lands a rounding error short of a boundary is the boundary, not 99%.
+    EXPECT_EQ(averageFor(2.0 - 1e-12), "Silver · 0% to Gold");
+    // The percentage never reads 100% before the next tier is reached.
+    EXPECT_EQ(averageFor(1.9999), "Bronze · 99% to Silver");
+    // The top tier has nothing to progress toward.
+    EXPECT_EQ(averageFor(3.0), "Gold · top tier reached");
 }
 
 TEST(BenchmarkTrackingViewModel, IncompleteDefinitionShowsIssuesAndSuppressesRankDerivedValues) {

@@ -66,7 +66,7 @@ Frame {
         }
         // The average rank on the tier bar the progress grid uses: Iron, Bronze and
         // Silver full and Gold half full at 3.5, with a tick where the completed rank's
-        // chunk ends. The number itself is in the tooltip.
+        // chunk ends. Where it sits ("Bronze · 60% to Silver") is in the tooltip.
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -85,8 +85,8 @@ Frame {
                 Layout.minimumWidth: 160
                 implicitHeight: averageRankBar.implicitHeight + 8
                 Accessible.role: Accessible.ProgressBar
-                Accessible.name: qsTr("Average rank %1").arg(text)
-                Accessible.description: qsTr("Average rank") + ": " + text
+                Accessible.name: qsTr("Average rank: %1").arg(text)
+                Accessible.description: qsTr("Average rank: %1").arg(text)
 
                 TierBar {
                     id: averageRankBar
@@ -104,7 +104,7 @@ Frame {
                 HoverHandler { id: averageRankHover }
                 ToolTip.visible: averageRankHover.hovered && !averageRankBar.tickHovered
                 ToolTip.delay: 300
-                ToolTip.text: qsTr("Average rank %1").arg(averageRankArea.text)
+                ToolTip.text: qsTr("Average rank: %1").arg(averageRankArea.text)
             }
         }
         Field {

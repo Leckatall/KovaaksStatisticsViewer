@@ -38,6 +38,8 @@ namespace ksv::presentation {
         Q_PROPERTY(QString attainedRankColor READ attainedRankColor NOTIFY changed)
         Q_PROPERTY(QString completedRankColor READ completedRankColor NOTIFY changed)
         Q_PROPERTY(QString nextTierColor READ nextTierColor NOTIFY changed)
+        // The average rank in words ("Bronze · 60% to Silver"; see describeAverageRank), or
+        // "Unavailable". Never the bare number.
         Q_PROPERTY(QString averageRank READ averageRank NOTIFY changed)
         // The average rank as tier bar chunk fills (rankChunkFills), and the completed rank as a
         // position on that bar's chunk scale (the end of its chunk), or -1 when none is completed.
