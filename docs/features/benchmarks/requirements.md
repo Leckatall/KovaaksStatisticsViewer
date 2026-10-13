@@ -239,7 +239,7 @@ For this personal/open-source desktop product, successful use and trustworthy an
 - [x] Given a selected benchmark, the tracking view shows official and completed ranks, average-rank history, total playtime, three-day rolling playtime, and scenario-level blockers.
 - [x] Given zero, one, or multiple name matches in the profile, KSV respectively keeps the scenario unresolved, binds it automatically, or exposes an ambiguity requiring user choice.
 - [x] Given a valid benchmark file copied or edited in the managed directory, refresh loads it without restarting the application.
-- [ ] Given an invalid benchmark file, the manager shows its name when safely available, otherwise its filename, plus a useful validation reason while continuing to load valid benchmarks.
+- [x] Given an invalid benchmark file, the manager shows its name when safely available, otherwise its filename, plus a useful validation reason while continuing to load valid benchmarks.
 - [x] Given unsaved manager edits, refresh cannot silently replace them.
 - [x] Given threshold, membership, or hierarchy edits, saved tracking results are recalculated across existing history and the user is warned that interpretation will change.
 - [x] Given an unsupported newer file version or failed migration/save, KSV preserves recoverable data, reports the failure, and does not claim that the benchmark loaded or saved successfully.
