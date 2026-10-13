@@ -250,12 +250,16 @@ ApplicationWindow {
                             radius: width / 2
                             // Semantic status, not chrome — there is no palette role
                             // for ok/error, so these stay literal.
-                            color: root.settingsVm.profileLoaded ? "#4CAF50" : "#E53935"
+                            color: root.sessionVm.profileBuildInProgress ? "#FFB300"
+                                 : root.settingsVm.profileLoaded ? "#4CAF50" : "#E53935"
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Label {
                             objectName: "profileLoadedLabel"
-                            text: "Profile status: " + (root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
+                            // The loaded flag describes the profile as it stood before the rebuild,
+                            // so it is not shown while one is running.
+                            text: "Profile status: " + (root.sessionVm.profileBuildInProgress ? "Rebuilding"
+                                  : root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
                         }
                     }
 
@@ -264,6 +268,16 @@ ApplicationWindow {
                         text: "Rebuild Profile from Kovaaks Directory"
                         enabled: !root.sessionVm.profileBuildInProgress
                         onClicked: root.sessionVm.generateProfile()
+                    }
+
+                    Label {
+                        objectName: "profileBuildProgressLabel"
+                        visible: root.sessionVm.profileBuildInProgress
+                        // The file count only arrives with the first per-file report.
+                        text: root.sessionVm.profileBuildTotal === 0
+                              ? "Scanning Kovaaks Directory..."
+                              : "Rebuilding profile: " + root.sessionVm.profileBuildDone
+                                + " of " + root.sessionVm.profileBuildTotal + " files"
                     }
 
                     ProgressBar {

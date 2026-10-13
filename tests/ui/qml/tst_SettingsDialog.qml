@@ -30,12 +30,26 @@ TestCase {
         }, overrides))
     }
 
+    // A sessionVm whose properties notify, for tests that change them while the dialog is open.
+    Component {
+        id: observableSessionVmComponent
+        QtObject {
+            property bool profileBuildInProgress: false
+            property double profileBuildProgress: 0
+            property int profileBuildDone: 0
+            property int profileBuildTotal: 0
+            function generateProfile() {}
+        }
+    }
+
     function makeFakeSessionVm(overrides) {
         return Object.assign({
             generateProfileCalls: 0,
             generateProfile: function () { this.generateProfileCalls++ },
             profileBuildInProgress: false,
-            profileBuildProgress: 0
+            profileBuildProgress: 0,
+            profileBuildDone: 0,
+            profileBuildTotal: 0
         }, overrides)
     }
 
@@ -229,6 +243,66 @@ TestCase {
 
         const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
         compare(bar.indeterminate, true, "a build with no progress yet should render as indeterminate")
+    }
+
+    function test_profileStatus_saysRebuildingWhileABuildRuns_andRestoresAfter() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({profileLoaded: true}),
+            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true}),
+            visualSettings: visualSettings
+        })
+        const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
+        compare(statusLabel.text, "Profile status: Rebuilding", "a running rebuild replaces the loaded state in the status line")
+
+        dialog.sessionVm.profileBuildInProgress = false
+        compare(statusLabel.text, "Profile status: Loaded", "the status line shows the real state again once the rebuild ends")
+    }
+
+    function test_profileStatus_notLoadedAfterAFailedRebuild() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({profileLoaded: false}),
+            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true}),
+            visualSettings: visualSettings
+        })
+        const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
+        compare(statusLabel.text, "Profile status: Rebuilding")
+
+        dialog.sessionVm.profileBuildInProgress = false
+        compare(statusLabel.text, "Profile status: Not loaded")
+    }
+
+    function test_profileBuildProgressLabel_hiddenWhenNoBuildIsRunning() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            visualSettings: visualSettings
+        })
+        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
+        verify(label !== null, "no label named 'profileBuildProgressLabel' found in SettingsDialog Profile category")
+        compare(label.visible, false)
+    }
+
+    function test_profileBuildProgressLabel_saysFilesDoneOutOfTotal() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4,
+                                          profileBuildDone: 2, profileBuildTotal: 5}),
+            visualSettings: visualSettings
+        })
+        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
+        compare(label.visible, true)
+        compare(label.text, "Rebuilding profile: 2 of 5 files")
+    }
+
+    function test_profileBuildProgressLabel_saysScanningBeforeTheFirstReport() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true}),
+            visualSettings: visualSettings
+        })
+        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
+        compare(label.visible, true)
+        compare(label.text, "Scanning Kovaaks Directory...")
     }
 
     function test_seriesEnabledSwitchesListAllSeriesConfigsAndReflectEnabledState() {
