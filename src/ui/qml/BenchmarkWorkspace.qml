@@ -8,6 +8,10 @@ Item {
     property var trackingVm
 
     signal manageBenchmarksRequested()
+    // Opens the Benchmark Manager on one selector entry: its draft in the editor when it can be
+    // opened, otherwise selected in the library. A problem file may have no id, so its filename
+    // identifies it; the id is passed for entries that have one.
+    signal editBenchmarkRequested(string filename, string benchmarkId)
 
     implicitWidth: 800
     implicitHeight: 600
@@ -121,6 +125,10 @@ Item {
                         id: entryRow
                         required property var modelData
                         readonly property bool rowSelectable: modelData.selectable === true
+                        readonly property string kind: String(modelData.classification).toLowerCase()
+                        // Every exception (incomplete, invalid, unsupported) carries a chip
+                        // and a way to the manager, where its details are shown.
+                        readonly property bool hasWarning: kind !== "trackable"
                         width: parent.width
                         implicitHeight: entryDelegate.implicitHeight
                         height: entryDelegate.implicitHeight
@@ -136,7 +144,8 @@ Item {
                             text: entryRow.modelData.name
                             // A trackable benchmark is the normal case and shows
                             // only its name; the exceptions get a filled chip.
-                            rightPadding: entryChip.visible ? entryChip.width + 20 : padding
+                            rightPadding: entryRow.hasWarning
+                                          ? entryChip.width + entryEditButton.width + 24 : padding
                             onClicked: {
                                 if (entryRow.rowSelectable && String(entryRow.modelData.id).length > 0)
                                     root.trackingVm.selectBenchmark(entryRow.modelData.id)
@@ -147,14 +156,14 @@ Item {
                             id: entryChip
                             objectName: "selectorEntryLabel_" + entryRow.modelData.name
                             readonly property string kind: String(entryRow.modelData.classification)
-                            visible: kind.toLowerCase() !== "trackable"
-                            anchors.right: parent.right
-                            anchors.rightMargin: 10
+                            visible: entryRow.hasWarning
+                            anchors.right: entryEditButton.left
+                            anchors.rightMargin: 6
                             anchors.verticalCenter: parent.verticalCenter
                             width: chipText.implicitWidth + 14
                             height: chipText.implicitHeight + 2
                             radius: height / 2
-                            color: kind.toLowerCase() === "incomplete" ? "#FFB74D" : "#E57373"
+                            color: entryRow.kind === "incomplete" ? "#FFB74D" : "#E57373"
                             Label {
                                 id: chipText
                                 anchors.centerIn: parent
@@ -172,6 +181,34 @@ Item {
                             anchors.fill: parent
                             enabled: !entryRow.rowSelectable
                             onPressed: mouse => mouse.accepted = true
+                        }
+
+                        // Declared after the click blocker so it stays clickable on rows that
+                        // cannot be selected; it opens the manager without selecting the row.
+                        ToolButton {
+                            id: entryEditButton
+                            objectName: "selectorEntryEdit_" + entryRow.modelData.name
+                            visible: entryRow.hasWarning
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: visible ? implicitWidth : 0
+                            padding: 4
+                            icon.source: "icons/square-pen.svg"
+                            icon.width: 16
+                            icon.height: 16
+                            display: AbstractButton.IconOnly
+                            // A loaded (incomplete) benchmark opens in the editor; a problem
+                            // file can only be shown in the library.
+                            text: entryRow.kind === "incomplete"
+                                  ? qsTr("Edit %1 in the Benchmark Manager").arg(entryRow.modelData.name)
+                                  : qsTr("Show %1 in the Benchmark Manager").arg(entryRow.modelData.name)
+                            Accessible.name: text
+                            ToolTip.text: text
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            onClicked: root.editBenchmarkRequested(String(entryRow.modelData.filename || ""),
+                                                                   String(entryRow.modelData.id || ""))
                         }
                     }
                 }

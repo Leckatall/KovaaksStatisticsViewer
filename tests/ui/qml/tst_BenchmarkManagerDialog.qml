@@ -895,6 +895,95 @@ TestCase {
         compare(vm(dialog).openCalls, ["bench-B"])
     }
 
+    // ---- Opening the manager on one entry (the Benchmarks tab's selector rows) -------------
+
+    function makeClosedDialog(overrides) {
+        const dialog = createTemporaryObject(dialogComponent, testCase,
+            {benchmarkManagerVm: TestDoubles.makeFakeBenchmarkManagerVm(overrides || {})})
+        verify(dialog !== null, "BenchmarkManagerDialog failed to instantiate")
+        return dialog
+    }
+
+    function test_openOnEntryOpensAnOpenableEntryInTheEditor() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries()})
+
+        dialog.openOnEntry("b.json", "bench-B")
+
+        compare(dialog.visible, true)
+        compare(vm(dialog).openCalls, ["bench-B"])
+        compare(dialog.selectedEntryFilename, "b.json", "the opened entry is also the selected one")
+    }
+
+    // A problem file has no id and cannot be opened: the manager shows it selected in the library.
+    function test_openOnEntrySelectsAProblemFileWithoutOpeningIt() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries()})
+
+        dialog.openOnEntry("bad.json", "")
+
+        compare(dialog.visible, true)
+        compare(dialog.selectedEntryFilename, "bad.json")
+        wait(50)
+        compare(vm(dialog).openCalls.length, 0)
+        compare(dialog.dirtyClosePrompt.visible, false)
+    }
+
+    function test_openOnEntryFallsBackToTheIdWithoutAFilename() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries()})
+
+        dialog.openOnEntry("", "bench-A")
+
+        compare(dialog.selectedEntryFilename, "a.json")
+        compare(vm(dialog).openCalls, ["bench-A"])
+    }
+
+    // The manager's own open() clears the library selection; opening on an entry must not.
+    function test_openOnEntryReplacesAnEarlierSelection() {
+        const dialog = openWithFake({libraryEntries: openableEntries()})
+        mouseClick(find(dialog, "libraryEntry_0"))
+        compare(dialog.selectedEntryFilename, "a.json")
+
+        dialog.openOnEntry("bad.json", "")
+
+        compare(dialog.selectedEntryFilename, "bad.json")
+    }
+
+    function test_openOnAnUnknownEntryOnlyOpensTheManager() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries()})
+
+        dialog.openOnEntry("gone.json", "bench-gone")
+
+        compare(dialog.visible, true)
+        compare(dialog.selectedEntryFilename, "")
+        compare(vm(dialog).openCalls.length, 0)
+    }
+
+    // The benchmark is already being edited: its draft, unsaved edits included, stays as it is.
+    function test_openOnTheEntryAlreadyInTheEditorKeepsItsDraft() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries(), hasDraft: true, dirty: true,
+                                         draftFromLibrary: true, draftId: "bench-B"})
+
+        dialog.openOnEntry("b.json", "bench-B")
+
+        wait(50)
+        compare(dialog.dirtyClosePrompt.visible, false)
+        compare(vm(dialog).openCalls.length, 0)
+        compare(vm(dialog).discardCalls, 0)
+        compare(dialog.selectedEntryFilename, "b.json")
+    }
+
+    function test_openOnEntryWithAnotherUnsavedDraftRaisesTheGuard() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries(), hasDraft: true, dirty: true,
+                                         draftFromLibrary: true, draftId: "bench-A"})
+
+        dialog.openOnEntry("b.json", "bench-B")
+
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+        compare(vm(dialog).openCalls.length, 0, "opening must wait for the Save/Discard/Cancel decision")
+        dialog.dirtyClosePrompt.buttonClicked(MessageDialog.Discard, MessageDialog.DestructiveRole)
+        tryVerify(() => vm(dialog).openCalls.length === 1)
+        compare(vm(dialog).openCalls, ["bench-B"])
+    }
+
     function test_enterOpensTheSelectedLibraryEntry() {
         const dialog = openWithFake({libraryEntries: openableEntries()})
 

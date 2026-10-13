@@ -19,6 +19,7 @@ Item {
     height: 800
 
     property int managerRequests: 0
+    property var editRequests: []
 
     Component {
         id: tierBarComponent
@@ -70,7 +71,11 @@ Item {
             ws.width = w || 1200
             ws.height = h || 800
             root.managerRequests = 0
+            root.editRequests = []
             ws.manageBenchmarksRequested.connect(function () { root.managerRequests++ })
+            ws.editBenchmarkRequested.connect(function (filename, benchmarkId) {
+                root.editRequests = root.editRequests.concat([[filename, benchmarkId]])
+            })
             return ws
         }
         function find(ws, name) { return ItemLookup.findByObjectName(ws, name) }
@@ -252,6 +257,76 @@ Item {
             compare(row.enabled, data.selectable)
             verify(row.rightPadding >= chip.width, "the name must leave room for the label")
             compare(find(ws, "selectorEntryLabel_Voltaic S3").visible, false)
+        }
+
+        // A row with a warning chip carries a control that opens the Benchmark Manager
+        // on that benchmark; a trackable row stays name-only.
+        function test_onlyWarningRowsOfferTheManager_data() {
+            return [
+                {tag: "trackable", name: "Voltaic S3", shown: false},
+                {tag: "incomplete", name: "Half Built", shown: true, verb: "Edit"},
+                {tag: "invalid", name: "broken.json", shown: true, verb: "Show"},
+                {tag: "unsupported", name: "Future Format", shown: true, verb: "Show"}
+            ]
+        }
+
+        function test_onlyWarningRowsOfferTheManager(data) {
+            const selectable = data.tag === "trackable" || data.tag === "incomplete"
+            const ws = makeWorkspace({
+                state: "NoSelection",
+                selectorEntries: [
+                    {id: selectable ? "bench-X" : "", name: data.name, filename: "x.json",
+                     classification: data.tag, selectable: selectable}
+                ]
+            })
+            const control = find(ws, "selectorEntryEdit_" + data.name)
+            verify(control !== null, "every row has the control, shown or not")
+            compare(control.visible, data.shown)
+            const chip = find(ws, "selectorEntryLabel_" + data.name)
+            compare(chip.visible, data.shown, "the control goes with the warning chip")
+            if (!data.shown) return
+            verify(control.width > 0 && control.height > 0, "the control must have a size")
+            const name = String(control.Accessible.name)
+            verify(name.indexOf(data.verb) === 0 && name.indexOf(data.name) !== -1
+                   && name.indexOf("Benchmark Manager") !== -1,
+                   "the accessible name says what the control does: " + name)
+            compare(String(control.ToolTip.text), name, "the tooltip says the same")
+            // The control sits beside the chip, inside the row, and the name leaves room for both.
+            const row = find(ws, "selectorEntry_" + data.name)
+            const controlX = control.mapToItem(row, 0, 0).x
+            const chipRight = chip.mapToItem(row, chip.width, 0).x
+            verify(controlX >= chipRight, "the control sits right of the chip")
+            verify(controlX + control.width <= row.width, "the control stays inside the row")
+            verify(row.rightPadding >= chip.width + control.width, "the name leaves room for chip and control")
+        }
+
+        function test_warningControlOpensTheManagerWithoutSelecting_data() {
+            return [
+                {tag: "incomplete", entry: {id: "bench-I", name: "Half Built", filename: "half.json",
+                                            classification: "incomplete", selectable: true}},
+                {tag: "invalid-without-id", entry: {id: "", name: "broken.json", filename: "broken.json",
+                                                    classification: "invalid", selectable: false}},
+                {tag: "unsupported", entry: {id: "bench-U", name: "Future Format", filename: "future.json",
+                                             classification: "unsupported", selectable: false}}
+            ]
+        }
+
+        function test_warningControlOpensTheManagerWithoutSelecting(data) {
+            const ws = makeWorkspace({
+                state: "NoSelection",
+                selectorEntries: [
+                    {id: "bench-A", name: "Voltaic S3", filename: "voltaic-s3.json",
+                     classification: "trackable", selectable: true},
+                    data.entry
+                ]
+            })
+            const control = find(ws, "selectorEntryEdit_" + data.entry.name)
+            verify(control !== null && control.visible)
+            mouseClick(control)
+            compare(root.editRequests.length, 1, "the control must raise editBenchmarkRequested")
+            compare(root.editRequests[0], [data.entry.filename, data.entry.id])
+            compare(ws.trackingVm.selectBenchmarkCalls.length, 0, "the control must not select the row")
+            compare(root.managerRequests, 0, "the control opens the manager on its benchmark, not plainly")
         }
 
         // showing the workspace with nothing selected asks the view model for

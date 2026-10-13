@@ -115,6 +115,25 @@ ApplicationWindow {
         requestActivate()
     }
 
+    // Opens the manager on one library entry: selected in the library, and opened in the editor
+    // when it can be (through the same unsaved-changes guard as Open). A problem file can have an
+    // empty id, so the filename identifies the entry; the id is the fallback when no filename is
+    // given. A draft of the same benchmark already in the editor is kept, edits and all.
+    function openOnEntry(filename, benchmarkId) {
+        root.open()
+        const entries = root.vm().libraryEntries || []
+        let index = filename ? entries.findIndex(entry => entry.filename === filename) : -1
+        if (index < 0 && benchmarkId)
+            index = entries.findIndex(entry => entry.id === benchmarkId)
+        if (index < 0) return
+        const entry = entries[index]
+        root.selectedEntryFilename = entry.filename
+        libraryList.positionViewAtIndex(index, ListView.Contain)
+        libraryList.forceActiveFocus()
+        const alreadyOpen = root.vm().hasDraft && root.vm().draftFromLibrary && root.vm().draftId === entry.id
+        if (!alreadyOpen) root.openLibraryEntry(entry)
+    }
+
     onClosing: (close) => {
         root.commitActiveEdits()
         if (root.vm().dirty) {

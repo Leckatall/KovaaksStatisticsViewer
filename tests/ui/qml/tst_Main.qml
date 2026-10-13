@@ -70,7 +70,7 @@ TestCase {
         fakeScenarioBrowserVm.hasScenarios = true
     }
 
-    function createMain() {
+    function createMain(managerVm) {
         const win = createTemporaryObject(mainComponent, testCase, {
             graphVm: fakeGraphVm,
             playtimeVm: fakePlaytimeVm,
@@ -78,7 +78,7 @@ TestCase {
             sessionVm: fakeSessionVm,
             settingsVm: fakeSettingsVm,
             scenarioBrowserVm: fakeScenarioBrowserVm,
-            benchmarkManagerVm: fakeManagerVm,
+            benchmarkManagerVm: managerVm || fakeManagerVm,
             benchmarkTrackingVm: fakeTrackingVm
         })
         verify(win !== null, "Main.qml failed to instantiate")
@@ -267,6 +267,30 @@ TestCase {
         compare(win.benchmarkManagerDialog, dialog,
                 "both entry points must open the same shared manager dialog instance")
     }
+    // A warning row in the Benchmarks tab's selector opens the shared manager on its benchmark.
+    function test_selectorWarningOpensTheManagerOnThatBenchmark() {
+        const win = createMain(TestDoubles.makeFakeBenchmarkManagerVm({libraryEntries: [
+            {id: "bench-A", name: "Alpha", filename: "a.json", classification: "Incomplete",
+             openable: true, deletable: true},
+            {id: "", name: "bad.json", filename: "bad.json", classification: "Invalid",
+             openable: false, deletable: false}
+        ]}))
+        const benchmarkWorkspace = find(win, "benchmarkWorkspace")
+        const dialog = win.benchmarkManagerDialog
+
+        benchmarkWorkspace.editBenchmarkRequested("bad.json", "")
+        tryCompare(dialog, "visible", true)
+        compare(dialog.selectedEntryFilename, "bad.json")
+        compare(dialog.editorTable.manager.openCalls.length, 0, "a problem file is only selected")
+        dialog.close()
+        tryCompare(dialog, "visible", false)
+
+        benchmarkWorkspace.editBenchmarkRequested("a.json", "bench-A")
+        tryCompare(dialog, "visible", true)
+        compare(dialog.selectedEntryFilename, "a.json")
+        compare(dialog.editorTable.manager.openCalls, ["bench-A"], "a loaded benchmark opens in the editor")
+    }
+
     // -- first run puts choosing the folder first ----------------------
 
     // Every item under `root` whose QML type name starts with `typeName`.

@@ -155,8 +155,8 @@ function trackingFixtureProblemsOnly() {
         state: "ProblemsOnly",
         stateMessage: "Some benchmark files need attention.",
         selectorEntries: [
-            {id: "", name: "broken.json", classification: "Invalid", selectable: false},
-            {id: "", name: "future.json", classification: "Unsupported", selectable: false}
+            {id: "", name: "broken.json", filename: "broken.json", classification: "Invalid", selectable: false},
+            {id: "", name: "future.json", filename: "future.json", classification: "Unsupported", selectable: false}
         ]
     }
 }
@@ -166,8 +166,8 @@ function trackingFixtureNoSelection() {
         state: "NoSelection",
         stateMessage: "Select a benchmark to begin.",
         selectorEntries: [
-            {id: "bench-A", name: "Voltaic S3", classification: "Trackable", selectable: true},
-            {id: "", name: "broken.json", classification: "Invalid", selectable: false}
+            {id: "bench-A", name: "Voltaic S3", filename: "voltaic-s3.json", classification: "Trackable", selectable: true},
+            {id: "", name: "broken.json", filename: "broken.json", classification: "Invalid", selectable: false}
         ]
     }
 }
@@ -178,7 +178,7 @@ function trackingFixtureUnavailable() {
         stateMessage: "The selected benchmark was deleted or became invalid.",
         selectedName: "Voltaic S3 (last known)",
         selectorEntries: [
-            {id: "", name: "broken.json", classification: "Invalid", selectable: false}
+            {id: "", name: "broken.json", filename: "broken.json", classification: "Invalid", selectable: false}
         ],
         summaryAvailable: false,
         attainedRank: "",
@@ -198,7 +198,7 @@ function trackingFixtureIncomplete() {
         stateMessage: "This benchmark is not ready to rank.",
         selectedName: "Half-built Bench",
         selectorEntries: [
-            {id: "bench-I", name: "Half-built Bench", classification: "Incomplete", selectable: true}
+            {id: "bench-I", name: "Half-built Bench", filename: "half-built.json", classification: "Incomplete", selectable: true}
         ],
         completenessIssues: [
             "Tier \"Gold\" has no threshold for scenario \"1w4ts\".",
@@ -233,9 +233,9 @@ function trackingFixtureTrackable() {
         stateMessage: "",
         selectedName: "Voltaic S3",
         selectorEntries: [
-            {id: "bench-A", name: "Voltaic S3", classification: "Trackable", selectable: true},
-            {id: "bench-B", name: "Revo Novice", classification: "Trackable", selectable: true},
-            {id: "", name: "broken.json", classification: "Invalid", selectable: false}
+            {id: "bench-A", name: "Voltaic S3", filename: "voltaic-s3.json", classification: "Trackable", selectable: true},
+            {id: "bench-B", name: "Revo Novice", filename: "revo-novice.json", classification: "Trackable", selectable: true},
+            {id: "", name: "broken.json", filename: "broken.json", classification: "Invalid", selectable: false}
         ],
         completenessIssues: [],
         summaryAvailable: true,
