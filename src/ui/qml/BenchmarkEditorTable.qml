@@ -53,20 +53,28 @@ FocusScope {
     // identifying columns at that width), and a relayout only re-places the columns in view, so the
     // views are rebuilt from scratch instead, keeping the same ranks in view. Never under an open
     // cell editor: that waits until the edit ends.
+    //
+    // The views' left margin follows the laid-out width, not the new one, until the rebuild: the
+    // scroll position is then still measured from where the ranks started at the old width.
     property int laidOutThresholdWidth: 0
     onThresholdWidthChanged: Qt.callLater(root.relayoutRankColumns)
     onActiveEditorChanged: if (!root.activeEditor) Qt.callLater(root.relayoutRankColumns)
     function relayoutRankColumns() {
         const previous = root.laidOutThresholdWidth
         const width = root.thresholdWidth
-        if (previous === width || root.activeEditor) return
+        if (root.activeEditor) return
+        if (previous === width) {
+            root.clampRankScroll()
+            return
+        }
         root.laidOutThresholdWidth = width
         if (previous === 0 || !root.tableModel) {
             thresholdView.forceLayout()
             rankHeader.forceLayout()
+            root.clampRankScroll()
             return
         }
-        const scrolledRanks = Math.max(0, thresholdView.contentX + thresholdView.leftMargin) / previous
+        const scrolledRanks = Math.max(0, thresholdView.contentX - root.thresholdKind * previous) / previous
         const contentY = thresholdView.contentY
         const hadFocus = thresholdView.activeFocus
         // The rebuild may clear the selection model; the manager's anchors put it back.
@@ -75,10 +83,25 @@ FocusScope {
         thresholdView.model = Qt.binding(() => root.tableModel)
         thresholdView.forceLayout()
         thresholdView.contentY = contentY
-        thresholdView.contentX = -thresholdView.leftMargin + scrolledRanks * width
+        thresholdView.contentX = root.rankScrollStart + Math.min(scrolledRanks * width, root.rankScrollRange)
         rankHeader.forceLayout()
         if (hadFocus) thresholdView.forceActiveFocus()
         root.scheduleSelectionRestore()
+    }
+
+    // The threshold view's horizontal scroll range: from the first rank right after the scenario
+    // column to the last rank ending at the add-rank slot. Ranks that fit leave no range at all.
+    readonly property real rankScrollStart: root.hiddenThresholdWidth
+    readonly property real rankScrollRange: Math.max(0, root.rankColumnsWidth - root.availableRankWidth)
+    // A width or rank-count change can leave the view outside that range (scrolled while the ranks
+    // overflowed, then they fit; or a blank stretch past the last rank). Pull it back to the nearest
+    // edge; a position inside the range, such as one the user scrolled to, is kept.
+    onRankScrollRangeChanged: Qt.callLater(root.relayoutRankColumns)
+    function clampRankScroll() {
+        if (root.activeEditor || root.laidOutThresholdWidth !== root.thresholdWidth) return
+        const start = root.rankScrollStart
+        const clamped = Math.min(Math.max(thresholdView.contentX, start), start + root.rankScrollRange)
+        if (Math.abs(clamped - thresholdView.contentX) > 0.5) thresholdView.contentX = clamped
     }
 
     function rankHeaderText(name, hasIssues) {
@@ -98,7 +121,11 @@ FocusScope {
     }
     // Width of the identifying columns inside the threshold view's own column space. They are as
     // wide as the ranks: every column the same width keeps the scrollbar's estimate exact.
-    readonly property int hiddenThresholdWidth: root.thresholdKind * root.thresholdWidth
+    // Until the first layout it follows the live width; afterwards, the laid-out one (see
+    // relayoutRankColumns).
+    readonly property int hiddenThresholdWidth: root.thresholdKind * (root.laidOutThresholdWidth > 0
+                                                                      ? root.laidOutThresholdWidth
+                                                                      : root.thresholdWidth)
     function thresholdColumnWidth(column) {
         return root.thresholdWidth
     }

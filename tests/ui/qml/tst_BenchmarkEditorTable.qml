@@ -1185,6 +1185,73 @@ TestCase {
                   2000, "the first rank cell follows the scenario column")
     }
 
+    // Where the first rank starts and where the last one ends inside the threshold view's scroll range.
+    function rankScrollStart(table) {
+        return -table.thresholdView.leftMargin
+    }
+    function rankScrollEnd(table) {
+        return rankScrollStart(table) + Math.max(0, table.rankColumnsWidth - table.availableRankWidth)
+    }
+
+    // Widening and then narrowing back (hiding and showing the Manager's library) while every rank
+    // fits: the ranks start right after the scenario column again, with the add-rank control after
+    // the last one, not scrolled by the difference between the two widths.
+    function test_narrowingWhileTheRanksFitShowsThemFromTheFirst() {
+        const names = ["Iron", "Bronze", "Silver", "Gold", "Platinum"]
+        const table = makeTable({tiers: names.map((name, i) => ({id: "t" + i, name: name})),
+                                 rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const view = table.thresholdView
+        const bar = ItemLookup.findByObjectName(table, "thresholdHorizontalBar")
+        const plus = ItemLookup.findByObjectName(table, "addRankPlus")
+        const shareAt = width => Math.floor((width - table.identityTotalWidth - table.rankSlotWidth) / names.length)
+
+        table.width = 1100
+        tryCompare(table, "laidOutThresholdWidth", shareAt(1100))
+        verify(shareAt(1100) >= table.rankHeaderMinimumWidth, "fixture: the five ranks fit at 1100")
+        table.width = 1500
+        tryCompare(table, "laidOutThresholdWidth", shareAt(1500))
+        table.width = 1100
+        tryCompare(table, "laidOutThresholdWidth", shareAt(1100))
+        waitForRendering(table)
+
+        fuzzyCompare(view.contentX, rankScrollStart(table), 0.5, "the view is back at the first rank")
+        compare(bar.visible, false, "everything fits: no scrollbar")
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_t0") !== null && cellFor(table, "a", "t0") !== null)
+        fuzzyCompare(ItemLookup.findByObjectName(table, "rankHeader_t0").mapToItem(table, 0, 0).x,
+                     table.identityTotalWidth, 0.5, "the first rank header follows the scenario column")
+        fuzzyCompare(cellFor(table, "a", "t0").mapToItem(table, 0, 0).x, table.identityTotalWidth, 0.5,
+                     "the first rank cell follows the scenario column")
+        const last = ItemLookup.findByObjectName(table, "rankHeader_t4")
+        const gap = plus.mapToItem(table, 0, 0).x - last.mapToItem(table, last.width, 0).x
+        verify(gap >= -0.5 && gap <= names.length, "no blank gap before the add-rank control, gap " + gap)
+    }
+
+    // While the ranks overflow, a resize never leaves the view past the last rank, and a position
+    // the user scrolled to stays where it was as long as it is still in range.
+    function test_overflowingRanksKeepAReachableScrollPosition() {
+        const table = makeTable({tiers: tiersNamed(14), rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const view = table.thresholdView
+        table.width = 1000
+        tryCompare(table, "laidOutThresholdWidth", table.rankHeaderMinimumWidth)
+        verify(table.rankColumnsWidth > table.availableRankWidth, "fixture: the ranks overflow at 1000")
+
+        // Scrolled to the last rank, then widened (still overflowing): the end stays the end.
+        view.contentX = rankScrollEnd(table)
+        table.width = 1200
+        verify(table.rankColumnsWidth > table.availableRankWidth, "fixture: the ranks overflow at 1200")
+        tryVerify(() => view.contentX <= rankScrollEnd(table) + 0.5, 2000,
+                  "no blank space past the last rank, contentX " + view.contentX + ", end " + rankScrollEnd(table))
+        verify(view.contentX >= rankScrollStart(table) - 0.5)
+
+        // A position in the middle survives an unrelated narrowing.
+        const middle = rankScrollStart(table) + 3 * table.thresholdWidth
+        view.contentX = middle
+        table.width = 900
+        waitForRendering(table)
+        wait(50)
+        fuzzyCompare(view.contentX, middle, 0.5, "the user's scroll position is kept")
+    }
+
     function test_identifyingColumnsKeepTheirWidthWhenThereAreNoRanks() {
         const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
         const placeholder = ItemLookup.findByObjectName(table, "emptyRankHeader")
