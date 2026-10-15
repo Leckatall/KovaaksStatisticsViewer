@@ -286,17 +286,12 @@ TestCase {
         verify(candidate.text.indexOf("hash-b") !== -1 && candidate.text.indexOf("7") !== -1
                && candidate.text.indexOf("2024") !== -1, "candidate metadata is shown: " + candidate.text)
         mouseClick(candidate)
-        tryCompare(dialog.retrospectivePrompt, "visible", true)
-        compare(vm(dialog).setScenarioHashCalls.length, 0)
-        dialog.retrospectivePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
         tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
         compare(vm(dialog).setScenarioHashCalls[0], ["u-amb", "hash-b"])
 
         verify(dialog.editorTable.focusCell({entryId: "u-res"}))
         tryCompare(find(dialog, "matchLabel"), "text", "Resolved")
         click(dialog, "clearMappingButton")
-        tryCompare(dialog.retrospectivePrompt, "visible", true)
-        dialog.retrospectivePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
         tryVerify(() => vm(dialog).setScenarioHashCalls.length === 2)
         compare(vm(dialog).setScenarioHashCalls[1], ["u-res", ""])
         compare(vm(dialog).clearThresholdCalls.length, 0, "clearing a mapping keeps thresholds")

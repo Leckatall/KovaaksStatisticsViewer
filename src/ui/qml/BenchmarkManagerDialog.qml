@@ -21,7 +21,6 @@ ApplicationWindow {
     function vm() { return editorTable.manager }
 
     readonly property alias dirtyClosePrompt: dirtyClosePrompt
-    readonly property alias retrospectivePrompt: retrospectivePrompt
     readonly property alias deleteConfirmPrompt: deleteConfirmPrompt
     readonly property alias colorDialog: colorDialog
     readonly property alias assignMenu: assignMenu
@@ -42,10 +41,6 @@ ApplicationWindow {
     // Bumped after every command and session publication, so bindings over view-model state that
     // is not itself observable (the plain-JS test double) re-read it.
     property int sessionRevision: 0
-
-    // A mapping edit or a save on an opened (from-library) definition must clear the
-    // retrospective reinterpretation warning first; the confirmed action is parked here.
-    property var pendingRetrospectiveAction: null
 
     // ---- Table context -----------------------------------------------------------------------
     readonly property string currentTierId: editorTable.focusedTierId
@@ -188,28 +183,16 @@ ApplicationWindow {
 
     function requestSave() {
         root.commitActiveEdits()
-        root.runRetrospective(() => root.doSave())
-    }
-
-    // Edits to a saved definition reinterpret past results, so they pass through the
-    // retrospective warning; a never-saved draft applies the action immediately.
-    function runRetrospective(action) {
-        if (root.vm().draftFromLibrary) {
-            root.pendingRetrospectiveAction = action
-            retrospectivePrompt.open()
-        } else {
-            action()
-        }
+        root.doSave()
     }
 
     function requestMappingEdit(entryId, hash) {
         root.commitActiveEdits()
-        root.runRetrospective(() => root.vm().setScenarioHash(entryId, hash))
+        root.vm().setScenarioHash(entryId, hash)
     }
 
     function requestScenarioIdentity(entryId, name, hash) {
-        root.runRetrospective(() => root.runTableCommand(
-            () => root.vm().setScenarioIdentity(entryId, name, hash)))
+        root.runTableCommand(() => root.vm().setScenarioIdentity(entryId, name, hash))
     }
 
     function matchStateLabel(state) {
@@ -400,28 +383,6 @@ ApplicationWindow {
             } else if (button === MessageDialog.Discard) {
                 root.vm().discard()
                 root.runPendingAction()
-            } else {
-                root.pendingAction = null
-            }
-        }
-    }
-
-    MessageDialog {
-        id: retrospectivePrompt
-        objectName: "retrospectivePrompt"
-        title: qsTr("Recalculate history?")
-        text: qsTr("Saving these changes reinterprets past results under the edited definition.")
-        informativeText: qsTr("Thresholds, membership, tier order, and hierarchy all feed the historical graphs.")
-            + (root.normalizationIssues().length > 0
-               ? "\n\n" + qsTr("These thresholds are not valid numbers and will be saved as missing: %1")
-                     .arg(root.normalizationSummary())
-               : "")
-        buttons: MessageDialog.Save | MessageDialog.Cancel
-        onButtonClicked: function (button) {
-            const action = root.pendingRetrospectiveAction
-            root.pendingRetrospectiveAction = null
-            if (button === MessageDialog.Save) {
-                if (action) action()
             } else {
                 root.pendingAction = null
             }

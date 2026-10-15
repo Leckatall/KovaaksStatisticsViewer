@@ -215,15 +215,10 @@ TestCase {
         tryCompare(status, "visible", true)
     }
 
-    function test_retrospectiveWarningShownBeforeSavingAnOpenedBenchmark() {
+    function test_openedBenchmarkSavesWithoutConfirmation() {
         const dialog = openWithFake({hasDraft: true, dirty: true, draftFromLibrary: true})
 
         mouseClick(find(dialog, "saveButton"))
-
-        tryCompare(dialog.retrospectivePrompt, "visible", true)
-        compare(vm(dialog).saveCalls, 0, "save must wait for the retrospective warning confirmation")
-
-        dialog.retrospectivePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
 
         tryCompare(vm(dialog), "saveCalls", 1)
     }
@@ -442,7 +437,7 @@ TestCase {
         compare(vm(dialog).renameScenarioCalls.length, 0)
     }
 
-    function test_nameSuggestionOnSavedBenchmarkWaitsForRetrospectiveWarning() {
+    function test_nameSuggestionOnSavedBenchmarkAppliesImmediately() {
         const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
             draftFromLibrary: true,
             scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
@@ -456,9 +451,6 @@ TestCase {
                                                     "scenarioSuggestion_hash-c")
         verify(option !== null)
         mouseClick(option)
-        tryCompare(dialog.retrospectivePrompt, "visible", true)
-        compare(vm(dialog).setScenarioIdentityCalls.length, 0)
-        dialog.retrospectivePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
         tryCompare(vm(dialog), "setScenarioIdentityCalls", [["s-unr", "popcorn", "hash-c"]])
     }
 
@@ -548,18 +540,12 @@ TestCase {
         compare(vm(dialog).moveScenarioCalls.length + vm(dialog).assignScenariosCalls.length, 0)
     }
 
-    function test_retrospectiveWarningPrecedesAMappingEditOnASavedDraft() {
+    function test_mappingEditOnASavedDraftAppliesImmediately() {
         const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {dirty: true, draftFromLibrary: true})
 
         verify(dialog.editorTable.focusCell({entryId: "s-amb"}))
         tryVerify(() => find(dialog, "candidateOption_hash-b") !== null)
         mouseClick(find(dialog, "candidateOption_hash-b"))
-
-        tryCompare(dialog.retrospectivePrompt, "visible", true)
-        compare(vm(dialog).setScenarioHashCalls.length, 0,
-                "a mapping edit on a saved definition must wait for the retrospective warning")
-
-        dialog.retrospectivePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
 
         tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
         compare(vm(dialog).setScenarioHashCalls[0], ["s-amb", "hash-b"])
@@ -641,16 +627,13 @@ TestCase {
             mouseClick(find(dialog, "saveButton"))
 
             compare(vm(dialog).editThresholdTextCalls, [["s-res", "t1", "12oops"]], "Save commits the editor first")
-            tryCompare(dialog.retrospectivePrompt, "visible", true)
-            verify(String(dialog.retrospectivePrompt.informativeText).indexOf("12oops") !== -1,
-                   "the existing gate names what Save will store as missing")
+            compare(vm(dialog).commandLog.slice(0, 2), ["editThresholdText", "save"])
+            compare(vm(dialog).saveCalls, 1)
             const warning = find(dialog, "normalizationWarning")
             verify(warning !== null && warning.visible, "the consequence is listed in the editor")
             verify(warning.text.indexOf("12oops") !== -1)
 
-            dialog.retrospectivePrompt.buttonClicked(MessageDialog.Cancel, MessageDialog.RejectRole)
-            compare(vm(dialog).saveCalls, 0)
-            compare(vm(dialog).discardCalls, 0, "cancel keeps the retained input")
+            compare(vm(dialog).discardCalls, 0)
             compare(vm(dialog).undoCalls, 0)
             verify(find(dialog, "normalizationWarning").visible)
         }
