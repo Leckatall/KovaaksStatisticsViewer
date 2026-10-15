@@ -968,43 +968,16 @@ FocusScope {
                 }
             }
 
-            TextField {
+            CreationField {
                 id: subcategoryCreationField
                 objectName: "subcategoryCreationField"
                 visible: cell.addingSubcategory
                 anchors.fill: parent
                 placeholderText: qsTr("Subcategory name")
-                Accessible.name: placeholderText
-                // Focus goes back to the table before the request is sent: the request may open
-                // the Manager's modal "already holds scenarios" prompt, which hands focus back on
-                // closing to whatever held it when it opened, and this field is hidden by then. A
-                // hidden field must not stay the table's focus child either, or focusing the table
-                // (a focus scope) would hand active focus straight back to it.
-                function releaseFocus() {
-                    subcategoryCreationField.focus = false
-                    cell.TableView.view.forceActiveFocus()
-                }
-                onAccepted: {
-                    if (text.trim() === "") return
-                    subcategoryCreationField.releaseFocus()
-                    if (root.requestCreation({kind: "subcategory", categoryId: cell.categoryId, name: text})) {
-                        cell.addingSubcategory = false
-                        text = ""
-                    } else {
-                        subcategoryCreationField.forceActiveFocus()
-                    }
-                }
-                Keys.onEscapePressed: {
-                    cell.addingSubcategory = false
-                    text = ""
-                    subcategoryCreationField.releaseFocus()
-                }
-                // TextInput emits accepted() but leaves Return unaccepted, so it would propagate
-                // to the TableView, whose edit trigger then opens a rename editor on the current
-                // (category) cell, behind the prompt the name may have opened.
-                Keys.priority: Keys.AfterItem
-                Keys.onReturnPressed: (event) => event.accepted = true
-                Keys.onEnterPressed: (event) => event.accepted = true
+                focusReturnTarget: cell.TableView.view
+                swallowReturn: true
+                submit: name => root.requestCreation({kind: "subcategory", categoryId: cell.categoryId, name: name})
+                onDone: cell.addingSubcategory = false
             }
 
             DragHandler {
@@ -1291,22 +1264,13 @@ FocusScope {
                             emptySubcategoryName.forceActiveFocus()
                         }
                     }
-                    TextField {
+                    CreationField {
                         id: emptySubcategoryName
                         visible: groupItem.addingSubcategory
                         width: 130
                         placeholderText: qsTr("Subcategory name")
-                        onAccepted: {
-                            if (text.trim() === "") return
-                            if (root.requestCreation({kind: "subcategory", categoryId: groupItem.groupId, name: text})) {
-                                groupItem.addingSubcategory = false
-                                text = ""
-                            }
-                        }
-                        Keys.onEscapePressed: {
-                            groupItem.addingSubcategory = false
-                            text = ""
-                        }
+                        submit: name => root.requestCreation({kind: "subcategory", categoryId: groupItem.groupId, name: name})
+                        onDone: groupItem.addingSubcategory = false
                     }
                     TextField {
                         id: emptyGroupRenameField
@@ -1617,24 +1581,14 @@ FocusScope {
                             rankCreationName.forceActiveFocus()
                         }
                     }
-                    TextField {
+                    CreationField {
                         id: rankCreationName
                         objectName: "rankCreationName"
                         visible: root.addingRank
                         anchors.fill: parent
                         placeholderText: qsTr("Rank name")
-                        Accessible.name: placeholderText
-                        onAccepted: {
-                            if (text.trim() === "") return
-                            if (root.requestCreation({kind: "rank", name: text})) {
-                                root.addingRank = false
-                                text = ""
-                            }
-                        }
-                        Keys.onEscapePressed: {
-                            root.addingRank = false
-                            text = ""
-                        }
+                        submit: name => root.requestCreation({kind: "rank", name: name})
+                        onDone: root.addingRank = false
                     }
                 }
                 Item {
@@ -1742,25 +1696,15 @@ FocusScope {
                     categoryCreationName.forceActiveFocus()
                 }
             }
-            TextField {
+            CreationField {
                 id: categoryCreationName
                 objectName: "categoryCreationName"
                 visible: root.addingCategory
                 width: root.identityWidths[0]
                 height: root.rowHeight
                 placeholderText: qsTr("Category name")
-                Accessible.name: placeholderText
-                onAccepted: {
-                    if (text.trim() === "") return
-                    if (root.requestCreation({kind: "category", name: text})) {
-                        root.addingCategory = false
-                        text = ""
-                    }
-                }
-                Keys.onEscapePressed: {
-                    root.addingCategory = false
-                    text = ""
-                }
+                submit: name => root.requestCreation({kind: "category", name: name})
+                onDone: root.addingCategory = false
             }
             Item { width: root.identityWidths[1]; height: root.rowHeight }
             AddRowButton {

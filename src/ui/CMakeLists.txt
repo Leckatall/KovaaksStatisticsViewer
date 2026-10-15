@@ -41,6 +41,7 @@ qt_add_qml_module(ksv_ui
             qml/scenario/RunListView.qml
             qml/scenario/SortControls.qml
             qml/scenario/ScenarioRunItem.qml
+            qml/common/CreationField.qml
             qml/common/ListScrollBar.qml
             qml/common/Theme.qml
             qml/shell/AppMenuBar.qml
