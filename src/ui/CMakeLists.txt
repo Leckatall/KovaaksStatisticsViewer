@@ -24,6 +24,8 @@ qt_add_qml_module(ksv_ui
             qml/Main.qml
             qml/scenario/ScenarioWorkspace.qml
             qml/benchmark/BenchmarkWorkspace.qml
+            qml/benchmark/BenchmarkIncompleteBody.qml
+            qml/benchmark/BenchmarkTrackableBody.qml
             qml/benchmark/BenchmarkStatusSummary.qml
             qml/benchmark/BenchmarkHistoryCard.qml
             qml/graph/ChartTitle.qml
