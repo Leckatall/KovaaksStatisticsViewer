@@ -1028,6 +1028,7 @@ FocusScope {
                 onTapped: eventPoint => {
                     const point = cell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
                     if (cell.isGroup && cell.groupId !== "") {
+                        root.focusedGroupId = cell.groupId
                         root.groupContextRequested(cell.groupId, point.x, point.y)
                     } else if (!cell.isGroup) {
                         if (!root.selectionHasEntry(cell.entryId))
@@ -1272,6 +1273,7 @@ FocusScope {
                             acceptedButtons: Qt.RightButton
                             onTapped: {
                                 const p = groupButton.mapToItem(root, 0, groupButton.height)
+                                root.focusedGroupId = groupItem.groupId
                                 root.groupContextRequested(groupItem.groupId, p.x, p.y)
                             }
                         }

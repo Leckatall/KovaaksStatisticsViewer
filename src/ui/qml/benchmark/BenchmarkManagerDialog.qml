@@ -198,7 +198,8 @@ ApplicationWindow {
 
     function requestLinkedVersion(hash, linked) {
         const entryId = root.currentEntryId
-        const hashes = Array.from(mappingPanel.mappedHashes).filter(value => value !== hash)
+        const current = root.currentRow && root.currentRow.mappedHashes ? root.currentRow.mappedHashes : []
+        const hashes = Array.from(current).filter(value => value !== hash)
         if (linked) hashes.push(hash)
         root.runTableCommand(() => root.vm().setScenarioHashes(entryId, hashes))
     }
@@ -829,26 +830,14 @@ ApplicationWindow {
                                     : qsTr("Hide the library list to give the table the full width")
                                 onClicked: root.libraryCollapsed = !root.libraryCollapsed
                             }
-                            TextField {
+                            BoundField {
                                 id: benchmarkNameField
                                 objectName: "benchmarkNameField"
+                                boundText: root.vm().benchmarkName
                                 placeholderText: qsTr("Benchmark name")
                                 Layout.fillWidth: true
                                 Layout.minimumWidth: 160
-                                selectByMouse: true
                                 onEditingFinished: root.vm().setBenchmarkName(text)
-
-                                // Typing into a TextField destroys a plain `text:` binding, and this pane is
-                                // only hidden (never destroyed) when the draft closes, so the field would keep
-                                // the old name across Discard/New. Binding re-asserts it whenever the field is
-                                // not the one being edited.
-                                Binding {
-                                    target: benchmarkNameField
-                                    property: "text"
-                                    value: root.vm().benchmarkName
-                                    when: !benchmarkNameField.activeFocus
-                                    restoreMode: Binding.RestoreNone
-                                }
                             }
                             // The view model's own dirty state: it compares the draft with the copy it
                             // was opened from or saved to, so undoing back to that copy clears it.
@@ -1175,11 +1164,9 @@ ApplicationWindow {
                             rowContextMenu.popup(editorTable, x, y)
                         }
                         onGroupContextRequested: (groupId, x, y) => {
-                            editorTable.focusedGroupId = groupId
                             groupContextMenu.popup(editorTable, x, y)
                         }
                         onRankContextRequested: (tierId, x, y) => {
-                            editorTable.focusedTierId = tierId
                             rankContextMenu.popup(editorTable, x, y)
                         }
                     }
