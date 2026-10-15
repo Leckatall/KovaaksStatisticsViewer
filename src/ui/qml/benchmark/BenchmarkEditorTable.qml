@@ -768,21 +768,6 @@ FocusScope {
         onSelectionChanged: root.publishSelection()
     }
 
-    // Takes no focus, so clicking it never moves the table's current cell.
-    component TableSwatch: AbstractButton {
-        id: swatch
-        required property color swatchColor
-        implicitWidth: 14
-        implicitHeight: 14
-        focusPolicy: Qt.NoFocus
-        Accessible.role: Accessible.Button
-        background: Rectangle {
-            color: swatch.swatchColor
-            radius: 3
-            border.color: swatch.hovered ? swatch.palette.highlight : swatch.palette.mid
-        }
-    }
-
     // A labelled "+ Add ..." control that extends the table. It keeps keyboard focus (Tab) and
     // shows what it does on hover.
     component AddRowButton: TooltipToolButton {
@@ -1242,120 +1227,7 @@ FocusScope {
                     // or the header drifts three columns away from its body.
                     leftMargin: -root.hiddenThresholdWidth
                     columnWidthProvider: (column) => root.thresholdColumnWidth(column)
-                    delegate: FocusScope {
-                        id: headerCell
-                        required property var model
-                        required property int column
-                        readonly property string tierId: headerCell.model.tierId !== undefined ? headerCell.model.tierId : ""
-                        readonly property string headerName: headerCell.model.display !== undefined ? headerCell.model.display : ""
-                        readonly property var headerIssues: headerCell.model.issues || []
-                        readonly property var headerColor: headerCell.model.headerColor !== undefined ? headerCell.model.headerColor : "transparent"
-                        property bool editingName: false
-                        objectName: headerCell.tierId !== "" ? "rankHeader_" + headerCell.tierId : ""
-                        implicitWidth: root.thresholdWidth
-                        implicitHeight: root.headerHeight
-                        activeFocusOnTab: headerCell.tierId !== ""
-                        Accessible.role: Accessible.ColumnHeader
-                        Accessible.name: headerCell.headerName !== "" ? headerCell.headerName : qsTr("Unnamed rank")
-                        Accessible.description: headerCell.headerIssues.join("; ")
-                        onActiveFocusChanged: if (activeFocus) {
-                            root.focusedTierId = headerCell.tierId
-                            root.headerFocused = true
-                        }
-
-                        function beginRename() {
-                            if (headerCell.tierId !== "") headerCell.editingName = true
-                        }
-
-                        // While the name editor is open, its keys (including Paste and Undo) stay local.
-                        Keys.onPressed: (event) => {
-                            if (headerCell.editingName) {
-                                event.accepted = false
-                            } else if (event.key === Qt.Key_F2 || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                headerCell.beginRename()
-                                event.accepted = true
-                            } else {
-                                root.handleCommandKey(event)
-                            }
-                        }
-
-                        TapHandler {
-                            onTapped: headerCell.forceActiveFocus()
-                            onDoubleTapped: headerCell.beginRename()
-                        }
-                        TapHandler {
-                            acceptedButtons: Qt.RightButton
-                            onTapped: eventPoint => {
-                                headerCell.forceActiveFocus()
-                                const point = headerCell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
-                                root.rankContextRequested(headerCell.tierId, point.x, point.y)
-                            }
-                        }
-
-                        GridHeaderCell {
-                            anchors.fill: parent
-                            focused: headerCell.activeFocus
-                        }
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            height: 4
-                            color: headerCell.headerColor
-                        }
-                        TableSwatch {
-                            objectName: "rankSwatch_" + headerCell.tierId
-                            visible: headerCell.tierId !== "" && !headerCell.editingName
-                            anchors.left: parent.left
-                            anchors.leftMargin: 4
-                            anchors.verticalCenter: parent.verticalCenter
-                            swatchColor: headerCell.headerColor
-                            Accessible.name: qsTr("Colour of rank %1").arg(headerCell.Accessible.name)
-                            onClicked: root.colorSwatchRequested("tier", headerCell.tierId, headerCell.headerColor)
-                        }
-                        Loader {
-                            anchors.fill: parent
-                            anchors.margins: 2
-                            active: headerCell.editingName
-                            sourceComponent: TextField {
-                                id: rankNameEditor
-                                objectName: "rankHeaderEditor"
-                                property bool cancelled: false
-                                text: headerCell.headerName
-                                Accessible.name: qsTr("Rank name")
-                                Component.onCompleted: {
-                                    rankNameEditor.selectAll()
-                                    rankNameEditor.forceActiveFocus()
-                                }
-                                Keys.onEscapePressed: {
-                                    rankNameEditor.cancelled = true
-                                    headerCell.editingName = false
-                                    headerCell.forceActiveFocus()
-                                }
-                                // Return keeps focus on the header; losing focus elsewhere must not steal it back.
-                                onEditingFinished: {
-                                    const returnFocus = rankNameEditor.activeFocus
-                                    if (!rankNameEditor.cancelled && rankNameEditor.text !== headerCell.headerName)
-                                        root.manager.renameTier(headerCell.tierId, rankNameEditor.text)
-                                    headerCell.editingName = false
-                                    if (returnFocus) headerCell.forceActiveFocus()
-                                }
-                            }
-                        }
-                        Label {
-                            anchors.fill: parent
-                            anchors.margins: 4
-                            anchors.leftMargin: root.rankHeaderLabelLeftInset
-                            anchors.rightMargin: root.rankHeaderLabelRightInset
-                            visible: !headerCell.editingName
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                            font.bold: true
-                            font.italic: headerCell.headerName === ""
-                            text: root.rankHeaderText(headerCell.headerName, headerCell.headerIssues.length > 0)
-                        }
-                    }
+                    delegate: BenchmarkRankHeaderCell { table: root }
                 }
 
                 // Right after the last rank when they all fit, at the end of the header otherwise.
