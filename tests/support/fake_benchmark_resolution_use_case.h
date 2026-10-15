@@ -20,6 +20,9 @@ namespace ksv::tests_support {
         std::vector<domain::ScenarioResolution> resolveResult;
         std::map<std::string, std::vector<domain::ScenarioResolution>> resolveResultById;
         mutable std::vector<domain::Benchmark> resolvedBenchmarks;
+        // withAutomaticMappings() returns its input unchanged unless this is set.
+        std::optional<domain::Benchmark> mapResult;
+        mutable std::vector<domain::Benchmark> mappedBenchmarks;
         std::optional<domain::BenchmarkId> editLease;
         int setEditLeaseCount = 0;
         std::vector<std::function<void()>> callbacks;
@@ -33,6 +36,10 @@ namespace ksv::tests_support {
             if (const auto it = resolveResultById.find(benchmark.id.value); it != resolveResultById.end())
                 return it->second;
             return resolveResult;
+        }
+        [[nodiscard]] domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const override {
+            mappedBenchmarks.push_back(benchmark);
+            return mapResult ? *mapResult : benchmark;
         }
         void setEditLease(std::optional<domain::BenchmarkId> benchmark) override {
             editLease = std::move(benchmark);

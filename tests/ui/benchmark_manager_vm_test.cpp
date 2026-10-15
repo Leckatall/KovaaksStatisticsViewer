@@ -236,6 +236,49 @@ TEST(BenchmarkManagerVm, SaveSuccessUpdatesLocalBaselineFromAdmittedToken) {
     EXPECT_TRUE(f.vm->dirty());
 }
 
+// The open benchmark is leased, so background linking skips it; save is where its unlinked
+// entries get linked, or the progress view would wait on the lease indefinitely.
+TEST(BenchmarkManagerVm, SaveLinksMatchedScenariosAndAdoptsTheLinkedCopyAsBaseline) {
+    Fixture f;
+    f.uc->nextNewSeed = newSeed(draftWith("Alpha", {}, {benchmarkEntry("e1", "air angelic ", std::nullopt, {})}));
+    f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"}, std::nullopt};
+    f.uc->mapAutomatically = [](Benchmark benchmark) {
+        benchmark.uncategorized[0].name = "Air Angelic";
+        benchmark.uncategorized[0].hash = "hA";
+        return benchmark;
+    };
+    f.build();
+    f.vm->beginNewBenchmark();
+
+    ASSERT_TRUE(f.vm->save()["ok"].toBool());
+
+    ASSERT_EQ(f.uc->saveCalls.size(), 1U);
+    EXPECT_EQ(f.uc->saveCalls.back().first.uncategorized[0].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(f.uc->saveCalls.back().first.uncategorized[0].name, "Air Angelic");
+    EXPECT_FALSE(f.vm->dirty());
+    EXPECT_EQ(scenarioNames(*f.vm), QStringList{QStringLiteral("Air Angelic")});
+    ASSERT_FALSE(f.uc->resolveCalls.empty());
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized[0].hash, std::optional<std::string>{"hA"});
+}
+
+TEST(BenchmarkManagerVm, FailedSaveLeavesTheWorkingCopyUnlinked) {
+    Fixture f;
+    f.uc->nextNewSeed = newSeed(draftWith("Alpha", {}, {benchmarkEntry("e1", "air angelic", std::nullopt, {})}));
+    f.uc->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::WriteFailed};
+    f.uc->mapAutomatically = [](Benchmark benchmark) {
+        benchmark.uncategorized[0].name = "Air Angelic";
+        benchmark.uncategorized[0].hash = "hA";
+        return benchmark;
+    };
+    f.build();
+    f.vm->beginNewBenchmark();
+
+    EXPECT_FALSE(f.vm->save()["ok"].toBool());
+
+    EXPECT_TRUE(f.vm->dirty());
+    EXPECT_EQ(scenarioNames(*f.vm), QStringList{QStringLiteral("air angelic")});
+}
+
 // The editor's "• Unsaved" label reads dirty(): undoing back to the saved copy clears it.
 TEST(BenchmarkManagerVm, UndoingBackToTheSavedCopyClearsDirty) {
     Fixture f;

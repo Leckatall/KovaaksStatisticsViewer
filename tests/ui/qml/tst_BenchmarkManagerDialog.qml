@@ -99,6 +99,29 @@ TestCase {
         compare(vm(dialog).discardCalls, 0)
     }
 
+    // An open benchmark is held back from automatic linking to the user's runs, so closing the
+    // window must close it, or a saved benchmark would stay unlinked until the app restarts.
+    function test_closingWithACleanDraftClosesTheDraft() {
+        const dialog = openWithFake({dirty: false, hasDraft: true})
+
+        dialog.close()
+
+        tryCompare(dialog, "visible", false)
+        compare(vm(dialog).discardCalls, 1)
+    }
+
+    function test_savingFromTheClosePromptClosesTheSavedDraft() {
+        const dialog = openWithFake({dirty: true, hasDraft: true})
+
+        dialog.close()
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+        dialog.dirtyClosePrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
+
+        tryCompare(vm(dialog), "saveCalls", 1)
+        tryCompare(dialog, "visible", false)
+        compare(vm(dialog).discardCalls, 1)
+    }
+
     // "• Unsaved" follows the view model's dirty state: absent on a clean draft, shown after an
     // edit, gone again once saved (or undone back to the saved copy).
     function test_unsavedLabelFollowsTheDraftsDirtyState() {

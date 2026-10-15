@@ -301,3 +301,71 @@ TEST(BenchmarkResolutionUseCase, NewDraftLeaseDoesNotSuppressAcceptedBenchmarks)
 
     EXPECT_FALSE(useCase->snapshot().resolutions.contains(BenchmarkId{"draft-new"}));
 }
+
+// Names pasted from a spreadsheet carry trailing spaces and their own capitalisation; matching
+// tolerates both, and the link adopts the played scenario's exact name.
+TEST(BenchmarkResolutionUseCase, MatchesNamesIgnoringCaseAndSurroundingWhitespaceAndAdoptsTheProfileName) {
+    Fixture f;
+    f.played("1wall6targets TE", "hT");
+    f.played("Air Angelic 4", "hA");
+    f.library({benchmarkWith("b1", {benchmarkEntry("trail", "1wall6targets TE  ", std::nullopt, {}),
+                                    benchmarkEntry("case", "air angelic 4", std::nullopt, {})})});
+    f.benchmarks->nextBatchOutcome = {{admitted("b1")}};
+
+    const auto useCase = f.build();
+
+    const auto snap = useCase->snapshot();
+    const auto &rs = resolutionsFor(snap, "b1");
+    EXPECT_EQ(forEntry(rs, "trail").state, ScenarioMatchState::AutoMappable);
+    EXPECT_EQ(forEntry(rs, "case").state, ScenarioMatchState::AutoMappable);
+    ASSERT_EQ(forEntry(rs, "case").candidates.size(), 1U);
+    EXPECT_EQ(forEntry(rs, "case").candidates[0].name, "Air Angelic 4");
+
+    ASSERT_EQ(f.benchmarks->batchRequests.size(), 1U);
+    const auto &written = f.benchmarks->batchRequests.front().at(0).benchmark.uncategorized;
+    ASSERT_EQ(written.size(), 2U);
+    EXPECT_EQ(written[0].hash, std::optional<std::string>{"hT"});
+    EXPECT_EQ(written[0].name, "1wall6targets TE");
+    EXPECT_EQ(written[1].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(written[1].name, "Air Angelic 4");
+}
+
+TEST(BenchmarkResolutionUseCase, PlayedNamesDifferingOnlyByCaseAreAmbiguousAndNeverAutoLinked) {
+    Fixture f;
+    f.played("Tile Frenzy", "h1");
+    f.played("tile frenzy", "h2");
+    f.library({benchmarkWith("b1", {benchmarkEntry("e1", "Tile Frenzy", std::nullopt, {})})});
+
+    const auto useCase = f.build();
+
+    const auto snap = useCase->snapshot();
+    const auto &resolution = forEntry(resolutionsFor(snap, "b1"), "e1");
+    EXPECT_EQ(resolution.state, ScenarioMatchState::Ambiguous);
+    EXPECT_EQ(resolution.candidates.size(), 2U);
+    EXPECT_TRUE(f.benchmarks->batchRequests.empty());
+}
+
+// The manager links a working copy at save time, so the leased benchmark it is editing is linked
+// without waiting for the lease to be released.
+TEST(BenchmarkResolutionUseCase, WithAutomaticMappingsLinksAWorkingCopyEvenWhileItIsLeased) {
+    Fixture f;
+    f.played("Alpha", "hA");
+    f.played("Many", "hM1");
+    f.played("Many", "hM2");
+    f.library({});
+    const auto useCase = f.build();
+    useCase->setEditLease(BenchmarkId{"b1"});
+
+    const auto linked = useCase->withAutomaticMappings(
+        benchmarkWith("b1", {benchmarkEntry("e1", " alpha", std::nullopt, {}),
+                             benchmarkEntry("many", "Many", std::nullopt, {}),
+                             benchmarkEntry("none", "Unplayed", std::nullopt, {})}));
+
+    ASSERT_EQ(linked.uncategorized.size(), 3U);
+    EXPECT_EQ(linked.uncategorized[0].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(linked.uncategorized[0].name, "Alpha");
+    EXPECT_EQ(linked.uncategorized[1].hash, std::nullopt);
+    EXPECT_EQ(linked.uncategorized[2].hash, std::nullopt);
+    EXPECT_EQ(linked.uncategorized[2].name, "Unplayed");
+    EXPECT_TRUE(f.benchmarks->batchRequests.empty());
+}

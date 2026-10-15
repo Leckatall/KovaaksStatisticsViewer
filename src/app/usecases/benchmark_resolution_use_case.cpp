@@ -40,11 +40,31 @@ namespace ksv::application {
         }
 
         struct ScenarioCatalogue {
+            // Keyed by domain::scenarioNameKey, never by the exact name.
             std::map<std::string, std::vector<domain::ScenarioCandidate>> byName;
             std::unordered_set<std::string> knownHashes;
         };
 
-        std::vector<std::pair<domain::ScenarioEntryId, std::string>> computeAutoMappings(
+        ScenarioCatalogue buildCatalogue(const IProfileService &profile) {
+            ScenarioCatalogue catalogue;
+            for (const auto &scenario: profile.getScenarioList()) {
+                catalogue.knownHashes.insert(scenario.hash);
+                catalogue.byName[domain::scenarioNameKey(scenario.name)].push_back(
+                    {scenario.hash, static_cast<int>(profile.getRunCount(scenario).value_or(0)),
+                     profile.getLastRunTime(scenario), scenario.name});
+            }
+            for (auto &candidates: catalogue.byName | std::views::values)
+                std::ranges::sort(candidates, {}, &domain::ScenarioCandidate::hash);
+            return catalogue;
+        }
+
+        struct AutoMapping {
+            domain::ScenarioEntryId entryId;
+            std::string hash;
+            std::string name;
+        };
+
+        std::vector<AutoMapping> computeAutoMappings(
             const domain::Benchmark &benchmark,
             const std::map<std::string, std::vector<domain::ScenarioCandidate>> &byName) {
             std::unordered_set<std::string> taken;
@@ -53,20 +73,30 @@ namespace ksv::application {
                     if (entry.hash) taken.insert(*entry.hash);
                 return false;
             });
-            std::vector<std::pair<domain::ScenarioEntryId, std::string>> mappings;
+            std::vector<AutoMapping> mappings;
             forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
                 for (const auto &entry: entries) {
                     if (entry.hash) continue;
-                    const auto found = byName.find(entry.name);
+                    const auto found = byName.find(domain::scenarioNameKey(entry.name));
                     if (found == byName.end() || found->second.size() != 1) continue;
-                    const auto &hash = found->second.front().hash;
-                    if (taken.contains(hash)) continue;
-                    taken.insert(hash);
-                    mappings.push_back({entry.id, hash});
+                    const auto &candidate = found->second.front();
+                    if (taken.contains(candidate.hash)) continue;
+                    taken.insert(candidate.hash);
+                    mappings.push_back({entry.id, candidate.hash, candidate.name});
                 }
                 return false;
             });
             return mappings;
+        }
+
+        domain::Benchmark applyAutoMappings(domain::Benchmark benchmark, const std::vector<AutoMapping> &mappings) {
+            for (const auto &mapping: mappings) {
+                if (auto *target = findEntry(benchmark, mapping.entryId)) {
+                    target->hash = mapping.hash;
+                    target->name = mapping.name;
+                }
+            }
+            return benchmark;
         }
 
         AutomaticMappingWriteError toWriteError(std::optional<data::BenchmarkSaveError> error) {
@@ -111,16 +141,7 @@ namespace ksv::application {
 
     std::vector<domain::ScenarioResolution> BenchmarkResolutionUseCase::resolve(
         const domain::Benchmark &benchmark) const {
-        ScenarioCatalogue catalogue;
-        for (const auto &scenario: m_profile->getScenarioList()) {
-            catalogue.knownHashes.insert(scenario.hash);
-            catalogue.byName[scenario.name].push_back(
-                {scenario.hash, static_cast<int>(m_profile->getRunCount(scenario).value_or(0)),
-                 m_profile->getLastRunTime(scenario)});
-        }
-        for (auto &[_, candidates]: catalogue.byName)
-            std::ranges::sort(candidates, {}, &domain::ScenarioCandidate::hash);
-
+        const auto catalogue = buildCatalogue(*m_profile);
         std::vector<domain::ScenarioResolution> resolutions;
         forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
             for (const auto &entry: entries) {
@@ -130,7 +151,7 @@ namespace ksv::application {
                     resolution.state = catalogue.knownHashes.contains(*entry.hash)
                                            ? domain::ScenarioMatchState::Resolved
                                            : domain::ScenarioMatchState::MappedUnavailable;
-                } else if (const auto found = catalogue.byName.find(entry.name);
+                } else if (const auto found = catalogue.byName.find(domain::scenarioNameKey(entry.name));
                            found != catalogue.byName.end()) {
                     resolution.candidates = found->second;
                     resolution.state = found->second.size() == 1
@@ -144,6 +165,10 @@ namespace ksv::application {
         return resolutions;
     }
 
+    domain::Benchmark BenchmarkResolutionUseCase::withAutomaticMappings(const domain::Benchmark &benchmark) const {
+        return applyAutoMappings(benchmark, computeAutoMappings(benchmark, buildCatalogue(*m_profile).byName));
+    }
+
     void BenchmarkResolutionUseCase::runReconcilePass() {
         BenchmarkResolutionSnapshot next;
 
@@ -153,15 +178,7 @@ namespace ksv::application {
         });
         next.scenarioCatalogue = catalogueScenarios;
 
-        ScenarioCatalogue catalogue;
-        for (const auto &scenario: m_profile->getScenarioList()) {
-            catalogue.knownHashes.insert(scenario.hash);
-            catalogue.byName[scenario.name].push_back(
-                {scenario.hash, static_cast<int>(m_profile->getRunCount(scenario).value_or(0)),
-                 m_profile->getLastRunTime(scenario)});
-        }
-        for (auto &candidates: catalogue.byName | std::views::values)
-            std::ranges::sort(candidates, {}, &domain::ScenarioCandidate::hash);
+        const auto catalogue = buildCatalogue(*m_profile);
 
         const auto snapshot = m_benchmarks->snapshot();
         std::vector<data::BenchmarkReplacementRequest> requests;
@@ -177,10 +194,7 @@ namespace ksv::application {
                 if (m_editLease && *m_editLease == loaded->benchmark.id) continue;
                 const auto mappings = computeAutoMappings(loaded->benchmark, catalogue.byName);
                 if (mappings.empty()) continue;
-                auto updated = loaded->benchmark;
-                for (const auto &[id, hash]: mappings)
-                    if (auto *target = findEntry(updated, id)) target->hash = hash;
-                requests.push_back({std::move(updated),
+                requests.push_back({applyAutoMappings(loaded->benchmark, mappings),
                                     data::BenchmarkEditToken{loaded->benchmark.id, entry.filename,
                                                              entry.digest}});
                 request_owners.push_back(loaded->benchmark.id);

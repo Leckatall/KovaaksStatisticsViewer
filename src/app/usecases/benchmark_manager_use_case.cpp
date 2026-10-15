@@ -109,6 +109,10 @@ namespace ksv::application {
         return m_resolution->resolve(benchmark);
     }
 
+    domain::Benchmark BenchmarkManagerUseCase::withAutomaticMappings(const domain::Benchmark &benchmark) const {
+        return m_resolution->withAutomaticMappings(benchmark);
+    }
+
     data::BenchmarkRemoveOutcome BenchmarkManagerUseCase::deleteBenchmark(
         const data::BenchmarkEditToken &token) {
         return m_benchmarks->remove(token);

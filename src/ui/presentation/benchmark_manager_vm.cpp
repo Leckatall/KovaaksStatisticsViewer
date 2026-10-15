@@ -544,6 +544,8 @@ namespace ksv::presentation {
             domain::BenchmarkEditor normalizer{candidate, m_idFactory};
             for (const auto &key: m_cellInputs | std::views::keys) normalizer.clearThreshold(key.entryId, key.tierId);
         }
+        // The open benchmark is leased, which holds background linking off it, so it links here.
+        candidate = m_useCase->withAutomaticMappings(candidate);
         const auto outcome = m_useCase->save(candidate, m_token);
         if (outcome.error) {
             switch (*outcome.error) {

@@ -329,7 +329,7 @@ function makeFakeBenchmarkManagerVm(overrides) {
         openCalls: [],
         openBenchmark: function (id) { this.openCalls.push(id); return true },
         discardCalls: 0,
-        discard: function () { this.discardCalls++; this.dirty = false },
+        discard: function () { this.discardCalls++; this.dirty = false; this.hasDraft = false },
         importCalls: [],
         importResult: null,
         importPlaylist: function (url) {

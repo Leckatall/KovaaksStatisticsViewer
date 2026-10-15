@@ -1078,3 +1078,63 @@ TEST(BenchmarkTableComposition, ProfileRebuildRefreshesLeasedDraftMapping) {
     EXPECT_EQ(tableCell(*vm, "s1", "t1", TableRole::DisplayTextRole).toString(), "123");
     EXPECT_NE(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "unresolved");
 }
+
+// Regression: the open benchmark is leased away from background linking, and nothing released the
+// lease after a save, so pasted names showed "Linking to your runs" until the app restarted. Names
+// pasted from a spreadsheet also differ from the played scenario by case and trailing spaces.
+TEST(BenchmarkTableComposition, PastedNameLinksOnSaveDespiteCaseAndTrailingSpaces) {
+    const DefaultLocaleGuard guard{kEnglishGb};
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, unresolvedTrackableJson());
+    ASSERT_NE(w, nullptr);
+    auto *tracking = w->app->benchmarkTrackingVm();
+    tracking->selectBenchmark(QStringLiteral("b-cascade"));
+    auto *vm = w->app->benchmarkManagerVm();
+    ASSERT_TRUE(vm->openBenchmark("b-cascade"));
+
+    ASSERT_TRUE(vm->pasteText(at("scenario", "s1"), "1WALL6TARGETS te  ")["ok"].toBool());
+    EXPECT_EQ(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "autoMappable");
+    const auto result = vm->save();
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+
+    // Still open in the manager: linked in the file, the editor and the progress view.
+    ASSERT_TRUE(vm->hasDraft());
+    EXPECT_FALSE(vm->dirty());
+    EXPECT_EQ(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "resolved");
+    const auto stored = jsonEntry(readJson(QDir(benchmarks.path()).absoluteFilePath("bench.json")), "s1");
+    EXPECT_EQ(stored.value("hash").toString(), kWallSixHash);
+    EXPECT_EQ(stored.value("name").toString(), "1wall6targets TE");
+    const auto *projection = w->app->benchmarkTrackingUseCase()->projection();
+    ASSERT_NE(projection, nullptr);
+    ASSERT_EQ(projection->scenarios.size(), 1U);
+    EXPECT_EQ(projection->scenarios[0].matchState, domain::ScenarioMatchState::Resolved);
+    EXPECT_TRUE(projection->scenarios[0].personalBest.has_value());
+    const QVariantMap row = findGridRow(tracking->progressGrid(), QStringLiteral("1wall6targets TE"));
+    ASSERT_FALSE(row.isEmpty());
+    EXPECT_TRUE(row.value(QStringLiteral("matchStateText")).toString().isEmpty());
+}
+
+// Closing the manager closes its benchmark, so a scenario played afterwards links in the background.
+TEST(BenchmarkTableComposition, ClosedManagerBenchmarkLinksWhenTheScenarioIsLaterPlayed) {
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, unmappedJson(), false);
+    ASSERT_NE(w, nullptr);
+    auto *vm = w->app->benchmarkManagerVm();
+    ASSERT_TRUE(vm->openBenchmark("auto-1"));
+    ASSERT_TRUE(vm->renameScenario("s1", " 1wall6targets te")["ok"].toBool());
+    ASSERT_TRUE(vm->save()["ok"].toBool());
+    vm->discard();
+
+    ASSERT_FALSE(w->env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+    w->app->profileService()->generateProfileFromDirectory();
+    const auto path = QDir(benchmarks.path()).absoluteFilePath("bench.json");
+    QElapsedTimer timer;
+    timer.start();
+    while (jsonEntry(readJson(path), "s1").value("hash").toString().isEmpty()) {
+        ASSERT_LT(timer.elapsed(), 5000) << "the closed benchmark was never linked";
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+    EXPECT_EQ(jsonEntry(readJson(path), "s1").value("hash").toString(), kWallSixHash);
+    EXPECT_EQ(jsonEntry(readJson(path), "s1").value("name").toString(), "1wall6targets TE");
+}

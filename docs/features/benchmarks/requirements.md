@@ -247,7 +247,7 @@ For this personal/open-source desktop product, successful use and trustworthy an
 ## Assumptions and non-material open questions
 
 - Benchmark scores use the Kovaak's convention that higher values are better and meaningful scores are non-negative.
-- Automatic name matching uses exact names to avoid false attribution; manual resolution remains available when exact matching is insufficient.
+- Automatic name matching ignores letter case and surrounding whitespace, and a link adopts the played scenario's exact name. Played scenarios whose names differ only that way are ambiguous and never linked automatically; manual resolution remains available when matching is insufficient.
 - Tier, category, and subcategory colors receive application defaults and may repeat. Exact palettes and color-picker interaction are presentation decisions.
 - The tracking view uses all available profile history by default. Graph navigation and optional date-range controls may follow existing KSV graph conventions without changing the product model.
 - Benchmark display ordering and filename generation are manager presentation details as long as benchmark identity, content, validation, and recovery behavior remain stable.

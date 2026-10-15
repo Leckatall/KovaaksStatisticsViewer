@@ -214,6 +214,21 @@ TEST(BenchmarkManagerUseCase, ResolveForwardsToStatelessResolutionAndRetainsNoth
     EXPECT_TRUE(fixture.manager->state().library->entries.empty());
 }
 
+TEST(BenchmarkManagerUseCase, WithAutomaticMappingsForwardsTheWorkingCopyAndReturnsTheLinkedValue) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    auto linked = savedBenchmark("draft-1");
+    linked.name = "Linked";
+    fixture.resolution->mapResult = linked;
+    fixture.build();
+
+    const auto result = fixture.manager->withAutomaticMappings(savedBenchmark("draft-1"));
+
+    EXPECT_EQ(result.name, "Linked");
+    ASSERT_EQ(fixture.resolution->mappedBenchmarks.size(), 1U);
+    EXPECT_EQ(fixture.resolution->mappedBenchmarks.front().id.value, "draft-1");
+}
+
 TEST(BenchmarkManagerUseCase, DeleteForwardsTheTokenAndReturnsTheOutcomeUnchanged) {
     Fixture fixture;
     fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));

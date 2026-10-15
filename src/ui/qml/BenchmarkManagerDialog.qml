@@ -138,8 +138,21 @@ ApplicationWindow {
         root.commitActiveEdits()
         if (root.vm().dirty) {
             close.accepted = false
-            root.runWhenClean(() => root.visible = false)
+            root.runWhenClean(() => root.closeWindow())
+            return
         }
+        root.closeDraft()
+    }
+
+    function closeWindow() {
+        root.closeDraft()
+        root.visible = false
+    }
+
+    // The open benchmark is held back from automatic linking to your runs until the editor
+    // closes it, so the window never keeps one open behind it.
+    function closeDraft() {
+        if (root.vm().hasDraft) root.vm().discard()
     }
 
     // Every draft-replacing transition (New / Open / Import / close) waits for an explicit

@@ -32,6 +32,9 @@ namespace ksv::tests_support {
         std::function<void()> duringSave;
         data::BenchmarkRemoveOutcome nextRemoveOutcome{};
         mutable std::vector<domain::ScenarioResolution> nextResolveResult;
+        // withAutomaticMappings() returns its input unchanged unless this is set.
+        std::function<domain::Benchmark(const domain::Benchmark &)> mapAutomatically;
+        mutable std::vector<domain::Benchmark> mapCalls;
 
         std::vector<std::string> openArgs;
         std::vector<std::string> importPaths;
@@ -88,6 +91,10 @@ namespace ksv::tests_support {
             const domain::Benchmark &benchmark) const override {
             resolveCalls.push_back(benchmark);
             return nextResolveResult;
+        }
+        [[nodiscard]] domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const override {
+            mapCalls.push_back(benchmark);
+            return mapAutomatically ? mapAutomatically(benchmark) : benchmark;
         }
         [[nodiscard]] data::BenchmarkRemoveOutcome deleteBenchmark(
             const data::BenchmarkEditToken &token) override {

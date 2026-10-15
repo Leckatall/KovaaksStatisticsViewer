@@ -48,6 +48,8 @@ namespace ksv::application {
         // adopting or persisting it.
         [[nodiscard]] virtual std::vector<domain::ScenarioResolution> resolve(
             const domain::Benchmark &benchmark) const = 0;
+        // A caller-supplied working copy with its uniquely matched, unlinked entries linked.
+        [[nodiscard]] virtual domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const = 0;
         [[nodiscard]] virtual data::BenchmarkRemoveOutcome deleteBenchmark(
             const data::BenchmarkEditToken &token) = 0;
     };

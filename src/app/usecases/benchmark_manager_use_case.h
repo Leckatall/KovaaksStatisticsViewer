@@ -42,6 +42,7 @@ namespace ksv::application {
             const std::optional<data::BenchmarkEditToken> &token) override;
         [[nodiscard]] std::vector<domain::ScenarioResolution> resolve(
             const domain::Benchmark &benchmark) const override;
+        [[nodiscard]] domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const override;
         [[nodiscard]] data::BenchmarkRemoveOutcome deleteBenchmark(
             const data::BenchmarkEditToken &token) override;
 
