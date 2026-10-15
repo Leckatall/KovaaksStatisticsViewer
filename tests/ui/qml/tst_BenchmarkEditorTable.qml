@@ -232,10 +232,10 @@ TestCase {
             {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []}
         ]})
         const requests = []
-        table.addSubcategoryRequested.connect((categoryId, name) => {
-            requests.push([categoryId, name])
-            table.creationAccepted = true
-        })
+        table.creationHandler = request => {
+            requests.push([request.categoryId, request.name])
+            return true
+        }
 
         const category = cellFor(table, "b", "category")
         mouseClick(category.face, 20, category.height / 2)

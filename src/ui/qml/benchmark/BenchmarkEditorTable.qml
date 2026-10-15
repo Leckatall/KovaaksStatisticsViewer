@@ -242,16 +242,15 @@ FocusScope {
     property var dropInsertion: null
     property bool addingRank: false
     property bool addingCategory: false
-    property bool creationAccepted: true
+    // (request) => bool, answered synchronously; `request` is {kind: "category", name},
+    // {kind: "subcategory", categoryId, name} or {kind: "rank", name}.
+    property var creationHandler: null
     // The entry whose scenario cell opens for editing once its row has a delegate.
     property string pendingScenarioEdit: ""
 
     // `kind` is "tier" or "group"; the dialog owns the colour picker.
     signal colorSwatchRequested(string kind, string id, color current)
     signal addScenarioRequested()
-    signal addCategoryRequested(string name)
-    signal addSubcategoryRequested(string categoryId, string name)
-    signal addRankRequested(string name)
     // An empty `beforeEntryId` appends to the group.
     signal moveSelectionRequested(var entryIds, string targetGroupId, string beforeEntryId)
     signal rowContextRequested(string entryId, real x, real y)
@@ -285,6 +284,10 @@ FocusScope {
 
     function columnKey(kind, tierId) {
         return kind === root.thresholdKind ? tierId : root.kindKeys[kind]
+    }
+
+    function requestCreation(request) {
+        return root.creationHandler ? !!root.creationHandler(request) : false
     }
 
     function commitCell(kind, entryId, tierId, groupId, text, original) {
@@ -983,10 +986,8 @@ FocusScope {
                 }
                 onAccepted: {
                     if (text.trim() === "") return
-                    root.creationAccepted = true
                     subcategoryCreationField.releaseFocus()
-                    root.addSubcategoryRequested(cell.categoryId, text)
-                    if (root.creationAccepted) {
+                    if (root.requestCreation({kind: "subcategory", categoryId: cell.categoryId, name: text})) {
                         cell.addingSubcategory = false
                         text = ""
                     } else {
@@ -1295,9 +1296,7 @@ FocusScope {
                         placeholderText: qsTr("Subcategory name")
                         onAccepted: {
                             if (text.trim() === "") return
-                            root.creationAccepted = true
-                            root.addSubcategoryRequested(groupItem.groupId, text)
-                            if (root.creationAccepted) {
+                            if (root.requestCreation({kind: "subcategory", categoryId: groupItem.groupId, name: text})) {
                                 groupItem.addingSubcategory = false
                                 text = ""
                             }
@@ -1625,9 +1624,7 @@ FocusScope {
                         Accessible.name: placeholderText
                         onAccepted: {
                             if (text.trim() === "") return
-                            root.creationAccepted = true
-                            root.addRankRequested(text)
-                            if (root.creationAccepted) {
+                            if (root.requestCreation({kind: "rank", name: text})) {
                                 root.addingRank = false
                                 text = ""
                             }
@@ -1753,9 +1750,7 @@ FocusScope {
                 Accessible.name: placeholderText
                 onAccepted: {
                     if (text.trim() === "") return
-                    root.creationAccepted = true
-                    root.addCategoryRequested(text)
-                    if (root.creationAccepted) {
+                    if (root.requestCreation({kind: "category", name: text})) {
                         root.addingCategory = false
                         text = ""
                     }

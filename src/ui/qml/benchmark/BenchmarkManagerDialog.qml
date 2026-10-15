@@ -1158,14 +1158,13 @@ ApplicationWindow {
                             if (result && result.ok && result.createdId)
                                 Qt.callLater(() => editorTable.beginScenarioEdit(result.createdId))
                         }
-                        onAddCategoryRequested: name => {
-                            editorTable.creationAccepted = root.runTableCommand(() => root.vm().addCategory(name)).ok
-                        }
-                        onAddSubcategoryRequested: (categoryId, name) => {
-                            editorTable.creationAccepted = root.requestSubcategory(categoryId, name)
-                        }
-                        onAddRankRequested: name => {
-                            editorTable.creationAccepted = root.runTableCommand(() => root.vm().addTier(name)).ok
+                        creationHandler: request => {
+                            switch (request.kind) {
+                            case "category": return root.runTableCommand(() => root.vm().addCategory(request.name)).ok
+                            case "subcategory": return root.requestSubcategory(request.categoryId, request.name)
+                            case "rank": return root.runTableCommand(() => root.vm().addTier(request.name)).ok
+                            }
+                            return false
                         }
                         onMoveSelectionRequested: (entryIds, targetId, beforeId) => root.runTableCommand(
                             () => root.vm().assignScenarios(entryIds, targetId, beforeId))
