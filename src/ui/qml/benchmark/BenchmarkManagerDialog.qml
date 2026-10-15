@@ -62,8 +62,9 @@ ApplicationWindow {
     // they act on what the user typed even though no editingFinished has fired.
     function commitActiveEdits() {
         editorTable.commitActiveEdit()
-        if (benchmarkNameField.activeFocus && benchmarkNameField.text !== root.vm().benchmarkName)
-            root.vm().setBenchmarkName(benchmarkNameField.text)
+        const nameField = editorToolbar.nameField
+        if (nameField.activeFocus && nameField.text !== root.vm().benchmarkName)
+            root.vm().setBenchmarkName(nameField.text)
         root.sessionRevision++
     }
 
@@ -515,21 +516,6 @@ ApplicationWindow {
     // The width the Library pane opens at: just the toolbar row, which leaves the rest to the editor.
     readonly property int libraryDefaultWidth: Math.max(libraryPane.toolbarImplicitWidth, 280)
 
-    // A text field that shows the model value whenever it is not being edited; typing into a
-    // TextField destroys a plain `text:` binding, and these fields outlive the element they edit.
-    component BoundField: TextField {
-        id: boundField
-        property string boundText
-        selectByMouse: true
-        Binding {
-            target: boundField
-            property: "text"
-            value: boundField.boundText
-            when: !boundField.activeFocus
-            restoreMode: Binding.RestoreNone
-        }
-    }
-
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 10
@@ -603,112 +589,28 @@ ApplicationWindow {
                     // A closed draft brings the list back, so the next open starts with it shown.
                     onVisibleChanged: if (!visible) root.libraryCollapsed = false
 
-                    // The actions sit beside the name while the name can keep a comfortable width,
-                    // and otherwise move to their own row together: never some on each row. The
-                    // actions row has a fixed implicit width, so the switch cannot oscillate.
-                    GridLayout {
+                    BenchmarkEditorToolbar {
                         id: editorToolbar
-                        objectName: "editorToolbar"
-                        readonly property real inlineNameWidth: 240
-                        readonly property bool actionsInline: editorPane.width
-                            >= libraryToggle.implicitWidth + nameRow.spacing + inlineNameWidth
-                               + columnSpacing + editorActions.implicitWidth
                         Layout.fillWidth: true
-                        columns: actionsInline ? 2 : 1
-                        columnSpacing: 8
-                        rowSpacing: 6
-                        RowLayout {
-                            id: nameRow
-                            Layout.fillWidth: true
-                            spacing: 8
-                            ToolbarButton {
-                                id: libraryToggle
-                                objectName: "libraryToggleButton"
-                                icon.source: root.libraryCollapsed ? "../icons/panel-left-open.svg"
-                                                                   : "../icons/panel-left-close.svg"
-                                display: AbstractButton.IconOnly
-                                Accessible.name: root.libraryCollapsed ? qsTr("Show the library list")
-                                                                       : qsTr("Hide the library list")
-                                ToolTip.text: root.libraryCollapsed
-                                    ? qsTr("Show the library list")
-                                    : qsTr("Hide the library list to give the table the full width")
-                                onClicked: root.libraryCollapsed = !root.libraryCollapsed
-                            }
-                            BoundField {
-                                id: benchmarkNameField
-                                objectName: "benchmarkNameField"
-                                boundText: root.vm().benchmarkName
-                                placeholderText: qsTr("Benchmark name")
-                                Layout.fillWidth: true
-                                Layout.minimumWidth: 160
-                                onEditingFinished: root.vm().setBenchmarkName(text)
-                            }
-                            // The view model's own dirty state: it compares the draft with the copy it
-                            // was opened from or saved to, so undoing back to that copy clears it.
-                            Label {
-                                objectName: "unsavedLabel"
-                                visible: root.vm().dirty === true
-                                text: qsTr("• Unsaved")
-                                color: Qt.alpha(root.palette.accent, 0.8)
-                                Accessible.name: qsTr("The benchmark has unsaved changes")
-                            }
+                        manager: root.vm()
+                        libraryCollapsed: root.libraryCollapsed
+                        sessionRevision: root.sessionRevision
+                        availableWidth: editorPane.width
+                        onLibraryToggleRequested: root.libraryCollapsed = !root.libraryCollapsed
+                        onNameEdited: name => root.vm().setBenchmarkName(name)
+                        onUndoRequested: {
+                            root.commitActiveEdits()
+                            root.tableStatus = ""
+                            editorTable.undo()
+                            root.sessionRevision++
                         }
-                        RowLayout {
-                            id: editorActions
-                            objectName: "editorActions"
-                            // Inline it sits at the right end of the name row; on its own row it
-                            // stays right-aligned under the name.
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                            spacing: 4
-                            Label {
-                                objectName: "draftStatusBadge"
-                                Layout.rightMargin: 2
-                                text: root.vm().draftTrackable ? qsTr("Trackable") : qsTr("Incomplete")
-                            }
-                            Rectangle {
-                                Layout.rightMargin: 8
-                                implicitWidth: 8
-                                implicitHeight: 8
-                                radius: 4
-                                color: Theme.classificationColor(root.vm().draftTrackable
-                                    ? "Trackable" : "Incomplete")
-                            }
-                            ToolbarButton {
-                                objectName: "undoButton"
-                                icon.source: "../icons/undo-2.svg"
-                                display: AbstractButton.IconOnly
-                                enabled: root.sessionRevision >= 0 && root.vm().canUndo === true
-                                Accessible.name: qsTr("Undo the last table edit")
-                                ToolTip.text: qsTr("Undo the last table edit")
-                                onClicked: {
-                                    root.commitActiveEdits()
-                                    root.tableStatus = ""
-                                    editorTable.undo()
-                                    root.sessionRevision++
-                                }
-                            }
-                            ToolbarButton {
-                                objectName: "pasteButton"
-                                icon.source: "../icons/clipboard-paste.svg"
-                                display: AbstractButton.IconOnly
-                                Accessible.name: qsTr("Paste spreadsheet cells at the current cell or rank header")
-                                ToolTip.text: qsTr("Paste spreadsheet cells at the current cell or rank header")
-                                onClicked: {
-                                    root.commitActiveEdits()
-                                    root.tableStatus = ""
-                                    editorTable.pasteFromClipboard()
-                                    root.sessionRevision++
-                                }
-                            }
-                            ToolbarButton {
-                                objectName: "saveButton"
-                                icon.source: "../icons/save.svg"
-                                display: AbstractButton.IconOnly
-                                Accessible.name: qsTr("Save")
-                                ToolTip.text: qsTr("Save the benchmark")
-                                onClicked: root.requestSave()
-                            }
+                        onPasteRequested: {
+                            root.commitActiveEdits()
+                            root.tableStatus = ""
+                            editorTable.pasteFromClipboard()
+                            root.sessionRevision++
                         }
+                        onSaveRequested: root.requestSave()
                     }
 
                     // The accepted file this editor was opened from has changed, been removed, or

@@ -55,6 +55,7 @@ qt_add_qml_module(ksv_ui
             qml/benchmark/BenchmarkEditorTable.qml
             qml/benchmark/BenchmarkMappingPanel.qml
             qml/benchmark/BenchmarkLibraryPane.qml
+            qml/benchmark/BenchmarkEditorToolbar.qml
             qml/series/SeriesConfigDraftPanel.qml
             qml/series/SeriesConfigEditorDelegate.qml
             qml/series/ExpressionTreeEditor.qml
