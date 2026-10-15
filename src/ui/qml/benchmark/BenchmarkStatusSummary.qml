@@ -104,7 +104,7 @@ Frame {
                 }
                 HoverHandler { id: averageRankHover }
                 ToolTip.visible: averageRankHover.hovered && !averageRankBar.tickHovered
-                ToolTip.delay: 300
+                ToolTip.delay: Theme.shortToolTipDelay
                 ToolTip.text: qsTr("Average rank: %1").arg(averageRankArea.text)
             }
         }

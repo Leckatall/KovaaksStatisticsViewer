@@ -13,6 +13,8 @@ add_library(ksv_ui STATIC)
 target_link_libraries(ksv_ui PUBLIC ksv_contracts)
 target_link_libraries(ksv_ui PRIVATE Qt6::Core Qt6::Quick Qt6::Qml)
 
+set_source_files_properties(qml/common/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(ksv_ui
         URI KovaaksStatsViewer
         VERSION 1.0
@@ -40,6 +42,7 @@ qt_add_qml_module(ksv_ui
             qml/scenario/SortControls.qml
             qml/scenario/ScenarioRunItem.qml
             qml/common/ListScrollBar.qml
+            qml/common/Theme.qml
             qml/shell/AppMenuBar.qml
             qml/shell/SettingsDialog.qml
             qml/benchmark/BenchmarkManagerDialog.qml

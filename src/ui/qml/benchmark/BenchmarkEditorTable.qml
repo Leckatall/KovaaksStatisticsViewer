@@ -791,7 +791,7 @@ FocusScope {
         // hover effects off.
         HoverHandler { id: addRowHover }
         ToolTip.visible: addRowHover.hovered
-        ToolTip.delay: 400
+        ToolTip.delay: Theme.toolTipDelay
         background: Rectangle {
             color: addRowHover.hovered || addRowButton.activeFocus
                 ? Qt.alpha(addRowButton.palette.highlight, 0.25) : Qt.alpha(addRowButton.palette.button, 0.35)
@@ -880,7 +880,7 @@ FocusScope {
                  : cell.selected ? Qt.alpha(palette.highlight, 0.3)
                  : cell.rowHighlighted ? Qt.alpha(palette.highlight, 0.14)
                  : cell.isGroup && cell.groupId !== "" && root.hoverDropGroupId === cell.groupId ? Qt.alpha(palette.highlight, 0.45)
-                 : cell.isGroup && cell.groupId !== "" ? Qt.alpha(cell.groupColor, 0.22)
+                 : cell.isGroup && cell.groupId !== "" ? Qt.alpha(cell.groupColor, Theme.groupTintAlpha)
                  : palette.base
 
             Rectangle {
@@ -906,7 +906,7 @@ FocusScope {
                 anchors.left: parent.left
                 width: 6
                 height: 6
-                color: cell.inputState !== "" ? "#E53935" : "#FFA726"
+                color: cell.inputState !== "" ? Theme.error : Theme.warning
             }
             Rectangle {
                 readonly property var insertion: root.dropInsertion
@@ -930,7 +930,7 @@ FocusScope {
                     : cell.unnamedScenario ? qsTr("Unnamed scenario") : ""
                 font.italic: cell.inputState !== "" || cell.unnamedScenario
                 font.bold: cell.isGroup
-                color: cell.inputState !== "" ? "#E57373"
+                color: cell.inputState !== "" ? Theme.errorText
                      : cell.unnamedScenario ? cell.palette.placeholderText : cell.palette.text
             }
 
@@ -960,7 +960,7 @@ FocusScope {
                 Accessible.name: qsTr("Add subcategory to %1").arg(cell.categoryName)
                 HoverHandler { id: addSubcategoryHover }
                 ToolTip.visible: addSubcategoryHover.hovered
-                ToolTip.delay: 400
+                ToolTip.delay: Theme.toolTipDelay
                 ToolTip.text: Accessible.name
                 onClicked: {
                     cell.addingSubcategory = true
@@ -1284,7 +1284,7 @@ FocusScope {
                         Accessible.name: qsTr("Add subcategory to %1").arg(groupItem.modelData.name)
                         HoverHandler { id: emptyGroupAddHover }
                         ToolTip.visible: emptyGroupAddHover.hovered
-                        ToolTip.delay: 400
+                        ToolTip.delay: Theme.toolTipDelay
                         ToolTip.text: Accessible.name
                         onClicked: {
                             groupItem.addingSubcategory = true
@@ -1610,7 +1610,7 @@ FocusScope {
                         Accessible.name: qsTr("Add rank")
                         HoverHandler { id: addRankHover }
                         ToolTip.visible: addRankHover.hovered
-                        ToolTip.delay: 400
+                        ToolTip.delay: Theme.toolTipDelay
                         ToolTip.text: qsTr("Add a rank")
                         onClicked: {
                             root.addingRank = true

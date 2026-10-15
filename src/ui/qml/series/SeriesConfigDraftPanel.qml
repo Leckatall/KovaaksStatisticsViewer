@@ -180,7 +180,7 @@ Pane {
         Label {
             id: seriesDraftErrorLabel
             Layout.fillWidth: true
-            color: "#E53935"
+            color: Theme.error
             objectName: "seriesDraftErrorLabel"
             visible: text.length > 0
             wrapMode: Text.WordWrap

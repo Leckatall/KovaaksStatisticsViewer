@@ -53,7 +53,7 @@ Item {
     property string statusText: ""
     // Tooltip of the above-the-top-tier mark.
     property string aboveTopText: ""
-    readonly property color unmatchedColor: "#FFB74D"
+    readonly property color unmatchedColor: Theme.attention
 
     function missingAt(index) {
         return root.missing && root.missing.length > index && root.missing[index] === true
@@ -165,7 +165,7 @@ Item {
                 if (root.fillAt(i) > 0) {
                     const tier = root.tiers[i]
                     const c = Qt.color(tier && String(tier.barColor || "").length > 0 ? tier.barColor : root.palette.highlight)
-                    return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) > 0.55
+                    return Theme.isLightFill(c)
                            ? Qt.rgba(0.1, 0.1, 0.1, 0.9) : Qt.rgba(1, 1, 1, 0.95)
                 }
             }
@@ -242,7 +242,7 @@ Item {
         }
         HoverHandler { id: aboveTopHover }
         ToolTip.visible: aboveTopHover.hovered && root.aboveTopText.length > 0
-        ToolTip.delay: 300
+        ToolTip.delay: Theme.shortToolTipDelay
         ToolTip.text: root.aboveTopText
     }
 
@@ -259,7 +259,7 @@ Item {
             readonly property color fillColor: tier && String(tier.barColor || "").length > 0
                                                ? tier.barColor : root.palette.highlight
             // Dark text on a light tier colour, light text on a dark one.
-            readonly property color onFillColor: (0.299 * fillColor.r + 0.587 * fillColor.g + 0.114 * fillColor.b) > 0.55
+            readonly property color onFillColor: Theme.isLightFill(fillColor)
                                                  ? Qt.rgba(0.1, 0.1, 0.1, 0.85) : Qt.rgba(1, 1, 1, 0.9)
             readonly property string labelText: root.labelAt(index)
             // "end" | "middle" | "start": where the label sits, clear of the value; "" for nowhere.
@@ -447,13 +447,13 @@ Item {
         }
         HoverHandler { id: markerHover }
         ToolTip.visible: markerHover.hovered && root.markerDescription.length > 0
-        ToolTip.delay: 300
+        ToolTip.delay: Theme.shortToolTipDelay
         ToolTip.text: root.markerDescription
     }
 
     HoverHandler { id: barHover }
     ToolTip.visible: barHover.hovered && !markerHover.hovered && root.description.length > 0
-    ToolTip.delay: 300
+    ToolTip.delay: Theme.shortToolTipDelay
     ToolTip.text: root.description
 
     // --- tier tick -----------------------------------------------------------------
@@ -489,7 +489,7 @@ Item {
         }
         HoverHandler { id: tickHover }
         ToolTip.visible: tickHover.hovered && root.tickDescription.length > 0
-        ToolTip.delay: 300
+        ToolTip.delay: Theme.shortToolTipDelay
         ToolTip.text: root.tickDescription
     }
 }

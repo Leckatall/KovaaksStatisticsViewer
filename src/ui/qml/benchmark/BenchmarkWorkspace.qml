@@ -164,7 +164,7 @@ Item {
                             width: chipText.implicitWidth + 14
                             height: chipText.implicitHeight + 2
                             radius: height / 2
-                            color: entryRow.kind === "incomplete" ? "#FFB74D" : "#E57373"
+                            color: entryRow.kind === "incomplete" ? Theme.classificationColor("Incomplete") : Theme.errorText
                             Label {
                                 id: chipText
                                 anchors.centerIn: parent
@@ -207,7 +207,7 @@ Item {
                             Accessible.name: text
                             ToolTip.text: text
                             ToolTip.visible: hovered
-                            ToolTip.delay: 400
+                            ToolTip.delay: Theme.toolTipDelay
                             onClicked: root.editBenchmarkRequested(String(entryRow.modelData.filename || ""),
                                                                    String(entryRow.modelData.id || ""))
                         }

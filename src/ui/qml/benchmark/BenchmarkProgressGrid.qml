@@ -121,25 +121,8 @@ Item {
         return tier.length > 0 ? tier + " " + row.nextThresholdText : String(row.nextThresholdText)
     }
 
-    // `color` as text on `background`: the colour itself when it reads (WCAG 4.5:1),
-    // otherwise the first 5% step of a blend toward `fallback` (the palette's text
-    // colour for that background) that does. Works for light and dark palettes alike.
     function readableOn(color, background, fallback) {
-        if (String(color).length === 0) return fallback
-        const linear = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
-        const luminance = c => 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
-        const contrast = (a, b) => {
-            const la = luminance(a), lb = luminance(b)
-            return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
-        }
-        const base = Qt.color(color), bg = Qt.color(background), to = Qt.color(fallback)
-        for (let step = 0; step <= 20; ++step) {
-            const t = step / 20
-            const mixed = Qt.rgba(base.r + (to.r - base.r) * t, base.g + (to.g - base.g) * t,
-                                  base.b + (to.b - base.b) * t, 1)
-            if (contrast(mixed, bg) >= 4.5) return mixed
-        }
-        return fallback
+        return Theme.readableOn(color, background, fallback)
     }
 
     // The left edge of tier header `index` inside the bar: the same equal shares the
@@ -513,7 +496,7 @@ Item {
                         }
                         HoverHandler { id: blockerHover }
                         ToolTip.visible: blockerHover.hovered
-                        ToolTip.delay: 300
+                        ToolTip.delay: Theme.shortToolTipDelay
                         ToolTip.text: String(rowItem.modelData.blockerText || "")
                     }
 
@@ -530,7 +513,7 @@ Item {
 
                         HoverHandler { id: nameHover }
                         ToolTip.visible: nameHover.hovered && nameLabel.truncated
-                        ToolTip.delay: 400
+                        ToolTip.delay: Theme.toolTipDelay
                         ToolTip.text: nameLabel.text
                     }
 
@@ -625,7 +608,7 @@ Item {
                     Rectangle {
                         anchors.fill: parent
                         visible: groupCell.tint.length > 0
-                        color: groupCell.tint.length > 0 ? Qt.alpha(groupCell.tint, 0.22) : "transparent"
+                        color: groupCell.tint.length > 0 ? Qt.alpha(groupCell.tint, Theme.groupTintAlpha) : "transparent"
                     }
                     Rectangle {
                         anchors.left: parent.left

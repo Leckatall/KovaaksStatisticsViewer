@@ -249,10 +249,8 @@ ApplicationWindow {
                             width: 10
                             height: 10
                             radius: width / 2
-                            // Semantic status, not chrome — there is no palette role
-                            // for ok/error, so these stay literal.
                             color: root.sessionVm.profileBuildInProgress ? "#FFB300"
-                                 : root.settingsVm.profileLoaded ? "#4CAF50" : "#E53935"
+                                 : root.settingsVm.profileLoaded ? Theme.success : Theme.error
                             Layout.alignment: Qt.AlignVCenter
                         }
                         Label {

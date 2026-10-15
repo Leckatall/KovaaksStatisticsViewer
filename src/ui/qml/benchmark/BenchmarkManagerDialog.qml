@@ -238,15 +238,6 @@ ApplicationWindow {
         })
     }
 
-    function classificationColor(classification) {
-        return ({
-            Trackable: "#4CAF50",
-            Incomplete: "#FFA726",
-            Invalid: "#E53935",
-            Unsupported: "#9E9E9E"
-        })[classification] || "#9E9E9E"
-    }
-
     function runTableCommand(command) {
         root.commitActiveEdits()
         const result = command()
@@ -563,7 +554,7 @@ ApplicationWindow {
         implicitWidth: implicitContentWidth + leftPadding + rightPadding
         HoverHandler { id: toolbarHover }
         ToolTip.visible: toolbarHover.hovered && ToolTip.text !== ""
-        ToolTip.delay: 400
+        ToolTip.delay: Theme.toolTipDelay
     }
 
     // A text field that shows the model value whenever it is not being edited; typing into a
@@ -693,7 +684,7 @@ ApplicationWindow {
                     visible: root.importStatus !== ""
                     text: root.importStatus
                     color: root.importStatus.toLowerCase().indexOf("imported") === 0
-                        ? root.palette.windowText : "#E57373"
+                        ? root.palette.windowText : Theme.errorText
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                 }
@@ -701,7 +692,7 @@ ApplicationWindow {
                     objectName: "refreshFailedLabel"
                     visible: root.vm().refreshFailed
                     text: qsTr("Last refresh failed: the directory could not be read.")
-                    color: "#E57373"
+                    color: Theme.errorText
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                 }
@@ -709,7 +700,7 @@ ApplicationWindow {
                     objectName: "saveStatusLabel"
                     visible: root.statusMessage !== ""
                     text: root.statusMessage
-                    color: root.statusIsError ? "#E57373" : root.palette.windowText
+                    color: root.statusIsError ? Theme.errorText : root.palette.windowText
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                 }
@@ -773,7 +764,7 @@ ApplicationWindow {
                                 width: 8
                                 height: 8
                                 radius: 4
-                                color: root.classificationColor(libraryEntry.modelData.classification)
+                                color: Theme.classificationColor(libraryEntry.modelData.classification)
                             }
                             Label {
                                 text: libraryEntry.modelData.classification
@@ -866,7 +857,7 @@ ApplicationWindow {
                                 implicitWidth: 8
                                 implicitHeight: 8
                                 radius: 4
-                                color: root.classificationColor(root.vm().draftTrackable
+                                color: Theme.classificationColor(root.vm().draftTrackable
                                     ? "Trackable" : "Incomplete")
                             }
                             ToolbarButton {
@@ -915,7 +906,7 @@ ApplicationWindow {
                         visible: root.vm().baselineStale
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        color: "#E57373"
+                        color: Theme.errorText
                         text: qsTr("The saved benchmark this editor was opened from has changed on disk. "
                                    + "Your edits are kept here; saving will report a conflict until you reopen it.")
                     }
@@ -948,7 +939,7 @@ ApplicationWindow {
                         visible: root.normalizationIssues().length > 0
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        color: "#FFA726"
+                        color: Theme.warning
                         text: qsTr("Not valid numbers; Save stores these thresholds as missing: %1")
                             .arg(root.normalizationSummary())
                     }
@@ -958,7 +949,7 @@ ApplicationWindow {
                         readonly property string message: root.tableStatus !== "" ? root.tableStatus : editorTable.statusText
                         visible: message !== ""
                         text: message
-                        color: "#E57373"
+                        color: Theme.errorText
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
