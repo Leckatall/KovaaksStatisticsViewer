@@ -254,27 +254,12 @@ Item {
         return cols
     }
 
-    component HeaderCell: Rectangle {
-        id: headerCell
-        property string text
-        property int alignment: Text.AlignLeft
+    component HeaderCell: GridHeaderCell {
         y: 0
         height: root.headerHeight
-        color: root.palette.button
-        border.color: root.palette.mid
+        labelPadding: root.cellPadding
         Accessible.role: Accessible.ColumnHeader
         Accessible.name: text
-
-        Label {
-            anchors.fill: parent
-            anchors.leftMargin: root.cellPadding
-            anchors.rightMargin: root.cellPadding
-            verticalAlignment: Text.AlignVCenter
-            horizontalAlignment: headerCell.alignment
-            elide: Text.ElideRight
-            font.bold: true
-            text: headerCell.text
-        }
     }
 
     component ValueCell: Label {
@@ -610,20 +595,7 @@ Item {
                         visible: groupCell.tint.length > 0
                         color: groupCell.tint.length > 0 ? Qt.alpha(groupCell.tint, Theme.groupTintAlpha) : "transparent"
                     }
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 1
-                        color: root.palette.mid
-                    }
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        anchors.right: parent.right
-                        width: 1
-                        color: root.palette.mid
-                    }
+                    GridCellBorders {}
                     Row {
                         x: root.cellPadding
                         width: Math.max(0, groupCell.width - 2 * root.cellPadding)

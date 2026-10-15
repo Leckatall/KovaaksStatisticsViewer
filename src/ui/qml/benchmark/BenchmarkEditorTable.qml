@@ -878,21 +878,7 @@ FocusScope {
                  : cell.isGroup && cell.groupId !== "" ? Qt.alpha(cell.groupColor, Theme.groupTintAlpha)
                  : palette.base
 
-            Rectangle {
-                visible: cell.lastRowOfSpan
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 1
-                color: cell.palette.mid
-            }
-            Rectangle {
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.right: parent.right
-                width: 1
-                color: cell.palette.mid
-            }
+            GridCellBorders { showBottom: cell.lastRowOfSpan }
             Rectangle {
                 // Retained input and domain issues get a textual explanation too (Accessible and
                 // tooltip); the marker is only a pointer to it.
@@ -1298,20 +1284,12 @@ FocusScope {
                     Layout.preferredHeight: root.headerHeight
                     Repeater {
                         model: root.identityHeaders
-                        delegate: Rectangle {
+                        delegate: GridHeaderCell {
                             required property string modelData
                             required property int index
                             width: root.identityWidths[index]
                             height: root.headerHeight
-                            color: palette.button
-                            border.color: palette.mid
-                            Label {
-                                anchors.fill: parent
-                                anchors.leftMargin: 6
-                                verticalAlignment: Text.AlignVCenter
-                                text: parent.modelData
-                                font.bold: true
-                            }
+                            text: modelData
                         }
                     }
                 }
@@ -1399,11 +1377,9 @@ FocusScope {
                     TapHandler {
                         onTapped: emptyRankHeader.forceActiveFocus()
                     }
-                    Rectangle {
+                    GridHeaderCell {
                         anchors.fill: parent
-                        color: emptyRankHeader.palette.button
-                        border.color: emptyRankHeader.activeFocus ? emptyRankHeader.palette.highlight : emptyRankHeader.palette.mid
-                        border.width: emptyRankHeader.activeFocus ? 2 : 1
+                        focused: emptyRankHeader.activeFocus
                     }
                     Label {
                         anchors.fill: parent
@@ -1479,11 +1455,9 @@ FocusScope {
                             }
                         }
 
-                        Rectangle {
+                        GridHeaderCell {
                             anchors.fill: parent
-                            color: headerCell.palette.button
-                            border.color: headerCell.activeFocus ? headerCell.palette.highlight : headerCell.palette.mid
-                            border.width: headerCell.activeFocus ? 2 : 1
+                            focused: headerCell.activeFocus
                         }
                         Rectangle {
                             anchors.left: parent.left
