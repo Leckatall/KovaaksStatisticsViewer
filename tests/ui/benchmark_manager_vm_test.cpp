@@ -1989,3 +1989,37 @@ TEST(BenchmarkTableModelHeaders, IdentityTextsListEveryRowInRowOrder) {
     EXPECT_EQ(second.value("subcategoryId").toString(), "");
     EXPECT_EQ(second.value("scenario").toString(), "");
 }
+
+TEST(BenchmarkManagerResolution, LinkedMappingsAreProjectedAndUndoAsOneEdit) {
+    Fixture f;
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", "old", {})}));
+    f.build();
+    f.vm->beginNewBenchmark();
+    const auto result = f.vm->setScenarioHashes("e1", {"old", "new", "new", ""});
+    ASSERT_TRUE(result.value("ok").toBool());
+    EXPECT_EQ(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList(),
+              (QStringList{"old", "new"}));
+    ASSERT_FALSE(f.uc->resolveCalls.empty());
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.front().additionalHashes,
+              (std::vector<std::string>{"new"}));
+    EXPECT_TRUE(f.vm->dirty());
+    ASSERT_TRUE(f.vm->undo().value("ok").toBool());
+    EXPECT_EQ(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList(), (QStringList{"old"}));
+    EXPECT_FALSE(f.vm->undo().value("ok").toBool());
+}
+
+TEST(BenchmarkManagerResolution, ClearingLinkedMappingsCanBeUndoneAndUnknownEntriesChangeNothing) {
+    Fixture f;
+    auto entry = benchmarkEntry("e1", "Alpha", "old", {});
+    entry.additionalHashes = {"new"};
+    f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {entry}));
+    f.build();
+    f.vm->beginNewBenchmark();
+    EXPECT_FALSE(f.vm->setScenarioHashes("missing", {"replacement"}).value("ok").toBool());
+    EXPECT_FALSE(f.vm->canUndo());
+    EXPECT_EQ(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList(), (QStringList{"old", "new"}));
+    ASSERT_TRUE(f.vm->setScenarioHashes("e1", {}).value("ok").toBool());
+    EXPECT_TRUE(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList().empty());
+    ASSERT_TRUE(f.vm->undo().value("ok").toBool());
+    EXPECT_EQ(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList(), (QStringList{"old", "new"}));
+}

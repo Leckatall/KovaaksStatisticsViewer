@@ -470,6 +470,45 @@ TestCase {
         compare(vm(dialog).renameScenarioCalls.length, 0)
     }
 
+    function test_linkAnotherVersionKeepsTheExistingMapping() {
+        const fixtureRef = {}
+        const description = {tiers: [], rows: [{
+            entryId: "linked", name: "Alpha", mappingState: "resolved", mappedHashes: ["old"],
+            mappingCandidates: [{hash: "old", runCount: 2}, {hash: "new", runCount: 3}]
+        }]}
+        const dialog = openWithTable(description, {}, fixtureRef)
+        verify(dialog.editorTable.focusCell({entryId: "linked"}))
+        const link = find(dialog, "linkVersionsButton")
+        verify(link !== null, "a scenario can link another version")
+        compare(find(dialog, "candidateOption_old").visible, false, "a linked version is already shown with its Unlink control")
+        mouseClick(link)
+        const candidate = find(dialog, "candidateOption_new")
+        verify(candidate !== null)
+        tryCompare(candidate, "enabled", true)
+        mouseClick(candidate)
+        tryCompare(vm(dialog), "setScenarioHashesCalls", [["linked", ["old", "new"]]])
+        compare(vm(dialog).setScenarioHashCalls.length, 0)
+        description.rows[0].mappedHashes = ["old", "new"]
+        fixtureRef.fixture.setProjection(TestDoubles.benchmarkTableProjection(description))
+        tryCompare(link, "enabled", true, 2000, "the last link must leave the toggle usable")
+        verify(waitForRendering(dialog.contentItem))
+        mouseClick(link)
+        tryCompare(link, "checked", false)
+    }
+
+    function test_removeUnavailableLinkedVersionKeepsTheOtherVersion() {
+        const dialog = openWithTable({tiers: [], rows: [{
+            entryId: "linked", name: "Alpha", mappingState: "resolved", mappedHashes: ["old", "new"],
+            mappingCandidates: [{hash: "new", runCount: 3}]
+        }]})
+        verify(dialog.editorTable.focusCell({entryId: "linked"}))
+        const remove = find(dialog, "unlinkVersion_old")
+        verify(remove !== null, "unavailable versions can be unlinked")
+        verify(waitForRendering(dialog.contentItem))
+        mouseClick(remove)
+        tryCompare(vm(dialog), "setScenarioHashesCalls", [["linked", ["new"]]])
+    }
+
     function test_everyMatchingStateRendersItsTextualLabel() {
         const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
             tiers: [{id: "t1", name: "Gold", color: "#FFD700"}]

@@ -57,6 +57,7 @@ namespace ksv::domain {
         BenchmarkEditResult addKnownScenario(const std::string &name, const std::string &hash);
         BenchmarkEditResult renameScenario(const ScenarioEntryId &id, const std::string &name);
         BenchmarkEditResult setScenarioHash(const ScenarioEntryId &id, const std::optional<std::string> &hash);
+        BenchmarkEditResult setScenarioHashes(const ScenarioEntryId &id, const std::vector<std::string> &hashes);
         BenchmarkEditResult removeScenario(const ScenarioEntryId &id);
         BenchmarkEditResult setThreshold(const ScenarioEntryId &entryId, const TierId &tierId, double score);
         BenchmarkEditResult clearThreshold(const ScenarioEntryId &entryId, const TierId &tierId);

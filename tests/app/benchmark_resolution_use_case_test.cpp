@@ -369,3 +369,35 @@ TEST(BenchmarkResolutionUseCase, WithAutomaticMappingsLinksAWorkingCopyEvenWhile
     EXPECT_EQ(linked.uncategorized[2].name, "Unplayed");
     EXPECT_TRUE(f.benchmarks->batchRequests.empty());
 }
+
+TEST(BenchmarkResolutionUseCase, LinkedMappingsSurviveUnavailablePrimaryAndNewSameNameVersions) {
+    Fixture f;
+    f.played("Alpha", "new");
+    f.played("Alpha", "future");
+    auto entry = benchmarkEntry("entry", "Alpha", "old", {});
+    entry.additionalHashes = {"new"};
+    f.library({benchmarkWith("b1", {entry})});
+    const auto useCase = f.build();
+    const auto snapshot = useCase->snapshot();
+    const auto &resolution = forEntry(resolutionsFor(snapshot, "b1"), "entry");
+    EXPECT_EQ(resolution.state, ScenarioMatchState::Resolved);
+    EXPECT_EQ(resolution.hash, std::optional<std::string>{"old"});
+    EXPECT_EQ(resolution.additionalHashes, (std::vector<std::string>{"new"}));
+    EXPECT_EQ(resolution.candidates.size(), 2U);
+    f.profile->scenarios.clear();
+    const auto missing = useCase->resolve(benchmarkWith("b1", {entry}));
+    EXPECT_EQ(missing.front().state, ScenarioMatchState::MappedUnavailable);
+    EXPECT_EQ(missing.front().additionalHashes, (std::vector<std::string>{"new"}));
+}
+
+TEST(BenchmarkResolutionUseCase, AutomaticMappingCannotClaimAnExplicitAdditionalHash) {
+    Fixture f;
+    f.played("Candidate", "new");
+    auto entry = benchmarkEntry("entry", "Alpha", "old", {});
+    entry.additionalHashes = {"new"};
+    const auto value = benchmarkWith("b1", {entry, benchmarkEntry("other", "Candidate", std::nullopt, {})});
+    const auto useCase = f.build();
+    const auto mapped = useCase->withAutomaticMappings(value);
+    EXPECT_FALSE(mapped.uncategorized[1].hash);
+    EXPECT_EQ(mapped.uncategorized[0].additionalHashes, (std::vector<std::string>{"new"}));
+}

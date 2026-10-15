@@ -2,6 +2,9 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 
 #include <algorithm>
@@ -69,6 +72,38 @@ TEST_F(BenchmarkStoreTest, ScanClassifiesAValidTrackableFile) {
     EXPECT_EQ(loaded(entry)->benchmark.name, "Bench");
 }
 
+TEST_F(BenchmarkStoreTest, ReadsMultipleHashesAndPreservesThemOnWrite) {
+    auto json = trackableJson();
+    json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 2");
+    json.replace("\"hash\": null", "\"hashes\": [\"old\", \"new\"]");
+    write("linked.json", json);
+    const auto entry = store->scan().snapshot->entries.at(0);
+    ASSERT_NE(loaded(entry), nullptr);
+    const auto saved = store->write(loaded(entry)->benchmark, "linked.json", entry.digest);
+    ASSERT_TRUE(saved.succeeded());
+    QFile file(QDir(dir.path()).absoluteFilePath("linked.json"));
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+    const auto document = QJsonDocument::fromJson(file.readAll()).object();
+    EXPECT_EQ(document.value("schemaVersion").toInt(), 2);
+    EXPECT_EQ(document.value("uncategorized").toArray().at(0).toObject().value("hashes").toArray(),
+              (QJsonArray{"old", "new"}));
+    const auto reread = store->scan().snapshot->entries.at(0);
+    ASSERT_NE(loaded(reread), nullptr);
+    EXPECT_EQ(loaded(reread)->benchmark, loaded(entry)->benchmark);
+}
+
+TEST_F(BenchmarkStoreTest, RejectsMalformedVersionTwoHashArrays) {
+    for (const QByteArray hashes: {QByteArray{"null"}, QByteArray{"\"old\""}, QByteArray{"[1]"},
+                                  QByteArray{"[\"\"]"}, QByteArray{"[\"old\",\"old\"]"}}) {
+        auto json = trackableJson();
+        json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 2");
+        json.replace("\"hash\": null", QByteArray{"\"hashes\": "} + hashes);
+        write("invalid.json", json);
+        const auto entry = store->scan().snapshot->entries.at(0);
+        EXPECT_NE(problem(entry), nullptr) << hashes.toStdString();
+    }
+}
+
 TEST_F(BenchmarkStoreTest, ScanReportsMissingDirectoryFailureOnceCreationIsImpossible) {
     // Point at a path whose parent is a file, so mkpath cannot succeed.
     write("blocker", QByteArray("x"));
@@ -88,13 +123,13 @@ TEST_F(BenchmarkStoreTest, MalformedJsonIsInvalid) {
 
 TEST_F(BenchmarkStoreTest, NewerSchemaVersionIsUnsupportedAndKeepsName) {
     auto json = trackableJson();
-    json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 2");
+    json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 3");
     write("future.json", json);
     const auto entry = store->scan().snapshot->entries.at(0);
     ASSERT_NE(problem(entry), nullptr);
     EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Unsupported);
     ASSERT_TRUE(problem(entry)->schemaVersion.has_value());
-    EXPECT_EQ(*problem(entry)->schemaVersion, 2);
+    EXPECT_EQ(*problem(entry)->schemaVersion, 3);
     ASSERT_TRUE(problem(entry)->displayName.has_value());
     EXPECT_EQ(*problem(entry)->displayName, "Bench");
 }

@@ -187,11 +187,22 @@ namespace ksv::domain {
         auto *entry = findEntry(m_target, id);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
         entry->hash = hash;
+        entry->additionalHashes.clear();
         return {};
     }
 
     BenchmarkEditResult BenchmarkEditor::removeScenario(const ScenarioEntryId &id) {
         if (!detachEntry(m_target, id)) return {BenchmarkEditError::UnknownEntry};
+        return {};
+    }
+
+    BenchmarkEditResult BenchmarkEditor::setScenarioHashes(const ScenarioEntryId &id,
+                                                           const std::vector<std::string> &hashes) {
+        auto *entry = findEntry(m_target, id);
+        if (!entry) return {BenchmarkEditError::UnknownEntry};
+        const auto unique = mappedScenarioHashes(std::nullopt, hashes);
+        entry->hash = unique.empty() ? std::nullopt : std::optional{unique.front()};
+        entry->additionalHashes.assign(unique.empty() ? unique.end() : unique.begin() + 1, unique.end());
         return {};
     }
 

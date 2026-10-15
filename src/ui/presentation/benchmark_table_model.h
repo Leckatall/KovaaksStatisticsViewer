@@ -43,6 +43,7 @@ namespace ksv::presentation {
         QString mappingState;
         QVariantList mappingCandidates;
         std::vector<BenchmarkTableCell> cells; // one per tier, in ladder order
+        QStringList mappedHashes;
         friend bool operator==(const BenchmarkTableRow &, const BenchmarkTableRow &) = default;
     };
 

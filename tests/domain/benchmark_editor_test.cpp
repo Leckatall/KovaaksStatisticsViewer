@@ -40,6 +40,30 @@ TEST(BenchmarkEditor, AddTierAppendsWithFreshId) {
     EXPECT_EQ(bench.tiers.front().id, *result.createdTier);
 }
 
+TEST(BenchmarkEditor, ReplacingOrClearingMappingRemovesAdditionalHashes) {
+    Benchmark bench;
+    BenchmarkEditor editor{bench, countingIds()};
+    const auto id = *editor.addKnownScenario("Alpha", "old").createdEntry;
+    bench.uncategorized.front().additionalHashes = {"new"};
+    ASSERT_TRUE(editor.setScenarioHash(id, "replacement").ok());
+    EXPECT_TRUE(bench.uncategorized.front().additionalHashes.empty());
+    bench.uncategorized.front().additionalHashes = {"new"};
+    ASSERT_TRUE(editor.setScenarioHash(id, std::nullopt).ok());
+    EXPECT_TRUE(mappedScenarioHashes(bench.uncategorized.front().hash,
+                                     bench.uncategorized.front().additionalHashes).empty());
+}
+
+TEST(BenchmarkEditor, ValidationFindsOverlapInAdditionalMappings) {
+    Benchmark bench;
+    BenchmarkEditor editor{bench, countingIds()};
+    editor.addKnownScenario("Alpha", "old");
+    editor.addKnownScenario("Beta", "other");
+    bench.uncategorized[0].additionalHashes = {"new", "new"};
+    EXPECT_FALSE(hasIssue(editor.validation(), BenchmarkIssueCode::DuplicateResolvedHash));
+    bench.uncategorized[1].additionalHashes = {"new"};
+    EXPECT_TRUE(hasIssue(editor.validation(), BenchmarkIssueCode::DuplicateResolvedHash));
+}
+
 TEST(BenchmarkEditor, ReorderTierMovesTheTier) {
     Benchmark bench;
     BenchmarkEditor editor{bench, countingIds()};

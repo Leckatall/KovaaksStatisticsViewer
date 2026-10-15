@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-#include "benchmarks/benchmark_ids.h"
+#include "benchmarks/benchmark.h"
 
 namespace ksv::domain {
     enum class ScenarioMatchState { Resolved, MappedUnavailable, Unresolved, Ambiguous, AutoMappable };
@@ -31,6 +31,7 @@ namespace ksv::domain {
         ScenarioMatchState state = ScenarioMatchState::Unresolved;
         std::optional<std::string> hash;
         std::vector<ScenarioCandidate> candidates;
+        std::vector<std::string> additionalHashes{};
         auto operator<=>(const ScenarioResolution &) const = default;
     };
 }

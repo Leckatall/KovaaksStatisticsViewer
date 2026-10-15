@@ -174,6 +174,8 @@ namespace ksv::presentation {
                 BenchmarkTableRow row;
                 row.entryId = idString(entry.id);
                 row.name = QString::fromStdString(entry.name);
+                for (const auto &hash: domain::mappedScenarioHashes(entry.hash, entry.additionalHashes))
+                    row.mappedHashes.push_back(QString::fromStdString(hash));
                 row.scenarioIssues = issueTexts(IssueIndex::lookup(issues.byEntry, entry.id.value));
                 row.category = category;
                 row.subcategory = subcategory;
@@ -670,6 +672,15 @@ namespace ksv::presentation {
             return e.setScenarioHash(
                 domain::ScenarioEntryId{entryId.toStdString()},
                 hash.isEmpty() ? std::nullopt : std::optional{hash.toStdString()});
+        });
+    }
+
+    QVariantMap BenchmarkManagerViewModel::setScenarioHashes(const QString &entryId, const QStringList &hashes) {
+        std::vector<std::string> values;
+        values.reserve(static_cast<std::size_t>(hashes.size()));
+        for (const auto &hash: hashes) values.push_back(hash.toStdString());
+        return applyEdit([&](domain::BenchmarkEditor &editor) {
+            return editor.setScenarioHashes(domain::ScenarioEntryId{entryId.toStdString()}, values);
         });
     }
 

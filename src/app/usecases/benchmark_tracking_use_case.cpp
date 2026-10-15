@@ -185,8 +185,8 @@ namespace ksv::application {
         std::vector<domain::ScenarioId> scenarios;
         std::unordered_set<std::string> hashes;
         for (const auto &resolution: resolutions) {
-            if (!resolution.hash || !hashes.insert(*resolution.hash).second) continue;
-            scenarios.push_back({{}, *resolution.hash});
+            for (const auto &hash: domain::mappedScenarioHashes(resolution.hash, resolution.additionalHashes))
+                if (hashes.insert(hash).second) scenarios.push_back({{}, hash});
         }
         return domain::evaluateBenchmark(loaded.benchmark, loaded.completeness, resolutions,
                                          m_profileService->getRunFacts(scenarios),

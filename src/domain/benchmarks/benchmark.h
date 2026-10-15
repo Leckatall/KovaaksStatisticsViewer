@@ -27,8 +27,12 @@ namespace ksv::domain {
         std::string name;                  // retained display label; never replaced by the hash
         std::optional<std::string> hash;   // persisted scenario mapping when resolved
         std::vector<Threshold> thresholds; // one per tier when complete; decoded as-is for validation
+        std::vector<std::string> additionalHashes{};
         auto operator<=>(const ScenarioEntry &) const = default;
     };
+
+    [[nodiscard]] std::vector<std::string> mappedScenarioHashes(
+        const std::optional<std::string> &hash, const std::vector<std::string> &additionalHashes);
 
     struct Subcategory {
         GroupId id;

@@ -379,6 +379,11 @@ function makeFakeBenchmarkManagerVm(overrides) {
             this.setScenarioIdentityCalls.push([id, name, hash])
             return {ok: true}
         },
+        setScenarioHashesCalls: [],
+        setScenarioHashes: function (entryId, hashes) {
+            this.setScenarioHashesCalls.push([entryId, Array.prototype.slice.call(hashes)])
+            return {ok: true}
+        },
         setScenarioHashCalls: [],
         setScenarioHash: function (entryId, hash) {
             this.setScenarioHashCalls.push([entryId, hash])
@@ -598,6 +603,7 @@ function benchmarkTableProjection(desc) {
                                          : {id: "", name: "", issues: []},
             mappingState: row.mappingState || "unresolved",
             mappingCandidates: row.mappingCandidates || [],
+            mappedHashes: row.mappedHashes || [],
             cells: cells
         }
     })

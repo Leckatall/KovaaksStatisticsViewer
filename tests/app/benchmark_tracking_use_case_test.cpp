@@ -769,3 +769,16 @@ TEST(BenchmarkTrackingDefaultSelection, WithoutSettingsOnlyTheSoleBenchmarkRuleA
     ASSERT_TRUE(fixture.tracking->selected());
     EXPECT_EQ(fixture.tracking->selected()->value, "only");
 }
+
+TEST(BenchmarkTracking, RequestsEveryExplicitLinkedHashOnce) {
+    Fixture fixture;
+    auto value = benchmark("b1");
+    value.uncategorized[0].additionalHashes = {"new", "h2", "new"};
+    fixture.repo->nextScan = {snapshotFor(value), std::nullopt};
+    fixture.build();
+    fixture.tracking->select(BenchmarkId{"b1"});
+    EXPECT_EQ(fixture.profile->requested_fact_scenarios.size(), 3U);
+    EXPECT_EQ(fixture.profile->requested_rolling_scenarios.size(), 3U);
+    EXPECT_TRUE(std::ranges::any_of(fixture.profile->requested_fact_scenarios,
+                                  [](const auto &scenario) { return scenario.hash == "new"; }));
+}

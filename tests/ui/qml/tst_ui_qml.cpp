@@ -50,6 +50,7 @@ public:
             built.subcategory = group(map.value("subcategory"));
             built.mappingState = map.value("mappingState").toString();
             built.mappingCandidates = map.value("mappingCandidates").toList();
+            built.mappedHashes = map.value("mappedHashes").toStringList();
             for (const auto &cell: map.value("cells").toList()) {
                 const auto c = cell.toMap();
                 built.cells.push_back({c.value("displayText").toString(), c.value("editText").toString(),

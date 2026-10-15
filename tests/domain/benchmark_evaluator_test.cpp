@@ -483,3 +483,46 @@ TEST(BenchmarkRank, RecategorizingChangesAttainmentButNotTheAverageRank) {
         EXPECT_DOUBLE_EQ(separate.averageRankHistory[index].averageRank,
                          together.averageRankHistory[index].averageRank);
 }
+
+TEST(BenchmarkEvaluator, LinkedHashesCombineChronologicalStatisticsAndHistory) {
+    auto definition = benchmark();
+    definition.uncategorized.front().additionalHashes = {"new"};
+    auto resolution = resolvedEntry("entry", "hash");
+    resolution.additionalHashes = {"new", "hash", "new"};
+    std::vector<RunFact> facts;
+    for (int day = 1; day <= 6; ++day)
+        facts.push_back(benchmarkFact(day % 2 ? "hash" : "new", day * kDay,
+                                      static_cast<float>(day * 50), 10.0F));
+    facts.push_back(benchmarkFact("unrelated", 7 * kDay, 999.0F, 100.0F));
+    const auto projection = evaluateBenchmark(definition, validateBenchmark(definition),
+                                               {resolution}, facts, {});
+    const auto &scenario = scenarioNamed(projection, "entry");
+    EXPECT_EQ(scenario.runCount, 6);
+    ASSERT_TRUE(scenario.personalBest);
+    EXPECT_DOUBLE_EQ(*scenario.personalBest, 300.0);
+    ASSERT_TRUE(scenario.recentAverage);
+    EXPECT_DOUBLE_EQ(*scenario.recentAverage, 200.0);
+    EXPECT_EQ(scenario.recentSampleCount, 5);
+    EXPECT_DOUBLE_EQ(scenario.playtimeSeconds, 60.0);
+    EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 60.0);
+    ASSERT_TRUE(projection.attainedRank);
+    EXPECT_EQ(projection.attainedRank->value, "gold");
+    ASSERT_EQ(projection.averageRankHistory.size(), 6U);
+    for (std::size_t index = 0; index < 6; ++index)
+        EXPECT_DOUBLE_EQ(projection.averageRankHistory[index].averageRank, .5 * (index + 1));
+}
+
+TEST(BenchmarkEvaluator, LinkedHashesDoNotDoubleCountOverlappingEntryPlaytime) {
+    auto definition = twoScenarioBenchmark();
+    auto first = resolvedEntry("one", "one");
+    first.additionalHashes = {"shared"};
+    auto second = resolvedEntry("two", "two");
+    second.additionalHashes = {"shared"};
+    const auto projection = evaluateBenchmark(definition, {Completeness::Incomplete, {}},
+        {first, second}, {benchmarkFact("one", kDay, 100.0F, 10.0F),
+                          benchmarkFact("shared", 2 * kDay, 200.0F, 20.0F),
+                          benchmarkFact("two", 3 * kDay, 300.0F, 30.0F)}, {});
+    EXPECT_DOUBLE_EQ(scenarioNamed(projection, "one").playtimeSeconds, 30.0);
+    EXPECT_DOUBLE_EQ(scenarioNamed(projection, "two").playtimeSeconds, 50.0);
+    EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 60.0);
+}

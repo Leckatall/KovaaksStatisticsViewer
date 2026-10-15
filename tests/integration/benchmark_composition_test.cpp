@@ -794,7 +794,6 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
     ASSERT_NE(w, nullptr);
     auto *vm = w->app->benchmarkManagerVm();
     const auto path = QDir(benchmarks.path()).absoluteFilePath("bench.json");
-    const auto schemaBefore = readJson(path).value("schemaVersion");
 
     ASSERT_TRUE(vm->openBenchmark("b-track"));
     ASSERT_TRUE(vm->pasteText(at("rankHeader"), "Silver\tGold\tPlatinum\tDiamond")["ok"].toBool());
@@ -818,11 +817,11 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
 
     // Stored JSON: invalid inputs are simply absent thresholds; everything finite survives as typed.
     const auto stored = readJson(path);
-    EXPECT_EQ(stored.value("schemaVersion"), schemaBefore);
+    EXPECT_EQ(stored.value("schemaVersion").toInt(), 2);
     EXPECT_EQ(stored.value("id").toString(), "b-track");
     const auto s1 = jsonEntry(stored, "s1");
     EXPECT_EQ(s1.value("name").toString(), "Wall Six");
-    EXPECT_EQ(s1.value("hash").toString(), kWallSixHash);
+    EXPECT_EQ(s1.value("hashes").toArray(), (QJsonArray{QString::fromLatin1(kWallSixHash)}));
     const auto s1Scores = storedScores(s1);
     EXPECT_EQ(s1Scores, (std::map<QString, double>{{tiers[0], 1.0}, {tiers[1], 0.0}, {tiers[2], -5.0}}));
     const auto extra = jsonEntry(stored, unnamed);
@@ -1015,7 +1014,7 @@ TEST(BenchmarkTableComposition, GroupedPlaylistMappingAndUndo) {
     EXPECT_TRUE(vm->normalizationIssues().isEmpty()) << "no raw input is persisted";
 
     const auto stored = readJson(QDir(benchmarks.path()).absoluteFilePath(id + ".json"));
-    EXPECT_EQ(jsonEntry(stored, first).value("hash").toString(), kWallSixHash);
+    EXPECT_EQ(jsonEntry(stored, first).value("hashes").toArray(), (QJsonArray{QString::fromLatin1(kWallSixHash)}));
 }
 
 // A profile rebuild that makes a leased draft's hashless scenario resolvable must show in the table
@@ -1103,7 +1102,7 @@ TEST(BenchmarkTableComposition, PastedNameLinksOnSaveDespiteCaseAndTrailingSpace
     EXPECT_FALSE(vm->dirty());
     EXPECT_EQ(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "resolved");
     const auto stored = jsonEntry(readJson(QDir(benchmarks.path()).absoluteFilePath("bench.json")), "s1");
-    EXPECT_EQ(stored.value("hash").toString(), kWallSixHash);
+    EXPECT_EQ(stored.value("hashes").toArray(), (QJsonArray{QString::fromLatin1(kWallSixHash)}));
     EXPECT_EQ(stored.value("name").toString(), "1wall6targets TE");
     const auto *projection = w->app->benchmarkTrackingUseCase()->projection();
     ASSERT_NE(projection, nullptr);
@@ -1131,10 +1130,70 @@ TEST(BenchmarkTableComposition, ClosedManagerBenchmarkLinksWhenTheScenarioIsLate
     const auto path = QDir(benchmarks.path()).absoluteFilePath("bench.json");
     QElapsedTimer timer;
     timer.start();
-    while (jsonEntry(readJson(path), "s1").value("hash").toString().isEmpty()) {
+    while (jsonEntry(readJson(path), "s1").value("hashes").toArray().isEmpty()) {
         ASSERT_LT(timer.elapsed(), 5000) << "the closed benchmark was never linked";
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     }
-    EXPECT_EQ(jsonEntry(readJson(path), "s1").value("hash").toString(), kWallSixHash);
+    EXPECT_EQ(jsonEntry(readJson(path), "s1").value("hashes").toArray(), (QJsonArray{QString::fromLatin1(kWallSixHash)}));
     EXPECT_EQ(jsonEntry(readJson(path), "s1").value("name").toString(), "1wall6targets TE");
+}
+
+TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkStatistics) {
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, hierarchyTrackableJson());
+    ASSERT_NE(w, nullptr);
+    ASSERT_FALSE(w->env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
+    w->app->profileService()->generateProfileFromDirectory();
+    QElapsedTimer timer;
+    timer.start();
+    while (w->app->profileService()->getScenarioList().size() < 2) {
+        ASSERT_LT(timer.elapsed(), 5000);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+    const auto scenarios = w->app->profileService()->getScenarioList();
+    const auto other = std::ranges::find_if(scenarios, [](const auto &scenario) {
+        return scenario.hash != kWallSixHash;
+    });
+    ASSERT_NE(other, scenarios.end());
+    const auto otherHash = QString::fromStdString(other->hash);
+    const auto tracking = w->app->benchmarkTrackingUseCase();
+    tracking->select(domain::BenchmarkId{"b-track"});
+    ASSERT_NE(tracking->projection(), nullptr);
+    const auto baseline = tracking->projection()->scenarios.front();
+    auto *vm = w->app->benchmarkManagerVm();
+    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    ASSERT_TRUE(vm->setScenarioHashes("s1", {kWallSixHash, otherHash, "unavailable"})["ok"].toBool());
+    ASSERT_TRUE(vm->save()["ok"].toBool());
+    const auto facts = w->app->profileService()->getRunFacts(scenarios);
+    double expectedPlaytime = 0.0;
+    double expectedBest = 0.0;
+    for (const auto &fact: facts) {
+        expectedPlaytime += fact.duration_seconds;
+        expectedBest = std::max(expectedBest, static_cast<double>(fact.score));
+    }
+    ASSERT_NE(tracking->projection(), nullptr);
+    const auto &combined = tracking->projection()->scenarios.front();
+    EXPECT_EQ(combined.runCount, facts.size());
+    EXPECT_GT(combined.runCount, baseline.runCount);
+    ASSERT_TRUE(combined.personalBest);
+    EXPECT_DOUBLE_EQ(*combined.personalBest, expectedBest);
+    EXPECT_DOUBLE_EQ(tracking->projection()->totalPlaytimeSeconds, expectedPlaytime);
+    vm->discard();
+    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    const auto *table = qobject_cast<presentation::BenchmarkTableModel *>(vm->tableModel());
+    ASSERT_NE(table, nullptr);
+    EXPECT_EQ(table->rowInfo(0).value("mappedHashes").toStringList(),
+              (QStringList{kWallSixHash, otherHash, "unavailable"}));
+    const auto reread = w->repo->scan();
+    ASSERT_TRUE(reread.snapshot.has_value());
+    ASSERT_EQ(reread.snapshot->entries.size(), 1U);
+    const auto *loaded = std::get_if<LoadedBenchmark>(&reread.snapshot->entries.front().content);
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_EQ(loaded->benchmark.categories.front().subcategories.front().scenarios.front().additionalHashes,
+              (std::vector<std::string>{otherHash.toStdString(), "unavailable"}));
+    ASSERT_TRUE(vm->setScenarioHashes("s1", {kWallSixHash})["ok"].toBool());
+    ASSERT_TRUE(vm->save()["ok"].toBool());
+    ASSERT_NE(tracking->projection(), nullptr);
+    EXPECT_EQ(tracking->projection()->scenarios.front().runCount, baseline.runCount);
+    EXPECT_DOUBLE_EQ(tracking->projection()->totalPlaytimeSeconds, baseline.playtimeSeconds);
 }

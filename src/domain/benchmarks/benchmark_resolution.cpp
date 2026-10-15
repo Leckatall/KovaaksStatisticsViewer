@@ -3,6 +3,15 @@
 #include <algorithm>
 
 namespace ksv::domain {
+    std::vector<std::string> mappedScenarioHashes(
+        const std::optional<std::string> &hash, const std::vector<std::string> &additionalHashes) {
+        std::vector<std::string> hashes;
+        if (hash && !hash->empty()) hashes.push_back(*hash);
+        for (const auto &value: additionalHashes)
+            if (!value.empty() && std::ranges::find(hashes, value) == hashes.end()) hashes.push_back(value);
+        return hashes;
+    }
+
     namespace {
         constexpr std::string_view kNoBreakSpace = "\xC2\xA0";
 

@@ -18,7 +18,7 @@ namespace ksv::qt_data {
         using namespace data;
         using namespace ksv::domain;
 
-        constexpr int kSchemaVersion = 1;
+        constexpr int kSchemaVersion = 2;
 
         bool exactKeys(const QJsonObject &object, const std::initializer_list<const char *> keys) {
             if (object.size() != static_cast<qsizetype>(keys.size())) return false;
@@ -60,18 +60,30 @@ namespace ksv::qt_data {
             return Threshold{TierId{*tierId}, object["score"].toDouble()};
         }
 
-        std::optional<ScenarioEntry> decodeEntry(const QJsonValue &value) {
+        std::optional<ScenarioEntry> decodeEntry(const QJsonValue &value, int version) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
-            if (!exactKeys(object, {"id", "name", "hash", "thresholds"}) || !object["name"].isString() ||
+            if (!(version == 1 ? exactKeys(object, {"id", "name", "hash", "thresholds"})
+                              : exactKeys(object, {"id", "name", "hashes", "thresholds"})) ||
+                !object["name"].isString() ||
                 !object["thresholds"].isArray())
                 return std::nullopt;
             const auto id = nonEmptyIdString(object["id"]);
             if (!id) return std::nullopt;
-            std::optional<std::string> hash;
-            if (!object["hash"].isNull()) {
-                if (!object["hash"].isString()) return std::nullopt;
-                hash = object["hash"].toString().toStdString();
+            std::vector<std::string> hashes;
+            if (version == 1) {
+                if (!object["hash"].isNull()) {
+                    if (!object["hash"].isString()) return std::nullopt;
+                    const auto hash = object["hash"].toString().toStdString();
+                    if (!hash.empty()) hashes.push_back(hash);
+                }
+            } else {
+                if (!object["hashes"].isArray()) return std::nullopt;
+                for (const auto &value: object["hashes"].toArray()) {
+                    const auto hash = nonEmptyIdString(value);
+                    if (!hash || std::ranges::find(hashes, *hash) != hashes.end()) return std::nullopt;
+                    hashes.push_back(*hash);
+                }
             }
             std::vector<Threshold> thresholds;
             for (const auto &item: object["thresholds"].toArray()) {
@@ -79,22 +91,27 @@ namespace ksv::qt_data {
                 if (!threshold) return std::nullopt;
                 thresholds.push_back(*threshold);
             }
-            return ScenarioEntry{ScenarioEntryId{*id}, object["name"].toString().toStdString(),
-                                 hash, std::move(thresholds)};
+            ScenarioEntry entry{ScenarioEntryId{*id}, object["name"].toString().toStdString(),
+                                std::nullopt, std::move(thresholds)};
+            if (!hashes.empty()) {
+                entry.hash = hashes.front();
+                entry.additionalHashes.assign(hashes.begin() + 1, hashes.end());
+            }
+            return entry;
         }
 
-        std::optional<std::vector<ScenarioEntry>> decodeEntries(const QJsonValue &value) {
+        std::optional<std::vector<ScenarioEntry>> decodeEntries(const QJsonValue &value, int version) {
             if (!value.isArray()) return std::nullopt;
             std::vector<ScenarioEntry> entries;
             for (const auto &item: value.toArray()) {
-                const auto entry = decodeEntry(item);
+                const auto entry = decodeEntry(item, version);
                 if (!entry) return std::nullopt;
                 entries.push_back(*entry);
             }
             return entries;
         }
 
-        std::optional<Category> decodeCategory(const QJsonValue &value) {
+        std::optional<Category> decodeCategory(const QJsonValue &value, int version) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             if (!exactKeys(object, {"id", "name", "color", "scenarios", "subcategories"}) ||
@@ -102,7 +119,7 @@ namespace ksv::qt_data {
                 return std::nullopt;
             const auto id = nonEmptyIdString(object["id"]);
             const auto color = decodeColor(object["color"]);
-            const auto scenarios = decodeEntries(object["scenarios"]);
+            const auto scenarios = decodeEntries(object["scenarios"], version);
             if (!id || !color || !scenarios) return std::nullopt;
             std::vector<Subcategory> subcategories;
             for (const auto &item: object["subcategories"].toArray()) {
@@ -112,7 +129,7 @@ namespace ksv::qt_data {
                     return std::nullopt;
                 const auto subId = nonEmptyIdString(sub["id"]);
                 const auto subColor = decodeColor(sub["color"]);
-                const auto subScenarios = decodeEntries(sub["scenarios"]);
+                const auto subScenarios = decodeEntries(sub["scenarios"], version);
                 if (!subId || !subColor || !subScenarios) return std::nullopt;
                 subcategories.push_back(Subcategory{GroupId{*subId}, sub["name"].toString().toStdString(),
                                                     *subColor, std::move(*subScenarios)});
@@ -132,7 +149,7 @@ namespace ksv::qt_data {
         }
 
         // Structural decode: shape + types only. Returns nullopt on any representation failure.
-        std::optional<Benchmark> decodeStructure(const QJsonObject &root) {
+        std::optional<Benchmark> decodeStructure(const QJsonObject &root, int version) {
             if (!exactKeys(root, {"schemaVersion", "id", "name", "tiers", "uncategorized", "categories"}) ||
                 !root["name"].isString() || !root["tiers"].isArray() || !root["uncategorized"].isArray() ||
                 !root["categories"].isArray())
@@ -147,11 +164,11 @@ namespace ksv::qt_data {
                 if (!tier) return std::nullopt;
                 def.tiers.push_back(*tier);
             }
-            auto uncategorized = decodeEntries(root["uncategorized"]);
+            auto uncategorized = decodeEntries(root["uncategorized"], version);
             if (!uncategorized) return std::nullopt;
             def.uncategorized = std::move(*uncategorized);
             for (const auto &item: root["categories"].toArray()) {
-                const auto category = decodeCategory(item);
+                const auto category = decodeCategory(item, version);
                 if (!category) return std::nullopt;
                 def.categories.push_back(*category);
             }
@@ -209,10 +226,10 @@ namespace ksv::qt_data {
             if (static_cast<int>(version) > kSchemaVersion)
                 return ProblemBenchmark{BenchmarkFileProblem::Unsupported, displayName, embeddedId,
                                         static_cast<int>(version)};
-            if (static_cast<int>(version) != kSchemaVersion)
+            if (version < 1)
                 return ProblemBenchmark{BenchmarkFileProblem::Invalid, displayName, embeddedId, {}};
 
-            const auto structure = decodeStructure(root);
+            const auto structure = decodeStructure(root, static_cast<int>(version));
             if (!structure || !hasStructuralIntegrity(*structure))
                 return ProblemBenchmark{BenchmarkFileProblem::Invalid, displayName, embeddedId, {}};
             return LoadedBenchmark{*structure, validateBenchmark(*structure)};
@@ -223,9 +240,12 @@ namespace ksv::qt_data {
             for (const auto &threshold: entry.thresholds)
                 thresholds.append(QJsonObject{{"tierId", QString::fromStdString(threshold.tierId.value)},
                                               {"score", threshold.score}});
+            QJsonArray hashes;
+            for (const auto &hash: mappedScenarioHashes(entry.hash, entry.additionalHashes))
+                hashes.append(QString::fromStdString(hash));
             return QJsonObject{{"id", QString::fromStdString(entry.id.value)},
                                {"name", QString::fromStdString(entry.name)},
-                               {"hash", entry.hash ? QJsonValue(QString::fromStdString(*entry.hash)) : QJsonValue()},
+                               {"hashes", hashes},
                                {"thresholds", thresholds}};
         }
 

@@ -190,6 +190,7 @@ namespace ksv::presentation {
                 {"subcategorySpanStart", projected.subcategory.spanStart},
                 {"subcategorySpanLength", projected.subcategory.spanLength},
                 {"mappingState", projected.mappingState},
+                {"mappedHashes", projected.mappedHashes},
                 {"mappingCandidates", projected.mappingCandidates}};
     }
 

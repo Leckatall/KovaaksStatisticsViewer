@@ -117,6 +117,7 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap renameScenario(const QString &id, const QString &name);
         Q_INVOKABLE QVariantMap setScenarioIdentity(const QString &id, const QString &name, const QString &hash);
         Q_INVOKABLE QVariantMap setScenarioHash(const QString &entryId, const QString &hash);
+        Q_INVOKABLE QVariantMap setScenarioHashes(const QString &entryId, const QStringList &hashes);
         Q_INVOKABLE QVariantMap removeScenario(const QString &id);
         // Removes every listed scenario as one edit and one Undo step; an unknown ID rejects the
         // whole batch and changes nothing.

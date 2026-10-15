@@ -62,18 +62,27 @@ namespace ksv::domain {
             ScenarioProjection projection;
             projection.entryId = entry.id;
             projection.name = entry.name;
-            const std::vector<const RunFact *> *history = nullptr;
+            std::vector<const RunFact *> history;
             if (const auto found = resolutions.find(entry.id.value); found != resolutions.end()) {
                 projection.matchState = found->second->state;
-                if (found->second->state == ScenarioMatchState::Resolved && found->second->hash)
-                    if (const auto bucket = facts.find(*found->second->hash); bucket != facts.end())
-                        history = &bucket->second;
+                if (found->second->state == ScenarioMatchState::Resolved) {
+                    const auto hashes = mappedScenarioHashes(found->second->hash, found->second->additionalHashes);
+                    for (const auto &hash: hashes)
+                        if (const auto bucket = facts.find(hash); bucket != facts.end())
+                            history.insert(history.end(), bucket->second.begin(), bucket->second.end());
+                    if (hashes.size() > 1)
+                        std::ranges::sort(history, [](const RunFact *left, const RunFact *right) {
+                            return left->run_id.start_time != right->run_id.start_time
+                                ? left->run_id.start_time < right->run_id.start_time
+                                : left->run_id.scenario_id.hash < right->run_id.scenario_id.hash;
+                        });
+                }
             }
-            if (history && !history->empty()) {
-                projection.runCount = static_cast<int>(history->size());
-                const RunFact *bestRun = history->front();
+            if (!history.empty()) {
+                projection.runCount = static_cast<int>(history.size());
+                const RunFact *bestRun = history.front();
                 double playtime = 0.0;
-                for (const auto *fact: *history) {
+                for (const auto *fact: history) {
                     if (fact->score > bestRun->score ||
                         (fact->score == bestRun->score && fact->run_id.start_time < bestRun->run_id.start_time))
                         bestRun = fact;
@@ -82,10 +91,10 @@ namespace ksv::domain {
                 projection.personalBest = static_cast<double>(bestRun->score);
                 projection.personalBestTime = bestRun->run_id.startSecond();
                 projection.playtimeSeconds = playtime;
-                const auto sample = std::min(kRecentRuns, history->size());
+                const auto sample = std::min(kRecentRuns, history.size());
                 double total = 0.0;
-                for (std::size_t index = history->size() - sample; index < history->size(); ++index)
-                    total += (*history)[index]->score;
+                for (std::size_t index = history.size() - sample; index < history.size(); ++index)
+                    total += history[index]->score;
                 projection.recentAverage = total / static_cast<double>(sample);
                 projection.recentSampleCount = static_cast<int>(sample);
             }
@@ -232,8 +241,9 @@ namespace ksv::domain {
         // the per-scenario figures would double the benchmark total.
         std::unordered_set<std::string> hashes;
         for (const auto &resolution: resolutions)
-            if (resolution.state == ScenarioMatchState::Resolved && resolution.hash)
-                hashes.insert(*resolution.hash);
+            if (resolution.state == ScenarioMatchState::Resolved)
+                for (const auto &hash: mappedScenarioHashes(resolution.hash, resolution.additionalHashes))
+                    hashes.insert(hash);
         for (const auto &hash: hashes)
             if (const auto facts = byHash.find(hash); facts != byHash.end())
                 for (const auto *fact: facts->second) projection.totalPlaytimeSeconds += fact->duration_seconds;
@@ -305,10 +315,9 @@ namespace ksv::domain {
         std::unordered_map<std::string, std::vector<std::size_t> > entriesByHash;
         for (std::size_t index = 0; index < projection.scenarios.size(); ++index) {
             const auto found = byEntry.find(projection.scenarios[index].entryId.value);
-            if (found == byEntry.end() || found->second->state != ScenarioMatchState::Resolved ||
-                !found->second->hash)
-                continue;
-            entriesByHash[*found->second->hash].push_back(index);
+            if (found == byEntry.end() || found->second->state != ScenarioMatchState::Resolved) continue;
+            for (const auto &hash: mappedScenarioHashes(found->second->hash, found->second->additionalHashes))
+                entriesByHash[hash].push_back(index);
         }
         // Running sum of every entry's normalized value rather than re-averaging per point, so the
         // sweep stays linear in runs plus emitted points. runFacts is chronological by contract
