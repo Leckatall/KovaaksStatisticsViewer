@@ -26,6 +26,22 @@ namespace ksv::presentation {
             }
             return niceFraction * std::pow(10.0, exponent);
         }
+
+        // The next coarser step in the 1-2-5 nice sequence (1 -> 2 -> 5 -> 10 -> 20 ...).
+        qreal nextNiceStep(const qreal step) {
+            const qreal exponent = std::floor(std::log10(step) + 1e-9);
+            const qreal magnitude = std::pow(10.0, exponent);
+            const qreal fraction = step / magnitude;
+            if (fraction < 1.5) return 2.0 * magnitude;
+            if (fraction < 3.5) return 5.0 * magnitude;
+            return 10.0 * magnitude;
+        }
+
+        // Upper bound on step coarsening; each round multiplies the step by at least 2, so this is
+        // far beyond any realistic range and only guards a formatter that collapses every value.
+        constexpr int kMaxCoarsening = 64;
+        // Epsilon handles non-representable values (e.g. 0.05) that round incorrectly
+        constexpr qreal kEps = 1e-9;
     }
 
     ValueAxis::ValueAxis() : ValueAxis(Options{}, ValueTransform::identity()) {}
@@ -70,18 +86,50 @@ namespace ksv::presentation {
         qreal step = niceNum(niceNum(hi - lo, false) / intervals, true);
         if (m_options.integral) step = std::max(1.0, std::round(step));
 
-        // Epsilon handles non-representable values (e.g. 0.05) that round incorrectly
-        constexpr qreal kEps = 1e-9;
-        qreal niceMin = std::floor(lo / step + kEps) * step;
-        const qreal niceMax = std::ceil(hi / step - kEps) * step;
-        if (m_options.baseline == Baseline::Zero) niceMin = 0.0;
+        Resolved resolved = resolve(lo, hi, step);
+        for (int round = 0; round < kMaxCoarsening && !adjacentLabelsDistinct(resolved.ticks); ++round) {
+            step = nextNiceStep(step);
+            resolved = resolve(lo, hi, step);
+        }
 
-        QList<qreal> ticks;
-        // Index from niceMin instead of accumulating step to avoid floating-point drift
-        const int tickCount = int(std::round((niceMax - niceMin) / step));
-        ticks.reserve(tickCount + 1);
-        for (int i = 0; i <= tickCount; ++i) ticks.append(niceMin + step * i);
+        return replaceResolvedState(resolved.min, resolved.max, std::move(resolved.ticks), m_transform);
+    }
 
-        return replaceResolvedState(niceMin, niceMax, std::move(ticks), m_transform);
+    ValueAxis::Resolved ValueAxis::resolve(const qreal lo, const qreal hi, const qreal step) const {
+        Resolved resolved{};
+        qreal first;
+        qreal last;
+        if (m_options.niceBounds) {
+            resolved.min = m_options.baseline == Baseline::Zero ? 0.0 : std::floor(lo / step + kEps) * step;
+            resolved.max = std::ceil(hi / step - kEps) * step;
+            first = resolved.min;
+            last = resolved.max;
+        } else {
+            resolved.min = lo;
+            resolved.max = hi;
+            first = std::ceil(lo / step - kEps) * step;
+            last = std::floor(hi / step + kEps) * step;
+        }
+
+        // Index from the first tick instead of accumulating step to avoid floating-point drift
+        const int tickCount = int(std::round((last - first) / step));
+        if (tickCount < 0) {
+            // No nice multiple falls inside an exact-bounds range: label its start alone.
+            resolved.ticks = {lo};
+            return resolved;
+        }
+        resolved.ticks.reserve(tickCount + 1);
+        for (int i = 0; i <= tickCount; ++i) resolved.ticks.append(first + step * i);
+        return resolved;
+    }
+
+    bool ValueAxis::adjacentLabelsDistinct(const QList<qreal> &ticks) const {
+        QString previous;
+        for (int i = 0; i < ticks.size(); ++i) {
+            QString label = m_transform.format(ticks[i]);
+            if (i > 0 && label == previous) return false;
+            previous = std::move(label);
+        }
+        return true;
     }
 }

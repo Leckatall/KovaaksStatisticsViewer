@@ -11,7 +11,7 @@
 #include <presentation/benchmark_manager_vm.h>
 #include <presentation/benchmark_tracking_vm.h>
 #include <presentation/benchmark_history_vm.h>
-#include <presentation/benchmark_breakdown_model.h>
+#include <presentation/benchmark_progress_grid_model.h>
 
 namespace ksv {
     // Referencing these types keeps the linker from dropping the static QML
@@ -46,8 +46,8 @@ namespace ksv {
             "KovaaksStatsViewer", 1, 0, "BenchmarkTrackingViewModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::BenchmarkHistoryViewModel>(
             "KovaaksStatsViewer", 1, 0, "BenchmarkHistoryViewModel", "Created in C++");
-        qmlRegisterUncreatableType<presentation::BenchmarkBreakdownModel>(
-            "KovaaksStatsViewer", 1, 0, "BenchmarkBreakdownModel", "Created in C++");
+        qmlRegisterUncreatableType<presentation::BenchmarkProgressGridModel>(
+            "KovaaksStatsViewer", 1, 0, "BenchmarkProgressGridModel", "Created in C++");
     }
 }
 

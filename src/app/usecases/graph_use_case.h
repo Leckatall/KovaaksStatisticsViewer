@@ -34,7 +34,10 @@ namespace ksv::application {
             m_session_controller->setCurrentRunToLatest();
         }
 
+        // Empty when no run is selected: a default run id would otherwise format as the epoch
+        // ("(1970-01-01, 01:00:00)") with no scenario name.
         std::string get_run_label() override {
+            if (!hasCurrentRun()) return {};
             return m_session_controller->getCurrentRun().run_id.toString();
         }
 

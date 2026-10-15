@@ -13,6 +13,8 @@
 #include <QFile>
 #include <QImage>
 #include <QPainter>
+#include <QQuickItem>
+#include <QQuickWindow>
 #include <QQmlApplicationEngine>
 #include <QRect>
 #include <QRectF>
@@ -22,6 +24,7 @@
 #include <QUrl>
 #include <QVariant>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -247,6 +250,85 @@ namespace {
         EXPECT_TRUE(sample.value("valid").toBool()) << "dashboard graph has no plotted data at mid-x";
     }
 
+    // Hover dots stack like the lines: the dot of the series higher in the line list is on top,
+    // while the tooltip keeps listing the series top-of-list first.
+    TEST_F(DashboardUiTest, HoverDotsStackInLineListOrder) {
+        app()->graphVm()->fetchData(perfUrl());
+
+        auto *canvas = dashboardCanvas();
+        ASSERT_NE(canvas, nullptr);
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return canvas->property("plotArea").toRectF().width() > 0.0 && canvas->visibleColumns().size() >= 2;
+        }, 2000)) << "dashboard canvas never showed two or more lines";
+        // The hover area and the dots are siblings of the canvas inside GraphCanvasWithTooltip.
+        QQuickItem *tooltipRoot = canvas->parentItem();
+        ASSERT_NE(tooltipRoot, nullptr);
+        const auto siblingsNamed = [tooltipRoot](const QString &name) {
+            QList<QQuickItem *> found;
+            for (auto *child: tooltipRoot->childItems()) if (child->objectName() == name) found.append(child);
+            return found;
+        };
+        const auto hoverAreas = siblingsNamed("graphHoverArea");
+        ASSERT_EQ(hoverAreas.size(), 1);
+        QQuickItem *hoverArea = hoverAreas.front();
+
+        const QVariantMap info = canvas->valuesAtX(canvas->property("plotArea").toRectF().center().x());
+        ASSERT_TRUE(info.value("valid").toBool());
+        hoverArea->setProperty("hoverInfo", info);
+
+        const QVariantList listed = info.value("series").toList();
+        QList<QQuickItem *> dots;
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            dots = siblingsNamed("graphHoverDot");
+            return dots.size() == listed.size();
+        }, 2000)) << "expected one hover dot per listed series";
+        std::ranges::sort(dots, [](const QQuickItem *a, const QQuickItem *b) { return a->z() > b->z(); });
+        for (int i = 0; i < dots.size(); ++i) {
+            EXPECT_EQ(dots[i]->property("color").value<QColor>(), listed[i].toMap().value("color").value<QColor>())
+                << "dot " << i << " from the top is not the " << i << "-th listed series";
+        }
+
+        hoverArea->setProperty("hoverInfo", QVariantMap{{"valid", false}});
+    }
+
+    // The three Scenarios-tab graph panels split the column equally, whatever their content, and
+    // the visible ones still do when one is hidden.
+    TEST_F(DashboardUiTest, GraphPanelsShareTheColumnEqually) {
+        app()->graphVm()->fetchData(perfUrl());
+
+        auto *run = root()->findChild<QObject *>("scenarioGraphPanel");
+        auto *playtime = root()->findChild<QObject *>("playtimeGraphPanel");
+        auto *history = root()->findChild<QObject *>("scenarioHistoryPanel");
+        QObject *visualSettings = root()->findChild<QObject *>("visualSettings");
+        ASSERT_TRUE(run && playtime && history && visualSettings);
+        const auto height = [](const QObject *item) { return item->property("height").toReal(); };
+
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return height(run) > 0.0 && std::abs(height(run) - height(playtime)) <= 1.0 &&
+                   std::abs(height(run) - height(history)) <= 1.0;
+        }, 2000)) << "panel heights " << height(run) << ", " << height(playtime) << ", " << height(history);
+
+        visualSettings->setProperty("playtimeGraphVisible", false);
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return height(run) > 0.0 && std::abs(height(run) - height(history)) <= 1.0 &&
+                   height(run) > height(playtime);
+        }, 2000)) << "with playtime hidden: " << height(run) << ", " << height(history);
+        visualSettings->setProperty("playtimeGraphVisible", true);
+    }
+
+    // The panels about the selected scenario (run graph, its history) sit together, above the
+    // all-scenario playtime panel.
+    TEST_F(DashboardUiTest, GraphPanelsAreOrderedRunHistoryPlaytime) {
+        auto *run = root()->findChild<QObject *>("scenarioGraphPanel");
+        auto *history = root()->findChild<QObject *>("scenarioHistoryPanel");
+        auto *playtime = root()->findChild<QObject *>("playtimeGraphPanel");
+        ASSERT_TRUE(run && history && playtime);
+        const auto y = [](const QObject *item) { return item->property("y").toReal(); };
+
+        EXPECT_TRUE(QTest::qWaitFor([&] { return y(run) < y(history) && y(history) < y(playtime); }, 2000))
+            << "panel y: run " << y(run) << ", history " << y(history) << ", playtime " << y(playtime);
+    }
+
     TEST_F(DashboardUiTest, YAxisTitleLabelDefaultsToScore) {
         // The plot subtree (and its axis title) is only instantiated once a run with performance data
         // is shown; before that the panel carries the "No run selected" message instead.
@@ -318,6 +400,59 @@ namespace {
         EXPECT_EQ(historyCanvas()->graphVm(), app->completionHistoryVm());
     }
 
+    // A click on the history graph selects the nearest run: the history marks it, the run list's
+    // current item follows it, and the run graph shows it. A click outside the plot does nothing.
+    TEST_F(DashboardCleanSceneTest, ClickingTheHistoryGraphSelectsTheNearestRun) {
+        auto *app = scene.app.get();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
+
+        auto base_run = app->profileService()->getLatestRun();
+        domain::UserProfile profile;
+        const auto source = profile.ensureSource(scene.env.rootPath().toStdString(), "FPSAimTrainer/performances");
+        base_run.sources.perf = {{source, std::filesystem::path(scene.perfFile.toStdString()).filename().string()}};
+        for (int i = 0; i < 3; ++i) {
+            auto run = base_run;
+            run.run_id.start_time += 1000 * i;
+            ASSERT_TRUE(profile.addRun(run));
+        }
+        app->profileService()->applyBuiltProfile(std::move(profile));
+
+        auto *historyVm = app->completionHistoryVm();
+        ui::GraphCanvas *canvas = nullptr;
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            canvas = scene.canvasFor(historyVm);
+            return canvas != nullptr && historyVm->runCount() == 3 && canvas->width() > 0;
+        }, 5000));
+        app->completionHistoryVm()->selectRun(3);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return historyVm->selectedRunIndex() == 3; }, 2000));
+
+        QQuickItem *runList = nullptr;
+        for (auto *item: scene.root->findChildren<QQuickItem *>("runListView"))
+            if (item->property("model").value<QObject *>() == app->scenarioBrowserVm()->runModel()) runList = item;
+        ASSERT_NE(runList, nullptr);
+
+        const QRectF plot = canvas->property("plotArea").toRectF();
+        const auto clickAt = [&](const QPointF &local) {
+            QTest::mouseClick(canvas->window(), Qt::LeftButton, {}, canvas->mapToScene(local).toPoint());
+        };
+
+        // Nearer run #1 than #2: x a fifth of the way across a plot spanning runs 1..3.
+        clickAt({plot.left() + plot.width() * 0.2, plot.center().y()});
+        EXPECT_TRUE(QTest::qWaitFor([&] { return historyVm->selectedRunIndex() == 1; }, 2000))
+            << "selected run index " << historyVm->selectedRunIndex();
+        EXPECT_EQ(canvas->markedX(), 1.0);
+        EXPECT_EQ(app->scenarioBrowserVm()->currentRunStartTimeMs(), static_cast<double>(base_run.run_id.start_time));
+        // The run list is newest first, so run #1 of 3 is its last row.
+        EXPECT_TRUE(QTest::qWaitFor([&] { return runList->property("currentIndex").toInt() == 2; }, 2000))
+            << "run list current index " << runList->property("currentIndex").toInt();
+
+        // Left of the plot, on the y-axis labels: nothing changes.
+        QTest::qWait(500);
+        clickAt({plot.left() / 2, plot.center().y()});
+        QTest::qWait(100);
+        EXPECT_EQ(historyVm->selectedRunIndex(), 1);
+    }
+
     // Regression: BenchmarkHistoryCard never handed its canvas any visibleColumns, so
     // series([]) came back empty and nothing was drawn -- yet both axes still painted,
     // because the x axis is the VM's and the y axis falls back through labelledYAxisColumn()
@@ -332,7 +467,7 @@ namespace {
                 "schemaVersion": 1, "id": "auto-1", "name": "Auto",
                 "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
                 "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hash": null,
-                    "thresholds": [ { "tierId": "t1", "score": 100.0 } ] } ],
+                    "thresholds": [ { "tierId": "t1", "score": 1000000000.0 } ] } ],
                 "categories": []
             })");
         }
@@ -341,6 +476,8 @@ namespace {
         auto *app = scene.app.get();
         ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
 
+        // The tier is out of reach, so the rank line stays below Bronze's tier line, which is
+        // painted over the series and would hide a line running exactly along it.
         // Average-rank history only gains a point on a day the personal best improves.
         auto first_run = app->profileService()->getLatestRun();
         auto second_run = first_run;
@@ -382,12 +519,59 @@ namespace {
                 canvas->paint(&painter);
             }
             const QRect plot = canvas->property("plotArea").toRectF().toAlignedRect();
-            EXPECT_GT(countPixelsNear(image, plot, series.front()->color()), 0)
+            // The rank line has no colour of its own; the canvas draws it in its foreground colour.
+            EXPECT_GT(countPixelsNear(image, plot, canvas->colorFor(*series.front())), 0)
                 << metric << ": axes painted but the series line was not";
         }
     }
 
-    TEST(FirstRunUiTest, BannerOpensFolderDialogAndHidesAfterDirectorySelection) {
+    // Selection through the real pipeline: two imported scenarios, the graphs on the
+    // latest run's scenario; activating the other scenario in the browser moves both
+    // the per-run graph and the run-history graph to it without picking a run.
+    TEST(ScenarioSelectionUiTest, ActivatingAScenarioMovesBothGraphsToIt) {
+        integration::TestEnv env;
+        ASSERT_TRUE(env.valid());
+        ASSERT_TRUE(env.makePerformancesDir());
+        ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+        ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
+        application::App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore,
+                             env.statsParser, env.benchmarkStore);
+        ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
+
+        auto *browser = app.scenarioBrowserVm();
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return app.profileService()->isProfileLoaded() && app.profileService()->getScenarioList().size() == 2;
+        }, 10000));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !browser->activeScenarioHash().isEmpty(); }, 3000));
+
+        const auto current = app.sessionController()->getCurrentRun().run_id.scenario_id;
+        EXPECT_EQ(browser->activeScenarioHash().toStdString(), current.hash)
+            << "the browser starts on the scenario the graphs show";
+
+        domain::ScenarioId other;
+        for (const auto &scenario: app.profileService()->getScenarioList())
+            if (!(scenario == current)) other = scenario;
+        ASSERT_FALSE(other.hash.empty());
+        const auto otherName = QString::fromStdString(other.name);
+
+        browser->activateScenario(QString::fromStdString(other.hash), otherName);
+
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return app.sessionController()->getCurrentRun().run_id.scenario_id == other;
+        }, 3000)) << "selecting a scenario must make one of its runs current";
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return app.completionHistoryVm()->scenarioTitle() == otherName;
+        }, 3000)) << "history graph shows " << app.completionHistoryVm()->scenarioTitle().toStdString();
+        EXPECT_TRUE(app.graphVm()->scenarioTitle().startsWith(otherName))
+            << "per-run graph shows " << app.graphVm()->scenarioTitle().toStdString();
+        EXPECT_EQ(browser->activeScenarioHash().toStdString(), other.hash);
+    }
+
+    // before a folder is configured exactly one call to choose it is shown --
+    // the Scenarios workspace's full welcome when nothing has been imported, or the
+    // banner when runs are already there (e.g. from the default Steam path) -- and it
+    // opens the folder dialog; choosing a folder dismisses both.
+    TEST(FirstRunUiTest, FolderPromptOpensFolderDialogAndHidesAfterDirectorySelection) {
         QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         raw.remove("file/kovaaks");
         raw.remove("file/kovaaksDirs");
@@ -407,17 +591,25 @@ namespace {
 
         auto *root = app.engine()->rootObjects().first();
         auto *banner = root->findChild<QObject *>("firstRunBanner");
+        auto *welcome = root->findChild<QObject *>("firstRunWelcome");
         auto *dialog = root->findChild<QObject *>("kovaaksFolderDialog");
         ASSERT_NE(banner, nullptr);
+        ASSERT_NE(welcome, nullptr);
         ASSERT_NE(dialog, nullptr);
-        EXPECT_TRUE(banner->property("visible").toBool());
 
-        ASSERT_TRUE(QMetaObject::invokeMethod(banner, "chooseFolderRequested"));
+        const bool nothingImported = !app.scenarioBrowserVm()->hasScenarios();
+        EXPECT_EQ(welcome->property("visible").toBool(), nothingImported);
+        EXPECT_EQ(banner->property("visible").toBool(), !nothingImported);
+
+        QObject *prompt = nothingImported ? welcome : banner;
+        ASSERT_TRUE(QMetaObject::invokeMethod(prompt, "chooseFolderRequested"));
         ASSERT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
         dialog->setProperty("visible", false);
 
         app.settingsVm()->setKovaaksDir(QUrl::fromLocalFile("D:/Kovaaks"));
 
-        EXPECT_TRUE(QTest::qWaitFor([&] { return !banner->property("visible").toBool(); }, 3000));
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return !banner->property("visible").toBool() && !welcome->property("visible").toBool();
+        }, 3000));
     }
 }

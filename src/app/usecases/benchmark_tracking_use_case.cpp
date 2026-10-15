@@ -1,5 +1,6 @@
 #include "benchmark_tracking_use_case.h"
 
+#include <algorithm>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -53,9 +54,10 @@ namespace ksv::application {
     BenchmarkTrackingUseCase::BenchmarkTrackingUseCase(
         std::shared_ptr<data::IBenchmarksService> benchmarks,
         std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
-        std::shared_ptr<IProfileService> profileService)
+        std::shared_ptr<IProfileService> profileService,
+        std::shared_ptr<ISettingsService> settings)
         : m_benchmarks(std::move(benchmarks)), m_resolution(std::move(resolution)),
-          m_profileService(std::move(profileService)) {
+          m_profileService(std::move(profileService)), m_settings(std::move(settings)) {
         const auto reevaluate = [this] {
             m_cache.clear();
             refresh();
@@ -71,6 +73,7 @@ namespace ksv::application {
         if (m_selected && *m_selected == id) return;
         m_selected = id;
         m_lastKnownSelectedDisplayName.clear();
+        if (m_settings) m_settings->setLastSelectedBenchmarkId(id.value);
         refresh();
         notifyChanged();
     }
@@ -79,8 +82,35 @@ namespace ksv::application {
         if (!m_selected) return;
         m_selected.reset();
         m_lastKnownSelectedDisplayName.clear();
+        if (m_settings) m_settings->setLastSelectedBenchmarkId({});
         refresh();
         notifyChanged();
+    }
+
+    void BenchmarkTrackingUseCase::selectDefault() {
+        if (m_selected) return;
+        const auto &choices = m_snapshot.choices;
+        const auto selectable = [](const BenchmarkChoice &choice) { return choice.selectable && choice.id; };
+
+        if (m_settings) {
+            const std::string remembered = m_settings->getLastSelectedBenchmarkId();
+            if (!remembered.empty()) {
+                const auto found = std::find_if(choices.begin(), choices.end(), [&](const BenchmarkChoice &choice) {
+                    return selectable(choice) && choice.id->value == remembered;
+                });
+                if (found != choices.end()) {
+                    // `select` rebuilds m_snapshot, which `found` points into; pass a copy.
+                    const domain::BenchmarkId id = *found->id;
+                    select(id);
+                    return;
+                }
+            }
+        }
+
+        if (std::count_if(choices.begin(), choices.end(), selectable) != 1) return;
+        const auto only = std::find_if(choices.begin(), choices.end(), selectable);
+        const domain::BenchmarkId id = *only->id;
+        select(id);
     }
 
     void BenchmarkTrackingUseCase::notifyChanged() const {

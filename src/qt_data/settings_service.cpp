@@ -11,6 +11,7 @@ namespace ksv::qt_data {
     namespace {
         constexpr auto kSeriesConfigKey = "graph/seriesConfigV1";
         constexpr auto kSeriesConfigQuarantinePrefix = "graph/seriesConfigQuarantine/";
+        constexpr auto kLastSelectedBenchmarkKey = "benchmarks/lastSelectedId";
     }
 
     SettingsService::SettingsService(const QSettings::Format format, QObject *parent) : QObject(parent),
@@ -46,11 +47,9 @@ namespace ksv::qt_data {
     }
 
     std::vector<std::string> SettingsService::getKovaaksDirs() const {
-        static const QString kDefaultDir = "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer";
-
         const QMutexLocker locker(&m_settings_mutex);
         if (!m_settings.contains("file/kovaaksDirs")) {
-            if (!m_settings.contains("file/kovaaks")) return {kDefaultDir.toStdString()};
+            if (!m_settings.contains("file/kovaaks")) return {m_fallback_kovaaks_dir};
             return {m_settings.value("file/kovaaks").toUrl().toLocalFile().toStdString()};
         }
 
@@ -60,6 +59,11 @@ namespace ksv::qt_data {
     bool SettingsService::isKovaaksDirSet() const {
         const QMutexLocker locker(&m_settings_mutex);
         return m_settings.contains("file/kovaaksDirs") || m_settings.contains("file/kovaaks");
+    }
+
+    void SettingsService::setFallbackKovaaksDir(const std::string &dir) {
+        const QMutexLocker locker(&m_settings_mutex);
+        m_fallback_kovaaks_dir = dir;
     }
 
     void SettingsService::setKovaaksDirs(const std::vector<std::string> &dirs) {
@@ -111,5 +115,17 @@ namespace ksv::qt_data {
         result.reserve(stored.size());
         for (const auto &key: stored) result.push_back(key.toStdString());
         return result;
+    }
+
+    std::string SettingsService::getLastSelectedBenchmarkId() const {
+        const QMutexLocker locker(&m_settings_mutex);
+        return m_settings.value(kLastSelectedBenchmarkKey).toString().toStdString();
+    }
+
+    void SettingsService::setLastSelectedBenchmarkId(const std::string &id) {
+        const QMutexLocker locker(&m_settings_mutex);
+        if (id.empty()) m_settings.remove(kLastSelectedBenchmarkKey);
+        else m_settings.setValue(kLastSelectedBenchmarkKey, QString::fromStdString(id));
+        m_settings.sync();
     }
 }

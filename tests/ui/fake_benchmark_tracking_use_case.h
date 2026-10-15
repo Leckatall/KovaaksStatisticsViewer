@@ -30,9 +30,11 @@ namespace ksv::tests_ui {
         application::BenchmarkWorkspaceSnapshot snap;
         std::vector<domain::BenchmarkId> selectCalls;
         int clearCalls = 0;
+        int selectDefaultCalls = 0;
 
         void select(const domain::BenchmarkId &id) override { selectCalls.push_back(id); }
         void clearSelection() override { ++clearCalls; }
+        void selectDefault() override { ++selectDefaultCalls; }
         [[nodiscard]] const application::BenchmarkWorkspaceSnapshot &snapshot() const override { return snap; }
         [[nodiscard]] std::optional<domain::BenchmarkId> selected() const override { return snap.selectedId; }
         [[nodiscard]] application::BenchmarkTrackingState state() const override { return snap.availability; }

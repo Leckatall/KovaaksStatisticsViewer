@@ -1,0 +1,14 @@
+---
+type: fixed
+area: Build & packaging
+---
+UI driver sessions can now be composed from general inputs instead of one named dataset per case, and no session can read the real KovaaK's install any more.
+Isolation fix: with no KovaaK's folder configured, `SettingsService::getKovaaksDirs()` returned the hard-coded Steam path `C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer`, so a `first-run` driver session (and a session whose `file/kovaaksDirs` was removed) imported the developer's real runs whenever that folder existed. The default now lives in `SettingsService::m_fallback_kovaaks_dir` behind a new `setFallbackKovaaksDir()` seam; `ksv` never calls it, so the app's default is unchanged, and `ksv_driver` always points it at the nonexistent `<session>/no-kovaaks-install`. Covered by `SettingsServiceTest.FallbackKovaaksDirCanBeReplaced`.
+`ui_driver.py start` gained three repeatable options, stored in `launch.json` so `restart` reuses them:
+- `--overlay DIR` copies DIR's tree onto the session's `data/` after seeding, in order, replacing files (`driver::applyOverlay`, `tools/driver/session_compose.*`).
+- `--setting KEY=VALUE` writes any QSettings key before the app reads settings. VALUE is JSON when it parses, else a string; `KEY=` removes the key. `file/kovaaksDirs`, `file/profilePath` and the legacy `file/kovaaks` go through `SettingsService`'s own URL encoding so the app reads them back exactly (`driver::applySetting`).
+- `--env KEY=VALUE` sets (or, with `KEY=`, unsets) environment variables for `ksv_driver`, after the headless `QML_ENVIRONMENT` defaults.
+Composition order in `driver_main.cpp`: seed the dataset, overlays, the driver's own defaults (KovaaK's dir, profile path), `--setting`, then build `App`. Overlays, defaults and settings are applied only when the session is freshly seeded; a kept session (`restart`, `start --keep`) keeps the user's changes. The driver defaults used to be re-applied on every launch, which would have undone a `--setting file/kovaaksDirs=` on restart. `start --keep` with explicit `--overlay`/`--setting` passes the new `ksv_driver --reapply` to apply them on top of the kept session.
+`LaunchOptions` (`scripts/ui_automation/session.py`) is now table-driven: each field's metadata names its `launch.json` key and its `ksv_driver` flag, so adding a driver option is one field.
+New file commands, usable in batches: `put SRC... [--to performances|stats|benchmarks|.|PATH]` (default by extension), `rm PATH...` and `edit PATH --replace OLD NEW | --from SRC`. Paths are relative to the session's `data/` and anything resolving outside it is refused. Each one then waits until the app is quiet: no profile build in progress (`sessionVm.profileBuildInProgress`) and no new log entries for 300 ms, capped by `--timeout` (default 5 s). `ping` now returns `logSeq` so this wait does not move the `logs` cursor.
+`status` lists the session's overlays, settings and env.

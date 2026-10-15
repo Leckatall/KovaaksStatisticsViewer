@@ -1,0 +1,23 @@
+# Worked example for tools/driver/README.md, "Composing a session": benchmark
+# rows whose scenario is missing (unresolved) or shared by two scenarios
+# (ambiguous). No dataset has either, and no driver code exists for them:
+#   twins.json            profile spec: "Solo Scenario" plus two "Twin Scenario"s
+#                         with different hashes
+#   overlay/benchmarks/   a hand-written benchmark naming Solo (resolved), Twin
+#                         (ambiguous: no hash, two candidates) and Ghost (unresolved)
+#   --setting             opens the Benchmarks tab on that benchmark
+#
+#   uv run python scripts/ui_driver.py tour composing-example --report
+start --profile-spec "${TOUR_DATA}/twins.json" --overlay "${TOUR_DATA}/overlay" --setting benchmarks/lastSelectedId=matching-demo
+set M=win:benchmarkManagerDialog
+
+section benchmarks
+click benchmarksTab --shot=matching-rows
+
+section manager
+invoke obj:manageBenchmarksAction trigger
+dblclick "${M}/libraryEntry_0"
+click "${M}/cell_entry-twin_scenario"
+shot --window benchmarkManagerDialog --name ambiguous-row-mapping
+click "${M}/cell_entry-ghost_scenario"
+shot --window benchmarkManagerDialog --name unresolved-row-mapping

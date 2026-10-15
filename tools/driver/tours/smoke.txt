@@ -1,0 +1,71 @@
+# Visual smoke test: the main screens of every built-in dataset at 1280x800 and
+# 960x700. Any failed step or app warning (QML binding errors included, at
+# startup or during a step) fails the tour with a non-zero exit. Not wired into
+# CTest; run it before committing UI changes:
+#
+#   uv run python scripts/ui_driver.py tour smoke --report
+options --fail-on-warnings
+
+section rich
+start --dataset rich
+shot --name rich-scenarios-1280x800
+click benchmarksTab --shot=rich-benchmarks-1280x800
+resize 960x700
+shot --name rich-benchmarks-960x700
+click "selectorEntry_Driver Many Tiers Benchmark" --shot=rich-many-tiers-960x700
+click scenariosTab --shot=rich-scenarios-960x700
+eval settingsDialog.open()
+shot --window settingsDialog --name rich-settings-profile
+click "win:settingsDialog/text:Graph Lines" --shot=rich-settings-graph-lines
+eval settingsDialog.close()
+invoke obj:manageBenchmarksAction trigger
+dblclick "win:benchmarkManagerDialog/libraryEntry_0" --shot=rich-manager-draft
+eval benchmarkManagerDialog.close()
+
+section single
+start --dataset single
+shot --name single-scenarios-1280x800
+click benchmarksTab --shot=single-benchmarks-1280x800
+resize 960x700
+shot --name single-benchmarks-960x700
+click scenariosTab --shot=single-scenarios-960x700
+
+section short
+start --dataset short
+shot --name short-scenarios-1280x800
+click benchmarksTab --shot=short-benchmarks-1280x800
+resize 960x700
+shot --name short-benchmarks-960x700
+click scenariosTab --shot=short-scenarios-960x700
+
+section bunched
+start --dataset bunched
+shot --name bunched-scenarios-1280x800
+click benchmarksTab --shot=bunched-benchmarks-1280x800
+resize 960x700
+shot --name bunched-benchmarks-960x700
+click scenariosTab --shot=bunched-scenarios-960x700
+
+section fixtures
+start --dataset fixtures
+shot --name fixtures-scenarios-1280x800
+click benchmarksTab --shot=fixtures-benchmarks-1280x800
+resize 960x700
+shot --name fixtures-benchmarks-960x700
+click scenariosTab --shot=fixtures-scenarios-960x700
+
+section empty
+start --dataset empty
+shot --name empty-scenarios-1280x800
+click benchmarksTab --shot=empty-benchmarks-1280x800
+resize 960x700
+shot --name empty-benchmarks-960x700
+click scenariosTab --shot=empty-scenarios-960x700
+
+section first-run
+start --dataset first-run
+shot --name first-run-scenarios-1280x800
+click benchmarksTab --shot=first-run-benchmarks-1280x800
+resize 960x700
+shot --name first-run-benchmarks-960x700
+click scenariosTab --shot=first-run-scenarios-960x700

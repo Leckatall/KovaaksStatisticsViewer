@@ -236,6 +236,23 @@ TEST(BenchmarkManagerVm, SaveSuccessUpdatesLocalBaselineFromAdmittedToken) {
     EXPECT_TRUE(f.vm->dirty());
 }
 
+// The editor's "• Unsaved" label reads dirty(): undoing back to the saved copy clears it.
+TEST(BenchmarkManagerVm, UndoingBackToTheSavedCopyClearsDirty) {
+    Fixture f;
+    f.uc->nextNewSeed = newSeed(draftWith("Alpha", {}, {benchmarkEntry("e1", "Old", std::nullopt, {})}));
+    f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"}, std::nullopt};
+    f.build();
+    f.vm->beginNewBenchmark();
+    ASSERT_TRUE(f.vm->save()["ok"].toBool());
+    ASSERT_FALSE(f.vm->dirty());
+
+    ASSERT_TRUE(f.vm->setScenarioIdentity("e1", "New", "h-new").value("ok").toBool());
+    EXPECT_TRUE(f.vm->dirty());
+
+    ASSERT_TRUE(f.vm->undo().value("ok").toBool());
+    EXPECT_FALSE(f.vm->dirty());
+}
+
 TEST(BenchmarkManagerVm, DiscardClosesAndForgetsUnsavedWorkingCopy) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Draft", {tier("g", "Gold")}, {}));
@@ -1882,4 +1899,50 @@ TEST(BenchmarkTableNotifications, PublicationsInsideSaveKeepRetryState) {
     EXPECT_EQ(f.cell(f.rowOf("a"), f.columnOf("t1"), TM::InputStateRole).toString(), QString());
     EXPECT_EQ(f.cell(f.rowOf("a"), 2, TM::MappingStateRole).toString(), "resolved");
     EXPECT_FALSE(canUndo(*f.vm));
+}
+
+// The editor sizes every rank column from these, including columns it has no delegate for.
+TEST(BenchmarkTableModelHeaders, TierHeadersListEveryRankInColumnOrder) {
+    BenchmarkTableModel model;
+    BenchmarkTableProjection projection;
+    projection.tiers = {{"t1", "Iron", QColor("#828282"), {}},
+                        {"t2", "Platinum", QColor("#50dcdc"), {QStringLiteral("Missing threshold")}}};
+    model.setProjection(projection);
+
+    const QVariantList headers = model.tierHeaders();
+    ASSERT_EQ(headers.size(), 2);
+    EXPECT_EQ(headers[0].toMap().value("name").toString(), "Iron");
+    EXPECT_FALSE(headers[0].toMap().value("hasIssues").toBool());
+    EXPECT_EQ(headers[1].toMap().value("name").toString(), "Platinum");
+    EXPECT_TRUE(headers[1].toMap().value("hasIssues").toBool());
+}
+
+// The editor sizes the identifying columns from these, including rows it has no delegate for.
+TEST(BenchmarkTableModelHeaders, IdentityTextsListEveryRowInRowOrder) {
+    BenchmarkTableModel model;
+    BenchmarkTableProjection projection;
+    BenchmarkTableRow grouped;
+    grouped.entryId = "a";
+    grouped.name = "1wall6targets";
+    grouped.category = {"c1", "Clicking", QColor("#00bcd4"), 0, 1, {}};
+    grouped.subcategory = {"s1", "Static", QColor("#26a69a"), 0, 1, {}};
+    BenchmarkTableRow uncategorized;
+    uncategorized.entryId = "b";
+    uncategorized.category = {"", "Uncategorized", QColor(), 1, 1, {}};
+    projection.rows = {grouped, uncategorized};
+    model.setProjection(projection);
+
+    const QVariantList texts = model.identityTexts();
+    ASSERT_EQ(texts.size(), 2);
+    const QVariantMap first = texts[0].toMap();
+    EXPECT_EQ(first.value("categoryId").toString(), "c1");
+    EXPECT_EQ(first.value("category").toString(), "Clicking");
+    EXPECT_EQ(first.value("subcategoryId").toString(), "s1");
+    EXPECT_EQ(first.value("subcategory").toString(), "Static");
+    EXPECT_EQ(first.value("scenario").toString(), "1wall6targets");
+    const QVariantMap second = texts[1].toMap();
+    EXPECT_EQ(second.value("categoryId").toString(), "");
+    EXPECT_EQ(second.value("category").toString(), "Uncategorized");
+    EXPECT_EQ(second.value("subcategoryId").toString(), "");
+    EXPECT_EQ(second.value("scenario").toString(), "");
 }

@@ -12,9 +12,26 @@
 #include "presentation/monotone_spline.h"
 
 namespace ksv::ui {
+    namespace {
+        void drawMarkers(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor,
+                         const SeriesPainter::Style &style) {
+            const QColor fill = style.markerColor.isValid() ? style.markerColor : lineColor;
+            if (style.markerOutlineColor.isValid())
+                painter.setPen(QPen(style.markerOutlineColor, 1.5));
+            else
+                painter.setPen(Qt::NoPen);
+            painter.setBrush(fill);
+            for (const auto &p: pixelPoints) painter.drawEllipse(p, style.markerRadius, style.markerRadius);
+        }
+    }
+
     void SeriesPainter::paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor,
                               const Style &style) {
-        if (pixelPoints.size() < 2) return;
+        if (pixelPoints.isEmpty()) return;
+        if (pixelPoints.size() == 1) {
+            drawMarkers(painter, pixelPoints, lineColor, style);
+            return;
+        }
 
         const auto curve = presentation::monotoneCubicInterpolate(pixelPoints, 16);
 
@@ -26,10 +43,6 @@ namespace ksv::ui {
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
 
-        if (style.showMarkers) {
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(style.markerColor);
-            for (const auto &p: pixelPoints) painter.drawEllipse(p, style.markerRadius, style.markerRadius);
-        }
+        if (style.showMarkers) drawMarkers(painter, pixelPoints, lineColor, style);
     }
 }

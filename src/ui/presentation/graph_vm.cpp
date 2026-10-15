@@ -53,7 +53,8 @@ namespace ksv::presentation {
         QList<SeriesModel *> result;
         result.reserve(columns.size());
         QHash<uint64_t, std::vector<int>> membersByAxis;
-        for (SeriesModel *series: m_seriesById) {
+        // The user's line-list order (series config order), not the id map's lexical order.
+        for (SeriesModel *series: m_allSeriesList) {
             if (!columns.contains(series->column())) continue;
             result.append(series);
             if (series->yAxisId) membersByAxis[*series->yAxisId].push_back(result.size() - 1);
@@ -88,6 +89,7 @@ namespace ksv::presentation {
         m_axesById.clear();
         for (const auto &axis: axes) m_axesById.insert(axis.id.value, axis);
 
+        m_allSeriesList.clear();
         qDeleteAll(m_seriesById);
         m_seriesById.clear();
         for (const auto &config: configs) {

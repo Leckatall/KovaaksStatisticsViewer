@@ -7,7 +7,8 @@ import os
 from pathlib import Path
 import re
 import shutil
-from typing import Mapping
+import subprocess
+from typing import Callable, Mapping
 
 
 TOOLCHAIN_KEYS = (
@@ -22,6 +23,21 @@ TOOLCHAIN_KEYS = (
     "KSV_QT_BIN_DIR",
     "KSV_QT6_DIR",
 )
+# Runner settings share the env files but stay out of the toolchain fingerprint,
+# so changing them never wipes build-agent/.
+RUNNER_KEYS = (
+    "KSV_BUILD_JOBS",
+    "KSV_BUILD_PRIORITY",
+)
+KNOWN_KEYS = TOOLCHAIN_KEYS + RUNNER_KEYS
+LOCAL_ENV_NAME = "toolchain.local.env"
+# Windows priority classes; children of a below-normal or idle process inherit its class,
+# so this also covers the compilers and test runners that cmake/ninja/ctest start.
+BUILD_PRIORITIES = {
+    "normal": 0,
+    "below_normal": getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0),
+    "idle": getattr(subprocess, "IDLE_PRIORITY_CLASS", 0),
+}
 
 
 class ToolchainError(RuntimeError):
@@ -42,6 +58,16 @@ class Toolchain:
     qt6_dir: Path
 
 
+@dataclass(frozen=True)
+class RunnerSettings:
+    jobs: int
+    priority: str = "normal"
+
+    @property
+    def creationflags(self) -> int:
+        return BUILD_PRIORITIES[self.priority]
+
+
 def read_toolchain_env(path: Path, *, optional: bool = False) -> dict[str, str]:
     if not path.is_file():
         if optional:
@@ -56,7 +82,7 @@ def read_toolchain_env(path: Path, *, optional: bool = False) -> dict[str, str]:
         if "=" not in line or line.index("=") == 0:
             raise ToolchainError(f"Malformed toolchain entry at {path}:{line_number} (expected NAME=value)")
         key, value = (part.strip() for part in line.split("=", 1))
-        if key not in TOOLCHAIN_KEYS:
+        if key not in KNOWN_KEYS:
             raise ToolchainError(f"Unknown toolchain key '{key}' at {path}:{line_number}")
         if key in values:
             raise ToolchainError(f"Duplicate toolchain key '{key}' at {path}:{line_number}")
@@ -79,18 +105,90 @@ def _resolve_path(value: str, what: str, *, directory: bool = False) -> Path:
     return path.resolve()
 
 
+def main_worktree_root(repo_root: Path) -> Path | None:
+    """The main checkout that owns repo_root's git directory, or None outside a non-bare repository."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    output = result.stdout.strip()
+    if result.returncode or not output:
+        return None
+    common_dir = Path(output)
+    if not common_dir.is_absolute():
+        common_dir = repo_root / common_dir
+    common_dir = common_dir.resolve()
+    if common_dir.name != ".git":
+        return None
+    return common_dir.parent
+
+
+def find_local_env(
+    scripts_dir: Path,
+    *,
+    main_root_of: Callable[[Path], Path | None] = main_worktree_root,
+) -> Path | None:
+    """This checkout's local env file, else the main worktree's, so linked worktrees share one copy."""
+    own = scripts_dir / LOCAL_ENV_NAME
+    if own.is_file():
+        return own
+    repo_root = scripts_dir.parent
+    main_root = main_root_of(repo_root)
+    if main_root is None or normalized_path(main_root) == normalized_path(repo_root):
+        return None
+    shared = main_root / scripts_dir.name / LOCAL_ENV_NAME
+    return shared if shared.is_file() else None
+
+
+def _layered_values(
+    scripts_dir: Path,
+    keys: tuple[str, ...],
+    process_environment: Mapping[str, str] | None,
+) -> dict[str, str]:
+    resolved = read_toolchain_env(scripts_dir / "toolchain.defaults.env")
+    local_env = find_local_env(scripts_dir)
+    if local_env is not None:
+        resolved.update(read_toolchain_env(local_env))
+    environment = os.environ if process_environment is None else process_environment
+    for key in keys:
+        if environment.get(key):
+            resolved[key] = environment[key]
+    return resolved
+
+
+def resolve_runner_settings(
+    scripts_dir: Path,
+    *,
+    process_environment: Mapping[str, str] | None = None,
+) -> RunnerSettings:
+    resolved = _layered_values(scripts_dir, RUNNER_KEYS, process_environment)
+    for key in RUNNER_KEYS:
+        if key not in resolved:
+            raise ToolchainError(f"Missing required runner key: {key}")
+
+    jobs_text = resolved["KSV_BUILD_JOBS"].strip()
+    jobs = int(jobs_text) if jobs_text.isdigit() else 0
+    if jobs < 1:
+        raise ToolchainError(f"KSV_BUILD_JOBS must be a positive integer, not '{jobs_text}'")
+    priority = resolved["KSV_BUILD_PRIORITY"].strip().lower()
+    if priority not in BUILD_PRIORITIES:
+        choices = ", ".join(BUILD_PRIORITIES)
+        raise ToolchainError(f"KSV_BUILD_PRIORITY must be one of {choices}, not '{priority}'")
+    return RunnerSettings(jobs=jobs, priority=priority)
+
+
 def resolve_toolchain(
     scripts_dir: Path,
     *,
     process_environment: Mapping[str, str] | None = None,
     overrides: Mapping[str, str] | None = None,
 ) -> Toolchain:
-    resolved = read_toolchain_env(scripts_dir / "toolchain.defaults.env")
-    resolved.update(read_toolchain_env(scripts_dir / "toolchain.local.env", optional=True))
-    environment = os.environ if process_environment is None else process_environment
-    for key in TOOLCHAIN_KEYS:
-        if environment.get(key):
-            resolved[key] = environment[key]
+    resolved = _layered_values(scripts_dir, TOOLCHAIN_KEYS, process_environment)
     for key, value in (overrides or {}).items():
         if key not in TOOLCHAIN_KEYS:
             raise ToolchainError(f"Unknown toolchain override: {key}")

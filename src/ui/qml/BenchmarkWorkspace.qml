@@ -8,6 +8,10 @@ Item {
     property var trackingVm
 
     signal manageBenchmarksRequested()
+    // Opens the Benchmark Manager on one selector entry: its draft in the editor when it can be
+    // opened, otherwise selected in the library. A problem file may have no id, so its filename
+    // identifies it; the id is passed for entries that have one.
+    signal editBenchmarkRequested(string filename, string benchmarkId)
 
     implicitWidth: 800
     implicitHeight: 600
@@ -37,10 +41,39 @@ Item {
     }
     readonly property bool _wide: width >= 1000
 
+    // Bodies that carry their own Benchmark Manager action; while one is shown the
+    // header's Manage Benchmarks button would only be a second control for the
+    // same thing.
+    readonly property bool _bodyOwnsManagerAction: _bodyState === "emptyLibrary"
+                                                   || _bodyState === "problemsOnly"
+                                                   || _bodyState === "unavailable"
+                                                   || _bodyState === "incomplete"
+
+    // Opening the workspace with nothing selected shows a benchmark without an
+    // extra click: the use case restores the remembered choice, or picks the only
+    // benchmark there is. Re-checked whenever the workspace becomes visible or the
+    // library changes while it is visible.
+    //
+    // Creation-time triggers are deferred: inside the window's StackLayout this item
+    // still reports visible while it is being created and is only hidden once the
+    // layout runs, so an immediate check would select (and evaluate) a benchmark at
+    // startup before the tab is ever opened. Becoming visible (the tab opening) is
+    // handled at once, so the first frame of the tab already shows the benchmark.
+    function _ensureSelection() {
+        if (!root.visible || !root.trackingVm || root._bodyState !== "noSelection") return
+        if (typeof root.trackingVm.selectDefaultBenchmark === "function")
+            root.trackingVm.selectDefaultBenchmark()
+    }
+    function _scheduleEnsureSelection() { Qt.callLater(root._ensureSelection) }
+    onVisibleChanged: _ensureSelection()
+    onTrackingVmChanged: _scheduleEnsureSelection()
+    Component.onCompleted: _scheduleEnsureSelection()
+
     // Widths in the trackable body derive from this instead of a ScrollView's
     // availableWidth: `width` is assigned directly and takes effect before the
     // first layout polish, so responsive geometry is correct on the same frame.
-    readonly property real _contentWidth: Math.max(0, width - 24)
+    // 16px of body margins plus room for the always-visible scroll bar.
+    readonly property real _contentWidth: Math.max(0, width - 32)
 
     readonly property Component _bodyComponent: {
         switch (_bodyState) {
@@ -53,14 +86,19 @@ Item {
         }
     }
 
-    // --- always-visible header ----------------------------------------------
+    // --- header: selector, status, manager action ---------------------------
+    // Hidden with an empty library: there is nothing to select, and the empty-state
+    // body carries the one explanation and the one action.
     RowLayout {
         id: headerRow
+        objectName: "benchmarkHeader"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 8
         spacing: 12
+        visible: root._hasAnyEntry
+        height: visible ? implicitHeight : 0
 
         Frame {
             id: benchmarkSelector
@@ -81,17 +119,16 @@ Item {
                     font.bold: true
                     color: root.palette.placeholderText
                 }
-                Label {
-                    visible: !root._hasAnyEntry
-                    text: qsTr("No benchmark files found.")
-                    color: root.palette.placeholderText
-                }
                 Repeater {
                     model: root._entries
                     delegate: Item {
                         id: entryRow
                         required property var modelData
                         readonly property bool rowSelectable: modelData.selectable === true
+                        readonly property string kind: String(modelData.classification).toLowerCase()
+                        // Every exception (incomplete, invalid, unsupported) carries a chip
+                        // and a way to the manager, where its details are shown.
+                        readonly property bool hasWarning: kind !== "trackable"
                         width: parent.width
                         implicitHeight: entryDelegate.implicitHeight
                         height: entryDelegate.implicitHeight
@@ -104,10 +141,36 @@ Item {
                             activeFocusOnTab: entryRow.rowSelectable
                             highlighted: root.trackingVm
                                          && root.trackingVm.selectedName === entryRow.modelData.name
-                            text: entryRow.modelData.name + "  —  " + entryRow.modelData.classification
+                            text: entryRow.modelData.name
+                            // A trackable benchmark is the normal case and shows
+                            // only its name; the exceptions get a filled chip.
+                            rightPadding: entryRow.hasWarning
+                                          ? entryChip.width + entryEditButton.width + 24 : padding
                             onClicked: {
                                 if (entryRow.rowSelectable && String(entryRow.modelData.id).length > 0)
                                     root.trackingVm.selectBenchmark(entryRow.modelData.id)
+                            }
+                        }
+
+                        Rectangle {
+                            id: entryChip
+                            objectName: "selectorEntryLabel_" + entryRow.modelData.name
+                            readonly property string kind: String(entryRow.modelData.classification)
+                            visible: entryRow.hasWarning
+                            anchors.right: entryEditButton.left
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: chipText.implicitWidth + 14
+                            height: chipText.implicitHeight + 2
+                            radius: height / 2
+                            color: entryRow.kind === "incomplete" ? "#FFB74D" : "#E57373"
+                            Label {
+                                id: chipText
+                                anchors.centerIn: parent
+                                text: entryChip.kind
+                                font.bold: true
+                                font.pixelSize: entryDelegate.font.pixelSize - 1
+                                color: "#1E1E1E"
                             }
                         }
 
@@ -119,26 +182,59 @@ Item {
                             enabled: !entryRow.rowSelectable
                             onPressed: mouse => mouse.accepted = true
                         }
+
+                        // Declared after the click blocker so it stays clickable on rows that
+                        // cannot be selected; it opens the manager without selecting the row.
+                        ToolButton {
+                            id: entryEditButton
+                            objectName: "selectorEntryEdit_" + entryRow.modelData.name
+                            visible: entryRow.hasWarning
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: visible ? implicitWidth : 0
+                            padding: 4
+                            icon.source: "icons/square-pen.svg"
+                            icon.width: 16
+                            icon.height: 16
+                            display: AbstractButton.IconOnly
+                            // A loaded (incomplete) benchmark opens in the editor; a problem
+                            // file can only be shown in the library.
+                            text: entryRow.kind === "incomplete"
+                                  ? qsTr("Edit %1 in the Benchmark Manager").arg(entryRow.modelData.name)
+                                  : qsTr("Show %1 in the Benchmark Manager").arg(entryRow.modelData.name)
+                            Accessible.name: text
+                            ToolTip.text: text
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            onClicked: root.editBenchmarkRequested(String(entryRow.modelData.filename || ""),
+                                                                   String(entryRow.modelData.id || ""))
+                        }
                     }
                 }
             }
         }
 
+        // Every other state explains itself in its body, so a status line here
+        // would repeat it; only the tracking state has nothing else to say.
         Label {
             objectName: "benchmarkClassificationLabel"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: {
-                if (!root.trackingVm) return ""
-                var name = root.trackingVm.selectedName
-                var msg = root.trackingVm.stateMessage
-                return name && String(name).length > 0 ? name + " — " + msg : msg
-            }
+            visible: root._bodyState === "trackable"
+            color: root.palette.placeholderText
+            text: root.trackingVm ? String(root.trackingVm.stateMessage || "") : ""
+        }
+        Item {
+            // Keeps the manager button right-aligned while the status line is hidden.
+            Layout.fillWidth: true
+            visible: root._bodyState !== "trackable"
         }
 
         Button {
             objectName: "manageBenchmarksButton"
             text: qsTr("Manage Benchmarks")
+            visible: !root._bodyOwnsManagerAction
             activeFocusOnTab: true
             focusPolicy: Qt.StrongFocus
             onClicked: root.manageBenchmarksRequested()
@@ -150,13 +246,15 @@ Item {
         id: bodyLoader
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: headerRow.bottom
+        anchors.top: headerRow.visible ? headerRow.bottom : parent.top
         anchors.bottom: parent.bottom
         anchors.leftMargin: 8
         anchors.rightMargin: 8
-        anchors.topMargin: 4
+        anchors.topMargin: headerRow.visible ? 4 : 8
         anchors.bottomMargin: 8
         sourceComponent: root._bodyComponent
+        // A library change can land on "nothing selected" while the tab is open.
+        onSourceComponentChanged: root._scheduleEnsureSelection()
     }
 
     // ======================================================================
@@ -178,20 +276,45 @@ Item {
 
     Component {
         id: emptyLibraryComponent
-        ColumnLayout {
+        // One explanation and one primary action, placed where the eye lands.
+        Item {
             objectName: "emptyLibraryBody"
-            spacing: 8
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: qsTr("No benchmarks are installed yet.")
+
+            ColumnLayout {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: Math.max(0, Math.round(parent.height * 0.22))
+                width: Math.min(parent.width - 32, 520)
+                spacing: 12
+
+                Label {
+                    objectName: "emptyLibraryTitle"
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    font.pointSize: emptyLibraryMessage.font.pointSize > 0
+                                    ? emptyLibraryMessage.font.pointSize * 1.4 : 13
+                    font.bold: true
+                    text: qsTr("No benchmarks yet")
+                }
+                Label {
+                    id: emptyLibraryMessage
+                    objectName: "emptyLibraryMessage"
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    color: root.palette.placeholderText
+                    text: qsTr("A benchmark ranks your scores on a set of scenarios against tier thresholds. "
+                               + "Create one, or import a benchmark file, to start tracking.")
+                }
+                Button {
+                    objectName: "createOrImportButton"
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 4
+                    highlighted: true
+                    text: qsTr("Create or import a benchmark")
+                    onClicked: root.manageBenchmarksRequested()
+                }
             }
-            Button {
-                objectName: "createOrImportButton"
-                text: qsTr("Create or import a benchmark")
-                onClicked: root.manageBenchmarksRequested()
-            }
-            Item { Layout.fillHeight: true }
         }
     }
 
@@ -244,8 +367,17 @@ Item {
     Component {
         id: incompleteComponent
         ScrollView {
+            id: incompleteScroll
             contentWidth: availableWidth
             clip: true
+            ScrollBar.vertical: ListScrollBar {
+                // A ScrollView leaves a replacement bar's geometry to the caller.
+                parent: incompleteScroll
+                x: incompleteScroll.width - width
+                y: incompleteScroll.topPadding
+                height: incompleteScroll.availableHeight
+                overflowing: incompleteScroll.contentHeight > incompleteScroll.height + 1
+            }
 
             ColumnLayout {
                 width: root._contentWidth
@@ -277,6 +409,15 @@ Item {
                     onClicked: root.manageBenchmarksRequested()
                 }
 
+                // Same order as the trackable page: the table, then the charts.
+                BenchmarkProgressGrid {
+                    objectName: "benchmarkProgressGrid"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: implicitHeight
+                    grid: root.trackingVm ? root.trackingVm.progressGrid : null
+                    benchmarkKey: root.trackingVm ? root.trackingVm.selectedName : ""
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -298,14 +439,6 @@ Item {
                     namePrefix: "playtimeHistory"
                     historyModel: root.trackingVm ? root.trackingVm.playtimeHistory : null
                 }
-
-                BenchmarkBreakdownView {
-                    objectName: "benchmarkBreakdownView"
-                    Layout.fillWidth: true
-                    breakdown: root.trackingVm ? root.trackingVm.breakdown : null
-                    trackingVm: root.trackingVm
-                    wide: root._wide
-                }
             }
         }
     }
@@ -317,6 +450,16 @@ Item {
             objectName: "benchmarkWorkspaceScroll"
             contentWidth: availableWidth
             clip: true
+            // Always visible while the content overflows: the history cards usually
+            // starts below the fold, and the style's own bar only shows mid-scroll.
+            ScrollBar.vertical: ListScrollBar {
+                // A ScrollView leaves a replacement bar's geometry to the caller.
+                parent: benchmarkWorkspaceScroll
+                x: benchmarkWorkspaceScroll.width - width
+                y: benchmarkWorkspaceScroll.topPadding
+                height: benchmarkWorkspaceScroll.availableHeight
+                overflowing: benchmarkWorkspaceScroll.contentHeight > benchmarkWorkspaceScroll.height + 1
+            }
 
             // Explicit x/y placement rather than a Flow: the two history cards
             // stay direct children (the scroll-order test walks them by index) yet
@@ -327,7 +470,8 @@ Item {
                 objectName: "trackableScrollColumn"
                 width: root._contentWidth
                 implicitWidth: width
-                implicitHeight: breakdownView.y + breakdownView.height
+                implicitHeight: root._wide ? rankCard.y + Math.max(rankCard.height, playtimeCard.height)
+                                           : playtimeCard.y + playtimeCard.height
 
                 readonly property real gap: 12
                 readonly property real halfWidth: Math.floor((width - gap) / 2)
@@ -352,19 +496,39 @@ Item {
                         objectName: "nextTierProgress"
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
+                        font.bold: true
+                        textFormat: Text.StyledText
+                        visible: text.length > 0
                         text: {
-                            if (!root.trackingVm) return ""
-                            var total = root.trackingVm.scenarioCount
-                            if (total === undefined || total === null) total = "?"
-                            return qsTr("%1 of %2 scenarios at the next tier")
-                                   .arg(root.trackingVm.scenariosAtNextTier).arg(total)
+                            const vm = root.trackingVm
+                            if (!vm || !vm.summaryAvailable) return ""
+                            if (!vm.hasNextTier) return qsTr("Highest tier attained")
+                            const count = vm.nextTierBlockerCount
+                            const color = String(vm.nextTierColor || "")
+                            const tier = color.length === 0 ? String(vm.nextTier)
+                                : "<font color=\"" + color + "\">"
+                                  + String(vm.nextTier).replace(/&/g, "&amp;")
+                                        .replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                                  + "</font>"
+                            // An empty attained colour means Unranked. Ranks are attained per group, so this counts the rows marked as blockers,
+                            // not the scenarios already at the next tier.
+                            let line
+                            if (count === 0) line = qsTr("No scenario blocks %1").arg(tier)
+                            else if (count === 1) line = qsTr("1 scenario blocks %1").arg(tier)
+                            else line = qsTr("%1 scenarios block %2").arg(count).arg(tier)
+                            return String(vm.attainedRankColor || "") === ""
+                                   ? qsTr("Not ranked yet: %1").arg(line) : line
                         }
                     }
-                    BenchmarkBlockerList {
-                        objectName: "benchmarkBlockerList"
+                    // Every scenario with its tier bar; rows that block the next tier
+                    // are marked, so the count above has its reasons right below it.
+                    BenchmarkProgressGrid {
+                        objectName: "benchmarkProgressGrid"
                         Layout.fillWidth: true
-                        blockers: (root.trackingVm && root.trackingVm.blockers)
-                                  ? root.trackingVm.blockers : []
+                        Layout.preferredHeight: implicitHeight
+                        Layout.topMargin: 4
+                        grid: root.trackingVm ? root.trackingVm.progressGrid : null
+                        benchmarkKey: root.trackingVm ? root.trackingVm.selectedName : ""
                     }
                 }
 
@@ -389,19 +553,6 @@ Item {
                     height: Math.max(implicitHeight, 220)
                     namePrefix: "playtimeHistory"
                     historyModel: root.trackingVm ? root.trackingVm.playtimeHistory : null
-                }
-
-                BenchmarkBreakdownView {
-                    id: breakdownView
-                    objectName: "benchmarkBreakdownView"
-                    x: 0
-                    y: (root._wide
-                        ? rankCard.y + Math.max(rankCard.height, playtimeCard.height)
-                        : playtimeCard.y + playtimeCard.height) + trackableScrollColumn.gap
-                    width: trackableScrollColumn.width
-                    breakdown: root.trackingVm ? root.trackingVm.breakdown : null
-                    trackingVm: root.trackingVm
-                    wide: root._wide
                 }
             }
         }

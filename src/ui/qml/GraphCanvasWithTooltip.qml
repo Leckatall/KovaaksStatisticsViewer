@@ -10,8 +10,18 @@ Item {
     property int yAxisColumn: -1
     property bool showSeriesNames: true
     property string xLabel: qsTr("Time")
+    // Dot each real data point while the points are sparse enough to tell apart.
+    property bool pointMarkers: false
+    // An x value to mark with a rule and a ring on each line's point there; NaN marks nothing.
+    property real markedX: NaN
+    // Whether a left click inside the plot reports the nearest data point's x through pointClicked.
+    property bool clickable: false
     readonly property rect plotArea: canvas.plotArea
+
+    signal pointClicked(real dataX)
     readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
+    readonly property var labelledYAxisColumns: canvas.labelledYAxisColumns
+    readonly property bool pointMarkersShown: canvas.pointMarkersShown
 
     Layout.fillHeight: true
     Layout.fillWidth: true
@@ -23,6 +33,10 @@ Item {
         graphVm: root.graphVm
         visibleColumns: root.visibleColumns
         yAxisColumn: root.yAxisColumn
+        pointMarkers: root.pointMarkers
+        markedX: root.markedX
+        backgroundColor: root.palette.base
+        foregroundColor: root.palette.text
     }
     MouseArea {
         id: hoverArea
@@ -31,14 +45,23 @@ Item {
                 valid: false
             })
 
-        acceptedButtons: Qt.NoButton
+        acceptedButtons: root.clickable ? Qt.LeftButton : Qt.NoButton
         anchors.fill: parent
         hoverEnabled: true
+        objectName: "graphHoverArea"
+        cursorShape: root.clickable && hoverInfo.valid === true ? Qt.PointingHandCursor : Qt.ArrowCursor
 
         onExited: hoverInfo = {
             valid: false
         }
         onPositionChanged: mouse => hoverInfo = canvas.valuesAtX(mouse.x)
+        onClicked: mouse => {
+            const plot = canvas.plotArea
+            if (mouse.x < plot.x || mouse.x > plot.x + plot.width
+                    || mouse.y < plot.y || mouse.y > plot.y + plot.height) return
+            const info = canvas.valuesAtX(mouse.x)
+            if (info.valid === true) root.pointClicked(info.xRaw)
+        }
     }
     Rectangle {
         id: verticalLine
@@ -53,12 +76,18 @@ Item {
         y: plotArea.y
         z: 100
     }
+    // The dots stack like the lines: hoverInfo.series is in line-list order (top of the list
+    // first, as the tooltip lists it), so earlier entries get the higher z.
     Repeater {
+        id: hoverDots
+
         model: hoverArea.hoverInfo.valid ? hoverArea.hoverInfo.series : []
 
         Rectangle {
             required property var modelData
+            required property int index
 
+            objectName: "graphHoverDot"
             readonly property bool hasPosition: modelData.pixelY !== undefined && modelData.pixelY !== null
 
             width: 10
@@ -68,7 +97,7 @@ Item {
             visible: hasPosition
             x: hoverArea.hoverInfo.pixelX - width / 2
             y: modelData.pixelY - height / 2
-            z: 101
+            z: 101 + (hoverDots.count - index) / (hoverDots.count + 1)
             scale: 0
 
             Component.onCompleted: scale = 1
@@ -87,7 +116,10 @@ Item {
         visible: hoverArea.hoverInfo.valid === true
         width: tooltipContent.implicitWidth + 16
         height: tooltipContent.implicitHeight + 12
-        x: (idealX + width > parent.width) ? hoverArea.mouseX - width - 14 : idealX
+        // Beside the cursor, flipped to its left when the right is short of room; a box wider than
+        // either side (a long tier description) is kept inside the graph, over the cursor, not cut off.
+        x: Math.max(0, Math.min((idealX + width > parent.width) ? hoverArea.mouseX - width - 14 : idealX,
+                                parent.width - width))
         y: Math.max(0, Math.min(idealY, parent.height - height))
         z: 102
 

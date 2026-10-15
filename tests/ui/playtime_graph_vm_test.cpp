@@ -126,4 +126,40 @@ namespace {
         EXPECT_EQ(series.front()->name(), "Playtime (3-day avg)");
         EXPECT_TRUE(series.front()->color().isValid());
     }
+
+    TEST_F(PlaytimeGraphViewModelTest, HasNoDataUntilPlaytimeIsRecorded) {
+        EXPECT_FALSE(view_model.hasData());
+
+        fake->series = {{19500, 1800.0}};
+        const QSignalSpy dataSpy(&view_model, &GraphViewModelBase::dataUpdated);
+        view_model.refresh();
+        EXPECT_TRUE(view_model.hasData());
+        EXPECT_GT(dataSpy.count(), 0);
+
+        fake->series.clear();
+        view_model.refresh();
+        EXPECT_FALSE(view_model.hasData());
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, DailyDataIsTickedByDayNotByHour) {
+        // Four days of data once ticked every 6 hours ("Aug 25 06:00"), labels the graph cannot fit.
+        fake->series = {{19500, 60.0}, {19501, 60.0}, {19502, 60.0}, {19503, 60.0}};
+        view_model.refresh();
+
+        for (const qreal tick: view_model.xAxis().ticks()) {
+            EXPECT_EQ(QDateTime::fromMSecsSinceEpoch(qint64(tick), QTimeZone::utc()).time(), QTime(0, 0));
+        }
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, ConstantSubMinutePlaytimeNeverRepeatsAYAxisLabel) {
+        fake->series = {{19500, 30.0}, {19501, 30.0}};
+        view_model.refresh();
+
+        const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
+        ASSERT_EQ(series.size(), 1);
+        ASSERT_TRUE(series.front()->yAxis.has_value());
+        const auto &axis = *series.front()->yAxis;
+        for (int i = 1; i < axis.ticks().size(); ++i)
+            EXPECT_NE(axis.formatTick(axis.ticks()[i - 1]), axis.formatTick(axis.ticks()[i]));
+    }
 }

@@ -41,6 +41,17 @@ namespace {
                   (std::vector<std::string>{"C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer"}));
     }
 
+    TEST_F(SettingsServiceTest, FallbackKovaaksDirCanBeReplaced) {
+        SettingsService settings(QSettings::IniFormat);
+
+        settings.setFallbackKovaaksDir("D:/Sandbox/no-kovaaks-install");
+
+        EXPECT_FALSE(settings.isKovaaksDirSet());
+        EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{"D:/Sandbox/no-kovaaks-install"}));
+        settings.setKovaaksDirs({"D:/Games/Configured"});
+        EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{"D:/Games/Configured"}));
+    }
+
     TEST_F(SettingsServiceTest, ReturnsPreviouslyStoredValue) {
         {
             QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
@@ -147,5 +158,20 @@ namespace {
         QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         raw.beginGroup("graph/seriesConfigQuarantine");
         EXPECT_EQ(raw.childKeys().size(), 2);
+    }
+
+    TEST_F(SettingsServiceTest, LastSelectedBenchmarkSurvivesARestartAndCanBeCleared) {
+        {
+            SettingsService service(QSettings::IniFormat);
+            EXPECT_TRUE(service.getLastSelectedBenchmarkId().empty());
+            service.setLastSelectedBenchmarkId("driver-demo");
+        }
+
+        SettingsService reloaded(QSettings::IniFormat);
+        EXPECT_EQ(reloaded.getLastSelectedBenchmarkId(), "driver-demo");
+
+        reloaded.setLastSelectedBenchmarkId({});
+        const SettingsService cleared(QSettings::IniFormat);
+        EXPECT_TRUE(cleared.getLastSelectedBenchmarkId().empty());
     }
 }

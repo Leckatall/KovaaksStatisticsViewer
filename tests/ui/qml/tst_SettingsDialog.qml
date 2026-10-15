@@ -30,12 +30,26 @@ TestCase {
         }, overrides))
     }
 
+    // A sessionVm whose properties notify, for tests that change them while the dialog is open.
+    Component {
+        id: observableSessionVmComponent
+        QtObject {
+            property bool profileBuildInProgress: false
+            property double profileBuildProgress: 0
+            property int profileBuildDone: 0
+            property int profileBuildTotal: 0
+            function generateProfile() {}
+        }
+    }
+
     function makeFakeSessionVm(overrides) {
         return Object.assign({
             generateProfileCalls: 0,
             generateProfile: function () { this.generateProfileCalls++ },
             profileBuildInProgress: false,
-            profileBuildProgress: 0
+            profileBuildProgress: 0,
+            profileBuildDone: 0,
+            profileBuildTotal: 0
         }, overrides)
     }
 
@@ -64,6 +78,35 @@ TestCase {
         verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never re-rendered after selecting category '" + categoryName + "'")
     }
 
+    // Opens at 860x620 (bounded only by the room the main window or screen gives it), never
+    // below the old 680x460, and reopens at the size it was left at.
+    function test_opensLargeAndRemembersItsSize() {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
+        const limitWidth = dialog._limitWidth()
+        const limitHeight = dialog._limitHeight()
+        compare(dialog.width, Math.min(860, limitWidth))
+        compare(dialog.height, Math.min(620, limitHeight))
+        verify(dialog.width >= Math.min(680, limitWidth) && dialog.height >= Math.min(460, limitHeight),
+               "never smaller than the old 680x460 while there is room")
+
+        dialog.width = Math.min(700, limitWidth)
+        dialog.height = Math.min(500, limitHeight)
+        dialog.close()
+        dialog.open()
+        compare(dialog.width, Math.min(700, limitWidth), "reopens at the width it was left at")
+        compare(dialog.height, Math.min(500, limitHeight))
+
+        dialog.width = 500
+        dialog.close()
+        dialog.open()
+        compare(dialog.width, Math.min(680, limitWidth), "a remembered size below the floor opens at the floor")
+
+        // Leave the default for the other tests in this process.
+        dialog.width = 860
+        dialog.height = 620
+        dialog.close()
+    }
+
     function test_kovaaksDirField_showsSettingsVmDirWithoutFileScheme() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({kovaaksDir: "file:///D:/CustomDir"}),
@@ -74,6 +117,36 @@ TestCase {
         const field = ItemLookup.findByObjectName(dialog.contentItem, "kovaaksDirField")
         verify(field !== null, "no field named 'kovaaksDirField' found in SettingsDialog")
         compare(field.text, "D:/CustomDir", "kovaaksDirField should show settingsVm.kovaaksDir with the file:// scheme stripped")
+    }
+
+    // a path longer than its field must neither lose its start nor its
+    // end to horizontal scrolling; it wraps so the whole path (including the
+    // final folder / file name) is on screen without editing the field.
+    function test_longPathsWrapSoTheWholePathIsVisible() {
+        const longDir = "C:/Users/Student/CLionProjects/KovaaksStatisticsViewer/.temp/ui-driver/default/some/deeply/nested/folder/data"
+        const longProfile = longDir + "/profile.pb"
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({kovaaksDir: "file:///" + longDir, profilePath: "file:///" + longProfile}),
+            sessionVm: makeFakeSessionVm(),
+            visualSettings: visualSettings
+        })
+
+        const dirField = ItemLookup.findByObjectName(dialog.contentItem, "kovaaksDirField")
+        const profileField = ItemLookup.findByObjectName(dialog.contentItem, "profilePathField")
+        verify(dirField !== null && profileField !== null, "both path fields must exist")
+
+        compare(dirField.text, longDir, "the field must hold the full path")
+        compare(profileField.text, longProfile, "the field must hold the full path")
+        for (const field of [dirField, profileField]) {
+            verify(field.lineCount > 1, "a path longer than the field must wrap onto further lines")
+            verify(field.contentWidth <= field.width,
+                   "the path must not overflow the field horizontally (contentWidth " + field.contentWidth
+                   + " > width " + field.width + ")")
+            verify(field.height >= field.contentHeight,
+                   "every wrapped line must fit inside the field (height " + field.height
+                   + " < contentHeight " + field.contentHeight + ")")
+            compare(field.readOnly, true, "a path field is not editable")
+        }
     }
 
     function test_directoriesCategory_showsProfilePathAndLoadedState() {
@@ -118,6 +191,22 @@ TestCase {
         compare(dialog.sessionVm.generateProfileCalls, 1, "clicking generateProfileButton should call sessionVm.generateProfile() once")
     }
 
+    // the label matches the app's Title Case buttons and spells
+    // "Kovaaks" and "Directory" the way the rest of the UI does.
+    function test_generateProfileButton_labelIsClearAndConsistentlyCapitalised() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            visualSettings: visualSettings
+        })
+
+        const button = ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton")
+        verify(button !== null, "no button named 'generateProfileButton' found in SettingsDialog Profile category")
+        compare(button.text, "Rebuild Profile from Kovaaks Directory")
+        verify(!/kovaaks/.test(button.text), "'Kovaaks' must be capitalised like the rest of the UI")
+        verify(!/\bdir\b/i.test(button.text), "the abbreviation 'dir' must not be used")
+    }
+
     function test_profileBuildProgressBar_hiddenWhenNoBuildIsRunning() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
@@ -154,6 +243,66 @@ TestCase {
 
         const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
         compare(bar.indeterminate, true, "a build with no progress yet should render as indeterminate")
+    }
+
+    function test_profileStatus_saysRebuildingWhileABuildRuns_andRestoresAfter() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({profileLoaded: true}),
+            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true}),
+            visualSettings: visualSettings
+        })
+        const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
+        compare(statusLabel.text, "Profile status: Rebuilding", "a running rebuild replaces the loaded state in the status line")
+
+        dialog.sessionVm.profileBuildInProgress = false
+        compare(statusLabel.text, "Profile status: Loaded", "the status line shows the real state again once the rebuild ends")
+    }
+
+    function test_profileStatus_notLoadedAfterAFailedRebuild() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({profileLoaded: false}),
+            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true}),
+            visualSettings: visualSettings
+        })
+        const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
+        compare(statusLabel.text, "Profile status: Rebuilding")
+
+        dialog.sessionVm.profileBuildInProgress = false
+        compare(statusLabel.text, "Profile status: Not loaded")
+    }
+
+    function test_profileBuildProgressLabel_hiddenWhenNoBuildIsRunning() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm(),
+            visualSettings: visualSettings
+        })
+        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
+        verify(label !== null, "no label named 'profileBuildProgressLabel' found in SettingsDialog Profile category")
+        compare(label.visible, false)
+    }
+
+    function test_profileBuildProgressLabel_saysFilesDoneOutOfTotal() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4,
+                                          profileBuildDone: 2, profileBuildTotal: 5}),
+            visualSettings: visualSettings
+        })
+        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
+        compare(label.visible, true)
+        compare(label.text, "Rebuilding profile: 2 of 5 files")
+    }
+
+    function test_profileBuildProgressLabel_saysScanningBeforeTheFirstReport() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true}),
+            visualSettings: visualSettings
+        })
+        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
+        compare(label.visible, true)
+        compare(label.text, "Scanning Kovaaks Directory...")
     }
 
     function test_seriesEnabledSwitchesListAllSeriesConfigsAndReflectEnabledState() {

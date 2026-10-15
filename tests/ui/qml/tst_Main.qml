@@ -39,6 +39,9 @@ TestCase {
     QtObject {
         id: fakeScenarioBrowserVm
         property string longestScenarioName: ""
+        property string activeScenarioHash: ""
+        property string activeScenarioName: ""
+        property bool hasScenarios: true
         property string currentRunHash: ""
         property double currentRunStartTimeMs: 0
         property var scenarioModel: null
@@ -62,7 +65,12 @@ TestCase {
         Main {}
     }
 
-    function createMain() {
+    function cleanup() {
+        fakeSettingsVm.kovaaksDirSet = true
+        fakeScenarioBrowserVm.hasScenarios = true
+    }
+
+    function createMain(managerVm) {
         const win = createTemporaryObject(mainComponent, testCase, {
             graphVm: fakeGraphVm,
             playtimeVm: fakePlaytimeVm,
@@ -70,7 +78,7 @@ TestCase {
             sessionVm: fakeSessionVm,
             settingsVm: fakeSettingsVm,
             scenarioBrowserVm: fakeScenarioBrowserVm,
-            benchmarkManagerVm: fakeManagerVm,
+            benchmarkManagerVm: managerVm || fakeManagerVm,
             benchmarkTrackingVm: fakeTrackingVm
         })
         verify(win !== null, "Main.qml failed to instantiate")
@@ -121,6 +129,42 @@ TestCase {
         compare(benchmark.visible, false, "Benchmarks workspace should be hidden at startup")
     }
 
+    // -- the tab bar reads as main navigation ---------------------------
+
+    function test_workspaceTabsAreComfortableClickTargets() {
+        const win = createMain()
+        const scenariosTab = find(win, "scenariosTab")
+        const benchmarksTab = find(win, "benchmarksTab")
+        verify(scenariosTab !== null && benchmarksTab !== null, "both workspace tabs must exist")
+
+        // The old strip was ~21px tall and looked like a table header.
+        verify(scenariosTab.height >= 36, "Scenarios tab is only " + scenariosTab.height + "px tall")
+        verify(benchmarksTab.height >= 36, "Benchmarks tab is only " + benchmarksTab.height + "px tall")
+        verify(scenariosTab.width >= 100, "Scenarios tab is only " + scenariosTab.width + "px wide")
+        verify(tabBar(win).height >= 36, "the tab bar must be at least as tall as its tabs")
+    }
+
+    function test_selectedWorkspaceTabIsVisuallyDistinctFromTheOther() {
+        const win = createMain()
+        const scenariosTab = find(win, "scenariosTab")
+        const benchmarksTab = find(win, "benchmarksTab")
+
+        verify(scenariosTab.checked && !benchmarksTab.checked, "Scenarios starts selected")
+        verify(scenariosTab.contentItem.font.bold, "the selected tab's label must be bold")
+        verify(!benchmarksTab.contentItem.font.bold, "the unselected tab's label must not be bold")
+        verify(Qt.colorEqual(scenariosTab.contentItem.color, scenariosTab.palette.text),
+               "the selected tab's label must use the full text colour")
+        verify(!Qt.colorEqual(benchmarksTab.contentItem.color, scenariosTab.contentItem.color),
+               "the unselected tab's label must be dimmed relative to the selected one")
+        verify(!Qt.colorEqual(scenariosTab.background.color, benchmarksTab.background.color),
+               "the selected tab must have a different background from the unselected one")
+
+        tabBar(win).currentIndex = 1
+        tryVerify(() => benchmarksTab.checked && !scenariosTab.checked)
+        verify(benchmarksTab.contentItem.font.bold, "the emphasis must follow the selection")
+        verify(!scenariosTab.contentItem.font.bold, "the emphasis must leave the previously selected tab")
+    }
+
     // -- accessible names + keyboard switching --------------------------------
 
     function test_bothTabsHaveAccessibleNames() {
@@ -147,6 +191,24 @@ TestCase {
 
         keyClick(Qt.Key_Left)
         tryCompare(tb, "currentIndex", 0, 2000, "Left arrow must return to the Scenarios tab")
+    }
+
+    // Ctrl+F searches scenarios from the Benchmarks tab too: back to Scenarios, caret in the field.
+    function test_ctrlFFocusesTheScenarioSearchFromEitherTab() {
+        const win = createMain()
+        win.requestActivate()
+        tryVerify(() => win.active, 2000, "the Main window never became the active window")
+        const tb = tabBar(win)
+        tb.currentIndex = 1
+        tb.forceActiveFocus()
+        tryCompare(stack(win), "currentIndex", 1)
+
+        keyClick(Qt.Key_F, Qt.ControlModifier)
+
+        tryCompare(tb, "currentIndex", 0, 2000, "Ctrl+F must switch to the Scenarios tab")
+        const field = find(win, "scenarioSearchField")
+        verify(field !== null)
+        tryVerify(() => field.activeFocus, 2000, "Ctrl+F must focus the scenario search field")
     }
 
     // -- state retention across tab switches ---------------------------------
@@ -204,5 +266,114 @@ TestCase {
         tryCompare(dialog, "visible", true)
         compare(win.benchmarkManagerDialog, dialog,
                 "both entry points must open the same shared manager dialog instance")
+    }
+    // A warning row in the Benchmarks tab's selector opens the shared manager on its benchmark.
+    function test_selectorWarningOpensTheManagerOnThatBenchmark() {
+        const win = createMain(TestDoubles.makeFakeBenchmarkManagerVm({libraryEntries: [
+            {id: "bench-A", name: "Alpha", filename: "a.json", classification: "Incomplete",
+             openable: true, deletable: true},
+            {id: "", name: "bad.json", filename: "bad.json", classification: "Invalid",
+             openable: false, deletable: false}
+        ]}))
+        const benchmarkWorkspace = find(win, "benchmarkWorkspace")
+        const dialog = win.benchmarkManagerDialog
+
+        benchmarkWorkspace.editBenchmarkRequested("bad.json", "")
+        tryCompare(dialog, "visible", true)
+        compare(dialog.selectedEntryFilename, "bad.json")
+        compare(dialog.editorTable.manager.openCalls.length, 0, "a problem file is only selected")
+        dialog.close()
+        tryCompare(dialog, "visible", false)
+
+        benchmarkWorkspace.editBenchmarkRequested("a.json", "bench-A")
+        tryCompare(dialog, "visible", true)
+        compare(dialog.selectedEntryFilename, "a.json")
+        compare(dialog.editorTable.manager.openCalls, ["bench-A"], "a loaded benchmark opens in the editor")
+    }
+
+    // -- first run puts choosing the folder first ----------------------
+
+    // Every item under `root` whose QML type name starts with `typeName`.
+    function findAllOfType(root, typeName, matches) {
+        matches = matches || []
+        if (!root)
+            return matches
+        if (String(root).startsWith(typeName))
+            matches.push(root)
+        for (const child of root.children || [])
+            findAllOfType(child, typeName, matches)
+        return matches
+    }
+
+    function isShown(item) {
+        for (let it = item; it; it = it.parent)
+            if (!it.visible) return false
+        return true
+    }
+
+    function test_firstRunWithNothingImportedShowsOnlyTheWelcome() {
+        fakeSettingsVm.kovaaksDirSet = false
+        fakeScenarioBrowserVm.hasScenarios = false
+        const win = createMain()
+
+        const welcome = find(win, "firstRunWelcome")
+        verify(welcome !== null, "no firstRunWelcome in the Scenarios workspace")
+        verify(isShown(welcome), "the first-run welcome must be shown")
+        const button = ItemLookup.findByObjectName(welcome, "welcomeChooseKovaaksFolderButton")
+        verify(button !== null && isShown(button), "the welcome must offer choosing the folder")
+
+        const workspace = find(win, "scenarioWorkspace")
+        for (const type of ["DashboardGraphCanvas", "PlaytimeGraphPanel", "ScenarioHistoryPanel", "SelectionPanel"]) {
+            const items = findAllOfType(workspace, type)
+            verify(items.length > 0, "expected the workspace to contain a " + type)
+            for (const item of items)
+                verify(!isShown(item), type + " must not be shown on first run")
+        }
+        verify(!isShown(ItemLookup.findByObjectName(workspace, "scenarioSearchPanel")),
+               "the empty scenario list must not be shown behind the welcome")
+        verify(!find(win, "firstRunBanner").visible,
+               "the banner would only repeat the welcome")
+
+        welcomeSpy.target = workspace
+        button.clicked()
+        compare(welcomeSpy.count, 1, "the welcome button must ask for the folder dialog")
+    }
+
+    SignalSpy {
+        id: welcomeSpy
+        signalName: "chooseKovaaksFolderRequested"
+    }
+
+    function test_firstRunBannerHidesOnTheBenchmarksTabToo() {
+        fakeSettingsVm.kovaaksDirSet = false
+        fakeScenarioBrowserVm.hasScenarios = false
+        const win = createMain()
+        const banner = find(win, "firstRunBanner")
+        const barYOnScenarios = tabBar(win).y
+
+        tabBar(win).currentIndex = 1
+        tryCompare(stack(win), "currentIndex", 1)
+        compare(banner.visible, false)
+        compare(tabBar(win).y, barYOnScenarios, "switching tabs must not move the tab bar")
+    }
+
+    function test_folderNotSetButRunsAvailableShowsWorkspaceAndBanner() {
+        fakeSettingsVm.kovaaksDirSet = false
+        fakeScenarioBrowserVm.hasScenarios = true
+        const win = createMain()
+
+        verify(!isShown(find(win, "firstRunWelcome")), "imported runs must not be hidden behind the welcome")
+        verify(isShown(ItemLookup.findByObjectName(find(win, "scenarioWorkspace"), "scenarioSearchPanel")))
+        verify(find(win, "firstRunBanner").visible, "the banner still asks for the folder")
+    }
+
+    function test_configuredFolderShowsTheWorkspaceWithoutWelcomeOrBanner() {
+        fakeSettingsVm.kovaaksDirSet = true
+        fakeScenarioBrowserVm.hasScenarios = false
+        const win = createMain()
+
+        verify(!isShown(find(win, "firstRunWelcome")))
+        verify(!find(win, "firstRunBanner").visible)
+        verify(isShown(ItemLookup.findByObjectName(find(win, "scenarioWorkspace"), "scenarioSearchPanel")))
     }
 }

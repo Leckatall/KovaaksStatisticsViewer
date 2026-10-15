@@ -82,9 +82,13 @@ namespace {
 
         emit fake_controller->buildProgress(1, 4);
         EXPECT_DOUBLE_EQ(view_model.profileBuildProgress(), 0.25);
+        EXPECT_EQ(view_model.profileBuildDone(), 1);
+        EXPECT_EQ(view_model.profileBuildTotal(), 4);
 
         emit fake_controller->buildFinished();
         EXPECT_FALSE(view_model.profileBuildInProgress());
+        EXPECT_EQ(view_model.profileBuildDone(), 0);
+        EXPECT_EQ(view_model.profileBuildTotal(), 0);
         EXPECT_EQ(spy.count(), 3);
     }
 

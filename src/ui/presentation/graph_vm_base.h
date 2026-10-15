@@ -21,7 +21,9 @@ namespace ksv::presentation {
     public:
         explicit GraphViewModelBase(QObject *parent = nullptr) : QObject(parent) {}
 
-        // SeriesModel for each requested column; omits columns with no drawable series.
+        // SeriesModel for each requested column, in the graph's line-list order (first = top of the
+        // list, drawn on top) whatever order the columns are requested in; omits columns with no
+        // drawable series.
         // Returned pointers are owned by the VM and remain valid only until its next refresh.
         [[nodiscard]] virtual QList<SeriesModel *> series(const QList<int> &columns) const = 0;
 

@@ -18,22 +18,30 @@ MenuBar {
     signal quitRequested()
     signal aboutRequested()
 
+    // An item that keeps the check box's column even when it has no check box, so in a menu that
+    // mixes checkable items with submenus and plain actions every label starts at the same x.
+    component AlignedMenuItem: MenuItem {
+        leftPadding: checkable ? padding : padding + (indicator ? indicator.width : 0) + spacing
+    }
+
     Menu {
         title: qsTr("&File")
         Action {
             id: setSoruceDirAction
-            text: qsTr("Set Source &Directory")
+            text: qsTr("Set Source &Directory...")
             onTriggered: setSourceDirRequested()
         }
         Action {
             id: loadPerformanceFileAction
             text: qsTr("&Load Performance File...")
+            shortcut: "Ctrl+O"
             onTriggered: loadPerformanceFileRequested()
         }
 
         Action {
             id: settingsAction
-            text: qsTr("&Settings")
+            text: qsTr("&Settings...")
+            shortcut: "Ctrl+,"
             onTriggered: settingsRequested()
         }
         MenuSeparator {
@@ -45,6 +53,7 @@ MenuBar {
     }
     Menu {
         title: qsTr("&View")
+        delegate: AlignedMenuItem {}
 
         Action {
             text: qsTr("Scenario Graph")
@@ -55,6 +64,7 @@ MenuBar {
         Menu {
             objectName: "scenarioGraphLinesMenu"
             title: qsTr("Scenario Graph Lines")
+            delegate: AlignedMenuItem {}
             enabled: root.visualSettings ? root.visualSettings.scenarioGraphVisible : true
             Repeater {
                 model: root.graphVm ? root.graphVm.allSeries : []
@@ -72,12 +82,6 @@ MenuBar {
                 text: qsTr("Configure Lines...")
                 onTriggered: root.configureGraphLinesRequested()
             }
-        }
-        Action {
-            text: qsTr("Playtime Graph")
-            checkable: true
-            checked: root.visualSettings ? root.visualSettings.playtimeGraphVisible : true
-            onTriggered: if (root.visualSettings) root.visualSettings.playtimeGraphVisible = checked
         }
         Action {
             text: qsTr("Scenario History")
@@ -100,8 +104,16 @@ MenuBar {
                 }
             }
         }
+        // The graph entries follow the panels' top-to-bottom order.
         Action {
-            text: qsTr("Control Panel")
+            text: qsTr("Playtime Graph")
+            checkable: true
+            checked: root.visualSettings ? root.visualSettings.playtimeGraphVisible : true
+            onTriggered: if (root.visualSettings) root.visualSettings.playtimeGraphVisible = checked
+        }
+        Action {
+            // The line toggles now sit inside the run graph panel (formerly a separate "Control Panel").
+            text: qsTr("Graph Line Toggles")
             checkable: true
             checked: root.visualSettings ? root.visualSettings.controlPanelVisible : true
             onTriggered: if (root.visualSettings) root.visualSettings.controlPanelVisible = checked
@@ -131,18 +143,19 @@ MenuBar {
         }
     }
     Menu {
-        title: qsTr("&Help")
-        Action {
-            text: qsTr("&About")
-            onTriggered: aboutRequested()
-        }
-    }
-    Menu {
         title: qsTr("&Benchmarks")
         Action {
             objectName: "manageBenchmarksAction"
             text: qsTr("&Manage Benchmarks...")
             onTriggered: root.manageBenchmarksRequested()
+        }
+    }
+    // Help stays last, as Windows menu bars put it.
+    Menu {
+        title: qsTr("&Help")
+        Action {
+            text: qsTr("&About")
+            onTriggered: aboutRequested()
         }
     }
 }

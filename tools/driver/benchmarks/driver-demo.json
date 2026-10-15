@@ -1,0 +1,105 @@
+{
+    "schemaVersion": 1,
+    "id": "driver-demo",
+    "name": "Driver Demo Benchmark",
+    "tiers": [
+        {"id": "iron", "name": "Iron", "color": [130, 130, 140, 255]},
+        {"id": "bronze", "name": "Bronze", "color": [205, 127, 50, 255]},
+        {"id": "silver", "name": "Silver", "color": [192, 192, 200, 255]},
+        {"id": "gold", "name": "Gold", "color": [255, 200, 40, 255]},
+        {"id": "platinum", "name": "Platinum", "color": [80, 220, 220, 255]}
+    ],
+    "uncategorized": [],
+    "categories": [
+        {
+            "id": "clicking",
+            "name": "Clicking",
+            "color": [0, 188, 212, 255],
+            "scenarios": [],
+            "subcategories": [
+                {
+                    "id": "static",
+                    "name": "Static",
+                    "color": [38, 166, 154, 255],
+                    "scenarios": [
+                        {
+                            "id": "entry-gallery-primary",
+                            "name": "1wall6targets Gallery",
+                            "hash": "gallery-primary",
+                            "thresholds": [
+                                {"tierId": "iron", "score": 3500},
+                                {"tierId": "bronze", "score": 4200},
+                                {"tierId": "silver", "score": 4800},
+                                {"tierId": "gold", "score": 5200},
+                                {"tierId": "platinum", "score": 5600}
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "id": "dynamic",
+                    "name": "Dynamic",
+                    "color": [255, 152, 0, 255],
+                    "scenarios": [
+                        {
+                            "id": "entry-gallery-pasu",
+                            "name": "Pasu Gallery",
+                            "hash": "gallery-pasu",
+                            "thresholds": [
+                                {"tierId": "iron", "score": 3150},
+                                {"tierId": "bronze", "score": 3350},
+                                {"tierId": "silver", "score": 3700},
+                                {"tierId": "gold", "score": 4000},
+                                {"tierId": "platinum", "score": 4300}
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "tracking",
+            "name": "Tracking",
+            "color": [156, 39, 176, 255],
+            "scenarios": [
+                {
+                    "id": "entry-gallery-smoothbot",
+                    "name": "Smoothbot Gallery",
+                    "hash": "gallery-smoothbot",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 1500},
+                        {"tierId": "bronze", "score": 1700},
+                        {"tierId": "silver", "score": 1850},
+                        {"tierId": "gold", "score": 1950},
+                        {"tierId": "platinum", "score": 2000}
+                    ]
+                },
+                {
+                    "id": "entry-gallery-flyts",
+                    "name": "VT FlyTS Gallery",
+                    "hash": "gallery-flyts",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 3500},
+                        {"tierId": "bronze", "score": 4000},
+                        {"tierId": "silver", "score": 4400},
+                        {"tierId": "gold", "score": 4800},
+                        {"tierId": "platinum", "score": 5200}
+                    ]
+                },
+                {
+                    "id": "entry-gallery-celestial",
+                    "name": "Air CELESTIAL No UFO Easy Slowed",
+                    "hash": "gallery-celestial",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 1200},
+                        {"tierId": "bronze", "score": 1400},
+                        {"tierId": "silver", "score": 1600},
+                        {"tierId": "gold", "score": 1800},
+                        {"tierId": "platinum", "score": 2000}
+                    ]
+                }
+            ],
+            "subcategories": []
+        }
+    ]
+}

@@ -36,9 +36,18 @@ namespace ksv::presentation {
                 CalendarInterval{CalendarUnit::Year, 5, 5 * 365 * 24 * 60 * 60'000LL},
         };
 
-        CalendarInterval calendarIntervalFor(const qint64 spanMs, const int targetTicks) {
+        constexpr qint64 kDayMs = 24 * 60 * 60'000LL;
+
+        CalendarInterval calendarIntervalFor(const qint64 spanMs, const int targetTicks, const bool wholeDays) {
             const double target = std::max(1, targetTicks);
-            return *std::min_element(kCalendarIntervals.begin(), kCalendarIntervals.end(),
+            // Intervals are ordered by length; whole-day axes start the search at the first day interval.
+            const auto first = wholeDays
+                                   ? std::find_if(kCalendarIntervals.begin(), kCalendarIntervals.end(),
+                                                  [](const CalendarInterval &interval) {
+                                                      return interval.approximateMs >= kDayMs;
+                                                  })
+                                   : kCalendarIntervals.begin();
+            return *std::min_element(first, kCalendarIntervals.end(),
                                      [spanMs, target](const CalendarInterval &left, const CalendarInterval &right) {
                                          return std::abs(double(spanMs) / left.approximateMs - target) <
                                                 std::abs(double(spanMs) / right.approximateMs - target);
@@ -81,11 +90,22 @@ namespace ksv::presentation {
             return value;
         }
 
-        QString formatForInterval(const CalendarUnit unit, const qreal value, const QTimeZone &zone) {
-            const QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(qint64(std::llround(value)), zone);
+        // `firstTickMs` is the axis' first tick: sub-day labels show only the time, so the first
+        // tick (and every midnight) also names the date to anchor the times that follow it.
+        QString formatForInterval(const CalendarUnit unit, const qreal value, const QTimeZone &zone,
+                                  const qint64 firstTickMs) {
+            const qint64 valueMs = qint64(std::llround(value));
+            const QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(valueMs, zone);
             switch (unit) {
                 case CalendarUnit::Minute:
-                case CalendarUnit::Hour: return dateTime.toString(QStringLiteral("MMM d HH:mm"));
+                case CalendarUnit::Hour:
+                    if (valueMs == firstTickMs) {
+                        return dateTime.time() == QTime(0, 0)
+                                   ? dateTime.toString(QStringLiteral("MMM d"))
+                                   : dateTime.toString(QStringLiteral("MMM d HH:mm"));
+                    }
+                    if (dateTime.time() == QTime(0, 0)) return dateTime.toString(QStringLiteral("MMM d"));
+                    return dateTime.toString(QStringLiteral("HH:mm"));
                 case CalendarUnit::Day:
                 case CalendarUnit::Week: return dateTime.toString(QStringLiteral("MMM d"));
                 case CalendarUnit::Month: return dateTime.toString(QStringLiteral("MMM yyyy"));
@@ -132,7 +152,8 @@ namespace ksv::presentation {
             hi = startOfDay(hi.date(), zone).addDays(1);
         }
 
-        const CalendarInterval interval = calendarIntervalFor(lo.msecsTo(hi), m_options.targetTicks);
+        const CalendarInterval interval = calendarIntervalFor(lo.msecsTo(hi), m_options.targetTicks,
+                                                              m_options.wholeDays);
         const QDateTime min = floorDateTime(lo, interval, zone);
         QDateTime max = floorDateTime(hi, interval, zone);
         if (max < hi) max = advanceDateTime(max, interval);
@@ -143,7 +164,10 @@ namespace ksv::presentation {
 
         ValueTransform transform;
         const CalendarUnit unit = interval.unit;
-        transform.formatter = [unit, zone](const qreal value) { return formatForInterval(unit, value, zone); };
+        const qint64 firstTickMs = min.toMSecsSinceEpoch();
+        transform.formatter = [unit, zone, firstTickMs](const qreal value) {
+            return formatForInterval(unit, value, zone, firstTickMs);
+        };
 
         return replaceResolvedState(static_cast<qreal>(min.toMSecsSinceEpoch()),
                                     static_cast<qreal>(max.toMSecsSinceEpoch()), std::move(ticks),

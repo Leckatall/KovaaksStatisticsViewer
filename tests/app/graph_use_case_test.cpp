@@ -142,6 +142,21 @@ namespace {
         EXPECT_FALSE(use_case.currentRunHasPerformance());
     }
 
+    // A default run id formats as the epoch ("(1970-01-01, ...)"); with no run selected the label
+    // must carry no placeholder date at all.
+    TEST_F(GraphUseCaseTest, RunLabelIsEmptyWhenNoRunIsSelected) {
+        EXPECT_EQ(use_case.get_run_label(), "");
+    }
+
+    TEST_F(GraphUseCaseTest, RunLabelNamesTheScenarioOfTheSelectedRun) {
+        fake_session_controller->current_run = runWithSeconds("a");
+
+        const std::string label = use_case.get_run_label();
+
+        EXPECT_EQ(label.rfind("S (", 0), 0U) << label;
+        EXPECT_EQ(label, fake_session_controller->current_run.run_id.toString());
+    }
+
     TEST_F(GraphUseCaseTest, PerfRunHasCurrentRunAndPerformance) {
         fake_session_controller->current_run = runWithSeconds("a");
 

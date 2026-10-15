@@ -1,0 +1,38 @@
+{
+    "schemaVersion": 1,
+    "id": "autoresolve-demo",
+    "name": "Auto-resolve Benchmark",
+    "tiers": [
+        {"id": "bronze", "name": "Bronze", "color": [205, 127, 50, 255]},
+        {"id": "gold", "name": "Gold", "color": [255, 200, 40, 255]}
+    ],
+    "uncategorized": [],
+    "categories": [
+        {
+            "id": "by-name",
+            "name": "Named Only",
+            "color": [76, 175, 80, 255],
+            "scenarios": [
+                {
+                    "id": "entry-pasu-by-name",
+                    "name": "Pasu Gallery",
+                    "hash": null,
+                    "thresholds": [
+                        {"tierId": "bronze", "score": 2000},
+                        {"tierId": "gold", "score": 3500}
+                    ]
+                },
+                {
+                    "id": "entry-flyts-by-name",
+                    "name": "VT FlyTS Gallery",
+                    "hash": null,
+                    "thresholds": [
+                        {"tierId": "bronze", "score": 2500},
+                        {"tierId": "gold", "score": 3900}
+                    ]
+                }
+            ],
+            "subcategories": []
+        }
+    ]
+}

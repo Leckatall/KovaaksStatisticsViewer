@@ -32,6 +32,8 @@ ApplicationWindow {
     readonly property alias editorTable: editorTable
 
     property string selectedEntryFilename: ""
+    // Hides the Library list while a benchmark is open, so the table gets the whole window.
+    property bool libraryCollapsed: false
     property string statusMessage: ""
     property bool statusIsError: false
     property string importStatus: ""
@@ -92,8 +94,17 @@ ApplicationWindow {
         return entries.find(entry => entry.filename === root.selectedEntryFilename) || null
     }
 
+    // Opens a library entry in the editor. Double-click, Enter and the Open button all come here,
+    // so each passes through the same unsaved-changes guard; entries that cannot be opened do
+    // nothing.
+    function openLibraryEntry(entry) {
+        if (!entry || !entry.openable) return
+        root.runWhenClean(() => root.vm().openBenchmark(entry.id))
+    }
+
     function open() {
         root.selectedEntryFilename = ""
+        root.libraryCollapsed = false
         root.statusMessage = ""
         root.statusIsError = false
         root.importStatus = ""
@@ -102,6 +113,25 @@ ApplicationWindow {
         visible = true
         raise()
         requestActivate()
+    }
+
+    // Opens the manager on one library entry: selected in the library, and opened in the editor
+    // when it can be (through the same unsaved-changes guard as Open). A problem file can have an
+    // empty id, so the filename identifies the entry; the id is the fallback when no filename is
+    // given. A draft of the same benchmark already in the editor is kept, edits and all.
+    function openOnEntry(filename, benchmarkId) {
+        root.open()
+        const entries = root.vm().libraryEntries || []
+        let index = filename ? entries.findIndex(entry => entry.filename === filename) : -1
+        if (index < 0 && benchmarkId)
+            index = entries.findIndex(entry => entry.id === benchmarkId)
+        if (index < 0) return
+        const entry = entries[index]
+        root.selectedEntryFilename = entry.filename
+        libraryList.positionViewAtIndex(index, ListView.Contain)
+        libraryList.forceActiveFocus()
+        const alreadyOpen = root.vm().hasDraft && root.vm().draftFromLibrary && root.vm().draftId === entry.id
+        if (!alreadyOpen) root.openLibraryEntry(entry)
     }
 
     onClosing: (close) => {
@@ -417,13 +447,22 @@ ApplicationWindow {
         standardButtons: Dialog.Cancel
         property string categoryId
         property string subcategoryName
+        // The group the table focuses once the prompt has closed: the new subcategory when one
+        // was created, otherwise (Cancel, Escape, a failed command) the category it was asked for.
+        property string focusGroupAfterClose
 
         function relocate(choice) {
-            subcategoryRelocationPrompt.close()
             const categoryId = subcategoryRelocationPrompt.categoryId
             const name = subcategoryRelocationPrompt.subcategoryName
-            root.runTableCommand(() => root.vm().addSubcategoryRelocating(categoryId, name, choice))
+            const result = root.runTableCommand(() => root.vm().addSubcategoryRelocating(categoryId, name, choice))
+            if (result && result.ok && result.createdId) subcategoryRelocationPrompt.focusGroupAfterClose = result.createdId
+            subcategoryRelocationPrompt.close()
         }
+
+        onAboutToShow: subcategoryRelocationPrompt.focusGroupAfterClose = subcategoryRelocationPrompt.categoryId
+        // Closing hands focus back to the table, which held it when the prompt opened; once the
+        // popup has finished restoring it, the table moves its current cell to that group.
+        onClosed: Qt.callLater(editorTable.focusCell, {groupId: subcategoryRelocationPrompt.focusGroupAfterClose})
 
         ColumnLayout {
             spacing: 8
@@ -549,6 +588,21 @@ ApplicationWindow {
         colorDialog.open()
     }
 
+    // The width the Library pane opens at: just the toolbar row, which leaves the rest to the editor.
+    readonly property int libraryDefaultWidth: Math.max(libraryToolbar.implicitWidth, 280)
+
+    // A toolbar button sized to its content (the style's 80px minimum would not fit the row). An
+    // icon-only button shows its tooltip on hover.
+    component ToolbarButton: Button {
+        id: toolbarButton
+        leftPadding: 8
+        rightPadding: 8
+        implicitWidth: implicitContentWidth + leftPadding + rightPadding
+        HoverHandler { id: toolbarHover }
+        ToolTip.visible: toolbarHover.hovered && ToolTip.text !== ""
+        ToolTip.delay: 400
+    }
+
     // A text field that shows the model value whenever it is not being edited; typing into a
     // TextField destroys a plain `text:` binding, and these fields outlive the element they edit.
     component BoundField: TextField {
@@ -569,15 +623,43 @@ ApplicationWindow {
         anchors.margins: 10
         spacing: 10
 
-        RowLayout {
+        // The Library list and the editor share the window through a draggable divider, so the
+        // table can be given the room it needs (every rank column) at the cost of the list.
+        SplitView {
+            id: paneSplit
+            objectName: "paneSplit"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 10
+            orientation: Qt.Horizontal
+
+            handle: Rectangle {
+                id: paneHandle
+                implicitWidth: 10
+                color: "transparent"
+                Accessible.role: Accessible.Splitter
+                Accessible.name: qsTr("Resize the library list")
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: SplitHandle.pressed || SplitHandle.hovered ? 3 : 1
+                    height: parent.height
+                    color: SplitHandle.pressed ? root.palette.highlight
+                         : SplitHandle.hovered ? Qt.lighter(root.palette.mid, 1.6) : root.palette.mid
+                }
+                HoverHandler {
+                    cursorShape: Qt.SplitHCursor
+                }
+            }
 
             // ---- Library pane ------------------------------------------------
             ColumnLayout {
-                Layout.preferredWidth: 260
-                Layout.fillHeight: true
+                id: libraryPane
+                objectName: "libraryPane"
+                // Only while an editor is there to take the room: with no draft the list is all
+                // the dialog has.
+                visible: !root.libraryCollapsed || !root.vm().hasDraft
+                SplitView.preferredWidth: root.libraryDefaultWidth
+                SplitView.minimumWidth: libraryToolbar.implicitWidth
                 spacing: 8
 
                 Label {
@@ -586,29 +668,33 @@ ApplicationWindow {
                     font.bold: true
                 }
 
-                Flow {
+                // One row at every width the pane can take: the buttons size to their text, and
+                // the pane never narrows below the row.
+                RowLayout {
+                    id: libraryToolbar
+                    objectName: "libraryToolbar"
                     Layout.fillWidth: true
-                    spacing: 6
-                    Button {
+                    spacing: 4
+
+                    ToolbarButton {
                         objectName: "newBenchmarkButton"
                         text: qsTr("New")
                         onClicked: root.runWhenClean(() => root.vm().beginNewBenchmark())
                     }
-                    Button {
+                    ToolbarButton {
                         objectName: "importPlaylistButton"
-                        text: qsTr("Import playlist...")
+                        text: qsTr("Import...")
+                        Accessible.name: qsTr("Import playlist")
+                        ToolTip.text: qsTr("Import a playlist file as a benchmark")
                         onClicked: importDialog.open()
                     }
-                    Button {
+                    ToolbarButton {
                         objectName: "openBenchmarkButton"
                         text: qsTr("Open")
                         enabled: root.selectedRow() !== null && root.selectedRow().openable
-                        onClicked: {
-                            const row = root.selectedRow()
-                            root.runWhenClean(() => root.vm().openBenchmark(row.id))
-                        }
+                        onClicked: root.openLibraryEntry(root.selectedRow())
                     }
-                    Button {
+                    ToolbarButton {
                         objectName: "deleteBenchmarkButton"
                         text: qsTr("Delete")
                         enabled: root.selectedRow() !== null && root.selectedRow().deletable
@@ -618,15 +704,22 @@ ApplicationWindow {
                             deleteConfirmPrompt.open()
                         }
                     }
-                    Button {
+                    Item { Layout.fillWidth: true }
+                    ToolbarButton {
                         objectName: "refreshLibraryButton"
-                        text: qsTr("Refresh")
+                        icon.source: "icons/refresh-cw.svg"
+                        display: AbstractButton.IconOnly
                         enabled: !root.vm().dirty
+                        Accessible.name: qsTr("Refresh")
+                        ToolTip.text: qsTr("Refresh the list from the benchmark directory")
                         onClicked: root.vm().refresh()
                     }
-                    Button {
+                    ToolbarButton {
                         objectName: "openDirectoryButton"
-                        text: qsTr("Open directory")
+                        icon.source: "icons/folder-open.svg"
+                        display: AbstractButton.IconOnly
+                        Accessible.name: qsTr("Open directory")
+                        ToolTip.text: qsTr("Open the benchmark directory in the file manager")
                         onClicked:
                             Qt.openUrlExternally(encodeURI("file:///" + root.vm().managedDirectoryPath))
                     }
@@ -665,14 +758,47 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     clip: true
                     model: root.vm().libraryEntries
+                    // The selection (selectedEntryFilename) is the single source of truth, so the
+                    // arrow keys move it directly instead of a separate current index.
+                    keyNavigationEnabled: false
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.List
+                    Accessible.name: qsTr("Benchmark library")
+
+                    function step(delta) {
+                        const entries = root.vm().libraryEntries || []
+                        if (entries.length === 0) return
+                        let index = entries.findIndex(entry => entry.filename === root.selectedEntryFilename)
+                        index = index < 0 ? (delta > 0 ? 0 : entries.length - 1)
+                                          : Math.max(0, Math.min(entries.length - 1, index + delta))
+                        root.selectedEntryFilename = entries[index].filename
+                        libraryList.positionViewAtIndex(index, ListView.Contain)
+                    }
+                    Keys.onDownPressed: libraryList.step(1)
+                    Keys.onUpPressed: libraryList.step(-1)
+                    // Enter opens the selected benchmark, exactly like the Open button.
+                    Keys.onReturnPressed: root.openLibraryEntry(root.selectedRow())
+                    Keys.onEnterPressed: root.openLibraryEntry(root.selectedRow())
+
                     delegate: ItemDelegate {
                         id: libraryEntry
                         required property var modelData
                         required property int index
                         width: libraryList.width
                         objectName: "libraryEntry_" + index
+                        // The list owns the keyboard focus; the rows only select.
+                        focusPolicy: Qt.NoFocus
                         highlighted: root.selectedEntryFilename === libraryEntry.modelData.filename
-                        onClicked: root.selectedEntryFilename = libraryEntry.modelData.filename
+                        onClicked: {
+                            root.selectedEntryFilename = libraryEntry.modelData.filename
+                            libraryList.forceActiveFocus()
+                        }
+                        // Double-click opens through the same guard as the Open button.
+                        onDoubleClicked: {
+                            root.selectedEntryFilename = libraryEntry.modelData.filename
+                            libraryList.forceActiveFocus()
+                            root.openLibraryEntry(libraryEntry.modelData)
+                        }
                         contentItem: RowLayout {
                             spacing: 8
                             Label {
@@ -695,286 +821,359 @@ ApplicationWindow {
                 }
             }
 
-            Rectangle {
-                Layout.fillHeight: true
-                width: 1
-                color: root.palette.mid
-            }
-
             // ---- Editor pane ---------------------------------------------------
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 6
-                visible: root.vm().hasDraft
+            Item {
+                id: editorPane
+                objectName: "editorPane"
+                SplitView.fillWidth: true
+                // Never so narrow that the table loses its last rank column (and its scrollbar).
+                SplitView.minimumWidth: Math.max(360, editorTable.minimumTableWidth)
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    TextField {
-                        id: benchmarkNameField
-                        objectName: "benchmarkNameField"
-                        placeholderText: qsTr("Benchmark name")
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 6
+                    visible: root.vm().hasDraft
+                    // A closed draft brings the list back, so the next open starts with it shown.
+                    onVisibleChanged: if (!visible) root.libraryCollapsed = false
+
+                    // The actions sit beside the name while the name can keep a comfortable width,
+                    // and otherwise move to their own row together: never some on each row. The
+                    // actions row has a fixed implicit width, so the switch cannot oscillate.
+                    GridLayout {
+                        id: editorToolbar
+                        objectName: "editorToolbar"
+                        readonly property real inlineNameWidth: 240
+                        readonly property bool actionsInline: editorPane.width
+                            >= libraryToggle.implicitWidth + nameRow.spacing + inlineNameWidth
+                               + columnSpacing + editorActions.implicitWidth
                         Layout.fillWidth: true
-                        selectByMouse: true
-                        onEditingFinished: root.vm().setBenchmarkName(text)
-
-                        // Typing into a TextField destroys a plain `text:` binding, and this pane is
-                        // only hidden (never destroyed) when the draft closes, so the field would keep
-                        // the old name across Discard/New. Binding re-asserts it whenever the field is
-                        // not the one being edited.
-                        Binding {
-                            target: benchmarkNameField
-                            property: "text"
-                            value: root.vm().benchmarkName
-                            when: !benchmarkNameField.activeFocus
-                            restoreMode: Binding.RestoreNone
-                        }
-                    }
-                    Label {
-                        objectName: "draftStatusBadge"
-                        text: root.vm().draftTrackable ? qsTr("Trackable") : qsTr("Incomplete")
-                    }
-                    Rectangle {
-                        width: 8
-                        height: 8
-                        radius: 4
-                        color: root.classificationColor(root.vm().draftTrackable
-                            ? "Trackable" : "Incomplete")
-                    }
-                    Button {
-                        objectName: "undoButton"
-                        text: qsTr("Undo")
-                        enabled: root.sessionRevision >= 0 && root.vm().canUndo === true
-                        Accessible.name: qsTr("Undo the last table edit")
-                        onClicked: {
-                            root.commitActiveEdits()
-                            root.tableStatus = ""
-                            editorTable.undo()
-                            root.sessionRevision++
-                        }
-                    }
-                    Button {
-                        objectName: "pasteButton"
-                        text: qsTr("Paste")
-                        Accessible.name: qsTr("Paste spreadsheet cells at the current cell or rank header")
-                        onClicked: {
-                            root.commitActiveEdits()
-                            root.tableStatus = ""
-                            editorTable.pasteFromClipboard()
-                            root.sessionRevision++
-                        }
-                    }
-                    Button {
-                        objectName: "saveButton"
-                        text: qsTr("Save")
-                        onClicked: root.requestSave()
-                    }
-                    Button {
-                        objectName: "discardButton"
-                        text: qsTr("Discard")
-                        onClicked: {
-                            root.vm().discard()
-                            root.statusMessage = ""
-                        }
-                    }
-                }
-
-                // The accepted file this editor was opened from has changed, been removed, or
-                // become unreadable since. The working copy is kept as-is; a later Save will
-                // return a conflict. The editor stays fully usable.
-                Label {
-                    objectName: "staleBaselineWarning"
-                    visible: root.vm().baselineStale
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    color: "#E57373"
-                    text: qsTr("The saved benchmark this editor was opened from has changed on disk. "
-                               + "Your edits are kept here; saving will report a conflict until you reopen it.")
-                }
-
-                // Non-modal: the editor stays fully usable while this is shown. It is bound
-                // straight to the flag, so the next reconciliation that publishes without a
-                // write failure clears it on its own.
-                Rectangle {
-                    objectName: "resolutionFailureBanner"
-                    visible: root.vm().resolutionWriteFailed
-                    Layout.fillWidth: true
-                    implicitHeight: resolutionFailureText.implicitHeight + 12
-                    radius: 4
-                    color: "#5D4037"
-                    Label {
-                        id: resolutionFailureText
-                        objectName: "resolutionFailureBannerLabel"
-                        anchors.fill: parent
-                        anchors.margins: 6
-                        wrapMode: Text.WordWrap
-                        color: "#FFFFFF"
-                        text: qsTr("Automatic scenario resolution could not be written. Your mappings are unchanged; the manager retries on the next refresh.")
-                    }
-                }
-
-                // What a successful Save will store as missing. Save stays available: this informs
-                // the existing gates rather than adding a compulsory repair step.
-                Label {
-                    objectName: "normalizationWarning"
-                    visible: root.normalizationIssues().length > 0
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    color: "#FFA726"
-                    text: qsTr("Not valid numbers; Save stores these thresholds as missing: %1")
-                        .arg(root.normalizationSummary())
-                }
-
-                Label {
-                    objectName: "tableStatusLabel"
-                    readonly property string message: root.tableStatus !== "" ? root.tableStatus : editorTable.statusText
-                    visible: message !== ""
-                    text: message
-                    color: "#E57373"
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                }
-
-                // Mapping details for the current row; candidates for a resolved or mapped entry
-                // stay disarmed until "Change mapping" is pressed.
-                Pane {
-                    id: mappingPanel
-                    objectName: "mappingPanel"
-                    Layout.fillWidth: true
-                    visible: root.currentEntryId !== ""
-                    padding: 4
-                    property bool candidatesArmed: false
-                    readonly property string mappingState: root.currentRow && root.currentRow.mappingState ? root.currentRow.mappingState : "unresolved"
-                    readonly property var candidates: root.currentRow && root.currentRow.mappingCandidates ? root.currentRow.mappingCandidates : []
-                    readonly property bool armed: mappingPanel.candidatesArmed || mappingPanel.mappingState === "ambiguous"
-                    Connections {
-                        target: root
-                        function onCurrentEntryIdChanged() { mappingPanel.candidatesArmed = false }
-                    }
-
-                    ColumnLayout {
-                        width: parent.width
-                        spacing: 2
+                        columns: actionsInline ? 2 : 1
+                        columnSpacing: 8
+                        rowSpacing: 6
                         RowLayout {
+                            id: nameRow
+                            Layout.fillWidth: true
                             spacing: 8
-                            Label {
-                                text: qsTr("Mapping for %1:").arg(root.currentRow && root.currentRow.name ? root.currentRow.name : qsTr("(unnamed)"))
+                            ToolbarButton {
+                                id: libraryToggle
+                                objectName: "libraryToggleButton"
+                                icon.source: root.libraryCollapsed ? "icons/panel-left-open.svg"
+                                                                   : "icons/panel-left-close.svg"
+                                display: AbstractButton.IconOnly
+                                Accessible.name: root.libraryCollapsed ? qsTr("Show the library list")
+                                                                       : qsTr("Hide the library list")
+                                ToolTip.text: root.libraryCollapsed
+                                    ? qsTr("Show the library list")
+                                    : qsTr("Hide the library list to give the table the full width")
+                                onClicked: root.libraryCollapsed = !root.libraryCollapsed
                             }
+                            TextField {
+                                id: benchmarkNameField
+                                objectName: "benchmarkNameField"
+                                placeholderText: qsTr("Benchmark name")
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 160
+                                selectByMouse: true
+                                onEditingFinished: root.vm().setBenchmarkName(text)
+
+                                // Typing into a TextField destroys a plain `text:` binding, and this pane is
+                                // only hidden (never destroyed) when the draft closes, so the field would keep
+                                // the old name across Discard/New. Binding re-asserts it whenever the field is
+                                // not the one being edited.
+                                Binding {
+                                    target: benchmarkNameField
+                                    property: "text"
+                                    value: root.vm().benchmarkName
+                                    when: !benchmarkNameField.activeFocus
+                                    restoreMode: Binding.RestoreNone
+                                }
+                            }
+                            // The view model's own dirty state: it compares the draft with the copy it
+                            // was opened from or saved to, so undoing back to that copy clears it.
                             Label {
-                                objectName: "matchLabel"
-                                text: root.matchStateLabel(mappingPanel.mappingState)
+                                objectName: "unsavedLabel"
+                                visible: root.vm().dirty === true
+                                text: qsTr("• Unsaved")
+                                color: Qt.alpha(root.palette.accent, 0.8)
+                                Accessible.name: qsTr("The benchmark has unsaved changes")
+                            }
+                        }
+                        RowLayout {
+                            id: editorActions
+                            objectName: "editorActions"
+                            // Inline it sits at the right end of the name row; on its own row it
+                            // stays right-aligned under the name.
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                            spacing: 4
+                            Label {
+                                objectName: "draftStatusBadge"
+                                Layout.rightMargin: 2
+                                text: root.vm().draftTrackable ? qsTr("Trackable") : qsTr("Incomplete")
+                            }
+                            Rectangle {
+                                Layout.rightMargin: 8
+                                implicitWidth: 8
+                                implicitHeight: 8
+                                radius: 4
+                                color: root.classificationColor(root.vm().draftTrackable
+                                    ? "Trackable" : "Incomplete")
+                            }
+                            ToolbarButton {
+                                objectName: "undoButton"
+                                icon.source: "icons/undo-2.svg"
+                                display: AbstractButton.IconOnly
+                                enabled: root.sessionRevision >= 0 && root.vm().canUndo === true
+                                Accessible.name: qsTr("Undo the last table edit")
+                                ToolTip.text: qsTr("Undo the last table edit")
+                                onClicked: {
+                                    root.commitActiveEdits()
+                                    root.tableStatus = ""
+                                    editorTable.undo()
+                                    root.sessionRevision++
+                                }
+                            }
+                            ToolbarButton {
+                                objectName: "pasteButton"
+                                icon.source: "icons/clipboard-paste.svg"
+                                display: AbstractButton.IconOnly
+                                Accessible.name: qsTr("Paste spreadsheet cells at the current cell or rank header")
+                                ToolTip.text: qsTr("Paste spreadsheet cells at the current cell or rank header")
+                                onClicked: {
+                                    root.commitActiveEdits()
+                                    root.tableStatus = ""
+                                    editorTable.pasteFromClipboard()
+                                    root.sessionRevision++
+                                }
+                            }
+                            ToolbarButton {
+                                objectName: "saveButton"
+                                icon.source: "icons/save.svg"
+                                display: AbstractButton.IconOnly
+                                Accessible.name: qsTr("Save")
+                                ToolTip.text: qsTr("Save the benchmark")
+                                onClicked: root.requestSave()
+                            }
+                        }
+                    }
+
+                    // The accepted file this editor was opened from has changed, been removed, or
+                    // become unreadable since. The working copy is kept as-is; a later Save will
+                    // return a conflict. The editor stays fully usable.
+                    Label {
+                        objectName: "staleBaselineWarning"
+                        visible: root.vm().baselineStale
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: "#E57373"
+                        text: qsTr("The saved benchmark this editor was opened from has changed on disk. "
+                                   + "Your edits are kept here; saving will report a conflict until you reopen it.")
+                    }
+
+                    // Non-modal: the editor stays fully usable while this is shown. It is bound
+                    // straight to the flag, so the next reconciliation that publishes without a
+                    // write failure clears it on its own.
+                    Rectangle {
+                        objectName: "resolutionFailureBanner"
+                        visible: root.vm().resolutionWriteFailed
+                        Layout.fillWidth: true
+                        implicitHeight: resolutionFailureText.implicitHeight + 12
+                        radius: 4
+                        color: "#5D4037"
+                        Label {
+                            id: resolutionFailureText
+                            objectName: "resolutionFailureBannerLabel"
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            wrapMode: Text.WordWrap
+                            color: "#FFFFFF"
+                            text: qsTr("Automatic scenario resolution could not be written. Your mappings are unchanged; the manager retries on the next refresh.")
+                        }
+                    }
+
+                    // What a successful Save will store as missing. Save stays available: this informs
+                    // the existing gates rather than adding a compulsory repair step.
+                    Label {
+                        objectName: "normalizationWarning"
+                        visible: root.normalizationIssues().length > 0
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: "#FFA726"
+                        text: qsTr("Not valid numbers; Save stores these thresholds as missing: %1")
+                            .arg(root.normalizationSummary())
+                    }
+
+                    Label {
+                        objectName: "tableStatusLabel"
+                        readonly property string message: root.tableStatus !== "" ? root.tableStatus : editorTable.statusText
+                        visible: message !== ""
+                        text: message
+                        color: "#E57373"
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+
+                    // Mapping details for the current row; candidates for a resolved or mapped entry
+                    // stay disarmed until "Change mapping" is pressed. Its row is always there (a hint
+                    // while no scenario is selected), so selecting a cell never moves the table.
+                    Pane {
+                        id: mappingPanel
+                        objectName: "mappingPanel"
+                        Layout.fillWidth: true
+                        padding: 4
+                        property bool candidatesArmed: false
+                        readonly property string mappingState: root.currentRow && root.currentRow.mappingState ? root.currentRow.mappingState : "unresolved"
+                        readonly property var candidates: root.currentRow && root.currentRow.mappingCandidates ? root.currentRow.mappingCandidates : []
+                        readonly property bool armed: mappingPanel.candidatesArmed || mappingPanel.mappingState === "ambiguous"
+                        Connections {
+                            target: root
+                            function onCurrentEntryIdChanged() { mappingPanel.candidatesArmed = false }
+                        }
+
+                        ColumnLayout {
+                            width: parent.width
+                            spacing: 2
+                            Label {
+                                objectName: "mappingHint"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: clearMappingButton.implicitHeight
+                                visible: root.currentEntryId === ""
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                text: qsTr("Select a scenario to see its mapping")
                                 color: root.palette.placeholderText
                             }
-                            Button {
-                                objectName: "changeMappingButton"
-                                text: qsTr("Change mapping")
-                                visible: root.offersMappingEdit(mappingPanel.mappingState)
-                                Accessible.name: qsTr("Change the scenario mapping")
-                                onClicked: mappingPanel.candidatesArmed = !mappingPanel.candidatesArmed
-                            }
-                            Button {
-                                objectName: "clearMappingButton"
-                                text: qsTr("Clear mapping")
-                                visible: root.offersMappingEdit(mappingPanel.mappingState)
-                                Accessible.name: qsTr("Clear the scenario mapping")
-                                onClicked: root.requestMappingEdit(root.currentEntryId, "")
-                            }
-                        }
-                        Repeater {
-                            model: mappingPanel.candidates
-                            delegate: ItemDelegate {
-                                id: candidateOption
-                                required property var modelData
-                                objectName: "candidateOption_" + candidateOption.modelData.hash
+                            // Wraps instead of running past a narrow editor, so the buttons stay reachable.
+                            Flow {
                                 Layout.fillWidth: true
-                                enabled: mappingPanel.armed
-                                opacity: mappingPanel.armed ? 1 : 0.4
-                                text: root.candidateText(candidateOption.modelData)
-                                Accessible.name: qsTr("Map to %1").arg(candidateOption.text)
-                                onClicked: root.requestMappingEdit(root.currentEntryId, candidateOption.modelData.hash)
-                            }
-                        }
-                    }
-                }
-
-                // ---- Validation -----------------------------------------------------------------
-                ScrollView {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(validationPanel.implicitHeight, 96)
-                    visible: root.vm().validationIssues.length > 0
-                    clip: true
-                    ColumnLayout {
-                        id: validationPanel
-                        objectName: "validationPanel"
-                        spacing: 0
-
-                        Repeater {
-                            model: root.vm().validationIssues
-                            delegate: Button {
-                                id: validationIssue
-                                required property var modelData
-                                required property int index
-                                objectName: "validationIssue_" + index
-                                flat: true
-                                Layout.fillWidth: true
-                                Accessible.name: validationIssue.modelData.message
-                                contentItem: Text {
-                                    text: "• " + validationIssue.modelData.message
-                                    horizontalAlignment: Text.AlignLeft
-                                    elide: Text.ElideRight
-                                    color: validationIssue.palette.buttonText
+                                visible: root.currentEntryId !== ""
+                                spacing: 8
+                                Label {
+                                    height: clearMappingButton.implicitHeight
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: qsTr("Mapping for %1:").arg(root.currentRow && root.currentRow.name ? root.currentRow.name : qsTr("(unnamed)"))
                                 }
-                                onClicked: root.focusValidationIssue(validationIssue.modelData)
+                                Label {
+                                    objectName: "matchLabel"
+                                    height: clearMappingButton.implicitHeight
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: root.matchStateLabel(mappingPanel.mappingState)
+                                    color: root.palette.placeholderText
+                                }
+                                Button {
+                                    objectName: "changeMappingButton"
+                                    text: qsTr("Change mapping")
+                                    visible: root.offersMappingEdit(mappingPanel.mappingState)
+                                    Accessible.name: qsTr("Change the scenario mapping")
+                                    onClicked: mappingPanel.candidatesArmed = !mappingPanel.candidatesArmed
+                                }
+                                Button {
+                                    id: clearMappingButton
+                                    objectName: "clearMappingButton"
+                                    text: qsTr("Clear mapping")
+                                    visible: root.offersMappingEdit(mappingPanel.mappingState)
+                                    Accessible.name: qsTr("Clear the scenario mapping")
+                                    onClicked: root.requestMappingEdit(root.currentEntryId, "")
+                                }
                             }
+                            Repeater {
+                                model: root.currentEntryId !== "" ? mappingPanel.candidates : []
+                                delegate: ItemDelegate {
+                                    id: candidateOption
+                                    required property var modelData
+                                    objectName: "candidateOption_" + candidateOption.modelData.hash
+                                    Layout.fillWidth: true
+                                    enabled: mappingPanel.armed
+                                    opacity: mappingPanel.armed ? 1 : 0.4
+                                    text: root.candidateText(candidateOption.modelData)
+                                    Accessible.name: qsTr("Map to %1").arg(candidateOption.text)
+                                    onClicked: root.requestMappingEdit(root.currentEntryId, candidateOption.modelData.hash)
+                                }
+                            }
+                        }
+                    }
+
+                    // ---- Validation -----------------------------------------------------------------
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(validationPanel.implicitHeight, 96)
+                        visible: root.vm().validationIssues.length > 0
+                        clip: true
+                        ColumnLayout {
+                            id: validationPanel
+                            objectName: "validationPanel"
+                            spacing: 0
+
+                            Repeater {
+                                model: root.vm().validationIssues
+                                delegate: Button {
+                                    id: validationIssue
+                                    required property var modelData
+                                    required property int index
+                                    objectName: "validationIssue_" + index
+                                    flat: true
+                                    Layout.fillWidth: true
+                                    Accessible.name: validationIssue.modelData.message
+                                    contentItem: Text {
+                                        text: "• " + validationIssue.modelData.message
+                                        horizontalAlignment: Text.AlignLeft
+                                        elide: Text.ElideRight
+                                        color: validationIssue.palette.buttonText
+                                    }
+                                    onClicked: root.focusValidationIssue(validationIssue.modelData)
+                                }
+                            }
+                        }
+                    }
+
+                    BenchmarkEditorTable {
+                        id: editorTable
+                        objectName: "editorTable"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        manager: root.benchmarkManagerVm
+                        onColorSwatchRequested: (kind, id, color) => root.openColorDialog(kind, id, color)
+                        onAddScenarioRequested: {
+                            const result = root.runTableCommand(() => root.vm().addUnplayedScenario(""))
+                            if (result && result.ok && result.createdId)
+                                Qt.callLater(() => editorTable.beginScenarioEdit(result.createdId))
+                        }
+                        onAddCategoryRequested: name => {
+                            editorTable.creationAccepted = root.runTableCommand(() => root.vm().addCategory(name)).ok
+                        }
+                        onAddSubcategoryRequested: (categoryId, name) => {
+                            editorTable.creationAccepted = root.requestSubcategory(categoryId, name)
+                        }
+                        onAddRankRequested: name => {
+                            editorTable.creationAccepted = root.runTableCommand(() => root.vm().addTier(name)).ok
+                        }
+                        onMoveSelectionRequested: (entryIds, targetId, beforeId) => root.runTableCommand(
+                            () => root.vm().assignScenarios(entryIds, targetId, beforeId))
+                        onScenarioIdentityRequested: (entryId, name, hash) => root.requestScenarioIdentity(entryId, name, hash)
+                        onRenameGroupRequested: (groupId, name) => root.runTableCommand(
+                            () => root.vm().renameGroup(groupId, name))
+                        onRowContextRequested: (entryId, x, y) => {
+                            rowContextMenu.popup(editorTable, x, y)
+                        }
+                        onGroupContextRequested: (groupId, x, y) => {
+                            editorTable.focusedGroupId = groupId
+                            groupContextMenu.popup(editorTable, x, y)
+                        }
+                        onRankContextRequested: (tierId, x, y) => {
+                            editorTable.focusedTierId = tierId
+                            rankContextMenu.popup(editorTable, x, y)
                         }
                     }
                 }
 
-                BenchmarkEditorTable {
-                    id: editorTable
-                    objectName: "editorTable"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    manager: root.benchmarkManagerVm
-                    onColorSwatchRequested: (kind, id, color) => root.openColorDialog(kind, id, color)
-                    onAddScenarioRequested: {
-                        const result = root.runTableCommand(() => root.vm().addUnplayedScenario(""))
-                        if (result && result.ok && result.createdId)
-                            Qt.callLater(() => editorTable.beginScenarioEdit(result.createdId))
-                    }
-                    onAddCategoryRequested: name => {
-                        editorTable.creationAccepted = root.runTableCommand(() => root.vm().addCategory(name)).ok
-                    }
-                    onAddSubcategoryRequested: (categoryId, name) => {
-                        editorTable.creationAccepted = root.requestSubcategory(categoryId, name)
-                    }
-                    onAddRankRequested: name => {
-                        editorTable.creationAccepted = root.runTableCommand(() => root.vm().addTier(name)).ok
-                    }
-                    onMoveSelectionRequested: (entryIds, targetId, beforeId) => root.runTableCommand(
-                        () => root.vm().assignScenarios(entryIds, targetId, beforeId))
-                    onScenarioIdentityRequested: (entryId, name, hash) => root.requestScenarioIdentity(entryId, name, hash)
-                    onRenameGroupRequested: (groupId, name) => root.runTableCommand(
-                        () => root.vm().renameGroup(groupId, name))
-                    onRowContextRequested: (entryId, x, y) => {
-                        rowContextMenu.popup(editorTable, x, y)
-                    }
-                    onGroupContextRequested: (groupId, x, y) => {
-                        editorTable.focusedGroupId = groupId
-                        groupContextMenu.popup(editorTable, x, y)
-                    }
-                    onRankContextRequested: (tierId, x, y) => {
-                        editorTable.focusedTierId = tierId
-                        rankContextMenu.popup(editorTable, x, y)
-                    }
+                Label {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 20, 360)
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    visible: !root.vm().hasDraft
+                    text: qsTr("Create, import, or open a benchmark to edit it.")
+                    color: root.palette.placeholderText
                 }
-            }
-
-            Label {
-                visible: !root.vm().hasDraft
-                text: qsTr("Create, import, or open a benchmark to edit it.")
-                color: root.palette.placeholderText
             }
         }
     }

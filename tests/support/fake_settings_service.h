@@ -57,6 +57,16 @@ namespace ksv::tests_support {
             return legacyDisabledColumns;
         }
 
+        std::string lastSelectedBenchmarkId;
+        int lastSelectedBenchmarkWrites = 0;
+
+        [[nodiscard]] std::string getLastSelectedBenchmarkId() const override { return lastSelectedBenchmarkId; }
+
+        void setLastSelectedBenchmarkId(const std::string &id) override {
+            lastSelectedBenchmarkId = id;
+            ++lastSelectedBenchmarkWrites;
+        }
+
     private:
         std::vector<std::function<void()>> kovaaks_dirs_callbacks;
         std::vector<std::function<void()>> profile_path_callbacks;

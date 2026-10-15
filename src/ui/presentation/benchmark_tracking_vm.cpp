@@ -91,13 +91,6 @@ namespace ksv::presentation {
             return entries;
         }
 
-        void collectGroupNames(const std::vector<domain::GroupProjection> &groups, QHash<QString, QString> &out) {
-            for (const auto &group: groups) {
-                out.insert(q(group.id.value), q(group.name));
-                collectGroupNames(group.subgroups, out);
-            }
-        }
-
         QString deriveState(const application::BenchmarkWorkspaceSnapshot &snapshot) {
             switch (snapshot.availability) {
                 case application::BenchmarkTrackingState::NoSelection: {
@@ -126,7 +119,8 @@ namespace ksv::presentation {
             if (state == QLatin1String("noSelection"))
                 return QObject::tr("Select a benchmark to see your tracking status.");
             if (state == QLatin1String("unavailable"))
-                return QObject::tr("The selected benchmark is no longer available. Open the Benchmark Manager to repair it.");
+                return QObject::tr("The selected benchmark is no longer available. Its file may have been deleted or "
+                                   "may have a problem.");
             if (state == QLatin1String("incomplete"))
                 return QObject::tr("This benchmark's setup is incomplete. Finish it in the Benchmark Manager to unlock ranks.");
             return QObject::tr("Tracking is up to date.");
@@ -136,10 +130,12 @@ namespace ksv::presentation {
     BenchmarkTrackingViewModel::BenchmarkTrackingViewModel(
         std::shared_ptr<application::IBenchmarkTrackingUseCase> useCase, QObject *parent)
         : QObject(parent), m_useCase(std::move(useCase)),
+          // Both history metrics are one point per UTC day, so the axis never ticks in hours.
+          m_historyXAxis(DateTimeAxis::Options{.wholeDays = true}),
           m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, m_historyXAxis, this)),
           m_playtimeHistory(
               new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, m_historyXAxis, this)),
-          m_breakdown(new BenchmarkBreakdownModel(this)) {
+          m_progressGrid(new BenchmarkProgressGridModel(this)) {
         m_useCase->onChanged([this] { rebuild(); });
         rebuild();
     }
@@ -150,9 +146,7 @@ namespace ksv::presentation {
 
     void BenchmarkTrackingViewModel::clearSelection() { m_useCase->clearSelection(); }
 
-    void BenchmarkTrackingViewModel::setExpanded(const QString &nodeId, const bool expanded) {
-        m_breakdown->setExpanded(nodeId, expanded);
-    }
+    void BenchmarkTrackingViewModel::selectDefaultBenchmark() { m_useCase->selectDefault(); }
 
     void BenchmarkTrackingViewModel::rebuild() {
         const application::BenchmarkWorkspaceSnapshot &snapshot = m_useCase->snapshot();
@@ -175,64 +169,68 @@ namespace ksv::presentation {
             for (const auto &issue: snapshot.selectedLoaded->completeness.issues)
                 m_completenessIssues << benchmarkIssueText(issue.code);
 
-        std::vector<QString> tierNames;
+        std::vector<RankTier> rankTiers;
         QHash<QString, QString> tierNameById;
+        QHash<QString, QString> tierColorById;
         const auto indexTiers = [&](const std::vector<domain::Tier> &tiers) {
             for (const auto &tier: tiers) {
-                tierNames.push_back(q(tier.name));
+                const QColor readable = readableTextColor(tier.color);
+                rankTiers.push_back({q(tier.name), readable});
                 tierNameById.insert(q(tier.id.value), q(tier.name));
+                tierColorById.insert(q(tier.id.value), readable.name());
             }
         };
         if (projection) indexTiers(projection->tiers);
         else if (definition) indexTiers(definition->tiers);
 
+        // Sets `name`/`color` to the tier's, or to `fallback` and no colour when the id is absent.
+        const auto resolveTier = [&](const std::optional<domain::TierId> &id, const QString &fallback,
+                                     QString &name, QString &color) {
+            name = fallback;
+            color.clear();
+            if (!id) return;
+            const QString key = q(id->value);
+            if (!tierNameById.contains(key)) return;
+            name = tierNameById.value(key);
+            color = tierColorById.value(key);
+        };
+
         const QString unavailableText = tr("Unavailable");
         if (trackable && projection) {
-            m_attainedRank = projection->attainedRank
-                                 ? tierNameById.value(q(projection->attainedRank->value), tr("Unranked"))
-                                 : tr("Unranked");
-            m_completedRank = projection->completedRank
-                                  ? tierNameById.value(q(projection->completedRank->value), tr("None completed"))
-                                  : tr("None completed");
-            m_nextTier = projection->nextTier
-                             ? tierNameById.value(q(projection->nextTier->value), tr("Highest tier attained"))
-                             : tr("Highest tier attained");
-            m_averageRank = projection->averageRank ? formatBenchmarkNumber(*projection->averageRank) : unavailableText;
+            resolveTier(projection->attainedRank, tr("Unranked"), m_attainedRank, m_attainedRankColor);
+            resolveTier(projection->completedRank, tr("None completed"), m_completedRank, m_completedRankColor);
+            resolveTier(projection->nextTier, tr("Highest tier attained"), m_nextTier, m_nextTierColor);
+            std::vector<QString> tierNames;
+            tierNames.reserve(rankTiers.size());
+            for (const auto &tier: rankTiers) tierNames.push_back(tier.name);
+            m_averageRank = projection->averageRank ? describeAverageRank(*projection->averageRank, tierNames)
+                                                    : unavailableText;
         } else {
             m_attainedRank = unavailableText;
             m_completedRank = unavailableText;
             m_nextTier = unavailableText;
             m_averageRank = unavailableText;
+            m_attainedRankColor.clear();
+            m_completedRankColor.clear();
+            m_nextTierColor.clear();
         }
+        // The summary's average-rank bar: averageRank is the mean normalized rank, so exactly k
+        // (tier k attained) ends at tier k's chunk's right edge; the completed rank ticks its chunk's end.
+        m_averageRankFills.clear();
+        m_completedRankPosition = -1.0;
+        if (trackable && projection && projection->averageRank)
+            for (const double fill: rankChunkFills(*projection->averageRank, projection->tiers.size()))
+                m_averageRankFills.push_back(fill);
+        if (trackable && projection && projection->completedRank)
+            for (std::size_t index = 0; index < projection->tiers.size(); ++index)
+                if (projection->tiers[index].id == *projection->completedRank)
+                    m_completedRankPosition = static_cast<double>(index + 1);
+
         m_totalPlaytime = projection ? formatDuration(projection->totalPlaytimeSeconds) : QString();
         m_scenariosAtNextTier = projection ? projection->scenariosAtNextTier : 0;
+        m_hasNextTier = trackable && projection && projection->nextTier.has_value();
+        m_nextTierBlockerCount = m_hasNextTier ? static_cast<int>(projection->nextTierBlockers.size()) : 0;
         m_scenarioCount = projection ? static_cast<int>(projection->scenarios.size()) : 0;
-
-        m_blockers.clear();
-        if (trackable && projection) {
-            QHash<QString, QString> scenarioNames;
-            for (const auto &scenario: projection->scenarios)
-                scenarioNames.insert(q(scenario.entryId.value), q(scenario.name));
-            QHash<QString, QString> groupNames;
-            collectGroupNames(projection->categories, groupNames);
-
-            for (const auto &blocker: projection->nextTierBlockers) {
-                QVariantMap map;
-                map[QStringLiteral("kind")] = blocker.entryId.value.empty() && blocker.group
-                                                  ? QStringLiteral("group")
-                                                  : QStringLiteral("scenario");
-                map[QStringLiteral("entryId")] = q(blocker.entryId.value);
-                map[QStringLiteral("scenarioName")] = scenarioNames.value(q(blocker.entryId.value),
-                                                                          q(blocker.entryId.value));
-                map[QStringLiteral("groupName")] =
-                    blocker.group ? groupNames.value(q(blocker.group->value), q(blocker.group->value))
-                                  : QString();
-                map[QStringLiteral("currentText")] =
-                    blocker.current ? formatBenchmarkNumber(*blocker.current) : tr("Unplayed");
-                map[QStringLiteral("requiredText")] = formatBenchmarkNumber(blocker.required);
-                m_blockers.push_back(map);
-            }
-        }
 
         const bool rankPresent = trackable && projection && !projection->averageRankHistory.empty();
         std::vector<qint64> unionMs;
@@ -260,10 +258,14 @@ namespace ksv::presentation {
             const auto [lo, hi] = std::minmax_element(unionMs.begin(), unionMs.end());
             std::ignore = m_historyXAxis.setEpochMillisecondsRange(*lo, *hi);
         }
-        m_rankHistory->update(rankPoints, rankPresent, tierNames);
+        // A personal-best rank never lapses: hold it flat from its last change to the right-hand edge
+        // of the plotted range, so the current rank reads at the edge.
+        if (rankPresent && rankPoints.last().x() < m_historyXAxis.max())
+            rankPoints.append(QPointF(m_historyXAxis.max(), rankPoints.last().y()));
+        m_rankHistory->update(rankPoints, rankPresent, rankTiers);
         m_playtimeHistory->update(playtimePoints, playtimePresent, {});
 
-        m_breakdown->reset(definition, projection);
+        m_progressGrid->reset(definition, projection);
 
         emit changed();
     }

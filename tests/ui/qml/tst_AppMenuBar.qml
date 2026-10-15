@@ -72,8 +72,8 @@ TestCase {
         let emitted = 0
         menuBar.setSourceDirRequested.connect(() => emitted++)
 
-        const item = findMenuItemByText(menuBar.menuAt(0), "Set Source &Directory")
-        verify(item !== null, "no menu item with text 'Set Source Directory' found in menuAt(0)")
+        const item = findMenuItemByText(menuBar.menuAt(0), "Set Source &Directory...")
+        verify(item !== null, "no menu item with text 'Set Source Directory...' found in menuAt(0)")
         item.action.trigger()
 
         compare(emitted, 1, "setSourceDirRequested should fire exactly once when its action is triggered")
@@ -86,8 +86,8 @@ TestCase {
         let emitted = 0
         menuBar.settingsRequested.connect(() => emitted++)
 
-        const item = findMenuItemByText(menuBar.menuAt(0), "&Settings")
-        verify(item !== null, "no menu item with text 'Settings' found in menuAt(0)")
+        const item = findMenuItemByText(menuBar.menuAt(0), "&Settings...")
+        verify(item !== null, "no menu item with text 'Settings...' found in menuAt(0)")
         item.action.trigger()
 
         compare(emitted, 1, "settingsRequested should fire exactly once when its action is triggered")
@@ -114,11 +114,33 @@ TestCase {
         let emitted = 0
         menuBar.aboutRequested.connect(() => emitted++)
 
-        const item = findMenuItemByText(menuBar.menuAt(2), "&About")
-        verify(item !== null, "no menu item with text '&About' found in menuAt(2)")
+        const item = findMenuItemByText(menuBar.menuAt(3), "&About")
+        verify(item !== null, "no menu item with text '&About' found in menuAt(3)")
         item.action.trigger()
 
         compare(emitted, 1, "aboutRequested should fire exactly once when its action is triggered")
+    }
+
+    // Ctrl+O and Ctrl+, live on the File menu's actions, so the menu shows them next to the items.
+    function test_fileMenuActionsCarryTheirShortcuts() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        compare(String(findMenuItemByText(menuBar.menuAt(0), "&Load Performance File...").action.shortcut), "Ctrl+O")
+        compare(String(findMenuItemByText(menuBar.menuAt(0), "&Settings...").action.shortcut), "Ctrl+,")
+    }
+
+    // Every File-menu item that opens a dialog or picker says so with "...".
+    function test_dialogItemsEndInEllipsis() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        for (const text of ["Set Source &Directory...", "&Load Performance File...", "&Settings..."])
+            verify(findMenuItemByText(menuBar.menuAt(0), text) !== null, "no File menu item '" + text + "'")
+    }
+
+    // Windows convention: File, View, then the app's own menus, Help last.
+    function test_menusFollowWindowsOrder() {
+        const menuBar = createTemporaryObject(menuBarComponent, testCase)
+        const titles = []
+        for (let i = 0; i < menuBar.count; ++i) titles.push(menuBar.menuAt(i).title)
+        compare(titles, ["&File", "&View", "&Benchmarks", "&Help"])
     }
 
     function test_unrelatedActions_doNotEmitEitherSignal() {
@@ -178,7 +200,7 @@ TestCase {
         historyItem.action.trigger()
         compare(fakeViewSettings.scenarioHistoryGraphVisible, false)
 
-        const controlPanelItem = findMenuItemByText(viewMenu, "Control Panel")
+        const controlPanelItem = findMenuItemByText(viewMenu, "Graph Line Toggles")
         verify(controlPanelItem !== null)
         controlPanelItem.action.trigger()
         compare(fakeViewSettings.controlPanelVisible, false)
@@ -187,6 +209,51 @@ TestCase {
         verify(selectionPanelItem !== null)
         selectionPanelItem.action.trigger()
         compare(fakeViewSettings.selectionPanelVisible, false)
+    }
+
+    function indexOfMenuItem(menu, text) {
+        for (let i = 0; i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.text === text) return i
+        }
+        return -1
+    }
+
+    // The graph entries follow the panels' top-to-bottom order: the two about the selected
+    // scenario, then the all-scenario playtime graph.
+    function test_viewMenuGraphEntriesFollowPanelOrder() {
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const viewMenu = menuBar.menuAt(1)
+        const order = ["Scenario Graph", "Scenario Graph Lines", "Scenario History", "Scenario History Lines",
+                       "Playtime Graph"]
+        let previous = -1
+        for (const text of order) {
+            const index = indexOfMenuItem(viewMenu, text)
+            verify(index > previous, "'" + text + "' at " + index + " should come after index " + previous)
+            previous = index
+        }
+    }
+
+    // Where an item's label text starts: the item's left padding plus the content item's own
+    // (Fusion indents a checkable item's label past its check box there).
+    function labelX(menu, text) {
+        const item = findMenuItemByText(menu, text)
+        verify(item !== null, "no menu item '" + text + "'")
+        return item.leftPadding + item.contentItem.leftPadding
+    }
+
+    // Checkable items, submenus and plain actions share one label column in the View menu and
+    // in its mixed Scenario Graph Lines submenu.
+    function test_viewMenuLabelsStartAtTheSameX() {
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const viewMenu = menuBar.menuAt(1)
+        const checkableX = labelX(viewMenu, "Scenario Graph")
+        verify(checkableX > findMenuItemByText(viewMenu, "Scenario Graph").padding, "label indented past the check box")
+        fuzzyCompare(labelX(viewMenu, "Scenario Graph Lines"), checkableX, 1)
+        fuzzyCompare(labelX(viewMenu, "Selection Panel Sections"), checkableX, 1)
+
+        const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
+        fuzzyCompare(labelX(linesMenu, "Configure Lines..."), labelX(linesMenu, "Score"), 1)
     }
 
     function test_scenarioGraphLinesSubmenu_enabledTracksMasterToggle() {

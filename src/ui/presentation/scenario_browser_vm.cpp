@@ -49,9 +49,19 @@ namespace ksv::presentation {
     void ScenarioBrowserViewModel::refreshScenarioModel() {
         auto summaries = m_scenario_browser_use_case->getScenarioSummaries();
         applyScenarioSort(summaries);
+        const bool had_scenarios = hasScenarios();
         m_all_summaries = summaries;
         updateLongestScenarioName();
         applyFilter();
+        if (had_scenarios != hasScenarios()) emit hasScenariosChanged();
+
+        // A rebuilt or cleared profile can drop the active scenario; keep listing
+        // nothing rather than a scenario that no longer exists.
+        const auto active_hash = m_active_scenario_hash.toStdString();
+        if (!active_hash.empty() && std::ranges::none_of(m_all_summaries, [&active_hash](const auto &summary) {
+                return summary.scenario_id.hash == active_hash;
+            }))
+            setActiveScenario({}, {});
     }
 
     void ScenarioBrowserViewModel::updateLongestScenarioName() {
@@ -68,6 +78,17 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::activateScenario(const QString &hash, const QString &name) {
+        setActiveScenario(hash, name);
+        // Bring the graphs to the scenario too. This may synchronously notify a current
+        // run change, which refresh() then finds already matching the active scenario.
+        if (!hash.isEmpty())
+            m_scenario_browser_use_case->selectScenario(domain::ScenarioId{
+                .name = name.toStdString(),
+                .hash = hash.toStdString(),
+            });
+    }
+
+    void ScenarioBrowserViewModel::setActiveScenario(const QString &hash, const QString &name) {
         if (m_active_scenario_hash == hash) return;
         m_active_scenario_hash = hash;
         m_active_scenario_name = name;
@@ -102,7 +123,7 @@ namespace ksv::presentation {
     }
 
     void ScenarioBrowserViewModel::refreshCurrentRun() {
-        const auto &run_id = m_scenario_browser_use_case->getCurrentRun().run_id;
+        const auto run_id = m_scenario_browser_use_case->getCurrentRun().run_id;
         const QString hash = QString::fromStdString(run_id.scenario_id.hash);
         const double start_time_ms = static_cast<double>(run_id.start_time);
         if (m_current_run_hash == hash && m_current_run_start_time_ms == start_time_ms)
@@ -111,6 +132,11 @@ namespace ksv::presentation {
         m_current_run_hash = hash;
         m_current_run_start_time_ms = start_time_ms;
         emit currentRunChanged();
+
+        // Only a change of current run moves the active scenario, so a refresh for any
+        // other reason never overrides what the user picked.
+        if (!hash.isEmpty())
+            setActiveScenario(hash, QString::fromStdString(run_id.scenario_id.name));
     }
 
     void ScenarioBrowserViewModel::setRunSort(const RunSortField field, const bool ascending) {

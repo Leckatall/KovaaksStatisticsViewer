@@ -1,6 +1,7 @@
 #ifndef KOVAAKSSTATSVIEWER_BENCHMARK_HISTORY_VM_H
 #define KOVAAKSSTATSVIEWER_BENCHMARK_HISTORY_VM_H
 
+#include <QColor>
 #include <QList>
 #include <QPointF>
 #include <QString>
@@ -18,6 +19,12 @@ namespace ksv::presentation {
     // both with the same UTC-day X axis while each keeps its own series name, transform, and Y axis.
     // series() is empty whenever the metric is suppressed or has no points, so an incomplete
     // definition or an empty history never renders a line that resembles data.
+    // One tier of the rank axis, bottom (lowest) first; tier k (1-based) sits at y = k.
+    struct RankTier {
+        QString name;
+        QColor color;
+    };
+
     class BenchmarkHistoryViewModel final : public GraphViewModelBase {
         Q_OBJECT
         Q_PROPERTY(bool hasData READ hasData NOTIFY dataUpdated)
@@ -50,11 +57,13 @@ namespace ksv::presentation {
         // Called by BenchmarkTrackingViewModel inside one atomic rebuild, after it has updated the
         // shared X axis. `rawPoints` carry UTC-midnight epoch-ms X and the metric's raw Y (rank
         // position, or playtime seconds). `present` is false when the metric is suppressed;
-        // `rankTierNames` is only read for AverageRank and sizes the 0..tierCount rank axis.
-        void update(const QList<QPointF> &rawPoints, bool present, const std::vector<QString> &rankTierNames);
+        // `rankTiers` is only read for AverageRank: it sizes the 0..tierCount rank axis, with a tick
+        // at every tier, and gives each tier a reference line in its colour. The rank line itself
+        // has no colour of its own (neutral), so it is never mistaken for a tier line.
+        void update(const QList<QPointF> &rawPoints, bool present, const std::vector<RankTier> &rankTiers);
 
     private:
-        [[nodiscard]] static ValueAxis rankYAxis(const std::vector<QString> &tierNames);
+        [[nodiscard]] static ValueAxis rankYAxis(const std::vector<RankTier> &tiers);
 
         Metric m_metric;
         SeriesModel *m_series;

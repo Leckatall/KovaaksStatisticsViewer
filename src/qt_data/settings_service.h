@@ -26,6 +26,12 @@ namespace ksv::qt_data {
         void setSeriesConfigDocument(const std::string &json) override;
         void quarantineSeriesConfigDocument(const std::string &invalidJson) override;
         [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override;
+        [[nodiscard]] std::string getLastSelectedBenchmarkId() const override;
+        void setLastSelectedBenchmarkId(const std::string &id) override;
+
+        // The directory getKovaaksDirs() reports when none is configured. Defaults
+        // to the standard Steam install path; dev tools point it into a sandbox.
+        void setFallbackKovaaksDir(const std::string &dir);
 
         void onProfilePathChanged(std::function<void()> callback) override {
             m_profile_path_callbacks.push_back(std::move(callback));
@@ -41,6 +47,7 @@ namespace ksv::qt_data {
 
         QSettings m_settings;
         mutable QMutex m_settings_mutex;
+        std::string m_fallback_kovaaks_dir = "C:/Program Files (x86)/Steam/steamapps/common/FPSAimTrainer";
         std::vector<std::function<void()>> m_profile_path_callbacks;
         std::vector<std::function<void()>> m_kovaaks_dirs_callbacks;
     };

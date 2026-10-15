@@ -181,9 +181,9 @@ Implementation anchors: [`src/data/formats/protobuf/schema/profile.proto`](../..
 
 ## Build, deployment, and development topology
 
-The application uses C++20, CMake, Ninja, Qt 6.11.1, MinGW, and vcpkg-provided Protocol Buffers. `scripts/toolchain.defaults.env` records the canonical Windows toolchain, while process environment values and the ignored `scripts/toolchain.local.env` provide controlled overrides.
+The application uses C++20, CMake, Ninja, Qt 6.11.1, MinGW, and vcpkg-provided Protocol Buffers. `scripts/toolchain.defaults.env` records the canonical Windows toolchain, while process environment values and the ignored `scripts/toolchain.local.env` provide controlled overrides. A linked git worktree without its own `toolchain.local.env` reads the main worktree's, so one machine-local file serves every checkout.
 
-The sanctioned Debug path is `uv run python scripts/build_and_test.py`. It configures and validates a repository-local `build-agent/` tree, fingerprints the resolved tools and runtime dependencies before incremental reuse, and retains full phase logs under `.temp/build-and-test/`. The runner consumes native stdout itself: success is summarized, while compiler, linker, GoogleTest, and QML failures are selected and printed without a separate log-read step. Focused logical scopes run the corresponding GoogleTest or Qt Quick Test executable with low-noise framework settings; the default path builds every target and runs the complete CTest suite. Builds are fixed at eight parallel compiler jobs. Protocol Buffer generation uses a build-local `protoc` runtime assembled from the resolved vcpkg and compiler installations, so configuring does not mutate the dependency installation.
+The sanctioned Debug path is `uv run python scripts/build_and_test.py`. It configures and validates a repository-local `build-agent/` tree, fingerprints the resolved tools and runtime dependencies before incremental reuse, and retains full phase logs under `.temp/build-and-test/`. The runner consumes native stdout itself: success is summarized, while compiler, linker, GoogleTest, and QML failures are selected and printed without a separate log-read step. Focused logical scopes run the corresponding GoogleTest or Qt Quick Test executable with low-noise framework settings; the default path builds every target and runs the complete CTest suite. Parallel compiler jobs (`KSV_BUILD_JOBS`, default eight) and the process priority of everything the runner starts (`KSV_BUILD_PRIORITY`) are machine settings resolved from the same layered files and environment; they are deliberately not command-line options and not part of the toolchain fingerprint. Protocol Buffer generation uses a build-local `protoc` runtime assembled from the resolved vcpkg and compiler installations, so configuring does not mutate the dependency installation.
 
 The Release packaging script:
 
@@ -195,9 +195,9 @@ The Release packaging script:
 
 The compiler-matched MinGW DLL copies are part of the deployment architecture: multiple installed MinGW runtimes can otherwise satisfy DLL lookup with ABI-incompatible files.
 
-Tests mirror the production layers, with integration tests constructing the real object graph against fixture files. Qt Quick Tests cover QML behavior. The development-only gallery loads the real application wiring against disposable data and supports QML preview; it is excluded from Release builds.
+Tests mirror the production layers, with integration tests constructing the real object graph against fixture files. Qt Quick Tests cover QML behavior. The development-only gallery loads the real application wiring against disposable data and supports QML preview. The development-only UI driver (`ksv_driver`, driven by `scripts/ui_driver.py`) also runs the real wiring against a disposable session. It serves screenshots, item-tree inspection and synthesized input over a localhost socket, so agents can see and exercise the UI. Both tools are excluded from Release builds.
 
-Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/build_and_test.py`](../../scripts/build_and_test.py), [`scripts/toolchain.defaults.env`](../../scripts/toolchain.defaults.env), [`scripts/package-release.ps1`](../../scripts/package-release.ps1), [`tests/`](../../tests/), and [`tools/gallery/`](../../tools/gallery/).
+Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/build_and_test.py`](../../scripts/build_and_test.py), [`scripts/toolchain.defaults.env`](../../scripts/toolchain.defaults.env), [`scripts/package-release.ps1`](../../scripts/package-release.ps1), [`tests/`](../../tests/), [`tools/gallery/`](../../tools/gallery/), and [`tools/driver/`](../../tools/driver/).
 
 ## Cross-cutting quality responses
 

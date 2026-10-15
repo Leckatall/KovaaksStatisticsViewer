@@ -18,6 +18,8 @@ namespace ksv::presentation {
     // Calendar-date vs rolling-average playtime. Adapts IPlaytimeGraphUseCase output for GraphCanvas.
     class PlaytimeGraphViewModel : public GraphViewModelBase {
         Q_OBJECT
+        // False when there is no playtime to plot; the panel then shows an empty state, not axes.
+        Q_PROPERTY(bool hasData READ hasData NOTIFY dataUpdated)
 
     public:
         // Column ids for the two axes; Playtime is the only drawn series.
@@ -35,6 +37,8 @@ namespace ksv::presentation {
         [[nodiscard]] const Axis &xAxis() const override { return m_xAxis; }
 
         [[nodiscard]] int yAxisColumn() const override { return Playtime; }
+
+        [[nodiscard]] bool hasData() const { return !m_series->points.isEmpty(); }
 
     public slots:
         // Re-pulls rolling average when profile reloads

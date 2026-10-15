@@ -11,14 +11,14 @@
 
 #include "app/contracts/benchmark_workspace_snapshot.h"
 #include "app/contracts/i_benchmark_tracking_use_case.h"
-#include "benchmark_breakdown_model.h"
 #include "benchmark_history_vm.h"
+#include "benchmark_progress_grid_model.h"
 #include "date_time_axis.h"
 
 namespace ksv::presentation {
     // Adapts one IBenchmarkTrackingUseCase revision into the benchmark workspace's QML surface:
-    // selector entries, explicit state, status summary, blockers, and three owned presentation-only
-    // child models (two history graphs and the hierarchical breakdown). Its only dependency is the
+    // selector entries, explicit state, status summary, and three owned presentation-only child
+    // models (two history graphs and the scenario progress grid). Its only dependency is the
     // use case - never a service, profile, or repository. After an onChanged notification it reads
     // one BenchmarkWorkspaceSnapshot, builds every replacement value plus all child models, installs
     // them, and only then emits changed(), so QML never sees a new state over a stale child model.
@@ -33,14 +33,28 @@ namespace ksv::presentation {
         Q_PROPERTY(QString attainedRank READ attainedRank NOTIFY changed)
         Q_PROPERTY(QString completedRank READ completedRank NOTIFY changed)
         Q_PROPERTY(QString nextTier READ nextTier NOTIFY changed)
+        // Readable text colours ("#rrggbb") of the tiers named by attainedRank/completedRank/
+        // nextTier, or "" when the value is not a tier (Unranked, None completed, ...).
+        Q_PROPERTY(QString attainedRankColor READ attainedRankColor NOTIFY changed)
+        Q_PROPERTY(QString completedRankColor READ completedRankColor NOTIFY changed)
+        Q_PROPERTY(QString nextTierColor READ nextTierColor NOTIFY changed)
+        // The average rank in words ("Bronze · 60% to Silver"; see describeAverageRank), or
+        // "Unavailable". Never the bare number.
         Q_PROPERTY(QString averageRank READ averageRank NOTIFY changed)
+        // The average rank as tier bar chunk fills (rankChunkFills), and the completed rank as a
+        // position on that bar's chunk scale (the end of its chunk), or -1 when none is completed.
+        Q_PROPERTY(QVariantList averageRankFills READ averageRankFills NOTIFY changed)
+        Q_PROPERTY(double completedRankPosition READ completedRankPosition NOTIFY changed)
         Q_PROPERTY(QString totalPlaytime READ totalPlaytime NOTIFY changed)
         Q_PROPERTY(int scenariosAtNextTier READ scenariosAtNextTier NOTIFY changed)
+        // Scenarios that keep the benchmark from nextTier: exactly the rows the progress grid marks as
+        // blockers. hasNextTier is false when the top tier is attained (or the benchmark is not trackable).
+        Q_PROPERTY(int nextTierBlockerCount READ nextTierBlockerCount NOTIFY changed)
+        Q_PROPERTY(bool hasNextTier READ hasNextTier NOTIFY changed)
         Q_PROPERTY(int scenarioCount READ scenarioCount NOTIFY changed)
-        Q_PROPERTY(QVariantList blockers READ blockers NOTIFY changed)
         Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *rankHistory READ rankHistory CONSTANT)
         Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *playtimeHistory READ playtimeHistory CONSTANT)
-        Q_PROPERTY(ksv::presentation::BenchmarkBreakdownModel *breakdown READ breakdown CONSTANT)
+        Q_PROPERTY(ksv::presentation::BenchmarkProgressGridModel *progressGrid READ progressGrid CONSTANT)
 
     public:
         explicit BenchmarkTrackingViewModel(std::shared_ptr<application::IBenchmarkTrackingUseCase> useCase,
@@ -55,18 +69,26 @@ namespace ksv::presentation {
         [[nodiscard]] QString attainedRank() const { return m_attainedRank; }
         [[nodiscard]] QString completedRank() const { return m_completedRank; }
         [[nodiscard]] QString nextTier() const { return m_nextTier; }
+        [[nodiscard]] QString attainedRankColor() const { return m_attainedRankColor; }
+        [[nodiscard]] QString completedRankColor() const { return m_completedRankColor; }
+        [[nodiscard]] QString nextTierColor() const { return m_nextTierColor; }
         [[nodiscard]] QString averageRank() const { return m_averageRank; }
+        [[nodiscard]] QVariantList averageRankFills() const { return m_averageRankFills; }
+        [[nodiscard]] double completedRankPosition() const { return m_completedRankPosition; }
         [[nodiscard]] QString totalPlaytime() const { return m_totalPlaytime; }
         [[nodiscard]] int scenariosAtNextTier() const { return m_scenariosAtNextTier; }
+        [[nodiscard]] int nextTierBlockerCount() const { return m_nextTierBlockerCount; }
+        [[nodiscard]] bool hasNextTier() const { return m_hasNextTier; }
         [[nodiscard]] int scenarioCount() const { return m_scenarioCount; }
-        [[nodiscard]] QVariantList blockers() const { return m_blockers; }
         [[nodiscard]] BenchmarkHistoryViewModel *rankHistory() const { return m_rankHistory; }
         [[nodiscard]] BenchmarkHistoryViewModel *playtimeHistory() const { return m_playtimeHistory; }
-        [[nodiscard]] BenchmarkBreakdownModel *breakdown() const { return m_breakdown; }
+        [[nodiscard]] BenchmarkProgressGridModel *progressGrid() const { return m_progressGrid; }
 
         Q_INVOKABLE void selectBenchmark(const QString &id);
         Q_INVOKABLE void clearSelection();
-        Q_INVOKABLE void setExpanded(const QString &nodeId, bool expanded);
+        // Called when the workspace is shown with nothing selected; the use case decides whether
+        // a remembered or sole benchmark should be shown.
+        Q_INVOKABLE void selectDefaultBenchmark();
 
     signals:
         void changed();
@@ -80,7 +102,7 @@ namespace ksv::presentation {
         DateTimeAxis m_historyXAxis;
         BenchmarkHistoryViewModel *m_rankHistory;
         BenchmarkHistoryViewModel *m_playtimeHistory;
-        BenchmarkBreakdownModel *m_breakdown;
+        BenchmarkProgressGridModel *m_progressGrid;
 
         QString m_state;
         QString m_stateMessage;
@@ -91,11 +113,17 @@ namespace ksv::presentation {
         QString m_attainedRank;
         QString m_completedRank;
         QString m_nextTier;
+        QString m_attainedRankColor;
+        QString m_completedRankColor;
+        QString m_nextTierColor;
         QString m_averageRank;
+        QVariantList m_averageRankFills;
+        double m_completedRankPosition = -1.0;
         QString m_totalPlaytime;
         int m_scenariosAtNextTier = 0;
+        int m_nextTierBlockerCount = 0;
+        bool m_hasNextTier = false;
         int m_scenarioCount = 0;
-        QVariantList m_blockers;
     };
 }
 

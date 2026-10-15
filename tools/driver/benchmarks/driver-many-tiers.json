@@ -1,0 +1,133 @@
+{
+    "schemaVersion": 1,
+    "id": "driver-many-tiers",
+    "name": "Driver Many Tiers Benchmark",
+    "tiers": [
+        {"id": "iron", "name": "Iron", "color": [130, 130, 140, 255]},
+        {"id": "bronze", "name": "Bronze", "color": [205, 127, 50, 255]},
+        {"id": "silver", "name": "Silver", "color": [192, 192, 200, 255]},
+        {"id": "gold", "name": "Gold", "color": [255, 200, 40, 255]},
+        {"id": "platinum", "name": "Platinum", "color": [80, 220, 220, 255]},
+        {"id": "diamond", "name": "Diamond", "color": [100, 160, 255, 255]},
+        {"id": "jade", "name": "Jade", "color": [60, 200, 120, 255]},
+        {"id": "master", "name": "Master", "color": [200, 90, 220, 255]},
+        {"id": "grandmaster", "name": "Grandmaster", "color": [230, 60, 80, 255]},
+        {"id": "nova", "name": "Nova", "color": [255, 120, 180, 255]},
+        {"id": "astra", "name": "Astra", "color": [150, 110, 255, 255]},
+        {"id": "celestial", "name": "Celestial", "color": [250, 240, 190, 255]}
+    ],
+    "uncategorized": [],
+    "categories": [
+        {
+            "id": "clicking",
+            "name": "Clicking",
+            "color": [0, 188, 212, 255],
+            "scenarios": [
+                {
+                    "id": "entry-gallery-primary",
+                    "name": "1wall6targets Gallery",
+                    "hash": "gallery-primary",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 3000},
+                        {"tierId": "bronze", "score": 3300},
+                        {"tierId": "silver", "score": 3600},
+                        {"tierId": "gold", "score": 3900},
+                        {"tierId": "platinum", "score": 4200},
+                        {"tierId": "diamond", "score": 4500},
+                        {"tierId": "jade", "score": 4800},
+                        {"tierId": "master", "score": 5100},
+                        {"tierId": "grandmaster", "score": 5400},
+                        {"tierId": "nova", "score": 5700},
+                        {"tierId": "astra", "score": 6000},
+                        {"tierId": "celestial", "score": 6300}
+                    ]
+                },
+                {
+                    "id": "entry-gallery-pasu",
+                    "name": "Pasu Gallery",
+                    "hash": "gallery-pasu",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 2600},
+                        {"tierId": "bronze", "score": 2900},
+                        {"tierId": "silver", "score": 3150},
+                        {"tierId": "gold", "score": 3350},
+                        {"tierId": "platinum", "score": 3550},
+                        {"tierId": "diamond", "score": 3750},
+                        {"tierId": "jade", "score": 3950},
+                        {"tierId": "master", "score": 4150},
+                        {"tierId": "grandmaster", "score": 4350},
+                        {"tierId": "nova", "score": 4550},
+                        {"tierId": "astra", "score": 4750},
+                        {"tierId": "celestial", "score": 5000}
+                    ]
+                }
+            ],
+            "subcategories": []
+        },
+        {
+            "id": "tracking",
+            "name": "Tracking",
+            "color": [156, 39, 176, 255],
+            "scenarios": [
+                {
+                    "id": "entry-gallery-smoothbot",
+                    "name": "Smoothbot Gallery",
+                    "hash": "gallery-smoothbot",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 1500},
+                        {"tierId": "bronze", "score": 1580},
+                        {"tierId": "silver", "score": 1650},
+                        {"tierId": "gold", "score": 1710},
+                        {"tierId": "platinum", "score": 1760},
+                        {"tierId": "diamond", "score": 1810},
+                        {"tierId": "jade", "score": 1850},
+                        {"tierId": "master", "score": 1890},
+                        {"tierId": "grandmaster", "score": 1930},
+                        {"tierId": "nova", "score": 1960},
+                        {"tierId": "astra", "score": 2000},
+                        {"tierId": "celestial", "score": 2050}
+                    ]
+                },
+                {
+                    "id": "entry-gallery-flyts",
+                    "name": "VT FlyTS Gallery",
+                    "hash": "gallery-flyts",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 2800},
+                        {"tierId": "bronze", "score": 3000},
+                        {"tierId": "silver", "score": 3200},
+                        {"tierId": "gold", "score": 3450},
+                        {"tierId": "platinum", "score": 3700},
+                        {"tierId": "diamond", "score": 3950},
+                        {"tierId": "jade", "score": 4200},
+                        {"tierId": "master", "score": 4450},
+                        {"tierId": "grandmaster", "score": 4700},
+                        {"tierId": "nova", "score": 4950},
+                        {"tierId": "astra", "score": 5200},
+                        {"tierId": "celestial", "score": 5500}
+                    ]
+                },
+                {
+                    "id": "entry-gallery-celestial",
+                    "name": "Air CELESTIAL No UFO Easy Slowed",
+                    "hash": "gallery-celestial",
+                    "thresholds": [
+                        {"tierId": "iron", "score": 900},
+                        {"tierId": "bronze", "score": 1050},
+                        {"tierId": "silver", "score": 1150},
+                        {"tierId": "gold", "score": 1250},
+                        {"tierId": "platinum", "score": 1350},
+                        {"tierId": "diamond", "score": 1450},
+                        {"tierId": "jade", "score": 1550},
+                        {"tierId": "master", "score": 1650},
+                        {"tierId": "grandmaster", "score": 1750},
+                        {"tierId": "nova", "score": 1850},
+                        {"tierId": "astra", "score": 1950},
+                        {"tierId": "celestial", "score": 2050}
+                    ]
+                }
+            ],
+            "subcategories": []
+        }
+    ]
+}

@@ -5,6 +5,7 @@
 #include "benchmark_builders.h"
 #include "fake_benchmark_store.h"
 #include "fake_profile_service.h"
+#include "fake_settings_service.h"
 #include "data/benchmarks_service.h"
 #include "usecases/benchmark_resolution_use_case.h"
 #include "usecases/benchmark_tracking_use_case.h"
@@ -610,4 +611,161 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, UnavailableSelectionAutoRecoversWhenSa
     EXPECT_EQ(snap.selectedId->value, "b1");
     ASSERT_TRUE(snap.projection.has_value());
     EXPECT_EQ(snap.projection->benchmarkId.value, "b1");
+}
+
+// ---- default selection and remembered choice ------------------------------------------
+
+namespace {
+    struct RememberingFixture {
+        std::shared_ptr<FakeBenchmarkStore> repo = std::make_shared<FakeBenchmarkStore>();
+        std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
+        std::shared_ptr<FakeSettingsService> settings = std::make_shared<FakeSettingsService>();
+        std::shared_ptr<BenchmarksService> benchmarks;
+        std::shared_ptr<BenchmarkResolutionUseCase> resolution;
+        std::unique_ptr<BenchmarkTrackingUseCase> tracking;
+
+        void build(const std::vector<std::string> &ids) {
+            BenchmarkLibrarySnapshot snapshot;
+            for (const auto &id: ids) snapshot.entries.push_back(fileFor(benchmark(id), id + ".json"));
+            repo->nextScan = {snapshot, std::nullopt};
+            benchmarks = std::make_shared<BenchmarksService>(repo);
+            resolution = std::make_shared<BenchmarkResolutionUseCase>(benchmarks, profile);
+            tracking = std::make_unique<BenchmarkTrackingUseCase>(benchmarks, resolution, profile, settings);
+        }
+    };
+}
+
+TEST(BenchmarkTrackingDefaultSelection, NothingIsSelectedUntilAskedEvenWithASingleBenchmark) {
+    RememberingFixture fixture;
+    fixture.build({"only"});
+    EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::NoSelection);
+}
+
+TEST(BenchmarkTrackingDefaultSelection, SelectsTheOnlyBenchmark) {
+    RememberingFixture fixture;
+    fixture.build({"only"});
+    int notifications = 0;
+    fixture.tracking->onChanged([&] { ++notifications; });
+
+    fixture.tracking->selectDefault();
+
+    ASSERT_TRUE(fixture.tracking->selected());
+    EXPECT_EQ(fixture.tracking->selected()->value, "only");
+    EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
+    EXPECT_EQ(notifications, 1);
+}
+
+TEST(BenchmarkTrackingDefaultSelection, DoesNotGuessBetweenSeveralBenchmarks) {
+    RememberingFixture fixture;
+    fixture.build({"b1", "b2"});
+    int notifications = 0;
+    fixture.tracking->onChanged([&] { ++notifications; });
+
+    fixture.tracking->selectDefault();
+
+    EXPECT_FALSE(fixture.tracking->selected());
+    EXPECT_EQ(notifications, 0);
+}
+
+TEST(BenchmarkTrackingDefaultSelection, IgnoresProblemFilesWhenCountingTheOnlyBenchmark) {
+    RememberingFixture fixture;
+    BenchmarkLibrarySnapshot snapshot;
+    snapshot.entries.push_back(fileFor(benchmark("good"), "good.json"));
+    snapshot.entries.push_back({"broken.json", "digest",
+                                ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, BenchmarkId{"bad"}, {}}});
+    fixture.repo->nextScan = {snapshot, std::nullopt};
+    fixture.benchmarks = std::make_shared<BenchmarksService>(fixture.repo);
+    fixture.resolution = std::make_shared<BenchmarkResolutionUseCase>(fixture.benchmarks, fixture.profile);
+    fixture.tracking = std::make_unique<BenchmarkTrackingUseCase>(fixture.benchmarks, fixture.resolution,
+                                                                  fixture.profile, fixture.settings);
+
+    fixture.tracking->selectDefault();
+
+    ASSERT_TRUE(fixture.tracking->selected());
+    EXPECT_EQ(fixture.tracking->selected()->value, "good");
+}
+
+TEST(BenchmarkTrackingDefaultSelection, RestoresTheRememberedBenchmarkAmongSeveral) {
+    RememberingFixture fixture;
+    fixture.settings->lastSelectedBenchmarkId = "b2";
+    fixture.build({"b1", "b2", "b3"});
+
+    fixture.tracking->selectDefault();
+
+    ASSERT_TRUE(fixture.tracking->selected());
+    EXPECT_EQ(fixture.tracking->selected()->value, "b2");
+    EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
+}
+
+TEST(BenchmarkTrackingDefaultSelection, FallsBackToTheOnlyBenchmarkWhenTheRememberedOneIsGone) {
+    RememberingFixture fixture;
+    fixture.settings->lastSelectedBenchmarkId = "deleted";
+    fixture.build({"only"});
+
+    fixture.tracking->selectDefault();
+
+    ASSERT_TRUE(fixture.tracking->selected());
+    EXPECT_EQ(fixture.tracking->selected()->value, "only");
+}
+
+TEST(BenchmarkTrackingDefaultSelection, RememberedButMissingAmongSeveralSelectsNothing) {
+    RememberingFixture fixture;
+    fixture.settings->lastSelectedBenchmarkId = "deleted";
+    fixture.build({"b1", "b2"});
+
+    fixture.tracking->selectDefault();
+
+    EXPECT_FALSE(fixture.tracking->selected());
+}
+
+TEST(BenchmarkTrackingDefaultSelection, NeverReplacesAnExistingSelection) {
+    RememberingFixture fixture;
+    fixture.settings->lastSelectedBenchmarkId = "b1";
+    fixture.build({"b1", "b2"});
+    fixture.tracking->select(BenchmarkId{"b2"});
+    int notifications = 0;
+    fixture.tracking->onChanged([&] { ++notifications; });
+
+    fixture.tracking->selectDefault();
+
+    EXPECT_EQ(fixture.tracking->selected()->value, "b2");
+    EXPECT_EQ(notifications, 0);
+}
+
+TEST(BenchmarkTrackingDefaultSelection, ExplicitChoicesAreRememberedAndClearingForgetsThem) {
+    RememberingFixture fixture;
+    fixture.build({"b1", "b2"});
+
+    fixture.tracking->select(BenchmarkId{"b2"});
+    EXPECT_EQ(fixture.settings->lastSelectedBenchmarkId, "b2");
+
+    fixture.tracking->clearSelection();
+    EXPECT_TRUE(fixture.settings->lastSelectedBenchmarkId.empty());
+}
+
+// The restart round trip: a choice made in one session is what the next session restores.
+TEST(BenchmarkTrackingDefaultSelection, ChoiceSurvivesIntoANewSession) {
+    RememberingFixture first;
+    first.build({"b1", "b2", "b3"});
+    first.tracking->select(BenchmarkId{"b3"});
+
+    RememberingFixture second;
+    second.settings = first.settings;
+    second.build({"b1", "b2", "b3"});
+    EXPECT_FALSE(second.tracking->selected()) << "nothing is selected before the workspace asks";
+    second.tracking->selectDefault();
+
+    ASSERT_TRUE(second.tracking->selected());
+    EXPECT_EQ(second.tracking->selected()->value, "b3");
+}
+
+TEST(BenchmarkTrackingDefaultSelection, WithoutSettingsOnlyTheSoleBenchmarkRuleApplies) {
+    Fixture fixture;
+    fixture.repo->nextScan = {snapshotFor(benchmark("only")), std::nullopt};
+    fixture.build();
+
+    fixture.tracking->selectDefault();
+
+    ASSERT_TRUE(fixture.tracking->selected());
+    EXPECT_EQ(fixture.tracking->selected()->value, "only");
 }

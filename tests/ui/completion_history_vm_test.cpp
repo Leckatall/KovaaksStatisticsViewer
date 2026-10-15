@@ -16,9 +16,14 @@ namespace {
     class FakeCompletionHistoryUseCase final : public ICompletionHistoryUseCase {
     public:
         CompletionHistory history;
+        std::optional<int> selected;
 
         CompletionHistory get_history() override { return history; }
         void onCurrentScenarioChanged(std::function<void()>) override {}
+        std::optional<int> selected_run_index() override { return selected; }
+        void onSelectedRunChanged(std::function<void()>) override {}
+        std::vector<int> select_run_calls;
+        void select_run(const int run_index) override { select_run_calls.push_back(run_index); }
     };
 
     class CompletionHistoryViewModelTest : public testing::Test {
@@ -101,6 +106,18 @@ namespace {
         EXPECT_GE(series[1]->yAxis->max(), 25.0);
     }
 
+    TEST_F(CompletionHistoryViewModelTest, SeriesFollowThePlottableColumnOrder) {
+        setHistory();
+        view_model.refresh();
+
+        QList<int> columns;
+        for (const auto *s: view_model.series({CompletionHistoryViewModel::Misses, CompletionHistoryViewModel::Score,
+                                               CompletionHistoryViewModel::Accuracy}))
+            columns.append(s->column());
+        EXPECT_EQ(columns, (QList<int>{CompletionHistoryViewModel::Score, CompletionHistoryViewModel::Accuracy,
+                                       CompletionHistoryViewModel::Misses}));
+    }
+
     TEST_F(CompletionHistoryViewModelTest, RunIndexHasNoDrawableSeries) {
         setHistory();
         view_model.refresh();
@@ -141,5 +158,74 @@ namespace {
             ids.insert(series.front()->id());
         }
         EXPECT_EQ(ids.size(), CompletionHistoryViewModel::ColumnCount - CompletionHistoryViewModel::Score);
+    }
+
+    // The run axis must only label runs that exist: no "#0", nothing past the latest run.
+    TEST_F(CompletionHistoryViewModelTest, RunAxisLabelsOnlyRunsThatExist) {
+        for (const int runs: {2, 4, 8, 224, 360}) {
+            fake->history.rows.clear();
+            for (int i = 1; i <= runs; ++i)
+                fake->history.rows.push_back({.run_index = i, .score = 100.0 + i, .accuracy = 0.5,
+                                              .shots = 10, .hits = 5, .misses = 5});
+            view_model.refresh();
+
+            const auto &axis = view_model.xAxis();
+            ASSERT_FALSE(axis.ticks().isEmpty());
+            EXPECT_DOUBLE_EQ(axis.min(), 1.0) << runs << " runs";
+            EXPECT_DOUBLE_EQ(axis.max(), runs) << runs << " runs";
+            for (const qreal tick: axis.ticks()) {
+                EXPECT_GE(tick, 1.0) << runs << " runs: tick " << axis.formatTick(tick).toStdString();
+                EXPECT_LE(tick, runs) << runs << " runs: tick " << axis.formatTick(tick).toStdString();
+            }
+        }
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FewRunsAreEachTickedFromTheFirstRun) {
+        fake->history.rows.clear();
+        for (int i = 1; i <= 8; ++i)
+            fake->history.rows.push_back({.run_index = i, .score = 3100.0 + 40 * i});
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{1, 2, 3, 4, 5, 6, 7, 8}));
+        EXPECT_EQ(view_model.xAxis().formatTick(view_model.xAxis().ticks().front()), "#1");
+    }
+
+    // The history graph marks the selected run at its run number; -1 marks nothing.
+    TEST_F(CompletionHistoryViewModelTest, SelectedRunIndexFollowsTheUseCase) {
+        setHistory();
+        view_model.refresh();
+        EXPECT_EQ(view_model.selectedRunIndex(), -1);
+
+        const QSignalSpy spy(&view_model, &CompletionHistoryViewModel::selectedRunIndexChanged);
+        fake->selected = 2;
+        view_model.refreshSelection();
+        EXPECT_EQ(view_model.selectedRunIndex(), 2);
+        view_model.refreshSelection();
+        EXPECT_EQ(spy.count(), 1) << "an unchanged selection does not signal";
+
+        fake->selected = std::nullopt;
+        view_model.refresh();
+        EXPECT_EQ(view_model.selectedRunIndex(), -1);
+        EXPECT_EQ(spy.count(), 2);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, SelectRunForwardsOnlyRunsOnTheGraph) {
+        setHistory();
+        view_model.refresh();
+
+        view_model.selectRun(0);
+        view_model.selectRun(3);
+        view_model.selectRun(2);
+
+        EXPECT_EQ(fake->select_run_calls, std::vector<int>{2});
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, CountSeriesShareOneAxisIdentity) {
+        const auto series = view_model.series({CompletionHistoryViewModel::Score, CompletionHistoryViewModel::Shots,
+                                               CompletionHistoryViewModel::Hits});
+        ASSERT_EQ(series.size(), 3);
+        ASSERT_TRUE(series[0]->yAxisId && series[1]->yAxisId && series[2]->yAxisId);
+        EXPECT_NE(*series[0]->yAxisId, *series[1]->yAxisId);
+        EXPECT_EQ(*series[1]->yAxisId, *series[2]->yAxisId);
     }
 }

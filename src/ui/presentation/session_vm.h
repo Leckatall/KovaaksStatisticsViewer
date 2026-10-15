@@ -15,6 +15,8 @@ namespace ksv::presentation {
         Q_PROPERTY(QStringList scenario_list READ getScenarioList NOTIFY scenario_list_changed)
         Q_PROPERTY(bool profileBuildInProgress READ profileBuildInProgress NOTIFY profileBuildChanged)
         Q_PROPERTY(double profileBuildProgress READ profileBuildProgress NOTIFY profileBuildChanged)
+        Q_PROPERTY(int profileBuildDone READ profileBuildDone NOTIFY profileBuildChanged)
+        Q_PROPERTY(int profileBuildTotal READ profileBuildTotal NOTIFY profileBuildChanged)
 
     public:
         explicit SessionViewModel(std::shared_ptr<application::ISessionController> session_controller,
@@ -36,6 +38,10 @@ namespace ksv::presentation {
         [[nodiscard]] double profileBuildProgress() const {
             return m_build_total == 0 ? 0.0 : static_cast<double>(m_build_done) / m_build_total;
         }
+
+        // Files finished and files found so far; both stay 0 until the first per-file report.
+        [[nodiscard]] int profileBuildDone() const { return m_build_done; }
+        [[nodiscard]] int profileBuildTotal() const { return m_build_total; }
 
     signals:
         void scenario_list_changed();

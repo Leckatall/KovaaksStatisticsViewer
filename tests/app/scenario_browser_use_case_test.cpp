@@ -125,4 +125,35 @@ namespace {
         EXPECT_EQ(*session->selected_run, run_id);
         EXPECT_EQ(changes, 2);
     }
+    // selecting a scenario brings the graphs (which follow the current run) to it.
+    TEST_F(ScenarioBrowserUseCaseTest, SelectScenarioMakesItsMostRecentRunCurrent) {
+        const ScenarioId pasu{.name = "Scenario hash-2", .hash = "hash-2"};
+        session->current_run = makeRun("hash-1", 900);
+        profile->perfs_by_scenario[pasu] = {makeRun("hash-2", 100), makeRun("hash-2", 300)};
+
+        use_case.selectScenario(pasu);
+
+        ASSERT_TRUE(session->selected_run.has_value());
+        EXPECT_EQ(session->selected_run->scenario_id.hash, "hash-2");
+        EXPECT_EQ(session->selected_run->start_time, 300);
+    }
+
+    TEST_F(ScenarioBrowserUseCaseTest, SelectScenarioKeepsTheCurrentRunWhenItAlreadyBelongsToTheScenario) {
+        const ScenarioId pasu{.name = "Scenario hash-2", .hash = "hash-2"};
+        session->current_run = makeRun("hash-2", 100);
+        profile->perfs_by_scenario[pasu] = {makeRun("hash-2", 100), makeRun("hash-2", 300)};
+
+        use_case.selectScenario(pasu);
+
+        EXPECT_FALSE(session->selected_run.has_value());
+    }
+
+    TEST_F(ScenarioBrowserUseCaseTest, SelectScenarioWithoutRunsOrHashLeavesTheCurrentRunAlone) {
+        session->current_run = makeRun("hash-1", 900);
+
+        use_case.selectScenario(ScenarioId{.name = "No runs", .hash = "hash-9"});
+        use_case.selectScenario(ScenarioId{});
+
+        EXPECT_FALSE(session->selected_run.has_value());
+    }
 }

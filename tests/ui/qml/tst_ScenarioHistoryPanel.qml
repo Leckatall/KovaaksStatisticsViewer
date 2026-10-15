@@ -34,6 +34,18 @@ Item {
         }
     }
 
+    Component {
+        id: fewRunsPanelComponent
+
+        ScenarioHistoryPanel {
+            width: 900
+            height: 600
+            historyVm: Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8})
+            columnVisibility: historyVisibilitySettings.value
+            historyAxisSettings: axisSettings
+        }
+    }
+
     TestCase {
         name: "ScenarioHistoryPanelTest"
         when: windowShown
@@ -60,6 +72,41 @@ Item {
         //     axisSettings.yAxisColumnKey = "missing"
         //     tryCompare(panel, "yAxisColumn", -1)
         // }
+
+        // the history graph asks its canvas to dot each real run (shown while sparse).
+        function test_historyGraphMarksRealRuns() {
+            const panel = createTemporaryObject(fewRunsPanelComponent, root)
+            verify(!!panel, "Component exists")
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            compare(canvas.pointMarkers, true)
+        }
+
+        // The canvas marks the run the VM reports as selected, and nothing without one.
+        function test_selectedRunIsMarkedOnTheCanvas() {
+            const panel = createTemporaryObject(fewRunsPanelComponent, root)
+            verify(!!panel, "Component exists")
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            verify(isNaN(canvas.markedX), "no selected run marks nothing, got " + canvas.markedX)
+
+            panel.historyVm = Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8, selectedRunIndex: 6})
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            tryCompare(canvas, "markedX", 6)
+
+            panel.historyVm = Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8, selectedRunIndex: 2})
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            tryCompare(canvas, "markedX", 2)
+        }
+
+        // The rotated Y-axis title names the labelled axis in the default grey, never a series colour.
+        function test_yAxisTitleIsGrey() {
+            const panel = createTemporaryObject(fewRunsPanelComponent, root)
+            verify(!!panel, "Component exists")
+            let label = null
+            tryVerify(() => (label = findChild(panel, "historyYAxisTitleLabel")) !== null, 2000)
+            verify(Qt.colorEqual(label.color, Qt.alpha(label.palette.text, 0.6)), "axis title colour " + label.color)
+        }
 
         function test_titleBindsThroughHistoryViewModel() {
             const panel = createTemporaryObject(panelComponent, root)

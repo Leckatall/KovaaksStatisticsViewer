@@ -14,16 +14,21 @@
 #include "contracts/i_benchmark_tracking_use_case.h"
 #include "data/interfaces/i_benchmarks_service.h"
 #include "data/interfaces/i_profile_service.h"
+#include "data/interfaces/i_settings_service.h"
 
 namespace ksv::application {
     class BenchmarkTrackingUseCase final : public IBenchmarkTrackingUseCase {
     public:
+        // `settings` remembers the last explicit choice across launches; without it (tests) the
+        // remembered-benchmark half of selectDefault() simply never matches.
         BenchmarkTrackingUseCase(std::shared_ptr<data::IBenchmarksService> benchmarks,
                                  std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
-                                 std::shared_ptr<IProfileService> profileService);
+                                 std::shared_ptr<IProfileService> profileService,
+                                 std::shared_ptr<ISettingsService> settings = nullptr);
 
         void select(const domain::BenchmarkId &id) override;
         void clearSelection() override;
+        void selectDefault() override;
         [[nodiscard]] const BenchmarkWorkspaceSnapshot &snapshot() const override { return m_snapshot; }
         [[nodiscard]] std::optional<domain::BenchmarkId> selected() const override { return m_selected; }
         [[nodiscard]] BenchmarkTrackingState state() const override { return m_state; }
@@ -42,6 +47,7 @@ namespace ksv::application {
         std::shared_ptr<data::IBenchmarksService> m_benchmarks;
         std::shared_ptr<IBenchmarkResolutionUseCase> m_resolution;
         std::shared_ptr<IProfileService> m_profileService;
+        std::shared_ptr<ISettingsService> m_settings;
         // Cached whole-library snapshot; the service returns it by value (a deep copy of every
         // definition), so it is re-fetched only when the library revision moves, not on every
         // profile change that merely invalidates projections.

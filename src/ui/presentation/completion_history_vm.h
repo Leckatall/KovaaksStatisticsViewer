@@ -19,6 +19,8 @@ namespace ksv::presentation {
         Q_PROPERTY(QQmlListProperty<SeriesModel> allSeries READ allSeries CONSTANT)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
         Q_PROPERTY(int runCount READ runCount NOTIFY dataUpdated)
+        // The selected run's x position (its 1-based run number), or -1 when no run is selected.
+        Q_PROPERTY(int selectedRunIndex READ selectedRunIndex NOTIFY selectedRunIndexChanged)
 
     public:
         enum Column { RunIndex = 0, Score, Accuracy, Shots, Hits, Misses, ColumnCount };
@@ -33,6 +35,10 @@ namespace ksv::presentation {
         [[nodiscard]] int yAxisColumn() const override { return -1; }
         [[nodiscard]] QString scenarioTitle() const { return m_scenario_title; }
         [[nodiscard]] int runCount() const { return m_run_count; }
+        [[nodiscard]] int selectedRunIndex() const { return m_selected_run_index; }
+
+        // Selects the run with this 1-based run number (the history graph's x).
+        Q_INVOKABLE void selectRun(int runIndex);
 
         // series objects for Score..Misses; identity is fixed at construction, only points/yAxis
         // mutate per refresh().
@@ -43,9 +49,12 @@ namespace ksv::presentation {
 
     public slots:
         void refresh();
+        // Re-reads only the selected run; refresh() also does.
+        void refreshSelection();
 
     signals:
         void scenarioTitleChanged();
+        void selectedRunIndexChanged();
 
     private:
         std::shared_ptr<application::ICompletionHistoryUseCase> m_use_case;
@@ -54,6 +63,7 @@ namespace ksv::presentation {
         QList<SeriesModel *> m_series;
         QString m_scenario_title;
         int m_run_count = 0;
+        int m_selected_run_index = -1;
     };
 }
 

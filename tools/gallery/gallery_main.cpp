@@ -8,9 +8,7 @@
 #include <memory>
 
 #include <QDir>
-#include <QFileInfo>
 #include <QGuiApplication>
-#include <QQmlAbstractUrlInterceptor>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -25,6 +23,7 @@
 #include "logging_setup.h"
 #include "qml_registration.h"
 #include "gallery_dataset.h"
+#include "qml_source_interceptor.h"
 #include "settings_service.h"
 #include "series_config_store.h"
 #include "formats/csv/stats_csv_parser.h"
@@ -51,26 +50,6 @@ namespace {
         }
         return paths;
     }
-
-    class GalleryQmlSourceInterceptor final : public QQmlAbstractUrlInterceptor {
-    public:
-        explicit GalleryQmlSourceInterceptor(QString sourceDirectory)
-            : m_sourceDirectory(std::move(sourceDirectory)) {}
-
-        QUrl intercept(const QUrl& url, DataType type) override {
-            constexpr auto modulePrefix = "/qt/qml/KovaaksStatsViewer/qml/";
-            if (type != QmlFile || url.scheme() != "qrc" || !url.path().startsWith(modulePrefix)) {
-                return url;
-            }
-
-            const QString relativePath = url.path().mid(QString::fromLatin1(modulePrefix).size());
-            const QString sourcePath = QDir(m_sourceDirectory).filePath(relativePath);
-            return QFileInfo::exists(sourcePath) ? QUrl::fromLocalFile(sourcePath) : url;
-        }
-
-    private:
-        QString m_sourceDirectory;
-    };
 }
 
 int main(int argc, char *argv[]) {
@@ -81,6 +60,7 @@ int main(int argc, char *argv[]) {
     QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer-Gallery");
+    QCoreApplication::setApplicationVersion(KSV_VERSION);
 
     QTemporaryDir tmp;
     const QVariantList datasetPaths = createDatasetProfiles(tmp.path());
@@ -96,7 +76,7 @@ int main(int argc, char *argv[]) {
         std::make_shared<data::StatsCsvParser>(),
         std::make_shared<qt_data::BenchmarkStore>((tmp.path() + "/benchmarks").toStdString()));
     QQmlApplicationEngine* engine = app.engine();
-    GalleryQmlSourceInterceptor sourceInterceptor(QStringLiteral(GALLERY_QML_SOURCE_DIR));
+    gallery::QmlSourceInterceptor sourceInterceptor(QStringLiteral(GALLERY_QML_SOURCE_DIR));
     engine->addUrlInterceptor(&sourceInterceptor);
 
     // qmlpreview recreates the root object without replaying the engine's

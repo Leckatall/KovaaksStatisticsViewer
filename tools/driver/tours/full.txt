@@ -1,0 +1,137 @@
+# The 2026-10-11 full-state sweep as a repeatable tour: every state the sweep
+# reached by hand, with named shots grouped by area. The states it could not
+# reach are in unreachable.txt.
+#
+#   uv run python scripts/ui_driver.py tour full --report
+set M=win:benchmarkManagerDialog
+set S=win:settingsDialog
+
+# ---- Scenarios -----------------------------------------------------------------
+section scenarios
+start --dataset rich
+shot --name default
+hover scenarioGraphPanel --offset 500 120 --shot=run-graph-hover
+hover playtimeGraphPanel --offset 420 110 --shot=playtime-hover
+hover scenarioHistoryPanel --offset 800 110 --shot=history-hover-right-edge
+click recentToggleButton --shot=recent-expanded
+click recentToggleButton
+click scenarioItem_2 --shot=other-scenario-selected
+click scenarioItem_0
+click runItem_2
+hover runItem_4 --shot=run-selected-and-card-hover
+type zzz --into scenarioSearchField --shot=search-no-match
+type "" --into scenarioSearchField --clear
+click scenarioSortCombo --shot=sort-combo-open
+key Escape
+hover scenarioSortDirectionButton --settle 1200 --shot=sort-direction-tooltip
+click "text:View"
+click "text:Scenario Graph" --shot=run-graph-hidden
+click "text:View"
+click "text:Scenario Graph"
+click "text:View"
+click "text:Graph Line Toggles" --shot=line-toggles-hidden
+click "text:View"
+click "text:Graph Line Toggles"
+click "text:View"
+click "text:Selection Panel"
+click "text:View"
+click "text:Playtime Graph" --shot=selection-and-playtime-hidden
+click "text:View"
+click "text:Selection Panel"
+click "text:View"
+click "text:Playtime Graph"
+click "text:Help"
+click "text:About" --shot=about-dialog
+key Escape
+
+# ---- Menus ---------------------------------------------------------------------
+section menus
+click "text:File" --shot=file
+key Escape
+click "text:View" --shot=view
+hover "text:Scenario Graph Lines" --settle 400 --shot=view-graph-lines-submenu
+hover "text:Selection Panel Sections" --settle 400 --shot=view-selection-sections-submenu
+key Escape
+key Escape
+click "text:Help" --shot=help
+key Escape
+click "text:Benchmarks@0" --shot=benchmarks
+key Escape
+
+# ---- Benchmarks tab ------------------------------------------------------------
+section benchmarks
+click benchmarksTab --shot=trackable
+hover "progressRow_*_blocker@0" --settle 1200 --shot=blocker-tooltip
+hover "progressRow_*_bar@0" --settle 1200 --shot=tier-bar-tooltip
+hover rankHistoryCard --offset 300 120 --shot=rank-history-hover
+resize 960x700
+shot --name narrow-960x700
+scroll benchmarkWorkspaceScroll --dy 6 --shot=narrow-scrolled
+resize 1280x800
+scroll benchmarkWorkspaceScroll --dy -6
+click "selectorEntry_Driver Many Tiers Benchmark" --shot=many-tiers
+resize 960x700
+shot --name many-tiers-960x700
+resize 1280x800
+
+# ---- Datasets ------------------------------------------------------------------
+section datasets
+start --dataset single
+shot --name single-scenarios
+click benchmarksTab --shot=single-benchmarks
+start --dataset bunched
+shot --name bunched-scenarios
+start --dataset fixtures
+shot --name fixtures-scenarios
+start --dataset empty
+shot --name empty-scenarios
+click benchmarksTab --shot=empty-benchmarks
+start --dataset first-run
+shot --name first-run-welcome
+
+# ---- Settings ------------------------------------------------------------------
+section settings
+start --dataset rich
+eval settingsDialog.open()
+shot --window settingsDialog --name profile-page
+click "${S}/text:Graph Lines" --shot=graph-lines-page
+hover "${S}/editExpressionButton_2" --settle 1200 --shot=edit-expression-tooltip
+type " (x)" --into "${S}/seriesNameField_2" --enter --shot=dirty-draft
+click "${S}/axisCombo_2" --shot=axis-combo-open
+key Escape
+click "${S}/editExpressionButton_2"
+shot --window settingsDialog --name expression-editor
+shot --all-windows --name expression-editor-windows
+
+# ---- Benchmark Manager ---------------------------------------------------------
+section manager
+start --dataset rich
+invoke obj:manageBenchmarksAction trigger
+shot --window benchmarkManagerDialog --name library-only
+dblclick "${M}/libraryEntry_0" --shot=draft-open
+rclick "${M}/cell_entry-gallery-pasu_scenario" --shot=row-context-menu
+key Escape --window benchmarkManagerDialog
+rclick "${M}/cell_entry-gallery-primary_category" --shot=group-context-menu
+key Escape --window benchmarkManagerDialog
+rclick "${M}/rankHeader_iron" --shot=rank-context-menu
+key Escape --window benchmarkManagerDialog
+click "${M}/addRankPlus" --shot=add-rank-inline
+key Escape --window benchmarkManagerDialog
+click "${M}/addCategoryPlus" --shot=add-category-inline
+key Escape --window benchmarkManagerDialog
+click "${M}/addSubcategoryPlus_clicking" --shot=add-subcategory-inline
+key Escape --window benchmarkManagerDialog
+dblclick "${M}/cell_entry-gallery-pasu_scenario"
+type Ga --shot=cell-edit-suggestions
+key Escape --window benchmarkManagerDialog
+click "${M}/cell_entry-gallery-primary_scenario"
+click "${M}/cell_entry-gallery-smoothbot_scenario" --mods shift --shot=multi-row-selection
+click "${M}/libraryToggleButton" --shot=library-collapsed-toolbar
+hover "${M}/saveButton" --settle 1200 --shot=toolbar-tooltip
+click "${M}/libraryToggleButton"
+click "${M}/addSubcategoryPlus_tracking"
+type Smooth --into "${M}/subcategoryCreationField" --enter --shot=subcategory-relocation-prompt
+click "${M}/relocateToNewSubcategory" --shot=after-relocation-dirty
+click "${M}/text:Close"
+shot --window dirtyClosePrompt --with-context --name dirty-close-prompt
+click "win:dirtyClosePrompt/text:Discard"

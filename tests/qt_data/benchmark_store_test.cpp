@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 
+#include <algorithm>
 #include <variant>
 
 #include "qt_data/benchmark_store.h"
@@ -150,6 +151,61 @@ TEST_F(BenchmarkStoreTest, WriteCreatesThenRoundTripsThroughScan) {
     ASSERT_NE(loaded(entries[0]), nullptr);
     EXPECT_EQ(loaded(entries[0])->benchmark.name, "Written");
     EXPECT_EQ(entries[0].digest, *write.digest);  // scan digest matches the write's returned digest
+}
+
+TEST_F(BenchmarkStoreTest, IncompleteWorkRoundTripsExactlyAndKeepsItsIssues) {
+    using namespace ksv::domain;
+    Benchmark def;
+    def.id = BenchmarkId{"b1"};
+    def.name = "Half Done";
+    def.tiers = {Tier{TierId{"t1"}, "Bronze", {200, 120, 0, 255}},
+                 Tier{TierId{"t2"}, "Silver", {190, 190, 190, 255}}};
+    // Partial thresholds: t2 still missing.
+    def.uncategorized = {ScenarioEntry{ScenarioEntryId{"s1"}, "Loose", std::nullopt,
+                                       {Threshold{TierId{"t1"}, 10.0}}}};
+    Category nested{GroupId{"c1"}, "Tracking", {10, 20, 30, 255}, {}, {}};
+    nested.subcategories = {Subcategory{GroupId{"sc1"}, "Smooth", {40, 50, 60, 255},
+                                        {ScenarioEntry{ScenarioEntryId{"s2"}, "Mapped", std::string{"HASH"},
+                                                       {Threshold{TierId{"t1"}, 1.5},
+                                                        Threshold{TierId{"t2"}, 2.5}}}}}};
+    def.categories = {nested, Category{GroupId{"c2"}, "Not yet filled", {70, 80, 90, 255}, {}, {}}};
+
+    ASSERT_TRUE(store->write(def, "half.json", std::nullopt).succeeded());
+
+    const auto entries = store->scan().snapshot->entries;
+    ASSERT_EQ(entries.size(), 1U);
+    const auto *reread = loaded(entries[0]);
+    ASSERT_NE(reread, nullptr);
+    EXPECT_EQ(reread->benchmark, def);  // every entered value, colour, mapping and placement survives
+    EXPECT_EQ(reread->completeness.completeness, Completeness::Incomplete);
+    EXPECT_EQ(reread->completeness, validateBenchmark(def));
+    const auto has = [&](BenchmarkIssueCode code) {
+        return std::ranges::any_of(reread->completeness.issues,
+                                   [&](const auto &issue) { return issue.code == code; });
+    };
+    EXPECT_TRUE(has(BenchmarkIssueCode::MissingThreshold));
+    EXPECT_TRUE(has(BenchmarkIssueCode::EmptyCategory));
+}
+
+TEST_F(BenchmarkStoreTest, UnsupportedFileIsNeverRewritten) {
+    auto json = trackableJson();
+    json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 7");
+    const auto path = write("future.json", json);
+
+    for (int pass = 0; pass < 2; ++pass) {
+        const auto entry = store->scan().snapshot->entries.at(0);
+        ASSERT_NE(problem(entry), nullptr);
+        EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Unsupported);
+    }
+    domain::Benchmark replacement;
+    replacement.id = domain::BenchmarkId{"b1"};
+    replacement.name = "Replacement";
+    EXPECT_EQ(store->write(replacement, "future.json", std::nullopt).failure,
+              std::make_optional(BenchmarkWriteFailure::ExternalModificationConflict));
+
+    QFile file(path);
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+    EXPECT_EQ(file.readAll(), json);
 }
 
 TEST_F(BenchmarkStoreTest, ReplaceWithStaleDigestIsAConflictAndDoesNotOverwrite) {

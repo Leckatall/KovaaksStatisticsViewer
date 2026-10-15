@@ -8,7 +8,7 @@ from typing import Callable, Mapping
 from xml.etree import ElementTree
 
 from .catalog import RunnerSpec, catalog_for_scope, matches_pattern, parse_gtest_list, parse_qml_functions
-from .config import Toolchain, ToolchainError, assert_cache, write_fingerprint
+from .config import RunnerSettings, Toolchain, ToolchainError, assert_cache, write_fingerprint
 from .diagnostics import reduce_build_failure, reduce_configure_failure, reduce_test_failure
 from .failures import Failure, render_diagnostic_report, render_test_report
 from .parsers import failures_from_ctest, parse_ctest_junit, parse_gtest_xml, parse_qt_txt
@@ -21,7 +21,6 @@ UNUSABLE_REPORT = (OSError, ValueError, ElementTree.ParseError)
 
 Execute = Callable[..., CommandResult]
 Emit = Callable[[str], None]
-BUILD_JOBS = 8
 
 
 def _summary_duration(started: float, clock: Callable[[], float]) -> float:
@@ -54,6 +53,7 @@ def _invoke(
     repo_root: Path,
     process_environment: Mapping[str, str],
     toolchain: Toolchain,
+    settings: RunnerSettings,
     runner_environment: Mapping[str, str] | None,
     show_all_output: bool,
     phase: str,
@@ -69,6 +69,7 @@ def _invoke(
         show_all_output=show_all_output,
         phase=phase,
         emit=emit,
+        creationflags=settings.creationflags,
     )
 
 
@@ -123,6 +124,7 @@ def run_pipeline(
     repo_root: Path,
     log_dir: Path,
     toolchain: Toolchain,
+    settings: RunnerSettings,
     process_environment: Mapping[str, str],
     fingerprint: dict[str, object] | None = None,
     execute: Execute = run_command,
@@ -146,6 +148,7 @@ def run_pipeline(
         repo_root=repo_root,
         process_environment=process_environment,
         toolchain=toolchain,
+        settings=settings,
         runner_environment=None,
         show_all_output=args.show_all_output,
         phase="configure",
@@ -173,9 +176,11 @@ def run_pipeline(
         "--build",
         build_dir,
         "--parallel",
-        str(BUILD_JOBS),
+        str(settings.jobs),
     ]
-    if args.scope != "all":
+    if args.target:
+        build_command.extend(["--target", *args.target])
+    elif args.scope != "all":
         build_command.extend(["--target", *(runner.target for runner in runners)])
     build_log = log_dir / "build.log"
     build = _invoke(
@@ -185,6 +190,7 @@ def run_pipeline(
         repo_root=repo_root,
         process_environment=process_environment,
         toolchain=toolchain,
+        settings=settings,
         runner_environment=None,
         show_all_output=args.show_all_output,
         phase="build",
@@ -205,7 +211,8 @@ def run_pipeline(
 
     if args.build_only:
         elapsed = _summary_duration(started, clock)
-        emit(f"Scope {args.scope} | jobs {BUILD_JOBS} | tests 0 (build only) | {elapsed:.1f}s | PASS")
+        built = f"Targets {', '.join(args.target)}" if args.target else f"Scope {args.scope}"
+        emit(f"{built} | jobs {settings.jobs} | tests 0 (build only) | {elapsed:.1f}s | PASS")
         return 0
 
     ctest_exe = toolchain.cmake_exe.with_name("ctest.exe")
@@ -220,6 +227,7 @@ def run_pipeline(
             repo_root=repo_root,
             process_environment=process_environment,
             toolchain=toolchain,
+            settings=settings,
             runner_environment=None,
             show_all_output=args.show_all_output,
             phase="test discovery",
@@ -255,6 +263,7 @@ def run_pipeline(
             repo_root=repo_root,
             process_environment=process_environment,
             toolchain=toolchain,
+            settings=settings,
             runner_environment=None,
             show_all_output=args.show_all_output,
             phase="test",
@@ -284,7 +293,7 @@ def run_pipeline(
             )
             return tested.exit_code
         elapsed = _summary_duration(started, clock)
-        emit(f"Scope all | jobs {BUILD_JOBS} | tests {test_count} | {elapsed:.1f}s | PASS")
+        emit(f"Scope all | jobs {settings.jobs} | tests {test_count} | {elapsed:.1f}s | PASS")
         return 0
 
     qml_input = repo_root / "tests" / "ui" / "qml"
@@ -307,6 +316,7 @@ def run_pipeline(
             repo_root=repo_root,
             process_environment=process_environment,
             toolchain=toolchain,
+            settings=settings,
             runner_environment=enumeration_environment,
             show_all_output=args.show_all_output,
             phase="test discovery",
@@ -387,6 +397,7 @@ def run_pipeline(
             repo_root=repo_root,
             process_environment=process_environment,
             toolchain=toolchain,
+            settings=settings,
             runner_environment=runner.environment,
             show_all_output=args.show_all_output,
             phase="test",
@@ -427,7 +438,7 @@ def run_pipeline(
             )
         )
         return 1
-    emit(f"Scope {args.scope} | jobs {BUILD_JOBS} | tests {len(selected)} | {elapsed:.1f}s | PASS")
+    emit(f"Scope {args.scope} | jobs {settings.jobs} | tests {len(selected)} | {elapsed:.1f}s | PASS")
     return 0
 
 

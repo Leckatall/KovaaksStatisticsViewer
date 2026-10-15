@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QtMath>
 
+#include <algorithm>
 #include <array>
 #include <tuple>
 #include <utility>
@@ -53,7 +54,10 @@ namespace ksv::presentation {
     CompletionHistoryViewModel::CompletionHistoryViewModel(
         std::shared_ptr<application::ICompletionHistoryUseCase> use_case, QObject *parent)
         : GraphViewModelBase(parent), m_use_case(std::move(use_case)),
-          m_xAxis({.baseline = ValueAxis::Baseline::Zero, .integral = true, .targetTicks = 10},
+          // Runs are numbered from #1: the axis spans exactly the first to the last run, so it
+          // never labels a run that does not exist (no "#0", nothing past the latest run).
+          m_xAxis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .targetTicks = 10,
+                   .niceBounds = false},
                   runIndexTransform()) {
         for (int column = Score; column < ColumnCount; ++column) {
             auto *series_model = new SeriesModel(this);
@@ -62,6 +66,8 @@ namespace ksv::presentation {
             series_model->setColor(kColumnMeta[column].color);
             series_model->setColumn(column);
             series_model->transform = kYAxisMeta[kColumnMeta[column].yAxis].transform;
+            // Lets the canvas tell which lines share the labelled axis (e.g. Shots/Hits/Misses).
+            series_model->yAxisId = static_cast<uint64_t>(kColumnMeta[column].yAxis);
             m_series.append(series_model);
         }
         refresh();
@@ -71,8 +77,9 @@ namespace ksv::presentation {
         QList<SeriesModel *> result;
         result.reserve(columns.size());
         std::array<std::vector<int>, YAxisCount> membersByAxis;
-        for (const int column: columns) {
-            if (column < Score || column >= ColumnCount) continue;
+        // Plottable column order (Score, Accuracy, Shots, Hits, Misses), whatever order was asked for.
+        for (int column = Score; column < ColumnCount; ++column) {
+            if (!columns.contains(column)) continue;
             result.append(m_series[column - Score]);
             membersByAxis[kColumnMeta[column].yAxis].push_back(result.size() - 1);
         }
@@ -113,9 +120,22 @@ namespace ksv::presentation {
             series->yAxis.reset();
         }
 
-        std::ignore = m_xAxis.setRange(m_run_count > 0 ? 1.0 : 0.0, m_run_count);
+        std::ignore = m_xAxis.setRange(1.0, std::max(1, m_run_count));
 
         emit dataUpdated();
         emit boundsChanged();
+        refreshSelection();
+    }
+
+    void CompletionHistoryViewModel::selectRun(const int runIndex) {
+        if (runIndex < 1 || runIndex > m_run_count) return;
+        m_use_case->select_run(runIndex);
+    }
+
+    void CompletionHistoryViewModel::refreshSelection() {
+        const int index = m_use_case->selected_run_index().value_or(-1);
+        if (index == m_selected_run_index) return;
+        m_selected_run_index = index;
+        emit selectedRunIndexChanged();
     }
 }

@@ -71,13 +71,16 @@ namespace ksv::domain {
             }
             if (history && !history->empty()) {
                 projection.runCount = static_cast<int>(history->size());
-                double best = history->front()->score;
+                const RunFact *bestRun = history->front();
                 double playtime = 0.0;
                 for (const auto *fact: *history) {
-                    best = std::max(best, static_cast<double>(fact->score));
+                    if (fact->score > bestRun->score ||
+                        (fact->score == bestRun->score && fact->run_id.start_time < bestRun->run_id.start_time))
+                        bestRun = fact;
                     playtime += fact->duration_seconds;
                 }
-                projection.personalBest = best;
+                projection.personalBest = static_cast<double>(bestRun->score);
+                projection.personalBestTime = bestRun->run_id.startSecond();
                 projection.playtimeSeconds = playtime;
                 const auto sample = std::min(kRecentRuns, history->size());
                 double total = 0.0;

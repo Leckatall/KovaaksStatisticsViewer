@@ -18,6 +18,7 @@ namespace ksv::application {
 
         virtual void load_latest_perf() = 0;
 
+        // "<scenario> (<local start time>)" for the displayed run; empty when no run is selected.
         virtual std::string get_run_label() = 0;
 
         // A run is "displayed" when one is selected; a default-constructed current run (empty id) is not.

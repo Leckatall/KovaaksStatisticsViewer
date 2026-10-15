@@ -26,15 +26,15 @@ TestCase {
     }
 
     function makeRuns() {
-        return [{hash: "scenario-a", runLabel: "run", startTimeMs: 1723200000000,
+        return [{hash: "scenario-a", scenarioName: "Scenario A", runLabel: "run", startTimeMs: 1723200000000,
                  score: 8421, accuracy: 0.91, shots: 132, hits: 120, personalBest: true}]
     }
 
     function makeSortableRuns() {
         return [
-            {hash: "a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80, personalBest: false},
-            {hash: "b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95, personalBest: false},
-            {hash: "c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70, personalBest: false},
+            {hash: "a", scenarioName: "Scenario a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80, personalBest: false},
+            {hash: "b", scenarioName: "Scenario b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95, personalBest: false},
+            {hash: "c", scenarioName: "Scenario c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70, personalBest: false},
         ]
     }
 
@@ -51,7 +51,7 @@ TestCase {
         verify(delegate !== null)
         verify(findChild(delegate, "runScore_0").text.indexOf("8421") !== -1)
         verify(findChild(delegate, "runAccuracy_0").text.indexOf("91.0%") !== -1)
-        verify(findChild(delegate, "runLabel_0").text.length > 0)
+        compare(findChild(delegate, "runLabel_0").text, "run")
         verify(findChild(delegate, "personalBestBadge_0").visible)
 
         runSelectedSpy.target = view
@@ -79,7 +79,7 @@ TestCase {
 
     function test_sortFieldSelectionEmitsSortRequestedAndReordersRows() {
         const view = createView({runModel: makeSortableRuns()})
-        verify(findChild(view, "runLabel_0").text.indexOf("run-a") !== -1)
+        compare(findChild(view, "runScore_0").text, "Score 8000")
 
         const combo = findChild(view, "runSortCombo")
         verify(combo !== null)
@@ -103,15 +103,15 @@ TestCase {
 
         // Simulate what the real VM does on sortRequested: re-sort by score desc.
         view.runModel = [
-            {hash: "b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95, personalBest: false},
-            {hash: "a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80, personalBest: false},
-            {hash: "c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70, personalBest: false},
+            {hash: "b", scenarioName: "Scenario b", runLabel: "run-b", startTimeMs: 1000, score: 9500, accuracy: 0.95, shots: 100, hits: 95, personalBest: false},
+            {hash: "a", scenarioName: "Scenario a", runLabel: "run-a", startTimeMs: 3000, score: 8000, accuracy: 0.80, shots: 100, hits: 80, personalBest: false},
+            {hash: "c", scenarioName: "Scenario c", runLabel: "run-c", startTimeMs: 2000, score: 7000, accuracy: 0.70, shots: 100, hits: 70, personalBest: false},
         ]
         wait(0)
 
-        verify(findChild(view, "runLabel_0").text.indexOf("run-b") !== -1)
-        verify(findChild(view, "runLabel_1").text.indexOf("run-a") !== -1)
-        verify(findChild(view, "runLabel_2").text.indexOf("run-c") !== -1)
+        compare(findChild(view, "runScore_0").text, "Score 9500")
+        compare(findChild(view, "runScore_1").text, "Score 8000")
+        compare(findChild(view, "runScore_2").text, "Score 7000")
     }
 
     function test_sortDirectionToggleEmitsSortRequestedWithFlippedDirection() {
@@ -128,5 +128,66 @@ TestCase {
         compare(sortRequestedSpy.count, 1)
         compare(sortRequestedSpy.signalArguments[0][0], 0)
         compare(sortRequestedSpy.signalArguments[0][1], true)
+    }
+    // --- two-line run cards -------------------------------------------
+
+    function makeManyRuns(count) {
+        const runs = []
+        for (let i = 0; i < count; ++i)
+            runs.push({hash: "p", scenarioName: "Pasu Gallery", runLabel: "Pasu Gallery #" + i,
+                       startTimeMs: 1723200000000 - i * 3600000, score: 3400 - i * 10,
+                       accuracy: 0.68, shots: 100, hits: 68, personalBest: i % 3 === 0})
+        return runs
+    }
+
+    function test_cardShowsTitleThenScoreAccuracyAndPersonalBest() {
+        const view = createView({runModel: makeManyRuns(3)})
+        const card = findChild(view, "runItem_0")
+        compare(findChild(card, "runLabel_0").text, "Pasu Gallery #0")
+        compare(findChild(card, "runScore_0").text, "Score 3400")
+        compare(findChild(card, "runAccuracy_0").text, "Acc 68.0%")
+        verify(findChild(card, "personalBestBadge_0").visible)
+        verify(!findChild(view, "personalBestBadge_1").visible)
+        // Two lines: the title sits above the score line, both inside the card.
+        const title = findChild(card, "runLabel_0").mapToItem(card, 0, 0).y
+        const scoreLine = findChild(card, "runScore_0").mapToItem(card, 0, 0).y
+        verify(scoreLine > title, "the score line must be below the title")
+        verify(scoreLine + findChild(card, "runScore_0").height <= card.height)
+        // Cards are separated, so each reads as its own clickable item.
+        verify(findChild(view, "runItem_1").y - card.y >= card.height + view.cardSpacing - 0.5)
+    }
+
+    function test_cardLiftsOnHover() {
+        const view = createView({runModel: makeManyRuns(2)})
+        const card = findChild(view, "runItem_1")
+        mouseMove(view, 1, view.height - 1)
+        tryVerify(() => !card.pointerOver)
+        const rest = card.background.color.toString()
+        mouseMove(card, card.width / 2, card.height / 2)
+        tryVerify(() => card.pointerOver)
+        verify(card.background.color.toString() !== rest, "hovering must visibly change the card")
+    }
+
+    function test_rowExposesAnAccessibleSummary() {
+        const view = createView({runModel: makeManyRuns(1)})
+        const name = findChild(view, "runItem_0").Accessible.name
+        verify(name.indexOf("3400") !== -1 && name.indexOf("68.0%") !== -1 && name.indexOf("personal best") !== -1, name)
+    }
+
+    // --- whole-card sizing and a visible scroll bar --------------
+
+    function test_heightForRowsFitsWholeRowsAndShowsScrollBarWhenOverflowing() {
+        const view = createView({runModel: makeManyRuns(10), showSort: false, title: ""})
+        view.height = view.heightForRows(4)
+        wait(0)
+        const list = findChild(view, "runListView")
+        tryCompare(list, "height", 4 * view.rowHeight - view.cardSpacing)
+        verify(view.scrollable)
+        verify(findChild(view, "runListScrollBar").visible, "an overflowing list shows its scroll bar")
+
+        view.runModel = makeManyRuns(2)
+        wait(0)
+        verify(!view.scrollable)
+        verify(!findChild(view, "runListScrollBar").visible)
     }
 }

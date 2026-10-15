@@ -27,6 +27,7 @@ namespace ksv::presentation {
             case ShotsRole: return run.data.totals.shots;
             case HitsRole: return run.data.totals.hits;
             case PersonalBestRole: return run.personal_best;
+            case ScenarioNameRole: return QString::fromStdString(run.data.run_id.scenario_id.name);
             default: return {};
         }
     }
@@ -41,7 +42,18 @@ namespace ksv::presentation {
             {ShotsRole, "shots"},
             {HitsRole, "hits"},
             {PersonalBestRole, "personalBest"},
+            {ScenarioNameRole, "scenarioName"},
         };
+    }
+
+    int RunListModel::rowOf(const QString &hash, const double startTimeMs) const {
+        const std::string key = hash.toStdString();
+        const auto startTime = static_cast<long long>(startTimeMs);
+        for (std::size_t row = 0; row < m_runs.size(); ++row) {
+            const auto &run_id = m_runs[row].data.run_id;
+            if (run_id.scenario_id.hash == key && run_id.start_time == startTime) return static_cast<int>(row);
+        }
+        return -1;
     }
 
     void RunListModel::setRuns(std::vector<application::RunPerformance> runs) {

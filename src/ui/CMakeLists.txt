@@ -23,10 +23,10 @@ qt_add_qml_module(ksv_ui
             qml/ScenarioWorkspace.qml
             qml/BenchmarkWorkspace.qml
             qml/BenchmarkStatusSummary.qml
-            qml/BenchmarkBlockerList.qml
             qml/BenchmarkHistoryCard.qml
-            qml/BenchmarkBreakdownView.qml
-            qml/BenchmarkBreakdownNode.qml
+            qml/ChartTitle.qml
+            qml/BenchmarkProgressGrid.qml
+            qml/TierBar.qml
             qml/VisualSettingsManager.qml
             qml/DashboardGraphCanvas.qml
             qml/PlaytimeGraphPanel.qml
@@ -39,6 +39,7 @@ qt_add_qml_module(ksv_ui
             qml/RunListView.qml
             qml/SortControls.qml
             qml/ScenarioRunItem.qml
+            qml/ListScrollBar.qml
             qml/AppMenuBar.qml
             qml/SettingsDialog.qml
             qml/BenchmarkManagerDialog.qml
@@ -54,11 +55,19 @@ qt_add_qml_module(ksv_ui
             qml/AboutDialog.qml
             qml/DirectoryPickerRow.qml
             qml/FirstRunBanner.qml
+            qml/FirstRunWelcome.qml
         RESOURCES
             qml/icons/copy.svg
             qml/icons/clipboard-paste.svg
             qml/icons/trash-2.svg
             qml/icons/square-function.svg
+            qml/icons/refresh-cw.svg
+            qml/icons/folder-open.svg
+            qml/icons/panel-left-close.svg
+            qml/icons/panel-left-open.svg
+            qml/icons/undo-2.svg
+            qml/icons/save.svg
+            qml/icons/square-pen.svg
         SOURCES
             presentation/axis.h
             presentation/value_axis.h
@@ -106,8 +115,8 @@ qt_add_qml_module(ksv_ui
             presentation/benchmark_clipboard_adapter.cpp
             presentation/benchmark_history_vm.h
             presentation/benchmark_history_vm.cpp
-            presentation/benchmark_breakdown_model.h
-            presentation/benchmark_breakdown_model.cpp
+            presentation/benchmark_progress_grid_model.h
+            presentation/benchmark_progress_grid_model.cpp
             presentation/benchmark_tracking_vm.h
             presentation/benchmark_tracking_vm.cpp
             presentation/scenario_list_model.h

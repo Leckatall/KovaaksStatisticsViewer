@@ -25,6 +25,8 @@
     Tool paths come from toolchain.defaults.env, toolchain.local.env, and
     process environment variables, in that order. Explicit parameters remain
     the highest-precedence overrides for compatibility with existing callers.
+    A linked git worktree without its own toolchain.local.env uses the main
+    worktree's.
 
 .EXAMPLE
     ./scripts/package-release.ps1

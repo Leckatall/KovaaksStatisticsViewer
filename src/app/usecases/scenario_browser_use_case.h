@@ -85,6 +85,13 @@ namespace ksv::application {
             m_session_controller->setCurrentRun(run_id);
         }
 
+        void selectScenario(const domain::ScenarioId &scenario) override {
+            if (scenario.hash.empty()) return;
+            if (m_session_controller->getCurrentRun().run_id.scenario_id == scenario) return;
+            if (const auto latest = m_profile_service->getMostRecentRun(scenario))
+                m_session_controller->setCurrentRun(latest->run_id);
+        }
+
         void onChanged(std::function<void()> callback) override {
             m_callbacks.push_back(std::move(callback));
         }

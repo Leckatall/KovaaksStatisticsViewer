@@ -93,7 +93,7 @@ namespace ksv::application {
             m_benchmarksService, m_benchmarkResolutionUseCase, std::make_shared<qt_data::PlaylistReader>(),
             [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
         m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
-            m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService);
+            m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService, m_settingsService);
 
         auto averageUseCase = std::make_shared<AverageLineUseCase>(m_profileService);
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController, m_seriesConfigStore, averageUseCase);
@@ -113,6 +113,7 @@ namespace ksv::application {
             m_sessionController, m_profileService);
         m_completionHistoryVm = new presentation::CompletionHistoryViewModel(m_completionHistoryUseCase, this);
         m_completionHistoryUseCase->onCurrentScenarioChanged([this] { m_completionHistoryVm->refresh(); });
+        m_completionHistoryUseCase->onSelectedRunChanged([this] { m_completionHistoryVm->refreshSelection(); });
 
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
         m_settingsVm = new presentation::SettingsViewModel(
@@ -124,8 +125,8 @@ namespace ksv::application {
         m_benchmarkTrackingVm = new presentation::BenchmarkTrackingViewModel(m_benchmarkTrackingUseCase, this);
     }
 
-    int App::start() {
-        m_engine.setInitialProperties({
+    QVariantMap App::initialProperties() const {
+        return {
             {"graphVm", QVariant::fromValue(m_graphVm)},
             {"playtimeVm", QVariant::fromValue(m_playtimeVm)},
             {"historyVm", QVariant::fromValue(m_completionHistoryVm)},
@@ -134,7 +135,11 @@ namespace ksv::application {
             {"scenarioBrowserVm", QVariant::fromValue(m_scenarioBrowserVm)},
             {"benchmarkManagerVm", QVariant::fromValue(m_benchmarkManagerVm)},
             {"benchmarkTrackingVm", QVariant::fromValue(m_benchmarkTrackingVm)}
-        });
+        };
+    }
+
+    int App::start() {
+        m_engine.setInitialProperties(initialProperties());
         m_engine.loadFromModule("KovaaksStatsViewer", "Main");
         if (m_engine.rootObjects().isEmpty()) return -1;
         return 0;

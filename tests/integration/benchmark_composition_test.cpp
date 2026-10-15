@@ -23,12 +23,13 @@
 
 #include "app/app.h"
 #include "formats/protobuf/proto_decoder.h"
-#include "presentation/benchmark_breakdown_model.h"
+#include "presentation/benchmark_progress_grid_model.h"
 #include "presentation/benchmark_issue_text.h"
 #include "presentation/benchmark_manager_vm.h"
 #include "presentation/benchmark_table_model.h"
 #include "presentation/benchmark_tracking_vm.h"
 #include "qt_data/benchmark_store.h"
+#include "qt_data/playlist_reader.h"
 #include "qt_data/series_config_store.h"
 #include "fake_settings_service.h"
 #include "integration_env.h"
@@ -208,6 +209,15 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     ASSERT_EQ(working.uncategorized.size(), 36U);
     EXPECT_EQ(working.uncategorized.front().name, "WhisphereRawControl");
     EXPECT_EQ(working.uncategorized.back().name, "voxTargetClick 20% Small");
+    // Every scenario lands in Uncategorized in the playlist's own order, with no setup invented.
+    const auto playlist = qt_data::PlaylistReader{}.read(
+        QDir(TEST_FILES_DIR).absoluteFilePath("Viscose Benchmarks Beta - Intermediate.json").toStdString());
+    ASSERT_TRUE(playlist.seed.has_value());
+    std::vector<std::string> importedOrder;
+    for (const auto &entry: working.uncategorized) importedOrder.push_back(entry.name);
+    EXPECT_EQ(importedOrder, playlist.seed->scenarioNames);
+    EXPECT_TRUE(working.categories.empty());
+    EXPECT_TRUE(working.tiers.empty());
     const domain::BenchmarkId benchmarkId = working.id;
 
     const auto savedPath =
@@ -219,6 +229,9 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     ASSERT_TRUE(service->snapshot().has_value());
     ASSERT_EQ(service->snapshot()->entries.size(), 1U);
     EXPECT_EQ(service->snapshot()->entries.front().filename, benchmarkId.value + ".json");
+    const auto *savedImport = std::get_if<LoadedBenchmark>(&service->snapshot()->entries.front().content);
+    ASSERT_NE(savedImport, nullptr);
+    EXPECT_EQ(savedImport->completeness.completeness, domain::Completeness::Incomplete);
 
     manager->closeEditor();
     const auto reopened = manager->openBenchmark(benchmarkId);
@@ -255,6 +268,92 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     EXPECT_FALSE(QFile::exists(savedPath));
     ASSERT_TRUE(service->snapshot().has_value());
     EXPECT_TRUE(service->snapshot()->entries.empty());
+}
+
+TEST(BenchmarkComposition, RefreshLoadsACopiedFileAndClearsAFixedProblemWithoutRestarting) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const auto writeFile = [&](const QString &name, const QByteArray &bytes) {
+        QFile file(QDir(dir.path()).absoluteFilePath(name));
+        ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+        file.write(bytes);
+    };
+    writeFile("broken.json", "{ not json");
+
+    auto settings = std::make_shared<tests_support::FakeSettingsService>();
+    auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
+    App app(settings, std::make_shared<data::ProtoDecoder>(),
+            std::make_shared<qt_data::SeriesConfigStore>(settings),
+            std::make_shared<StatsCsvParser>(), repo);
+    const auto service = app.benchmarksService();
+    ASSERT_TRUE(service->snapshot().has_value());
+    ASSERT_EQ(service->snapshot()->entries.size(), 1U);
+    ASSERT_NE(std::get_if<ProblemBenchmark>(&service->snapshot()->entries[0].content), nullptr);
+
+    // A file copied in from another KSV install, plus a repaired replacement for the broken one.
+    writeFile("copied.json", trackableJson());
+    QByteArray repaired = trackableJson();
+    repaired.replace("\"id\": \"b1\", \"name\": \"Composed\"", "\"id\": \"b2\", \"name\": \"Repaired\"");
+    ASSERT_NE(repaired, trackableJson());
+    writeFile("broken.json", repaired);
+    app.benchmarkManagerUseCase()->refresh();
+
+    const auto refreshed = service->snapshot();
+    ASSERT_TRUE(refreshed.has_value());
+    const auto &entries = refreshed->entries;
+    ASSERT_EQ(entries.size(), 2U);
+    std::map<std::string, std::string> namesByFile;
+    for (const auto &entry: entries) {
+        const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content);
+        ASSERT_NE(loaded, nullptr) << entry.filename;
+        namesByFile[entry.filename] = loaded->benchmark.name;
+    }
+    EXPECT_EQ(namesByFile["broken.json"], "Repaired");
+    EXPECT_EQ(namesByFile["copied.json"], "Composed");
+
+    app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"b1"});
+    EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Ready);
+}
+
+TEST(BenchmarkComposition, UnsupportedFileIsReportedAndNeverRewrittenByAutomaticMapping) {
+    integration::TestEnv env;
+    ASSERT_TRUE(env.valid());
+    ASSERT_TRUE(env.makePerformancesDir());
+    ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+    QTemporaryDir benchmarks;
+    ASSERT_TRUE(benchmarks.isValid());
+    // Auto-mappable by name if it were loaded, so only the version check keeps it untouched.
+    QByteArray future = unmappedJson();
+    future.replace("\"schemaVersion\": 1", "\"schemaVersion\": 99");
+    ASSERT_NE(future, unmappedJson());
+    const auto path = QDir(benchmarks.path()).absoluteFilePath("future.json");
+    {
+        QFile file(path);
+        ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+        file.write(future);
+    }
+
+    auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, env.statsParser, repo);
+    QElapsedTimer timer;
+    timer.start();
+    while (!app.profileService()->isProfileLoaded()) {
+        ASSERT_LT(timer.elapsed(), 5000);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+
+    ASSERT_TRUE(app.benchmarksService()->snapshot().has_value());
+    const auto *problem =
+        std::get_if<ProblemBenchmark>(&app.benchmarksService()->snapshot()->entries.at(0).content);
+    ASSERT_NE(problem, nullptr);
+    EXPECT_EQ(problem->problem, BenchmarkFileProblem::Unsupported);
+    EXPECT_EQ(problem->schemaVersion, std::make_optional(99));
+    app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"auto-1"});
+    EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Unavailable);
+
+    QFile file(path);
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+    EXPECT_EQ(file.readAll(), future);
 }
 
 TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConflicts) {
@@ -472,13 +571,9 @@ namespace {
         return declaration.match(source).hasMatch();
     }
 
-    QModelIndex findBreakdownNode(const QAbstractItemModel *model, const QString &name,
-                                  const QModelIndex &parent = {}) {
-        for (int row = 0; row < model->rowCount(parent); ++row) {
-            const QModelIndex idx = model->index(row, 0, parent);
-            if (idx.data(presentation::BenchmarkBreakdownModel::NameRole).toString() == name) return idx;
-            if (const QModelIndex hit = findBreakdownNode(model, name, idx); hit.isValid()) return hit;
-        }
+    QVariantMap findGridRow(const presentation::BenchmarkProgressGridModel *grid, const QString &name) {
+        for (const QVariant &row: grid->rows())
+            if (row.toMap().value(QStringLiteral("name")).toString() == name) return row.toMap();
         return {};
     }
 }
@@ -541,16 +636,15 @@ TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewM
 
     EXPECT_NE(vm->rankHistory(), nullptr);
     EXPECT_NE(vm->playtimeHistory(), nullptr);
-    ASSERT_NE(vm->breakdown(), nullptr);
-    EXPECT_GT(vm->breakdown()->rowCount({}), 0);
+    ASSERT_NE(vm->progressGrid(), nullptr);
+    EXPECT_FALSE(vm->progressGrid()->rows().isEmpty());
     EXPECT_TRUE(vm->playtimeHistory()->hasData());
 
-    const QModelIndex scenario = findBreakdownNode(vm->breakdown(), QStringLiteral("Wall Six"));
-    ASSERT_TRUE(scenario.isValid()) << "breakdown hierarchy never surfaced the mapped scenario";
-    EXPECT_EQ(scenario.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString(),
-              QStringLiteral("Resolved"));
-    EXPECT_FALSE(scenario.data(presentation::BenchmarkBreakdownModel::PersonalBestTextRole)
-                     .toString().isEmpty());
+    const QVariantMap scenario = findGridRow(vm->progressGrid(), QStringLiteral("Wall Six"));
+    ASSERT_FALSE(scenario.isEmpty()) << "the progress grid never surfaced the mapped scenario";
+    // A normally resolved scenario reports no match state at all.
+    EXPECT_TRUE(scenario.value(QStringLiteral("matchStateText")).toString().isEmpty());
+    EXPECT_NE(scenario.value(QStringLiteral("personalBestText")).toString(), QStringLiteral("—"));
 
     // The application projection carries the numeric detail the Qt surface adapts.
     const auto *projection = w->app->benchmarkTrackingUseCase()->projection();
@@ -582,10 +676,9 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     ASSERT_EQ(before->scenarios[0].matchState, domain::ScenarioMatchState::Unresolved);
     ASSERT_FALSE(before->scenarios[0].personalBest.has_value());
 
-    const QModelIndex unmapped = findBreakdownNode(vm->breakdown(), QStringLiteral("Needs Mapping"));
-    ASSERT_TRUE(unmapped.isValid());
-    EXPECT_EQ(unmapped.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString(),
-              QStringLiteral("Unresolved"));
+    const QVariantMap unmapped = findGridRow(vm->progressGrid(), QStringLiteral("Needs Mapping"));
+    ASSERT_FALSE(unmapped.isEmpty());
+    EXPECT_EQ(unmapped.value(QStringLiteral("matchStateText")).toString(), QStringLiteral("Not found in your runs"));
 
     QSignalSpy changed(vm, &presentation::BenchmarkTrackingViewModel::changed);
 
@@ -611,13 +704,11 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     EXPECT_GT(after->totalPlaytimeSeconds, 0.0);
 
     EXPECT_EQ(vm->attainedRank(), QStringLiteral("Bronze"));
-    EXPECT_TRUE(vm->blockers().isEmpty());
-    const QModelIndex remapped = findBreakdownNode(vm->breakdown(), QStringLiteral("Needs Mapping"));
-    ASSERT_TRUE(remapped.isValid());
-    EXPECT_EQ(remapped.data(presentation::BenchmarkBreakdownModel::MatchStateTextRole).toString(),
-              QStringLiteral("Resolved"));
-    EXPECT_NE(remapped.data(presentation::BenchmarkBreakdownModel::PersonalBestTextRole).toString(),
-              QStringLiteral("Unplayed"));
+    const QVariantMap remapped = findGridRow(vm->progressGrid(), QStringLiteral("Needs Mapping"));
+    ASSERT_FALSE(remapped.isEmpty());
+    EXPECT_FALSE(remapped.value(QStringLiteral("blocker")).toBool());
+    EXPECT_TRUE(remapped.value(QStringLiteral("matchStateText")).toString().isEmpty());
+    EXPECT_NE(remapped.value(QStringLiteral("personalBestText")).toString(), QStringLiteral("—"));
 }
 
 // --- Benchmark table editor: real composition ----------------------------------------------------

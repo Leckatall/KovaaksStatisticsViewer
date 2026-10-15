@@ -31,6 +31,7 @@ find_package(Qt6 REQUIRED COMPONENTS
         Svg  # qsvg image-format plugin, for SVG button icons
         Test  # Add for testing
         QuickTest
+        Network  # ksv_driver's localhost automation socket (dev tool only)
 )
 qt_policy(SET QTP0004 NEW)
 
@@ -109,10 +110,12 @@ endfunction()
 
 ksv_copy_mingw_runtime_dlls(ksv)
 
-# Dev-only component gallery (qmlpreview target). Excluded from Release and packaged builds.
-option(KSV_BUILD_GALLERY "Build the dev component gallery (ksv_gallery)" ON)
+# Dev-only tools: the component gallery (qmlpreview target) and the UI automation driver
+# (screenshots + scripted input for agents). Excluded from Release and packaged builds.
+option(KSV_BUILD_GALLERY "Build the dev tools (ksv_gallery, ksv_driver)" ON)
 if(KSV_BUILD_GALLERY AND NOT CMAKE_BUILD_TYPE STREQUAL "Release")
     add_subdirectory(tools/gallery)
+    add_subdirectory(tools/driver)
 endif()
 
 include(CTest)
