@@ -60,6 +60,8 @@ qt_add_qml_module(ksv_ui
             qml/benchmark/TableSwatch.qml
             qml/benchmark/BenchmarkRankHeaderCell.qml
             qml/benchmark/BenchmarkEmptyGroupList.qml
+            qml/benchmark/ProgressGridRow.qml
+            qml/benchmark/ProgressGridGroupCell.qml
             qml/series/SeriesConfigDraftPanel.qml
             qml/series/SeriesConfigEditorDelegate.qml
             qml/series/ExpressionTreeEditor.qml
