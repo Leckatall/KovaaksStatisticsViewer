@@ -31,7 +31,7 @@ flowchart TB
 
 **Key:** every box identifies its architectural type in the label. Each arrow names a distinct interaction; no internal KSV component, store, or technology is shown.
 
-Evidence: [`src/main.cpp`](../../src/main.cpp), [`src/qt_data/file_service.cpp`](../../src/qt_data/file_service.cpp), [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/qt_data/settings_service.cpp`](../../src/qt_data/settings_service.cpp), and [`src/ui/qml/VisualSettingsManager.qml`](../../src/ui/qml/VisualSettingsManager.qml).
+Evidence: [`src/main.cpp`](../../src/main.cpp), [`src/qt_data/file_service.cpp`](../../src/qt_data/file_service.cpp), [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/qt_data/settings_service.cpp`](../../src/qt_data/settings_service.cpp), and [`src/ui/qml/graph/VisualSettingsManager.qml`](../../src/ui/qml/graph/VisualSettingsManager.qml).
 
 KovaaK's produces `.perf` and optional stats `.csv` exports in configured local roots; KSV reads them as import inputs. KSV owns accepted run history in `profile.pb` and configuration in local settings. Qt, Protocol Buffers, files, and owned stores are internal or subordinate details rather than external software systems, so they are omitted from this context view. The verified production composition uses only local interactions; no remote service is present in this model.
 
@@ -177,7 +177,7 @@ Implementation anchors: [`src/domain/run.h`](../../src/domain/run.h), [`src/doma
 
 Series and axis configuration is a versioned JSON document stored through `QSettings`. `SeriesConfigStore` validates changes, migrates supported older document shapes, quarantines invalid content, and seeds defaults when recovery is required. Its draft mode keeps edits in memory until commit and can restore the pre-edit baseline on discard.
 
-Implementation anchors: [`src/data/formats/protobuf/schema/profile.proto`](../../src/data/formats/protobuf/schema/profile.proto), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/data/formats/protobuf/migration/profile_v3_migrator.cpp`](../../src/data/formats/protobuf/migration/profile_v3_migrator.cpp), [`src/qt_data/series_config_store.cpp`](../../src/qt_data/series_config_store.cpp), and [`src/ui/qml/VisualSettingsManager.qml`](../../src/ui/qml/VisualSettingsManager.qml).
+Implementation anchors: [`src/data/formats/protobuf/schema/profile.proto`](../../src/data/formats/protobuf/schema/profile.proto), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/data/formats/protobuf/migration/profile_v3_migrator.cpp`](../../src/data/formats/protobuf/migration/profile_v3_migrator.cpp), [`src/qt_data/series_config_store.cpp`](../../src/qt_data/series_config_store.cpp), and [`src/ui/qml/graph/VisualSettingsManager.qml`](../../src/ui/qml/graph/VisualSettingsManager.qml).
 
 ## Build, deployment, and development topology
 

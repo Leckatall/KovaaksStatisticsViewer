@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../../src/ui/qml"
+import "../../../src/ui/qml/shell"
 import "ItemLookup.js" as ItemLookup
 
 TestCase {

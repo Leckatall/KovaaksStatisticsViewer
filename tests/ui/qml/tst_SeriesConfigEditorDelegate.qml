@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtTest
-import "../../../src/ui/qml"
+import "../../../src/ui/qml/series"
 import "ItemLookup.js" as ItemLookup
 
 TestCase {

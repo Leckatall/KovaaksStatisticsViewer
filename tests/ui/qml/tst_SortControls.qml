@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../../src/ui/qml"
+import "../../../src/ui/qml/scenario"
 
 TestCase {
     id: testCase

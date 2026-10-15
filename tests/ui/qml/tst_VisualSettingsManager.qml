@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../../src/ui/qml"
+import "../../../src/ui/qml/graph"
 
 TestCase {
     id: testCase
@@ -35,7 +35,7 @@ TestCase {
         // Simulated app restart: a fresh instance reading back whatever the previous
         // instance persisted, rather than reusing the shared `manager` from above.
         const before = Qt.createQmlObject(
-            'import "../../../src/ui/qml"; VisualSettingsManager {}',
+            'import "../../../src/ui/qml/graph"; VisualSettingsManager {}',
             testCase, "beforeRestartManager")
         before.syncVisibleSeriesIds(["10", "11"])
         before.setSeriesVisible("10", false)
@@ -43,7 +43,7 @@ TestCase {
         wait(50) // let the destroyed instance's Settings flush before reading it back
 
         const after = Qt.createQmlObject(
-            'import "../../../src/ui/qml"; VisualSettingsManager {}',
+            'import "../../../src/ui/qml/graph"; VisualSettingsManager {}',
             testCase, "afterRestartManager")
         wait(50)
         // A fresh instance re-running the startup sync must see "10" as already-seen

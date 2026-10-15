@@ -50,10 +50,10 @@ Static audit findings retained from the 2026-08-13 review. Each checkbox reports
 
 ## QML performance and state
 
-- [ ] Pointer movement performs repeated linear sampling and by-value series copies. (`src/ui/qml/GraphCanvasWithTooltip.qml:26`; `src/ui/components/graph_canvas.cpp:168`, `GraphCanvas::valuesAtX`; `src/ui/presentation/series_model.cpp:10`, `SeriesModel::sampleAtX`)
-- [ ] Tooltip series are rebuilt from a fresh model on every hover event. (`src/ui/qml/GraphCanvasWithTooltip.qml:40`; `src/ui/qml/GraphCanvasWithTooltip.qml:83`; `src/ui/components/graph_canvas.cpp:190`, `GraphCanvas::valuesAtX`)
-- [ ] Invisible tooltip-position bindings recompute during hover movement. (`src/ui/qml/GraphCanvasWithTooltip.qml:55`)
-- [ ] Column visibility relies on unchecked checked-binding/write-back lockstep across separate definitions. (`src/ui/qml/SettingsDialog.qml:231`; `src/ui/qml/Main.qml:25`; `src/ui/presentation/graph_vm.h:29`, `GraphViewModel::Column`)
+- [ ] Pointer movement performs repeated linear sampling and by-value series copies. (`src/ui/qml/graph/GraphCanvasWithTooltip.qml:26`; `src/ui/components/graph_canvas.cpp:168`, `GraphCanvas::valuesAtX`; `src/ui/presentation/series_model.cpp:10`, `SeriesModel::sampleAtX`)
+- [ ] Tooltip series are rebuilt from a fresh model on every hover event. (`src/ui/qml/graph/GraphCanvasWithTooltip.qml:40`; `src/ui/qml/graph/GraphCanvasWithTooltip.qml:83`; `src/ui/components/graph_canvas.cpp:190`, `GraphCanvas::valuesAtX`)
+- [ ] Invisible tooltip-position bindings recompute during hover movement. (`src/ui/qml/graph/GraphCanvasWithTooltip.qml:55`)
+- [ ] Column visibility relies on unchecked checked-binding/write-back lockstep across separate definitions. (`src/ui/qml/shell/SettingsDialog.qml:231`; `src/ui/qml/Main.qml:25`; `src/ui/presentation/graph_vm.h:29`, `GraphViewModel::Column`)
 
 ## Architecture and project hygiene
 
@@ -63,4 +63,4 @@ Static audit findings retained from the 2026-08-13 review. Each checkbox reports
 - [x] Integration tests use divergent manual QML registration. (`tests/integration/qt_test_main.cpp:16`, `registerQmlTypes`; `src/qml_registration.h:15`, `declare_metatypes`)
 - [ ] Release packaging leaves gallery construction enabled. (`CMakeLists.txt:99`; `scripts/package-release.ps1:137`)
 - [ ] The integration suite contains a view-model stub despite its “no fakes” rule. (`tests/integration/graph_canvas_geometry_test.cpp:93`, `NoYAxisVm`)
-- [x] Commented-out code lacks the required dated TODO marker. (`CMakeLists.txt:109`; `src/ui/qml/AppMenuBar.qml:29`)
+- [x] Commented-out code lacks the required dated TODO marker. (`CMakeLists.txt:109`; `src/ui/qml/shell/AppMenuBar.qml:29`)

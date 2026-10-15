@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
 import QtQuick.Dialogs
-import "../../../src/ui/qml"
+import "../../../src/ui/qml/shell"
 import "ItemLookup.js" as ItemLookup
 import "TestDoubles.js" as TestDoubles
 

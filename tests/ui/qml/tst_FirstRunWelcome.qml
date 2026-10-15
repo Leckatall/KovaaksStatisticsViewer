@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../../src/ui/qml"
+import "../../../src/ui/qml/shell"
 
 // the first-run welcome makes choosing the Kovaaks folder the primary action.
 TestCase {

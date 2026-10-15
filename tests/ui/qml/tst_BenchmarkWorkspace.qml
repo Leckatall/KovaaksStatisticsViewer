@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtTest
-import "../../../src/ui/qml"
+import "../../../src/ui/qml/benchmark"
 import "ItemLookup.js" as ItemLookup
 import "TestDoubles.js" as TestDoubles
 
@@ -56,7 +56,7 @@ Item {
             let obj = null
             try {
                 obj = Qt.createQmlObject(
-                    'import QtQuick; import "../../../src/ui/qml"; BenchmarkWorkspace { }',
+                    'import QtQuick; import "../../../src/ui/qml/benchmark"; BenchmarkWorkspace { }',
                     parentItem, "dyn_BenchmarkWorkspace")
             } catch (e) {
                 verify(false, "BenchmarkWorkspace.qml did not load: " + e)
@@ -621,7 +621,7 @@ Item {
             let obj = null
             try {
                 obj = Qt.createQmlObject(
-                    'import QtQuick; import "../../../src/ui/qml"; BenchmarkWorkspace { }',
+                    'import QtQuick; import "../../../src/ui/qml/benchmark"; BenchmarkWorkspace { }',
                     parentItem, "dyn_BenchmarkWorkspace")
             } catch (e) {
                 verify(false, "BenchmarkWorkspace.qml did not load: " + e)

@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
 import KovaaksStatsViewer
-import "../../../src/ui/qml"
+import "../../../src/ui/qml/graph"
 import "TestDoubles.js" as TestDoubles
 
 Item {
