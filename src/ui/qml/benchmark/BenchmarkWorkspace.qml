@@ -365,18 +365,8 @@ Item {
 
     Component {
         id: incompleteComponent
-        ScrollView {
+        OverflowScrollView {
             id: incompleteScroll
-            contentWidth: availableWidth
-            clip: true
-            ScrollBar.vertical: ListScrollBar {
-                // A ScrollView leaves a replacement bar's geometry to the caller.
-                parent: incompleteScroll
-                x: incompleteScroll.width - width
-                y: incompleteScroll.topPadding
-                height: incompleteScroll.availableHeight
-                overflowing: incompleteScroll.contentHeight > incompleteScroll.height + 1
-            }
 
             ColumnLayout {
                 width: root._contentWidth
@@ -444,21 +434,11 @@ Item {
 
     Component {
         id: trackableComponent
-        ScrollView {
+        // The bar is always visible while the content overflows: the history cards usually
+        // starts below the fold, and the style's own bar only shows mid-scroll.
+        OverflowScrollView {
             id: benchmarkWorkspaceScroll
             objectName: "benchmarkWorkspaceScroll"
-            contentWidth: availableWidth
-            clip: true
-            // Always visible while the content overflows: the history cards usually
-            // starts below the fold, and the style's own bar only shows mid-scroll.
-            ScrollBar.vertical: ListScrollBar {
-                // A ScrollView leaves a replacement bar's geometry to the caller.
-                parent: benchmarkWorkspaceScroll
-                x: benchmarkWorkspaceScroll.width - width
-                y: benchmarkWorkspaceScroll.topPadding
-                height: benchmarkWorkspaceScroll.availableHeight
-                overflowing: benchmarkWorkspaceScroll.contentHeight > benchmarkWorkspaceScroll.height + 1
-            }
 
             // Explicit x/y placement rather than a Flow: the two history cards
             // stay direct children (the scroll-order test walks them by index) yet

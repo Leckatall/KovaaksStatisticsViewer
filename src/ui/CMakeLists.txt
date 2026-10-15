@@ -45,6 +45,7 @@ qt_add_qml_module(ksv_ui
             qml/common/GridCellBorders.qml
             qml/common/GridHeaderCell.qml
             qml/common/ListScrollBar.qml
+            qml/common/OverflowScrollView.qml
             qml/common/Theme.qml
             qml/common/ToolbarButton.qml
             qml/common/TooltipToolButton.qml
