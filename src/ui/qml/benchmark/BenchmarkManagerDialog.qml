@@ -204,29 +204,6 @@ ApplicationWindow {
         root.runTableCommand(() => root.vm().setScenarioHashes(entryId, hashes))
     }
 
-    function matchStateLabel(state) {
-        return ({
-            resolved: qsTr("Resolved"),
-            mappedUnavailable: qsTr("Mapped, unavailable"),
-            unresolved: qsTr("Unresolved"),
-            ambiguous: qsTr("Ambiguous"),
-            autoMappable: qsTr("Pending automatic mapping")
-        })[state] || qsTr("Unresolved")
-    }
-
-    function offersMappingEdit(state) {
-        return state === "resolved" || state === "mappedUnavailable"
-    }
-
-    function candidateText(candidate) {
-        const parts = [String(candidate.hash),
-                       qsTr("%n run(s)", "", candidate.runCount || 0)]
-        const played = candidate.lastPlayed
-        if (played && !isNaN(new Date(played).getTime()))
-            parts.push(Qt.formatDate(played, "yyyy-MM-dd"))
-        return parts.join(" · ")
-    }
-
     function importFromUrl(url) {
         root.runWhenClean(() => {
             const result = root.vm().importPlaylist(url)
@@ -942,143 +919,13 @@ ApplicationWindow {
                         Layout.fillWidth: true
                     }
 
-                    // Replacement drops the previous versions; linking preserves them.
-                    Pane {
+                    BenchmarkMappingPanel {
                         id: mappingPanel
-                        objectName: "mappingPanel"
                         Layout.fillWidth: true
-                        padding: 4
-                        property bool candidatesArmed: false
-                        property bool linking: false
-                        readonly property string mappingState: root.currentRow && root.currentRow.mappingState ? root.currentRow.mappingState : "unresolved"
-                        readonly property var candidates: root.currentRow && root.currentRow.mappingCandidates ? root.currentRow.mappingCandidates : []
-                        readonly property var mappedHashes: root.currentRow && root.currentRow.mappedHashes ? root.currentRow.mappedHashes : []
-                        readonly property bool armed: mappingPanel.candidatesArmed || mappingPanel.mappingState === "ambiguous"
-                        Connections {
-                            target: root
-                            function onCurrentEntryIdChanged() {
-                                mappingPanel.candidatesArmed = false
-                                mappingPanel.linking = false
-                            }
-                        }
-
-                        ColumnLayout {
-                            width: parent.width
-                            spacing: 2
-                            Label {
-                                objectName: "mappingHint"
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: clearMappingButton.implicitHeight
-                                visible: root.currentEntryId === ""
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
-                                text: qsTr("Select a scenario to see its mapping")
-                                color: root.palette.placeholderText
-                            }
-                            // Wraps instead of running past a narrow editor, so the buttons stay reachable.
-                            Flow {
-                                Layout.fillWidth: true
-                                visible: root.currentEntryId !== ""
-                                spacing: 8
-                                Label {
-                                    height: clearMappingButton.implicitHeight
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: qsTr("Mapping for %1:").arg(root.currentRow && root.currentRow.name ? root.currentRow.name : qsTr("(unnamed)"))
-                                }
-                                Label {
-                                    objectName: "matchLabel"
-                                    height: clearMappingButton.implicitHeight
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: root.matchStateLabel(mappingPanel.mappingState)
-                                    color: root.palette.placeholderText
-                                }
-                                Button {
-                                    objectName: "changeMappingButton"
-                                    text: mappingPanel.mappedHashes.length > 1 ? qsTr("Replace mappings") : qsTr("Change mapping")
-                                    visible: root.offersMappingEdit(mappingPanel.mappingState)
-                                    Accessible.name: qsTr("Change the scenario mapping")
-                                    onClicked: {
-                                        mappingPanel.linking = false
-                                        mappingPanel.candidatesArmed = !mappingPanel.candidatesArmed
-                                    }
-                                }
-                                Button {
-                                    objectName: "linkVersionsButton"
-                                    text: qsTr("Link versions")
-                                    checkable: true
-                                    checked: mappingPanel.linking
-                                    enabled: mappingPanel.linking
-                                        || mappingPanel.candidates.some(candidate => mappingPanel.mappedHashes.indexOf(candidate.hash) < 0)
-                                    Accessible.name: qsTr("Link another version with the same scenario name")
-                                    onClicked: {
-                                        mappingPanel.linking = !mappingPanel.linking
-                                        mappingPanel.candidatesArmed = false
-                                    }
-                                }
-                                Button {
-                                    id: clearMappingButton
-                                    objectName: "clearMappingButton"
-                                    text: qsTr("Clear mapping")
-                                    visible: root.offersMappingEdit(mappingPanel.mappingState)
-                                    Accessible.name: qsTr("Clear the scenario mapping")
-                                    onClicked: root.requestMappingEdit(root.currentEntryId, "")
-                                }
-                            }
-                            Repeater {
-                                model: mappingPanel.mappedHashes
-                                delegate: RowLayout {
-                                    id: linkedVersion
-                                    required property string modelData
-                                    Layout.fillWidth: true
-                                    readonly property var candidate: mappingPanel.candidates.find(value => value.hash === linkedVersion.modelData)
-                                    readonly property bool available: linkedVersion.candidate !== undefined
-                                        || (root.vm().scenarioCatalogue || []).some(value => value.hash === linkedVersion.modelData)
-                                    Label {
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideMiddle
-                                        text: linkedVersion.candidate ? root.candidateText(linkedVersion.candidate)
-                                            : (linkedVersion.available ? linkedVersion.modelData
-                                                : qsTr("%1 · unavailable").arg(linkedVersion.modelData))
-                                    }
-                                    Button {
-                                        objectName: "unlinkVersion_" + linkedVersion.modelData
-                                        text: qsTr("Unlink")
-                                        Accessible.name: qsTr("Unlink scenario version %1").arg(linkedVersion.modelData)
-                                        onClicked: root.requestLinkedVersion(linkedVersion.modelData, false)
-                                    }
-                                }
-                            }
-                            Label {
-                                Layout.fillWidth: true
-                                visible: mappingPanel.linking
-                                text: qsTr("Choose a version to include its scores and history in this benchmark row.")
-                                wrapMode: Text.WordWrap
-                                color: root.palette.placeholderText
-                            }
-                            Repeater {
-                                model: root.currentEntryId !== "" ? mappingPanel.candidates : []
-                                delegate: ItemDelegate {
-                                    id: candidateOption
-                                    required property var modelData
-                                    objectName: "candidateOption_" + candidateOption.modelData.hash
-                                    Layout.fillWidth: true
-                                    visible: mappingPanel.candidatesArmed
-                                        || mappingPanel.mappedHashes.indexOf(candidateOption.modelData.hash) < 0
-                                    enabled: mappingPanel.linking
-                                        ? mappingPanel.mappedHashes.indexOf(candidateOption.modelData.hash) < 0
-                                        : mappingPanel.armed
-                                    opacity: enabled ? 1 : 0.4
-                                    text: root.candidateText(candidateOption.modelData)
-                                    Accessible.name: mappingPanel.linking
-                                        ? qsTr("Link version %1").arg(candidateOption.text)
-                                        : qsTr("Map to %1").arg(candidateOption.text)
-                                    onClicked: {
-                                        if (mappingPanel.linking) root.requestLinkedVersion(candidateOption.modelData.hash, true)
-                                        else root.requestMappingEdit(root.currentEntryId, candidateOption.modelData.hash)
-                                    }
-                                }
-                            }
-                        }
+                        currentRow: root.currentRow
+                        scenarioCatalogue: root.vm().scenarioCatalogue || []
+                        onMappingEditRequested: (entryId, hash) => root.requestMappingEdit(entryId, hash)
+                        onLinkedVersionRequested: (hash, linked) => root.requestLinkedVersion(hash, linked)
                     }
 
                     // ---- Validation -----------------------------------------------------------------
