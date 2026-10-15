@@ -270,33 +270,15 @@ ApplicationWindow {
     }
 
     function assignTargets() {
-        const targets = [{id: "", label: qsTr("Uncategorized")}]
-        const groups = root.vm().groups || []
-        for (const group of groups) {
-            if (group.kind === "category" && !groups.some(g => g.parentId === group.id)) {
-                targets.push({id: group.id, label: group.name})
-            } else if (group.kind === "subcategory") {
-                const parent = groups.find(g => g.id === group.parentId)
-                targets.push({id: group.id, label: (parent ? parent.name : "") + " / " + group.name})
-            }
-        }
-        return targets
+        return root.vm().assignTargets || []
     }
 
     // Position and size of the current row within the collection that holds it: a subcategory,
     // a category's direct scenarios (which precede its subcategories), or Uncategorized.
     function currentRowPlacement() {
         const info = root.currentRow
-        const model = root.vm().tableModel
-        if (!info || info.row === undefined || !model) return {position: -1, size: 0}
-        if (info.subcategoryId !== "")
-            return {position: info.row - info.subcategorySpanStart, size: info.subcategorySpanLength}
-        let size = 0
-        for (let r = info.categorySpanStart; r < info.categorySpanStart + info.categorySpanLength; ++r) {
-            if (model.rowInfo(r).subcategoryId !== "") break
-            ++size
-        }
-        return {position: info.row - info.categorySpanStart, size: size}
+        if (!info || info.row === undefined) return {position: -1, size: 0}
+        return {position: info.positionInContainer, size: info.containerSize}
     }
 
     function moveCurrentRow(delta) {
@@ -350,10 +332,8 @@ ApplicationWindow {
     function requestSubcategory(categoryId, name) {
         root.commitActiveEdits()
         if (name.trim() === "") return false
-        const groups = root.vm().groups || []
-        const category = groups.find(g => g.id === categoryId)
-        const hasSubcategories = groups.some(g => g.kind === "subcategory" && g.parentId === categoryId)
-        if (category && !hasSubcategories && category.scenarioCount > 0) {
+        const category = (root.vm().groups || []).find(g => g.id === categoryId)
+        if (category && category.subcategoryNeedsRelocation === true) {
             subcategoryRelocationPrompt.categoryId = categoryId
             subcategoryRelocationPrompt.subcategoryName = name
             subcategoryRelocationPrompt.open()

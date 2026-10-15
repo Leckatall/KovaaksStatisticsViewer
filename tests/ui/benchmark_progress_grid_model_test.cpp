@@ -252,6 +252,27 @@ TEST(BenchmarkProgressGridModel, GroupsWithoutScenariosAreLeftOut) {
     EXPECT_EQ(grid->rows().size(), 3);
 }
 
+TEST(BenchmarkProgressGridModel, CategoriesWithoutASubcategoryRowSpanTheSubcategoryColumn) {
+    auto fake = gridFake();
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *grid = vm.progressGrid();
+
+    EXPECT_TRUE(groupFor(grid, QString()).value("spansSubcategory").toBool());
+    EXPECT_TRUE(groupFor(grid, "c1").value("spansSubcategory").toBool());
+    EXPECT_FALSE(groupFor(grid, "c2").value("spansSubcategory").toBool());
+    EXPECT_TRUE(groupFor(grid, "sc1").contains("spansSubcategory"));
+    EXPECT_FALSE(groupFor(grid, "sc1").value("spansSubcategory").toBool());
+
+    // A mixed category: its direct scenarios come first, so the subcategory starts mid-span.
+    auto &definition = fake->snap.selectedLoaded->benchmark;
+    definition.categories[0].subcategories.push_back(
+        Subcategory{GroupId{"sc2"}, "Mixed", {}, {definition.uncategorized.front()}});
+    definition.uncategorized.erase(definition.uncategorized.begin());
+    fake->publish();
+    EXPECT_FALSE(groupFor(grid, "c1").value("spansSubcategory").toBool());
+    EXPECT_TRUE(groupFor(grid, QString()).value("spansSubcategory").toBool());
+}
+
 TEST(BenchmarkProgressGridModel, NoSubcategoryColumnWithoutSubcategories) {
     auto fake = gridFake();
     auto &definition = fake->snap.selectedLoaded->benchmark;

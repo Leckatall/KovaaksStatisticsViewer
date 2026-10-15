@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "benchmark_format.h"
 #include "benchmarks/benchmark_evaluator.h"
@@ -171,6 +172,7 @@ namespace ksv::presentation {
                     addGroup(QStringLiteral("category"), q(category.id.value), q(category.name),
                              toQColor(category.color).name(), start);
                 }
+                markSubcategorySpans();
             }
 
             QVariantList tiers;
@@ -192,6 +194,27 @@ namespace ksv::presentation {
                 map[QStringLiteral("span")] = rowCount() - start;
                 addGroupRank(map, id);
                 groups.push_back(map);
+            }
+
+            // A category cell widens across the Subcategory column when none of its rows has a
+            // subcategory cell.
+            void markSubcategorySpans() {
+                const auto startsInside = [this](const int start, const int end) {
+                    return std::ranges::any_of(std::as_const(groups), [&](const QVariant &other) {
+                        const auto map = other.toMap();
+                        const int otherStart = map.value(QStringLiteral("start")).toInt();
+                        return map.value(QStringLiteral("column")).toString() == QStringLiteral("subcategory") &&
+                               otherStart >= start && otherStart < end;
+                    });
+                };
+                for (auto &group: groups) {
+                    auto map = group.toMap();
+                    const int start = map.value(QStringLiteral("start")).toInt();
+                    map[QStringLiteral("spansSubcategory")] =
+                        map.value(QStringLiteral("column")).toString() == QStringLiteral("category") &&
+                        !startsInside(start, start + map.value(QStringLiteral("span")).toInt());
+                    group = map;
+                }
             }
 
             // The group's rank chip: the highest tier the group satisfies (the old breakdown's

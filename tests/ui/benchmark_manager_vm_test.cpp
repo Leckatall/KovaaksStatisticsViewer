@@ -950,6 +950,102 @@ TEST(BenchmarkTableProjection, EmptyAndMixedGroupsRemainRepairable) {
     EXPECT_FALSE(find("g1")["issues"].toStringList().isEmpty());
 }
 
+namespace {
+    // projectionBench() plus g1 loaded mixed (direct a,b and m-sub holding m), g2 gaining an empty
+    // "hollow" subcategory, and a trailing empty category. Rows: a,b,m,c,d,e,u.
+    Benchmark mixedBench() {
+        auto bench = projectionBench();
+        bench.categories.at(0).subcategories.push_back(tableSub("m-sub", {tableEntry("m")}));
+        bench.categories.at(1).subcategories.push_back(tableSub("hollow", {}));
+        bench.categories.push_back(tableCategory("empty", {}));
+        bench.categories.push_back(tableCategory("direct", {tableEntry("x")}));
+        return bench;
+    }
+
+    QVariantMap groupById(const BenchmarkManagerViewModel &vm, const QString &id) {
+        for (const auto &group: vm.groups())
+            if (group.toMap()["id"].toString() == id) return group.toMap();
+        return {};
+    }
+}
+
+TEST(BenchmarkTableProjection, GroupsSayWhetherTheyAcceptScenariosAndNeedRelocation) {
+    TableFixture f;
+    f.open(mixedBench());
+
+    struct Expected {
+        QString id;
+        bool accepts;
+        bool needsRelocation;
+    };
+    const std::vector<Expected> categories{
+        {"g1", false, false},
+        {"g2", false, false},
+        {"empty", true, false},
+        {"direct", true, true},
+    };
+    for (const auto &[id, accepts, needsRelocation]: categories) {
+        const auto group = groupById(*f.vm, id);
+        ASSERT_FALSE(group.isEmpty()) << id.toStdString();
+        EXPECT_EQ(group["acceptsScenarios"].toBool(), accepts) << id.toStdString();
+        EXPECT_TRUE(group.contains("subcategoryNeedsRelocation")) << id.toStdString();
+        EXPECT_EQ(group["subcategoryNeedsRelocation"].toBool(), needsRelocation) << id.toStdString();
+    }
+    for (const QString id: {"m-sub", "p", "q", "hollow"}) {
+        const auto group = groupById(*f.vm, id);
+        ASSERT_FALSE(group.isEmpty()) << id.toStdString();
+        EXPECT_TRUE(group.contains("acceptsScenarios")) << id.toStdString();
+        EXPECT_TRUE(group["acceptsScenarios"].toBool()) << id.toStdString();
+    }
+
+    ASSERT_TRUE(f.vm->addSubcategoryRelocating("direct", "New", "newSubcategory")["ok"].toBool());
+    EXPECT_FALSE(groupById(*f.vm, "direct")["acceptsScenarios"].toBool());
+    EXPECT_FALSE(groupById(*f.vm, "direct")["subcategoryNeedsRelocation"].toBool());
+}
+
+TEST(BenchmarkTableProjection, AssignTargetsListUncategorizedThenEveryGroupThatAcceptsScenarios) {
+    TableFixture f;
+    f.open(mixedBench());
+
+    QStringList ids, labels;
+    for (const auto &target: f.vm->property("assignTargets").toList()) {
+        ids << target.toMap()["id"].toString();
+        labels << target.toMap()["label"].toString();
+    }
+    EXPECT_EQ(ids, (QStringList{"", "m-sub", "p", "q", "hollow", "empty", "direct"}));
+    EXPECT_EQ(labels, (QStringList{"Uncategorized", "Category g1 / Sub m-sub", "Category g2 / Sub p",
+                                   "Category g2 / Sub q", "Category g2 / Sub hollow", "Category empty",
+                                   "Category direct"}));
+
+    f.vm->discard();
+    QStringList closed;
+    for (const auto &target: f.vm->property("assignTargets").toList()) closed << target.toMap()["id"].toString();
+    EXPECT_EQ(closed, QStringList{""});
+}
+
+TEST(BenchmarkTableProjection, RowInfoPlacesEachRowWithinTheCollectionThatHoldsIt) {
+    TableFixture f;
+    f.open(mixedBench());
+    ASSERT_EQ(f.rowIds(), (QStringList{"a", "b", "m", "c", "d", "e", "x", "u"}));
+
+    const auto placement = [&](int row) {
+        QVariantMap info;
+        QMetaObject::invokeMethod(f.model, "rowInfo", Q_RETURN_ARG(QVariantMap, info), Q_ARG(int, row));
+        EXPECT_TRUE(info.contains("positionInContainer")) << row;
+        EXPECT_TRUE(info.contains("containerSize")) << row;
+        return std::pair{info["positionInContainer"].toInt(), info["containerSize"].toInt()};
+    };
+    // g1's direct scenarios a,b end where its m-sub begins, though g1's span covers all three rows.
+    EXPECT_EQ(placement(0), std::pair(0, 2));
+    EXPECT_EQ(placement(1), std::pair(1, 2));
+    EXPECT_EQ(placement(2), std::pair(0, 1));
+    EXPECT_EQ(placement(3), std::pair(0, 2));
+    EXPECT_EQ(placement(4), std::pair(1, 2));
+    EXPECT_EQ(placement(5), std::pair(0, 1));
+    EXPECT_EQ(placement(6), std::pair(0, 1));
+    EXPECT_EQ(placement(7), std::pair(0, 1));
+}
+
 // ── Threshold input ─────────────────────────────────────────────────────────────────────────────
 
 namespace {

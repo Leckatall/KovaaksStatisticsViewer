@@ -386,9 +386,10 @@ TestCase {
         const desc = TestDoubles.benchmarkManagementDesc()
         const dialog = openWithTable(desc, {
             groups: [
-                {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, issues: []},
-                {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 1, issues: []}
-            ]
+                {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
+                {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 1, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []}
+            ],
+            assignTargets: [{id: "", label: "Uncategorized"}, {id: "g1", label: "Clicking"}, {id: "g2", label: "Tracking"}]
         })
         verify(dialog.editorTable.focusCell({entryId: "a", columnKind: 2}))
         const model = vm(dialog).tableModel

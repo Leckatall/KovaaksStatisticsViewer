@@ -32,6 +32,7 @@ TestCase {
         fixture.setProjection(TestDoubles.benchmarkTableProjection(TestDoubles.benchmarkManagementDesc()))
         const vm = TestDoubles.makeFakeBenchmarkManagerVm(Object.assign({
             hasDraft: true, tableModel: fixture.model, groups: TestDoubles.benchmarkManagementGroups(),
+            assignTargets: TestDoubles.benchmarkManagementAssignTargets(),
             tiers: [{id: "t1", name: "Gold", color: "#FFD700"}, {id: "t2", name: "", color: "#808080"}]
         }, overrides || {}))
         const dialog = createTemporaryObject(dialogComponent, testCase, {benchmarkManagerVm: vm})
@@ -145,8 +146,13 @@ TestCase {
                 const created = {id: "subcategory-1", name: name, color: "#123456"}
                 for (const row of desc.rows)
                     if (row.category && row.category.id === categoryId) row.subcategory = created
-                this.groups = this.groups.concat([{id: "subcategory-1", kind: "subcategory", parentId: categoryId,
-                                                   name: name, color: "#123456", scenarioCount: 2, issues: []}])
+                const parent = this.groups.find(g => g.id === categoryId)
+                this.groups = this.groups.map(g => g.id === categoryId
+                    ? Object.assign({}, g, {acceptsScenarios: false, subcategoryNeedsRelocation: false}) : g)
+                    .concat([{id: "subcategory-1", kind: "subcategory", parentId: categoryId, name: name,
+                              color: "#123456", scenarioCount: 2, acceptsScenarios: true, issues: []}])
+                this.assignTargets = this.assignTargets.filter(t => t.id !== categoryId)
+                    .concat([{id: "subcategory-1", label: parent.name + " / " + name}])
                 ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(desc))
                 return {ok: true, createdId: "subcategory-1"}
             }

@@ -222,7 +222,7 @@ function trackingFixtureIncomplete() {
                     fills: [1, 0.4, 0, 0], barDescription: "Bronze · 40% of the way to Silver (84.2 / 90)"
                 })
             ],
-            groups: [{column: "category", id: "", name: "Uncategorized", color: "", start: 0, span: 1}]
+            groups: [{column: "category", id: "", name: "Uncategorized", color: "", start: 0, span: 1, spansSubcategory: true}]
         })
     }
 }
@@ -295,11 +295,11 @@ function trackingFixtureTrackable() {
                 })
             ],
             groups: [
-                {column: "category", id: "", name: "Uncategorized", color: "", start: 0, span: 1},
-                {column: "subcategory", id: "sub-static", name: "Static", color: "#00A000", start: 1, span: 1},
-                {column: "subcategory", id: "sub-dynamic", name: "Dynamic", color: "#007000", start: 2, span: 1},
-                {column: "category", id: "cat-click", name: "Clicking", color: "#00A000", start: 1, span: 2},
-                {column: "category", id: "cat-track", name: "Tracking", color: "#9c27b0", start: 3, span: 1}
+                {column: "category", id: "", name: "Uncategorized", color: "", start: 0, span: 1, spansSubcategory: true},
+                {column: "subcategory", id: "sub-static", name: "Static", color: "#00A000", start: 1, span: 1, spansSubcategory: false},
+                {column: "subcategory", id: "sub-dynamic", name: "Dynamic", color: "#007000", start: 2, span: 1, spansSubcategory: false},
+                {column: "category", id: "cat-click", name: "Clicking", color: "#00A000", start: 1, span: 2, spansSubcategory: false},
+                {column: "category", id: "cat-track", name: "Tracking", color: "#9c27b0", start: 3, span: 1, spansSubcategory: true}
             ]
         })
     }
@@ -431,6 +431,7 @@ function makeFakeBenchmarkManagerVm(overrides) {
         // BenchmarkTableModelFixture; commandLog records every table-era command in call order.
         tableModel: null,
         groups: [],
+        assignTargets: [{id: "", label: "Uncategorized"}],
         selectedEntryIds: [],
         currentCell: ({}),
         canUndo: false,
@@ -504,13 +505,23 @@ function benchmarkManagementDesc() {
 
 function benchmarkManagementGroups() {
     return [
-        {id: "g1", kind: "category", parentId: "", name: "Clicking", color: "#009600", scenarioCount: 2, issues: []},
-        {id: "g2", kind: "category", parentId: "", name: "Tracking", color: "#000096", scenarioCount: 1, issues: []},
-        {id: "p", kind: "subcategory", parentId: "g2", name: "Precise", color: "#960000", scenarioCount: 1, issues: []},
-        {id: "hollow", kind: "subcategory", parentId: "g2", name: "Hollow", color: "#444444", scenarioCount: 0,
+        {id: "g1", kind: "category", parentId: "", name: "Clicking", color: "#009600", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
+        {id: "g2", kind: "category", parentId: "", name: "Tracking", color: "#000096", scenarioCount: 1, acceptsScenarios: false, subcategoryNeedsRelocation: false, issues: []},
+        {id: "p", kind: "subcategory", parentId: "g2", name: "Precise", color: "#960000", scenarioCount: 1, acceptsScenarios: true, issues: []},
+        {id: "hollow", kind: "subcategory", parentId: "g2", name: "Hollow", color: "#444444", scenarioCount: 0, acceptsScenarios: true,
          issues: ["A subcategory has no scenarios."]},
-        {id: "gE", kind: "category", parentId: "", name: "Empty", color: "#888888", scenarioCount: 0,
+        {id: "gE", kind: "category", parentId: "", name: "Empty", color: "#888888", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false,
          issues: ["A category has neither scenarios nor subcategories."]}
+    ]
+}
+
+function benchmarkManagementAssignTargets() {
+    return [
+        {id: "", label: "Uncategorized"},
+        {id: "g1", label: "Clicking"},
+        {id: "p", label: "Tracking / Precise"},
+        {id: "hollow", label: "Tracking / Hollow"},
+        {id: "gE", label: "Empty"}
     ]
 }
 

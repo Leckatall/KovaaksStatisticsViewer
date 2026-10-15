@@ -113,7 +113,9 @@ namespace ksv::presentation {
         Q_INVOKABLE int firstRowOfGroup(const QString &groupId) const;
         // The stable {entryId, tierId, columnKind} address of a cell; empty when out of range.
         Q_INVOKABLE QVariantMap anchorAt(int row, int column) const;
-        // Row-level roles (entry, group spans, mapping) for contextual controls; empty when out of range.
+        // Row-level roles (entry, group spans, mapping) for contextual controls, plus the row's
+        // positionInContainer / containerSize within the subcategory, category's direct scenarios or
+        // Uncategorized that holds it; empty when out of range.
         Q_INVOKABLE QVariantMap rowInfo(int row) const;
         // Every tier header in column order as {name, hasIssues}, so the view can size all rank
         // columns, including ones it has not loaded a delegate for.

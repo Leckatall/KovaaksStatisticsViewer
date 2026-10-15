@@ -56,6 +56,8 @@ namespace ksv::presentation {
         Q_PROPERTY(QAbstractItemModel *tableModel READ tableModel CONSTANT)
         // Every category and subcategory, including empty ones that occupy no table row.
         Q_PROPERTY(QVariantList groups READ groups NOTIFY draftChanged)
+        // {id, label} of every group a scenario can be assigned to, Uncategorized (empty id) first.
+        Q_PROPERTY(QVariantList assignTargets READ assignTargets NOTIFY draftChanged)
         Q_PROPERTY(bool canUndo READ canUndo NOTIFY draftChanged)
         // Stable scenario IDs, never row numbers: rows move when groups change.
         Q_PROPERTY(QStringList selectedEntryIds READ selectedEntryIds WRITE setSelectedEntryIds
@@ -91,6 +93,7 @@ namespace ksv::presentation {
 
         [[nodiscard]] QAbstractItemModel *tableModel() const { return m_tableModel; }
         [[nodiscard]] const QVariantList &groups() const { return m_groups; }
+        [[nodiscard]] const QVariantList &assignTargets() const { return m_assignTargets; }
         [[nodiscard]] bool canUndo() const { return !m_history.empty(); }
         [[nodiscard]] const QStringList &selectedEntryIds() const { return m_selectedEntryIds; }
         void setSelectedEntryIds(const QStringList &ids);
@@ -214,6 +217,7 @@ namespace ksv::presentation {
         QVariantList m_validationIssues;
         QVariantList m_tiers;
         QVariantList m_groups;
+        QVariantList m_assignTargets;
         QVariantList m_scenarioCatalogue;
         BenchmarkTableModel *m_tableModel = nullptr;
         BenchmarkClipboardAdapter *m_clipboard = nullptr;

@@ -112,13 +112,7 @@ Item {
     // the category, or Uncategorized) spans the Subcategory column too, rather than
     // leaving an empty cell beside it. Only meaningful while the grid shows that column.
     function spansSubcategory(group) {
-        if (!hasSubcategories || String(group.column) !== "category") return false
-        const start = Number(group.start), end = start + Number(group.span)
-        for (const other of groups) {
-            if (String(other.column) === "subcategory" && Number(other.start) >= start && Number(other.start) < end)
-                return false
-        }
-        return true
+        return hasSubcategories && group.spansSubcategory === true
     }
 
     function nextText(row) {

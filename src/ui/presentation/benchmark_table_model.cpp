@@ -1,5 +1,6 @@
 #include "benchmark_table_model.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace ksv::presentation {
@@ -180,6 +181,19 @@ namespace ksv::presentation {
     QVariantMap BenchmarkTableModel::rowInfo(int row) const {
         if (row < 0 || row >= rowCount()) return {};
         const auto &projected = m_projection.rows[static_cast<std::size_t>(row)];
+        int positionInContainer = row - projected.subcategory.spanStart;
+        int containerSize = projected.subcategory.spanLength;
+        if (projected.subcategory.id.isEmpty()) {
+            // A category's direct scenarios precede its subcategories, and a loaded category can
+            // hold both, so its own collection ends at its first subcategory row, not its span end.
+            const int start = projected.category.spanStart;
+            const int end = std::min(start + projected.category.spanLength, rowCount());
+            positionInContainer = row - start;
+            containerSize = 0;
+            while (start + containerSize < end &&
+                   m_projection.rows[static_cast<std::size_t>(start + containerSize)].subcategory.id.isEmpty())
+                ++containerSize;
+        }
         return {{"row", row},
                 {"entryId", projected.entryId},
                 {"name", projected.name},
@@ -189,6 +203,8 @@ namespace ksv::presentation {
                 {"subcategoryId", projected.subcategory.id},
                 {"subcategorySpanStart", projected.subcategory.spanStart},
                 {"subcategorySpanLength", projected.subcategory.spanLength},
+                {"positionInContainer", positionInContainer},
+                {"containerSize", containerSize},
                 {"mappingState", projected.mappingState},
                 {"mappedHashes", projected.mappedHashes},
                 {"mappingCandidates", projected.mappingCandidates}};
