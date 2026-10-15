@@ -36,6 +36,7 @@ target_link_libraries(ksv_gallery PRIVATE
 target_compile_definitions(ksv_gallery PRIVATE
         GALLERY_QML_FILE="${CMAKE_CURRENT_SOURCE_DIR}/Gallery.qml"
         GALLERY_QML_SOURCE_DIR="${CMAKE_SOURCE_DIR}/src/ui/qml"
+        KSV_VERSION="${KSV_VERSION}"
         QT_QML_DEBUG
 )
 

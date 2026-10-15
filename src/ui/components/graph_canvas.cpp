@@ -94,6 +94,32 @@ namespace ksv::ui {
         update();
     }
 
+    void GraphCanvas::setForegroundColor(const QColor &foregroundColor) {
+        if (m_foregroundColor == foregroundColor) return;
+        m_foregroundColor = foregroundColor;
+        emit foregroundColorChanged();
+        update();
+    }
+
+    QColor GraphCanvas::colorFor(const presentation::SeriesModel &series) const {
+        return series.color().isValid() ? series.color() : m_foregroundColor;
+    }
+
+    void GraphCanvas::setMarkedX(const qreal markedX) {
+        const bool bothNone = std::isnan(m_markedX) && std::isnan(markedX);
+        if (bothNone || m_markedX == markedX) return;
+        m_markedX = markedX;
+        emit markedXChanged();
+        update();
+    }
+
+    void GraphCanvas::setMarkerColor(const QColor &markerColor) {
+        if (m_markerColor == markerColor) return;
+        m_markerColor = markerColor;
+        emit markerColorChanged();
+        update();
+    }
+
     bool GraphCanvas::markersFit(const int pointCount, const qreal pixelSpan) {
         if (pointCount < 2) return pointCount == 1;
         return pixelSpan / (pointCount - 1) >= kMinMarkerSpacing;
@@ -246,8 +272,55 @@ namespace ksv::ui {
             style.markerOutlineColor = m_backgroundColor;
             style.showMarkers = m_pointMarkers &&
                                 markersFit(int(pixelPoints.size()), pixelPoints.back().x() - pixelPoints.front().x());
-            SeriesPainter::paint(*painter, pixelPoints, s->color(), style);
+            SeriesPainter::paint(*painter, pixelPoints, colorFor(*s), style);
         }
+    }
+
+    void GraphCanvas::drawReferenceLines(QPainter *painter, const QRectF &rect) const {
+        if (!m_graphVm) return;
+        painter->save();
+        // Over the lines: a reference level stays legible where a line runs along it.
+        for (const auto *s: seriesInPaintOrder()) {
+            if (s->referenceLines.isEmpty()) continue;
+            const presentation::ValueAxis yAxis = yAxisFor(*s);
+            for (const auto &line: s->referenceLines) {
+                const qreal t = yAxis.normalizedPosition(line.value);
+                if (t < 0.0 || t > 1.0) continue;
+                const qreal y = rect.bottom() - t * rect.height();
+                QPen pen(line.color, kReferenceLineWidth);
+                pen.setCapStyle(Qt::FlatCap);
+                painter->setPen(pen);
+                painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
+            }
+        }
+        painter->restore();
+    }
+
+    void GraphCanvas::drawMarkedX(QPainter *painter, const QRectF &rect) const {
+        if (!m_graphVm || std::isnan(m_markedX)) return;
+        const presentation::Axis &sharedXAxis = m_graphVm->xAxis();
+        const qreal t = sharedXAxis.normalizedPosition(m_markedX);
+        if (t < 0.0 || t > 1.0) return;
+        const qreal pixelX = rect.left() + t * rect.width();
+
+        painter->save();
+        QPen rulePen(m_markerColor, 2.0);
+        rulePen.setCapStyle(Qt::FlatCap);
+        painter->setPen(rulePen);
+        painter->drawLine(QPointF(pixelX, rect.top()), QPointF(pixelX, rect.bottom()));
+
+        // A ring in the marker colour around each visible line's point at the marked x, over the
+        // line's own colour, so the point reads as "this run" on every line.
+        constexpr qreal kRingRadius = 6.0;
+        for (const auto *s: seriesInPaintOrder()) {
+            const auto sample = s->sampleAtX(m_markedX);
+            if (!sample || sample->x() != m_markedX) continue;
+            const QPointF pixel = toPixel(*sample, rect, xAxisFor(*s), yAxisFor(*s));
+            painter->setPen(QPen(m_markerColor, 2.5));
+            painter->setBrush(colorFor(*s));
+            painter->drawEllipse(pixel, kRingRadius, kRingRadius);
+        }
+        painter->restore();
     }
 
     void GraphCanvas::paint(QPainter *painter) {
@@ -255,6 +328,8 @@ namespace ksv::ui {
         const QRectF rect = plotRect();
         drawAxes(painter, rect);
         drawSeries(painter, rect);
+        drawReferenceLines(painter, rect);
+        drawMarkedX(painter, rect);
     }
 
     QVariantMap GraphCanvas::valuesAtX(const qreal x) const {
@@ -284,7 +359,7 @@ namespace ksv::ui {
         for (const auto *s: series) {
             QVariantMap entry;
             entry["name"] = s->name();
-            entry["color"] = s->color();
+            entry["color"] = colorFor(*s);
             entry["value"] = s->formattedValueAtX(dataX);
             const auto sample = s->sampleAtX(dataX);
             entry["valueRaw"] = sample ? sample->y() : QVariant();
@@ -318,7 +393,7 @@ namespace ksv::ui {
                     bestDistanceSq = distSq;
                     best["valid"] = true;
                     best["name"] = s->name();
-                    best["color"] = s->color().name();
+                    best["color"] = colorFor(*s).name();
                     best["x"] = xAxis.formatTick(p.x());
                     best["value"] = yAxis.formatTick(p.y());
                 }

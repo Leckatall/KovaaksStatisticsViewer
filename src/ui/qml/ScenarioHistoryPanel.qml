@@ -28,6 +28,10 @@ Frame {
         return s && !!root.columnVisibility[s.id]
     })
 
+    // The selected run's x position on the history graph, or -1 for none.
+    readonly property int selectedRunIndex: root.historyVm.selectedRunIndex !== undefined
+                                            ? root.historyVm.selectedRunIndex : -1
+
     readonly property int yAxisColumn: {
         const cols = root.visibleColumns;
         for (const column of cols) {
@@ -51,12 +55,9 @@ Frame {
         anchors.fill: parent
         spacing: 4
 
-        Label {
+        ChartTitle {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            font.bold: true
-            font.pixelSize: 16
-            horizontalAlignment: Text.AlignHCenter
             objectName: "historyTitleLabel"
             text: root.historyVm.scenarioTitle
         }
@@ -94,6 +95,11 @@ Frame {
                         objectName: "historyGraphCanvas"
                         // Few runs: dot each real run so it reads apart from the smoothed curve.
                         pointMarkers: true
+                        // The run selected in the run list / run graph.
+                        markedX: root.selectedRunIndex > 0 ? root.selectedRunIndex : NaN
+                        // A click selects the run nearest it.
+                        clickable: true
+                        onPointClicked: dataX => root.historyVm.selectRun(Math.round(dataX))
                     }
                 }
             }

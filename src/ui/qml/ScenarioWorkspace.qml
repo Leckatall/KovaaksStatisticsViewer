@@ -22,6 +22,15 @@ Item {
     signal configureGraphLinesRequested()
     signal chooseKovaaksFolderRequested()
 
+    // Ctrl+F: show the scenario browser if it is hidden, then focus its search field. Nothing to
+    // search on the first-run welcome.
+    function focusScenarioSearch() {
+        if (root.welcomeVisible) return
+        root.visualSettings.selectionPanelVisible = true
+        root.visualSettings.scenarioBrowserSectionVisible = true
+        Qt.callLater(selectionPanel.focusScenarioSearch)
+    }
+
     FirstRunWelcome {
         objectName: "firstRunWelcome"
         anchors.fill: parent
@@ -36,7 +45,8 @@ Item {
 
         // The graph panels split the column equally whatever their content: fill items share the
         // space in the ratio of their preferred heights, so each states the same one. A hidden
-        // panel drops out and the others share its space.
+        // panel drops out and the others share its space. The two panels about the selected scenario
+        // come first, then the all-scenario playtime panel.
         ColumnLayout {
             Layout.row: 1; Layout.column: 1
             Layout.fillWidth: true
@@ -53,14 +63,6 @@ Item {
                 visualSettings: root.visualSettings
                 onConfigureLinesRequested: root.configureGraphLinesRequested()
             }
-            PlaytimeGraphPanel {
-                objectName: "playtimeGraphPanel"
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredHeight: 1
-                visible: root.visualSettings.playtimeGraphVisible
-                playtimeVm: root.playtimeVm
-            }
             ScenarioHistoryPanel {
                 objectName: "scenarioHistoryPanel"
                 Layout.fillWidth: true
@@ -71,8 +73,17 @@ Item {
                 columnVisibility: root.visualSettings.historyColumnVisibility
                 historyAxisSettings: root.visualSettings
             }
+            PlaytimeGraphPanel {
+                objectName: "playtimeGraphPanel"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: 1
+                visible: root.visualSettings.playtimeGraphVisible
+                playtimeVm: root.playtimeVm
+            }
         }
         SelectionPanel {
+            id: selectionPanel
             Layout.row: 1; Layout.column: 0
             Layout.fillHeight: true
             visible: root.visualSettings.selectionPanelVisible

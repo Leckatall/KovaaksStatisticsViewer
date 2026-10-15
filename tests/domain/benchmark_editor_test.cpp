@@ -122,6 +122,25 @@ TEST(BenchmarkEditor, AddKnownScenarioPersistsHash) {
     EXPECT_EQ(*bench.uncategorized.front().hash, "C0FFE00D");
 }
 
+TEST(BenchmarkEditor, ManualBenchmarkHoldsKnownAndUnplayedScenariosTogether) {
+    Benchmark bench;
+    BenchmarkEditor editor{bench, countingIds()};
+    editor.renameBenchmark("Manual");
+    const auto tier = *editor.addTier("Gold").createdTier;
+    const auto known = *editor.addKnownScenario("Played", "C0FFE00D").createdEntry;
+    const auto unplayed = *editor.addUnplayedScenario("Never played").createdEntry;
+    ASSERT_TRUE(editor.setThreshold(known, tier, 10.0).ok());
+    ASSERT_TRUE(editor.setThreshold(unplayed, tier, 10.0).ok());
+
+    ASSERT_EQ(bench.uncategorized.size(), 2U);
+    EXPECT_EQ(bench.uncategorized.at(0).name, "Played");
+    EXPECT_EQ(bench.uncategorized.at(0).hash, std::optional<std::string>{"C0FFE00D"});
+    EXPECT_EQ(bench.uncategorized.at(1).name, "Never played");
+    EXPECT_FALSE(bench.uncategorized.at(1).hash.has_value());
+    // The unplayed, unmapped entry does not hold the benchmark back from tracking.
+    EXPECT_EQ(editor.validation().completeness, Completeness::Trackable);
+}
+
 TEST(BenchmarkEditor, SetThresholdUpsertsForTier) {
     Benchmark bench;
     BenchmarkEditor editor{bench, countingIds()};

@@ -115,6 +115,25 @@ ApplicationWindow {
         requestActivate()
     }
 
+    // Opens the manager on one library entry: selected in the library, and opened in the editor
+    // when it can be (through the same unsaved-changes guard as Open). A problem file can have an
+    // empty id, so the filename identifies the entry; the id is the fallback when no filename is
+    // given. A draft of the same benchmark already in the editor is kept, edits and all.
+    function openOnEntry(filename, benchmarkId) {
+        root.open()
+        const entries = root.vm().libraryEntries || []
+        let index = filename ? entries.findIndex(entry => entry.filename === filename) : -1
+        if (index < 0 && benchmarkId)
+            index = entries.findIndex(entry => entry.id === benchmarkId)
+        if (index < 0) return
+        const entry = entries[index]
+        root.selectedEntryFilename = entry.filename
+        libraryList.positionViewAtIndex(index, ListView.Contain)
+        libraryList.forceActiveFocus()
+        const alreadyOpen = root.vm().hasDraft && root.vm().draftFromLibrary && root.vm().draftId === entry.id
+        if (!alreadyOpen) root.openLibraryEntry(entry)
+    }
+
     onClosing: (close) => {
         root.commitActiveEdits()
         if (root.vm().dirty) {
@@ -428,13 +447,22 @@ ApplicationWindow {
         standardButtons: Dialog.Cancel
         property string categoryId
         property string subcategoryName
+        // The group the table focuses once the prompt has closed: the new subcategory when one
+        // was created, otherwise (Cancel, Escape, a failed command) the category it was asked for.
+        property string focusGroupAfterClose
 
         function relocate(choice) {
-            subcategoryRelocationPrompt.close()
             const categoryId = subcategoryRelocationPrompt.categoryId
             const name = subcategoryRelocationPrompt.subcategoryName
-            root.runTableCommand(() => root.vm().addSubcategoryRelocating(categoryId, name, choice))
+            const result = root.runTableCommand(() => root.vm().addSubcategoryRelocating(categoryId, name, choice))
+            if (result && result.ok && result.createdId) subcategoryRelocationPrompt.focusGroupAfterClose = result.createdId
+            subcategoryRelocationPrompt.close()
         }
+
+        onAboutToShow: subcategoryRelocationPrompt.focusGroupAfterClose = subcategoryRelocationPrompt.categoryId
+        // Closing hands focus back to the table, which held it when the prompt opened; once the
+        // popup has finished restoring it, the table moves its current cell to that group.
+        onClosed: Qt.callLater(editorTable.focusCell, {groupId: subcategoryRelocationPrompt.focusGroupAfterClose})
 
         ColumnLayout {
             spacing: 8
@@ -798,7 +826,8 @@ ApplicationWindow {
                 id: editorPane
                 objectName: "editorPane"
                 SplitView.fillWidth: true
-                SplitView.minimumWidth: 360
+                // Never so narrow that the table loses its last rank column (and its scrollbar).
+                SplitView.minimumWidth: Math.max(360, editorTable.minimumTableWidth)
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -859,6 +888,15 @@ ApplicationWindow {
                                     restoreMode: Binding.RestoreNone
                                 }
                             }
+                            // The view model's own dirty state: it compares the draft with the copy it
+                            // was opened from or saved to, so undoing back to that copy clears it.
+                            Label {
+                                objectName: "unsavedLabel"
+                                visible: root.vm().dirty === true
+                                text: qsTr("• Unsaved")
+                                color: Qt.alpha(root.palette.accent, 0.8)
+                                Accessible.name: qsTr("The benchmark has unsaved changes")
+                            }
                         }
                         RowLayout {
                             id: editorActions
@@ -914,17 +952,6 @@ ApplicationWindow {
                                 Accessible.name: qsTr("Save")
                                 ToolTip.text: qsTr("Save the benchmark")
                                 onClicked: root.requestSave()
-                            }
-                            ToolbarButton {
-                                objectName: "discardButton"
-                                icon.source: "icons/x.svg"
-                                display: AbstractButton.IconOnly
-                                Accessible.name: qsTr("Discard")
-                                ToolTip.text: qsTr("Discard unsaved changes and close the editor")
-                                onClicked: {
-                                    root.vm().discard()
-                                    root.statusMessage = ""
-                                }
                             }
                         }
                     }
@@ -986,12 +1013,12 @@ ApplicationWindow {
                     }
 
                     // Mapping details for the current row; candidates for a resolved or mapped entry
-                    // stay disarmed until "Change mapping" is pressed.
+                    // stay disarmed until "Change mapping" is pressed. Its row is always there (a hint
+                    // while no scenario is selected), so selecting a cell never moves the table.
                     Pane {
                         id: mappingPanel
                         objectName: "mappingPanel"
                         Layout.fillWidth: true
-                        visible: root.currentEntryId !== ""
                         padding: 4
                         property bool candidatesArmed: false
                         readonly property string mappingState: root.currentRow && root.currentRow.mappingState ? root.currentRow.mappingState : "unresolved"
@@ -1005,9 +1032,20 @@ ApplicationWindow {
                         ColumnLayout {
                             width: parent.width
                             spacing: 2
+                            Label {
+                                objectName: "mappingHint"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: clearMappingButton.implicitHeight
+                                visible: root.currentEntryId === ""
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                text: qsTr("Select a scenario to see its mapping")
+                                color: root.palette.placeholderText
+                            }
                             // Wraps instead of running past a narrow editor, so the buttons stay reachable.
                             Flow {
                                 Layout.fillWidth: true
+                                visible: root.currentEntryId !== ""
                                 spacing: 8
                                 Label {
                                     height: clearMappingButton.implicitHeight
@@ -1038,7 +1076,7 @@ ApplicationWindow {
                                 }
                             }
                             Repeater {
-                                model: mappingPanel.candidates
+                                model: root.currentEntryId !== "" ? mappingPanel.candidates : []
                                 delegate: ItemDelegate {
                                     id: candidateOption
                                     required property var modelData

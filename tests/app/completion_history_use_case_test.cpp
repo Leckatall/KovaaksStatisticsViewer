@@ -85,6 +85,54 @@ namespace {
         EXPECT_EQ(callback_count, 1);
     }
 
+    TEST_F(CompletionHistoryUseCaseTest, SelectedRunIndexIsTheCurrentRunsOneBasedRunIndex) {
+        setCurrentScenario("scenario-1", 200);
+        profile->completion_history_by_scenario[{.name = "Scenario One", .hash = "scenario-1"}] = {
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100}},
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 200}},
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 300}},
+        };
+
+        EXPECT_EQ(use_case.selected_run_index(), 2);
+
+        session->current_run.run_id.start_time = 999;
+        EXPECT_EQ(use_case.selected_run_index(), std::nullopt) << "a run missing from the history marks nothing";
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, NoSelectedRunHasNoSelectedRunIndex) {
+        EXPECT_EQ(use_case.selected_run_index(), std::nullopt);
+        EXPECT_EQ(profile->completion_history_calls, 0);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, SelectedRunCallbackFiresOnEveryRunChange) {
+        setCurrentScenario("scenario-1", 100);
+        int callback_count = 0;
+        use_case.onSelectedRunChanged([&callback_count] { ++callback_count; });
+
+        session->changeRun("scenario-1", 200);
+        session->changeRun("scenario-2", 300);
+
+        EXPECT_EQ(callback_count, 2);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, SelectRunMakesThatHistoryRunCurrent) {
+        setCurrentScenario("scenario-1", 300);
+        profile->completion_history_by_scenario[{.name = "Scenario One", .hash = "scenario-1"}] = {
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100}},
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 300}},
+        };
+
+        use_case.select_run(1);
+        ASSERT_TRUE(session->selected_run.has_value());
+        EXPECT_EQ(session->selected_run->start_time, 100);
+        EXPECT_EQ(session->selected_run->scenario_id.hash, "scenario-1");
+
+        session->selected_run.reset();
+        use_case.select_run(0);
+        use_case.select_run(3);
+        EXPECT_FALSE(session->selected_run.has_value()) << "an index outside the history selects nothing";
+    }
+
     TEST_F(CompletionHistoryUseCaseTest, ProfileChangeAlwaysFiresAndRestoresTheScenarioGate) {
         setCurrentScenario("scenario-1", 100);
         int callback_count = 0;

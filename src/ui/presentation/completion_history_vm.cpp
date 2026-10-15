@@ -124,5 +124,18 @@ namespace ksv::presentation {
 
         emit dataUpdated();
         emit boundsChanged();
+        refreshSelection();
+    }
+
+    void CompletionHistoryViewModel::selectRun(const int runIndex) {
+        if (runIndex < 1 || runIndex > m_run_count) return;
+        m_use_case->select_run(runIndex);
+    }
+
+    void CompletionHistoryViewModel::refreshSelection() {
+        const int index = m_use_case->selected_run_index().value_or(-1);
+        if (index == m_selected_run_index) return;
+        m_selected_run_index = index;
+        emit selectedRunIndexChanged();
     }
 }

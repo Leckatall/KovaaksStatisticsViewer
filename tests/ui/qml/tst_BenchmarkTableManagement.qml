@@ -24,8 +24,11 @@ TestCase {
         BenchmarkManagerDialog {}
     }
 
-    function openTableDialog(overrides) {
+    // `fixtureRef`, when given, receives the fixture so a command double can publish a new
+    // projection through it.
+    function openTableDialog(overrides, fixtureRef) {
         const fixture = createTemporaryObject(fixtureComponent, testCase)
+        if (fixtureRef) fixtureRef.fixture = fixture
         fixture.setProjection(TestDoubles.benchmarkTableProjection(TestDoubles.benchmarkManagementDesc()))
         const vm = TestDoubles.makeFakeBenchmarkManagerVm(Object.assign({
             hasDraft: true, tableModel: fixture.model, groups: TestDoubles.benchmarkManagementGroups(),
@@ -56,6 +59,26 @@ TestCase {
         waitForRendering(dialog.contentItem)
         mouseClick(item)
         return item
+    }
+
+    // The mapping row is always reserved: a hint without a selected scenario, the mapping with
+    // one, and the table stays exactly where it was.
+    function test_selectingAScenarioNeverMovesTheTable() {
+        const dialog = openTableDialog({draftFromLibrary: true})
+        tryVerify(() => find(dialog, "cell_a_scenario") !== null)
+        const table = dialog.editorTable
+        const hint = find(dialog, "mappingHint")
+        tryVerify(() => hint !== null && hint.visible, 2000,
+                  "a hint stands in for the mapping while nothing is selected")
+        waitForRendering(dialog.contentItem)
+        const before = table.mapToItem(dialog.contentItem, 0, 0).y
+
+        click(dialog, "cell_a_scenario")
+        tryCompare(dialog, "currentEntryId", "a")
+        tryVerify(() => find(dialog, "matchLabel") !== null && find(dialog, "matchLabel").visible)
+        waitForRendering(dialog.contentItem)
+        compare(hint.visible, false)
+        compare(table.mapToItem(dialog.contentItem, 0, 0).y, before, "the table did not move")
     }
 
     function test_managementWithoutCards() {
@@ -110,6 +133,72 @@ TestCase {
         dialog.subcategoryRelocationPrompt.relocate("newSubcategory")
         compare(vm(dialog).addSubcategoryRelocatingCalls, [["g1", "Static", "newSubcategory"]])
     }
+    // Return in the add-subcategory field opens only the "already holds scenarios" prompt, never a
+    // rename editor on the category behind it; every way out of the prompt leaves the table
+    // focused, with no editor open, on the new subcategory or else on the category.
+    function test_subcategoryPromptOpensNoEditorAndReturnsFocusToTheTable() {
+        const ref = {}
+        const dialog = openTableDialog({
+            addSubcategoryRelocating: function (categoryId, name, relocation) {
+                this.addSubcategoryRelocatingCalls.push([categoryId, name, relocation])
+                const desc = TestDoubles.benchmarkManagementDesc()
+                const created = {id: "subcategory-1", name: name, color: "#123456"}
+                for (const row of desc.rows)
+                    if (row.category && row.category.id === categoryId) row.subcategory = created
+                this.groups = this.groups.concat([{id: "subcategory-1", kind: "subcategory", parentId: categoryId,
+                                                   name: name, color: "#123456", scenarioCount: 2, issues: []}])
+                ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(desc))
+                return {ok: true, createdId: "subcategory-1"}
+            }
+        }, ref)
+        const table = dialog.editorTable
+        const prompt = dialog.subcategoryRelocationPrompt
+        const categoryCell = () => ItemLookup.findByObjectName(table.identityView.contentItem, "cell_a_category")
+        tryVerify(() => categoryCell() !== null)
+        // The table settles (and rebuilds its cells) once more after it first renders.
+        waitForRendering(dialog.contentItem)
+        // An editor opened behind the prompt is closed again when the prompt takes focus, so every
+        // editor that opens is recorded.
+        const editorsOpened = []
+        table.activeEditorChanged.connect(() => { if (table.activeEditor) editorsOpened.push(table.activeEditor.text) })
+
+        function typeSubcategoryName() {
+            verify(table.focusCell({groupId: "g1"}))
+            tryCompare(table.selectionModel.currentIndex, "column", 0)
+            mouseClick(find(dialog, "addSubcategoryPlus_g1"))
+            tryVerify(() => categoryCell().subcategoryField.visible && categoryCell().subcategoryField.activeFocus)
+            keyClick(Qt.Key_S)
+            keyClick(Qt.Key_Return)
+            tryCompare(prompt, "opened", true)
+            waitForRendering(dialog.contentItem)
+            compare(editorsOpened, [], "no rename editor opens behind the prompt")
+        }
+        function verifyTableFocusedOn(row, column) {
+            // The table itself, not the hidden add-subcategory field inside it.
+            tryVerify(() => dialog.activeFocusItem === table.identityView)
+            tryCompare(table.selectionModel.currentIndex, "column", column)
+            compare(table.selectionModel.currentIndex.row, row)
+            compare(table.activeEditor, null)
+        }
+
+        typeSubcategoryName()
+        keyClick(Qt.Key_Escape)
+        tryCompare(prompt, "visible", false)
+        verifyTableFocusedOn(0, 0)
+
+        typeSubcategoryName()
+        mouseClick(ItemLookup.findByObjectName(prompt.contentItem, "relocateToNewSubcategory"))
+        tryCompare(prompt, "visible", false)
+        compare(vm(dialog).addSubcategoryRelocatingCalls, [["g1", "s", "newSubcategory"]])
+        verifyTableFocusedOn(0, 1)
+
+        // The focused cell still takes Return as its own rename.
+        keyClick(Qt.Key_Return)
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.text, "s")
+        keyClick(Qt.Key_Escape)
+    }
+
     // One Remove over several selected rows is one session command, hence one Undo step.
     function test_removingSelectedRowsIsOneCommand() {
         const dialog = openTableDialog()
@@ -153,8 +242,11 @@ TestCase {
         verify(dialog.editorTable, "the dialog must host the table editor")
 
         // Rank colour commits only on acceptance, at the rank's ID.
+        // The rank columns are rebuilt once the dialog settles their width.
+        tryVerify(() => dialog.editorTable.laidOutThresholdWidth === dialog.editorTable.thresholdWidth)
         verify(dialog.editorTable.focusCell({tierId: "t1"}))
         tryCompare(dialog, "currentTierId", "t1")
+        tryVerify(() => find(dialog, "rankSwatch_t1") !== null)
         const rankSwatch = click(dialog, "rankSwatch_t1")
         verify(String(rankSwatch.Accessible.name) !== "", "swatches carry a textual label")
         tryCompare(dialog.colorDialog, "visible", true)

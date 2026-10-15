@@ -33,7 +33,8 @@ namespace ksv::gallery {
     };
 
     // The shape the gallery uses for a scenario hash (gallery-pasu,
-    // gallery-smoothbot, gallery-flyts; anything else gets the primary shape).
+    // gallery-smoothbot, gallery-flyts, gallery-celestial; anything else gets the
+    // primary shape).
     [[nodiscard]] RunShape shapeForHash(std::string_view hash);
 
     // One deterministic run: `seed` varies accuracy and shot counts; timestamps

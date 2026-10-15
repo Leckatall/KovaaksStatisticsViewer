@@ -21,6 +21,11 @@ add_library(ksv_driver_core STATIC
         ui_driver.h
 )
 target_include_directories(ksv_driver_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# The benchmark files the synthetic datasets ship with; public so the integration
+# suite can seed a session exactly as ksv_driver does.
+target_compile_definitions(ksv_driver_core PUBLIC
+        KSV_DRIVER_BENCHMARKS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/benchmarks"
+)
 target_link_libraries(ksv_driver_core PUBLIC
         Qt6::Core
         Qt6::Gui
@@ -57,6 +62,7 @@ target_link_libraries(ksv_driver PRIVATE
 target_compile_definitions(ksv_driver PRIVATE
         KSV_QML_SOURCE_DIR="${CMAKE_SOURCE_DIR}/src/ui/qml"
         KSV_EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/tests/examples"
+        KSV_VERSION="${KSV_VERSION}"
 )
 
 ksv_copy_mingw_runtime_dlls(ksv_driver)

@@ -37,6 +37,8 @@ namespace ksv::presentation {
         [[nodiscard]] QVariant data(const QModelIndex &index, int role) const override;
         [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
         [[nodiscard]] int count() const { return rowCount(); }
+        // The row of the run with this scenario hash and start time, or -1.
+        Q_INVOKABLE [[nodiscard]] int rowOf(const QString &hash, double startTimeMs) const;
 
         void setRuns(std::vector<application::RunPerformance> runs);
 

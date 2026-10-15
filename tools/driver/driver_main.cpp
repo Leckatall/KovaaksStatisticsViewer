@@ -160,6 +160,7 @@ int main(int argc, char *argv[]) {
     applyHeadlessAppLook();
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer");
+    QCoreApplication::setApplicationVersion(KSV_VERSION);
 
     QCommandLineParser parser;
     parser.setApplicationDescription("KSV UI automation host (see tools/driver/README.md).");
@@ -224,6 +225,7 @@ int main(int argc, char *argv[]) {
     const bool freshSession = !driver::isSeeded(data);
     const bool compose = freshSession || parser.isSet(reapplyOption);
     if (const QString error = driver::seedSessionData(data, dataset, QStringLiteral(KSV_EXAMPLES_DIR),
+                                                      QStringLiteral(KSV_DRIVER_BENCHMARKS_DIR),
                                                       parser.value(profileSpecOption));
         !error.isEmpty()) {
         return fail(2, error);
@@ -242,6 +244,8 @@ int main(int argc, char *argv[]) {
     if (freshSession) {
         if (driver::datasetSetsKovaaksDir(dataset)) settings->setKovaaksDirs({data.root.toStdString()});
         settings->setProfilePath(data.profilePath().toStdString());
+        // With more than one benchmark the app selects none until one is picked.
+        if (driver::datasetShipsBenchmarks(dataset)) settings->setLastSelectedBenchmarkId(driver::kDefaultBenchmarkId);
     }
     if (compose) {
         for (const auto &assignment: settingAssignments) {

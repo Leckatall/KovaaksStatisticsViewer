@@ -134,15 +134,17 @@ Item {
                    "the column runs to the bottom of the plot")
         }
 
-        // The title is centred over the plot column, not over the whole panel.
-        function test_titleIsCentredOverThePlot() {
+        // The title uses the shared chart title style (ChartTitle) and starts where the plot column
+        // does, not over the legend.
+        function test_titleIsLeftAlignedOverThePlot() {
             const panel = createTemporaryObject(panelComponent, root)
             verify(!!panel, "Component exists")
             const title = findChild(panel, "scenarioTitleLabel")
             const content = findChild(panel, "graphContentArea")
-            compare(title.horizontalAlignment, Text.AlignHCenter)
-            fuzzyCompare(title.mapToItem(panel, title.width / 2, 0).x,
-                         content.mapToItem(panel, content.width / 2, 0).x, 0.5)
+            compare(title.horizontalAlignment, Text.AlignLeft)
+            compare(title.font.weight, Font.DemiBold)
+            compare(title.font.pixelSize, 14)
+            fuzzyCompare(title.mapToItem(panel, 0, 0).x, content.mapToItem(panel, 0, 0).x, 0.5)
         }
 
         // Hiding the legend from the View menu gives the plot the full width.

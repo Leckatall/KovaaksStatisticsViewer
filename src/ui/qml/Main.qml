@@ -205,7 +205,20 @@ ApplicationWindow {
                 objectName: "benchmarkWorkspace"
                 trackingVm: root.benchmarkTrackingVm
                 onManageBenchmarksRequested: benchmarkManagerDialog.open()
+                onEditBenchmarkRequested: (filename, benchmarkId) =>
+                    benchmarkManagerDialog.openOnEntry(filename, benchmarkId)
             }
+        }
+    }
+
+    // Ctrl+F searches scenarios from either workspace. A window shortcut: Settings and the
+    // Benchmark Manager are their own windows, so it never takes keys from their text fields.
+    Shortcut {
+        objectName: "findScenarioShortcut"
+        sequence: "Ctrl+F"
+        onActivated: {
+            workspaceTabBar.currentIndex = 0
+            scenarioWorkspace.focusScenarioSearch()
         }
     }
 

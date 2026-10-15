@@ -82,6 +82,8 @@ ColumnLayout {
         onRunSelected: (hash, startTimeMs) => root.runSelected(hash, startTimeMs)
     }
 
+    function focusScenarioSearch() { scenarioSearch.focusSearch() }
+
     ScenarioSearchPanel {
         id: scenarioSearch
         objectName: "scenarioSearchPanel"

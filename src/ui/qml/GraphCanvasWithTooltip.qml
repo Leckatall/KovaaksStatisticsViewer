@@ -12,7 +12,13 @@ Item {
     property string xLabel: qsTr("Time")
     // Dot each real data point while the points are sparse enough to tell apart.
     property bool pointMarkers: false
+    // An x value to mark with a rule and a ring on each line's point there; NaN marks nothing.
+    property real markedX: NaN
+    // Whether a left click inside the plot reports the nearest data point's x through pointClicked.
+    property bool clickable: false
     readonly property rect plotArea: canvas.plotArea
+
+    signal pointClicked(real dataX)
     readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
     readonly property var labelledYAxisColumns: canvas.labelledYAxisColumns
     readonly property bool pointMarkersShown: canvas.pointMarkersShown
@@ -28,7 +34,9 @@ Item {
         visibleColumns: root.visibleColumns
         yAxisColumn: root.yAxisColumn
         pointMarkers: root.pointMarkers
+        markedX: root.markedX
         backgroundColor: root.palette.base
+        foregroundColor: root.palette.text
     }
     MouseArea {
         id: hoverArea
@@ -37,15 +45,23 @@ Item {
                 valid: false
             })
 
-        acceptedButtons: Qt.NoButton
+        acceptedButtons: root.clickable ? Qt.LeftButton : Qt.NoButton
         anchors.fill: parent
         hoverEnabled: true
         objectName: "graphHoverArea"
+        cursorShape: root.clickable && hoverInfo.valid === true ? Qt.PointingHandCursor : Qt.ArrowCursor
 
         onExited: hoverInfo = {
             valid: false
         }
         onPositionChanged: mouse => hoverInfo = canvas.valuesAtX(mouse.x)
+        onClicked: mouse => {
+            const plot = canvas.plotArea
+            if (mouse.x < plot.x || mouse.x > plot.x + plot.width
+                    || mouse.y < plot.y || mouse.y > plot.y + plot.height) return
+            const info = canvas.valuesAtX(mouse.x)
+            if (info.valid === true) root.pointClicked(info.xRaw)
+        }
     }
     Rectangle {
         id: verticalLine
@@ -100,7 +116,10 @@ Item {
         visible: hoverArea.hoverInfo.valid === true
         width: tooltipContent.implicitWidth + 16
         height: tooltipContent.implicitHeight + 12
-        x: (idealX + width > parent.width) ? hoverArea.mouseX - width - 14 : idealX
+        // Beside the cursor, flipped to its left when the right is short of room; a box wider than
+        // either side (a long tier description) is kept inside the graph, over the cursor, not cut off.
+        x: Math.max(0, Math.min((idealX + width > parent.width) ? hoverArea.mouseX - width - 14 : idealX,
+                                parent.width - width))
         y: Math.max(0, Math.min(idealY, parent.height - height))
         z: 102
 

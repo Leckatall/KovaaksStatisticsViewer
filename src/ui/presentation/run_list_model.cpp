@@ -46,6 +46,16 @@ namespace ksv::presentation {
         };
     }
 
+    int RunListModel::rowOf(const QString &hash, const double startTimeMs) const {
+        const std::string key = hash.toStdString();
+        const auto startTime = static_cast<long long>(startTimeMs);
+        for (std::size_t row = 0; row < m_runs.size(); ++row) {
+            const auto &run_id = m_runs[row].data.run_id;
+            if (run_id.scenario_id.hash == key && run_id.start_time == startTime) return static_cast<int>(row);
+        }
+        return -1;
+    }
+
     void RunListModel::setRuns(std::vector<application::RunPerformance> runs) {
         beginResetModel();
         m_runs = std::move(runs);

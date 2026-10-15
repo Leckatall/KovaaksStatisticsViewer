@@ -99,6 +99,28 @@ TestCase {
         compare(vm(dialog).discardCalls, 0)
     }
 
+    // "• Unsaved" follows the view model's dirty state: absent on a clean draft, shown after an
+    // edit, gone again once saved (or undone back to the saved copy).
+    function test_unsavedLabelFollowsTheDraftsDirtyState() {
+        const dialog = openWithFake({dirty: false, hasDraft: true, benchmarkName: "Demo"})
+        const label = find(dialog, "unsavedLabel")
+        verify(label !== null, "the editor header has an unsaved-changes label")
+        compare(label.visible, false, "a clean draft shows no label")
+
+        dialog.benchmarkManagerVm = TestDoubles.makeFakeBenchmarkManagerVm({dirty: true, hasDraft: true,
+                                                                             benchmarkName: "Demo"})
+        tryCompare(label, "visible", true)
+        compare(label.text, "• Unsaved")
+        const name = find(dialog, "benchmarkNameField")
+        tryVerify(() => label.mapToItem(dialog.contentItem, 0, 0).x
+                        >= name.mapToItem(dialog.contentItem, name.width, 0).x, 2000,
+                  "the label sits right after the benchmark name")
+
+        dialog.benchmarkManagerVm = TestDoubles.makeFakeBenchmarkManagerVm({dirty: false, hasDraft: true,
+                                                                             benchmarkName: "Demo"})
+        tryCompare(label, "visible", false)
+    }
+
     function test_dirtyCloseRaisesSaveDiscardCancelPrompt() {
         const dialog = openWithFake({dirty: true, hasDraft: true})
 
@@ -191,9 +213,17 @@ TestCase {
         verify(warning !== null, "the editor must surface a stale-baseline warning")
         compare(warning.visible, true)
 
-        // The editor is not hidden and Discard stays available.
+        // The editor is not hidden, and leaving it still offers Discard through the prompt.
         compare(find(dialog, "benchmarkNameField").visible, true)
-        compare(find(dialog, "discardButton").enabled, true)
+        dialog.close()
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+    }
+
+    // There is no one-click discard: leaving a dirty draft always goes through the prompt.
+    function test_editorHasNoDiscardButton() {
+        const dialog = openWithFake({dirty: true, hasDraft: true})
+        verify(find(dialog, "saveButton") !== null)
+        compare(find(dialog, "discardButton"), null)
     }
 
     function test_deleteRequiresConfirmation() {
@@ -865,6 +895,95 @@ TestCase {
         compare(vm(dialog).openCalls, ["bench-B"])
     }
 
+    // ---- Opening the manager on one entry (the Benchmarks tab's selector rows) -------------
+
+    function makeClosedDialog(overrides) {
+        const dialog = createTemporaryObject(dialogComponent, testCase,
+            {benchmarkManagerVm: TestDoubles.makeFakeBenchmarkManagerVm(overrides || {})})
+        verify(dialog !== null, "BenchmarkManagerDialog failed to instantiate")
+        return dialog
+    }
+
+    function test_openOnEntryOpensAnOpenableEntryInTheEditor() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries()})
+
+        dialog.openOnEntry("b.json", "bench-B")
+
+        compare(dialog.visible, true)
+        compare(vm(dialog).openCalls, ["bench-B"])
+        compare(dialog.selectedEntryFilename, "b.json", "the opened entry is also the selected one")
+    }
+
+    // A problem file has no id and cannot be opened: the manager shows it selected in the library.
+    function test_openOnEntrySelectsAProblemFileWithoutOpeningIt() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries()})
+
+        dialog.openOnEntry("bad.json", "")
+
+        compare(dialog.visible, true)
+        compare(dialog.selectedEntryFilename, "bad.json")
+        wait(50)
+        compare(vm(dialog).openCalls.length, 0)
+        compare(dialog.dirtyClosePrompt.visible, false)
+    }
+
+    function test_openOnEntryFallsBackToTheIdWithoutAFilename() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries()})
+
+        dialog.openOnEntry("", "bench-A")
+
+        compare(dialog.selectedEntryFilename, "a.json")
+        compare(vm(dialog).openCalls, ["bench-A"])
+    }
+
+    // The manager's own open() clears the library selection; opening on an entry must not.
+    function test_openOnEntryReplacesAnEarlierSelection() {
+        const dialog = openWithFake({libraryEntries: openableEntries()})
+        mouseClick(find(dialog, "libraryEntry_0"))
+        compare(dialog.selectedEntryFilename, "a.json")
+
+        dialog.openOnEntry("bad.json", "")
+
+        compare(dialog.selectedEntryFilename, "bad.json")
+    }
+
+    function test_openOnAnUnknownEntryOnlyOpensTheManager() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries()})
+
+        dialog.openOnEntry("gone.json", "bench-gone")
+
+        compare(dialog.visible, true)
+        compare(dialog.selectedEntryFilename, "")
+        compare(vm(dialog).openCalls.length, 0)
+    }
+
+    // The benchmark is already being edited: its draft, unsaved edits included, stays as it is.
+    function test_openOnTheEntryAlreadyInTheEditorKeepsItsDraft() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries(), hasDraft: true, dirty: true,
+                                         draftFromLibrary: true, draftId: "bench-B"})
+
+        dialog.openOnEntry("b.json", "bench-B")
+
+        wait(50)
+        compare(dialog.dirtyClosePrompt.visible, false)
+        compare(vm(dialog).openCalls.length, 0)
+        compare(vm(dialog).discardCalls, 0)
+        compare(dialog.selectedEntryFilename, "b.json")
+    }
+
+    function test_openOnEntryWithAnotherUnsavedDraftRaisesTheGuard() {
+        const dialog = makeClosedDialog({libraryEntries: openableEntries(), hasDraft: true, dirty: true,
+                                         draftFromLibrary: true, draftId: "bench-A"})
+
+        dialog.openOnEntry("b.json", "bench-B")
+
+        tryCompare(dialog.dirtyClosePrompt, "visible", true)
+        compare(vm(dialog).openCalls.length, 0, "opening must wait for the Save/Discard/Cancel decision")
+        dialog.dirtyClosePrompt.buttonClicked(MessageDialog.Discard, MessageDialog.DestructiveRole)
+        tryVerify(() => vm(dialog).openCalls.length === 1)
+        compare(vm(dialog).openCalls, ["bench-B"])
+    }
+
     function test_enterOpensTheSelectedLibraryEntry() {
         const dialog = openWithFake({libraryEntries: openableEntries()})
 
@@ -948,7 +1067,7 @@ TestCase {
         const nameField = find(dialog, "benchmarkNameField")
         verify(nameField !== null && nameField.visible)
         verify(nameField.width >= 160, "the name is squeezed to " + nameField.width)
-        for (const name of ["undoButton", "pasteButton", "saveButton", "discardButton"]) {
+        for (const name of ["undoButton", "pasteButton", "saveButton"]) {
             const button = find(dialog, name)
             verify(button !== null && button.visible, name + " is missing")
             verify(button.mapToItem(editor, button.width, 0).x <= editor.width + 0.5,
@@ -962,7 +1081,7 @@ TestCase {
         const dialog = openWithFake({libraryEntries: openableEntries(), hasDraft: true})
         const editor = find(dialog, "editorPane")
         const nameField = find(dialog, "benchmarkNameField")
-        const names = ["undoButton", "pasteButton", "saveButton", "discardButton"]
+        const names = ["undoButton", "pasteButton", "saveButton"]
         const rowsOf = () => names.map(name => {
             const button = find(dialog, name)
             return Math.round(button.mapToItem(editor, 0, button.height / 2).y)
@@ -994,6 +1113,32 @@ TestCase {
         verify(Math.abs(pane.width - Math.max(toolbar.implicitWidth, 280)) < 1,
                "pane " + pane.width + " vs toolbar " + toolbar.implicitWidth)
         verify(editor.width > dialog.width * 0.6, "the editor has the rest: " + editor.width)
+    }
+
+    // Dragging the divider all the way toward the editor stops while the table still has its
+    // identifying columns and one whole rank column in view.
+    function test_squeezedEditorKeepsARankColumnInView() {
+        const names = ["Iron", "Bronze", "Silver", "Gold", "Platinum"]
+        const dialog = openWithTable({tiers: names.map((name, i) => ({id: "t" + i, name: name})),
+                                      rows: [{entryId: "a", name: "Alpha", cells: {}}]},
+                                     {libraryEntries: openableEntries()})
+        const pane = find(dialog, "libraryPane")
+        const editor = find(dialog, "editorPane")
+        const table = dialog.editorTable
+        tryVerify(() => editor.width > 0)
+        verify(table.minimumTableWidth > 360, "fixture: the table needs more than the toolbar's minimum")
+
+        const handle = pane.mapToItem(dialog.contentItem, pane.width + 5, pane.height / 2)
+        mouseDrag(dialog.contentItem, handle.x, handle.y, dialog.width, 0)
+        tryVerify(() => editor.width < 700, 2000, "the divider moved, editor " + editor.width)
+        verify(editor.width >= table.minimumTableWidth - 0.5,
+               "the editor " + editor.width + " is narrower than the table's minimum " + table.minimumTableWidth)
+
+        tryVerify(() => find(dialog, "rankHeader_t0") !== null)
+        const first = find(dialog, "rankHeader_t0")
+        tryVerify(() => first.mapToItem(editor, first.width, 0).x <= editor.width - table.rankSlotWidth + 0.5,
+                  2000, "the first rank column is cut off")
+        tryCompare(find(dialog, "thresholdHorizontalBar"), "visible", true, 2000, "the other ranks scroll")
     }
 
     function test_libraryToggleHidesTheListForTheEditorAndRestoresIt() {

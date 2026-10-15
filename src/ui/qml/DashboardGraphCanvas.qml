@@ -85,15 +85,11 @@ Frame {
             Layout.fillWidth: true
             spacing: 4
 
-            Label {
+            ChartTitle {
                 id: scenarioTitleLabel
 
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                elide: Text.ElideRight
-                font.bold: true
-                font.pixelSize: 16
-                horizontalAlignment: Text.AlignHCenter
                 objectName: "scenarioTitleLabel"
                 // The VM's title is empty while no run is selected; the panel keeps a neutral name.
                 text: root.graphVm.scenarioTitle !== "" ? root.graphVm.scenarioTitle : qsTr("Run graph")

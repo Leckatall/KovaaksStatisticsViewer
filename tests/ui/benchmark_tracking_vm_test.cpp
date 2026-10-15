@@ -1,5 +1,5 @@
 // BenchmarkTrackingViewModel adapts one IBenchmarkTrackingUseCase revision into the workspace's
-// selector, state text, status summary, blockers, and child graph models. These tests drive it
+// selector, state text, status summary, progress grid, and child graph models. These tests drive it
 // through a single fake use case (never a service) and assert on the QML-facing surface.
 
 #include <gtest/gtest.h>
@@ -80,6 +80,11 @@ TEST(BenchmarkTrackingViewModel, SelectorOrdersLoadedEntriesFirstThenProblemsWit
     EXPECT_EQ(entries.at(4).toMap().value("name").toString(), "p_bad.json");
     EXPECT_FALSE(entries.at(3).toMap().value("selectable").toBool());
     EXPECT_FALSE(entries.at(4).toMap().value("selectable").toBool());
+    // The selector labels every non-trackable entry by this classification string.
+    EXPECT_EQ(entries.at(0).toMap().value("classification").toString(), "incomplete");
+    EXPECT_EQ(entries.at(1).toMap().value("classification").toString(), "trackable");
+    EXPECT_EQ(entries.at(3).toMap().value("classification").toString(), "unsupported");
+    EXPECT_EQ(entries.at(4).toMap().value("classification").toString(), "invalid");
 }
 
 TEST(BenchmarkTrackingViewModel, EmptyLibraryStateExposesInstallGuidance) {
@@ -116,7 +121,7 @@ TEST(BenchmarkTrackingViewModel, UnavailableStateRetainsLastKnownNameAndClearsDe
     EXPECT_EQ(vm.state(), "unavailable");
     EXPECT_EQ(vm.selectedName(), "Voltaic S3");
     EXPECT_FALSE(vm.summaryAvailable());
-    EXPECT_TRUE(vm.blockers().isEmpty());
+    EXPECT_TRUE(vm.progressGrid()->rows().isEmpty());
     EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
     EXPECT_TRUE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }
@@ -130,9 +135,11 @@ TEST(BenchmarkTrackingViewModel, TrackableSummaryResolvesRanksAndFormatsAverageA
     EXPECT_EQ(vm.attainedRank(), "Silver");
     EXPECT_EQ(vm.completedRank(), "None completed");
     EXPECT_EQ(vm.nextTier(), "Gold");
-    EXPECT_EQ(vm.averageRank(), QLocale().toString(2.5));
+    EXPECT_EQ(vm.averageRank(), "Silver · 50% to Gold");
     EXPECT_EQ(vm.totalPlaytime(), "1h 1m");
     EXPECT_EQ(vm.scenariosAtNextTier(), 1);
+    EXPECT_TRUE(vm.hasNextTier());
+    EXPECT_EQ(vm.nextTierBlockerCount(), 2);
 }
 
 TEST(BenchmarkTrackingViewModel, SummaryFallsBackWhenNothingAttainedCompletedOrHigher) {
@@ -146,6 +153,8 @@ TEST(BenchmarkTrackingViewModel, SummaryFallsBackWhenNothingAttainedCompletedOrH
     EXPECT_EQ(vm.attainedRank(), "Unranked");
     EXPECT_EQ(vm.completedRank(), "None completed");
     EXPECT_EQ(vm.nextTier(), "Highest tier attained");
+    EXPECT_FALSE(vm.hasNextTier());
+    EXPECT_EQ(vm.nextTierBlockerCount(), 0);
 }
 
 TEST(BenchmarkTrackingViewModel, TotalPlaytimeUsesMinuteAndHourThresholds) {
@@ -164,17 +173,30 @@ TEST(BenchmarkTrackingViewModel, TotalPlaytimeUsesMinuteAndHourThresholds) {
     EXPECT_EQ(playtimeFor(7320.0), "2h 2m");
 }
 
-TEST(BenchmarkTrackingViewModel, AverageRankUsesLocaleWithAtMostTwoFractionDigitsAndNoTrailingZeroes) {
+// The fixture ladder is Bronze, Silver, Gold: rank 0 is Unranked and k is the k-th tier.
+TEST(BenchmarkTrackingViewModel, AverageRankReadsAsTheTierAndProgressTowardTheNext) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
-    fake->snap.projection->averageRank = 2.5;
-    fake->publish();
-    EXPECT_EQ(vm.averageRank(), QLocale().toString(2.5));
-
-    fake->snap.projection->averageRank = 2.718;
-    fake->publish();
-    EXPECT_EQ(vm.averageRank(), QLocale().toString(2.72));
+    const auto averageFor = [&](const double rank) {
+        fake->snap.projection->averageRank = rank;
+        fake->publish();
+        return vm.averageRank();
+    };
+    // Mid-tier: the fraction is progress toward the next tier.
+    EXPECT_EQ(averageFor(1.6), "Bronze · 60% to Silver");
+    EXPECT_EQ(averageFor(2.5), "Silver · 50% to Gold");
+    // Below the first tier.
+    EXPECT_EQ(averageFor(0.25), "Unranked · 25% to Bronze");
+    EXPECT_EQ(averageFor(0.0), "Unranked · 0% to Bronze");
+    // An exact tier boundary has attained that tier and no progress yet.
+    EXPECT_EQ(averageFor(2.0), "Silver · 0% to Gold");
+    // A mean that lands a rounding error short of a boundary is the boundary, not 99%.
+    EXPECT_EQ(averageFor(2.0 - 1e-12), "Silver · 0% to Gold");
+    // The percentage never reads 100% before the next tier is reached.
+    EXPECT_EQ(averageFor(1.9999), "Bronze · 99% to Silver");
+    // The top tier has nothing to progress toward.
+    EXPECT_EQ(averageFor(3.0), "Gold · top tier reached");
 }
 
 TEST(BenchmarkTrackingViewModel, IncompleteDefinitionShowsIssuesAndSuppressesRankDerivedValues) {
@@ -205,44 +227,76 @@ TEST(BenchmarkTrackingViewModel, IncompleteDefinitionShowsIssuesAndSuppressesRan
     EXPECT_NE(vm.attainedRank(), "Unranked");
     EXPECT_NE(vm.attainedRank(), "0");
     EXPECT_NE(vm.averageRank(), "0");
-    EXPECT_TRUE(vm.blockers().isEmpty());
+    for (const QVariant &row: vm.progressGrid()->rows())
+        EXPECT_FALSE(row.toMap().value("blocker").toBool()) << "no blocker without an official rank";
     EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
     // Playtime is a safe fact the evaluator can still interpret.
     EXPECT_FALSE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }
 
-TEST(BenchmarkTrackingViewModel, BlockerListResolvesScenarioAndGroupNamesWithCurrentAndRequired) {
+// The workspace's progress heading reads hasNextTier and nextTierBlockerCount. A benchmark that is
+// not trackable has no next tier and no blockers, even when its projection still carries them (as
+// it does here, so the check fails if the view model forwards them regardless of the state).
+TEST(BenchmarkTrackingViewModel, NonTrackableBenchmarkHasNoNextTierAndNoBlockers) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
+    ASSERT_EQ(vm.state(), "trackable");
+    ASSERT_TRUE(vm.hasNextTier());
+    ASSERT_GT(vm.nextTierBlockerCount(), 0);
 
-    const auto blockers = vm.blockers();
-    ASSERT_EQ(blockers.size(), 2);
+    fake->snap.selectedLoaded->completeness = CompletenessResult{
+        Completeness::Incomplete, {BenchmarkIssue{BenchmarkIssueCode::MissingThreshold, std::monostate{}}}};
+    fake->snap.projection->completeness = Completeness::Incomplete;
+    ASSERT_TRUE(fake->snap.projection->nextTier.has_value());
+    ASSERT_FALSE(fake->snap.projection->nextTierBlockers.empty());
+    fake->publish();
 
-    const auto first = blockers.at(0).toMap();
-    EXPECT_EQ(first.value("scenarioName").toString(), "1w6ts");
-    EXPECT_EQ(first.value("groupName").toString(), "Clicking");
-    EXPECT_TRUE(first.value("currentText").toString().contains("800"));
-    EXPECT_TRUE(first.value("requiredText").toString().contains("850"));
-
-    const auto second = blockers.at(1).toMap();
-    EXPECT_EQ(second.value("scenarioName").toString(), "pasu");
-    EXPECT_EQ(second.value("groupName").toString(), QString());
-    EXPECT_EQ(second.value("currentText").toString(), "Unplayed");
-    EXPECT_TRUE(second.value("requiredText").toString().contains("900"));
+    EXPECT_EQ(vm.state(), "incomplete");
+    EXPECT_FALSE(vm.hasNextTier());
+    EXPECT_EQ(vm.nextTierBlockerCount(), 0);
 }
 
-TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryBlockersAndGraphsBeforeNotifying) {
+TEST(BenchmarkTrackingViewModel, BlockerCountEqualsTheRowsTheGridMarks) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
-    ASSERT_FALSE(vm.blockers().isEmpty());
+
+    int marked = 0;
+    for (const auto &row: vm.progressGrid()->rows())
+        if (row.toMap().value("blocker").toBool()) ++marked;
+    EXPECT_EQ(vm.nextTierBlockerCount(), marked);
+}
+
+TEST(BenchmarkTrackingViewModel, ProgressGridListsEveryScenarioAndMarksTheBlockers) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    const QVariantList rows = vm.progressGrid()->rows();
+    ASSERT_EQ(rows.size(), 2);
+    // Uncategorized first, then the categories, as the definition orders them.
+    const auto pasu = rows.at(0).toMap();
+    EXPECT_EQ(pasu.value("name").toString(), "pasu");
+    EXPECT_TRUE(pasu.value("blocker").toBool());
+    EXPECT_TRUE(pasu.value("blockerText").toString().startsWith("Blocks Gold"));
+    EXPECT_TRUE(pasu.value("blockerText").toString().contains("900"));
+
+    const auto wall = rows.at(1).toMap();
+    EXPECT_EQ(wall.value("name").toString(), "1w6ts");
+    EXPECT_TRUE(wall.value("blocker").toBool());
+    EXPECT_TRUE(wall.value("personalBestText").toString().contains("800"));
+}
+
+TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryGridAndGraphsBeforeNotifying) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    ASSERT_FALSE(vm.progressGrid()->rows().isEmpty());
     ASSERT_FALSE(vm.rankHistory()->series({kValueColumn}).isEmpty());
 
     QString stateInNotification;
-    int blockersInNotification = -1;
+    int rowsInNotification = -1;
     bool rankLineEmptyInNotification = false;
     QObject::connect(&vm, &BenchmarkTrackingViewModel::changed, [&] {
         stateInNotification = vm.state();
-        blockersInNotification = static_cast<int>(vm.blockers().size());
+        rowsInNotification = static_cast<int>(vm.progressGrid()->rows().size());
         rankLineEmptyInNotification = vm.rankHistory()->series({kValueColumn}).isEmpty();
     });
     const QSignalSpy spy(&vm, &BenchmarkTrackingViewModel::changed);
@@ -254,7 +308,7 @@ TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryBlockersAndGraph
 
     ASSERT_EQ(spy.count(), 1);
     EXPECT_EQ(stateInNotification, "unavailable");
-    EXPECT_EQ(blockersInNotification, 0);
+    EXPECT_EQ(rowsInNotification, 0);
     EXPECT_TRUE(rankLineEmptyInNotification);
 }
 
@@ -301,38 +355,44 @@ TEST(BenchmarkTrackingViewModel, DarkTierColoursAreLightenedForReadability) {
     EXPECT_GE(contrastRatio(shown, darkPanelColor()), 4.5);
 }
 
-// each blocking scenario reports how far it has come, from the highest threshold it
-// already meets toward the score the next tier needs.
-TEST(BenchmarkTrackingViewModel, BlockerProgressIsMeasuredFromTheThresholdAlreadyMet) {
-    auto snapshot = makeTrackableSnapshot();
-    // s1: thresholds Bronze 700, Silver 850; PB 800 needs 850 for the blocker.
-    auto &s1 = snapshot.selectedLoaded->benchmark.categories[0].scenarios[0];
-    s1.thresholds = {Threshold{TierId{"t1"}, 700.0}, Threshold{TierId{"t2"}, 850.0},
-                     Threshold{TierId{"t3"}, 1000.0}};
-    snapshot.projection->tiers[2].color = BenchmarkColor{255, 200, 40};
-    auto fake = fakeWith(snapshot);
-    BenchmarkTrackingViewModel vm{fake};
+// --- the summary's average-rank bar --------------------------------------------------------------
 
-    const auto blockers = vm.blockers();
-    ASSERT_EQ(blockers.size(), 2);
-    const auto played = blockers.at(0).toMap();
-    EXPECT_NEAR(played.value("progress").toDouble(), (800.0 - 700.0) / (850.0 - 700.0), 1e-9);
-    EXPECT_EQ(played.value("progressColor").toString(), QColor(255, 200, 40).name());
-    EXPECT_TRUE(played.value("progressDescription").toString().contains("67%"));
-    EXPECT_TRUE(played.value("progressDescription").toString().contains("Bronze"));
-
-    // Unplayed: no progress at all.
-    const auto unplayed = blockers.at(1).toMap();
-    EXPECT_DOUBLE_EQ(unplayed.value("progress").toDouble(), 0.0);
+namespace {
+    std::vector<double> listToFills(const QVariantList &list) {
+        std::vector<double> fills;
+        for (const QVariant &value: list) fills.push_back(value.toDouble());
+        return fills;
+    }
 }
 
-TEST(BenchmarkTrackingViewModel, BlockerProgressFallsBackToZeroBasedWhenNoThresholdIsMet) {
-    auto snapshot = makeTrackableSnapshot();
-    auto &s1 = snapshot.selectedLoaded->benchmark.categories[0].scenarios[0];
-    s1.thresholds = {Threshold{TierId{"t1"}, 900.0}, Threshold{TierId{"t2"}, 1000.0}};
+// averageRank is the mean normalized rank: exactly k fills k whole chunks, so 6.37 is six full
+// chunks and 37% of the seventh.
+TEST(RankChunkFills, WholeRanksEndAtTheirChunksRightEdgeAndFractionsFillTheNext) {
+    EXPECT_EQ(rankChunkFills(3.5, 5), (std::vector<double>{1, 1, 1, 0.5, 0}));
+    EXPECT_EQ(rankChunkFills(3.0, 5), (std::vector<double>{1, 1, 1, 0, 0}));
+    EXPECT_EQ(rankChunkFills(0.0, 5), (std::vector<double>{0, 0, 0, 0, 0}));
+    EXPECT_EQ(rankChunkFills(5.0, 5), (std::vector<double>{1, 1, 1, 1, 1}));
+    const auto low = rankChunkFills(0.87, 5);
+    EXPECT_NEAR(low[0], 0.87, 1e-9) << "below the first tier: part of Iron's chunk";
+    EXPECT_EQ(low[1], 0.0);
+}
+
+TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
+    auto snapshot = makeTrackableSnapshot(); // Bronze, Silver, Gold; average 2.5; nothing completed
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
-    // PB 800 meets no threshold; the blocker requires 850.
-    EXPECT_NEAR(vm.blockers().at(0).toMap().value("progress").toDouble(), 800.0 / 850.0, 1e-9);
+    EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{1, 1, 0.5}));
+    EXPECT_EQ(vm.completedRankPosition(), -1.0);
+
+    fake->snap.projection->completedRank = TierId{"t2"};
+    fake->publish();
+    EXPECT_EQ(vm.completedRankPosition(), 2.0) << "the tick ends Silver's chunk";
+
+    fake->snap.availability = BenchmarkTrackingState::Unavailable;
+    fake->snap.selectedLoaded.reset();
+    fake->snap.projection.reset();
+    fake->publish();
+    EXPECT_TRUE(vm.averageRankFills().isEmpty());
+    EXPECT_EQ(vm.completedRankPosition(), -1.0);
 }

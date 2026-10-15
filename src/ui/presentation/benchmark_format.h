@@ -3,6 +3,7 @@
 
 #include <QColor>
 #include <QString>
+#include <vector>
 
 #include "benchmarks/benchmark_ids.h"
 
@@ -23,6 +24,13 @@ namespace ksv::presentation {
     // Locale-formatted, rounded to two decimals - the shared presentation form for
     // benchmark scores, thresholds and averages.
     [[nodiscard]] QString formatBenchmarkNumber(double value);
+
+    // An average rank (the mean normalized rank: whole numbers are tiers, 0 Unranked and k the
+    // k-th tier in `tierNames`, the fraction progress toward the next) in words:
+    // "Bronze · 60% to Silver", "Unranked · 25% to Iron", and at the top "Gold · top tier reached".
+    // The percentage is floored, so it never reads 100% before the next tier is reached. With no
+    // tiers there is nothing to name, so it falls back to formatBenchmarkNumber().
+    [[nodiscard]] QString describeAverageRank(double rank, const std::vector<QString> &tierNames);
 }
 
 #endif // KOVAAKSSTATSVIEWER_BENCHMARK_FORMAT_H

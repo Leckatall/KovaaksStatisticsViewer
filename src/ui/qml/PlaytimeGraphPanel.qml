@@ -21,12 +21,9 @@ Frame {
         anchors.fill: parent
         spacing: 4
 
-        Label {
+        ChartTitle {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            font.bold: true
-            font.pixelSize: 16
-            horizontalAlignment: Text.AlignHCenter
             objectName: "playtimeTitleLabel"
             text: "Daily Playtime (3-day rolling average)"
         }

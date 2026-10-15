@@ -144,6 +144,22 @@ TEST(BenchmarkEvaluator, ProjectsPersonalBestRecentFiveAndTierProgress) {
     EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 18.0);
 }
 
+TEST(BenchmarkEvaluator, PersonalBestTimeIsTheEarliestRunThatScoredIt) {
+    // Out of order on purpose: the later tie (day 9) is listed first.
+    const auto facts = std::vector{benchmarkFact("hash", 9 * kDay, 80.0F), benchmarkFact("hash", 2 * kDay, 50.0F),
+                                   benchmarkFact("hash", 5 * kDay, 80.0F), benchmarkFact("hash", 7 * kDay, 70.0F)};
+    const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
+                                              {resolvedEntry("entry", "hash")}, facts, {});
+    const auto &scenario = scenarioNamed(projection, "entry");
+    EXPECT_DOUBLE_EQ(*scenario.personalBest, 80.0);
+    ASSERT_TRUE(scenario.personalBestTime);
+    EXPECT_EQ(scenario.personalBestTime->time_since_epoch(), std::chrono::seconds{5 * kDay / 1000});
+
+    const auto unplayed = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
+                                            {resolvedEntry("entry", "hash")}, {}, {});
+    EXPECT_FALSE(scenarioNamed(unplayed, "entry").personalBestTime);
+}
+
 TEST(BenchmarkEvaluator, UnplayedAndAutoMappableDoNotClaimCandidateFacts) {
     const auto facts = std::vector{benchmarkFact("hash", kDay, 250.0F)};
     const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
@@ -363,4 +379,107 @@ TEST(BenchmarkAverageRankHistory, IsAbsentForIncompleteDefinitionsAndUsesZeroFor
         {resolvedEntry("one", "one"), unresolvedEntry("two")}, facts, {});
     ASSERT_EQ(unresolved.averageRankHistory.size(), 1U);
     EXPECT_DOUBLE_EQ(unresolved.averageRankHistory.back().averageRank, 1.5);
+}
+
+TEST(BenchmarkAttainment, AScoreEqualToAThresholdAttainsThatTier) {
+    const auto at = [](float score) {
+        return scenarioNamed(evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
+                                               {resolvedEntry("entry", "hash")},
+                                               {benchmarkFact("hash", kDay, score)}, {}),
+                             "entry");
+    };
+    const auto exact = at(200.0F);
+    ASSERT_TRUE(exact.attainedTier);
+    EXPECT_EQ(exact.attainedTier->value, "silver");
+    ASSERT_TRUE(exact.nextThreshold);
+    EXPECT_EQ(exact.nextThreshold->tierId.value, "gold");
+
+    const auto justBelow = at(199.5F);
+    ASSERT_TRUE(justBelow.attainedTier);
+    EXPECT_EQ(justBelow.attainedTier->value, "bronze");
+    ASSERT_TRUE(justBelow.nextThreshold);
+    EXPECT_EQ(justBelow.nextThreshold->tierId.value, "silver");
+}
+
+TEST(BenchmarkAverageRank, WeighsEveryScenarioEquallyAndCountsAnUnplayedOneAsZero) {
+    const auto projection = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
+        {resolvedEntry("one", "one"), unresolvedEntry("two")},
+        {benchmarkFact("one", 100 * kDay, 250.0F)}, {});
+    EXPECT_DOUBLE_EQ(scenarioNamed(projection, "one").normalizedRank, 2.5);
+    EXPECT_DOUBLE_EQ(scenarioNamed(projection, "two").normalizedRank, 0.0);
+    ASSERT_TRUE(projection.averageRank);
+    EXPECT_DOUBLE_EQ(*projection.averageRank, (2.5 + 0.0) / 2.0);
+}
+
+TEST(BenchmarkAverageRank, AScoreAboveTheTopTierCountsAsTheTopTierWithoutCappingThePersonalBest) {
+    const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
+        {resolvedEntry("entry", "hash")}, {benchmarkFact("hash", 100 * kDay, 450.0F)}, {});
+    const auto &scenario = scenarioNamed(projection, "entry");
+    ASSERT_TRUE(scenario.personalBest);
+    EXPECT_DOUBLE_EQ(*scenario.personalBest, 450.0);
+    ASSERT_TRUE(scenario.recentAverage);
+    EXPECT_DOUBLE_EQ(*scenario.recentAverage, 450.0);
+    EXPECT_DOUBLE_EQ(scenario.normalizedRank, 3.0);
+    ASSERT_TRUE(projection.averageRank);
+    EXPECT_DOUBLE_EQ(*projection.averageRank, 3.0);
+    ASSERT_EQ(projection.averageRankHistory.size(), 1U);
+    EXPECT_DOUBLE_EQ(projection.averageRankHistory.back().averageRank, 3.0);
+}
+
+TEST(BenchmarkRecentAverage, UsesExactlyTheLatestFiveRunsAndNeverChangesAttainment) {
+    // An early silver PB followed by six weak runs: the recent five sit below bronze.
+    std::vector<RunFact> facts{benchmarkFact("hash", 100 * kDay, 250.0F)};
+    for (int run = 1; run <= 6; ++run)
+        facts.push_back(benchmarkFact("hash", (100 + run) * kDay, static_cast<float>(10 * run)));
+    const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
+                                              {resolvedEntry("entry", "hash")}, facts, {});
+    const auto &scenario = scenarioNamed(projection, "entry");
+    ASSERT_TRUE(scenario.recentAverage);
+    EXPECT_DOUBLE_EQ(*scenario.recentAverage, (20.0 + 30.0 + 40.0 + 50.0 + 60.0) / 5.0);
+    EXPECT_EQ(scenario.recentSampleCount, 5);
+    EXPECT_EQ(scenario.runCount, 7);
+    ASSERT_TRUE(scenario.personalBest);
+    EXPECT_DOUBLE_EQ(*scenario.personalBest, 250.0);
+    ASSERT_TRUE(scenario.attainedTier);
+    EXPECT_EQ(scenario.attainedTier->value, "silver");
+    EXPECT_DOUBLE_EQ(scenario.normalizedRank, 2.5);
+    ASSERT_TRUE(projection.attainedRank);
+    EXPECT_EQ(projection.attainedRank->value, "silver");
+    ASSERT_TRUE(projection.averageRank);
+    EXPECT_DOUBLE_EQ(*projection.averageRank, 2.5);
+}
+
+// Category structure decides official attainment but never the average: the same runs read
+// under a recategorized definition change the attained rank and leave the average line alone.
+TEST(BenchmarkRank, RecategorizingChangesAttainmentButNotTheAverageRank) {
+    const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 300.0F),
+                                   benchmarkFact("two", 101 * kDay, 100.0F)};
+    const auto resolutions = std::vector{resolvedEntry("one", "one"), resolvedEntry("two", "two")};
+    const auto separate = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
+                                            resolutions, facts, {});
+
+    auto grouped = twoScenarioBenchmark();
+    Category interchangeable{GroupId{"either"}, "Either", {}, grouped.uncategorized, {}};
+    grouped.uncategorized.clear();
+    grouped.categories = {interchangeable};
+    const auto together = evaluateBenchmark(grouped, {Completeness::Trackable, {}}, resolutions, facts, {});
+
+    ASSERT_TRUE(separate.attainedRank);
+    EXPECT_EQ(separate.attainedRank->value, "bronze");
+    ASSERT_TRUE(together.attainedRank);
+    EXPECT_EQ(together.attainedRank->value, "gold");
+    // Completion still needs every scenario, whatever the grouping.
+    ASSERT_TRUE(separate.completedRank);
+    ASSERT_TRUE(together.completedRank);
+    EXPECT_EQ(separate.completedRank->value, "bronze");
+    EXPECT_EQ(together.completedRank->value, "bronze");
+
+    ASSERT_TRUE(separate.averageRank);
+    ASSERT_TRUE(together.averageRank);
+    EXPECT_DOUBLE_EQ(*separate.averageRank, 2.0);
+    EXPECT_DOUBLE_EQ(*together.averageRank, 2.0);
+    ASSERT_EQ(separate.averageRankHistory.size(), together.averageRankHistory.size());
+    for (std::size_t index = 0; index < separate.averageRankHistory.size(); ++index)
+        EXPECT_DOUBLE_EQ(separate.averageRankHistory[index].averageRank,
+                         together.averageRankHistory[index].averageRank);
 }
