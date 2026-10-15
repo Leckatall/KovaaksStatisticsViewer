@@ -17,6 +17,11 @@ namespace ksv::gallery {
             domain::ScenarioId{.name = "Smoothbot Gallery", .hash = "gallery-smoothbot"},
             domain::ScenarioId{.name = "VT FlyTS Gallery", .hash = "gallery-flyts"},
         };
+        // A real benchmark scenario name (Viscose Benchmarks), long enough to elide in narrow columns.
+        const domain::ScenarioId kCelestial{
+            .name = "Air CELESTIAL No UFO Easy Slowed",
+            .hash = "gallery-celestial",
+        };
 
         long long timestampMs(const int day_offset, const int minute_of_day) {
             const auto instant = sys_days{year{2026} / August / 1} + days{day_offset} + minutes{minute_of_day};
@@ -34,6 +39,7 @@ namespace ksv::gallery {
         if (hash == "gallery-pasu") return {4, 4, 0.68F, 1, 100.0F, 12.0F, 8.0F};
         if (hash == "gallery-smoothbot") return {8, 3, 0.86F, 18, 12.0F, 3.0F, 20.0F};
         if (hash == "gallery-flyts") return {5, 4, 0.74F, 3, 35.0F, 8.0F, 12.0F};
+        if (hash == "gallery-celestial") return {7, 3, 0.64F, 10, 15.0F, 2.0F, 10.0F};
         return {6, 4, 0.78F, 1, 100.0F, 10.0F, 5.0F};
     }
 
@@ -101,6 +107,11 @@ namespace ksv::gallery {
                 for (int run = 0; run < 8; ++run) {
                     profile.addRun(makeRun(kPrimary, day, 18 * 60 + run * 2, 60.0F, seed++));
                 }
+            }
+            // Started mid-month and played every other evening, ending before the primary
+            // scenario's last session so that stays the latest run.
+            for (int run = 0; run < 7; ++run) {
+                profile.addRun(makeRun(kCelestial, 13 + run * 2, 20 * 60, 60.0F, seed++));
             }
             return profile;
         }

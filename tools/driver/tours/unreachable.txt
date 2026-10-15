@@ -84,8 +84,8 @@ shot --window benchmarkManagerDialog --name row-drag-drop-line
 mouse release --at 5 5
 
 # Adding a subcategory to a category that holds scenarios asks where they go.
-click "${M}/addSubcategoryPlus_clicking"
-type Static --into "${M}/subcategoryCreationField" --enter
+click "${M}/addSubcategoryPlus_tracking"
+type Smooth --into "${M}/subcategoryCreationField" --enter
 shot --window benchmarkManagerDialog --name relocation-prompt
 click "${M}/subcategoryRelocationPrompt > text:Cancel"
 

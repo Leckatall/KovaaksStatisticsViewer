@@ -29,6 +29,7 @@
 #include "presentation/benchmark_table_model.h"
 #include "presentation/benchmark_tracking_vm.h"
 #include "qt_data/benchmark_store.h"
+#include "qt_data/playlist_reader.h"
 #include "qt_data/series_config_store.h"
 #include "fake_settings_service.h"
 #include "integration_env.h"
@@ -208,6 +209,15 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     ASSERT_EQ(working.uncategorized.size(), 36U);
     EXPECT_EQ(working.uncategorized.front().name, "WhisphereRawControl");
     EXPECT_EQ(working.uncategorized.back().name, "voxTargetClick 20% Small");
+    // Every scenario lands in Uncategorized in the playlist's own order, with no setup invented.
+    const auto playlist = qt_data::PlaylistReader{}.read(
+        QDir(TEST_FILES_DIR).absoluteFilePath("Viscose Benchmarks Beta - Intermediate.json").toStdString());
+    ASSERT_TRUE(playlist.seed.has_value());
+    std::vector<std::string> importedOrder;
+    for (const auto &entry: working.uncategorized) importedOrder.push_back(entry.name);
+    EXPECT_EQ(importedOrder, playlist.seed->scenarioNames);
+    EXPECT_TRUE(working.categories.empty());
+    EXPECT_TRUE(working.tiers.empty());
     const domain::BenchmarkId benchmarkId = working.id;
 
     const auto savedPath =
@@ -219,6 +229,9 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     ASSERT_TRUE(service->snapshot().has_value());
     ASSERT_EQ(service->snapshot()->entries.size(), 1U);
     EXPECT_EQ(service->snapshot()->entries.front().filename, benchmarkId.value + ".json");
+    const auto *savedImport = std::get_if<LoadedBenchmark>(&service->snapshot()->entries.front().content);
+    ASSERT_NE(savedImport, nullptr);
+    EXPECT_EQ(savedImport->completeness.completeness, domain::Completeness::Incomplete);
 
     manager->closeEditor();
     const auto reopened = manager->openBenchmark(benchmarkId);
@@ -255,6 +268,92 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     EXPECT_FALSE(QFile::exists(savedPath));
     ASSERT_TRUE(service->snapshot().has_value());
     EXPECT_TRUE(service->snapshot()->entries.empty());
+}
+
+TEST(BenchmarkComposition, RefreshLoadsACopiedFileAndClearsAFixedProblemWithoutRestarting) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const auto writeFile = [&](const QString &name, const QByteArray &bytes) {
+        QFile file(QDir(dir.path()).absoluteFilePath(name));
+        ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+        file.write(bytes);
+    };
+    writeFile("broken.json", "{ not json");
+
+    auto settings = std::make_shared<tests_support::FakeSettingsService>();
+    auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
+    App app(settings, std::make_shared<data::ProtoDecoder>(),
+            std::make_shared<qt_data::SeriesConfigStore>(settings),
+            std::make_shared<StatsCsvParser>(), repo);
+    const auto service = app.benchmarksService();
+    ASSERT_TRUE(service->snapshot().has_value());
+    ASSERT_EQ(service->snapshot()->entries.size(), 1U);
+    ASSERT_NE(std::get_if<ProblemBenchmark>(&service->snapshot()->entries[0].content), nullptr);
+
+    // A file copied in from another KSV install, plus a repaired replacement for the broken one.
+    writeFile("copied.json", trackableJson());
+    QByteArray repaired = trackableJson();
+    repaired.replace("\"id\": \"b1\", \"name\": \"Composed\"", "\"id\": \"b2\", \"name\": \"Repaired\"");
+    ASSERT_NE(repaired, trackableJson());
+    writeFile("broken.json", repaired);
+    app.benchmarkManagerUseCase()->refresh();
+
+    const auto refreshed = service->snapshot();
+    ASSERT_TRUE(refreshed.has_value());
+    const auto &entries = refreshed->entries;
+    ASSERT_EQ(entries.size(), 2U);
+    std::map<std::string, std::string> namesByFile;
+    for (const auto &entry: entries) {
+        const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content);
+        ASSERT_NE(loaded, nullptr) << entry.filename;
+        namesByFile[entry.filename] = loaded->benchmark.name;
+    }
+    EXPECT_EQ(namesByFile["broken.json"], "Repaired");
+    EXPECT_EQ(namesByFile["copied.json"], "Composed");
+
+    app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"b1"});
+    EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Ready);
+}
+
+TEST(BenchmarkComposition, UnsupportedFileIsReportedAndNeverRewrittenByAutomaticMapping) {
+    integration::TestEnv env;
+    ASSERT_TRUE(env.valid());
+    ASSERT_TRUE(env.makePerformancesDir());
+    ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+    QTemporaryDir benchmarks;
+    ASSERT_TRUE(benchmarks.isValid());
+    // Auto-mappable by name if it were loaded, so only the version check keeps it untouched.
+    QByteArray future = unmappedJson();
+    future.replace("\"schemaVersion\": 1", "\"schemaVersion\": 99");
+    ASSERT_NE(future, unmappedJson());
+    const auto path = QDir(benchmarks.path()).absoluteFilePath("future.json");
+    {
+        QFile file(path);
+        ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+        file.write(future);
+    }
+
+    auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore, env.statsParser, repo);
+    QElapsedTimer timer;
+    timer.start();
+    while (!app.profileService()->isProfileLoaded()) {
+        ASSERT_LT(timer.elapsed(), 5000);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+
+    ASSERT_TRUE(app.benchmarksService()->snapshot().has_value());
+    const auto *problem =
+        std::get_if<ProblemBenchmark>(&app.benchmarksService()->snapshot()->entries.at(0).content);
+    ASSERT_NE(problem, nullptr);
+    EXPECT_EQ(problem->problem, BenchmarkFileProblem::Unsupported);
+    EXPECT_EQ(problem->schemaVersion, std::make_optional(99));
+    app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"auto-1"});
+    EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Unavailable);
+
+    QFile file(path);
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+    EXPECT_EQ(file.readAll(), future);
 }
 
 TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConflicts) {

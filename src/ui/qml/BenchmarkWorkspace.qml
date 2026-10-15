@@ -8,6 +8,10 @@ Item {
     property var trackingVm
 
     signal manageBenchmarksRequested()
+    // Opens the Benchmark Manager on one selector entry: its draft in the editor when it can be
+    // opened, otherwise selected in the library. A problem file may have no id, so its filename
+    // identifies it; the id is passed for entries that have one.
+    signal editBenchmarkRequested(string filename, string benchmarkId)
 
     implicitWidth: 800
     implicitHeight: 600
@@ -121,6 +125,10 @@ Item {
                         id: entryRow
                         required property var modelData
                         readonly property bool rowSelectable: modelData.selectable === true
+                        readonly property string kind: String(modelData.classification).toLowerCase()
+                        // Every exception (incomplete, invalid, unsupported) carries a chip
+                        // and a way to the manager, where its details are shown.
+                        readonly property bool hasWarning: kind !== "trackable"
                         width: parent.width
                         implicitHeight: entryDelegate.implicitHeight
                         height: entryDelegate.implicitHeight
@@ -133,10 +141,36 @@ Item {
                             activeFocusOnTab: entryRow.rowSelectable
                             highlighted: root.trackingVm
                                          && root.trackingVm.selectedName === entryRow.modelData.name
-                            text: entryRow.modelData.name + "  —  " + entryRow.modelData.classification
+                            text: entryRow.modelData.name
+                            // A trackable benchmark is the normal case and shows
+                            // only its name; the exceptions get a filled chip.
+                            rightPadding: entryRow.hasWarning
+                                          ? entryChip.width + entryEditButton.width + 24 : padding
                             onClicked: {
                                 if (entryRow.rowSelectable && String(entryRow.modelData.id).length > 0)
                                     root.trackingVm.selectBenchmark(entryRow.modelData.id)
+                            }
+                        }
+
+                        Rectangle {
+                            id: entryChip
+                            objectName: "selectorEntryLabel_" + entryRow.modelData.name
+                            readonly property string kind: String(entryRow.modelData.classification)
+                            visible: entryRow.hasWarning
+                            anchors.right: entryEditButton.left
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: chipText.implicitWidth + 14
+                            height: chipText.implicitHeight + 2
+                            radius: height / 2
+                            color: entryRow.kind === "incomplete" ? "#FFB74D" : "#E57373"
+                            Label {
+                                id: chipText
+                                anchors.centerIn: parent
+                                text: entryChip.kind
+                                font.bold: true
+                                font.pixelSize: entryDelegate.font.pixelSize - 1
+                                color: "#1E1E1E"
                             }
                         }
 
@@ -147,6 +181,34 @@ Item {
                             anchors.fill: parent
                             enabled: !entryRow.rowSelectable
                             onPressed: mouse => mouse.accepted = true
+                        }
+
+                        // Declared after the click blocker so it stays clickable on rows that
+                        // cannot be selected; it opens the manager without selecting the row.
+                        ToolButton {
+                            id: entryEditButton
+                            objectName: "selectorEntryEdit_" + entryRow.modelData.name
+                            visible: entryRow.hasWarning
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: visible ? implicitWidth : 0
+                            padding: 4
+                            icon.source: "icons/square-pen.svg"
+                            icon.width: 16
+                            icon.height: 16
+                            display: AbstractButton.IconOnly
+                            // A loaded (incomplete) benchmark opens in the editor; a problem
+                            // file can only be shown in the library.
+                            text: entryRow.kind === "incomplete"
+                                  ? qsTr("Edit %1 in the Benchmark Manager").arg(entryRow.modelData.name)
+                                  : qsTr("Show %1 in the Benchmark Manager").arg(entryRow.modelData.name)
+                            Accessible.name: text
+                            ToolTip.text: text
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            onClicked: root.editBenchmarkRequested(String(entryRow.modelData.filename || ""),
+                                                                   String(entryRow.modelData.id || ""))
                         }
                     }
                 }
@@ -347,6 +409,15 @@ Item {
                     onClicked: root.manageBenchmarksRequested()
                 }
 
+                // Same order as the trackable page: the table, then the charts.
+                BenchmarkProgressGrid {
+                    objectName: "benchmarkProgressGrid"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: implicitHeight
+                    grid: root.trackingVm ? root.trackingVm.progressGrid : null
+                    benchmarkKey: root.trackingVm ? root.trackingVm.selectedName : ""
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -367,13 +438,6 @@ Item {
                     Layout.minimumHeight: 200
                     namePrefix: "playtimeHistory"
                     historyModel: root.trackingVm ? root.trackingVm.playtimeHistory : null
-                }
-
-                BenchmarkProgressGrid {
-                    objectName: "benchmarkProgressGrid"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: implicitHeight
-                    grid: root.trackingVm ? root.trackingVm.progressGrid : null
                 }
             }
         }
@@ -434,18 +498,26 @@ Item {
                         wrapMode: Text.WordWrap
                         font.bold: true
                         textFormat: Text.StyledText
+                        visible: text.length > 0
                         text: {
-                            if (!root.trackingVm) return ""
-                            var total = root.trackingVm.scenarioCount
-                            if (total === undefined || total === null) total = "?"
-                            var line = qsTr("%1 of %2 scenarios at the next tier")
-                                       .arg(root.trackingVm.scenariosAtNextTier).arg(total)
-                            var color = String(root.trackingVm.nextTierColor || "")
-                            if (color.length === 0) return line
-                            return line + " (<font color=\"" + color + "\">"
-                                   + String(root.trackingVm.nextTier).replace(/&/g, "&amp;")
-                                         .replace(/</g, "&lt;").replace(/>/g, "&gt;")
-                                   + "</font>)"
+                            const vm = root.trackingVm
+                            if (!vm || !vm.summaryAvailable) return ""
+                            if (!vm.hasNextTier) return qsTr("Highest tier attained")
+                            const count = vm.nextTierBlockerCount
+                            const color = String(vm.nextTierColor || "")
+                            const tier = color.length === 0 ? String(vm.nextTier)
+                                : "<font color=\"" + color + "\">"
+                                  + String(vm.nextTier).replace(/&/g, "&amp;")
+                                        .replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                                  + "</font>"
+                            // An empty attained colour means Unranked. Ranks are attained per group, so this counts the rows marked as blockers,
+                            // not the scenarios already at the next tier.
+                            let line
+                            if (count === 0) line = qsTr("No scenario blocks %1").arg(tier)
+                            else if (count === 1) line = qsTr("1 scenario blocks %1").arg(tier)
+                            else line = qsTr("%1 scenarios block %2").arg(count).arg(tier)
+                            return String(vm.attainedRankColor || "") === ""
+                                   ? qsTr("Not ranked yet: %1").arg(line) : line
                         }
                     }
                     // Every scenario with its tier bar; rows that block the next tier
@@ -456,6 +528,7 @@ Item {
                         Layout.preferredHeight: implicitHeight
                         Layout.topMargin: 4
                         grid: root.trackingVm ? root.trackingVm.progressGrid : null
+                        benchmarkKey: root.trackingVm ? root.trackingVm.selectedName : ""
                     }
                 }
 

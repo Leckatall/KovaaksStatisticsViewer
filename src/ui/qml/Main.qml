@@ -205,6 +205,8 @@ ApplicationWindow {
                 objectName: "benchmarkWorkspace"
                 trackingVm: root.benchmarkTrackingVm
                 onManageBenchmarksRequested: benchmarkManagerDialog.open()
+                onEditBenchmarkRequested: (filename, benchmarkId) =>
+                    benchmarkManagerDialog.openOnEntry(filename, benchmarkId)
             }
         }
     }

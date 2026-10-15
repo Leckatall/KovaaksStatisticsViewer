@@ -38,6 +38,8 @@ namespace ksv::presentation {
         Q_PROPERTY(QString attainedRankColor READ attainedRankColor NOTIFY changed)
         Q_PROPERTY(QString completedRankColor READ completedRankColor NOTIFY changed)
         Q_PROPERTY(QString nextTierColor READ nextTierColor NOTIFY changed)
+        // The average rank in words ("Bronze · 60% to Silver"; see describeAverageRank), or
+        // "Unavailable". Never the bare number.
         Q_PROPERTY(QString averageRank READ averageRank NOTIFY changed)
         // The average rank as tier bar chunk fills (rankChunkFills), and the completed rank as a
         // position on that bar's chunk scale (the end of its chunk), or -1 when none is completed.
@@ -45,6 +47,10 @@ namespace ksv::presentation {
         Q_PROPERTY(double completedRankPosition READ completedRankPosition NOTIFY changed)
         Q_PROPERTY(QString totalPlaytime READ totalPlaytime NOTIFY changed)
         Q_PROPERTY(int scenariosAtNextTier READ scenariosAtNextTier NOTIFY changed)
+        // Scenarios that keep the benchmark from nextTier: exactly the rows the progress grid marks as
+        // blockers. hasNextTier is false when the top tier is attained (or the benchmark is not trackable).
+        Q_PROPERTY(int nextTierBlockerCount READ nextTierBlockerCount NOTIFY changed)
+        Q_PROPERTY(bool hasNextTier READ hasNextTier NOTIFY changed)
         Q_PROPERTY(int scenarioCount READ scenarioCount NOTIFY changed)
         Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *rankHistory READ rankHistory CONSTANT)
         Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *playtimeHistory READ playtimeHistory CONSTANT)
@@ -71,6 +77,8 @@ namespace ksv::presentation {
         [[nodiscard]] double completedRankPosition() const { return m_completedRankPosition; }
         [[nodiscard]] QString totalPlaytime() const { return m_totalPlaytime; }
         [[nodiscard]] int scenariosAtNextTier() const { return m_scenariosAtNextTier; }
+        [[nodiscard]] int nextTierBlockerCount() const { return m_nextTierBlockerCount; }
+        [[nodiscard]] bool hasNextTier() const { return m_hasNextTier; }
         [[nodiscard]] int scenarioCount() const { return m_scenarioCount; }
         [[nodiscard]] BenchmarkHistoryViewModel *rankHistory() const { return m_rankHistory; }
         [[nodiscard]] BenchmarkHistoryViewModel *playtimeHistory() const { return m_playtimeHistory; }
@@ -113,6 +121,8 @@ namespace ksv::presentation {
         double m_completedRankPosition = -1.0;
         QString m_totalPlaytime;
         int m_scenariosAtNextTier = 0;
+        int m_nextTierBlockerCount = 0;
+        bool m_hasNextTier = false;
         int m_scenarioCount = 0;
     };
 }

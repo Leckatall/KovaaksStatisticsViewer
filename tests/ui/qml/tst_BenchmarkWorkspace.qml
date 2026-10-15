@@ -19,6 +19,17 @@ Item {
     height: 800
 
     property int managerRequests: 0
+    property var editRequests: []
+
+    Component {
+        id: tierBarComponent
+        TierBar { objectName: "probe"; height: 16 }
+    }
+
+    Component {
+        id: progressGridComponent
+        BenchmarkProgressGrid { }
+    }
 
     Component {
         id: largeFontHostComponent
@@ -60,7 +71,11 @@ Item {
             ws.width = w || 1200
             ws.height = h || 800
             root.managerRequests = 0
+            root.editRequests = []
             ws.manageBenchmarksRequested.connect(function () { root.managerRequests++ })
+            ws.editBenchmarkRequested.connect(function (filename, benchmarkId) {
+                root.editRequests = root.editRequests.concat([[filename, benchmarkId]])
+            })
             return ws
         }
         function find(ws, name) { return ItemLookup.findByObjectName(ws, name) }
@@ -200,6 +215,120 @@ Item {
                     "clicking a disabled problem row must not select it")
         }
 
+        function test_selectorLabelsOnlyExceptions() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureNoSelection())
+            const entry = find(ws, "selectorEntry_Voltaic S3")
+            verify(entry !== null, "trackable entry missing")
+            compare(entry.text, "Voltaic S3", "a trackable entry shows only its name")
+            const trackableChip = find(ws, "selectorEntryLabel_Voltaic S3")
+            verify(trackableChip !== null)
+            compare(trackableChip.visible, false, "trackable is the normal state and carries no label")
+            const problemChip = find(ws, "selectorEntryLabel_broken.json")
+            verify(problemChip !== null)
+            compare(problemChip.visible, true, "an exception keeps its label")
+            compare(problemChip.kind.toLowerCase(), "invalid")
+        }
+
+        // Every exception kind the real view model emits (lowercase) keeps a
+        // visible, labelled pill; only trackable rows show the bare name.
+        function test_selectorLabelsEveryExceptionKind_data() {
+            return [
+                {tag: "incomplete", name: "Half Built", selectable: true},
+                {tag: "invalid", name: "broken.json", selectable: false},
+                {tag: "unsupported", name: "Future Format", selectable: false}
+            ]
+        }
+
+        function test_selectorLabelsEveryExceptionKind(data) {
+            const ws = makeWorkspace({
+                state: "NoSelection",
+                selectorEntries: [
+                    {id: "bench-A", name: "Voltaic S3", classification: "trackable", selectable: true},
+                    {id: data.selectable ? "bench-X" : "", name: data.name,
+                     classification: data.tag, selectable: data.selectable}
+                ]
+            })
+            const chip = find(ws, "selectorEntryLabel_" + data.name)
+            verify(chip !== null, data.tag + " entry has no label")
+            compare(chip.visible, true, "the " + data.tag + " benchmark must keep its label")
+            compare(chip.kind, data.tag)
+            verify(chip.width > 0 && chip.height > 0, "the label must have a size")
+            const row = find(ws, "selectorEntry_" + data.name)
+            compare(row.enabled, data.selectable)
+            verify(row.rightPadding >= chip.width, "the name must leave room for the label")
+            compare(find(ws, "selectorEntryLabel_Voltaic S3").visible, false)
+        }
+
+        // A row with a warning chip carries a control that opens the Benchmark Manager
+        // on that benchmark; a trackable row stays name-only.
+        function test_onlyWarningRowsOfferTheManager_data() {
+            return [
+                {tag: "trackable", name: "Voltaic S3", shown: false},
+                {tag: "incomplete", name: "Half Built", shown: true, verb: "Edit"},
+                {tag: "invalid", name: "broken.json", shown: true, verb: "Show"},
+                {tag: "unsupported", name: "Future Format", shown: true, verb: "Show"}
+            ]
+        }
+
+        function test_onlyWarningRowsOfferTheManager(data) {
+            const selectable = data.tag === "trackable" || data.tag === "incomplete"
+            const ws = makeWorkspace({
+                state: "NoSelection",
+                selectorEntries: [
+                    {id: selectable ? "bench-X" : "", name: data.name, filename: "x.json",
+                     classification: data.tag, selectable: selectable}
+                ]
+            })
+            const control = find(ws, "selectorEntryEdit_" + data.name)
+            verify(control !== null, "every row has the control, shown or not")
+            compare(control.visible, data.shown)
+            const chip = find(ws, "selectorEntryLabel_" + data.name)
+            compare(chip.visible, data.shown, "the control goes with the warning chip")
+            if (!data.shown) return
+            verify(control.width > 0 && control.height > 0, "the control must have a size")
+            const name = String(control.Accessible.name)
+            verify(name.indexOf(data.verb) === 0 && name.indexOf(data.name) !== -1
+                   && name.indexOf("Benchmark Manager") !== -1,
+                   "the accessible name says what the control does: " + name)
+            compare(String(control.ToolTip.text), name, "the tooltip says the same")
+            // The control sits beside the chip, inside the row, and the name leaves room for both.
+            const row = find(ws, "selectorEntry_" + data.name)
+            const controlX = control.mapToItem(row, 0, 0).x
+            const chipRight = chip.mapToItem(row, chip.width, 0).x
+            verify(controlX >= chipRight, "the control sits right of the chip")
+            verify(controlX + control.width <= row.width, "the control stays inside the row")
+            verify(row.rightPadding >= chip.width + control.width, "the name leaves room for chip and control")
+        }
+
+        function test_warningControlOpensTheManagerWithoutSelecting_data() {
+            return [
+                {tag: "incomplete", entry: {id: "bench-I", name: "Half Built", filename: "half.json",
+                                            classification: "incomplete", selectable: true}},
+                {tag: "invalid-without-id", entry: {id: "", name: "broken.json", filename: "broken.json",
+                                                    classification: "invalid", selectable: false}},
+                {tag: "unsupported", entry: {id: "bench-U", name: "Future Format", filename: "future.json",
+                                             classification: "unsupported", selectable: false}}
+            ]
+        }
+
+        function test_warningControlOpensTheManagerWithoutSelecting(data) {
+            const ws = makeWorkspace({
+                state: "NoSelection",
+                selectorEntries: [
+                    {id: "bench-A", name: "Voltaic S3", filename: "voltaic-s3.json",
+                     classification: "trackable", selectable: true},
+                    data.entry
+                ]
+            })
+            const control = find(ws, "selectorEntryEdit_" + data.entry.name)
+            verify(control !== null && control.visible)
+            mouseClick(control)
+            compare(root.editRequests.length, 1, "the control must raise editBenchmarkRequested")
+            compare(root.editRequests[0], [data.entry.filename, data.entry.id])
+            compare(ws.trackingVm.selectBenchmarkCalls.length, 0, "the control must not select the row")
+            compare(root.managerRequests, 0, "the control opens the manager on its benchmark, not plainly")
+        }
+
         // showing the workspace with nothing selected asks the view model for
         // the default (remembered or only) benchmark; which one is the use case's call.
         function test_shownWithoutSelectionRequestsDefaultBenchmark() {
@@ -300,6 +429,28 @@ Item {
                    "the incomplete body lists its scenarios in the progress grid too")
         }
 
+        // The incomplete page reads in the trackable page's order: the notice with
+        // its issues and the edit action first, then the progress table, then the
+        // playtime chart.
+        function test_incompletePageListsTheTableBeforeTheChart() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureIncomplete())
+            const top = function (name) {
+                const item = find(ws, name)
+                verify(item !== null, name + " missing")
+                return item.mapToItem(ws, 0, 0).y
+            }
+            const issues = findAllPrefixed(ws, "completenessIssue_")
+            const lastIssue = issues[issues.length - 1].mapToItem(ws, 0, 0).y
+            verify(top("incompleteBody") < top("completenessIssue_0"), "message before its issue list")
+            verify(lastIssue < top("editBenchmarkButton"), "issue list before the edit button")
+            verify(top("editBenchmarkButton") < top("benchmarkProgressGrid"),
+                   "edit button before the progress table")
+            verify(top("benchmarkProgressGrid") < top("incompleteTotalPlaytime"),
+                   "progress table before the playtime summary")
+            verify(top("incompleteTotalPlaytime") < top("playtimeHistoryCard"),
+                   "playtime summary before the chart")
+        }
+
         function test_trackableShowsAllSeparatelyLabelledSummaryValues() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             verify(find(ws, "benchmarkStatusSummary") !== null, "trackable state must show the status summary")
@@ -316,7 +467,7 @@ Item {
 
             compare(attained.text, "Gold")
             compare(completed.text, "Silver")
-            compare(avg.text, "2.75")
+            compare(avg.text, "Silver · 75% to Gold")
             compare(playtime.text, "5 h 40 min")
             compare(nextTier.text, "Platinum")
 
@@ -326,12 +477,12 @@ Item {
         }
 
         // the average rank is drawn on the tier bar, with the completed rank as a tick
-        // and the number in the tooltip.
+        // and the tier and progress in the tooltip.
         function test_summaryAverageRankIsATierBarWithACompletedRankTick() {
             const fx = TestDoubles.trackingFixtureTrackable()
-            fx.averageRank = "2.75"
+            fx.averageRank = "Silver · 75% to Gold"
             fx.averageRankFills = [1, 1, 0.75, 0]
-            fx.completedRankPosition = 2      // Silver, the second tier
+            fx.completedRankPosition = 2      // Silver, the second tier: the end of its chunk
             const ws = makeWorkspace(fx)
             wait(0)
             const area = find(ws, "summaryAverageRank")
@@ -351,7 +502,10 @@ Item {
             verify(tickX >= silverEnd.mapToItem(ws, silverEnd.width, 0).x - 1
                    && tickX <= goldStart.mapToItem(ws, 0, 0).x + 1, "the tick sits at the end of Silver's chunk")
             compare(tick.ToolTip.text, "Completed rank: Silver")
-            compare(area.ToolTip.text, "Average rank 2.75", "the number stays in the tooltip")
+            compare(area.ToolTip.text, "Average rank: Silver · 75% to Gold",
+                    "the tier and progress are in the tooltip, not the bare number")
+            compare(area.Accessible.name, "Average rank: Silver · 75% to Gold")
+            compare(area.Accessible.description, "Average rank: Silver · 75% to Gold")
             verify(find(ws, "summaryAttainedRank").visible && find(ws, "summaryNextTier").visible,
                    "attained rank and next tier stay visible as text")
             // The bar does not push the right-hand column off its half of the card.
@@ -391,13 +545,64 @@ Item {
             verify(find(ws, "progressRow_sc-pasu_blocker") === null, "a row that blocks nothing has no marker")
         }
 
-        function test_nextTierProgressShowsCountButNotAsTheRule() {
+        function test_headingCountsBlockersAndMatchesTheMarkedRows() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            const progress = find(ws, "nextTierProgress")
-            verify(progress !== null, "next-tier progress element missing")
-            const t = String(progress.text)
-            verify(t.indexOf("3") !== -1 && t.indexOf("9") !== -1,
-                   "progress shows scenariosAtNextTier against the total scenario count")
+            wait(0)
+            const markers = findAllPrefixed(ws, "progressRow_").filter(function (item) {
+                return /_blocker$/.test(item.objectName)
+            })
+            const t = String(find(ws, "nextTierProgress").text)
+            compare(t.replace(/<[^>]*>/g, ""), markers.length + " scenarios block Platinum")
+            verify(t.indexOf("#50dcdc") !== -1, "the tier name keeps its colour")
+        }
+
+        function test_headingSingularAndNoNextTierAndUnranked() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            fx.nextTierBlockerCount = 1
+            let ws = makeWorkspace(fx)
+            compare(String(find(ws, "nextTierProgress").text).replace(/<[^>]*>/g, ""), "1 scenario blocks Platinum")
+
+            const top = TestDoubles.trackingFixtureTrackable()
+            top.hasNextTier = false
+            top.nextTier = "Highest tier attained"
+            top.nextTierColor = ""
+            top.nextTierBlockerCount = 0
+            ws = makeWorkspace(top)
+            compare(String(find(ws, "nextTierProgress").text), "Highest tier attained")
+
+            const none = TestDoubles.trackingFixtureTrackable()
+            none.attainedRank = "Unranked"
+            none.attainedRankColor = ""
+            none.nextTier = "Bronze"
+            none.nextTierColor = "#cd7f32"
+            none.nextTierBlockerCount = 4
+            ws = makeWorkspace(none)
+            compare(String(find(ws, "nextTierProgress").text).replace(/<[^>]*>/g, ""),
+                    "Not ranked yet: 4 scenarios block Bronze")
+        }
+
+        // A non-trackable benchmark has no rank to progress from, so the heading must not
+        // show. The fixtures carry stale next-tier values on purpose: a heading that read
+        // them regardless of the state would render text.
+        function test_headingIsHiddenWhenNotTrackable_data() {
+            return [
+                {tag: "incomplete", fx: TestDoubles.trackingFixtureIncomplete(), body: "incompleteBody"},
+                {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable(), body: "unavailableBody"}
+            ]
+        }
+        function test_headingIsHiddenWhenNotTrackable(data) {
+            const fx = Object.assign({}, data.fx, {
+                hasNextTier: true, nextTier: "Gold", nextTierColor: "#ffc828", nextTierBlockerCount: 3
+            })
+            verify(String(fx.state).toLowerCase() !== "trackable", "the fixture must not be trackable")
+            verify(fx.summaryAvailable === false, "a non-trackable fixture has no summary")
+
+            const ws = makeWorkspace(fx)
+            verify(find(ws, data.body) !== null, "the " + data.tag + " body must be shown")
+            verify(find(ws, "benchmarkStatusSummary") === null, "no status summary when not trackable")
+            const heading = find(ws, "nextTierProgress")
+            verify(heading === null || !heading.visible,
+                   "the next-tier heading must not show: " + (heading ? heading.text : ""))
         }
     }
 
@@ -528,6 +733,100 @@ Item {
                    "playtime card description must include its metric name")
         }
 
+        // -- progress grid: column order and tier headers -----------------
+
+        function test_pbDateAndPlaysPrecedeTheBarAndNextTierFollowsIt() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
+            wait(0)
+            // Unscrolled, so the pinned columns sit where the layout puts them.
+            find(ws, "progressGridFlick").contentX = 0
+            wait(0)
+            const order = ["progressHeader_category", "progressHeader_subcategory", "progressHeader_scenario",
+                           "progressHeader_pbDate", "progressHeader_plays", "progressHeader_progress",
+                           "progressHeader_next"]
+            let previousRight = -1
+            for (const name of order) {
+                const header = find(ws, name)
+                verify(header !== null, name + " missing")
+                const left = header.mapToItem(ws, 0, 0).x
+                verify(Math.abs(left - previousRight) <= 0.5 || previousRight < 0,
+                       name + " follows the previous column directly")
+                previousRight = left + header.width
+            }
+            const bar = find(ws, "progressRow_sc-1w4ts_bar")
+            const plays = find(ws, "progressHeader_plays")
+            verify(bar.mapToItem(ws, 0, 0).x >= plays.mapToItem(ws, plays.width, 0).x,
+                   "the bar sits right of Plays")
+        }
+
+        function test_tierHeadersShowOnlyTheirNameInAReadableTierColour() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
+            wait(0)
+            const grid = find(ws, "benchmarkProgressGrid")
+            const tiers = grid.tiers
+            const seen = []
+            for (let i = 0; i < tiers.length; ++i) {
+                const header = find(ws, "progressTierHeader_" + i)
+                const name = find(ws, "progressTierHeader_" + i + "_name")
+                compare(name.text, tiers[i].name)
+                verify(name.font.bold, "tier names are bold")
+                // No swatch: the header holds only its underline and its name.
+                compare(header.children.length, 2, "tier " + i + " header has no colour swatch")
+                const underline = header.children[0]
+                verify(Qt.colorEqual(underline.color, tiers[i].barColor), "tier " + i + " keeps its tier underline")
+                verify(contrast(name.color, header.color) >= 4.5,
+                       "tier " + i + " name reads on its header: " + name.color + " on " + header.color)
+                for (const other of seen)
+                    verify(!Qt.colorEqual(other, name.color), "tier " + i + " name has its own colour")
+                seen.push(name.color)
+            }
+        }
+
+        function test_readableTierColourKeepsColoursThatReadAndBlendsTheRest() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
+            const grid = find(ws, "benchmarkProgressGrid")
+            // Dark header: gold reads as is; the dark iron grey is lightened until it reads.
+            verify(Qt.colorEqual(grid.readableOn("#ffc828", "#3c3c3c", "#ffffff"), "#ffc828"))
+            const iron = grid.readableOn("#82828c", "#3c3c3c", "#ffffff")
+            verify(!Qt.colorEqual(iron, "#82828c") && contrast(iron, "#3c3c3c") >= 4.5, "iron is lightened")
+            verify(iron.r < 0.9, "iron is lightened only as far as it needs: " + iron)
+            // Light header: gold is darkened toward the dark text colour instead.
+            const gold = grid.readableOn("#ffc828", "#efefef", "#000000")
+            verify(contrast(gold, "#efefef") >= 4.5 && gold.r > gold.b, "gold stays a gold on light: " + gold)
+            verify(Qt.colorEqual(grid.readableOn("", "#3c3c3c", "#ffffff"), "#ffffff"), "no colour: the fallback")
+        }
+
+        // Too little width: the chunks give up their padding around the widest tier name
+        // before any scenario name shortens, and the grid scrolls only after both.
+        function test_chunkPaddingGivesWayBeforeScenarioNames() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
+            const grid = find(ws, "benchmarkProgressGrid")
+            compare(grid.tiers.length, 4)
+            const m = {category: 100, subcategory: 0, scenario: 300, scenarioMinimum: 120, pbDate: 80,
+                       plays: 50, next: 100, chunk: 100, chunkMinimum: 84}
+            // fixed columns 630; bar comfortable 4*100+16 = 416, minimum 4*84+16 = 352
+            let cols = grid._layoutColumns(1046, m)
+            compare(cols.progress.width, 416, "room to spare: comfortable chunks")
+            compare(cols.scenario.width, 300)
+            cols = grid._layoutColumns(1000, m)
+            compare(cols.progress.width, 370, "the chunk padding shrinks first")
+            compare(cols.scenario.width, 300, "scenario names keep their width while padding is left")
+            cols = grid._layoutColumns(950, m)
+            compare(cols.progress.width, 352, "chunks stop at the widest name")
+            compare(cols.scenario.width, 268, "then the scenario names shorten")
+            cols = grid._layoutColumns(700, m)
+            compare(cols.progress.width, 352)
+            compare(cols.scenario.width, 120)
+            verify(cols.total > 700, "and then the grid scrolls")
+        }
+
+        function contrast(a, b) {
+            const linear = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+            const lum = c => 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
+            const la = lum(Qt.color(a)), lb = lum(Qt.color(b))
+            return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+        }
+
         // -- progress grid: rows, values, group cells ---------------------
 
         function test_scenarioRowExposesEveryValueInItsOwnCell() {
@@ -535,8 +834,8 @@ Item {
             const row = find(ws, "progressRow_sc-1w4ts")
             verify(row !== null, "row for sc-1w4ts missing")
             compare(find(ws, "progressRow_sc-1w4ts_name").text, "1w4ts")
-            compare(find(ws, "progressRow_sc-1w4ts_personalBest").text, "812")
-            compare(find(ws, "progressRow_sc-1w4ts_recent").text, "790.5")
+            compare(find(ws, "progressRow_sc-1w4ts_personalBestDate").text, "2026-08-14")
+            compare(find(ws, "progressRow_sc-1w4ts_playCount").text, "37")
             compare(find(ws, "progressRow_sc-1w4ts_next").text, "Platinum 900")
             const bar = find(ws, "progressRow_sc-1w4ts_bar")
             verify(bar !== null, "every row has a tier bar")
@@ -582,6 +881,23 @@ Item {
             verify(find(ws, "progressGroup_cat-click_name").font.bold, "group names are bold, as in the editor")
             compare(find(ws, "progressHeader_subcategory").visible, true,
                     "a benchmark with subcategories shows the Subcategory column")
+        }
+
+        // A category group with no subcategory groups among its rows covers the
+        // Subcategory column too; one that has subcategories keeps its own width.
+        function test_categoryWithoutSubcategoriesSpansTheSubcategoryColumn() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            wait(0)
+            const category = find(ws, "progressHeader_category")
+            const subcategory = find(ws, "progressHeader_subcategory")
+            const flat = find(ws, "progressGroup_cat-track")
+            const split = find(ws, "progressGroup_cat-click")
+            fuzzyCompare(flat.x, category.x, 0.5)
+            fuzzyCompare(flat.width, category.width + subcategory.width, 0.5, "Tracking covers both columns")
+            fuzzyCompare(find(ws, "progressGroup_uncategorized").width, category.width + subcategory.width, 0.5,
+                         "Uncategorized covers both columns")
+            fuzzyCompare(split.width, category.width, 0.5, "Clicking keeps its own column")
+            fuzzyCompare(find(ws, "progressGroup_sub-static").width, subcategory.width, 0.5)
         }
 
         // each group cell shows its rank as a chip in that tier's colour.
@@ -641,7 +957,7 @@ Item {
             // The offscreen test font is wide, so whether the grid fits is the
             // driver's to check; here the scroll bar shows exactly when it overflows.
             compare(find(ws, "progressGridScrollBar").visible, grid.overflowing)
-            verify(grid.columns.progress.width >= 4 * grid._measured.chunk + 16,
+            verify(grid.columns.progress.width >= 4 * grid._measured.chunkMinimum + 16,
                    "the bar column never narrows below one minimum chunk per tier")
         }
 
@@ -671,13 +987,152 @@ Item {
             for (let i = 0; i < 4; ++i) {
                 const header = find(ws, "progressTierHeader_" + i)
                 const name = find(ws, "progressTierHeader_" + i + "_name")
-                verify(header.width >= name.implicitWidth + 14, "tier " + i + " header fits its name: "
+                verify(header.width >= name.implicitWidth, "tier " + i + " header fits its name: "
                        + header.width + " < " + name.implicitWidth)
+                const nameLeft = name.mapToItem(header, 0, 0).x
+                verify(nameLeft >= 0 && nameLeft + name.implicitWidth <= header.width,
+                       "tier " + i + " name lies inside its header")
             }
-            verify(find(ws, "progressRow_sc-1w4ts_personalBest") !== null
-                   && find(ws, "progressRow_sc-1w4ts_recent") !== null
+            verify(find(ws, "progressRow_sc-1w4ts_personalBestDate") !== null
+                   && find(ws, "progressRow_sc-1w4ts_playCount") !== null
                    && find(ws, "progressRow_sc-1w4ts_next") !== null,
                    "narrow layout preserves every value")
+        }
+
+        // -- horizontal scroll: the right end first, identifying columns pinned --
+
+        // A standalone grid over the trackable fixture. `fit` sizes it to fit; otherwise
+        // it gets `scrolling` px beside its pinned columns, so it overflows and pins.
+        function makeGrid(fit, scrolling) {
+            const data = TestDoubles.trackingFixtureTrackable().progressGrid
+            const probe = createTemporaryObject(progressGridComponent, root, {grid: data, width: 4000})
+            const fitting = probe.implicitWidth
+            const pinned = probe.pinnedWidth
+            probe.destroy()
+            const width = fit ? fitting + 200 : pinned + (scrolling || 220)
+            const grid = createTemporaryObject(progressGridComponent, root,
+                                               {grid: data, width: width, benchmarkKey: "Voltaic S3"})
+            verify(grid !== null, "the grid failed to instantiate")
+            wait(0)
+            if (!fit) {
+                verify(grid.overflowing, "the grid overflows at " + width + " px")
+                verify(grid.pinning, "the grid pins its identifying columns at " + width + " px")
+            }
+            return grid
+        }
+        function gridFlick(grid) { return ItemLookup.findByObjectName(grid, "progressGridFlick") }
+        // A real drag on the bar area, to the right: the content moves back toward its start.
+        function userDrag(grid, dx) {
+            const flick = gridFlick(grid)
+            mouseDrag(flick, flick.width - 40, grid.headerHeight + grid.rowHeight / 2, dx, 0, Qt.LeftButton,
+                      Qt.NoModifier, 20)
+            tryCompare(flick, "moving", false, 5000)
+        }
+
+        function test_overflowingGridOpensAtItsRightEnd() {
+            // Room for Next tier (wide in the test font) and the top tier beside it.
+            const grid = makeGrid(false, 420)
+            const flick = gridFlick(grid)
+            verify(grid.maximumContentX > 0)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5, "opens scrolled to the right end")
+            compare(grid.userScrolled, false)
+            const next = ItemLookup.findByObjectName(grid, "progressHeader_next")
+            fuzzyCompare(next.mapToItem(grid, next.width, 0).x, grid.width, 0.5, "Next tier is the last thing visible")
+            const lastTier = ItemLookup.findByObjectName(grid, "progressTierHeader_" + (grid.tiers.length - 1))
+            const lastRight = lastTier.mapToItem(grid, lastTier.width, 0).x
+            verify(lastRight <= grid.width - next.width + 0.5 && lastRight > grid.pinnedWidth,
+                   "the top tier is in view, beside Next tier and clear of the pinned columns")
+        }
+
+        function test_gridThatFitsDoesNotScrollOrPin() {
+            const grid = makeGrid(true)
+            verify(!grid.overflowing && !grid.pinning)
+            compare(gridFlick(grid).contentX, 0)
+            compare(grid.pinOffset, 0)
+            const edge = ItemLookup.findByObjectName(grid, "progressGridPinEdge")
+            verify(!edge.visible, "no pinned edge on a grid that fits")
+            fuzzyCompare(ItemLookup.findByObjectName(grid, "progressHeader_scenario").mapToItem(grid, 0, 0).x,
+                         grid.columns.scenario.x, 0.5)
+        }
+
+        function test_identifyingColumnsStayPinnedWhileTheRestScrolls() {
+            const grid = makeGrid(false)
+            const flick = gridFlick(grid)
+            verify(flick.contentX > 0)
+            for (const key of ["category", "subcategory", "scenario"]) {
+                const header = ItemLookup.findByObjectName(grid, "progressHeader_" + key)
+                fuzzyCompare(header.mapToItem(grid, 0, 0).x, grid.columns[key].x, 0.5, key + " header stays put")
+                verify(header.z > 0, key + " header draws over the scrolled tier headers")
+            }
+            const pbDate = ItemLookup.findByObjectName(grid, "progressHeader_pbDate")
+            fuzzyCompare(pbDate.mapToItem(grid, 0, 0).x, grid.columns.pbDate.x - flick.contentX, 0.5,
+                         "PB date scrolls under the pinned columns")
+            for (const id of ["sc-popcorn", "sc-1w4ts", "sc-pasu", "sc-smooth"]) {
+                const name = ItemLookup.findByObjectName(grid, "progressRow_" + id + "_name")
+                fuzzyCompare(name.mapToItem(grid, 0, 0).x,
+                             grid.columns.scenario.x + grid.cellPadding + grid.markerSpace, 0.5, id + " name stays put")
+            }
+            const blocker = ItemLookup.findByObjectName(grid, "progressRow_sc-1w4ts_blocker")
+            fuzzyCompare(blocker.mapToItem(grid, 0, 0).x, grid.columns.scenario.x + grid.cellPadding - 4, 0.5,
+                         "the blocker marker stays beside its name")
+            // Group cells, including categories that span the Subcategory column.
+            const flat = ItemLookup.findByObjectName(grid, "progressGroup_cat-track")
+            const split = ItemLookup.findByObjectName(grid, "progressGroup_cat-click")
+            const sub = ItemLookup.findByObjectName(grid, "progressGroup_sub-static")
+            fuzzyCompare(flat.mapToItem(grid, 0, 0).x, grid.columns.category.x, 0.5)
+            fuzzyCompare(flat.width, grid.columns.category.width + grid.columns.subcategory.width, 0.5,
+                         "a spanning category still covers both columns")
+            fuzzyCompare(split.mapToItem(grid, 0, 0).x, grid.columns.category.x, 0.5)
+            fuzzyCompare(sub.mapToItem(grid, 0, 0).x, grid.columns.subcategory.x, 0.5)
+            verify(ItemLookup.findByObjectName(grid, "progressGridPinEdge").visible,
+                   "an edge marks where the columns pass under")
+        }
+
+        function test_resizeFollowsTheRightEndUntilTheUserScrolls() {
+            const grid = makeGrid(false, 300)
+            const flick = gridFlick(grid)
+            grid.width -= 60
+            wait(0)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5, "a narrower grid still shows its right end")
+
+            userDrag(grid, 120)
+            verify(grid.userScrolled, "a drag away from the right end is the user's position")
+            const kept = flick.contentX
+            verify(kept < grid.maximumContentX - 0.5)
+            grid.width -= 40
+            wait(0)
+            fuzzyCompare(flick.contentX, Math.min(kept, grid.maximumContentX), 0.5, "a resize keeps the user's position")
+
+            userDrag(grid, -2000)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5)
+            verify(!grid.userScrolled, "back at the right end, the grid follows it again")
+            grid.width -= 40
+            wait(0)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5)
+        }
+
+        function test_benchmarkChangeReturnsToTheRightEnd() {
+            const grid = makeGrid(false, 300)
+            const flick = gridFlick(grid)
+            userDrag(grid, 120)
+            verify(grid.userScrolled)
+            grid.benchmarkKey = "Revo Novice"
+            wait(0)
+            verify(!grid.userScrolled, "a new benchmark forgets the user's position")
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5, "and opens at its right end")
+        }
+
+        function test_fittingAgainForgetsTheUserPosition() {
+            const grid = makeGrid(false, 300)
+            const flick = gridFlick(grid)
+            userDrag(grid, 120)
+            verify(grid.userScrolled)
+            grid.width = grid.implicitWidth + 4000
+            wait(0)
+            compare(flick.contentX, 0, "a grid that fits sits at its start")
+            grid.width = grid.pinnedWidth + 260
+            wait(0)
+            fuzzyCompare(flick.contentX, grid.maximumContentX, 0.5, "overflowing again opens at the right end")
         }
 
         function test_noOverlapOrClippingAtBothSupportedWindowSizes_data() {
@@ -741,8 +1196,8 @@ Item {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), data.w, data.h)
             wait(0)
             const columns = [
-                {header: "progressHeader_pb", cell: "personalBest"},
-                {header: "progressHeader_recent", cell: "recent"},
+                {header: "progressHeader_pbDate", cell: "personalBestDate"},
+                {header: "progressHeader_plays", cell: "playCount"},
                 {header: "progressHeader_next", cell: "next"}
             ]
             for (const column of columns) {
@@ -817,12 +1272,262 @@ Item {
             verify(mark.mapToItem(ws, mark.width, 0).x > above.mapToItem(ws, above.width, 0).x,
                    "the mark sits at the bar's end")
             compare(mark.ToolTip.text, "Above Platinum: 1,040.25 / 1,000")
+            const chevron = find(mark, above.objectName + "_aboveTopChevron")
+            verify(chevron && chevron.height > chevron.width, "the mark is a chevron, not a diamond")
             const normal = find(ws, "progressRow_sc-1w4ts_bar")
             verify(!find(normal, normal.objectName + "_aboveTop").visible, "only above the top tier")
 
             const smooth = find(ws, "progressRow_sc-smooth_bar")
             verify(find(smooth, smooth.objectName + "_hatch_3").visible, "a chunk without thresholds is hatched")
             verify(!find(smooth, smooth.objectName + "_hatch_2").visible, "the others are not")
+        }
+
+        // -- the score that reaches each tier, at the end of its chunk ----------
+
+        function test_eachChunkShowsTheScoreThatCompletesItAtItsEnd() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            const rows = fx.progressGrid.rows
+            const scores = ["300", "500", "700", "900"]
+            rows[0].thresholdTexts = scores                    // sc-popcorn: unplayed below
+            rows[0].edgeState = "unplayed"
+            rows[0].statusText = "Unplayed"
+            rows[1].thresholdTexts = scores                    // sc-1w4ts: every chunk
+            rows[1].personalBestText = "—"                     // (no PB label in the way)
+            rows[3].thresholdTexts = scores                   // sc-smooth: Platinum hatched
+            rows[3].missingChunks = [false, false, false, true]
+            rows[3].personalBestText = "—"
+            const ws = makeWorkspace(fx)
+            wait(0)
+
+            const bar = find(ws, "progressRow_sc-1w4ts_bar")
+            for (let i = 0; i < 4; ++i) {
+                const label = find(bar, bar.objectName + "_label_" + i)
+                const chunk = find(bar, bar.objectName + "_chunk_" + i)
+                verify(label !== null && label.visible, "chunk " + i + " shows its score")
+                compare(label.text, scores[i])
+                const textRight = label.mapToItem(bar, label.width, 0).x
+                const chunkRight = chunk.mapToItem(bar, chunk.width, 0).x
+                verify(textRight <= chunkRight && chunkRight - textRight <= 4,
+                       "chunk " + i + " label ends at its chunk's right edge")
+                compare(label.horizontalAlignment, Text.AlignRight)
+            }
+
+            const smooth = find(ws, "progressRow_sc-smooth_bar")
+            verify(find(smooth, smooth.objectName + "_label_2").visible, "a usable chunk keeps its score")
+            verify(!find(smooth, smooth.objectName + "_label_3").visible, "a hatched chunk shows none")
+
+            const unplayed = find(ws, "progressRow_sc-popcorn_bar")
+            for (let i = 0; i < 4; ++i)
+                verify(!find(unplayed, unplayed.objectName + "_label_" + i).visible,
+                       "the status text owns an unplayed bar's middle")
+
+            const bare = find(ws, "progressRow_sc-pasu_bar")
+            for (let i = 0; i < 4; ++i)
+                verify(!find(bare, bare.objectName + "_label_" + i).visible, "a row without scores shows none")
+        }
+
+        // -- the PB where its fill ends ----------------------------------------------
+
+        function test_personalBestSitsWhereTheFillEnds() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            const rows = fx.progressGrid.rows
+            rows[0].personalBestText = "250"                   // sc-popcorn: unplayed
+            rows[0].edgeState = "unplayed"
+            rows[0].statusText = "Unplayed"
+            rows[3].thresholdTexts = ["300", "3,000", "3,400", "4,000"]  // sc-smooth: PB 20% into chunk 2
+            rows[1].thresholdTexts = ["300", "500", "700", "900"]          // sc-1w4ts: PB near chunk 3's end
+            rows[1].fills = [1, 1, 1, 0.9]
+            const ws = makeWorkspace(fx)
+            wait(0)
+
+            const smooth = find(ws, "progressRow_sc-smooth_bar")
+            const value = find(smooth, smooth.objectName + "_value")
+            const fill = find(smooth, smooth.objectName + "_fill_2")
+            verify(value.visible, "the PB shows on its bar")
+            compare(value.text, "3,120")
+            verify(Qt.colorEqual(value.color, "#c0c0c8"), "in the attained tier's colour")
+            const fillEnd = fill.mapToItem(smooth, fill.width, 0).x
+            const valueLeft = value.mapToItem(smooth, 0, 0).x
+            verify(valueLeft > fillEnd && valueLeft - fillEnd < 8, "just past the fill's end")
+            verify(find(smooth, smooth.objectName + "_label_1").visible, "a tier score clear of the PB stays")
+
+            // A PB near its chunk's end would cover that chunk's score: the score moves out of
+            // its way, and the PB stays where the fill ends.
+            const near = find(ws, "progressRow_sc-1w4ts_bar")
+            const nearValue = find(near, near.objectName + "_value")
+            verify(nearValue.visible)
+            const moved = find(near, near.objectName + "_label_3")
+            const movedChunk = find(near, near.objectName + "_chunk_3")
+            verify(moved.visible, "the tier score under the PB stays visible")
+            verify(movedChunk.labelPlacement === "middle" || movedChunk.labelPlacement === "start",
+                   "it moved off the chunk's end: " + movedChunk.labelPlacement)
+            verify(!near.coversValue(3, moved.implicitWidth, movedChunk.labelPlacement), "clear of the PB")
+            compare(find(near, near.objectName + "_chunk_2").labelPlacement, "end", "the others stay at their ends")
+            verify(find(near, near.objectName + "_label_2").visible, "the others stay")
+
+            // A full bar leaves no room past the fill: the PB moves inside its end.
+            const pasu = find(ws, "progressRow_sc-pasu_bar")
+            const inside = find(pasu, pasu.objectName + "_value")
+            verify(inside.visible)
+            verify(inside.mapToItem(pasu, inside.width, 0).x <= pasu.width, "stays on the bar")
+            verify(!Qt.colorEqual(inside.color, "#50dcdc"), "readable on the fill rather than in its own colour")
+
+            const unplayed = find(ws, "progressRow_sc-popcorn_bar")
+            verify(!find(unplayed, unplayed.objectName + "_value").visible, "the status text owns an unplayed bar")
+        }
+
+        // -- a threshold label moves out of the PB's way ------------------------------
+
+        function makeTierBar(props) {
+            const bar = createTemporaryObject(tierBarComponent, root, {})
+            verify(bar !== null)
+            bar.tiers = [{name: "Iron", barColor: "#80808a"}, {name: "Bronze", barColor: "#cd7f32"}]
+            bar.labels = ["300", "600"]
+            for (const key in props) bar[key] = props[key]
+            wait(0)
+            return bar
+        }
+
+        function placement(bar, index) {
+            return find(bar, "probe_chunk_" + index).labelPlacement
+        }
+
+        function test_thresholdLabelMovesOutOfThePersonalBestsWay() {
+            // Chunk 0 spans [0, 99] of a 200 px bar.
+            const clear = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250"})
+            compare(placement(clear, 0), "end", "a label clear of the PB stays at its chunk's end")
+            compare(find(clear, "probe_label_0").horizontalAlignment, Text.AlignRight)
+
+            const nearEnd = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250"})
+            compare(placement(nearEnd, 0), "middle", "a PB at the chunk's end moves the label to the middle")
+            verify(find(nearEnd, "probe_label_0").visible)
+            compare(find(nearEnd, "probe_label_0").horizontalAlignment, Text.AlignHCenter)
+            compare(placement(nearEnd, 1), "end", "the next chunk's label is unaffected")
+
+            const wide = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890"})
+            verify(!wide.valueInside, "the PB sits past the fill, not inside it")
+            compare(placement(wide, 0), "start", "a PB over the end and middle moves the label to the start")
+            verify(find(wide, "probe_label_0").visible)
+            compare(find(wide, "probe_label_0").horizontalAlignment, Text.AlignLeft)
+            const valueLeft = find(wide, "probe_value").mapToItem(wide, 0, 0).x
+            verify(valueLeft > wide.fillEnd && valueLeft - wide.fillEnd < 8, "the PB stays past the fill's end")
+
+            const narrow = makeTierBar({width: 120, fills: [0.3, 0], valueText: "250"})
+            verify(!narrow.valueInside, "the PB sits past the fill, not inside it")
+            compare(placement(narrow, 0), "", "a narrow chunk the PB covers everywhere hides its label")
+            verify(!find(narrow, "probe_label_0").visible)
+            verify(find(narrow, "probe_value").visible, "the PB still shows")
+
+            // Of the moved places, one clear of the recent-average marker wins.
+            const marked = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250", marker: 0.5})
+            compare(placement(marked, 0), "start", "the middle is under the marker, so the start")
+        }
+
+        // -- a threshold label moves off the recent-average marker -------------------
+
+        function test_thresholdLabelMovesOffTheMarker() {
+            // Chunk 0 spans [0, 99] of a 200 px bar.
+            const markedEnd = makeTierBar({width: 200, fills: [0.2, 0], marker: 0.95})
+            compare(placement(markedEnd, 0), "middle", "the marker over the chunk's end moves the label to the middle")
+            const w = find(markedEnd, "probe_label_0").implicitWidth
+            verify(!markedEnd.coversMarker(0, w, "middle"), "clear of the marker there")
+            compare(placement(markedEnd, 1), "end", "a chunk the marker is not in keeps its label at the end")
+
+            const markedBoth = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250", marker: 0.5})
+            compare(placement(markedBoth, 0), "end", "a marker away from the end leaves the label there")
+
+            // A target label keeps its outline, not just its text, clear of the marker.
+            const probe = makeTierBar({width: 400, fills: [0, 0]})
+            const textLeft = probe.labelSpanLeft(0, find(probe, "probe_label_0").implicitWidth, "end")
+            // 5 px left of the text: clear of the text, not of a target's outline.
+            const nearText = (textLeft - 5) / probe.chunkRight(0)
+            const plain = makeTierBar({width: 400, fills: [0, 0], marker: nearText})
+            compare(placement(plain, 0), "end", "a plain label 5 px from the marker stays put")
+            const target = makeTierBar({width: 400, fills: [0.97, 0], marker: nearText})
+            compare(placement(target, 0), "middle", "a target's outline would touch the marker, so it moves")
+            verify(isTarget(target, 0), "and stays a target in the fill")
+        }
+
+        function test_thresholdLabelStaysUnderTheMarkerOnlyWhenNothingElseIsClear() {
+            // The PB covers the end and middle; the marker the start: avoiding the PB wins.
+            const blocked = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890", marker: 0.05})
+            const w = find(blocked, "probe_label_0").implicitWidth
+            verify(blocked.coversMarker(0, w, "start"), "the marker is over the start")
+            compare(placement(blocked, 0), "start", "under the marker rather than under the PB")
+            verify(find(blocked, "probe_label_0").visible)
+
+            // A chunk so narrow the marker reaches every place: the label stays at its end.
+            const narrow = makeTierBar({width: 60, fills: [0, 0], marker: 0.5})
+            const nw = find(narrow, "probe_label_0").implicitWidth
+            verify(["end", "middle", "start"].every(p => narrow.coversMarker(0, nw, p)), "no place is clear")
+            compare(placement(narrow, 0), "end")
+            verify(find(narrow, "probe_label_0").visible)
+        }
+
+        // -- the marker is cut behind the PB it crosses ----------------------------------
+
+        function test_markerCrossingThePersonalBestIsCutBehindIt() {
+            // The PB "250" sits just past a fill ending at 0.3 of chunk 0 ([0, 99]).
+            const crossed = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0.4})
+            const value = find(crossed, "probe_value")
+            const x = crossed.scaleX(0.4)
+            verify(x > value.x && x < value.x + value.width, "the marker passes through the PB text")
+            verify(crossed.markerCrossesValue)
+            const top = find(crossed, "probe_markerTick")
+            const bottom = find(crossed, "probe_markerTickBottom")
+            verify(bottom.visible, "the tick's lower end shows")
+            const marker = find(crossed, "probe_marker")
+            verify(top.mapToItem(crossed, 0, top.height).y < crossed.height / 2 - 3,
+                   "the upper end stops above the text")
+            verify(bottom.mapToItem(crossed, 0, 0).y > crossed.height / 2 + 3, "the lower end starts below it")
+            verify(top.mapToItem(crossed, 0, 0).y < 0 && bottom.mapToItem(crossed, 0, bottom.height).y > crossed.height,
+                   "both ends still overhang the bar")
+            compare(value.x, crossed.valueLeft, "the PB does not move")
+
+            const clear = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0.1})
+            verify(!clear.markerCrossesValue)
+            verify(!find(clear, "probe_markerTickBottom").visible, "a marker clear of the PB is one whole tick")
+            compare(find(clear, "probe_markerTick").height, find(clear, "probe_marker").height)
+        }
+
+        // -- a threshold label inside a partial fill is styled as a target -------------
+
+        function isTarget(bar, index) {
+            const chunk = find(bar, "probe_chunk_" + index)
+            compare(find(bar, "probe_target_" + index).visible, chunk.labelIsTarget,
+                    "the outline shows exactly for a target label")
+            return chunk.labelIsTarget
+        }
+
+        function test_thresholdLabelInsideAPartialFillIsATarget() {
+            // Chunk 0 spans [0, 99] of a 200 px bar; chunk 1 [101, 200].
+            const moved = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250"})
+            compare(placement(moved, 0), "middle")
+            verify(isTarget(moved, 0), "a label moved into the partial fill reads as a target")
+            verify(!isTarget(moved, 1), "a label over an empty chunk keeps its look")
+            compare(find(moved, "probe_label_0").text, "300", "the text itself is unchanged")
+
+            const start = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890"})
+            compare(placement(start, 0), "start")
+            verify(isTarget(start, 0), "a label moved to the start of a partial fill reads as a target")
+
+            const clear = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250"})
+            compare(placement(clear, 0), "end")
+            verify(!isTarget(clear, 0), "a label over the unfilled part keeps its look")
+
+            const full = makeTierBar({width: 200, fills: [1, 0.85], valueText: "650"})
+            compare(placement(full, 0), "end")
+            verify(!isTarget(full, 0), "a label at the end of a full chunk keeps its look")
+            verify(placement(full, 1) === "middle" || placement(full, 1) === "start", placement(full, 1))
+            verify(isTarget(full, 1), "the partial chunk's moved label is a target")
+
+            const noValue = makeTierBar({width: 200, fills: [0.97, 0]})
+            compare(placement(noValue, 0), "end")
+            verify(isTarget(noValue, 0), "a fill reaching under the label at its end makes it a target too")
+
+            const narrow = makeTierBar({width: 120, fills: [0.3, 0], valueText: "250"})
+            compare(placement(narrow, 0), "")
+            verify(!isTarget(narrow, 0), "a hidden label is never a target")
         }
 
         // -- rank names use their tier colours --------------------------
@@ -887,8 +1592,7 @@ Item {
             for (let j = 0; j < 4; ++j)
                 compare(find(unplayed, unplayed.objectName + "_fill_" + j).visible, false,
                         "an unplayed scenario shows no fill")
-            const progress = String(find(ws, "nextTierProgress").text)
-            verify(progress.indexOf("3 of 9") !== -1, "the overall count is still shown")
+            verify(String(find(ws, "nextTierProgress").text).indexOf("block") !== -1, "the heading is still shown")
         }
 
         // the recent average reads against the PB fill on the same chunk scale.

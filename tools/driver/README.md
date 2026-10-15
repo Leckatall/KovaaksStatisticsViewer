@@ -38,11 +38,22 @@ A session lives in `.temp/ui-driver/<name>/` (default name `default`, pick anoth
 
 | Name | Data |
 |---|---|
-| `rich` (default) | the gallery's synthetic profile (4 scenarios, a month of history) plus a two-category demo benchmark |
-| `single`, `short`, `bunched` | the gallery's other synthetic profiles, plus the demo benchmark |
+| `rich` (default) | the gallery's synthetic profile (5 scenarios, a month of history, one with the long real name `Air CELESTIAL No UFO Easy Slowed`) plus the [benchmark fixtures](#benchmark-fixtures), opened on the demo benchmark |
+| `single`, `short`, `bunched` | the gallery's other synthetic profiles (the primary scenario only, so the other benchmark rows are unplayed), plus the benchmark fixtures |
 | `fixtures` | `tests/examples/*.perf` / `*.csv`, imported through the real ingestion pipeline |
 | `empty` | an empty KovaaK's dir: no runs, no benchmarks |
 | `first-run` | no KovaaK's dir configured, so the first-run welcome and banner show |
+
+### Benchmark fixtures
+
+The synthetic datasets copy every file in [`benchmarks/`](benchmarks) into the session and remember `driver-demo` as the selected benchmark (`--setting benchmarks/lastSelectedId=…` picks another). Their thresholds are fixed numbers picked against the rich profile's scores, so each row shows a different state; `DriverBenchmarkFixtureTest` (`tests/integration/driver_session_test.cpp`) fails when the run generator drifts from them.
+
+| File | Against `rich` |
+|---|---|
+| `driver-demo.json` (5 tiers) | Clicking split into Static and Dynamic subcategories, Tracking flat. Rows: above Platinum (recent average back in the Platinum chunk), just into Bronze with the recent average still in Iron (the only Silver blocker), Gold nine tenths of the way to Platinum, Iron with the recent average below it, and played but below Iron. Summary: attained Bronze, none completed, next Silver; the rank history climbs in steps. |
+| `driver-many-tiers.json` (12 tiers, Iron…Celestial) | Every row ranked, Iron to Nova: attained Grandmaster, completed Iron (the average-rank tick shows), next Nova with two blockers. The ladder overflows the grid at 960x700. |
+
+Under `single`, `short` and `bunched` only the 1wall6targets row has runs; the others show as unplayed.
 
 Other `start` options (all of them stored in `launch.json`, so `restart` reuses them):
 
@@ -145,7 +156,7 @@ Prefer `objectName`s. `Main.qml` and the workspaces have many: `scenariosTab`, `
 | `runsPerDay`, `startMinute`, `minuteSpacing` | 1, 1080, 2 | runs per day, minute of day of the first (1080 = 18:00), minutes between them |
 | `durationSeconds` | 60 | run length |
 | `performance` | true | false keeps only the run totals, as a stats-CSV-only import does (the run graph shows no performance data) |
-| `shape` | `gallery-primary` | a gallery shape (`gallery-primary`, `gallery-pasu`, `gallery-smoothbot`, `gallery-flyts`) or base values: `{"shotsPerSecond", "shotVariation", "accuracy", "hitsPerKill", "damagePerHit", "scorePerHit", "scorePerKill"}` |
+| `shape` | `gallery-primary` | a gallery shape (`gallery-primary`, `gallery-pasu`, `gallery-smoothbot`, `gallery-flyts`, `gallery-celestial`) or base values: `{"shotsPerSecond", "shotVariation", "accuracy", "hitsPerKill", "damagePerHit", "scorePerHit", "scorePerKill"}` |
 
 `benchmark` is either a path to a benchmark JSON file to copy (relative to the spec) or an object: `id`, `name`, `file`, then `tiers` (`[{"name", "id", "factor", "color"}]`) or `tierFactors` (up to five factors for Iron…Platinum; default `[0.6, 0.8, 0.95, 1.05, 1.2]`), and `categories` (`[{"name", "id", "color", "scenarios"}]`; default one category with every scenario). A category names scenarios by name or by `{"name", "hash"}`. Thresholds are each tier's factor times the scenario's personal best; a name that matches no scenario, or several, is written without a hash (unresolved or ambiguous) around a nominal 1000.
 
@@ -251,5 +262,5 @@ The commands are the CLI's, under their protocol names: `ping`, `windows`, `tree
 - `driver_dataset.{h,cpp}`: session seeding. It reuses `tools/gallery/gallery_dataset.*`.
 - `driver_spec.{h,cpp}`: profile specs and the benchmark generator; `driver_ports.{h,cpp}`: the `--inject` decorators; `session_compose.{h,cpp}`: overlays and `--setting` (tested in `tests/integration/driver_session_test.cpp`).
 - `driver_main.cpp`: the host. It redirects settings, composes the session, applies the headless look, loads Main through `gallery::QmlSourceInterceptor`, and writes `session.json`.
-- `specs/`: example profile specs. `tours/`: checked-in tours and their data.
+- `benchmarks/`: the benchmark fixtures the synthetic datasets ship with. `specs/`: example profile specs. `tours/`: checked-in tours and their data.
 - `scripts/ui_automation/`: the CLI (`cli.py`), sessions (`session.py`), the client, result formatting and the contact sheet (`report.py`).

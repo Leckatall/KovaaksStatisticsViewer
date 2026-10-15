@@ -169,14 +169,15 @@ namespace ksv::presentation {
             for (const auto &issue: snapshot.selectedLoaded->completeness.issues)
                 m_completenessIssues << benchmarkIssueText(issue.code);
 
-        std::vector<QString> tierNames;
+        std::vector<RankTier> rankTiers;
         QHash<QString, QString> tierNameById;
         QHash<QString, QString> tierColorById;
         const auto indexTiers = [&](const std::vector<domain::Tier> &tiers) {
             for (const auto &tier: tiers) {
-                tierNames.push_back(q(tier.name));
+                const QColor readable = readableTextColor(tier.color);
+                rankTiers.push_back({q(tier.name), readable});
                 tierNameById.insert(q(tier.id.value), q(tier.name));
-                tierColorById.insert(q(tier.id.value), readableTextColor(tier.color).name());
+                tierColorById.insert(q(tier.id.value), readable.name());
             }
         };
         if (projection) indexTiers(projection->tiers);
@@ -199,7 +200,11 @@ namespace ksv::presentation {
             resolveTier(projection->attainedRank, tr("Unranked"), m_attainedRank, m_attainedRankColor);
             resolveTier(projection->completedRank, tr("None completed"), m_completedRank, m_completedRankColor);
             resolveTier(projection->nextTier, tr("Highest tier attained"), m_nextTier, m_nextTierColor);
-            m_averageRank = projection->averageRank ? formatBenchmarkNumber(*projection->averageRank) : unavailableText;
+            std::vector<QString> tierNames;
+            tierNames.reserve(rankTiers.size());
+            for (const auto &tier: rankTiers) tierNames.push_back(tier.name);
+            m_averageRank = projection->averageRank ? describeAverageRank(*projection->averageRank, tierNames)
+                                                    : unavailableText;
         } else {
             m_attainedRank = unavailableText;
             m_completedRank = unavailableText;
@@ -210,7 +215,7 @@ namespace ksv::presentation {
             m_nextTierColor.clear();
         }
         // The summary's average-rank bar: averageRank is the mean normalized rank, so exactly k
-        // (tier k attained) ends at chunk k's right edge; the completed rank ticks its chunk's end.
+        // (tier k attained) ends at tier k's chunk's right edge; the completed rank ticks its chunk's end.
         m_averageRankFills.clear();
         m_completedRankPosition = -1.0;
         if (trackable && projection && projection->averageRank)
@@ -223,6 +228,8 @@ namespace ksv::presentation {
 
         m_totalPlaytime = projection ? formatDuration(projection->totalPlaytimeSeconds) : QString();
         m_scenariosAtNextTier = projection ? projection->scenariosAtNextTier : 0;
+        m_hasNextTier = trackable && projection && projection->nextTier.has_value();
+        m_nextTierBlockerCount = m_hasNextTier ? static_cast<int>(projection->nextTierBlockers.size()) : 0;
         m_scenarioCount = projection ? static_cast<int>(projection->scenarios.size()) : 0;
 
         const bool rankPresent = trackable && projection && !projection->averageRankHistory.empty();
@@ -251,7 +258,11 @@ namespace ksv::presentation {
             const auto [lo, hi] = std::minmax_element(unionMs.begin(), unionMs.end());
             std::ignore = m_historyXAxis.setEpochMillisecondsRange(*lo, *hi);
         }
-        m_rankHistory->update(rankPoints, rankPresent, tierNames);
+        // A personal-best rank never lapses: hold it flat from its last change to the right-hand edge
+        // of the plotted range, so the current rank reads at the edge.
+        if (rankPresent && rankPoints.last().x() < m_historyXAxis.max())
+            rankPoints.append(QPointF(m_historyXAxis.max(), rankPoints.last().y()));
+        m_rankHistory->update(rankPoints, rankPresent, rankTiers);
         m_playtimeHistory->update(playtimePoints, playtimePresent, {});
 
         m_progressGrid->reset(definition, projection);

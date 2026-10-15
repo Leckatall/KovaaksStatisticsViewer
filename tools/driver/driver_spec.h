@@ -45,9 +45,6 @@ namespace ksv::driver {
 
     [[nodiscard]] domain::Benchmark generateBenchmark(const domain::UserProfile &profile, const BenchmarkSpec &spec);
 
-    // The five-tier, two-category benchmark the synthetic datasets ship with.
-    [[nodiscard]] BenchmarkSpec demoBenchmarkSpec();
-
     // A declarative profile (`ksv_driver --profile-spec FILE`; the schema is in
     // tools/driver/README.md). Scenarios are generated in the order listed, each
     // run seeded from its scenario and run index, so a spec always produces the

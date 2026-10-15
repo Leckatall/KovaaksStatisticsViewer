@@ -117,7 +117,8 @@ namespace ksv::driver {
         }
 
         gallery::RunShape parseShape(const QJsonValue &value, const QString &path) {
-            static const QStringList kNamed{"gallery-primary", "gallery-pasu", "gallery-smoothbot", "gallery-flyts"};
+            static const QStringList kNamed{"gallery-primary", "gallery-pasu", "gallery-smoothbot", "gallery-flyts",
+                                            "gallery-celestial"};
             if (value.isString()) {
                 if (!kNamed.contains(value.toString())) {
                     reject(path, QStringLiteral("unknown shape '%1' (expected %2, or an object of base values)")
@@ -285,21 +286,6 @@ namespace ksv::driver {
             benchmark.categories.push_back(generated);
         }
         return benchmark;
-    }
-
-    BenchmarkSpec demoBenchmarkSpec() {
-        BenchmarkSpec spec;
-        spec.id = "driver-demo";
-        spec.name = "Driver Demo Benchmark";
-        spec.file = "driver-demo.json";
-        spec.tiers = defaultTiers();
-        spec.categories = {
-            {"clicking", "Clicking", {0, 188, 212, 255},
-             {{"1wall6targets Gallery", "gallery-primary"}, {"Pasu Gallery", "gallery-pasu"}}},
-            {"tracking", "Tracking", {156, 39, 176, 255},
-             {{"Smoothbot Gallery", "gallery-smoothbot"}, {"VT FlyTS Gallery", "gallery-flyts"}}},
-        };
-        return spec;
     }
 
     QString parseProfileSpec(const QJsonObject &json, const QString &specPath, ProfileSpec &out) {

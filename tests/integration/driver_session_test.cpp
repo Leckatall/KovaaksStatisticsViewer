@@ -13,6 +13,8 @@
 #include <QTemporaryDir>
 #include <QUrl>
 
+#include "benchmarks/benchmark_evaluator.h"
+#include "driver_dataset.h"
 #include "driver_ports.h"
 #include "driver_spec.h"
 #include "formats/csv/stats_csv_parser.h"
@@ -26,8 +28,12 @@
 
 #include <QElapsedTimer>
 #include <QJsonDocument>
+#include <algorithm>
+#include <cmath>
 #include <limits>
 #include <set>
+#include <stdexcept>
+#include <variant>
 
 using namespace ksv;
 
@@ -121,7 +127,8 @@ namespace {
     }
 
     // DAT-03: the built-in synthetic datasets keep producing the profiles they
-    // always have (ksv_gallery and ksv_driver both show them).
+    // always have (ksv_gallery and ksv_driver both show them). The rich profile
+    // gained the Air CELESTIAL scenario (7 runs) for the benchmark fixtures.
     struct DatasetGolden {
         gallery::Dataset dataset;
         std::size_t runs;
@@ -132,9 +139,10 @@ namespace {
     };
 
     TEST(DriverSpecTest, BuiltInDatasetsAreUnchanged) {
-        const std::set<std::string> all{"gallery-primary", "gallery-pasu", "gallery-smoothbot", "gallery-flyts"};
+        const std::set<std::string> all{"gallery-primary", "gallery-pasu", "gallery-smoothbot", "gallery-flyts",
+                                        "gallery-celestial"};
         const DatasetGolden goldens[]{
-            {gallery::Dataset::RichProfile, 248, all, 1785578400000, 1787940840000, 1250346.0},
+            {gallery::Dataset::RichProfile, 255, all, 1785578400000, 1787940840000, 1257118.0},
             {gallery::Dataset::SingleRun, 1, {"gallery-primary"}, 1787940000000, 1787940000000, 4950.0},
             {gallery::Dataset::ShortHistory, 4, {"gallery-primary"}, 1787680800000, 1787940900000, 22290.0},
             {gallery::Dataset::BunchedHistory, 360, {"gallery-primary"}, 1785571200000, 1786042740000, 1898865.0},
@@ -161,15 +169,168 @@ namespace {
         }
     }
 
-    TEST(DriverSpecTest, TheDemoBenchmarkIsTheOneTheDatasetsShipWith) {
-        const auto benchmark = driver::generateBenchmark(gallery::makeProfile(gallery::Dataset::RichProfile),
-                                                         driver::demoBenchmarkSpec());
-        EXPECT_EQ(benchmark.id.value, "driver-demo");
-        ASSERT_EQ(benchmark.categories.size(), 2U);
-        EXPECT_EQ(benchmark.categories[0].id.value, "clicking");
-        EXPECT_EQ(benchmark.categories[1].scenarios[1].id.value, "entry-gallery-flyts");
-        ASSERT_EQ(benchmark.tiers.size(), 5U);
-        EXPECT_EQ(benchmark.tiers[4].id.value, "platinum");
+    // The benchmark fixtures (tools/driver/benchmarks) have fixed thresholds picked
+    // against the rich profile's scores so that each row shows a different state.
+    // These tests fail when the run generator or the rich profile drifts from them;
+    // re-pick the thresholds rather than loosening the expectations.
+    struct SeededProjection {
+        domain::Benchmark benchmark;
+        domain::BenchmarkProjection projection;
+
+        [[nodiscard]] const domain::ScenarioProjection &scenario(const std::string &entryId) const {
+            const auto found = std::ranges::find_if(projection.scenarios, [&](const domain::ScenarioProjection &row) {
+                return row.entryId.value == entryId;
+            });
+            if (found == projection.scenarios.end()) throw std::runtime_error("no row " + entryId);
+            return *found;
+        }
+
+        [[nodiscard]] const domain::ScenarioEntry &entry(const std::string &entryId) const {
+            for (const auto &category: benchmark.categories) {
+                for (const auto &candidate: category.scenarios)
+                    if (candidate.id.value == entryId) return candidate;
+                for (const auto &subcategory: category.subcategories)
+                    for (const auto &candidate: subcategory.scenarios)
+                        if (candidate.id.value == entryId) return candidate;
+            }
+            throw std::runtime_error("no entry " + entryId);
+        }
+
+        // How many tiers a score reaches on an entry's ladder (0: below the first).
+        [[nodiscard]] int tiersReached(const std::string &entryId, const std::optional<double> score) const {
+            return static_cast<int>(std::floor(domain::normalizedTierValue(benchmark.tiers, entry(entryId).thresholds, score)));
+        }
+
+        [[nodiscard]] std::optional<std::string> attained(const std::string &entryId) const {
+            const auto &tier = scenario(entryId).attainedTier;
+            return tier ? std::optional(tier->value) : std::nullopt;
+        }
+
+        [[nodiscard]] std::optional<std::string> groupTier(const std::string &groupId) const {
+            for (const auto &group: projection.categories) {
+                if (group.id.value == groupId) return group.satisfiedTier ? std::optional(group.satisfiedTier->value) : std::nullopt;
+                for (const auto &subgroup: group.subgroups)
+                    if (subgroup.id.value == groupId)
+                        return subgroup.satisfiedTier ? std::optional(subgroup.satisfiedTier->value) : std::nullopt;
+            }
+            throw std::runtime_error("no group " + groupId);
+        }
+    };
+
+    // Seeds a `dataset` session as ksv_driver does and evaluates one of its benchmark files
+    // against the seeded profile, every hashed entry resolved as the app resolves it.
+    SeededProjection projectSeededBenchmark(const QString &dataset, const std::string &filename) {
+        QTemporaryDir dir;
+        const driver::SessionData data{dir.path()};
+        const QString error = driver::seedSessionData(data, dataset, {}, QStringLiteral(KSV_DRIVER_BENCHMARKS_DIR));
+        if (!error.isEmpty()) throw std::runtime_error(error.toStdString());
+        const auto loadResult = data::ProfileSerializer().load(data.profilePath().toStdString());
+        const auto *profile = std::get_if<domain::UserProfile>(&loadResult);
+        if (!profile) throw std::runtime_error("seeded profile did not load");
+
+        const auto scan = qt_data::BenchmarkStore(data.benchmarksDir().toStdString()).scan();
+        if (!scan.snapshot) throw std::runtime_error("benchmark scan failed");
+        const auto file = std::ranges::find_if(scan.snapshot->entries, [&](const data::BenchmarkFileEntry &candidate) {
+            return candidate.filename == filename;
+        });
+        if (file == scan.snapshot->entries.end()) throw std::runtime_error("no benchmark file " + filename);
+        const auto &loaded = std::get<data::LoadedBenchmark>(file->content);
+
+        std::set<std::string> played;
+        for (const auto &scenario: profile->getScenarioList()) played.insert(scenario.hash);
+        std::vector<domain::ScenarioResolution> resolutions;
+        std::vector<domain::ScenarioId> scenarios;
+        const auto resolve = [&](const domain::ScenarioEntry &entry) {
+            const bool found = entry.hash && played.contains(*entry.hash);
+            resolutions.push_back({entry.id, found ? domain::ScenarioMatchState::Resolved
+                                                   : domain::ScenarioMatchState::MappedUnavailable,
+                                   entry.hash, {}});
+            if (found) scenarios.push_back({{}, *entry.hash});
+        };
+        for (const auto &category: loaded.benchmark.categories) {
+            std::ranges::for_each(category.scenarios, resolve);
+            for (const auto &subcategory: category.subcategories) std::ranges::for_each(subcategory.scenarios, resolve);
+        }
+        return {loaded.benchmark,
+                domain::evaluateBenchmark(loaded.benchmark, loaded.completeness, resolutions,
+                                          profile->getRunFacts(scenarios), {})};
+    }
+
+    TEST(DriverBenchmarkFixtureTest, DemoBenchmarkSpreadsTheRichProfileAcrossEveryRowState) {
+        const auto seeded = projectSeededBenchmark("rich", "driver-demo.json");
+        const auto &projection = seeded.projection;
+        ASSERT_EQ(projection.completeness, domain::Completeness::Trackable);
+        EXPECT_EQ(seeded.benchmark.id.value, driver::kDefaultBenchmarkId);
+
+        // Above the top tier, with its recent average back inside the Platinum chunk.
+        EXPECT_EQ(seeded.attained("entry-gallery-primary"), "platinum");
+        EXPECT_GT(*seeded.scenario("entry-gallery-primary").personalBest,
+                  seeded.entry("entry-gallery-primary").thresholds.back().score);
+        EXPECT_EQ(seeded.tiersReached("entry-gallery-primary", seeded.scenario("entry-gallery-primary").recentAverage), 4);
+        // Just into Bronze, its recent average still in Iron.
+        EXPECT_EQ(seeded.attained("entry-gallery-pasu"), "bronze");
+        EXPECT_EQ(seeded.tiersReached("entry-gallery-pasu", seeded.scenario("entry-gallery-pasu").recentAverage), 1);
+        // Gold, nine tenths of the way to Platinum.
+        EXPECT_EQ(seeded.attained("entry-gallery-smoothbot"), "gold");
+        EXPECT_NEAR(seeded.scenario("entry-gallery-smoothbot").normalizedRank, 4.9, 0.001);
+        // Iron, its recent average below it.
+        EXPECT_EQ(seeded.attained("entry-gallery-flyts"), "iron");
+        EXPECT_EQ(seeded.tiersReached("entry-gallery-flyts", seeded.scenario("entry-gallery-flyts").recentAverage), 0);
+        // Played but below Iron, under the long real scenario name.
+        EXPECT_EQ(seeded.attained("entry-gallery-celestial"), std::nullopt);
+        EXPECT_TRUE(seeded.scenario("entry-gallery-celestial").personalBest.has_value());
+        EXPECT_EQ(seeded.scenario("entry-gallery-celestial").name, "Air CELESTIAL No UFO Easy Slowed");
+
+        // Clicking ranks by its weaker subcategory, Tracking by its best scenario.
+        EXPECT_EQ(seeded.groupTier("static"), "platinum");
+        EXPECT_EQ(seeded.groupTier("dynamic"), "bronze");
+        EXPECT_EQ(seeded.groupTier("clicking"), "bronze");
+        EXPECT_EQ(seeded.groupTier("tracking"), "gold");
+        ASSERT_TRUE(projection.attainedRank);
+        EXPECT_EQ(projection.attainedRank->value, "bronze");
+        EXPECT_FALSE(projection.completedRank.has_value());
+        ASSERT_TRUE(projection.nextTier);
+        EXPECT_EQ(projection.nextTier->value, "silver");
+        ASSERT_EQ(projection.nextTierBlockers.size(), 1U);
+        EXPECT_EQ(projection.nextTierBlockers[0].entryId.value, "entry-gallery-pasu");
+        EXPECT_EQ(projection.scenariosAtNextTier, 2);
+
+        // The personal-best average climbs in several steps over the month.
+        ASSERT_GE(projection.averageRankHistory.size(), 5U);
+        EXPECT_GT(projection.averageRankHistory.back().averageRank - projection.averageRankHistory.front().averageRank, 0.5);
+    }
+
+    TEST(DriverBenchmarkFixtureTest, ManyTiersBenchmarkRanksEveryRowOnATwelveTierLadder) {
+        const auto seeded = projectSeededBenchmark("rich", "driver-many-tiers.json");
+        const auto &projection = seeded.projection;
+        ASSERT_EQ(projection.completeness, domain::Completeness::Trackable);
+        EXPECT_EQ(seeded.benchmark.tiers.size(), 12U);
+
+        EXPECT_EQ(seeded.attained("entry-gallery-primary"), "grandmaster");
+        EXPECT_EQ(seeded.attained("entry-gallery-pasu"), "gold");
+        EXPECT_EQ(seeded.attained("entry-gallery-smoothbot"), "nova");
+        EXPECT_EQ(seeded.attained("entry-gallery-flyts"), "platinum");
+        EXPECT_EQ(seeded.attained("entry-gallery-celestial"), "iron");
+
+        ASSERT_TRUE(projection.attainedRank);
+        EXPECT_EQ(projection.attainedRank->value, "grandmaster");
+        ASSERT_TRUE(projection.completedRank);
+        EXPECT_EQ(projection.completedRank->value, "iron");
+        ASSERT_TRUE(projection.nextTier);
+        EXPECT_EQ(projection.nextTier->value, "nova");
+        std::set<std::string> blockers;
+        for (const auto &blocker: projection.nextTierBlockers) blockers.insert(blocker.entryId.value);
+        EXPECT_EQ(blockers, (std::set<std::string>{"entry-gallery-primary", "entry-gallery-pasu"}));
+    }
+
+    TEST(DriverBenchmarkFixtureTest, SingleScenarioDatasetsLeaveTheOtherRowsUnplayed) {
+        const auto seeded = projectSeededBenchmark("single", "driver-demo.json");
+        EXPECT_EQ(seeded.attained("entry-gallery-primary"), "silver");
+        for (const auto *entryId: {"entry-gallery-pasu", "entry-gallery-smoothbot", "entry-gallery-flyts",
+                                   "entry-gallery-celestial"}) {
+            EXPECT_EQ(seeded.scenario(entryId).matchState, domain::ScenarioMatchState::MappedUnavailable) << entryId;
+        }
+        EXPECT_FALSE(seeded.projection.attainedRank.has_value());
     }
 
     TEST(DriverFaultTest, ParsesPortsOpsAndEffectsAndNamesBadInput) {

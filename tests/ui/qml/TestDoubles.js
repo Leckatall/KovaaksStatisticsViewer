@@ -81,7 +81,8 @@ function makeFakeProgressRow(overrides) {
         entryId: "n",
         name: "Scenario",
         personalBestText: "—",
-        recentText: "—",
+        personalBestDateText: "—",
+        playCountText: "—",
         attainedTierText: "Unranked",
         attainedTierColor: "",
         fills: [],
@@ -120,6 +121,8 @@ function makeFakeTrackingVm(overrides) {
         averageRank: "0",
         totalPlaytime: "<1 min",
         scenariosAtNextTier: 0,
+        nextTierBlockerCount: 0,
+        hasNextTier: false,
         scenarioCount: 0,
         rankHistory: makeFakeHistoryModel({metricName: "Personal-best average rank"}),
         playtimeHistory: makeFakeHistoryModel({metricName: "Three-day average playtime"}),
@@ -152,8 +155,8 @@ function trackingFixtureProblemsOnly() {
         state: "ProblemsOnly",
         stateMessage: "Some benchmark files need attention.",
         selectorEntries: [
-            {id: "", name: "broken.json", classification: "Invalid", selectable: false},
-            {id: "", name: "future.json", classification: "Unsupported", selectable: false}
+            {id: "", name: "broken.json", filename: "broken.json", classification: "Invalid", selectable: false},
+            {id: "", name: "future.json", filename: "future.json", classification: "Unsupported", selectable: false}
         ]
     }
 }
@@ -163,8 +166,8 @@ function trackingFixtureNoSelection() {
         state: "NoSelection",
         stateMessage: "Select a benchmark to begin.",
         selectorEntries: [
-            {id: "bench-A", name: "Voltaic S3", classification: "Trackable", selectable: true},
-            {id: "", name: "broken.json", classification: "Invalid", selectable: false}
+            {id: "bench-A", name: "Voltaic S3", filename: "voltaic-s3.json", classification: "Trackable", selectable: true},
+            {id: "", name: "broken.json", filename: "broken.json", classification: "Invalid", selectable: false}
         ]
     }
 }
@@ -175,7 +178,7 @@ function trackingFixtureUnavailable() {
         stateMessage: "The selected benchmark was deleted or became invalid.",
         selectedName: "Voltaic S3 (last known)",
         selectorEntries: [
-            {id: "", name: "broken.json", classification: "Invalid", selectable: false}
+            {id: "", name: "broken.json", filename: "broken.json", classification: "Invalid", selectable: false}
         ],
         summaryAvailable: false,
         attainedRank: "",
@@ -195,7 +198,7 @@ function trackingFixtureIncomplete() {
         stateMessage: "This benchmark is not ready to rank.",
         selectedName: "Half-built Bench",
         selectorEntries: [
-            {id: "bench-I", name: "Half-built Bench", classification: "Incomplete", selectable: true}
+            {id: "bench-I", name: "Half-built Bench", filename: "half-built.json", classification: "Incomplete", selectable: true}
         ],
         completenessIssues: [
             "Tier \"Gold\" has no threshold for scenario \"1w4ts\".",
@@ -215,7 +218,7 @@ function trackingFixtureIncomplete() {
             tiers: fakeProgressTiers(),
             rows: [
                 makeFakeProgressRow({
-                    entryId: "sc-1", name: "1w4ts", personalBestText: "84.2", recentText: "80.1 (3)",
+                    entryId: "sc-1", name: "1w4ts", personalBestText: "84.2", personalBestDateText: "2026-07-30", playCountText: "3",
                     fills: [1, 0.4, 0, 0], barDescription: "Bronze · 40% of the way to Silver (84.2 / 90)"
                 })
             ],
@@ -230,21 +233,23 @@ function trackingFixtureTrackable() {
         stateMessage: "",
         selectedName: "Voltaic S3",
         selectorEntries: [
-            {id: "bench-A", name: "Voltaic S3", classification: "Trackable", selectable: true},
-            {id: "bench-B", name: "Revo Novice", classification: "Trackable", selectable: true},
-            {id: "", name: "broken.json", classification: "Invalid", selectable: false}
+            {id: "bench-A", name: "Voltaic S3", filename: "voltaic-s3.json", classification: "Trackable", selectable: true},
+            {id: "bench-B", name: "Revo Novice", filename: "revo-novice.json", classification: "Trackable", selectable: true},
+            {id: "", name: "broken.json", filename: "broken.json", classification: "Invalid", selectable: false}
         ],
         completenessIssues: [],
         summaryAvailable: true,
         attainedRank: "Gold",
         completedRank: "Silver",
-        averageRank: "2.75",
+        averageRank: "Silver · 75% to Gold",
         totalPlaytime: "5 h 40 min",
         nextTier: "Platinum",
         attainedRankColor: "#ffc828",
         completedRankColor: "#c0c0c8",
         nextTierColor: "#50dcdc",
         scenariosAtNextTier: 3,
+        nextTierBlockerCount: 2,
+        hasNextTier: true,
         scenarioCount: 9,
         rankHistory: makeFakeHistoryModel({
             metricName: "Personal-best average rank", hasData: true,
@@ -269,20 +274,21 @@ function trackingFixtureTrackable() {
                     blocker: true, blockerColor: "#50dcdc", blockerText: "Blocks Platinum (needs 78)"
                 }),
                 makeFakeProgressRow({
-                    entryId: "sc-1w4ts", name: "1w4ts", personalBestText: "812", recentText: "790.5",
+                    entryId: "sc-1w4ts", name: "1w4ts", personalBestText: "812", personalBestDateText: "2026-08-14", playCountText: "37",
                     attainedTierText: "Gold", attainedTierColor: "#ffc828", fills: [1, 1, 1, 0.75],
                     nextTierText: "Platinum", nextTierColor: "#50dcdc", nextThresholdText: "900",
                     barDescription: "Gold · 75% of the way to Platinum (812 / 900)",
                     blocker: true, blockerColor: "#50dcdc", blockerText: "Blocks Platinum (needs 900)"
                 }),
                 makeFakeProgressRow({
-                    entryId: "sc-pasu", name: "Pasu Reload", personalBestText: "1,040.25", recentText: "998 (2)",
+                    entryId: "sc-pasu", name: "Pasu Reload", personalBestText: "1,040.25", personalBestDateText: "2026-08-02",
+                    playCountText: "2",
                     attainedTierText: "Platinum", attainedTierColor: "#50dcdc", fills: [1, 1, 1, 1],
                     nextThresholdText: "Highest tier attained",
                     barDescription: "Platinum · top tier reached (1,040.25 / 1,000)"
                 }),
                 makeFakeProgressRow({
-                    entryId: "sc-smooth", name: "Smoothbot", personalBestText: "3,120", recentText: "3,001",
+                    entryId: "sc-smooth", name: "Smoothbot", personalBestText: "3,120", personalBestDateText: "2026-08-21", playCountText: "1,204",
                     attainedTierText: "Silver", attainedTierColor: "#c0c0c8", fills: [1, 1, 0.2, 0],
                     nextTierText: "Gold", nextTierColor: "#ffc828", nextThresholdText: "3,400",
                     barDescription: "Silver · 20% of the way to Gold (3,120 / 3,400)"

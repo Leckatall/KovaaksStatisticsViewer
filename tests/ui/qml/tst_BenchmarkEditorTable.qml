@@ -160,6 +160,119 @@ TestCase {
         verify(ItemLookup.findByObjectName(table, "groupListItem_uncategorized") === null)
     }
 
+    // A category whose scenarios sit straight under it (and Uncategorized) spans the Subcategory
+    // column; one with subcategories keeps its own cell. The span stays selectable, editable and
+    // reachable from the keyboard, and its add-subcategory control remains.
+    function test_categoryWithoutSubcategoriesSpansTheSubcategoryColumn() {
+        const clicking = {id: "g1", name: "Clicking", color: "#009600"}
+        const tracking = {id: "g2", name: "Tracking", color: "#960096"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", category: clicking, subcategory: {id: "s1", name: "Static"}, name: "Alpha", cells: {}},
+            {entryId: "b", category: tracking, name: "Beta", cells: {}},
+            {entryId: "c", category: tracking, name: "Gamma", cells: {}},
+            {entryId: "d", name: "Delta", cells: {}}
+        ]}, {groups: [
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 1, issues: []},
+            {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 1, issues: []},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, issues: []}
+        ]})
+        const spanWidth = table.identityWidths[0] + table.identityWidths[1]
+
+        const withSubcategory = cellFor(table, "a", "category")
+        verify(!withSubcategory.spansBoth)
+        compare(withSubcategory.face.width, table.identityWidths[0])
+        verify(!cellFor(table, "a", "subcategory").coveredBySpan)
+        compare(cellFor(table, "a", "subcategory").opacity, 1)
+
+        for (const entryId of ["b", "c", "d"]) {
+            const category = cellFor(table, entryId, "category")
+            verify(category.spansBoth, entryId + " has no subcategory, so its category spans")
+            compare(category.face.width, spanWidth)
+            const covered = cellFor(table, entryId, "subcategory")
+            verify(covered.coveredBySpan)
+            compare(covered.opacity, 0)
+            verify(!covered.enabled)
+        }
+        verify(ItemLookup.findByObjectName(table, "addSubcategoryPlus_g2").visible,
+               "a spanning category can still gain a subcategory")
+
+        // A click on the Subcategory column's part of the span selects the category.
+        const tracking0 = cellFor(table, "b", "category")
+        mouseClick(tracking0.face, table.identityWidths[0] + table.identityWidths[1] / 2, tracking0.height / 2)
+        tryCompare(table.selectionModel.currentIndex, "column", 0)
+        compare(table.selectionModel.currentIndex.row, 1)
+        compare(table.focusedGroupId, "g2")
+
+        // The keyboard steps over the covered cell, and never comes to rest on one.
+        keyClick(Qt.Key_Right)
+        compare(table.selectionModel.currentIndex.column, 2)
+        keyClick(Qt.Key_Left)
+        compare(table.selectionModel.currentIndex.column, 0)
+        verify(table.focusCell({entryId: "a", columnKind: 1}))
+        keyClick(Qt.Key_Down)
+        compare(table.selectionModel.currentIndex.row, 1)
+        compare(table.selectionModel.currentIndex.column, 0)
+
+        // The name is edited across the whole span.
+        verify(table.beginGroupRename("g2"))
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.width, spanWidth)
+        keyClick(Qt.Key_Escape)
+    }
+
+    // Return in the add-subcategory field is the field's own: it used to propagate to the table,
+    // whose edit trigger opened a rename editor on the current category cell, behind the prompt
+    // the Manager opens for a category that already holds scenarios.
+    function test_returnInSubcategoryFieldOpensNoRenameEditor() {
+        const tracking = {id: "g2", name: "Tracking", color: "#960096"}
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "b", category: tracking, name: "Beta", cells: {}},
+            {entryId: "c", category: tracking, name: "Gamma", cells: {}}
+        ]}, {groups: [
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, issues: []}
+        ]})
+        const requests = []
+        table.addSubcategoryRequested.connect((categoryId, name) => {
+            requests.push([categoryId, name])
+            table.creationAccepted = true
+        })
+
+        const category = cellFor(table, "b", "category")
+        mouseClick(category.face, 20, category.height / 2)
+        tryCompare(table.selectionModel.currentIndex, "column", 0)
+        mouseClick(ItemLookup.findByObjectName(table, "addSubcategoryPlus_g2"))
+        const field = category.subcategoryField
+        tryVerify(() => field.visible && field.activeFocus)
+        keyClick(Qt.Key_S)
+        keyClick(Qt.Key_Return)
+
+        compare(requests, [["g2", "s"]])
+        waitForRendering(table)
+        compare(table.activeEditor, null, "Return in the name field must not reach the table's edit trigger")
+        verify(!field.visible)
+        verify(!field.focus, "the hidden field no longer holds the table's focus")
+        verify(table.identityView.activeFocus)
+        compare(table.selectionModel.currentIndex.row, 0)
+        compare(table.selectionModel.currentIndex.column, 0)
+
+        // Escape closes the field the same way, without creating anything.
+        mouseClick(ItemLookup.findByObjectName(table, "addSubcategoryPlus_g2"))
+        tryVerify(() => field.visible && field.activeFocus)
+        keyClick(Qt.Key_X)
+        keyClick(Qt.Key_Escape)
+        verify(!field.visible)
+        compare(field.text, "")
+        verify(table.identityView.activeFocus)
+        compare(requests.length, 1)
+
+        // Return on the category cell itself still renames it.
+        keyClick(Qt.Key_Return)
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.text, "Tracking")
+        keyClick(Qt.Key_Escape)
+        tryVerify(() => table.activeEditor === null)
+    }
+
     function test_dragSelectionMovesRowsOnlyToValidGroupOrUncategorized() {
         const group = {id: "g1", name: "Clicking"}
         const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
@@ -864,6 +977,34 @@ TestCase {
         compare(table.manager.editThresholdTextCalls, [["a", "t1", "12oops"]])
     }
 
+    // With the suggestion list open, the first Escape closes just the list and keeps the editor and
+    // its text; the second cancels the edit. Neither renames the scenario.
+    function test_escapeClosesSuggestionListBeforeDiscarding() {
+        const table = sessionCommandTable()
+        table.manager.scenarioCatalogue = [{name: "Gamma", hash: "hash-g"}, {name: "Gazelle", hash: "hash-z"}]
+        verify(table.focusCell({entryId: "a", columnKind: 2}))
+        keyClick(Qt.Key_Return)
+        tryVerify(() => table.activeEditor !== null)
+        const editor = table.activeEditor
+        editor.selectAll()
+        typeText("Ga")
+        tryVerify(() => editor.suggestionPopupView.opened, 3000, "typing opens the suggestion list")
+
+        keyClick(Qt.Key_Escape)
+
+        tryVerify(() => !editor.suggestionPopupView.opened, 3000, "the first Escape closes the list")
+        wait(50)
+        verify(table.activeEditor === editor, "the editor stays open")
+        compare(editor.text, "Ga")
+        compare(table.manager.commandLog, [])
+
+        keyClick(Qt.Key_Escape)
+
+        tryVerify(() => table.activeEditor === null)
+        wait(50)
+        compare(table.manager.commandLog, [], "Escape never renames the scenario")
+    }
+
     // Undo reveals the restored cell; a rank header that held focus must not take it back later.
     function test_undoFromRankHeaderEndsOnRestoredCell() {
         const ref = {}
@@ -1044,6 +1185,126 @@ TestCase {
                   2000, "the first rank cell follows the scenario column")
     }
 
+    // Where the first rank starts and where the last one ends inside the threshold view's scroll range.
+    function rankScrollStart(table) {
+        return -table.thresholdView.leftMargin
+    }
+    function rankScrollEnd(table) {
+        return rankScrollStart(table) + Math.max(0, table.rankColumnsWidth - table.availableRankWidth)
+    }
+
+    // Widening and then narrowing back (hiding and showing the Manager's library) while every rank
+    // fits: the ranks start right after the scenario column again, with the add-rank control after
+    // the last one, not scrolled by the difference between the two widths.
+    function test_narrowingWhileTheRanksFitShowsThemFromTheFirst() {
+        const names = ["Iron", "Bronze", "Silver", "Gold", "Platinum"]
+        const table = makeTable({tiers: names.map((name, i) => ({id: "t" + i, name: name})),
+                                 rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const view = table.thresholdView
+        const bar = ItemLookup.findByObjectName(table, "thresholdHorizontalBar")
+        const plus = ItemLookup.findByObjectName(table, "addRankPlus")
+        const shareAt = width => Math.floor((width - table.identityTotalWidth - table.rankSlotWidth) / names.length)
+
+        table.width = 1100
+        tryCompare(table, "laidOutThresholdWidth", shareAt(1100))
+        verify(shareAt(1100) >= table.rankHeaderMinimumWidth, "fixture: the five ranks fit at 1100")
+        table.width = 1500
+        tryCompare(table, "laidOutThresholdWidth", shareAt(1500))
+        table.width = 1100
+        tryCompare(table, "laidOutThresholdWidth", shareAt(1100))
+        waitForRendering(table)
+
+        fuzzyCompare(view.contentX, rankScrollStart(table), 0.5, "the view is back at the first rank")
+        compare(bar.visible, false, "everything fits: no scrollbar")
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_t0") !== null && cellFor(table, "a", "t0") !== null)
+        fuzzyCompare(ItemLookup.findByObjectName(table, "rankHeader_t0").mapToItem(table, 0, 0).x,
+                     table.identityTotalWidth, 0.5, "the first rank header follows the scenario column")
+        fuzzyCompare(cellFor(table, "a", "t0").mapToItem(table, 0, 0).x, table.identityTotalWidth, 0.5,
+                     "the first rank cell follows the scenario column")
+        const last = ItemLookup.findByObjectName(table, "rankHeader_t4")
+        const gap = plus.mapToItem(table, 0, 0).x - last.mapToItem(table, last.width, 0).x
+        verify(gap >= -0.5 && gap <= names.length, "no blank gap before the add-rank control, gap " + gap)
+    }
+
+    // While the ranks overflow, a resize never leaves the view past the last rank, and a position
+    // the user scrolled to stays where it was as long as it is still in range.
+    function test_overflowingRanksKeepAReachableScrollPosition() {
+        const table = makeTable({tiers: tiersNamed(14), rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const view = table.thresholdView
+        table.width = 1000
+        tryCompare(table, "laidOutThresholdWidth", table.rankHeaderMinimumWidth)
+        verify(table.rankColumnsWidth > table.availableRankWidth, "fixture: the ranks overflow at 1000")
+
+        // Scrolled to the last rank, then widened (still overflowing): the end stays the end.
+        view.contentX = rankScrollEnd(table)
+        table.width = 1200
+        verify(table.rankColumnsWidth > table.availableRankWidth, "fixture: the ranks overflow at 1200")
+        tryVerify(() => view.contentX <= rankScrollEnd(table) + 0.5, 2000,
+                  "no blank space past the last rank, contentX " + view.contentX + ", end " + rankScrollEnd(table))
+        verify(view.contentX >= rankScrollStart(table) - 0.5)
+
+        // A position in the middle survives an unrelated narrowing.
+        const middle = rankScrollStart(table) + 3 * table.thresholdWidth
+        view.contentX = middle
+        table.width = 900
+        waitForRendering(table)
+        wait(50)
+        fuzzyCompare(view.contentX, middle, 0.5, "the user's scroll position is kept")
+    }
+
+    function namedTiers(prefix, names) {
+        return names.map((name, i) => ({id: prefix + i, name: name}))
+    }
+
+    // Opening a benchmark whose ranks are wider than the one shown (a model reset that also widens
+    // every rank column) keeps the same number of ranks scrolled past, at the new width: none at
+    // all leaves the first rank right after the scenario column, not part-way into it.
+    function test_resetToWiderOverflowingRanksKeepsWholeRanksScrolled_data() {
+        const short = ["Iron", "Bronze", "Silver", "Gold", "Plat"]
+        const long = []
+        for (let i = 0; i < 12; ++i) long.push("Grandmaster Elite " + i)
+        const shortTwelve = []
+        for (let i = 0; i < 12; ++i) shortTwelve.push("R" + i)
+        return [
+            {tag: "fewer ranks that fit, at the first rank", from: short, to: long, scrolled: 0},
+            {tag: "as many ranks, at the first rank", from: shortTwelve, to: long, scrolled: 0},
+            {tag: "as many ranks, two scrolled past", from: shortTwelve, to: long, scrolled: 2},
+        ]
+    }
+    function test_resetToWiderOverflowingRanksKeepsWholeRanksScrolled(data) {
+        const ref = {}
+        const rows = [{entryId: "a", name: "Alpha", cells: {}}]
+        const table = makeTable({tiers: namedTiers("s", data.from), rows: rows}, undefined, ref)
+        const view = table.thresholdView
+        tryVerify(() => table.laidOutThresholdWidth === table.thresholdWidth && table.laidOutThresholdWidth > 0)
+        const before = table.laidOutThresholdWidth
+        if (data.scrolled > 0) {
+            verify(table.rankScrollRange >= data.scrolled * before, "fixture: the first ranks overflow")
+            view.contentX = rankScrollStart(table) + data.scrolled * before
+            waitForRendering(table)
+        }
+
+        ref.fixture.setProjection(TestDoubles.benchmarkTableProjection({tiers: namedTiers("w", data.to), rows: rows}))
+        tryCompare(view, "columns", 3 + data.to.length)
+        tryVerify(() => table.laidOutThresholdWidth === table.thresholdWidth)
+        verify(table.thresholdWidth > before, "fixture: the new ranks are wider, " + before + " -> " + table.thresholdWidth)
+        verify(table.rankColumnsWidth > table.availableRankWidth, "fixture: the new ranks overflow")
+        waitForRendering(table)
+        wait(50)
+
+        const expected = rankScrollStart(table) + data.scrolled * table.thresholdWidth
+        fuzzyCompare(table.rankScrollStart, rankScrollStart(table), 0.5)
+        fuzzyCompare(view.contentX, expected, 0.5,
+                     "whole ranks scrolled past: contentX " + view.contentX + ", expected " + expected)
+        if (data.scrolled === 0) {
+            tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_w0") !== null && cellFor(table, "a", "w0") !== null)
+            fuzzyCompare(ItemLookup.findByObjectName(table, "rankHeader_w0").mapToItem(table, 0, 0).x,
+                         table.identityTotalWidth, 0.5, "the first rank header follows the scenario column")
+            fuzzyCompare(cellFor(table, "a", "w0").mapToItem(table, 0, 0).x, table.identityTotalWidth, 0.5,
+                         "the first rank cell follows the scenario column")
+        }
+    }
+
     function test_identifyingColumnsKeepTheirWidthWhenThereAreNoRanks() {
         const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
         const placeholder = ItemLookup.findByObjectName(table, "emptyRankHeader")
@@ -1052,5 +1313,39 @@ TestCase {
         const scenario = cellFor(table, "a", "scenario")
         verify(scenario !== null)
         compare(table.identityView.width, table.identityWidths[0] + table.identityWidths[1] + table.identityWidths[2])
+    }
+
+    // Too narrow for the identifying columns and a rank, the identifying columns give way toward
+    // their content, so down to minimumTableWidth the first rank stays whole and nothing is elided.
+    function test_identifyingColumnsShrinkToTheirContentToKeepARankInView() {
+        const table = makeTable({tiers: tiersNamed(4), rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const bar = ItemLookup.findByObjectName(table, "thresholdHorizontalBar")
+        const preferredTotal = table.identityPreferredWidths.reduce((sum, width) => sum + width, 0)
+        table.width = 1100
+        tryCompare(table, "identityTotalWidth", preferredTotal)
+        verify(table.minimumTableWidth < preferredTotal + table.rankSlotWidth + table.rankHeaderMinimumWidth,
+               "fixture: the content fits in less than the comfortable widths")
+
+        table.width = table.minimumTableWidth
+        tryVerify(() => table.identityWidths.every((width, column) => width === table.identityContentWidths[column]),
+                  2000, "identity widths " + table.identityWidths + ", content " + table.identityContentWidths)
+        verify(table.identityTotalWidth < preferredTotal)
+        tryVerify(() => [0, 1, 2].every(column => table.identityView.columnWidth(column) === table.identityWidths[column]),
+                  2000, "the identity view lays out the narrower columns")
+        const scenario = cellFor(table, "a", "scenario")
+        verify(scenario !== null)
+        verify(!headerLabel(scenario.face).truncated, "the scenario name is not elided")
+
+        tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_r0") !== null)
+        const first = ItemLookup.findByObjectName(table, "rankHeader_r0")
+        tryVerify(() => Math.abs(first.mapToItem(table, 0, 0).x - table.identityTotalWidth) < 0.5, 2000,
+                  "the first rank header follows the scenario column")
+        verify(first.mapToItem(table, first.width, 0).x <= table.width - table.rankSlotWidth + 0.5,
+               "the first rank header is whole")
+        verify(!headerLabel(first).truncated)
+        tryCompare(bar, "visible", true, 2000, "the other ranks scroll")
+
+        table.width = 1100
+        tryCompare(table, "identityTotalWidth", preferredTotal)
     }
 }

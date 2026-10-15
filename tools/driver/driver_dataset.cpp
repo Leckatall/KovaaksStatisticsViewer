@@ -3,11 +3,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <algorithm>
 
 #include "driver_spec.h"
 #include "formats/protobuf/profile_serializer.h"
 #include "gallery_dataset.h"
-#include "qt_data/benchmark_store.h"
 
 namespace ksv::driver {
     namespace {
@@ -29,9 +29,13 @@ namespace ksv::driver {
             const auto files = source.entryList({nameFilter}, QDir::Files);
             if (files.isEmpty()) return QStringLiteral("no %1 fixtures in %2").arg(nameFilter, examplesDir);
             for (const auto &file: files) {
-                if (!QFile::copy(source.filePath(file), QDir(destination).filePath(file))) {
+                const QString target = QDir(destination).filePath(file);
+                if (!QFile::copy(source.filePath(file), target)) {
                     return QStringLiteral("could not copy fixture %1").arg(file);
                 }
+                // The app edits and deletes benchmark files, so a read-only checkout must not
+                // leave the session's copies read-only.
+                QFile::setPermissions(target, QFile::permissions(target) | QFileDevice::WriteOwner | QFileDevice::WriteUser);
             }
             return {};
         }
@@ -57,8 +61,14 @@ namespace ksv::driver {
         return dataset == u"empty" || dataset == u"first-run" || dataset == u"fixtures";
     }
 
+    bool datasetShipsBenchmarks(const QString &dataset) {
+        return std::ranges::any_of(kSynthetic, [&](const SyntheticDataset &synthetic) {
+            return dataset == QLatin1String(synthetic.name);
+        });
+    }
+
     QString seedSessionData(const SessionData &data, const QString &dataset, const QString &examplesDir,
-                            const QString &profileSpec) {
+                            const QString &benchmarkFixturesDir, const QString &profileSpec) {
         if (!datasetNames().contains(dataset)) {
             return QStringLiteral("unknown dataset '%1' (expected one of: %2)")
                 .arg(dataset, datasetNames().join(QStringLiteral(", ")));
@@ -80,10 +90,8 @@ namespace ksv::driver {
             if (!data::ProfileSerializer().save(profile, data.profilePath().toStdString())) {
                 return QStringLiteral("could not write %1").arg(data.profilePath());
             }
-            const BenchmarkSpec demo = demoBenchmarkSpec();
-            qt_data::BenchmarkStore store(data.benchmarksDir().toStdString());
-            if (!store.write(generateBenchmark(profile, demo), demo.file, std::nullopt).succeeded()) {
-                return QStringLiteral("could not write the demo benchmark");
+            if (auto error = copyFixtures(benchmarkFixturesDir, "*.json", data.benchmarksDir()); !error.isEmpty()) {
+                return error;
             }
         }
         if (dataset == u"fixtures") {

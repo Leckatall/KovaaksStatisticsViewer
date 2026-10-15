@@ -13,18 +13,22 @@
 #include "benchmarks/benchmark_projection.h"
 
 namespace ksv::presentation {
+    // A segmented tier bar has one equal-width chunk per tier in ladder order, and chunk k is the
+    // progress toward tier k: from tier k-1's threshold (0 for the first tier) up to tier k's, so
+    // a chunk is full exactly when its tier is reached and the bar is full once the top tier is.
+    // The filled length in chunk units is the domain's normalized tier value (6.37 = six full
+    // chunks and 37% of the seventh), the scale the rank graph and the average rank use.
+
     // A rank on the domain's normalized scale (BenchmarkProjection::averageRank: k = tier k attained,
     // fractions part-way to the next) as tier bar chunk fills: chunk k (0-based) fills
-    // clamp(rank - k, 0, 1), so exactly k ends at chunk k's right edge.
+    // clamp(rank - k, 0, 1), so exactly k ends at chunk k-1's right edge.
     [[nodiscard]] std::vector<double> rankChunkFills(double rank, std::size_t tierCount);
 
-    // The fill of each equal-width chunk of a segmented tier bar, one chunk per tier in ladder
-    // order. Chunk k covers scores from tier k-1's threshold to tier k's (chunk 0 starts at 0), and
-    // fills clamp((score - t[k-1]) / (t[k] - t[k-1]), 0, 1): the same in-tier fraction the domain's
-    // normalized rank uses, so the filled length in chunk units equals ScenarioProjection's
-    // normalizedRank whenever the ladder is valid. A chunk whose bounding thresholds are missing,
-    // duplicated, negative, non-finite or not increasing stays empty, and so does every chunk
-    // without a score.
+    // The fill of each chunk of a scenario's tier bar. Chunk k fills
+    // clamp((score - t[k-1]) / (t[k] - t[k-1]), 0, 1), with t[-1] = 0: the same in-tier fraction
+    // the domain's normalized rank uses, so the filled length equals it whenever the ladder is
+    // valid. A chunk whose bounding thresholds are missing, duplicated, negative, non-finite or not
+    // increasing stays empty, and so does every chunk without a score.
     [[nodiscard]] std::vector<double> scenarioChunkFills(const std::vector<domain::Tier> &tiers,
                                                          const std::vector<domain::Threshold> &thresholds,
                                                          std::optional<double> score);
@@ -77,9 +81,10 @@ namespace ksv::presentation {
     };
 
     // Where `score` sits on a tier bar's chunk scale, in chunk units from 0 (bar start) to the
-    // tier count (bar end): the domain's normalized tier value. No position without a score or
-    // when the ladder is incomplete or not increasing, so a marker is never drawn at a made-up
-    // place.
+    // tier count (bar end), matching scenarioChunkFills: the domain's normalized tier value, so a
+    // score below the first tier sits inside the first chunk and tier k's threshold at the end of
+    // chunk k-1. No position without a score or when the ladder is incomplete or not increasing,
+    // so a marker is never drawn at a made-up place.
     [[nodiscard]] std::optional<double> tierScalePosition(const std::vector<domain::Tier> &tiers,
                                                           const std::vector<domain::Threshold> &thresholds,
                                                           std::optional<double> score);

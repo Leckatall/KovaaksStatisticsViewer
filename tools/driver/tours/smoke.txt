@@ -12,6 +12,7 @@ shot --name rich-scenarios-1280x800
 click benchmarksTab --shot=rich-benchmarks-1280x800
 resize 960x700
 shot --name rich-benchmarks-960x700
+click "selectorEntry_Driver Many Tiers Benchmark" --shot=rich-many-tiers-960x700
 click scenariosTab --shot=rich-scenarios-960x700
 eval settingsDialog.open()
 shot --window settingsDialog --name rich-settings-profile

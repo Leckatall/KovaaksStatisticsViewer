@@ -1,7 +1,9 @@
 #include "benchmark_progress_grid_model.h"
 
 #include <QColor>
+#include <QDateTime>
 #include <QHash>
+#include <QLocale>
 #include <QVariantMap>
 
 #include <algorithm>
@@ -69,39 +71,49 @@ namespace ksv::presentation {
             return {};
         }
 
-        // "5,226.4", plus the sample count when fewer than five runs make up the average.
-        QString recentText(const domain::ScenarioProjection &scenario) {
-            if (!scenario.recentAverage) return QStringLiteral("—");
-            QString text = formatBenchmarkNumber(*scenario.recentAverage);
-            if (scenario.recentSampleCount >= 1 && scenario.recentSampleCount <= 4)
-                text += QObject::tr(" (%1)").arg(scenario.recentSampleCount);
-            return text;
+        // The local day the PB was set, "2026-08-14".
+        QString personalBestDateText(const domain::ScenarioProjection &scenario) {
+            if (!scenario.personalBestTime) return QStringLiteral("—");
+            return QDateTime::fromSecsSinceEpoch(scenario.personalBestTime->time_since_epoch().count())
+                .toString(QStringLiteral("yyyy-MM-dd"));
+        }
+
+        QString playCountText(const domain::ScenarioProjection &scenario) {
+            return scenario.runCount > 0 ? QLocale().toString(scenario.runCount) : QStringLiteral("—");
         }
 
         // Where the PB sits on the ladder, in words: "Silver · 50% of the way to Gold (5,670 / 5,954)".
         QString progressDescription(const std::vector<domain::Tier> &tiers,
                                     const std::vector<domain::Threshold> &thresholds,
-                                    const std::vector<double> &fills, const std::optional<double> score) {
+                                    const std::optional<double> score) {
             if (!score) return QObject::tr("Unplayed");
-            const auto open = std::find_if(fills.begin(), fills.end(), [](const double fill) { return fill < 1.0; });
-            if (open == fills.end()) {
+            // The first tier the score has not reached, climbing only while the ladder is usable.
+            std::size_t index = 0;
+            for (; index < tiers.size(); ++index) {
+                const auto threshold = thresholdFor(thresholds, tiers[index].id);
+                if (!threshold || *score < *threshold) break;
+                if (index > 0) {
+                    const auto previous = thresholdFor(thresholds, tiers[index - 1].id);
+                    if (previous && *threshold <= *previous) break;
+                }
+            }
+            if (index == tiers.size()) {
                 if (tiers.empty()) return formatBenchmarkNumber(*score);
                 const auto top = thresholdFor(thresholds, tiers.back().id);
                 return QObject::tr("%1 · top tier reached (%2 / %3)")
                     .arg(q(tiers.back().name), formatBenchmarkNumber(*score),
                          top ? formatBenchmarkNumber(*top) : QStringLiteral("—"));
             }
-            const auto index = static_cast<std::size_t>(open - fills.begin());
             const QString from = index == 0 ? QObject::tr("Unranked") : q(tiers[index - 1].name);
             const auto target = thresholdFor(thresholds, tiers[index].id);
             if (!target) return QObject::tr("%1 · no threshold set for %2").arg(from, q(tiers[index].name));
-            if (index > 0) {
-                const auto floor = thresholdFor(thresholds, tiers[index - 1].id);
-                if (floor && *target <= *floor)
-                    return QObject::tr("%1 · the %2 threshold is not above %3's")
-                        .arg(from, q(tiers[index].name), q(tiers[index - 1].name));
-            }
-            const int percent = static_cast<int>(std::floor(*open * 100.0));
+            const auto floor = index == 0 ? std::optional<double>{0.0} : thresholdFor(thresholds, tiers[index - 1].id);
+            if (index > 0 && floor && *target <= *floor)
+                return QObject::tr("%1 · the %2 threshold is not above %3's")
+                    .arg(from, q(tiers[index].name), q(tiers[index - 1].name));
+            const double span = floor ? *target - *floor : 0.0;
+            const double fraction = span > 0.0 ? std::clamp((*score - *floor) / span, 0.0, 1.0) : 0.0;
+            const int percent = static_cast<int>(std::floor(fraction * 100.0));
             return QObject::tr("%1 · %2% of the way to %3 (%4 / %5)")
                 .arg(from)
                 .arg(percent)
@@ -227,7 +239,9 @@ namespace ksv::presentation {
                 map[QStringLiteral("name")] = projected ? q(projected->name) : q(entry.name);
                 map[QStringLiteral("personalBestText")] =
                     personalBest ? formatBenchmarkNumber(*personalBest) : QStringLiteral("—");
-                map[QStringLiteral("recentText")] = projected ? recentText(*projected) : QStringLiteral("—");
+                map[QStringLiteral("personalBestDateText")] =
+                    projected ? personalBestDateText(*projected) : QStringLiteral("—");
+                map[QStringLiteral("playCountText")] = projected ? playCountText(*projected) : QStringLiteral("—");
 
                 QString attainedText = QObject::tr("Unranked");
                 QString attainedColor;
@@ -251,10 +265,12 @@ namespace ksv::presentation {
                 const auto recentPosition = tierScalePosition(m_projection.tiers, entry.thresholds, recent);
                 map[QStringLiteral("recentPosition")] = recentPosition ? *recentPosition : -1.0;
                 QString recentTier = QObject::tr("Unranked");
-                if (recentPosition && *recentPosition >= 1.0 && !m_projection.tiers.empty()) {
-                    const auto attained = std::min(static_cast<std::size_t>(std::floor(*recentPosition)),
-                                                   m_projection.tiers.size());
-                    recentTier = q(m_projection.tiers[attained - 1].name);
+                if (recentPosition) {
+                    const auto reached = std::min(
+                        static_cast<std::size_t>(std::floor(
+                            domain::normalizedTierValue(m_projection.tiers, entry.thresholds, recent))),
+                        m_projection.tiers.size());
+                    if (reached >= 1) recentTier = q(m_projection.tiers[reached - 1].name);
                 }
                 map[QStringLiteral("recentDescription")] =
                     recentPosition ? QObject::tr("Recent average %1 · %2").arg(formatBenchmarkNumber(*recent), recentTier)
@@ -271,8 +287,7 @@ namespace ksv::presentation {
                         nextTierColor = found->textColor;
                     }
                     nextThresholdText = formatBenchmarkNumber(projected->nextThreshold->score);
-                } else if (personalBest && !fills.empty() &&
-                           std::all_of(fills.begin(), fills.end(), [](const double fill) { return fill >= 1.0; })) {
+                } else if (personalBest && !fills.empty() && fills.back() >= 1.0) {
                     nextThresholdText = QObject::tr("Highest tier attained");
                 }
                 map[QStringLiteral("nextTierText")] = nextTierText;
@@ -284,7 +299,7 @@ namespace ksv::presentation {
                 map[QStringLiteral("matchStateText")] = matchText;
                 map[QStringLiteral("matchStateHint")] = matchHint;
 
-                QString description = progressDescription(m_projection.tiers, entry.thresholds, fills, personalBest);
+                QString description = progressDescription(m_projection.tiers, entry.thresholds, personalBest);
                 if (!matchText.isEmpty()) description += QStringLiteral("\n") + matchText + QStringLiteral(": ") + matchHint;
                 map[QStringLiteral("barDescription")] = description;
 
@@ -295,6 +310,14 @@ namespace ksv::presentation {
                 for (const bool missing: missingThresholdChunks(m_projection.tiers, entry.thresholds))
                     missingList.push_back(missing);
                 map[QStringLiteral("missingChunks")] = missingList;
+                // The score that reaches each tier, at the end of its chunk ("" when this
+                // entry has no usable threshold for the tier).
+                QVariantList thresholdList;
+                for (const auto &tier: m_projection.tiers) {
+                    const auto threshold = thresholdFor(entry.thresholds, tier.id);
+                    thresholdList.push_back(threshold ? formatBenchmarkNumber(*threshold) : QString());
+                }
+                map[QStringLiteral("thresholdTexts")] = thresholdList;
                 QString edgeState;
                 QString statusText;
                 QString aboveTopText;
@@ -312,8 +335,7 @@ namespace ksv::presentation {
                                      : QObject::tr("Unplayed");
                 } else if (!m_projection.tiers.empty()) {
                     const auto top = thresholdFor(entry.thresholds, m_projection.tiers.back().id);
-                    const bool allFull = std::all_of(fills.begin(), fills.end(), [](const double fill) { return fill >= 1.0; });
-                    if (top && allFull && *personalBest > *top) {
+                    if (top && !fills.empty() && fills.back() >= 1.0 && *personalBest > *top) {
                         edgeState = QStringLiteral("aboveTop");
                         aboveTopText = QObject::tr("Above %1: %2 / %3")
                                            .arg(q(m_projection.tiers.back().name), formatBenchmarkNumber(*personalBest),
@@ -414,11 +436,10 @@ namespace ksv::presentation {
             const bool aboveNext = index + 1 < count && values[index + 1] && *values[index + 1] <= *values[index];
             outOfOrder[index] = belowPrevious || aboveNext;
         }
+        const auto usable = [&](const std::size_t index) { return values[index] && !outOfOrder[index]; };
         std::vector<bool> missing(count, false);
-        for (std::size_t index = 0; index < count; ++index) {
-            const bool lowerUsable = index == 0 || (values[index - 1] && !outOfOrder[index - 1]);
-            missing[index] = !values[index] || outOfOrder[index] || !lowerUsable;
-        }
+        for (std::size_t index = 0; index < count; ++index)
+            missing[index] = !usable(index) || (index > 0 && !usable(index - 1));
         return missing;
     }
 }

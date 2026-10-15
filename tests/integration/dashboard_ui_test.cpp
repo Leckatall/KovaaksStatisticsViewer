@@ -467,7 +467,7 @@ namespace {
                 "schemaVersion": 1, "id": "auto-1", "name": "Auto",
                 "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
                 "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hash": null,
-                    "thresholds": [ { "tierId": "t1", "score": 100.0 } ] } ],
+                    "thresholds": [ { "tierId": "t1", "score": 1000000000.0 } ] } ],
                 "categories": []
             })");
         }
@@ -476,6 +476,8 @@ namespace {
         auto *app = scene.app.get();
         ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
 
+        // The tier is out of reach, so the rank line stays below Bronze's tier line, which is
+        // painted over the series and would hide a line running exactly along it.
         // Average-rank history only gains a point on a day the personal best improves.
         auto first_run = app->profileService()->getLatestRun();
         auto second_run = first_run;
@@ -517,7 +519,8 @@ namespace {
                 canvas->paint(&painter);
             }
             const QRect plot = canvas->property("plotArea").toRectF().toAlignedRect();
-            EXPECT_GT(countPixelsNear(image, plot, series.front()->color()), 0)
+            // The rank line has no colour of its own; the canvas draws it in its foreground colour.
+            EXPECT_GT(countPixelsNear(image, plot, canvas->colorFor(*series.front())), 0)
                 << metric << ": axes painted but the series line was not";
         }
     }
