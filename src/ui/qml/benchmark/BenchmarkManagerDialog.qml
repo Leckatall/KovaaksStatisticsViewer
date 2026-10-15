@@ -84,12 +84,6 @@ ApplicationWindow {
         }).join(", ")
     }
 
-    function selectedRow() {
-        const entries = root.vm().libraryEntries
-        if (!root.selectedEntryFilename || !entries) return null
-        return entries.find(entry => entry.filename === root.selectedEntryFilename) || null
-    }
-
     // Opens a library entry in the editor. Double-click, Enter and the Open button all come here,
     // so each passes through the same unsaved-changes guard; entries that cannot be opened do
     // nothing.
@@ -124,8 +118,7 @@ ApplicationWindow {
         if (index < 0) return
         const entry = entries[index]
         root.selectedEntryFilename = entry.filename
-        libraryList.positionViewAtIndex(index, ListView.Contain)
-        libraryList.forceActiveFocus()
+        libraryPane.revealEntry(index)
         const alreadyOpen = root.vm().hasDraft && root.vm().draftFromLibrary && root.vm().draftId === entry.id
         if (!alreadyOpen) root.openLibraryEntry(entry)
     }
@@ -520,7 +513,7 @@ ApplicationWindow {
     }
 
     // The width the Library pane opens at: just the toolbar row, which leaves the rest to the editor.
-    readonly property int libraryDefaultWidth: Math.max(libraryToolbar.implicitWidth, 280)
+    readonly property int libraryDefaultWidth: Math.max(libraryPane.toolbarImplicitWidth, 280)
 
     // A text field that shows the model value whenever it is not being edited; typing into a
     // TextField destroys a plain `text:` binding, and these fields outlive the element they edit.
@@ -571,172 +564,27 @@ ApplicationWindow {
             }
 
             // ---- Library pane ------------------------------------------------
-            ColumnLayout {
+            BenchmarkLibraryPane {
                 id: libraryPane
-                objectName: "libraryPane"
                 // Only while an editor is there to take the room: with no draft the list is all
                 // the dialog has.
                 visible: !root.libraryCollapsed || !root.vm().hasDraft
                 SplitView.preferredWidth: root.libraryDefaultWidth
-                SplitView.minimumWidth: libraryToolbar.implicitWidth
-                spacing: 8
-
-                Label {
-                    text: qsTr("Library")
-                    font.pixelSize: 18
-                    font.bold: true
-                }
-
-                // One row at every width the pane can take: the buttons size to their text, and
-                // the pane never narrows below the row.
-                RowLayout {
-                    id: libraryToolbar
-                    objectName: "libraryToolbar"
-                    Layout.fillWidth: true
-                    spacing: 4
-
-                    ToolbarButton {
-                        objectName: "newBenchmarkButton"
-                        text: qsTr("New")
-                        onClicked: root.runWhenClean(() => root.vm().beginNewBenchmark())
-                    }
-                    ToolbarButton {
-                        objectName: "importPlaylistButton"
-                        text: qsTr("Import...")
-                        Accessible.name: qsTr("Import playlist")
-                        ToolTip.text: qsTr("Import a playlist file as a benchmark")
-                        onClicked: importDialog.open()
-                    }
-                    ToolbarButton {
-                        objectName: "openBenchmarkButton"
-                        text: qsTr("Open")
-                        enabled: root.selectedRow() !== null && root.selectedRow().openable
-                        onClicked: root.openLibraryEntry(root.selectedRow())
-                    }
-                    ToolbarButton {
-                        objectName: "deleteBenchmarkButton"
-                        text: qsTr("Delete")
-                        enabled: root.selectedRow() !== null && root.selectedRow().deletable
-                        onClicked: {
-                            deleteConfirmPrompt.targetId = root.selectedRow().id
-                            deleteConfirmPrompt.targetName = root.selectedRow().name
-                            deleteConfirmPrompt.open()
-                        }
-                    }
-                    Item { Layout.fillWidth: true }
-                    ToolbarButton {
-                        objectName: "refreshLibraryButton"
-                        icon.source: "../icons/refresh-cw.svg"
-                        display: AbstractButton.IconOnly
-                        enabled: !root.vm().dirty
-                        Accessible.name: qsTr("Refresh")
-                        ToolTip.text: qsTr("Refresh the list from the benchmark directory")
-                        onClicked: root.vm().refresh()
-                    }
-                    ToolbarButton {
-                        objectName: "openDirectoryButton"
-                        icon.source: "../icons/folder-open.svg"
-                        display: AbstractButton.IconOnly
-                        Accessible.name: qsTr("Open directory")
-                        ToolTip.text: qsTr("Open the benchmark directory in the file manager")
-                        onClicked:
-                            Qt.openUrlExternally(encodeURI("file:///" + root.vm().managedDirectoryPath))
-                    }
-                }
-
-                Label {
-                    objectName: "importStatusLabel"
-                    visible: root.importStatus !== ""
-                    text: root.importStatus
-                    color: root.importStatus.toLowerCase().indexOf("imported") === 0
-                        ? root.palette.windowText : Theme.errorText
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                }
-                Label {
-                    objectName: "refreshFailedLabel"
-                    visible: root.vm().refreshFailed
-                    text: qsTr("Last refresh failed: the directory could not be read.")
-                    color: Theme.errorText
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                }
-                Label {
-                    objectName: "saveStatusLabel"
-                    visible: root.statusMessage !== ""
-                    text: root.statusMessage
-                    color: root.statusIsError ? Theme.errorText : root.palette.windowText
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                }
-
-                ListView {
-                    id: libraryList
-                    objectName: "libraryList"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-                    model: root.vm().libraryEntries
-                    // The selection (selectedEntryFilename) is the single source of truth, so the
-                    // arrow keys move it directly instead of a separate current index.
-                    keyNavigationEnabled: false
-                    activeFocusOnTab: true
-                    Accessible.role: Accessible.List
-                    Accessible.name: qsTr("Benchmark library")
-
-                    function step(delta) {
-                        const entries = root.vm().libraryEntries || []
-                        if (entries.length === 0) return
-                        let index = entries.findIndex(entry => entry.filename === root.selectedEntryFilename)
-                        index = index < 0 ? (delta > 0 ? 0 : entries.length - 1)
-                                          : Math.max(0, Math.min(entries.length - 1, index + delta))
-                        root.selectedEntryFilename = entries[index].filename
-                        libraryList.positionViewAtIndex(index, ListView.Contain)
-                    }
-                    Keys.onDownPressed: libraryList.step(1)
-                    Keys.onUpPressed: libraryList.step(-1)
-                    // Enter opens the selected benchmark, exactly like the Open button.
-                    Keys.onReturnPressed: root.openLibraryEntry(root.selectedRow())
-                    Keys.onEnterPressed: root.openLibraryEntry(root.selectedRow())
-
-                    delegate: ItemDelegate {
-                        id: libraryEntry
-                        required property var modelData
-                        required property int index
-                        width: libraryList.width
-                        objectName: "libraryEntry_" + index
-                        // The list owns the keyboard focus; the rows only select.
-                        focusPolicy: Qt.NoFocus
-                        highlighted: root.selectedEntryFilename === libraryEntry.modelData.filename
-                        onClicked: {
-                            root.selectedEntryFilename = libraryEntry.modelData.filename
-                            libraryList.forceActiveFocus()
-                        }
-                        // Double-click opens through the same guard as the Open button.
-                        onDoubleClicked: {
-                            root.selectedEntryFilename = libraryEntry.modelData.filename
-                            libraryList.forceActiveFocus()
-                            root.openLibraryEntry(libraryEntry.modelData)
-                        }
-                        contentItem: RowLayout {
-                            spacing: 8
-                            Label {
-                                text: libraryEntry.modelData.name
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            Rectangle {
-                                width: 8
-                                height: 8
-                                radius: 4
-                                color: Theme.classificationColor(libraryEntry.modelData.classification)
-                            }
-                            Label {
-                                text: libraryEntry.modelData.classification
-                                color: libraryEntry.palette.placeholderText
-                            }
-                        }
-                    }
+                SplitView.minimumWidth: libraryPane.toolbarImplicitWidth
+                manager: root.vm()
+                selectedEntryFilename: root.selectedEntryFilename
+                importStatus: root.importStatus
+                statusMessage: root.statusMessage
+                statusIsError: root.statusIsError
+                onEntrySelected: filename => root.selectedEntryFilename = filename
+                onNewRequested: root.runWhenClean(() => root.vm().beginNewBenchmark())
+                onImportRequested: importDialog.open()
+                onRefreshRequested: root.vm().refresh()
+                onOpenRequested: entry => root.openLibraryEntry(entry)
+                onDeleteRequested: entry => {
+                    deleteConfirmPrompt.targetId = entry.id
+                    deleteConfirmPrompt.targetName = entry.name
+                    deleteConfirmPrompt.open()
                 }
             }
 
