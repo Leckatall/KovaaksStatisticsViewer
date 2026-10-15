@@ -281,7 +281,9 @@ TEST(BenchmarkHistoryViewModel, RankAxisHasATickAtEveryTierEvenWithManyTiers) {
         for (int index = 1; index <= tierCount; ++index)
             tiers.push_back(coloredTier("t" + std::to_string(index), "Tier " + std::to_string(index),
                                         BenchmarkColor{200, 200, 200, 255}));
-        auto fake = fakeWith(snapshotWithTiers(std::move(tiers)));
+        auto snapshot = snapshotWithTiers(std::move(tiers));
+        snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), static_cast<double>(tierCount)}};
+        auto fake = fakeWith(snapshot);
         BenchmarkTrackingViewModel vm{fake};
 
         const auto series = vm.rankHistory()->series({kValueColumn});
@@ -291,6 +293,31 @@ TEST(BenchmarkHistoryViewModel, RankAxisHasATickAtEveryTierEvenWithManyTiers) {
         for (int k = 0; k <= tierCount; ++k) expected.append(k);
         EXPECT_EQ(series.front()->yAxis->ticks(), expected) << tierCount;
         EXPECT_EQ(series.front()->referenceLines.size(), tierCount);
+    }
+}
+
+TEST(BenchmarkHistoryViewModel, RankAxisAndTierLinesStopOneTierAboveThePeakRank) {
+    struct Case {
+        double peak;
+        int shownTiers;
+    };
+    for (const auto [peak, shownTiers]: {Case{0.25, 1}, Case{1.6, 2}, Case{2.0, 3}, Case{4.5, 5}, Case{5.0, 5}}) {
+        std::vector<Tier> tiers;
+        for (int index = 1; index <= 5; ++index)
+            tiers.push_back(coloredTier("t" + std::to_string(index), "Tier " + std::to_string(index),
+                                        BenchmarkColor{200, 200, 200, 255}));
+        auto snapshot = snapshotWithTiers(std::move(tiers));
+        // The peak is not the last point, so the cap follows the best rank rather than the current one.
+        snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), peak}, {ymd(2024, 3, 5), 0.1}};
+        auto fake = fakeWith(snapshot);
+        BenchmarkTrackingViewModel vm{fake};
+
+        const auto series = vm.rankHistory()->series({kValueColumn});
+        ASSERT_EQ(series.size(), 1) << peak;
+        ASSERT_TRUE(series.front()->yAxis.has_value()) << peak;
+        EXPECT_DOUBLE_EQ(series.front()->yAxis->max(), shownTiers) << peak;
+        EXPECT_EQ(series.front()->referenceLines.size(), shownTiers) << peak;
+        EXPECT_EQ(series.front()->yAxis->formatTick(shownTiers), "Tier " + QString::number(shownTiers)) << peak;
     }
 }
 

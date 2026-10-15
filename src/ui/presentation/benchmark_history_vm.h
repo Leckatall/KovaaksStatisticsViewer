@@ -57,8 +57,9 @@ namespace ksv::presentation {
         // Called by BenchmarkTrackingViewModel inside one atomic rebuild, after it has updated the
         // shared X axis. `rawPoints` carry UTC-midnight epoch-ms X and the metric's raw Y (rank
         // position, or playtime seconds). `present` is false when the metric is suppressed;
-        // `rankTiers` is only read for AverageRank: it sizes the 0..tierCount rank axis, with a tick
-        // at every tier, and gives each tier a reference line in its colour. The rank line itself
+        // `rankTiers` is only read for AverageRank: it sizes the rank axis from 0 up to one tier
+        // above the peak rank (capped at the top tier), with a tick at every shown tier, and gives
+        // each shown tier a reference line in its colour. The rank line itself
         // has no colour of its own (neutral), so it is never mistaken for a tier line.
         void update(const QList<QPointF> &rawPoints, bool present, const std::vector<RankTier> &rankTiers);
 

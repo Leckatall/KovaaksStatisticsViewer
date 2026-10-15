@@ -81,10 +81,18 @@ namespace ksv::presentation {
                 return describeAverageRank(value, tierNames);
             };
             m_series->points = rawPoints;
-            m_series->yAxis = rankYAxis(rankTiers);
+            // Tiers more than one above the peak rank are out of reach for now; drawing them would
+            // squash the line into the bottom of the plot.
+            qreal peak = 0.0;
+            for (const QPointF &point: rawPoints) peak = std::max(peak, point.y());
+            const auto shownTierCount = std::min(rankTiers.size(),
+                                                 static_cast<std::size_t>(std::floor(peak)) + 1);
+            const std::vector<RankTier> shownTiers(rankTiers.begin(),
+                                                   rankTiers.begin() + static_cast<std::ptrdiff_t>(shownTierCount));
+            m_series->yAxis = rankYAxis(shownTiers);
             m_series->referenceLines.clear();
-            for (std::size_t index = 0; index < rankTiers.size(); ++index)
-                m_series->referenceLines.append({static_cast<qreal>(index + 1), rankTiers[index].color});
+            for (std::size_t index = 0; index < shownTiers.size(); ++index)
+                m_series->referenceLines.append({static_cast<qreal>(index + 1), shownTiers[index].color});
         } else {
             m_series->setName(tr("Three-day average playtime"));
             m_series->setColor(kPlaytimeColor);
