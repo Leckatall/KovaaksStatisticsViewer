@@ -433,14 +433,6 @@ FocusScope {
         root.viewForColumn(column).forceActiveFocus()
     }
 
-    function groupListItem(groupId) {
-        for (let i = 0; i < groupRepeater.count; ++i) {
-            const item = groupRepeater.itemAt(i)
-            if (item && item.groupId === groupId) return item.focusButton
-        }
-        return null
-    }
-
     function rankHeaderItem(tierId) {
         const items = rankHeader.contentItem.children
         for (let i = 0; i < items.length; ++i)
@@ -463,7 +455,7 @@ FocusScope {
         if (anchor.groupId) {
             const row = model.firstRowOfGroup(anchor.groupId)
             if (row < 0) {
-                const item = root.groupListItem(anchor.groupId)
+                const item = groupList.focusButton(anchor.groupId)
                 if (!item) return false
                 item.forceActiveFocus()
                 return true
@@ -516,14 +508,7 @@ FocusScope {
 
     function beginGroupRename(groupId) {
         const row = root.tableModel.firstRowOfGroup(groupId)
-        if (row < 0) {
-            const empty = root.groupListItem(groupId)
-            if (!empty) return false
-            empty.parent.renaming = true
-            empty.parent.renameField.text = empty.parent.modelData.name
-            empty.parent.renameField.forceActiveFocus()
-            return true
-        }
+        if (row < 0) return groupList.beginRename(groupId)
         const group = (root.manager.groups || []).find(item => item.id === groupId)
         const column = group && group.kind === "subcategory" ? 1 : 0
         root.moveCurrent(row, column)
@@ -532,20 +517,20 @@ FocusScope {
     }
 
     function beginSubcategoryCreation(groupId) {
-        const empty = root.groupListItem(groupId)
-        if (empty) {
-            empty.parent.addingSubcategory = true
-            empty.parent.subcategoryField.forceActiveFocus()
-            return true
-        }
-        for (const item of identityView.contentItem.children) {
-            if (item.groupId === groupId && item.columnKind === 0 && item.groupLabelShown) {
-                item.addingSubcategory = true
-                item.subcategoryField.forceActiveFocus()
-                return true
-            }
-        }
-        return false
+        if (groupList.beginSubcategoryCreation(groupId)) return true
+        const model = root.tableModel
+        const firstRow = model ? model.firstRowOfGroup(groupId) : -1
+        if (firstRow < 0) return false
+        const info = model.rowInfo(firstRow)
+        if (info.categoryId !== groupId) return false
+        // The category cell that shows the label, as TableCell.groupLabelShown decides it.
+        const labelRow = Math.max(firstRow, identityView.topRow)
+        if (labelRow >= firstRow + info.categorySpanLength) return false
+        const item = identityView.itemAtIndex(model.index(labelRow, 0))
+        if (!item) return false
+        item.addingSubcategory = true
+        item.subcategoryField.forceActiveFocus()
+        return true
     }
 
     function beginRankRename(tierId) {
@@ -621,10 +606,8 @@ FocusScope {
 
     // Whole-group targets, which append: a group list button, a group cell or the Uncategorized zone.
     function targetAtScene(scenePoint) {
-        for (let i = 0; i < groupRepeater.count; ++i) {
-            const item = groupRepeater.itemAt(i)
-            if (item && root.localPointIn(item.focusButton, scenePoint)) return item.groupId
-        }
+        const listed = groupList.groupAtScene(scenePoint)
+        if (listed !== null) return listed
         for (const item of identityView.contentItem.children) {
             if (item.isGroup && item.groupId !== "" && root.localPointIn(item.face, scenePoint)) return item.groupId
         }
@@ -1004,85 +987,21 @@ FocusScope {
         anchors.fill: parent
         spacing: 4
 
-        Flow {
+        BenchmarkEmptyGroupList {
             id: groupList
-            objectName: "groupList"
             Layout.fillWidth: true
-            spacing: 4
-            visible: groupRepeater.count > 0
-
-            Repeater {
-                id: groupRepeater
-                model: root.manager && root.manager.groups
-                    ? root.manager.groups.filter(group => group.scenarioCount === 0 && group.kind !== "uncategorized") : []
-                delegate: Row {
-                    id: groupItem
-                    required property var modelData
-                    readonly property string groupId: groupItem.modelData.id
-                    readonly property alias focusButton: groupButton
-                    property bool addingSubcategory: false
-                    property bool renaming: false
-                    readonly property alias subcategoryField: emptySubcategoryName
-                    readonly property alias renameField: emptyGroupRenameField
-                    Button {
-                        id: groupButton
-                        objectName: "groupListItem_" + groupItem.groupId
-                        flat: true
-                        visible: !groupItem.renaming
-                        activeFocusOnTab: true
-                        text: (groupItem.modelData.kind === "subcategory" ? "↳ " : "")
-                            + (groupItem.modelData.name !== "" ? groupItem.modelData.name : qsTr("(unnamed)"))
-                            + " " + qsTr("(empty)")
-                            + ((groupItem.modelData.issues || []).length > 0 ? " ⚠" : "")
-                        Accessible.name: text
-                        Accessible.description: (groupItem.modelData.issues || []).join("; ")
-                        ToolTip.visible: hovered && (groupItem.modelData.issues || []).length > 0
-                        ToolTip.text: Accessible.description
-                        highlighted: root.focusedGroupId === groupItem.groupId
-                                     || root.hoverDropGroupId === groupItem.groupId
-                        onActiveFocusChanged: if (activeFocus) root.focusedGroupId = groupItem.groupId
-                        onClicked: root.focusedGroupId = groupItem.groupId
-                        TapHandler {
-                            acceptedButtons: Qt.RightButton
-                            onTapped: {
-                                const p = groupButton.mapToItem(root, 0, groupButton.height)
-                                root.focusedGroupId = groupItem.groupId
-                                root.groupContextRequested(groupItem.groupId, p.x, p.y)
-                            }
-                        }
-                    }
-                    TooltipToolButton {
-                        visible: groupItem.modelData.kind === "category" && !groupItem.addingSubcategory && !groupItem.renaming
-                        text: "+"
-                        Accessible.name: qsTr("Add subcategory to %1").arg(groupItem.modelData.name)
-                        ToolTip.text: Accessible.name
-                        onClicked: {
-                            groupItem.addingSubcategory = true
-                            emptySubcategoryName.forceActiveFocus()
-                        }
-                    }
-                    CreationField {
-                        id: emptySubcategoryName
-                        visible: groupItem.addingSubcategory
-                        width: 130
-                        placeholderText: qsTr("Subcategory name")
-                        submit: name => root.requestCreation({kind: "subcategory", categoryId: groupItem.groupId, name: name})
-                        onDone: groupItem.addingSubcategory = false
-                    }
-                    TextField {
-                        id: emptyGroupRenameField
-                        objectName: "emptyGroupRenameField_" + groupItem.groupId
-                        visible: groupItem.renaming
-                        width: 140
-                        Accessible.name: qsTr("Group name")
-                        onAccepted: {
-                            root.renameGroupRequested(groupItem.groupId, text)
-                            groupItem.renaming = false
-                        }
-                        Keys.onEscapePressed: groupItem.renaming = false
-                    }
-                }
+            groups: root.manager && root.manager.groups
+                ? root.manager.groups.filter(group => group.scenarioCount === 0 && group.kind !== "uncategorized") : []
+            focusedGroupId: root.focusedGroupId
+            hoverDropGroupId: root.hoverDropGroupId
+            submitSubcategory: (categoryId, name) => root.requestCreation({kind: "subcategory", categoryId: categoryId, name: name})
+            onGroupFocused: groupId => root.focusedGroupId = groupId
+            onContextRequested: (groupId, x, y) => {
+                const p = groupList.mapToItem(root, x, y)
+                root.focusedGroupId = groupId
+                root.groupContextRequested(groupId, p.x, p.y)
             }
+            onRenameRequested: (groupId, name) => root.renameGroupRequested(groupId, name)
         }
 
         // The table is capped at its own content, so the add-category and add-scenario controls
