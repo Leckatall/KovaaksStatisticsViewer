@@ -545,18 +545,6 @@ ApplicationWindow {
     // The width the Library pane opens at: just the toolbar row, which leaves the rest to the editor.
     readonly property int libraryDefaultWidth: Math.max(libraryToolbar.implicitWidth, 280)
 
-    // A toolbar button sized to its content (the style's 80px minimum would not fit the row). An
-    // icon-only button shows its tooltip on hover.
-    component ToolbarButton: Button {
-        id: toolbarButton
-        leftPadding: 8
-        rightPadding: 8
-        implicitWidth: implicitContentWidth + leftPadding + rightPadding
-        HoverHandler { id: toolbarHover }
-        ToolTip.visible: toolbarHover.hovered && ToolTip.text !== ""
-        ToolTip.delay: Theme.toolTipDelay
-    }
-
     // A text field that shows the model value whenever it is not being edited; typing into a
     // TextField destroys a plain `text:` binding, and these fields outlive the element they edit.
     component BoundField: TextField {

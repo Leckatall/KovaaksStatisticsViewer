@@ -785,15 +785,10 @@ FocusScope {
 
     // A labelled "+ Add ..." control that extends the table. It keeps keyboard focus (Tab) and
     // shows what it does on hover.
-    component AddRowButton: ToolButton {
+    component AddRowButton: TooltipToolButton {
         id: addRowButton
-        // A HoverHandler rather than `hovered`: the latter stays false where the platform turns
-        // hover effects off.
-        HoverHandler { id: addRowHover }
-        ToolTip.visible: addRowHover.hovered
-        ToolTip.delay: Theme.toolTipDelay
         background: Rectangle {
-            color: addRowHover.hovered || addRowButton.activeFocus
+            color: addRowButton.pointerHovered || addRowButton.activeFocus
                 ? Qt.alpha(addRowButton.palette.highlight, 0.25) : Qt.alpha(addRowButton.palette.button, 0.35)
             border.color: addRowButton.activeFocus ? addRowButton.palette.highlight : addRowButton.palette.mid
         }
@@ -946,7 +941,7 @@ FocusScope {
                 onClicked: root.colorSwatchRequested("group", cell.groupId, cell.groupColor)
             }
 
-            ToolButton {
+            TooltipToolButton {
                 id: addSubcategoryPlus
                 objectName: "addSubcategoryPlus_" + cell.categoryId
                 visible: cell.columnKind === 0 && cell.groupLabelShown && cell.categoryId !== ""
@@ -958,9 +953,6 @@ FocusScope {
                 text: "+"
                 focusPolicy: Qt.NoFocus
                 Accessible.name: qsTr("Add subcategory to %1").arg(cell.categoryName)
-                HoverHandler { id: addSubcategoryHover }
-                ToolTip.visible: addSubcategoryHover.hovered
-                ToolTip.delay: Theme.toolTipDelay
                 ToolTip.text: Accessible.name
                 onClicked: {
                     cell.addingSubcategory = true
@@ -1251,13 +1243,10 @@ FocusScope {
                             }
                         }
                     }
-                    ToolButton {
+                    TooltipToolButton {
                         visible: groupItem.modelData.kind === "category" && !groupItem.addingSubcategory && !groupItem.renaming
                         text: "+"
                         Accessible.name: qsTr("Add subcategory to %1").arg(groupItem.modelData.name)
-                        HoverHandler { id: emptyGroupAddHover }
-                        ToolTip.visible: emptyGroupAddHover.hovered
-                        ToolTip.delay: Theme.toolTipDelay
                         ToolTip.text: Accessible.name
                         onClicked: {
                             groupItem.addingSubcategory = true
@@ -1565,16 +1554,13 @@ FocusScope {
                     Layout.minimumWidth: root.rankSlotWidth
                     Layout.preferredHeight: root.headerHeight
 
-                    ToolButton {
+                    TooltipToolButton {
                         id: addRankPlus
                         objectName: "addRankPlus"
                         visible: !root.addingRank
                         anchors.fill: parent
                         text: "+"
                         Accessible.name: qsTr("Add rank")
-                        HoverHandler { id: addRankHover }
-                        ToolTip.visible: addRankHover.hovered
-                        ToolTip.delay: Theme.toolTipDelay
                         ToolTip.text: qsTr("Add a rank")
                         onClicked: {
                             root.addingRank = true

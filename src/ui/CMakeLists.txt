@@ -44,6 +44,8 @@ qt_add_qml_module(ksv_ui
             qml/common/CreationField.qml
             qml/common/ListScrollBar.qml
             qml/common/Theme.qml
+            qml/common/ToolbarButton.qml
+            qml/common/TooltipToolButton.qml
             qml/shell/AppMenuBar.qml
             qml/shell/SettingsDialog.qml
             qml/benchmark/BenchmarkManagerDialog.qml

@@ -186,7 +186,7 @@ Item {
 
                         // Declared after the click blocker so it stays clickable on rows that
                         // cannot be selected; it opens the manager without selecting the row.
-                        ToolButton {
+                        TooltipToolButton {
                             id: entryEditButton
                             objectName: "selectorEntryEdit_" + entryRow.modelData.name
                             visible: entryRow.hasWarning
@@ -206,8 +206,6 @@ Item {
                                   : qsTr("Show %1 in the Benchmark Manager").arg(entryRow.modelData.name)
                             Accessible.name: text
                             ToolTip.text: text
-                            ToolTip.visible: hovered
-                            ToolTip.delay: Theme.toolTipDelay
                             onClicked: root.editBenchmarkRequested(String(entryRow.modelData.filename || ""),
                                                                    String(entryRow.modelData.id || ""))
                         }
