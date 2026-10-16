@@ -13,9 +13,22 @@ namespace ksv::presentation {
         const QColor kPlaytimeColor("#4DD0E1");
     }
 
-    BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, const Axis &sharedXAxis,
-                                                         QObject *parent)
-        : GraphViewModelBase(parent), m_metric(metric), m_series(new SeriesModel(this)), m_xAxis(&sharedXAxis) {
+    BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, const Axis &xAxis, QObject *parent)
+        : GraphViewModelBase(parent), m_metric(metric), m_series(new SeriesModel(this)), m_xAxis(&xAxis) {
+    }
+
+    QString BenchmarkHistoryViewModel::metricName() const {
+        if (m_metric == AverageRank) return tr("Personal-best average rank");
+        // The default window keeps its spelled-out wording.
+        if (m_windowDays == 1) return tr("Daily playtime");
+        if (m_windowDays == 3) return tr("Three-day average playtime");
+        return tr("%1-day average playtime").arg(m_windowDays);
+    }
+
+    void BenchmarkHistoryViewModel::setAveragingWindowDays(const int days) {
+        if (m_windowDays == days) return;
+        m_windowDays = days;
+        if (m_metric == RollingPlaytime) emit metricNameChanged();
     }
 
     QList<SeriesModel *> BenchmarkHistoryViewModel::series(const QList<int> &columns) const {
@@ -94,7 +107,7 @@ namespace ksv::presentation {
             for (std::size_t index = 0; index < shownTiers.size(); ++index)
                 m_series->referenceLines.append({static_cast<qreal>(index + 1), shownTiers[index].color});
         } else {
-            m_series->setName(tr("Three-day average playtime"));
+            m_series->setName(metricName());
             m_series->setColor(kPlaytimeColor);
             m_series->transform = ValueTransform::secondsToMinutes();
             m_series->yAxisOptions = {.baseline = ValueAxis::Baseline::Zero};

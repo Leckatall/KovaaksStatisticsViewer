@@ -4,32 +4,42 @@
 
 #ifndef KOVAAKSSTATSVIEWER_PLAYTIME_GRAPH_USE_CASE_H
 #define KOVAAKSSTATSVIEWER_PLAYTIME_GRAPH_USE_CASE_H
+#include <chrono>
+#include <functional>
 #include <memory>
-#include <utility>
+#include <optional>
 #include <vector>
 
+#include "contracts/i_graph_configuration_use_case.h"
 #include "contracts/i_playtime_graph_use_case.h"
+#include "data/interfaces/i_day_source.h"
 #include "data/interfaces/i_profile_service.h"
 
 namespace ksv::application {
-    class PlaytimeGraphUseCase : public IPlaytimeGraphUseCase {
+    class PlaytimeGraphUseCase final : public IPlaytimeGraphUseCase {
     public:
-        explicit PlaytimeGraphUseCase(std::shared_ptr<IProfileService> profile_service)
-            : m_profile_service(std::move(profile_service)) {}
+        PlaytimeGraphUseCase(std::shared_ptr<IProfileService> profileService,
+                             std::shared_ptr<IGraphConfigurationUseCase> configuration,
+                             std::shared_ptr<data::IDaySource> daySource);
 
-        std::vector<std::pair<long long, double>> get_rolling_playtime(const int window_days) override {
-            const auto series = m_profile_service->getRollingTimeAverage(window_days);
-            std::vector<std::pair<long long, double>> result;
-            result.reserve(series.size());
-            for (const auto &[day, avg_seconds]: series) {
-                // sys_days counts days since Unix epoch (1970-01-01); used as graph X value
-                result.emplace_back(static_cast<long long>(day.time_since_epoch().count()), avg_seconds);
-            }
-            return result;
-        }
+        [[nodiscard]] PlaytimeGraphSnapshot snapshot() override;
+        void onChanged(std::function<void()> callback) override { m_callbacks.push_back(std::move(callback)); }
 
     private:
-        std::shared_ptr<IProfileService> m_profile_service;
+        void notifyChanged() const;
+        [[nodiscard]] std::optional<std::chrono::sys_days> latestProfileDay() const;
+
+        std::shared_ptr<IProfileService> m_profileService;
+        std::shared_ptr<IGraphConfigurationUseCase> m_configuration;
+        std::shared_ptr<data::IDaySource> m_daySource;
+        std::vector<std::function<void()> > m_callbacks;
+
+        // Full-history measurements for one window; a profile change drops them, a range or style
+        // change leaves them alone.
+        std::optional<int> m_fullWindowDays;
+        PlaytimeSeries m_full;
+        bool m_anchorValid = false;
+        std::optional<std::chrono::sys_days> m_anchor;
     };
 }
 

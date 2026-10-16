@@ -48,6 +48,12 @@ namespace ksv::presentation {
             return utcDateTimeForEpochDay(static_cast<long long>(day.time_since_epoch().count())).toMSecsSinceEpoch();
         }
 
+        void widenExtent(std::optional<std::pair<qint64, qint64>> &extent, const qint64 milliseconds) {
+            if (!extent) extent = std::pair<qint64, qint64>{milliseconds, milliseconds};
+            else extent = std::pair<qint64, qint64>{std::min(extent->first, milliseconds),
+                                                    std::max(extent->second, milliseconds)};
+        }
+
         QVariantList buildSelectorEntries(const std::vector<application::BenchmarkChoice> &choices) {
             struct Row {
                 QVariantMap map;
@@ -132,11 +138,13 @@ namespace ksv::presentation {
         : QObject(parent), m_useCase(std::move(useCase)),
           // Both history metrics are one point per UTC day, so the axis never ticks in hours.
           m_historyXAxis(DateTimeAxis::Options{.wholeDays = true}),
+          m_playtimeXAxis(DateTimeAxis::Options{.wholeDays = true}),
           m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, m_historyXAxis, this)),
           m_playtimeHistory(
-              new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, m_historyXAxis, this)),
+              new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, m_playtimeXAxis, this)),
           m_progressGrid(new BenchmarkProgressGridModel(this)) {
         m_useCase->onChanged([this] { rebuild(); });
+        m_useCase->onPlaytimeChanged([this] { rebuildPlaytime(); });
         rebuild();
     }
 
@@ -233,40 +241,83 @@ namespace ksv::presentation {
         m_scenarioCount = projection ? static_cast<int>(projection->scenarios.size()) : 0;
 
         const bool rankPresent = trackable && projection && !projection->averageRankHistory.empty();
-        std::vector<qint64> unionMs;
         QList<QPointF> rankPoints;
+        m_rankExtentMs.reset();
         if (rankPresent)
             for (const auto &point: projection->averageRankHistory) {
                 const qint64 milliseconds = utcMidnightMs(point.day);
                 rankPoints.append(QPointF(static_cast<qreal>(milliseconds), point.averageRank));
-                unionMs.push_back(milliseconds);
+                widenExtent(m_rankExtentMs, milliseconds);
             }
 
-        const bool playtimePresent = projection && !projection->rollingPlaytime.empty();
-        QList<QPointF> playtimePoints;
-        if (playtimePresent)
-            for (const auto &[day, seconds]: projection->rollingPlaytime) {
-                const qint64 milliseconds = utcMidnightMs(day);
-                playtimePoints.append(QPointF(static_cast<qreal>(milliseconds), seconds));
-                unionMs.push_back(milliseconds);
-            }
-
-        if (unionMs.empty()) {
-            const QDateTime now = QDateTime::currentDateTimeUtc();
-            std::ignore = m_historyXAxis.setRange(now, now);
-        } else {
-            const auto [lo, hi] = std::minmax_element(unionMs.begin(), unionMs.end());
-            std::ignore = m_historyXAxis.setEpochMillisecondsRange(*lo, *hi);
-        }
+        const QList<QPointF> playtime = playtimePoints(snapshot);
+        applyPlaytimeAxis(snapshot);
         // A personal-best rank never lapses: hold it flat from its last change to the right-hand edge
         // of the plotted range, so the current rank reads at the edge.
         if (rankPresent && rankPoints.last().x() < m_historyXAxis.max())
             rankPoints.append(QPointF(m_historyXAxis.max(), rankPoints.last().y()));
         m_rankHistory->update(rankPoints, rankPresent, rankTiers);
-        m_playtimeHistory->update(playtimePoints, playtimePresent, {});
+        m_playtimeHistory->setAveragingWindowDays(snapshot.playtime.windowDays);
+        m_playtimeHistory->update(playtime, projection && !playtime.isEmpty(), {});
 
         m_progressGrid->reset(definition, projection);
 
         emit changed();
+    }
+
+    QList<QPointF> BenchmarkTrackingViewModel::playtimePoints(const application::BenchmarkWorkspaceSnapshot &snapshot) {
+        QList<QPointF> points;
+        m_playtimeExtentMs.reset();
+        if (!snapshot.projection) return points;
+        for (const auto &[day, seconds]: snapshot.projection->rollingPlaytime) {
+            const qint64 milliseconds = utcMidnightMs(day);
+            points.append(QPointF(static_cast<qreal>(milliseconds), seconds));
+            widenExtent(m_playtimeExtentMs, milliseconds);
+        }
+        // A narrowed range shows fewer samples, but the default extent stays that of the whole series.
+        if (const auto &full = snapshot.playtime.fullExtent) {
+            m_playtimeExtentMs.reset();
+            widenExtent(m_playtimeExtentMs, utcMidnightMs(full->first));
+            widenExtent(m_playtimeExtentMs, utcMidnightMs(full->last));
+        }
+        return points;
+    }
+
+    std::optional<BenchmarkTrackingViewModel::ExtentMs> BenchmarkTrackingViewModel::unionExtent() const {
+        std::optional<ExtentMs> combined = m_rankExtentMs;
+        if (m_playtimeExtentMs) {
+            widenExtent(combined, m_playtimeExtentMs->first);
+            widenExtent(combined, m_playtimeExtentMs->second);
+        }
+        return combined;
+    }
+
+    void BenchmarkTrackingViewModel::applyPlaytimeAxis(const application::BenchmarkWorkspaceSnapshot &snapshot) {
+        const auto combined = unionExtent();
+        if (combined) std::ignore = m_historyXAxis.setEpochMillisecondsRange(combined->first, combined->second);
+        else std::ignore = m_historyXAxis.setRange(QDateTime::currentDateTimeUtc(), QDateTime::currentDateTimeUtc());
+        m_appliedUnionMs = combined;
+
+        if (const auto &interval = snapshot.playtime.interval) {
+            const qint64 first = utcMidnightMs(interval->first);
+            std::ignore = m_playtimeXAxis.setEpochMillisecondsRange(first, std::max(first, utcMidnightMs(interval->last)));
+        } else if (combined) {
+            std::ignore = m_playtimeXAxis.setEpochMillisecondsRange(combined->first, combined->second);
+        } else {
+            std::ignore = m_playtimeXAxis.setRange(QDateTime::currentDateTimeUtc(), QDateTime::currentDateTimeUtc());
+        }
+    }
+
+    void BenchmarkTrackingViewModel::rebuildPlaytime() {
+        const application::BenchmarkWorkspaceSnapshot &snapshot = m_useCase->snapshot();
+        const QList<QPointF> playtime = playtimePoints(snapshot);
+        if (unionExtent() != m_appliedUnionMs) {
+            // The rank axis, and the rank line held flat to its edge, depend on the shared extent.
+            rebuild();
+            return;
+        }
+        applyPlaytimeAxis(snapshot);
+        m_playtimeHistory->setAveragingWindowDays(snapshot.playtime.windowDays);
+        m_playtimeHistory->update(playtime, snapshot.projection && !playtime.isEmpty(), {});
     }
 }

@@ -229,7 +229,10 @@ namespace ksv::domain {
         const sys_days last_day = daily_totals.back().first;
         const auto window = days{window_days};
 
-        result.reserve(daily_totals.size() * static_cast<std::size_t>(window_days));
+        // A sample needs a day with runs inside its window, so output is bounded by both the calendar
+        // span and daily_totals * window; the product alone grows with the window, not the data.
+        result.reserve(std::min(static_cast<std::size_t>((last_day - first_day).count()) + 1,
+                                daily_totals.size() * static_cast<std::size_t>(window_days)));
         std::size_t lo = 0;
         std::size_t next = 0;
         double window_sum = 0.0;

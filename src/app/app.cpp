@@ -99,7 +99,8 @@ namespace ksv::application {
             m_benchmarksService, m_benchmarkResolutionUseCase, std::make_shared<qt_data::PlaylistReader>(),
             [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
         m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
-            m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService, m_settingsService);
+            m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService, m_graphConfigurationUseCase,
+            m_daySource, m_settingsService);
 
         auto averageUseCase = std::make_shared<AverageLineUseCase>(m_profileService);
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController, m_graphConfigurationUseCase, averageUseCase);
@@ -110,10 +111,9 @@ namespace ksv::application {
         // connection above existed, so that first currentRunChanged was never observed here.
         m_graphVm->fetchData();
 
-        m_playtimeUseCase = std::make_shared<PlaytimeGraphUseCase>(m_profileService);
+        m_playtimeUseCase = std::make_shared<PlaytimeGraphUseCase>(
+            m_profileService, m_graphConfigurationUseCase, m_daySource);
         m_playtimeVm = new presentation::PlaytimeGraphViewModel(m_playtimeUseCase, this);
-        // Re-pull rolling average when profile changes (new run, store reload, or dir change)
-        m_profileService->onProfileChanged([this] { m_playtimeVm->refresh(); });
 
         m_completionHistoryUseCase = std::make_shared<CompletionHistoryUseCase>(
             m_sessionController, m_profileService);

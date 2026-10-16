@@ -8,6 +8,8 @@
 #include <QTimeZone>
 #include <QSignalSpy>
 
+#include <functional>
+
 #include "playtime_graph_vm.h"
 
 using namespace ksv::presentation;
@@ -18,14 +20,25 @@ namespace {
         return QDateTime(QDate(1970, 1, 1).addDays(epochDay), QTime(0, 0), QTimeZone::utc()).toMSecsSinceEpoch();
     }
 
+    // Samples are given as epoch days, the unit the assertions below use.
     class FakePlaytimeUseCase : public IPlaytimeGraphUseCase {
     public:
         std::vector<std::pair<long long, double>> series;
-        int last_window_days = 0;
+        PlaytimeView view;
+        std::vector<std::function<void()>> callbacks;
 
-        std::vector<std::pair<long long, double>> get_rolling_playtime(const int window_days) override {
-            last_window_days = window_days;
-            return series;
+        [[nodiscard]] PlaytimeGraphSnapshot snapshot() override {
+            PlaytimeGraphSnapshot result;
+            result.view = view;
+            for (const auto &[epochDay, seconds]: series)
+                result.samples.emplace_back(std::chrono::sys_days{std::chrono::days{epochDay}}, seconds);
+            return result;
+        }
+
+        void onChanged(std::function<void()> callback) override { callbacks.push_back(std::move(callback)); }
+
+        void publish() const {
+            for (const auto &callback: callbacks) callback();
         }
     };
 
@@ -35,8 +48,87 @@ namespace {
         PlaytimeGraphViewModel view_model{fake};
     };
 
-    TEST_F(PlaytimeGraphViewModelTest, RequestsThreeDayWindow) {
-        EXPECT_EQ(fake->last_window_days, 3);
+    TEST_F(PlaytimeGraphViewModelTest, DefaultWindowIsThreeDays) {
+        EXPECT_EQ(view_model.averagingWindowDays(), 3);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, UseCaseChangesRefreshTheGraph) {
+        fake->series = {{19500, 1800.0}};
+        const QSignalSpy dataSpy(&view_model, &GraphViewModelBase::dataUpdated);
+
+        fake->publish();
+
+        EXPECT_GT(dataSpy.count(), 0);
+        EXPECT_TRUE(view_model.hasData());
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, TitleAndSeriesNameStateTheDefaultWindow) {
+        EXPECT_EQ(view_model.title(), "Daily Playtime (3-day rolling average)");
+        EXPECT_EQ(view_model.series({PlaytimeGraphViewModel::Playtime}).front()->name(), "Playtime (3-day avg)");
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, TitleAndSeriesNameFollowAnyOtherWindowAndNeverSayThree) {
+        fake->view.windowDays = 14;
+        const QSignalSpy windowSpy(&view_model, &PlaytimeGraphViewModel::windowChanged);
+
+        fake->publish();
+
+        EXPECT_EQ(windowSpy.count(), 1);
+        EXPECT_EQ(view_model.averagingWindowDays(), 14);
+        EXPECT_EQ(view_model.title(), "Daily Playtime (14-day rolling average)");
+        EXPECT_EQ(view_model.series({PlaytimeGraphViewModel::Playtime}).front()->name(), "Playtime (14-day avg)");
+        EXPECT_FALSE(view_model.title().contains("3-day"));
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, OneDayWindowReadsAsDailyTotals) {
+        fake->view.windowDays = 1;
+
+        fake->publish();
+
+        EXPECT_EQ(view_model.title(), "Daily Playtime (daily totals)");
+        EXPECT_EQ(view_model.series({PlaytimeGraphViewModel::Playtime}).front()->name(), "Playtime (daily total)");
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, UnchangedWindowDoesNotAnnounceAWindowChange) {
+        const QSignalSpy windowSpy(&view_model, &PlaytimeGraphViewModel::windowChanged);
+        fake->series = {{19500, 1800.0}};
+
+        fake->publish();
+
+        EXPECT_EQ(windowSpy.count(), 0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, ADateRangeSpansItsWholeIntervalIncludingBlankDays) {
+        fake->series = {{19503, 600.0}};
+        fake->view.interval = DayInterval{std::chrono::sys_days{std::chrono::days{19500}},
+                                          std::chrono::sys_days{std::chrono::days{19506}}};
+
+        fake->publish();
+
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), epochDayMs(19500));
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), epochDayMs(19506));
+        const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
+        ASSERT_EQ(series.front()->points.size(), 1);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, AnEmptyIntervalKeepsItsAxisButHasNoData) {
+        fake->view.interval = DayInterval{std::chrono::sys_days{std::chrono::days{19500}},
+                                          std::chrono::sys_days{std::chrono::days{19506}}};
+
+        fake->publish();
+
+        EXPECT_FALSE(view_model.hasData());
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), epochDayMs(19500));
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), epochDayMs(19506));
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, WithoutAnIntervalTheAxisIsTheSamplesExtentAsBefore) {
+        fake->series = {{19500, 600.0}, {19504, 600.0}};
+
+        fake->publish();
+
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), epochDayMs(19500));
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), epochDayMs(19504));
     }
 
     TEST_F(PlaytimeGraphViewModelTest, StartsEmpty) {
@@ -123,7 +215,7 @@ namespace {
     TEST_F(PlaytimeGraphViewModelTest, PlaytimeColumnHasNameAndValidColor) {
         const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
         ASSERT_EQ(series.size(), 1);
-        EXPECT_EQ(series.front()->name(), "Playtime (3-day avg)");
+        EXPECT_FALSE(series.front()->name().isEmpty());
         EXPECT_TRUE(series.front()->color().isValid());
     }
 

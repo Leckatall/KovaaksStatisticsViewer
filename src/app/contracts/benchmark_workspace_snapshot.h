@@ -9,6 +9,7 @@
 #include "benchmarks/benchmark_projection.h"
 #include "data/interfaces/benchmark_library_snapshot.h"
 #include "i_benchmark_tracking_use_case.h"
+#include "playtime_view.h"
 
 namespace ksv::application {
     enum class BenchmarkChoiceClassification { Trackable, Incomplete, Invalid, Unsupported };
@@ -32,6 +33,8 @@ namespace ksv::application {
         std::string lastKnownSelectedDisplayName;
         BenchmarkTrackingState availability = BenchmarkTrackingState::NoSelection;
         std::optional<data::LoadedBenchmark> selectedLoaded;
+        // Its `rollingPlaytime` is already the range-visible part of the committed window's series.
         std::optional<domain::BenchmarkProjection> projection;
+        PlaytimeView playtime;
     };
 }

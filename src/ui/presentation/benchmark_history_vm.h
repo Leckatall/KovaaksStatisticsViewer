@@ -15,8 +15,9 @@
 
 namespace ksv::presentation {
     // One drawn metric of the benchmark tracking workspace - either personal-best average rank or
-    // three-day average playtime. BenchmarkTrackingViewModel owns one instance per metric and drives
-    // both with the same UTC-day X axis while each keeps its own series name, transform, and Y axis.
+    // averaged playtime. BenchmarkTrackingViewModel owns one instance per metric and hands each a
+    // UTC-day X axis (the same extent unless the playtime range narrows it) while each keeps its own
+    // series name, transform, and Y axis.
     // series() is empty whenever the metric is suppressed or has no points, so an incomplete
     // definition or an empty history never renders a line that resembles data.
     // One tier of the rank axis, bottom (lowest) first; tier k (1-based) sits at y = k.
@@ -29,7 +30,8 @@ namespace ksv::presentation {
         Q_OBJECT
         Q_PROPERTY(bool hasData READ hasData NOTIFY dataUpdated)
         Q_PROPERTY(QString emptyStateText READ emptyStateText CONSTANT)
-        Q_PROPERTY(QString metricName READ metricName CONSTANT)
+        // Names the playtime metric's effective averaging window; the rank metric's name never changes.
+        Q_PROPERTY(QString metricName READ metricName NOTIFY metricNameChanged)
 
     public:
         enum Metric { AverageRank, RollingPlaytime };
@@ -39,9 +41,8 @@ namespace ksv::presentation {
         enum Column { Date = 0, Value = 1 };
         Q_ENUM(Column)
 
-        // `sharedXAxis` is owned by the parent BenchmarkTrackingViewModel and must outlive this
-        // object; both history metrics observe the same instance instead of copying it.
-        BenchmarkHistoryViewModel(Metric metric, const Axis &sharedXAxis, QObject *parent = nullptr);
+        // `xAxis` is owned by the parent BenchmarkTrackingViewModel and must outlive this object.
+        BenchmarkHistoryViewModel(Metric metric, const Axis &xAxis, QObject *parent = nullptr);
 
         [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override;
         [[nodiscard]] const Axis &xAxis() const override { return *m_xAxis; }
@@ -49,10 +50,11 @@ namespace ksv::presentation {
 
         [[nodiscard]] bool hasData() const { return m_hasData; }
         [[nodiscard]] QString emptyStateText() const { return tr("No history recorded yet."); }
-        [[nodiscard]] QString metricName() const {
-            return m_metric == AverageRank ? tr("Personal-best average rank")
-                                           : tr("Three-day average playtime");
-        }
+        [[nodiscard]] QString metricName() const;
+
+        // Only meaningful for RollingPlaytime; takes effect on the next update().
+        void setAveragingWindowDays(int days);
+        [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
         // Called by BenchmarkTrackingViewModel inside one atomic rebuild, after it has updated the
         // shared X axis. `rawPoints` carry UTC-midnight epoch-ms X and the metric's raw Y (rank
@@ -63,10 +65,14 @@ namespace ksv::presentation {
         // has no colour of its own (neutral), so it is never mistaken for a tier line.
         void update(const QList<QPointF> &rawPoints, bool present, const std::vector<RankTier> &rankTiers);
 
+    signals:
+        void metricNameChanged();
+
     private:
         [[nodiscard]] static ValueAxis rankYAxis(const std::vector<RankTier> &tiers);
 
         Metric m_metric;
+        int m_windowDays = 3;
         SeriesModel *m_series;
         const Axis *m_xAxis;
         bool m_hasData = false;

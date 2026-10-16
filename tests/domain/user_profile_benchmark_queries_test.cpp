@@ -99,3 +99,48 @@ TEST(UserProfileBenchmarkQueries, RollingAverageForNoScenariosIsEmpty) {
 
     EXPECT_TRUE(profile.getRollingTimeAverage(std::vector<ScenarioId>{}, 3).empty());
 }
+
+namespace {
+    using Series = std::vector<std::pair<std::chrono::sys_days, double> >;
+
+    std::chrono::sys_days epochDay(const long long day) { return std::chrono::sys_days{std::chrono::days{day}}; }
+}
+
+TEST(UserProfileRollingWindow, OneDayWindowIsTheDailyTotalsOfDaysWithRuns) {
+    UserProfile profile;
+    profile.addRun(makeRun("a", 100 * kDay, 0.0F, 0, 0, 60.0F));
+    profile.addRun(makeRun("b", 100 * kDay + 5'000, 0.0F, 0, 0, 120.0F));
+    profile.addRun(makeRun("a", 101 * kDay, 0.0F, 0, 0, 30.0F));
+    profile.addRun(makeRun("b", 104 * kDay, 0.0F, 0, 0, 90.0F));
+
+    EXPECT_EQ(profile.getRollingTimeAverage(1),
+              (Series{{epochDay(100), 180.0}, {epochDay(101), 30.0}, {epochDay(104), 90.0}}));
+}
+
+TEST(UserProfileRollingWindow, WindowLongerThanTheHistoryKeepsTheShorterInitialDenominator) {
+    UserProfile profile;
+    profile.addRun(makeRun("a", 100 * kDay, 0.0F, 0, 0, 60.0F));
+    profile.addRun(makeRun("a", 102 * kDay, 0.0F, 0, 0, 60.0F));
+
+    EXPECT_EQ(profile.getRollingTimeAverage(3650),
+              (Series{{epochDay(100), 60.0}, {epochDay(101), 30.0}, {epochDay(102), 40.0}}));
+}
+
+TEST(UserProfileRollingWindow, DaysWhoseWindowHoldsNoRunsAreOmittedForAnyWindow) {
+    UserProfile profile;
+    profile.addRun(makeRun("a", 100 * kDay, 0.0F, 0, 0, 60.0F));
+    profile.addRun(makeRun("a", 105 * kDay, 0.0F, 0, 0, 60.0F));
+
+    EXPECT_EQ(profile.getRollingTimeAverage(2),
+              (Series{{epochDay(100), 60.0}, {epochDay(101), 30.0}, {epochDay(105), 30.0}}));
+}
+
+TEST(UserProfileRollingWindow, OutputStorageIsBoundedByTheHistoryNotTheWindow) {
+    UserProfile profile;
+    profile.addRun(makeRun("a", 100 * kDay, 0.0F, 0, 0, 60.0F));
+    profile.addRun(makeRun("a", 103 * kDay, 0.0F, 0, 0, 60.0F));
+
+    const auto series = profile.getRollingTimeAverage(3650);
+
+    EXPECT_LE(series.capacity(), 4U);
+}

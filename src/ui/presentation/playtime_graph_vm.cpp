@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QTimeZone>
 
+#include <algorithm>
 #include <tuple>
 #include <utility>
 
@@ -19,20 +20,31 @@ namespace ksv::presentation {
                                                    QObject *parent)
         : GraphViewModelBase(parent), m_useCase(std::move(useCase)),
           m_xAxis(DateTimeAxis::Options{.wholeDays = true}), m_series(new SeriesModel(this)) {
+        m_useCase->onChanged([this] { refresh(); });
         refresh();
     }
 
+    QString PlaytimeGraphViewModel::title() const {
+        return m_windowDays == 1 ? tr("Daily Playtime (daily totals)")
+                                 : tr("Daily Playtime (%1-day rolling average)").arg(m_windowDays);
+    }
+
     void PlaytimeGraphViewModel::refresh() {
-        const auto rollingPlaytime = m_useCase->get_rolling_playtime(kWindowDays);
+        const auto snapshot = m_useCase->snapshot();
 
         QList<QPointF> rawSecondsPoints;
-        rawSecondsPoints.reserve(int(rollingPlaytime.size()));
-        for (const auto &[epoch_day, avg_seconds]: rollingPlaytime) {
-            const auto epochMs = static_cast<qreal>(utcDateTimeForEpochDay(epoch_day).toMSecsSinceEpoch());
+        rawSecondsPoints.reserve(int(snapshot.samples.size()));
+        for (const auto &[day, avg_seconds]: snapshot.samples) {
+            const auto epochMs = static_cast<qreal>(utcDateTimeForEpochDay(day.time_since_epoch().count()).toMSecsSinceEpoch());
             rawSecondsPoints.append(QPointF(epochMs, avg_seconds));
         }
 
-        if (rawSecondsPoints.isEmpty()) {
+        if (snapshot.view.interval) {
+            const auto &interval = *snapshot.view.interval;
+            const auto firstMs = utcDateTimeForEpochDay(interval.first.time_since_epoch().count()).toMSecsSinceEpoch();
+            const auto lastMs = utcDateTimeForEpochDay(interval.last.time_since_epoch().count()).toMSecsSinceEpoch();
+            std::ignore = m_xAxis.setEpochMillisecondsRange(firstMs, std::max(firstMs, lastMs));
+        } else if (rawSecondsPoints.isEmpty()) {
             const QDateTime now = QDateTime::currentDateTimeUtc();
             std::ignore = m_xAxis.setRange(now, now);
         } else {
@@ -41,13 +53,17 @@ namespace ksv::presentation {
             std::ignore = m_xAxis.setRange(lo, hi);
         }
 
+        const bool windowMoved = m_windowDays != snapshot.view.windowDays;
+        m_windowDays = snapshot.view.windowDays;
+
         m_series->setId(QString::number(Playtime));
-        m_series->setName("Playtime (3-day avg)");
+        m_series->setName(m_windowDays == 1 ? tr("Playtime (daily total)") : tr("Playtime (%1-day avg)").arg(m_windowDays));
         m_series->setColor(kPlaytimeColor);
         m_series->setColumn(Playtime);
         m_series->transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
         m_series->yAxisOptions = {.baseline = ValueAxis::Baseline::Zero};
         m_series->setData(rawSecondsPoints);
+        if (windowMoved) emit windowChanged();
         emit dataUpdated();
         emit boundsChanged();
     }

@@ -13,6 +13,7 @@ Item {
         id: fakePlaytimeVm
 
         property bool hasData: false
+        property string title: "Daily Playtime (3-day rolling average)"
     }
 
     Component {
@@ -31,6 +32,18 @@ Item {
 
         function init() {
             fakePlaytimeVm.hasData = false
+            fakePlaytimeVm.title = "Daily Playtime (3-day rolling average)"
+        }
+
+        function test_titleFollowsTheViewModelsEffectiveWindow() {
+            const panel = createTemporaryObject(panelComponent, root)
+            const title = findChild(panel, "playtimeTitleLabel")
+            compare(title.text, "Daily Playtime (3-day rolling average)")
+
+            fakePlaytimeVm.title = "Daily Playtime (daily totals)"
+            compare(title.text, "Daily Playtime (daily totals)")
+            fakePlaytimeVm.title = "Daily Playtime (7-day rolling average)"
+            compare(title.text, "Daily Playtime (7-day rolling average)")
         }
 
         // no playtime shows a message, not an empty grid with axes.

@@ -1,11 +1,12 @@
 // BenchmarkHistoryViewModel is a GraphViewModelBase adapter. BenchmarkTrackingViewModel owns two
-// of them - personal-best average rank and three-day average playtime - and feeds both the same
+// of them - personal-best average rank and averaged playtime - and by default feeds both the same
 // UTC-day X range while keeping metric-specific series names, transforms, and Y axes. These tests
 // reach the child models through the tracking VM's rankHistory()/playtimeHistory() accessors.
 
 #include <gtest/gtest.h>
 
 #include <QDateTime>
+#include <QSignalSpy>
 #include <QTimeZone>
 #include <memory>
 
@@ -48,11 +49,11 @@ TEST(BenchmarkHistoryViewModel, RankAndPlaytimeAreSeparateChildObjects) {
     EXPECT_NE(static_cast<QObject *>(vm.rankHistory()), static_cast<QObject *>(vm.playtimeHistory()));
 }
 
-TEST(BenchmarkHistoryViewModel, BothHistoriesShareTheSameXAxisAddress) {
+TEST(BenchmarkHistoryViewModel, EachHistoryOwnsItsXAxisSoOnePlaytimeRangeNeverMovesTheOther) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
-    EXPECT_EQ(&vm.rankHistory()->xAxis(), &vm.playtimeHistory()->xAxis());
+    EXPECT_NE(&vm.rankHistory()->xAxis(), &vm.playtimeHistory()->xAxis());
 }
 
 TEST(BenchmarkHistoryViewModel, CalendarDaysConvertToUtcMidnightEpochMs) {
@@ -353,4 +354,70 @@ TEST(BenchmarkHistoryViewModel, CanvasKeepsAColouredSeriesOwnColour) {
     const auto series = vm.playtimeHistory()->series({kValueColumn});
     ASSERT_EQ(series.size(), 1);
     EXPECT_EQ(canvas.colorFor(*series.front()), series.front()->color());
+}
+
+TEST(BenchmarkHistoryViewModel, PlaytimeNamesTheEffectiveWindowAndNeverCallsAnotherWindowThreeDay) {
+    const std::pair<int, QString> expected[] = {
+        {1, "Daily playtime"}, {3, "Three-day average playtime"}, {7, "7-day average playtime"},
+        {30, "30-day average playtime"}};
+    for (const auto &[window, name]: expected) {
+        auto snapshot = makeTrackableSnapshot();
+        snapshot.playtime.windowDays = window;
+        auto fake = fakeWith(snapshot);
+        BenchmarkTrackingViewModel vm{fake};
+
+        EXPECT_EQ(vm.playtimeHistory()->metricName(), name);
+        EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->name(), name);
+        EXPECT_EQ(vm.rankHistory()->metricName(), "Personal-best average rank");
+    }
+}
+
+TEST(BenchmarkHistoryViewModel, AWindowChangeRelabelsPlaytimeWithoutRebuildingTheWholeWorkspace) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    QSignalSpy changed(&vm, &BenchmarkTrackingViewModel::changed);
+    QSignalSpy renamed(vm.playtimeHistory(), &BenchmarkHistoryViewModel::metricNameChanged);
+
+    fake->snap.playtime.windowDays = 10;
+    fake->snap.projection->rollingPlaytime = {{ymd(2024, 3, 4), 1000.0}, {ymd(2024, 3, 6), 500.0}};
+    fake->publishPlaytime();
+
+    EXPECT_EQ(changed.count(), 0);
+    EXPECT_EQ(renamed.count(), 1);
+    EXPECT_EQ(vm.playtimeHistory()->metricName(), "10-day average playtime");
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->points.front().y(), 1000.0);
+}
+
+TEST(BenchmarkHistoryViewModel, ADatePlaytimeRangeSpansItsIntervalWhileTheRankAxisKeepsTheDefaultExtent) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
+    snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 4), 600.0}, {ymd(2024, 3, 12), 1200.0}};
+    snapshot.playtime.fullExtent = PlaytimeDayExtent{ymd(2024, 3, 4), ymd(2024, 3, 12)};
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+    const auto rankMin = vm.rankHistory()->xAxis().min();
+    const auto rankMax = vm.rankHistory()->xAxis().max();
+
+    fake->snap.playtime.interval = DayInterval{ymd(2024, 3, 10), ymd(2024, 3, 12)};
+    fake->snap.projection->rollingPlaytime = {{ymd(2024, 3, 12), 1200.0}};
+    fake->publishPlaytime();
+
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 10))));
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 12))));
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().min(), rankMin);
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().max(), rankMax);
+    EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->points.size(), 1);
+}
+
+TEST(BenchmarkHistoryViewModel, AnEmptyPlaytimeIntervalKeepsItsAxisAndDrawsNoLine) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.playtime.fullExtent = PlaytimeDayExtent{ymd(2024, 3, 4), ymd(2024, 3, 6)};
+    snapshot.playtime.interval = DayInterval{ymd(2024, 4, 1), ymd(2024, 4, 7)};
+    snapshot.projection->rollingPlaytime.clear();
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), static_cast<double>(utcMidnightMs(ymd(2024, 4, 1))));
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), static_cast<double>(utcMidnightMs(ymd(2024, 4, 7))));
+    EXPECT_TRUE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }

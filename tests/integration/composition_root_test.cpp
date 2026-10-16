@@ -108,7 +108,7 @@ namespace {
     }
 
     TEST_F(CompositionRootTest, ProfileChangeCascadesToPlaytimeViewModelRefresh) {
-        // The App wires m_profileService->onProfileChanged([]{ m_playtimeVm->refresh(); });
+        // PlaytimeGraphUseCase subscribes to the profile and the playtime VM to the use case;
         // refresh() emits dataUpdated, so a profile mutation must reach the playtime VM.
         QSignalSpy spy(app->playtimeVm(), &presentation::GraphViewModelBase::dataUpdated);
         ASSERT_TRUE(spy.isValid());
@@ -116,6 +116,30 @@ namespace {
         app->profileService()->generateProfileFromDirectory();
 
         EXPECT_GE(spy.count(), 1);
+    }
+
+    TEST_F(CompositionRootTest, ACommittedDailyPlaytimeWindowRelabelsTheDashboardGraph) {
+        application::GraphQuickPatch patch;
+        patch.averagingWindowDays = 9;
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(application::GraphKey::DailyPlaytime, patch).accepted());
+
+        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), 9);
+        EXPECT_EQ(app->playtimeVm()->title(), "Daily Playtime (9-day rolling average)");
+
+        patch.averagingWindowDays = application::kDefaultAveragingWindowDays;
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(application::GraphKey::DailyPlaytime, patch).accepted());
+        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), 3);
+    }
+
+    TEST_F(CompositionRootTest, ABenchmarkPlaytimeWindowChangeLeavesTheOtherGraphsWindowAlone) {
+        application::GraphQuickPatch patch;
+        patch.averagingWindowDays = 12;
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(application::GraphKey::BenchmarkPlaytime, patch).accepted());
+
+        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), 3);
+        const auto committed = app->graphConfigurationUseCase()->current();
+        EXPECT_EQ(committed.configuration->preferences(application::GraphKey::BenchmarkPlaytime).averagingWindowDays, 12);
+        EXPECT_EQ(committed.configuration->preferences(application::GraphKey::DailyPlaytime).averagingWindowDays, 3);
     }
 
     TEST_F(CompositionRootTest, TheInjectedDaySourceIsTheOneTheAppExposesAndAdvances) {

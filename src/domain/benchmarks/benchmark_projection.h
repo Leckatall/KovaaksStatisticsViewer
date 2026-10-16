@@ -60,6 +60,8 @@ namespace ksv::domain {
         std::optional<double> averageRank;
         std::vector<AverageRankPoint> averageRankHistory;
         double totalPlaytimeSeconds = 0.0;
+        // Display series supplied by the caller and never read by the evaluation, so a different
+        // window or range cannot change a summary.
         std::vector<std::pair<std::chrono::sys_days, double> > rollingPlaytime;
     };
 }

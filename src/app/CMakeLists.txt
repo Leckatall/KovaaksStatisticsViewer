@@ -10,6 +10,7 @@ add_library(ksv_app STATIC
         usecases/average_line_use_case.h
         usecases/average_line_use_case.cpp
         usecases/playtime_graph_use_case.h
+        usecases/playtime_graph_use_case.cpp
         usecases/completion_history_use_case.h
         usecases/scenario_browser_use_case.h
         profile_build_worker.cpp

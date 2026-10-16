@@ -55,9 +55,12 @@ namespace ksv::application {
         std::shared_ptr<data::IBenchmarksService> benchmarks,
         std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
         std::shared_ptr<IProfileService> profileService,
+        std::shared_ptr<IGraphConfigurationUseCase> configuration,
+        std::shared_ptr<data::IDaySource> daySource,
         std::shared_ptr<ISettingsService> settings)
         : m_benchmarks(std::move(benchmarks)), m_resolution(std::move(resolution)),
-          m_profileService(std::move(profileService)), m_settings(std::move(settings)) {
+          m_profileService(std::move(profileService)), m_configuration(std::move(configuration)),
+          m_daySource(std::move(daySource)), m_settings(std::move(settings)) {
         const auto reevaluate = [this] {
             m_cache.clear();
             refresh();
@@ -66,6 +69,15 @@ namespace ksv::application {
         m_benchmarks->onChanged(reevaluate);
         m_resolution->onChanged(reevaluate);
         m_profileService->onProfileChanged(reevaluate);
+        m_configuration->onChanged([this](const GraphConfigurationChange &change) {
+            if (std::ranges::find(change.graphs, GraphKey::BenchmarkPlaytime) != change.graphs.end())
+                refreshPlaytimeOnly();
+        });
+        m_daySource->onDayChanged([this](std::chrono::sys_days) {
+            const auto committed = m_configuration->current();
+            if (followsToday(effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkPlaytime))))
+                refreshPlaytimeOnly();
+        });
         refresh();
     }
 
@@ -151,20 +163,21 @@ namespace ksv::application {
 
         const data::LoadedBenchmark *loaded = library ? findLoaded(*library, *m_selected) : nullptr;
 
-        if (const auto cached = m_cache.find(*m_selected); cached != m_cache.end()) {
-            // Any library or profile change drops the whole cache, so a surviving entry is always
-            // current for the definition it was built from -- presence is the only check a hit needs.
-            m_projection = cached->second;
-            m_state = BenchmarkTrackingState::Ready;
-        } else if (!loaded) {
-            m_state = BenchmarkTrackingState::Unavailable;
-            m_projection = {};
-        } else {
-            m_projection = evaluate(*loaded);
-            m_state = BenchmarkTrackingState::Ready;
+        auto cached = m_cache.find(*m_selected);
+        if (cached == m_cache.end() && loaded) {
             // Only Ready results are cached, so a benchmark that reappears is evaluated rather than
             // served a remembered absence.
-            m_cache[*m_selected] = m_projection;
+            cached = m_cache.emplace(*m_selected, evaluate(*loaded)).first;
+        }
+        // Any library or profile change drops the whole cache, so a surviving entry is always
+        // current for the definition it was built from -- presence is the only check a hit needs.
+        if (cached != m_cache.end()) {
+            m_projection = cached->second.projection;
+            applyPlaytimeView(cached->second);
+            m_state = BenchmarkTrackingState::Ready;
+        } else {
+            m_state = BenchmarkTrackingState::Unavailable;
+            m_projection = {};
         }
 
         m_snapshot.availability = m_state;
@@ -174,7 +187,35 @@ namespace ksv::application {
         }
     }
 
-    domain::BenchmarkProjection BenchmarkTrackingUseCase::evaluate(const data::LoadedBenchmark &loaded) const {
+    void BenchmarkTrackingUseCase::applyPlaytimeView(Evaluation &evaluation) {
+        const auto committed = m_configuration->current();
+        const auto &preferences = committed.configuration->preferences(GraphKey::BenchmarkPlaytime);
+        const int window = effectiveAveragingWindow(preferences);
+        if (evaluation.fullPlaytimeWindowDays != window) {
+            evaluation.fullPlaytime = m_profileService->getRollingTimeAverage(evaluation.scenarios, window);
+            evaluation.fullPlaytimeWindowDays = window;
+        }
+        const auto projection = resolveRange(effectiveRange(preferences), m_daySource->today(),
+                                             evaluation.latestRunDay);
+        m_projection.rollingPlaytime = visiblePlaytime(evaluation.fullPlaytime, projection);
+        m_snapshot.playtime = describePlaytimeView(window, projection, evaluation.fullPlaytime);
+    }
+
+    void BenchmarkTrackingUseCase::refreshPlaytimeOnly() {
+        if (m_state != BenchmarkTrackingState::Ready || !m_selected) return;
+        const auto cached = m_cache.find(*m_selected);
+        if (cached == m_cache.end()) return;
+        applyPlaytimeView(cached->second);
+        m_snapshot.projection->rollingPlaytime = m_projection.rollingPlaytime;
+        notifyPlaytimeChanged();
+    }
+
+    void BenchmarkTrackingUseCase::notifyPlaytimeChanged() const {
+        for (const auto &callback: m_playtimeCallbacks) callback();
+    }
+
+    BenchmarkTrackingUseCase::Evaluation BenchmarkTrackingUseCase::evaluate(
+        const data::LoadedBenchmark &loaded) const {
         const auto resolutionSnapshot = m_resolution->snapshot();
         const auto entry = resolutionSnapshot.resolutions.find(loaded.benchmark.id);
         const std::vector<domain::ScenarioResolution> resolutions =
@@ -188,8 +229,17 @@ namespace ksv::application {
             for (const auto &hash: domain::mappedScenarioHashes(resolution.hash, resolution.additionalHashes))
                 if (hashes.insert(hash).second) scenarios.push_back({{}, hash});
         }
-        return domain::evaluateBenchmark(loaded.benchmark, loaded.completeness, resolutions,
-                                         m_profileService->getRunFacts(scenarios),
-                                         m_profileService->getRollingTimeAverage(scenarios, kRollingWindowDays));
+        const auto facts = m_profileService->getRunFacts(scenarios);
+        Evaluation evaluation;
+        for (const auto &fact: facts) {
+            // The playtime accounting skips runs stamped at or before the epoch, so the anchor does too.
+            if (fact.run_id.start_time <= 0) continue;
+            const auto day = fact.run_id.startDay();
+            if (!evaluation.latestRunDay || day > *evaluation.latestRunDay) evaluation.latestRunDay = day;
+        }
+        evaluation.projection = domain::evaluateBenchmark(loaded.benchmark, loaded.completeness, resolutions,
+                                                          facts, {});
+        evaluation.scenarios = std::move(scenarios);
+        return evaluation;
     }
 }

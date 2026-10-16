@@ -33,9 +33,14 @@ namespace ksv::tests_support {
         std::vector<domain::Run> recent_runs;
         std::vector<std::pair<std::chrono::sys_days, double>> rolling_time_average;
         mutable int rolling_time_average_window_days = 0;
+        mutable int rolling_time_average_request_count = 0;
+        // When set, answers by window instead of returning rolling_time_average.
+        std::function<std::vector<std::pair<std::chrono::sys_days, double>>(int)> rolling_by_window;
         std::vector<domain::RunFact> run_facts;
         std::vector<std::pair<std::chrono::sys_days, double>> filtered_rolling_time_average;
         mutable int filtered_rolling_window_days = 0;
+        mutable int filtered_rolling_request_count = 0;
+        std::function<std::vector<std::pair<std::chrono::sys_days, double>>(int)> filtered_rolling_by_window;
         mutable std::vector<domain::ScenarioId> requested_fact_scenarios;
         mutable std::vector<domain::ScenarioId> requested_rolling_scenarios;
         mutable int fact_request_count = 0;
@@ -126,7 +131,8 @@ namespace ksv::tests_support {
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>>
         getRollingTimeAverage(const int window_days) const override {
             rolling_time_average_window_days = window_days;
-            return rolling_time_average;
+            ++rolling_time_average_request_count;
+            return rolling_by_window ? rolling_by_window(window_days) : rolling_time_average;
         }
 
         [[nodiscard]] std::vector<domain::RunFact> getRunFacts(
@@ -141,7 +147,9 @@ namespace ksv::tests_support {
                               const int window_days) const override {
             requested_rolling_scenarios = scenarios;
             filtered_rolling_window_days = window_days;
-            return filtered_rolling_time_average;
+            ++filtered_rolling_request_count;
+            return filtered_rolling_by_window ? filtered_rolling_by_window(window_days)
+                                              : filtered_rolling_time_average;
         }
 
         [[nodiscard]] bool isProfileLoaded() const override { return profile_loaded; }

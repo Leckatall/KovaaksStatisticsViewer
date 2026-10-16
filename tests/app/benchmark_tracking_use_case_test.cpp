@@ -4,8 +4,11 @@
 
 #include "benchmark_builders.h"
 #include "fake_benchmark_store.h"
+#include "fake_day_source.h"
+#include "fake_graph_configuration_use_case.h"
 #include "fake_profile_service.h"
 #include "fake_settings_service.h"
+#include "user_profile.h"
 #include "data/benchmarks_service.h"
 #include "usecases/benchmark_resolution_use_case.h"
 #include "usecases/benchmark_tracking_use_case.h"
@@ -40,9 +43,21 @@ namespace {
     struct Fixture {
         std::shared_ptr<FakeBenchmarkStore> repo = std::make_shared<FakeBenchmarkStore>();
         std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
+        std::shared_ptr<FakeGraphConfigurationUseCase> configuration =
+            std::make_shared<FakeGraphConfigurationUseCase>();
+        std::shared_ptr<FakeDaySource> days = std::make_shared<FakeDaySource>();
         std::shared_ptr<BenchmarksService> benchmarks;
         std::shared_ptr<BenchmarkResolutionUseCase> resolution;
         std::unique_ptr<BenchmarkTrackingUseCase> tracking;
+
+        GraphPreferences &playtimePreferences() {
+            return configuration->configuration.preferences(GraphKey::BenchmarkPlaytime);
+        }
+
+        void commitPlaytime(const GraphKey key = GraphKey::BenchmarkPlaytime) {
+            ++configuration->revision;
+            configuration->publish({.graphs = {key}});
+        }
 
         void known(const std::string &name, const std::string &hash) {
             profile->scenarios.push_back({name, hash});
@@ -51,7 +66,7 @@ namespace {
         void build() {
             benchmarks = std::make_shared<BenchmarksService>(repo);
             resolution = std::make_shared<BenchmarkResolutionUseCase>(benchmarks, profile);
-            tracking = std::make_unique<BenchmarkTrackingUseCase>(benchmarks, resolution, profile);
+            tracking = std::make_unique<BenchmarkTrackingUseCase>(benchmarks, resolution, profile, configuration, days);
         }
     };
 
@@ -620,6 +635,9 @@ namespace {
         std::shared_ptr<FakeBenchmarkStore> repo = std::make_shared<FakeBenchmarkStore>();
         std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
         std::shared_ptr<FakeSettingsService> settings = std::make_shared<FakeSettingsService>();
+        std::shared_ptr<FakeGraphConfigurationUseCase> configuration =
+            std::make_shared<FakeGraphConfigurationUseCase>();
+        std::shared_ptr<FakeDaySource> days = std::make_shared<FakeDaySource>();
         std::shared_ptr<BenchmarksService> benchmarks;
         std::shared_ptr<BenchmarkResolutionUseCase> resolution;
         std::unique_ptr<BenchmarkTrackingUseCase> tracking;
@@ -630,7 +648,8 @@ namespace {
             repo->nextScan = {snapshot, std::nullopt};
             benchmarks = std::make_shared<BenchmarksService>(repo);
             resolution = std::make_shared<BenchmarkResolutionUseCase>(benchmarks, profile);
-            tracking = std::make_unique<BenchmarkTrackingUseCase>(benchmarks, resolution, profile, settings);
+            tracking = std::make_unique<BenchmarkTrackingUseCase>(benchmarks, resolution, profile, configuration, days,
+                                                                  settings);
         }
     };
 }
@@ -677,7 +696,8 @@ TEST(BenchmarkTrackingDefaultSelection, IgnoresProblemFilesWhenCountingTheOnlyBe
     fixture.benchmarks = std::make_shared<BenchmarksService>(fixture.repo);
     fixture.resolution = std::make_shared<BenchmarkResolutionUseCase>(fixture.benchmarks, fixture.profile);
     fixture.tracking = std::make_unique<BenchmarkTrackingUseCase>(fixture.benchmarks, fixture.resolution,
-                                                                  fixture.profile, fixture.settings);
+                                                                  fixture.profile, fixture.configuration,
+                                                                  fixture.days, fixture.settings);
 
     fixture.tracking->selectDefault();
 
@@ -781,4 +801,207 @@ TEST(BenchmarkTracking, RequestsEveryExplicitLinkedHashOnce) {
     EXPECT_EQ(fixture.profile->requested_rolling_scenarios.size(), 3U);
     EXPECT_TRUE(std::ranges::any_of(fixture.profile->requested_fact_scenarios,
                                   [](const auto &scenario) { return scenario.hash == "new"; }));
+}
+
+// ---- playtime window and range ----------------------------------------------------------
+
+namespace {
+    using Series = std::vector<std::pair<std::chrono::sys_days, double> >;
+
+    std::chrono::sys_days epochDay(const long long day) { return std::chrono::sys_days{std::chrono::days{day}}; }
+
+    // Real rolling accounting behind the fake, over hash "h1" runs on the given days.
+    void useRealAccounting(Fixture &fixture, const std::vector<std::pair<long long, float> > &dailyRuns) {
+        auto profile = std::make_shared<UserProfile>();
+        for (const auto &[day, seconds]: dailyRuns) {
+            Run run;
+            run.run_id.scenario_id = {"Alpha", "h1"};
+            run.run_id.start_time = day * kDay;
+            run.scenario_length = seconds;
+            profile->addRun(run);
+        }
+        fixture.profile->filtered_rolling_by_window = [profile](const int window) {
+            return profile->getRollingTimeAverage(window);
+        };
+        for (const auto &[day, seconds]: dailyRuns)
+            fixture.profile->run_facts.push_back(benchmarkFact("h1", day * kDay, 250.0F, seconds));
+    }
+
+    void expectSameSummary(const BenchmarkProjection &left, const BenchmarkProjection &right) {
+        EXPECT_EQ(left.attainedRank, right.attainedRank);
+        EXPECT_EQ(left.nextTier, right.nextTier);
+        EXPECT_EQ(left.averageRank, right.averageRank);
+        EXPECT_DOUBLE_EQ(left.totalPlaytimeSeconds, right.totalPlaytimeSeconds);
+        ASSERT_EQ(left.scenarios.size(), right.scenarios.size());
+        for (std::size_t index = 0; index < left.scenarios.size(); ++index) {
+            EXPECT_EQ(left.scenarios[index].personalBest, right.scenarios[index].personalBest);
+            EXPECT_EQ(left.scenarios[index].attainedTier, right.scenarios[index].attainedTier);
+        }
+        ASSERT_EQ(left.averageRankHistory.size(), right.averageRankHistory.size());
+        for (std::size_t index = 0; index < left.averageRankHistory.size(); ++index) {
+            EXPECT_EQ(left.averageRankHistory[index].day, right.averageRankHistory[index].day);
+            EXPECT_EQ(left.averageRankHistory[index].averageRank, right.averageRankHistory[index].averageRank);
+        }
+    }
+
+    struct PlaytimeFixture : Fixture {
+        int tracked = 0;
+        int playtimeOnly = 0;
+
+        PlaytimeFixture() {
+            known("Alpha", "h1");
+            known("Beta", "h2");
+            repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
+        }
+
+        void start() {
+            build();
+            tracking->select(BenchmarkId{"b1"});
+            tracking->onChanged([this] { ++tracked; });
+            tracking->onPlaytimeChanged([this] { ++playtimeOnly; });
+        }
+    };
+}
+
+TEST(BenchmarkTrackingPlaytime, RequestsTheCommittedWindowAndReportsIt) {
+    PlaytimeFixture fixture;
+    fixture.playtimePreferences().averagingWindowDays = 7;
+    fixture.start();
+
+    EXPECT_EQ(fixture.profile->filtered_rolling_window_days, 7);
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.windowDays, 7);
+}
+
+TEST(BenchmarkTrackingPlaytime, OneDayWindowYieldsTheDailyTotals) {
+    PlaytimeFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}});
+    fixture.playtimePreferences().averagingWindowDays = 1;
+    fixture.start();
+
+    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime,
+              (Series{{epochDay(100), 60.0}, {epochDay(101), 30.0}, {epochDay(104), 90.0}}));
+}
+
+TEST(BenchmarkTrackingPlaytime, ChangingTheWindowRecalculatesOnlyPlaytimeAndNeverTheSummaries) {
+    PlaytimeFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}});
+    fixture.start();
+    const auto before = *fixture.tracking->projection();
+    const auto factRequests = fixture.profile->fact_request_count;
+    const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
+
+    fixture.playtimePreferences().averagingWindowDays = 5;
+    fixture.commitPlaytime();
+
+    EXPECT_EQ(fixture.playtimeOnly, 1);
+    EXPECT_EQ(fixture.tracked, 0);
+    EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
+    EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests + 1);
+    EXPECT_NE(fixture.tracking->projection()->rollingPlaytime, before.rollingPlaytime);
+    expectSameSummary(before, *fixture.tracking->projection());
+    expectSameSummary(before, *fixture.tracking->snapshot().projection);
+    EXPECT_EQ(fixture.tracking->snapshot().projection->rollingPlaytime, fixture.tracking->projection()->rollingPlaytime);
+}
+
+TEST(BenchmarkTrackingPlaytime, ANarrowerRangeKeepsOverlappingValuesAndTheWindow) {
+    PlaytimeFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}, {106, 30.0F}});
+    fixture.playtimePreferences().averagingWindowDays = 4;
+    fixture.start();
+    const auto before = *fixture.tracking->projection();
+    const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
+
+    fixture.days->setToday(epochDay(106));
+    fixture.playtimePreferences().range = RangePreference{RecentDays{3}, false};
+    fixture.commitPlaytime();
+
+    const auto &narrowed = fixture.tracking->projection()->rollingPlaytime;
+    ASSERT_EQ(narrowed.size(), 3U);
+    EXPECT_EQ(narrowed, Series(before.rollingPlaytime.end() - 3, before.rollingPlaytime.end()));
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.windowDays, 4);
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.interval,
+              std::optional(DayInterval{epochDay(104), epochDay(106)}));
+    EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests);
+    expectSameSummary(before, *fixture.tracking->projection());
+}
+
+TEST(BenchmarkTrackingPlaytime, TheFullExtentSurvivesNarrowing) {
+    PlaytimeFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}});
+    fixture.start();
+    const auto fullExtent = fixture.tracking->snapshot().playtime.fullExtent;
+    ASSERT_TRUE(fullExtent);
+
+    fixture.playtimePreferences().range = RangePreference{RecentDays{1}, true};
+    fixture.commitPlaytime();
+
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.fullExtent, fullExtent);
+    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime.size(), 1U);
+}
+
+TEST(BenchmarkTrackingPlaytime, TheAnchorIsTheNewestContributingRunEvenWhenItImprovedNothing) {
+    PlaytimeFixture fixture;
+    fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
+                                  benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F),
+                                  benchmarkFact("h1", 110 * kDay, 10.0F, 30.0F)};
+    fixture.days->setToday(epochDay(400));
+    fixture.playtimePreferences().range = RangePreference{RecentDays{5}, true};
+    fixture.start();
+
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.interval,
+              std::optional(DayInterval{epochDay(106), epochDay(110)}));
+}
+
+TEST(BenchmarkTrackingPlaytime, AnchoredRangeWithoutContributingRunsHasNoIntervalAndNoSamples) {
+    PlaytimeFixture fixture;
+    fixture.days->setToday(epochDay(400));
+    fixture.playtimePreferences().range = RangePreference{RecentDays{5}, true};
+    fixture.start();
+
+    EXPECT_FALSE(fixture.tracking->snapshot().playtime.interval);
+    EXPECT_TRUE(fixture.tracking->projection()->rollingPlaytime.empty());
+}
+
+TEST(BenchmarkTrackingPlaytime, ADayChangeReprojectsWithoutRecalculatingOrTouchingTheSummaries) {
+    PlaytimeFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}});
+    fixture.days->setToday(epochDay(101));
+    fixture.playtimePreferences().range = RangePreference{RecentDays{2}, false};
+    fixture.start();
+    const auto before = *fixture.tracking->projection();
+    const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
+    const auto factRequests = fixture.profile->fact_request_count;
+
+    fixture.days->advance();
+
+    EXPECT_EQ(fixture.playtimeOnly, 1);
+    EXPECT_EQ(fixture.tracked, 0);
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.interval,
+              std::optional(DayInterval{epochDay(101), epochDay(102)}));
+    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime.size(), 1U);
+    EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests);
+    EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
+    expectSameSummary(before, *fixture.tracking->projection());
+}
+
+TEST(BenchmarkTrackingPlaytime, ADayChangeIsIgnoredWhenTheRangeDoesNotFollowToday) {
+    PlaytimeFixture fixture;
+    fixture.start();
+
+    fixture.days->advance();
+
+    EXPECT_EQ(fixture.playtimeOnly, 0);
+}
+
+TEST(BenchmarkTrackingPlaytime, OtherGraphsAndUnselectedStatesAreNotRefreshed) {
+    PlaytimeFixture fixture;
+    fixture.start();
+
+    fixture.commitPlaytime(GraphKey::BenchmarkRank);
+    fixture.commitPlaytime(GraphKey::DailyPlaytime);
+    EXPECT_EQ(fixture.playtimeOnly, 0);
+
+    fixture.tracking->clearSelection();
+    fixture.commitPlaytime();
+    EXPECT_EQ(fixture.playtimeOnly, 0);
 }

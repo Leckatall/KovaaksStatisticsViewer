@@ -42,14 +42,23 @@ namespace ksv::tests_ui {
             return snap.projection ? &*snap.projection : nullptr;
         }
         void onChanged(std::function<void()> callback) override { m_callbacks.push_back(std::move(callback)); }
+        void onPlaytimeChanged(std::function<void()> callback) override {
+            m_playtimeCallbacks.push_back(std::move(callback));
+        }
 
         void publish() const {
             for (const auto &callback: m_callbacks)
                 if (callback) callback();
         }
 
+        void publishPlaytime() const {
+            for (const auto &callback: m_playtimeCallbacks)
+                if (callback) callback();
+        }
+
     private:
         std::vector<std::function<void()> > m_callbacks;
+        std::vector<std::function<void()> > m_playtimeCallbacks;
     };
 
     inline std::chrono::sys_days ymd(const int year, const unsigned month, const unsigned day) {

@@ -8,6 +8,8 @@
 #include <qqmlintegration.h>
 
 #include <memory>
+#include <optional>
+#include <utility>
 
 #include "app/contracts/benchmark_workspace_snapshot.h"
 #include "app/contracts/i_benchmark_tracking_use_case.h"
@@ -94,15 +96,29 @@ namespace ksv::presentation {
         void changed();
 
     private:
+        using ExtentMs = std::pair<qint64, qint64>;
+
         void rebuild();
+        // A window or range change: only the playtime history and its axis move.
+        void rebuildPlaytime();
+        QList<QPointF> playtimePoints(const application::BenchmarkWorkspaceSnapshot &snapshot);
+        // The union both graphs default to; empty when neither has a sample.
+        [[nodiscard]] std::optional<ExtentMs> unionExtent() const;
+        void applyPlaytimeAxis(const application::BenchmarkWorkspaceSnapshot &snapshot);
 
         std::shared_ptr<application::IBenchmarkTrackingUseCase> m_useCase;
-        // Must precede m_rankHistory/m_playtimeHistory: both children hold a non-owning pointer to
-        // this axis and are constructed with a reference to it, so it must outlive them.
+        // Must precede m_rankHistory/m_playtimeHistory: each child holds a non-owning pointer to its
+        // axis and is constructed with a reference to it, so the axes must outlive them.
         DateTimeAxis m_historyXAxis;
+        DateTimeAxis m_playtimeXAxis;
         BenchmarkHistoryViewModel *m_rankHistory;
         BenchmarkHistoryViewModel *m_playtimeHistory;
         BenchmarkProgressGridModel *m_progressGrid;
+
+        std::optional<ExtentMs> m_rankExtentMs;
+        // Of the full-history playtime series, not of what its range shows.
+        std::optional<ExtentMs> m_playtimeExtentMs;
+        std::optional<ExtentMs> m_appliedUnionMs;
 
         QString m_state;
         QString m_stateMessage;

@@ -20,6 +20,9 @@ namespace ksv::presentation {
         Q_OBJECT
         // False when there is no playtime to plot; the panel then shows an empty state, not axes.
         Q_PROPERTY(bool hasData READ hasData NOTIFY dataUpdated)
+        // Names the effective averaging window, so it can never describe a different one than is plotted.
+        Q_PROPERTY(QString title READ title NOTIFY windowChanged)
+        Q_PROPERTY(int averagingWindowDays READ averagingWindowDays NOTIFY windowChanged)
 
     public:
         // Column ids for the two axes; Playtime is the only drawn series.
@@ -39,17 +42,19 @@ namespace ksv::presentation {
         [[nodiscard]] int yAxisColumn() const override { return Playtime; }
 
         [[nodiscard]] bool hasData() const { return !m_series->points.isEmpty(); }
+        [[nodiscard]] QString title() const;
+        [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
     public slots:
-        // Re-pulls rolling average when profile reloads
+        // Re-reads the use case; it also runs on the use case's own change notifications.
         void refresh();
 
-    private:
-        // TODO: make this configurable by the user
-        // Trailing window for the rolling average, in days.
-        static constexpr int kWindowDays = 3;
+    signals:
+        void windowChanged();
 
+    private:
         std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;
+        int m_windowDays = application::kDefaultAveragingWindowDays;
         DateTimeAxis m_xAxis;
         SeriesModel *m_series; // raw seconds + a seconds->minutes transform
     };

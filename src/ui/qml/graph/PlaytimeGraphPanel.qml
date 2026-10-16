@@ -25,7 +25,7 @@ Frame {
             Layout.fillWidth: true
             Layout.topMargin: 4
             objectName: "playtimeTitleLabel"
-            text: "Daily Playtime (3-day rolling average)"
+            text: root.playtimeVm.title
         }
         // The plot and the empty state share one slot so the panel keeps its size either way.
         Item {
