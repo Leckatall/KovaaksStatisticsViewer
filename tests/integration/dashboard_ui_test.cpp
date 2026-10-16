@@ -16,6 +16,8 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQmlExpression>
 #include <QRect>
 #include <QRectF>
 #include <QSettings>
@@ -430,6 +432,54 @@ namespace {
         ASSERT_TRUE(QMetaObject::invokeMethod(save, "clicked"));
         EXPECT_FALSE(settings->hasPendingChanges());
         EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), 9);
+    }
+
+    // Closing the real settings window over a staged edit asks first; cancelling the close keeps the
+    // window, the draft and the dashboard as they were, and discarding drops the draft.
+    TEST_F(DashboardCleanSceneTest, ClosingADirtySettingsWindowKeepsTheDraftUntilTheUserDecides) {
+        auto *settings = scene.app->settingsVm();
+        auto *dialog = scene.root->findChild<QObject *>("settingsDialog");
+        ASSERT_NE(dialog, nullptr);
+        ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "openGraph", Q_ARG(QVariant, QVariant("dailyPlaytime"))));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
+        auto *prompt = dialog->property("discardChangesPrompt").value<QObject *>();
+        ASSERT_NE(prompt, nullptr);
+        const int committed = scene.app->playtimeVm()->averagingWindowDays();
+        const int staged = committed == 9 ? 11 : 9;
+        ASSERT_TRUE(settings->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", QString::number(staged)));
+        ASSERT_TRUE(settings->hasPendingChanges());
+
+        // QPlatformDialogHelper::Cancel / Discard with RejectRole / DestructiveRole.
+        const auto click = [&](const int button, const int role) {
+            QQmlExpression click(QQmlEngine::contextForObject(prompt), prompt,
+                                 QString("buttonClicked(%1, %2)").arg(button).arg(role));
+            click.evaluate();
+            ASSERT_FALSE(click.hasError()) << click.error().toString().toStdString();
+        };
+        const auto closeWindow = [&] {
+            ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
+            ASSERT_TRUE(QTest::qWaitFor([&] { return prompt->property("visible").toBool(); }, 3000));
+        };
+
+        ASSERT_NO_FATAL_FAILURE(closeWindow());
+        EXPECT_TRUE(dialog->property("visible").toBool());
+        EXPECT_TRUE(settings->hasPendingChanges());
+        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), committed);
+
+        ASSERT_NO_FATAL_FAILURE(click(0x00400000, 1));
+        EXPECT_TRUE(dialog->property("visible").toBool()) << "Cancel keeps the window open";
+        EXPECT_TRUE(settings->isVisitOpen());
+        EXPECT_TRUE(settings->hasPendingChanges());
+        EXPECT_EQ(settings->graphDraft("dailyPlaytime")["window"].toInt(), staged);
+        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), committed);
+
+        ASSERT_NO_FATAL_FAILURE(closeWindow());
+        ASSERT_NO_FATAL_FAILURE(click(0x00800000, 2));
+        EXPECT_TRUE(QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000));
+        EXPECT_FALSE(settings->isVisitOpen());
+        EXPECT_FALSE(settings->hasPendingChanges());
+        EXPECT_EQ(settings->graphDraft("dailyPlaytime")["window"].toInt(), committed);
+        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), committed);
     }
 
     TEST_F(DashboardCleanSceneTest, NoRunSelectedMessageShowsBeforeAnyRunIsLoaded) {

@@ -13,6 +13,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSettings>
 #include <QString>
 #include <QTemporaryDir>
 
@@ -29,6 +30,15 @@
 #include "fake_day_source.h"
 
 namespace ksv::integration {
+    // The integration suite shares one QSettings store; tests that commit graph configuration clear
+    // what they wrote so a later App does not start from it.
+    inline void clearSavedGraphConfiguration() {
+        QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
+        raw.remove("graph");
+        raw.remove("graphAxis");
+        raw.sync();
+    }
+
     inline QString fixturePath(const QString &name) {
         return QDir(TEST_FILES_DIR).absoluteFilePath(name);
     }

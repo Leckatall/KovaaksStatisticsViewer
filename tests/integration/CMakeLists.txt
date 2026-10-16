@@ -14,6 +14,7 @@ add_executable(integration_tests
     qml_smoke_test.cpp
     dashboard_ui_test.cpp
     benchmark_composition_test.cpp
+    graph_configuration_flow_test.cpp
 )
 
 target_link_libraries(integration_tests PRIVATE
@@ -56,7 +57,8 @@ target_compile_definitions(integration_tests PRIVATE
 
 # The UI driver core only exists when the dev tools are built (tools/driver).
 if(TARGET ksv_driver_core)
-    target_sources(integration_tests PRIVATE driver_ui_test.cpp driver_session_test.cpp)
+    target_sources(integration_tests PRIVATE driver_ui_test.cpp driver_session_test.cpp
+        graph_configuration_responsiveness_test.cpp)
     target_link_libraries(integration_tests PRIVATE ksv_driver_core)
 endif()
 
