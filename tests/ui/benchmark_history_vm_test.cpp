@@ -6,9 +6,14 @@
 #include <gtest/gtest.h>
 
 #include <QDateTime>
+#include <QImage>
+#include <QPainter>
 #include <QSignalSpy>
 #include <QTimeZone>
+#include <chrono>
+#include <cmath>
 #include <memory>
+#include <optional>
 
 #include "components/graph_canvas.h"
 #include "presentation/benchmark_format.h"
@@ -68,7 +73,7 @@ TEST(BenchmarkHistoryViewModel, CalendarDaysConvertToUtcMidnightEpochMs) {
     EXPECT_DOUBLE_EQ(points[1].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 6))));
 }
 
-TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxis) {
+TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxisWithoutAnObservationThere) {
     auto snapshot = makeTrackableSnapshot();
     snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
     // Playtime runs later than the last rank change, and the axis rounds up to a tick.
@@ -78,12 +83,14 @@ TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxis) {
 
     const auto series = vm.rankHistory()->series({kValueColumn});
     ASSERT_EQ(series.size(), 1);
-    const auto points = series.front()->points;
-    ASSERT_EQ(points.size(), 3);
-    EXPECT_DOUBLE_EQ(points[1].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 6))));
-    EXPECT_DOUBLE_EQ(points[2].x(), vm.rankHistory()->xAxis().max());
-    EXPECT_GT(points[2].x(), points[1].x());
-    EXPECT_DOUBLE_EQ(points[2].y(), 2.0);
+    const auto &rank = *series.front();
+    ASSERT_EQ(rank.points.size(), 2);
+    EXPECT_DOUBLE_EQ(rank.points[1].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 6))));
+    EXPECT_FALSE(rank.leadingCarry);
+    ASSERT_TRUE(rank.trailingCarry);
+    EXPECT_DOUBLE_EQ(rank.trailingCarry->x(), vm.rankHistory()->xAxis().max());
+    EXPECT_GT(rank.trailingCarry->x(), rank.points[1].x());
+    EXPECT_DOUBLE_EQ(rank.trailingCarry->y(), 2.0);
 }
 
 TEST(BenchmarkHistoryViewModel, BothHistoriesShareTheUnionOfTheirXRanges) {
@@ -420,4 +427,229 @@ TEST(BenchmarkHistoryViewModel, AnEmptyPlaytimeIntervalKeepsItsAxisAndDrawsNoLin
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), static_cast<double>(utcMidnightMs(ymd(2024, 4, 1))));
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), static_cast<double>(utcMidnightMs(ymd(2024, 4, 7))));
     EXPECT_TRUE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
+}
+
+// ---- rank range and carried geometry ------------------------------------------------------
+
+namespace {
+    double ms(const std::chrono::sys_days day) { return static_cast<double>(utcMidnightMs(day)); }
+
+    // Improvements on 4, 6 and 10 March 2024; playtime spans 2 to 20 March.
+    BenchmarkWorkspaceSnapshot rankRangeSnapshot(const std::optional<DayInterval> interval) {
+        auto snapshot = makeTrackableSnapshot();
+        snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0},
+                                                   {ymd(2024, 3, 10), 2.5}};
+        snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 2), 600.0}, {ymd(2024, 3, 20), 1200.0}};
+        snapshot.playtime.fullExtent = PlaytimeDayExtent{ymd(2024, 3, 2), ymd(2024, 3, 20)};
+        snapshot.rank.interval = interval;
+        return snapshot;
+    }
+
+    const SeriesModel *rankSeries(const BenchmarkTrackingViewModel &vm) {
+        const auto series = vm.rankHistory()->series({kValueColumn});
+        return series.isEmpty() ? nullptr : series.front();
+    }
+
+    [[nodiscard]] int countPixelsNear(const QImage &image, const QRect &area, const QColor &colour) {
+        int count = 0;
+        const QRect clipped = area.intersected(image.rect());
+        for (int y = clipped.top(); y <= clipped.bottom(); ++y)
+            for (int x = clipped.left(); x <= clipped.right(); ++x) {
+                const QColor pixel = image.pixelColor(x, y);
+                if (pixel.alpha() > 200 && std::abs(pixel.red() - colour.red()) <= 8 &&
+                    std::abs(pixel.green() - colour.green()) <= 8 && std::abs(pixel.blue() - colour.blue()) <= 8)
+                    ++count;
+            }
+        return count;
+    }
+}
+
+TEST(BenchmarkHistoryViewModel, ARankRangeCarriesTheEstablishedRankInAndTheLastImprovementOut) {
+    auto fake = fakeWith(rankRangeSnapshot(DayInterval{ymd(2024, 3, 5), ymd(2024, 3, 12)}));
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto *rank = rankSeries(vm);
+    ASSERT_NE(rank, nullptr);
+    ASSERT_EQ(rank->points.size(), 2);
+    EXPECT_EQ(rank->points[0], QPointF(ms(ymd(2024, 3, 6)), 2.0));
+    EXPECT_EQ(rank->points[1], QPointF(ms(ymd(2024, 3, 10)), 2.5));
+    ASSERT_TRUE(rank->leadingCarry);
+    EXPECT_EQ(*rank->leadingCarry, QPointF(ms(ymd(2024, 3, 5)), 1.0));
+    ASSERT_TRUE(rank->trailingCarry);
+    EXPECT_EQ(*rank->trailingCarry, QPointF(ms(ymd(2024, 3, 12)), 2.5));
+
+    auto *history = vm.rankHistory();
+    EXPECT_TRUE(history->hasData());
+    EXPECT_EQ(history->observationCount(), 2);
+    EXPECT_TRUE(history->hasCarriedState());
+    EXPECT_FALSE(history->noObservationsInRange());
+    EXPECT_DOUBLE_EQ(history->xAxis().min(), ms(ymd(2024, 3, 5)));
+    EXPECT_DOUBLE_EQ(history->xAxis().max(), ms(ymd(2024, 3, 12)));
+}
+
+TEST(BenchmarkHistoryViewModel, ARankRangeWithoutImprovementsDrawsOnlyNonSelectableCarriedGeometry) {
+    auto fake = fakeWith(rankRangeSnapshot(DayInterval{ymd(2024, 3, 11), ymd(2024, 3, 13)}));
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto *rank = rankSeries(vm);
+    ASSERT_NE(rank, nullptr) << "the carried rank is still drawn in line modes";
+    EXPECT_TRUE(rank->points.isEmpty());
+    ASSERT_TRUE(rank->leadingCarry);
+    ASSERT_TRUE(rank->trailingCarry);
+    EXPECT_EQ(*rank->leadingCarry, QPointF(ms(ymd(2024, 3, 11)), 2.5));
+    EXPECT_EQ(*rank->trailingCarry, QPointF(ms(ymd(2024, 3, 13)), 2.5));
+
+    auto *history = vm.rankHistory();
+    EXPECT_TRUE(history->hasData());
+    EXPECT_EQ(history->observationCount(), 0);
+    EXPECT_TRUE(history->hasCarriedState());
+    // What Points only has to explain: the range holds no improvement point.
+    EXPECT_TRUE(history->noObservationsInRange());
+
+    ksv::ui::GraphCanvas canvas;
+    canvas.setWidth(400);
+    canvas.setHeight(200);
+    canvas.setGraphVm(history);
+    canvas.setVisibleColumns({kValueColumn});
+    canvas.setPointMarkers(true);
+    canvas.setForegroundColor(QColor("#123456"));
+    const QRectF plot = canvas.property("plotArea").toRectF();
+    for (const qreal x: {plot.left() + 1, plot.center().x(), plot.right() - 1})
+        EXPECT_FALSE(canvas.valuesAtX(x).value("valid").toBool()) << "tooltip snapped to an out-of-range point";
+    ASSERT_TRUE(rank->yAxis);
+    const qreal carryY = plot.bottom() - rank->yAxis->normalizedPosition(2.5) * plot.height();
+    const qreal carryStartX = plot.left() + history->xAxis().normalizedPosition(rank->leadingCarry->x()) * plot.width();
+    EXPECT_FALSE(canvas.nearestPoint(carryStartX, carryY).value("valid").toBool());
+    EXPECT_FALSE(canvas.pointMarkersShown());
+
+    QImage image(400, 200, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    {
+        QPainter painter(&image);
+        canvas.paint(&painter);
+    }
+    EXPECT_GT(countPixelsNear(image, plot.toAlignedRect(), QColor("#123456")), 0) << "the carried line was not drawn";
+}
+
+TEST(BenchmarkHistoryViewModel, NoRankIsDrawnBeforeTheFirstImprovement) {
+    auto fake = fakeWith(rankRangeSnapshot(DayInterval{ymd(2024, 3, 1), ymd(2024, 3, 3)}));
+    BenchmarkTrackingViewModel vm{fake};
+
+    auto *history = vm.rankHistory();
+    EXPECT_FALSE(history->hasData());
+    EXPECT_TRUE(history->series({kValueColumn}).isEmpty());
+    EXPECT_FALSE(history->hasCarriedState());
+    EXPECT_TRUE(history->noObservationsInRange());
+    EXPECT_TRUE(history->emptyStateText().contains("range")) << history->emptyStateText().toStdString();
+
+    fake->snap.rank.interval = DayInterval{ymd(2024, 3, 1), ymd(2024, 3, 5)};
+    fake->publishRank();
+
+    const auto *rank = rankSeries(vm);
+    ASSERT_NE(rank, nullptr);
+    ASSERT_EQ(rank->points.size(), 1);
+    EXPECT_EQ(rank->points[0], QPointF(ms(ymd(2024, 3, 4)), 1.0));
+    EXPECT_FALSE(rank->leadingCarry);
+    ASSERT_TRUE(rank->trailingCarry);
+    EXPECT_EQ(*rank->trailingCarry, QPointF(ms(ymd(2024, 3, 5)), 1.0));
+}
+
+TEST(BenchmarkHistoryViewModel, EveryRankPointIsAnActualImprovementWhateverTheRange) {
+    const auto improvementDays = QList<double>{ms(ymd(2024, 3, 4)), ms(ymd(2024, 3, 6)), ms(ymd(2024, 3, 10))};
+    for (const auto &interval: {std::optional<DayInterval>{}, std::optional(DayInterval{ymd(2024, 3, 5), ymd(2024, 3, 8)}),
+                                std::optional(DayInterval{ymd(2024, 3, 6), ymd(2024, 3, 10)}),
+                                std::optional(DayInterval{ymd(2024, 3, 11), ymd(2024, 3, 30)})}) {
+        auto fake = fakeWith(rankRangeSnapshot(interval));
+        BenchmarkTrackingViewModel vm{fake};
+        const auto *rank = rankSeries(vm);
+        ASSERT_NE(rank, nullptr);
+        for (const QPointF &point: rank->points) EXPECT_TRUE(improvementDays.contains(point.x())) << point.x();
+    }
+}
+
+TEST(BenchmarkHistoryViewModel, TierReferencesKeepTheirFullHistoryMeaningInANarrowRange) {
+    std::vector<Tier> tiers;
+    for (int index = 1; index <= 6; ++index)
+        tiers.push_back(coloredTier("t" + std::to_string(index), "Tier " + std::to_string(index),
+                                    BenchmarkColor{200, 200, 200, 255}));
+    auto snapshot = snapshotWithTiers(tiers);
+    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 8), 4.5}};
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+    const auto wholeMax = rankSeries(vm)->yAxis->max();
+    const auto wholeLines = rankSeries(vm)->referenceLines.size();
+
+    fake->snap.rank.interval = DayInterval{ymd(2024, 3, 4), ymd(2024, 3, 5)};
+    fake->publishRank();
+
+    const auto *narrowed = rankSeries(vm);
+    ASSERT_NE(narrowed, nullptr);
+    ASSERT_EQ(narrowed->points.size(), 1);
+    EXPECT_DOUBLE_EQ(wholeMax, 5.0);
+    EXPECT_DOUBLE_EQ(narrowed->yAxis->max(), wholeMax);
+    EXPECT_EQ(narrowed->referenceLines.size(), wholeLines);
+    EXPECT_EQ(narrowed->yAxis->formatTick(5.0), "Tier 5");
+}
+
+TEST(BenchmarkHistoryViewModel, RankAndPlaytimeRangesMoveOnlyTheirOwnAxes) {
+    auto fake = fakeWith(rankRangeSnapshot(std::nullopt));
+    BenchmarkTrackingViewModel vm{fake};
+    const auto defaultMin = vm.playtimeHistory()->xAxis().min();
+    const auto defaultMax = vm.playtimeHistory()->xAxis().max();
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().min(), defaultMin);
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().max(), defaultMax);
+
+    fake->snap.rank.interval = DayInterval{ymd(2024, 3, 5), ymd(2024, 3, 12)};
+    fake->publishRank();
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().min(), ms(ymd(2024, 3, 5)));
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().max(), ms(ymd(2024, 3, 12)));
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), defaultMin);
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), defaultMax);
+
+    fake->snap.playtime.interval = DayInterval{ymd(2024, 3, 14), ymd(2024, 3, 16)};
+    fake->snap.projection->rollingPlaytime = {};
+    fake->publishPlaytime();
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), ms(ymd(2024, 3, 14)));
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().min(), ms(ymd(2024, 3, 5)));
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().max(), ms(ymd(2024, 3, 12)));
+}
+
+TEST(BenchmarkHistoryViewModel, ARankRangeChangeLeavesTheSummaryAndPlaytimeAlone) {
+    auto fake = fakeWith(rankRangeSnapshot(std::nullopt));
+    BenchmarkTrackingViewModel vm{fake};
+    const auto attained = vm.attainedRank();
+    const auto average = vm.averageRank();
+    const auto playtimePoints = vm.playtimeHistory()->series({kValueColumn}).front()->points;
+    QSignalSpy changed(&vm, &BenchmarkTrackingViewModel::changed);
+
+    fake->snap.rank.interval = DayInterval{ymd(2024, 3, 7), ymd(2024, 3, 9)};
+    fake->publishRank();
+
+    EXPECT_EQ(changed.count(), 0);
+    EXPECT_EQ(vm.attainedRank(), attained);
+    EXPECT_EQ(vm.averageRank(), average);
+    EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->points, playtimePoints);
+    EXPECT_TRUE(rankSeries(vm)->points.isEmpty());
+}
+
+TEST(BenchmarkHistoryViewModel, AnAnchoredRankRangeWithNoContributingRunShowsNothing) {
+    auto snapshot = rankRangeSnapshot(std::nullopt);
+    snapshot.rank.noRelevantHistory = true;
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_FALSE(vm.rankHistory()->hasData());
+    EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
+}
+
+TEST(BenchmarkHistoryViewModel, NoHistoryAndAnEmptyRangeReadDifferently) {
+    auto empty = makeTrackableSnapshot();
+    empty.projection->averageRankHistory.clear();
+    auto none = fakeWith(empty);
+    BenchmarkTrackingViewModel noHistory{none};
+    auto fake = fakeWith(rankRangeSnapshot(DayInterval{ymd(2024, 3, 1), ymd(2024, 3, 3)}));
+    BenchmarkTrackingViewModel emptyRange{fake};
+
+    EXPECT_FALSE(noHistory.rankHistory()->noObservationsInRange());
+    EXPECT_NE(noHistory.rankHistory()->emptyStateText(), emptyRange.rankHistory()->emptyStateText());
 }

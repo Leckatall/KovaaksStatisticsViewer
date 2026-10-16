@@ -14,6 +14,8 @@ add_library(ksv_domain STATIC
         benchmarks/benchmark_resolution.h
         benchmarks/benchmark_resolution.cpp
         benchmarks/benchmark_projection.h
+        benchmarks/rank_history.h
+        benchmarks/rank_history.cpp
         benchmarks/benchmark_editor.h
         benchmarks/benchmark_editor.cpp
 )

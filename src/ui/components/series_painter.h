@@ -6,11 +6,13 @@
 #define KOVAAKSSTATSVIEWER_SERIES_PAINTER_H
 
 #include <QColor>
+#include <QPointF>
 #include <QVector>
 #include <QtGlobal>
 
+#include <optional>
+
 class QPainter;
-class QPointF;
 
 namespace ksv::ui {
     class SeriesPainter {
@@ -25,10 +27,20 @@ namespace ksv::ui {
             bool showMarkers = false;
         };
 
+        // Unmarked vertices the line also runs through, before the first and after the last point.
+        struct Carry {
+            std::optional<QPointF> leading;
+            std::optional<QPointF> trailing;
+        };
+
         // Draws the monotone curve through `pixelPoints` and, with showMarkers, a marker on each
-        // point. A lone point has no curve, so it is always drawn as a marker.
+        // point. A lone point without carry has no curve, so it is always drawn as a marker.
+        static void paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const Carry &carry,
+                          const QColor &lineColor, const Style &style);
         static void paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor,
-                          const Style &style);
+                          const Style &style) {
+            paint(painter, pixelPoints, Carry{}, lineColor, style);
+        }
         static void paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor) {
             paint(painter, pixelPoints, lineColor, Style{});
         }

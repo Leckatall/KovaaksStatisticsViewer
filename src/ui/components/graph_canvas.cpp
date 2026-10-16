@@ -263,10 +263,14 @@ namespace ksv::ui {
         // Each line's markers are painted with it, so they stack the same way as the lines.
         for (const auto *s: seriesInPaintOrder()) {
             const QList<QPointF> displayPoints = s->displayPoints();
-            if (displayPoints.isEmpty()) continue;
+            if (displayPoints.isEmpty() && !s->leadingCarry && !s->trailingCarry) continue;
 
             const presentation::Axis &xAxis = xAxisFor(*s);
             const presentation::ValueAxis yAxis = yAxisFor(*s);
+            const auto carryPixel = [&](const std::optional<QPointF> &raw) -> std::optional<QPointF> {
+                if (!raw) return std::nullopt;
+                return toPixel(QPointF(raw->x(), s->transform.display(raw->y())), rect, xAxis, yAxis);
+            };
 
             QVector<QPointF> pixelPoints;
             pixelPoints.reserve(displayPoints.size());
@@ -274,9 +278,10 @@ namespace ksv::ui {
 
             SeriesPainter::Style style;
             style.markerOutlineColor = m_backgroundColor;
-            style.showMarkers = m_pointMarkers &&
+            style.showMarkers = m_pointMarkers && !pixelPoints.isEmpty() &&
                                 markersFit(int(pixelPoints.size()), pixelPoints.back().x() - pixelPoints.front().x());
-            SeriesPainter::paint(*painter, pixelPoints, colorFor(*s), style);
+            SeriesPainter::paint(*painter, pixelPoints, {carryPixel(s->leadingCarry), carryPixel(s->trailingCarry)},
+                                 colorFor(*s), style);
         }
     }
 

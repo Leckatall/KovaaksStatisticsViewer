@@ -44,6 +44,7 @@ namespace ksv::application {
         void onPlaytimeChanged(std::function<void()> callback) override {
             m_playtimeCallbacks.push_back(std::move(callback));
         }
+        void onRankChanged(std::function<void()> callback) override { m_rankCallbacks.push_back(std::move(callback)); }
 
     private:
         // Everything derived from one benchmark's definition and the profile's runs. The playtime
@@ -65,6 +66,10 @@ namespace ksv::application {
         // range, recomputing the full series only when the window differs from the one it holds.
         void applyPlaytimeView(Evaluation &evaluation);
         void refreshPlaytimeOnly();
+        // Resolves the rank graph's range into m_snapshot.rank. The rank history is never filtered,
+        // so a range change needs no re-evaluation.
+        void applyRankRange(const Evaluation &evaluation);
+        void refreshRankOnly();
 
         std::shared_ptr<data::IBenchmarksService> m_benchmarks;
         std::shared_ptr<IBenchmarkResolutionUseCase> m_resolution;
@@ -89,6 +94,7 @@ namespace ksv::application {
         BenchmarkWorkspaceSnapshot m_snapshot;
         std::vector<std::function<void()> > m_callbacks;
         std::vector<std::function<void()> > m_playtimeCallbacks;
+        std::vector<std::function<void()> > m_rankCallbacks;
     };
 }
 

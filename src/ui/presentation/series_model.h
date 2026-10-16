@@ -55,21 +55,28 @@ namespace ksv::presentation {
         ValueAxis::Options yAxisOptions;
         // Painted over the line by GraphCanvas while this series is visible.
         QList<ReferenceLine> referenceLines;
+        // Actual observations: the only points tooltips, hit tests, selection and markers address.
         QList<QPointF> points;
+        // Non-selectable boundary geometry in raw units: a level held from the range's left edge up to
+        // the first observation, and from the last observation to the right edge. Line modes draw
+        // through them; nothing samples, hit-tests or marks them, and a mode without connections skips them.
+        std::optional<QPointF> leadingCarry;
+        std::optional<QPointF> trailingCarry;
         std::shared_ptr<const Axis> xAxis;
         std::optional<ValueAxis> yAxis;
         std::optional<uint64_t> yAxisId;
 
         [[nodiscard]] std::optional<std::pair<qreal, qreal>> displayRange() const {
-            if (points.isEmpty()) return std::nullopt;
-            qreal lo = transform.display(points.front().y());
-            qreal hi = lo;
-            for (const auto &p: points) {
+            std::optional<std::pair<qreal, qreal>> range;
+            const auto widen = [&](const QPointF &p) {
                 const qreal value = transform.display(p.y());
-                lo = std::min(lo, value);
-                hi = std::max(hi, value);
-            }
-            return std::pair{lo, hi};
+                if (!range) range = std::pair{value, value};
+                else range = std::pair{std::min(range->first, value), std::max(range->second, value)};
+            };
+            for (const auto &p: points) widen(p);
+            if (leadingCarry) widen(*leadingCarry);
+            if (trailingCarry) widen(*trailingCarry);
+            return range;
         }
 
         [[nodiscard]] ValueAxis deriveYAxis() const {

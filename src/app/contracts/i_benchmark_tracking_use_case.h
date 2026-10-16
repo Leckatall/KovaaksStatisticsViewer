@@ -38,6 +38,8 @@ namespace ksv::application {
         // Fired instead of onChanged when only the playtime graph's window or range moved: the
         // snapshot's projection summaries and rank history are the ones the last onChanged delivered.
         virtual void onPlaytimeChanged(std::function<void()> callback) = 0;
+        // Likewise for the rank graph's range: only the snapshot's `rank` view moved.
+        virtual void onRankChanged(std::function<void()> callback) = 0;
     };
 }
 

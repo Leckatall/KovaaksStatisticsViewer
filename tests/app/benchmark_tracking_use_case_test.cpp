@@ -1005,3 +1005,158 @@ TEST(BenchmarkTrackingPlaytime, OtherGraphsAndUnselectedStatesAreNotRefreshed) {
     fixture.commitPlaytime();
     EXPECT_EQ(fixture.playtimeOnly, 0);
 }
+
+// ---- rank range ---------------------------------------------------------------------------
+
+namespace {
+    struct RankFixture : PlaytimeFixture {
+        int rankOnly = 0;
+
+        GraphPreferences &rankPreferences() {
+            return configuration->configuration.preferences(GraphKey::BenchmarkRank);
+        }
+
+        void startRank() {
+            start();
+            tracking->onRankChanged([this] { ++rankOnly; });
+        }
+
+        void improvingThenFlatRuns() {
+            profile->run_facts = {benchmarkFact("h1", 100 * kDay, 150.0F, 60.0F),
+                                  benchmarkFact("h2", 101 * kDay, 250.0F, 30.0F),
+                                  benchmarkFact("h1", 104 * kDay, 260.0F, 30.0F),
+                                  benchmarkFact("h1", 110 * kDay, 10.0F, 30.0F)};
+        }
+    };
+}
+
+TEST(BenchmarkTrackingRank, TheDefaultRangeIsTheWholeHistory) {
+    RankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.startRank();
+
+    EXPECT_EQ(fixture.tracking->snapshot().rank, RankRangeView{});
+    EXPECT_EQ(fixture.tracking->projection()->averageRankHistory.size(), 3U);
+}
+
+TEST(BenchmarkTrackingRank, ARangeChangeReprojectsWithoutReevaluatingOrTouchingTheSummaries) {
+    RankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.startRank();
+    const auto before = *fixture.tracking->projection();
+    const auto factRequests = fixture.profile->fact_request_count;
+    const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
+
+    fixture.rankPreferences().range = RangePreference{
+        CustomDates{std::chrono::year_month_day{epochDay(102)}, std::chrono::year_month_day{epochDay(106)}}, false};
+    fixture.commitPlaytime(GraphKey::BenchmarkRank);
+
+    EXPECT_EQ(fixture.rankOnly, 1);
+    EXPECT_EQ(fixture.tracked, 0);
+    EXPECT_EQ(fixture.playtimeOnly, 0);
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(106)}));
+    EXPECT_FALSE(fixture.tracking->snapshot().rank.noRelevantHistory);
+    EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
+    EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests);
+    // The rank history stays whole: what came before the range is the rank carried into it.
+    expectSameSummary(before, *fixture.tracking->projection());
+    expectSameSummary(before, *fixture.tracking->snapshot().projection);
+}
+
+TEST(BenchmarkTrackingRank, TheAnchorIsTheNewestContributingRunNotTheLatestImprovement) {
+    RankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.days->setToday(epochDay(400));
+    fixture.rankPreferences().range = RangePreference{RecentDays{3}, true};
+    fixture.startRank();
+
+    ASSERT_EQ(fixture.tracking->projection()->averageRankHistory.back().day, epochDay(104));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(108), epochDay(110)}));
+}
+
+TEST(BenchmarkTrackingRank, ALaterNonImprovingRunMovesTheAnchor) {
+    RankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.days->setToday(epochDay(400));
+    fixture.rankPreferences().range = RangePreference{RecentDays{3}, true};
+    fixture.startRank();
+
+    fixture.profile->run_facts.push_back(benchmarkFact("h2", 120 * kDay, 5.0F, 30.0F));
+    fixture.profile->notifyProfileChanged();
+
+    EXPECT_EQ(fixture.tracking->projection()->averageRankHistory.back().day, epochDay(104));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(118), epochDay(120)}));
+}
+
+TEST(BenchmarkTrackingRank, AnAnchoredRangeWithoutContributingRunsHasNoRelevantHistory) {
+    RankFixture fixture;
+    fixture.days->setToday(epochDay(400));
+    fixture.rankPreferences().range = RangePreference{RecentDays{5}, true};
+    fixture.startRank();
+
+    EXPECT_TRUE(fixture.tracking->snapshot().rank.noRelevantHistory);
+    EXPECT_FALSE(fixture.tracking->snapshot().rank.interval);
+}
+
+TEST(BenchmarkTrackingRank, ATodayAnchoredRangeFollowsADayChangeWithoutReevaluating) {
+    RankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.days->setToday(epochDay(110));
+    fixture.rankPreferences().range = RangePreference{RecentDays{5}, false};
+    fixture.startRank();
+    const auto factRequests = fixture.profile->fact_request_count;
+
+    fixture.days->advance();
+
+    EXPECT_EQ(fixture.rankOnly, 1);
+    EXPECT_EQ(fixture.tracked, 0);
+    EXPECT_EQ(fixture.playtimeOnly, 0);
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(107), epochDay(111)}));
+    EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
+}
+
+TEST(BenchmarkTrackingRank, ADayChangeIsIgnoredWhenTheRankRangeDoesNotFollowToday) {
+    RankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.rankPreferences().range = RangePreference{RecentDays{5}, true};
+    fixture.startRank();
+
+    fixture.days->advance();
+
+    EXPECT_EQ(fixture.rankOnly, 0);
+}
+
+TEST(BenchmarkTrackingRank, RankAndPlaytimeRangesNeverWriteEachOther) {
+    RankFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}, {106, 30.0F}});
+    fixture.days->setToday(epochDay(106));
+    fixture.startRank();
+    const auto playtime = fixture.tracking->projection()->rollingPlaytime;
+
+    fixture.rankPreferences().range = RangePreference{RecentDays{2}, false};
+    fixture.commitPlaytime(GraphKey::BenchmarkRank);
+    EXPECT_EQ(fixture.rankOnly, 1);
+    EXPECT_EQ(fixture.playtimeOnly, 0);
+    EXPECT_FALSE(fixture.tracking->snapshot().playtime.interval);
+    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime, playtime);
+
+    fixture.playtimePreferences().range = RangePreference{RecentDays{4}, false};
+    fixture.commitPlaytime();
+    EXPECT_EQ(fixture.rankOnly, 1);
+    EXPECT_EQ(fixture.playtimeOnly, 1);
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(105), epochDay(106)}));
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.interval, std::optional(DayInterval{epochDay(103), epochDay(106)}));
+}
+
+TEST(BenchmarkTrackingRank, OtherGraphsAndUnselectedStatesAreNotRefreshed) {
+    RankFixture fixture;
+    fixture.startRank();
+
+    fixture.commitPlaytime(GraphKey::BenchmarkPlaytime);
+    fixture.commitPlaytime(GraphKey::ScenarioHistory);
+    EXPECT_EQ(fixture.rankOnly, 0);
+
+    fixture.tracking->clearSelection();
+    fixture.commitPlaytime(GraphKey::BenchmarkRank);
+    EXPECT_EQ(fixture.rankOnly, 0);
+}

@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "app/contracts/benchmark_workspace_snapshot.h"
 #include "app/contracts/i_benchmark_tracking_use_case.h"
@@ -101,9 +102,18 @@ namespace ksv::presentation {
         void rebuild();
         // A window or range change: only the playtime history and its axis move.
         void rebuildPlaytime();
+        // A rank range change: only the rank history and its axis move.
+        void rebuildRank();
         QList<QPointF> playtimePoints(const application::BenchmarkWorkspaceSnapshot &snapshot);
+        [[nodiscard]] static BenchmarkHistoryViewModel::Content playtimeContent(
+            const application::BenchmarkWorkspaceSnapshot &snapshot, const QList<QPointF> &points);
+        void updateRankHistory(const application::BenchmarkWorkspaceSnapshot &snapshot);
         // The union both graphs default to; empty when neither has a sample.
         [[nodiscard]] std::optional<ExtentMs> unionExtent() const;
+        // A graph with a date range spans exactly it; without one it spans the last applied union,
+        // which either graph only reads and neither graph's range ever writes.
+        void applyAxis(DateTimeAxis &axis, const std::optional<application::DayInterval> &interval) const;
+        void applyRankAxis(const application::BenchmarkWorkspaceSnapshot &snapshot);
         void applyPlaytimeAxis(const application::BenchmarkWorkspaceSnapshot &snapshot);
 
         std::shared_ptr<application::IBenchmarkTrackingUseCase> m_useCase;
@@ -115,10 +125,14 @@ namespace ksv::presentation {
         BenchmarkHistoryViewModel *m_playtimeHistory;
         BenchmarkProgressGridModel *m_progressGrid;
 
+        // Of the full rank history, whatever its range shows.
         std::optional<ExtentMs> m_rankExtentMs;
         // Of the full-history playtime series, not of what its range shows.
         std::optional<ExtentMs> m_playtimeExtentMs;
         std::optional<ExtentMs> m_appliedUnionMs;
+        // Kept from the last full rebuild, so a rank range change redraws without re-deriving them.
+        bool m_rankPresent = false;
+        std::vector<RankTier> m_rankTiers;
 
         QString m_state;
         QString m_stateMessage;

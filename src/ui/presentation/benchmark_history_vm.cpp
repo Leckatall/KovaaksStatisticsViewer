@@ -67,12 +67,17 @@ namespace ksv::presentation {
         return axis;
     }
 
-    void BenchmarkHistoryViewModel::update(const QList<QPointF> &rawPoints, const bool present,
+    void BenchmarkHistoryViewModel::update(const Content &content, const bool present,
                                            const std::vector<RankTier> &rankTiers) {
-        m_hasData = present && !rawPoints.isEmpty();
+        m_historyAvailable = present && content.historyAvailable;
+        m_observationCount = present ? static_cast<int>(content.observations.size()) : 0;
+        m_hasCarriedState = present && (content.leadingCarry || content.trailingCarry);
+        m_hasData = m_observationCount > 0 || m_hasCarriedState;
 
         if (!m_hasData) {
             m_series->points.clear();
+            m_series->leadingCarry.reset();
+            m_series->trailingCarry.reset();
             m_series->referenceLines.clear();
             emit dataUpdated();
             emit boundsChanged();
@@ -81,6 +86,8 @@ namespace ksv::presentation {
 
         m_series->setId(QString::number(Value));
         m_series->setColumn(Value);
+        m_series->leadingCarry = content.leadingCarry;
+        m_series->trailingCarry = content.trailingCarry;
 
         if (m_metric == AverageRank) {
             m_series->setName(tr("Personal-best average rank"));
@@ -93,13 +100,11 @@ namespace ksv::presentation {
             m_series->transform.formatter = [tierNames](const qreal value) {
                 return describeAverageRank(value, tierNames);
             };
-            m_series->points = rawPoints;
+            m_series->points = content.observations;
             // Tiers more than one above the peak rank are out of reach for now; drawing them would
             // squash the line into the bottom of the plot.
-            qreal peak = 0.0;
-            for (const QPointF &point: rawPoints) peak = std::max(peak, point.y());
-            const auto shownTierCount = std::min(rankTiers.size(),
-                                                 static_cast<std::size_t>(std::floor(peak)) + 1);
+            const auto shownTierCount = std::min(
+                rankTiers.size(), static_cast<std::size_t>(std::floor(std::max<qreal>(0.0, content.fullHistoryPeak))) + 1);
             const std::vector<RankTier> shownTiers(rankTiers.begin(),
                                                    rankTiers.begin() + static_cast<std::ptrdiff_t>(shownTierCount));
             m_series->yAxis = rankYAxis(shownTiers);
@@ -111,7 +116,7 @@ namespace ksv::presentation {
             m_series->setColor(kPlaytimeColor);
             m_series->transform = ValueTransform::secondsToMinutes();
             m_series->yAxisOptions = {.baseline = ValueAxis::Baseline::Zero};
-            m_series->setData(rawPoints);
+            m_series->setData(content.observations);
         }
 
         emit dataUpdated();

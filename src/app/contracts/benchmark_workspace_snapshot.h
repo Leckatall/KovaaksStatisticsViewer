@@ -23,6 +23,17 @@ namespace ksv::application {
         bool selectable = false;
     };
 
+    // What the rank graph's committed range resolved to. The rank history itself stays whole in the
+    // projection, so the rank established before a range can be carried into it.
+    struct RankRangeView {
+        // Set when the range resolved to calendar dates; the X axis spans exactly this.
+        std::optional<DayInterval> interval;
+        // An anchored preset found no contributing run: nothing is shown rather than borrowing an anchor.
+        bool noRelevantHistory = false;
+
+        bool operator==(const RankRangeView &) const = default;
+    };
+
     // One coherent revision of the tracking workspace: library choices, selection, and the selected
     // definition/completeness/projection all belong to the same `libraryRevision`. Consumers read it
     // once after an onChanged notification and never retain the reference.
@@ -36,5 +47,6 @@ namespace ksv::application {
         // Its `rollingPlaytime` is already the range-visible part of the committed window's series.
         std::optional<domain::BenchmarkProjection> projection;
         PlaytimeView playtime;
+        RankRangeView rank;
     };
 }

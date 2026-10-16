@@ -70,11 +70,15 @@ namespace ksv::application {
         m_resolution->onChanged(reevaluate);
         m_profileService->onProfileChanged(reevaluate);
         m_configuration->onChanged([this](const GraphConfigurationChange &change) {
+            if (std::ranges::find(change.graphs, GraphKey::BenchmarkRank) != change.graphs.end())
+                refreshRankOnly();
             if (std::ranges::find(change.graphs, GraphKey::BenchmarkPlaytime) != change.graphs.end())
                 refreshPlaytimeOnly();
         });
         m_daySource->onDayChanged([this](std::chrono::sys_days) {
             const auto committed = m_configuration->current();
+            if (followsToday(effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkRank))))
+                refreshRankOnly();
             if (followsToday(effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkPlaytime))))
                 refreshPlaytimeOnly();
         });
@@ -174,6 +178,7 @@ namespace ksv::application {
         if (cached != m_cache.end()) {
             m_projection = cached->second.projection;
             applyPlaytimeView(cached->second);
+            applyRankRange(cached->second);
             m_state = BenchmarkTrackingState::Ready;
         } else {
             m_state = BenchmarkTrackingState::Unavailable;
@@ -212,6 +217,23 @@ namespace ksv::application {
 
     void BenchmarkTrackingUseCase::notifyPlaytimeChanged() const {
         for (const auto &callback: m_playtimeCallbacks) callback();
+    }
+
+    void BenchmarkTrackingUseCase::applyRankRange(const Evaluation &evaluation) {
+        const auto committed = m_configuration->current();
+        const auto projection = resolveRange(effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkRank)),
+                                             m_daySource->today(), evaluation.latestRunDay);
+        m_snapshot.rank = {};
+        if (const auto *interval = std::get_if<DayInterval>(&projection)) m_snapshot.rank.interval = *interval;
+        m_snapshot.rank.noRelevantHistory = std::holds_alternative<NoRelevantHistory>(projection);
+    }
+
+    void BenchmarkTrackingUseCase::refreshRankOnly() {
+        if (m_state != BenchmarkTrackingState::Ready || !m_selected) return;
+        const auto cached = m_cache.find(*m_selected);
+        if (cached == m_cache.end()) return;
+        applyRankRange(cached->second);
+        for (const auto &callback: m_rankCallbacks) callback();
     }
 
     BenchmarkTrackingUseCase::Evaluation BenchmarkTrackingUseCase::evaluate(

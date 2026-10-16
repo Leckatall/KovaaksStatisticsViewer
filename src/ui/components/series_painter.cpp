@@ -25,15 +25,19 @@ namespace ksv::ui {
         }
     }
 
-    void SeriesPainter::paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor,
-                              const Style &style) {
-        if (pixelPoints.isEmpty()) return;
-        if (pixelPoints.size() == 1) {
-            drawMarkers(painter, pixelPoints, lineColor, style);
+    void SeriesPainter::paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const Carry &carry,
+                              const QColor &lineColor, const Style &style) {
+        QVector<QPointF> vertices;
+        vertices.reserve(pixelPoints.size() + 2);
+        if (carry.leading) vertices.append(*carry.leading);
+        vertices.append(pixelPoints);
+        if (carry.trailing) vertices.append(*carry.trailing);
+        if (vertices.size() < 2) {
+            if (!pixelPoints.isEmpty()) drawMarkers(painter, pixelPoints, lineColor, style);
             return;
         }
 
-        const auto curve = presentation::monotoneCubicInterpolate(pixelPoints, 16);
+        const auto curve = presentation::monotoneCubicInterpolate(vertices, 16);
 
         QPainterPath path;
         path.moveTo(curve.first());
@@ -43,6 +47,6 @@ namespace ksv::ui {
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
 
-        if (style.showMarkers) drawMarkers(painter, pixelPoints, lineColor, style);
+        if (style.showMarkers && !pixelPoints.isEmpty()) drawMarkers(painter, pixelPoints, lineColor, style);
     }
 }

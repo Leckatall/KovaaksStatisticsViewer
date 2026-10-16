@@ -45,6 +45,7 @@ namespace ksv::tests_ui {
         void onPlaytimeChanged(std::function<void()> callback) override {
             m_playtimeCallbacks.push_back(std::move(callback));
         }
+        void onRankChanged(std::function<void()> callback) override { m_rankCallbacks.push_back(std::move(callback)); }
 
         void publish() const {
             for (const auto &callback: m_callbacks)
@@ -56,9 +57,15 @@ namespace ksv::tests_ui {
                 if (callback) callback();
         }
 
+        void publishRank() const {
+            for (const auto &callback: m_rankCallbacks)
+                if (callback) callback();
+        }
+
     private:
         std::vector<std::function<void()> > m_callbacks;
         std::vector<std::function<void()> > m_playtimeCallbacks;
+        std::vector<std::function<void()> > m_rankCallbacks;
     };
 
     inline std::chrono::sys_days ymd(const int year, const unsigned month, const unsigned day) {

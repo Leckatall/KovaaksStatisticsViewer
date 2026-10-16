@@ -11,6 +11,7 @@ add_executable(domain_tests
     gallery_dataset_test.cpp
     benchmark_projection_timing_test.cpp
     scenario_name_key_test.cpp
+    rank_history_window_test.cpp
     ../../tools/gallery/gallery_dataset.cpp
 )
 

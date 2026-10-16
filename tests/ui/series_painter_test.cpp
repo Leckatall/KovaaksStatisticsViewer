@@ -54,4 +54,37 @@ namespace ksv::ui {
 
         EXPECT_EQ(image.pixelColor(15, 15), QColor(Qt::blue));
     }
+
+    TEST(SeriesPainterTest, CarriedVerticesExtendTheLineButAreNeverMarked) {
+        QImage image(60, 30, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        SeriesPainter::Style style;
+        style.showMarkers = true;
+        style.markerColor = Qt::white;
+
+        SeriesPainter::paint(painter, {{30.0, 15.0}}, {.leading = QPointF(5.0, 15.0), .trailing = QPointF(55.0, 15.0)},
+                             Qt::blue, style);
+
+        EXPECT_EQ(image.pixelColor(30, 15), QColor(Qt::white)) << "the observation keeps its marker";
+        EXPECT_EQ(image.pixelColor(15, 15), QColor(Qt::blue)) << "the line runs to the leading carry";
+        EXPECT_EQ(image.pixelColor(50, 15), QColor(Qt::blue)) << "the line runs to the trailing carry";
+        EXPECT_NE(image.pixelColor(5, 15), QColor(Qt::white));
+        EXPECT_NE(image.pixelColor(55, 15), QColor(Qt::white));
+    }
+
+    TEST(SeriesPainterTest, CarryWithoutObservationsDrawsALineAndNoMarker) {
+        QImage image(60, 30, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        SeriesPainter::Style style;
+        style.showMarkers = true;
+        style.markerColor = Qt::white;
+
+        SeriesPainter::paint(painter, {}, {.leading = QPointF(5.0, 15.0), .trailing = QPointF(55.0, 15.0)}, Qt::blue,
+                             style);
+
+        EXPECT_EQ(image.pixelColor(30, 15), QColor(Qt::blue));
+        EXPECT_EQ(image.pixelColor(5, 12).alpha(), 0) << "no marker at the carried boundary";
+    }
 }
