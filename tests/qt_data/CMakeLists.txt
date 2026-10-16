@@ -6,6 +6,7 @@ add_executable(qt_data_tests
     settings_service_test.cpp
     file_service_test.cpp
     series_config_store_test.cpp
+    graph_configuration_persistence_test.cpp
     benchmark_store_test.cpp
     playlist_reader_test.cpp
 )

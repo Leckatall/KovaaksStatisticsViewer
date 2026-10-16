@@ -1,421 +1,24 @@
 #include "series_config_store.h"
 
-#include "app/contracts/expression_dsl.h"
-
-#include <QJsonArray>
+#include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
 
 #include <algorithm>
-#include <cmath>
-#include <limits>
 #include <tuple>
+
+#include "graph_configuration_codec.h"
+#include "series_config_codec.h"
 
 namespace ksv::qt_data {
     namespace {
         using namespace application;
 
-        std::optional<PrimitiveMetric> metricFromTag(const QString &tag) {
-            if (tag == "score") return PrimitiveMetric::Score;
-            if (tag == "shots") return PrimitiveMetric::Shots;
-            if (tag == "hits") return PrimitiveMetric::Hits;
-            if (tag == "kills") return PrimitiveMetric::Kills;
-            if (tag == "dmg") return PrimitiveMetric::Dmg;
-            return std::nullopt;
-        }
-
-        bool exactKeys(const QJsonObject &object, const std::initializer_list<const char *> keys) {
-            if (object.size() != static_cast<qsizetype>(keys.size())) return false; // TODO: Necessary?
-            if (std::ranges::all_of(keys, [&](const auto &key) { return object.contains(key); })) return true;
-
-            return false;
-        }
-
-        std::optional<uint64_t> decimalId(const QJsonValue &value, const bool zeroAllowed) {
-            if (!value.isString()) return std::nullopt;
-            const auto text = value.toString();
-            if (text.isEmpty() || (text.size() > 1 && text.front() == '0')) return std::nullopt;
-            for (const auto c: text) if (c < '0' || c > '9') return std::nullopt;
-            bool ok = false;
-            const auto parsed = text.toULongLong(&ok);
-            if (!ok || (!zeroAllowed && parsed == 0)) return std::nullopt;
-            return parsed;
-        }
-
-        template<typename T>
-        std::optional<T> boundedInteger(const QJsonValue &value) {
-            if (!value.isDouble()) return std::nullopt;
-            const auto number = value.toDouble();
-            if (!std::isfinite(number) || std::floor(number) != number || number < 0 ||
-                number > static_cast<double>(std::numeric_limits<T>::max()))
-                return std::nullopt;
-            return static_cast<T>(number);
-        }
-
-        std::optional<double> finiteNumber(const QJsonValue &value) {
-            if (!value.isDouble() || !std::isfinite(value.toDouble())) return std::nullopt;
-            return value.toDouble();
-        }
-
-        std::optional<Expression> decodeExpression(const QJsonValue &value);
-
-        QJsonObject encodeStyle(const LineStyle &style) {
-            return {
-                {
-                    "color", QJsonArray{
-                        style.color.red,
-                        style.color.green,
-                        style.color.blue,
-                        style.color.alpha
-                    }
-                },
-                {"width", style.width}
-            };
-        }
-
-        std::optional<LineStyle> decodeStyle(const QJsonValue &value) {
-            if (!value.isObject()) return std::nullopt;
-            const auto object = value.toObject();
-            if (!exactKeys(object, {"color", "width"}) || !object["color"].isArray()) return std::nullopt;
-            const auto color = object["color"].toArray();
-            if (color.size() != 4) return std::nullopt;
-            const auto red = boundedInteger<uint8_t>(color[0]);
-            const auto green = boundedInteger<uint8_t>(color[1]);
-            const auto blue = boundedInteger<uint8_t>(color[2]);
-            const auto alpha = boundedInteger<uint8_t>(color[3]);
-            const auto width = finiteNumber(object["width"]);
-            if (!red || !green || !blue || !alpha || !width) return std::nullopt;
-            return LineStyle{{*red, *green, *blue, *alpha}, *width};
-        }
-
-        QJsonObject encodePresentation(const SeriesPresentation &presentation) {
-            return {
-                {"name", QString::fromStdString(presentation.name)}, {"enabled", presentation.enabled},
-                {"displayPosition", static_cast<double>(presentation.displayPosition)},
-                {"lineStyle", encodeStyle(presentation.lineStyle)}
-            };
-        }
-
-        std::optional<SeriesPresentation> decodePresentation(const QJsonValue &value) {
-            if (!value.isObject()) return std::nullopt;
-            const auto object = value.toObject();
-            if (!exactKeys(object, {"name", "enabled", "displayPosition", "lineStyle"}) || !object["name"].isString() ||
-                !object["enabled"].isBool())
-                return std::nullopt;
-            const auto position = boundedInteger<uint32_t>(object["displayPosition"]);
-            const auto style = decodeStyle(object["lineStyle"]);
-            if (!position || !style) return std::nullopt;
-            return SeriesPresentation{
-                object["name"].toString().toStdString(), *style, object["enabled"].toBool(), *position
-            };
-        }
-
-        using BinaryExpressionFactory = Expression (*)(Expression, Expression);
-        using UnaryExpressionFactory = Expression (*)(Expression);
-
-        std::optional<Expression> decodeBinaryExpression(const QJsonObject &object,
-                                                         const BinaryExpressionFactory factory) {
-            if (!exactKeys(object, {"kind", "left", "right"})) return {};
-            const auto left = decodeExpression(object["left"]);
-            const auto right = decodeExpression(object["right"]);
-            if (!left || !right) return {};
-            return factory(*left, *right);
-        }
-
-        std::optional<Expression>
-        decodeUnaryExpression(const QJsonObject &object, const UnaryExpressionFactory factory) {
-            if (!exactKeys(object, {"kind", "input"})) return {};
-            const auto input = decodeExpression(object["input"]);
-            return input ? std::optional{factory(*input)} : std::nullopt;
-        }
-
-        std::optional<RunSelection> decodeSelection(const QJsonValue &value) {
-            if (!value.isObject()) return {};
-            const auto selection = value.toObject();
-            if (!selection["kind"].isString()) return {};
-            if (selection["kind"] == "recentRuns") {
-                const auto count = boundedInteger<uint32_t>(selection["count"]);
-                if (!exactKeys(selection, {"kind", "count"}) || !count) return {};
-                return RecentRuns{*count};
-            }
-            const auto percent = finiteNumber(selection["percent"]);
-            if (!exactKeys(selection, {"kind", "percent"}) || selection["kind"] != "topPercentile" || !percent)
-                return {};
-            return TopPercentile{*percent};
-        }
-
-        std::optional<Expression> decodeExpression(const QJsonValue &value) {
-            if (!value.isObject()) return std::nullopt;
-            const auto object = value.toObject();
-            if (!object["kind"].isString()) return std::nullopt;
-            const auto kind = object["kind"].toString();
-            if (kind == "primitive") {
-                const auto metric = metricFromTag(object["primitiveMetric"].toString());
-                if (!exactKeys(object, {"kind", "primitiveMetric"}) || !metric) return {};
-                return primitive(*metric);
-            }
-            if (kind == "constant") {
-                const auto number = finiteNumber(object["value"]);
-                if (!exactKeys(object, {"kind", "value"}) || !number) return {};
-                return numericConstant(*number);
-            }
-            if (kind == "add") return decodeBinaryExpression(object, add);
-            if (kind == "subtract") return decodeBinaryExpression(object, subtract);
-            if (kind == "multiply") return decodeBinaryExpression(object, multiply);
-            if (kind == "divide") return decodeBinaryExpression(object, divide);
-            if (kind == "runningSum") return decodeUnaryExpression(object, runningSum);
-            if (kind == "projectedFinalValue") return decodeUnaryExpression(object, projectedFinalValue);
-            if (kind == "projectRateToFinal") return decodeUnaryExpression(object, projectRateToFinal);
-            if (kind == "rollingMean") {
-                if (!exactKeys(object, {"kind", "input", "window"})) return {};
-                const auto decoded = decodeExpression(object["input"]);
-                const auto window = boundedInteger<uint32_t>(object["window"]);
-                if (!decoded || !window) return {};
-                return rollingMean(*decoded, *window);
-            }
-            if (kind != "averageAcrossRuns" || !exactKeys(object, {"kind", "input", "selection"})) return {};
-            const auto input = decodeExpression(object["input"]);
-            const auto selection = decodeSelection(object["selection"]);
-            if (!input || !selection) return {};
-            return averageAcrossRuns(*input, *selection);
-        }
-
-        QString transformKindTag(const AxisTransformKind kind) {
-            switch (kind) {
-                case AxisTransformKind::Identity: return "identity";
-                case AxisTransformKind::Percentage: return "percentage";
-            }
-            return {};
-        }
-
-        std::optional<AxisTransformKind> transformKindFromTag(const QString &tag) {
-            if (tag == "identity") return AxisTransformKind::Identity;
-            if (tag == "percentage") return AxisTransformKind::Percentage;
-            return std::nullopt;
-        }
-
-        QString baselineTag(const ValueAxisOptions::Baseline baseline) {
-            switch (baseline) {
-                case ValueAxisOptions::Baseline::Zero: return "zero";
-                case ValueAxisOptions::Baseline::HugData: return "hugData";
-            }
-            return {};
-        }
-
-        std::optional<ValueAxisOptions::Baseline> baselineFromTag(const QString &tag) {
-            if (tag == "zero") return ValueAxisOptions::Baseline::Zero;
-            if (tag == "hugData") return ValueAxisOptions::Baseline::HugData;
-            return std::nullopt;
-        }
-
-        QJsonObject encodeAxisOptions(const ValueAxisOptions &options) {
-            return {{"baseline", baselineTag(options.baseline)}, {"integral", options.integral},
-                    {"targetTicks", options.targetTicks}, {"fallbackSpan", options.fallbackSpan}};
-        }
-
-        std::optional<ValueAxisOptions> decodeAxisOptions(const QJsonValue &value) {
-            if (!value.isObject()) return std::nullopt;
-            const auto object = value.toObject();
-            if (!exactKeys(object, {"baseline", "integral", "targetTicks", "fallbackSpan"}) ||
-                !object["baseline"].isString() || !object["integral"].isBool())
-                return std::nullopt;
-            const auto baseline = baselineFromTag(object["baseline"].toString());
-            const auto targetTicks = boundedInteger<int>(object["targetTicks"]);
-            const auto fallbackSpan = finiteNumber(object["fallbackSpan"]);
-            if (!baseline || !targetTicks || !fallbackSpan || *fallbackSpan <= 0.0) return std::nullopt;
-            return ValueAxisOptions{*baseline, object["integral"].toBool(), *targetTicks, *fallbackSpan};
-        }
-
-        QJsonObject encodeAxis(const AxisConfig &axis) {
-            return {{"id", QString::number(axis.id.value)}, {"name", QString::fromStdString(axis.name)},
-                    {"options", encodeAxisOptions(axis.options)}, {"transformKind", transformKindTag(axis.transformKind)}};
-        }
-
-        std::optional<AxisConfig> decodeAxis(const QJsonValue &value) {
-            if (!value.isObject()) return std::nullopt;
-            const auto object = value.toObject();
-            if (!exactKeys(object, {"id", "name", "options", "transformKind"}) || !object["name"].isString() ||
-                !object["transformKind"].isString()) return std::nullopt;
-            const auto id = decimalId(object["id"], false);
-            const auto options = decodeAxisOptions(object["options"]);
-            const auto transformKind = transformKindFromTag(object["transformKind"].toString());
-            if (!id || !options || !transformKind) return std::nullopt;
-            return AxisConfig{{*id}, object["name"].toString().toStdString(), *options, *transformKind};
-        }
-
-        std::optional<std::vector<SeriesConfig>> decodeSeriesArray(const QJsonValue &value, const bool expectAxisFields,
-                                                                    const bool expressionIsDsl = false) {
-            if (!value.isArray()) return std::nullopt;
-            std::vector<SeriesConfig> configs;
-            for (const auto &item: value.toArray()) {
-                if (!item.isObject()) return std::nullopt;
-                const auto object = item.toObject();
-                const auto presentation = decodePresentation(object["presentation"]);
-                const auto id = decimalId(object["id"], false);
-                if (!presentation || !id) return std::nullopt;
-                Expression expression;
-                if (expressionIsDsl) {
-                    if (!object["expression"].isString()) return std::nullopt;
-                    const auto decoded = decodeExpressionDsl(object["expression"].toString().toStdString());
-                    if (!decoded) return std::nullopt;
-                    expression = *decoded;
-                } else if (!object["expression"].isNull()) {
-                    const auto decoded = decodeExpression(object["expression"]);
-                    if (!decoded) return std::nullopt;
-                    expression = *decoded;
-                }
-                std::optional<AxisId> yAxisId;
-                auto transformKind = AxisTransformKind::Identity;
-                if (expectAxisFields) {
-                    if (!exactKeys(object, {"id", "presentation", "expression", "yAxisId", "transformKind"}) ||
-                        !object["transformKind"].isString()) return std::nullopt;
-                    if (!object["yAxisId"].isNull()) {
-                        const auto axisId = decimalId(object["yAxisId"], false);
-                        if (!axisId) return std::nullopt;
-                        yAxisId = AxisId{*axisId};
-                    }
-                    const auto kind = transformKindFromTag(object["transformKind"].toString());
-                    if (!kind) return std::nullopt;
-                    transformKind = *kind;
-                } else if (!exactKeys(object, {"id", "presentation", "expression"})) return std::nullopt;
-                configs.emplace_back(SeriesConfig{{*id}, *presentation, expression, yAxisId, transformKind});
-            }
-            return configs;
-        }
-
         QString encode(const std::vector<SeriesConfig> &configs, const std::optional<SeriesId> next,
                        const std::vector<AxisConfig> &axes, const std::optional<AxisId> nextAxisId) {
-            QJsonArray series;
-            for (const auto &config: configs)
-                series.append(QJsonObject{{"id", QString::number(config.id.value)},
-                    {"presentation", encodePresentation(config.presentation)},
-                    {"expression", QString::fromStdString(encodeExpressionDsl(config.expression))},
-                    {"yAxisId", config.yAxisId ? QJsonValue(QString::number(config.yAxisId->value)) : QJsonValue()},
-                    {"transformKind", transformKindTag(config.transformKind)}});
-            QJsonArray axesArray;
-            for (const auto &axis: axes) axesArray.append(encodeAxis(axis));
-            return QString::fromUtf8(QJsonDocument(QJsonObject{{"schemaVersion", 3},
-                {"nextComputedSeriesId", next ? QJsonValue(QString::number(next->value)) : QJsonValue()}, {"series", series},
-                {"axes", axesArray}, {"nextAxisId", nextAxisId ? QJsonValue(QString::number(nextAxisId->value)) : QJsonValue()}}
-                ).toJson(QJsonDocument::Indented));
-        }
-
-        struct Document {
-            std::vector<SeriesConfig> configs;
-            std::optional<SeriesId> nextSeriesId;
-            std::vector<AxisConfig> axes;
-            std::optional<AxisId> nextAxisId;
-        };
-
-        std::optional<std::optional<uint64_t>> optionalDecimalId(const QJsonValue &value) {
-            if (value.isNull()) return std::optional<uint64_t>{};
-            const auto id = decimalId(value, false);
-            return id ? std::optional{*id} : std::nullopt;
-        }
-
-        Document migrateV1ToV2(std::vector<SeriesConfig> configs, const SeriesId nextSeriesId) {
-            auto axes = defaultAxisConfigs();
-            for (auto &config: configs) {
-                if (config.id.value == 7 || config.id.value == 8 || config.id.value == 9) config.yAxisId = axes[1].id;
-                config.transformKind = config.id.value == 2 ? AxisTransformKind::Percentage : AxisTransformKind::Identity;
-            }
-            return {std::move(configs), nextSeriesId, std::move(axes), kFirstUserAxisId};
-        }
-
-        std::optional<Document> migrateV1ToV3(const QJsonObject &root) {
-            if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series"})) return {};
-            const auto nextId = decimalId(root["nextComputedSeriesId"], false);
-            auto configs = decodeSeriesArray(root["series"], false);
-            if (!nextId || !configs || !validateSeriesConfigs(*configs).empty()) return {};
-            uint64_t maximumId = 0;
-            for (const auto &config: *configs) maximumId = std::max(maximumId, config.id.value);
-            if (*nextId <= maximumId) return {};
-            return migrateV1ToV2(std::move(*configs), SeriesId{*nextId});
-        }
-
-        std::optional<Document> decodeVersionedDocument(const QJsonObject &root, const bool expressionIsDsl) {
-            if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series", "axes", "nextAxisId"})) return {};
-            const auto nextSeriesId = optionalDecimalId(root["nextComputedSeriesId"]);
-            const auto nextAxisId = optionalDecimalId(root["nextAxisId"]);
-            if (!nextSeriesId || !nextAxisId || !root["axes"].isArray()) return {};
-            std::vector<AxisConfig> axes;
-            for (const auto &item: root["axes"].toArray()) {
-                const auto axis = decodeAxis(item);
-                if (!axis) return {};
-                axes.push_back(*axis);
-            }
-            std::vector<uint64_t> axisIds;
-            axisIds.reserve(axes.size());
-            for (const auto &axis: axes) axisIds.push_back(axis.id.value);
-            std::ranges::sort(axisIds);
-            if (std::ranges::adjacent_find(axisIds) != axisIds.end()) return {};
-            auto configs = decodeSeriesArray(root["series"], true, expressionIsDsl);
-            if (!configs || !validateSeriesConfigs(*configs).empty()) return {};
-            uint64_t maximumSeriesId = 0;
-            for (const auto &config: *configs) {
-                maximumSeriesId = std::max(maximumSeriesId, config.id.value);
-                if (config.yAxisId && std::ranges::none_of(axes, [&](const auto &axis) { return axis.id == *config.yAxisId; })) return {};
-            }
-            if (nextSeriesId->has_value() ? **nextSeriesId <= maximumSeriesId : maximumSeriesId != UINT64_MAX) return {};
-            uint64_t maximumAxisId = 0;
-            for (const auto &axis: axes) maximumAxisId = std::max(maximumAxisId, axis.id.value);
-            if (nextAxisId->has_value() ? **nextAxisId <= maximumAxisId : maximumAxisId != UINT64_MAX) return {};
-            const auto nextSeries = nextSeriesId->has_value() ? std::optional{SeriesId{**nextSeriesId}} : std::nullopt;
-            const auto nextAxis = nextAxisId->has_value() ? std::optional{AxisId{**nextAxisId}} : std::nullopt;
-            return Document{std::move(*configs), nextSeries, std::move(axes), nextAxis};
-        }
-
-        std::optional<Document> migrateV2ToV3(const QJsonObject &root) {
-            return decodeVersionedDocument(root, false);
-        }
-
-        std::optional<Document> decodeV3(const QJsonObject &root) {
-            return decodeVersionedDocument(root, true);
-        }
-
-        std::optional<Document> decode(const QString &raw) {
-            QJsonParseError error;
-            const auto document = QJsonDocument::fromJson(raw.toUtf8(), &error);
-            if (error.error != QJsonParseError::NoError || !document.isObject()) return {};
-            const auto root = document.object();
-            if (!root["schemaVersion"].isDouble()) return {};
-            const auto version = root["schemaVersion"].toDouble();
-            if (version == 1) return migrateV1ToV3(root);
-            if (version == 2) return migrateV2ToV3(root);
-            if (version == 3) return decodeV3(root);
-            return {};
-        }
-
-        bool sameAxisOptions(const ValueAxisOptions &left, const ValueAxisOptions &right) {
-            return left.baseline == right.baseline && left.integral == right.integral &&
-                   left.targetTicks == right.targetTicks && left.fallbackSpan == right.fallbackSpan;
-        }
-
-        bool sameConfigs(const std::vector<SeriesConfig> &left, const std::vector<SeriesConfig> &right) {
-            if (left.size() != right.size()) return false;
-            for (size_t index = 0; index < left.size(); ++index) {
-                const auto &[leftId, leftPresentation, leftExpression, leftAxis, leftTransform] = left[index];
-                const auto &[rightId, rightPresentation, rightExpression, rightAxis, rightTransform] = right[index];
-                if (leftId != rightId || leftPresentation.name != rightPresentation.name ||
-                    leftPresentation.lineStyle.color != rightPresentation.lineStyle.color ||
-                    leftPresentation.lineStyle.width != rightPresentation.lineStyle.width ||
-                    leftPresentation.enabled != rightPresentation.enabled ||
-                    leftPresentation.displayPosition != rightPresentation.displayPosition || leftAxis != rightAxis ||
-                    leftTransform != rightTransform || encodeExpressionDsl(leftExpression) != encodeExpressionDsl(rightExpression))
-                    return false;
-            }
-            return true;
-        }
-
-        bool sameAxes(const std::vector<AxisConfig> &left, const std::vector<AxisConfig> &right) {
-            if (left.size() != right.size()) return false;
-            for (size_t index = 0; index < left.size(); ++index) {
-                if (left[index].id != right[index].id || left[index].name != right[index].name ||
-                    !sameAxisOptions(left[index].options, right[index].options) ||
-                    left[index].transformKind != right[index].transformKind)
-                    return false;
-            }
-            return true;
+            auto root = series_codec::encodeRunSeries({configs, next, axes, nextAxisId});
+            root["schemaVersion"] = 3;
+            return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Indented));
         }
 
         void normalizeDisplayPositions(std::vector<SeriesConfig> &configs) {
@@ -438,21 +41,12 @@ namespace ksv::qt_data {
     void SeriesConfigStore::seedLocked(const std::string *invalidRaw) const {
         qDebug() << "Seeding series config store";
         if (invalidRaw) m_settingsService->quarantineSeriesConfigDocument(*invalidRaw);
-        m_configs = defaultSeriesConfigs();
-        m_next = kFirstUserComputedSeriesId;
-        m_axes = defaultAxisConfigs();
-        m_nextAxisId = kFirstUserAxisId;
-        const auto disabled = m_settingsService->getLegacyDisabledColumnKeys();
-        constexpr std::array<std::pair<const char *, unsigned>, 8> legacy{
-            {
-                {"score", 0}, {"accuracy", 1}, {"shots", 2}, {"kills", 4},
-                {"dmg", 5}, {"scoreTotal", 6}, {"expectedFinalScore", 7}, {"expectedFinalScoreRecent", 8}
-            }
-        };
-        for (const auto &[legacyKey, recordIndex]: legacy) {
-            if (std::ranges::find(disabled, std::string(legacyKey)) != disabled.end())
-                m_configs[recordIndex].presentation.enabled = false;
-        }
+        auto [configs, next, axes, nextAxisId] =
+                series_codec::seededRunSeries(m_settingsService->getLegacyDisabledColumnKeys());
+        m_configs = std::move(configs);
+        m_next = next;
+        m_axes = std::move(axes);
+        m_nextAxisId = nextAxisId;
         writeLocked(m_configs, m_next, m_axes, m_nextAxisId);
         m_requiresReload = false;
     }
@@ -464,15 +58,17 @@ namespace ksv::qt_data {
             return;
         }
         const auto raw = m_settingsService->getSeriesConfigDocument();
-        const auto decoded = decode(QString::fromStdString(raw));
-        if (!decoded) {
+        // Graph preferences in a version-4 document are not this store's concern; only its series section is.
+        const auto decoded = decodeGraphConfigurationDocument(raw);
+        if (!decoded || decoded->runSeriesRejected) {
             seedLocked(&raw);
             return;
         }
-        m_configs = decoded->configs;
-        m_next = decoded->nextSeriesId;
-        m_axes = decoded->axes;
-        m_nextAxisId = decoded->nextAxisId;
+        const auto &runSeries = decoded->configuration.runSeries;
+        m_configs = runSeries.series;
+        m_next = runSeries.nextSeriesId;
+        m_axes = runSeries.axes;
+        m_nextAxisId = runSeries.nextAxisId;
         m_requiresReload = false;
     }
 
@@ -549,7 +145,8 @@ namespace ksv::qt_data {
         QMutexLocker lock(&m_mutex);
         if (!m_draftActive) return false;
         const auto &[configs, next, axes, nextAxisId] = *m_draftBaseline;
-        return !sameConfigs(m_configs, configs) || m_next != next || !sameAxes(m_axes, axes) || m_nextAxisId != nextAxisId;
+        return !sameSeriesConfigs(m_configs, configs) || m_next != next || !sameAxisConfigs(m_axes, axes) ||
+               m_nextAxisId != nextAxisId;
     }
 
     MutationResult SeriesConfigStore::mutateLocked(

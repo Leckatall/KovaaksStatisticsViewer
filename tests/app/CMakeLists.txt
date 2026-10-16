@@ -6,6 +6,7 @@ add_executable(app_tests
         fake_profile_service_test.cpp
         completion_history_use_case_test.cpp
         series_config_test.cpp
+        graph_configuration_test.cpp
         expression_dsl_test.cpp
         graph_use_case_test.cpp
         average_line_use_case_test.cpp

@@ -16,6 +16,7 @@ namespace ksv::tests_support {
         std::optional<std::string> document;
         std::vector<std::string> quarantined;
         std::vector<std::string> legacyDisabledColumns;
+        std::string legacyRunAxisLabelSeriesId;
         int document_writes = 0;
 
         [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
@@ -55,6 +56,10 @@ namespace ksv::tests_support {
 
         [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override {
             return legacyDisabledColumns;
+        }
+
+        [[nodiscard]] std::string getLegacyRunAxisLabelSeriesId() const override {
+            return legacyRunAxisLabelSeriesId;
         }
 
         std::string lastSelectedBenchmarkId;

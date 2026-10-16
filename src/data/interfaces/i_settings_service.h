@@ -27,6 +27,8 @@ namespace ksv::application {
         virtual void setSeriesConfigDocument(const std::string &json) = 0;
         virtual void quarantineSeriesConfigDocument(const std::string &invalidJson) = 0;
         [[nodiscard]] virtual std::vector<std::string> getLegacyDisabledColumnKeys() const = 0;
+        // The run graph's Y-axis-label series ID as VisualSettingsManager.qml stored it; empty when unset.
+        [[nodiscard]] virtual std::string getLegacyRunAxisLabelSeriesId() const = 0;
 
         // The benchmark the user last chose in the Benchmarks workspace, so the next launch can
         // show it again. Empty when none has been chosen (or the choice was cleared).

@@ -9,6 +9,13 @@ add_library(ksv_qt_data STATIC
         series_config_store.cpp
         series_config_store.h
         ../data/interfaces/i_series_config_store.h
+        series_config_codec.cpp
+        series_config_codec.h
+        graph_configuration_codec.cpp
+        graph_configuration_codec.h
+        graph_configuration_persistence.cpp
+        graph_configuration_persistence.h
+        ../data/interfaces/i_graph_configuration_persistence.h
         benchmark_store.cpp
         benchmark_store.h
         ../data/interfaces/i_benchmark_store.h

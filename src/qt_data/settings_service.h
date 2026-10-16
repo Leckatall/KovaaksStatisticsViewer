@@ -26,6 +26,7 @@ namespace ksv::qt_data {
         void setSeriesConfigDocument(const std::string &json) override;
         void quarantineSeriesConfigDocument(const std::string &invalidJson) override;
         [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override;
+        [[nodiscard]] std::string getLegacyRunAxisLabelSeriesId() const override;
         [[nodiscard]] std::string getLastSelectedBenchmarkId() const override;
         void setLastSelectedBenchmarkId(const std::string &id) override;
 

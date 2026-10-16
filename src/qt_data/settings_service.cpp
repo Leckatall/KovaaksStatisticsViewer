@@ -12,6 +12,7 @@ namespace ksv::qt_data {
         constexpr auto kSeriesConfigKey = "graph/seriesConfigV1";
         constexpr auto kSeriesConfigQuarantinePrefix = "graph/seriesConfigQuarantine/";
         constexpr auto kLastSelectedBenchmarkKey = "benchmarks/lastSelectedId";
+        constexpr auto kLegacyRunAxisLabelKey = "graphAxis/seriesId";
     }
 
     SettingsService::SettingsService(const QSettings::Format format, QObject *parent) : QObject(parent),
@@ -115,6 +116,11 @@ namespace ksv::qt_data {
         result.reserve(stored.size());
         for (const auto &key: stored) result.push_back(key.toStdString());
         return result;
+    }
+
+    std::string SettingsService::getLegacyRunAxisLabelSeriesId() const {
+        const QMutexLocker locker(&m_settings_mutex);
+        return m_settings.value(kLegacyRunAxisLabelKey).toString().toStdString();
     }
 
     std::string SettingsService::getLastSelectedBenchmarkId() const {

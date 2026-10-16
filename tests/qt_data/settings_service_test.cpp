@@ -174,4 +174,15 @@ namespace {
         const SettingsService cleared(QSettings::IniFormat);
         EXPECT_TRUE(cleared.getLastSelectedBenchmarkId().empty());
     }
+
+    // VisualSettingsManager.qml's Settings { category: "graphAxis" } wrote this key through the same
+    // organization and application QSettings store.
+    TEST_F(SettingsServiceTest, ReadsTheLegacyRunAxisLabelSelectionWrittenByQml) {
+        EXPECT_TRUE(SettingsService(QSettings::IniFormat).getLegacyRunAxisLabelSeriesId().empty());
+        {
+            QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
+            raw.setValue("graphAxis/seriesId", "8");
+        }
+        EXPECT_EQ(SettingsService(QSettings::IniFormat).getLegacyRunAxisLabelSeriesId(), "8");
+    }
 }

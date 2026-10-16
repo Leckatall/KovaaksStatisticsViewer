@@ -76,6 +76,9 @@ namespace ksv::application {
         auto operator<=>(const RgbaColor &) const = default;
     };
 
+    inline constexpr double kMinimumLineWidth = 0.5;
+    inline constexpr double kMaximumLineWidth = 12.0;
+
     struct LineStyle {
         RgbaColor color{};
         double width = 2.0;
@@ -225,6 +228,11 @@ namespace ksv::application {
     };
 
     [[nodiscard]] std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs);
+
+    // Expressions compare by their canonical DSL text, not by node identity.
+    [[nodiscard]] bool sameSeriesConfigs(const std::vector<SeriesConfig> &left, const std::vector<SeriesConfig> &right);
+
+    [[nodiscard]] bool sameAxisConfigs(const std::vector<AxisConfig> &left, const std::vector<AxisConfig> &right);
 
     [[nodiscard]] std::vector<SeriesConfig> defaultSeriesConfigs();
 

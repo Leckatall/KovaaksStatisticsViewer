@@ -1,17 +1,18 @@
 #include "series_config.h"
 
+#include "expression_dsl.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <iterator>
 #include <ranges>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace ksv::application {
     namespace {
-        constexpr double kMinimumLineWidth = 0.5;
-        constexpr double kMaximumLineWidth = 12.0;
         constexpr size_t kMaximumComputedNameBytes = 120;
         constexpr size_t kMaximumExpressionDepth = 16;
         constexpr size_t kMaximumExpressionNodes = 256;
@@ -219,6 +220,36 @@ namespace ksv::application {
             }
         }
         return errors;
+    }
+
+    bool sameSeriesConfigs(const std::vector<SeriesConfig> &left, const std::vector<SeriesConfig> &right) {
+        if (left.size() != right.size()) return false;
+        for (size_t index = 0; index < left.size(); ++index) {
+            const auto &[leftId, leftPresentation, leftExpression, leftAxis, leftTransform] = left[index];
+            const auto &[rightId, rightPresentation, rightExpression, rightAxis, rightTransform] = right[index];
+            if (leftId != rightId || leftPresentation.name != rightPresentation.name ||
+                leftPresentation.lineStyle.color != rightPresentation.lineStyle.color ||
+                leftPresentation.lineStyle.width != rightPresentation.lineStyle.width ||
+                leftPresentation.enabled != rightPresentation.enabled ||
+                leftPresentation.displayPosition != rightPresentation.displayPosition || leftAxis != rightAxis ||
+                leftTransform != rightTransform || encodeExpressionDsl(leftExpression) != encodeExpressionDsl(rightExpression))
+                return false;
+        }
+        return true;
+    }
+
+    bool sameAxisConfigs(const std::vector<AxisConfig> &left, const std::vector<AxisConfig> &right) {
+        if (left.size() != right.size()) return false;
+        for (size_t index = 0; index < left.size(); ++index) {
+            const auto &[leftOptions, rightOptions] = std::tie(left[index].options, right[index].options);
+            if (left[index].id != right[index].id || left[index].name != right[index].name ||
+                leftOptions.baseline != rightOptions.baseline || leftOptions.integral != rightOptions.integral ||
+                leftOptions.targetTicks != rightOptions.targetTicks ||
+                leftOptions.fallbackSpan != rightOptions.fallbackSpan ||
+                left[index].transformKind != right[index].transformKind)
+                return false;
+        }
+        return true;
     }
 
     std::vector<SeriesConfig> defaultSeriesConfigs() {
