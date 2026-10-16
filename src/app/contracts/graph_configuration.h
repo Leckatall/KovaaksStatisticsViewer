@@ -257,12 +257,32 @@ namespace ksv::application {
         std::uint64_t revision = 0;
     };
 
+    // Which parts of one graph's preferences a committed change touched. A consumer re-derives only
+    // what its sections name: `style` never moves a measurement, `range` never moves the averaging.
+    struct GraphSectionChange {
+        // The range preference, anchor flag included.
+        bool range = false;
+        bool window = false;
+        // Appearance, series overrides and axis policies.
+        bool style = false;
+
+        [[nodiscard]] bool any() const { return range || window || style; }
+
+        bool operator==(const GraphSectionChange &) const = default;
+    };
+
     struct GraphConfigurationChange {
         std::uint64_t revision = 0;
         // Graphs whose GraphPreferences changed, in kGraphKeys order.
         std::vector<GraphKey> graphs;
         bool runSeries = false;
         bool runAxisLabel = false;
+        // Indexed by GraphKey; every entry of a graph missing from `graphs` is empty.
+        std::array<GraphSectionChange, kGraphKeys.size()> sections;
+
+        [[nodiscard]] const GraphSectionChange &sectionsOf(const GraphKey key) const {
+            return sections[static_cast<std::size_t>(key)];
+        }
 
         [[nodiscard]] bool empty() const { return graphs.empty() && !runSeries && !runAxisLabel; }
 

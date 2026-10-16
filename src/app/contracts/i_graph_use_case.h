@@ -9,6 +9,7 @@
 #include <string>
 
 #include "graph_info.h"
+#include "graph_presentation.h"
 
 namespace ksv::application {
     class IGraphUseCase {
@@ -40,6 +41,11 @@ namespace ksv::application {
         // The committed Y-axis-label series; absent means the first visible series.
         [[nodiscard]] virtual std::optional<SeriesId> getAxisLabelSeriesId() = 0;
         virtual void onAxisLabelChanged(std::function<void()>) = 0;
+
+        // Connection mode and marker preference only: the run graph's series keep Graph Lines colours
+        // and the painter's default width.
+        [[nodiscard]] virtual GraphPresentation presentation() const = 0;
+        virtual void onPresentationChanged(std::function<void()>) = 0;
     };
 }
 

@@ -1160,3 +1160,100 @@ TEST(BenchmarkTrackingRank, OtherGraphsAndUnselectedStatesAreNotRefreshed) {
     fixture.commitPlaytime(GraphKey::BenchmarkRank);
     EXPECT_EQ(fixture.rankOnly, 0);
 }
+
+// ---- committed style ----------------------------------------------------------------------
+
+namespace {
+    struct StyleFixture : RankFixture {
+        int style = 0;
+
+        void startStyle() {
+            startRank();
+            tracking->onPresentationChanged([this] { ++style; });
+        }
+
+        void publishStyleEdits() {
+            ++configuration->revision;
+            configuration->publishDiff();
+        }
+    };
+}
+
+TEST(BenchmarkTrackingStyle, AStyleOnlyChangeNeverEvaluatesOrReprojectsEitherBenchmarkGraph) {
+    StyleFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}});
+    fixture.startStyle();
+    const auto factRequests = fixture.profile->fact_request_count;
+    const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
+    const auto before = *fixture.tracking->projection();
+
+    fixture.playtimePreferences().appearance = {ConnectionMode::PointsOnly, true};
+    fixture.playtimePreferences().seriesStyles["playtime"] = {RgbaColor{9, 9, 9, 255}, 8.0};
+    fixture.rankPreferences().appearance.connection = ConnectionMode::Straight;
+    fixture.rankPreferences().seriesStyles["rank"] = {RgbaColor{200, 0, 0, 255}, std::nullopt};
+    fixture.publishStyleEdits();
+
+    EXPECT_EQ(fixture.style, 1);
+    EXPECT_EQ(fixture.tracked, 0);
+    EXPECT_EQ(fixture.playtimeOnly, 0);
+    EXPECT_EQ(fixture.rankOnly, 0);
+    EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
+    EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests);
+    expectSameSummary(before, *fixture.tracking->projection());
+}
+
+TEST(BenchmarkTrackingStyle, EachGraphReportsItsOwnCommittedStyle) {
+    StyleFixture fixture;
+    fixture.startStyle();
+
+    fixture.playtimePreferences().appearance.connection = ConnectionMode::PointsOnly;
+    fixture.rankPreferences().seriesStyles["rank"] = {RgbaColor{1, 1, 1, 255}, 5.0};
+    fixture.publishStyleEdits();
+
+    const auto rank = fixture.tracking->presentation(GraphKey::BenchmarkRank);
+    const auto playtime = fixture.tracking->presentation(GraphKey::BenchmarkPlaytime);
+    EXPECT_EQ(rank.appearance.connection, ConnectionMode::Smooth);
+    EXPECT_EQ(rank.seriesStyle("rank"), (ResolvedSeriesStyle{RgbaColor{1, 1, 1, 255}, 5.0}));
+    EXPECT_EQ(playtime.appearance.connection, ConnectionMode::PointsOnly);
+    EXPECT_EQ(playtime.seriesStyle("playtime").color, (RgbaColor{77, 208, 225, 255}));
+}
+
+TEST(BenchmarkTrackingStyle, RangeAndWindowChangesTakeTheirDataPathsAndNotTheStylePath) {
+    StyleFixture fixture;
+    fixture.startStyle();
+
+    fixture.rankPreferences().range = RangePreference{RecentDays{2}, false};
+    fixture.playtimePreferences().averagingWindowDays = 5;
+    fixture.publishStyleEdits();
+
+    EXPECT_EQ(fixture.style, 0);
+    EXPECT_EQ(fixture.rankOnly, 1);
+    EXPECT_EQ(fixture.playtimeOnly, 1);
+}
+
+TEST(BenchmarkTrackingStyle, TheStyleFollowsTheGraphAcrossBenchmarkSelection) {
+    StyleFixture fixture;
+    fixture.startStyle();
+    fixture.rankPreferences().seriesStyles["rank"] = {RgbaColor{4, 4, 4, 255}, std::nullopt};
+    fixture.publishStyleEdits();
+    const auto committed = fixture.tracking->presentation(GraphKey::BenchmarkRank);
+
+    fixture.tracking->clearSelection();
+    fixture.tracking->select(BenchmarkId{"b1"});
+
+    EXPECT_EQ(fixture.tracking->presentation(GraphKey::BenchmarkRank), committed);
+    EXPECT_EQ(committed.seriesStyle("rank").color, (RgbaColor{4, 4, 4, 255}));
+}
+
+TEST(BenchmarkTrackingStyle, OtherGraphsStyleChangesAreIgnored) {
+    StyleFixture fixture;
+    fixture.startStyle();
+
+    fixture.configuration->configuration.preferences(GraphKey::ScenarioHistory).appearance.connection =
+        ConnectionMode::Straight;
+    fixture.configuration->configuration.preferences(GraphKey::DailyPlaytime).appearance.connection =
+        ConnectionMode::Straight;
+    fixture.publishStyleEdits();
+
+    EXPECT_EQ(fixture.style, 0);
+}

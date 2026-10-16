@@ -15,16 +15,18 @@
 #include "../contracts/graph_info.h"
 #include "../contracts/i_average_line_use_case.h"
 #include "../contracts/i_graph_configuration_use_case.h"
+#include "graph_presentation_source.h"
 
 namespace ksv::application {
     class GraphUseCase: public IGraphUseCase {
     public:
-        explicit GraphUseCase(std::shared_ptr<ISessionController> session_controller): m_session_controller(std::move(session_controller)) {}
+        explicit GraphUseCase(std::shared_ptr<ISessionController> session_controller)
+            : m_session_controller(std::move(session_controller)), m_presentation(nullptr, GraphKey::Run) {}
         GraphUseCase(std::shared_ptr<ISessionController> session_controller,
                      std::shared_ptr<IGraphConfigurationUseCase> configuration,
                      std::shared_ptr<IAverageLineUseCase> average)
             : m_session_controller(std::move(session_controller)), m_configuration(std::move(configuration)),
-              m_average(std::move(average)) {
+              m_average(std::move(average)), m_presentation(m_configuration, GraphKey::Run) {
             if (m_configuration) m_configuration->onChanged([this](const GraphConfigurationChange &change) {
                 if (change.runSeries) for (const auto &callback : m_config_callbacks) callback();
                 if (change.runAxisLabel) for (const auto &callback : m_axis_label_callbacks) callback();
@@ -101,6 +103,12 @@ namespace ksv::application {
             m_axis_label_callbacks.push_back(std::move(callback));
         }
 
+        [[nodiscard]] GraphPresentation presentation() const override { return m_presentation.current(); }
+
+        void onPresentationChanged(std::function<void()> callback) override {
+            m_presentation.onChanged(std::move(callback));
+        }
+
     private:
         // Single-entry cache of the reference run's buckets, shared by getSeriesValues()'s x-fold
         // and getRunDuration(). Keyed by run id; a run is immutable under its id, so an id match is
@@ -120,6 +128,7 @@ namespace ksv::application {
         std::shared_ptr<IAverageLineUseCase> m_average;
         std::vector<std::function<void()>> m_config_callbacks;
         std::vector<std::function<void()>> m_axis_label_callbacks;
+        GraphPresentationSource m_presentation;
         std::optional<domain::ScenarioRunId> m_cachedRunId;
         BucketedRun m_cachedBuckets;
 

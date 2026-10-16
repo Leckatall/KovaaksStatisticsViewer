@@ -45,6 +45,12 @@ namespace ksv::application {
             m_playtimeCallbacks.push_back(std::move(callback));
         }
         void onRankChanged(std::function<void()> callback) override { m_rankCallbacks.push_back(std::move(callback)); }
+        [[nodiscard]] GraphPresentation presentation(const GraphKey graph) const override {
+            return presentationOf(graph, m_configuration->current().configuration->preferences(graph));
+        }
+        void onPresentationChanged(std::function<void()> callback) override {
+            m_presentationCallbacks.push_back(std::move(callback));
+        }
 
     private:
         // Everything derived from one benchmark's definition and the profile's runs. The playtime
@@ -95,6 +101,7 @@ namespace ksv::application {
         std::vector<std::function<void()> > m_callbacks;
         std::vector<std::function<void()> > m_playtimeCallbacks;
         std::vector<std::function<void()> > m_rankCallbacks;
+        std::vector<std::function<void()> > m_presentationCallbacks;
     };
 }
 

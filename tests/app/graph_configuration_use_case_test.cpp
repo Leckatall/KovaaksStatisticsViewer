@@ -61,7 +61,9 @@ namespace {
         ASSERT_EQ(persistence->saves.size(), 1U);
         EXPECT_EQ(persistence->saves.front(), candidate);
         ASSERT_EQ(changes.size(), 1U);
-        EXPECT_EQ(changes.front(), (GraphConfigurationChange{2, {GraphKey::BenchmarkRank}, false, true}));
+        auto expected = GraphConfigurationChange{2, {GraphKey::BenchmarkRank}, false, true};
+        expected.sections[static_cast<std::size_t>(GraphKey::BenchmarkRank)].range = true;
+        EXPECT_EQ(changes.front(), expected);
     }
 
     // EDGE-02: an invalid field on a graph other than the one being edited still blocks the whole save,
@@ -168,8 +170,10 @@ namespace {
         after.preferences(GraphKey::Run).appearance.connection = ConnectionMode::Straight;
         after.runSeries.nextAxisId = AxisId{9};
 
-        EXPECT_EQ(diffGraphConfigurations(before, after),
-                  (GraphConfigurationChange{0, {GraphKey::Run, GraphKey::BenchmarkPlaytime}, true, false}));
+        auto expected = GraphConfigurationChange{0, {GraphKey::Run, GraphKey::BenchmarkPlaytime}, true, false};
+        expected.sections[static_cast<std::size_t>(GraphKey::Run)].style = true;
+        expected.sections[static_cast<std::size_t>(GraphKey::BenchmarkPlaytime)].window = true;
+        EXPECT_EQ(diffGraphConfigurations(before, after), expected);
         EXPECT_TRUE(diffGraphConfigurations(before, before).empty());
     }
 }

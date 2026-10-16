@@ -35,7 +35,11 @@ namespace ksv::tests_ui {
         void select(const domain::BenchmarkId &id) override { selectCalls.push_back(id); }
         void clearSelection() override { ++clearCalls; }
         void selectDefault() override { ++selectDefaultCalls; }
-        [[nodiscard]] const application::BenchmarkWorkspaceSnapshot &snapshot() const override { return snap; }
+        mutable int snapshotCalls = 0;
+        [[nodiscard]] const application::BenchmarkWorkspaceSnapshot &snapshot() const override {
+            ++snapshotCalls;
+            return snap;
+        }
         [[nodiscard]] std::optional<domain::BenchmarkId> selected() const override { return snap.selectedId; }
         [[nodiscard]] application::BenchmarkTrackingState state() const override { return snap.availability; }
         [[nodiscard]] const domain::BenchmarkProjection *projection() const override {
@@ -46,6 +50,21 @@ namespace ksv::tests_ui {
             m_playtimeCallbacks.push_back(std::move(callback));
         }
         void onRankChanged(std::function<void()> callback) override { m_rankCallbacks.push_back(std::move(callback)); }
+        application::GraphPresentation rankPresentation =
+            application::defaultGraphPresentation(application::GraphKey::BenchmarkRank);
+        application::GraphPresentation playtimePresentation =
+            application::defaultGraphPresentation(application::GraphKey::BenchmarkPlaytime);
+        [[nodiscard]] application::GraphPresentation presentation(const application::GraphKey graph) const override {
+            return graph == application::GraphKey::BenchmarkRank ? rankPresentation : playtimePresentation;
+        }
+        void onPresentationChanged(std::function<void()> callback) override {
+            m_presentationCallbacks.push_back(std::move(callback));
+        }
+
+        void publishPresentation() const {
+            for (const auto &callback: m_presentationCallbacks)
+                if (callback) callback();
+        }
 
         void publish() const {
             for (const auto &callback: m_callbacks)
@@ -66,6 +85,7 @@ namespace ksv::tests_ui {
         std::vector<std::function<void()> > m_callbacks;
         std::vector<std::function<void()> > m_playtimeCallbacks;
         std::vector<std::function<void()> > m_rankCallbacks;
+        std::vector<std::function<void()> > m_presentationCallbacks;
     };
 
     inline std::chrono::sys_days ymd(const int year, const unsigned month, const unsigned day) {

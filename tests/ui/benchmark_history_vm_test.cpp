@@ -768,3 +768,117 @@ TEST(BenchmarkHistoryAxisPolicy, TheRankGraphNeverTakesGenericNumericFitting) {
     EXPECT_EQ(historyAxis(vm).formatTick(2.0), "Silver");
     EXPECT_EQ(bounds.count(), 1) << "only the update announced anything";
 }
+
+
+// ---- committed style ----------------------------------------------------------------------
+
+TEST(BenchmarkHistoryStyle, WithNothingSavedBothGraphsLookAsTheyAlwaysDid) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    for (const auto *history: {vm.rankHistory(), vm.playtimeHistory()}) {
+        EXPECT_EQ(history->property("connectionMode").toInt(), 0);
+        EXPECT_FALSE(history->property("pointMarkers").toBool());
+        EXPECT_DOUBLE_EQ(history->series({kValueColumn}).front()->lineWidth, 3.0);
+    }
+    EXPECT_FALSE(vm.rankHistory()->series({kValueColumn}).front()->color().isValid()) << "neutral rank line";
+    EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->color(), QColor("#4DD0E1"));
+}
+
+TEST(BenchmarkHistoryStyle, TheCommittedStyleIsAppliedAtConstructionToEachGraph) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    fake->rankPresentation.appearance = {ConnectionMode::Straight, true};
+    fake->rankPresentation.seriesStyles["rank"] = {RgbaColor{200, 0, 0, 255}, 6.0};
+    fake->playtimePresentation.appearance = {ConnectionMode::PointsOnly, false};
+
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_EQ(vm.rankHistory()->property("connectionMode").toInt(), static_cast<int>(ConnectionMode::Straight));
+    EXPECT_TRUE(vm.rankHistory()->property("pointMarkers").toBool());
+    const auto *rank = vm.rankHistory()->series({kValueColumn}).front();
+    EXPECT_EQ(rank->color(), QColor(200, 0, 0));
+    EXPECT_DOUBLE_EQ(rank->lineWidth, 6.0);
+    EXPECT_EQ(vm.playtimeHistory()->property("connectionMode").toInt(), static_cast<int>(ConnectionMode::PointsOnly));
+    EXPECT_FALSE(vm.playtimeHistory()->property("pointMarkers").toBool());
+}
+
+TEST(BenchmarkHistoryStyle, AStyleChangeRestylesWithoutReadingTheWorkspaceAgain) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    const int reads = fake->snapshotCalls;
+    const QSignalSpy rankStyle(vm.rankHistory(), &GraphViewModelBase::styleChanged);
+    const QSignalSpy playtimeStyle(vm.playtimeHistory(), &GraphViewModelBase::styleChanged);
+    const QSignalSpy changed(&vm, &BenchmarkTrackingViewModel::changed);
+
+    fake->playtimePresentation.seriesStyles["playtime"] = {RgbaColor{9, 8, 7, 255}, 9.0};
+    fake->publishPresentation();
+
+    EXPECT_EQ(fake->snapshotCalls, reads);
+    EXPECT_EQ(changed.count(), 0);
+    EXPECT_EQ(playtimeStyle.count(), 1);
+    EXPECT_EQ(rankStyle.count(), 0) << "the rank graph style did not move";
+    const auto *playtime = vm.playtimeHistory()->series({kValueColumn}).front();
+    EXPECT_EQ(playtime->color(), QColor(9, 8, 7));
+    EXPECT_DOUBLE_EQ(playtime->lineWidth, 9.0);
+}
+
+// STYLE-07: recolouring the rank line must not leave it unidentifiable.
+TEST(BenchmarkHistoryStyle, ARecolouredRankSeriesKeepsItsIdentifyingNameAndTierReferences) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    const auto tierColours = [&] {
+        QList<QColor> colours;
+        for (const auto &line: vm.rankHistory()->series({kValueColumn}).front()->referenceLines)
+            colours.append(line.color);
+        return colours;
+    };
+    const auto tiersBefore = tierColours();
+
+    fake->rankPresentation.seriesStyles["rank"] = {RgbaColor{12, 34, 56, 255}, std::nullopt};
+    fake->publishPresentation();
+    fake->publishRank();
+
+    const auto *rank = vm.rankHistory()->series({kValueColumn}).front();
+    EXPECT_EQ(rank->color(), QColor(12, 34, 56));
+    EXPECT_EQ(rank->name(), "Personal-best average rank");
+    EXPECT_EQ(vm.rankHistory()->metricName(), "Personal-best average rank");
+    EXPECT_EQ(tierColours(), tiersBefore);
+}
+
+TEST(BenchmarkHistoryStyle, TheStyleSurvivesRebuildsAndBenchmarkSelectionChanges) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    fake->rankPresentation.seriesStyles["rank"] = {RgbaColor{1, 1, 1, 255}, 5.0};
+    fake->playtimePresentation.appearance = {ConnectionMode::Straight, true};
+    fake->publishPresentation();
+
+    auto other = makeTrackableSnapshot();
+    other.selectedId = BenchmarkId{"b2"};
+    other.projection->averageRankHistory = {{ymd(2025, 1, 1), 2.0}, {ymd(2025, 1, 9), 3.0}};
+    other.projection->rollingPlaytime = {{ymd(2025, 1, 1), 60.0}, {ymd(2025, 1, 9), 120.0}};
+    fake->snap = other;
+    fake->publish();
+    fake->publishPlaytime();
+    fake->publishRank();
+
+    const auto *rank = vm.rankHistory()->series({kValueColumn}).front();
+    EXPECT_EQ(rank->color(), QColor(1, 1, 1));
+    EXPECT_DOUBLE_EQ(rank->lineWidth, 5.0);
+    EXPECT_EQ(vm.playtimeHistory()->property("connectionMode").toInt(), static_cast<int>(ConnectionMode::Straight));
+    EXPECT_TRUE(vm.playtimeHistory()->property("pointMarkers").toBool());
+}
+
+TEST(BenchmarkHistoryStyle, OnlyThePlaytimeGraphTakesAnAxisPolicyAndTheRankAxisStaysTierBased) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    const auto rankAxisMax = vm.rankHistory()->series({kValueColumn}).front()->yAxis->max();
+
+    fake->playtimePresentation.axisPolicies["playtime"] = FixedBounds{5.0, 45.0};
+    fake->rankPresentation.axisPolicies["playtime"] = FixedBounds{5.0, 45.0};
+    fake->publishPresentation();
+
+    const auto &playtimeAxis = *vm.playtimeHistory()->series({kValueColumn}).front()->yAxis;
+    EXPECT_DOUBLE_EQ(playtimeAxis.min(), 5.0);
+    EXPECT_DOUBLE_EQ(playtimeAxis.max(), 45.0);
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->series({kValueColumn}).front()->yAxis->max(), rankAxisMax);
+}

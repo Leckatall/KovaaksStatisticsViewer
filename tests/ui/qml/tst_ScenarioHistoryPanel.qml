@@ -82,6 +82,21 @@ Item {
             compare(canvas.pointMarkers, true)
         }
 
+        // The line style is the committed preference of this graph: markers and connection follow the VM.
+        function test_markersAndConnectionFollowTheViewModel() {
+            const panel = panelWith({runCount: 8, visibleRunCount: 8, pointMarkers: false, connectionMode: 2})
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            compare(canvas.pointMarkers, false)
+            compare(canvas.connectionMode, 2)
+
+            panel.historyVm = Object.assign(TestDoubles.makeFakeHistoryVm(),
+                                            {runCount: 8, visibleRunCount: 8, pointMarkers: true, connectionMode: 1})
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            compare(canvas.pointMarkers, true)
+            compare(canvas.connectionMode, 1)
+        }
+
         // The canvas marks the run the VM reports as selected, and nothing without one.
         function test_selectedRunIsMarkedOnTheCanvas() {
             const panel = createTemporaryObject(fewRunsPanelComponent, root)

@@ -1,6 +1,7 @@
 add_library(ksv_contracts STATIC
         series_config.cpp
         graph_configuration.cpp
+        graph_presentation.cpp
         run_series_editing.cpp
         range_projection.cpp
         playtime_view.cpp
@@ -17,6 +18,7 @@ target_sources(ksv_contracts PUBLIC
         graph_info.h
         series_config.h
         graph_configuration.h
+        graph_presentation.h
         run_series_editing.h
         range_projection.h
         playtime_view.h

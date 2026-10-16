@@ -401,6 +401,10 @@ namespace {
         }
         void onCurrentScenarioChanged(std::function<void()>) override {}
         void onRangeChanged(std::function<void()>) override {}
+        [[nodiscard]] application::GraphPresentation presentation() const override {
+            return application::defaultGraphPresentation(application::GraphKey::ScenarioHistory);
+        }
+        void onPresentationChanged(std::function<void()>) override {}
         std::optional<int> selected_run_index() override { return 7; }
         void onSelectedRunChanged(std::function<void()>) override {}
         void select_run(int) override {}

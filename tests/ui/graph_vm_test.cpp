@@ -71,8 +71,20 @@ namespace {
         std::optional<SeriesId> getAxisLabelSeriesId() override { return axis_label; }
         void onAxisLabelChanged(std::function<void()> callback) override { axis_label_callback = std::move(callback); }
 
+        GraphPresentation committedPresentation = defaultGraphPresentation(GraphKey::Run);
+        std::vector<std::function<void()>> presentation_callbacks;
+        int series_value_calls = 0;
+        [[nodiscard]] GraphPresentation presentation() const override { return committedPresentation; }
+        void onPresentationChanged(std::function<void()> callback) override {
+            presentation_callbacks.push_back(std::move(callback));
+        }
+        void publishPresentation() const {
+            for (const auto &callback: presentation_callbacks) callback();
+        }
+
         std::vector<SeriesConfig> getSeriesConfigs() override { return series_configs; }
         std::optional<SeriesPoints> getSeriesValues(const SeriesId id) override {
+            ++series_value_calls;
             const auto it = series_values.find(id.value);
             return it == series_values.end() ? std::nullopt : it->second;
         }
@@ -444,5 +456,54 @@ namespace {
 
         EXPECT_EQ(view_model.axisLabelSeriesId(), "7");
         EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(GraphViewModelTest, WithNothingSavedTheRunGraphIsSmoothWithoutMarkers) {
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), 0);
+        EXPECT_FALSE(view_model.property("pointMarkers").toBool());
+    }
+
+    TEST_F(GraphViewModelTest, TheCommittedConnectionAndMarkersApplyAtConstruction) {
+        auto restored_use_case = std::make_shared<FakeGraphUseCase>();
+        restored_use_case->committedPresentation.appearance = {ConnectionMode::Straight, true};
+
+        GraphViewModel restored{restored_use_case};
+
+        EXPECT_EQ(restored.property("connectionMode").toInt(), static_cast<int>(ConnectionMode::Straight));
+        EXPECT_TRUE(restored.property("pointMarkers").toBool());
+    }
+
+    TEST_F(GraphViewModelTest, AStyleChangeRestylesWithoutRefetchingSeriesOrRebuildingTheLineList) {
+        setSampleData();
+        view_model.fetchData();
+        const int reads = fake_use_case->series_value_calls;
+        const QSignalSpy styleSpy(&view_model, &GraphViewModelBase::styleChanged);
+        const QSignalSpy configSpy(&view_model, &GraphViewModel::seriesConfigurationChanged);
+        const QSignalSpy dataSpy(&view_model, &GraphViewModelBase::dataUpdated);
+
+        fake_use_case->committedPresentation.appearance = {ConnectionMode::PointsOnly, false};
+        fake_use_case->publishPresentation();
+
+        EXPECT_EQ(fake_use_case->series_value_calls, reads);
+        EXPECT_EQ(styleSpy.count(), 1);
+        EXPECT_EQ(configSpy.count(), 0);
+        EXPECT_EQ(dataSpy.count(), 0);
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), static_cast<int>(ConnectionMode::PointsOnly));
+    }
+
+    // Graph Lines remains the run graph's series editor: its colours are the configured ones and the
+    // painted width stays the painter default, not the stored per-line width.
+    TEST_F(GraphViewModelTest, RunSeriesKeepTheirGraphLinesColourAndThePainterWidth) {
+        setSampleData();
+        view_model.fetchMetadata();
+        const auto before = view_model.series({kScore}).front()->color();
+
+        fake_use_case->committedPresentation.appearance = {ConnectionMode::Straight, true};
+        fake_use_case->publishPresentation();
+
+        const auto score = view_model.series({kScore}).front();
+        EXPECT_EQ(score->color(), before);
+        EXPECT_TRUE(score->color().isValid());
+        EXPECT_DOUBLE_EQ(score->lineWidth, 3.0);
     }
 }

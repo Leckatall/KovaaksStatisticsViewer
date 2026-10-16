@@ -346,4 +346,50 @@ namespace {
         days->advance();
         EXPECT_EQ(notifications, 1) << "anchored presets, latest-N and all history ignore the date";
     }
+
+    TEST_F(CompletionHistoryUseCaseTest, StyleOnlyChangesNeverRequeryTheProfileOrRefreshTheRows) {
+        playOnDays({kToday - 6, kToday - 1});
+        std::ignore = use_case.get_history();
+        int range = 0;
+        int style = 0;
+        use_case.onRangeChanged([&] { ++range; });
+        use_case.onPresentationChanged([&] { ++style; });
+        const auto queries = profile->completion_history_calls;
+
+        preferences().appearance = {ConnectionMode::Straight, false};
+        preferences().seriesStyles["hits"] = {RgbaColor{3, 3, 3, 255}, 7.0};
+        preferences().axisPolicies["accuracy"] = StartAtZero{};
+        configuration->publishDiff();
+
+        EXPECT_EQ(range, 0);
+        EXPECT_EQ(style, 1);
+        EXPECT_EQ(profile->completion_history_calls, queries);
+        const auto presentation = use_case.presentation();
+        EXPECT_EQ(presentation.appearance, (LineAppearance{ConnectionMode::Straight, false}));
+        EXPECT_EQ(presentation.seriesStyle("hits"), (ResolvedSeriesStyle{RgbaColor{3, 3, 3, 255}, 7.0}));
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ARangeChangeRefreshesTheRowsAndLeavesTheStyleAlone) {
+        int range = 0;
+        int style = 0;
+        use_case.onRangeChanged([&] { ++range; });
+        use_case.onPresentationChanged([&] { ++style; });
+
+        setRange(LatestRuns{3});
+        configuration->publishDiff();
+
+        EXPECT_EQ(range, 1);
+        EXPECT_EQ(style, 0);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, TheStyleFollowsTheGraphAcrossScenarioChanges) {
+        preferences().appearance.connection = ConnectionMode::PointsOnly;
+        configuration->publishDiff();
+        playOnDays({kToday}, "scenario-a");
+        const auto first = use_case.presentation();
+        playOnDays({kToday}, "scenario-b");
+
+        EXPECT_EQ(use_case.presentation(), first);
+        EXPECT_EQ(use_case.presentation().appearance.connection, ConnectionMode::PointsOnly);
+    }
 }

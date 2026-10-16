@@ -17,6 +17,7 @@
 #include "contracts/i_graph_configuration_use_case.h"
 #include "contracts/playtime_view.h"
 #include "contracts/range_projection.h"
+#include "graph_presentation_source.h"
 #include "i_session_controller.h"
 
 namespace ksv::application {
@@ -29,10 +30,10 @@ namespace ksv::application {
             : m_session_controller(std::move(session_controller)),
               m_profile_service(std::move(profile_service)),
               m_configuration(std::move(configuration)),
-              m_day_source(std::move(day_source)) {
+              m_day_source(std::move(day_source)),
+              m_presentation(m_configuration, GraphKey::ScenarioHistory) {
             m_configuration->onChanged([this](const GraphConfigurationChange &change) {
-                if (std::ranges::find(change.graphs, GraphKey::ScenarioHistory) != change.graphs.end())
-                    notifyRangeChanged();
+                if (change.sectionsOf(GraphKey::ScenarioHistory).range) notifyRangeChanged();
             });
             m_day_source->onDayChanged([this](std::chrono::sys_days) {
                 if (followsToday(committedRange())) notifyRangeChanged();
@@ -79,6 +80,12 @@ namespace ksv::application {
 
         void onRangeChanged(std::function<void()> callback) override {
             m_range_callbacks.push_back(std::move(callback));
+        }
+
+        [[nodiscard]] GraphPresentation presentation() const override { return m_presentation.current(); }
+
+        void onPresentationChanged(std::function<void()> callback) override {
+            m_presentation.onChanged(std::move(callback));
         }
 
         void onCurrentScenarioChanged(std::function<void()> callback) override {
@@ -143,6 +150,7 @@ namespace ksv::application {
         std::shared_ptr<IProfileService> m_profile_service;
         std::shared_ptr<IGraphConfigurationUseCase> m_configuration;
         std::shared_ptr<data::IDaySource> m_day_source;
+        GraphPresentationSource m_presentation;
         std::vector<std::function<void()>> m_range_callbacks;
         std::string m_last_scenario_hash;
         QMetaObject::Connection m_current_perf_connection;

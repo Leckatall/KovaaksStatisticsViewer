@@ -58,6 +58,7 @@ namespace ksv::presentation {
 
     private:
         void applyYAxis();
+        void applyPresentation();
 
         std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;
         int m_windowDays = application::kDefaultAveragingWindowDays;

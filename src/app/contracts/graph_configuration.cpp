@@ -248,8 +248,18 @@ namespace ksv::application {
 
     GraphConfigurationChange diffGraphConfigurations(const GraphConfiguration &before, const GraphConfiguration &after) {
         GraphConfigurationChange change;
-        for (const auto key: kGraphKeys)
-            if (before.preferences(key) != after.preferences(key)) change.graphs.push_back(key);
+        for (const auto key: kGraphKeys) {
+            const auto &was = before.preferences(key);
+            const auto &now = after.preferences(key);
+            if (was == now) continue;
+            change.graphs.push_back(key);
+            change.sections[static_cast<std::size_t>(key)] = {
+                .range = was.range != now.range,
+                .window = was.averagingWindowDays != now.averagingWindowDays,
+                .style = was.appearance != now.appearance || was.seriesStyles != now.seriesStyles ||
+                         was.axisPolicies != now.axisPolicies
+            };
+        }
         change.runSeries = !(before.runSeries == after.runSeries);
         change.runAxisLabel = before.runAxisLabelSeriesId != after.runAxisLabelSeriesId;
         return change;

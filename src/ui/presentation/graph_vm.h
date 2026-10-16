@@ -88,6 +88,7 @@ namespace ksv::presentation {
         QString m_axisLabelSeriesId;
 
         void refreshAxisLabelSeriesId();
+        void applyPresentation();
     };
 }
 

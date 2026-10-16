@@ -13,6 +13,8 @@ Item {
         id: fakePlaytimeVm
 
         property bool hasData: false
+        property bool pointMarkers: false
+        property int connectionMode: 0
         property string title: "Daily Playtime (3-day rolling average)"
     }
 
@@ -32,6 +34,8 @@ Item {
 
         function init() {
             fakePlaytimeVm.hasData = false
+            fakePlaytimeVm.pointMarkers = false
+            fakePlaytimeVm.connectionMode = 0
             fakePlaytimeVm.title = "Daily Playtime (3-day rolling average)"
         }
 
@@ -44,6 +48,23 @@ Item {
             compare(title.text, "Daily Playtime (daily totals)")
             fakePlaytimeVm.title = "Daily Playtime (7-day rolling average)"
             compare(title.text, "Daily Playtime (7-day rolling average)")
+        }
+
+        // The playtime graph draws with its own committed connection mode and marker preference.
+        function test_canvasFollowsTheViewModelsLineStyle() {
+            fakePlaytimeVm.hasData = true
+            fakePlaytimeVm.pointMarkers = true
+            fakePlaytimeVm.connectionMode = 1
+            const panel = createTemporaryObject(panelComponent, root)
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "playtimeGraphCanvas")) !== null, 2000)
+            compare(canvas.pointMarkers, true)
+            compare(canvas.connectionMode, 1)
+
+            fakePlaytimeVm.connectionMode = 2
+            fakePlaytimeVm.pointMarkers = false
+            compare(canvas.connectionMode, 2)
+            compare(canvas.pointMarkers, false)
         }
 
         // no playtime shows a message, not an empty grid with axes.

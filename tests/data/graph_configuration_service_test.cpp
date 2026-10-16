@@ -62,8 +62,10 @@ namespace {
         ASSERT_EQ(persistence->saves.size(), 1U);
         EXPECT_EQ(persistence->saves.front(), candidate);
         ASSERT_EQ(changes.size(), 1U);
-        EXPECT_EQ(changes.front(), (GraphConfigurationChange{
-                      2, {GraphKey::DailyPlaytime, GraphKey::ScenarioHistory}, false, false}));
+        auto expected = GraphConfigurationChange{2, {GraphKey::DailyPlaytime, GraphKey::ScenarioHistory}, false, false};
+        expected.sections[static_cast<std::size_t>(GraphKey::DailyPlaytime)].window = true;
+        expected.sections[static_cast<std::size_t>(GraphKey::ScenarioHistory)].style = true;
+        EXPECT_EQ(changes.front(), expected);
     }
 
     TEST_F(GraphConfigurationServiceTest, NamesTheRunSeriesAndAxisLabelSections) {

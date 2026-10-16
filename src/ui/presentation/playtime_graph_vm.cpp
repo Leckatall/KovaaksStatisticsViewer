@@ -4,6 +4,7 @@
 
 #include "playtime_graph_vm.h"
 
+#include "series_style.h"
 #include <QDateTime>
 #include <QTimeZone>
 
@@ -13,17 +14,23 @@
 #include <utility>
 
 namespace ksv::presentation {
-    namespace {
-        const QColor kPlaytimeColor("#4DD0E1");
-    }
-
     PlaytimeGraphViewModel::PlaytimeGraphViewModel(std::shared_ptr<application::IPlaytimeGraphUseCase> useCase,
                                                    QObject *parent)
         : GraphViewModelBase(parent), m_useCase(std::move(useCase)),
           m_axisPolicy(axisPolicyFor({}, application::GraphKey::DailyPlaytime, "playtime")),
           m_xAxis(DateTimeAxis::Options{.wholeDays = true}), m_series(new SeriesModel(this)) {
         m_useCase->onChanged([this] { refresh(); });
+        m_useCase->onPresentationChanged([this] { applyPresentation(); });
+        applyPresentation();
         refresh();
+    }
+
+    void PlaytimeGraphViewModel::applyPresentation() {
+        const auto presentation = m_useCase->presentation();
+        setAppearance(presentation.appearance);
+        applySeriesStyle(*m_series, presentation, "playtime");
+        setAxisPolicies(presentation.axisPolicies);
+        emit styleChanged();
     }
 
     QString PlaytimeGraphViewModel::title() const {
@@ -74,7 +81,6 @@ namespace ksv::presentation {
 
         m_series->setId(QString::number(Playtime));
         m_series->setName(m_windowDays == 1 ? tr("Playtime (daily total)") : tr("Playtime (%1-day avg)").arg(m_windowDays));
-        m_series->setColor(kPlaytimeColor);
         m_series->setColumn(Playtime);
         m_series->transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
         m_series->points = rawSecondsPoints;

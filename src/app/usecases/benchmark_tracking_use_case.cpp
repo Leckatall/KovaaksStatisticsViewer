@@ -70,10 +70,12 @@ namespace ksv::application {
         m_resolution->onChanged(reevaluate);
         m_profileService->onProfileChanged(reevaluate);
         m_configuration->onChanged([this](const GraphConfigurationChange &change) {
-            if (std::ranges::find(change.graphs, GraphKey::BenchmarkRank) != change.graphs.end())
-                refreshRankOnly();
-            if (std::ranges::find(change.graphs, GraphKey::BenchmarkPlaytime) != change.graphs.end())
-                refreshPlaytimeOnly();
+            if (change.sectionsOf(GraphKey::BenchmarkRank).range) refreshRankOnly();
+            const auto &playtime = change.sectionsOf(GraphKey::BenchmarkPlaytime);
+            if (playtime.range || playtime.window) refreshPlaytimeOnly();
+            // One announcement however many of the two graphs restyled.
+            if (change.sectionsOf(GraphKey::BenchmarkRank).style || playtime.style)
+                for (const auto &callback: m_presentationCallbacks) callback();
         });
         m_daySource->onDayChanged([this](std::chrono::sys_days) {
             const auto committed = m_configuration->current();

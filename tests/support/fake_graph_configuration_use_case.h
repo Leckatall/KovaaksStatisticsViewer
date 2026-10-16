@@ -19,6 +19,7 @@ namespace ksv::tests_support {
         std::vector<application::GraphConfigurationIssue> rejectSavesWith;
         std::vector<std::pair<application::GraphKey, application::GraphQuickPatch>> patches;
         std::vector<std::function<void(const application::GraphConfigurationChange &)>> callbacks;
+        application::GraphConfiguration published = application::defaultGraphConfiguration();
 
         [[nodiscard]] application::GraphConfigurationSnapshot current() const override {
             return {std::make_shared<const application::GraphConfiguration>(configuration), revision};
@@ -45,8 +46,28 @@ namespace ksv::tests_support {
             return {{}, revision};
         }
 
+        // A change naming a graph without naming sections touches all of them.
         void publish(application::GraphConfigurationChange change) {
             change.revision = revision;
+            for (const auto graph: change.graphs) {
+                auto &sections = change.sections[static_cast<std::size_t>(graph)];
+                if (!sections.any()) sections = {true, true, true};
+            }
+            deliver(change);
+            published = configuration;
+        }
+
+        // Publishes exactly what differs between `configuration` and the last published state, as
+        // the real service would.
+        void publishDiff() {
+            auto change = application::diffGraphConfigurations(published, configuration);
+            change.revision = revision;
+            deliver(change);
+            published = configuration;
+        }
+
+    private:
+        void deliver(const application::GraphConfigurationChange &change) const {
             for (const auto &callback: callbacks) callback(change);
         }
     };

@@ -207,4 +207,42 @@ namespace {
         EXPECT_EQ(notifications, 1);
         EXPECT_EQ(use_case.getAxisLabelSeriesId(), SeriesId{4});
     }
+
+    TEST_F(GraphUseCaseTest, RunGraphStyleIsItsConnectionModeAndMarkersFromCommittedConfiguration) {
+        EXPECT_EQ(use_case.presentation(), defaultGraphPresentation(GraphKey::Run));
+
+        auto &preferences = fake_configuration->configuration.preferences(GraphKey::Run);
+        preferences.appearance = {ConnectionMode::Straight, true};
+
+        EXPECT_EQ(use_case.presentation().appearance, (LineAppearance{ConnectionMode::Straight, true}));
+    }
+
+    TEST_F(GraphUseCaseTest, StyleOnlyChangesAnnounceThemselvesWithoutRefreshingSeriesOrAxisLabel) {
+        int presentation = 0;
+        int series = 0;
+        int label = 0;
+        use_case.onPresentationChanged([&] { ++presentation; });
+        use_case.onSeriesConfigChanged([&] { ++series; });
+        use_case.onAxisLabelChanged([&] { ++label; });
+
+        fake_configuration->configuration.preferences(GraphKey::Run).appearance.connection =
+            ConnectionMode::PointsOnly;
+        fake_configuration->publishDiff();
+
+        EXPECT_EQ(presentation, 1);
+        EXPECT_EQ(series, 0);
+        EXPECT_EQ(label, 0);
+    }
+
+    TEST_F(GraphUseCaseTest, OtherGraphsStyleAndRunSeriesEditsDoNotRestyleTheRunGraph) {
+        int presentation = 0;
+        use_case.onPresentationChanged([&] { ++presentation; });
+
+        fake_configuration->configuration.preferences(GraphKey::ScenarioHistory).appearance.connection =
+            ConnectionMode::Straight;
+        fake_configuration->configuration.runAxisLabelSeriesId = SeriesId{2};
+        fake_configuration->publishDiff();
+
+        EXPECT_EQ(presentation, 0);
+    }
 }

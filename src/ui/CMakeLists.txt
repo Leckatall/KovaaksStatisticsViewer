@@ -97,6 +97,7 @@ qt_add_qml_module(ksv_ui
             presentation/value_transform.h
             presentation/series_model.h
             presentation/series_model.cpp
+            presentation/series_style.h
             presentation/axis_policy.h
             presentation/axis_policy.cpp
             presentation/graph_vm_base.h

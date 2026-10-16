@@ -75,6 +75,10 @@ namespace ksv::presentation {
         // Takes the "playtime" policy, in minutes, for RollingPlaytime and is ignored for AverageRank:
         // the rank axis is always tier-based. Kept across updates.
         void setAxisPolicies(const AxisPolicyMap &policies);
+
+        // This metric's graph style: connection, markers, series colour and width, and the playtime
+        // axis policy. Kept across updates; the series name never depends on it.
+        void setPresentation(const application::GraphPresentation &presentation);
         [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
         // X is UTC-midnight epoch ms, Y the metric's raw value (rank position, or playtime seconds).
@@ -100,11 +104,16 @@ namespace ksv::presentation {
         void metricNameChanged();
 
     private:
+        [[nodiscard]] application::GraphKey graphKey() const {
+            return m_metric == AverageRank ? application::GraphKey::BenchmarkRank
+                                           : application::GraphKey::BenchmarkPlaytime;
+        }
         [[nodiscard]] static ValueAxis rankYAxis(const std::vector<RankTier> &tiers);
         void applyPlaytimeYAxis();
 
         Metric m_metric;
         int m_windowDays = 3;
+        application::GraphPresentation m_presentation;
         application::AxisPolicy m_playtimeAxisPolicy;
         SeriesModel *m_series;
         const Axis *m_xAxis;

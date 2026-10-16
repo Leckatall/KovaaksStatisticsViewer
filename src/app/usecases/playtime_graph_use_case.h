@@ -14,6 +14,7 @@
 #include "contracts/i_playtime_graph_use_case.h"
 #include "data/interfaces/i_day_source.h"
 #include "data/interfaces/i_profile_service.h"
+#include "graph_presentation_source.h"
 
 namespace ksv::application {
     class PlaytimeGraphUseCase final : public IPlaytimeGraphUseCase {
@@ -24,6 +25,10 @@ namespace ksv::application {
 
         [[nodiscard]] PlaytimeGraphSnapshot snapshot() override;
         void onChanged(std::function<void()> callback) override { m_callbacks.push_back(std::move(callback)); }
+        [[nodiscard]] GraphPresentation presentation() const override { return m_presentation.current(); }
+        void onPresentationChanged(std::function<void()> callback) override {
+            m_presentation.onChanged(std::move(callback));
+        }
 
     private:
         void notifyChanged() const;
@@ -33,6 +38,7 @@ namespace ksv::application {
         std::shared_ptr<IGraphConfigurationUseCase> m_configuration;
         std::shared_ptr<data::IDaySource> m_daySource;
         std::vector<std::function<void()> > m_callbacks;
+        GraphPresentationSource m_presentation;
 
         // Full-history measurements for one window; a profile change drops them, a range or style
         // change leaves them alone.

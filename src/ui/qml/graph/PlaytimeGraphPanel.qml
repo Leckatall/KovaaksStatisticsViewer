@@ -43,6 +43,8 @@ Frame {
                         // Single series ("Playtime"), always visible.
                         visibleColumns: [PlaytimeGraphViewModel.Playtime]
                         showSeriesNames: false
+                        pointMarkers: root.playtimeVm.pointMarkers
+                        connectionMode: root.playtimeVm.connectionMode
                     }
                 }
             }

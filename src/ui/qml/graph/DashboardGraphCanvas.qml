@@ -122,6 +122,8 @@ Frame {
                                 graphVm: root.graphVm
                                 visibleColumns: root.visibleColumns
                                 yAxisColumn: root.yAxisColumn
+                                pointMarkers: root.graphVm.pointMarkers
+                                connectionMode: root.graphVm.connectionMode
                             }
                         }
                     }

@@ -1,5 +1,7 @@
 #include "completion_history_vm.h"
 
+#include "series_style.h"
+
 #include <QColor>
 #include <QtMath>
 
@@ -13,7 +15,8 @@ namespace ksv::presentation {
     namespace {
         struct ColumnMeta {
             const char *name;
-            QColor color;
+            // The series key graphDescriptor(ScenarioHistory) and the committed overrides use.
+            std::string_view key;
             int yAxis;
         };
 
@@ -43,12 +46,12 @@ namespace ksv::presentation {
         }};
 
         const std::array<ColumnMeta, CompletionHistoryViewModel::ColumnCount> kColumnMeta{{
-            {"Run", QColor(), -1},
-            {"Score", QColor("#009600"), ScoreAxis},
-            {"Accuracy", QColor("cyan"), AccuracyAxis},
-            {"Shots", QColor("orange"), CountAxis},
-            {"Hits", QColor("#7CB342"), CountAxis},
-            {"Misses", QColor("#E53935"), CountAxis},
+            {"Run", "", -1},
+            {"Score", "score", ScoreAxis},
+            {"Accuracy", "accuracy", AccuracyAxis},
+            {"Shots", "shots", CountAxis},
+            {"Hits", "hits", CountAxis},
+            {"Misses", "misses", CountAxis},
         }};
 
     }
@@ -68,14 +71,24 @@ namespace ksv::presentation {
             auto *series_model = new SeriesModel(this);
             series_model->setId(QString::number(column));
             series_model->setName(QString::fromLatin1(kColumnMeta[column].name));
-            series_model->setColor(kColumnMeta[column].color);
             series_model->setColumn(column);
             series_model->transform = kYAxisMeta[kColumnMeta[column].yAxis].transform;
             // Lets the canvas tell which lines share the labelled axis (e.g. Shots/Hits/Misses).
             series_model->yAxisId = static_cast<uint64_t>(kColumnMeta[column].yAxis);
             m_series.append(series_model);
         }
+        m_use_case->onPresentationChanged([this] { applyPresentation(); });
+        applyPresentation();
         refresh();
+    }
+
+    void CompletionHistoryViewModel::applyPresentation() {
+        const auto presentation = m_use_case->presentation();
+        setAppearance(presentation.appearance);
+        for (int column = Score; column < ColumnCount; ++column)
+            applySeriesStyle(*m_series[column - Score], presentation, kColumnMeta[column].key);
+        setAxisPolicies(presentation.axisPolicies);
+        emit styleChanged();
     }
 
     QList<SeriesModel *> CompletionHistoryViewModel::series(const QList<int> &columns) const {

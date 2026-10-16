@@ -39,9 +39,11 @@ namespace {
         std::shared_ptr<FakeDaySource> days = std::make_shared<FakeDaySource>();
         PlaytimeGraphUseCase use_case{profile, configuration, days};
         int notifications = 0;
+        int styleNotifications = 0;
 
         PlaytimeGraphUseCaseTest() {
             use_case.onChanged([this] { ++notifications; });
+            use_case.onPresentationChanged([this] { ++styleNotifications; });
         }
 
         GraphPreferences &preferences() { return configuration->configuration.preferences(GraphKey::DailyPlaytime); }
@@ -179,17 +181,54 @@ namespace {
         EXPECT_TRUE(first.view.interval);
     }
 
-    TEST_F(PlaytimeGraphUseCaseTest, StyleOnlyChangesNeverRecalculate) {
+    TEST_F(PlaytimeGraphUseCaseTest, StyleOnlyChangesNeverRecalculateOrRefreshTheData) {
         useRealAccounting({{100, 60.0F}});
         std::ignore = use_case.snapshot();
         const auto requests = profile->rolling_time_average_request_count;
 
         preferences().appearance.connection = ConnectionMode::Straight;
-        commit();
+        preferences().seriesStyles["playtime"] = {RgbaColor{1, 2, 3, 255}, 5.0};
+        preferences().axisPolicies["playtime"] = FitVisibleData{};
+        configuration->publishDiff();
         std::ignore = use_case.snapshot();
 
         EXPECT_EQ(profile->rolling_time_average_request_count, requests);
+        EXPECT_EQ(notifications, 0);
+        EXPECT_EQ(styleNotifications, 1);
+        const auto style = use_case.presentation();
+        EXPECT_EQ(style.appearance.connection, ConnectionMode::Straight);
+        EXPECT_EQ(style.seriesStyle("playtime"), (ResolvedSeriesStyle{RgbaColor{1, 2, 3, 255}, 5.0}));
+        EXPECT_EQ(style.axisPolicies.at("playtime"), AxisPolicy{FitVisibleData{}});
+    }
+
+    TEST_F(PlaytimeGraphUseCaseTest, RangeAndWindowChangesRefreshTheDataButNeverTheStyle) {
+        useRealAccounting({{100, 60.0F}});
+        preferences().range = firstThreeMonthsOf1970();
+        configuration->publishDiff();
+        preferences().averagingWindowDays = 6;
+        configuration->publishDiff();
+
+        EXPECT_EQ(notifications, 2);
+        EXPECT_EQ(styleNotifications, 0);
+    }
+
+    TEST_F(PlaytimeGraphUseCaseTest, ARangeAndAStyleEditInOneSaveTakeBothPaths) {
+        preferences().range = firstThreeMonthsOf1970();
+        preferences().appearance.connection = ConnectionMode::PointsOnly;
+        configuration->publishDiff();
+
         EXPECT_EQ(notifications, 1);
+        EXPECT_EQ(styleNotifications, 1);
+    }
+
+    TEST_F(PlaytimeGraphUseCaseTest, TheStyleIsTheDailyPlaytimeGraphsWhateverTheProfileHolds) {
+        configuration->configuration.preferences(GraphKey::BenchmarkPlaytime).appearance.connection =
+            ConnectionMode::Straight;
+        configuration->publishDiff();
+        profile->notifyProfileChanged();
+
+        EXPECT_EQ(styleNotifications, 0);
+        EXPECT_EQ(use_case.presentation(), defaultGraphPresentation(GraphKey::DailyPlaytime));
     }
 
     TEST_F(PlaytimeGraphUseCaseTest, OtherGraphsChangesAreIgnored) {

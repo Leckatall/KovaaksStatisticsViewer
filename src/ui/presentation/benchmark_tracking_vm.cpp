@@ -149,7 +149,14 @@ namespace ksv::presentation {
         m_useCase->onChanged([this] { rebuild(); });
         m_useCase->onPlaytimeChanged([this] { rebuildPlaytime(); });
         m_useCase->onRankChanged([this] { rebuildRank(); });
+        m_useCase->onPresentationChanged([this] { applyPresentation(); });
+        applyPresentation();
         rebuild();
+    }
+
+    void BenchmarkTrackingViewModel::applyPresentation() {
+        m_rankHistory->setPresentation(m_useCase->presentation(application::GraphKey::BenchmarkRank));
+        m_playtimeHistory->setPresentation(m_useCase->presentation(application::GraphKey::BenchmarkPlaytime));
     }
 
     void BenchmarkTrackingViewModel::selectBenchmark(const QString &id) {

@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "completion_history.h"
+#include "graph_presentation.h"
 
 namespace ksv::application {
     class ICompletionHistoryUseCase {
@@ -17,6 +18,10 @@ namespace ksv::application {
         // Fires when the visible rows may differ without the scenario or profile changing: a committed
         // change to this graph's configuration, or a calendar rollover under a today-anchored range.
         virtual void onRangeChanged(std::function<void()> callback) = 0;
+
+        [[nodiscard]] virtual GraphPresentation presentation() const = 0;
+        // Fires for a committed style change only; the history, and the profile behind it, are untouched.
+        virtual void onPresentationChanged(std::function<void()> callback) = 0;
 
         // The selected run's CompletionRow::run_index, or nullopt when no run is selected or it is not
         // in the scenario's full history. The run may lie outside get_history()'s visible rows.

@@ -94,9 +94,8 @@ Frame {
                         yAxisColumn: root.yAxisColumn
                         xLabel: qsTr("Run")
                         objectName: "historyGraphCanvas"
-                        // Few runs: dot each real run so it reads apart from the smoothed curve; a lone
-                        // run is always dotted.
-                        pointMarkers: true
+                        pointMarkers: root.historyVm.pointMarkers
+                        connectionMode: root.historyVm.connectionMode
                         // The run selected in the run list / run graph.
                         markedX: root.selectedRunIndex > 0 ? root.selectedRunIndex : NaN
                         // A click selects the run nearest it.

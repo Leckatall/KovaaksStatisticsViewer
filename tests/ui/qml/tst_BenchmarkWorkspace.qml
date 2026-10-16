@@ -705,6 +705,25 @@ Item {
                 compare(canvas.visible, false, "no misleading line when the series is absent")
         }
 
+        // Each benchmark card draws with its own graph committed line style.
+        function test_historyCanvasesFollowTheirOwnViewModelsLineStyle() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            fx.rankHistory = TestDoubles.makeFakeHistoryModel({
+                metricName: "Personal-best average rank", hasData: true, connectionMode: 1, pointMarkers: true
+            })
+            fx.playtimeHistory = TestDoubles.makeFakeHistoryModel({
+                metricName: "Three-day average playtime", hasData: true, connectionMode: 2, pointMarkers: false
+            })
+            const ws = makeWorkspace(fx)
+            const rank = find(ws, "rankHistoryCanvas")
+            const playtime = find(ws, "playtimeHistoryCanvas")
+            verify(rank !== null && playtime !== null, "both history canvases must exist")
+            compare(rank.connectionMode, 1)
+            compare(rank.pointMarkers, true)
+            compare(playtime.connectionMode, 2)
+            compare(playtime.pointMarkers, false)
+        }
+
         function test_nonEmptyHistoryCardsAreSeparateWithNamedAccessibleLines() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             const rankCard = find(ws, "rankHistoryCard")

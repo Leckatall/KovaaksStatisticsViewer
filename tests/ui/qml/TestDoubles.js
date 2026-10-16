@@ -42,6 +42,8 @@ function makeFakeHistoryVm() {
         visibleRunCount: 0,
         selectedRunIndex: -1,
         selectedRunVisible: false,
+        pointMarkers: true,
+        connectionMode: 0,
         allSeries: [
             {id: "1", name: "Score", column: 1},
             {id: "2", name: "Accuracy", column: 2},
@@ -72,6 +74,8 @@ function makeFakeHistoryModel(overrides) {
         // Minimal GraphViewModelBase-ish surface so a card can bind it as graphVm
         // without throwing while the metric is empty.
         contentState: 0,
+        pointMarkers: false,
+        connectionMode: 0,
         enabledSeriesIds: [],
         allSeries: [],
         series: function () { return [] },

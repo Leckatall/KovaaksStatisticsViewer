@@ -19,6 +19,8 @@
 
 #include "app/app.h"
 #include "formats/protobuf/proto_decoder.h"
+#include "presentation/benchmark_tracking_vm.h"
+#include "presentation/completion_history_vm.h"
 #include "presentation/playtime_graph_vm.h"
 #include "presentation/settings_vm.h"
 
@@ -217,5 +219,166 @@ namespace {
 
         EXPECT_EQ(env->graphConfigurationPersistence->load().preferences(application::GraphKey::DailyPlaytime)
                   .averagingWindowDays, 12);
+    }
+
+    // ---- committed graph style reaches every graph view model --------------------------------
+
+    struct StyleProbe {
+        int connection;
+        bool markers;
+
+        bool operator==(const StyleProbe &) const = default;
+    };
+
+    StyleProbe probe(const presentation::GraphViewModelBase *vm) { return {vm->connectionMode(), vm->pointMarkers()}; }
+
+    // STATE-08: nothing saved means every graph draws as it did before graph configuration existed.
+    TEST_F(CompositionRootTest, WithNoSavedStyleEveryGraphLooksAsItAlwaysDid) {
+        EXPECT_EQ(probe(app->graphVm()), (StyleProbe{0, false}));
+        EXPECT_EQ(probe(app->playtimeVm()), (StyleProbe{0, false}));
+        EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{0, true}));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), (StyleProbe{0, false}));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{0, false}));
+        const auto score = app->completionHistoryVm()->series({presentation::CompletionHistoryViewModel::Score});
+        EXPECT_EQ(score.front()->color(), QColor("#009600"));
+        EXPECT_DOUBLE_EQ(score.front()->lineWidth, 3.0);
+    }
+
+    // SCOPE-03: a graph type owns its style; committing one never moves another.
+    TEST_F(CompositionRootTest, AQuickStyleChangeReachesOnlyItsOwnGraph) {
+        using application::GraphKey;
+        const auto *configuration = app->graphConfigurationUseCase().get();
+        application::GraphQuickPatch patch;
+        patch.connection = application::ConnectionMode::PointsOnly;
+        patch.seriesStyles["playtime"] = {application::RgbaColor{1, 2, 3, 255}, 7.0};
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(GraphKey::DailyPlaytime, patch).accepted());
+
+        EXPECT_EQ(probe(app->playtimeVm()), (StyleProbe{2, false}));
+        const auto *daily = app->playtimeVm()->series({presentation::PlaytimeGraphViewModel::Playtime}).front();
+        EXPECT_EQ(daily->color(), QColor(1, 2, 3));
+        EXPECT_DOUBLE_EQ(daily->lineWidth, 7.0);
+        EXPECT_EQ(probe(app->graphVm()), (StyleProbe{0, false}));
+        EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{0, true}));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), (StyleProbe{0, false}));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{0, false}));
+        EXPECT_EQ(configuration->current().configuration->preferences(GraphKey::ScenarioHistory),
+                  application::defaultGraphPreferences(GraphKey::ScenarioHistory));
+
+        application::GraphQuickPatch restore;
+        restore.connection = application::ConnectionMode::Smooth;
+        restore.seriesStyles["playtime"] = {};
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(GraphKey::DailyPlaytime, restore).accepted());
+        EXPECT_EQ(probe(app->playtimeVm()), (StyleProbe{0, false}));
+        EXPECT_EQ(app->playtimeVm()->series({presentation::PlaytimeGraphViewModel::Playtime}).front()->color(),
+                  QColor("#4DD0E1"));
+    }
+
+    TEST_F(CompositionRootTest, EachGraphKindTakesItsStyleThroughItsOwnWiring) {
+        using application::GraphKey;
+        const auto commit = [&](const GraphKey key, const application::ConnectionMode mode, const bool markers) {
+            application::GraphQuickPatch patch;
+            patch.connection = mode;
+            patch.lineModeMarkers = markers;
+            ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(key, patch).accepted());
+        };
+
+        commit(GraphKey::Run, application::ConnectionMode::Straight, true);
+        commit(GraphKey::ScenarioHistory, application::ConnectionMode::PointsOnly, false);
+        commit(GraphKey::BenchmarkRank, application::ConnectionMode::Straight, false);
+        commit(GraphKey::BenchmarkPlaytime, application::ConnectionMode::PointsOnly, true);
+
+        EXPECT_EQ(probe(app->graphVm()), (StyleProbe{1, true}));
+        EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{2, false}));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), (StyleProbe{1, false}));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{2, true}));
+        EXPECT_EQ(probe(app->playtimeVm()), (StyleProbe{0, false}));
+
+        commit(GraphKey::Run, application::ConnectionMode::Smooth, false);
+        commit(GraphKey::ScenarioHistory, application::ConnectionMode::Smooth, true);
+        commit(GraphKey::BenchmarkRank, application::ConnectionMode::Smooth, false);
+        commit(GraphKey::BenchmarkPlaytime, application::ConnectionMode::Smooth, false);
+        EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{0, true}));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{0, false}));
+    }
+
+    // QUAL-04: a style change redraws; it does not re-read or recompute any history.
+    TEST_F(CompositionRootTest, AStyleChangeRestylesWithoutRefreshingAnyGraphData) {
+        using application::GraphKey;
+        QSignalSpy playtimeData(app->playtimeVm(), &presentation::GraphViewModelBase::dataUpdated);
+        QSignalSpy historyData(app->completionHistoryVm(), &presentation::GraphViewModelBase::dataUpdated);
+        QSignalSpy runData(app->graphVm(), &presentation::GraphViewModelBase::dataUpdated);
+        QSignalSpy rankData(app->benchmarkTrackingVm()->rankHistory(), &presentation::GraphViewModelBase::dataUpdated);
+        QSignalSpy playtimeStyle(app->playtimeVm(), &presentation::GraphViewModelBase::styleChanged);
+
+        application::GraphQuickPatch patch;
+        patch.connection = application::ConnectionMode::Straight;
+        for (const auto key: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
+                              GraphKey::BenchmarkRank, GraphKey::BenchmarkPlaytime})
+            ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(key, patch).accepted());
+
+        EXPECT_EQ(playtimeData.count(), 0);
+        EXPECT_EQ(historyData.count(), 0);
+        EXPECT_EQ(runData.count(), 0);
+        EXPECT_EQ(rankData.count(), 0);
+        EXPECT_EQ(playtimeStyle.count(), 1);
+
+        patch.connection = application::ConnectionMode::Smooth;
+        for (const auto key: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
+                              GraphKey::BenchmarkRank, GraphKey::BenchmarkPlaytime})
+            ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(key, patch).accepted());
+    }
+
+    // The rank line keeps its identifying name however it is recoloured, and the selected benchmark
+    // never decides the style.
+    TEST_F(CompositionRootTest, ARecolouredRankLineKeepsItsNameAcrossBenchmarkSelectionChanges) {
+        using application::GraphKey;
+        application::GraphQuickPatch patch;
+        patch.seriesStyles["rank"] = {application::RgbaColor{9, 99, 199, 255}, 5.0};
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(GraphKey::BenchmarkRank, patch).accepted());
+
+        const auto *rank = app->benchmarkTrackingVm()->rankHistory();
+        EXPECT_EQ(rank->metricName(), "Personal-best average rank");
+        app->benchmarkTrackingVm()->clearSelection();
+        app->benchmarkTrackingVm()->selectDefaultBenchmark();
+        EXPECT_EQ(rank->metricName(), "Personal-best average rank");
+        EXPECT_EQ(app->benchmarkTrackingUseCase()->presentation(GraphKey::BenchmarkRank).seriesStyle("rank").color,
+                  (application::RgbaColor{9, 99, 199, 255}));
+
+        patch.seriesStyles["rank"] = {};
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(GraphKey::BenchmarkRank, patch).accepted());
+    }
+
+    // A saved style is in force from the first frame, not only after the next change.
+    TEST(CompositionRootStartup, SavedStyleIsAppliedByEveryGraphViewModelAtConstruction) {
+        integration::TestEnv startupEnv;
+        ASSERT_TRUE(startupEnv.valid());
+        ASSERT_TRUE(startupEnv.makePerformancesDir());
+        auto saved = application::defaultGraphConfiguration();
+        saved.preferences(application::GraphKey::Run).appearance = {application::ConnectionMode::Straight, true};
+        saved.preferences(application::GraphKey::DailyPlaytime).appearance.connection =
+            application::ConnectionMode::PointsOnly;
+        saved.preferences(application::GraphKey::ScenarioHistory).appearance = {
+            application::ConnectionMode::Straight, false};
+        saved.preferences(application::GraphKey::ScenarioHistory).seriesStyles["hits"] = {
+            application::RgbaColor{4, 5, 6, 255}, 9.0};
+        saved.preferences(application::GraphKey::BenchmarkRank).seriesStyles["rank"] = {
+            application::RgbaColor{7, 8, 9, 255}, std::nullopt};
+        saved.preferences(application::GraphKey::BenchmarkPlaytime).appearance.lineModeMarkers = true;
+        startupEnv.graphConfigurationPersistence->save(saved);
+
+        {
+            application::App restored(startupEnv.settings, std::make_shared<data::ProtoDecoder>(),
+                                      startupEnv.graphConfigurationPersistence, startupEnv.statsParser,
+                                      startupEnv.benchmarkStore, startupEnv.daySource);
+
+            EXPECT_EQ(probe(restored.graphVm()), (StyleProbe{1, true}));
+            EXPECT_EQ(probe(restored.playtimeVm()), (StyleProbe{2, false}));
+            EXPECT_EQ(probe(restored.completionHistoryVm()), (StyleProbe{1, false}));
+            const auto hits = restored.completionHistoryVm()->series({presentation::CompletionHistoryViewModel::Hits});
+            EXPECT_EQ(hits.front()->color(), QColor(4, 5, 6));
+            EXPECT_DOUBLE_EQ(hits.front()->lineWidth, 9.0);
+            EXPECT_EQ(probe(restored.benchmarkTrackingVm()->rankHistory()), (StyleProbe{0, false}));
+            EXPECT_EQ(probe(restored.benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{0, true}));
+        }
     }
 }

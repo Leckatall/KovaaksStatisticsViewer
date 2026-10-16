@@ -49,6 +49,13 @@ namespace ksv::presentation {
         m_graphUseCase->onSeriesConfigChanged([this] { fetchMetadata(); });
         refreshAxisLabelSeriesId();
         m_graphUseCase->onAxisLabelChanged([this] { refreshAxisLabelSeriesId(); });
+        m_graphUseCase->onPresentationChanged([this] { applyPresentation(); });
+        applyPresentation();
+    }
+
+    void GraphViewModel::applyPresentation() {
+        setAppearance(m_graphUseCase->presentation().appearance);
+        emit styleChanged();
     }
 
     void GraphViewModel::refreshAxisLabelSeriesId() {

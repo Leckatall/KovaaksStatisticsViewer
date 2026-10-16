@@ -8,7 +8,7 @@ namespace ksv::application {
                                                std::shared_ptr<IGraphConfigurationUseCase> configuration,
                                                std::shared_ptr<data::IDaySource> daySource)
         : m_profileService(std::move(profileService)), m_configuration(std::move(configuration)),
-          m_daySource(std::move(daySource)) {
+          m_daySource(std::move(daySource)), m_presentation(m_configuration, GraphKey::DailyPlaytime) {
         m_profileService->onProfileChanged([this] {
             m_fullWindowDays.reset();
             m_full.clear();
@@ -16,7 +16,8 @@ namespace ksv::application {
             notifyChanged();
         });
         m_configuration->onChanged([this](const GraphConfigurationChange &change) {
-            if (std::ranges::find(change.graphs, GraphKey::DailyPlaytime) != change.graphs.end()) notifyChanged();
+            const auto &sections = change.sectionsOf(GraphKey::DailyPlaytime);
+            if (sections.range || sections.window) notifyChanged();
         });
         m_daySource->onDayChanged([this](std::chrono::sys_days) {
             const auto snapshot = m_configuration->current();

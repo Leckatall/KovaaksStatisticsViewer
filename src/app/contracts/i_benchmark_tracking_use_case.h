@@ -6,6 +6,7 @@
 
 #include "benchmarks/benchmark_ids.h"
 #include "benchmarks/benchmark_projection.h"
+#include "graph_presentation.h"
 
 namespace ksv::application {
     enum class BenchmarkTrackingState { NoSelection, Unavailable, Ready };
@@ -40,6 +41,11 @@ namespace ksv::application {
         virtual void onPlaytimeChanged(std::function<void()> callback) = 0;
         // Likewise for the rank graph's range: only the snapshot's `rank` view moved.
         virtual void onRankChanged(std::function<void()> callback) = 0;
+        // `graph` is BenchmarkRank or BenchmarkPlaytime; selecting another benchmark never changes it.
+        [[nodiscard]] virtual GraphPresentation presentation(GraphKey graph) const = 0;
+        // Fires for a committed style change of either benchmark graph and nothing else: no
+        // evaluation, projection or range moved.
+        virtual void onPresentationChanged(std::function<void()> callback) = 0;
     };
 }
 

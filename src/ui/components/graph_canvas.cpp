@@ -47,6 +47,11 @@ namespace ksv::ui {
                         emit plotAreaChanged();
                         update();
                     });
+            connect(m_graphVm, &presentation::GraphViewModelBase::styleChanged,
+                    this, [this] {
+                        emit plotAreaChanged();
+                        update();
+                    });
         }
         emit graphVmChanged();
         emit labelledYAxisColumnChanged();

@@ -7,17 +7,24 @@
 #include <cmath>
 
 #include "benchmark_format.h"
+#include "series_style.h"
 #include "value_transform.h"
 
 namespace ksv::presentation {
-    namespace {
-        const QColor kPlaytimeColor("#4DD0E1");
-    }
-
     BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, const Axis &xAxis, QObject *parent)
         : GraphViewModelBase(parent), m_metric(metric),
           m_playtimeAxisPolicy(axisPolicyFor({}, application::GraphKey::BenchmarkPlaytime, "playtime")),
           m_series(new SeriesModel(this)), m_xAxis(&xAxis) {
+        setPresentation(application::defaultGraphPresentation(graphKey()));
+    }
+
+    void BenchmarkHistoryViewModel::setPresentation(const application::GraphPresentation &presentation) {
+        if (presentation == m_presentation) return;
+        m_presentation = presentation;
+        setAppearance(presentation.appearance);
+        applySeriesStyle(*m_series, presentation, m_metric == AverageRank ? "rank" : "playtime");
+        setAxisPolicies(presentation.axisPolicies);
+        emit styleChanged();
     }
 
     QString BenchmarkHistoryViewModel::metricName() const {
@@ -110,7 +117,6 @@ namespace ksv::presentation {
 
         if (m_metric == AverageRank) {
             m_series->setName(tr("Personal-best average rank"));
-            m_series->setColor(QColor());
             // The hover tooltip reads the rank as a tier and progress, not as a bare number.
             m_series->transform = ValueTransform::identity();
             std::vector<QString> tierNames;
@@ -132,7 +138,6 @@ namespace ksv::presentation {
                 m_series->referenceLines.append({static_cast<qreal>(index + 1), shownTiers[index].color});
         } else {
             m_series->setName(metricName());
-            m_series->setColor(kPlaytimeColor);
             m_series->transform = ValueTransform::secondsToMinutes();
             m_series->points = content.observations;
             applyPlaytimeYAxis();

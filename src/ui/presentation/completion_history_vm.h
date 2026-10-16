@@ -73,6 +73,8 @@ namespace ksv::presentation {
         void selectedRunVisibleChanged();
 
     private:
+        void applyPresentation();
+
         std::shared_ptr<application::ICompletionHistoryUseCase> m_use_case;
         std::array<QList<QPointF>, ColumnCount> m_points{};
         ValueAxis m_xAxis;

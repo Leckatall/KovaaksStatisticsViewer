@@ -11,12 +11,17 @@
 #include <QString>
 #include <cmath>
 
+#include "app/contracts/graph_presentation.h"
 #include "axis.h"
 #include "series_model.h"
 
 namespace ksv::presentation {
     class GraphViewModelBase : public QObject {
         Q_OBJECT
+        // GraphCanvas::ConnectionMode: 0 smooth, 1 straight, 2 points only.
+        Q_PROPERTY(int connectionMode READ connectionMode NOTIFY styleChanged)
+        // The line modes' marker preference; points only marks every observation regardless.
+        Q_PROPERTY(bool pointMarkers READ pointMarkers NOTIFY styleChanged)
 
     public:
         explicit GraphViewModelBase(QObject *parent = nullptr) : QObject(parent) {}
@@ -32,9 +37,20 @@ namespace ksv::presentation {
 
         [[nodiscard]] virtual int yAxisColumn() const = 0;
 
+        [[nodiscard]] int connectionMode() const { return static_cast<int>(m_appearance.connection); }
+        [[nodiscard]] bool pointMarkers() const { return m_appearance.lineModeMarkers; }
+
     signals:
         void boundsChanged();
         void dataUpdated();
+        // Connection mode, markers, series colours or widths changed; the data did not.
+        void styleChanged();
+
+    protected:
+        void setAppearance(const application::LineAppearance &appearance) { m_appearance = appearance; }
+
+    private:
+        application::LineAppearance m_appearance;
     };
 }
 

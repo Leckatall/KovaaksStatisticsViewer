@@ -17,6 +17,8 @@ Item {
         property var enabledSeriesIds: []
         property var allSeries: []
         property string axisLabelSeriesId: ""
+        property bool pointMarkers: false
+        property int connectionMode: 0
         property var columnForSeriesId: function (id) { return -1 }
         property var seriesIdForColumn: function (column) { return "" }
     }
@@ -84,6 +86,8 @@ Item {
         function init() {
             fakeGraphVm.contentState = GraphViewModel.HasData
             fakeGraphVm.scenarioTitle = "Air Angelic"
+            fakeGraphVm.pointMarkers = false
+            fakeGraphVm.connectionMode = 0
             fakeVisualSettings.controlPanelVisible = true
             manyLinesGraphVm.axisLabelSeriesId = ""
             configureSpy.clear()
@@ -94,6 +98,20 @@ Item {
                 if (p === ancestor) return true
             }
             return false
+        }
+
+        // The run graph draws with its own committed connection mode and marker preference.
+        function test_canvasFollowsTheViewModelsLineStyle() {
+            fakeGraphVm.pointMarkers = true
+            fakeGraphVm.connectionMode = 2
+            const panel = createTemporaryObject(panelComponent, root)
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "scenarioGraphCanvas")) !== null, 2000)
+            compare(canvas.pointMarkers, true)
+            compare(canvas.connectionMode, 2)
+
+            fakeGraphVm.connectionMode = 1
+            compare(canvas.connectionMode, 1)
         }
 
         // an unselected run has an empty label; the title must not invent a date for it.

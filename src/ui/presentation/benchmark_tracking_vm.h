@@ -100,6 +100,8 @@ namespace ksv::presentation {
         using ExtentMs = std::pair<qint64, qint64>;
 
         void rebuild();
+        // A style-only change: each graph restyles itself; no measurement is read or recomputed.
+        void applyPresentation();
         // A window or range change: only the playtime history and its axis move.
         void rebuildPlaytime();
         // A rank range change: only the rank history and its axis move.

@@ -28,6 +28,7 @@ namespace {
         std::vector<std::function<void()>> callbacks;
 
         [[nodiscard]] PlaytimeGraphSnapshot snapshot() override {
+            ++snapshotCalls;
             PlaytimeGraphSnapshot result;
             result.view = view;
             for (const auto &[epochDay, seconds]: series)
@@ -37,8 +38,21 @@ namespace {
 
         void onChanged(std::function<void()> callback) override { callbacks.push_back(std::move(callback)); }
 
+        GraphPresentation committedPresentation = defaultGraphPresentation(GraphKey::DailyPlaytime);
+        std::vector<std::function<void()>> presentationCallbacks;
+        int snapshotCalls = 0;
+
+        [[nodiscard]] GraphPresentation presentation() const override { return committedPresentation; }
+        void onPresentationChanged(std::function<void()> callback) override {
+            presentationCallbacks.push_back(std::move(callback));
+        }
+
         void publish() const {
             for (const auto &callback: callbacks) callback();
+        }
+
+        void publishPresentation() const {
+            for (const auto &callback: presentationCallbacks) callback();
         }
     };
 
@@ -362,5 +376,92 @@ namespace {
 
         EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), 0.0);
         EXPECT_DOUBLE_EQ(playtimeAxis(view_model).max(), 20.0);
+    }
+
+    // ---- committed style -------------------------------------------------------------------
+
+    TEST_F(PlaytimeGraphViewModelTest, WithNothingSavedTheGraphLooksAsItAlwaysDid) {
+        const auto *series = view_model.series({PlaytimeGraphViewModel::Playtime}).front();
+
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), 0);
+        EXPECT_FALSE(view_model.property("pointMarkers").toBool());
+        EXPECT_EQ(series->color(), QColor("#4DD0E1"));
+        EXPECT_DOUBLE_EQ(series->lineWidth, 3.0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, TheCommittedStyleIsAppliedBeforeTheFirstRefresh) {
+        auto preconfigured = std::make_shared<FakePlaytimeUseCase>();
+        preconfigured->committedPresentation.appearance = {ConnectionMode::PointsOnly, true};
+        preconfigured->committedPresentation.seriesStyles["playtime"] = {RgbaColor{10, 20, 30, 255}, 6.0};
+
+        PlaytimeGraphViewModel restored{preconfigured};
+
+        EXPECT_EQ(restored.property("connectionMode").toInt(), static_cast<int>(ConnectionMode::PointsOnly));
+        EXPECT_TRUE(restored.property("pointMarkers").toBool());
+        const auto *series = restored.series({PlaytimeGraphViewModel::Playtime}).front();
+        EXPECT_EQ(series->color(), QColor(10, 20, 30));
+        EXPECT_DOUBLE_EQ(series->lineWidth, 6.0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, AStyleChangeRestylesWithoutRecomputingTheMeasurements) {
+        fake->series = {{19500, 1800.0}, {19501, 2400.0}};
+        fake->publish();
+        const int snapshots = fake->snapshotCalls;
+        const QSignalSpy styleSpy(&view_model, &GraphViewModelBase::styleChanged);
+        const QSignalSpy dataSpy(&view_model, &GraphViewModelBase::dataUpdated);
+
+        fake->committedPresentation.appearance = {ConnectionMode::Straight, true};
+        fake->committedPresentation.seriesStyles["playtime"] = {RgbaColor{200, 100, 50, 255}, 8.0};
+        fake->publishPresentation();
+
+        EXPECT_EQ(fake->snapshotCalls, snapshots);
+        EXPECT_EQ(dataSpy.count(), 0);
+        EXPECT_EQ(styleSpy.count(), 1);
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), static_cast<int>(ConnectionMode::Straight));
+        EXPECT_TRUE(view_model.property("pointMarkers").toBool());
+        const auto *series = view_model.series({PlaytimeGraphViewModel::Playtime}).front();
+        EXPECT_EQ(series->color(), QColor(200, 100, 50));
+        EXPECT_DOUBLE_EQ(series->lineWidth, 8.0);
+        EXPECT_EQ(series->points.size(), 2);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, TheStyleSurvivesDataRefreshesAndWindowChanges) {
+        fake->committedPresentation.seriesStyles["playtime"] = {RgbaColor{1, 2, 3, 255}, 5.0};
+        fake->publishPresentation();
+
+        fake->series = {{19500, 1800.0}};
+        fake->view.windowDays = 7;
+        fake->publish();
+
+        const auto *series = view_model.series({PlaytimeGraphViewModel::Playtime}).front();
+        EXPECT_EQ(series->color(), QColor(1, 2, 3));
+        EXPECT_DOUBLE_EQ(series->lineWidth, 5.0);
+        EXPECT_EQ(series->name(), "Playtime (7-day avg)");
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, RemovingAnOverrideRestoresTheDefaultColourAndWidth) {
+        fake->committedPresentation.seriesStyles["playtime"] = {RgbaColor{1, 2, 3, 255}, 5.0};
+        fake->publishPresentation();
+
+        fake->committedPresentation.seriesStyles.clear();
+        fake->publishPresentation();
+
+        const auto *series = view_model.series({PlaytimeGraphViewModel::Playtime}).front();
+        EXPECT_EQ(series->color(), QColor("#4DD0E1"));
+        EXPECT_DOUBLE_EQ(series->lineWidth, 3.0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, TheCommittedAxisPolicyReachesTheYAxis) {
+        fake->series = {{19500, 1800.0}, {19501, 2400.0}};
+        fake->publish();
+        const QSignalSpy boundsSpy(&view_model, &GraphViewModelBase::boundsChanged);
+
+        fake->committedPresentation.axisPolicies["playtime"] = FixedBounds{10.0, 90.0};
+        fake->publishPresentation();
+
+        const auto &axis = *view_model.series({PlaytimeGraphViewModel::Playtime}).front()->yAxis;
+        EXPECT_DOUBLE_EQ(axis.min(), 10.0);
+        EXPECT_DOUBLE_EQ(axis.max(), 90.0);
+        EXPECT_GE(boundsSpy.count(), 1);
     }
 }

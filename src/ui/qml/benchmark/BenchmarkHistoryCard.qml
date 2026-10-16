@@ -54,6 +54,8 @@ Frame {
                 graphVm: root.historyModel
                 visibleColumns: [BenchmarkHistoryViewModel.Value]
                 showSeriesNames: true
+                pointMarkers: root.historyModel.pointMarkers
+                connectionMode: root.historyModel.connectionMode
                 xLabel: qsTr("Date")
             }
         }

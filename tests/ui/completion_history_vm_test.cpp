@@ -18,9 +18,23 @@ namespace {
         CompletionHistory history;
         std::optional<int> selected;
 
-        CompletionHistory get_history() override { return history; }
+        GraphPresentation committedPresentation = defaultGraphPresentation(GraphKey::ScenarioHistory);
+        std::vector<std::function<void()>> presentationCallbacks;
+        int historyCalls = 0;
+
+        CompletionHistory get_history() override {
+            ++historyCalls;
+            return history;
+        }
         void onCurrentScenarioChanged(std::function<void()>) override {}
         void onRangeChanged(std::function<void()>) override {}
+        [[nodiscard]] GraphPresentation presentation() const override { return committedPresentation; }
+        void onPresentationChanged(std::function<void()> callback) override {
+            presentationCallbacks.push_back(std::move(callback));
+        }
+        void publishPresentation() const {
+            for (const auto &callback: presentationCallbacks) callback();
+        }
         std::optional<int> selected_run_index() override { return selected; }
         void onSelectedRunChanged(std::function<void()>) override {}
         std::vector<int> select_run_calls;
@@ -584,5 +598,95 @@ namespace {
         const ValueAxis &fixed = yAxisOf(view_model.series({CompletionHistoryViewModel::Score}));
         EXPECT_DOUBLE_EQ(fixed.min(), 10.0);
         EXPECT_DOUBLE_EQ(fixed.max(), 20.0);
+    }
+
+    // ---- committed style -------------------------------------------------------------------
+
+    TEST_F(CompletionHistoryViewModelTest, WithNothingSavedTheGraphLooksAsItAlwaysDidMarkersIncluded) {
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), 0);
+        EXPECT_TRUE(view_model.property("pointMarkers").toBool()) << "scenario history dots its runs by default";
+        const QList<QColor> expected{QColor("#009600"), QColor("cyan"), QColor("orange"), QColor("#7CB342"),
+                                     QColor("#E53935")};
+        const auto series = view_model.series({CompletionHistoryViewModel::Score, CompletionHistoryViewModel::Accuracy,
+                                               CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Hits,
+                                               CompletionHistoryViewModel::Misses});
+        ASSERT_EQ(series.size(), 5);
+        for (int i = 0; i < 5; ++i) {
+            EXPECT_EQ(series[i]->color(), expected[i]) << i;
+            EXPECT_DOUBLE_EQ(series[i]->lineWidth, 3.0) << i;
+        }
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, TheCommittedStyleIsAppliedBeforeTheFirstRefresh) {
+        auto preconfigured = std::make_shared<FakeCompletionHistoryUseCase>();
+        preconfigured->committedPresentation.appearance = {ConnectionMode::Straight, false};
+        preconfigured->committedPresentation.seriesStyles["accuracy"] = {RgbaColor{1, 2, 3, 255}, std::nullopt};
+
+        CompletionHistoryViewModel restored{preconfigured};
+
+        EXPECT_EQ(restored.property("connectionMode").toInt(), static_cast<int>(ConnectionMode::Straight));
+        EXPECT_FALSE(restored.property("pointMarkers").toBool());
+        const auto accuracy = restored.series({CompletionHistoryViewModel::Accuracy}).front();
+        EXPECT_EQ(accuracy->color(), QColor(1, 2, 3));
+        EXPECT_DOUBLE_EQ(accuracy->lineWidth, 3.0);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, AStyleChangeRestylesEachSeriesWithoutReadingTheHistoryAgain) {
+        setHistory();
+        view_model.refresh();
+        const int reads = fake->historyCalls;
+        const QSignalSpy styleSpy(&view_model, &GraphViewModelBase::styleChanged);
+        const QSignalSpy dataSpy(&view_model, &GraphViewModelBase::dataUpdated);
+
+        fake->committedPresentation.appearance = {ConnectionMode::PointsOnly, true};
+        fake->committedPresentation.seriesStyles["score"] = {RgbaColor{9, 9, 9, 255}, 7.0};
+        fake->committedPresentation.seriesStyles["misses"] = {std::nullopt, 1.5};
+        fake->publishPresentation();
+
+        EXPECT_EQ(fake->historyCalls, reads);
+        EXPECT_EQ(dataSpy.count(), 0);
+        EXPECT_EQ(styleSpy.count(), 1);
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), static_cast<int>(ConnectionMode::PointsOnly));
+        const auto score = view_model.series({CompletionHistoryViewModel::Score}).front();
+        EXPECT_EQ(score->color(), QColor(9, 9, 9));
+        EXPECT_DOUBLE_EQ(score->lineWidth, 7.0);
+        EXPECT_EQ(score->points.size(), 2);
+        const auto misses = view_model.series({CompletionHistoryViewModel::Misses}).front();
+        EXPECT_EQ(misses->color(), QColor("#E53935")) << "a width-only override keeps the default colour";
+        EXPECT_DOUBLE_EQ(misses->lineWidth, 1.5);
+        const auto hits = view_model.series({CompletionHistoryViewModel::Hits}).front();
+        EXPECT_DOUBLE_EQ(hits->lineWidth, 3.0) << "series are styled independently";
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, TheStyleSurvivesRefreshesAndScenarioChanges) {
+        fake->committedPresentation.seriesStyles["hits"] = {RgbaColor{5, 5, 5, 255}, 4.0};
+        fake->publishPresentation();
+
+        project(40, {35, 36, 37});
+        view_model.refresh();
+        setHistory();
+        view_model.refresh();
+
+        const auto hits = view_model.series({CompletionHistoryViewModel::Hits}).front();
+        EXPECT_EQ(hits->color(), QColor(5, 5, 5));
+        EXPECT_DOUBLE_EQ(hits->lineWidth, 4.0);
+        EXPECT_EQ(view_model.property("pointMarkers").toBool(), true);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, TheCommittedAxisPoliciesReachTheSharedAxes) {
+        setHistory();
+        view_model.refresh();
+
+        fake->committedPresentation.axisPolicies["score"] = FixedBounds{0.0, 500.0};
+        fake->committedPresentation.axisPolicies["counts"] = FitVisibleData{};
+        fake->publishPresentation();
+
+        const ValueAxis &score = yAxisOf(view_model.series({CompletionHistoryViewModel::Score}));
+        EXPECT_DOUBLE_EQ(score.min(), 0.0);
+        EXPECT_DOUBLE_EQ(score.max(), 500.0);
+        ValueAxis fitCounts;
+        fitCounts.setRange(10.0, 25.0);
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Misses})),
+                       fitCounts);
     }
 }
