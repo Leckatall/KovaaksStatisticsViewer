@@ -245,4 +245,13 @@ namespace ksv::application {
                       std::make_move_iterator(seriesIssues.end()));
         return issues;
     }
+
+    GraphConfigurationChange diffGraphConfigurations(const GraphConfiguration &before, const GraphConfiguration &after) {
+        GraphConfigurationChange change;
+        for (const auto key: kGraphKeys)
+            if (before.preferences(key) != after.preferences(key)) change.graphs.push_back(key);
+        change.runSeries = !(before.runSeries == after.runSeries);
+        change.runAxisLabel = before.runAxisLabelSeriesId != after.runAxisLabelSeriesId;
+        return change;
+    }
 }

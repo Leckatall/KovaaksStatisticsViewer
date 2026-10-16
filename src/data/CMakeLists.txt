@@ -50,6 +50,8 @@ add_library(ksv_data STATIC
         run_ingestor.h
         benchmarks_service.cpp
         benchmarks_service.h
+        graph_configuration_service.cpp
+        graph_configuration_service.h
 
         interfaces/i_proto_decoder.h
         interfaces/i_run_ingestor.h
@@ -58,8 +60,8 @@ add_library(ksv_data STATIC
         interfaces/i_profile_service.h
         interfaces/i_profile_serializer.h
         interfaces/i_settings_service.h
-        interfaces/i_series_config_store.h
         interfaces/i_graph_configuration_persistence.h
+        interfaces/i_graph_configuration_service.h
         interfaces/benchmark_library_snapshot.h
         interfaces/i_benchmark_store.h
         interfaces/i_benchmarks_service.h

@@ -111,52 +111,25 @@ namespace ksv::driver {
             std::shared_ptr<FaultPlan> m_plan;
         };
 
-        class InjectedSeriesStore final : public application::ISeriesConfigStore {
+        class InjectedGraphConfigurationPersistence final : public data::IGraphConfigurationPersistence {
         public:
-            InjectedSeriesStore(std::shared_ptr<application::ISeriesConfigStore> inner, std::shared_ptr<FaultPlan> plan)
+            InjectedGraphConfigurationPersistence(std::shared_ptr<data::IGraphConfigurationPersistence> inner,
+                                                  std::shared_ptr<FaultPlan> plan)
                 : m_inner(std::move(inner)), m_plan(std::move(plan)) {}
 
-            [[nodiscard]] std::vector<application::SeriesConfig> getAll() const override { return m_inner->getAll(); }
-            application::MutationResult createComputed(const application::CreateComputedSeriesRequest &request) override {
-                return guarded("createComputed", [&] { return m_inner->createComputed(request); });
+            // As if the stored document could not be read, but without quarantining or rewriting it.
+            [[nodiscard]] application::GraphConfiguration load() override {
+                if (m_plan->beforeCall(kSeriesStore, "load")) return application::defaultGraphConfiguration();
+                return m_inner->load();
             }
-            application::MutationResult updateSeries(const application::UpdateSeriesRequest &request) override {
-                return guarded("updateSeries", [&] { return m_inner->updateSeries(request); });
+            // Writes are never verified (EDGE-05), so a lost one goes unreported, as a failed QSettings write would.
+            void save(const application::GraphConfiguration &configuration) override {
+                if (m_plan->beforeCall(kSeriesStore, "save")) return;
+                m_inner->save(configuration);
             }
-            application::MutationResult removeComputed(const application::SeriesId id) override {
-                return guarded("removeComputed", [&] { return m_inner->removeComputed(id); });
-            }
-            application::MutationResult reorder(const application::SeriesId id, const uint32_t position) override {
-                return guarded("reorder", [&] { return m_inner->reorder(id, position); });
-            }
-            void onChanged(std::function<void()> callback) override { m_inner->onChanged(std::move(callback)); }
-            [[nodiscard]] std::vector<application::AxisConfig> getAllAxes() const override { return m_inner->getAllAxes(); }
-            application::MutationResult createAxis(const application::CreateAxisRequest &request) override {
-                return guarded("createAxis", [&] { return m_inner->createAxis(request); });
-            }
-            application::MutationResult deleteAxis(const application::AxisId id) override {
-                return guarded("deleteAxis", [&] { return m_inner->deleteAxis(id); });
-            }
-            void beginDraft() override { m_inner->beginDraft(); }
-            application::MutationResult commitDraft() override {
-                return guarded("commitDraft", [&] { return m_inner->commitDraft(); });
-            }
-            void discardDraft() override { m_inner->discardDraft(); }
-            [[nodiscard]] bool hasPendingChanges() const override { return m_inner->hasPendingChanges(); }
 
         private:
-            // A failed mutation is the store's own persistence failure.
-            template<typename Call>
-            application::MutationResult guarded(const char *op, Call &&call) {
-                if (m_plan->beforeCall(kSeriesStore, op)) {
-                    application::MutationResult result;
-                    result.failure = application::StoreMutationFailureCode::PersistenceWriteFailed;
-                    return result;
-                }
-                return call();
-            }
-
-            std::shared_ptr<application::ISeriesConfigStore> m_inner;
+            std::shared_ptr<data::IGraphConfigurationPersistence> m_inner;
             std::shared_ptr<FaultPlan> m_plan;
         };
     }
@@ -166,8 +139,7 @@ namespace ksv::driver {
             {kDecoder, {"decode", "decode_file"}},
             {kCsv, {"parseFile"}},
             {kBenchmarkStore, {"scan", "write", "remove"}},
-            {kSeriesStore, {"createComputed", "updateSeries", "removeComputed", "reorder", "createAxis", "deleteAxis",
-                            "commitDraft"}},
+            {kSeriesStore, {"load", "save"}},
         };
         return kPorts;
     }
@@ -250,9 +222,9 @@ namespace ksv::driver {
         return std::make_shared<InjectedBenchmarkStore>(std::move(inner), std::move(plan));
     }
 
-    std::shared_ptr<application::ISeriesConfigStore> injectSeriesStore(
-        std::shared_ptr<application::ISeriesConfigStore> inner, std::shared_ptr<FaultPlan> plan) {
+    std::shared_ptr<data::IGraphConfigurationPersistence> injectGraphConfigurationPersistence(
+        std::shared_ptr<data::IGraphConfigurationPersistence> inner, std::shared_ptr<FaultPlan> plan) {
         if (!plan || !plan->targets(kSeriesStore)) return inner;
-        return std::make_shared<InjectedSeriesStore>(std::move(inner), std::move(plan));
+        return std::make_shared<InjectedGraphConfigurationPersistence>(std::move(inner), std::move(plan));
     }
 }

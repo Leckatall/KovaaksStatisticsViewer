@@ -4,6 +4,9 @@ add_library(ksv_app STATIC
         app.cpp
         usecases/graph_use_case.h
         usecases/series_management_use_case.h
+        usecases/series_management_use_case.cpp
+        usecases/graph_configuration_use_case.h
+        usecases/graph_configuration_use_case.cpp
         usecases/bucketed_run.h
         usecases/bucketed_run.cpp
         usecases/average_line_use_case.h

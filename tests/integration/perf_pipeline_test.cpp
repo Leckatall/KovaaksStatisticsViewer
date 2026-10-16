@@ -44,7 +44,7 @@ namespace {
             perfUrl = QUrl::fromLocalFile(file).toString();
 
             app = std::make_unique<application::App>(
-                env->settings, std::make_shared<data::ProtoDecoder>(), env->seriesConfigStore,
+                env->settings, std::make_shared<data::ProtoDecoder>(), env->graphConfigurationPersistence,
                 env->statsParser, env->benchmarkStore);
             graphVm = app->graphVm();
             ASSERT_NE(graphVm, nullptr);

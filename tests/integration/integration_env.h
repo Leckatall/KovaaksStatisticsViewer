@@ -24,7 +24,7 @@
 #include "qt_data/benchmark_store.h"
 #include "run_ingestor.h"
 #include "kovaaks_dir.h"
-#include "series_config_store.h"
+#include "qt_data/graph_configuration_persistence.h"
 #include "settings_service.h"
 
 namespace ksv::integration {
@@ -48,8 +48,8 @@ namespace ksv::integration {
         tests_support::KovaaksDir kovaaks;
         std::shared_ptr<qt_data::SettingsService> settings =
             std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
-        std::shared_ptr<qt_data::SeriesConfigStore> seriesConfigStore =
-            std::make_shared<qt_data::SeriesConfigStore>(settings);
+        std::shared_ptr<qt_data::GraphConfigurationPersistence> graphConfigurationPersistence =
+            std::make_shared<qt_data::GraphConfigurationPersistence>(settings);
         std::shared_ptr<data::StatsCsvParser> statsParser = std::make_shared<data::StatsCsvParser>();
         QTemporaryDir benchmarksDir;
         std::shared_ptr<qt_data::BenchmarkStore> benchmarkStore =

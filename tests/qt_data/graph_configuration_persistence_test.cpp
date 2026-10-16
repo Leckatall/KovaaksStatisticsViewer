@@ -14,7 +14,6 @@
 
 #include "app/contracts/expression_dsl.h"
 #include "qt_data/graph_configuration_persistence.h"
-#include "qt_data/series_config_store.h"
 #include "qt_data/settings_service.h"
 #include "fake_settings_service.h"
 
@@ -442,15 +441,6 @@ namespace {
             EXPECT_EQ(loaded, expected) << raw;
             EXPECT_EQ(docObject()["schemaVersion"].toInt(), 4);
         }
-    }
-
-    TEST_F(GraphConfigurationPersistenceTest, SeriesConfigStoreStillReadsTheSeriesOfAVersionFourDocument) {
-        writeDoc(v4RootWithV3Series());
-
-        const SeriesConfigStore store(settings);
-        EXPECT_TRUE(settings->quarantined.empty());
-        EXPECT_EQ(store.getAll().size(), 3U);
-        EXPECT_EQ(store.getAllAxes().size(), 2U);
     }
 
     // Uses SettingsService(QSettings::IniFormat) + QSettings::setPath so the round trip goes through a

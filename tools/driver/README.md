@@ -171,7 +171,7 @@ Generation is deterministic: runs are seeded from their scenario and run index, 
 | `decoder` | `decode`, `decode_file` | a thrown `std::runtime_error`, as a bad `.perf` does | `decode_file`: `SessionController`'s worker thread during profile builds (startup, Rebuild Profile); the GUI thread for live imports and File > Load Performance File. `decode` is not called through the port. |
 | `csv` | `parseFile` | `std::nullopt` | as `decode_file` |
 | `benchmarkStore` | `scan`, `write`, `remove` | `DirectoryUnavailable` / `WriteFailed` | GUI thread |
-| `seriesStore` | `createComputed`, `updateSeries`, `removeComputed`, `reorder`, `createAxis`, `deleteAxis`, `commitDraft` | `PersistenceWriteFailed` | GUI thread |
+| `seriesStore` | `load`, `save` (the graph-configuration document, Graph Lines included) | `load`: the default configuration, leaving the stored document untouched; `save`: nothing is written and nothing reports it, since writes are never verified | GUI thread (`load` once, while `App` is built) |
 
 | Effect | Meaning |
 |---|---|
@@ -183,7 +183,7 @@ Generation is deterministic: runs are seeded from their scenario and run index, 
 ```
 start --dataset fixtures --inject decoder=delay:300                 # Rebuild Profile shows its progress bar
 start --inject benchmarkStore.write=fail                            # Manager saves fail
-start --inject seriesStore.commitDraft=fail                         # Save Graph Lines fails
+start --inject seriesStore.save=fail                                # graph settings saves are silently lost
 ```
 
 ## Batches and tours

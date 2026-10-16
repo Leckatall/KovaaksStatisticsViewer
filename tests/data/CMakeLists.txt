@@ -141,3 +141,16 @@ target_compile_definitions(profile_v3_migrator_tests PRIVATE
 
 ksv_copy_mingw_runtime_dlls(profile_v3_migrator_tests)
 gtest_discover_tests(profile_v3_migrator_tests)
+
+add_executable(graph_configuration_service_tests
+    graph_configuration_service_test.cpp
+)
+
+target_link_libraries(graph_configuration_service_tests PRIVATE
+    tests_support
+    ksv_data
+    GTest::gtest_main
+)
+
+ksv_copy_mingw_runtime_dlls(graph_configuration_service_tests)
+gtest_discover_tests(graph_configuration_service_tests)

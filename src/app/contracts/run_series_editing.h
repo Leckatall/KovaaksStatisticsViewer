@@ -1,24 +1,26 @@
 #pragma once
 
-#include <functional>
+#include <cstdint>
 #include <optional>
-#include <variant>
+#include <string>
+#include <vector>
 
-#include "app/contracts/series_config.h"
+#include "graph_configuration.h"
+#include "series_config.h"
 
 namespace ksv::application {
-    enum class StoreMutationFailureCode {
+    enum class SeriesMutationFailureCode {
         UnknownSeriesId,
         DisplayPositionOutOfRange,
         ComputedSeriesIdExhausted,
-        PersistenceWriteFailed,
+        ConfigurationRejected,
         UnknownAxisId,
         AxisIdExhausted
     };
 
     struct MutationResult {
         std::vector<ValidationError> errors;
-        std::optional<StoreMutationFailureCode> failure;
+        std::optional<SeriesMutationFailureCode> failure;
         bool requiresReload = false;
         std::optional<SeriesId> createdId;
         std::optional<AxisId> createdAxisId;
@@ -50,23 +52,17 @@ namespace ksv::application {
         std::string name;
     };
 
-    class ISeriesConfigStore {
-    public:
-        virtual ~ISeriesConfigStore() = default;
-        [[nodiscard]] virtual std::vector<SeriesConfig> getAll() const = 0;
-        virtual MutationResult createComputed(const CreateComputedSeriesRequest &) = 0;
-        virtual MutationResult updateSeries(const UpdateSeriesRequest &) = 0;
-        virtual MutationResult removeComputed(SeriesId) = 0;
-        virtual MutationResult reorder(SeriesId, uint32_t position) = 0;
-        virtual void onChanged(std::function<void()> callback) = 0;
+    // Graph Lines edits as transformations of a caller-owned document. Each leaves the document
+    // untouched unless the result succeeded.
+    MutationResult createComputedSeries(RunSeriesDocument &document, const CreateComputedSeriesRequest &request);
 
-        [[nodiscard]] virtual std::vector<AxisConfig> getAllAxes() const = 0;
-        virtual MutationResult createAxis(const CreateAxisRequest &) = 0;
-        virtual MutationResult deleteAxis(AxisId) = 0;
+    MutationResult updateSeries(RunSeriesDocument &document, const UpdateSeriesRequest &request);
 
-        virtual void beginDraft() = 0;
-        virtual MutationResult commitDraft() = 0;
-        virtual void discardDraft() = 0;
-        [[nodiscard]] virtual bool hasPendingChanges() const = 0;
-    };
+    MutationResult removeSeries(RunSeriesDocument &document, SeriesId id);
+
+    MutationResult reorderSeries(RunSeriesDocument &document, SeriesId id, uint32_t position);
+
+    MutationResult createAxis(RunSeriesDocument &document, const CreateAxisRequest &request);
+
+    MutationResult deleteAxis(RunSeriesDocument &document, AxisId id);
 }

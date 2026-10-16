@@ -17,12 +17,13 @@
 #include "driver_dataset.h"
 #include "driver_ports.h"
 #include "driver_spec.h"
+#include "fake_settings_service.h"
 #include "formats/csv/stats_csv_parser.h"
 #include "formats/protobuf/profile_serializer.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "gallery_dataset.h"
 #include "qt_data/benchmark_store.h"
-#include "series_config_store.h"
+#include "qt_data/graph_configuration_persistence.h"
 #include "session_compose.h"
 #include "settings_service.h"
 
@@ -340,7 +341,7 @@ namespace {
         EXPECT_EQ(plan.describe(), (QStringList{"benchmarkStore.write=fail", "decoder=delay:5,fail:2"}));
 
         EXPECT_TRUE(plan.add("disk=fail").contains("unknown port 'disk'"));
-        EXPECT_TRUE(plan.add("disk=fail").contains("seriesStore (createComputed"));
+        EXPECT_TRUE(plan.add("disk=fail").contains("seriesStore (load, save)"));
         EXPECT_TRUE(plan.add("csv.write=fail").contains("no op 'write'"));
         EXPECT_TRUE(plan.add("csv=explode").contains("unknown effect 'explode'"));
         EXPECT_TRUE(plan.add("csv=fail:0").contains("unknown effect"));
@@ -364,7 +365,7 @@ namespace {
     TEST(DriverFaultTest, DecoratorsReturnEachPortsNaturalFailure) {
         auto plan = std::make_shared<driver::FaultPlan>();
         ASSERT_TRUE(plan->add("benchmarkStore=fail").isEmpty());
-        ASSERT_TRUE(plan->add("seriesStore.commitDraft=fail").isEmpty());
+        ASSERT_TRUE(plan->add("seriesStore=fail").isEmpty());
         ASSERT_TRUE(plan->add("decoder.decode_file=delay:60,fail").isEmpty());
 
         QTemporaryDir dir;
@@ -375,12 +376,16 @@ namespace {
         EXPECT_FALSE(store->remove("x.json", "digest").ok);
         EXPECT_EQ(store->managedDirectoryPath(), dir.path().toStdString());
 
-        auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
-        const auto series = driver::injectSeriesStore(std::make_shared<qt_data::SeriesConfigStore>(settings), plan);
-        series->beginDraft();
-        EXPECT_EQ(series->commitDraft().failure, application::StoreMutationFailureCode::PersistenceWriteFailed);
-        series->discardDraft();
-        EXPECT_FALSE(series->getAll().empty());
+        const auto settings = std::make_shared<tests_support::FakeSettingsService>();
+        settings->document = "{}";
+        const auto graphs = driver::injectGraphConfigurationPersistence(
+            std::make_shared<qt_data::GraphConfigurationPersistence>(settings), plan);
+        auto configuration = graphs->load();
+        EXPECT_EQ(configuration, application::defaultGraphConfiguration());
+        configuration.runAxisLabelSeriesId = application::SeriesId{2};
+        graphs->save(configuration);
+        EXPECT_EQ(settings->document, "{}");
+        EXPECT_TRUE(settings->quarantined.empty());
 
         const auto decoder = driver::injectDecoder(std::make_shared<data::ProtoDecoder>(), plan);
         QElapsedTimer timer;

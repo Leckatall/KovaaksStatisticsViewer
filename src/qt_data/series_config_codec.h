@@ -14,8 +14,7 @@
 
 #include "app/contracts/graph_configuration.h"
 
-// JSON codec for the Graph Lines series document stored under `graph/seriesConfigV1`, shared by
-// SeriesConfigStore and GraphConfigurationPersistence.
+// JSON codec for the Graph Lines series section of the document stored under `graph/seriesConfigV1`.
 namespace ksv::qt_data::series_codec {
     [[nodiscard]] bool exactKeys(const QJsonObject &object, std::initializer_list<const char *> keys);
 

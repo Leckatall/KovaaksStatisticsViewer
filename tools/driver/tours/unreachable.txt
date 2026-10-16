@@ -54,12 +54,9 @@ click "${S}/generateProfileButton" --settle 50
 shot --window settingsDialog --name rebuild-in-progress
 wait "${S}/profileBuildProgressBar" --gone --timeout 10000
 
-start --dataset rich --inject seriesStore.commitDraft=fail
+start --dataset rich
 eval settingsDialog.open()
 click "${S}/text:Graph Lines"
-type " (x)" --into "${S}/seriesNameField_2" --enter
-click "${S}/saveGraphLinesButton"
-shot --window settingsDialog --name series-draft-error
 # A held drag: the reorder preview exists only while the button is down.
 mouse press "${S}/seriesDragHandle_1"
 mouse move "${S}/seriesDragHandle_3"

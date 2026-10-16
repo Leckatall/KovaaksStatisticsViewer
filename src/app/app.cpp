@@ -24,7 +24,9 @@
 #include "../data/run_ingestor.h"
 #include "usecases/graph_use_case.h"
 #include "usecases/average_line_use_case.h"
-#include "series_config_store.h"
+#include "qt_data/graph_configuration_persistence.h"
+#include "../data/graph_configuration_service.h"
+#include "usecases/graph_configuration_use_case.h"
 #include "../data/benchmarks_service.h"
 #include "usecases/benchmark_resolution_use_case.h"
 #include "usecases/benchmark_manager_use_case.h"
@@ -48,7 +50,7 @@ namespace ksv::application {
              QObject *parent)
         : App(settingsService,
               std::move(decoder),
-              std::make_shared<qt_data::SeriesConfigStore>(settingsService),
+              std::make_shared<qt_data::GraphConfigurationPersistence>(settingsService),
               std::make_shared<data::StatsCsvParser>(),
               std::make_shared<qt_data::BenchmarkStore>(
                   (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
@@ -57,7 +59,7 @@ namespace ksv::application {
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
              std::shared_ptr<IProtoDecoder> decoder,
-             std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
+             std::shared_ptr<data::IGraphConfigurationPersistence> graphConfigurationPersistence,
              std::shared_ptr<data::IStatsCsvParser> statsParser,
              std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
              QObject *parent) : QObject(parent) {
@@ -65,9 +67,11 @@ namespace ksv::application {
         m_protoDecoder = std::move(decoder);
 
         m_settingsService = std::move(settingsService);
-        m_seriesConfigStore = std::move(seriesConfigStore);
+        m_graphConfigurationService =
+                std::make_shared<data::GraphConfigurationService>(std::move(graphConfigurationPersistence));
+        m_graphConfigurationUseCase = std::make_shared<GraphConfigurationUseCase>(m_graphConfigurationService);
         m_statsParser = std::move(statsParser);
-        m_seriesManagementUseCase = std::make_shared<SeriesManagementUseCase>(m_seriesConfigStore);
+        m_seriesManagementUseCase = std::make_shared<SeriesManagementUseCase>(m_graphConfigurationUseCase);
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder, m_statsParser);
         m_runIngestor = std::make_shared<data::RunIngestor>(m_fileService);
 
@@ -96,7 +100,7 @@ namespace ksv::application {
             m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService, m_settingsService);
 
         auto averageUseCase = std::make_shared<AverageLineUseCase>(m_profileService);
-        m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController, m_seriesConfigStore, averageUseCase);
+        m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController, m_graphConfigurationUseCase, averageUseCase);
         m_graphVm = new presentation::GraphViewModel(m_graphUseCase, this);
         // Re-pull the series when currentPerf changes for any reason (file load, run selection, latest-on-startup)
         m_graphUseCase->onCurrentPerfChanged([this] { m_graphVm->fetchData(); });

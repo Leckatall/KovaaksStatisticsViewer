@@ -7,6 +7,7 @@ add_executable(app_tests
         completion_history_use_case_test.cpp
         series_config_test.cpp
         graph_configuration_test.cpp
+        graph_configuration_use_case_test.cpp
         expression_dsl_test.cpp
         graph_use_case_test.cpp
         average_line_use_case_test.cpp
@@ -14,6 +15,7 @@ add_executable(app_tests
         scenario_browser_use_case_test.cpp
         session_controller_test.cpp
         series_management_use_case_test.cpp
+        run_series_authority_test.cpp
     benchmark_resolution_use_case_test.cpp
     benchmark_tracking_use_case_test.cpp
     benchmark_manager_use_case_test.cpp

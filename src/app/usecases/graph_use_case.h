@@ -14,17 +14,21 @@
 #include "bucketed_run.h"
 #include "../contracts/graph_info.h"
 #include "../contracts/i_average_line_use_case.h"
-#include "../../data/interfaces/i_series_config_store.h"
+#include "../contracts/i_graph_configuration_use_case.h"
 
 namespace ksv::application {
     class GraphUseCase: public IGraphUseCase {
     public:
         explicit GraphUseCase(std::shared_ptr<ISessionController> session_controller): m_session_controller(std::move(session_controller)) {}
         GraphUseCase(std::shared_ptr<ISessionController> session_controller,
-                     std::shared_ptr<ISeriesConfigStore> store,
+                     std::shared_ptr<IGraphConfigurationUseCase> configuration,
                      std::shared_ptr<IAverageLineUseCase> average)
-            : m_session_controller(std::move(session_controller)), m_store(std::move(store)), m_average(std::move(average)) {
-            if (m_store) m_store->onChanged([this] { for (const auto &callback : m_config_callbacks) callback(); });
+            : m_session_controller(std::move(session_controller)), m_configuration(std::move(configuration)),
+              m_average(std::move(average)) {
+            if (m_configuration) m_configuration->onChanged([this](const GraphConfigurationChange &change) {
+                if (!change.runSeries) return;
+                for (const auto &callback : m_config_callbacks) callback();
+            });
         }
 
         void load_perf(const std::string_view filename) override {
@@ -55,13 +59,15 @@ namespace ksv::application {
 
         [[nodiscard]] std::vector<SeriesConfig> getSeriesConfigs() override {
             std::vector<SeriesConfig> result;
-            for (const auto &config : m_store->getAll())
+            const auto snapshot = m_configuration->current();
+            for (const auto &config : snapshot.configuration->runSeries.series)
                 if (config.presentation.enabled) result.push_back(config);
             return result;
         }
 
         [[nodiscard]] std::optional<SeriesPoints> getSeriesValues(const SeriesId id) override {
-            for (const auto &config : m_store->getAll()) {
+            const auto snapshot = m_configuration->current();
+            for (const auto &config : snapshot.configuration->runSeries.series) {
                 if (config.id != id) continue;
                 const auto ys = m_average->evaluate(m_session_controller->getCurrentRun(), config.expression);
                 if (!ys) return std::nullopt;
@@ -76,7 +82,9 @@ namespace ksv::application {
             return std::nullopt;
         }
 
-        [[nodiscard]] std::vector<AxisConfig> getAxes() override { return m_store->getAllAxes(); }
+        [[nodiscard]] std::vector<AxisConfig> getAxes() override {
+            return m_configuration->current().configuration->runSeries.axes;
+        }
 
         [[nodiscard]] double getRunDuration() override {
             const auto &buckets = referenceBuckets();
@@ -100,7 +108,7 @@ namespace ksv::application {
         }
 
         std::shared_ptr<ISessionController> m_session_controller;
-        std::shared_ptr<ISeriesConfigStore> m_store;
+        std::shared_ptr<IGraphConfigurationUseCase> m_configuration;
         std::shared_ptr<IAverageLineUseCase> m_average;
         std::vector<std::function<void()>> m_config_callbacks;
         std::optional<domain::ScenarioRunId> m_cachedRunId;

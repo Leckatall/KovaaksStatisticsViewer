@@ -21,7 +21,8 @@
 #include "../data/interfaces/i_run_ingestor.h"
 #include "data/interfaces/i_profile_service.h"
 #include "interfaces/i_settings_service.h"
-#include "data/interfaces/i_series_config_store.h"
+#include "data/interfaces/i_graph_configuration_persistence.h"
+#include "data/interfaces/i_graph_configuration_service.h"
 #include "usecases/i_session_controller.h"
 #include "../data/interfaces/i_benchmark_store.h"
 #include "../data/interfaces/i_benchmarks_service.h"
@@ -32,6 +33,7 @@
 #include "contracts/i_completion_history_use_case.h"
 #include "contracts/i_scenario_browser_use_case.h"
 #include "contracts/i_series_management_use_case.h"
+#include "contracts/i_graph_configuration_use_case.h"
 
 
 namespace ksv::application {
@@ -46,7 +48,7 @@ namespace ksv::application {
             QObject* parent = nullptr);
         App(std::shared_ptr<ISettingsService> settingsService,
             std::shared_ptr<IProtoDecoder> decoder,
-            std::shared_ptr<ISeriesConfigStore> seriesConfigStore,
+            std::shared_ptr<data::IGraphConfigurationPersistence> graphConfigurationPersistence,
             std::shared_ptr<data::IStatsCsvParser> statsParser,
             std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
             QObject* parent = nullptr);
@@ -73,7 +75,12 @@ namespace ksv::application {
         [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
         [[nodiscard]] std::shared_ptr<ISessionController> sessionController() const { return m_sessionController; }
-        [[nodiscard]] std::shared_ptr<ISeriesConfigStore> seriesConfigStore() const { return m_seriesConfigStore; }
+        [[nodiscard]] std::shared_ptr<data::IGraphConfigurationService> graphConfigurationService() const {
+            return m_graphConfigurationService;
+        }
+        [[nodiscard]] std::shared_ptr<IGraphConfigurationUseCase> graphConfigurationUseCase() const {
+            return m_graphConfigurationUseCase;
+        }
         [[nodiscard]] std::shared_ptr<data::IBenchmarksService> benchmarksService() const {
             return m_benchmarksService;
         }
@@ -99,7 +106,8 @@ namespace ksv::application {
         presentation::BenchmarkTrackingViewModel* m_benchmarkTrackingVm = nullptr;
 
         std::shared_ptr<ISettingsService> m_settingsService;
-        std::shared_ptr<ISeriesConfigStore> m_seriesConfigStore;
+        std::shared_ptr<data::IGraphConfigurationService> m_graphConfigurationService;
+        std::shared_ptr<IGraphConfigurationUseCase> m_graphConfigurationUseCase;
         std::shared_ptr<ISeriesManagementUseCase> m_seriesManagementUseCase;
         std::shared_ptr<data::IStatsCsvParser> m_statsParser;
         std::shared_ptr<IFileService> m_fileService;

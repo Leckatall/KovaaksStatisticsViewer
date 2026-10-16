@@ -23,8 +23,7 @@ INJECT_PORTS = {
     "decoder": ("decode", "decode_file"),
     "csv": ("parseFile",),
     "benchmarkStore": ("scan", "write", "remove"),
-    "seriesStore": ("createComputed", "updateSeries", "removeComputed", "reorder", "createAxis", "deleteAxis",
-                    "commitDraft"),
+    "seriesStore": ("load", "save"),
 }
 _INJECT_EFFECT = re.compile(r"^(delay:\d+|fail|fail:[1-9]\d*|fail:after:\d+)$")
 

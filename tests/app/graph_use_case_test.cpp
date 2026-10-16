@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "usecases/graph_use_case.h"
-#include "fake_series_config_store.h"
+#include "fake_graph_configuration_use_case.h"
 #include "fake_session_controller.h"
 
 using namespace ksv::application;
@@ -24,9 +24,10 @@ namespace {
     class GraphUseCaseTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSessionController> fake_session_controller = std::make_shared<FakeSessionController>();
-        std::shared_ptr<FakeSeriesConfigStore> fake_store = std::make_shared<FakeSeriesConfigStore>();
+        std::shared_ptr<FakeGraphConfigurationUseCase> fake_configuration =
+            std::make_shared<FakeGraphConfigurationUseCase>();
         std::shared_ptr<FakeAverageLineUseCase> fake_average = std::make_shared<FakeAverageLineUseCase>();
-        GraphUseCase use_case{fake_session_controller, fake_store, fake_average};
+        GraphUseCase use_case{fake_session_controller, fake_configuration, fake_average};
     };
 
     TEST_F(GraphUseCaseTest, LoadPerfDelegatesToSessionController) {
@@ -61,7 +62,7 @@ namespace {
     }
 
     TEST_F(GraphUseCaseTest, GetSeriesConfigsReturnsEnabledOnly) {
-        fake_store->configs = {
+        fake_configuration->configuration.runSeries.series = {
             SeriesConfig{{1}, {"Enabled", {}, true, 0}, primitive(PrimitiveMetric::Score)},
             SeriesConfig{{2}, {"Disabled", {}, false, 1}, primitive(PrimitiveMetric::Shots)},
         };
@@ -74,7 +75,7 @@ namespace {
 
     TEST_F(GraphUseCaseTest, GetSeriesValuesFoldsBucketTimesIntoPoints) {
         fake_session_controller->current_run = runWithSeconds("a");
-        fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
+        fake_configuration->configuration.runSeries.series = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
         fake_average->result = std::vector<double>{7.0, 9.0};
 
         const auto points = use_case.getSeriesValues(SeriesId{1});
@@ -89,7 +90,7 @@ namespace {
 
     TEST_F(GraphUseCaseTest, GetSeriesValuesReturnsNulloptWhenEvaluationFails) {
         fake_session_controller->current_run = runWithSeconds("a");
-        fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
+        fake_configuration->configuration.runSeries.series = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
         fake_average->result = std::nullopt;
 
         EXPECT_FALSE(use_case.getSeriesValues(SeriesId{1}).has_value());
@@ -97,14 +98,14 @@ namespace {
 
     TEST_F(GraphUseCaseTest, GetSeriesValuesReturnsNulloptForUnknownId) {
         fake_session_controller->current_run = runWithSeconds("a");
-        fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
+        fake_configuration->configuration.runSeries.series = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
         fake_average->result = std::vector<double>{7.0, 9.0};
 
         EXPECT_FALSE(use_case.getSeriesValues(SeriesId{999}).has_value());
     }
 
     TEST_F(GraphUseCaseTest, GetAxesReturnsConfiguredAxes) {
-        fake_store->axes = {
+        fake_configuration->configuration.runSeries.axes = {
             AxisConfig{AxisId{1}, "Accuracy", {}, AxisTransformKind::Percentage},
             AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity},
         };
@@ -173,12 +174,23 @@ namespace {
 
     TEST_F(GraphUseCaseTest, CsvOnlyCurrentRunProducesEmptyGraphData) {
         fake_session_controller->current_run.run_id = {{.name = "S", .hash = "csv"}, 1000};
-        fake_store->configs = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
+        fake_configuration->configuration.runSeries.series = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};
         fake_average->result = std::vector<double>{};
 
         EXPECT_DOUBLE_EQ(use_case.getRunDuration(), 0.0);
         const auto points = use_case.getSeriesValues(SeriesId{1});
         ASSERT_TRUE(points.has_value());
         EXPECT_TRUE(points->empty());
+    }
+
+    TEST_F(GraphUseCaseTest, SeriesConfigCallbacksFollowOnlyCommittedRunSeriesChanges) {
+        int notifications = 0;
+        use_case.onSeriesConfigChanged([&] { ++notifications; });
+
+        fake_configuration->publish({0, {GraphKey::Run, GraphKey::ScenarioHistory}, false, true});
+        EXPECT_EQ(notifications, 0);
+
+        fake_configuration->publish({0, {}, true, false});
+        EXPECT_EQ(notifications, 1);
     }
 }

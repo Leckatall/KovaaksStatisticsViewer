@@ -6,9 +6,6 @@ add_library(ksv_qt_data STATIC
         settings_service.cpp
         settings_service.h
         ../data/interfaces/i_settings_service.h
-        series_config_store.cpp
-        series_config_store.h
-        ../data/interfaces/i_series_config_store.h
         series_config_codec.cpp
         series_config_codec.h
         graph_configuration_codec.cpp

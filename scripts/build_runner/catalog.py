@@ -35,6 +35,7 @@ RUNNERS = {
             "run_filename_tests",
             "run_ingestor_tests",
             "benchmarks_service_tests",
+            "graph_configuration_service_tests",
             "profile_service_tests",
             "profile_builder_tests",
             "profile_serializer_tests",

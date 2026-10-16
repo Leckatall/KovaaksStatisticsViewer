@@ -99,7 +99,7 @@ namespace {
         [[nodiscard]] QString build() {
             if (!env.valid()) return "temp dir invalid";
             app = std::make_unique<application::App>(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore,
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
                 env.statsParser, env.benchmarkStore);
             if (app->start() != 0) return "Main.qml failed to load";
             root = app->engine()->rootObjects().first();

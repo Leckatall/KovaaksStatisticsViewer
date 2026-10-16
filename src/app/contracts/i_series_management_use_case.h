@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "series_config.h"
-#include "data/interfaces/i_series_config_store.h"
+#include "run_series_editing.h"
 
 namespace ksv::application {
     class ISeriesManagementUseCase {

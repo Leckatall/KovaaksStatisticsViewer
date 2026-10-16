@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
@@ -17,6 +18,7 @@
 #include "app/app.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "presentation/playtime_graph_vm.h"
+#include "presentation/settings_vm.h"
 
 #include "integration_env.h"
 
@@ -42,7 +44,7 @@ namespace {
             ASSERT_FALSE(env->copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
 
             app = std::make_unique<application::App>(
-                env->settings, std::make_shared<data::ProtoDecoder>(), env->seriesConfigStore,
+                env->settings, std::make_shared<data::ProtoDecoder>(), env->graphConfigurationPersistence,
                 env->statsParser, env->benchmarkStore);
             ASSERT_TRUE(waitForProfile());
         }
@@ -112,5 +114,46 @@ namespace {
         app->profileService()->generateProfileFromDirectory();
 
         EXPECT_GE(spy.count(), 1);
+    }
+
+    TEST_F(CompositionRootTest, TheUseCaseReadsTheServicesSingleCommittedSnapshot) {
+        const auto viaUseCase = app->graphConfigurationUseCase()->current();
+        const auto viaService = app->graphConfigurationService()->snapshot();
+
+        EXPECT_EQ(viaUseCase.configuration, viaService.configuration);
+        EXPECT_EQ(viaUseCase.revision, viaService.revision);
+    }
+
+    // The run graph draws committed configuration only: a Graph Lines visit's edits stay off the
+    // dashboard until the visit saves, and the save goes through the injected persistence port.
+    TEST_F(CompositionRootTest, GraphLinesDraftEditsReachTheRunGraphOnlyWhenSaved) {
+        auto *settingsVm = app->settingsVm();
+        settingsVm->beginSeriesDraft();
+        const auto before = app->graphVm()->enabledSeriesIds();
+
+        const auto created = settingsVm->createComputedSeries("Draft line", QColor("#4CAF50"), 2.0, true, "");
+        ASSERT_TRUE(created["succeeded"].toBool());
+        const auto id = created["createdId"].toString();
+
+        EXPECT_TRUE(settingsVm->hasPendingChanges());
+        EXPECT_EQ(app->graphVm()->enabledSeriesIds(), before);
+
+        ASSERT_TRUE(settingsVm->commitSeriesDraft()["succeeded"].toBool());
+
+        EXPECT_FALSE(settingsVm->hasPendingChanges());
+        EXPECT_TRUE(app->graphVm()->enabledSeriesIds().contains(id));
+        const auto stored = env->graphConfigurationPersistence->load();
+        EXPECT_EQ(stored, *app->graphConfigurationService()->snapshot().configuration);
+    }
+
+    TEST_F(CompositionRootTest, AQuickPatchIsCommittedAndStored) {
+        application::GraphQuickPatch patch;
+        patch.averagingWindowDays = 12;
+
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(application::GraphKey::DailyPlaytime, patch)
+            .accepted());
+
+        EXPECT_EQ(env->graphConfigurationPersistence->load().preferences(application::GraphKey::DailyPlaytime)
+                  .averagingWindowDays, 12);
     }
 }

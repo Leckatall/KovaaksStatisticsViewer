@@ -40,7 +40,7 @@
 #include "qml_registration.h"
 #include "qml_source_interceptor.h"
 #include "settings_service.h"
-#include "series_config_store.h"
+#include "qt_data/graph_configuration_persistence.h"
 #include "session_compose.h"
 #include "ui_driver.h"
 #include "formats/csv/stats_csv_parser.h"
@@ -259,7 +259,8 @@ int main(int argc, char *argv[]) {
     for (const QString &injection: faults->describe()) qInfo("ksv_driver: inject %s", qPrintable(injection));
     application::App app(
         settings, driver::injectDecoder(std::make_shared<data::ProtoDecoder>(), faults),
-        driver::injectSeriesStore(std::make_shared<qt_data::SeriesConfigStore>(settings), faults),
+        driver::injectGraphConfigurationPersistence(
+            std::make_shared<qt_data::GraphConfigurationPersistence>(settings), faults),
         driver::injectCsvParser(std::make_shared<data::StatsCsvParser>(), faults),
         driver::injectBenchmarkStore(std::make_shared<qt_data::BenchmarkStore>(data.benchmarksDir().toStdString()),
                                      faults));

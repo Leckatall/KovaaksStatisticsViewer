@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "data/interfaces/i_benchmark_store.h"
-#include "data/interfaces/i_series_config_store.h"
+#include "data/interfaces/i_graph_configuration_persistence.h"
 #include "data/interfaces/i_stats_csv_parser.h"
 #include "interfaces/i_proto_decoder.h"
 
@@ -60,6 +60,7 @@ namespace ksv::driver {
         std::shared_ptr<data::IStatsCsvParser> inner, std::shared_ptr<FaultPlan> plan);
     [[nodiscard]] std::shared_ptr<data::IBenchmarkStore> injectBenchmarkStore(
         std::shared_ptr<data::IBenchmarkStore> inner, std::shared_ptr<FaultPlan> plan);
-    [[nodiscard]] std::shared_ptr<application::ISeriesConfigStore> injectSeriesStore(
-        std::shared_ptr<application::ISeriesConfigStore> inner, std::shared_ptr<FaultPlan> plan);
+    // Port `seriesStore`: the graph-configuration document, Graph Lines included.
+    [[nodiscard]] std::shared_ptr<data::IGraphConfigurationPersistence> injectGraphConfigurationPersistence(
+        std::shared_ptr<data::IGraphConfigurationPersistence> inner, std::shared_ptr<FaultPlan> plan);
 }

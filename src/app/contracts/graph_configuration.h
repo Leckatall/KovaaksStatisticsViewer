@@ -3,8 +3,10 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -247,4 +249,36 @@ namespace ksv::application {
 
     [[nodiscard]] std::vector<GraphConfigurationIssue> validateGraphConfiguration(
         const GraphConfiguration &configuration);
+
+    // ── Committed state ──────────────────────────────────────────────────────────────────────────
+    // Immutable once published: a replacement installs a new configuration rather than editing this one.
+    struct GraphConfigurationSnapshot {
+        std::shared_ptr<const GraphConfiguration> configuration;
+        std::uint64_t revision = 0;
+    };
+
+    struct GraphConfigurationChange {
+        std::uint64_t revision = 0;
+        // Graphs whose GraphPreferences changed, in kGraphKeys order.
+        std::vector<GraphKey> graphs;
+        bool runSeries = false;
+        bool runAxisLabel = false;
+
+        [[nodiscard]] bool empty() const { return graphs.empty() && !runSeries && !runAxisLabel; }
+
+        bool operator==(const GraphConfigurationChange &) const = default;
+    };
+
+    // The revision is left 0 for the publisher to stamp.
+    [[nodiscard]] GraphConfigurationChange diffGraphConfigurations(const GraphConfiguration &before,
+                                                                   const GraphConfiguration &after);
+
+    struct GraphConfigurationSaveResult {
+        // Empty when accepted; otherwise nothing was replaced, written or published.
+        std::vector<GraphConfigurationIssue> issues;
+        // The committed revision once the call returns.
+        std::uint64_t revision = 0;
+
+        [[nodiscard]] bool accepted() const { return issues.empty(); }
+    };
 }

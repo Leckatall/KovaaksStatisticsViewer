@@ -25,7 +25,7 @@
 #include "gallery_dataset.h"
 #include "qml_source_interceptor.h"
 #include "settings_service.h"
-#include "series_config_store.h"
+#include "qt_data/graph_configuration_persistence.h"
 #include "formats/csv/stats_csv_parser.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "formats/protobuf/profile_serializer.h"
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
 
     application::App app(
         settings, std::make_shared<data::ProtoDecoder>(),
-        std::make_shared<qt_data::SeriesConfigStore>(settings),
+        std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
         std::make_shared<data::StatsCsvParser>(),
         std::make_shared<qt_data::BenchmarkStore>((tmp.path() + "/benchmarks").toStdString()));
     QQmlApplicationEngine* engine = app.engine();

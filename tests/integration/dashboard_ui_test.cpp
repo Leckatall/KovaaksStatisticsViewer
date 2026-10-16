@@ -81,7 +81,7 @@ namespace {
             perfUrl = QUrl::fromLocalFile(perfFile).toString();
 
             app = std::make_unique<application::App>(
-                env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore,
+                env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
                 env.statsParser, env.benchmarkStore);
             if (app->start() != 0) return "Main.qml failed to load";
             root = app->engine()->rootObjects().first();
@@ -534,7 +534,7 @@ namespace {
         ASSERT_TRUE(env.makePerformancesDir());
         ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
         ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
-        application::App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.seriesConfigStore,
+        application::App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
                              env.statsParser, env.benchmarkStore);
         ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
 
@@ -581,10 +581,10 @@ namespace {
         ASSERT_TRUE(tempDir.isValid());
         const auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
         settings->setProfilePath(QDir(tempDir.path()).filePath("profile.pb").toStdString());
-        const auto seriesConfigStore = std::make_shared<qt_data::SeriesConfigStore>(settings);
+        const auto graphConfigurationPersistence = std::make_shared<qt_data::GraphConfigurationPersistence>(settings);
         QTemporaryDir benchmarksDir;
         ASSERT_TRUE(benchmarksDir.isValid());
-        application::App app(settings, std::make_shared<data::ProtoDecoder>(), seriesConfigStore,
+        application::App app(settings, std::make_shared<data::ProtoDecoder>(), graphConfigurationPersistence,
                              std::make_shared<data::StatsCsvParser>(),
                              std::make_shared<qt_data::BenchmarkStore>(benchmarksDir.path().toStdString()));
         ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";

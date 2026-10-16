@@ -27,7 +27,8 @@ target_sources(tests_support INTERFACE
         fake_file_service.h
         fake_profile_service.h
         fake_session_controller.h
-        fake_series_config_store.h
+        fake_graph_configuration_persistence.h
+        fake_graph_configuration_use_case.h
         fake_benchmark_store.h
         fake_benchmarks_service.h
         fake_benchmark_resolution_use_case.h

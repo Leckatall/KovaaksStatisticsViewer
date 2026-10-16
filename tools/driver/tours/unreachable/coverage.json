@@ -8,7 +8,6 @@
   {"area": "Benchmarks", "state": "Incomplete body (completeness issues)", "shot": "incomplete"},
   {"area": "Benchmarks", "state": "Unresolved and ambiguous rows", "shot": "unresolved-and-ambiguous-rows"},
   {"area": "Settings", "state": "Profile rebuild in progress", "shot": "rebuild-in-progress"},
-  {"area": "Settings", "state": "Graph Lines save error", "shot": "series-draft-error"},
   {"area": "Settings", "state": "Graph Lines drag-reorder preview", "shot": "series-drag-preview"},
   {"area": "Manager", "state": "Automatic resolution write failed", "shot": "resolution-write-failed"},
   {"area": "Manager", "state": "Row drag: drop line and Move to Uncategorized", "shot": "row-drag-drop-line"},
