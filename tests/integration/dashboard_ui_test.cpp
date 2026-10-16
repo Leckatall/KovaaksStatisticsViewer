@@ -82,7 +82,7 @@ namespace {
 
             app = std::make_unique<application::App>(
                 env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
-                env.statsParser, env.benchmarkStore);
+                env.statsParser, env.benchmarkStore, env.daySource);
             if (app->start() != 0) return "Main.qml failed to load";
             root = app->engine()->rootObjects().first();
             return {};
@@ -535,7 +535,7 @@ namespace {
         ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
         ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
         application::App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
-                             env.statsParser, env.benchmarkStore);
+                             env.statsParser, env.benchmarkStore, env.daySource);
         ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
 
         auto *browser = app.scenarioBrowserVm();
@@ -586,7 +586,8 @@ namespace {
         ASSERT_TRUE(benchmarksDir.isValid());
         application::App app(settings, std::make_shared<data::ProtoDecoder>(), graphConfigurationPersistence,
                              std::make_shared<data::StatsCsvParser>(),
-                             std::make_shared<qt_data::BenchmarkStore>(benchmarksDir.path().toStdString()));
+                             std::make_shared<qt_data::BenchmarkStore>(benchmarksDir.path().toStdString()),
+                             std::make_shared<tests_support::FakeDaySource>());
         ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
 
         auto *root = app.engine()->rootObjects().first();

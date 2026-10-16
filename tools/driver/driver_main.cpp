@@ -46,6 +46,7 @@
 #include "formats/csv/stats_csv_parser.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "qt_data/benchmark_store.h"
+#include "qt_data/system_day_source.h"
 
 using namespace ksv;
 
@@ -263,7 +264,8 @@ int main(int argc, char *argv[]) {
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings), faults),
         driver::injectCsvParser(std::make_shared<data::StatsCsvParser>(), faults),
         driver::injectBenchmarkStore(std::make_shared<qt_data::BenchmarkStore>(data.benchmarksDir().toStdString()),
-                                     faults));
+                                     faults),
+        std::make_shared<qt_data::SystemDaySource>());
     QQmlApplicationEngine *engine = app.engine();
 
     const bool compiledQml = parser.isSet(compiledOption);

@@ -2,6 +2,7 @@ add_library(ksv_contracts STATIC
         series_config.cpp
         graph_configuration.cpp
         run_series_editing.cpp
+        range_projection.cpp
         expression_dsl.cpp
 )
 
@@ -16,6 +17,7 @@ target_sources(ksv_contracts PUBLIC
         series_config.h
         graph_configuration.h
         run_series_editing.h
+        range_projection.h
         expression_dsl.h
         i_graph_use_case.h
         i_playtime_graph_use_case.h

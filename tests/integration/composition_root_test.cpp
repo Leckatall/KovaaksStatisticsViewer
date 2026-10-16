@@ -14,6 +14,8 @@
 #include <QSignalSpy>
 #include <memory>
 #include <type_traits>
+#include <chrono>
+#include <vector>
 
 #include "app/app.h"
 #include "formats/protobuf/proto_decoder.h"
@@ -45,7 +47,7 @@ namespace {
 
             app = std::make_unique<application::App>(
                 env->settings, std::make_shared<data::ProtoDecoder>(), env->graphConfigurationPersistence,
-                env->statsParser, env->benchmarkStore);
+                env->statsParser, env->benchmarkStore, env->daySource);
             ASSERT_TRUE(waitForProfile());
         }
 
@@ -114,6 +116,18 @@ namespace {
         app->profileService()->generateProfileFromDirectory();
 
         EXPECT_GE(spy.count(), 1);
+    }
+
+    TEST_F(CompositionRootTest, TheInjectedDaySourceIsTheOneTheAppExposesAndAdvances) {
+        ASSERT_EQ(app->daySource(), env->daySource);
+
+        std::vector<std::chrono::sys_days> announced;
+        app->daySource()->onDayChanged([&](const std::chrono::sys_days day) { announced.push_back(day); });
+        const auto before = app->daySource()->today();
+        env->daySource->advance();
+
+        EXPECT_EQ(app->daySource()->today(), before + std::chrono::days{1});
+        EXPECT_EQ(announced, std::vector{before + std::chrono::days{1}});
     }
 
     TEST_F(CompositionRootTest, TheUseCaseReadsTheServicesSingleCommittedSnapshot) {

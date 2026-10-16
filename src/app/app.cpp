@@ -33,6 +33,7 @@
 #include "usecases/benchmark_tracking_use_case.h"
 #include "qt_data/benchmark_store.h"
 #include "qt_data/playlist_reader.h"
+#include "qt_data/system_day_source.h"
 #include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
 #include "usecases/scenario_browser_use_case.h"
@@ -54,6 +55,7 @@ namespace ksv::application {
               std::make_shared<qt_data::BenchmarkStore>(
                   (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
                       .toStdString()),
+              std::make_shared<qt_data::SystemDaySource>(),
               parent) {}
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
@@ -61,11 +63,13 @@ namespace ksv::application {
              std::shared_ptr<data::IGraphConfigurationPersistence> graphConfigurationPersistence,
              std::shared_ptr<data::IStatsCsvParser> statsParser,
              std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
+             std::shared_ptr<data::IDaySource> daySource,
              QObject *parent) : QObject(parent) {
         qDebug() << "App Started. This message should not appear in release builds";
         m_protoDecoder = std::move(decoder);
 
         m_settingsService = std::move(settingsService);
+        m_daySource = std::move(daySource);
         m_graphConfigurationService =
                 std::make_shared<data::GraphConfigurationService>(std::move(graphConfigurationPersistence));
         m_graphConfigurationUseCase = std::make_shared<GraphConfigurationUseCase>(m_graphConfigurationService);

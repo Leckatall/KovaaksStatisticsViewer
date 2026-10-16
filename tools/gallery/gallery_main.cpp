@@ -30,6 +30,7 @@
 #include "formats/protobuf/proto_decoder.h"
 #include "formats/protobuf/profile_serializer.h"
 #include "qt_data/benchmark_store.h"
+#include "qt_data/system_day_source.h"
 
 using namespace ksv;
 
@@ -74,7 +75,8 @@ int main(int argc, char *argv[]) {
         settings, std::make_shared<data::ProtoDecoder>(),
         std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
         std::make_shared<data::StatsCsvParser>(),
-        std::make_shared<qt_data::BenchmarkStore>((tmp.path() + "/benchmarks").toStdString()));
+        std::make_shared<qt_data::BenchmarkStore>((tmp.path() + "/benchmarks").toStdString()),
+        std::make_shared<qt_data::SystemDaySource>());
     QQmlApplicationEngine* engine = app.engine();
     gallery::QmlSourceInterceptor sourceInterceptor(QStringLiteral(GALLERY_QML_SOURCE_DIR));
     engine->addUrlInterceptor(&sourceInterceptor);

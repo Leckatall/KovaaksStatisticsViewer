@@ -71,7 +71,7 @@ namespace {
 
             app = std::make_unique<application::App>(
                 env->settings, std::make_shared<data::ProtoDecoder>(), env->graphConfigurationPersistence,
-                env->statsParser, env->benchmarkStore);
+                env->statsParser, env->benchmarkStore, env->daySource);
             graphVm = app->graphVm();
             graphVm->fetchData(QUrl::fromLocalFile(file).toString());
         }

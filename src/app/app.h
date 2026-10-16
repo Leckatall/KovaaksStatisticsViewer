@@ -23,6 +23,7 @@
 #include "interfaces/i_settings_service.h"
 #include "data/interfaces/i_graph_configuration_persistence.h"
 #include "data/interfaces/i_graph_configuration_service.h"
+#include "data/interfaces/i_day_source.h"
 #include "usecases/i_session_controller.h"
 #include "../data/interfaces/i_benchmark_store.h"
 #include "../data/interfaces/i_benchmarks_service.h"
@@ -50,6 +51,7 @@ namespace ksv::application {
             std::shared_ptr<data::IGraphConfigurationPersistence> graphConfigurationPersistence,
             std::shared_ptr<data::IStatsCsvParser> statsParser,
             std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
+            std::shared_ptr<data::IDaySource> daySource,
             QObject* parent = nullptr);
         int start();
         // The view models Main.qml declares as required properties. start() hands
@@ -72,6 +74,7 @@ namespace ksv::application {
             return m_benchmarkTrackingVm;
         }
         [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
+        [[nodiscard]] std::shared_ptr<data::IDaySource> daySource() const { return m_daySource; }
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
         [[nodiscard]] std::shared_ptr<ISessionController> sessionController() const { return m_sessionController; }
         [[nodiscard]] std::shared_ptr<data::IGraphConfigurationService> graphConfigurationService() const {
@@ -105,6 +108,7 @@ namespace ksv::application {
         presentation::BenchmarkTrackingViewModel* m_benchmarkTrackingVm = nullptr;
 
         std::shared_ptr<ISettingsService> m_settingsService;
+        std::shared_ptr<data::IDaySource> m_daySource;
         std::shared_ptr<data::IGraphConfigurationService> m_graphConfigurationService;
         std::shared_ptr<IGraphConfigurationUseCase> m_graphConfigurationUseCase;
         std::shared_ptr<data::IStatsCsvParser> m_statsParser;

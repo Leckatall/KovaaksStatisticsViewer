@@ -7,6 +7,7 @@ add_executable(app_tests
         completion_history_use_case_test.cpp
         series_config_test.cpp
         graph_configuration_test.cpp
+        range_projection_test.cpp
         graph_configuration_use_case_test.cpp
         expression_dsl_test.cpp
         graph_use_case_test.cpp

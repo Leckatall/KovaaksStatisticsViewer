@@ -62,6 +62,7 @@ add_library(ksv_data STATIC
         interfaces/i_settings_service.h
         interfaces/i_graph_configuration_persistence.h
         interfaces/i_graph_configuration_service.h
+        interfaces/i_day_source.h
         interfaces/benchmark_library_snapshot.h
         interfaces/i_benchmark_store.h
         interfaces/i_benchmarks_service.h

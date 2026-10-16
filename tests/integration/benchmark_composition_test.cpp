@@ -32,6 +32,7 @@
 #include "qt_data/playlist_reader.h"
 #include "qt_data/graph_configuration_persistence.h"
 #include "fake_settings_service.h"
+#include "fake_day_source.h"
 #include "integration_env.h"
 
 using namespace ksv;
@@ -73,7 +74,7 @@ TEST(BenchmarkComposition, RealGraphAutoResolvesAScenarioNameAtStartup) {
     file.close();
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource);
     QElapsedTimer timer;
     timer.start();
     while (!app.profileService()->isProfileLoaded()) {
@@ -110,7 +111,7 @@ TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
     file.close();
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource);
     QElapsedTimer timer;
     timer.start();
     while (!app.profileService()->isProfileLoaded()) {
@@ -138,7 +139,7 @@ TEST(BenchmarkComposition, RealGraphReportsUnknownBenchmarkAsUnavailable) {
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo);
+            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
     app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"missing"});
     EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Unavailable);
     EXPECT_EQ(app.benchmarkTrackingUseCase()->projection(), nullptr);
@@ -156,7 +157,7 @@ TEST(BenchmarkComposition, RealGraphLoadsManagedBenchmarksAtStartup) {
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo);
+            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
 
     const auto service = app.benchmarksService();
     ASSERT_NE(service, nullptr);
@@ -190,7 +191,7 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo);
+            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
 
     auto manager = app.benchmarkManagerUseCase();
     ASSERT_NE(manager, nullptr);
@@ -284,7 +285,7 @@ TEST(BenchmarkComposition, RefreshLoadsACopiedFileAndClearsAFixedProblemWithoutR
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo);
+            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
     const auto service = app.benchmarksService();
     ASSERT_TRUE(service->snapshot().has_value());
     ASSERT_EQ(service->snapshot()->entries.size(), 1U);
@@ -334,7 +335,7 @@ TEST(BenchmarkComposition, UnsupportedFileIsReportedAndNeverRewrittenByAutomatic
     }
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource);
     QElapsedTimer timer;
     timer.start();
     while (!app.profileService()->isProfileLoaded()) {
@@ -370,7 +371,7 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo);
+            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
 
     auto *vm = app.benchmarkManagerVm();
     ASSERT_NE(vm, nullptr);
@@ -428,7 +429,7 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
     }
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource);
 
     QElapsedTimer timer;
     timer.start();
@@ -552,7 +553,7 @@ namespace {
 
         w->repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
         w->app = std::make_unique<App>(w->env.settings, std::make_shared<data::ProtoDecoder>(),
-                                       w->env.graphConfigurationPersistence, w->env.statsParser, w->repo);
+                                       w->env.graphConfigurationPersistence, w->env.statsParser, w->repo, w->env.daySource);
         QElapsedTimer timer;
         timer.start();
         while (!w->app->profileService()->isProfileLoaded()) {
@@ -596,7 +597,7 @@ TEST(BenchmarkWorkspaceComposition, StartSuppliesBothBenchmarkViewModelsAsRequir
     ASSERT_TRUE(env.valid());
 
     App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser,
-            env.benchmarkStore);
+            env.benchmarkStore, env.daySource);
     ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
 
     ASSERT_FALSE(app.engine()->rootObjects().isEmpty());

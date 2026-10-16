@@ -58,7 +58,7 @@ namespace {
         {
             application::App app(
                 env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
-                env.statsParser, env.benchmarkStore);
+                env.statsParser, env.benchmarkStore, env.daySource);
             startResult = app.start();
         }
 
@@ -92,7 +92,7 @@ namespace {
 
         application::App app(
             env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
-                env.statsParser, env.benchmarkStore);
+                env.statsParser, env.benchmarkStore, env.daySource);
         ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
         ASSERT_FALSE(app.engine()->rootObjects().isEmpty());
 

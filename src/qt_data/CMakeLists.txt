@@ -12,6 +12,9 @@ add_library(ksv_qt_data STATIC
         graph_configuration_codec.h
         graph_configuration_persistence.cpp
         graph_configuration_persistence.h
+        system_day_source.cpp
+        system_day_source.h
+        ../data/interfaces/i_day_source.h
         ../data/interfaces/i_graph_configuration_persistence.h
         benchmark_store.cpp
         benchmark_store.h
@@ -24,6 +27,7 @@ add_library(ksv_qt_data STATIC
 
 target_link_libraries(ksv_qt_data PUBLIC
         Qt6::Core
+        Qt6::Gui
         ksv_contracts
         ksv_domain
         ksv_data

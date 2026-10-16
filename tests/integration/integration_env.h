@@ -26,6 +26,7 @@
 #include "kovaaks_dir.h"
 #include "qt_data/graph_configuration_persistence.h"
 #include "settings_service.h"
+#include "fake_day_source.h"
 
 namespace ksv::integration {
     inline QString fixturePath(const QString &name) {
@@ -51,6 +52,8 @@ namespace ksv::integration {
         std::shared_ptr<qt_data::GraphConfigurationPersistence> graphConfigurationPersistence =
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings);
         std::shared_ptr<data::StatsCsvParser> statsParser = std::make_shared<data::StatsCsvParser>();
+        // Tests advance this to move the application past a UTC midnight.
+        std::shared_ptr<tests_support::FakeDaySource> daySource = std::make_shared<tests_support::FakeDaySource>();
         QTemporaryDir benchmarksDir;
         std::shared_ptr<qt_data::BenchmarkStore> benchmarkStore =
             std::make_shared<qt_data::BenchmarkStore>(benchmarksDir.path().toStdString());
