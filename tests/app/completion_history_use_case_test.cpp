@@ -247,6 +247,36 @@ namespace {
         EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{1}));
     }
 
+    TEST_F(CompletionHistoryUseCaseTest, ANewRunShiftsTheLatestRunsSuffixAndKeepsOriginalRunNumbers) {
+        playOnDays({kToday - 30, kToday - 20, kToday - 10});
+        setRange(LatestRuns{2});
+        const auto before = use_case.get_history();
+        ASSERT_EQ(runNumbers(before), (std::vector{2, 3}));
+
+        playOnDays({kToday - 30, kToday - 20, kToday - 10, kToday});
+        session->notifyProfileChanged();
+        const auto after = use_case.get_history();
+
+        EXPECT_EQ(runNumbers(after), (std::vector{3, 4}));
+        EXPECT_EQ(after.full_count, 4);
+        EXPECT_EQ(after.rows[0].start_time_ms, (kToday - 10) * kMsPerDay + 7);
+        EXPECT_EQ(after.rows[1].start_time_ms, kToday * kMsPerDay + 7);
+        EXPECT_DOUBLE_EQ(after.rows[1].score, 103.0);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ANewRunMovesALatestRunAnchoredRecentDaysInterval) {
+        playOnDays({kToday - 400, kToday - 395, kToday - 392});
+        setRange(RecentDays{5}, true);
+        ASSERT_EQ(runNumbers(use_case.get_history()), (std::vector{2, 3}));
+
+        playOnDays({kToday - 400, kToday - 395, kToday - 392, kToday - 380});
+        session->notifyProfileChanged();
+        const auto after = use_case.get_history();
+
+        EXPECT_EQ(runNumbers(after), (std::vector{4})) << "the interval follows the new latest run, dropping older ones";
+        EXPECT_EQ(after.full_count, 4);
+    }
+
     TEST_F(CompletionHistoryUseCaseTest, ValidRangeWithNoRowsInsideIsEmptyButKeepsTheFullCount) {
         playOnDays({kToday - 40, kToday - 30});
         setRange(RecentDays{7});

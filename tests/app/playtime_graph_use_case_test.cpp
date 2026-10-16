@@ -249,6 +249,37 @@ namespace {
         EXPECT_EQ(profile->rolling_time_average_request_count, requests + 1);
     }
 
+    TEST_F(PlaytimeGraphUseCaseTest, ALaterRunMovesTheLatestRunAnchoredIntervalOnceTheProfileChanges) {
+        useRealAccounting({{100, 60.0F}, {104, 90.0F}});
+        days->setToday(day(300));
+        preferences().range = RangePreference{RecentDays{2}, true};
+        const auto before = use_case.snapshot();
+        ASSERT_EQ(before.view.interval, std::optional(DayInterval{day(103), day(104)}));
+
+        useRealAccounting({{100, 60.0F}, {104, 90.0F}, {108, 30.0F}});
+        profile->notifyProfileChanged();
+        const auto after = use_case.snapshot();
+
+        EXPECT_EQ(notifications, 1);
+        EXPECT_EQ(after.view.interval, std::optional(DayInterval{day(107), day(108)}));
+        ASSERT_FALSE(after.samples.empty());
+        EXPECT_EQ(after.samples.back().first, day(108));
+    }
+
+    TEST_F(PlaytimeGraphUseCaseTest, TheAnchorIsOnlyResolvedAgainAfterTheProfileChanges) {
+        useRealAccounting({{100, 60.0F}, {104, 90.0F}});
+        days->setToday(day(300));
+        preferences().range = RangePreference{RecentDays{2}, true};
+        std::ignore = use_case.snapshot();
+
+        useRealAccounting({{100, 60.0F}, {104, 90.0F}, {108, 30.0F}});
+        EXPECT_EQ(use_case.snapshot().view.interval, std::optional(DayInterval{day(103), day(104)}))
+            << "the anchor is kept per profile revision, so no change notification means no new anchor";
+
+        profile->notifyProfileChanged();
+        EXPECT_EQ(use_case.snapshot().view.interval, std::optional(DayInterval{day(107), day(108)}));
+    }
+
     TEST_F(PlaytimeGraphUseCaseTest, ADayChangeReprojectsATodayAnchoredRangeWithoutRecalculating) {
         useRealAccounting({{100, 60.0F}, {101, 30.0F}});
         days->setToday(day(101));
