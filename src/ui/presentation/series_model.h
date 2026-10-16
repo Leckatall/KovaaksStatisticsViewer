@@ -52,6 +52,8 @@ namespace ksv::presentation {
         void setColumn(const int column) { if (m_column == column) return; m_column = column; emit columnChanged(); }
 
         ValueTransform transform;
+        // Pen width in pixels; the default is the width every series has always been painted at.
+        qreal lineWidth = 3.0;
         ValueAxis::Options yAxisOptions;
         // Painted over the line by GraphCanvas while this series is visible.
         QList<ReferenceLine> referenceLines;

@@ -12,6 +12,8 @@ Item {
     property string xLabel: qsTr("Time")
     // Dot each real data point while the points are sparse enough to tell apart.
     property bool pointMarkers: false
+    // GraphCanvas.ConnectionMode: 0 smooth, 1 straight, 2 points only.
+    property int connectionMode: 0
     // An x value to mark with a rule and a ring on each line's point there; NaN marks nothing.
     property real markedX: NaN
     // Whether a left click inside the plot reports the nearest data point's x through pointClicked.
@@ -34,6 +36,7 @@ Item {
         visibleColumns: root.visibleColumns
         yAxisColumn: root.yAxisColumn
         pointMarkers: root.pointMarkers
+        connectionMode: root.connectionMode
         markedX: root.markedX
         backgroundColor: root.palette.base
         foregroundColor: root.palette.text

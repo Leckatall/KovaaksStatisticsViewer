@@ -15,6 +15,7 @@
 #include <qqmlintegration.h>
 
 #include "presentation/graph_vm_base.h"
+#include "series_painter.h"
 #include "presentation/series_model.h"
 
 namespace ksv::ui {
@@ -42,9 +43,19 @@ namespace ksv::ui {
         // visible line's point there; NaN marks nothing.
         Q_PROPERTY(qreal markedX READ markedX WRITE setMarkedX NOTIFY markedXChanged)
         Q_PROPERTY(QColor markerColor READ markerColor WRITE setMarkerColor NOTIFY markerColorChanged)
+        // How consecutive observations are joined; the values match application::ConnectionMode.
+        // PointsOnly marks every observation whatever pointMarkers says or how dense the series is,
+        // and leaves pointMarkers (the preference of the line modes) untouched.
+        Q_PROPERTY(ConnectionMode connectionMode READ connectionMode WRITE setConnectionMode NOTIFY connectionModeChanged)
 
     public:
+        enum class ConnectionMode { Smooth, Straight, PointsOnly };
+        Q_ENUM(ConnectionMode)
+
         explicit GraphCanvas(QQuickItem *parent = nullptr);
+
+        [[nodiscard]] ConnectionMode connectionMode() const { return m_connectionMode; }
+        void setConnectionMode(ConnectionMode mode);
 
         [[nodiscard]] presentation::GraphViewModelBase *graphVm() const { return m_graphVm; }
 
@@ -109,9 +120,12 @@ namespace ksv::ui {
         void foregroundColorChanged();
         void markedXChanged();
         void markerColorChanged();
+        void connectionModeChanged();
 
     private:
         [[nodiscard]] QRectF plotRect() const;
+
+        [[nodiscard]] SeriesPainter::Connection painterConnection() const;
 
         [[nodiscard]] QList<int> visibleColumnIds() const;
 
@@ -137,6 +151,7 @@ namespace ksv::ui {
         presentation::GraphViewModelBase *m_graphVm = nullptr;
         QVariantList m_visibleColumns;
         int m_yAxisColumn = -1;
+        ConnectionMode m_connectionMode = ConnectionMode::Smooth;
         bool m_pointMarkers = false;
         QColor m_backgroundColor{"#2d2d2d"};
         QColor m_foregroundColor{Qt::white};

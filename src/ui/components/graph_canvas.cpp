@@ -87,6 +87,14 @@ namespace ksv::ui {
         update();
     }
 
+    void GraphCanvas::setConnectionMode(const ConnectionMode mode) {
+        if (m_connectionMode == mode) return;
+        m_connectionMode = mode;
+        emit connectionModeChanged();
+        emit plotAreaChanged();
+        update();
+    }
+
     void GraphCanvas::setBackgroundColor(const QColor &backgroundColor) {
         if (m_backgroundColor == backgroundColor) return;
         m_backgroundColor = backgroundColor;
@@ -99,6 +107,15 @@ namespace ksv::ui {
         m_foregroundColor = foregroundColor;
         emit foregroundColorChanged();
         update();
+    }
+
+    SeriesPainter::Connection GraphCanvas::painterConnection() const {
+        switch (m_connectionMode) {
+            case ConnectionMode::Straight: return SeriesPainter::Connection::Straight;
+            case ConnectionMode::PointsOnly: return SeriesPainter::Connection::None;
+            case ConnectionMode::Smooth: break;
+        }
+        return SeriesPainter::Connection::Smooth;
     }
 
     QColor GraphCanvas::colorFor(const presentation::SeriesModel &series) const {
@@ -126,13 +143,14 @@ namespace ksv::ui {
     }
 
     bool GraphCanvas::pointMarkersShown() const {
-        if (!m_pointMarkers || !m_graphVm) return false;
+        const bool pointsOnly = m_connectionMode == ConnectionMode::PointsOnly;
+        if (!(m_pointMarkers || pointsOnly) || !m_graphVm) return false;
         const QRectF rect = plotRect();
         const auto series = m_graphVm->series(visibleColumnIds());
         bool any = false;
         for (const auto *s: series) {
             if (s->points.isEmpty()) continue;
-            if (s->points.size() == 1) {
+            if (pointsOnly || s->points.size() == 1) {
                 any = true;
                 continue;
             }
@@ -277,9 +295,16 @@ namespace ksv::ui {
             for (const auto &p: displayPoints) pixelPoints.append(toPixel(p, rect, xAxis, yAxis));
 
             SeriesPainter::Style style;
+            style.lineWidth = s->lineWidth;
+            style.connection = painterConnection();
+            // A line centred on the plot edge keeps its full stroke; anything further out is cut.
+            const qreal edgeAllowance = s->lineWidth / 2;
+            style.clip = rect.adjusted(-edgeAllowance, -edgeAllowance, edgeAllowance, edgeAllowance);
             style.markerOutlineColor = m_backgroundColor;
-            style.showMarkers = m_pointMarkers && !pixelPoints.isEmpty() &&
-                                markersFit(int(pixelPoints.size()), pixelPoints.back().x() - pixelPoints.front().x());
+            style.showMarkers = !pixelPoints.isEmpty() &&
+                                (m_connectionMode == ConnectionMode::PointsOnly ||
+                                 (m_pointMarkers && markersFit(int(pixelPoints.size()),
+                                                               pixelPoints.back().x() - pixelPoints.front().x())));
             SeriesPainter::paint(*painter, pixelPoints, {carryPixel(s->leadingCarry), carryPixel(s->trailingCarry)},
                                  colorFor(*s), style);
         }

@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QPointF>
+#include <QRectF>
 #include <QVector>
 #include <QtGlobal>
 
@@ -17,8 +18,14 @@ class QPainter;
 namespace ksv::ui {
     class SeriesPainter {
     public:
+        // None draws only the markers of the observations, whatever showMarkers says.
+        enum class Connection { Smooth, Straight, None };
+
         struct Style {
             qreal lineWidth = 3;
+            Connection connection = Connection::Smooth;
+            // A non-null rect confines the line and drops markers centred outside it.
+            QRectF clip;
             // Data-point markers: a dot on each real sample so it reads apart from the interpolated
             // curve. An invalid markerColor means the line colour; an invalid outline draws none.
             qreal markerRadius = 3.5;
@@ -33,8 +40,8 @@ namespace ksv::ui {
             std::optional<QPointF> trailing;
         };
 
-        // Draws the monotone curve through `pixelPoints` and, with showMarkers, a marker on each
-        // point. A lone point without carry has no curve, so it is always drawn as a marker.
+        // Draws the connection through `pixelPoints` (carry included) and, with showMarkers, a marker
+        // on each point. A lone point is always marked.
         static void paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const Carry &carry,
                           const QColor &lineColor, const Style &style);
         static void paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const QColor &lineColor,

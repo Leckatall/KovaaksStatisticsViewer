@@ -100,6 +100,23 @@ namespace {
         EXPECT_DOUBLE_EQ(sample->y(), 87.0);
     }
 
+    TEST(SeriesModelTest, LineWidthDefaultsToThePainterWidth) {
+        EXPECT_DOUBLE_EQ(SeriesModel{}.lineWidth, 3.0);
+    }
+
+    TEST(SeriesModelTest, CarriedVerticesAreNeverSampled) {
+        SeriesModel series;
+        series.points = {QPointF(10.0, 4.0)};
+        series.leadingCarry = QPointF(0.0, 1.0);
+        series.trailingCarry = QPointF(20.0, 4.0);
+
+        for (const qreal x: {0.0, 5.0, 15.0, 20.0}) {
+            const auto sample = series.sampleAtX(x);
+            ASSERT_TRUE(sample) << "x=" << x;
+            EXPECT_DOUBLE_EQ(sample->x(), 10.0) << "x=" << x;
+        }
+    }
+
     TEST(SeriesModelTest, SampleAtXOnEmptySeriesIsNullopt) {
         SeriesModel series;
         EXPECT_FALSE(series.sampleAtX(5.0).has_value());

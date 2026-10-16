@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <QImage>
+#include <QPainter>
 #include <QStringList>
 #include <QUrl>
 #include <QVariantList>
@@ -426,5 +428,230 @@ namespace {
         const QVariantMap nearest = canvas->nearestPoint(hover.value("pixelX").toReal(),
                                                           series.front().toMap().value("pixelY").toReal());
         EXPECT_TRUE(nearest.value("valid").toBool());
+    }
+
+    // --- Connection modes, widths, clipping and non-selectable geometry. ---
+
+    constexpr QRgb kSeriesRed = qRgb(255, 0, 0);
+    constexpr QRgb kReferenceBlue = qRgb(0, 0, 255);
+
+    class StyledVm : public presentation::GraphViewModelBase {
+    public:
+        StyledVm(QList<QPointF> points, const qreal xLo, const qreal xHi) : m_series(new presentation::SeriesModel(this)) {
+            m_xAxis.setRange(xLo, xHi);
+            m_series->setColumn(0);
+            m_series->setName("Styled");
+            m_series->setColor(QColor(kSeriesRed));
+            m_series->setData(std::move(points));
+        }
+
+        [[nodiscard]] presentation::SeriesModel &model() const { return *m_series; }
+        [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &columns) const override {
+            return columns.contains(0) ? QList<presentation::SeriesModel *>{m_series}
+                                       : QList<presentation::SeriesModel *>{};
+        }
+        [[nodiscard]] const presentation::Axis &xAxis() const override { return m_xAxis; }
+        [[nodiscard]] int yAxisColumn() const override { return 0; }
+
+        [[nodiscard]] QPointF pixelOf(const GraphCanvas &canvas, const QPointF &raw) const {
+            const QRectF plot = canvas.property("plotArea").toRectF();
+            return toPixel(QPointF(raw.x(), m_series->transform.display(raw.y())), plot, m_xAxis,
+                           m_series->yAxis.value_or(m_series->deriveYAxis()));
+        }
+
+    private:
+        presentation::ValueAxis m_xAxis;
+        presentation::SeriesModel *m_series;
+    };
+
+    QImage render(GraphCanvas &canvas) {
+        QImage image(int(canvas.width()), int(canvas.height()), QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        canvas.paint(&painter);
+        return image;
+    }
+
+    int countColour(const QImage &image, const QRect &area, const QRgb colour) {
+        int count = 0;
+        const QRect bounded = area.intersected(image.rect());
+        for (int y = bounded.top(); y <= bounded.bottom(); ++y) {
+            for (int x = bounded.left(); x <= bounded.right(); ++x) {
+                const QColor c = image.pixelColor(x, y);
+                if (c.alpha() > 200 && std::abs(c.red() - qRed(colour)) < 40 && std::abs(c.green() - qGreen(colour)) < 40 &&
+                    std::abs(c.blue() - qBlue(colour)) < 40)
+                    ++count;
+            }
+        }
+        return count;
+    }
+
+    TEST(GraphCanvasConnectionTest, ConnectionModeDefaultsToSmoothAndKeepsTheMarkerPreference) {
+        GraphCanvas canvas;
+        EXPECT_EQ(canvas.property("connectionMode").toInt(), int(GraphCanvas::ConnectionMode::Smooth));
+
+        int changes = 0;
+        QObject::connect(&canvas, &GraphCanvas::connectionModeChanged, [&changes] { ++changes; });
+        canvas.setPointMarkers(true);
+        canvas.setProperty("connectionMode", int(GraphCanvas::ConnectionMode::PointsOnly));
+        canvas.setConnectionMode(GraphCanvas::ConnectionMode::PointsOnly);
+
+        EXPECT_EQ(changes, 1);
+        EXPECT_TRUE(canvas.pointMarkers()) << "Points only never overwrites the line-mode marker preference";
+    }
+
+    TEST(GraphCanvasConnectionTest, PointsOnlyBypassesMarkerSpacingAndRestoresThePreferenceAfterwards) {
+        RunsVm many(224);
+        const auto canvas = makeCanvas(many, QVariantList{0});
+
+        for (const bool preference: {false, true}) {
+            canvas->setPointMarkers(preference);
+            canvas->setConnectionMode(GraphCanvas::ConnectionMode::Smooth);
+            EXPECT_FALSE(canvas->pointMarkersShown()) << "dense series stay plain lines in line modes";
+
+            canvas->setConnectionMode(GraphCanvas::ConnectionMode::PointsOnly);
+            EXPECT_TRUE(canvas->pointMarkersShown()) << "Points only forces markers on regardless of density";
+            EXPECT_EQ(canvas->pointMarkers(), preference);
+
+            canvas->setConnectionMode(GraphCanvas::ConnectionMode::Straight);
+            EXPECT_FALSE(canvas->pointMarkersShown());
+            EXPECT_EQ(canvas->pointMarkers(), preference);
+        }
+
+        RunsVm few(8);
+        const auto fewCanvas = makeCanvas(few, QVariantList{0});
+        EXPECT_FALSE(fewCanvas->pointMarkersShown());
+        fewCanvas->setConnectionMode(GraphCanvas::ConnectionMode::PointsOnly);
+        EXPECT_TRUE(fewCanvas->pointMarkersShown()) << "the preference being off does not hide Points only";
+        fewCanvas->setConnectionMode(GraphCanvas::ConnectionMode::Smooth);
+        EXPECT_FALSE(fewCanvas->pointMarkersShown()) << "back to the stored preference";
+    }
+
+    TEST(GraphCanvasConnectionTest, PointsOnlyPaintsMarkersAndNoConnection) {
+        QList<QPointF> points;
+        for (int i = 0; i <= 10; ++i) points.append(QPointF(i, i % 2 == 0 ? 10.0 : 90.0));
+        StyledVm vm(points, 0.0, 10.0);
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+
+        const QImage smooth = render(*canvas);
+        canvas->setConnectionMode(GraphCanvas::ConnectionMode::PointsOnly);
+        const QImage pointsOnly = render(*canvas);
+
+        const QPointF first = vm.pixelOf(*canvas, points[0]);
+        const QPointF second = vm.pixelOf(*canvas, points[1]);
+        const QRect betweenPoints(int((first.x() + second.x()) / 2) - 1, int(std::min(first.y(), second.y())) + 8, 3,
+                                  int(std::abs(first.y() - second.y())) - 16);
+        EXPECT_GT(countColour(smooth, betweenPoints, kSeriesRed), 0) << "the line crosses between the points";
+        EXPECT_EQ(countColour(pointsOnly, betweenPoints, kSeriesRed), 0) << "Points only has no connection";
+        EXPECT_GT(countColour(pointsOnly, QRect(int(first.x()) - 1, int(first.y()) - 1, 3, 3), kSeriesRed), 7)
+            << "markers remain";
+    }
+
+    TEST(GraphCanvasConnectionTest, PointsOnlyKeepsTierReferenceLinesAndSkipsCarriedGeometry) {
+        StyledVm vm({QPointF(5.0, 40.0)}, 0.0, 10.0);
+        vm.model().leadingCarry = QPointF(0.0, 40.0);
+        vm.model().trailingCarry = QPointF(10.0, 40.0);
+        vm.model().referenceLines = {presentation::ReferenceLine{.value = 10.0, .color = QColor(kReferenceBlue)}};
+        presentation::ValueAxis fixed;
+        fixed.setRange(0.0, 50.0);
+        vm.model().yAxis = fixed;
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        const QRectF plot = canvas->property("plotArea").toRectF();
+        const QPointF observation = vm.pixelOf(*canvas, QPointF(5.0, 40.0));
+        const QRect carriedStretch(int(plot.left()) + 4, int(observation.y()) - 2, int(observation.x() - plot.left()) - 20, 5);
+        const QRect wholePlot(int(plot.left()), int(plot.top()), int(plot.width()), int(plot.height()));
+
+        canvas->setConnectionMode(GraphCanvas::ConnectionMode::Smooth);
+        const QImage smooth = render(*canvas);
+        canvas->setConnectionMode(GraphCanvas::ConnectionMode::PointsOnly);
+        const QImage pointsOnly = render(*canvas);
+
+        EXPECT_GT(countColour(smooth, carriedStretch, kSeriesRed), 20) << "line modes draw the carried level";
+        EXPECT_EQ(countColour(pointsOnly, carriedStretch, kSeriesRed), 0);
+        EXPECT_GT(countColour(pointsOnly, QRect(int(observation.x()) - 4, int(observation.y()) - 4, 9, 9), kSeriesRed), 0);
+        EXPECT_GT(countColour(smooth, wholePlot, kReferenceBlue), 200);
+        EXPECT_EQ(countColour(pointsOnly, wholePlot, kReferenceBlue), countColour(smooth, wholePlot, kReferenceBlue))
+            << "reference lines keep their own path in every mode";
+    }
+
+    TEST(GraphCanvasConnectionTest, ALoneObservationWithCarryIsMarkedEvenWithMarkersOff) {
+        StyledVm vm({QPointF(5.0, 40.0)}, 0.0, 10.0);
+        vm.model().leadingCarry = QPointF(0.0, 40.0);
+        vm.model().trailingCarry = QPointF(10.0, 40.0);
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        vm.model().lineWidth = 2.0;
+        const QPointF observation = vm.pixelOf(*canvas, QPointF(5.0, 40.0));
+
+        for (const auto mode: {GraphCanvas::ConnectionMode::Smooth, GraphCanvas::ConnectionMode::Straight}) {
+            canvas->setConnectionMode(mode);
+            const QImage image = render(*canvas);
+            EXPECT_GE(countColour(image, QRect(int(observation.x()), int(observation.y()) - 4, 1, 9), kSeriesRed), 4)
+                << "the marker is taller than the 2px line";
+            EXPECT_GT(countColour(image, QRect(int(observation.x()) - 30, int(observation.y()) - 1, 3, 3), kSeriesRed), 0)
+                << "and the carried level is still drawn";
+        }
+    }
+
+    TEST(GraphCanvasConnectionTest, SeriesLineWidthReachesThePainter) {
+        StyledVm vm({QPointF(0.0, 50.0), QPointF(10.0, 50.0)}, 0.0, 10.0);
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        const QPointF middle = vm.pixelOf(*canvas, QPointF(5.0, 50.0));
+        const QRect column(int(middle.x()), int(middle.y()) - 20, 1, 41);
+
+        const int defaultWidth = countColour(render(*canvas), column, kSeriesRed);
+        vm.model().lineWidth = 9.0;
+        const int thick = countColour(render(*canvas), column, kSeriesRed);
+        vm.model().lineWidth = 1.0;
+        const int thin = countColour(render(*canvas), column, kSeriesRed);
+
+        EXPECT_NEAR(defaultWidth, 3, 1);
+        EXPECT_NEAR(thick, 9, 1);
+        EXPECT_NEAR(thin, 1, 1);
+    }
+
+    TEST(GraphCanvasConnectionTest, FixedBoundsClipDataGeometryToThePlotArea) {
+        StyledVm vm({QPointF(0.0, 10.0), QPointF(5.0, 400.0), QPointF(10.0, 10.0)}, 0.0, 10.0);
+        presentation::ValueAxis fixed;
+        fixed.setRange(0.0, 50.0);
+        vm.model().yAxis = fixed;
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        canvas->setPointMarkers(true);
+        canvas->setConnectionMode(GraphCanvas::ConnectionMode::Straight);
+        const QRectF plot = canvas->property("plotArea").toRectF();
+
+        const QImage image = render(*canvas);
+
+        const int slack = 3;
+        EXPECT_GT(countColour(image, QRect(0, int(plot.top()), image.width(), int(plot.height())), kSeriesRed), 50);
+        EXPECT_EQ(countColour(image, QRect(0, 0, image.width(), int(plot.top()) - slack), kSeriesRed), 0)
+            << "nothing above the plot, neither line nor the out-of-bounds marker";
+        EXPECT_EQ(countColour(image, QRect(0, int(plot.bottom()) + slack, image.width(), image.height()), kSeriesRed), 0);
+    }
+
+    TEST(GraphCanvasConnectionTest, SplineAndCarriedGeometryAreNeverSelectable) {
+        QList<QPointF> points{QPointF(2.0, 20.0), QPointF(5.0, 80.0), QPointF(8.0, 30.0)};
+        StyledVm vm(points, 0.0, 10.0);
+        vm.model().leadingCarry = QPointF(0.0, 20.0);
+        vm.model().trailingCarry = QPointF(10.0, 30.0);
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        canvas->setPointMarkers(true);
+
+        for (const auto mode: {GraphCanvas::ConnectionMode::Smooth, GraphCanvas::ConnectionMode::Straight}) {
+            canvas->setConnectionMode(mode);
+            const QPointF leadingCarry = vm.pixelOf(*canvas, *vm.model().leadingCarry);
+            EXPECT_FALSE(canvas->nearestPoint(leadingCarry.x(), leadingCarry.y()).value("valid").toBool());
+            const QPointF trailingCarry = vm.pixelOf(*canvas, *vm.model().trailingCarry);
+            EXPECT_FALSE(canvas->nearestPoint(trailingCarry.x(), trailingCarry.y()).value("valid").toBool());
+
+            const QPointF a = vm.pixelOf(*canvas, points[0]);
+            const QPointF b = vm.pixelOf(*canvas, points[1]);
+            const QPointF midway = (a + b) / 2.0;
+            EXPECT_FALSE(canvas->nearestPoint(midway.x(), midway.y()).value("valid").toBool())
+                << "the curve between two observations is not a data point";
+
+            const QVariantMap hover = canvas->valuesAtX(leadingCarry.x());
+            ASSERT_TRUE(hover.value("valid").toBool());
+            EXPECT_DOUBLE_EQ(hover.value("xRaw").toReal(), 2.0) << "hover snaps to an observation, never the carry";
+        }
     }
 }

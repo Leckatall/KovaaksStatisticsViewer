@@ -21,32 +21,43 @@ namespace ksv::ui {
             else
                 painter.setPen(Qt::NoPen);
             painter.setBrush(fill);
-            for (const auto &p: pixelPoints) painter.drawEllipse(p, style.markerRadius, style.markerRadius);
+            for (const auto &p: pixelPoints) {
+                if (!style.clip.isNull() && !style.clip.contains(p)) continue;
+                painter.drawEllipse(p, style.markerRadius, style.markerRadius);
+            }
+        }
+
+        void drawConnection(QPainter &painter, const QVector<QPointF> &vertices, const QColor &lineColor,
+                            const SeriesPainter::Style &style) {
+            const QVector<QPointF> curve = style.connection == SeriesPainter::Connection::Smooth
+                                               ? presentation::monotoneCubicInterpolate(vertices, 16)
+                                               : vertices;
+            QPainterPath path;
+            path.moveTo(curve.first());
+            for (int p = 1; p < curve.size(); ++p) path.lineTo(curve[p]);
+
+            painter.save();
+            if (!style.clip.isNull()) painter.setClipRect(style.clip);
+            painter.setPen(QPen(lineColor, style.lineWidth));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(path);
+            painter.restore();
         }
     }
 
     void SeriesPainter::paint(QPainter &painter, const QVector<QPointF> &pixelPoints, const Carry &carry,
                               const QColor &lineColor, const Style &style) {
-        QVector<QPointF> vertices;
-        vertices.reserve(pixelPoints.size() + 2);
-        if (carry.leading) vertices.append(*carry.leading);
-        vertices.append(pixelPoints);
-        if (carry.trailing) vertices.append(*carry.trailing);
-        if (vertices.size() < 2) {
-            if (!pixelPoints.isEmpty()) drawMarkers(painter, pixelPoints, lineColor, style);
-            return;
+        const bool connected = style.connection != Connection::None;
+        if (connected) {
+            QVector<QPointF> vertices;
+            vertices.reserve(pixelPoints.size() + 2);
+            if (carry.leading) vertices.append(*carry.leading);
+            vertices.append(pixelPoints);
+            if (carry.trailing) vertices.append(*carry.trailing);
+            if (vertices.size() >= 2) drawConnection(painter, vertices, lineColor, style);
         }
 
-        const auto curve = presentation::monotoneCubicInterpolate(vertices, 16);
-
-        QPainterPath path;
-        path.moveTo(curve.first());
-        for (int p = 1; p < curve.size(); ++p) path.lineTo(curve[p]);
-
-        painter.setPen(QPen(lineColor, style.lineWidth));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawPath(path);
-
-        if (style.showMarkers && !pixelPoints.isEmpty()) drawMarkers(painter, pixelPoints, lineColor, style);
+        const bool marked = !connected || style.showMarkers || pixelPoints.size() == 1;
+        if (marked && !pixelPoints.isEmpty()) drawMarkers(painter, pixelPoints, lineColor, style);
     }
 }
