@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtCore
 import KovaaksStatsViewer
+import "../graph/GraphCatalog.js" as GraphCatalog
 
 ApplicationWindow {
     id: root
@@ -91,6 +92,7 @@ ApplicationWindow {
 
     property int currentCategory: 0
     readonly property int graphLinesCategory: 1
+    readonly property int graphsCategory: 2
     readonly property alias discardChangesPrompt: discardChangesPrompt
 
     function open() {
@@ -104,6 +106,15 @@ ApplicationWindow {
     function openGraphLines() {
         currentCategory = graphLinesCategory
         open()
+    }
+
+    // Opens on the Graphs page with `graphKey` selected and keyboard focus in its editor. The visit
+    // seeds from the committed configuration, which already holds every quick change.
+    function openGraph(graphKey) {
+        if (GraphCatalog.isKnown(graphKey)) root.settingsVm.selectedGraph = graphKey
+        currentCategory = graphsCategory
+        open()
+        graphSelector.forceActiveFocus()
     }
 
     onClosing: (close) => {
@@ -221,6 +232,13 @@ ApplicationWindow {
                         text: "Graph Lines"
                         highlighted: root.currentCategory === 1
                         onClicked: root.currentCategory = 1
+                    }
+                    CategoryButton {
+                        objectName: "categoryItem_Graphs"
+                        Layout.fillWidth: true
+                        text: "Graphs"
+                        highlighted: root.currentCategory === root.graphsCategory
+                        onClicked: root.currentCategory = root.graphsCategory
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -365,6 +383,50 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         settingsVm: root.settingsVm
+                    }
+                }
+
+                // Graphs
+                ColumnLayout {
+                    id: graphsPage
+                    objectName: "graphsSettingsPage"
+                    spacing: 8
+
+                    Label {
+                        text: "Graphs"
+                        font.pixelSize: 18
+                        font.bold: true
+                        Layout.bottomMargin: 4
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        Label {
+                            text: "Graph"
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        ComboBox {
+                            id: graphSelector
+                            objectName: "graphSelector"
+                            Layout.fillWidth: true
+                            model: GraphCatalog.graphs
+                            textRole: "name"
+                            currentIndex: Math.max(0, GraphCatalog.graphs.findIndex(g => g.key === root.settingsVm.selectedGraph))
+                            Accessible.name: qsTr("Graph")
+                            onActivated: index => {
+                                root.settingsVm.selectedGraph = GraphCatalog.graphs[index].key
+                                graphSelector.currentIndex = Qt.binding(
+                                    () => Math.max(0, GraphCatalog.graphs.findIndex(g => g.key === root.settingsVm.selectedGraph)))
+                            }
+                        }
+                    }
+
+                    Item {
+                        objectName: "graphEditorArea"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
                     }
                 }
             }

@@ -7,6 +7,9 @@ Frame {
     id: root
 
     required property var playtimeVm
+    property var settingsVm: null
+
+    signal moreGraphSettingsRequested(string graphKey)
 
     Layout.fillHeight: true
     Layout.fillWidth: true
@@ -21,11 +24,21 @@ Frame {
         anchors.fill: parent
         spacing: 4
 
-        ChartTitle {
+        RowLayout {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            objectName: "playtimeTitleLabel"
-            text: root.playtimeVm.title
+            Layout.rightMargin: 4
+
+            ChartTitle {
+                Layout.fillWidth: true
+                objectName: "playtimeTitleLabel"
+                text: root.playtimeVm.title
+            }
+            GraphGear {
+                graphKey: "dailyPlaytime"
+                settingsVm: root.settingsVm
+                onMoreSettingsRequested: key => root.moreGraphSettingsRequested(key)
+            }
         }
         // The plot and the empty state share one slot so the panel keeps its size either way.
         Item {

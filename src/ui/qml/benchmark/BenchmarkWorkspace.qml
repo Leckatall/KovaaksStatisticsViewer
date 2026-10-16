@@ -7,8 +7,10 @@ Item {
     id: root
 
     property var trackingVm
+    property var settingsVm: null
 
     signal manageBenchmarksRequested()
+    signal moreGraphSettingsRequested(string graphKey)
     // Opens the Benchmark Manager on one selector entry: its draft in the editor when it can be
     // opened, otherwise selected in the library. A problem file may have no id, so its filename
     // identifies it; the id is passed for entries that have one.
@@ -367,9 +369,11 @@ Item {
         id: incompleteComponent
         BenchmarkIncompleteBody {
             trackingVm: root.trackingVm
+            settingsVm: root.settingsVm
             bodyWidth: root._contentWidth
             wide: root._wide
             onManageBenchmarksRequested: root.manageBenchmarksRequested()
+            onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
         }
     }
 
@@ -377,9 +381,11 @@ Item {
         id: trackableComponent
         BenchmarkTrackableBody {
             trackingVm: root.trackingVm
+            settingsVm: root.settingsVm
             bodyWidth: root._contentWidth
             wide: root._wide
             onManageBenchmarksRequested: root.manageBenchmarksRequested()
+            onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
         }
     }
 }

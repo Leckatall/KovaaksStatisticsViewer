@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+
 #include <QSignalSpy>
 
 #include "app/contracts/expression_dsl.h"
@@ -645,5 +647,213 @@ namespace {
         std::unique_ptr<SeriesExpressionEditorModel> second(view_model->beginExpressionEdit("1"));
 
         EXPECT_NE(first.get(), second.get());
+    }
+
+    // ---- Quick settings: the committed configuration, bypassing the visit --------------------------
+
+    TEST_F(SettingsViewModelTest, QuickSettingsDescribeWhichControlsEachGraphOffers) {
+        const auto view_model = make_view_model();
+        const auto quick = view_model->quickSettings();
+
+        const auto run = quick["run"].toMap();
+        EXPECT_FALSE(run["hasRange"].toBool());
+        EXPECT_FALSE(run["hasLatestRuns"].toBool());
+        EXPECT_FALSE(run["hasWindow"].toBool());
+
+        const auto daily = quick["dailyPlaytime"].toMap();
+        EXPECT_TRUE(daily["hasRange"].toBool());
+        EXPECT_FALSE(daily["hasLatestRuns"].toBool());
+        EXPECT_TRUE(daily["hasWindow"].toBool());
+        EXPECT_EQ(daily["window"].toInt(), 3);
+
+        const auto history = quick["scenarioHistory"].toMap();
+        EXPECT_TRUE(history["hasRange"].toBool());
+        EXPECT_TRUE(history["hasLatestRuns"].toBool());
+        EXPECT_FALSE(history["hasWindow"].toBool());
+
+        const auto rank = quick["benchmarkRank"].toMap();
+        EXPECT_TRUE(rank["hasRange"].toBool());
+        EXPECT_FALSE(rank["hasWindow"].toBool());
+
+        EXPECT_TRUE(quick["benchmarkPlaytime"].toMap()["hasWindow"].toBool());
+    }
+
+    TEST_F(SettingsViewModelTest, QuickSettingsReportTheDefaultsTruthfully) {
+        const auto view_model = make_view_model();
+        const auto quick = view_model->quickSettings();
+
+        const auto history = quick["scenarioHistory"].toMap();
+        EXPECT_EQ(history["rangeKind"].toString(), "allHistory");
+        EXPECT_EQ(history["connection"].toString(), "smooth");
+        EXPECT_TRUE(history["markers"].toBool());
+        EXPECT_FALSE(quick["dailyPlaytime"].toMap()["markers"].toBool());
+    }
+
+    TEST_F(SettingsViewModelTest, QuickSettingsShowACustomRangeAsCustomRatherThanAPreset) {
+        using namespace std::chrono;
+        configuration->configuration.preferences(GraphKey::DailyPlaytime).range = RangePreference{
+            CustomDates{2026y / August / 1d, 2026y / August / 20d}, true
+        };
+        configuration->configuration.preferences(GraphKey::ScenarioHistory).range = RangePreference{LatestRuns{37}};
+        configuration->configuration.preferences(GraphKey::BenchmarkRank).range = RangePreference{RecentDays{45}};
+        const auto view_model = make_view_model();
+        const auto quick = view_model->quickSettings();
+
+        const auto daily = quick["dailyPlaytime"].toMap();
+        EXPECT_EQ(daily["rangeKind"].toString(), "customDates");
+        EXPECT_EQ(daily["rangeStart"].toString(), "2026-08-01");
+        EXPECT_EQ(daily["rangeEnd"].toString(), "2026-08-20");
+        const auto history = quick["scenarioHistory"].toMap();
+        EXPECT_EQ(history["rangeKind"].toString(), "latestRuns");
+        EXPECT_EQ(history["rangeCount"].toInt(), 37);
+        const auto rank = quick["benchmarkRank"].toMap();
+        EXPECT_EQ(rank["rangeKind"].toString(), "recentDays");
+        EXPECT_EQ(rank["rangeCount"].toInt(), 45);
+    }
+
+    TEST_F(SettingsViewModelTest, QuickSettingsFollowACommittedChangeEvenDuringAVisit) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::quickSettingsChanged);
+
+        configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 9;
+        configuration->publishDiff();
+
+        EXPECT_EQ(spy.count(), 1);
+        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 9);
+    }
+
+    TEST_F(SettingsViewModelTest, QuickSettingsDoNotChangeForAChangeToGraphLinesOnly) {
+        const auto view_model = make_view_model();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::quickSettingsChanged);
+
+        configuration->configuration.runAxisLabelSeriesId = SeriesId{2};
+        configuration->publishDiff();
+
+        EXPECT_EQ(spy.count(), 0);
+    }
+
+    TEST_F(SettingsViewModelTest, AQuickRangePatchGoesStraightToTheCommittedConfiguration) {
+        const auto view_model = make_view_model();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::quickSettingsChanged);
+
+        const auto result = view_model->applyQuickPatch("dailyPlaytime", {{"rangeKind", "recentDays"}, {"count", 30}});
+
+        EXPECT_TRUE(result["accepted"].toBool());
+        ASSERT_EQ(configuration->patches.size(), 1u);
+        EXPECT_EQ(configuration->patches[0].first, GraphKey::DailyPlaytime);
+        EXPECT_EQ(configuration->patches[0].second.range, (RangePreference{RecentDays{30}}));
+        EXPECT_TRUE(configuration->saves.empty());
+        EXPECT_FALSE(view_model->isVisitOpen());
+        EXPECT_EQ(spy.count(), 1);
+        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["rangeCount"].toInt(), 30);
+    }
+
+    TEST_F(SettingsViewModelTest, AQuickRangePatchKeepsTheStoredLatestRunAnchor) {
+        configuration->configuration.preferences(GraphKey::DailyPlaytime).range = RangePreference{AllHistory{}, true};
+        const auto view_model = make_view_model();
+
+        view_model->applyQuickPatch("dailyPlaytime", {{"rangeKind", "recentDays"}, {"count", 7}});
+
+        ASSERT_EQ(configuration->patches.size(), 1u);
+        EXPECT_EQ(configuration->patches[0].second.range, (RangePreference{RecentDays{7}, true}));
+    }
+
+    TEST_F(SettingsViewModelTest, QuickPatchesCoverAllHistoryLatestRunsWindowConnectionAndMarkers) {
+        const auto view_model = make_view_model();
+
+        view_model->applyQuickPatch("scenarioHistory", {{"rangeKind", "latestRuns"}, {"count", 50}});
+        view_model->applyQuickPatch("scenarioHistory", {{"rangeKind", "allHistory"}});
+        view_model->applyQuickPatch("dailyPlaytime", {{"window", 7}});
+        view_model->applyQuickPatch("dailyPlaytime", {{"connection", "pointsOnly"}, {"markers", true}});
+
+        ASSERT_EQ(configuration->patches.size(), 4u);
+        EXPECT_EQ(configuration->patches[0].second.range, (RangePreference{LatestRuns{50}}));
+        EXPECT_EQ(configuration->patches[1].second.range, (RangePreference{AllHistory{}}));
+        EXPECT_EQ(configuration->patches[2].second.averagingWindowDays, 7);
+        EXPECT_EQ(configuration->patches[3].second.connection, ConnectionMode::PointsOnly);
+        EXPECT_EQ(configuration->patches[3].second.lineModeMarkers, true);
+        const auto daily = view_model->quickSettings()["dailyPlaytime"].toMap();
+        EXPECT_EQ(daily["connection"].toString(), "pointsOnly");
+        EXPECT_TRUE(daily["markers"].toBool());
+    }
+
+    TEST_F(SettingsViewModelTest, QuickChangesMadeBeforeAVisitSeedItsWorkingCopy) {
+        const auto view_model = make_view_model();
+        view_model->applyQuickPatch("dailyPlaytime", {{"window", 7}});
+        view_model->applyQuickPatch("scenarioHistory", {{"connection", "straight"}});
+
+        view_model->beginVisit();
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        view_model->save();
+
+        ASSERT_EQ(configuration->saves.size(), 1u);
+        EXPECT_EQ(configuration->saves[0].preferences(GraphKey::DailyPlaytime).averagingWindowDays, 7);
+        EXPECT_EQ(configuration->saves[0].preferences(GraphKey::ScenarioHistory).appearance.connection,
+                  ConnectionMode::Straight);
+    }
+
+    TEST_F(SettingsViewModelTest, TextualCountsAreParsedAsWholeNumbers) {
+        const auto view_model = make_view_model();
+
+        const auto result = view_model->applyQuickPatch("dailyPlaytime", {{"window", " 14 "}});
+
+        EXPECT_TRUE(result["accepted"].toBool());
+        ASSERT_EQ(configuration->patches.size(), 1u);
+        EXPECT_EQ(configuration->patches[0].second.averagingWindowDays, 14);
+    }
+
+    TEST_F(SettingsViewModelTest, UnparsableCountsNeverReachTheUseCase) {
+        const auto view_model = make_view_model();
+
+        for (const QString text: {"abc", "2.5", "", "1e3", "3 days"}) {
+            const auto result = view_model->applyQuickPatch("dailyPlaytime", {{"window", text}});
+            ASSERT_FALSE(result["accepted"].toBool()) << text.toStdString();
+            const auto issues = result["issues"].toList();
+            ASSERT_EQ(issues.size(), 1) << text.toStdString();
+            EXPECT_EQ(issues[0].toMap()["graph"].toString(), "dailyPlaytime");
+            EXPECT_EQ(issues[0].toMap()["group"].toString(), "dataRange");
+            EXPECT_EQ(issues[0].toMap()["field"].toString(), "averagingWindow");
+            EXPECT_EQ(issues[0].toMap()["code"].toString(), "unparsedInput");
+        }
+        const auto latest = view_model->applyQuickPatch("scenarioHistory", {{"rangeKind", "latestRuns"}, {"count", "x"}});
+        EXPECT_EQ(latest["issues"].toList().at(0).toMap()["field"].toString(), "latestRuns");
+
+        EXPECT_TRUE(configuration->patches.empty());
+    }
+
+    TEST_F(SettingsViewModelTest, OutOfRangeCountsAreRejectedByValidationWithoutChangingTheEffectiveValue) {
+        const auto view_model = make_view_model();
+
+        const auto zero = view_model->applyQuickPatch("dailyPlaytime", {{"window", "0"}});
+        const auto huge = view_model->applyQuickPatch("dailyPlaytime", {{"window", "99999999999999999999"}});
+        const auto beyond = view_model->applyQuickPatch("dailyPlaytime", {{"window", "3651"}});
+
+        EXPECT_EQ(zero["issues"].toList().at(0).toMap()["code"].toString(), "nonPositiveCount");
+        EXPECT_EQ(huge["issues"].toList().at(0).toMap()["code"].toString(), "countTooLarge");
+        EXPECT_EQ(beyond["issues"].toList().at(0).toMap()["code"].toString(), "countTooLarge");
+        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 3);
+    }
+
+    TEST_F(SettingsViewModelTest, ARejectedPatchReportsTheUseCaseIssuesAndChangesNothing) {
+        configuration->rejectPatchesWith = {{GraphConfigurationIssueCode::NotApplicable, GraphKey::Run, "dataRange", "", "range"}};
+        const auto view_model = make_view_model();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::quickSettingsChanged);
+
+        const auto result = view_model->applyQuickPatch("run", {{"rangeKind", "recentDays"}, {"count", 7}});
+
+        EXPECT_FALSE(result["accepted"].toBool());
+        EXPECT_EQ(result["issues"].toList().at(0).toMap()["code"].toString(), "notApplicable");
+        EXPECT_EQ(spy.count(), 0);
+    }
+
+    TEST_F(SettingsViewModelTest, AnUnknownGraphOrConnectionIsRefused) {
+        const auto view_model = make_view_model();
+
+        EXPECT_FALSE(view_model->applyQuickPatch("nonsense", {{"window", 7}})["accepted"].toBool());
+        EXPECT_FALSE(view_model->applyQuickPatch("run", {{"connection", "wavy"}})["accepted"].toBool());
+        EXPECT_FALSE(view_model->applyQuickPatch("run", {{"rangeKind", "fortnight"}, {"count", 1}})["accepted"].toBool());
+
+        EXPECT_TRUE(configuration->patches.empty());
     }
 }

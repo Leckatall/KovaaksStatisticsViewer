@@ -7,10 +7,12 @@ OverflowScrollView {
     id: incompleteScroll
 
     property var trackingVm
+    property var settingsVm: null
     property real bodyWidth
     property bool wide
 
     signal manageBenchmarksRequested()
+    signal moreGraphSettingsRequested(string graphKey)
 
     ColumnLayout {
         width: incompleteScroll.bodyWidth
@@ -70,6 +72,9 @@ OverflowScrollView {
             Layout.fillWidth: true
             Layout.minimumHeight: 200
             namePrefix: "playtimeHistory"
+            graphKey: "benchmarkPlaytime"
+            settingsVm: incompleteScroll.settingsVm
+            onMoreGraphSettingsRequested: key => incompleteScroll.moreGraphSettingsRequested(key)
             historyModel: incompleteScroll.trackingVm ? incompleteScroll.trackingVm.playtimeHistory : null
         }
     }

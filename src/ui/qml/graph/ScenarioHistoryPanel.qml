@@ -9,6 +9,9 @@ Frame {
     required property var historyVm
     required property var columnVisibility
     required property var historyAxisSettings
+    property var settingsVm: null
+
+    signal moreGraphSettingsRequested(string graphKey)
     readonly property var plottable: [
         CompletionHistoryViewModel.Score,
         CompletionHistoryViewModel.Accuracy,
@@ -56,11 +59,21 @@ Frame {
         anchors.fill: parent
         spacing: 4
 
-        ChartTitle {
+        RowLayout {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            objectName: "historyTitleLabel"
-            text: root.historyVm.scenarioTitle
+            Layout.rightMargin: 4
+
+            ChartTitle {
+                Layout.fillWidth: true
+                objectName: "historyTitleLabel"
+                text: root.historyVm.scenarioTitle
+            }
+            GraphGear {
+                graphKey: "scenarioHistory"
+                settingsVm: root.settingsVm
+                onMoreSettingsRequested: key => root.moreGraphSettingsRequested(key)
+            }
         }
 
         Loader {

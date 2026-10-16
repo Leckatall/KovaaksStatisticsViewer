@@ -9,14 +9,16 @@
 #include "app/contracts/i_graph_configuration_use_case.h"
 
 namespace ksv::tests_support {
-    // Accepts every save and patch without validating unless `rejectSavesWith` is set; tests set
-    // `configuration` directly and call publish() to simulate a committed change.
+    // Accepts every save without validating unless `rejectSavesWith` is set; tests set
+    // `configuration` directly and call publish() to simulate a committed change. A quick patch is
+    // validated, applied to `configuration` and published, as the real use case does.
     class FakeGraphConfigurationUseCase final : public application::IGraphConfigurationUseCase {
     public:
         application::GraphConfiguration configuration = application::defaultGraphConfiguration();
         std::uint64_t revision = 1;
         std::vector<application::GraphConfiguration> saves;
         std::vector<application::GraphConfigurationIssue> rejectSavesWith;
+        std::vector<application::GraphConfigurationIssue> rejectPatchesWith;
         std::vector<std::pair<application::GraphKey, application::GraphQuickPatch>> patches;
         std::vector<std::function<void(const application::GraphConfigurationChange &)>> callbacks;
         application::GraphConfiguration published = application::defaultGraphConfiguration();
@@ -43,6 +45,18 @@ namespace ksv::tests_support {
         application::GraphConfigurationSaveResult applyQuickPatch(const application::GraphKey graph,
                                                                   const application::GraphQuickPatch &patch) override {
             patches.emplace_back(graph, patch);
+            if (!rejectPatchesWith.empty()) return {rejectPatchesWith, revision};
+            auto candidate = configuration;
+            auto &preferences = candidate.preferences(graph);
+            if (patch.range) preferences.range = patch.range;
+            if (patch.averagingWindowDays) preferences.averagingWindowDays = patch.averagingWindowDays;
+            if (patch.connection) preferences.appearance.connection = *patch.connection;
+            if (patch.lineModeMarkers) preferences.appearance.lineModeMarkers = *patch.lineModeMarkers;
+            if (auto issues = application::validateGraphPreferences(graph, preferences); !issues.empty())
+                return {std::move(issues), revision};
+            configuration = std::move(candidate);
+            ++revision;
+            publishDiff();
             return {{}, revision};
         }
 

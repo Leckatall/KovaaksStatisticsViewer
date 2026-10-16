@@ -29,6 +29,8 @@ qt_add_qml_module(ksv_ui
             qml/benchmark/BenchmarkStatusSummary.qml
             qml/benchmark/BenchmarkHistoryCard.qml
             qml/graph/ChartTitle.qml
+            qml/graph/GraphGear.qml
+            qml/graph/GraphCatalog.js
             qml/benchmark/BenchmarkProgressGrid.qml
             qml/benchmark/TierBar.qml
             qml/graph/VisualSettingsManager.qml
@@ -88,6 +90,7 @@ qt_add_qml_module(ksv_ui
             qml/icons/undo-2.svg
             qml/icons/save.svg
             qml/icons/square-pen.svg
+            qml/icons/settings.svg
         SOURCES
             presentation/axis.h
             presentation/value_axis.h

@@ -63,6 +63,14 @@ namespace {
         return count;
     }
 
+    [[nodiscard]] QQuickItem *findItem(QQuickItem *parent, const QString &name) {
+        if (!parent) return nullptr;
+        if (parent->objectName() == name) return parent;
+        for (auto *child: parent->childItems())
+            if (auto *found = findItem(child, name)) return found;
+        return nullptr;
+    }
+
     // A temp KovaaKs dir with the fixture perf in it, a wired App, and the real
     // Main.qml scene loaded through App::start().
     struct DashboardScene {
@@ -343,6 +351,43 @@ namespace {
         const auto series = app()->graphVm()->series({app()->graphVm()->yAxisColumn()});
         ASSERT_FALSE(series.isEmpty());
         EXPECT_EQ(label->property("text").toString(), series.front()->name());
+    }
+
+    // The popup edits the committed configuration; More graph settings then opens the settings
+    // visit on that graph, seeded with the change, without leaving anything pending.
+    TEST_F(DashboardCleanSceneTest, TheGearPopupHandsItsQuickChangesToTheGraphsSettingsPage) {
+        auto *gear = scene.root->findChild<QQuickItem *>("graphGear_dailyPlaytime");
+        ASSERT_NE(gear, nullptr) << "no gear on the daily playtime graph, which has no data in this scene";
+        ASSERT_TRUE(QMetaObject::invokeMethod(gear, "clicked"));
+        auto *popup = gear->property("popup").value<QObject *>();
+        ASSERT_NE(popup, nullptr);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return popup->property("opened").toBool(); }, 3000));
+
+        auto *settings = scene.app->settingsVm();
+        const auto quick = settings->applyQuickPatch("dailyPlaytime", {{"window", 7}});
+        ASSERT_TRUE(quick["accepted"].toBool());
+        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), 7);
+
+        auto *content = popup->property("contentItem").value<QQuickItem *>();
+        auto *windowField = findItem(content, "graphField_dataRange_averagingWindow");
+        ASSERT_NE(windowField, nullptr);
+        EXPECT_EQ(windowField->property("text").toString(), "7");
+        auto *more = findItem(content, "graphMoreSettings_dailyPlaytime");
+        ASSERT_NE(more, nullptr);
+        ASSERT_TRUE(QMetaObject::invokeMethod(more, "clicked"));
+
+        auto *dialog = scene.root->findChild<QObject *>("settingsDialog");
+        ASSERT_NE(dialog, nullptr);
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 2;
+        }, 3000));
+        EXPECT_FALSE(popup->property("opened").toBool());
+        EXPECT_EQ(settings->selectedGraph(), "dailyPlaytime");
+        EXPECT_TRUE(settings->isVisitOpen());
+        EXPECT_FALSE(settings->hasPendingChanges());
+        auto *selector = findItem(dialog->property("contentItem").value<QQuickItem *>(), "graphSelector");
+        ASSERT_NE(selector, nullptr);
+        EXPECT_EQ(selector->property("currentIndex").toInt(), 1);
     }
 
     TEST_F(DashboardCleanSceneTest, NoRunSelectedMessageShowsBeforeAnyRunIsLoaded) {

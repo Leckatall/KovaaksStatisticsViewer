@@ -8,6 +8,11 @@ Frame {
 
     property var historyModel
     property string namePrefix: "history"
+    // benchmarkRank or benchmarkPlaytime.
+    required property string graphKey
+    property var settingsVm: null
+
+    signal moreGraphSettingsRequested(string graphKey)
 
     readonly property bool hasData: root.historyModel !== undefined
                                     && root.historyModel !== null
@@ -28,10 +33,19 @@ Frame {
         anchors.fill: parent
         spacing: 4
 
-        ChartTitle {
-            objectName: root.namePrefix + "LineName"
+        RowLayout {
             Layout.fillWidth: true
-            text: root.metricName
+
+            ChartTitle {
+                objectName: root.namePrefix + "LineName"
+                Layout.fillWidth: true
+                text: root.metricName
+            }
+            GraphGear {
+                graphKey: root.graphKey
+                settingsVm: root.settingsVm
+                onMoreSettingsRequested: key => root.moreGraphSettingsRequested(key)
+            }
         }
 
         Label {

@@ -44,6 +44,7 @@ namespace ksv::presentation {
         Q_PROPERTY(QString selectedGraph READ selectedGraph WRITE setSelectedGraph NOTIFY selectedGraphChanged)
         Q_PROPERTY(QVariantList issues READ issues NOTIFY issuesChanged)
         Q_PROPERTY(QVariantList rawInputs READ rawInputs NOTIFY rawInputsChanged)
+        Q_PROPERTY(QVariantMap quickSettings READ quickSettings NOTIFY quickSettingsChanged)
 
     public:
         explicit SettingsViewModel(std::shared_ptr<application::ISettingsService> settings_service,
@@ -94,6 +95,13 @@ namespace ksv::presentation {
                                                     const QString &target, const QString &field) const;
         [[nodiscard]] QVariantList rawInputs() const;
 
+        // ---- Quick settings: committed state, independent of any visit ----------------------------
+        // Keyed by graph name; each entry carries only what the gear popup shows for that graph.
+        [[nodiscard]] QVariantMap quickSettings() const;
+        // Returns {accepted, issues}. Count fields may be numbers or text; text that is not a whole
+        // number is reported without reaching the use case.
+        Q_INVOKABLE QVariantMap applyQuickPatch(const QString &graph, const QVariantMap &patch);
+
         // ---- Graph Lines: the working copy during a visit, the committed configuration otherwise -----
         Q_INVOKABLE [[nodiscard]] QVariantList getAllSeriesConfigs() const;
         Q_INVOKABLE [[nodiscard]] QVariantList getAllAxes() const;
@@ -123,6 +131,7 @@ namespace ksv::presentation {
         void selectedGraphChanged();
         void issuesChanged();
         void rawInputsChanged();
+        void quickSettingsChanged();
 
     private:
         struct FieldKey {

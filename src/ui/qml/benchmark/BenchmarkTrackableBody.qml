@@ -10,10 +10,12 @@ OverflowScrollView {
     objectName: "benchmarkWorkspaceScroll"
 
     property var trackingVm
+    property var settingsVm: null
     property real bodyWidth
     property bool wide
 
     signal manageBenchmarksRequested()
+    signal moreGraphSettingsRequested(string graphKey)
 
     // Explicit x/y placement rather than a Flow: the two history cards
     // stay direct children (the scroll-order test walks them by index) yet
@@ -94,6 +96,9 @@ OverflowScrollView {
             width: benchmarkWorkspaceScroll.wide ? trackableScrollColumn.halfWidth : trackableScrollColumn.width
             height: Math.max(implicitHeight, 220)
             namePrefix: "rankHistory"
+            graphKey: "benchmarkRank"
+            settingsVm: benchmarkWorkspaceScroll.settingsVm
+            onMoreGraphSettingsRequested: key => benchmarkWorkspaceScroll.moreGraphSettingsRequested(key)
             historyModel: benchmarkWorkspaceScroll.trackingVm ? benchmarkWorkspaceScroll.trackingVm.rankHistory : null
         }
 
@@ -106,6 +111,9 @@ OverflowScrollView {
             width: benchmarkWorkspaceScroll.wide ? trackableScrollColumn.halfWidth : trackableScrollColumn.width
             height: Math.max(implicitHeight, 220)
             namePrefix: "playtimeHistory"
+            graphKey: "benchmarkPlaytime"
+            settingsVm: benchmarkWorkspaceScroll.settingsVm
+            onMoreGraphSettingsRequested: key => benchmarkWorkspaceScroll.moreGraphSettingsRequested(key)
             historyModel: benchmarkWorkspaceScroll.trackingVm ? benchmarkWorkspaceScroll.trackingVm.playtimeHistory : null
         }
     }

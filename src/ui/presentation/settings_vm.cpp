@@ -5,7 +5,14 @@
 #include "settings_vm.h"
 #include "series_expression_editor_model.h"
 
+#include <chrono>
+#include <concepts>
+#include <limits>
 #include <ranges>
+#include <variant>
+
+#include <QDate>
+#include <QRegularExpression>
 
 #include "app/contracts/expression_dsl.h"
 
@@ -77,6 +84,62 @@ namespace ksv::presentation {
             return QString::fromUtf8(application::graphKeyName(key).data(),
                                      static_cast<qsizetype>(application::graphKeyName(key).size()));
         }
+
+        QVariantMap issueMap(const application::GraphKey graph, const QString &group, const QString &target,
+                             const QString &field, const QString &code) {
+            return {{"graph", graphName(graph)}, {"group", group}, {"target", target}, {"field", field},
+                    {"code", code}};
+        }
+
+        QVariantMap quickPatchResult(const bool accepted, QVariantList issues = {}) {
+            return {{"accepted", accepted}, {"issues", std::move(issues)}};
+        }
+
+        QString connectionName(const application::ConnectionMode mode) {
+            switch (mode) {
+                case application::ConnectionMode::Smooth: return "smooth";
+                case application::ConnectionMode::Straight: return "straight";
+                case application::ConnectionMode::PointsOnly: return "pointsOnly";
+            }
+            return "smooth";
+        }
+
+        std::optional<application::ConnectionMode> connectionFromName(const QString &name) {
+            if (name == "smooth") return application::ConnectionMode::Smooth;
+            if (name == "straight") return application::ConnectionMode::Straight;
+            if (name == "pointsOnly") return application::ConnectionMode::PointsOnly;
+            return std::nullopt;
+        }
+
+        QString isoDate(const std::chrono::year_month_day &date) {
+            return QDate(static_cast<int>(date.year()), static_cast<int>(static_cast<unsigned>(date.month())),
+                         static_cast<int>(static_cast<unsigned>(date.day()))).toString(Qt::ISODate);
+        }
+
+        // Either the whole number, or the issue code that explains why there is none.
+        struct ParsedCount {
+            std::optional<int> value;
+            QString failure;
+        };
+
+        ParsedCount parseCount(const QVariant &input) {
+            if (input.metaType().id() != QMetaType::QString) {
+                bool ok = false;
+                const int value = input.toInt(&ok);
+                if (ok) return {value, {}};
+                return {std::nullopt, kUnparsedInputCode};
+            }
+            const auto text = input.toString().trimmed();
+            static const QRegularExpression wholeNumber(R"(^[+-]?\d+$)");
+            if (!wholeNumber.match(text).hasMatch()) return {std::nullopt, kUnparsedInputCode};
+            bool ok = false;
+            const qlonglong value = text.toLongLong(&ok);
+            const bool negative = text.startsWith(QLatin1Char('-'));
+            if (!ok || value > std::numeric_limits<int>::max() || value < std::numeric_limits<int>::min())
+                return {std::nullopt, issueCodeName(negative ? application::GraphConfigurationIssueCode::NonPositiveCount
+                                                             : application::GraphConfigurationIssueCode::CountTooLarge)};
+            return {static_cast<int>(value), {}};
+        }
     }
 
     SettingsViewModel::SettingsViewModel(
@@ -94,7 +157,9 @@ namespace ksv::presentation {
         const QPointer<SettingsViewModel> self(this);
         m_profile_service->onProfileChanged([self] { if (self) emit self->profileLoadedChanged(); });
         m_configuration->onChanged([self](const application::GraphConfigurationChange &change) {
-            if (!self || self->isVisitOpen()) return;
+            if (!self) return;
+            if (!change.graphs.empty()) emit self->quickSettingsChanged();
+            if (self->isVisitOpen()) return;
             if (change.runSeries || change.runAxisLabel) emit self->seriesConfigurationChanged();
         });
     }
@@ -190,13 +255,8 @@ namespace ksv::presentation {
     QVariantList SettingsViewModel::issues() const {
         QVariantList result;
         for (const auto &[key, code]: m_issues) {
-            result.append(QVariantMap{
-                {"graph", graphName(key.graph)},
-                {"group", QString::fromStdString(key.group)},
-                {"target", QString::fromStdString(key.target)},
-                {"field", QString::fromStdString(key.field)},
-                {"code", code}
-            });
+            result.append(issueMap(key.graph, QString::fromStdString(key.group), QString::fromStdString(key.target),
+                                   QString::fromStdString(key.field), code));
         }
         return result;
     }
@@ -260,6 +320,93 @@ namespace ksv::presentation {
             });
         }
         return result;
+    }
+
+    // ---- Quick settings ----------------------------------------------------------------------------
+
+    QVariantMap SettingsViewModel::quickSettings() const {
+        const auto committed = m_configuration->current().configuration;
+        QVariantMap result;
+        for (const auto key: application::kGraphKeys) {
+            const auto &descriptor = application::graphDescriptor(key);
+            const auto &preferences = committed->preferences(key);
+            QVariantMap entry{
+                {"hasRange", descriptor.dateRange},
+                {"hasLatestRuns", descriptor.latestRuns},
+                {"hasWindow", descriptor.averagingWindow},
+                {"rangeKind", "allHistory"},
+                {"rangeCount", 0},
+                {"rangeStart", QString()},
+                {"rangeEnd", QString()},
+                {"window", preferences.averagingWindowDays.value_or(0)},
+                {"connection", connectionName(preferences.appearance.connection)},
+                {"markers", preferences.appearance.lineModeMarkers}
+            };
+            if (preferences.range) {
+                std::visit([&entry](const auto &range) {
+                    using Range = std::decay_t<decltype(range)>;
+                    if constexpr (std::same_as<Range, application::RecentDays>) {
+                        entry["rangeKind"] = "recentDays";
+                        entry["rangeCount"] = range.days;
+                    } else if constexpr (std::same_as<Range, application::LatestRuns>) {
+                        entry["rangeKind"] = "latestRuns";
+                        entry["rangeCount"] = range.count;
+                    } else if constexpr (std::same_as<Range, application::CustomDates>) {
+                        entry["rangeKind"] = "customDates";
+                        entry["rangeStart"] = isoDate(range.start);
+                        entry["rangeEnd"] = isoDate(range.end);
+                    }
+                }, preferences.range->range);
+            }
+            result.insert(graphName(key), entry);
+        }
+        return result;
+    }
+
+    QVariantMap SettingsViewModel::applyQuickPatch(const QString &graph, const QVariantMap &patch) {
+        const auto key = application::graphKeyFromName(graph.toStdString());
+        if (!key) return quickPatchResult(false);
+
+        application::GraphQuickPatch request;
+        QVariantList issues;
+        const auto parse = [&](const QVariant &input, const QString &field) -> std::optional<int> {
+            const auto parsed = parseCount(input);
+            if (!parsed.value) issues.append(issueMap(*key, "dataRange", {}, field, parsed.failure));
+            return parsed.value;
+        };
+
+        if (patch.contains("rangeKind")) {
+            const auto kind = patch.value("rangeKind").toString();
+            const auto committed = m_configuration->current().configuration;
+            const auto &stored = committed->preferences(*key).range;
+            const bool anchor = stored && stored->anchorToLatestRun;
+            if (kind == "allHistory") {
+                request.range = application::RangePreference{application::AllHistory{}, anchor};
+            } else if (kind == "recentDays") {
+                if (const auto days = parse(patch.value("count"), "recentDays"))
+                    request.range = application::RangePreference{application::RecentDays{*days}, anchor};
+            } else if (kind == "latestRuns") {
+                if (const auto count = parse(patch.value("count"), "latestRuns"))
+                    request.range = application::RangePreference{application::LatestRuns{*count}, anchor};
+            } else {
+                return quickPatchResult(false);
+            }
+        }
+        if (patch.contains("window")) request.averagingWindowDays = parse(patch.value("window"), "averagingWindow");
+        if (patch.contains("connection")) {
+            request.connection = connectionFromName(patch.value("connection").toString());
+            if (!request.connection) return quickPatchResult(false);
+        }
+        if (patch.contains("markers")) request.lineModeMarkers = patch.value("markers").toBool();
+
+        if (!issues.isEmpty()) return quickPatchResult(false, std::move(issues));
+
+        const auto result = m_configuration->applyQuickPatch(*key, request);
+        for (const auto &issue: result.issues)
+            issues.append(issueMap(issue.graph, QString::fromStdString(issue.group),
+                                   QString::fromStdString(issue.target), QString::fromStdString(issue.field),
+                                   issueCodeName(issue.code)));
+        return quickPatchResult(result.accepted(), std::move(issues));
     }
 
     // ---- Graph Lines --------------------------------------------------------------------------------

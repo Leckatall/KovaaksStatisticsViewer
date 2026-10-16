@@ -11,6 +11,7 @@ Item {
     required property var historyVm
     required property var scenarioBrowserVm
     required property var visualSettings
+    property var settingsVm: null
     // Whether a Kovaaks folder has been configured (SettingsViewModel.kovaaksDirSet).
     property bool kovaaksFolderSet: true
 
@@ -20,6 +21,7 @@ Item {
     readonly property bool welcomeVisible: !kovaaksFolderSet && !scenarioBrowserVm.hasScenarios
 
     signal configureGraphLinesRequested()
+    signal moreGraphSettingsRequested(string graphKey)
     signal chooseKovaaksFolderRequested()
 
     // Ctrl+F: show the scenario browser if it is hidden, then focus its search field. Nothing to
@@ -61,7 +63,9 @@ Item {
                 visible: root.visualSettings.scenarioGraphVisible
                 graphVm: root.graphVm
                 visualSettings: root.visualSettings
+                settingsVm: root.settingsVm
                 onConfigureLinesRequested: root.configureGraphLinesRequested()
+                onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
             }
             ScenarioHistoryPanel {
                 objectName: "scenarioHistoryPanel"
@@ -72,6 +76,8 @@ Item {
                 historyVm: root.historyVm
                 columnVisibility: root.visualSettings.historyColumnVisibility
                 historyAxisSettings: root.visualSettings
+                settingsVm: root.settingsVm
+                onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
             }
             PlaytimeGraphPanel {
                 objectName: "playtimeGraphPanel"
@@ -80,6 +86,8 @@ Item {
                 Layout.preferredHeight: 1
                 visible: root.visualSettings.playtimeGraphVisible
                 playtimeVm: root.playtimeVm
+                settingsVm: root.settingsVm
+                onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
             }
         }
         SelectionPanel {

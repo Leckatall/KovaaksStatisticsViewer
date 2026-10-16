@@ -591,4 +591,100 @@ TestCase {
         compare(combo.currentIndex, 0)
         compare(combo.displayText, "Score")
     }
+
+    // ---- Graphs category ---------------------------------------------------------------------------
+
+    Component {
+        id: observableSettingsVmComponent
+        FakeQuickSettingsVm {}
+    }
+
+    function openObservableDialog() {
+        const vm = createTemporaryObject(observableSettingsVmComponent, testCase)
+        const dialog = createTemporaryObject(settingsDialogComponent, testCase, {settingsVm: vm, sessionVm: makeFakeSessionVm()})
+        verify(dialog !== null)
+        return {dialog: dialog, vm: vm}
+    }
+
+    function test_graphsCategoryFollowsGraphLinesInTheSidebar() {
+        const {dialog} = openObservableDialog()
+        dialog.open()
+        verify(waitForRendering(dialog.contentItem))
+
+        const lines = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_Graph Lines")
+        const graphs = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_Graphs")
+        verify(graphs !== null, "no categoryItem_Graphs in the sidebar")
+        compare(graphs.text, "Graphs")
+        verify(graphs.mapToItem(dialog.contentItem, 0, 0).y > lines.mapToItem(dialog.contentItem, 0, 0).y)
+        compare(dialog.graphsCategory, 2)
+    }
+
+    function test_choosingGraphsShowsTheGraphsPageWithItsSelector() {
+        const {dialog, vm} = openObservableDialog()
+        dialog.open()
+        verify(waitForRendering(dialog.contentItem))
+
+        selectCategory(dialog, "Graphs")
+
+        compare(dialog.currentCategory, dialog.graphsCategory)
+        const page = ItemLookup.findByObjectName(dialog.contentItem, "graphsSettingsPage")
+        verify(page !== null && page.visible)
+        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
+        verify(selector !== null)
+        const names = []
+        for (let i = 0; i < selector.count; ++i) names.push(selector.textAt(i))
+        compare(names, ["Run graph", "Daily playtime", "Scenario history", "Benchmark rank history", "Benchmark playtime"])
+        compare(selector.currentIndex, 0)
+        compare(selector.Accessible.name, "Graph")
+    }
+
+    function test_theSelectorChoosesTheGraphBeingEdited() {
+        const {dialog, vm} = openObservableDialog()
+        dialog.open()
+        selectCategory(dialog, "Graphs")
+        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
+
+        selector.currentIndex = 3
+        selector.activated(3)
+
+        compare(vm.selectedGraph, "benchmarkRank")
+        vm.selectedGraph = "dailyPlaytime"
+        compare(selector.currentIndex, 1, "the selector follows the view model")
+    }
+
+    function test_openGraphOpensTheVisitOnThatGraphAndFocusesTheEditor() {
+        const {dialog, vm} = openObservableDialog()
+
+        dialog.openGraph("scenarioHistory")
+        verify(waitForRendering(dialog.contentItem))
+
+        compare(dialog.visible, true)
+        compare(dialog.currentCategory, dialog.graphsCategory)
+        compare(vm.selectedGraph, "scenarioHistory")
+        compare(vm.beginVisitCalls, 1)
+        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
+        compare(selector.currentIndex, 2)
+        tryVerify(() => selector.activeFocus, 2000, "focus moves into the graph editor")
+    }
+
+    function test_openGraphWithAnUnknownKeyStillOpensTheGraphsPage() {
+        const {dialog, vm} = openObservableDialog()
+        vm.selectedGraph = "dailyPlaytime"
+
+        dialog.openGraph("nonsense")
+
+        compare(dialog.currentCategory, dialog.graphsCategory)
+        compare(vm.selectedGraph, "dailyPlaytime")
+    }
+
+    function test_openGraphOnAnAlreadyOpenDialogSwitchesGraphWithoutEndingTheVisit() {
+        const {dialog, vm} = openObservableDialog()
+        dialog.openGraph("dailyPlaytime")
+        verify(waitForRendering(dialog.contentItem))
+
+        dialog.openGraph("benchmarkPlaytime")
+
+        compare(vm.selectedGraph, "benchmarkPlaytime")
+        compare(vm.endVisitCalls, 0)
+    }
 }

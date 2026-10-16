@@ -198,13 +198,17 @@ ApplicationWindow {
                 historyVm: root.historyVm
                 scenarioBrowserVm: root.scenarioBrowserVm
                 visualSettings: visualSettings
+                settingsVm: root.settingsVm
                 onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
+                onMoreGraphSettingsRequested: graphKey => settingsDialog.openGraph(graphKey)
             }
 
             BenchmarkWorkspace {
                 objectName: "benchmarkWorkspace"
                 trackingVm: root.benchmarkTrackingVm
+                settingsVm: root.settingsVm
                 onManageBenchmarksRequested: benchmarkManagerDialog.open()
+                onMoreGraphSettingsRequested: graphKey => settingsDialog.openGraph(graphKey)
                 onEditBenchmarkRequested: (filename, benchmarkId) =>
                     benchmarkManagerDialog.openOnEntry(filename, benchmarkId)
             }

@@ -8,6 +8,7 @@ Frame {
 
     required property var graphVm
     required property var visualSettings
+    property var settingsVm: null
     readonly property var visibleColumns: {
         const result = [];
         for (const id of root.graphVm.enabledSeriesIds) {
@@ -30,6 +31,7 @@ Frame {
 
     // Raised by the line toggles' "Configure..." button.
     signal configureLinesRequested
+    signal moreGraphSettingsRequested(string graphKey)
 
     function seriesForColumn(column) {
         if (!root.graphVm) return null
@@ -85,14 +87,24 @@ Frame {
             Layout.fillWidth: true
             spacing: 4
 
-            ChartTitle {
-                id: scenarioTitleLabel
-
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                objectName: "scenarioTitleLabel"
-                // The VM's title is empty while no run is selected; the panel keeps a neutral name.
-                text: root.graphVm.scenarioTitle !== "" ? root.graphVm.scenarioTitle : qsTr("Run graph")
+                Layout.rightMargin: 4
+
+                ChartTitle {
+                    id: scenarioTitleLabel
+
+                    Layout.fillWidth: true
+                    objectName: "scenarioTitleLabel"
+                    // The VM's title is empty while no run is selected; the panel keeps a neutral name.
+                    text: root.graphVm.scenarioTitle !== "" ? root.graphVm.scenarioTitle : qsTr("Run graph")
+                }
+                GraphGear {
+                    graphKey: "run"
+                    settingsVm: root.settingsVm
+                    onMoreSettingsRequested: key => root.moreGraphSettingsRequested(key)
+                }
             }
             // One always-present, always-filling slot so the plot and the empty-state messages occupy
             // the exact same area — the panel's height must not change with contentState.
