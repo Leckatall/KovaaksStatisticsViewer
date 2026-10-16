@@ -45,6 +45,9 @@ namespace ksv::presentation {
         Q_PROPERTY(QVariantList issues READ issues NOTIFY issuesChanged)
         Q_PROPERTY(QVariantList rawInputs READ rawInputs NOTIFY rawInputsChanged)
         Q_PROPERTY(QVariantMap quickSettings READ quickSettings NOTIFY quickSettingsChanged)
+        Q_PROPERTY(QVariantMap graphDrafts READ graphDrafts NOTIFY graphDraftsChanged)
+        Q_PROPERTY(QVariantList draftIssues READ draftIssues NOTIFY draftIssuesChanged)
+        Q_PROPERTY(QVariantMap graphLimits READ graphLimits CONSTANT)
 
     public:
         explicit SettingsViewModel(std::shared_ptr<application::ISettingsService> settings_service,
@@ -102,6 +105,42 @@ namespace ksv::presentation {
         // number is reported without reaching the use case.
         Q_INVOKABLE QVariantMap applyQuickPatch(const QString &graph, const QVariantMap &patch);
 
+        // ---- Graph preferences: the working copy during a visit, the committed ones otherwise ------------
+        // Keyed by graph name; each entry says which controls the graph offers and holds the text each
+        // one shows (unparsed input verbatim, else the value in the app locale). See graphDraft().
+        [[nodiscard]] QVariantMap graphDrafts() const;
+        Q_INVOKABLE [[nodiscard]] QVariantMap graphDraft(const QString &graph) const;
+        // What is wrong with the working copy now, in the shape of issues(): unparsed text plus the
+        // semantic validation of the candidate. Save() stays the authority; this only places errors.
+        [[nodiscard]] QVariantList draftIssues() const;
+        // The stated input limits and the date format fields expect.
+        [[nodiscard]] QVariantMap graphLimits() const;
+
+        // Every edit below changes only the working copy; it returns false when nothing was applied
+        // (no visit, unknown graph or control, or text that does not parse completely).
+        // Text is parsed whole in the app locale; text that does not parse is kept as unparsed input at
+        // its field and the working copy keeps its previous value.
+        // Fields: dataRange/{recentDays,latestRuns,startDate,endDate,averagingWindow},
+        // seriesStyle/<series>/width, axes/<axis>/{fixedMin,fixedMax}.
+        Q_INVOKABLE bool setGraphField(const QString &graph, const QString &group, const QString &target,
+                                       const QString &field, const QString &text);
+        // allHistory, recentDays, latestRuns or customDates; the anchor flag is kept, and unparsed text
+        // of the range fields the new kind hides is dropped.
+        Q_INVOKABLE bool setGraphRangeKind(const QString &graph, const QString &kind);
+        Q_INVOKABLE bool setGraphAnchor(const QString &graph, bool anchorToLatestRun);
+        Q_INVOKABLE bool setGraphConnection(const QString &graph, const QString &connection);
+        Q_INVOKABLE bool setGraphMarkers(const QString &graph, bool markers);
+        Q_INVOKABLE bool setSeriesColor(const QString &graph, const QString &series, const QColor &color);
+        // field is "color" or "width"; the series falls back to the graph's default for it.
+        Q_INVOKABLE bool clearSeriesOverride(const QString &graph, const QString &series, const QString &field);
+        // fit, zero or fixed; unparsed text of the bound fields is dropped unless the mode is fixed.
+        Q_INVOKABLE bool setAxisMode(const QString &graph, const QString &axis, const QString &mode);
+        // Stages the graph's presentation defaults only; Graph Lines and other graphs are untouched.
+        Q_INVOKABLE bool resetGraph(const QString &graph);
+
+        // The locale that numbers and dates are read and shown in; the system's unless a test sets it.
+        void setLocale(const QLocale &locale);
+
         // ---- Graph Lines: the working copy during a visit, the committed configuration otherwise -----
         Q_INVOKABLE [[nodiscard]] QVariantList getAllSeriesConfigs() const;
         Q_INVOKABLE [[nodiscard]] QVariantList getAllAxes() const;
@@ -132,6 +171,8 @@ namespace ksv::presentation {
         void issuesChanged();
         void rawInputsChanged();
         void quickSettingsChanged();
+        void graphDraftsChanged();
+        void draftIssuesChanged();
 
     private:
         struct FieldKey {
@@ -146,6 +187,8 @@ namespace ksv::presentation {
         struct Issue {
             FieldKey key;
             QString code;
+
+            bool operator==(const Issue &) const = default;
         };
 
         [[nodiscard]] std::shared_ptr<const application::GraphConfiguration> shownConfiguration() const;
@@ -155,6 +198,20 @@ namespace ksv::presentation {
         void setIssues(std::vector<Issue> issues);
         // Emits pendingChangesChanged when the dirty state flipped.
         void refreshPendingChanges();
+        // After any edit of the working copy's graph preferences or unparsed text.
+        void draftChanged();
+        void setDraftIssues(std::vector<Issue> issues);
+        [[nodiscard]] QString rawOr(const FieldKey &key, const QString &shown) const;
+        [[nodiscard]] application::GraphPreferences *draftPreferences(const QString &graph,
+                                                                      application::GraphKey &key);
+        [[nodiscard]] QVariantMap draftEntry(application::GraphKey key) const;
+        // True when any text was dropped.
+        bool dropRawInput(application::GraphKey graph, const std::string &group, const std::string &target,
+                          std::initializer_list<const char *> fields);
+        // Records the outcome of editing `key` with `text`: unparsed text is kept, parsed text replaces it.
+        // `changed` says whether the working copy's value moved. Returns `parsed`.
+        bool finishFieldEdit(const FieldKey &key, const QString &text, bool parsed, bool changed);
+        void revalidateDraft();
 
         std::shared_ptr<application::ISettingsService> m_settings_service;
         std::shared_ptr<application::IProfileService> m_profile_service;
@@ -165,6 +222,8 @@ namespace ksv::presentation {
         application::GraphConfiguration m_baseline;
         std::map<FieldKey, QString> m_rawInput;
         std::vector<Issue> m_issues;
+        std::vector<Issue> m_draftIssues;
+        QLocale m_locale;
         application::GraphKey m_selectedGraph = application::GraphKey::Run;
         bool m_pendingChanges = false;
     };

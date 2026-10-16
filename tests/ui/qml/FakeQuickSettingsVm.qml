@@ -1,8 +1,10 @@
 import QtQuick
 
-// The slice of SettingsViewModel that the graph gear popups and the Graphs navigation use, with
-// notifying properties so bindings in the popup follow committed changes the way the real one does.
+// The slice of SettingsViewModel that the graph gear popups and the Graphs settings page use, with
+// notifying properties so bindings follow changes the way the real one does.
 // Count text is validated like the real view model: a whole number from 1 to the field's limit.
+// The draft side keeps what the page was told (`calls`) and reflects it in `graphDrafts` without parsing;
+// a test that wants an error sets `draftIssues` itself.
 QtObject {
     id: vm
 
@@ -14,7 +16,6 @@ QtObject {
     property bool profileLoaded: false
     property var allSeriesConfigs: []
     property var allAxes: []
-    property var issues: []
     property var rawInputs: []
     property string runAxisLabelSeriesId: ""
     property bool pendingChanges: false
@@ -22,12 +23,20 @@ QtObject {
     property int endVisitCalls: 0
     function beginVisit() { beginVisitCalls++ }
     function endVisit() { endVisitCalls++; pendingChanges = false }
-    function save() { pendingChanges = false; return {accepted: true, issues: []} }
+    function save() {
+        saveCalls++
+        if (saveResult.accepted) pendingChanges = false
+        else issues = saveResult.issues
+        return saveResult
+    }
     function revertChanges() { pendingChanges = false }
     function setRunAxisLabelSeriesId(id) {}
     function setKovaaksDir(dir) {}
     function setProfilePath(path) {}
     property var patches: []
+    property var issues: []
+    property var saveResult: ({accepted: true, issues: []})
+    property int saveCalls: 0
     // Non-empty: the next applyQuickPatch is rejected with these issues and changes nothing.
     property var rejectWith: []
 
@@ -97,4 +106,117 @@ QtObject {
         setEntry(graph, changes)
         return {accepted: true, issues: []}
     }
+
+    // ---- Graph drafts --------------------------------------------------------------------------------
+
+    property var draftIssues: []
+    property var calls: []
+    property var graphLimits: ({
+        maxRecentDays: 36500, maxLatestRuns: 1000000, maxAveragingWindow: 3650,
+        minWidth: 0.5, maxWidth: 12, maxBound: 1e12,
+        earliestDate: "1970-01-01", latestDate: "9999-12-31",
+        earliestDateText: "01.01.1970", latestDateText: "31.12.9999", dateFormat: "dd.MM.yyyy"
+    })
+    property var graphDrafts: ({
+        run: draft({hasRange: false, series: [], axes: []}),
+        dailyPlaytime: draft({hasWindow: true, window: 3, windowText: "3",
+                              series: [seriesRow("playtime", "#4dd0e1")],
+                              axes: [axisRow("playtime", "zero", ["playtime"])]}),
+        scenarioHistory: draft({hasLatestRuns: true, markers: true,
+                                series: [seriesRow("score", "#009600"), seriesRow("accuracy", "#00ffff"),
+                                         seriesRow("shots", "#ffa500"), seriesRow("hits", "#7cb342"),
+                                         seriesRow("misses", "#e53935")],
+                                axes: [axisRow("score", "fit", ["score"]), axisRow("accuracy", "fit", ["accuracy"]),
+                                       axisRow("counts", "zero", ["shots", "hits", "misses"])]}),
+        benchmarkRank: draft({series: [seriesRow("rank", undefined)], axes: []}),
+        benchmarkPlaytime: draft({hasWindow: true, window: 3, windowText: "3",
+                                  series: [seriesRow("playtime", "#4dd0e1")],
+                                  axes: [axisRow("playtime", "zero", ["playtime"])]})
+    })
+
+    function draft(overrides) {
+        return Object.assign({
+            hasRange: true, hasLatestRuns: false, hasWindow: false,
+            rangeKind: "allHistory", rangeCount: 0, rangeCountText: "",
+            rangeStart: "", rangeEnd: "", rangeStartText: "", rangeEndText: "",
+            rangeStartFormatted: "", rangeEndFormatted: "",
+            anchor: false, window: 0, windowText: "", connection: "smooth", markers: false,
+            series: [], axes: []
+        }, overrides)
+    }
+
+    function seriesRow(key, color) {
+        return {key: key, color: color, colorOverridden: false, width: 3, widthText: "3",
+                widthOverridden: false, defaultWidth: 3}
+    }
+
+    function axisRow(key, mode, seriesKeys) {
+        return {key: key, mode: mode, minText: "", maxText: "", seriesKeys: seriesKeys}
+    }
+
+    function record(name, args) {
+        calls = calls.concat([{name: name, args: args}])
+        pendingChanges = true
+    }
+
+    function callsNamed(name) { return calls.filter(c => c.name === name) }
+
+    function change(graph, changes) {
+        const all = Object.assign({}, graphDrafts)
+        all[graph] = Object.assign({}, all[graph], changes)
+        graphDrafts = all
+    }
+
+    function mapRows(graph, listName, key, changes) {
+        return graphDrafts[graph][listName].map(r => r.key === key ? Object.assign({}, r, changes) : r)
+    }
+
+    function setGraphField(graph, group, target, field, text) {
+        record("setGraphField", [graph, group, target, field, text])
+        if (group === "dataRange") {
+            const property = {recentDays: "rangeCountText", latestRuns: "rangeCountText", startDate: "rangeStartText",
+                              endDate: "rangeEndText", averagingWindow: "windowText"}[field]
+            change(graph, {[property]: text})
+        } else if (group === "seriesStyle") {
+            change(graph, {series: mapRows(graph, "series", target, {widthText: text, widthOverridden: true})})
+        } else if (group === "axes") {
+            change(graph, {axes: mapRows(graph, "axes", target, {[field === "fixedMin" ? "minText" : "maxText"]: text})})
+        }
+        return true
+    }
+
+    function setGraphRangeKind(graph, kind) {
+        record("setGraphRangeKind", [graph, kind])
+        const counts = {recentDays: 30, latestRuns: 50}
+        change(graph, {rangeKind: kind, rangeCount: counts[kind] || 0, rangeCountText: String(counts[kind] || ""),
+                       rangeStart: kind === "customDates" ? "2026-09-17" : "", rangeEnd: kind === "customDates" ? "2026-10-16" : "",
+                       rangeStartText: kind === "customDates" ? "17.09.2026" : "",
+                       rangeEndText: kind === "customDates" ? "16.10.2026" : "",
+                       rangeStartFormatted: kind === "customDates" ? "17.09.2026" : "",
+                       rangeEndFormatted: kind === "customDates" ? "16.10.2026" : ""})
+        return true
+    }
+
+    function setGraphAnchor(graph, anchor) { record("setGraphAnchor", [graph, anchor]); change(graph, {anchor: anchor}); return true }
+    function setGraphConnection(graph, connection) { record("setGraphConnection", [graph, connection]); change(graph, {connection: connection}); return true }
+    function setGraphMarkers(graph, markers) { record("setGraphMarkers", [graph, markers]); change(graph, {markers: markers}); return true }
+
+    function setSeriesColor(graph, series, color) {
+        record("setSeriesColor", [graph, series, String(color)])
+        change(graph, {series: mapRows(graph, "series", series, {color: color, colorOverridden: true})})
+        return true
+    }
+
+    function clearSeriesOverride(graph, series, field) {
+        record("clearSeriesOverride", [graph, series, field])
+        return true
+    }
+
+    function setAxisMode(graph, axis, mode) {
+        record("setAxisMode", [graph, axis, mode])
+        change(graph, {axes: mapRows(graph, "axes", axis, {mode: mode, minText: mode === "fixed" ? "0" : "", maxText: mode === "fixed" ? "0" : ""})})
+        return true
+    }
+
+    function resetGraph(graph) { record("resetGraph", [graph]); return true }
 }

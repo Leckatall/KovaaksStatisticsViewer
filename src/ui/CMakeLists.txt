@@ -30,6 +30,10 @@ qt_add_qml_module(ksv_ui
             qml/benchmark/BenchmarkHistoryCard.qml
             qml/graph/ChartTitle.qml
             qml/graph/GraphGear.qml
+            qml/graph/GraphSettingsEditor.qml
+            qml/graph/GraphSettingsGroup.qml
+            qml/graph/GraphNumberField.qml
+            qml/graph/GraphTextInput.qml
             qml/graph/GraphCatalog.js
             qml/benchmark/BenchmarkProgressGrid.qml
             qml/benchmark/TierBar.qml

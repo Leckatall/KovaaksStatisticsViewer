@@ -72,7 +72,10 @@ ApplicationWindow {
             text: qsTr("Save")
             enabled: root.settingsVm.pendingChanges
             DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
-            onClicked: root.settingsVm.save()
+            onClicked: {
+                const result = root.settingsVm.save()
+                if (!result.accepted) root.focusFirstIssue(result.issues)
+            }
         }
         Button {
             objectName: "settingsCancelButton"
@@ -101,6 +104,22 @@ ApplicationWindow {
         visible = true
         raise()
         requestActivate()
+    }
+
+    // Takes keyboard focus to the control an issue concerns, opening its page and graph first.
+    function focusIssue(issue) {
+        if (!issue) return
+        if (issue.group === "graphLines") {
+            currentCategory = graphLinesCategory
+            return
+        }
+        if (GraphCatalog.isKnown(issue.graph)) root.settingsVm.selectedGraph = issue.graph
+        currentCategory = graphsCategory
+        Qt.callLater(() => graphEditor.focusIssue(issue))
+    }
+
+    function focusFirstIssue(issues) {
+        focusIssue(GraphCatalog.sortedIssues(issues || [])[0])
     }
 
     function openGraphLines() {
@@ -137,8 +156,11 @@ ApplicationWindow {
             switch (button) {
                 case MessageDialog.Save:
                     // A rejected Save keeps the window, its working copy and the issues to correct.
-                    if (!root.settingsVm.save().accepted)
+                    const saved = root.settingsVm.save()
+                    if (!saved.accepted) {
+                        root.focusFirstIssue(saved.issues)
                         return
+                    }
                     break
                 case MessageDialog.Discard:
                     root.settingsVm.endVisit()
@@ -427,6 +449,15 @@ ApplicationWindow {
                         objectName: "graphEditorArea"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+
+                        GraphSettingsEditor {
+                            id: graphEditor
+                            anchors.fill: parent
+                            settingsVm: root.settingsVm
+                            graphKey: root.settingsVm.selectedGraph
+                            onGraphLinesRequested: root.currentCategory = root.graphLinesCategory
+                            onIssueActivated: issue => root.focusIssue(issue)
+                        }
                     }
                 }
             }

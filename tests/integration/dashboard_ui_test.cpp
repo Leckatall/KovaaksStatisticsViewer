@@ -390,6 +390,48 @@ namespace {
         EXPECT_EQ(selector->property("currentIndex").toInt(), 1);
     }
 
+    // Typing into the real Graphs page edits the visit's working copy only; Save commits it, and an
+    // unparseable entry stays beside its control, blocks Save and leaves the dashboard as it was.
+    TEST_F(DashboardCleanSceneTest, TypingIntoTheGraphsPageStagesUntilSaveAndABadEntryBlocksIt) {
+        auto *settings = scene.app->settingsVm();
+        auto *dialog = scene.root->findChild<QObject *>("settingsDialog");
+        ASSERT_NE(dialog, nullptr);
+        ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "openGraph", Q_ARG(QVariant, QVariant("dailyPlaytime"))));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
+        auto *content = dialog->property("contentItem").value<QQuickItem *>();
+        auto *footer = dialog->property("footer").value<QQuickItem *>();
+        auto *windowField = findItem(content, "graphField_dataRange_averagingWindow");
+        auto *error = findItem(content, "graphField_dataRange_averagingWindow_error");
+        auto *save = findItem(footer, "settingsSaveButton");
+        ASSERT_NE(windowField, nullptr);
+        ASSERT_NE(error, nullptr);
+        ASSERT_NE(save, nullptr);
+        const int committed = scene.app->playtimeVm()->averagingWindowDays();
+        const auto type = [&](const QString &text) {
+            windowField->setProperty("text", text);
+            QMetaObject::invokeMethod(windowField, "textEdited");
+        };
+
+        type("9");
+        EXPECT_TRUE(settings->hasPendingChanges());
+        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), committed) << "a draft edit must not reach the graph";
+        EXPECT_FALSE(error->property("visible").toBool());
+
+        type("9x");
+        EXPECT_TRUE(error->property("visible").toBool());
+        EXPECT_FALSE(error->property("text").toString().isEmpty());
+        ASSERT_TRUE(QMetaObject::invokeMethod(save, "clicked"));
+        EXPECT_TRUE(settings->isVisitOpen());
+        EXPECT_FALSE(settings->issues().isEmpty());
+        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), committed);
+
+        type("9");
+        EXPECT_FALSE(error->property("visible").toBool());
+        ASSERT_TRUE(QMetaObject::invokeMethod(save, "clicked"));
+        EXPECT_FALSE(settings->hasPendingChanges());
+        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), 9);
+    }
+
     TEST_F(DashboardCleanSceneTest, NoRunSelectedMessageShowsBeforeAnyRunIsLoaded) {
         auto *label = scene.root->findChild<QObject *>("graphNoRunSelectedLabel");
         ASSERT_NE(label, nullptr) << "no label named 'graphNoRunSelectedLabel' found in the dashboard scene";

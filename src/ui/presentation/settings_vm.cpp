@@ -5,13 +5,17 @@
 #include "settings_vm.h"
 #include "series_expression_editor_model.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <concepts>
+#include <functional>
 #include <limits>
 #include <ranges>
 #include <variant>
 
 #include <QDate>
+#include <QDateTime>
 #include <QRegularExpression>
 
 #include "app/contracts/expression_dsl.h"
@@ -116,6 +120,66 @@ namespace ksv::presentation {
                          static_cast<int>(static_cast<unsigned>(date.day()))).toString(Qt::ISODate);
         }
 
+        // Group separators are rejected so that a whole string either is a number in the locale or is not.
+        QLocale parsingLocale(QLocale locale) {
+            locale.setNumberOptions(locale.numberOptions() | QLocale::RejectGroupSeparator);
+            return locale;
+        }
+
+        QLocale displayLocale(QLocale locale) {
+            locale.setNumberOptions(locale.numberOptions() | QLocale::OmitGroupSeparator);
+            return locale;
+        }
+
+        std::optional<int> parseWholeNumber(const QString &text, const QLocale &locale) {
+            bool ok = false;
+            const qlonglong value = parsingLocale(locale).toLongLong(text.trimmed(), &ok);
+            if (!ok || value > std::numeric_limits<int>::max() || value < std::numeric_limits<int>::min())
+                return std::nullopt;
+            return static_cast<int>(value);
+        }
+
+        std::optional<double> parseDecimal(const QString &text, const QLocale &locale) {
+            bool ok = false;
+            const double value = parsingLocale(locale).toDouble(text.trimmed(), &ok);
+            if (!ok || !std::isfinite(value)) return std::nullopt;
+            return value;
+        }
+
+        QString formatWhole(const int value, const QLocale &locale) {
+            return displayLocale(locale).toString(value);
+        }
+
+        QString formatDecimal(const double value, const QLocale &locale) {
+            return displayLocale(locale).toString(value, 'g', 15);
+        }
+
+        // The locale's short date order with a four-digit year, so entry and display agree.
+        QString dateFormatFor(const QLocale &locale) {
+            static const QRegularExpression shortYear(QStringLiteral("(?<!y)y{1,2}(?!y)"));
+            return locale.dateFormat(QLocale::ShortFormat).replace(shortYear, QStringLiteral("yyyy"));
+        }
+
+        std::chrono::year_month_day toCalendarDate(const QDate &date) {
+            return {std::chrono::year{date.year()}, std::chrono::month{static_cast<unsigned>(date.month())},
+                    std::chrono::day{static_cast<unsigned>(date.day())}};
+        }
+
+        QString formatDate(const std::chrono::year_month_day &date, const QLocale &locale) {
+            const QDate value(static_cast<int>(date.year()), static_cast<int>(static_cast<unsigned>(date.month())),
+                              static_cast<int>(static_cast<unsigned>(date.day())));
+            return value.isValid() ? locale.toString(value, dateFormatFor(locale)) : QString();
+        }
+
+        // The locale's own order, or ISO year-month-day in any locale; the whole text must be the date.
+        std::optional<std::chrono::year_month_day> parseDate(const QString &text, const QLocale &locale) {
+            const auto trimmed = text.trimmed();
+            auto date = QDate::fromString(trimmed, Qt::ISODate);
+            if (!date.isValid()) date = locale.toDate(trimmed, dateFormatFor(locale));
+            if (!date.isValid()) return std::nullopt;
+            return toCalendarDate(date);
+        }
+
         // Either the whole number, or the issue code that explains why there is none.
         struct ParsedCount {
             std::optional<int> value;
@@ -158,7 +222,10 @@ namespace ksv::presentation {
         m_profile_service->onProfileChanged([self] { if (self) emit self->profileLoadedChanged(); });
         m_configuration->onChanged([self](const application::GraphConfigurationChange &change) {
             if (!self) return;
-            if (!change.graphs.empty()) emit self->quickSettingsChanged();
+            if (!change.graphs.empty()) {
+                emit self->quickSettingsChanged();
+                if (!self->isVisitOpen()) emit self->graphDraftsChanged();
+            }
             if (self->isVisitOpen()) return;
             if (change.runSeries || change.runAxisLabel) emit self->seriesConfigurationChanged();
         });
@@ -191,6 +258,8 @@ namespace ksv::presentation {
         m_working = std::move(seed.configuration);
         emit visitOpenChanged();
         emit seriesConfigurationChanged();
+        emit graphDraftsChanged();
+        revalidateDraft();
         refreshPendingChanges();
     }
 
@@ -205,6 +274,7 @@ namespace ksv::presentation {
         const bool accepted = issues.empty();
         if (accepted) m_baseline = *m_working;
         setIssues(std::move(issues));
+        revalidateDraft();
         refreshPendingChanges();
         return {{"accepted", accepted}, {"issues", this->issues()}};
     }
@@ -217,6 +287,8 @@ namespace ksv::presentation {
         if (hadRawInput) emit rawInputsChanged();
         setIssues({});
         emit seriesConfigurationChanged();
+        emit graphDraftsChanged();
+        revalidateDraft();
         refreshPendingChanges();
     }
 
@@ -229,6 +301,8 @@ namespace ksv::presentation {
         setIssues({});
         emit visitOpenChanged();
         emit seriesConfigurationChanged();
+        emit graphDraftsChanged();
+        revalidateDraft();
         refreshPendingChanges();
     }
 
@@ -286,6 +360,8 @@ namespace ksv::presentation {
             it->second = text;
         }
         emit rawInputsChanged();
+        emit graphDraftsChanged();
+        revalidateDraft();
         refreshPendingChanges();
     }
 
@@ -297,6 +373,8 @@ namespace ksv::presentation {
         auto issues = m_issues;
         std::erase_if(issues, [&](const Issue &issue) { return issue.key == *key && issue.code == kUnparsedInputCode; });
         if (issues.size() != m_issues.size()) setIssues(std::move(issues));
+        emit graphDraftsChanged();
+        revalidateDraft();
         refreshPendingChanges();
     }
 
@@ -407,6 +485,445 @@ namespace ksv::presentation {
                                    QString::fromStdString(issue.target), QString::fromStdString(issue.field),
                                    issueCodeName(issue.code)));
         return quickPatchResult(result.accepted(), std::move(issues));
+    }
+
+    // ---- Graph preferences --------------------------------------------------------------------------
+
+    QVariantMap SettingsViewModel::graphDrafts() const {
+        QVariantMap result;
+        for (const auto key: application::kGraphKeys) result.insert(graphName(key), draftEntry(key));
+        return result;
+    }
+
+    QVariantMap SettingsViewModel::graphDraft(const QString &graph) const {
+        const auto key = application::graphKeyFromName(graph.toStdString());
+        return key ? draftEntry(*key) : QVariantMap{};
+    }
+
+    QVariantList SettingsViewModel::draftIssues() const {
+        QVariantList result;
+        for (const auto &[key, code]: m_draftIssues) {
+            result.append(issueMap(key.graph, QString::fromStdString(key.group), QString::fromStdString(key.target),
+                                   QString::fromStdString(key.field), code));
+        }
+        return result;
+    }
+
+    QVariantMap SettingsViewModel::graphLimits() const {
+        return {
+            {"maxRecentDays", application::kMaximumRangeDays},
+            {"maxLatestRuns", application::kMaximumLatestRuns},
+            {"maxAveragingWindow", application::kMaximumAveragingWindowDays},
+            {"minWidth", application::kMinimumLineWidth},
+            {"maxWidth", application::kMaximumLineWidth},
+            {"maxBound", application::kMaximumAxisBoundMagnitude},
+            {"earliestDate", isoDate(application::kEarliestCalendarDate)},
+            {"latestDate", isoDate(application::kLatestCalendarDate)},
+            {"earliestDateText", formatDate(application::kEarliestCalendarDate, m_locale)},
+            {"latestDateText", formatDate(application::kLatestCalendarDate, m_locale)},
+            {"dateFormat", dateFormatFor(m_locale)}
+        };
+    }
+
+    void SettingsViewModel::setLocale(const QLocale &locale) {
+        m_locale = locale;
+        emit graphDraftsChanged();
+    }
+
+    QString SettingsViewModel::rawOr(const FieldKey &key, const QString &shown) const {
+        const auto it = m_rawInput.find(key);
+        return it == m_rawInput.end() ? shown : it->second;
+    }
+
+    QVariantMap SettingsViewModel::draftEntry(const application::GraphKey key) const {
+        using namespace application;
+        const auto &descriptor = graphDescriptor(key);
+        const auto shown = shownConfiguration();
+        const auto &preferences = shown->preferences(key);
+        const auto keyed = [&](const std::string &group, const std::string &target, const std::string &field) {
+            return FieldKey{key, group, target, field};
+        };
+
+        QVariantMap entry{
+            {"graph", graphName(key)},
+            {"hasRange", descriptor.dateRange},
+            {"hasLatestRuns", descriptor.latestRuns},
+            {"hasWindow", descriptor.averagingWindow},
+            {"rangeKind", "allHistory"},
+            {"rangeCount", 0},
+            {"rangeCountText", QString()},
+            {"rangeStart", QString()},
+            {"rangeEnd", QString()},
+            {"rangeStartText", QString()},
+            {"rangeEndText", QString()},
+            {"rangeStartFormatted", QString()},
+            {"rangeEndFormatted", QString()},
+            {"anchor", preferences.range && preferences.range->anchorToLatestRun},
+            {"window", preferences.averagingWindowDays.value_or(0)},
+            {"windowText", QString()},
+            {"connection", connectionName(preferences.appearance.connection)},
+            {"markers", preferences.appearance.lineModeMarkers}
+        };
+
+        if (preferences.range) {
+            std::visit([&](const auto &range) {
+                using Range = std::decay_t<decltype(range)>;
+                if constexpr (std::same_as<Range, RecentDays>) {
+                    entry["rangeKind"] = "recentDays";
+                    entry["rangeCount"] = range.days;
+                    entry["rangeCountText"] = rawOr(keyed("dataRange", "", "recentDays"), formatWhole(range.days, m_locale));
+                } else if constexpr (std::same_as<Range, LatestRuns>) {
+                    entry["rangeKind"] = "latestRuns";
+                    entry["rangeCount"] = range.count;
+                    entry["rangeCountText"] = rawOr(keyed("dataRange", "", "latestRuns"), formatWhole(range.count, m_locale));
+                } else if constexpr (std::same_as<Range, CustomDates>) {
+                    entry["rangeKind"] = "customDates";
+                    entry["rangeStart"] = isoDate(range.start);
+                    entry["rangeEnd"] = isoDate(range.end);
+                    entry["rangeStartFormatted"] = formatDate(range.start, m_locale);
+                    entry["rangeEndFormatted"] = formatDate(range.end, m_locale);
+                    entry["rangeStartText"] = rawOr(keyed("dataRange", "", "startDate"), formatDate(range.start, m_locale));
+                    entry["rangeEndText"] = rawOr(keyed("dataRange", "", "endDate"), formatDate(range.end, m_locale));
+                }
+            }, preferences.range->range);
+        }
+        if (preferences.averagingWindowDays)
+            entry["windowText"] = rawOr(keyed("dataRange", "", "averagingWindow"),
+                                        formatWhole(*preferences.averagingWindowDays, m_locale));
+
+        QVariantList series;
+        for (const auto &described: descriptor.series) {
+            const auto seriesKey = std::string(described.key);
+            const auto found = preferences.seriesStyles.find(seriesKey);
+            const SeriesStyleOverride *override = found == preferences.seriesStyles.end() ? nullptr : &found->second;
+            const auto defaults = defaultSeriesStyle(key, described.key);
+            const auto color = override && override->color ? override->color : defaults.color;
+            const double width = override && override->width ? *override->width : defaults.width;
+            series.append(QVariantMap{
+                {"key", QString::fromStdString(seriesKey)},
+                {"axisKey", QString::fromUtf8(described.axisKey.data(), static_cast<qsizetype>(described.axisKey.size()))},
+                {"color", color ? QVariant(QColor(color->red, color->green, color->blue, color->alpha)) : QVariant()},
+                {"colorOverridden", override && override->color.has_value()},
+                {"width", width},
+                {"widthText", rawOr(keyed("seriesStyle", seriesKey, "width"), formatDecimal(width, m_locale))},
+                {"widthOverridden", override && override->width.has_value()},
+                {"defaultWidth", defaults.width}
+            });
+        }
+        entry["series"] = series;
+
+        QVariantList axes;
+        for (const auto &described: descriptor.axes) {
+            const auto axisKey = std::string(described.key);
+            const auto found = preferences.axisPolicies.find(axisKey);
+            const AxisPolicy &policy = found == preferences.axisPolicies.end() ? described.defaultPolicy : found->second;
+            QString mode = "fit";
+            QString minText;
+            QString maxText;
+            if (std::holds_alternative<StartAtZero>(policy)) {
+                mode = "zero";
+            } else if (const auto *bounds = std::get_if<FixedBounds>(&policy)) {
+                mode = "fixed";
+                minText = formatDecimal(bounds->minimum, m_locale);
+                maxText = formatDecimal(bounds->maximum, m_locale);
+            }
+            QStringList sharing;
+            for (const auto &member: descriptor.series)
+                if (member.axisKey == described.key)
+                    sharing.append(QString::fromUtf8(member.key.data(), static_cast<qsizetype>(member.key.size())));
+            axes.append(QVariantMap{
+                {"key", QString::fromStdString(axisKey)},
+                {"mode", mode},
+                {"minText", rawOr(keyed("axes", axisKey, "fixedMin"), minText)},
+                {"maxText", rawOr(keyed("axes", axisKey, "fixedMax"), maxText)},
+                {"seriesKeys", sharing}
+            });
+        }
+        entry["axes"] = axes;
+        return entry;
+    }
+
+    application::GraphPreferences *SettingsViewModel::draftPreferences(const QString &graph,
+                                                                       application::GraphKey &key) {
+        const auto parsed = application::graphKeyFromName(graph.toStdString());
+        if (!m_working || !parsed) return nullptr;
+        key = *parsed;
+        return &m_working->preferences(key);
+    }
+
+    void SettingsViewModel::draftChanged() {
+        emit graphDraftsChanged();
+        revalidateDraft();
+        // The list of the last rejected Save is only worth showing while something it named is still wrong.
+        if (m_draftIssues.empty()) setIssues({});
+        refreshPendingChanges();
+    }
+
+    void SettingsViewModel::setDraftIssues(std::vector<Issue> issues) {
+        if (issues == m_draftIssues) return;
+        m_draftIssues = std::move(issues);
+        emit draftIssuesChanged();
+    }
+
+    void SettingsViewModel::revalidateDraft() {
+        std::vector<Issue> live;
+        if (m_working) {
+            for (const auto &key: m_rawInput | std::views::keys) live.push_back({key, kUnparsedInputCode});
+            for (const auto &issue: application::validateGraphConfiguration(*m_working)) {
+                const FieldKey key{issue.graph, issue.group, issue.target, issue.field};
+                if (!m_rawInput.contains(key)) live.push_back({key, issueCodeName(issue.code)});
+            }
+        }
+        setDraftIssues(std::move(live));
+    }
+
+    bool SettingsViewModel::dropRawInput(const application::GraphKey graph, const std::string &group,
+                                         const std::string &target,
+                                         const std::initializer_list<const char *> fields) {
+        bool dropped = false;
+        for (const char *field: fields) dropped |= m_rawInput.erase({graph, group, target, field}) > 0;
+        if (dropped) emit rawInputsChanged();
+        return dropped;
+    }
+
+    bool SettingsViewModel::finishFieldEdit(const FieldKey &key, const QString &text, const bool parsed,
+                                            const bool changed) {
+        bool rawChanged = false;
+        if (parsed) {
+            rawChanged = m_rawInput.erase(key) > 0;
+        } else {
+            const auto [it, inserted] = m_rawInput.try_emplace(key, text);
+            rawChanged = inserted || it->second != text;
+            it->second = text;
+        }
+        if (rawChanged) emit rawInputsChanged();
+        if (changed || rawChanged) draftChanged();
+        return parsed;
+    }
+
+    bool SettingsViewModel::setGraphField(const QString &graph, const QString &group, const QString &target,
+                                          const QString &field, const QString &text) {
+        using namespace application;
+        GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        if (!preferences) return false;
+        const auto &descriptor = graphDescriptor(key);
+        const FieldKey location{key, group.toStdString(), target.toStdString(), field.toStdString()};
+
+        const auto editWhole = [&](const std::function<bool(int)> &store) {
+            const auto value = parseWholeNumber(text, m_locale);
+            return finishFieldEdit(location, text, value.has_value(), value && store(*value));
+        };
+
+        if (group == "dataRange" && target.isEmpty()) {
+            if (field == "recentDays" && preferences->range && std::holds_alternative<RecentDays>(preferences->range->range))
+                return editWhole([&](const int value) {
+                    auto &days = std::get<RecentDays>(preferences->range->range).days;
+                    return std::exchange(days, value) != value;
+                });
+            if (field == "latestRuns" && descriptor.latestRuns && preferences->range &&
+                std::holds_alternative<LatestRuns>(preferences->range->range))
+                return editWhole([&](const int value) {
+                    auto &count = std::get<LatestRuns>(preferences->range->range).count;
+                    return std::exchange(count, value) != value;
+                });
+            if (field == "averagingWindow" && descriptor.averagingWindow && preferences->averagingWindowDays)
+                return editWhole([&](const int value) {
+                    return std::exchange(*preferences->averagingWindowDays, value) != value;
+                });
+            if ((field == "startDate" || field == "endDate") && preferences->range &&
+                std::holds_alternative<CustomDates>(preferences->range->range)) {
+                const auto date = parseDate(text, m_locale);
+                bool changed = false;
+                if (date) {
+                    auto &custom = std::get<CustomDates>(preferences->range->range);
+                    auto &slot = field == "startDate" ? custom.start : custom.end;
+                    changed = slot != *date;
+                    slot = *date;
+                }
+                return finishFieldEdit(location, text, date.has_value(), changed);
+            }
+            return false;
+        }
+
+        if (group == "seriesStyle" && field == "width") {
+            if (std::ranges::none_of(descriptor.series, [&](const auto &s) { return s.key == location.target; }))
+                return false;
+            const auto value = parseDecimal(text, m_locale);
+            bool changed = false;
+            if (value) {
+                auto &style = preferences->seriesStyles[location.target];
+                const auto before = style.width;
+                if (*value == defaultSeriesStyle(key, location.target).width) style.width.reset();
+                else style.width = *value;
+                changed = before != style.width;
+                if (!style.color && !style.width) preferences->seriesStyles.erase(location.target);
+            }
+            return finishFieldEdit(location, text, value.has_value(), changed);
+        }
+
+        if (group == "axes" && (field == "fixedMin" || field == "fixedMax")) {
+            const auto policy = preferences->axisPolicies.find(location.target);
+            if (policy == preferences->axisPolicies.end() || !std::holds_alternative<FixedBounds>(policy->second))
+                return false;
+            const auto value = parseDecimal(text, m_locale);
+            bool changed = false;
+            if (value) {
+                auto &bounds = std::get<FixedBounds>(policy->second);
+                auto &slot = field == "fixedMin" ? bounds.minimum : bounds.maximum;
+                changed = slot != *value;
+                slot = *value;
+            }
+            return finishFieldEdit(location, text, value.has_value(), changed);
+        }
+        return false;
+    }
+
+    bool SettingsViewModel::setGraphRangeKind(const QString &graph, const QString &kind) {
+        using namespace application;
+        constexpr int kDefaultRecentDays = 30;
+        constexpr int kDefaultLatestRuns = 50;
+        constexpr int kDefaultCustomSpanDays = 30;
+
+        GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        if (!preferences || !preferences->range) return false;
+        auto &range = preferences->range->range;
+
+        GraphRange next;
+        if (kind == "allHistory") {
+            next = AllHistory{};
+        } else if (kind == "recentDays") {
+            next = std::holds_alternative<RecentDays>(range) ? range : GraphRange{RecentDays{kDefaultRecentDays}};
+        } else if (kind == "latestRuns") {
+            if (!graphDescriptor(key).latestRuns) return false;
+            next = std::holds_alternative<LatestRuns>(range) ? range : GraphRange{LatestRuns{kDefaultLatestRuns}};
+        } else if (kind == "customDates") {
+            if (std::holds_alternative<CustomDates>(range)) {
+                next = range;
+            } else {
+                // Only a seed to edit from; the app's day source is not reachable from here.
+                const auto today = QDateTime::currentDateTimeUtc().date();
+                next = CustomDates{toCalendarDate(today.addDays(1 - kDefaultCustomSpanDays)), toCalendarDate(today)};
+            }
+        } else {
+            return false;
+        }
+
+        if (next == range) return true;
+        range = next;
+        dropRawInput(key, "dataRange", "", {"recentDays", "latestRuns", "startDate", "endDate"});
+        draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::setGraphAnchor(const QString &graph, const bool anchorToLatestRun) {
+        application::GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        if (!preferences || !preferences->range) return false;
+        if (std::exchange(preferences->range->anchorToLatestRun, anchorToLatestRun) != anchorToLatestRun) draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::setGraphConnection(const QString &graph, const QString &connection) {
+        application::GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        const auto mode = connectionFromName(connection);
+        if (!preferences || !mode) return false;
+        if (std::exchange(preferences->appearance.connection, *mode) != *mode) draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::setGraphMarkers(const QString &graph, const bool markers) {
+        application::GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        if (!preferences) return false;
+        if (std::exchange(preferences->appearance.lineModeMarkers, markers) != markers) draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::setSeriesColor(const QString &graph, const QString &series, const QColor &color) {
+        using namespace application;
+        GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        const auto name = series.toStdString();
+        if (!preferences || !color.isValid() ||
+            std::ranges::none_of(graphDescriptor(key).series, [&](const auto &s) { return s.key == name; }))
+            return false;
+        auto &style = preferences->seriesStyles[name];
+        const auto before = style.color;
+        const auto chosen = rgba(color);
+        if (chosen == defaultSeriesStyle(key, name).color) style.color.reset();
+        else style.color = chosen;
+        const bool changed = before != style.color;
+        if (!style.color && !style.width) preferences->seriesStyles.erase(name);
+        if (changed) draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::clearSeriesOverride(const QString &graph, const QString &series, const QString &field) {
+        using namespace application;
+        GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        const auto name = series.toStdString();
+        if (!preferences || (field != "color" && field != "width") ||
+            std::ranges::none_of(graphDescriptor(key).series, [&](const auto &s) { return s.key == name; }))
+            return false;
+        bool changed = false;
+        if (const auto found = preferences->seriesStyles.find(name); found != preferences->seriesStyles.end()) {
+            auto &style = found->second;
+            changed = (field == "color" ? style.color.has_value() : style.width.has_value());
+            if (field == "color") style.color.reset();
+            else style.width.reset();
+            if (!style.color && !style.width) preferences->seriesStyles.erase(found);
+        }
+        const bool rawDropped = field == "width" && dropRawInput(key, "seriesStyle", name, {"width"});
+        if (changed || rawDropped) draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::setAxisMode(const QString &graph, const QString &axis, const QString &mode) {
+        using namespace application;
+        GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        const auto name = axis.toStdString();
+        const auto &axes = graphDescriptor(key).axes;
+        const auto described = preferences ? std::ranges::find(axes, name, &GraphAxisDescriptor::key) : axes.end();
+        if (!preferences || described == axes.end()) return false;
+
+        auto &policy = preferences->axisPolicies[name];
+        AxisPolicy next;
+        if (mode == "fit") next = FitVisibleData{};
+        else if (mode == "zero") next = StartAtZero{};
+        else if (mode == "fixed") next = std::holds_alternative<FixedBounds>(policy) ? policy : AxisPolicy{FixedBounds{}};
+        else return false;
+
+        if (next == policy) return true;
+        policy = next;
+        if (mode != "fixed") dropRawInput(key, "axes", name, {"fixedMin", "fixedMax"});
+        draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::resetGraph(const QString &graph) {
+        application::GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        if (!preferences) return false;
+        bool rawDropped = false;
+        for (auto it = m_rawInput.begin(); it != m_rawInput.end();) {
+            if (it->first.graph == key && it->first.group != "graphLines") {
+                it = m_rawInput.erase(it);
+                rawDropped = true;
+            } else {
+                ++it;
+            }
+        }
+        if (rawDropped) emit rawInputsChanged();
+        const auto defaults = application::defaultGraphPreferences(key);
+        const bool changed = *preferences != defaults;
+        *preferences = defaults;
+        if (changed || rawDropped) draftChanged();
+        return true;
     }
 
     // ---- Graph Lines --------------------------------------------------------------------------------

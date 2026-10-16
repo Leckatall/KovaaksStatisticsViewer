@@ -14,6 +14,7 @@ add_executable(ui_tests
     editable_expression_node_test.cpp
     session_vm_test.cpp
     settings_vm_test.cpp
+    graph_draft_test.cpp
     series_expression_editor_model_test.cpp
     monotone_spline_test.cpp
     series_painter_test.cpp
