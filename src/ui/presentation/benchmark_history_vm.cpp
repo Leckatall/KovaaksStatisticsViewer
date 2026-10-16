@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QString>
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "benchmark_format.h"
@@ -14,7 +15,9 @@ namespace ksv::presentation {
     }
 
     BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, const Axis &xAxis, QObject *parent)
-        : GraphViewModelBase(parent), m_metric(metric), m_series(new SeriesModel(this)), m_xAxis(&xAxis) {
+        : GraphViewModelBase(parent), m_metric(metric),
+          m_playtimeAxisPolicy(axisPolicyFor({}, application::GraphKey::BenchmarkPlaytime, "playtime")),
+          m_series(new SeriesModel(this)), m_xAxis(&xAxis) {
     }
 
     QString BenchmarkHistoryViewModel::metricName() const {
@@ -37,6 +40,22 @@ namespace ksv::presentation {
         for (const int column: columns)
             if (column == Value) result.append(m_series);
         return result;
+    }
+
+    void BenchmarkHistoryViewModel::applyPlaytimeYAxis() {
+        const std::array<const SeriesModel *, 1> members{m_series};
+        m_series->yAxisOptions = optionsForPolicy(m_playtimeAxisPolicy, {});
+        m_series->yAxis = axisForPolicy(members, m_playtimeAxisPolicy, {}, m_series->transform);
+    }
+
+    void BenchmarkHistoryViewModel::setAxisPolicies(const AxisPolicyMap &policies) {
+        if (m_metric != RollingPlaytime) return;
+        application::AxisPolicy next = axisPolicyFor(policies, application::GraphKey::BenchmarkPlaytime, "playtime");
+        if (next == m_playtimeAxisPolicy) return;
+        m_playtimeAxisPolicy = std::move(next);
+        if (!m_hasData) return;
+        applyPlaytimeYAxis();
+        emit boundsChanged();
     }
 
     ValueAxis BenchmarkHistoryViewModel::rankYAxis(const std::vector<RankTier> &tiers) {
@@ -115,8 +134,8 @@ namespace ksv::presentation {
             m_series->setName(metricName());
             m_series->setColor(kPlaytimeColor);
             m_series->transform = ValueTransform::secondsToMinutes();
-            m_series->yAxisOptions = {.baseline = ValueAxis::Baseline::Zero};
-            m_series->setData(content.observations);
+            m_series->points = content.observations;
+            applyPlaytimeYAxis();
         }
 
         emit dataUpdated();

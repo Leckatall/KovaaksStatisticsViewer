@@ -399,4 +399,190 @@ namespace {
         EXPECT_DOUBLE_EQ(sample->x(), 5.0);
         EXPECT_DOUBLE_EQ(sample->y(), 105.0);
     }
+
+    // ── Numeric Y-axis policies ─────────────────────────────────────────────────────────────────
+
+    void expectSameAxis(const Axis &actual, const Axis &expected) {
+        EXPECT_DOUBLE_EQ(actual.min(), expected.min());
+        EXPECT_DOUBLE_EQ(actual.max(), expected.max());
+        EXPECT_EQ(actual.ticks(), expected.ticks());
+    }
+
+    const ValueAxis &yAxisOf(const QList<SeriesModel *> &series, const int index = 0) {
+        EXPECT_TRUE(series.at(index)->yAxis.has_value());
+        return *series.at(index)->yAxis;
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, DefaultPoliciesReproduceTheAxesThatPreceededThem) {
+        setHistory();
+        view_model.refresh();
+
+        ValueAxis score;
+        score.setRange(100.0, 125.0);
+        ValueAxis accuracy({}, ValueTransform::percentage());
+        accuracy.setRange(45.0, 60.0);
+        ValueAxis counts({.baseline = ValueAxis::Baseline::Zero});
+        counts.setRange(9.0, 25.0);
+
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Score})), score);
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Accuracy})), accuracy);
+        const auto all = view_model.series({CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Hits,
+                                             CompletionHistoryViewModel::Misses});
+        for (int i = 0; i < all.size(); ++i) expectSameAxis(yAxisOf(all, i), counts);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FitVisibleDataFollowsWhichSharingSeriesAreVisible) {
+        setHistory();
+        view_model.refresh();
+        view_model.setAxisPolicies({{"counts", FitVisibleData{}}});
+
+        ValueAxis hitsAndMisses;
+        hitsAndMisses.setRange(9.0, 15.0);
+        ValueAxis everyCount;
+        everyCount.setRange(9.0, 25.0);
+
+        const auto hidingShots = view_model.series({CompletionHistoryViewModel::Hits, CompletionHistoryViewModel::Misses});
+        expectSameAxis(yAxisOf(hidingShots, 0), hitsAndMisses);
+        expectSameAxis(yAxisOf(hidingShots, 1), hitsAndMisses);
+
+        const auto showingShots = view_model.series({CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Hits,
+                                                      CompletionHistoryViewModel::Misses});
+        for (int i = 0; i < showingShots.size(); ++i) expectSameAxis(yAxisOf(showingShots, i), everyCount);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, AHiddenSeriesNeverStretchesTheAxisItNoLongerShares) {
+        setHistory();
+        view_model.refresh();
+
+        const auto before = view_model.series({CompletionHistoryViewModel::Hits}).front()->yAxis;
+        const auto withShots = view_model.series({CompletionHistoryViewModel::Hits, CompletionHistoryViewModel::Shots});
+        const auto after = view_model.series({CompletionHistoryViewModel::Hits}).front()->yAxis;
+
+        ASSERT_TRUE(before.has_value());
+        ASSERT_TRUE(after.has_value());
+        EXPECT_LT(before->max(), yAxisOf(withShots).max());
+        expectSameAxis(*after, *before);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, StartAtZeroAppliesToTheScoreAxis) {
+        setHistory();
+        view_model.refresh();
+        view_model.setAxisPolicies({{"score", StartAtZero{}}});
+
+        const ValueAxis &score = yAxisOf(view_model.series({CompletionHistoryViewModel::Score}));
+
+        EXPECT_DOUBLE_EQ(score.min(), 0.0);
+        EXPECT_GE(score.max(), 125.0);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FixedAccuracyBoundsArePercentagesAndPutOutsideValuesOffTheAxis) {
+        setHistory();
+        view_model.refresh();
+        view_model.setAxisPolicies({{"accuracy", FixedBounds{50.0, 70.0}}});
+
+        const auto series = view_model.series({CompletionHistoryViewModel::Accuracy});
+        const ValueAxis &accuracy = yAxisOf(series);
+
+        EXPECT_DOUBLE_EQ(accuracy.min(), 50.0);
+        EXPECT_DOUBLE_EQ(accuracy.max(), 70.0);
+        EXPECT_EQ(accuracy.formatTick(70.0), "70%");
+        EXPECT_LT(accuracy.normalizedPosition(series.front()->transform.display(0.45)), 0.0)
+            << "45% is below the 50% floor, outside the plot";
+        EXPECT_NEAR(accuracy.normalizedPosition(series.front()->transform.display(0.60)), 0.5, 1e-12);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FixedCountBoundsApplyToEveryCountSeries) {
+        setHistory();
+        view_model.refresh();
+        view_model.setAxisPolicies({{"counts", FixedBounds{5.0, 30.0}}});
+
+        const auto all = view_model.series({CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Hits,
+                                             CompletionHistoryViewModel::Misses});
+        ASSERT_EQ(all.size(), 3);
+        for (int i = 0; i < all.size(); ++i) {
+            EXPECT_DOUBLE_EQ(yAxisOf(all, i).min(), 5.0);
+            EXPECT_DOUBLE_EQ(yAxisOf(all, i).max(), 30.0);
+        }
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, PoliciesOfOneAxisLeaveTheOthersAlone) {
+        setHistory();
+        view_model.refresh();
+        view_model.setAxisPolicies({{"score", FixedBounds{0.0, 500.0}}});
+
+        ValueAxis accuracy({}, ValueTransform::percentage());
+        accuracy.setRange(45.0, 60.0);
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Accuracy})), accuracy);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, AnAbsentKeyReturnsItsAxisToTheDefault) {
+        setHistory();
+        view_model.refresh();
+        view_model.setAxisPolicies({{"score", FixedBounds{0.0, 500.0}}});
+
+        view_model.setAxisPolicies({});
+
+        ValueAxis score;
+        score.setRange(100.0, 125.0);
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Score})), score);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, PoliciesSurviveRefresh) {
+        setHistory();
+        view_model.refresh();
+        view_model.setAxisPolicies({{"score", FixedBounds{0.0, 500.0}}, {"counts", FitVisibleData{}}});
+
+        view_model.refresh();
+
+        const ValueAxis &score = yAxisOf(view_model.series({CompletionHistoryViewModel::Score}));
+        EXPECT_DOUBLE_EQ(score.min(), 0.0);
+        EXPECT_DOUBLE_EQ(score.max(), 500.0);
+        ValueAxis fitCounts;
+        fitCounts.setRange(10.0, 25.0);
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Misses})),
+                       fitCounts);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, ChangingAPolicyRepaintsTheGraphOnlyWhenItChangesSomething) {
+        setHistory();
+        view_model.refresh();
+        const QSignalSpy bounds(&view_model, &GraphViewModelBase::boundsChanged);
+
+        view_model.setAxisPolicies({{"score", FixedBounds{0.0, 500.0}}});
+        EXPECT_EQ(bounds.count(), 1);
+
+        view_model.setAxisPolicies({{"score", FixedBounds{0.0, 500.0}}});
+        view_model.setAxisPolicies({{"score", FixedBounds{0.0, 500.0}}, {"accuracy", FitVisibleData{}}});
+        EXPECT_EQ(bounds.count(), 1) << "the same effective policies are not a change";
+
+        view_model.setAxisPolicies({});
+        EXPECT_EQ(bounds.count(), 2);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FitOfALoneRunUsesTheFallbackSpanAroundIt) {
+        project(1, {1});
+        view_model.refresh();
+
+        ValueAxis score;
+        score.setRange(101.0, 101.0);
+        const ValueAxis &axis = yAxisOf(view_model.series({CompletionHistoryViewModel::Score}));
+
+        expectSameAxis(axis, score);
+        EXPECT_LT(axis.min(), 101.0);
+        EXPECT_GT(axis.max(), 101.0);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FitOfAnEmptyRangeUsesTheEmptyFallbackAndFixedBoundsStayExact) {
+        project(3, {});
+        view_model.refresh();
+
+        ValueAxis empty;
+        empty.setRange(0.0, 1.0);
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Score})), empty);
+
+        view_model.setAxisPolicies({{"score", FixedBounds{10.0, 20.0}}});
+        const ValueAxis &fixed = yAxisOf(view_model.series({CompletionHistoryViewModel::Score}));
+        EXPECT_DOUBLE_EQ(fixed.min(), 10.0);
+        EXPECT_DOUBLE_EQ(fixed.max(), 20.0);
+    }
 }

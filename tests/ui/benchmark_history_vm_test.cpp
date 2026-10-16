@@ -653,3 +653,118 @@ TEST(BenchmarkHistoryViewModel, NoHistoryAndAnEmptyRangeReadDifferently) {
     EXPECT_FALSE(noHistory.rankHistory()->noObservationsInRange());
     EXPECT_NE(noHistory.rankHistory()->emptyStateText(), emptyRange.rankHistory()->emptyStateText());
 }
+
+// ── Numeric Y-axis policy (playtime metric only) ─────────────────────────────────────────────────
+
+namespace {
+    const ValueAxis &historyAxis(const BenchmarkHistoryViewModel &vm) {
+        const auto series = vm.series({kValueColumn});
+        EXPECT_FALSE(series.isEmpty());
+        EXPECT_TRUE(series.front()->yAxis.has_value());
+        return *series.front()->yAxis;
+    }
+
+    BenchmarkHistoryViewModel::Content secondsContent(const std::vector<double> &seconds) {
+        BenchmarkHistoryViewModel::Content content;
+        content.historyAvailable = true;
+        double x = 0.0;
+        for (const double value: seconds) content.observations.append(QPointF(x++, value));
+        return content;
+    }
+
+    void expectSameAxis(const Axis &actual, const Axis &expected) {
+        EXPECT_DOUBLE_EQ(actual.min(), expected.min());
+        EXPECT_DOUBLE_EQ(actual.max(), expected.max());
+        EXPECT_EQ(actual.ticks(), expected.ticks());
+    }
+
+    const std::vector<RankTier> kTiers{{"Bronze", QColor("brown")}, {"Silver", QColor("gray")}, {"Gold", QColor("gold")}};
+}
+
+TEST(BenchmarkHistoryAxisPolicy, PlaytimeDefaultsToTheZeroBasedMinutesAxis) {
+    ValueAxis x;
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    vm.update(secondsContent({1800.0, 4200.0}), true, {});
+
+    ValueAxis expected({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
+    expected.setRange(30.0, 70.0);
+    expectSameAxis(historyAxis(vm), expected);
+}
+
+TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitsFixesAndRestoresItsAxisInMinutes) {
+    ValueAxis x;
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    vm.update(secondsContent({1800.0, 4200.0}), true, {});
+
+    vm.setAxisPolicies({{"playtime", FitVisibleData{}}});
+    ValueAxis fitted({}, ValueTransform::secondsToMinutes());
+    fitted.setRange(30.0, 70.0);
+    expectSameAxis(historyAxis(vm), fitted);
+
+    vm.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}});
+    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 10.0);
+    EXPECT_DOUBLE_EQ(historyAxis(vm).max(), 45.0);
+    EXPECT_EQ(historyAxis(vm).formatTick(45.0), "45 min");
+
+    vm.setAxisPolicies({});
+    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 0.0);
+}
+
+TEST(BenchmarkHistoryAxisPolicy, PlaytimePolicySurvivesFurtherUpdates) {
+    ValueAxis x;
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    vm.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}});
+
+    vm.update(secondsContent({600.0}), true, {});
+    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 10.0);
+    EXPECT_DOUBLE_EQ(historyAxis(vm).max(), 45.0);
+
+    vm.update(secondsContent({600.0, 7200.0}), true, {});
+    EXPECT_DOUBLE_EQ(historyAxis(vm).max(), 45.0);
+}
+
+TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitOfASingleDayUsesTheFallbackSpan) {
+    ValueAxis x;
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    vm.setAxisPolicies({{"playtime", FitVisibleData{}}});
+
+    vm.update(secondsContent({1800.0}), true, {});
+
+    ValueAxis expected({}, ValueTransform::secondsToMinutes());
+    expected.setRange(30.0, 30.0);
+    expectSameAxis(historyAxis(vm), expected);
+}
+
+TEST(BenchmarkHistoryAxisPolicy, PlaytimePolicyChangesRepaintOnlyWhenTheyChangeSomething) {
+    ValueAxis x;
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    vm.update(secondsContent({1800.0}), true, {});
+    const QSignalSpy bounds(&vm, &GraphViewModelBase::boundsChanged);
+
+    vm.setAxisPolicies({{"playtime", FitVisibleData{}}});
+    vm.setAxisPolicies({{"playtime", FitVisibleData{}}});
+
+    EXPECT_EQ(bounds.count(), 1);
+}
+
+TEST(BenchmarkHistoryAxisPolicy, TheRankGraphNeverTakesGenericNumericFitting) {
+    ValueAxis x;
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank, x);
+    BenchmarkHistoryViewModel::Content content;
+    content.historyAvailable = true;
+    content.observations = {QPointF(0.0, 1.0), QPointF(1.0, 2.0)};
+    content.fullHistoryPeak = 2.0;
+    vm.update(content, true, kTiers);
+    const ValueAxis tierAxis = historyAxis(vm);
+    const QSignalSpy bounds(&vm, &GraphViewModelBase::boundsChanged);
+
+    vm.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}, {"rank", FitVisibleData{}}});
+    expectSameAxis(historyAxis(vm), tierAxis);
+    vm.update(content, true, kTiers);
+
+    expectSameAxis(historyAxis(vm), tierAxis);
+    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 0.0);
+    EXPECT_DOUBLE_EQ(historyAxis(vm).max(), 3.0);
+    EXPECT_EQ(historyAxis(vm).formatTick(2.0), "Silver");
+    EXPECT_EQ(bounds.count(), 1) << "only the update announced anything";
+}

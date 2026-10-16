@@ -34,6 +34,7 @@
 #include "formats/protobuf/proto_decoder.h"
 #include "presentation/benchmark_history_vm.h"
 #include "presentation/benchmark_tracking_vm.h"
+#include "presentation/completion_history_vm.h"
 #include "presentation/graph_vm.h"
 #include "settings_service.h"
 
@@ -451,6 +452,58 @@ namespace {
         clickAt({plot.left() / 2, plot.center().y()});
         QTest::qWait(100);
         EXPECT_EQ(historyVm->selectedRunIndex(), 1);
+    }
+
+    // The wired history graph and the live QML canvas honour a numeric axis policy: fixed bounds are
+    // exact displayed values and what they exclude is clipped, not painted past the plot.
+    TEST_F(DashboardCleanSceneTest, ScenarioHistoryFixedBoundsReachTheLiveCanvasAndClipExcludedData) {
+        auto *app = scene.app.get();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
+
+        auto base_run = app->profileService()->getLatestRun();
+        domain::UserProfile profile;
+        const auto source = profile.ensureSource(scene.env.rootPath().toStdString(), "FPSAimTrainer/performances");
+        base_run.sources.perf = {{source, std::filesystem::path(scene.perfFile.toStdString()).filename().string()}};
+        for (int i = 0; i < 3; ++i) {
+            auto run = base_run;
+            run.run_id.start_time += 1000 * i;
+            ASSERT_TRUE(profile.addRun(run));
+        }
+        app->profileService()->applyBuiltProfile(std::move(profile));
+
+        auto *historyVm = app->completionHistoryVm();
+        ui::GraphCanvas *canvas = nullptr;
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            canvas = scene.canvasFor(historyVm);
+            return canvas != nullptr && historyVm->runCount() == 3 && canvas->width() > 0 && canvas->height() > 0;
+        }, 5000));
+        const auto score = historyVm->series({presentation::CompletionHistoryViewModel::Score});
+        ASSERT_EQ(score.size(), 1);
+        const QColor scoreColour = score.front()->color();
+        const qreal runScore = score.front()->points.front().y();
+        const auto render = [&] {
+            QImage image(canvas->size().toSize(), QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            QPainter painter(&image);
+            canvas->paint(&painter);
+            return image;
+        };
+
+        // Every run scores the same, so fitting draws one flat line inside the plot.
+        const QRect plot = canvas->property("plotArea").toRectF().toAlignedRect();
+        EXPECT_GT(countPixelsNear(render(), plot, scoreColour), 0) << "the score line is drawn under the default fit";
+
+        historyVm->setAxisPolicies({{"score", application::FixedBounds{runScore + 100.0, runScore + 200.0}}});
+        const auto fixedSeries = historyVm->series({presentation::CompletionHistoryViewModel::Score});
+        ASSERT_TRUE(fixedSeries.front()->yAxis.has_value());
+        EXPECT_DOUBLE_EQ(fixedSeries.front()->yAxis->min(), runScore + 100.0);
+        EXPECT_DOUBLE_EQ(fixedSeries.front()->yAxis->max(), runScore + 200.0);
+        const QImage image = render();
+        EXPECT_EQ(countPixelsNear(image, plot.adjusted(0, -40, 0, 40), scoreColour), 0)
+            << "the line lies below the floor, so none of it may be painted";
+
+        historyVm->setAxisPolicies({});
+        EXPECT_GT(countPixelsNear(render(), plot, scoreColour), 0) << "dropping the policy restores the fitted line";
     }
 
     // Regression: BenchmarkHistoryCard never handed its canvas any visibleColumns, so

@@ -8,6 +8,7 @@
 #include <QTimeZone>
 
 #include <algorithm>
+#include <array>
 #include <tuple>
 #include <utility>
 
@@ -19,6 +20,7 @@ namespace ksv::presentation {
     PlaytimeGraphViewModel::PlaytimeGraphViewModel(std::shared_ptr<application::IPlaytimeGraphUseCase> useCase,
                                                    QObject *parent)
         : GraphViewModelBase(parent), m_useCase(std::move(useCase)),
+          m_axisPolicy(axisPolicyFor({}, application::GraphKey::DailyPlaytime, "playtime")),
           m_xAxis(DateTimeAxis::Options{.wholeDays = true}), m_series(new SeriesModel(this)) {
         m_useCase->onChanged([this] { refresh(); });
         refresh();
@@ -27,6 +29,20 @@ namespace ksv::presentation {
     QString PlaytimeGraphViewModel::title() const {
         return m_windowDays == 1 ? tr("Daily Playtime (daily totals)")
                                  : tr("Daily Playtime (%1-day rolling average)").arg(m_windowDays);
+    }
+
+    void PlaytimeGraphViewModel::applyYAxis() {
+        const std::array<const SeriesModel *, 1> members{m_series};
+        m_series->yAxisOptions = optionsForPolicy(m_axisPolicy, {});
+        m_series->yAxis = axisForPolicy(members, m_axisPolicy, {}, m_series->transform);
+    }
+
+    void PlaytimeGraphViewModel::setAxisPolicies(const AxisPolicyMap &policies) {
+        application::AxisPolicy next = axisPolicyFor(policies, application::GraphKey::DailyPlaytime, "playtime");
+        if (next == m_axisPolicy) return;
+        m_axisPolicy = std::move(next);
+        applyYAxis();
+        emit boundsChanged();
     }
 
     void PlaytimeGraphViewModel::refresh() {
@@ -61,8 +77,8 @@ namespace ksv::presentation {
         m_series->setColor(kPlaytimeColor);
         m_series->setColumn(Playtime);
         m_series->transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
-        m_series->yAxisOptions = {.baseline = ValueAxis::Baseline::Zero};
-        m_series->setData(rawSecondsPoints);
+        m_series->points = rawSecondsPoints;
+        applyYAxis();
         if (windowMoved) emit windowChanged();
         emit dataUpdated();
         emit boundsChanged();

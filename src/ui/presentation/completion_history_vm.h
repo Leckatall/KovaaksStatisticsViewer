@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "app/contracts/i_completion_history_use_case.h"
+#include "axis_policy.h"
 #include "value_axis.h"
 #include "graph_vm_base.h"
 
@@ -50,6 +51,10 @@ namespace ksv::presentation {
         // hides is ignored.
         Q_INVOKABLE void selectRun(int runIndex);
 
+        // Replaces every axis' policy (score, accuracy, counts); an absent key means that axis' default.
+        // Shots, hits and misses share the one counts policy. Takes effect on the next series() call.
+        void setAxisPolicies(const AxisPolicyMap &policies);
+
         // series objects for Score..Misses; identity is fixed at construction, only points/yAxis
         // mutate per refresh().
         [[nodiscard]] QQmlListProperty<SeriesModel> allSeries() const {
@@ -71,6 +76,7 @@ namespace ksv::presentation {
         std::shared_ptr<application::ICompletionHistoryUseCase> m_use_case;
         std::array<QList<QPointF>, ColumnCount> m_points{};
         ValueAxis m_xAxis;
+        std::array<application::AxisPolicy, 3> m_axisPolicies;
         QList<SeriesModel *> m_series;
         QString m_scenario_title;
         int m_run_count = 0;

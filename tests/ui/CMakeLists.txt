@@ -4,6 +4,7 @@ include(GoogleTest)
 add_executable(ui_tests
     ../support/qt_gtest_main.cpp
     value_axis_test.cpp
+    axis_policy_test.cpp
     date_time_axis_test.cpp
     value_transform_test.cpp
     series_model_test.cpp

@@ -34,10 +34,12 @@ namespace ksv::presentation {
             return transform;
         }
 
+        constexpr std::array<std::string_view, YAxisCount> kAxisKeys{"score", "accuracy", "counts"};
+
         const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{{
             {ValueTransform::identity(), {}},
             {ValueTransform::percentage(), {}},
-            {ValueTransform::identity(), {.baseline = ValueAxis::Baseline::Zero}},
+            {ValueTransform::identity(), {}},
         }};
 
         const std::array<ColumnMeta, CompletionHistoryViewModel::ColumnCount> kColumnMeta{{
@@ -60,6 +62,8 @@ namespace ksv::presentation {
           m_xAxis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .targetTicks = 10,
                    .fallbackSpan = 0.5, .niceBounds = false},
                   runIndexTransform()) {
+        for (int axis = 0; axis < YAxisCount; ++axis)
+            m_axisPolicies[axis] = axisPolicyFor({}, application::GraphKey::ScenarioHistory, kAxisKeys[axis]);
         for (int column = Score; column < ColumnCount; ++column) {
             auto *series_model = new SeriesModel(this);
             series_model->setId(QString::number(column));
@@ -91,7 +95,7 @@ namespace ksv::presentation {
             members.reserve(indices.size());
             for (const int index: indices) members.push_back(result[index]);
             const auto &descriptor = kYAxisMeta[axis];
-            const ValueAxis yAxis = axisForSeries(members, descriptor.options, descriptor.transform);
+            const ValueAxis yAxis = axisForPolicy(members, m_axisPolicies[axis], descriptor.options, descriptor.transform);
             for (const int index: indices) result[index]->yAxis = yAxis;
         }
         return result;
@@ -130,6 +134,15 @@ namespace ksv::presentation {
         emit dataUpdated();
         emit boundsChanged();
         refreshSelection();
+    }
+
+    void CompletionHistoryViewModel::setAxisPolicies(const AxisPolicyMap &policies) {
+        std::array<application::AxisPolicy, YAxisCount> next;
+        for (int axis = 0; axis < YAxisCount; ++axis)
+            next[axis] = axisPolicyFor(policies, application::GraphKey::ScenarioHistory, kAxisKeys[axis]);
+        if (next == m_axisPolicies) return;
+        m_axisPolicies = std::move(next);
+        emit boundsChanged();
     }
 
     void CompletionHistoryViewModel::selectRun(const int runIndex) {

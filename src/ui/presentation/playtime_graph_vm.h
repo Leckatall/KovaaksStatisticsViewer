@@ -10,6 +10,7 @@
 #include <memory>
 #include <qqmlintegration.h>
 
+#include "axis_policy.h"
 #include "date_time_axis.h"
 #include "graph_vm_base.h"
 #include "app/contracts/i_playtime_graph_use_case.h"
@@ -45,6 +46,9 @@ namespace ksv::presentation {
         [[nodiscard]] QString title() const;
         [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
+        // Takes the "playtime" policy, in minutes; an absent key means the default. Kept across refreshes.
+        void setAxisPolicies(const AxisPolicyMap &policies);
+
     public slots:
         // Re-reads the use case; it also runs on the use case's own change notifications.
         void refresh();
@@ -53,8 +57,11 @@ namespace ksv::presentation {
         void windowChanged();
 
     private:
+        void applyYAxis();
+
         std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;
         int m_windowDays = application::kDefaultAveragingWindowDays;
+        application::AxisPolicy m_axisPolicy;
         DateTimeAxis m_xAxis;
         SeriesModel *m_series; // raw seconds + a seconds->minutes transform
     };

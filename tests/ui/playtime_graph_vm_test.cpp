@@ -254,4 +254,113 @@ namespace {
         for (int i = 1; i < axis.ticks().size(); ++i)
             EXPECT_NE(axis.formatTick(axis.ticks()[i - 1]), axis.formatTick(axis.ticks()[i]));
     }
+
+    // ── Numeric Y-axis policy ───────────────────────────────────────────────────────────────────
+
+    const ValueAxis &playtimeAxis(const PlaytimeGraphViewModel &vm) {
+        const auto series = vm.series({PlaytimeGraphViewModel::Playtime});
+        EXPECT_FALSE(series.isEmpty());
+        EXPECT_TRUE(series.front()->yAxis.has_value());
+        return *series.front()->yAxis;
+    }
+
+    void expectSameAxis(const Axis &actual, const Axis &expected) {
+        EXPECT_DOUBLE_EQ(actual.min(), expected.min());
+        EXPECT_DOUBLE_EQ(actual.max(), expected.max());
+        EXPECT_EQ(actual.ticks(), expected.ticks());
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, DefaultPolicyIsTheZeroBasedMinutesAxisItAlwaysWas) {
+        fake->series = {{19500, 1800.0}, {19501, 4200.0}};
+        view_model.refresh();
+
+        ValueAxis expected({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
+        expected.setRange(30.0, 70.0);
+        expectSameAxis(playtimeAxis(view_model), expected);
+        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), 0.0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, FitVisibleDataHugsThePlottedMinutes) {
+        fake->series = {{19500, 1800.0}, {19501, 4200.0}};
+        view_model.refresh();
+
+        view_model.setAxisPolicies({{"playtime", FitVisibleData{}}});
+
+        ValueAxis expected({}, ValueTransform::secondsToMinutes());
+        expected.setRange(30.0, 70.0);
+        expectSameAxis(playtimeAxis(view_model), expected);
+        EXPECT_GT(playtimeAxis(view_model).min(), 0.0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, FixedBoundsAreExactMinutesAndTheDataKeepsItsRawSeconds) {
+        fake->series = {{19500, 1800.0}, {19501, 4200.0}};
+        view_model.refresh();
+
+        view_model.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}});
+
+        const ValueAxis &axis = playtimeAxis(view_model);
+        EXPECT_DOUBLE_EQ(axis.min(), 10.0);
+        EXPECT_DOUBLE_EQ(axis.max(), 45.0);
+        EXPECT_EQ(axis.formatTick(45.0), "45 min");
+        const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
+        EXPECT_DOUBLE_EQ(series.front()->points[1].y(), 4200.0);
+        EXPECT_GT(axis.normalizedPosition(series.front()->transform.display(4200.0)), 1.0)
+            << "70 min lies above the 45 min ceiling, outside the plot";
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, PolicySurvivesRefreshAndANewWindow) {
+        fake->series = {{19500, 1800.0}, {19501, 4200.0}};
+        view_model.refresh();
+        view_model.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}});
+
+        fake->view.windowDays = 7;
+        fake->series = {{19500, 600.0}};
+        fake->publish();
+
+        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), 10.0);
+        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).max(), 45.0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, PolicyChangesRepaintOnlyWhenTheEffectivePolicyChanges) {
+        fake->series = {{19500, 1800.0}};
+        view_model.refresh();
+        const QSignalSpy bounds(&view_model, &GraphViewModelBase::boundsChanged);
+
+        view_model.setAxisPolicies({{"playtime", FitVisibleData{}}});
+        EXPECT_EQ(bounds.count(), 1);
+        view_model.setAxisPolicies({{"playtime", FitVisibleData{}}});
+        EXPECT_EQ(bounds.count(), 1);
+        view_model.setAxisPolicies({});
+        EXPECT_EQ(bounds.count(), 2);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, AnAbsentKeyRestoresTheZeroBasedDefault) {
+        fake->series = {{19500, 1800.0}, {19501, 4200.0}};
+        view_model.refresh();
+        view_model.setAxisPolicies({{"playtime", FitVisibleData{}}});
+
+        view_model.setAxisPolicies({});
+
+        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), 0.0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, FitOfASingleDayUsesTheFallbackSpan) {
+        fake->series = {{19500, 1800.0}};
+        view_model.refresh();
+
+        view_model.setAxisPolicies({{"playtime", FitVisibleData{}}});
+
+        ValueAxis expected({}, ValueTransform::secondsToMinutes());
+        expected.setRange(30.0, 30.0);
+        expectSameAxis(playtimeAxis(view_model), expected);
+        EXPECT_LT(playtimeAxis(view_model).min(), 30.0);
+        EXPECT_GT(playtimeAxis(view_model).max(), 30.0);
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, AnEmptyGraphKeepsItsFixedBounds) {
+        view_model.setAxisPolicies({{"playtime", FixedBounds{0.0, 20.0}}});
+
+        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), 0.0);
+        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).max(), 20.0);
+    }
 }

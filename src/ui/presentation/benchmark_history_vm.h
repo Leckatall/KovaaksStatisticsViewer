@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "axis.h"
+#include "axis_policy.h"
 #include "graph_vm_base.h"
 #include "series_model.h"
 
@@ -70,6 +71,10 @@ namespace ksv::presentation {
 
         // Only meaningful for RollingPlaytime; takes effect on the next update().
         void setAveragingWindowDays(int days);
+
+        // Takes the "playtime" policy, in minutes, for RollingPlaytime and is ignored for AverageRank:
+        // the rank axis is always tier-based. Kept across updates.
+        void setAxisPolicies(const AxisPolicyMap &policies);
         [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
         // X is UTC-midnight epoch ms, Y the metric's raw value (rank position, or playtime seconds).
@@ -96,9 +101,11 @@ namespace ksv::presentation {
 
     private:
         [[nodiscard]] static ValueAxis rankYAxis(const std::vector<RankTier> &tiers);
+        void applyPlaytimeYAxis();
 
         Metric m_metric;
         int m_windowDays = 3;
+        application::AxisPolicy m_playtimeAxisPolicy;
         SeriesModel *m_series;
         const Axis *m_xAxis;
         bool m_hasData = false;
