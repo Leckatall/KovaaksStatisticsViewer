@@ -32,7 +32,6 @@
 #include "contracts/i_playtime_graph_use_case.h"
 #include "contracts/i_completion_history_use_case.h"
 #include "contracts/i_scenario_browser_use_case.h"
-#include "contracts/i_series_management_use_case.h"
 #include "contracts/i_graph_configuration_use_case.h"
 
 
@@ -108,7 +107,6 @@ namespace ksv::application {
         std::shared_ptr<ISettingsService> m_settingsService;
         std::shared_ptr<data::IGraphConfigurationService> m_graphConfigurationService;
         std::shared_ptr<IGraphConfigurationUseCase> m_graphConfigurationUseCase;
-        std::shared_ptr<ISeriesManagementUseCase> m_seriesManagementUseCase;
         std::shared_ptr<data::IStatsCsvParser> m_statsParser;
         std::shared_ptr<IFileService> m_fileService;
         std::shared_ptr<data::IRunIngestor> m_runIngestor;

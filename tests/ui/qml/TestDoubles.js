@@ -1,11 +1,16 @@
 // .pragma library
 
-// The shared draft/enable machinery every settings-VM double needs. Callers pass
+// The shared visit/enable machinery every settings-VM double needs. Callers pass
 // their own fixture rows (allSeriesConfigs) and any extra surface through overrides.
+// `saveResult` decides whether save() is accepted; an accepted save leaves the visit clean.
 function makeFakeSettingsVm(overrides) {
     return Object.assign({
         allAxes: [],
         pendingChanges: false,
+        issues: [],
+        runAxisLabelSeriesId: "",
+        setRunAxisLabelSeriesIdCalls: [],
+        setRunAxisLabelSeriesId: function (id) { this.setRunAxisLabelSeriesIdCalls.push(id) },
         setSeriesEnabledCalls: 0,
         lastSetSeriesEnabledId: null,
         lastSetSeriesEnabledValue: null,
@@ -14,12 +19,19 @@ function makeFakeSettingsVm(overrides) {
             this.lastSetSeriesEnabledId = id
             this.lastSetSeriesEnabledValue = enabled
         },
-        beginDraftCalls: 0,
-        beginSeriesDraft: function () { this.beginDraftCalls++ },
-        commitDraftCalls: 0,
-        commitSeriesDraft: function () { this.commitDraftCalls++; this.pendingChanges = false; return {succeeded: true} },
-        discardDraftCalls: 0,
-        discardSeriesDraft: function () { this.discardDraftCalls++; this.pendingChanges = false }
+        beginVisitCalls: 0,
+        beginVisit: function () { this.beginVisitCalls++ },
+        saveCalls: 0,
+        saveResult: {accepted: true, issues: []},
+        save: function () {
+            this.saveCalls++
+            if (this.saveResult.accepted) this.pendingChanges = false
+            return this.saveResult
+        },
+        revertCalls: 0,
+        revertChanges: function () { this.revertCalls++; this.pendingChanges = false },
+        endVisitCalls: 0,
+        endVisit: function () { this.endVisitCalls++; this.pendingChanges = false }
     }, overrides)
 }
 

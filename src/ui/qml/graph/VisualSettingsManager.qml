@@ -34,13 +34,6 @@ Item {
         property bool scenarioBrowserSectionVisible: true
     }
 
-    property alias graphAxisSeriesId: axisSettings.seriesId
-    Settings {
-        id: axisSettings
-        category: "graphAxis"
-        property string seriesId: ""
-    }
-
     property alias historyColumnVisibility: historySettings.columnVisibility
     property alias historyAxisColumnKey: historySettings.yAxisColumnKey
     Settings {

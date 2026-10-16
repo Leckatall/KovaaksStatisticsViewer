@@ -16,6 +16,7 @@ Item {
         property string scenarioTitle: "Air Angelic"
         property var enabledSeriesIds: []
         property var allSeries: []
+        property string axisLabelSeriesId: ""
         property var columnForSeriesId: function (id) { return -1 }
         property var seriesIdForColumn: function (column) { return "" }
     }
@@ -23,7 +24,6 @@ Item {
     QtObject {
         id: fakeVisualSettings
 
-        property int graphAxisSeriesId: 0
         property bool controlPanelVisible: true
         property var isSeriesVisible: function (id) { return true }
         property var setSeriesVisible: function (id, visible) {}
@@ -61,6 +61,7 @@ Item {
             {"id": "7", "name": "Score Total", "color": "#800080", "column": 7},
             {"id": "8", "name": "Expected Final Score", "color": "#ff00ff", "column": 8}
         ]
+        property string axisLabelSeriesId: ""
         property var columnForSeriesId: function (id) { return Number(id) }
         property var seriesIdForColumn: function (column) { return String(column) }
     }
@@ -84,6 +85,7 @@ Item {
             fakeGraphVm.contentState = GraphViewModel.HasData
             fakeGraphVm.scenarioTitle = "Air Angelic"
             fakeVisualSettings.controlPanelVisible = true
+            manyLinesGraphVm.axisLabelSeriesId = ""
             configureSpy.clear()
         }
 
@@ -178,6 +180,19 @@ Item {
             let label = null
             tryVerify(() => (label = findChild(panel, "scenarioYAxisTitleLabel")) !== null)
             verify(Qt.colorEqual(label.color, Qt.alpha(label.palette.text, 0.6)), "axis title colour " + label.color)
+        }
+
+        // The axis label comes from the committed configuration the graph VM reads, not from QML settings.
+        function test_yAxisColumnFollowsTheCommittedAxisLabel() {
+            const panel = createTemporaryObject(manyLinesPanelComponent, root)
+            verify(!!panel, "Component exists")
+            compare(panel.yAxisColumn, 1)
+
+            manyLinesGraphVm.axisLabelSeriesId = "3"
+            compare(panel.yAxisColumn, 3)
+
+            manyLinesGraphVm.axisLabelSeriesId = "42"
+            compare(panel.yAxisColumn, 1, "a label naming no visible series falls back to the first visible one")
         }
 
         function test_configureButtonIsForwardedByThePanel() {

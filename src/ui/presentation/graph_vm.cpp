@@ -47,6 +47,16 @@ namespace ksv::presentation {
         fetchMetadata();
         recomputeBounds();
         m_graphUseCase->onSeriesConfigChanged([this] { fetchMetadata(); });
+        refreshAxisLabelSeriesId();
+        m_graphUseCase->onAxisLabelChanged([this] { refreshAxisLabelSeriesId(); });
+    }
+
+    void GraphViewModel::refreshAxisLabelSeriesId() {
+        const auto id = m_graphUseCase->getAxisLabelSeriesId();
+        const QString value = id ? QString::number(id->value) : QString();
+        if (value == m_axisLabelSeriesId) return;
+        m_axisLabelSeriesId = value;
+        emit axisLabelSeriesIdChanged();
     }
 
     QList<SeriesModel *> GraphViewModel::series(const QList<int> &columns) const {

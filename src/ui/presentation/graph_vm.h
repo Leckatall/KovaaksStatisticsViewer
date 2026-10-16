@@ -24,6 +24,8 @@ namespace ksv::presentation {
         Q_PROPERTY(QVariantList enabledSeriesIds READ enabledSeriesIds NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
         Q_PROPERTY(ContentState contentState READ contentState NOTIFY contentStateChanged)
+        // Empty when no series is chosen; the dashboard then labels the first visible series.
+        Q_PROPERTY(QString axisLabelSeriesId READ axisLabelSeriesId NOTIFY axisLabelSeriesIdChanged)
 
     public:
         // What the runtime graph can honestly say about the run it holds: nothing selected, a run with
@@ -46,6 +48,8 @@ namespace ksv::presentation {
 
         [[nodiscard]] ContentState contentState() const { return m_contentState; }
 
+        [[nodiscard]] QString axisLabelSeriesId() const { return m_axisLabelSeriesId; }
+
         [[nodiscard]] int yAxisColumn() const override { return kDefaultYAxisSeriesId; }
 
         void recomputeBounds();
@@ -63,6 +67,7 @@ namespace ksv::presentation {
         void scenarioTitleChanged();
         void seriesConfigurationChanged();
         void contentStateChanged();
+        void axisLabelSeriesIdChanged();
 
     private:
         // Fallback y-axis column when nothing else is specified; the built-in Score primitive, id 1.
@@ -80,6 +85,9 @@ namespace ksv::presentation {
         QString m_scenarioTitle;
         QVariantList m_enabledSeriesIds;
         ContentState m_contentState = NoRunSelected;
+        QString m_axisLabelSeriesId;
+
+        void refreshAxisLabelSeriesId();
     };
 }
 

@@ -62,13 +62,25 @@ ApplicationWindow {
 
     required property var settingsVm
     required property var sessionVm
-    required property var visualSettings
 
+    // One working copy per visit: Save keeps the window open and clean, Cancel drops every edit
+    // since the visit began or last saved and closes.
     footer: DialogButtonBox {
         Button {
-            text: qsTr("Close")
+            objectName: "settingsSaveButton"
+            text: qsTr("Save")
+            enabled: root.settingsVm.pendingChanges
+            DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
+            onClicked: root.settingsVm.save()
+        }
+        Button {
+            objectName: "settingsCancelButton"
+            text: qsTr("Cancel")
             DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-            onClicked: root.close()
+            onClicked: {
+                root.settingsVm.endVisit()
+                root.close()
+            }
         }
     }
 
@@ -82,7 +94,7 @@ ApplicationWindow {
     readonly property alias discardChangesPrompt: discardChangesPrompt
 
     function open() {
-        root.settingsVm.beginSeriesDraft()
+        root.settingsVm.beginVisit()
         if (!visible) _fitToScreen()
         visible = true
         raise()
@@ -98,7 +110,9 @@ ApplicationWindow {
         if (root.settingsVm.pendingChanges) {
             close.accepted = false
             discardChangesPrompt.open()
+            return
         }
+        root.settingsVm.endVisit()
     }
 
     MessageDialog {
@@ -111,10 +125,12 @@ ApplicationWindow {
         onButtonClicked: function (button) {
             switch (button) {
                 case MessageDialog.Save:
-                    root.settingsVm.commitSeriesDraft()
+                    // A rejected Save keeps the window, its working copy and the issues to correct.
+                    if (!root.settingsVm.save().accepted)
+                        return
                     break
                 case MessageDialog.Discard:
-                    root.settingsVm.discardSeriesDraft()
+                    root.settingsVm.endVisit()
                     break
                 case MessageDialog.Cancel:
                     return
@@ -338,10 +354,10 @@ ApplicationWindow {
                                 text: root.seriesName(modelData)
                             }
                             currentIndex: {
-                                const idx = graphLinesPage.visibleAxisColumns.indexOf(root.visualSettings.graphAxisSeriesId)
+                                const idx = graphLinesPage.visibleAxisColumns.indexOf(root.settingsVm.runAxisLabelSeriesId)
                                 return idx >= 0 ? idx : 0
                             }
-                            onActivated: index => root.visualSettings.graphAxisSeriesId = graphLinesPage.visibleAxisColumns[index]
+                            onActivated: index => root.settingsVm.setRunAxisLabelSeriesId(graphLinesPage.visibleAxisColumns[index])
                         }
                     }
 

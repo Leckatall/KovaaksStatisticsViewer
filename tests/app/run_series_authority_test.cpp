@@ -6,15 +6,16 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <limits>
 #include <ranges>
 
 #include "app/contracts/expression_dsl.h"
+#include "app/contracts/run_series_editing.h"
 #include "data/interfaces/i_settings_service.h"
 #include "data/graph_configuration_service.h"
 #include "qt_data/graph_configuration_persistence.h"
 #include "usecases/graph_configuration_use_case.h"
-#include "usecases/series_management_use_case.h"
 #include "fake_settings_service.h"
 
 using namespace ksv;
@@ -23,9 +24,67 @@ using namespace qt_data;
 using namespace ksv::tests_support;
 
 namespace {
+    // Graph Lines edits saved straight into the committed configuration, one save per edit, so every
+    // document these tests build goes through the real persistence chain.
+    class CommittedRunSeries {
+    public:
+        explicit CommittedRunSeries(std::shared_ptr<GraphConfigurationUseCase> configuration)
+            : m_configuration(std::move(configuration)) {
+        }
+
+        [[nodiscard]] std::vector<SeriesConfig> getAll() const {
+            return m_configuration->current().configuration->runSeries.series;
+        }
+
+        [[nodiscard]] std::vector<AxisConfig> getAllAxes() const {
+            return m_configuration->current().configuration->runSeries.axes;
+        }
+
+        MutationResult createComputed(const CreateComputedSeriesRequest &request) {
+            return edit([&](RunSeriesDocument &document) { return createComputedSeries(document, request); });
+        }
+
+        MutationResult updateSeries(const UpdateSeriesRequest &request) {
+            return edit([&](RunSeriesDocument &document) { return application::updateSeries(document, request); });
+        }
+
+        MutationResult removeComputed(const SeriesId id) {
+            return edit([&](RunSeriesDocument &document) { return removeSeries(document, id); });
+        }
+
+        MutationResult reorder(const SeriesId id, const uint32_t position) {
+            return edit([&](RunSeriesDocument &document) { return reorderSeries(document, id, position); });
+        }
+
+        MutationResult createAxis(const CreateAxisRequest &request) {
+            return edit([&](RunSeriesDocument &document) { return application::createAxis(document, request); });
+        }
+
+        MutationResult deleteAxis(const AxisId id) {
+            return edit([&](RunSeriesDocument &document) { return application::deleteAxis(document, id); });
+        }
+
+        void onChanged(std::function<void()> callback) {
+            m_configuration->onChanged([callback = std::move(callback)](const GraphConfigurationChange &change) {
+                if (change.runSeries) callback();
+            });
+        }
+
+    private:
+        MutationResult edit(const std::function<MutationResult(RunSeriesDocument &)> &mutate) {
+            auto candidate = *m_configuration->current().configuration;
+            auto result = mutate(candidate.runSeries);
+            if (result.succeeded() && !m_configuration->save(candidate).accepted())
+                result.failure = SeriesMutationFailureCode::ConfigurationRejected;
+            return result;
+        }
+
+        std::shared_ptr<GraphConfigurationUseCase> m_configuration;
+    };
+
     // The whole chain App::App() builds over the stored document; each call is a fresh application start.
-    std::shared_ptr<SeriesManagementUseCase> open(const std::shared_ptr<ISettingsService> &settings) {
-        return std::make_shared<SeriesManagementUseCase>(std::make_shared<GraphConfigurationUseCase>(
+    std::shared_ptr<CommittedRunSeries> open(const std::shared_ptr<ISettingsService> &settings) {
+        return std::make_shared<CommittedRunSeries>(std::make_shared<GraphConfigurationUseCase>(
             std::make_shared<data::GraphConfigurationService>(
                 std::make_shared<GraphConfigurationPersistence>(settings))));
     }
@@ -49,7 +108,7 @@ namespace {
     class RunSeriesAuthorityTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSettingsService> settings = std::make_shared<FakeSettingsService>();
-        std::shared_ptr<SeriesManagementUseCase> store;
+        std::shared_ptr<CommittedRunSeries> store;
 
         void makeStore() { store = open(settings); }
 
@@ -209,82 +268,6 @@ namespace {
         const auto exhausted = reopened->createAxis({"After maximum"});
         ASSERT_TRUE(exhausted.failure);
         EXPECT_EQ(*exhausted.failure, SeriesMutationFailureCode::AxisIdExhausted);
-    }
-
-    TEST_F(RunSeriesAuthorityTest, DraftMutationDoesNotReachDiskUntilCommitted) {
-        makeStore();
-        store->beginDraft();
-        ASSERT_TRUE(store->createComputed(request()).succeeded());
-        const int writesAfterMutation = settings->document_writes;
-
-        const auto reopened = open(settings);
-        EXPECT_EQ(reopened->getAll().size(), 9U);
-        EXPECT_EQ(settings->document_writes, writesAfterMutation);
-    }
-
-    TEST_F(RunSeriesAuthorityTest, DiscardDraftRestoresPreDraftStateAndFiresOnChangedOnce) {
-        makeStore();
-        const auto beforeDraft = store->getAll();
-        store->beginDraft();
-        ASSERT_TRUE(store->createComputed(request()).succeeded());
-
-        int notifications = 0;
-        store->onChanged([&] { ++notifications; });
-        store->discardDraft();
-
-        const auto after = store->getAll();
-        ASSERT_EQ(after.size(), beforeDraft.size());
-        for (size_t i = 0; i < after.size(); ++i) {
-            EXPECT_EQ(after[i].id, beforeDraft[i].id);
-            EXPECT_EQ(after[i].presentation.name, beforeDraft[i].presentation.name);
-        }
-        EXPECT_EQ(notifications, 1);
-    }
-
-    TEST_F(RunSeriesAuthorityTest, CommitDraftWritesOnceReflectingFinalShadowState) {
-        makeStore();
-        store->beginDraft();
-        ASSERT_TRUE(store->createComputed(request()).succeeded());
-        ASSERT_TRUE(store->createComputed(request()).succeeded());
-        const int writesDuringDraft = settings->document_writes;
-
-        ASSERT_TRUE(store->commitDraft().succeeded());
-
-        EXPECT_EQ(settings->document_writes, writesDuringDraft + 1);
-        const auto reopened = open(settings);
-        EXPECT_EQ(reopened->getAll().size(), 11U);
-    }
-
-    TEST_F(RunSeriesAuthorityTest, HasPendingChangesTracksDraftMutationsAndResolution) {
-        makeStore();
-        EXPECT_FALSE(store->hasPendingChanges());
-
-        store->beginDraft();
-        EXPECT_FALSE(store->hasPendingChanges());
-
-        ASSERT_TRUE(store->createComputed(request()).succeeded());
-        EXPECT_TRUE(store->hasPendingChanges());
-
-        store->discardDraft();
-        EXPECT_FALSE(store->hasPendingChanges());
-
-        store->beginDraft();
-        ASSERT_TRUE(store->createComputed(request()).succeeded());
-        ASSERT_TRUE(store->commitDraft().succeeded());
-        EXPECT_FALSE(store->hasPendingChanges());
-    }
-
-    TEST_F(RunSeriesAuthorityTest, CommitOrDiscardDraftWithNoActiveDraftIsANoOp) {
-        makeStore();
-        const int writesBefore = settings->document_writes;
-        int notifications = 0;
-        store->onChanged([&] { ++notifications; });
-
-        EXPECT_TRUE(store->commitDraft().succeeded());
-        store->discardDraft();
-
-        EXPECT_EQ(settings->document_writes, writesBefore);
-        EXPECT_EQ(notifications, 0);
     }
 
     TEST_F(RunSeriesAuthorityTest, UpdatesDeletesAndReordersWithinTypedPermissions) {
@@ -527,44 +510,6 @@ namespace {
         ASSERT_TRUE(store->updateSeries({.id = SeriesId{7}, .yAxisId = std::optional<AxisId>{std::nullopt}}).succeeded());
         const auto configs = store->getAll();
         const auto score = std::ranges::find(configs, SeriesId{7}, &SeriesConfig::id);
-        ASSERT_NE(score, configs.end());
-        EXPECT_FALSE(score->yAxisId);
-    }
-
-    TEST_F(RunSeriesAuthorityTest, DraftPersistsAxesAndAssignmentsOnlyOnCommit) {
-        makeStore();
-        store->beginDraft();
-        const auto created = store->createAxis({"Draft"});
-        ASSERT_TRUE(created.createdAxisId);
-        ASSERT_TRUE(store->updateSeries({.id = SeriesId{1}, .yAxisId = created.createdAxisId}).succeeded());
-        const auto beforeCommit = open(settings);
-        EXPECT_EQ(beforeCommit->getAllAxes().size(), 2U);
-        const auto beforeConfigs = beforeCommit->getAll();
-        const auto beforeScore = std::ranges::find(beforeConfigs, SeriesId{1}, &SeriesConfig::id);
-        ASSERT_NE(beforeScore, beforeConfigs.end());
-        EXPECT_FALSE(beforeScore->yAxisId);
-        ASSERT_TRUE(store->commitDraft().succeeded());
-        const auto afterCommit = open(settings);
-        EXPECT_EQ(afterCommit->getAllAxes().size(), 3U);
-        const auto afterConfigs = afterCommit->getAll();
-        const auto afterScore = std::ranges::find(afterConfigs, SeriesId{1}, &SeriesConfig::id);
-        ASSERT_NE(afterScore, afterConfigs.end());
-        EXPECT_EQ(afterScore->yAxisId, created.createdAxisId);
-    }
-
-    TEST_F(RunSeriesAuthorityTest, DiscardDraftRestoresAxesAndSeriesAssignments) {
-        makeStore();
-        store->beginDraft();
-        const auto created = store->createAxis({"Draft"});
-        ASSERT_TRUE(created.createdAxisId);
-        ASSERT_TRUE(store->updateSeries({.id = SeriesId{1}, .yAxisId = created.createdAxisId}).succeeded());
-        ASSERT_TRUE(store->hasPendingChanges());
-        store->discardDraft();
-
-        EXPECT_FALSE(store->hasPendingChanges());
-        EXPECT_EQ(store->getAllAxes().size(), 2U);
-        const auto configs = store->getAll();
-        const auto score = std::ranges::find(configs, SeriesId{1}, &SeriesConfig::id);
         ASSERT_NE(score, configs.end());
         EXPECT_FALSE(score->yAxisId);
     }

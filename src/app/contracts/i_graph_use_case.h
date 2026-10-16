@@ -5,6 +5,7 @@
 #ifndef KOVAAKSSTATSVIEWER_I_GRAPH_USE_CASE_H
 #define KOVAAKSSTATSVIEWER_I_GRAPH_USE_CASE_H
 #include <functional>
+#include <optional>
 #include <string>
 
 #include "graph_info.h"
@@ -35,6 +36,10 @@ namespace ksv::application {
         [[nodiscard]] virtual double getRunDuration() = 0;
 
         virtual void onSeriesConfigChanged(std::function<void()>) = 0;
+
+        // The committed Y-axis-label series; absent means the first visible series.
+        [[nodiscard]] virtual std::optional<SeriesId> getAxisLabelSeriesId() = 0;
+        virtual void onAxisLabelChanged(std::function<void()>) = 0;
     };
 }
 

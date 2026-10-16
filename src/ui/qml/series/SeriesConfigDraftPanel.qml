@@ -182,25 +182,26 @@ Pane {
             Layout.fillWidth: true
             color: Theme.error
             objectName: "seriesDraftErrorLabel"
+            text: (root.settingsVm.issues || []).length > 0
+                  ? qsTr("Changes weren't saved because some settings are invalid. Your edits are still here; correct them and save again.")
+                  : ""
             visible: text.length > 0
             wrapMode: Text.WordWrap
         }
+        // These act on the whole settings visit, which has one working copy for every section.
         RowLayout {
             Layout.fillWidth: true
             Button {
                 enabled: root.settingsVm.pendingChanges
                 objectName: "saveGraphLinesButton"
-                text: qsTr("Save Graph Lines")
-                onClicked: {
-                    const result = root.settingsVm.commitSeriesDraft()
-                    seriesDraftErrorLabel.text = result && result.succeeded === false ? qsTr("Couldn't save graph line changes. Your edits are still here — try again.") : ""
-                }
+                text: qsTr("Save Changes")
+                onClicked: root.settingsVm.save()
             }
             Button {
                 enabled: root.settingsVm.pendingChanges
                 objectName: "discardGraphLineChangesButton"
-                text: qsTr("Discard Graph Line Changes")
-                onClicked: root.settingsVm.discardSeriesDraft()
+                text: qsTr("Discard Changes")
+                onClicked: root.settingsVm.revertChanges()
             }
         }
     }

@@ -124,26 +124,50 @@ namespace {
         EXPECT_EQ(viaUseCase.revision, viaService.revision);
     }
 
-    // The run graph draws committed configuration only: a Graph Lines visit's edits stay off the
-    // dashboard until the visit saves, and the save goes through the injected persistence port.
-    TEST_F(CompositionRootTest, GraphLinesDraftEditsReachTheRunGraphOnlyWhenSaved) {
+    // The run graph draws committed configuration only: a settings visit's Graph Lines and axis-label
+    // edits stay off the dashboard until the visit saves, and the save goes through the injected
+    // persistence port.
+    TEST_F(CompositionRootTest, SettingsVisitEditsReachTheRunGraphOnlyWhenSaved) {
         auto *settingsVm = app->settingsVm();
-        settingsVm->beginSeriesDraft();
+        settingsVm->beginVisit();
         const auto before = app->graphVm()->enabledSeriesIds();
+        const auto labelBefore = app->graphVm()->axisLabelSeriesId();
+        const auto writtenBefore = env->graphConfigurationPersistence->load();
 
         const auto created = settingsVm->createComputedSeries("Draft line", QColor("#4CAF50"), 2.0, true, "");
         ASSERT_TRUE(created["succeeded"].toBool());
         const auto id = created["createdId"].toString();
+        settingsVm->setRunAxisLabelSeriesId(id);
 
         EXPECT_TRUE(settingsVm->hasPendingChanges());
         EXPECT_EQ(app->graphVm()->enabledSeriesIds(), before);
+        EXPECT_EQ(app->graphVm()->axisLabelSeriesId(), labelBefore);
+        EXPECT_EQ(env->graphConfigurationPersistence->load(), writtenBefore);
 
-        ASSERT_TRUE(settingsVm->commitSeriesDraft()["succeeded"].toBool());
+        ASSERT_TRUE(settingsVm->save()["accepted"].toBool());
 
         EXPECT_FALSE(settingsVm->hasPendingChanges());
+        EXPECT_TRUE(settingsVm->isVisitOpen());
         EXPECT_TRUE(app->graphVm()->enabledSeriesIds().contains(id));
+        EXPECT_EQ(app->graphVm()->axisLabelSeriesId(), id);
         const auto stored = env->graphConfigurationPersistence->load();
         EXPECT_EQ(stored, *app->graphConfigurationService()->snapshot().configuration);
+        settingsVm->endVisit();
+    }
+
+    TEST_F(CompositionRootTest, EndingASettingsVisitDropsItsEditsWithoutWriting) {
+        auto *settingsVm = app->settingsVm();
+        settingsVm->beginVisit();
+        const auto before = app->graphVm()->enabledSeriesIds();
+        const auto committed = app->graphConfigurationService()->snapshot();
+        ASSERT_TRUE(settingsVm->createComputedSeries("Dropped", QColor("#4CAF50"), 2.0, true, "")["succeeded"].toBool());
+
+        settingsVm->endVisit();
+
+        EXPECT_FALSE(settingsVm->hasPendingChanges());
+        EXPECT_EQ(app->graphVm()->enabledSeriesIds(), before);
+        EXPECT_EQ(app->graphConfigurationService()->snapshot().revision, committed.revision);
+        EXPECT_EQ(env->graphConfigurationPersistence->load(), *committed.configuration);
     }
 
     TEST_F(CompositionRootTest, AQuickPatchIsCommittedAndStored) {

@@ -9,13 +9,14 @@
 #include "app/contracts/i_graph_configuration_use_case.h"
 
 namespace ksv::tests_support {
-    // Accepts every save and patch without validating; tests set `configuration` directly and call
-    // publish() to simulate a committed change.
+    // Accepts every save and patch without validating unless `rejectSavesWith` is set; tests set
+    // `configuration` directly and call publish() to simulate a committed change.
     class FakeGraphConfigurationUseCase final : public application::IGraphConfigurationUseCase {
     public:
         application::GraphConfiguration configuration = application::defaultGraphConfiguration();
         std::uint64_t revision = 1;
         std::vector<application::GraphConfiguration> saves;
+        std::vector<application::GraphConfigurationIssue> rejectSavesWith;
         std::vector<std::pair<application::GraphKey, application::GraphQuickPatch>> patches;
         std::vector<std::function<void(const application::GraphConfigurationChange &)>> callbacks;
 
@@ -33,6 +34,7 @@ namespace ksv::tests_support {
 
         application::GraphConfigurationSaveResult save(const application::GraphConfiguration &candidate) override {
             saves.push_back(candidate);
+            if (!rejectSavesWith.empty()) return {rejectSavesWith, revision};
             configuration = candidate;
             return {{}, ++revision};
         }

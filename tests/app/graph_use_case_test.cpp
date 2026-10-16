@@ -193,4 +193,18 @@ namespace {
         fake_configuration->publish({0, {}, true, false});
         EXPECT_EQ(notifications, 1);
     }
+
+    TEST_F(GraphUseCaseTest, AxisLabelIsReadFromCommittedConfigurationAndFollowsOnlyItsChanges) {
+        int notifications = 0;
+        use_case.onAxisLabelChanged([&] { ++notifications; });
+        EXPECT_FALSE(use_case.getAxisLabelSeriesId());
+
+        fake_configuration->configuration.runAxisLabelSeriesId = SeriesId{4};
+        fake_configuration->publish({0, {}, true, false});
+        EXPECT_EQ(notifications, 0);
+
+        fake_configuration->publish({0, {}, false, true});
+        EXPECT_EQ(notifications, 1);
+        EXPECT_EQ(use_case.getAxisLabelSeriesId(), SeriesId{4});
+    }
 }

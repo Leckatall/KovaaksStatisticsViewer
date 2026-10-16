@@ -58,6 +58,8 @@ namespace {
         double run_duration = 0.0;
         bool has_current_run = false;
         bool has_performance = false;
+        std::optional<SeriesId> axis_label;
+        std::function<void()> axis_label_callback;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
         void load_latest_perf() override { load_latest_perf_calls++; }
@@ -66,6 +68,8 @@ namespace {
         bool currentRunHasPerformance() const override { return has_performance; }
         void onCurrentPerfChanged(std::function<void()>) override {}
         void onSeriesConfigChanged(std::function<void()>) override {}
+        std::optional<SeriesId> getAxisLabelSeriesId() override { return axis_label; }
+        void onAxisLabelChanged(std::function<void()> callback) override { axis_label_callback = std::move(callback); }
 
         std::vector<SeriesConfig> getSeriesConfigs() override { return series_configs; }
         std::optional<SeriesPoints> getSeriesValues(const SeriesId id) override {
@@ -427,5 +431,18 @@ namespace {
 
         EXPECT_EQ(view_model.columnForSeriesId("5"), kKills);
         EXPECT_EQ(view_model.series({kKills}).front()->name(), "Kills");
+    }
+
+    TEST_F(GraphViewModelTest, AxisLabelSeriesIdFollowsTheCommittedChoice) {
+        EXPECT_EQ(view_model.axisLabelSeriesId(), "");
+        ASSERT_TRUE(static_cast<bool>(fake_use_case->axis_label_callback));
+        const QSignalSpy spy(&view_model, &GraphViewModel::axisLabelSeriesIdChanged);
+
+        fake_use_case->axis_label = SeriesId{7};
+        fake_use_case->axis_label_callback();
+        fake_use_case->axis_label_callback();
+
+        EXPECT_EQ(view_model.axisLabelSeriesId(), "7");
+        EXPECT_EQ(spy.count(), 1);
     }
 }

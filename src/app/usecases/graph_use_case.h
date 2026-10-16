@@ -26,8 +26,8 @@ namespace ksv::application {
             : m_session_controller(std::move(session_controller)), m_configuration(std::move(configuration)),
               m_average(std::move(average)) {
             if (m_configuration) m_configuration->onChanged([this](const GraphConfigurationChange &change) {
-                if (!change.runSeries) return;
-                for (const auto &callback : m_config_callbacks) callback();
+                if (change.runSeries) for (const auto &callback : m_config_callbacks) callback();
+                if (change.runAxisLabel) for (const auto &callback : m_axis_label_callbacks) callback();
             });
         }
 
@@ -93,6 +93,14 @@ namespace ksv::application {
 
         void onSeriesConfigChanged(std::function<void()> callback) override { m_config_callbacks.push_back(std::move(callback)); }
 
+        [[nodiscard]] std::optional<SeriesId> getAxisLabelSeriesId() override {
+            return m_configuration->current().configuration->runAxisLabelSeriesId;
+        }
+
+        void onAxisLabelChanged(std::function<void()> callback) override {
+            m_axis_label_callbacks.push_back(std::move(callback));
+        }
+
     private:
         // Single-entry cache of the reference run's buckets, shared by getSeriesValues()'s x-fold
         // and getRunDuration(). Keyed by run id; a run is immutable under its id, so an id match is
@@ -111,6 +119,7 @@ namespace ksv::application {
         std::shared_ptr<IGraphConfigurationUseCase> m_configuration;
         std::shared_ptr<IAverageLineUseCase> m_average;
         std::vector<std::function<void()>> m_config_callbacks;
+        std::vector<std::function<void()>> m_axis_label_callbacks;
         std::optional<domain::ScenarioRunId> m_cachedRunId;
         BucketedRun m_cachedBuckets;
 

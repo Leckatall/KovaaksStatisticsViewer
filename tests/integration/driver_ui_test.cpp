@@ -209,9 +209,9 @@ namespace {
         }
         EXPECT_TRUE(listed);
         // The button and its own label both match text:; single-target commands take the button.
-        const auto close = run("get", {{"selector", "win:settingsDialog/text:Close"}, {"property", "text"}});
-        EXPECT_EQ(close.value("target").toObject().value("type").toString(), "Button");
-        EXPECT_EQ(close.value("target").toObject().value("window").toString(), "settingsDialog");
+        const auto cancel = run("get", {{"selector", "win:settingsDialog/text:Cancel"}, {"property", "text"}});
+        EXPECT_EQ(cancel.value("target").toObject().value("type").toString(), "Button");
+        EXPECT_EQ(cancel.value("target").toObject().value("window").toString(), "settingsDialog");
     }
 
     TEST_F(DriverUiTest, ScreenshotsCaptureTheWholeWindow) {

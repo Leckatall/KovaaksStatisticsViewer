@@ -51,7 +51,6 @@ ApplicationWindow {
         id: settingsDialog
         settingsVm: root.settingsVm
         sessionVm: root.sessionVm
-        visualSettings: visualSettings
     }
 
     AboutDialog {

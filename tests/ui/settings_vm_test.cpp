@@ -1,16 +1,15 @@
 //
-// SettingsViewModel tests using a hand-written fake ISettingsService.
+// SettingsViewModel tests using hand-written fakes of its settings, profile and configuration ports.
 //
 
 #include <gtest/gtest.h>
 
 #include <QSignalSpy>
 
-#include <type_traits>
-
 #include "app/contracts/expression_dsl.h"
 #include "settings_vm.h"
 #include "series_expression_editor_model.h"
+#include "fake_graph_configuration_use_case.h"
 #include "fake_profile_service.h"
 #include "fake_settings_service.h"
 
@@ -20,54 +19,6 @@ using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
-    class FakeSeriesManagementUseCase final : public ISeriesManagementUseCase {
-    public:
-        [[nodiscard]] std::vector<SeriesConfig> getAll() const override { return configs; }
-        MutationResult setSeriesEnabled(const SeriesId id, const bool enabled) override {
-            lastSetEnabled = std::pair{id, enabled};
-            return {};
-        }
-        MutationResult createComputed(const CreateComputedSeriesRequest &request) override {
-            lastCreateComputedRequest = request;
-            return {};
-        }
-        MutationResult updateSeries(const UpdateSeriesRequest &request) override {
-            lastUpdateSeriesRequest = request;
-            return {};
-        }
-        MutationResult removeComputed(SeriesId) override { return {}; }
-        MutationResult reorder(const SeriesId id, const uint32_t position) override {
-            lastReorder = std::pair{id, position};
-            return {};
-        }
-        [[nodiscard]] std::vector<AxisConfig> getAllAxes() const override { return axes; }
-        MutationResult createAxis(const CreateAxisRequest &) override { ++createAxisCalls; return createAxisResult; }
-        MutationResult deleteAxis(AxisId) override { ++deleteAxisCalls; return {}; }
-        void onChanged(std::function<void()> callback) override { callback_ = std::move(callback); }
-
-        void beginDraft() override { ++beginDraftCalls; }
-        MutationResult commitDraft() override { ++commitDraftCalls; return commitDraftResult; }
-        void discardDraft() override { ++discardDraftCalls; }
-        [[nodiscard]] bool hasPendingChanges() const override { return pendingChanges; }
-
-        std::vector<SeriesConfig> configs;
-        std::vector<AxisConfig> axes;
-        std::optional<std::pair<SeriesId, bool>> lastSetEnabled;
-        std::optional<std::pair<SeriesId, uint32_t>> lastReorder;
-        std::optional<CreateComputedSeriesRequest> lastCreateComputedRequest;
-        std::optional<UpdateSeriesRequest> lastUpdateSeriesRequest;
-        std::function<void()> callback_;
-
-        int createAxisCalls = 0;
-        int deleteAxisCalls = 0;
-        int beginDraftCalls = 0;
-        int commitDraftCalls = 0;
-        int discardDraftCalls = 0;
-        bool pendingChanges = false;
-        MutationResult commitDraftResult;
-        MutationResult createAxisResult;
-    };
-
     class SettingsViewModelTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSettingsService> fake_service = [] {
@@ -77,9 +28,28 @@ namespace {
             return settings;
         }();
         std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
-        std::shared_ptr<FakeSeriesManagementUseCase> seriesManagement = std::make_shared<FakeSeriesManagementUseCase>();
+        std::shared_ptr<FakeGraphConfigurationUseCase> configuration =
+            std::make_shared<FakeGraphConfigurationUseCase>();
+
         std::unique_ptr<SettingsViewModel> make_view_model() {
-            return std::make_unique<SettingsViewModel>(fake_service, fake_profile_service, seriesManagement);
+            return std::make_unique<SettingsViewModel>(fake_service, fake_profile_service, configuration);
+        }
+
+        static QVariantMap row(const SettingsViewModel &viewModel, const QString &id) {
+            for (const auto &value: viewModel.getAllSeriesConfigs())
+                if (value.toMap()["id"].toString() == id) return value.toMap();
+            return {};
+        }
+
+        static QStringList rowIds(const SettingsViewModel &viewModel) {
+            QStringList ids;
+            for (const auto &value: viewModel.getAllSeriesConfigs()) ids.append(value.toMap()["id"].toString());
+            return ids;
+        }
+
+        static GraphConfigurationIssue windowIssue() {
+            return {GraphConfigurationIssueCode::NonPositiveCount, GraphKey::DailyPlaytime, "dataRange", "",
+                    "averagingWindow"};
         }
     };
 
@@ -185,13 +155,340 @@ namespace {
         EXPECT_TRUE(view_model->isProfileLoaded());
     }
 
-    TEST_F(SettingsViewModelTest, HasNoMainGraphSeriesDependency) {
-        auto view_model = std::make_unique<SettingsViewModel>(fake_service, fake_profile_service, seriesManagement);
-        EXPECT_TRUE(view_model->getKovaaksDir().isValid());
+    // ---- Visit lifecycle ----------------------------------------------------------------------
+
+    TEST_F(SettingsViewModelTest, OutsideAVisitRowsAreTheCommittedConfiguration) {
+        const auto view_model = make_view_model();
+
+        EXPECT_FALSE(view_model->isVisitOpen());
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
+        EXPECT_EQ(view_model->getAllAxes().size(), 2);
     }
 
+    TEST_F(SettingsViewModelTest, OutsideAVisitEditsAreRefusedAndNothingIsSaved) {
+        const auto view_model = make_view_model();
+
+        EXPECT_FALSE(view_model->createComputedSeries("Line", "#123456", 2.0, true, "")["succeeded"].toBool());
+        view_model->setRunAxisLabelSeriesId("2");
+
+        EXPECT_TRUE(configuration->saves.empty());
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
+    }
+
+    TEST_F(SettingsViewModelTest, BeginVisitSeedsACleanWorkingCopyFromTheCommittedConfiguration) {
+        configuration->configuration.runAxisLabelSeriesId = SeriesId{7};
+        const auto view_model = make_view_model();
+        const QSignalSpy visitSpy(view_model.get(), &SettingsViewModel::visitOpenChanged);
+
+        view_model->beginVisit();
+
+        EXPECT_TRUE(view_model->isVisitOpen());
+        EXPECT_EQ(visitSpy.count(), 1);
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "7");
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
+    }
+
+    // Reopening or focusing an already open Settings window calls beginVisit() again; it must not
+    // reseed over the visit's edits, even when the committed configuration moved on meanwhile.
+    TEST_F(SettingsViewModelTest, BeginVisitOnAnOpenVisitNeverReseeds) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const auto created = view_model->createComputedSeries("Draft", "#123456", 2.0, true, "");
+        configuration->configuration.runSeries.series.pop_back();
+
+        view_model->beginVisit();
+
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        EXPECT_TRUE(rowIds(*view_model).contains(created["createdId"].toString()));
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 10);
+    }
+
+    TEST_F(SettingsViewModelTest, DraftEditsNeverReachTheApplicationBoundary) {
+        const auto view_model = make_view_model();
+        const auto committed = configuration->configuration;
+        view_model->beginVisit();
+
+        const auto created = view_model->createComputedSeries("Draft", "#123456", 2.0, true, "Add(SCORE, HITS)");
+        ASSERT_TRUE(created["succeeded"].toBool());
+        const auto axis = view_model->createAxis("Draft axis");
+        ASSERT_TRUE(axis["succeeded"].toBool());
+        ASSERT_TRUE(view_model->updateSeriesAxis("1", axis["createdAxisId"].toString())["succeeded"].toBool());
+        ASSERT_TRUE(view_model->setSeriesEnabled("2", false)["succeeded"].toBool());
+        ASSERT_TRUE(view_model->reorderSeries("3", 0)["succeeded"].toBool());
+        ASSERT_TRUE(view_model->removeComputedSeries("9")["succeeded"].toBool());
+        view_model->setRunAxisLabelSeriesId("4");
+
+        EXPECT_TRUE(configuration->saves.empty());
+        EXPECT_TRUE(configuration->patches.empty());
+        EXPECT_EQ(configuration->configuration, committed);
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "4");
+        EXPECT_EQ(row(*view_model, "1")["yAxisId"].toString(), axis["createdAxisId"].toString());
+        EXPECT_FALSE(row(*view_model, "2")["enabled"].toBool());
+        EXPECT_EQ(row(*view_model, "3")["displayPosition"].toInt(), 0);
+        EXPECT_FALSE(rowIds(*view_model).contains("9"));
+        EXPECT_EQ(view_model->getAllAxes().size(), 3);
+    }
+
+    TEST_F(SettingsViewModelTest, EditsNotifyTheEditorAndTheDirtyState) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const QSignalSpy configSpy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
+        const QSignalSpy pendingSpy(view_model.get(), &SettingsViewModel::pendingChangesChanged);
+
+        view_model->setSeriesEnabled("2", false);
+        view_model->setSeriesEnabled("3", false);
+
+        EXPECT_EQ(configSpy.count(), 2);
+        EXPECT_EQ(pendingSpy.count(), 1);
+    }
+
+    TEST_F(SettingsViewModelTest, UndoingAnEditByHandLeavesTheVisitClean) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        view_model->setSeriesEnabled("2", false);
+        view_model->setSeriesEnabled("2", true);
+
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, SaveSubmitsTheWholeWorkingCopyOnceAndKeepsTheVisitOpenAndClean) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const auto created = view_model->createComputedSeries("Saved", "#123456", 2.0, true, "");
+        view_model->setRunAxisLabelSeriesId(created["createdId"].toString());
+
+        const auto result = view_model->save();
+
+        EXPECT_TRUE(result["accepted"].toBool());
+        ASSERT_EQ(configuration->saves.size(), 1U);
+        const auto &candidate = configuration->saves.front();
+        EXPECT_EQ(candidate.runSeries.series.size(), 10U);
+        ASSERT_TRUE(candidate.runAxisLabelSeriesId);
+        EXPECT_EQ(QString::number(candidate.runAxisLabelSeriesId->value), created["createdId"].toString());
+        EXPECT_TRUE(view_model->isVisitOpen());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, SaveCarriesPreferencesCommittedBeforeTheVisit) {
+        configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 9;
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        view_model->setSeriesEnabled("2", false);
+
+        view_model->save();
+
+        ASSERT_EQ(configuration->saves.size(), 1U);
+        EXPECT_EQ(configuration->saves.front().preferences(GraphKey::DailyPlaytime).averagingWindowDays, 9);
+    }
+
+    TEST_F(SettingsViewModelTest, RevertRestoresTheLastSuccessfulSaveRatherThanTheInitialSeed) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const auto saved = view_model->createComputedSeries("Saved", "#123456", 2.0, true, "");
+        ASSERT_TRUE(view_model->save()["accepted"].toBool());
+        const auto unsaved = view_model->createComputedSeries("Unsaved", "#123456", 2.0, true, "");
+        view_model->setRunAxisLabelSeriesId("5");
+
+        view_model->revertChanges();
+
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_TRUE(rowIds(*view_model).contains(saved["createdId"].toString()));
+        EXPECT_FALSE(rowIds(*view_model).contains(unsaved["createdId"].toString()));
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
+        EXPECT_EQ(configuration->saves.size(), 1U);
+    }
+
+    TEST_F(SettingsViewModelTest, EndingAVisitDropsItsEditsAndTheNextVisitSeedsFromTheLastSave) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const auto saved = view_model->createComputedSeries("Saved", "#123456", 2.0, true, "");
+        view_model->save();
+        const auto unsaved = view_model->createComputedSeries("Unsaved", "#123456", 2.0, true, "");
+
+        view_model->endVisit();
+
+        EXPECT_FALSE(view_model->isVisitOpen());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        view_model->beginVisit();
+        EXPECT_TRUE(rowIds(*view_model).contains(saved["createdId"].toString()));
+        EXPECT_FALSE(rowIds(*view_model).contains(unsaved["createdId"].toString()));
+        EXPECT_EQ(configuration->saves.size(), 1U);
+    }
+
+    TEST_F(SettingsViewModelTest, ARejectedSaveRetainsTheWorkingCopyAndReportsEveryIssueByLocation) {
+        configuration->rejectSavesWith = {
+            windowIssue(),
+            {GraphConfigurationIssueCode::UnknownAxis, GraphKey::Run, "graphLines", "records[0].yAxisId", ""}
+        };
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        view_model->setSeriesEnabled("2", false);
+        const QSignalSpy issuesSpy(view_model.get(), &SettingsViewModel::issuesChanged);
+
+        const auto result = view_model->save();
+
+        EXPECT_FALSE(result["accepted"].toBool());
+        EXPECT_EQ(issuesSpy.count(), 1);
+        EXPECT_TRUE(view_model->isVisitOpen());
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        EXPECT_FALSE(row(*view_model, "2")["enabled"].toBool());
+        const auto issues = view_model->issues();
+        ASSERT_EQ(issues.size(), 2);
+        EXPECT_EQ(result["issues"].toList(), issues);
+        const auto first = issues[0].toMap();
+        EXPECT_EQ(first["graph"].toString(), "dailyPlaytime");
+        EXPECT_EQ(first["group"].toString(), "dataRange");
+        EXPECT_EQ(first["target"].toString(), "");
+        EXPECT_EQ(first["field"].toString(), "averagingWindow");
+        EXPECT_EQ(first["code"].toString(), "nonPositiveCount");
+        const auto second = issues[1].toMap();
+        EXPECT_EQ(second["graph"].toString(), "run");
+        EXPECT_EQ(second["group"].toString(), "graphLines");
+        EXPECT_EQ(second["target"].toString(), "records[0].yAxisId");
+        EXPECT_EQ(second["code"].toString(), "unknownAxis");
+    }
+
+    TEST_F(SettingsViewModelTest, ASuccessfulSaveOrARevertClearsEarlierIssues) {
+        configuration->rejectSavesWith = {windowIssue()};
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        view_model->setSeriesEnabled("2", false);
+        view_model->save();
+        ASSERT_EQ(view_model->issues().size(), 1);
+
+        configuration->rejectSavesWith.clear();
+        ASSERT_TRUE(view_model->save()["accepted"].toBool());
+        EXPECT_TRUE(view_model->issues().isEmpty());
+
+        configuration->rejectSavesWith = {windowIssue()};
+        view_model->setSeriesEnabled("3", false);
+        view_model->save();
+        ASSERT_EQ(view_model->issues().size(), 1);
+        view_model->revertChanges();
+        EXPECT_TRUE(view_model->issues().isEmpty());
+    }
+
+    // Unparsed text is presentation state, not configuration: it makes the visit dirty, so closing
+    // cannot lose it silently, and it blocks Save without the candidate ever being submitted.
+    TEST_F(SettingsViewModelTest, RawInputCountsAsDirtyAndBlocksSaveWithAnIssueAtItsField) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const QSignalSpy rawSpy(view_model.get(), &SettingsViewModel::rawInputsChanged);
+
+        view_model->setRawInput("dailyPlaytime", "dataRange", "", "averagingWindow", "3x");
+
+        EXPECT_EQ(rawSpy.count(), 1);
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        EXPECT_EQ(view_model->rawInput("dailyPlaytime", "dataRange", "", "averagingWindow").toString(), "3x");
+        EXPECT_FALSE(view_model->rawInput("scenarioHistory", "dataRange", "", "averagingWindow").isValid());
+        ASSERT_EQ(view_model->rawInputs().size(), 1);
+        EXPECT_EQ(view_model->rawInputs()[0].toMap()["text"].toString(), "3x");
+
+        const auto result = view_model->save();
+
+        EXPECT_FALSE(result["accepted"].toBool());
+        EXPECT_TRUE(configuration->saves.empty());
+        ASSERT_EQ(view_model->issues().size(), 1);
+        const auto issue = view_model->issues()[0].toMap();
+        EXPECT_EQ(issue["graph"].toString(), "dailyPlaytime");
+        EXPECT_EQ(issue["field"].toString(), "averagingWindow");
+        EXPECT_EQ(issue["code"].toString(), "unparsedInput");
+    }
+
+    TEST_F(SettingsViewModelTest, ClearingTheOnlyRawInputLeavesTheVisitCleanAndDropsItsIssue) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        view_model->setRawInput("dailyPlaytime", "dataRange", "", "averagingWindow", "3x");
+        view_model->save();
+
+        view_model->clearRawInput("dailyPlaytime", "dataRange", "", "averagingWindow");
+
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_TRUE(view_model->issues().isEmpty());
+    }
+
+    TEST_F(SettingsViewModelTest, RawInputForAnUnknownGraphOrOutsideAVisitIsIgnored) {
+        const auto view_model = make_view_model();
+        view_model->setRawInput("dailyPlaytime", "dataRange", "", "averagingWindow", "3x");
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+
+        view_model->beginVisit();
+        view_model->setRawInput("notAGraph", "dataRange", "", "averagingWindow", "3x");
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    // Graph Lines edits, another graph's unparsed text and the graph selection all live in the one
+    // working copy, so moving between graphs and categories (or refocusing the window) loses none.
+    TEST_F(SettingsViewModelTest, EditsInSeveralSectionsSurviveGraphSwitchesAndRefocusing) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        view_model->setSeriesEnabled("2", false);
+        view_model->setSelectedGraph("scenarioHistory");
+        view_model->setRawInput("scenarioHistory", "dataRange", "", "latestRuns", "ten");
+        view_model->setSelectedGraph("run");
+        view_model->setRunAxisLabelSeriesId("3");
+
+        view_model->beginVisit();
+        view_model->setSelectedGraph("scenarioHistory");
+
+        EXPECT_FALSE(row(*view_model, "2")["enabled"].toBool());
+        EXPECT_EQ(view_model->rawInput("scenarioHistory", "dataRange", "", "latestRuns").toString(), "ten");
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "3");
+        EXPECT_TRUE(configuration->saves.empty());
+    }
+
+    TEST_F(SettingsViewModelTest, SelectedGraphStartsOnTheRunGraphAndIgnoresUnknownKeys) {
+        const auto view_model = make_view_model();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::selectedGraphChanged);
+        EXPECT_EQ(view_model->selectedGraph(), "run");
+
+        view_model->setSelectedGraph("benchmarkRank");
+        view_model->setSelectedGraph("benchmarkRank");
+        view_model->setSelectedGraph("unknown");
+
+        EXPECT_EQ(view_model->selectedGraph(), "benchmarkRank");
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(SettingsViewModelTest, ClearingTheAxisLabelFallsBackToTheFirstVisibleSeries) {
+        configuration->configuration.runAxisLabelSeriesId = SeriesId{4};
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        view_model->setRunAxisLabelSeriesId("");
+        view_model->save();
+
+        ASSERT_EQ(configuration->saves.size(), 1U);
+        EXPECT_FALSE(configuration->saves.front().runAxisLabelSeriesId);
+    }
+
+    TEST_F(SettingsViewModelTest, CommittedChangesRefreshTheEditorOnlyOutsideAVisit) {
+        const auto view_model = make_view_model();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
+
+        configuration->configuration.runSeries.series.pop_back();
+        configuration->publish({0, {}, true, false});
+        EXPECT_EQ(spy.count(), 1);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 8);
+
+        view_model->beginVisit();
+        view_model->setSeriesEnabled("2", false);
+        const auto during = spy.count();
+        configuration->publish({0, {}, false, true});
+        EXPECT_EQ(spy.count(), during);
+        EXPECT_FALSE(row(*view_model, "2")["enabled"].toBool());
+    }
+
+    // ---- Graph Lines rows ---------------------------------------------------------------------
+
     TEST_F(SettingsViewModelTest, GetAllSeriesConfigsReturnsEveryRowAsAVariantMap) {
-        seriesManagement->configs = {
+        configuration->configuration.runSeries.series = {
             SeriesConfig{{1}, {"Score", {{0, 150, 0, 255}, 2.0}, true, 0}, primitive(PrimitiveMetric::Score)},
         };
         const auto view_model = make_view_model();
@@ -205,7 +502,7 @@ namespace {
     }
 
     TEST_F(SettingsViewModelTest, GetAllSeriesConfigsEmitsAnEmptyDslStringForBlankExpression) {
-        seriesManagement->configs = {
+        configuration->configuration.runSeries.series = {
             SeriesConfig{{1}, {"Blank", {{0, 150, 0, 255}, 2.0}, true, 0}, {}},
         };
         const auto view_model = make_view_model();
@@ -216,78 +513,8 @@ namespace {
         EXPECT_EQ(result.first().toMap()["expression"].toString(), "");
     }
 
-    TEST_F(SettingsViewModelTest, CreateComputedSeriesDecodesDslExpression) {
-        const auto view_model = make_view_model();
-
-        view_model->createComputedSeries("Derived", "#123456", 2.0, true, "Add(SCORE, HITS)");
-
-        ASSERT_TRUE(seriesManagement->lastCreateComputedRequest);
-        EXPECT_EQ(encodeExpressionDsl(seriesManagement->lastCreateComputedRequest->expression), "Add(SCORE, HITS)");
-    }
-
-    TEST_F(SettingsViewModelTest, UpdateComputedSeriesTreatsEmptyDslAsABlankExpression) {
-        const auto view_model = make_view_model();
-
-        view_model->updateComputedSeries("7", "Derived", "#123456", 2.0, true, "");
-
-        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest);
-        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest->expression);
-        EXPECT_FALSE(*seriesManagement->lastUpdateSeriesRequest->expression);
-    }
-
-    TEST_F(SettingsViewModelTest, UpdateComputedSeriesRejectsMalformedNonblankDsl) {
-        const auto view_model = make_view_model();
-
-        const auto result = view_model->updateComputedSeries("7", "Derived", "#123456", 2.0, true, "Add(SCORE)");
-
-        EXPECT_FALSE(result.value("succeeded").toBool());
-        EXPECT_FALSE(seriesManagement->lastUpdateSeriesRequest);
-    }
-
-    TEST_F(SettingsViewModelTest, GetAllAxesReturnsIdAndName) {
-        seriesManagement->axes = {AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity}};
-        const auto view_model = make_view_model();
-
-        const auto result = view_model->getAllAxes();
-
-        ASSERT_EQ(result.size(), 1);
-        const auto row = result.first().toMap();
-        EXPECT_EQ(row["id"].toString(), "2");
-        EXPECT_EQ(row["name"].toString(), "Score Family");
-    }
-
-    TEST_F(SettingsViewModelTest, CreateAxisForwardsNameToTheSeriesManagementUseCase) {
-        const auto view_model = make_view_model();
-
-        view_model->createAxis("Custom");
-
-        EXPECT_EQ(seriesManagement->createAxisCalls, 1);
-    }
-
-    TEST_F(SettingsViewModelTest, UpdateSeriesAxisWithAnIdSetsYAxisIdOnTheRequest) {
-        const auto view_model = make_view_model();
-
-        view_model->updateSeriesAxis("7", "2");
-
-        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest.has_value());
-        EXPECT_EQ(seriesManagement->lastUpdateSeriesRequest->id.value, 7U);
-        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest->yAxisId.has_value());
-        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest->yAxisId->has_value());
-        EXPECT_EQ(seriesManagement->lastUpdateSeriesRequest->yAxisId->value().value, 2U);
-    }
-
-    TEST_F(SettingsViewModelTest, UpdateSeriesAxisWithEmptyStringClearsYAxisId) {
-        const auto view_model = make_view_model();
-
-        view_model->updateSeriesAxis("7", "");
-
-        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest.has_value());
-        ASSERT_TRUE(seriesManagement->lastUpdateSeriesRequest->yAxisId.has_value());
-        EXPECT_FALSE(seriesManagement->lastUpdateSeriesRequest->yAxisId->has_value());
-    }
-
     TEST_F(SettingsViewModelTest, GetAllSeriesConfigsIncludesYAxisId) {
-        seriesManagement->configs = {
+        configuration->configuration.runSeries.series = {
             SeriesConfig{SeriesId{7}, {"Score Total", {}, true, 0}, primitive(PrimitiveMetric::Score), AxisId{2}}
         };
         const auto view_model = make_view_model();
@@ -298,82 +525,110 @@ namespace {
         EXPECT_EQ(result.first().toMap()["yAxisId"].toString(), "2");
     }
 
-    TEST_F(SettingsViewModelTest, CreateAxisReturnsCreatedAxisIdAsAString) {
-        seriesManagement->createAxisResult = MutationResult{{}, std::nullopt, false, std::nullopt, AxisId{9}};
+    TEST_F(SettingsViewModelTest, GetAllAxesReturnsIdAndName) {
+        configuration->configuration.runSeries.axes = {
+            AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity}
+        };
         const auto view_model = make_view_model();
+
+        const auto result = view_model->getAllAxes();
+
+        ASSERT_EQ(result.size(), 1);
+        const auto row = result.first().toMap();
+        EXPECT_EQ(row["id"].toString(), "2");
+        EXPECT_EQ(row["name"].toString(), "Score Family");
+    }
+
+    // ---- Graph Lines edits --------------------------------------------------------------------
+
+    TEST_F(SettingsViewModelTest, CreateComputedSeriesDecodesDslExpression) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        const auto created = view_model->createComputedSeries("Derived", "#123456", 2.0, true, "Add(SCORE, HITS)");
+
+        EXPECT_EQ(created["createdId"].toString(), "10");
+        EXPECT_EQ(row(*view_model, "10")["expression"].toString(), "Add(SCORE, HITS)");
+        EXPECT_EQ(row(*view_model, "10")["name"].toString(), "Derived");
+    }
+
+    TEST_F(SettingsViewModelTest, UpdateComputedSeriesTreatsEmptyDslAsABlankExpression) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        const auto result = view_model->updateComputedSeries("7", "Derived", "#123456", 2.0, true, "");
+
+        EXPECT_TRUE(result["succeeded"].toBool());
+        EXPECT_EQ(row(*view_model, "7")["expression"].toString(), "");
+        EXPECT_EQ(row(*view_model, "7")["name"].toString(), "Derived");
+    }
+
+    TEST_F(SettingsViewModelTest, UpdateComputedSeriesRejectsMalformedNonblankDsl) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        const auto result = view_model->updateComputedSeries("7", "Derived", "#123456", 2.0, true, "Add(SCORE)");
+
+        EXPECT_FALSE(result.value("succeeded").toBool());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, AFailedEditLeavesTheWorkingCopyUntouched) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        const auto result = view_model->removeComputedSeries("99");
+
+        EXPECT_FALSE(result["succeeded"].toBool());
+        EXPECT_EQ(result["failure"].toInt(), static_cast<int>(SeriesMutationFailureCode::UnknownSeriesId));
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, CreateAxisReturnsCreatedAxisIdAsAString) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
 
         const auto result = view_model->createAxis("Custom");
 
-        EXPECT_EQ(result["createdAxisId"].toString(), "9");
+        EXPECT_EQ(result["createdAxisId"].toString(), "3");
+        EXPECT_EQ(view_model->getAllAxes().size(), 3);
     }
 
-    TEST_F(SettingsViewModelTest, SetSeriesEnabledForwardsToTheSeriesManagementUseCase) {
+    TEST_F(SettingsViewModelTest, UpdateSeriesAxisWithAnIdAssignsAndWithEmptyStringClears) {
         const auto view_model = make_view_model();
-        view_model->setSeriesEnabled("3", false);
-        ASSERT_TRUE(seriesManagement->lastSetEnabled);
-        EXPECT_EQ(seriesManagement->lastSetEnabled->first.value, 3U);
-        EXPECT_FALSE(seriesManagement->lastSetEnabled->second);
+        view_model->beginVisit();
+
+        ASSERT_TRUE(view_model->updateSeriesAxis("1", "2")["succeeded"].toBool());
+        EXPECT_EQ(row(*view_model, "1")["yAxisId"].toString(), "2");
+
+        ASSERT_TRUE(view_model->updateSeriesAxis("1", "")["succeeded"].toBool());
+        EXPECT_EQ(row(*view_model, "1")["yAxisId"].toString(), "");
     }
 
-    TEST_F(SettingsViewModelTest, ReorderSeriesForwardsIdAndPosition) {
+    TEST_F(SettingsViewModelTest, ReorderSeriesMovesTheRowToThePosition) {
         const auto view_model = make_view_model();
-        view_model->reorderSeries("5", 2);
-        ASSERT_TRUE(seriesManagement->lastReorder);
-        EXPECT_EQ(seriesManagement->lastReorder->first.value, 5U);
-        EXPECT_EQ(seriesManagement->lastReorder->second, 2U);
+        view_model->beginVisit();
+
+        ASSERT_TRUE(view_model->reorderSeries("5", 2)["succeeded"].toBool());
+
+        EXPECT_EQ(row(*view_model, "5")["displayPosition"].toInt(), 2);
+        EXPECT_FALSE(view_model->reorderSeries("5", -1)["succeeded"].toBool());
     }
 
-    TEST_F(SettingsViewModelTest, BeginSeriesDraftForwardsToUseCase) {
+    // The expression editor's accepted result arrives through updateComputedSeries() like any other
+    // Graph Lines edit, so it lands in the same working copy.
+    TEST_F(SettingsViewModelTest, BeginExpressionEditReadsTheWorkingCopy) {
         const auto view_model = make_view_model();
-        view_model->beginSeriesDraft();
-        EXPECT_EQ(seriesManagement->beginDraftCalls, 1);
-    }
+        view_model->beginVisit();
+        view_model->updateComputedSeries("1", "Hits", "#000000", 2.0, true, "HITS");
 
-    TEST_F(SettingsViewModelTest, DiscardSeriesDraftForwardsToUseCase) {
-        const auto view_model = make_view_model();
-        view_model->discardSeriesDraft();
-        EXPECT_EQ(seriesManagement->discardDraftCalls, 1);
-    }
-
-    TEST_F(SettingsViewModelTest, CommitSeriesDraftForwardsAndEmitsPendingChangesChanged) {
-        const auto view_model = make_view_model();
-        const QSignalSpy spy(view_model.get(), &SettingsViewModel::pendingChangesChanged);
-
-        view_model->commitSeriesDraft();
-
-        EXPECT_EQ(seriesManagement->commitDraftCalls, 1);
-        EXPECT_EQ(spy.count(), 1);
-    }
-
-    TEST_F(SettingsViewModelTest, PendingChangesReflectsUseCaseState) {
-        seriesManagement->pendingChanges = true;
-        const auto view_model = make_view_model();
-        EXPECT_TRUE(view_model->hasPendingChanges());
-    }
-
-    TEST_F(SettingsViewModelTest, PendingChangesChangedFiresAlongsideSeriesConfigurationChanged) {
-        const auto view_model = make_view_model();
-        ASSERT_TRUE(static_cast<bool>(seriesManagement->callback_));
-
-        const QSignalSpy configSpy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
-        const QSignalSpy pendingSpy(view_model.get(), &SettingsViewModel::pendingChangesChanged);
-        seriesManagement->callback_();
-
-        EXPECT_EQ(configSpy.count(), 1);
-        EXPECT_EQ(pendingSpy.count(), 1);
-    }
-
-    TEST_F(SettingsViewModelTest, BeginExpressionEditReturnsEditorSeededFromMatchingSeriesExpression) {
-        seriesManagement->configs = {
-            SeriesConfig{{3}, {"Hits", {{0, 0, 0, 255}, 2.0}, true, 0}, primitive(PrimitiveMetric::Hits)},
-        };
-        const auto view_model = make_view_model();
-        std::unique_ptr<SeriesExpressionEditorModel> editor(view_model->beginExpressionEdit("3"));
+        std::unique_ptr<SeriesExpressionEditorModel> editor(view_model->beginExpressionEdit("1"));
 
         ASSERT_NE(editor, nullptr);
         auto *root = qobject_cast<EditablePrimitiveNode *>(editor->root());
         ASSERT_NE(root, nullptr);
         EXPECT_EQ(root->metric(), "hits");
+        EXPECT_TRUE(configuration->saves.empty());
     }
 
     TEST_F(SettingsViewModelTest, BeginExpressionEditReturnsEditorWithEmptyRootForUnknownId) {

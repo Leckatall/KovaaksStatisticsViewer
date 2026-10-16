@@ -55,14 +55,8 @@ TestCase {
 
     // Opens the dialog and waits for its Popup content (created on open,
     // not at construction) to actually show up in the item tree.
-    //
-    property var visualSettings: QtObject {
-        property string graphAxisSeriesId: ""
-    }
-
     function openDialog(props): SettingsDialog {
-        const fullProps = Object.assign({visualSettings: testCase.visualSettings}, props)
-        const dialog = createTemporaryObject(settingsDialogComponent, testCase, fullProps)
+        const dialog = createTemporaryObject(settingsDialogComponent, testCase, props)
         verify(dialog !== null, "SettingsDialog failed to instantiate")
         dialog.open()
         verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never became visible after open()")
@@ -110,8 +104,7 @@ TestCase {
     function test_kovaaksDirField_showsSettingsVmDirWithoutFileScheme() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({kovaaksDir: "file:///D:/CustomDir"}),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         const field = ItemLookup.findByObjectName(dialog.contentItem, "kovaaksDirField")
@@ -127,8 +120,7 @@ TestCase {
         const longProfile = longDir + "/profile.pb"
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({kovaaksDir: "file:///" + longDir, profilePath: "file:///" + longProfile}),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         const dirField = ItemLookup.findByObjectName(dialog.contentItem, "kovaaksDirField")
@@ -152,8 +144,7 @@ TestCase {
     function test_directoriesCategory_showsProfilePathAndLoadedState() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profilePath: "file:///D:/CustomProfile/profile.pb", profileLoaded: true}),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         const field = ItemLookup.findByObjectName(dialog.contentItem, "profilePathField")
@@ -168,8 +159,7 @@ TestCase {
     function test_directoriesCategory_showsNotLoadedWhenProfileVmReportsFalse() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profileLoaded: false}),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
@@ -180,8 +170,7 @@ TestCase {
     function test_generateProfileButton_delegatesToSessionVm() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         const button = ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton")
@@ -196,8 +185,7 @@ TestCase {
     function test_generateProfileButton_labelIsClearAndConsistentlyCapitalised() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         const button = ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton")
@@ -210,8 +198,7 @@ TestCase {
     function test_profileBuildProgressBar_hiddenWhenNoBuildIsRunning() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
@@ -222,8 +209,7 @@ TestCase {
     function test_profileBuildProgressBar_showsProgressWhileBuilding() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4}),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4})
         })
 
         const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
@@ -237,8 +223,7 @@ TestCase {
     function test_profileBuildProgressBar_indeterminateBeforeTheFirstReport() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileBuildInProgress: true}),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true})
         })
 
         const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
@@ -248,8 +233,7 @@ TestCase {
     function test_profileStatus_saysRebuildingWhileABuildRuns_andRestoresAfter() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profileLoaded: true}),
-            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true}),
-            visualSettings: visualSettings
+            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true})
         })
         const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
         compare(statusLabel.text, "Profile status: Rebuilding", "a running rebuild replaces the loaded state in the status line")
@@ -261,8 +245,7 @@ TestCase {
     function test_profileStatus_notLoadedAfterAFailedRebuild() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profileLoaded: false}),
-            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true}),
-            visualSettings: visualSettings
+            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true})
         })
         const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
         compare(statusLabel.text, "Profile status: Rebuilding")
@@ -274,8 +257,7 @@ TestCase {
     function test_profileBuildProgressLabel_hiddenWhenNoBuildIsRunning() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
         const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
         verify(label !== null, "no label named 'profileBuildProgressLabel' found in SettingsDialog Profile category")
@@ -286,8 +268,7 @@ TestCase {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4,
-                                          profileBuildDone: 2, profileBuildTotal: 5}),
-            visualSettings: visualSettings
+                                          profileBuildDone: 2, profileBuildTotal: 5})
         })
         const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
         compare(label.visible, true)
@@ -297,8 +278,7 @@ TestCase {
     function test_profileBuildProgressLabel_saysScanningBeforeTheFirstReport() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileBuildInProgress: true}),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm({profileBuildInProgress: true})
         })
         const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
         compare(label.visible, true)
@@ -308,7 +288,7 @@ TestCase {
     function test_seriesEnabledSwitchesListAllSeriesConfigsAndReflectEnabledState() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
+            sessionVm: makeFakeSessionVm()
         })
 
         selectCategory(dialog, "Graph Lines")
@@ -327,8 +307,7 @@ TestCase {
             rows.push({id: String(i), name: "Series " + i, color: "#009600", enabled: true, displayPosition: i})
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({allSeriesConfigs: rows, pendingChanges: true}),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
         selectCategory(dialog, "Graph Lines")
 
@@ -341,8 +320,7 @@ TestCase {
     function test_categoryList_startsOnDirectories() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         compare(dialog.currentCategory, 0, "SettingsDialog should default to the Directories category (index 0)")
@@ -351,8 +329,7 @@ TestCase {
     function test_clickingCategoryItem_switchesCurrentCategory() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         selectCategory(dialog, "Graph Lines")
@@ -363,8 +340,7 @@ TestCase {
     function test_openGraphLinesOpensDialogOnGraphLinesCategory() {
         const dialog = createTemporaryObject(settingsDialogComponent, testCase, {
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-            visualSettings: visualSettings
+            sessionVm: makeFakeSessionVm()
         })
 
         dialog.openGraphLines()
@@ -373,62 +349,121 @@ TestCase {
         compare(dialog.currentCategory, dialog.graphLinesCategory)
     }
 
-    function test_closingWithNoPendingChangesClosesImmediatelyWithoutPrompt() {
+    function findInDialog(dialog, name) {
+        return ItemLookup.findByObjectName(dialog.contentItem, name)
+            || ItemLookup.findByObjectName(dialog.footer, name)
+    }
+
+    function twoVisibleRows() {
+        return [
+            {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
+            {id: "2", name: "Accuracy", color: "#00ffff", enabled: true, displayPosition: 1}
+        ]
+    }
+
+    function test_openingTheDialogBeginsAVisit() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm()
+        })
+
+        compare(dialog.settingsVm.beginVisitCalls, 1)
+    }
+
+    // The view model keeps an already open visit as it is; the dialog only has to keep asking.
+    function test_reopeningAnOpenDialogNeitherEndsNorSavesItsVisit() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm()
+        })
+
+        dialog.open()
+
+        compare(dialog.visible, true)
+        compare(dialog.settingsVm.endVisitCalls, 0)
+        compare(dialog.settingsVm.saveCalls, 0)
+    }
+
+    function test_closingACleanVisitEndsItWithoutPrompting() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({pendingChanges: false}),
-            sessionVm: makeFakeSessionVm(),
+            sessionVm: makeFakeSessionVm()
         })
 
         dialog.close()
 
         tryCompare(dialog, "visible", false)
-        compare(dialog.settingsVm.discardDraftCalls, 0)
+        compare(dialog.discardChangesPrompt.visible, false)
+        compare(dialog.settingsVm.endVisitCalls, 1)
     }
 
     function test_closingWithPendingChangesShowsConfirmPromptAndStaysOpenUntilResolved() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({pendingChanges: true}),
-            sessionVm: makeFakeSessionVm(),
+            sessionVm: makeFakeSessionVm()
         })
 
         dialog.close()
 
         tryCompare(dialog, "visible", true)
         tryCompare(dialog.discardChangesPrompt, "visible", true)
+        compare(dialog.settingsVm.endVisitCalls, 0)
     }
 
-    function test_confirmingDiscardOnCloseCallsDiscardSeriesDraftThenCloses() {
+    function test_discardingOnCloseEndsTheVisitWithoutSavingThenCloses() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({pendingChanges: true}),
-            sessionVm: makeFakeSessionVm(),
+            sessionVm: makeFakeSessionVm()
         })
 
         dialog.close()
         tryCompare(dialog.discardChangesPrompt, "visible", true)
         dialog.discardChangesPrompt.buttonClicked(MessageDialog.Discard, MessageDialog.DestructiveRole)
 
-        tryCompare(dialog.settingsVm, "discardDraftCalls", 1)
         tryCompare(dialog, "visible", false)
+        compare(dialog.settingsVm.saveCalls, 0)
+        verify(dialog.settingsVm.endVisitCalls >= 1)
     }
 
-    function test_savingOnCloseCallsCommitSeriesDraftThenCloses() {
+    function test_savingOnCloseSavesThenClosesOnceAccepted() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({pendingChanges: true}),
-            sessionVm: makeFakeSessionVm(),
+            sessionVm: makeFakeSessionVm()
         })
 
         dialog.close()
         tryCompare(dialog.discardChangesPrompt, "visible", true)
         dialog.discardChangesPrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
 
-        tryCompare(dialog.settingsVm, "commitDraftCalls", 1)
         tryCompare(dialog, "visible", false)
+        compare(dialog.settingsVm.saveCalls, 1)
+        compare(dialog.settingsVm.endVisitCalls, 1)
     }
 
-    function test_cancellingCloseLeavesWindowOpenAndDraftUntouched() {
+    function test_aSaveRejectedOnCloseKeepsTheWindowAndItsVisit() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({
+                pendingChanges: true,
+                saveResult: {accepted: false, issues: [{graph: "run", group: "graphLines", target: "", field: "", code: "invalidRunSeries"}]}
+            }),
+            sessionVm: makeFakeSessionVm()
+        })
+
+        dialog.close()
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        dialog.discardChangesPrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
+
+        wait(50)
+        compare(dialog.visible, true)
+        compare(dialog.settingsVm.saveCalls, 1)
+        compare(dialog.settingsVm.endVisitCalls, 0)
+        compare(dialog.settingsVm.pendingChanges, true)
+    }
+
+    function test_cancellingCloseLeavesWindowOpenAndVisitUntouched() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({pendingChanges: true}),
-            sessionVm: makeFakeSessionVm(),
+            sessionVm: makeFakeSessionVm()
         })
 
         dialog.close()
@@ -436,74 +471,124 @@ TestCase {
         dialog.discardChangesPrompt.buttonClicked(MessageDialog.Cancel, MessageDialog.RejectRole)
 
         compare(dialog.visible, true)
-        compare(dialog.settingsVm.commitDraftCalls, 0)
-        compare(dialog.settingsVm.discardDraftCalls, 0)
+        compare(dialog.settingsVm.saveCalls, 0)
+        compare(dialog.settingsVm.endVisitCalls, 0)
     }
 
-    function test_switchingCategoriesDoesNotRetriggerDraftLifecycle() {
+    function test_footerSaveSavesTheVisitAndKeepsTheWindowOpen() {
         const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm()
+        })
+        const save = findInDialog(dialog, "settingsSaveButton")
+        verify(save !== null, "the footer offers Save")
+
+        mouseClick(save)
+
+        compare(dialog.settingsVm.saveCalls, 1)
+        compare(dialog.visible, true)
+        compare(dialog.settingsVm.endVisitCalls, 0)
+    }
+
+    function test_footerCancelDropsTheVisitAndClosesWithoutPrompting() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm()
+        })
+        const cancel = findInDialog(dialog, "settingsCancelButton")
+        verify(cancel !== null, "the footer offers Cancel")
+
+        mouseClick(cancel)
+
+        tryCompare(dialog, "visible", false)
+        compare(dialog.discardChangesPrompt.visible, false)
+        compare(dialog.settingsVm.saveCalls, 0)
+        verify(dialog.settingsVm.endVisitCalls >= 1)
+    }
+
+    function test_switchingCategoriesKeepsTheVisit() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm()
         })
 
         selectCategory(dialog, "Graph Lines")
         selectCategory(dialog, "Directories")
         selectCategory(dialog, "Graph Lines")
 
-        compare(dialog.settingsVm.discardDraftCalls, 0)
+        compare(dialog.settingsVm.beginVisitCalls, 1)
+        compare(dialog.settingsVm.endVisitCalls, 0)
+        compare(dialog.settingsVm.saveCalls, 0)
     }
 
-    function test_openingDialogCallsBeginSeriesDraft() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm(),
-        })
-
-        const panel = ItemLookup.findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
-        verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
-        compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should be called when the dialog is opened")
-    }
-
-    function test_reopeningDialogAfterCloseCallsBeginSeriesDraftAgain() {
+    function test_reopeningAfterACleanCloseBeginsAFreshVisit() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({pendingChanges: false}),
-            sessionVm: makeFakeSessionVm(),
+            sessionVm: makeFakeSessionVm()
         })
-
-        const panel = ItemLookup.findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
-        verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
-        compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should have fired on the first open()")
 
         dialog.close()
         tryCompare(dialog, "visible", false)
-
         dialog.open()
         verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never became visible after reopening")
 
-        compare(dialog.settingsVm.beginDraftCalls, 2, "beginSeriesDraft must be called again every time the dialog is opened, not just once at construction")
+        compare(dialog.settingsVm.endVisitCalls, 1)
+        compare(dialog.settingsVm.beginVisitCalls, 2)
     }
 
-    function test_reopeningAfterSavingPendingChangesCallsBeginSeriesDraftAgain() {
+    function test_reopeningAfterSavingOnCloseBeginsAFreshVisit() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({pendingChanges: true}),
-            sessionVm: makeFakeSessionVm(),
+            sessionVm: makeFakeSessionVm()
         })
-
-        const panel = ItemLookup.findByObjectName(dialog.contentItem, "seriesConfigDraftPanel")
-        verify(panel !== null, "no item named 'seriesConfigDraftPanel' found in SettingsDialog")
-        compare(dialog.settingsVm.beginDraftCalls, 1, "beginSeriesDraft should have fired on the first open()")
 
         dialog.close()
         tryCompare(dialog.discardChangesPrompt, "visible", true)
         dialog.discardChangesPrompt.buttonClicked(MessageDialog.Save, MessageDialog.AcceptRole)
-
-        tryCompare(dialog.settingsVm, "commitDraftCalls", 1)
         tryCompare(dialog, "visible", false)
 
         dialog.open()
         verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never became visible after reopening")
 
-        compare(dialog.settingsVm.beginDraftCalls, 2, "beginSeriesDraft must be called again on reopen after a save, matching the reported bug: Save-and-reopen must start a fresh draft")
+        compare(dialog.settingsVm.beginVisitCalls, 2)
     }
 
+    function test_yAxisLabelSelectorShowsTheWorkingCopyChoice() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({runAxisLabelSeriesId: "2", allSeriesConfigs: twoVisibleRows()}),
+            sessionVm: makeFakeSessionVm()
+        })
+        selectCategory(dialog, "Graph Lines")
+
+        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        verify(combo !== null)
+        compare(combo.currentIndex, 1)
+        compare(combo.displayText, "Accuracy")
+    }
+
+    // The label choice joins the working copy of the visit instead of being persisted by QML.
+    function test_choosingAYAxisLabelEditsTheWorkingCopy() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({allSeriesConfigs: twoVisibleRows()}),
+            sessionVm: makeFakeSessionVm()
+        })
+        selectCategory(dialog, "Graph Lines")
+        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+
+        combo.activated(1)
+
+        compare(dialog.settingsVm.setRunAxisLabelSeriesIdCalls, ["2"])
+    }
+
+    function test_anUnknownYAxisLabelFallsBackToTheFirstVisibleSeries() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({runAxisLabelSeriesId: "99"}),
+            sessionVm: makeFakeSessionVm()
+        })
+        selectCategory(dialog, "Graph Lines")
+
+        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        compare(combo.currentIndex, 0)
+        compare(combo.displayText, "Score")
+    }
 }

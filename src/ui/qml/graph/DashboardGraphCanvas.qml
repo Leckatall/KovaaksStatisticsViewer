@@ -21,7 +21,7 @@ Frame {
     readonly property int yAxisColumn: {
         const cols = root.visibleColumns;
         for (const column of cols) {
-            if (root.graphVm.seriesIdForColumn(column) === root.visualSettings.graphAxisSeriesId) {
+            if (root.graphVm.seriesIdForColumn(column) === root.graphVm.axisLabelSeriesId) {
                 return column;
             }
         }

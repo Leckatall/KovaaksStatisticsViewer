@@ -223,7 +223,8 @@ TestCase {
         compare(panel.settingsVm.createAxisCalls[0], ["Custom"]);
         compare(panel.settingsVm.updateSeriesAxisCalls[0], ["1", "9"]);
     }
-    function test_clickingDiscardCallsDiscardSeriesDraft() {
+    // There is one working copy per settings visit, so these act on all of it, not only on Graph Lines.
+    function test_clickingDiscardRevertsTheWholeVisitWithoutSaving() {
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: makeFakeSettingsVm({
                 pendingChanges: true
@@ -233,9 +234,11 @@ TestCase {
 
         mouseClick(ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton"));
 
-        compare(panel.settingsVm.discardDraftCalls, 1);
+        compare(panel.settingsVm.revertCalls, 1);
+        compare(panel.settingsVm.saveCalls, 0);
+        compare(panel.settingsVm.endVisitCalls, 0);
     }
-    function test_clickingSaveCallsCommitSeriesDraft() {
+    function test_clickingSaveSavesTheWholeVisit() {
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: makeFakeSettingsVm({
                 pendingChanges: true
@@ -245,7 +248,33 @@ TestCase {
 
         mouseClick(ItemLookup.findByObjectName(panel, "saveGraphLinesButton"));
 
-        compare(panel.settingsVm.commitDraftCalls, 1);
+        compare(panel.settingsVm.saveCalls, 1);
+        compare(panel.settingsVm.endVisitCalls, 0);
+    }
+    function test_errorLabelExplainsAValidationRejection() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: makeFakeSettingsVm({
+                pendingChanges: true,
+                issues: [{graph: "run", group: "graphLines", target: "records[0].yAxisId", field: "", code: "unknownAxis"}]
+            })
+        });
+        verify(waitForRendering(panel));
+
+        const label = ItemLookup.findByObjectName(panel, "seriesDraftErrorLabel");
+        verify(label !== null);
+        compare(label.visible, true);
+        verify(/invalid/i.test(label.text), "the message must say the changes were rejected as invalid: " + label.text);
+        verify(!/try again/i.test(label.text), "a rejection is not a transient failure: " + label.text);
+    }
+    function test_errorLabelHiddenWithoutIssues() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: makeFakeSettingsVm({
+                pendingChanges: true
+            })
+        });
+        verify(waitForRendering(panel));
+
+        compare(ItemLookup.findByObjectName(panel, "seriesDraftErrorLabel").visible, false);
     }
     function test_colorSwatchClickOpensColorDialogSeededWithRowColor() {
         const panel = createTemporaryObject(panelComponent, testCase, {
