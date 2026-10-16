@@ -17,6 +17,9 @@ namespace ksv::application {
 
     struct CompletionHistory {
         std::string scenario_name;
+        // Every run of the scenario, before the range filter; rows may be a subset of them.
+        int full_count = 0;
+        // The visible rows, oldest first, each keeping its run_index in the full history.
         std::vector<CompletionRow> rows;
     };
 }

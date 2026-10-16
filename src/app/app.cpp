@@ -116,9 +116,10 @@ namespace ksv::application {
         m_playtimeVm = new presentation::PlaytimeGraphViewModel(m_playtimeUseCase, this);
 
         m_completionHistoryUseCase = std::make_shared<CompletionHistoryUseCase>(
-            m_sessionController, m_profileService);
+            m_sessionController, m_profileService, m_graphConfigurationUseCase, m_daySource);
         m_completionHistoryVm = new presentation::CompletionHistoryViewModel(m_completionHistoryUseCase, this);
         m_completionHistoryUseCase->onCurrentScenarioChanged([this] { m_completionHistoryVm->refresh(); });
+        m_completionHistoryUseCase->onRangeChanged([this] { m_completionHistoryVm->refresh(); });
         m_completionHistoryUseCase->onSelectedRunChanged([this] { m_completionHistoryVm->refreshSelection(); });
 
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);

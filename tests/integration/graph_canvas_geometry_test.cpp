@@ -13,8 +13,10 @@
 #include <memory>
 
 #include "app/app.h"
+#include "app/contracts/i_completion_history_use_case.h"
 #include "components/graph_canvas.h"
 #include "formats/protobuf/proto_decoder.h"
+#include "presentation/completion_history_vm.h"
 #include "presentation/graph_vm.h"
 
 #include "integration_env.h"
@@ -386,5 +388,43 @@ namespace {
         manyCanvas->setProperty("pointMarkers", true);
         EXPECT_TRUE(fewCanvas->property("pointMarkersShown").toBool());
         EXPECT_FALSE(manyCanvas->property("pointMarkersShown").toBool());
+    }
+
+    class OneRunHistory final : public application::ICompletionHistoryUseCase {
+    public:
+        application::CompletionHistory get_history() override {
+            return {.scenario_name = "Air Angelic",
+                    .full_count = 9,
+                    .rows = {{.run_index = 7, .score = 125.0, .accuracy = 0.6, .shots = 25, .hits = 15, .misses = 10}}};
+        }
+        void onCurrentScenarioChanged(std::function<void()>) override {}
+        void onRangeChanged(std::function<void()>) override {}
+        std::optional<int> selected_run_index() override { return 7; }
+        void onSelectedRunChanged(std::function<void()>) override {}
+        void select_run(int) override {}
+    };
+
+    // The history chart used to refuse fewer than two runs; a lone visible run must be markable and
+    // hoverable instead.
+    TEST(GraphCanvasMarkersTest, AOneRunHistoryIsMarkedAndInspectable) {
+        presentation::CompletionHistoryViewModel history(std::make_shared<OneRunHistory>());
+        const auto canvas = makeCanvas(history, QVariantList{presentation::CompletionHistoryViewModel::Score});
+        canvas->setProperty("pointMarkers", true);
+        canvas->setMarkedX(7.0);
+
+        EXPECT_TRUE(canvas->property("pointMarkersShown").toBool());
+        const QRectF plot = canvas->property("plotArea").toRectF();
+        const QVariantMap hover = canvas->valuesAtX(plot.center().x());
+        ASSERT_TRUE(hover.value("valid").toBool());
+        EXPECT_DOUBLE_EQ(hover.value("xRaw").toReal(), 7.0);
+        EXPECT_EQ(hover.value("x").toString(), "#7");
+        const QVariantList series = hover.value("series").toList();
+        ASSERT_EQ(series.size(), 1);
+        EXPECT_TRUE(series.front().toMap().value("pixelY").isValid());
+        EXPECT_NEAR(hover.value("pixelX").toReal(), plot.center().x(), 1.0) << "the lone run sits mid-axis";
+
+        const QVariantMap nearest = canvas->nearestPoint(hover.value("pixelX").toReal(),
+                                                          series.front().toMap().value("pixelY").toReal());
+        EXPECT_TRUE(nearest.value("valid").toBool());
     }
 }

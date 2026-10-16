@@ -54,10 +54,11 @@ namespace ksv::presentation {
     CompletionHistoryViewModel::CompletionHistoryViewModel(
         std::shared_ptr<application::ICompletionHistoryUseCase> use_case, QObject *parent)
         : GraphViewModelBase(parent), m_use_case(std::move(use_case)),
-          // Runs are numbered from #1: the axis spans exactly the first to the last run, so it
-          // never labels a run that does not exist (no "#0", nothing past the latest run).
+          // The axis spans exactly the first to the last visible run, so it never labels a run that
+          // does not exist (no "#0", nothing past the last shown run). A lone run is padded by half a
+          // run on each side, which keeps its own tick and no neighbour's.
           m_xAxis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .targetTicks = 10,
-                   .niceBounds = false},
+                   .fallbackSpan = 0.5, .niceBounds = false},
                   runIndexTransform()) {
         for (int column = Score; column < ColumnCount; ++column) {
             auto *series_model = new SeriesModel(this);
@@ -104,9 +105,12 @@ namespace ksv::presentation {
             emit scenarioTitleChanged();
         }
 
-        m_run_count = static_cast<int>(history.rows.size());
+        m_run_count = history.full_count;
+        m_visible_runs.clear();
+        m_visible_runs.reserve(history.rows.size());
         for (auto &points: m_points) points.clear();
         for (const auto &row: history.rows) {
+            m_visible_runs.push_back(row.run_index);
             const qreal x = row.run_index;
             m_points[Score].append(QPointF(x, row.score));
             m_points[Accuracy].append(QPointF(x, row.accuracy));
@@ -120,7 +124,8 @@ namespace ksv::presentation {
             series->yAxis.reset();
         }
 
-        std::ignore = m_xAxis.setRange(1.0, std::max(1, m_run_count));
+        if (history.rows.empty()) std::ignore = m_xAxis.setRange(1.0, std::max(1, m_run_count));
+        else std::ignore = m_xAxis.setRange(history.rows.front().run_index, history.rows.back().run_index);
 
         emit dataUpdated();
         emit boundsChanged();
@@ -128,14 +133,18 @@ namespace ksv::presentation {
     }
 
     void CompletionHistoryViewModel::selectRun(const int runIndex) {
-        if (runIndex < 1 || runIndex > m_run_count) return;
+        if (!std::ranges::binary_search(m_visible_runs, runIndex)) return;
         m_use_case->select_run(runIndex);
     }
 
     void CompletionHistoryViewModel::refreshSelection() {
         const int index = m_use_case->selected_run_index().value_or(-1);
-        if (index == m_selected_run_index) return;
+        const bool visible = index > 0 && std::ranges::binary_search(m_visible_runs, index);
+        const bool indexChanged = index != m_selected_run_index;
+        const bool visibleChanged = visible != m_selected_run_visible;
         m_selected_run_index = index;
-        emit selectedRunIndexChanged();
+        m_selected_run_visible = visible;
+        if (indexChanged) emit selectedRunIndexChanged();
+        if (visibleChanged) emit selectedRunVisibleChanged();
     }
 }

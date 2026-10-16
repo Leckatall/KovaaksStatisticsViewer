@@ -39,6 +39,9 @@ function makeFakeHistoryVm() {
     return {
         scenarioTitle: "Air Angelic",
         runCount: 0,
+        visibleRunCount: 0,
+        selectedRunIndex: -1,
+        selectedRunVisible: false,
         allSeries: [
             {id: "1", name: "Score", column: 1},
             {id: "2", name: "Accuracy", column: 2},

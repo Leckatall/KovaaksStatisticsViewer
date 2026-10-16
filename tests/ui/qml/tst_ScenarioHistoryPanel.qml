@@ -40,7 +40,7 @@ Item {
         ScenarioHistoryPanel {
             width: 900
             height: 600
-            historyVm: Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8})
+            historyVm: Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8, visibleRunCount: 8})
             columnVisibility: historyVisibilitySettings.value
             historyAxisSettings: axisSettings
         }
@@ -90,13 +90,57 @@ Item {
             tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
             verify(isNaN(canvas.markedX), "no selected run marks nothing, got " + canvas.markedX)
 
-            panel.historyVm = Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8, selectedRunIndex: 6})
+            panel.historyVm = Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8, visibleRunCount: 8, selectedRunIndex: 6, selectedRunVisible: true})
             tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
             tryCompare(canvas, "markedX", 6)
 
-            panel.historyVm = Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8, selectedRunIndex: 2})
+            panel.historyVm = Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8, visibleRunCount: 8, selectedRunIndex: 2, selectedRunVisible: true})
             tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
             tryCompare(canvas, "markedX", 2)
+        }
+
+        function panelWith(vmOverrides) {
+            const panel = createTemporaryObject(panelComponent, root)
+            verify(!!panel, "Component exists")
+            panel.historyVm = Object.assign(TestDoubles.makeFakeHistoryVm(), vmOverrides)
+            return panel
+        }
+
+        // One visible run still loads the chart (its marker and tooltip), not a refusal.
+        function test_oneVisibleRunLoadsTheChart() {
+            const panel = panelWith({runCount: 8, visibleRunCount: 1})
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            compare(canvas.pointMarkers, true)
+            compare(findChild(panel, "historyEmptyLabel").visible, false)
+        }
+
+        // A selected run outside the visible set stays selected in the VM but draws no marker.
+        function test_selectedRunOutsideTheVisibleSetIsNotMarked() {
+            const panel = panelWith({runCount: 8, visibleRunCount: 3, selectedRunIndex: 2, selectedRunVisible: false})
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            verify(isNaN(canvas.markedX), "an out-of-range selection marks nothing, got " + canvas.markedX)
+            compare(panel.historyVm.selectedRunIndex, 2)
+        }
+
+        function test_noHistoryAndAnEmptyRangeAreToldApart() {
+            const noHistory = panelWith({runCount: 0, visibleRunCount: 0})
+            const emptyRange = panelWith({runCount: 5, visibleRunCount: 0})
+
+            const noHistoryLabel = findChild(noHistory, "historyEmptyLabel")
+            const emptyRangeLabel = findChild(emptyRange, "historyEmptyLabel")
+            compare(noHistoryLabel.visible, true)
+            compare(emptyRangeLabel.visible, true)
+            verify(noHistoryLabel.text !== emptyRangeLabel.text, "same text for both: " + noHistoryLabel.text)
+            compare(findChild(noHistory, "historyGraphCanvas"), null)
+            compare(findChild(emptyRange, "historyGraphCanvas"), null)
+        }
+
+        function test_nothingAsksForTwoRuns() {
+            const panel = createTemporaryObject(panelComponent, root)
+            verify(!!panel, "Component exists")
+            verify(!findChild(panel, "historyEmptyLabel").text.includes("2 runs"))
         }
 
         // The rotated Y-axis title names the labelled axis in the default grey, never a series colour.

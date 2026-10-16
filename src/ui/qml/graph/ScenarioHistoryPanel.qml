@@ -28,8 +28,9 @@ Frame {
         return s && !!root.columnVisibility[s.id]
     })
 
-    // The selected run's x position on the history graph, or -1 for none.
+    // The selected run's x position on the history graph, or -1 for none or one the range hides.
     readonly property int selectedRunIndex: root.historyVm.selectedRunIndex !== undefined
+                                            && root.historyVm.selectedRunVisible === true
                                             ? root.historyVm.selectedRunIndex : -1
 
     readonly property int yAxisColumn: {
@@ -65,7 +66,7 @@ Frame {
         Loader {
             Layout.fillHeight: true
             Layout.fillWidth: true
-            active: root.historyVm.runCount >= 2
+            active: root.historyVm.visibleRunCount >= 1
             sourceComponent: Component {
                 RowLayout {
                     anchors.fill: parent
@@ -93,7 +94,8 @@ Frame {
                         yAxisColumn: root.yAxisColumn
                         xLabel: qsTr("Run")
                         objectName: "historyGraphCanvas"
-                        // Few runs: dot each real run so it reads apart from the smoothed curve.
+                        // Few runs: dot each real run so it reads apart from the smoothed curve; a lone
+                        // run is always dotted.
                         pointMarkers: true
                         // The run selected in the run list / run graph.
                         markedX: root.selectedRunIndex > 0 ? root.selectedRunIndex : NaN
@@ -106,13 +108,16 @@ Frame {
         }
 
         Label {
+            objectName: "historyEmptyLabel"
             Layout.alignment: Qt.AlignCenter
             Layout.fillHeight: true
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            text: qsTr("At least 2 runs are needed to draw history.")
+            text: root.historyVm.runCount === 0
+                  ? qsTr("No runs recorded for this scenario.")
+                  : qsTr("No runs in the selected range.")
             verticalAlignment: Text.AlignVCenter
-            visible: root.historyVm.runCount < 2
+            visible: root.historyVm.visibleRunCount < 1
         }
     }
 }

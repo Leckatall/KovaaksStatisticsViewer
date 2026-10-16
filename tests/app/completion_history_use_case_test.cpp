@@ -9,8 +9,11 @@
 #include <vector>
 
 #include "usecases/completion_history_use_case.h"
+#include "fake_day_source.h"
+#include "fake_graph_configuration_use_case.h"
 #include "fake_profile_service.h"
 #include "fake_session_controller.h"
+#include "run_builders.h"
 
 using namespace ksv::application;
 using namespace ksv::domain;
@@ -21,11 +24,48 @@ namespace {
     protected:
         std::shared_ptr<FakeSessionController> session = std::make_shared<FakeSessionController>();
         std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
-        CompletionHistoryUseCase use_case{session, profile};
+        std::shared_ptr<FakeGraphConfigurationUseCase> configuration =
+            std::make_shared<FakeGraphConfigurationUseCase>();
+        std::shared_ptr<FakeDaySource> days = std::make_shared<FakeDaySource>();
+        CompletionHistoryUseCase use_case{session, profile, configuration, days};
+
+        static constexpr long long kMsPerDay = 86'400'000LL;
+        // 2026-10-16, the fake day source's default today.
+        static constexpr long long kToday = 20742;
 
         void setCurrentScenario(const std::string &hash = "scenario-1", const long long start_time = 300) const {
             session->current_run.run_id.scenario_id = {.name = "Scenario One", .hash = hash};
             session->current_run.run_id.start_time = start_time;
+        }
+
+        GraphPreferences &preferences() const {
+            return configuration->configuration.preferences(GraphKey::ScenarioHistory);
+        }
+
+        void setRange(GraphRange range, const bool anchorToLatestRun = false) const {
+            preferences().range = RangePreference{std::move(range), anchorToLatestRun};
+        }
+
+        void commit(const GraphKey key = GraphKey::ScenarioHistory) const {
+            ++configuration->revision;
+            configuration->publish({.graphs = {key}});
+        }
+
+        // One run per entry of `epochDays`, oldest first, for the current scenario.
+        void playOnDays(const std::vector<long long> &epochDays, const std::string &hash = "scenario-1") const {
+            setCurrentScenario(hash, epochDays.empty() ? 300 : epochDays.back() * kMsPerDay + 7);
+            std::vector<RunSummary> runs;
+            for (std::size_t i = 0; i < epochDays.size(); ++i)
+                runs.push_back({.run_id = {.scenario_id = {.name = "Scenario One", .hash = hash},
+                                           .start_time = epochDays[i] * kMsPerDay + 7},
+                                .totals = {.score = static_cast<float>(100 + i), .shots = 10, .hits = 5, .misses = 5}});
+            profile->completion_history_by_scenario[{.name = "Scenario One", .hash = hash}] = std::move(runs);
+        }
+
+        static std::vector<int> runNumbers(const CompletionHistory &history) {
+            std::vector<int> numbers;
+            for (const auto &row: history.rows) numbers.push_back(row.run_index);
+            return numbers;
         }
     };
 
@@ -143,5 +183,167 @@ namespace {
 
         session->changeRun("scenario-1", 200);
         EXPECT_EQ(callback_count, 1);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, AllHistoryIsTheDefaultAndFullCountEqualsRowCount) {
+        playOnDays({kToday - 30, kToday - 3, kToday});
+
+        const auto history = use_case.get_history();
+
+        EXPECT_EQ(runNumbers(history), (std::vector{1, 2, 3}));
+        EXPECT_EQ(history.full_count, 3);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, LatestRunsKeepTheNewestSuffixWithTheirOriginalRunNumbers) {
+        playOnDays({kToday - 40, kToday - 30, kToday - 20, kToday - 10, kToday});
+        setRange(LatestRuns{2});
+
+        const auto history = use_case.get_history();
+
+        EXPECT_EQ(runNumbers(history), (std::vector{4, 5}));
+        EXPECT_EQ(history.full_count, 5);
+        EXPECT_EQ(history.rows[0].start_time_ms, (kToday - 10) * kMsPerDay + 7);
+        EXPECT_DOUBLE_EQ(history.rows[0].score, 103.0) << "values come from the original row, not a re-indexed one";
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, LatestRunsLargerThanTheHistoryShowEverything) {
+        playOnDays({kToday - 2, kToday});
+        setRange(LatestRuns{50});
+
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{1, 2}));
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, CustomDatesFilterByRowTimestampNotByRunPosition) {
+        playOnDays({kToday - 40, kToday - 30, kToday - 20, kToday - 10, kToday});
+        const std::chrono::sys_days first{std::chrono::days{kToday - 30}};
+        const std::chrono::sys_days last{std::chrono::days{kToday - 10}};
+        setRange(CustomDates{std::chrono::year_month_day{first}, std::chrono::year_month_day{last}});
+
+        const auto history = use_case.get_history();
+
+        EXPECT_EQ(runNumbers(history), (std::vector{2, 3, 4})) << "both endpoints are inclusive";
+        EXPECT_EQ(history.full_count, 5);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, RecentDaysAreCountedBackFromTodayByDefault) {
+        playOnDays({kToday - 40, kToday - 6, kToday - 1});
+        setRange(RecentDays{7});
+
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{2, 3}));
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, RecentDaysCanAnchorToTheCurrentScenarioLatestRun) {
+        playOnDays({kToday - 400, kToday - 395, kToday - 392});
+        setRange(RecentDays{5}, true);
+
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{2, 3}));
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, AnchorIsTheCurrentScenarioRunsNotTheRestOfTheProfile) {
+        playOnDays({kToday - 400});
+        profile->latest_run = makeRun("other", kToday * kMsPerDay);
+        setRange(RecentDays{5}, true);
+
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{1}));
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ValidRangeWithNoRowsInsideIsEmptyButKeepsTheFullCount) {
+        playOnDays({kToday - 40, kToday - 30});
+        setRange(RecentDays{7});
+
+        const auto history = use_case.get_history();
+
+        EXPECT_TRUE(history.rows.empty());
+        EXPECT_EQ(history.full_count, 2) << "an empty selection is not the same as no history";
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, NoHistoryHasZeroFullCountWhateverTheRange) {
+        playOnDays({});
+        setRange(RecentDays{7}, true);
+
+        const auto history = use_case.get_history();
+
+        EXPECT_TRUE(history.rows.empty());
+        EXPECT_EQ(history.full_count, 0);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ASingleRowProjectionIsKept) {
+        playOnDays({kToday - 40, kToday - 30, kToday});
+        setRange(LatestRuns{1});
+
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{3}));
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, SelectedRunKeepsItsOriginalIndexOutsideTheVisibleRows) {
+        playOnDays({kToday - 40, kToday - 30, kToday});
+        setCurrentScenario("scenario-1", (kToday - 40) * kMsPerDay + 7);
+        setRange(LatestRuns{1});
+
+        EXPECT_EQ(use_case.selected_run_index(), 1);
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{3}));
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, SelectRunAddressesTheOriginalRowWhateverTheRange) {
+        playOnDays({kToday - 40, kToday - 30, kToday});
+        setRange(LatestRuns{1});
+
+        use_case.select_run(3);
+
+        ASSERT_TRUE(session->selected_run.has_value());
+        EXPECT_EQ(session->selected_run->start_time, kToday * kMsPerDay + 7);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ChangingTheRangeNeverChangesTheSelectedRun) {
+        playOnDays({kToday - 40, kToday - 30, kToday});
+        setCurrentScenario("scenario-1", (kToday - 30) * kMsPerDay + 7);
+
+        setRange(LatestRuns{1});
+        commit();
+        setRange(AllHistory{});
+        commit();
+
+        EXPECT_FALSE(session->selected_run.has_value());
+        EXPECT_EQ(use_case.selected_run_index(), 2);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, OneActiveRangeModeReplacesTheOther) {
+        playOnDays({kToday - 40, kToday - 30, kToday - 20, kToday - 10, kToday});
+        setRange(LatestRuns{1});
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{5}));
+
+        setRange(RecentDays{15});
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{4, 5}))
+            << "the stored range is a single discriminated value, so no earlier latest-N survives";
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, RangeChangeNotifiesOnlyForTheScenarioHistoryGraph) {
+        int notifications = 0;
+        use_case.onRangeChanged([&notifications] { ++notifications; });
+
+        commit(GraphKey::DailyPlaytime);
+        commit(GraphKey::BenchmarkRank);
+        EXPECT_EQ(notifications, 0);
+
+        commit(GraphKey::ScenarioHistory);
+        EXPECT_EQ(notifications, 1);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, DayChangeRefreshesOnlyTodayAnchoredPresets) {
+        playOnDays({kToday - 6, kToday - 1});
+        int notifications = 0;
+        use_case.onRangeChanged([&notifications] { ++notifications; });
+
+        setRange(RecentDays{7});
+        days->advance();
+        EXPECT_EQ(notifications, 1);
+        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{2})) << "the older run left the window";
+
+        setRange(RecentDays{7}, true);
+        days->advance();
+        setRange(LatestRuns{1});
+        days->advance();
+        setRange(AllHistory{});
+        days->advance();
+        EXPECT_EQ(notifications, 1) << "anchored presets, latest-N and all history ignore the date";
     }
 }

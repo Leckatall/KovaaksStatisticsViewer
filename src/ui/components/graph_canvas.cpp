@@ -131,7 +131,11 @@ namespace ksv::ui {
         const auto series = m_graphVm->series(visibleColumnIds());
         bool any = false;
         for (const auto *s: series) {
-            if (s->points.size() < 2) continue;
+            if (s->points.isEmpty()) continue;
+            if (s->points.size() == 1) {
+                any = true;
+                continue;
+            }
             const presentation::Axis &xAxis = xAxisFor(*s);
             const qreal span = (xAxis.normalizedPosition(s->points.back().x()) -
                                 xAxis.normalizedPosition(s->points.front().x())) * rect.width();

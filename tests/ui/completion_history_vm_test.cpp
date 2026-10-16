@@ -20,6 +20,7 @@ namespace {
 
         CompletionHistory get_history() override { return history; }
         void onCurrentScenarioChanged(std::function<void()>) override {}
+        void onRangeChanged(std::function<void()>) override {}
         std::optional<int> selected_run_index() override { return selected; }
         void onSelectedRunChanged(std::function<void()>) override {}
         std::vector<int> select_run_calls;
@@ -31,9 +32,18 @@ namespace {
         std::shared_ptr<FakeCompletionHistoryUseCase> fake = std::make_shared<FakeCompletionHistoryUseCase>();
         CompletionHistoryViewModel view_model{fake};
 
+        // The use case hands over only the visible rows, each keeping its original run number.
+        void project(const int fullCount, const std::vector<int> &visibleRuns) const {
+            fake->history = {.scenario_name = "Air Angelic", .full_count = fullCount};
+            for (const int run: visibleRuns)
+                fake->history.rows.push_back({.run_index = run, .score = 100.0 + run, .accuracy = 0.5,
+                                              .shots = 10, .hits = 5, .misses = 5});
+        }
+
         void setHistory() const {
             fake->history = {
                 .scenario_name = "Air Angelic",
+                .full_count = 2,
                 .rows = {
                     {.run_index = 1, .score = 100.0, .accuracy = 0.45, .shots = 20, .hits = 9, .misses = 11},
                     {.run_index = 2, .score = 125.0, .accuracy = 0.60, .shots = 25, .hits = 15, .misses = 10},
@@ -164,6 +174,7 @@ namespace {
     TEST_F(CompletionHistoryViewModelTest, RunAxisLabelsOnlyRunsThatExist) {
         for (const int runs: {2, 4, 8, 224, 360}) {
             fake->history.rows.clear();
+            fake->history.full_count = runs;
             for (int i = 1; i <= runs; ++i)
                 fake->history.rows.push_back({.run_index = i, .score = 100.0 + i, .accuracy = 0.5,
                                               .shots = 10, .hits = 5, .misses = 5});
@@ -182,6 +193,7 @@ namespace {
 
     TEST_F(CompletionHistoryViewModelTest, FewRunsAreEachTickedFromTheFirstRun) {
         fake->history.rows.clear();
+        fake->history.full_count = 8;
         for (int i = 1; i <= 8; ++i)
             fake->history.rows.push_back({.run_index = i, .score = 3100.0 + 40 * i});
         view_model.refresh();
@@ -227,5 +239,164 @@ namespace {
         ASSERT_TRUE(series[0]->yAxisId && series[1]->yAxisId && series[2]->yAxisId);
         EXPECT_NE(*series[0]->yAxisId, *series[1]->yAxisId);
         EXPECT_EQ(*series[1]->yAxisId, *series[2]->yAxisId);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, ProjectedRowsKeepTheirOriginalRunNumbersAsX) {
+        project(5, {4, 5});
+
+        view_model.refresh();
+
+        const auto score = view_model.series({CompletionHistoryViewModel::Score}).front()->points;
+        ASSERT_EQ(score.size(), 2);
+        EXPECT_DOUBLE_EQ(score[0].x(), 4.0);
+        EXPECT_DOUBLE_EQ(score[1].x(), 5.0);
+        EXPECT_DOUBLE_EQ(score[0].y(), 104.0);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FullAndVisibleCountsAreDistinct) {
+        project(5, {4, 5});
+
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.runCount(), 5);
+        EXPECT_EQ(view_model.visibleRunCount(), 2);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, XAxisSpansTheOriginalVisibleRunNumbers) {
+        project(40, {31, 32, 33, 34, 35, 36, 37, 38, 39, 40});
+
+        view_model.refresh();
+
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 31.0);
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 40.0);
+        for (const qreal tick: view_model.xAxis().ticks()) {
+            EXPECT_GE(tick, 31.0);
+            EXPECT_LE(tick, 40.0);
+        }
+        EXPECT_EQ(view_model.xAxis().formatTick(31.0), "#31");
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, AllHistoryAxisIsUnchangedFromOneToTheLastRun) {
+        setHistory();
+
+        view_model.refresh();
+
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 1.0);
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 2.0);
+        EXPECT_EQ(view_model.visibleRunCount(), view_model.runCount());
+    }
+
+    // A one-run chart still needs an axis that labels the run and no run that does not exist.
+    TEST_F(CompletionHistoryViewModelTest, OneVisibleRowGetsAnAxisLabellingOnlyThatRun) {
+        project(9, {7});
+
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.visibleRunCount(), 1);
+        EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{7}));
+        EXPECT_EQ(view_model.xAxis().formatTick(7.0), "#7");
+        EXPECT_GT(view_model.xAxis().normalizedPosition(7.0), 0.0);
+        EXPECT_LT(view_model.xAxis().normalizedPosition(7.0), 1.0);
+        ASSERT_EQ(view_model.series({CompletionHistoryViewModel::Score}).front()->points.size(), 1);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, OnlyRunOneGetsAnAxisThatNeverLabelsRunZero) {
+        project(1, {1});
+
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{1}));
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, EmptyProjectionKeepsTheHistoryCountAndDrawsNothing) {
+        project(6, {});
+
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.runCount(), 6);
+        EXPECT_EQ(view_model.visibleRunCount(), 0);
+        EXPECT_TRUE(view_model.series({CompletionHistoryViewModel::Score}).front()->points.isEmpty());
+        EXPECT_GT(view_model.xAxis().max(), view_model.xAxis().min());
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, NoHistoryHasNeitherFullNorVisibleRuns) {
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.runCount(), 0);
+        EXPECT_EQ(view_model.visibleRunCount(), 0);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, SelectedRunInsideTheProjectionIsMarkable) {
+        project(5, {4, 5});
+        fake->selected = 5;
+
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.selectedRunIndex(), 5);
+        EXPECT_TRUE(view_model.selectedRunVisible());
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, SelectedRunOutsideTheProjectionStaysSelectedButIsNotMarkable) {
+        project(5, {4, 5});
+        fake->selected = 2;
+
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.selectedRunIndex(), 2) << "the run is still the selected one";
+        EXPECT_FALSE(view_model.selectedRunVisible());
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, NoSelectedRunIsNotVisible) {
+        setHistory();
+
+        view_model.refresh();
+
+        EXPECT_FALSE(view_model.selectedRunVisible());
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, WideningTheRangeRevealsAnAlreadySelectedRunWithoutReselecting) {
+        project(5, {4, 5});
+        fake->selected = 2;
+        view_model.refresh();
+        const QSignalSpy visibleSpy(&view_model, &CompletionHistoryViewModel::selectedRunVisibleChanged);
+
+        project(5, {1, 2, 3, 4, 5});
+        view_model.refresh();
+
+        EXPECT_TRUE(view_model.selectedRunVisible());
+        EXPECT_EQ(view_model.selectedRunIndex(), 2);
+        EXPECT_EQ(visibleSpy.count(), 1);
+        EXPECT_TRUE(fake->select_run_calls.empty());
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, SelectRunForwardsTheOriginalNumberOfAVisibleRun) {
+        project(5, {4, 5});
+        view_model.refresh();
+
+        view_model.selectRun(5);
+
+        EXPECT_EQ(fake->select_run_calls, std::vector<int>{5});
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, SelectRunIgnoresRunsOutsideTheProjection) {
+        project(5, {4, 5});
+        view_model.refresh();
+
+        view_model.selectRun(1);
+        view_model.selectRun(3);
+        view_model.selectRun(6);
+
+        EXPECT_TRUE(fake->select_run_calls.empty());
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, TooltipValuesAddressTheOriginalRows) {
+        project(5, {4, 5});
+        view_model.refresh();
+
+        const auto sample = view_model.series({CompletionHistoryViewModel::Score}).front()->sampleAtX(5.0);
+
+        ASSERT_TRUE(sample.has_value());
+        EXPECT_DOUBLE_EQ(sample->x(), 5.0);
+        EXPECT_DOUBLE_EQ(sample->y(), 105.0);
     }
 }
