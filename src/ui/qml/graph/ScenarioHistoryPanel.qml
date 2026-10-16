@@ -31,6 +31,9 @@ Frame {
         return s && !!root.columnVisibility[s.id]
     })
 
+    // History exists but the range shows none of it.
+    readonly property bool rangeIsEmpty: root.historyVm.runCount > 0 && root.historyVm.visibleRunCount < 1
+
     // The selected run's x position on the history graph, or -1 for none or one the range hides.
     readonly property int selectedRunIndex: root.historyVm.selectedRunIndex !== undefined
                                             && root.historyVm.selectedRunVisible === true
@@ -119,17 +122,26 @@ Frame {
             }
         }
 
-        Label {
-            objectName: "historyEmptyLabel"
-            Layout.alignment: Qt.AlignCenter
+        ColumnLayout {
             Layout.fillHeight: true
             Layout.fillWidth: true
-            horizontalAlignment: Text.AlignHCenter
-            text: root.historyVm.runCount === 0
-                  ? qsTr("No runs recorded for this scenario.")
-                  : qsTr("No runs in the selected range.")
-            verticalAlignment: Text.AlignVCenter
+            spacing: 4
             visible: root.historyVm.visibleRunCount < 1
+
+            Item { Layout.fillHeight: true }
+            Label {
+                objectName: "historyEmptyLabel"
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                text: root.rangeIsEmpty ? qsTr("No runs in the selected range.")
+                                        : qsTr("No runs recorded for this scenario.")
+            }
+            GraphRangeHint {
+                objectName: "historyEmptyHint"
+                Layout.fillWidth: true
+                visible: root.rangeIsEmpty
+            }
+            Item { Layout.fillHeight: true }
         }
     }
 }

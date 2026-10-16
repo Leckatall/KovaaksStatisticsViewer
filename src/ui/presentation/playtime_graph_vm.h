@@ -21,6 +21,12 @@ namespace ksv::presentation {
         Q_OBJECT
         // False when there is no playtime to plot; the panel then shows an empty state, not axes.
         Q_PROPERTY(bool hasData READ hasData NOTIFY dataUpdated)
+        // Whether the unfiltered history has any playtime, whatever the range shows.
+        Q_PROPERTY(bool historyAvailable READ historyAvailable NOTIFY dataUpdated)
+        Q_PROPERTY(int visibleSampleCount READ visibleSampleCount NOTIFY dataUpdated)
+        // History exists but the range shows no sample.
+        Q_PROPERTY(bool noObservationsInRange READ noObservationsInRange NOTIFY dataUpdated)
+        Q_PROPERTY(QString emptyStateText READ emptyStateText NOTIFY dataUpdated)
         // Names the effective averaging window, so it can never describe a different one than is plotted.
         Q_PROPERTY(QString title READ title NOTIFY windowChanged)
         Q_PROPERTY(int averagingWindowDays READ averagingWindowDays NOTIFY windowChanged)
@@ -43,6 +49,10 @@ namespace ksv::presentation {
         [[nodiscard]] int yAxisColumn() const override { return Playtime; }
 
         [[nodiscard]] bool hasData() const { return !m_series->points.isEmpty(); }
+        [[nodiscard]] bool historyAvailable() const { return m_historyAvailable; }
+        [[nodiscard]] int visibleSampleCount() const { return static_cast<int>(m_series->points.size()); }
+        [[nodiscard]] bool noObservationsInRange() const { return m_historyAvailable && m_series->points.isEmpty(); }
+        [[nodiscard]] QString emptyStateText() const;
         [[nodiscard]] QString title() const;
         [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
@@ -64,6 +74,7 @@ namespace ksv::presentation {
         int m_windowDays = application::kDefaultAveragingWindowDays;
         application::AxisPolicy m_axisPolicy;
         DateTimeAxis m_xAxis;
+        bool m_historyAvailable = false;
         SeriesModel *m_series; // raw seconds + a seconds->minutes transform
     };
 }

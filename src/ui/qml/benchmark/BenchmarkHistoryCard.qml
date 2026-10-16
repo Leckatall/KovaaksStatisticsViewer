@@ -56,6 +56,22 @@ Frame {
             color: root.palette.placeholderText
             text: root.historyModel ? root.historyModel.emptyStateText : ""
         }
+        GraphRangeHint {
+            objectName: root.namePrefix + "EmptyHint"
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignLeft
+            visible: !root.hasData && root.historyModel !== null && root.historyModel !== undefined
+                     && root.historyModel.noObservationsInRange === true
+        }
+        Label {
+            objectName: root.namePrefix + "NoImprovementLabel"
+            Layout.fillWidth: true
+            visible: root.hasData && root.historyModel.noImprovementPoints === true
+            wrapMode: Text.WordWrap
+            color: root.palette.placeholderText
+            text: qsTr("This range has no improvement points, so Points only draws nothing. "
+                       + "Choose a line style to see your rank held through it.")
+        }
 
         Loader {
             Layout.fillWidth: true

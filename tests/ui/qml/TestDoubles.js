@@ -70,6 +70,11 @@ function makeFakeHistoryModel(overrides) {
     return Object.assign({
         metricName: "Personal-best average rank",
         hasData: false,
+        historyAvailable: false,
+        observationCount: 0,
+        hasCarriedState: false,
+        noObservationsInRange: false,
+        noImprovementPoints: false,
         emptyStateText: "No history yet",
         // Minimal GraphViewModelBase-ish surface so a card can bind it as graphVm
         // without throwing while the metric is empty.

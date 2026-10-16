@@ -654,6 +654,101 @@ TEST(BenchmarkHistoryViewModel, NoHistoryAndAnEmptyRangeReadDifferently) {
     EXPECT_NE(noHistory.rankHistory()->emptyStateText(), emptyRange.rankHistory()->emptyStateText());
 }
 
+// ---- content states: no improvement points, no relevant history ---------------------------
+
+namespace {
+    // Rank held at 2.5 through 11-13 March, with no improvement inside the range.
+    BenchmarkWorkspaceSnapshot carriedOnlySnapshot() {
+        return rankRangeSnapshot(DayInterval{ymd(2024, 3, 11), ymd(2024, 3, 13)});
+    }
+}
+
+TEST(BenchmarkHistoryContent, PointsOnlyOverACarriedRankWithoutImprovementsHasNoImprovementPoints) {
+    auto fake = fakeWith(carriedOnlySnapshot());
+    fake->rankPresentation.appearance = {ConnectionMode::PointsOnly, false};
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *history = vm.rankHistory();
+
+    EXPECT_TRUE(history->hasCarriedState());
+    EXPECT_EQ(history->observationCount(), 0);
+    EXPECT_TRUE(history->noImprovementPoints());
+    EXPECT_TRUE(history->property("noImprovementPoints").toBool());
+}
+
+TEST(BenchmarkHistoryContent, ALineModeDrawsTheCarriedRankSoThereIsNothingToExplain) {
+    auto fake = fakeWith(carriedOnlySnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_FALSE(vm.rankHistory()->noImprovementPoints());
+    fake->rankPresentation.appearance = {ConnectionMode::Straight, false};
+    fake->publishPresentation();
+    EXPECT_FALSE(vm.rankHistory()->noImprovementPoints());
+}
+
+TEST(BenchmarkHistoryContent, SwitchingTheLineModeAnnouncesTheContentStateChange) {
+    auto fake = fakeWith(carriedOnlySnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    const QSignalSpy spy(vm.rankHistory(), &BenchmarkHistoryViewModel::contentStateChanged);
+
+    fake->rankPresentation.appearance = {ConnectionMode::PointsOnly, false};
+    fake->publishPresentation();
+    EXPECT_TRUE(vm.rankHistory()->noImprovementPoints());
+    EXPECT_GE(spy.count(), 1);
+
+    fake->rankPresentation.appearance = {ConnectionMode::Smooth, false};
+    fake->publishPresentation();
+    EXPECT_FALSE(vm.rankHistory()->noImprovementPoints());
+}
+
+TEST(BenchmarkHistoryContent, PointsOnlyWithImprovementsInTheRangeHasPointsToShow) {
+    auto fake = fakeWith(rankRangeSnapshot(DayInterval{ymd(2024, 3, 5), ymd(2024, 3, 12)}));
+    fake->rankPresentation.appearance = {ConnectionMode::PointsOnly, false};
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_EQ(vm.rankHistory()->observationCount(), 2);
+    EXPECT_FALSE(vm.rankHistory()->noImprovementPoints());
+}
+
+TEST(BenchmarkHistoryContent, PointsOnlyBeforeAnyRankIsEstablishedIsAnEmptyRangeNotMissingImprovements) {
+    auto fake = fakeWith(rankRangeSnapshot(DayInterval{ymd(2024, 3, 1), ymd(2024, 3, 3)}));
+    fake->rankPresentation.appearance = {ConnectionMode::PointsOnly, false};
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *history = vm.rankHistory();
+
+    EXPECT_FALSE(history->hasCarriedState());
+    EXPECT_FALSE(history->noImprovementPoints());
+    EXPECT_TRUE(history->noObservationsInRange());
+}
+
+// EDGE-04: an anchor with no contributing run is the ordinary no-history state, even when stale
+// history lingers in the projection.
+TEST(BenchmarkHistoryContent, AnAnchoredRankRangeWithoutAContributingRunReadsAsNoHistory) {
+    auto snapshot = rankRangeSnapshot(std::nullopt);
+    snapshot.rank.noRelevantHistory = true;
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *history = vm.rankHistory();
+
+    EXPECT_FALSE(history->historyAvailable());
+    EXPECT_FALSE(history->noObservationsInRange());
+    EXPECT_EQ(history->emptyStateText().toStdString(), "No history recorded yet.");
+}
+
+TEST(BenchmarkHistoryContent, APlaytimeRangeWithoutSamplesOverRecordedPlaytimeIsAnEmptyRange) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.playtime.fullExtent = PlaytimeDayExtent{ymd(2024, 3, 4), ymd(2024, 3, 6)};
+    snapshot.playtime.interval = DayInterval{ymd(2024, 4, 1), ymd(2024, 4, 7)};
+    snapshot.projection->rollingPlaytime.clear();
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *playtime = vm.playtimeHistory();
+
+    EXPECT_TRUE(playtime->historyAvailable());
+    EXPECT_TRUE(playtime->noObservationsInRange());
+    EXPECT_FALSE(playtime->hasData());
+    EXPECT_FALSE(playtime->noImprovementPoints());
+}
+
 // ── Numeric Y-axis policy (playtime metric only) ─────────────────────────────────────────────────
 
 namespace {

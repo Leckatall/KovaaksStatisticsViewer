@@ -664,7 +664,9 @@ TestCase {
         compare(vm.beginVisitCalls, 1)
         const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
         compare(selector.currentIndex, 2)
-        tryVerify(() => selector.activeFocus, 2000, "focus moves into the graph editor")
+        const first = ItemLookup.findByObjectName(dialog.contentItem, "graphField_dataRange_range")
+        tryVerify(() => first !== null && first.activeFocus, 2000, "focus moves into the graph editor")
+        verify(!selector.activeFocus)
     }
 
     function test_openGraphWithAnUnknownKeyStillOpensTheGraphsPage() {

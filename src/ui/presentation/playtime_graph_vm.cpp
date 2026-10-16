@@ -38,6 +38,10 @@ namespace ksv::presentation {
                                  : tr("Daily Playtime (%1-day rolling average)").arg(m_windowDays);
     }
 
+    QString PlaytimeGraphViewModel::emptyStateText() const {
+        return m_historyAvailable ? tr("No playtime in the selected range.") : tr("No playtime recorded yet.");
+    }
+
     void PlaytimeGraphViewModel::applyYAxis() {
         const std::array<const SeriesModel *, 1> members{m_series};
         m_series->yAxisOptions = optionsForPolicy(m_axisPolicy, {});
@@ -75,6 +79,8 @@ namespace ksv::presentation {
             const QDateTime hi = QDateTime::fromMSecsSinceEpoch(qint64(rawSecondsPoints.last().x()), QTimeZone::utc());
             std::ignore = m_xAxis.setRange(lo, hi);
         }
+
+        m_historyAvailable = snapshot.view.fullExtent.has_value() || !rawSecondsPoints.isEmpty();
 
         const bool windowMoved = m_windowDays != snapshot.view.windowDays;
         m_windowDays = snapshot.view.windowDays;

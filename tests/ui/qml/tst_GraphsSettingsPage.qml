@@ -657,4 +657,119 @@ TestCase {
         compare(find(dialog, "graphGroup_dataRange").Accessible.role, Accessible.Heading)
         verify(find(dialog, "graphField_seriesStyle_hits_color").Accessible.name.indexOf("Hits") >= 0)
     }
+    // The contextual link hands the keyboard to the editor of the graph it opened, not to the selector.
+    function test_openingAGraphFocusesTheFirstControlOfItsEditor_data() {
+        return [
+            {tag: "dailyPlaytime", graph: "dailyPlaytime", first: "graphField_dataRange_range"},
+            {tag: "scenarioHistory", graph: "scenarioHistory", first: "graphField_dataRange_range"},
+            {tag: "benchmarkRank", graph: "benchmarkRank", first: "graphField_dataRange_range"},
+            {tag: "run", graph: "run", first: "graphField_seriesStyle_connection"}
+        ]
+    }
+
+    function test_openingAGraphFocusesTheFirstControlOfItsEditor(data) {
+        const {dialog} = openOn(data.graph)
+
+        tryVerify(() => find(dialog, data.first) !== null && find(dialog, data.first).activeFocus, 2000,
+                  data.first + " should hold keyboard focus")
+        verify(!find(dialog, "graphSelector").activeFocus)
+    }
+
+    // Walks the window's Tab order from `start` and returns the objectNames it passes before returning.
+    function tabOrderFrom(start) {
+        const visited = []
+        let item = start
+        for (let i = 0; i < 400; ++i) {
+            item = item.nextItemInFocusChain(true)
+            if (item === start) return {names: visited, cycles: true}
+            visited.push(item.objectName)
+        }
+        return {names: visited, cycles: false}
+    }
+
+    function test_tabOrderLeadsFromTheEditorToSaveAndCancelAndAroundAgain() {
+        const {dialog, vm} = openOn("scenarioHistory")
+        vm.pendingChanges = true
+        const first = find(dialog, "graphField_dataRange_range")
+
+        const walk = tabOrderFrom(first)
+
+        verify(walk.cycles, "the Tab order comes back to where it started: no trap")
+        for (const name of ["graphField_dataRange_latestRuns", "graphField_seriesStyle_connection", "graphField_seriesStyle_markers",
+                            "graphField_seriesStyle_hits_color", "graphField_seriesStyle_hits_width",
+                            "graphResetButton", "settingsSaveButton", "settingsCancelButton"]) {
+            const quiet = name === "graphField_dataRange_latestRuns" && find(dialog, name) && !find(dialog, name).visible
+            if (!quiet) verify(walk.names.indexOf(name) >= 0, name + " is not reachable by Tab; saw " + JSON.stringify(walk.names))
+        }
+        verify(walk.names.indexOf("graphSelector") >= 0, "the graph selector is reachable by Tab")
+    }
+
+    function test_theEditorsControlsComeInTheOrderTheyAreRead() {
+        const {dialog} = openOn("dailyPlaytime")
+        const walk = tabOrderFrom(find(dialog, "graphField_dataRange_range"))
+        const order = ["graphField_dataRange_range", "graphField_dataRange_averagingWindow", "graphField_dataRange_anchor",
+                       "graphField_axes_playtime_fitMode", "graphField_seriesStyle_connection", "graphResetButton"]
+        const names = ["graphField_dataRange_range"].concat(walk.names)
+        let last = -1
+        for (const name of order) {
+            const at = names.indexOf(name)
+            verify(at > last, name + " out of order in " + JSON.stringify(names))
+            last = at
+        }
+    }
+
+    function test_everyFieldErrorIsAssociatedWithItsControl() {
+        const {dialog, vm} = openOn("scenarioHistory")
+        vm.setGraphRangeKind("scenarioHistory", "customDates")
+        vm.setAxisMode("scenarioHistory", "score", "fixed")
+        vm.draftIssues = [
+            issue("scenarioHistory", "dataRange", "", "endDate", "reversedDateRange"),
+            issue("scenarioHistory", "seriesStyle", "hits", "width", "lineWidthOutOfRange"),
+            issue("scenarioHistory", "axes", "score", "fixedMax", "fixedBoundsNotIncreasing")
+        ]
+
+        for (const name of ["graphField_dataRange_endDate", "graphField_seriesStyle_hits_width", "graphField_axes_score_fixedMax"]) {
+            const error = find(dialog, name + "_error")
+            verify(error.visible && error.text.length > 0, name + " shows its problem as text")
+            verify(find(dialog, name).Accessible.description.indexOf(error.text) >= 0, name + " carries its error")
+        }
+    }
+
+    function test_theLimitsOfAFieldAreItsDescriptionBeforeAnythingIsWrong() {
+        const {dialog} = openOn("dailyPlaytime")
+        const description = find(dialog, "graphField_dataRange_averagingWindow").Accessible.description
+        verify(description.indexOf("3,650") >= 0 || description.indexOf("3650") >= 0 || description.indexOf("3.650") >= 0, description)
+    }
+
+    function test_theSelectedPresetIsMarkedBeyondColour() {
+        const {dialog, vm} = openOn("dailyPlaytime")
+        vm.setGraphRangeKind("dailyPlaytime", "recentDays")
+        vm.change("dailyPlaytime", {rangeCount: 30})
+        verify(waitForRendering(dialog.contentItem))
+
+        const selected = find(dialog, "graphRangePreset_recentDays_30")
+        const other = find(dialog, "graphRangePreset_recentDays_7")
+        verify(selected !== null && other !== null)
+        compare(selected.font.bold, true)
+        compare(other.font.bold, false)
+        verify(selected.Accessible.description.length > 0)
+        compare(other.Accessible.description, "")
+    }
+
+    function test_aColourSwatchShowsKeyboardFocusWithAThickerBorderAndNamesItsSeries() {
+        const {dialog} = openOn("scenarioHistory")
+        const swatch = find(dialog, "graphField_seriesStyle_hits_color")
+        compare(swatch.background.border.width, 1)
+
+        swatch.forceActiveFocus(Qt.TabFocusReason)
+
+        compare(swatch.visualFocus, true)
+        compare(swatch.background.border.width, 2)
+        verify(swatch.Accessible.name.indexOf("Hits") >= 0)
+    }
+
+    function test_theEditorNamesTheGraphItIsEditingAsText() {
+        const {dialog} = openOn("benchmarkRank")
+        verify(find(dialog, "graphEditingLabel").text.indexOf("Benchmark rank history") >= 0)
+    }
 }

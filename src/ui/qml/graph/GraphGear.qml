@@ -141,6 +141,9 @@ TooltipToolButton {
         contentItem: ColumnLayout {
             spacing: 8
 
+            Accessible.role: Accessible.Dialog
+            Accessible.name: qsTr("%1 quick settings").arg(gear.graphName)
+
             RowLayout {
                 Layout.fillWidth: true
 
@@ -196,7 +199,8 @@ TooltipToolButton {
                         Layout.fillWidth: true
                         placeholderText: qsTr("Custom count")
                         Accessible.name: qsTr("Latest runs, custom count")
-                        Accessible.description: gear.latestRunsError
+                        Accessible.description: gear.latestRunsError !== "" ? gear.latestRunsError
+                            : qsTr("Whole runs, 1 to %1.").arg(Number(gear.maximumLatestRuns).toLocaleString(Qt.locale(), "f", 0))
                         onTextEdited: {
                             gear.latestRunsError = gear.errorFor(
                                 gear.apply({rangeKind: "latestRuns", count: text}),
@@ -207,6 +211,7 @@ TooltipToolButton {
                 }
                 Label {
                     objectName: "graphField_dataRange_latestRuns_error"
+                    Accessible.role: Accessible.AlertMessage
                     Layout.fillWidth: true
                     visible: text !== ""
                     text: gear.latestRunsError
@@ -228,7 +233,8 @@ TooltipToolButton {
                         objectName: "graphField_dataRange_averagingWindow"
                         Layout.fillWidth: true
                         Accessible.name: qsTr("Rolling average window, in days")
-                        Accessible.description: gear.windowError
+                        Accessible.description: gear.windowError !== "" ? gear.windowError
+                            : qsTr("Whole days, 1 to %1.").arg(Number(gear.maximumWindowDays).toLocaleString(Qt.locale(), "f", 0))
                         onTextEdited: {
                             gear.windowError = gear.errorFor(gear.apply({window: text}), String(gear.maximumWindowDays))
                         }
@@ -237,6 +243,7 @@ TooltipToolButton {
                 }
                 Label {
                     objectName: "graphField_dataRange_averagingWindow_error"
+                    Accessible.role: Accessible.AlertMessage
                     Layout.fillWidth: true
                     visible: text !== ""
                     text: gear.windowError
@@ -288,6 +295,7 @@ TooltipToolButton {
                 Layout.fillWidth: true
                 flat: true
                 text: qsTr("More graph settings…")
+                Accessible.name: qsTr("More settings for %1").arg(gear.graphName)
                 onClicked: {
                     quickPopup.close()
                     gear.moreSettingsRequested(gear.graphKey)

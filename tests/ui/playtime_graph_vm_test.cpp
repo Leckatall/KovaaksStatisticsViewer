@@ -464,4 +464,53 @@ namespace {
         EXPECT_DOUBLE_EQ(axis.max(), 90.0);
         EXPECT_GE(boundsSpy.count(), 1);
     }
+    // EDGE-03: a range with no playtime is not the same as a profile with none.
+    TEST_F(PlaytimeGraphViewModelTest, NoPlaytimeAtAllIsNoHistoryRatherThanAnEmptyRange) {
+        EXPECT_FALSE(view_model.historyAvailable());
+        EXPECT_FALSE(view_model.noObservationsInRange());
+        EXPECT_EQ(view_model.visibleSampleCount(), 0);
+        EXPECT_FALSE(view_model.hasData());
+        EXPECT_EQ(view_model.emptyStateText(), "No playtime recorded yet.");
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, AnEmptyRangeOverRecordedPlaytimeKeepsTheHistoryAvailable) {
+        fake->view.fullExtent = PlaytimeDayExtent{std::chrono::sys_days{std::chrono::days{19500}},
+                                                  std::chrono::sys_days{std::chrono::days{19510}}};
+        fake->view.interval = DayInterval{std::chrono::sys_days{std::chrono::days{19600}},
+                                          std::chrono::sys_days{std::chrono::days{19606}}};
+        const QSignalSpy dataSpy(&view_model, &GraphViewModelBase::dataUpdated);
+
+        fake->publish();
+
+        EXPECT_GT(dataSpy.count(), 0);
+        EXPECT_TRUE(view_model.historyAvailable());
+        EXPECT_TRUE(view_model.noObservationsInRange());
+        EXPECT_FALSE(view_model.hasData());
+        EXPECT_EQ(view_model.visibleSampleCount(), 0);
+        EXPECT_EQ(view_model.emptyStateText(), "No playtime in the selected range.");
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, VisibleSamplesAreCountedSeparatelyFromTheHistory) {
+        fake->view.fullExtent = PlaytimeDayExtent{std::chrono::sys_days{std::chrono::days{19500}},
+                                                  std::chrono::sys_days{std::chrono::days{19510}}};
+        fake->series = {{19508, 600.0}, {19509, 1200.0}};
+
+        fake->publish();
+
+        EXPECT_TRUE(view_model.historyAvailable());
+        EXPECT_FALSE(view_model.noObservationsInRange());
+        EXPECT_EQ(view_model.visibleSampleCount(), 2);
+        EXPECT_TRUE(view_model.hasData());
+    }
+
+    TEST_F(PlaytimeGraphViewModelTest, RangeAndHistoryFactsAreReadableFromQml) {
+        fake->view.fullExtent = PlaytimeDayExtent{std::chrono::sys_days{std::chrono::days{19500}},
+                                                  std::chrono::sys_days{std::chrono::days{19510}}};
+        fake->publish();
+
+        EXPECT_TRUE(view_model.property("historyAvailable").toBool());
+        EXPECT_TRUE(view_model.property("noObservationsInRange").toBool());
+        EXPECT_EQ(view_model.property("visibleSampleCount").toInt(), 0);
+        EXPECT_EQ(view_model.property("emptyStateText").toString(), "No playtime in the selected range.");
+    }
 }

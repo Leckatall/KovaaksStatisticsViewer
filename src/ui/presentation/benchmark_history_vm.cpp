@@ -21,10 +21,12 @@ namespace ksv::presentation {
     void BenchmarkHistoryViewModel::setPresentation(const application::GraphPresentation &presentation) {
         if (presentation == m_presentation) return;
         m_presentation = presentation;
+        const bool modeChanged = connectionMode() != static_cast<int>(presentation.appearance.connection);
         setAppearance(presentation.appearance);
         applySeriesStyle(*m_series, presentation, m_metric == AverageRank ? "rank" : "playtime");
         setAxisPolicies(presentation.axisPolicies);
         emit styleChanged();
+        if (modeChanged) emit contentStateChanged();
     }
 
     QString BenchmarkHistoryViewModel::metricName() const {
@@ -107,6 +109,7 @@ namespace ksv::presentation {
             m_series->referenceLines.clear();
             emit dataUpdated();
             emit boundsChanged();
+            emit contentStateChanged();
             return;
         }
 
@@ -145,5 +148,6 @@ namespace ksv::presentation {
 
         emit dataUpdated();
         emit boundsChanged();
+        emit contentStateChanged();
     }
 }

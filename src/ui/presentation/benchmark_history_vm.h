@@ -41,6 +41,8 @@ namespace ksv::presentation {
         // History exists but the range shows no observation; Points only then draws nothing.
         Q_PROPERTY(bool noObservationsInRange READ noObservationsInRange NOTIFY dataUpdated)
         Q_PROPERTY(QString emptyStateText READ emptyStateText NOTIFY dataUpdated)
+        // Points only over a range whose rank is carried but has no improvement: nothing is drawn.
+        Q_PROPERTY(bool noImprovementPoints READ noImprovementPoints NOTIFY contentStateChanged)
         // Names the playtime metric's effective averaging window; the rank metric's name never changes.
         Q_PROPERTY(QString metricName READ metricName NOTIFY metricNameChanged)
 
@@ -66,6 +68,10 @@ namespace ksv::presentation {
         [[nodiscard]] bool noObservationsInRange() const { return m_historyAvailable && m_observationCount == 0; }
         [[nodiscard]] QString emptyStateText() const {
             return m_historyAvailable ? tr("No history in the selected range.") : tr("No history recorded yet.");
+        }
+        [[nodiscard]] bool noImprovementPoints() const {
+            return m_hasCarriedState && m_observationCount == 0
+                   && connectionMode() == static_cast<int>(application::ConnectionMode::PointsOnly);
         }
         [[nodiscard]] QString metricName() const;
 
@@ -102,6 +108,7 @@ namespace ksv::presentation {
 
     signals:
         void metricNameChanged();
+        void contentStateChanged();
 
     private:
         [[nodiscard]] application::GraphKey graphKey() const {

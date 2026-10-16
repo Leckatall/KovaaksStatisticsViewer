@@ -133,7 +133,7 @@ ApplicationWindow {
         if (GraphCatalog.isKnown(graphKey)) root.settingsVm.selectedGraph = graphKey
         currentCategory = graphsCategory
         open()
-        graphSelector.forceActiveFocus()
+        Qt.callLater(() => { if (!graphEditor.focusFirstControl()) graphSelector.forceActiveFocus() })
     }
 
     onClosing: (close) => {

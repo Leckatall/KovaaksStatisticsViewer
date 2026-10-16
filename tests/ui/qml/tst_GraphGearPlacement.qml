@@ -45,6 +45,8 @@ Item {
     QtObject {
         id: fakePlaytimeVm
         property bool hasData: false
+        property bool noObservationsInRange: false
+        property string emptyStateText: "No playtime recorded yet."
         property bool pointMarkers: false
         property int connectionMode: 0
         property string title: "Daily Playtime (3-day rolling average)"

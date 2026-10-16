@@ -329,11 +329,12 @@ namespace ksv::presentation {
         BenchmarkHistoryViewModel::Content content;
         const domain::BenchmarkProjection *projection = snapshot.projection ? &*snapshot.projection : nullptr;
         if (m_rankPresent && projection) {
-            content.historyAvailable = !projection->averageRankHistory.empty();
+            // An anchor with no contributing run is no history at all, whatever the projection still holds.
+            content.historyAvailable = !projection->averageRankHistory.empty() && !snapshot.rank.noRelevantHistory;
             for (const auto &point: projection->averageRankHistory)
                 content.fullHistoryPeak = std::max(content.fullHistoryPeak, point.averageRank);
         }
-        if (!content.historyAvailable || snapshot.rank.noRelevantHistory) {
+        if (!content.historyAvailable) {
             m_rankHistory->update(content, m_rankPresent, m_rankTiers);
             return;
         }

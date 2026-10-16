@@ -62,14 +62,24 @@ Frame {
                 }
             }
 
-            Label {
+            ColumnLayout {
                 anchors.centerIn: parent
                 width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                objectName: "playtimeEmptyLabel"
-                text: qsTr("No playtime recorded yet.")
+                spacing: 4
                 visible: !root.playtimeVm.hasData
-                wrapMode: Text.WordWrap
+
+                Label {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    objectName: "playtimeEmptyLabel"
+                    text: root.playtimeVm.emptyStateText
+                    wrapMode: Text.WordWrap
+                }
+                GraphRangeHint {
+                    Layout.fillWidth: true
+                    objectName: "playtimeEmptyHint"
+                    visible: root.playtimeVm.noObservationsInRange === true
+                }
             }
         }
     }

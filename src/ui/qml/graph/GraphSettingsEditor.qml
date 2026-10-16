@@ -164,6 +164,24 @@ Item {
         return true
     }
 
+    function firstTabStop(item) {
+        if (!item.visible || !item.enabled) return null
+        if (item.activeFocusOnTab) return item
+        for (const child of item.children) {
+            const found = firstTabStop(child)
+            if (found) return found
+        }
+        return null
+    }
+
+    function focusFirstControl() {
+        const first = firstTabStop(content)
+        if (!first) return false
+        ensureVisible(first)
+        first.forceActiveFocus(Qt.TabFocusReason)
+        return true
+    }
+
     function contains(item) {
         for (let current = item; current; current = current.parent)
             if (current === content) return true
@@ -348,6 +366,8 @@ Item {
                                 text: root.draft.rangeKind === "latestRuns"
                                       ? qsTr("%1 runs").arg(root.num(modelData)) : root.daysText(modelData)
                                 highlighted: root.draft.rangeCount === modelData
+                                font.bold: highlighted
+                                Accessible.description: highlighted ? qsTr("Selected") : ""
                                 onClicked: root.edit("dataRange", "", root.draft.rangeKind, root.num(modelData))
                             }
                         }
