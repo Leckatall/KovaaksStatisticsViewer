@@ -152,6 +152,14 @@ Item {
             compare(findChild(emptyRange, "historyGraphCanvas"), null)
         }
 
+        function test_noSelectedScenarioIsToldApartFromAScenarioWithoutRuns() {
+            const noScenario = panelWith({scenarioTitle: "", runCount: 0, visibleRunCount: 0})
+            const noRuns = panelWith({scenarioTitle: "Air Angelic", runCount: 0, visibleRunCount: 0})
+
+            compare(findChild(noScenario, "historyEmptyLabel").text, "No scenario selected.")
+            compare(findChild(noRuns, "historyEmptyLabel").text, "No runs recorded for this scenario.")
+        }
+
         function test_nothingAsksForTwoRuns() {
             const panel = createTemporaryObject(panelComponent, root)
             verify(!!panel, "Component exists")

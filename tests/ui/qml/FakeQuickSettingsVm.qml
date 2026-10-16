@@ -48,8 +48,25 @@ QtObject {
         benchmarkPlaytime: entry({hasWindow: true, window: 3})
     })
 
+    // The real view model hands QML every number and date already formatted for the locale; the text
+    // keys follow their value (plain digits, ISO dates) unless a test names them.
+    function withTexts(merged, overrides) {
+        const derived = {
+            rangeCountText: () => String(merged.rangeCount),
+            windowText: () => String(merged.window),
+            rangeStartFormatted: () => merged.rangeStart,
+            rangeEndFormatted: () => merged.rangeEnd
+        }
+        const sources = {rangeCountText: "rangeCount", windowText: "window",
+                         rangeStartFormatted: "rangeStart", rangeEndFormatted: "rangeEnd"}
+        for (const key of Object.keys(derived))
+            if (overrides[key] === undefined && (overrides[sources[key]] !== undefined || merged[key] === undefined))
+                merged[key] = derived[key]()
+        return merged
+    }
+
     function entry(overrides) {
-        return Object.assign({
+        return withTexts(Object.assign({
             hasRange: true,
             hasLatestRuns: false,
             hasWindow: false,
@@ -60,12 +77,12 @@ QtObject {
             window: 0,
             connection: "smooth",
             markers: false
-        }, overrides)
+        }, overrides), overrides)
     }
 
     function setEntry(graph, overrides) {
         const all = Object.assign({}, quickSettings)
-        all[graph] = Object.assign({}, all[graph], overrides)
+        all[graph] = withTexts(Object.assign({}, all[graph], overrides), overrides)
         quickSettings = all
     }
 

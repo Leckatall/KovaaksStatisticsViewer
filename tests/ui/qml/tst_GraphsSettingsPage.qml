@@ -621,6 +621,40 @@ TestCase {
                "the last control is reachable by scrolling (at " + resetAt + " of " + scroller.height + ")")
     }
 
+    function test_theScrollBarNeverCoversAControlOrAUnit_data() {
+        const rows = []
+        for (const graph of ["run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkPlaytime"]) {
+            rows.push({tag: graph + " at the default size", graph: graph, floor: false})
+            rows.push({tag: graph + " at the floor", graph: graph, floor: true})
+        }
+        return rows
+    }
+
+    function test_theScrollBarNeverCoversAControlOrAUnit(data) {
+        const {dialog} = openOn(data.graph)
+        if (data.floor) {
+            dialog.width = dialog.floorWidth
+            dialog.height = dialog.floorHeight
+        }
+        verify(waitForRendering(dialog.contentItem))
+
+        const scroller = find(dialog, "graphEditorScroll")
+        const bar = scroller.ScrollBar.vertical
+        if (scroller.contentHeight <= scroller.height + 1)
+            return
+        verify(bar.visible, "an overflowing editor shows its scroll bar")
+        const barLeft = bar.mapToItem(scroller, 0, 0).x
+        const guarded = ItemLookup.findByObjectNamePrefix(find(dialog, "graphSettingsContent"), "graph", [])
+            .filter(item => item.visible && item.width > 0 && !item.objectName.endsWith("_error")
+                    && (item.objectName.startsWith("graphField_") || item.objectName.endsWith("_unit")))
+        verify(guarded.length > 0)
+        for (const item of guarded) {
+            const right = item.mapToItem(scroller, item.width, 0).x
+            verify(right <= barLeft + 0.5,
+                   item.objectName + " ends at " + right + " under the scroll bar starting at " + barLeft)
+        }
+    }
+
     function test_atALargerTextScaleNothingIsClippedHorizontallyAndTheEditorStillScrolls() {
         const {dialog} = openOn("dailyPlaytime")
         dialog.width = dialog.floorWidth

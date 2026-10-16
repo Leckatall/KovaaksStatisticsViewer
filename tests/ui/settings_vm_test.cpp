@@ -711,6 +711,85 @@ namespace {
         EXPECT_EQ(rank["rangeCount"].toInt(), 45);
     }
 
+    // The popup and the Graphs page show and read the same values, so they follow the same locale.
+    TEST_F(SettingsViewModelTest, QuickSettingsFormatACustomRangeInTheAppLocaleAndKeepTheIsoDates) {
+        using namespace std::chrono;
+        configuration->configuration.preferences(GraphKey::DailyPlaytime).range = RangePreference{
+            CustomDates{2026y / August / 1d, 2026y / August / 20d}, true
+        };
+        const auto view_model = make_view_model();
+
+        view_model->setLocale(QLocale(QLocale::German, QLocale::Germany));
+        auto daily = view_model->quickSettings()["dailyPlaytime"].toMap();
+        EXPECT_EQ(daily["rangeStartFormatted"].toString(), "01.08.2026");
+        EXPECT_EQ(daily["rangeEndFormatted"].toString(), "20.08.2026");
+        EXPECT_EQ(daily["rangeStart"].toString(), "2026-08-01");
+
+        view_model->setLocale(QLocale(QLocale::English, QLocale::UnitedStates));
+        daily = view_model->quickSettings()["dailyPlaytime"].toMap();
+        EXPECT_EQ(daily["rangeStartFormatted"].toString(), "8/1/2026");
+        EXPECT_EQ(daily["rangeEndFormatted"].toString(), "8/20/2026");
+    }
+
+    TEST_F(SettingsViewModelTest, ChangingTheLocaleRefreshesQuickSettings) {
+        const auto view_model = make_view_model();
+        const QSignalSpy spy(view_model.get(), &SettingsViewModel::quickSettingsChanged);
+
+        view_model->setLocale(QLocale(QLocale::German, QLocale::Germany));
+
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(SettingsViewModelTest, QuickSettingsShowCountsInTheAppLocalesDigits) {
+        const QLocale arabic(QLocale::Arabic, QLocale::Egypt);
+        ASSERT_NE(arabic.toString(1234), "1234") << "the locale must use non-ASCII digits for this test to mean anything";
+        configuration->configuration.preferences(GraphKey::ScenarioHistory).range = RangePreference{LatestRuns{1234}};
+        configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 14;
+        const auto view_model = make_view_model();
+        view_model->setLocale(arabic);
+
+        const auto quick = view_model->quickSettings();
+
+        EXPECT_EQ(quick["scenarioHistory"].toMap()["rangeCountText"].toString(), arabic.toString(1234).remove(arabic.groupSeparator()));
+        EXPECT_EQ(quick["dailyPlaytime"].toMap()["windowText"].toString(), arabic.toString(14));
+        EXPECT_EQ(quick["scenarioHistory"].toMap()["rangeCount"].toInt(), 1234);
+    }
+
+    TEST_F(SettingsViewModelTest, PopupCountsAreReadInTheAppLocalesDigitsLikeThePageReadsThem) {
+        const QLocale arabic(QLocale::Arabic, QLocale::Egypt);
+        ASSERT_NE(arabic.toString(14), "14");
+        const auto view_model = make_view_model();
+        view_model->setLocale(arabic);
+
+        const auto window = view_model->applyQuickPatch("dailyPlaytime", {{"window", arabic.toString(14)}});
+        const auto latest = view_model->applyQuickPatch(
+            "scenarioHistory", {{"rangeKind", "latestRuns"}, {"count", arabic.toString(50)}});
+
+        EXPECT_TRUE(window["accepted"].toBool());
+        EXPECT_TRUE(latest["accepted"].toBool());
+        ASSERT_EQ(configuration->patches.size(), 2u);
+        EXPECT_EQ(configuration->patches[0].second.averagingWindowDays, 14);
+        ASSERT_TRUE(configuration->patches[1].second.range.has_value());
+        EXPECT_EQ(std::get<LatestRuns>(configuration->patches[1].second.range->range).count, 50);
+    }
+
+    TEST_F(SettingsViewModelTest, PopupCountsKeepTheirDistinctRejectionCodesInANonAsciiLocale) {
+        const QLocale arabic(QLocale::Arabic, QLocale::Egypt);
+        const auto view_model = make_view_model();
+        view_model->setLocale(arabic);
+        const auto code = [&](const QString &text) {
+            const auto result = view_model->applyQuickPatch("dailyPlaytime", {{"window", text}});
+            return result["issues"].toList().at(0).toMap()["code"].toString();
+        };
+
+        EXPECT_EQ(code(arabic.toString(0)), "nonPositiveCount");
+        EXPECT_EQ(code(QString("99999999999999999999")), "countTooLarge");
+        EXPECT_EQ(code(arabic.toString(99999).remove(arabic.groupSeparator())), "countTooLarge");
+        EXPECT_EQ(code(QString("-") + arabic.toString(5)), "nonPositiveCount");
+        EXPECT_EQ(code(QString("x")), "unparsedInput");
+        EXPECT_EQ(code(QString("1e3")), "unparsedInput");
+    }
+
     TEST_F(SettingsViewModelTest, QuickSettingsFollowACommittedChangeEvenDuringAVisit) {
         const auto view_model = make_view_model();
         view_model->beginVisit();

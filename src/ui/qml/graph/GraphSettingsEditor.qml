@@ -218,7 +218,8 @@ Item {
         ColumnLayout {
             id: content
             objectName: "graphSettingsContent"
-            width: scroller.availableWidth
+            // The bar is drawn over the view's right edge, so its width is kept clear whether or not it shows.
+            width: scroller.availableWidth - scroller.ScrollBar.vertical.width - 4
             spacing: 16
 
             // ---- Issues of the last rejected Save --------------------------------------------------------

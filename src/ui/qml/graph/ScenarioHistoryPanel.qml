@@ -134,7 +134,8 @@ Frame {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 text: root.rangeIsEmpty ? qsTr("No runs in the selected range.")
-                                        : qsTr("No runs recorded for this scenario.")
+                                        : root.historyVm.scenarioTitle === "" ? qsTr("No scenario selected.")
+                                                                              : qsTr("No runs recorded for this scenario.")
             }
             GraphRangeHint {
                 objectName: "historyEmptyHint"

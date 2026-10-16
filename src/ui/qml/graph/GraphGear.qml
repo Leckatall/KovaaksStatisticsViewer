@@ -34,7 +34,11 @@ TooltipToolButton {
     property string latestRunsError: ""
 
     function pluralised(count, singular, plural) {
-        return count === 1 ? singular : plural.arg(count)
+        return count === 1 ? singular : plural.arg(quick.rangeCountText)
+    }
+
+    function limitText(limit) {
+        return Number(limit).toLocaleString(Qt.locale(), "f", 0)
     }
 
     readonly property bool offersRange: quick.hasRange === true
@@ -62,7 +66,7 @@ TooltipToolButton {
     readonly property string rangeText: {
         if (rangeIndex >= 0) return rangePresets[rangeIndex].text
         if (quick.rangeKind === "customDates")
-            return qsTr("Custom: %1 – %2").arg(quick.rangeStart).arg(quick.rangeEnd)
+            return qsTr("Custom: %1 – %2").arg(quick.rangeStartFormatted).arg(quick.rangeEndFormatted)
         if (quick.rangeKind === "latestRuns")
             return pluralised(quick.rangeCount, qsTr("Latest 1 run"), qsTr("Latest %1 runs"))
         return pluralised(quick.rangeCount, qsTr("Last 1 day"), qsTr("Last %1 days"))
@@ -87,9 +91,9 @@ TooltipToolButton {
     // Text fields follow the committed value unless the person is typing in them.
     function syncFields(force) {
         if (force || !windowField.activeFocus)
-            windowField.text = gear.quick.hasWindow === true ? String(gear.quick.window) : ""
+            windowField.text = gear.quick.hasWindow === true ? gear.quick.windowText : ""
         if (force || !latestRunsField.activeFocus)
-            latestRunsField.text = gear.quick.rangeKind === "latestRuns" ? String(gear.quick.rangeCount) : ""
+            latestRunsField.text = gear.quick.rangeKind === "latestRuns" ? gear.quick.rangeCountText : ""
     }
 
     onQuickChanged: syncFields(false)
@@ -200,11 +204,10 @@ TooltipToolButton {
                         placeholderText: qsTr("Custom count")
                         Accessible.name: qsTr("Latest runs, custom count")
                         Accessible.description: gear.latestRunsError !== "" ? gear.latestRunsError
-                            : qsTr("Whole runs, 1 to %1.").arg(Number(gear.maximumLatestRuns).toLocaleString(Qt.locale(), "f", 0))
+                            : qsTr("Whole runs, 1 to %1.").arg(gear.limitText(gear.maximumLatestRuns))
                         onTextEdited: {
                             gear.latestRunsError = gear.errorFor(
-                                gear.apply({rangeKind: "latestRuns", count: text}),
-                                Number(gear.maximumLatestRuns).toLocaleString(Qt.locale(), "f", 0))
+                                gear.apply({rangeKind: "latestRuns", count: text}), gear.limitText(gear.maximumLatestRuns))
                         }
                     }
                     Label { text: qsTr("runs") }
@@ -234,9 +237,9 @@ TooltipToolButton {
                         Layout.fillWidth: true
                         Accessible.name: qsTr("Rolling average window, in days")
                         Accessible.description: gear.windowError !== "" ? gear.windowError
-                            : qsTr("Whole days, 1 to %1.").arg(Number(gear.maximumWindowDays).toLocaleString(Qt.locale(), "f", 0))
+                            : qsTr("Whole days, 1 to %1.").arg(gear.limitText(gear.maximumWindowDays))
                         onTextEdited: {
-                            gear.windowError = gear.errorFor(gear.apply({window: text}), String(gear.maximumWindowDays))
+                            gear.windowError = gear.errorFor(gear.apply({window: text}), gear.limitText(gear.maximumWindowDays))
                         }
                     }
                     Label { text: qsTr("days") }

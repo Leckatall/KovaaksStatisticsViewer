@@ -217,6 +217,14 @@ Item {
             verifyGearOpens(gearOf(panel, "scenarioHistory"))
         }
 
+        function test_noSelectedScenarioIsNotAScenarioWithoutRuns() {
+            const panel = createTemporaryObject(historyPanelComponent, root,
+                {historyVm: historyVm({scenarioTitle: "", runCount: 0, visibleRunCount: 0})})
+            compare(find(panel, "historyEmptyLabel").text, "No scenario selected.")
+            verify(!shown(panel, "historyEmptyHint"))
+            verifyGearOpens(gearOf(panel, "scenarioHistory"))
+        }
+
         function test_aRangeHidingEveryRunIsAnEmptyRangeWithAHint() {
             const panel = createTemporaryObject(historyPanelComponent, root, {historyVm: historyVm({runCount: 12, visibleRunCount: 0})})
             compare(find(panel, "historyEmptyLabel").text, "No runs in the selected range.")

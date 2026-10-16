@@ -291,12 +291,13 @@ TestCase {
     // ---- Truthful display of values only the settings page can set ----------------------------------------
 
     function test_aCustomDateRangeIsNotShownAsAPreset() {
-        fakeVm.setEntry("dailyPlaytime", {rangeKind: "customDates", rangeStart: "2026-08-01", rangeEnd: "2026-08-20"})
+        fakeVm.setEntry("dailyPlaytime", {rangeKind: "customDates", rangeStart: "2026-08-01", rangeEnd: "2026-08-20",
+                                          rangeStartFormatted: "01.08.2026", rangeEndFormatted: "20.08.2026"})
         const gear = makeGear("dailyPlaytime")
         openPopup(gear)
 
         const range = control(gear, "graphField_dataRange_range")
-        compare(range.displayText, "Custom: 2026-08-01 – 2026-08-20")
+        compare(range.displayText, "Custom: 01.08.2026 – 20.08.2026", "dates follow the application locale")
         compare(range.currentIndex, -1, "no preset is highlighted for a custom range")
         compare(range.count, 4, "the presets are unchanged")
     }
@@ -312,6 +313,19 @@ TestCase {
         const rank = makeGear("benchmarkRank")
         openPopup(rank)
         compare(control(rank, "graphField_dataRange_range").displayText, "Last 45 days")
+    }
+
+    function test_countsAreShownInTheApplicationLocale() {
+        fakeVm.setEntry("scenarioHistory", {rangeKind: "latestRuns", rangeCount: 37, rangeCountText: "٣٧"})
+        fakeVm.setEntry("dailyPlaytime", {window: 14, windowText: "١٤"})
+        const history = makeGear("scenarioHistory")
+        openPopup(history)
+        compare(control(history, "graphField_dataRange_latestRuns").text, "٣٧")
+        compare(control(history, "graphField_dataRange_range").displayText, "Latest ٣٧ runs")
+
+        const daily = makeGear("dailyPlaytime")
+        openPopup(daily)
+        compare(control(daily, "graphField_dataRange_averagingWindow").text, "١٤")
     }
 
     function test_aPresetMatchingTheStoredValueIsSelected() {
@@ -352,7 +366,7 @@ TestCase {
         compare(field.text, data.text, "the invalid text stays in the field")
         compare(error.visible, true)
         verify(error.text.length > 0)
-        verify(error.text.indexOf("3650") >= 0, "the error states the representable limit")
+        verify(error.text.indexOf("3,650") >= 0 || error.text.indexOf("3650") >= 0, "the error states the representable limit")
         compare(fakeVm.quickSettings.dailyPlaytime.window, 3, "the effective value is intact")
         compare(field.Accessible.description, error.text, "the error is associated with its field")
     }

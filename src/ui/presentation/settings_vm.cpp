@@ -186,7 +186,15 @@ namespace ksv::presentation {
             QString failure;
         };
 
-        ParsedCount parseCount(const QVariant &input) {
+        // A text that is only digits (of any script) with an optional sign is a whole number too large for
+        // an int; telling it from garbage keeps the out-of-range issue codes distinct.
+        bool isDigitsOnly(const QString &text) {
+            const auto digits = (text.startsWith(QLatin1Char('-')) || text.startsWith(QLatin1Char('+'))) ? QStringView(text).mid(1)
+                                                                                                           : QStringView(text);
+            return !digits.isEmpty() && std::ranges::all_of(digits, [](const QChar c) { return c.digitValue() >= 0; });
+        }
+
+        ParsedCount parseCount(const QVariant &input, const QLocale &locale) {
             if (input.metaType().id() != QMetaType::QString) {
                 bool ok = false;
                 const int value = input.toInt(&ok);
@@ -194,15 +202,11 @@ namespace ksv::presentation {
                 return {std::nullopt, kUnparsedInputCode};
             }
             const auto text = input.toString().trimmed();
-            static const QRegularExpression wholeNumber(R"(^[+-]?\d+$)");
-            if (!wholeNumber.match(text).hasMatch()) return {std::nullopt, kUnparsedInputCode};
-            bool ok = false;
-            const qlonglong value = text.toLongLong(&ok);
+            if (const auto value = parseWholeNumber(text, locale)) return {value, {}};
+            if (!isDigitsOnly(text)) return {std::nullopt, kUnparsedInputCode};
             const bool negative = text.startsWith(QLatin1Char('-'));
-            if (!ok || value > std::numeric_limits<int>::max() || value < std::numeric_limits<int>::min())
-                return {std::nullopt, issueCodeName(negative ? application::GraphConfigurationIssueCode::NonPositiveCount
-                                                             : application::GraphConfigurationIssueCode::CountTooLarge)};
-            return {static_cast<int>(value), {}};
+            return {std::nullopt, issueCodeName(negative ? application::GraphConfigurationIssueCode::NonPositiveCount
+                                                         : application::GraphConfigurationIssueCode::CountTooLarge)};
         }
     }
 
@@ -414,25 +418,34 @@ namespace ksv::presentation {
                 {"hasWindow", descriptor.averagingWindow},
                 {"rangeKind", "allHistory"},
                 {"rangeCount", 0},
+                {"rangeCountText", QString()},
                 {"rangeStart", QString()},
                 {"rangeEnd", QString()},
+                {"rangeStartFormatted", QString()},
+                {"rangeEndFormatted", QString()},
                 {"window", preferences.averagingWindowDays.value_or(0)},
+                {"windowText", preferences.averagingWindowDays ? formatWhole(*preferences.averagingWindowDays, m_locale)
+                                                               : QString()},
                 {"connection", connectionName(preferences.appearance.connection)},
                 {"markers", preferences.appearance.lineModeMarkers}
             };
             if (preferences.range) {
-                std::visit([&entry](const auto &range) {
+                std::visit([&entry, this](const auto &range) {
                     using Range = std::decay_t<decltype(range)>;
                     if constexpr (std::same_as<Range, application::RecentDays>) {
                         entry["rangeKind"] = "recentDays";
                         entry["rangeCount"] = range.days;
+                        entry["rangeCountText"] = formatWhole(range.days, m_locale);
                     } else if constexpr (std::same_as<Range, application::LatestRuns>) {
                         entry["rangeKind"] = "latestRuns";
                         entry["rangeCount"] = range.count;
+                        entry["rangeCountText"] = formatWhole(range.count, m_locale);
                     } else if constexpr (std::same_as<Range, application::CustomDates>) {
                         entry["rangeKind"] = "customDates";
                         entry["rangeStart"] = isoDate(range.start);
                         entry["rangeEnd"] = isoDate(range.end);
+                        entry["rangeStartFormatted"] = formatDate(range.start, m_locale);
+                        entry["rangeEndFormatted"] = formatDate(range.end, m_locale);
                     }
                 }, preferences.range->range);
             }
@@ -448,7 +461,7 @@ namespace ksv::presentation {
         application::GraphQuickPatch request;
         QVariantList issues;
         const auto parse = [&](const QVariant &input, const QString &field) -> std::optional<int> {
-            const auto parsed = parseCount(input);
+            const auto parsed = parseCount(input, m_locale);
             if (!parsed.value) issues.append(issueMap(*key, "dataRange", {}, field, parsed.failure));
             return parsed.value;
         };
@@ -527,6 +540,7 @@ namespace ksv::presentation {
 
     void SettingsViewModel::setLocale(const QLocale &locale) {
         m_locale = locale;
+        emit quickSettingsChanged();
         emit graphDraftsChanged();
     }
 
