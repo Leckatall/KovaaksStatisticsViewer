@@ -69,6 +69,7 @@ shot --name narrow-960x700
 scroll benchmarkWorkspaceScroll --dy 6 --shot=narrow-scrolled
 resize 1280x800
 scroll benchmarkWorkspaceScroll --dy -6
+click benchmarkSelector
 click "selectorEntry_Driver Many Tiers Benchmark" --shot=many-tiers
 resize 960x700
 shot --name many-tiers-960x700

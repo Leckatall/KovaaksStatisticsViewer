@@ -3,22 +3,23 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import KovaaksStatsViewer
 
-Frame {
+// The card around it belongs to the workspace's pinned header.
+Item {
     id: root
 
     property var trackingVm
 
-    background: Rectangle {
-        border.color: root.palette.mid
-        color: root.palette.base
-        radius: 8
-    }
+    implicitWidth: summaryGrid.implicitWidth
+    implicitHeight: summaryGrid.implicitHeight
 
     component Field: RowLayout {
         id: fieldRow
         property string caption
         property string value
         property string valueObjectName
+        // Normal-weight text after the value, e.g. "(blocked by 2 scenarios)".
+        property string suffix: ""
+        property string suffixObjectName: ""
         // A tier's readable colour ("#rrggbb"), or "" for values that are not a tier.
         property string valueColor: ""
         Layout.fillWidth: true
@@ -35,6 +36,13 @@ Frame {
             font.bold: true
             color: fieldRow.valueColor.length > 0 ? fieldRow.valueColor : root.palette.text
             Accessible.description: fieldRow.caption + ": " + fieldRow.value
+                                    + (fieldRow.suffix.length > 0 ? " " + fieldRow.suffix : "")
+        }
+        Label {
+            objectName: fieldRow.suffixObjectName
+            visible: fieldRow.suffix.length > 0
+            text: fieldRow.suffix
+            color: root.palette.placeholderText
         }
     }
 
@@ -44,8 +52,20 @@ Frame {
         return value === undefined || value === null ? "" : String(value)
     }
 
+    // Ranks are attained per group, so this counts the rows marked as blockers, not the
+    // scenarios already at the next tier.
+    function _blockerSuffix() {
+        const vm = root.trackingVm
+        if (!vm || !vm.hasNextTier) return ""
+        const count = vm.nextTierBlockerCount
+        return count === 1 ? qsTr("(blocked by 1 scenario)") : qsTr("(blocked by %1 scenarios)").arg(count)
+    }
+
     GridLayout {
-        anchors.fill: parent
+        id: summaryGrid
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
         columns: 2
         columnSpacing: 16
         rowSpacing: 6
@@ -118,6 +138,8 @@ Frame {
             value: root.trackingVm ? root.trackingVm.nextTier : ""
             valueColor: root._color("nextTierColor")
             valueObjectName: "summaryNextTier"
+            suffix: root._blockerSuffix()
+            suffixObjectName: "summaryNextTierBlockers"
         }
     }
 }

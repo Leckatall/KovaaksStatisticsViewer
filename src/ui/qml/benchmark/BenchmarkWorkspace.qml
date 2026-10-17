@@ -44,14 +44,6 @@ Item {
     }
     readonly property bool _wide: width >= 1000
 
-    // Bodies that carry their own Benchmark Manager action; while one is shown the
-    // header's Manage Benchmarks button would only be a second control for the
-    // same thing.
-    readonly property bool _bodyOwnsManagerAction: _bodyState === "emptyLibrary"
-                                                   || _bodyState === "problemsOnly"
-                                                   || _bodyState === "unavailable"
-                                                   || _bodyState === "incomplete"
-
     // Opening the workspace with nothing selected shows a benchmark without an
     // extra click: the use case restores the remembered choice, or picks the only
     // benchmark there is. Re-checked whenever the workspace becomes visible or the
@@ -89,156 +81,69 @@ Item {
         }
     }
 
-    // --- header: selector, status, manager action ---------------------------
+    // --- pinned card: picker, status line and, while tracking, the summary --
     // Hidden with an empty library: there is nothing to select, and the empty-state
-    // body carries the one explanation and the one action.
-    RowLayout {
-        id: headerRow
+    // body carries the one explanation and the one action. Outside the scrolling
+    // body on purpose, and never shrunk for short windows.
+    Rectangle {
+        id: headerCard
         objectName: "benchmarkHeader"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 8
-        spacing: 12
         visible: root._hasAnyEntry
-        height: visible ? implicitHeight : 0
+        height: visible ? cardColumn.implicitHeight + 2 * cardColumn.anchors.margins : 0
+        radius: 8
+        color: root.palette.base
+        border.color: root.palette.mid
 
-        Frame {
-            id: benchmarkSelector
-            objectName: "benchmarkSelector"
-            Layout.fillWidth: true
-            Accessible.role: Accessible.List
-            Accessible.name: qsTr("Benchmark selector")
-            activeFocusOnTab: true
-            focusPolicy: Qt.StrongFocus
+        ColumnLayout {
+            id: cardColumn
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 8
 
-            Column {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: 2
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
 
-                Label {
-                    text: qsTr("Benchmark")
-                    font.bold: true
-                    color: root.palette.placeholderText
+                BenchmarkPicker {
+                    Layout.preferredWidth: implicitWidth
+                    Layout.maximumWidth: Math.max(160, headerCard.width / 2)
+                    entries: root._entries
+                    selectedName: root.trackingVm ? String(root.trackingVm.selectedName || "") : ""
+                    onBenchmarkSelected: id => root.trackingVm.selectBenchmark(id)
+                    onManageBenchmarksRequested: root.manageBenchmarksRequested()
+                    onEditBenchmarkRequested: (filename, benchmarkId) =>
+                        root.editBenchmarkRequested(filename, benchmarkId)
                 }
-                Repeater {
-                    model: root._entries
-                    delegate: Item {
-                        id: entryRow
-                        required property var modelData
-                        readonly property bool rowSelectable: modelData.selectable === true
-                        readonly property string kind: String(modelData.classification).toLowerCase()
-                        // Every exception (incomplete, invalid, unsupported) carries a chip
-                        // and a way to the manager, where its details are shown.
-                        readonly property bool hasWarning: kind !== "trackable"
-                        width: parent.width
-                        implicitHeight: entryDelegate.implicitHeight
-                        height: entryDelegate.implicitHeight
 
-                        ItemDelegate {
-                            id: entryDelegate
-                            objectName: "selectorEntry_" + entryRow.modelData.name
-                            anchors.fill: parent
-                            enabled: entryRow.rowSelectable
-                            activeFocusOnTab: entryRow.rowSelectable
-                            highlighted: root.trackingVm
-                                         && root.trackingVm.selectedName === entryRow.modelData.name
-                            text: entryRow.modelData.name
-                            // A trackable benchmark is the normal case and shows
-                            // only its name; the exceptions get a filled chip.
-                            rightPadding: entryRow.hasWarning
-                                          ? entryChip.width + entryEditButton.width + 24 : padding
-                            onClicked: {
-                                if (entryRow.rowSelectable && String(entryRow.modelData.id).length > 0)
-                                    root.trackingVm.selectBenchmark(entryRow.modelData.id)
-                            }
-                        }
-
-                        Rectangle {
-                            id: entryChip
-                            objectName: "selectorEntryLabel_" + entryRow.modelData.name
-                            readonly property string kind: String(entryRow.modelData.classification)
-                            visible: entryRow.hasWarning
-                            anchors.right: entryEditButton.left
-                            anchors.rightMargin: 6
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: chipText.implicitWidth + 14
-                            height: chipText.implicitHeight + 2
-                            radius: height / 2
-                            color: entryRow.kind === "incomplete" ? Theme.classificationColor("Incomplete") : Theme.errorText
-                            Label {
-                                id: chipText
-                                anchors.centerIn: parent
-                                text: entryChip.kind
-                                font.bold: true
-                                font.pixelSize: entryDelegate.font.pixelSize - 1
-                                color: "#1E1E1E"
-                            }
-                        }
-
-                        // A disabled Invalid/Unsupported row must never pass a
-                        // click through to an enabled row stacked under it before
-                        // the Column positioner has run.
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: !entryRow.rowSelectable
-                            onPressed: mouse => mouse.accepted = true
-                        }
-
-                        // Declared after the click blocker so it stays clickable on rows that
-                        // cannot be selected; it opens the manager without selecting the row.
-                        TooltipToolButton {
-                            id: entryEditButton
-                            objectName: "selectorEntryEdit_" + entryRow.modelData.name
-                            visible: entryRow.hasWarning
-                            anchors.right: parent.right
-                            anchors.rightMargin: 4
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: visible ? implicitWidth : 0
-                            padding: 4
-                            icon.source: "../icons/square-pen.svg"
-                            icon.width: 16
-                            icon.height: 16
-                            display: AbstractButton.IconOnly
-                            // A loaded (incomplete) benchmark opens in the editor; a problem
-                            // file can only be shown in the library.
-                            text: entryRow.kind === "incomplete"
-                                  ? qsTr("Edit %1 in the Benchmark Manager").arg(entryRow.modelData.name)
-                                  : qsTr("Show %1 in the Benchmark Manager").arg(entryRow.modelData.name)
-                            Accessible.name: text
-                            ToolTip.text: text
-                            onClicked: root.editBenchmarkRequested(String(entryRow.modelData.filename || ""),
-                                                                   String(entryRow.modelData.id || ""))
-                        }
-                    }
+                // Every other state explains itself in its body, so a status line here
+                // would repeat it; only the tracking state has nothing else to say.
+                Label {
+                    objectName: "benchmarkClassificationLabel"
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    wrapMode: Text.WordWrap
+                    visible: root._bodyState === "trackable"
+                    color: root.palette.placeholderText
+                    text: root.trackingVm ? String(root.trackingVm.stateMessage || "") : ""
                 }
             }
-        }
 
-        // Every other state explains itself in its body, so a status line here
-        // would repeat it; only the tracking state has nothing else to say.
-        Label {
-            objectName: "benchmarkClassificationLabel"
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            visible: root._bodyState === "trackable"
-            color: root.palette.placeholderText
-            text: root.trackingVm ? String(root.trackingVm.stateMessage || "") : ""
-        }
-        Item {
-            // Keeps the manager button right-aligned while the status line is hidden.
-            Layout.fillWidth: true
-            visible: root._bodyState !== "trackable"
-        }
-
-        Button {
-            objectName: "manageBenchmarksButton"
-            text: qsTr("Manage Benchmarks")
-            visible: !root._bodyOwnsManagerAction
-            activeFocusOnTab: true
-            focusPolicy: Qt.StrongFocus
-            onClicked: root.manageBenchmarksRequested()
+            // A Loader rather than a hidden item: no summary exists outside the trackable state.
+            Loader {
+                Layout.fillWidth: true
+                Layout.preferredHeight: item ? item.implicitHeight : 0
+                active: root._bodyState === "trackable"
+                visible: active
+                sourceComponent: BenchmarkStatusSummary {
+                    objectName: "benchmarkStatusSummary"
+                    width: parent ? parent.width : 0
+                    trackingVm: root.trackingVm
+                }
+            }
         }
     }
 
@@ -247,11 +152,11 @@ Item {
         id: bodyLoader
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: headerRow.visible ? headerRow.bottom : parent.top
+        anchors.top: headerCard.visible ? headerCard.bottom : parent.top
         anchors.bottom: parent.bottom
         anchors.leftMargin: 8
         anchors.rightMargin: 8
-        anchors.topMargin: headerRow.visible ? 4 : 8
+        anchors.topMargin: headerCard.visible ? 4 : 8
         anchors.bottomMargin: 8
         sourceComponent: root._bodyComponent
         // A library change can land on "nothing selected" while the tab is open.

@@ -81,6 +81,32 @@ Item {
         function find(ws, name) { return ItemLookup.findByObjectName(ws, name) }
         function findAllPrefixed(ws, prefix) { return ItemLookup.findByObjectNamePrefix(ws, prefix, []) }
 
+        function pickerOf(ws) { return find(ws, "benchmarkSelector").parent }
+
+        // The picker's list lives in its popup, outside the workspace's item tree, and only
+        // exists once opened.
+        function openPicker(ws) {
+            const picker = pickerOf(ws)
+            if (!picker.popup.opened) {
+                mouseClick(find(ws, "benchmarkSelector"))
+                tryVerify(() => picker.popup.opened, 2000, "the picker never opened")
+            }
+            const content = picker.popup.contentItem
+            tryVerify(() => ItemLookup.findByObjectNamePrefix(content, "selectorEntry_", []).length
+                            === picker.entries.length, 2000, "the picker did not list every entry")
+            return content
+        }
+        function pickerFind(ws, name) { return ItemLookup.findByObjectName(openPicker(ws), name) }
+        function pickerRows(ws) { return ItemLookup.findByObjectNamePrefix(openPicker(ws), "selectorEntry_", []) }
+
+        function cleanup() {
+            for (const ws of root.children) {
+                const selector = ItemLookup.findByObjectName(ws, "benchmarkSelector")
+                if (selector && selector.parent.popup)
+                    selector.parent.popup.close()
+            }
+        }
+
         // -- always-visible header ---------------------------------------
 
         function test_headerSelectorIsShownWheneverAnyEntryExists_data() {
@@ -114,30 +140,32 @@ Item {
             return [
                 {tag: "empty", fx: TestDoubles.trackingFixtureEmptyLibrary(), action: "createOrImportButton"},
                 {tag: "problems", fx: TestDoubles.trackingFixtureProblemsOnly(), action: "manageBenchmarkFilesButton"},
-                {tag: "noselection", fx: TestDoubles.trackingFixtureNoSelection(), action: "manageBenchmarksButton"},
+                {tag: "noselection", fx: TestDoubles.trackingFixtureNoSelection(), action: ""},
                 {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable(), action: "repairButton"},
                 {tag: "incomplete", fx: TestDoubles.trackingFixtureIncomplete(), action: "editBenchmarkButton"},
-                {tag: "trackable", fx: TestDoubles.trackingFixtureTrackable(), action: "manageBenchmarksButton"}
+                {tag: "trackable", fx: TestDoubles.trackingFixtureTrackable(), action: ""}
             ]
         }
 
+        // The picker Manage row is the manager action wherever a body carries none.
         function test_exactlyOneManagerActionPerState(data) {
             const ws = makeWorkspace(data.fx)
-            const actions = ["manageBenchmarksButton", "createOrImportButton", "manageBenchmarkFilesButton",
-                             "repairButton", "editBenchmarkButton"]
+            const actions = ["createOrImportButton", "manageBenchmarkFilesButton", "repairButton",
+                             "editBenchmarkButton"]
             const shown = actions.filter(function (name) {
                 const item = find(ws, name)
                 return item !== null && item.visible
             })
-            compare(shown.length, 1, "visible manager actions: " + shown.join(", "))
-            compare(shown[0], data.action)
+            compare(shown, data.action.length > 0 ? [data.action] : [],
+                    "visible manager actions: " + shown.join(", "))
+            compare(find(ws, "manageBenchmarksButton"), null, "the header has no Manage Benchmarks button")
         }
 
         // Visible, non-empty text of every item, ignoring a control's own content
         // item (a Button's label repeats the Button's text).
         function visibleTexts(item, out) {
             out = out || []
-            if (!item || !item.visible)
+            if (!item || !item.visible || item.objectName === "benchmarkSelector")
                 return out
             const t = item.text === undefined || item.text === null ? "" : String(item.text)
             const parentText = item.parent && item.parent.text !== undefined ? String(item.parent.text) : null
@@ -148,7 +176,8 @@ Item {
             return out
         }
 
-        // no status or instruction message appears twice on the screen.
+        // no status or instruction message appears twice on the screen. The picker title is a
+        // control label, not a message, so it is left out.
         function test_noMessageIsShownTwice_data() {
             return [
                 {tag: "empty", fx: TestDoubles.trackingFixtureEmptyLibrary()},
@@ -193,20 +222,34 @@ Item {
                     "every other state explains itself in its body, so the header must not repeat it")
         }
 
-        function test_manageBenchmarksButtonEmitsRequest() {
+        function test_pickerManageRowEmitsRequest() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureNoSelection())
-            mouseClick(find(ws, "manageBenchmarksButton"))
+            mouseClick(pickerFind(ws, "selectorManageBenchmarks"))
             compare(root.managerRequests, 1, "Manage Benchmarks must raise manageBenchmarksRequested")
+        }
+
+        function test_pickerTitleShowsTheSelectedBenchmark() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            compare(find(ws, "benchmarkSelectorTitle").text, "Voltaic S3")
+        }
+
+        function test_choosingAnEntrySelectsThatBenchmark() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureNoSelection())
+            const row = pickerFind(ws, "selectorEntry_Voltaic S3")
+            verify(row !== null)
+            mouseClick(row)
+            compare(ws.trackingVm.selectBenchmarkCalls, ["bench-A"])
+            tryVerify(() => !pickerOf(ws).popup.opened)
         }
 
         // -- selector shows problem rows but disables them ---------------
 
         function test_problemEntriesVisibleButNotActivatable() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureNoSelection())
-            const rows = findAllPrefixed(ws, "selectorEntry_")
+            const rows = pickerRows(ws)
             verify(rows.length >= 2, "selector must list loaded and problem entries")
 
-            const problem = find(ws, "selectorEntry_broken.json")
+            const problem = pickerFind(ws, "selectorEntry_broken.json")
             verify(problem !== null, "the Invalid entry must remain visible in the selector")
             compare(problem.enabled, false, "Invalid/Unsupported entries must be disabled")
 
@@ -217,13 +260,13 @@ Item {
 
         function test_selectorLabelsOnlyExceptions() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureNoSelection())
-            const entry = find(ws, "selectorEntry_Voltaic S3")
+            const entry = pickerFind(ws, "selectorEntry_Voltaic S3")
             verify(entry !== null, "trackable entry missing")
             compare(entry.text, "Voltaic S3", "a trackable entry shows only its name")
-            const trackableChip = find(ws, "selectorEntryLabel_Voltaic S3")
+            const trackableChip = pickerFind(ws, "selectorEntryLabel_Voltaic S3")
             verify(trackableChip !== null)
             compare(trackableChip.visible, false, "trackable is the normal state and carries no label")
-            const problemChip = find(ws, "selectorEntryLabel_broken.json")
+            const problemChip = pickerFind(ws, "selectorEntryLabel_broken.json")
             verify(problemChip !== null)
             compare(problemChip.visible, true, "an exception keeps its label")
             compare(problemChip.kind.toLowerCase(), "invalid")
@@ -248,15 +291,15 @@ Item {
                      classification: data.tag, selectable: data.selectable}
                 ]
             })
-            const chip = find(ws, "selectorEntryLabel_" + data.name)
+            const chip = pickerFind(ws, "selectorEntryLabel_" + data.name)
             verify(chip !== null, data.tag + " entry has no label")
             compare(chip.visible, true, "the " + data.tag + " benchmark must keep its label")
             compare(chip.kind, data.tag)
             verify(chip.width > 0 && chip.height > 0, "the label must have a size")
-            const row = find(ws, "selectorEntry_" + data.name)
+            const row = pickerFind(ws, "selectorEntry_" + data.name)
             compare(row.enabled, data.selectable)
             verify(row.rightPadding >= chip.width, "the name must leave room for the label")
-            compare(find(ws, "selectorEntryLabel_Voltaic S3").visible, false)
+            compare(pickerFind(ws, "selectorEntryLabel_Voltaic S3").visible, false)
         }
 
         // A row with a warning chip carries a control that opens the Benchmark Manager
@@ -279,10 +322,10 @@ Item {
                      classification: data.tag, selectable: selectable}
                 ]
             })
-            const control = find(ws, "selectorEntryEdit_" + data.name)
+            const control = pickerFind(ws, "selectorEntryEdit_" + data.name)
             verify(control !== null, "every row has the control, shown or not")
             compare(control.visible, data.shown)
-            const chip = find(ws, "selectorEntryLabel_" + data.name)
+            const chip = pickerFind(ws, "selectorEntryLabel_" + data.name)
             compare(chip.visible, data.shown, "the control goes with the warning chip")
             if (!data.shown) return
             verify(control.width > 0 && control.height > 0, "the control must have a size")
@@ -292,7 +335,7 @@ Item {
                    "the accessible name says what the control does: " + name)
             compare(String(control.ToolTip.text), name, "the tooltip says the same")
             // The control sits beside the chip, inside the row, and the name leaves room for both.
-            const row = find(ws, "selectorEntry_" + data.name)
+            const row = pickerFind(ws, "selectorEntry_" + data.name)
             const controlX = control.mapToItem(row, 0, 0).x
             const chipRight = chip.mapToItem(row, chip.width, 0).x
             verify(controlX >= chipRight, "the control sits right of the chip")
@@ -320,7 +363,7 @@ Item {
                     data.entry
                 ]
             })
-            const control = find(ws, "selectorEntryEdit_" + data.entry.name)
+            const control = pickerFind(ws, "selectorEntryEdit_" + data.entry.name)
             verify(control !== null && control.visible)
             mouseClick(control)
             compare(root.editRequests.length, 1, "the control must raise editBenchmarkRequested")
@@ -545,22 +588,30 @@ Item {
             verify(find(ws, "progressRow_sc-pasu_blocker") === null, "a row that blocks nothing has no marker")
         }
 
-        function test_headingCountsBlockersAndMatchesTheMarkedRows() {
+        function test_nextTierNamesItsBlockersAndMatchesTheMarkedRows() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             wait(0)
             const markers = findAllPrefixed(ws, "progressRow_").filter(function (item) {
                 return /_blocker$/.test(item.objectName)
             })
-            const t = String(find(ws, "nextTierProgress").text)
-            compare(t.replace(/<[^>]*>/g, ""), markers.length + " scenarios block Platinum")
-            verify(t.indexOf("#50dcdc") !== -1, "the tier name keeps its colour")
+            const tier = find(ws, "summaryNextTier")
+            const blockers = find(ws, "summaryNextTierBlockers")
+            compare(tier.text, "Platinum")
+            verify(tier.font.bold, "the tier stays bold")
+            verify(Qt.colorEqual(tier.color, "#50dcdc"), "the tier keeps its colour")
+            compare(blockers.text, "(blocked by " + markers.length + " scenarios)")
+            compare(blockers.font.bold, false, "the parenthesis is normal weight")
+            verify(Qt.colorEqual(blockers.color, ws.palette.placeholderText), "and in the placeholder colour")
+            verify(blockers.visible)
+            verify(String(tier.Accessible.description).indexOf("(blocked by 2 scenarios)") !== -1,
+                   "the description includes the parenthesis: " + tier.Accessible.description)
         }
 
-        function test_headingSingularAndNoNextTierAndUnranked() {
+        function test_nextTierBlockersSingularAndNoNextTier() {
             const fx = TestDoubles.trackingFixtureTrackable()
             fx.nextTierBlockerCount = 1
             let ws = makeWorkspace(fx)
-            compare(String(find(ws, "nextTierProgress").text).replace(/<[^>]*>/g, ""), "1 scenario blocks Platinum")
+            compare(find(ws, "summaryNextTierBlockers").text, "(blocked by 1 scenario)")
 
             const top = TestDoubles.trackingFixtureTrackable()
             top.hasNextTier = false
@@ -568,29 +619,35 @@ Item {
             top.nextTierColor = ""
             top.nextTierBlockerCount = 0
             ws = makeWorkspace(top)
-            compare(String(find(ws, "nextTierProgress").text), "Highest tier attained")
+            compare(find(ws, "summaryNextTier").text, "Highest tier attained")
+            const none = find(ws, "summaryNextTierBlockers")
+            verify(none === null || !none.visible, "no parenthesis without a next tier")
+            compare(String(find(ws, "summaryNextTier").Accessible.description), "Next tier: Highest tier attained")
+        }
 
+        function test_unrankedBenchmarkStillNamesItsBlockers() {
             const none = TestDoubles.trackingFixtureTrackable()
             none.attainedRank = "Unranked"
             none.attainedRankColor = ""
             none.nextTier = "Bronze"
             none.nextTierColor = "#cd7f32"
             none.nextTierBlockerCount = 4
-            ws = makeWorkspace(none)
-            compare(String(find(ws, "nextTierProgress").text).replace(/<[^>]*>/g, ""),
-                    "Not ranked yet: 4 scenarios block Bronze")
+            const ws = makeWorkspace(none)
+            compare(find(ws, "summaryNextTier").text, "Bronze")
+            compare(find(ws, "summaryNextTierBlockers").text, "(blocked by 4 scenarios)")
+            compare(find(ws, "nextTierProgress"), null, "the old progress line is gone")
         }
 
-        // A non-trackable benchmark has no rank to progress from, so the heading must not
-        // show. The fixtures carry stale next-tier values on purpose: a heading that read
-        // them regardless of the state would render text.
-        function test_headingIsHiddenWhenNotTrackable_data() {
+        // A non-trackable benchmark has no rank to progress from, so no next tier shows. The
+        // fixtures carry stale next-tier values on purpose: a summary that read them
+        // regardless of the state would render text.
+        function test_nextTierIsHiddenWhenNotTrackable_data() {
             return [
                 {tag: "incomplete", fx: TestDoubles.trackingFixtureIncomplete(), body: "incompleteBody"},
                 {tag: "unavailable", fx: TestDoubles.trackingFixtureUnavailable(), body: "unavailableBody"}
             ]
         }
-        function test_headingIsHiddenWhenNotTrackable(data) {
+        function test_nextTierIsHiddenWhenNotTrackable(data) {
             const fx = Object.assign({}, data.fx, {
                 hasNextTier: true, nextTier: "Gold", nextTierColor: "#ffc828", nextTierBlockerCount: 3
             })
@@ -600,9 +657,8 @@ Item {
             const ws = makeWorkspace(fx)
             verify(find(ws, data.body) !== null, "the " + data.tag + " body must be shown")
             verify(find(ws, "benchmarkStatusSummary") === null, "no status summary when not trackable")
-            const heading = find(ws, "nextTierProgress")
-            verify(heading === null || !heading.visible,
-                   "the next-tier heading must not show: " + (heading ? heading.text : ""))
+            verify(find(ws, "summaryNextTier") === null, "no next tier when not trackable")
+            verify(find(ws, "summaryNextTierBlockers") === null, "no blocker count when not trackable")
         }
     }
 
@@ -660,22 +716,35 @@ Item {
         function test_trackableContentIsInSpecifiedScrollOrder() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             const col = scrollColumn(ws)
-            const summary = indexInColumn(col, "benchmarkStatusSummary")
-            const progress = indexInColumn(col, "nextTierProgress")
             const rank = indexInColumn(col, "rankHistoryCard")
             const playtime = indexInColumn(col, "playtimeHistoryCard")
             const grid = indexInColumn(col, "benchmarkProgressGrid")
-            verify(summary >= 0 && progress >= 0 && rank >= 0 && playtime >= 0 && grid >= 0,
+            verify(rank >= 0 && playtime >= 0 && grid >= 0,
                    "all content blocks must be present in the scroll column")
-            verify(summary < progress, "status summary comes before next-tier progress")
-            verify(grid === progress, "the progress grid sits with the next-tier count")
+            compare(grid, 0, "the progress grid is the first block")
+            compare(indexInColumn(col, "benchmarkStatusSummary"), -1, "the summary lives in the pinned card")
             verify(grid < rank, "the progress grid comes before the history cards")
             verify(rank < playtime, "average-rank card comes before rolling-playtime card")
-            wait(0)
-            const label = find(ws, "nextTierProgress")
-            const gridItem = find(ws, "benchmarkProgressGrid")
-            verify(label.mapToItem(ws, 0, label.height).y <= gridItem.mapToItem(ws, 0, 0).y + 0.5,
-                   "the 'N of M scenarios at the next tier' line stays above the grid")
+        }
+
+        function test_headerCardIsPinnedOutsideTheScrollingBody() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 500)
+            const header = find(ws, "benchmarkHeader")
+            const scroll = find(ws, "benchmarkWorkspaceScroll")
+            verify(header !== null && scroll !== null)
+            compare(ItemLookup.findByObjectName(scroll, "benchmarkHeader"), null,
+                    "the card is not a descendant of the scrolling body")
+            verify(find(header, "benchmarkStatusSummary") !== null, "the summary sits in the card")
+            verify(find(header, "benchmarkClassificationLabel") !== null, "and so does the status line")
+            tryVerify(() => scroll.contentItem.contentHeight > scroll.height, 2000,
+                      "the body must overflow for this test")
+            verify(scroll.mapToItem(ws, 0, 0).y >= header.mapToItem(ws, 0, header.height).y,
+                   "the body starts below the card")
+
+            const before = header.mapToItem(ws, 0, 0).y
+            scroll.contentItem.contentY = scroll.contentItem.contentHeight - scroll.contentItem.height
+            verify(scroll.contentItem.contentY > 0, "the body scrolled")
+            compare(header.mapToItem(ws, 0, 0).y, before, "the card does not move with the scroll")
         }
 
         function test_horizontalScrollIsNotTheStrategy() {
@@ -1611,7 +1680,8 @@ Item {
             for (let j = 0; j < 4; ++j)
                 compare(find(unplayed, unplayed.objectName + "_fill_" + j).visible, false,
                         "an unplayed scenario shows no fill")
-            verify(String(find(ws, "nextTierProgress").text).indexOf("block") !== -1, "the heading is still shown")
+            verify(String(find(ws, "summaryNextTierBlockers").text).indexOf("blocked by") !== -1,
+                   "the blocker count is still shown")
         }
 
         // the recent average reads against the PB fill on the same chunk scale.
@@ -1642,22 +1712,12 @@ Item {
 
         // -- focus order ----------------------------------------------
 
-        function test_visualTabOrderReachesManagerAction() {
+        function test_benchmarkSelectorIsKeyboardFocusable() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             const selector = find(ws, "benchmarkSelector")
-            const manage = find(ws, "manageBenchmarksButton")
-            verify(selector !== null && manage !== null, "selector and manager action must both exist")
-
+            verify(selector !== null, "selector must exist")
             selector.forceActiveFocus()
             verify(selector.activeFocus, "benchmark selector must be focusable")
-
-            let hop = selector
-            let reachedManage = false
-            for (let i = 0; i < 16 && hop !== null; ++i) {
-                hop = hop.nextItemInFocusChain(true)
-                if (hop === manage) { reachedManage = true; break }
-            }
-            verify(reachedManage, "Manage Benchmarks must be reachable in forward visual tab order")
         }
     }
 }

@@ -129,7 +129,7 @@ Matching rules:
 - Otherwise an ambiguous selector fails and lists its candidates.
 - A selector that matches nothing reports similar names and how many hidden items would match.
 
-Prefer `objectName`s. `Main.qml` and the workspaces have many: `scenariosTab`, `benchmarksTab`, `workspaceTabBar`, `scenarioSearchField`, `manageBenchmarksButton`, `benchmarkSelector`, … Adding an `objectName` to a QML item you want to drive is cheap.
+Prefer `objectName`s. `Main.qml` and the workspaces have many: `scenariosTab`, `benchmarksTab`, `workspaceTabBar`, `scenarioSearchField`, `selectorManageBenchmarks`, `benchmarkSelector`, … Adding an `objectName` to a QML item you want to drive is cheap.
 
 ## Profile specs
 
