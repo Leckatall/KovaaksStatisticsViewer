@@ -30,7 +30,7 @@ using namespace ksv::application;
 using namespace ksv::domain;
 using ksv::tests_ui::FakeBenchmarkTrackingUseCase;
 using ksv::tests_ui::makeTrackableSnapshot;
-using ksv::tests_ui::utcMidnightMs;
+using ksv::tests_ui::expectedMidnightMs;
 using ksv::tests_ui::ymd;
 
 namespace {
@@ -69,8 +69,8 @@ TEST(BenchmarkHistoryViewModel, CalendarDaysConvertToUtcMidnightEpochMs) {
     ASSERT_EQ(series.size(), 1);
     const auto points = series.front()->points;
     ASSERT_GE(points.size(), 2);
-    EXPECT_DOUBLE_EQ(points[0].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 4))));
-    EXPECT_DOUBLE_EQ(points[1].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 6))));
+    EXPECT_DOUBLE_EQ(points[0].x(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 4))));
+    EXPECT_DOUBLE_EQ(points[1].x(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 6))));
 }
 
 TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxisWithoutAnObservationThere) {
@@ -85,7 +85,7 @@ TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxisWithout
     ASSERT_EQ(series.size(), 1);
     const auto &rank = *series.front();
     ASSERT_EQ(rank.points.size(), 2);
-    EXPECT_DOUBLE_EQ(rank.points[1].x(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 6))));
+    EXPECT_DOUBLE_EQ(rank.points[1].x(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 6))));
     EXPECT_FALSE(rank.leadingCarry);
     ASSERT_TRUE(rank.trailingCarry);
     EXPECT_DOUBLE_EQ(rank.trailingCarry->x(), vm.rankHistory()->xAxis().max());
@@ -100,8 +100,8 @@ TEST(BenchmarkHistoryViewModel, BothHistoriesShareTheUnionOfTheirXRanges) {
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
-    const auto lo = static_cast<double>(utcMidnightMs(ymd(2024, 3, 4)));
-    const auto hi = static_cast<double>(utcMidnightMs(ymd(2024, 3, 7)));
+    const auto lo = static_cast<double>(expectedMidnightMs(ymd(2024, 3, 4)));
+    const auto hi = static_cast<double>(expectedMidnightMs(ymd(2024, 3, 7)));
     EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().min(), lo);
     EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().max(), hi);
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), lo);
@@ -116,9 +116,9 @@ TEST(BenchmarkHistoryViewModel, SingleHistoryRangeIsUsedForBoth) {
     BenchmarkTrackingViewModel vm{fake};
 
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(),
-                     static_cast<double>(utcMidnightMs(ymd(2024, 3, 4))));
+                     static_cast<double>(expectedMidnightMs(ymd(2024, 3, 4))));
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(),
-                     static_cast<double>(utcMidnightMs(ymd(2024, 3, 5))));
+                     static_cast<double>(expectedMidnightMs(ymd(2024, 3, 5))));
 }
 
 TEST(BenchmarkHistoryViewModel, NoHistoryYieldsDegenerateCurrentDayRangeAndNoLine) {
@@ -176,7 +176,7 @@ TEST(BenchmarkHistoryViewModel, RankTooltipValueReadsAsTheTierAndProgressTowardT
     ASSERT_EQ(series.size(), 1);
     const auto &rank = *series.front();
     const auto at = [&](const int day) {
-        return rank.formattedValueAtX(static_cast<double>(utcMidnightMs(ymd(2024, 3, day))));
+        return rank.formattedValueAtX(static_cast<double>(expectedMidnightMs(ymd(2024, 3, day))));
     };
     EXPECT_EQ(at(4), "Unranked · 25% to Bronze");
     EXPECT_EQ(at(5), "Bronze · 60% to Silver");
@@ -399,7 +399,7 @@ TEST(BenchmarkHistoryViewModel, ADatePlaytimeRangeSpansItsIntervalWhileTheRankAx
     auto snapshot = makeTrackableSnapshot();
     snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
     snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 4), 600.0}, {ymd(2024, 3, 12), 1200.0}};
-    snapshot.playtime.fullExtent = PlaytimeDayExtent{ymd(2024, 3, 4), ymd(2024, 3, 12)};
+    snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 4), ymd(2024, 3, 12)};
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
     const auto rankMin = vm.rankHistory()->xAxis().min();
@@ -409,8 +409,8 @@ TEST(BenchmarkHistoryViewModel, ADatePlaytimeRangeSpansItsIntervalWhileTheRankAx
     fake->snap.projection->rollingPlaytime = {{ymd(2024, 3, 12), 1200.0}};
     fake->publishPlaytime();
 
-    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 10))));
-    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), static_cast<double>(utcMidnightMs(ymd(2024, 3, 12))));
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 10))));
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 12))));
     EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().min(), rankMin);
     EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().max(), rankMax);
     EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->points.size(), 1);
@@ -418,21 +418,21 @@ TEST(BenchmarkHistoryViewModel, ADatePlaytimeRangeSpansItsIntervalWhileTheRankAx
 
 TEST(BenchmarkHistoryViewModel, AnEmptyPlaytimeIntervalKeepsItsAxisAndDrawsNoLine) {
     auto snapshot = makeTrackableSnapshot();
-    snapshot.playtime.fullExtent = PlaytimeDayExtent{ymd(2024, 3, 4), ymd(2024, 3, 6)};
+    snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 4), ymd(2024, 3, 6)};
     snapshot.playtime.interval = DayInterval{ymd(2024, 4, 1), ymd(2024, 4, 7)};
     snapshot.projection->rollingPlaytime.clear();
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
-    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), static_cast<double>(utcMidnightMs(ymd(2024, 4, 1))));
-    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), static_cast<double>(utcMidnightMs(ymd(2024, 4, 7))));
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), static_cast<double>(expectedMidnightMs(ymd(2024, 4, 1))));
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), static_cast<double>(expectedMidnightMs(ymd(2024, 4, 7))));
     EXPECT_TRUE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }
 
 // ---- rank range and carried geometry ------------------------------------------------------
 
 namespace {
-    double ms(const std::chrono::sys_days day) { return static_cast<double>(utcMidnightMs(day)); }
+    double ms(const std::chrono::sys_days day) { return static_cast<double>(expectedMidnightMs(day)); }
 
     // Improvements on 4, 6 and 10 March 2024; playtime spans 2 to 20 March.
     BenchmarkWorkspaceSnapshot rankRangeSnapshot(const std::optional<DayInterval> interval) {
@@ -440,7 +440,7 @@ namespace {
         snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0},
                                                    {ymd(2024, 3, 10), 2.5}};
         snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 2), 600.0}, {ymd(2024, 3, 20), 1200.0}};
-        snapshot.playtime.fullExtent = PlaytimeDayExtent{ymd(2024, 3, 2), ymd(2024, 3, 20)};
+        snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 2), ymd(2024, 3, 20)};
         snapshot.rank.interval = interval;
         return snapshot;
     }
@@ -736,7 +736,7 @@ TEST(BenchmarkHistoryContent, AnAnchoredRankRangeWithoutAContributingRunReadsAsN
 
 TEST(BenchmarkHistoryContent, APlaytimeRangeWithoutSamplesOverRecordedPlaytimeIsAnEmptyRange) {
     auto snapshot = makeTrackableSnapshot();
-    snapshot.playtime.fullExtent = PlaytimeDayExtent{ymd(2024, 3, 4), ymd(2024, 3, 6)};
+    snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 4), ymd(2024, 3, 6)};
     snapshot.playtime.interval = DayInterval{ymd(2024, 4, 1), ymd(2024, 4, 7)};
     snapshot.projection->rollingPlaytime.clear();
     auto fake = fakeWith(snapshot);

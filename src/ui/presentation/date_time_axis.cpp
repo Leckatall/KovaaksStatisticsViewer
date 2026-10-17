@@ -177,4 +177,8 @@ namespace ksv::presentation {
     QDateTime utcDateTimeForEpochDay(const long long epochDay) {
         return QDateTime(QDate(1970, 1, 1).addDays(epochDay), QTime(0, 0), QTimeZone::utc());
     }
+
+    qint64 utcMidnightMs(const std::chrono::sys_days day) {
+        return utcDateTimeForEpochDay(static_cast<long long>(day.time_since_epoch().count())).toMSecsSinceEpoch();
+    }
 }

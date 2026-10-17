@@ -5,6 +5,8 @@
 #include <QTimeZone>
 #include <QtGlobal>
 
+#include <chrono>
+
 #include "axis.h"
 
 namespace ksv::presentation {
@@ -42,6 +44,8 @@ namespace ksv::presentation {
 
     // Days since the Unix epoch -> UTC-midnight QDateTime, the X unit every calendar-day graph plots in.
     [[nodiscard]] QDateTime utcDateTimeForEpochDay(long long epochDay);
+
+    [[nodiscard]] qint64 utcMidnightMs(std::chrono::sys_days day);
 }
 
 #endif //KOVAAKSSTATSVIEWER_DATE_TIME_AXIS_H

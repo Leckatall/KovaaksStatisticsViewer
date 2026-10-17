@@ -186,7 +186,7 @@ namespace ksv::qt_data::series_codec {
             const auto object = value.toObject();
             if (!exactKeys(object, {"id", "name", "options", "transformKind"}) || !object["name"].isString() ||
                 !object["transformKind"].isString()) return std::nullopt;
-            const auto id = decimalId(object["id"], false);
+            const auto id = decimalId(object["id"]);
             const auto options = decodeAxisOptions(object["options"]);
             const auto transformKind = transformKindFromTag(object["transformKind"].toString());
             if (!id || !options || !transformKind) return std::nullopt;
@@ -201,7 +201,7 @@ namespace ksv::qt_data::series_codec {
                 if (!item.isObject()) return std::nullopt;
                 const auto object = item.toObject();
                 const auto presentation = decodePresentation(object["presentation"]);
-                const auto id = decimalId(object["id"], false);
+                const auto id = decimalId(object["id"]);
                 if (!presentation || !id) return std::nullopt;
                 Expression expression;
                 if (expressionIsDsl) {
@@ -220,7 +220,7 @@ namespace ksv::qt_data::series_codec {
                     if (!exactKeys(object, {"id", "presentation", "expression", "yAxisId", "transformKind"}) ||
                         !object["transformKind"].isString()) return std::nullopt;
                     if (!object["yAxisId"].isNull()) {
-                        const auto axisId = decimalId(object["yAxisId"], false);
+                        const auto axisId = decimalId(object["yAxisId"]);
                         if (!axisId) return std::nullopt;
                         yAxisId = AxisId{*axisId};
                     }
@@ -235,7 +235,7 @@ namespace ksv::qt_data::series_codec {
 
         std::optional<std::optional<uint64_t>> optionalDecimalId(const QJsonValue &value) {
             if (value.isNull()) return std::optional<uint64_t>{};
-            const auto id = decimalId(value, false);
+            const auto id = decimalId(value);
             return id ? std::optional{*id} : std::nullopt;
         }
 
@@ -250,7 +250,7 @@ namespace ksv::qt_data::series_codec {
 
         std::optional<RunSeriesDocument> migrateV1ToV3(const QJsonObject &root) {
             if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series"})) return {};
-            const auto nextId = decimalId(root["nextComputedSeriesId"], false);
+            const auto nextId = decimalId(root["nextComputedSeriesId"]);
             auto configs = decodeSeriesArray(root["series"], false);
             if (!nextId || !configs) return {};
             return migrateV1ToV2(std::move(*configs), SeriesId{*nextId});
@@ -275,19 +275,19 @@ namespace ksv::qt_data::series_codec {
         }
     }
 
-    bool exactKeys(const QJsonObject &object, const std::initializer_list<const char *> keys) {
+    bool exactKeys(const QJsonObject &object, const std::span<const char *const> keys) {
         if (object.size() != static_cast<qsizetype>(keys.size())) return false; // TODO: Necessary?
         return std::ranges::all_of(keys, [&](const auto &key) { return object.contains(key); });
     }
 
-    std::optional<uint64_t> decimalId(const QJsonValue &value, const bool zeroAllowed) {
+    std::optional<uint64_t> decimalId(const QJsonValue &value) {
         if (!value.isString()) return std::nullopt;
         const auto text = value.toString();
         if (text.isEmpty() || (text.size() > 1 && text.front() == '0')) return std::nullopt;
         for (const auto c: text) if (c < '0' || c > '9') return std::nullopt;
         bool ok = false;
         const auto parsed = text.toULongLong(&ok);
-        if (!ok || (!zeroAllowed && parsed == 0)) return std::nullopt;
+        if (!ok || parsed == 0) return std::nullopt;
         return parsed;
     }
 

@@ -116,10 +116,9 @@ namespace ksv::presentation {
                                            : application::GraphKey::BenchmarkPlaytime;
         }
         [[nodiscard]] static ValueAxis rankYAxis(const std::vector<RankTier> &tiers);
-        void applyPlaytimeYAxis();
 
         Metric m_metric;
-        int m_windowDays = 3;
+        int m_windowDays = application::kDefaultAveragingWindowDays;
         application::GraphPresentation m_presentation;
         application::AxisPolicy m_playtimeAxisPolicy;
         SeriesModel *m_series;

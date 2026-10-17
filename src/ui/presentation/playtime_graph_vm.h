@@ -67,7 +67,6 @@ namespace ksv::presentation {
         void windowChanged();
 
     private:
-        void applyYAxis();
         void applyPresentation();
 
         std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;

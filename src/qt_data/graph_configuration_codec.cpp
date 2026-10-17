@@ -17,11 +17,6 @@ namespace ksv::qt_data {
         using namespace series_codec;
         using namespace std::chrono;
 
-        bool hasExactly(const QJsonObject &object, const std::vector<const char *> &keys) {
-            return object.size() == static_cast<qsizetype>(keys.size()) &&
-                   std::ranges::all_of(keys, [&](const char *key) { return object.contains(key); });
-        }
-
         // ISO 8601 calendar dates: the stored value never depends on a timezone or locale.
         QString encodeDate(const year_month_day date) {
             char text[16];
@@ -56,16 +51,16 @@ namespace ksv::qt_data {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             const auto kind = object["kind"].toString();
-            if (kind == "all" && hasExactly(object, {"kind"})) return AllHistory{};
-            if (kind == "recentDays" && hasExactly(object, {"kind", "days"})) {
+            if (kind == "all" && exactKeys(object, {"kind"})) return AllHistory{};
+            if (kind == "recentDays" && exactKeys(object, {"kind", "days"})) {
                 const auto days = boundedInteger<int>(object["days"]);
                 return days ? std::optional<GraphRange>{RecentDays{*days}} : std::nullopt;
             }
-            if (kind == "latestRuns" && hasExactly(object, {"kind", "count"})) {
+            if (kind == "latestRuns" && exactKeys(object, {"kind", "count"})) {
                 const auto count = boundedInteger<int>(object["count"]);
                 return count ? std::optional<GraphRange>{LatestRuns{*count}} : std::nullopt;
             }
-            if (kind == "customDates" && hasExactly(object, {"kind", "start", "end"})) {
+            if (kind == "customDates" && exactKeys(object, {"kind", "start", "end"})) {
                 const auto start = decodeDate(object["start"]);
                 const auto end = decodeDate(object["end"]);
                 return start && end ? std::optional<GraphRange>{CustomDates{*start, *end}} : std::nullopt;
@@ -73,21 +68,8 @@ namespace ksv::qt_data {
             return std::nullopt;
         }
 
-        QString connectionTag(const ConnectionMode mode) {
-            switch (mode) {
-                case ConnectionMode::Smooth: return "smooth";
-                case ConnectionMode::Straight: return "straight";
-                case ConnectionMode::PointsOnly: return "pointsOnly";
-            }
-            return {};
-        }
-
-        std::optional<ConnectionMode> connectionFromTag(const QJsonValue &value) {
-            const auto tag = value.toString();
-            if (tag == "smooth") return ConnectionMode::Smooth;
-            if (tag == "straight") return ConnectionMode::Straight;
-            if (tag == "pointsOnly") return ConnectionMode::PointsOnly;
-            return std::nullopt;
+        QString latin1(const std::string_view text) {
+            return QString::fromLatin1(text.data(), static_cast<qsizetype>(text.size()));
         }
 
         QJsonObject encodeSeriesStyle(const SeriesStyleOverride &style) {
@@ -128,9 +110,9 @@ namespace ksv::qt_data {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             const auto mode = object["mode"].toString();
-            if (mode == "fitVisible" && hasExactly(object, {"mode"})) return FitVisibleData{};
-            if (mode == "startAtZero" && hasExactly(object, {"mode"})) return StartAtZero{};
-            if (mode != "fixed" || !hasExactly(object, {"mode", "min", "max"})) return std::nullopt;
+            if (mode == "fitVisible" && exactKeys(object, {"mode"})) return FitVisibleData{};
+            if (mode == "startAtZero" && exactKeys(object, {"mode"})) return StartAtZero{};
+            if (mode != "fixed" || !exactKeys(object, {"mode", "min", "max"})) return std::nullopt;
             const auto minimum = finiteNumber(object["min"]);
             const auto maximum = finiteNumber(object["max"]);
             if (!minimum || !maximum) return std::nullopt;
@@ -152,7 +134,7 @@ namespace ksv::qt_data {
             for (const auto &[key, policy]: preferences.axisPolicies)
                 axisPolicies[QString::fromStdString(key)] = encodeAxisPolicy(policy);
             QJsonObject object{
-                {"connection", connectionTag(preferences.appearance.connection)},
+                {"connection", latin1(connectionModeName(preferences.appearance.connection))},
                 {"lineModeMarkers", preferences.appearance.lineModeMarkers},
                 {"seriesStyles", seriesStyles}, {"axisPolicies", axisPolicies}
             };
@@ -168,12 +150,12 @@ namespace ksv::qt_data {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             const auto &descriptor = graphDescriptor(key);
-            if (!hasExactly(object, graphSectionKeys(descriptor)) || !object["lineModeMarkers"].isBool() ||
+            if (!exactKeys(object, graphSectionKeys(descriptor)) || !object["lineModeMarkers"].isBool() ||
                 !object["seriesStyles"].isObject() || !object["axisPolicies"].isObject())
                 return std::nullopt;
 
             GraphPreferences preferences;
-            const auto connection = connectionFromTag(object["connection"]);
+            const auto connection = connectionModeFromName(object["connection"].toString().toStdString());
             if (!connection) return std::nullopt;
             preferences.appearance = {*connection, object["lineModeMarkers"].toBool()};
 
@@ -244,7 +226,7 @@ namespace ksv::qt_data {
                 const auto label = root.take("runAxisLabelSeriesId");
                 if (label.isNull()) {
                     decoded.runAxisLabelStored = true;
-                } else if (const auto id = decimalId(label, false)) {
+                } else if (const auto id = decimalId(label)) {
                     decoded.runAxisLabelStored = true;
                     decoded.configuration.runAxisLabelSeriesId = SeriesId{*id};
                 } else {
@@ -271,9 +253,7 @@ namespace ksv::qt_data {
                                            : QJsonValue();
         QJsonObject graphs;
         for (const auto key: kGraphKeys) {
-            const auto name = graphKeyName(key);
-            graphs[QString::fromLatin1(name.data(), static_cast<qsizetype>(name.size()))] =
-                    encodeGraph(configuration.preferences(key));
+            graphs[latin1(graphKeyName(key))] = encodeGraph(configuration.preferences(key));
         }
         root["graphs"] = graphs;
         return QJsonDocument(root).toJson(QJsonDocument::Indented).toStdString();

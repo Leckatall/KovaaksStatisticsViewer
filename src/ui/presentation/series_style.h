@@ -8,13 +8,15 @@
 #include "series_model.h"
 
 namespace ksv::presentation {
+    inline QColor toQColor(const application::RgbaColor &color) {
+        return {color.red, color.green, color.blue, color.alpha};
+    }
+
     // An absent committed colour leaves the series neutral: GraphCanvas then draws the foreground colour.
     inline void applySeriesStyle(SeriesModel &series, const application::GraphPresentation &presentation,
                                  const std::string_view seriesKey) {
         const auto style = presentation.seriesStyle(seriesKey);
-        series.setColor(style.color ? QColor(style.color->red, style.color->green, style.color->blue,
-                                              style.color->alpha)
-                                    : QColor());
+        series.setColor(style.color ? toQColor(*style.color) : QColor());
         series.lineWidth = style.width;
     }
 }

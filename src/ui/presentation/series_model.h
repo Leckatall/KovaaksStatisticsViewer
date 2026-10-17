@@ -16,6 +16,7 @@
 #include <optional>
 #include <span>
 
+#include "app/contracts/graph_configuration.h"
 #include "axis.h"
 #include "value_axis.h"
 #include "value_transform.h"
@@ -52,8 +53,8 @@ namespace ksv::presentation {
         void setColumn(const int column) { if (m_column == column) return; m_column = column; emit columnChanged(); }
 
         ValueTransform transform;
-        // Pen width in pixels; the default is the width every series has always been painted at.
-        qreal lineWidth = 3.0;
+        // Pen width in pixels.
+        qreal lineWidth = application::kDefaultSeriesWidth;
         ValueAxis::Options yAxisOptions;
         // Painted over the line by GraphCanvas while this series is visible.
         QList<ReferenceLine> referenceLines;

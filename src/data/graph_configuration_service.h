@@ -17,7 +17,7 @@ namespace ksv::data {
 
         [[nodiscard]] application::GraphConfigurationSnapshot snapshot() const override;
 
-        application::GraphConfigurationSaveResult replace(const application::GraphConfiguration &candidate) override;
+        application::GraphConfigurationSaveResult replace(application::GraphConfiguration candidate) override;
 
         void onChanged(std::function<void(const application::GraphConfigurationChange &)> callback) override;
 

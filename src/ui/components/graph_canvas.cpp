@@ -306,10 +306,8 @@ namespace ksv::ui {
             const qreal edgeAllowance = s->lineWidth / 2;
             style.clip = rect.adjusted(-edgeAllowance, -edgeAllowance, edgeAllowance, edgeAllowance);
             style.markerOutlineColor = m_backgroundColor;
-            style.showMarkers = !pixelPoints.isEmpty() &&
-                                (m_connectionMode == ConnectionMode::PointsOnly ||
-                                 (m_pointMarkers && markersFit(int(pixelPoints.size()),
-                                                               pixelPoints.back().x() - pixelPoints.front().x())));
+            style.showMarkers = m_pointMarkers && !pixelPoints.isEmpty() &&
+                                markersFit(int(pixelPoints.size()), pixelPoints.back().x() - pixelPoints.front().x());
             SeriesPainter::paint(*painter, pixelPoints, {carryPixel(s->leadingCarry), carryPixel(s->trailingCarry)},
                                  colorFor(*s), style);
         }

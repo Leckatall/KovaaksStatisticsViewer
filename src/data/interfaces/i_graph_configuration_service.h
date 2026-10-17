@@ -16,7 +16,7 @@ namespace ksv::data {
 
         // Validates the whole candidate. Rejection or an unchanged candidate replaces, writes and
         // publishes nothing.
-        virtual application::GraphConfigurationSaveResult replace(const application::GraphConfiguration &candidate) = 0;
+        virtual application::GraphConfigurationSaveResult replace(application::GraphConfiguration candidate) = 0;
 
         // Called after the replacement is installed, in revision order even when a callback replaces again.
         virtual void onChanged(std::function<void(const application::GraphConfigurationChange &)> callback) = 0;

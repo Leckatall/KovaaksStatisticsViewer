@@ -475,14 +475,14 @@ namespace {
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
 
         configuration->configuration.runSeries.series.pop_back();
-        configuration->publish({0, {}, true, false});
+        configuration->publish({}, true, false);
         EXPECT_EQ(spy.count(), 1);
         EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 8);
 
         view_model->beginVisit();
         view_model->setSeriesEnabled("2", false);
         const auto during = spy.count();
-        configuration->publish({0, {}, false, true});
+        configuration->publish({}, false, true);
         EXPECT_EQ(spy.count(), during);
         EXPECT_FALSE(row(*view_model, "2")["enabled"].toBool());
     }

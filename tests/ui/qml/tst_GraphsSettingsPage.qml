@@ -329,6 +329,33 @@ TestCase {
         verify(find(dialog, "graphSeriesWidthHint").text.indexOf("12") >= 0)
     }
 
+    // Every keystroke republishes the drafts; a row rebuilt from them would take the field, and the
+    // person's focus, away mid-number.
+    function test_typingSeveralCharactersIntoARowFieldKeepsItsFocus_data() {
+        return [
+            {tag: "series width", name: "graphField_seriesStyle_accuracy_width", target: "accuracy", field: "width"},
+            {tag: "axis bound", name: "graphField_axes_score_fixedMin", target: "score", field: "fixedMin"}
+        ]
+    }
+
+    function test_typingSeveralCharactersIntoARowFieldKeepsItsFocus(data) {
+        const {dialog, vm} = openOn("scenarioHistory")
+        vm.setAxisMode("scenarioHistory", "score", "fixed")
+        tryVerify(() => shown(dialog, data.name))
+        const input = find(dialog, data.name)
+
+        input.forceActiveFocus()
+        input.selectAll()
+        keyClick("1")
+        keyClick("2")
+        keyClick("5")
+
+        verify(input.activeFocus)
+        compare(input.text, "125")
+        compare(vm.callsNamed("setGraphField").slice(-1)[0].args,
+                ["scenarioHistory", data.field === "width" ? "seriesStyle" : "axes", data.target, data.field, "125"])
+    }
+
     function test_theSeriesDefaultButtonClearsBothOverrides() {
         const {dialog, vm} = openOn("scenarioHistory")
         vm.setSeriesColor("scenarioHistory", "shots", "#111111")

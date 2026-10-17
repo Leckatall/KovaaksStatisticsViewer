@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <optional>
@@ -20,12 +19,6 @@ namespace ksv::application {
         std::map<std::string, AxisPolicy, std::less<>> axisPolicies;
     };
 
-    // A mutable copy for a settings visit's working copy and baseline.
-    struct GraphConfigurationEditorSeed {
-        GraphConfiguration configuration;
-        std::uint64_t revision = 0;
-    };
-
     class IGraphConfigurationUseCase {
     public:
         virtual ~IGraphConfigurationUseCase() = default;
@@ -34,8 +27,6 @@ namespace ksv::application {
 
         // Published after a whole accepted replacement; never for a rejected or unchanged candidate.
         virtual void onChanged(std::function<void(const GraphConfigurationChange &)> callback) = 0;
-
-        [[nodiscard]] virtual GraphConfigurationEditorSeed editorSeed() const = 0;
 
         // Validates the complete candidate, every graph included. Acceptance means the write was
         // submitted, not that it was verified.

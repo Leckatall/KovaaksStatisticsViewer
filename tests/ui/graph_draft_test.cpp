@@ -651,13 +651,13 @@ namespace {
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::graphDraftsChanged);
 
         configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 5;
-        configuration->publish({0, {GraphKey::DailyPlaytime}, false, false});
+        configuration->publish({GraphKey::DailyPlaytime}, false, false);
         EXPECT_GE(spy.count(), 1);
         EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "5");
 
         view_model->beginVisit();
         configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 8;
-        configuration->publish({0, {GraphKey::DailyPlaytime}, false, false});
+        configuration->publish({GraphKey::DailyPlaytime}, false, false);
         EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "5");
     }
 

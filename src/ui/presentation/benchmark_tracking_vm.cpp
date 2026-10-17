@@ -47,10 +47,6 @@ namespace ksv::presentation {
                    classification == application::BenchmarkChoiceClassification::Incomplete;
         }
 
-        qint64 utcMidnightMs(const std::chrono::sys_days day) {
-            return utcDateTimeForEpochDay(static_cast<long long>(day.time_since_epoch().count())).toMSecsSinceEpoch();
-        }
-
         void widenExtent(std::optional<std::pair<qint64, qint64>> &extent, const qint64 milliseconds) {
             if (!extent) extent = std::pair<qint64, qint64>{milliseconds, milliseconds};
             else extent = std::pair<qint64, qint64>{std::min(extent->first, milliseconds),

@@ -2,6 +2,7 @@
 #define KOVAAKSSTATISTICSVIEWER_TESTS_FAKE_GRAPH_CONFIGURATION_USE_CASE_H
 
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -31,10 +32,6 @@ namespace ksv::tests_support {
             callbacks.push_back(std::move(callback));
         }
 
-        [[nodiscard]] application::GraphConfigurationEditorSeed editorSeed() const override {
-            return {configuration, revision};
-        }
-
         application::GraphConfigurationSaveResult save(const application::GraphConfiguration &candidate) override {
             saves.push_back(candidate);
             if (!rejectSavesWith.empty()) return {rejectSavesWith, revision};
@@ -60,13 +57,11 @@ namespace ksv::tests_support {
             return {{}, revision};
         }
 
-        // A change naming a graph without naming sections touches all of them.
-        void publish(application::GraphConfigurationChange change) {
-            change.revision = revision;
-            for (const auto graph: change.graphs) {
-                auto &sections = change.sections[static_cast<std::size_t>(graph)];
-                if (!sections.any()) sections = {true, true, true};
-            }
+        // Every section of each named graph counts as changed.
+        void publish(const std::initializer_list<application::GraphKey> graphs, const bool runSeries = false,
+                     const bool runAxisLabel = false) {
+            application::GraphConfigurationChange change{revision, runSeries, runAxisLabel};
+            for (const auto graph: graphs) change.sections[static_cast<std::size_t>(graph)] = {true, true, true};
             deliver(change);
             published = configuration;
         }

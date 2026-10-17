@@ -93,7 +93,7 @@ namespace ksv::tests_ui {
             std::chrono::year{year} / std::chrono::month{month} / std::chrono::day{day}};
     }
 
-    inline qint64 utcMidnightMs(const std::chrono::sys_days day) {
+    inline qint64 expectedMidnightMs(const std::chrono::sys_days day) {
         const auto epochDays = static_cast<long long>(day.time_since_epoch().count());
         return QDateTime(QDate(1970, 1, 1).addDays(epochDays), QTime(0, 0), QTimeZone::utc())
             .toMSecsSinceEpoch();

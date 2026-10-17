@@ -13,13 +13,6 @@ namespace ksv::application {
     // One sample per calendar day, oldest first, as the profile's rolling-average accounting emits them.
     using PlaytimeSeries = std::vector<std::pair<std::chrono::sys_days, double> >;
 
-    struct PlaytimeDayExtent {
-        std::chrono::sys_days first;
-        std::chrono::sys_days last;
-
-        bool operator==(const PlaytimeDayExtent &) const = default;
-    };
-
     // What a playtime graph's committed window and range make of its full-history measurements.
     struct PlaytimeView {
         int windowDays = kDefaultAveragingWindowDays;
@@ -27,7 +20,7 @@ namespace ksv::application {
         std::optional<DayInterval> interval;
         // Extent of the full-history samples whatever the range, so a neighbour's default axis does not
         // shrink when this graph is narrowed.
-        std::optional<PlaytimeDayExtent> fullExtent;
+        std::optional<DayInterval> fullExtent;
 
         bool operator==(const PlaytimeView &) const = default;
     };

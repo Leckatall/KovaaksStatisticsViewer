@@ -29,6 +29,9 @@ namespace ksv::presentation {
     [[nodiscard]] ValueAxis axisForPolicy(std::span<const SeriesModel *const> members,
                                           const application::AxisPolicy &policy, ValueAxis::Options base,
                                           const ValueTransform &transform);
+
+    // Sets the Y axis of a series that has its axis to itself.
+    void applyAxisPolicy(SeriesModel &series, const application::AxisPolicy &policy);
 }
 
 #endif //KOVAAKSSTATSVIEWER_AXIS_POLICY_H

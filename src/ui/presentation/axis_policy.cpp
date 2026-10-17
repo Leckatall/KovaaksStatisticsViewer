@@ -1,12 +1,19 @@
 #include "axis_policy.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 #include <tuple>
 #include <variant>
 
 namespace ksv::presentation {
+    void applyAxisPolicy(SeriesModel &series, const application::AxisPolicy &policy) {
+        const std::array<const SeriesModel *, 1> members{&series};
+        series.yAxisOptions = optionsForPolicy(policy, {});
+        series.yAxis = axisForPolicy(members, policy, {}, series.transform);
+    }
+
     namespace {
         // Validation rejects anything else upstream; this guards a caller that skipped it.
         std::optional<application::FixedBounds> usableBounds(const application::AxisPolicy &policy) {

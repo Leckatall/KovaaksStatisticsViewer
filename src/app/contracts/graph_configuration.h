@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -92,6 +93,11 @@ namespace ksv::application {
         PointsOnly
     };
 
+    // The tag that names a mode wherever it leaves C++: the stored document and the QML transport.
+    [[nodiscard]] std::string_view connectionModeName(ConnectionMode mode);
+
+    [[nodiscard]] std::optional<ConnectionMode> connectionModeFromName(std::string_view name);
+
     struct LineAppearance {
         ConnectionMode connection = ConnectionMode::Smooth;
         // The line-mode preference; PointsOnly draws markers without overwriting it.
@@ -165,16 +171,26 @@ namespace ksv::application {
 
     [[nodiscard]] const GraphDescriptor &graphDescriptor(GraphKey key);
 
+    [[nodiscard]] bool offersSeries(const GraphDescriptor &descriptor, std::string_view seriesKey);
+
     inline constexpr int kDefaultAveragingWindowDays = 3;
     // Equal to SeriesPainter's default line width.
     inline constexpr double kDefaultSeriesWidth = 3.0;
 
-    struct SeriesStyleDefault {
+    struct SeriesStyle {
+        // Absent: drawn in the theme's foreground colour.
         std::optional<RgbaColor> color;
         double width = kDefaultSeriesWidth;
+
+        bool operator==(const SeriesStyle &) const = default;
     };
 
-    [[nodiscard]] SeriesStyleDefault defaultSeriesStyle(GraphKey graph, std::string_view seriesKey);
+    [[nodiscard]] SeriesStyle defaultSeriesStyle(GraphKey graph, std::string_view seriesKey);
+
+    // The graph's default for `seriesKey` with its override, if any, laid over it.
+    [[nodiscard]] SeriesStyle resolvedSeriesStyle(
+        GraphKey graph, const std::map<std::string, SeriesStyleOverride, std::less<>> &overrides,
+        std::string_view seriesKey);
 
     [[nodiscard]] GraphPreferences defaultGraphPreferences(GraphKey key);
 
@@ -273,18 +289,18 @@ namespace ksv::application {
 
     struct GraphConfigurationChange {
         std::uint64_t revision = 0;
-        // Graphs whose GraphPreferences changed, in kGraphKeys order.
-        std::vector<GraphKey> graphs;
         bool runSeries = false;
         bool runAxisLabel = false;
-        // Indexed by GraphKey; every entry of a graph missing from `graphs` is empty.
+        // Indexed by GraphKey; a graph's GraphPreferences changed exactly when its entry is any().
         std::array<GraphSectionChange, kGraphKeys.size()> sections;
 
         [[nodiscard]] const GraphSectionChange &sectionsOf(const GraphKey key) const {
             return sections[static_cast<std::size_t>(key)];
         }
 
-        [[nodiscard]] bool empty() const { return graphs.empty() && !runSeries && !runAxisLabel; }
+        [[nodiscard]] bool anyGraph() const { return std::ranges::any_of(sections, &GraphSectionChange::any); }
+
+        [[nodiscard]] bool empty() const { return !anyGraph() && !runSeries && !runAxisLabel; }
 
         bool operator==(const GraphConfigurationChange &) const = default;
     };

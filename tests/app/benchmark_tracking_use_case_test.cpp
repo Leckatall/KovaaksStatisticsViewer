@@ -56,7 +56,7 @@ namespace {
 
         void commitPlaytime(const GraphKey key = GraphKey::BenchmarkPlaytime) {
             ++configuration->revision;
-            configuration->publish({.graphs = {key}});
+            configuration->publish({key});
         }
 
         void known(const std::string &name, const std::string &hash) {
@@ -1213,7 +1213,7 @@ TEST(BenchmarkTrackingStyle, EachGraphReportsItsOwnCommittedStyle) {
     const auto rank = fixture.tracking->presentation(GraphKey::BenchmarkRank);
     const auto playtime = fixture.tracking->presentation(GraphKey::BenchmarkPlaytime);
     EXPECT_EQ(rank.appearance.connection, ConnectionMode::Smooth);
-    EXPECT_EQ(rank.seriesStyle("rank"), (ResolvedSeriesStyle{RgbaColor{1, 1, 1, 255}, 5.0}));
+    EXPECT_EQ(rank.seriesStyle("rank"), (SeriesStyle{RgbaColor{1, 1, 1, 255}, 5.0}));
     EXPECT_EQ(playtime.appearance.connection, ConnectionMode::PointsOnly);
     EXPECT_EQ(playtime.seriesStyle("playtime").color, (RgbaColor{77, 208, 225, 255}));
 }

@@ -13,13 +13,8 @@ namespace ksv::application {
         m_service->onChanged(std::move(callback));
     }
 
-    GraphConfigurationEditorSeed GraphConfigurationUseCase::editorSeed() const {
-        const auto snapshot = m_service->snapshot();
-        return {*snapshot.configuration, snapshot.revision};
-    }
-
     GraphConfigurationSaveResult GraphConfigurationUseCase::save(const GraphConfiguration &candidate) {
-        return m_service->replace(candidate);
+        return m_service->replace(GraphConfiguration(candidate));
     }
 
     GraphConfigurationSaveResult GraphConfigurationUseCase::applyQuickPatch(const GraphKey graph,
@@ -39,6 +34,6 @@ namespace ksv::application {
 
         if (auto issues = validateGraphPreferences(graph, preferences); !issues.empty())
             return {std::move(issues), snapshot.revision};
-        return m_service->replace(candidate);
+        return m_service->replace(std::move(candidate));
     }
 }

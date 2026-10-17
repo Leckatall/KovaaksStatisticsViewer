@@ -14,8 +14,6 @@ namespace ksv::application {
 
         void onChanged(std::function<void(const GraphConfigurationChange &)> callback) override;
 
-        [[nodiscard]] GraphConfigurationEditorSeed editorSeed() const override;
-
         GraphConfigurationSaveResult save(const GraphConfiguration &candidate) override;
 
         GraphConfigurationSaveResult applyQuickPatch(GraphKey graph, const GraphQuickPatch &patch) override;

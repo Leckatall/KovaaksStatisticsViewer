@@ -18,6 +18,25 @@ function nameOf(key) {
     return found ? found.name : key
 }
 
+// ---- Shared by the gear popup and the Graphs page ----------------------------------------------
+
+const connectionModes = [
+    {text: qsTr("Smooth lines"), value: "smooth"},
+    {text: qsTr("Straight lines"), value: "straight"},
+    {text: qsTr("Points only"), value: "pointsOnly"}
+]
+
+const recentDayPresets = [7, 30, 90]
+const latestRunPresets = [25, 50, 100]
+
+function allHistoryText(offersLatestRuns) {
+    return offersLatestRuns ? qsTr("All runs") : qsTr("All time")
+}
+
+function wholeNumberText(value) {
+    return Number(value).toLocaleString(Qt.locale(), "f", 0)
+}
+
 // ---- Detailed-settings vocabulary --------------------------------------------------------------
 
 const groupNames = {

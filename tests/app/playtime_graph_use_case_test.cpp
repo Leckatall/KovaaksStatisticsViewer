@@ -50,7 +50,7 @@ namespace {
 
         void commit(const GraphKey key = GraphKey::DailyPlaytime) {
             ++configuration->revision;
-            configuration->publish({.graphs = {key}});
+            configuration->publish({key});
         }
 
         // Real accounting behind the fake, so windows change values the way the profile would.
@@ -197,7 +197,7 @@ namespace {
         EXPECT_EQ(styleNotifications, 1);
         const auto style = use_case.presentation();
         EXPECT_EQ(style.appearance.connection, ConnectionMode::Straight);
-        EXPECT_EQ(style.seriesStyle("playtime"), (ResolvedSeriesStyle{RgbaColor{1, 2, 3, 255}, 5.0}));
+        EXPECT_EQ(style.seriesStyle("playtime"), (SeriesStyle{RgbaColor{1, 2, 3, 255}, 5.0}));
         EXPECT_EQ(style.axisPolicies.at("playtime"), AxisPolicy{FitVisibleData{}});
     }
 

@@ -31,8 +31,11 @@ Item {
     readonly property bool offersWindow: draft.hasWindow === true
     readonly property var axisRows: draft.axes || []
     readonly property var seriesRows: draft.series || []
+    // The Repeaters are keyed by these, which change only when the graph's axes or series do: every
+    // keystroke republishes the drafts, and a row rebuilt from them would take the field being typed in.
+    readonly property string axisKeys: axisRows.map(r => r.key).join(",")
+    readonly property string seriesKeys: seriesRows.map(r => r.key).join(",")
     readonly property bool isRunGraph: graphKey === "run"
-    readonly property bool pointsOnly: draft.connection === "pointsOnly"
     readonly property bool wide: scroller.availableWidth >= 560
 
     readonly property var sortedIssues: GraphCatalog.sortedIssues(settingsVm.draftIssues || [])
@@ -40,7 +43,7 @@ Item {
 
     readonly property var rangeKinds: {
         const kinds = [
-            {kind: "allHistory", text: offersLatestRuns ? qsTr("All runs") : qsTr("All time")},
+            {kind: "allHistory", text: GraphCatalog.allHistoryText(offersLatestRuns)},
             {kind: "recentDays", text: qsTr("Recent days")}
         ]
         if (offersLatestRuns) kinds.push({kind: "latestRuns", text: qsTr("Latest runs")})
@@ -49,11 +52,6 @@ Item {
     }
     readonly property int rangeIndex: Math.max(0, rangeKinds.findIndex(k => k.kind === draft.rangeKind))
 
-    readonly property var connectionEntries: [
-        {text: qsTr("Smooth lines"), value: "smooth"},
-        {text: qsTr("Straight lines"), value: "straight"},
-        {text: qsTr("Points only"), value: "pointsOnly"}
-    ]
     readonly property var fitEntries: [
         {text: qsTr("Fit visible data"), mode: "fit"},
         {text: qsTr("Start at zero"), mode: "zero"},
@@ -61,7 +59,15 @@ Item {
     ]
 
     function num(value) {
-        return Number(value).toLocaleString(Qt.locale(), "f", 0)
+        return GraphCatalog.wholeNumberText(value)
+    }
+
+    function keyList(keys) {
+        return keys === "" ? [] : keys.split(",")
+    }
+
+    function rowFor(rows, key) {
+        return rows.find(r => r.key === key) || ({key: key})
     }
 
     function decimal(value) {
@@ -78,9 +84,17 @@ Item {
 
     // ---- Issues ---------------------------------------------------------------------------------------
 
+    // This graph's live issues by group|target|field, so each error label is one lookup.
+    readonly property var issuesByField: {
+        const found = {}
+        for (const i of root.settingsVm.draftIssues || [])
+            if (i.graph === root.graphKey && !(i.group + "|" + i.target + "|" + i.field in found))
+                found[i.group + "|" + i.target + "|" + i.field] = i
+        return found
+    }
+
     function issueFor(group, target, field) {
-        return (root.settingsVm.draftIssues || []).find(
-            i => i.graph === root.graphKey && i.group === group && i.target === target && i.field === field) || null
+        return root.issuesByField[group + "|" + target + "|" + field] || null
     }
 
     function errorFor(group, target, field) {
@@ -281,7 +295,6 @@ Item {
                     columns: root.wide ? 2 : 1
                     columnSpacing: 16
                     rowSpacing: 10
-                    visible: root.offersRange || root.offersWindow
 
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -359,7 +372,8 @@ Item {
                         visible: root.draft.rangeKind === "recentDays" || root.draft.rangeKind === "latestRuns"
 
                         Repeater {
-                            model: root.draft.rangeKind === "latestRuns" ? [25, 50, 100] : [7, 30, 90]
+                            model: root.draft.rangeKind === "latestRuns" ? GraphCatalog.latestRunPresets
+                                                                         : GraphCatalog.recentDayPresets
 
                             Button {
                                 required property int modelData
@@ -452,15 +466,16 @@ Item {
                 visible: root.axisRows.length > 0
 
                 Repeater {
-                    model: root.axisRows
+                    model: root.keyList(root.axisKeys)
 
                     ColumnLayout {
                         id: axis
-                        required property var modelData
-                        readonly property string axisUnit: GraphCatalog.axisUnit(root.graphKey, modelData.key)
-                        readonly property string axisTitle: qsTr("%1 axis").arg(GraphCatalog.axisName(root.graphKey, modelData.key))
+                        required property string modelData
+                        readonly property var row: root.rowFor(root.axisRows, modelData)
+                        readonly property string axisUnit: GraphCatalog.axisUnit(root.graphKey, modelData)
+                        readonly property string axisTitle: qsTr("%1 axis").arg(GraphCatalog.axisName(root.graphKey, modelData))
 
-                        objectName: "graphAxis_" + modelData.key
+                        objectName: "graphAxis_" + modelData
                         Layout.fillWidth: true
                         spacing: 4
 
@@ -471,42 +486,42 @@ Item {
                             wrapMode: Text.WordWrap
                         }
                         Label {
-                            objectName: "graphAxisSeries_" + axis.modelData.key
+                            objectName: "graphAxisSeries_" + axis.modelData
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             opacity: 0.75
                             text: qsTr("Applies to: %1").arg(
-                                axis.modelData.seriesKeys.map(k => GraphCatalog.seriesName(root.graphKey, k)).join(", "))
+                                (axis.row.seriesKeys || []).map(k => GraphCatalog.seriesName(root.graphKey, k)).join(", "))
                         }
                         Label { text: qsTr("Vertical fit") }
                         ComboBox {
                             id: fitCombo
-                            objectName: "graphField_axes_" + axis.modelData.key + "_fitMode"
+                            objectName: "graphField_axes_" + axis.modelData + "_fitMode"
                             Layout.fillWidth: true
                             readonly property var entries: root.fitEntries
                             model: entries
                             textRole: "text"
-                            currentIndex: Math.max(0, entries.findIndex(e => e.mode === axis.modelData.mode))
+                            currentIndex: Math.max(0, entries.findIndex(e => e.mode === axis.row.mode))
                             Accessible.name: qsTr("%1 vertical fit").arg(axis.axisTitle)
-                            Accessible.description: root.errorFor("axes", axis.modelData.key, "fitMode")
+                            Accessible.description: root.errorFor("axes", axis.modelData, "fitMode")
                             onActivated: index => {
-                                root.settingsVm.setAxisMode(root.graphKey, axis.modelData.key, entries[index].mode)
+                                root.settingsVm.setAxisMode(root.graphKey, axis.modelData, entries[index].mode)
                                 fitCombo.currentIndex = Qt.binding(
-                                    () => Math.max(0, entries.findIndex(e => e.mode === axis.modelData.mode)))
+                                    () => Math.max(0, entries.findIndex(e => e.mode === axis.row.mode)))
                             }
                         }
                         Label {
                             objectName: fitCombo.objectName + "_error"
                             Layout.fillWidth: true
                             visible: text !== ""
-                            text: root.errorFor("axes", axis.modelData.key, "fitMode")
+                            text: root.errorFor("axes", axis.modelData, "fitMode")
                             color: Theme.errorText
                             wrapMode: Text.WordWrap
                         }
 
                         GridLayout {
                             Layout.fillWidth: true
-                            visible: axis.modelData.mode === "fixed"
+                            visible: axis.row.mode === "fixed"
                             columns: root.wide ? 2 : 1
                             columnSpacing: 16
                             rowSpacing: 10
@@ -514,25 +529,25 @@ Item {
                             GraphNumberField {
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignTop
-                                fieldName: "graphField_axes_" + axis.modelData.key + "_fixedMin"
+                                fieldName: "graphField_axes_" + axis.modelData + "_fixedMin"
                                 graphKey: root.graphKey
                                 label: qsTr("Minimum")
                                 unit: axis.axisUnit
                                 hint: qsTr("Up to %1 in size.").arg(root.num(root.limits.maxBound))
-                                shown: axis.modelData.minText || ""
-                                errorText: root.errorFor("axes", axis.modelData.key, "fixedMin")
-                                onEdited: text => root.edit("axes", axis.modelData.key, "fixedMin", text)
+                                shown: axis.row.minText || ""
+                                errorText: root.errorFor("axes", axis.modelData, "fixedMin")
+                                onEdited: text => root.edit("axes", axis.modelData, "fixedMin", text)
                             }
                             GraphNumberField {
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignTop
-                                fieldName: "graphField_axes_" + axis.modelData.key + "_fixedMax"
+                                fieldName: "graphField_axes_" + axis.modelData + "_fixedMax"
                                 graphKey: root.graphKey
                                 label: qsTr("Maximum")
                                 unit: axis.axisUnit
-                                shown: axis.modelData.maxText || ""
-                                errorText: root.errorFor("axes", axis.modelData.key, "fixedMax")
-                                onEdited: text => root.edit("axes", axis.modelData.key, "fixedMax", text)
+                                shown: axis.row.maxText || ""
+                                errorText: root.errorFor("axes", axis.modelData, "fixedMax")
+                                onEdited: text => root.edit("axes", axis.modelData, "fixedMax", text)
                             }
                         }
                     }
@@ -544,40 +559,13 @@ Item {
                 groupName: "seriesStyle"
                 title: qsTr("Series & style")
 
-                ColumnLayout {
+                GraphLineStyleControls {
                     Layout.fillWidth: true
-                    spacing: 2
-
-                    Label { text: qsTr("Line style") }
-                    ComboBox {
-                        id: connectionCombo
-                        objectName: "graphField_seriesStyle_connection"
-                        Layout.fillWidth: true
-                        model: root.connectionEntries
-                        textRole: "text"
-                        currentIndex: Math.max(0, root.connectionEntries.findIndex(e => e.value === root.draft.connection))
-                        Accessible.name: qsTr("Line style")
-                        onActivated: index => {
-                            root.settingsVm.setGraphConnection(root.graphKey, root.connectionEntries[index].value)
-                            connectionCombo.currentIndex = Qt.binding(
-                                () => Math.max(0, root.connectionEntries.findIndex(e => e.value === root.draft.connection)))
-                        }
-                    }
-                }
-
-                CheckBox {
-                    id: markerBox
-                    objectName: "graphField_seriesStyle_markers"
-                    Layout.fillWidth: true
-                    text: qsTr("Show point markers")
-                    checked: root.pointsOnly || root.draft.markers === true
-                    enabled: !root.pointsOnly
-                    Accessible.name: text
-                    Accessible.description: root.pointsOnly ? qsTr("Always shown while Points only is selected") : ""
-                    onToggled: {
-                        root.settingsVm.setGraphMarkers(root.graphKey, markerBox.checked)
-                        markerBox.checked = Qt.binding(() => root.pointsOnly || root.draft.markers === true)
-                    }
+                    spacing: 10
+                    connection: root.draft.connection || ""
+                    markers: root.draft.markers === true
+                    onConnectionChosen: connection => root.settingsVm.setGraphConnection(root.graphKey, connection)
+                    onMarkersChosen: markers => root.settingsVm.setGraphMarkers(root.graphKey, markers)
                 }
 
                 ColumnLayout {
@@ -619,14 +607,15 @@ Item {
                     }
 
                     Repeater {
-                        model: root.seriesRows
+                        model: root.keyList(root.seriesKeys)
 
                         ColumnLayout {
                             id: row
-                            required property var modelData
-                            readonly property string seriesLabel: GraphCatalog.seriesName(root.graphKey, modelData.key)
+                            required property string modelData
+                            readonly property var entry: root.rowFor(root.seriesRows, modelData)
+                            readonly property string seriesLabel: GraphCatalog.seriesName(root.graphKey, modelData)
 
-                            objectName: "graphSeriesRow_" + modelData.key
+                            objectName: "graphSeriesRow_" + modelData
                             Layout.fillWidth: true
                             spacing: 2
 
@@ -635,21 +624,21 @@ Item {
                                 spacing: 8
 
                                 Label {
-                                    objectName: "graphSeriesName_" + row.modelData.key
+                                    objectName: "graphSeriesName_" + row.modelData
                                     Layout.fillWidth: true
                                     text: row.seriesLabel
                                     elide: Text.ElideRight
                                 }
                                 Button {
                                     id: swatch
-                                    objectName: "graphField_seriesStyle_" + row.modelData.key + "_color"
-                                    readonly property bool usesThemeColor: !row.modelData.color
-                                    readonly property color swatchColor: usesThemeColor ? palette.text : row.modelData.color
+                                    objectName: "graphField_seriesStyle_" + row.modelData + "_color"
+                                    readonly property bool usesThemeColor: !row.entry.color
+                                    readonly property color swatchColor: usesThemeColor ? palette.text : row.entry.color
                                     implicitWidth: 40
                                     implicitHeight: 26
                                     Accessible.name: qsTr("%1 colour").arg(row.seriesLabel)
                                     Accessible.description: usesThemeColor ? qsTr("Follows the theme until a colour is chosen") : ""
-                                    onClicked: root.pickColor(row.modelData)
+                                    onClicked: root.pickColor(row.entry)
                                     background: Rectangle {
                                         radius: 4
                                         color: swatch.swatchColor
@@ -658,34 +647,34 @@ Item {
                                     }
                                 }
                                 GraphTextInput {
-                                    objectName: "graphField_seriesStyle_" + row.modelData.key + "_width"
+                                    objectName: "graphField_seriesStyle_" + row.modelData + "_width"
                                     Layout.preferredWidth: 64
                                     graphKey: root.graphKey
-                                    shown: row.modelData.widthText
+                                    shown: row.entry.widthText || ""
                                     selectByMouse: true
                                     Accessible.name: qsTr("%1 line width").arg(row.seriesLabel)
-                                    Accessible.description: root.errorFor("seriesStyle", row.modelData.key, "width")
-                                    onEdited: text => root.edit("seriesStyle", row.modelData.key, "width", text)
+                                    Accessible.description: root.errorFor("seriesStyle", row.modelData, "width")
+                                    onEdited: text => root.edit("seriesStyle", row.modelData, "width", text)
                                 }
                                 Label { text: qsTr("px") }
                                 Button {
-                                    objectName: "graphSeriesReset_" + row.modelData.key
+                                    objectName: "graphSeriesReset_" + row.modelData
                                     text: qsTr("Default")
                                     flat: true
-                                    enabled: row.modelData.colorOverridden === true || row.modelData.widthOverridden === true
-                                             || root.errorFor("seriesStyle", row.modelData.key, "width") !== ""
+                                    enabled: row.entry.colorOverridden === true || row.entry.widthOverridden === true
+                                             || root.errorFor("seriesStyle", row.modelData, "width") !== ""
                                     Accessible.name: qsTr("Restore default colour and width of %1").arg(row.seriesLabel)
                                     onClicked: {
-                                        root.settingsVm.clearSeriesOverride(root.graphKey, row.modelData.key, "color")
-                                        root.settingsVm.clearSeriesOverride(root.graphKey, row.modelData.key, "width")
+                                        root.settingsVm.clearSeriesOverride(root.graphKey, row.modelData, "color")
+                                        root.settingsVm.clearSeriesOverride(root.graphKey, row.modelData, "width")
                                     }
                                 }
                             }
                             Label {
-                                objectName: "graphField_seriesStyle_" + row.modelData.key + "_width_error"
+                                objectName: "graphField_seriesStyle_" + row.modelData + "_width_error"
                                 Layout.fillWidth: true
                                 visible: text !== ""
-                                text: root.errorFor("seriesStyle", row.modelData.key, "width")
+                                text: root.errorFor("seriesStyle", row.modelData, "width")
                                 color: Theme.errorText
                                 wrapMode: Text.WordWrap
                             }

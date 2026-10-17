@@ -3,13 +3,14 @@
 //
 
 #include "settings_vm.h"
+#include "axis_policy.h"
 #include "series_expression_editor_model.h"
+#include "series_style.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <concepts>
-#include <functional>
 #include <limits>
 #include <ranges>
 #include <variant>
@@ -84,10 +85,11 @@ namespace ksv::presentation {
         // Raw input is never part of a candidate, so its issue has no GraphConfigurationIssueCode.
         constexpr auto kUnparsedInputCode = "unparsedInput";
 
-        QString graphName(const application::GraphKey key) {
-            return QString::fromUtf8(application::graphKeyName(key).data(),
-                                     static_cast<qsizetype>(application::graphKeyName(key).size()));
+        QString qstring(const std::string_view text) {
+            return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
         }
+
+        QString graphName(const application::GraphKey key) { return qstring(application::graphKeyName(key)); }
 
         QVariantMap issueMap(const application::GraphKey graph, const QString &group, const QString &target,
                              const QString &field, const QString &code) {
@@ -99,26 +101,16 @@ namespace ksv::presentation {
             return {{"accepted", accepted}, {"issues", std::move(issues)}};
         }
 
-        QString connectionName(const application::ConnectionMode mode) {
-            switch (mode) {
-                case application::ConnectionMode::Smooth: return "smooth";
-                case application::ConnectionMode::Straight: return "straight";
-                case application::ConnectionMode::PointsOnly: return "pointsOnly";
-            }
-            return "smooth";
-        }
-
         std::optional<application::ConnectionMode> connectionFromName(const QString &name) {
-            if (name == "smooth") return application::ConnectionMode::Smooth;
-            if (name == "straight") return application::ConnectionMode::Straight;
-            if (name == "pointsOnly") return application::ConnectionMode::PointsOnly;
-            return std::nullopt;
+            return application::connectionModeFromName(name.toStdString());
         }
 
-        QString isoDate(const std::chrono::year_month_day &date) {
-            return QDate(static_cast<int>(date.year()), static_cast<int>(static_cast<unsigned>(date.month())),
-                         static_cast<int>(static_cast<unsigned>(date.day()))).toString(Qt::ISODate);
+        QDate toQDate(const std::chrono::year_month_day &date) {
+            return {static_cast<int>(date.year()), static_cast<int>(static_cast<unsigned>(date.month())),
+                    static_cast<int>(static_cast<unsigned>(date.day()))};
         }
+
+        QString isoDate(const std::chrono::year_month_day &date) { return toQDate(date).toString(Qt::ISODate); }
 
         // Group separators are rejected so that a whole string either is a number in the locale or is not.
         QLocale parsingLocale(QLocale locale) {
@@ -166,8 +158,7 @@ namespace ksv::presentation {
         }
 
         QString formatDate(const std::chrono::year_month_day &date, const QLocale &locale) {
-            const QDate value(static_cast<int>(date.year()), static_cast<int>(static_cast<unsigned>(date.month())),
-                              static_cast<int>(static_cast<unsigned>(date.day())));
+            const auto value = toQDate(date);
             return value.isValid() ? locale.toString(value, dateFormatFor(locale)) : QString();
         }
 
@@ -208,6 +199,17 @@ namespace ksv::presentation {
             return {std::nullopt, issueCodeName(negative ? application::GraphConfigurationIssueCode::NonPositiveCount
                                                          : application::GraphConfigurationIssueCode::CountTooLarge)};
         }
+
+        // A series left with no override field is dropped from the map. Returns whether the override moved.
+        template<typename Edit>
+        bool editSeriesOverride(application::GraphPreferences &preferences, const std::string &series, Edit edit) {
+            auto &style = preferences.seriesStyles[series];
+            const auto before = style;
+            edit(style);
+            const bool changed = style != before;
+            if (style == application::SeriesStyleOverride{}) preferences.seriesStyles.erase(series);
+            return changed;
+        }
     }
 
     SettingsViewModel::SettingsViewModel(
@@ -226,7 +228,7 @@ namespace ksv::presentation {
         m_profile_service->onProfileChanged([self] { if (self) emit self->profileLoadedChanged(); });
         m_configuration->onChanged([self](const application::GraphConfigurationChange &change) {
             if (!self) return;
-            if (!change.graphs.empty()) {
+            if (change.anyGraph()) {
                 emit self->quickSettingsChanged();
                 if (!self->isVisitOpen()) emit self->graphDraftsChanged();
             }
@@ -257,14 +259,8 @@ namespace ksv::presentation {
 
     void SettingsViewModel::beginVisit() {
         if (m_working) return;
-        auto seed = m_configuration->editorSeed();
-        m_baseline = seed.configuration;
-        m_working = std::move(seed.configuration);
-        emit visitOpenChanged();
-        emit seriesConfigurationChanged();
-        emit graphDraftsChanged();
-        revalidateDraft();
-        refreshPendingChanges();
+        m_baseline = *m_configuration->current().configuration;
+        replaceWorkingCopy(m_baseline);
     }
 
     QVariantMap SettingsViewModel::save() {
@@ -272,8 +268,7 @@ namespace ksv::presentation {
         std::vector<Issue> issues;
         for (const auto &key: m_rawInput | std::views::keys) issues.push_back({key, kUnparsedInputCode});
         if (issues.empty()) {
-            for (const auto &issue: m_configuration->save(*m_working).issues)
-                issues.push_back({{issue.graph, issue.group, issue.target, issue.field}, issueCodeName(issue.code)});
+            for (const auto &issue: m_configuration->save(*m_working).issues) issues.push_back(toIssue(issue));
         }
         const bool accepted = issues.empty();
         if (accepted) m_baseline = *m_working;
@@ -284,26 +279,22 @@ namespace ksv::presentation {
     }
 
     void SettingsViewModel::revertChanges() {
-        if (!m_working) return;
-        m_working = m_baseline;
-        const bool hadRawInput = !m_rawInput.empty();
-        m_rawInput.clear();
-        if (hadRawInput) emit rawInputsChanged();
-        setIssues({});
-        emit seriesConfigurationChanged();
-        emit graphDraftsChanged();
-        revalidateDraft();
-        refreshPendingChanges();
+        if (m_working) replaceWorkingCopy(m_baseline);
     }
 
     void SettingsViewModel::endVisit() {
-        if (!m_working) return;
-        m_working.reset();
-        const bool hadRawInput = !m_rawInput.empty();
-        m_rawInput.clear();
-        if (hadRawInput) emit rawInputsChanged();
+        if (m_working) replaceWorkingCopy(std::nullopt);
+    }
+
+    void SettingsViewModel::replaceWorkingCopy(std::optional<application::GraphConfiguration> working) {
+        const bool visitChanged = working.has_value() != m_working.has_value();
+        m_working = std::move(working);
+        if (!m_rawInput.empty()) {
+            m_rawInput.clear();
+            emit rawInputsChanged();
+        }
         setIssues({});
-        emit visitOpenChanged();
+        if (visitChanged) emit visitOpenChanged();
         emit seriesConfigurationChanged();
         emit graphDraftsChanged();
         revalidateDraft();
@@ -330,9 +321,15 @@ namespace ksv::presentation {
         emit selectedGraphChanged();
     }
 
-    QVariantList SettingsViewModel::issues() const {
+    QVariantList SettingsViewModel::issues() const { return issueList(m_issues); }
+
+    SettingsViewModel::Issue SettingsViewModel::toIssue(const application::GraphConfigurationIssue &issue) {
+        return {{issue.graph, issue.group, issue.target, issue.field}, issueCodeName(issue.code)};
+    }
+
+    QVariantList SettingsViewModel::issueList(const std::vector<Issue> &issues) {
         QVariantList result;
-        for (const auto &[key, code]: m_issues) {
+        for (const auto &[key, code]: issues) {
             result.append(issueMap(key.graph, QString::fromStdString(key.group), QString::fromStdString(key.target),
                                    QString::fromStdString(key.field), code));
         }
@@ -409,48 +406,8 @@ namespace ksv::presentation {
     QVariantMap SettingsViewModel::quickSettings() const {
         const auto committed = m_configuration->current().configuration;
         QVariantMap result;
-        for (const auto key: application::kGraphKeys) {
-            const auto &descriptor = application::graphDescriptor(key);
-            const auto &preferences = committed->preferences(key);
-            QVariantMap entry{
-                {"hasRange", descriptor.dateRange},
-                {"hasLatestRuns", descriptor.latestRuns},
-                {"hasWindow", descriptor.averagingWindow},
-                {"rangeKind", "allHistory"},
-                {"rangeCount", 0},
-                {"rangeCountText", QString()},
-                {"rangeStart", QString()},
-                {"rangeEnd", QString()},
-                {"rangeStartFormatted", QString()},
-                {"rangeEndFormatted", QString()},
-                {"window", preferences.averagingWindowDays.value_or(0)},
-                {"windowText", preferences.averagingWindowDays ? formatWhole(*preferences.averagingWindowDays, m_locale)
-                                                               : QString()},
-                {"connection", connectionName(preferences.appearance.connection)},
-                {"markers", preferences.appearance.lineModeMarkers}
-            };
-            if (preferences.range) {
-                std::visit([&entry, this](const auto &range) {
-                    using Range = std::decay_t<decltype(range)>;
-                    if constexpr (std::same_as<Range, application::RecentDays>) {
-                        entry["rangeKind"] = "recentDays";
-                        entry["rangeCount"] = range.days;
-                        entry["rangeCountText"] = formatWhole(range.days, m_locale);
-                    } else if constexpr (std::same_as<Range, application::LatestRuns>) {
-                        entry["rangeKind"] = "latestRuns";
-                        entry["rangeCount"] = range.count;
-                        entry["rangeCountText"] = formatWhole(range.count, m_locale);
-                    } else if constexpr (std::same_as<Range, application::CustomDates>) {
-                        entry["rangeKind"] = "customDates";
-                        entry["rangeStart"] = isoDate(range.start);
-                        entry["rangeEnd"] = isoDate(range.end);
-                        entry["rangeStartFormatted"] = formatDate(range.start, m_locale);
-                        entry["rangeEndFormatted"] = formatDate(range.end, m_locale);
-                    }
-                }, preferences.range->range);
-            }
-            result.insert(graphName(key), entry);
-        }
+        for (const auto key: application::kGraphKeys)
+            result.insert(graphName(key), preferencesEntry(key, committed->preferences(key), false));
         return result;
     }
 
@@ -493,11 +450,9 @@ namespace ksv::presentation {
         if (!issues.isEmpty()) return quickPatchResult(false, std::move(issues));
 
         const auto result = m_configuration->applyQuickPatch(*key, request);
-        for (const auto &issue: result.issues)
-            issues.append(issueMap(issue.graph, QString::fromStdString(issue.group),
-                                   QString::fromStdString(issue.target), QString::fromStdString(issue.field),
-                                   issueCodeName(issue.code)));
-        return quickPatchResult(result.accepted(), std::move(issues));
+        std::vector<Issue> rejected;
+        for (const auto &issue: result.issues) rejected.push_back(toIssue(issue));
+        return quickPatchResult(result.accepted(), issueList(rejected));
     }
 
     // ---- Graph preferences --------------------------------------------------------------------------
@@ -513,14 +468,7 @@ namespace ksv::presentation {
         return key ? draftEntry(*key) : QVariantMap{};
     }
 
-    QVariantList SettingsViewModel::draftIssues() const {
-        QVariantList result;
-        for (const auto &[key, code]: m_draftIssues) {
-            result.append(issueMap(key.graph, QString::fromStdString(key.group), QString::fromStdString(key.target),
-                                   QString::fromStdString(key.field), code));
-        }
-        return result;
-    }
+    QVariantList SettingsViewModel::draftIssues() const { return issueList(m_draftIssues); }
 
     QVariantMap SettingsViewModel::graphLimits() const {
         return {
@@ -549,13 +497,13 @@ namespace ksv::presentation {
         return it == m_rawInput.end() ? shown : it->second;
     }
 
-    QVariantMap SettingsViewModel::draftEntry(const application::GraphKey key) const {
+    QVariantMap SettingsViewModel::preferencesEntry(const application::GraphKey key,
+                                                    const application::GraphPreferences &preferences,
+                                                    const bool withRawInput) const {
         using namespace application;
         const auto &descriptor = graphDescriptor(key);
-        const auto shown = shownConfiguration();
-        const auto &preferences = shown->preferences(key);
-        const auto keyed = [&](const std::string &group, const std::string &target, const std::string &field) {
-            return FieldKey{key, group, target, field};
+        const auto text = [&](const char *field, const QString &shown) {
+            return withRawInput ? rawOr({key, "dataRange", "", field}, shown) : shown;
         };
 
         QVariantMap entry{
@@ -574,8 +522,10 @@ namespace ksv::presentation {
             {"rangeEndFormatted", QString()},
             {"anchor", preferences.range && preferences.range->anchorToLatestRun},
             {"window", preferences.averagingWindowDays.value_or(0)},
-            {"windowText", QString()},
-            {"connection", connectionName(preferences.appearance.connection)},
+            {"windowText", preferences.averagingWindowDays
+                               ? text("averagingWindow", formatWhole(*preferences.averagingWindowDays, m_locale))
+                               : QString()},
+            {"connection", qstring(connectionModeName(preferences.appearance.connection))},
             {"markers", preferences.appearance.lineModeMarkers}
         };
 
@@ -585,43 +535,47 @@ namespace ksv::presentation {
                 if constexpr (std::same_as<Range, RecentDays>) {
                     entry["rangeKind"] = "recentDays";
                     entry["rangeCount"] = range.days;
-                    entry["rangeCountText"] = rawOr(keyed("dataRange", "", "recentDays"), formatWhole(range.days, m_locale));
+                    entry["rangeCountText"] = text("recentDays", formatWhole(range.days, m_locale));
                 } else if constexpr (std::same_as<Range, LatestRuns>) {
                     entry["rangeKind"] = "latestRuns";
                     entry["rangeCount"] = range.count;
-                    entry["rangeCountText"] = rawOr(keyed("dataRange", "", "latestRuns"), formatWhole(range.count, m_locale));
+                    entry["rangeCountText"] = text("latestRuns", formatWhole(range.count, m_locale));
                 } else if constexpr (std::same_as<Range, CustomDates>) {
                     entry["rangeKind"] = "customDates";
                     entry["rangeStart"] = isoDate(range.start);
                     entry["rangeEnd"] = isoDate(range.end);
                     entry["rangeStartFormatted"] = formatDate(range.start, m_locale);
                     entry["rangeEndFormatted"] = formatDate(range.end, m_locale);
-                    entry["rangeStartText"] = rawOr(keyed("dataRange", "", "startDate"), formatDate(range.start, m_locale));
-                    entry["rangeEndText"] = rawOr(keyed("dataRange", "", "endDate"), formatDate(range.end, m_locale));
+                    entry["rangeStartText"] = text("startDate", formatDate(range.start, m_locale));
+                    entry["rangeEndText"] = text("endDate", formatDate(range.end, m_locale));
                 }
             }, preferences.range->range);
         }
-        if (preferences.averagingWindowDays)
-            entry["windowText"] = rawOr(keyed("dataRange", "", "averagingWindow"),
-                                        formatWhole(*preferences.averagingWindowDays, m_locale));
+        return entry;
+    }
+
+    QVariantMap SettingsViewModel::draftEntry(const application::GraphKey key) const {
+        using namespace application;
+        const auto &descriptor = graphDescriptor(key);
+        const auto shown = shownConfiguration();
+        const auto &preferences = shown->preferences(key);
+        auto entry = preferencesEntry(key, preferences, true);
 
         QVariantList series;
         for (const auto &described: descriptor.series) {
             const auto seriesKey = std::string(described.key);
             const auto found = preferences.seriesStyles.find(seriesKey);
             const SeriesStyleOverride *override = found == preferences.seriesStyles.end() ? nullptr : &found->second;
-            const auto defaults = defaultSeriesStyle(key, described.key);
-            const auto color = override && override->color ? override->color : defaults.color;
-            const double width = override && override->width ? *override->width : defaults.width;
+            const auto style = resolvedSeriesStyle(key, preferences.seriesStyles, described.key);
             series.append(QVariantMap{
                 {"key", QString::fromStdString(seriesKey)},
-                {"axisKey", QString::fromUtf8(described.axisKey.data(), static_cast<qsizetype>(described.axisKey.size()))},
-                {"color", color ? QVariant(QColor(color->red, color->green, color->blue, color->alpha)) : QVariant()},
+                {"axisKey", qstring(described.axisKey)},
+                {"color", style.color ? QVariant(toQColor(*style.color)) : QVariant()},
                 {"colorOverridden", override && override->color.has_value()},
-                {"width", width},
-                {"widthText", rawOr(keyed("seriesStyle", seriesKey, "width"), formatDecimal(width, m_locale))},
+                {"width", style.width},
+                {"widthText", rawOr({key, "seriesStyle", seriesKey, "width"}, formatDecimal(style.width, m_locale))},
                 {"widthOverridden", override && override->width.has_value()},
-                {"defaultWidth", defaults.width}
+                {"defaultWidth", defaultSeriesStyle(key, described.key).width}
             });
         }
         entry["series"] = series;
@@ -629,8 +583,7 @@ namespace ksv::presentation {
         QVariantList axes;
         for (const auto &described: descriptor.axes) {
             const auto axisKey = std::string(described.key);
-            const auto found = preferences.axisPolicies.find(axisKey);
-            const AxisPolicy &policy = found == preferences.axisPolicies.end() ? described.defaultPolicy : found->second;
+            const auto policy = axisPolicyFor(preferences.axisPolicies, key, described.key);
             QString mode = "fit";
             QString minText;
             QString maxText;
@@ -644,12 +597,12 @@ namespace ksv::presentation {
             QStringList sharing;
             for (const auto &member: descriptor.series)
                 if (member.axisKey == described.key)
-                    sharing.append(QString::fromUtf8(member.key.data(), static_cast<qsizetype>(member.key.size())));
+                    sharing.append(qstring(member.key));
             axes.append(QVariantMap{
                 {"key", QString::fromStdString(axisKey)},
                 {"mode", mode},
-                {"minText", rawOr(keyed("axes", axisKey, "fixedMin"), minText)},
-                {"maxText", rawOr(keyed("axes", axisKey, "fixedMax"), maxText)},
+                {"minText", rawOr({key, "axes", axisKey, "fixedMin"}, minText)},
+                {"maxText", rawOr({key, "axes", axisKey, "fixedMax"}, maxText)},
                 {"seriesKeys", sharing}
             });
         }
@@ -684,8 +637,8 @@ namespace ksv::presentation {
         if (m_working) {
             for (const auto &key: m_rawInput | std::views::keys) live.push_back({key, kUnparsedInputCode});
             for (const auto &issue: application::validateGraphConfiguration(*m_working)) {
-                const FieldKey key{issue.graph, issue.group, issue.target, issue.field};
-                if (!m_rawInput.contains(key)) live.push_back({key, issueCodeName(issue.code)});
+                auto converted = toIssue(issue);
+                if (!m_rawInput.contains(converted.key)) live.push_back(std::move(converted));
             }
         }
         setDraftIssues(std::move(live));
@@ -724,55 +677,33 @@ namespace ksv::presentation {
         const auto &descriptor = graphDescriptor(key);
         const FieldKey location{key, group.toStdString(), target.toStdString(), field.toStdString()};
 
-        const auto editWhole = [&](const std::function<bool(int)> &store) {
-            const auto value = parseWholeNumber(text, m_locale);
-            return finishFieldEdit(location, text, value.has_value(), value && store(*value));
+        // Stores a parsed value in `slot`; text that did not parse leaves it alone.
+        const auto edit = [&](const auto &parsed, auto &slot) {
+            const bool changed = parsed && std::exchange(slot, *parsed) != *parsed;
+            return finishFieldEdit(location, text, parsed.has_value(), changed);
         };
+        auto &range = preferences->range;
 
         if (group == "dataRange" && target.isEmpty()) {
-            if (field == "recentDays" && preferences->range && std::holds_alternative<RecentDays>(preferences->range->range))
-                return editWhole([&](const int value) {
-                    auto &days = std::get<RecentDays>(preferences->range->range).days;
-                    return std::exchange(days, value) != value;
-                });
-            if (field == "latestRuns" && descriptor.latestRuns && preferences->range &&
-                std::holds_alternative<LatestRuns>(preferences->range->range))
-                return editWhole([&](const int value) {
-                    auto &count = std::get<LatestRuns>(preferences->range->range).count;
-                    return std::exchange(count, value) != value;
-                });
+            if (field == "recentDays" && range && std::holds_alternative<RecentDays>(range->range))
+                return edit(parseWholeNumber(text, m_locale), std::get<RecentDays>(range->range).days);
+            if (field == "latestRuns" && descriptor.latestRuns && range && std::holds_alternative<LatestRuns>(range->range))
+                return edit(parseWholeNumber(text, m_locale), std::get<LatestRuns>(range->range).count);
             if (field == "averagingWindow" && descriptor.averagingWindow && preferences->averagingWindowDays)
-                return editWhole([&](const int value) {
-                    return std::exchange(*preferences->averagingWindowDays, value) != value;
-                });
-            if ((field == "startDate" || field == "endDate") && preferences->range &&
-                std::holds_alternative<CustomDates>(preferences->range->range)) {
-                const auto date = parseDate(text, m_locale);
-                bool changed = false;
-                if (date) {
-                    auto &custom = std::get<CustomDates>(preferences->range->range);
-                    auto &slot = field == "startDate" ? custom.start : custom.end;
-                    changed = slot != *date;
-                    slot = *date;
-                }
-                return finishFieldEdit(location, text, date.has_value(), changed);
+                return edit(parseWholeNumber(text, m_locale), *preferences->averagingWindowDays);
+            if ((field == "startDate" || field == "endDate") && range && std::holds_alternative<CustomDates>(range->range)) {
+                auto &custom = std::get<CustomDates>(range->range);
+                return edit(parseDate(text, m_locale), field == "startDate" ? custom.start : custom.end);
             }
             return false;
         }
 
         if (group == "seriesStyle" && field == "width") {
-            if (std::ranges::none_of(descriptor.series, [&](const auto &s) { return s.key == location.target; }))
-                return false;
+            if (!offersSeries(descriptor, location.target)) return false;
             const auto value = parseDecimal(text, m_locale);
-            bool changed = false;
-            if (value) {
-                auto &style = preferences->seriesStyles[location.target];
-                const auto before = style.width;
-                if (*value == defaultSeriesStyle(key, location.target).width) style.width.reset();
-                else style.width = *value;
-                changed = before != style.width;
-                if (!style.color && !style.width) preferences->seriesStyles.erase(location.target);
-            }
+            const bool changed = value && editSeriesOverride(*preferences, location.target, [&](SeriesStyleOverride &style) {
+                style.width = *value == defaultSeriesStyle(key, location.target).width ? std::nullopt : value;
+            });
             return finishFieldEdit(location, text, value.has_value(), changed);
         }
 
@@ -780,15 +711,8 @@ namespace ksv::presentation {
             const auto policy = preferences->axisPolicies.find(location.target);
             if (policy == preferences->axisPolicies.end() || !std::holds_alternative<FixedBounds>(policy->second))
                 return false;
-            const auto value = parseDecimal(text, m_locale);
-            bool changed = false;
-            if (value) {
-                auto &bounds = std::get<FixedBounds>(policy->second);
-                auto &slot = field == "fixedMin" ? bounds.minimum : bounds.maximum;
-                changed = slot != *value;
-                slot = *value;
-            }
-            return finishFieldEdit(location, text, value.has_value(), changed);
+            auto &bounds = std::get<FixedBounds>(policy->second);
+            return edit(parseDecimal(text, m_locale), field == "fixedMin" ? bounds.minimum : bounds.maximum);
         }
         return false;
     }
@@ -861,17 +785,12 @@ namespace ksv::presentation {
         GraphKey key{};
         auto *preferences = draftPreferences(graph, key);
         const auto name = series.toStdString();
-        if (!preferences || !color.isValid() ||
-            std::ranges::none_of(graphDescriptor(key).series, [&](const auto &s) { return s.key == name; }))
-            return false;
-        auto &style = preferences->seriesStyles[name];
-        const auto before = style.color;
+        if (!preferences || !color.isValid() || !offersSeries(graphDescriptor(key), name)) return false;
         const auto chosen = rgba(color);
-        if (chosen == defaultSeriesStyle(key, name).color) style.color.reset();
-        else style.color = chosen;
-        const bool changed = before != style.color;
-        if (!style.color && !style.width) preferences->seriesStyles.erase(name);
-        if (changed) draftChanged();
+        if (editSeriesOverride(*preferences, name, [&](SeriesStyleOverride &style) {
+            style.color = chosen == defaultSeriesStyle(key, name).color ? std::nullopt : std::optional{chosen};
+        }))
+            draftChanged();
         return true;
     }
 
@@ -880,17 +799,12 @@ namespace ksv::presentation {
         GraphKey key{};
         auto *preferences = draftPreferences(graph, key);
         const auto name = series.toStdString();
-        if (!preferences || (field != "color" && field != "width") ||
-            std::ranges::none_of(graphDescriptor(key).series, [&](const auto &s) { return s.key == name; }))
+        if (!preferences || (field != "color" && field != "width") || !offersSeries(graphDescriptor(key), name))
             return false;
-        bool changed = false;
-        if (const auto found = preferences->seriesStyles.find(name); found != preferences->seriesStyles.end()) {
-            auto &style = found->second;
-            changed = (field == "color" ? style.color.has_value() : style.width.has_value());
+        const bool changed = editSeriesOverride(*preferences, name, [&](SeriesStyleOverride &style) {
             if (field == "color") style.color.reset();
             else style.width.reset();
-            if (!style.color && !style.width) preferences->seriesStyles.erase(found);
-        }
+        });
         const bool rawDropped = field == "width" && dropRawInput(key, "seriesStyle", name, {"width"});
         if (changed || rawDropped) draftChanged();
         return true;
@@ -955,8 +869,7 @@ namespace ksv::presentation {
             result.append(QVariantMap{
                 {"id", QString::number(config.id.value)},
                 {"name", QString::fromStdString(config.presentation.name)},
-                {"color", QColor(config.presentation.lineStyle.color.red, config.presentation.lineStyle.color.green,
-                                  config.presentation.lineStyle.color.blue, config.presentation.lineStyle.color.alpha)},
+                {"color", toQColor(config.presentation.lineStyle.color)},
                 {"width", config.presentation.lineStyle.width},
                 {"enabled", config.presentation.enabled},
                 {"displayPosition", config.presentation.displayPosition},

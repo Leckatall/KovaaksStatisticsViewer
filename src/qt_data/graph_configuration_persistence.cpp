@@ -34,7 +34,7 @@ namespace ksv::qt_data {
         // VisualSettingsManager.qml's selection, until the document carries its own.
         if (!decoded->runAxisLabelStored) {
             const auto legacy = QString::fromStdString(m_settingsService->getLegacyRunAxisLabelSeriesId());
-            if (const auto id = series_codec::decimalId(QJsonValue(legacy), false))
+            if (const auto id = series_codec::decimalId(QJsonValue(legacy)))
                 configuration.runAxisLabelSeriesId = SeriesId{*id};
         }
         if (writeBack) save(configuration);

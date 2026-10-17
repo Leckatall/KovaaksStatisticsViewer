@@ -9,6 +9,7 @@
 #include <initializer_list>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -16,10 +17,14 @@
 
 // JSON codec for the Graph Lines series section of the document stored under `graph/seriesConfigV1`.
 namespace ksv::qt_data::series_codec {
-    [[nodiscard]] bool exactKeys(const QJsonObject &object, std::initializer_list<const char *> keys);
+    [[nodiscard]] bool exactKeys(const QJsonObject &object, std::span<const char *const> keys);
 
-    // Canonical unsigned decimal strings only: no sign, no leading zero, no JSON number.
-    [[nodiscard]] std::optional<uint64_t> decimalId(const QJsonValue &value, bool zeroAllowed);
+    [[nodiscard]] inline bool exactKeys(const QJsonObject &object, const std::initializer_list<const char *> keys) {
+        return exactKeys(object, std::span(keys.begin(), keys.size()));
+    }
+
+    // Canonical non-zero unsigned decimal strings only: no sign, no leading zero, no JSON number.
+    [[nodiscard]] std::optional<uint64_t> decimalId(const QJsonValue &value);
 
     // Rejects fractional, negative and out-of-range JSON numbers instead of truncating them.
     template<typename T>

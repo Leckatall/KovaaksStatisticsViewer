@@ -17,7 +17,7 @@ namespace ksv::data {
         return {m_configuration, m_revision};
     }
 
-    GraphConfigurationSaveResult GraphConfigurationService::replace(const GraphConfiguration &candidate) {
+    GraphConfigurationSaveResult GraphConfigurationService::replace(GraphConfiguration candidate) {
         const auto current = snapshot();
         if (auto issues = validateGraphConfiguration(candidate); !issues.empty())
             return {std::move(issues), current.revision};
@@ -25,7 +25,7 @@ namespace ksv::data {
         if (change.empty()) return {{}, current.revision};
 
         m_persistence->save(candidate);
-        auto replacement = std::make_shared<const GraphConfiguration>(candidate); {
+        auto replacement = std::make_shared<const GraphConfiguration>(std::move(candidate)); {
             std::lock_guard lock(m_mutex);
             m_configuration = std::move(replacement);
             change.revision = ++m_revision;
@@ -46,7 +46,7 @@ namespace ksv::data {
         while (!m_unpublished.empty()) {
             const auto next = std::move(m_unpublished.front());
             m_unpublished.pop_front();
-            for (std::size_t index = 0; index < m_callbacks.size(); ++index) m_callbacks[index](next);
+            for (const auto & callback : m_callbacks) callback(next);
         }
         m_publishing = false;
     }

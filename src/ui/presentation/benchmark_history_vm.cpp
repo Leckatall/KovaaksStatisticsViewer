@@ -3,7 +3,6 @@
 #include <QColor>
 #include <QString>
 #include <algorithm>
-#include <array>
 #include <cmath>
 
 #include "benchmark_format.h"
@@ -51,19 +50,13 @@ namespace ksv::presentation {
         return result;
     }
 
-    void BenchmarkHistoryViewModel::applyPlaytimeYAxis() {
-        const std::array<const SeriesModel *, 1> members{m_series};
-        m_series->yAxisOptions = optionsForPolicy(m_playtimeAxisPolicy, {});
-        m_series->yAxis = axisForPolicy(members, m_playtimeAxisPolicy, {}, m_series->transform);
-    }
-
     void BenchmarkHistoryViewModel::setAxisPolicies(const AxisPolicyMap &policies) {
         if (m_metric != RollingPlaytime) return;
         application::AxisPolicy next = axisPolicyFor(policies, application::GraphKey::BenchmarkPlaytime, "playtime");
         if (next == m_playtimeAxisPolicy) return;
         m_playtimeAxisPolicy = std::move(next);
         if (!m_hasData) return;
-        applyPlaytimeYAxis();
+        applyAxisPolicy(*m_series, m_playtimeAxisPolicy);
         emit boundsChanged();
     }
 
@@ -143,7 +136,7 @@ namespace ksv::presentation {
             m_series->setName(metricName());
             m_series->transform = ValueTransform::secondsToMinutes();
             m_series->points = content.observations;
-            applyPlaytimeYAxis();
+            applyAxisPolicy(*m_series, m_playtimeAxisPolicy);
         }
 
         emit dataUpdated();

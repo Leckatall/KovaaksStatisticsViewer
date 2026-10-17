@@ -195,6 +195,10 @@ namespace ksv::presentation {
         [[nodiscard]] static std::optional<FieldKey> fieldKey(const QString &graph, const QString &group,
                                                               const QString &target, const QString &field);
         QVariantMap editRunSeries(const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit);
+        // Installs `working` (no visit when empty) with no unparsed input and no Save issues.
+        void replaceWorkingCopy(std::optional<application::GraphConfiguration> working);
+        [[nodiscard]] static Issue toIssue(const application::GraphConfigurationIssue &issue);
+        [[nodiscard]] static QVariantList issueList(const std::vector<Issue> &issues);
         void setIssues(std::vector<Issue> issues);
         // Emits pendingChangesChanged when the dirty state flipped.
         void refreshPendingChanges();
@@ -204,6 +208,11 @@ namespace ksv::presentation {
         [[nodiscard]] QString rawOr(const FieldKey &key, const QString &shown) const;
         [[nodiscard]] application::GraphPreferences *draftPreferences(const QString &graph,
                                                                       application::GraphKey &key);
+        // The keys the gear popup and the settings page share; `withRawInput` shows unparsed text in
+        // place of a field's value.
+        [[nodiscard]] QVariantMap preferencesEntry(application::GraphKey key,
+                                                   const application::GraphPreferences &preferences,
+                                                   bool withRawInput) const;
         [[nodiscard]] QVariantMap draftEntry(application::GraphKey key) const;
         // True when any text was dropped.
         bool dropRawInput(application::GraphKey graph, const std::string &group, const std::string &target,

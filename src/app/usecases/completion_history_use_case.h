@@ -53,7 +53,7 @@ namespace ksv::application {
             const auto completion_history = m_profile_service->getCompletionHistory(scenario);
             std::vector<std::chrono::sys_days> row_days;
             row_days.reserve(completion_history.size());
-            for (const auto &row: completion_history) row_days.push_back(epochDayOfMillis(row.run_id.start_time));
+            for (const auto &row: completion_history) row_days.push_back(row.run_id.startDay());
 
             // The anchor comes from the scenario's full runs, before any filtering.
             const auto projection = resolveRange(committedRange(), m_day_source->today(), latestDay(row_days));

@@ -28,7 +28,7 @@ namespace ksv::application {
         PlaytimeView view;
         view.windowDays = windowDays;
         if (const auto *interval = std::get_if<DayInterval>(&projection)) view.interval = *interval;
-        if (!full.empty()) view.fullExtent = PlaytimeDayExtent{full.front().first, full.back().first};
+        if (!full.empty()) view.fullExtent = DayInterval{full.front().first, full.back().first};
         return view;
     }
 

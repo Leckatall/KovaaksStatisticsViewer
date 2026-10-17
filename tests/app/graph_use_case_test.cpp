@@ -187,10 +187,10 @@ namespace {
         int notifications = 0;
         use_case.onSeriesConfigChanged([&] { ++notifications; });
 
-        fake_configuration->publish({0, {GraphKey::Run, GraphKey::ScenarioHistory}, false, true});
+        fake_configuration->publish({GraphKey::Run, GraphKey::ScenarioHistory}, false, true);
         EXPECT_EQ(notifications, 0);
 
-        fake_configuration->publish({0, {}, true, false});
+        fake_configuration->publish({}, true, false);
         EXPECT_EQ(notifications, 1);
     }
 
@@ -200,10 +200,10 @@ namespace {
         EXPECT_FALSE(use_case.getAxisLabelSeriesId());
 
         fake_configuration->configuration.runAxisLabelSeriesId = SeriesId{4};
-        fake_configuration->publish({0, {}, true, false});
+        fake_configuration->publish({}, true, false);
         EXPECT_EQ(notifications, 0);
 
-        fake_configuration->publish({0, {}, false, true});
+        fake_configuration->publish({}, false, true);
         EXPECT_EQ(notifications, 1);
         EXPECT_EQ(use_case.getAxisLabelSeriesId(), SeriesId{4});
     }

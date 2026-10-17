@@ -30,26 +30,15 @@ namespace {
         }
     };
 
-    TEST_F(GraphConfigurationUseCaseTest, CurrentAndEditorSeedBothReflectTheCommittedSnapshot) {
+    TEST_F(GraphConfigurationUseCaseTest, CurrentReflectsTheCommittedSnapshot) {
         const auto current = useCase.current();
-        const auto seed = useCase.editorSeed();
 
         EXPECT_EQ(*current.configuration, defaultGraphConfiguration());
-        EXPECT_EQ(seed.configuration, *current.configuration);
-        EXPECT_EQ(seed.revision, current.revision);
-    }
-
-    TEST_F(GraphConfigurationUseCaseTest, EditingASeedLeavesTheCommittedSnapshotAlone) {
-        auto seed = useCase.editorSeed();
-        seed.configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 14;
-        seed.configuration.runSeries.series.clear();
-
-        EXPECT_EQ(*useCase.current().configuration, defaultGraphConfiguration());
-        EXPECT_TRUE(changes.empty());
+        EXPECT_EQ(current.revision, 1U);
     }
 
     TEST_F(GraphConfigurationUseCaseTest, SavingAValidCandidateCommitsWritesAndPublishesIt) {
-        auto candidate = useCase.editorSeed().configuration;
+        auto candidate = *useCase.current().configuration;
         candidate.preferences(GraphKey::BenchmarkRank).range = RangePreference{RecentDays{90}, true};
         candidate.runAxisLabelSeriesId = SeriesId{3};
 
@@ -61,7 +50,7 @@ namespace {
         ASSERT_EQ(persistence->saves.size(), 1U);
         EXPECT_EQ(persistence->saves.front(), candidate);
         ASSERT_EQ(changes.size(), 1U);
-        auto expected = GraphConfigurationChange{2, {GraphKey::BenchmarkRank}, false, true};
+        auto expected = GraphConfigurationChange{2, false, true};
         expected.sections[static_cast<std::size_t>(GraphKey::BenchmarkRank)].range = true;
         EXPECT_EQ(changes.front(), expected);
     }
@@ -69,7 +58,7 @@ namespace {
     // EDGE-02: an invalid field on a graph other than the one being edited still blocks the whole save,
     // and the valid edits beside it are not partially applied.
     TEST_F(GraphConfigurationUseCaseTest, AnInvalidFieldOnAnyGraphRejectsTheWholeCandidate) {
-        auto candidate = useCase.editorSeed().configuration;
+        auto candidate = *useCase.current().configuration;
         candidate.preferences(GraphKey::ScenarioHistory).range = RangePreference{LatestRuns{50}, false};
         candidate.preferences(GraphKey::BenchmarkPlaytime).axisPolicies["playtime"] = FixedBounds{10.0, 5.0};
 
@@ -105,7 +94,8 @@ namespace {
         EXPECT_TRUE(committed(GraphKey::ScenarioHistory).appearance.lineModeMarkers);
         ASSERT_EQ(persistence->saves.size(), 1U);
         ASSERT_EQ(changes.size(), 1U);
-        EXPECT_EQ(changes.front().graphs, std::vector{GraphKey::ScenarioHistory});
+        EXPECT_EQ(std::ranges::count_if(changes.front().sections, &GraphSectionChange::any), 1);
+        EXPECT_TRUE(changes.front().sectionsOf(GraphKey::ScenarioHistory).any());
     }
 
     TEST_F(GraphConfigurationUseCaseTest, AnInvalidQuickPatchChangesNothing) {
@@ -156,11 +146,11 @@ namespace {
         ASSERT_TRUE(useCase.applyQuickPatch(GraphKey::DailyPlaytime, window).accepted());
         ASSERT_TRUE(useCase.applyQuickPatch(GraphKey::DailyPlaytime, markers).accepted());
 
-        const auto seed = useCase.editorSeed();
+        const auto seed = useCase.current();
 
         EXPECT_EQ(seed.revision, 3U);
-        EXPECT_EQ(seed.configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 10);
-        EXPECT_TRUE(seed.configuration.preferences(GraphKey::DailyPlaytime).appearance.lineModeMarkers);
+        EXPECT_EQ(seed.configuration->preferences(GraphKey::DailyPlaytime).averagingWindowDays, 10);
+        EXPECT_TRUE(seed.configuration->preferences(GraphKey::DailyPlaytime).appearance.lineModeMarkers);
     }
 
     TEST(GraphConfigurationDiff, NamesEachChangedGraphAndSectionInKeyOrder) {
@@ -170,7 +160,7 @@ namespace {
         after.preferences(GraphKey::Run).appearance.connection = ConnectionMode::Straight;
         after.runSeries.nextAxisId = AxisId{9};
 
-        auto expected = GraphConfigurationChange{0, {GraphKey::Run, GraphKey::BenchmarkPlaytime}, true, false};
+        auto expected = GraphConfigurationChange{0, true, false};
         expected.sections[static_cast<std::size_t>(GraphKey::Run)].style = true;
         expected.sections[static_cast<std::size_t>(GraphKey::BenchmarkPlaytime)].window = true;
         EXPECT_EQ(diffGraphConfigurations(before, after), expected);

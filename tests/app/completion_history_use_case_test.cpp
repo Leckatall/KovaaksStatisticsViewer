@@ -48,7 +48,7 @@ namespace {
 
         void commit(const GraphKey key = GraphKey::ScenarioHistory) const {
             ++configuration->revision;
-            configuration->publish({.graphs = {key}});
+            configuration->publish({key});
         }
 
         // One run per entry of `epochDays`, oldest first, for the current scenario.
@@ -396,7 +396,7 @@ namespace {
         EXPECT_EQ(profile->completion_history_calls, queries);
         const auto presentation = use_case.presentation();
         EXPECT_EQ(presentation.appearance, (LineAppearance{ConnectionMode::Straight, false}));
-        EXPECT_EQ(presentation.seriesStyle("hits"), (ResolvedSeriesStyle{RgbaColor{3, 3, 3, 255}, 7.0}));
+        EXPECT_EQ(presentation.seriesStyle("hits"), (SeriesStyle{RgbaColor{3, 3, 3, 255}, 7.0}));
     }
 
     TEST_F(CompletionHistoryUseCaseTest, ARangeChangeRefreshesTheRowsAndLeavesTheStyleAlone) {

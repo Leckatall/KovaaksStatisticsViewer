@@ -474,7 +474,7 @@ namespace {
     }
 
     TEST_F(PlaytimeGraphViewModelTest, AnEmptyRangeOverRecordedPlaytimeKeepsTheHistoryAvailable) {
-        fake->view.fullExtent = PlaytimeDayExtent{std::chrono::sys_days{std::chrono::days{19500}},
+        fake->view.fullExtent = DayInterval{std::chrono::sys_days{std::chrono::days{19500}},
                                                   std::chrono::sys_days{std::chrono::days{19510}}};
         fake->view.interval = DayInterval{std::chrono::sys_days{std::chrono::days{19600}},
                                           std::chrono::sys_days{std::chrono::days{19606}}};
@@ -491,7 +491,7 @@ namespace {
     }
 
     TEST_F(PlaytimeGraphViewModelTest, VisibleSamplesAreCountedSeparatelyFromTheHistory) {
-        fake->view.fullExtent = PlaytimeDayExtent{std::chrono::sys_days{std::chrono::days{19500}},
+        fake->view.fullExtent = DayInterval{std::chrono::sys_days{std::chrono::days{19500}},
                                                   std::chrono::sys_days{std::chrono::days{19510}}};
         fake->series = {{19508, 600.0}, {19509, 1200.0}};
 
@@ -504,7 +504,7 @@ namespace {
     }
 
     TEST_F(PlaytimeGraphViewModelTest, RangeAndHistoryFactsAreReadableFromQml) {
-        fake->view.fullExtent = PlaytimeDayExtent{std::chrono::sys_days{std::chrono::days{19500}},
+        fake->view.fullExtent = DayInterval{std::chrono::sys_days{std::chrono::days{19500}},
                                                   std::chrono::sys_days{std::chrono::days{19510}}};
         fake->publish();
 

@@ -65,7 +65,7 @@ namespace {
         const auto view = describePlaytimeView(7, interval, kFull);
         EXPECT_EQ(view.windowDays, 7);
         EXPECT_EQ(view.interval, std::optional{interval});
-        const PlaytimeDayExtent extent{day(2026, 3, 1), day(2026, 3, 6)};
+        const DayInterval extent{day(2026, 3, 1), day(2026, 3, 6)};
         EXPECT_EQ(view.fullExtent, std::optional{extent});
     }
 

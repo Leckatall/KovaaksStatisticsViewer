@@ -15,6 +15,8 @@ namespace ksv::application {
             "run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkPlaytime"
         };
 
+        constexpr std::array<std::string_view, 3> kConnectionModeNames{"smooth", "straight", "pointsOnly"};
+
         constexpr RgbaColor kPlaytimeColor{77, 208, 225, 255};
 
         std::array<GraphDescriptor, kGraphKeys.size()> makeDescriptors() {
@@ -112,15 +114,38 @@ namespace ksv::application {
         return std::nullopt;
     }
 
+    std::string_view connectionModeName(const ConnectionMode mode) {
+        return kConnectionModeNames[static_cast<std::size_t>(mode)];
+    }
+
+    std::optional<ConnectionMode> connectionModeFromName(const std::string_view name) {
+        const auto found = std::ranges::find(kConnectionModeNames, name);
+        if (found == kConnectionModeNames.end()) return std::nullopt;
+        return static_cast<ConnectionMode>(found - kConnectionModeNames.begin());
+    }
+
     const GraphDescriptor &graphDescriptor(const GraphKey key) {
         static const auto descriptors = makeDescriptors();
         return descriptors[static_cast<std::size_t>(key)];
     }
 
-    SeriesStyleDefault defaultSeriesStyle(const GraphKey graph, const std::string_view seriesKey) {
+    bool offersSeries(const GraphDescriptor &descriptor, const std::string_view seriesKey) {
+        return std::ranges::find(descriptor.series, seriesKey, &GraphSeriesDescriptor::key) != descriptor.series.end();
+    }
+
+    SeriesStyle defaultSeriesStyle(const GraphKey graph, const std::string_view seriesKey) {
         const auto &series = graphDescriptor(graph).series;
         const auto found = std::ranges::find(series, seriesKey, &GraphSeriesDescriptor::key);
         return {found == series.end() ? std::nullopt : found->defaultColor, kDefaultSeriesWidth};
+    }
+
+    SeriesStyle resolvedSeriesStyle(const GraphKey graph,
+                                    const std::map<std::string, SeriesStyleOverride, std::less<>> &overrides,
+                                    const std::string_view seriesKey) {
+        const auto base = defaultSeriesStyle(graph, seriesKey);
+        const auto found = overrides.find(seriesKey);
+        if (found == overrides.end()) return base;
+        return {found->second.color ? found->second.color : base.color, found->second.width.value_or(base.width)};
     }
 
     GraphPreferences defaultGraphPreferences(const GraphKey key) {
@@ -170,7 +195,7 @@ namespace ksv::application {
             validateCount(*preferences.averagingWindowDays, kMaximumAveragingWindowDays, sink, "averagingWindow");
 
         for (const auto &[seriesKey, style]: preferences.seriesStyles) {
-            if (std::ranges::none_of(descriptor.series, [&](const auto &series) { return series.key == seriesKey; })) {
+            if (!offersSeries(descriptor, seriesKey)) {
                 sink.add(GraphConfigurationIssueCode::UnknownSeries, "seriesStyle", seriesKey, "");
                 continue;
             }
@@ -185,7 +210,7 @@ namespace ksv::application {
             if (!preferences.axisPolicies.contains(axis.key))
                 sink.add(GraphConfigurationIssueCode::MissingValue, "axes", std::string(axis.key), "fitMode");
         for (const auto &[axisKey, policy]: preferences.axisPolicies) {
-            if (std::ranges::none_of(descriptor.axes, [&](const auto &axis) { return axis.key == axisKey; })) {
+            if (std::ranges::find(descriptor.axes, axisKey, &GraphAxisDescriptor::key) == descriptor.axes.end()) {
                 sink.add(GraphConfigurationIssueCode::UnknownAxis, "axes", axisKey, "");
                 continue;
             }
@@ -203,14 +228,14 @@ namespace ksv::application {
         std::vector<GraphConfigurationIssue> issues;
         for (const auto &error: validateSeriesConfigs(document.series)) addSeriesDocumentIssue(issues, error.path);
 
-        std::vector<std::pair<uint64_t, std::size_t>> axisIds;
+        std::vector<uint64_t> axisIds;
         uint64_t maximumAxisId = 0;
         for (std::size_t index = 0; index < document.axes.size(); ++index) {
             const auto id = document.axes[index].id.value;
             if (id == 0) addSeriesDocumentIssue(issues, "axes[" + std::to_string(index) + "].id");
-            if (std::ranges::any_of(axisIds, [&](const auto &seen) { return seen.first == id; }))
+            if (std::ranges::find(axisIds, id) != axisIds.end())
                 addSeriesDocumentIssue(issues, "axes[" + std::to_string(index) + "].id");
-            axisIds.emplace_back(id, index);
+            axisIds.push_back(id);
             maximumAxisId = std::max(maximumAxisId, id);
         }
 
@@ -252,7 +277,6 @@ namespace ksv::application {
             const auto &was = before.preferences(key);
             const auto &now = after.preferences(key);
             if (was == now) continue;
-            change.graphs.push_back(key);
             change.sections[static_cast<std::size_t>(key)] = {
                 .range = was.range != now.range,
                 .window = was.averagingWindowDays != now.averagingWindowDays,

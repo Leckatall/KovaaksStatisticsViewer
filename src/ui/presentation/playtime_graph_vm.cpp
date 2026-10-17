@@ -9,7 +9,6 @@
 #include <QTimeZone>
 
 #include <algorithm>
-#include <array>
 #include <tuple>
 #include <utility>
 
@@ -42,17 +41,11 @@ namespace ksv::presentation {
         return m_historyAvailable ? tr("No playtime in the selected range.") : tr("No playtime recorded yet.");
     }
 
-    void PlaytimeGraphViewModel::applyYAxis() {
-        const std::array<const SeriesModel *, 1> members{m_series};
-        m_series->yAxisOptions = optionsForPolicy(m_axisPolicy, {});
-        m_series->yAxis = axisForPolicy(members, m_axisPolicy, {}, m_series->transform);
-    }
-
     void PlaytimeGraphViewModel::setAxisPolicies(const AxisPolicyMap &policies) {
         application::AxisPolicy next = axisPolicyFor(policies, application::GraphKey::DailyPlaytime, "playtime");
         if (next == m_axisPolicy) return;
         m_axisPolicy = std::move(next);
-        applyYAxis();
+        applyAxisPolicy(*m_series, m_axisPolicy);
         emit boundsChanged();
     }
 
@@ -62,15 +55,14 @@ namespace ksv::presentation {
         QList<QPointF> rawSecondsPoints;
         rawSecondsPoints.reserve(int(snapshot.samples.size()));
         for (const auto &[day, avg_seconds]: snapshot.samples) {
-            const auto epochMs = static_cast<qreal>(utcDateTimeForEpochDay(day.time_since_epoch().count()).toMSecsSinceEpoch());
+            const auto epochMs = static_cast<qreal>(utcMidnightMs(day));
             rawSecondsPoints.append(QPointF(epochMs, avg_seconds));
         }
 
         if (snapshot.view.interval) {
             const auto &interval = *snapshot.view.interval;
-            const auto firstMs = utcDateTimeForEpochDay(interval.first.time_since_epoch().count()).toMSecsSinceEpoch();
-            const auto lastMs = utcDateTimeForEpochDay(interval.last.time_since_epoch().count()).toMSecsSinceEpoch();
-            std::ignore = m_xAxis.setEpochMillisecondsRange(firstMs, std::max(firstMs, lastMs));
+            const auto firstMs = utcMidnightMs(interval.first);
+            std::ignore = m_xAxis.setEpochMillisecondsRange(firstMs, std::max(firstMs, utcMidnightMs(interval.last)));
         } else if (rawSecondsPoints.isEmpty()) {
             const QDateTime now = QDateTime::currentDateTimeUtc();
             std::ignore = m_xAxis.setRange(now, now);
@@ -90,7 +82,7 @@ namespace ksv::presentation {
         m_series->setColumn(Playtime);
         m_series->transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
         m_series->points = rawSecondsPoints;
-        applyYAxis();
+        applyAxisPolicy(*m_series, m_axisPolicy);
         if (windowMoved) emit windowChanged();
         emit dataUpdated();
         emit boundsChanged();

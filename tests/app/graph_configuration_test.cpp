@@ -438,7 +438,7 @@ namespace {
     TEST(GraphPresentation, DefaultsReproduceTodaysLinesMarkersAndColours) {
         const auto history = defaultGraphPresentation(GraphKey::ScenarioHistory);
         EXPECT_EQ(history.appearance, (LineAppearance{ConnectionMode::Smooth, true}));
-        EXPECT_EQ(history.seriesStyle("score"), (ResolvedSeriesStyle{RgbaColor{0, 150, 0, 255}, 3.0}));
+        EXPECT_EQ(history.seriesStyle("score"), (SeriesStyle{RgbaColor{0, 150, 0, 255}, 3.0}));
         EXPECT_EQ(history.seriesStyle("misses").color, (RgbaColor{229, 57, 53, 255}));
         EXPECT_EQ(history.axisPolicies.at("counts"), AxisPolicy{StartAtZero{}});
         for (const auto graph: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::BenchmarkRank,
@@ -457,9 +457,9 @@ namespace {
         const auto presentation = presentationOf(GraphKey::ScenarioHistory, preferences);
 
         EXPECT_EQ(presentation.appearance, (LineAppearance{ConnectionMode::PointsOnly, false}));
-        EXPECT_EQ(presentation.seriesStyle("score"), (ResolvedSeriesStyle{RgbaColor{9, 8, 7, 255}, 3.0}));
-        EXPECT_EQ(presentation.seriesStyle("hits"), (ResolvedSeriesStyle{RgbaColor{124, 179, 66, 255}, 6.5}));
-        EXPECT_EQ(presentation.seriesStyle("accuracy"), (ResolvedSeriesStyle{RgbaColor{0, 255, 255, 255}, 3.0}));
+        EXPECT_EQ(presentation.seriesStyle("score"), (SeriesStyle{RgbaColor{9, 8, 7, 255}, 3.0}));
+        EXPECT_EQ(presentation.seriesStyle("hits"), (SeriesStyle{RgbaColor{124, 179, 66, 255}, 6.5}));
+        EXPECT_EQ(presentation.seriesStyle("accuracy"), (SeriesStyle{RgbaColor{0, 255, 255, 255}, 3.0}));
     }
 
     TEST(GraphPresentation, ARecolouredRankSeriesKeepsItsKeyAndTheDefaultWidth) {
@@ -467,6 +467,6 @@ namespace {
         preferences.seriesStyles["rank"] = {RgbaColor{200, 0, 0, 255}, std::nullopt};
 
         EXPECT_EQ(presentationOf(GraphKey::BenchmarkRank, preferences).seriesStyle("rank"),
-                  (ResolvedSeriesStyle{RgbaColor{200, 0, 0, 255}, 3.0}));
+                  (SeriesStyle{RgbaColor{200, 0, 0, 255}, 3.0}));
     }
 }

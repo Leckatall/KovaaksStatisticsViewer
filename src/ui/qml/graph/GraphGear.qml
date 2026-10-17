@@ -24,21 +24,17 @@ TooltipToolButton {
     readonly property string graphName: GraphCatalog.nameOf(graphKey)
 
     // The committed values of this graph; empty when there is no view model.
-    readonly property var quick: settingsVm && settingsVm.quickSettings && settingsVm.quickSettings[graphKey]
-                                 ? settingsVm.quickSettings[graphKey] : ({})
-
-    readonly property int maximumWindowDays: 3650
-    readonly property int maximumLatestRuns: 1000000
+    readonly property var quick: {
+        const all = settingsVm ? settingsVm.quickSettings : null
+        return all && all[graphKey] ? all[graphKey] : ({})
+    }
+    readonly property var limits: settingsVm && settingsVm.graphLimits ? settingsVm.graphLimits : ({})
 
     property string windowError: ""
     property string latestRunsError: ""
 
     function pluralised(count, singular, plural) {
         return count === 1 ? singular : plural.arg(quick.rangeCountText)
-    }
-
-    function limitText(limit) {
-        return Number(limit).toLocaleString(Qt.locale(), "f", 0)
     }
 
     readonly property bool offersRange: quick.hasRange === true
@@ -51,10 +47,10 @@ TooltipToolButton {
             text: text, kind: kind, count: count,
             patch: kind === "allHistory" ? {rangeKind: kind} : {rangeKind: kind, count: count}
         })
-        for (const days of [7, 30, 90]) add(qsTr("Last %1 days").arg(days), "recentDays", days)
+        for (const days of GraphCatalog.recentDayPresets) add(qsTr("Last %1 days").arg(days), "recentDays", days)
         if (gear.offersLatestRuns)
-            for (const runs of [25, 50, 100]) add(qsTr("Latest %1 runs").arg(runs), "latestRuns", runs)
-        add(gear.offersLatestRuns ? qsTr("All runs") : qsTr("All time"), "allHistory", 0)
+            for (const runs of GraphCatalog.latestRunPresets) add(qsTr("Latest %1 runs").arg(runs), "latestRuns", runs)
+        add(GraphCatalog.allHistoryText(gear.offersLatestRuns), "allHistory", 0)
         return presets
     }
 
@@ -71,12 +67,6 @@ TooltipToolButton {
             return pluralised(quick.rangeCount, qsTr("Latest 1 run"), qsTr("Latest %1 runs"))
         return pluralised(quick.rangeCount, qsTr("Last 1 day"), qsTr("Last %1 days"))
     }
-
-    readonly property var connectionEntries: [
-        {text: qsTr("Smooth lines"), value: "smooth"},
-        {text: qsTr("Straight lines"), value: "straight"},
-        {text: qsTr("Points only"), value: "pointsOnly"}
-    ]
 
     function apply(patch) {
         return gear.settingsVm ? gear.settingsVm.applyQuickPatch(gear.graphKey, patch)
@@ -99,7 +89,7 @@ TooltipToolButton {
     onQuickChanged: syncFields(false)
 
     function focusFirstControl() {
-        for (const candidate of [rangeCombo, windowField, connectionCombo]) {
+        for (const candidate of [rangeCombo, windowField, lineStyle.connectionCombo]) {
             if (candidate.visible && candidate.enabled) {
                 candidate.forceActiveFocus()
                 return
@@ -204,10 +194,10 @@ TooltipToolButton {
                         placeholderText: qsTr("Custom count")
                         Accessible.name: qsTr("Latest runs, custom count")
                         Accessible.description: gear.latestRunsError !== "" ? gear.latestRunsError
-                            : qsTr("Whole runs, 1 to %1.").arg(gear.limitText(gear.maximumLatestRuns))
+                            : qsTr("Whole runs, 1 to %1.").arg(GraphCatalog.wholeNumberText(gear.limits.maxLatestRuns))
                         onTextEdited: {
-                            gear.latestRunsError = gear.errorFor(
-                                gear.apply({rangeKind: "latestRuns", count: text}), gear.limitText(gear.maximumLatestRuns))
+                            gear.latestRunsError = gear.errorFor(gear.apply({rangeKind: "latestRuns", count: text}),
+                                                                 GraphCatalog.wholeNumberText(gear.limits.maxLatestRuns))
                         }
                     }
                     Label { text: qsTr("runs") }
@@ -237,9 +227,10 @@ TooltipToolButton {
                         Layout.fillWidth: true
                         Accessible.name: qsTr("Rolling average window, in days")
                         Accessible.description: gear.windowError !== "" ? gear.windowError
-                            : qsTr("Whole days, 1 to %1.").arg(gear.limitText(gear.maximumWindowDays))
+                            : qsTr("Whole days, 1 to %1.").arg(GraphCatalog.wholeNumberText(gear.limits.maxAveragingWindow))
                         onTextEdited: {
-                            gear.windowError = gear.errorFor(gear.apply({window: text}), gear.limitText(gear.maximumWindowDays))
+                            gear.windowError = gear.errorFor(gear.apply({window: text}),
+                                                             GraphCatalog.wholeNumberText(gear.limits.maxAveragingWindow))
                         }
                     }
                     Label { text: qsTr("days") }
@@ -255,42 +246,14 @@ TooltipToolButton {
                 }
             }
 
-            ColumnLayout {
+            GraphLineStyleControls {
+                id: lineStyle
                 Layout.fillWidth: true
-                spacing: 2
-
-                Label { text: qsTr("Line style") }
-                ComboBox {
-                    id: connectionCombo
-                    objectName: "graphField_seriesStyle_connection"
-                    Layout.fillWidth: true
-                    model: gear.connectionEntries
-                    textRole: "text"
-                    currentIndex: Math.max(0, gear.connectionEntries.findIndex(e => e.value === gear.quick.connection))
-                    Accessible.name: qsTr("Line style")
-                    onActivated: index => {
-                        gear.apply({connection: gear.connectionEntries[index].value})
-                        connectionCombo.currentIndex = Qt.binding(
-                            () => Math.max(0, gear.connectionEntries.findIndex(e => e.value === gear.quick.connection)))
-                    }
-                }
-            }
-
-            CheckBox {
-                id: markerBox
-                objectName: "graphField_seriesStyle_markers"
-
-                readonly property bool pointsOnly: gear.quick.connection === "pointsOnly"
-
-                text: qsTr("Show point markers")
-                checked: pointsOnly || gear.quick.markers === true
-                enabled: !pointsOnly
-                Accessible.name: text
-                Accessible.description: pointsOnly ? qsTr("Always shown while Points only is selected") : ""
-                onToggled: {
-                    gear.apply({markers: markerBox.checked})
-                    markerBox.checked = Qt.binding(() => markerBox.pointsOnly || gear.quick.markers === true)
-                }
+                spacing: 8
+                connection: gear.quick.connection || ""
+                markers: gear.quick.markers === true
+                onConnectionChosen: connection => gear.apply({connection: connection})
+                onMarkersChosen: markers => gear.apply({markers: markers})
             }
 
             Button {
