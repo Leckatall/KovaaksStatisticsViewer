@@ -72,6 +72,16 @@ namespace ksv::tests_support {
             ++lastSelectedBenchmarkWrites;
         }
 
+        std::vector<std::string> recentBenchmarkIds;
+        int recentBenchmarkIdsWrites = 0;
+
+        [[nodiscard]] std::vector<std::string> getRecentBenchmarkIds() const override { return recentBenchmarkIds; }
+
+        void setRecentBenchmarkIds(const std::vector<std::string> &ids) override {
+            recentBenchmarkIds = ids;
+            ++recentBenchmarkIdsWrites;
+        }
+
     private:
         std::vector<std::function<void()>> kovaaks_dirs_callbacks;
         std::vector<std::function<void()>> profile_path_callbacks;

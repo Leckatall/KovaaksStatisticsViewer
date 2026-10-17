@@ -175,6 +175,57 @@ namespace {
         EXPECT_TRUE(cleared.getLastSelectedBenchmarkId().empty());
     }
 
+    TEST_F(SettingsServiceTest, RecentBenchmarkIdsSurviveARestartInOrder) {
+        {
+            SettingsService service(QSettings::IniFormat);
+            EXPECT_TRUE(service.getRecentBenchmarkIds().empty());
+            service.setRecentBenchmarkIds({"driver-demo", "matching-demo", "incomplete-demo"});
+        }
+
+        const SettingsService reloaded(QSettings::IniFormat);
+        EXPECT_EQ(reloaded.getRecentBenchmarkIds(),
+                  (std::vector<std::string>{"driver-demo", "matching-demo", "incomplete-demo"}));
+    }
+
+    TEST_F(SettingsServiceTest, SingleRecentBenchmarkIdSurvivesARestart) {
+        {
+            SettingsService service(QSettings::IniFormat);
+            service.setRecentBenchmarkIds({"driver-demo"});
+        }
+
+        const SettingsService reloaded(QSettings::IniFormat);
+        EXPECT_EQ(reloaded.getRecentBenchmarkIds(), (std::vector<std::string>{"driver-demo"}));
+    }
+
+    TEST_F(SettingsServiceTest, EmptyRecentBenchmarkIdsWriteLeavesAnEmptyList) {
+        SettingsService service(QSettings::IniFormat);
+        service.setRecentBenchmarkIds({"driver-demo"});
+
+        service.setRecentBenchmarkIds({});
+
+        EXPECT_TRUE(service.getRecentBenchmarkIds().empty());
+        EXPECT_TRUE(SettingsService(QSettings::IniFormat).getRecentBenchmarkIds().empty());
+    }
+
+    // A legacy single selection is read as a one-item recent list until the first write replaces it.
+    TEST_F(SettingsServiceTest, LegacyLastSelectedBenchmarkReadsAsOneItemRecentListAndIsRemovedOnWrite) {
+        {
+            QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
+            raw.setValue("benchmarks/lastSelectedId", "driver-demo");
+        }
+        {
+            SettingsService service(QSettings::IniFormat);
+            EXPECT_EQ(service.getRecentBenchmarkIds(), (std::vector<std::string>{"driver-demo"}));
+
+            service.setRecentBenchmarkIds({"matching-demo", "driver-demo"});
+        }
+
+        QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
+        EXPECT_FALSE(raw.contains("benchmarks/lastSelectedId"));
+        EXPECT_EQ(SettingsService(QSettings::IniFormat).getRecentBenchmarkIds(),
+                  (std::vector<std::string>{"matching-demo", "driver-demo"}));
+    }
+
     // VisualSettingsManager.qml's Settings { category: "graphAxis" } wrote this key through the same
     // organization and application QSettings store.
     TEST_F(SettingsServiceTest, ReadsTheLegacyRunAxisLabelSelectionWrittenByQml) {

@@ -29,6 +29,8 @@ namespace ksv::qt_data {
         [[nodiscard]] std::string getLegacyRunAxisLabelSeriesId() const override;
         [[nodiscard]] std::string getLastSelectedBenchmarkId() const override;
         void setLastSelectedBenchmarkId(const std::string &id) override;
+        [[nodiscard]] std::vector<std::string> getRecentBenchmarkIds() const override;
+        void setRecentBenchmarkIds(const std::vector<std::string> &ids) override;
 
         // The directory getKovaaksDirs() reports when none is configured. Defaults
         // to the standard Steam install path; dev tools point it into a sandbox.

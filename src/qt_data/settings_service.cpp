@@ -12,6 +12,7 @@ namespace ksv::qt_data {
         constexpr auto kSeriesConfigKey = "graph/seriesConfigV1";
         constexpr auto kSeriesConfigQuarantinePrefix = "graph/seriesConfigQuarantine/";
         constexpr auto kLastSelectedBenchmarkKey = "benchmarks/lastSelectedId";
+        constexpr auto kRecentBenchmarkIdsKey = "benchmarks/recentIds";
         constexpr auto kLegacyRunAxisLabelKey = "graphAxis/seriesId";
     }
 
@@ -132,6 +133,30 @@ namespace ksv::qt_data {
         const QMutexLocker locker(&m_settings_mutex);
         if (id.empty()) m_settings.remove(kLastSelectedBenchmarkKey);
         else m_settings.setValue(kLastSelectedBenchmarkKey, QString::fromStdString(id));
+        m_settings.sync();
+    }
+
+    std::vector<std::string> SettingsService::getRecentBenchmarkIds() const {
+        const QMutexLocker locker(&m_settings_mutex);
+        if (m_settings.contains(kRecentBenchmarkIdsKey)) {
+            const auto stored = m_settings.value(kRecentBenchmarkIdsKey).toStringList();
+            std::vector<std::string> result;
+            result.reserve(stored.size());
+            for (const auto &id: stored) result.push_back(id.toStdString());
+            return result;
+        }
+        const auto legacy = m_settings.value(kLastSelectedBenchmarkKey).toString();
+        if (legacy.isEmpty()) return {};
+        return {legacy.toStdString()};
+    }
+
+    void SettingsService::setRecentBenchmarkIds(const std::vector<std::string> &ids) {
+        QStringList stored;
+        stored.reserve(static_cast<qsizetype>(ids.size()));
+        for (const auto &id: ids) stored.push_back(QString::fromStdString(id));
+        const QMutexLocker locker(&m_settings_mutex);
+        m_settings.setValue(kRecentBenchmarkIdsKey, stored);
+        m_settings.remove(kLastSelectedBenchmarkKey);
         m_settings.sync();
     }
 }

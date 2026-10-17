@@ -34,6 +34,10 @@ namespace ksv::application {
         // show it again. Empty when none has been chosen (or the choice was cleared).
         [[nodiscard]] virtual std::string getLastSelectedBenchmarkId() const = 0;
         virtual void setLastSelectedBenchmarkId(const std::string &id) = 0;
+
+        // Most recent first; the front is what opens next launch.
+        [[nodiscard]] virtual std::vector<std::string> getRecentBenchmarkIds() const = 0;
+        virtual void setRecentBenchmarkIds(const std::vector<std::string> &ids) = 0;
     };
 }
 #endif //KOVAAKSSTATSVIEWER_I_SETTINGS_SERVICE_H
