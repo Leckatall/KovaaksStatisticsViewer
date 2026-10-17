@@ -13,6 +13,7 @@ namespace ksv::application {
         double shots = 0.0;
         double hits = 0.0;
         double misses = 0.0;
+        double score_average = 0.0;
     };
 
     struct CompletionHistory {

@@ -21,7 +21,14 @@ TestCase {
         property bool selectionPanelVisible: true
         property bool recentRunsSectionVisible: true
         property bool scenarioBrowserSectionVisible: true
-        property var historyColumnVisibility: ({"1": true, "2": false, "3": false, "4": false, "5": false})
+        property var historyColumnVisibility: ({"1": true, "2": false, "3": false, "4": false, "5": false, "6": true})
+        function isHistorySeriesVisible(id) {
+            return Object.prototype.hasOwnProperty.call(historyColumnVisibility, id)
+                   ? !!historyColumnVisibility[id] : id === "6"
+        }
+        function setHistorySeriesVisible(id, shown) {
+            historyColumnVisibility = Object.assign({}, historyColumnVisibility, {[id]: shown})
+        }
         property var visibleSeriesIds: ["1", "2"]
         function isSeriesVisible(id) { return visibleSeriesIds.indexOf(id) !== -1 }
         function setSeriesVisible(id, visible) {
@@ -293,6 +300,25 @@ TestCase {
 
         fakeViewSettings.scenarioBrowserSectionVisible = true
         compare(browserItem.checked, true)
+    }
+
+    function test_historyLinesMenuSharesVisibilityWithTheLegendOwner() {
+        fakeViewSettings.historyColumnVisibility = {"1": true, "6": true}
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const linesMenu = findChild(menuBar, "scenarioHistoryLinesMenu")
+        const accuracy = findMenuItemByText(linesMenu, "Accuracy")
+        const average = findMenuItemByText(linesMenu, "Score average (10 runs)")
+        verify(accuracy !== null && average !== null)
+        compare(accuracy.checked, false)
+        compare(average.checked, true)
+
+        accuracy.toggle()
+        accuracy.triggered()
+        compare(fakeViewSettings.isHistorySeriesVisible("2"), true)
+
+        fakeViewSettings.setHistorySeriesVisible("6", false)
+        compare(average.checked, false)
+        fakeViewSettings.historyColumnVisibility = {"1": true, "2": false, "3": false, "4": false, "5": false, "6": true}
     }
 
     function test_graphLinesSubmenuBuildsOneItemPerEnabledSeries() {

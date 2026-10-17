@@ -100,8 +100,8 @@ MenuBar {
                     required property var modelData
                     text: modelData.name
                     checkable: true
-                    checked: !!root.visualSettings.historyColumnVisibility[modelData.id]
-                    onTriggered: root.visualSettings.historyColumnVisibility[modelData.id] = checked
+                    checked: root.visualSettings.isHistorySeriesVisible(modelData.id)
+                    onTriggered: root.visualSettings.setHistorySeriesVisible(modelData.id, checked)
                 }
             }
         }

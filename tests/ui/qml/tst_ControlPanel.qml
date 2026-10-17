@@ -177,6 +177,30 @@ TestCase {
         compare(spy.count, 1)
     }
 
+    function test_configure_footer_shows_by_default() {
+        compare(panel.showConfigureButton, true)
+        testCase.visible = true
+        const button = findChild(panel, "configureGraphLinesButton")
+        compare(button.visible, true)
+        verify(panel.implicitWidth >= button.implicitWidth)
+        compare(panel.implicitHeight, button.implicitHeight)
+        testCase.visible = false
+    }
+
+    function test_hiding_the_configure_footer_removes_it_and_its_space() {
+        testCase.visible = true
+        const legend = createTemporaryObject(manyLinesComponent, testCase, {height: 400, showConfigureButton: false})
+        const button = findChild(legend, "configureGraphLinesButton")
+        compare(button.visible, false)
+        verify(findChild(legend, "seriesVisibilityCheckBox_1").visible, "the chips stay visible")
+        compare(legend.implicitHeight, 1)
+        const chip = findChild(legend, "seriesVisibilityCheckBox_1")
+        const list = findChild(legend, "graphLineChipList")
+        compare(list.height, legend.height)
+        verify(legend.implicitWidth >= Math.min(chip.implicitWidth, legend.maximumChipWidth))
+        testCase.visible = false
+    }
+
     Component {
         id: signalSpyComponent
         SignalSpy {}

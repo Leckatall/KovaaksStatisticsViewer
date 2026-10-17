@@ -313,6 +313,100 @@ namespace {
         EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{3}));
     }
 
+    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageOfASingleRunIsItsOwnScore) {
+        playOnDays({kToday});
+
+        const auto history = use_case.get_history();
+
+        ASSERT_EQ(history.rows.size(), 1);
+        EXPECT_DOUBLE_EQ(history.rows[0].score_average, 100.0);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageUsesAllRunsWhenFewerThanTenExist) {
+        playOnDays({kToday - 2, kToday - 1, kToday});
+
+        const auto history = use_case.get_history();
+
+        ASSERT_EQ(history.rows.size(), 3);
+        EXPECT_DOUBLE_EQ(history.rows[0].score_average, 100.0);
+        EXPECT_DOUBLE_EQ(history.rows[1].score_average, 100.5);
+        EXPECT_DOUBLE_EQ(history.rows[2].score_average, 101.0);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageUsesAtMostTenRunsIncludingTheCurrentRun) {
+        playOnDays({kToday - 10, kToday - 9, kToday - 8, kToday - 7, kToday - 6,
+                    kToday - 5, kToday - 4, kToday - 3, kToday - 2, kToday - 1, kToday});
+
+        const auto history = use_case.get_history();
+
+        ASSERT_EQ(history.rows.size(), 11);
+        EXPECT_DOUBLE_EQ(history.rows[0].score_average, 100.0);
+        EXPECT_DOUBLE_EQ(history.rows[1].score_average, 100.5);
+        EXPECT_DOUBLE_EQ(history.rows[9].score_average, 104.5);
+        EXPECT_DOUBLE_EQ(history.rows[10].score_average, 105.5);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageUsesRunsBeforeTheVisibleRange) {
+        playOnDays({kToday - 10, kToday - 9, kToday - 8, kToday - 7, kToday - 6,
+                    kToday - 5, kToday - 4, kToday - 3, kToday - 2, kToday - 1, kToday});
+        const double fullRangeValue = use_case.get_history().rows[10].score_average;
+        setRange(LatestRuns{1});
+
+        const auto history = use_case.get_history();
+
+        ASSERT_EQ(history.rows.size(), 1);
+        EXPECT_EQ(history.rows[0].run_index, 11);
+        EXPECT_DOUBLE_EQ(history.rows[0].score_average, 105.5);
+        EXPECT_DOUBLE_EQ(history.rows[0].score_average, fullRangeValue);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageUsesRunsBeforeAFilteredDateRange) {
+        playOnDays({kToday - 40, kToday - 30, kToday - 20, kToday - 10, kToday});
+        setRange(RecentDays{7});
+
+        const auto history = use_case.get_history();
+
+        ASSERT_EQ(history.rows.size(), 1);
+        EXPECT_EQ(history.rows[0].run_index, 5);
+        EXPECT_DOUBLE_EQ(history.rows[0].score_average, 102.0);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageIncludesZeroScores) {
+        setCurrentScenario();
+        profile->completion_history_by_scenario[{.name = "Scenario One", .hash = "scenario-1"}] = {
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
+             .totals = {.score = 0.0F}},
+            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 200},
+             .totals = {.score = 20.0F}},
+        };
+
+        const auto history = use_case.get_history();
+
+        ASSERT_EQ(history.rows.size(), 2);
+        EXPECT_DOUBLE_EQ(history.rows[0].score_average, 0.0);
+        EXPECT_DOUBLE_EQ(history.rows[1].score_average, 10.0);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageOfAnEmptyHistoryHasNoRows) {
+        playOnDays({});
+
+        EXPECT_TRUE(use_case.get_history().rows.empty());
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageDoesNotLeakBetweenScenarios) {
+        playOnDays({kToday - 1, kToday}, "scenario-a");
+        playOnDays({kToday}, "scenario-b");
+
+        const auto second = use_case.get_history();
+        ASSERT_EQ(second.rows.size(), 1);
+        EXPECT_DOUBLE_EQ(second.rows[0].score_average, 100.0);
+
+        setCurrentScenario("scenario-a", kToday * kMsPerDay + 7);
+        const auto first = use_case.get_history();
+        ASSERT_EQ(first.rows.size(), 2);
+        EXPECT_DOUBLE_EQ(first.rows[1].score_average, 100.5);
+    }
+
     TEST_F(CompletionHistoryUseCaseTest, SelectRunAddressesTheOriginalRowWhateverTheRange) {
         playOnDays({kToday - 40, kToday - 30, kToday});
         setRange(LatestRuns{1});

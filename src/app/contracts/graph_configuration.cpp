@@ -35,6 +35,7 @@ namespace ksv::application {
                         {"shots", "counts", RgbaColor{255, 165, 0, 255}},
                         {"hits", "counts", RgbaColor{124, 179, 66, 255}},
                         {"misses", "counts", RgbaColor{229, 57, 53, 255}},
+                        {"scoreAverage", "score", RgbaColor{171, 71, 188, 255}},
                     },
                     {{"score", FitVisibleData{}}, {"accuracy", FitVisibleData{}}, {"counts", StartAtZero{}}}
                 },

@@ -122,7 +122,7 @@ namespace {
         };
         EXPECT_TRUE(seriesKeys(GraphKey::Run).empty());
         EXPECT_EQ(seriesKeys(GraphKey::ScenarioHistory),
-                  (std::vector<std::string>{"score", "accuracy", "shots", "hits", "misses"}));
+                  (std::vector<std::string>{"score", "accuracy", "shots", "hits", "misses", "scoreAverage"}));
         EXPECT_EQ(seriesKeys(GraphKey::DailyPlaytime), (std::vector<std::string>{"playtime"}));
         EXPECT_EQ(seriesKeys(GraphKey::BenchmarkRank), (std::vector<std::string>{"rank"}));
         EXPECT_EQ(seriesKeys(GraphKey::BenchmarkPlaytime), (std::vector<std::string>{"playtime"}));
@@ -137,6 +137,8 @@ namespace {
         for (const auto &series: history) {
             if (series.key == "shots" || series.key == "hits" || series.key == "misses")
                 EXPECT_EQ(series.axisKey, "counts");
+            else if (series.key == "scoreAverage")
+                EXPECT_EQ(series.axisKey, "score");
             else
                 EXPECT_EQ(series.axisKey, series.key);
         }

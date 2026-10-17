@@ -110,7 +110,7 @@ namespace {
         const auto history = view_model->graphDraft("scenarioHistory");
         EXPECT_TRUE(history["hasLatestRuns"].toBool());
         EXPECT_FALSE(history["hasWindow"].toBool());
-        EXPECT_EQ(history["series"].toList().size(), 5);
+        EXPECT_EQ(history["series"].toList().size(), 6);
         EXPECT_EQ(history["axes"].toList().size(), 3);
     }
 

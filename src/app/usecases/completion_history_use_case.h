@@ -59,6 +59,16 @@ namespace ksv::application {
             const auto projection = resolveRange(committedRange(), m_day_source->today(), latestDay(row_days));
             const auto visible = selectRows(projection, row_days);
 
+            constexpr std::size_t window = 10;
+            std::vector<double> averages;
+            averages.reserve(completion_history.size());
+            double sum = 0.0;
+            for (std::size_t i = 0; i < completion_history.size(); ++i) {
+                sum += static_cast<double>(completion_history[i].totals.score);
+                if (i >= window) sum -= static_cast<double>(completion_history[i - window].totals.score);
+                averages.push_back(sum / static_cast<double>(std::min(i + 1, window)));
+            }
+
             CompletionHistory history;
             history.scenario_name = scenario.name;
             history.full_count = static_cast<int>(completion_history.size());
@@ -73,6 +83,7 @@ namespace ksv::application {
                     .shots = static_cast<double>(row.totals.shots),
                     .hits = static_cast<double>(row.totals.hits),
                     .misses = static_cast<double>(row.totals.misses),
+                    .score_average = averages[i],
                 });
             }
             return history;

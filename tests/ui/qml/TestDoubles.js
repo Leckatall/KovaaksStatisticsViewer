@@ -45,12 +45,14 @@ function makeFakeHistoryVm() {
         pointMarkers: true,
         connectionMode: 0,
         allSeries: [
-            {id: "1", name: "Score", column: 1},
-            {id: "2", name: "Accuracy", column: 2},
-            {id: "3", name: "Shots", column: 3},
-            {id: "4", name: "Hits", column: 4},
-            {id: "5", name: "Misses", column: 5}
-        ]
+            {id: "1", name: "Score", column: 1, color: "#009600"},
+            {id: "2", name: "Accuracy", column: 2, color: "#00ffff"},
+            {id: "3", name: "Shots", column: 3, color: "#ffa500"},
+            {id: "4", name: "Hits", column: 4, color: "#6495ed"},
+            {id: "5", name: "Misses", column: 5, color: "#ff0000"},
+            {id: "6", name: "Score average (10 runs)", column: 6, color: "#ab47bc"}
+        ],
+        enabledSeriesIds: ["1", "2", "3", "4", "5", "6"]
     }
 }
 

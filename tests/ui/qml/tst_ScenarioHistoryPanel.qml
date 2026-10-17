@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtTest
 import KovaaksStatsViewer
 import "../../../src/ui/qml/graph"
@@ -13,7 +14,11 @@ Item {
     QtObject {
         id: historyVisibilitySettings
 
-        property var value: ({"1": true, "2": false, "3": false, "4": false, "5": false})
+        property var value: ({"1": true, "2": false, "3": false, "4": false, "5": false, "6": false})
+
+        function request(id, shown) {
+            value = Object.assign({}, value, {[id]: shown})
+        }
     }
 
     QtObject {
@@ -31,6 +36,7 @@ Item {
             historyVm: TestDoubles.makeFakeHistoryVm()
             columnVisibility: historyVisibilitySettings.value
             historyAxisSettings: axisSettings
+            onSeriesVisibilityRequested: (id, shown) => historyVisibilitySettings.request(id, shown)
         }
     }
 
@@ -43,6 +49,7 @@ Item {
             historyVm: Object.assign(TestDoubles.makeFakeHistoryVm(), {runCount: 8, visibleRunCount: 8})
             columnVisibility: historyVisibilitySettings.value
             historyAxisSettings: axisSettings
+            onSeriesVisibilityRequested: (id, shown) => historyVisibilitySettings.request(id, shown)
         }
     }
 
@@ -51,8 +58,80 @@ Item {
         when: windowShown
 
         function init() {
-            historyVisibilitySettings.value = {"1": true, "2": false, "3": false, "4": false, "5": false}
+            historyVisibilitySettings.value = {"1": true, "2": false, "3": false, "4": false, "5": false, "6": false}
             axisSettings.yAxisColumnKey = "1"
+        }
+
+        function test_legendListsAllSixLinesIncludingHiddenOnes() {
+            const panel = createTemporaryObject(panelComponent, root)
+            verify(!!panel, "Component exists")
+            for (let id = 1; id <= 6; ++id) {
+                const box = findChild(panel, "seriesVisibilityCheckBox_" + id)
+                verify(box !== null, "legend chip " + id)
+                compare(box.checked, panel.visibleColumns.indexOf(id) !== -1)
+            }
+            const legend = findChild(panel, "historyLineToggles")
+            verify(legend !== null)
+            compare(findChild(legend, "configureGraphLinesButton").visible, false)
+        }
+
+        function test_legendTogglesRequestVisibilityAndUpdateTheColumns() {
+            const panel = createTemporaryObject(panelComponent, root)
+            const requests = []
+            panel.seriesVisibilityRequested.connect((id, shown) => requests.push([id, shown]))
+            const accuracy = findChild(panel, "seriesVisibilityCheckBox_2")
+            accuracy.checked = true
+            accuracy.toggled()
+            const average = findChild(panel, "seriesVisibilityCheckBox_6")
+            average.checked = true
+            average.toggled()
+            compare(requests, [["2", true], ["6", true]])
+            tryCompare(panel, "visibleColumns", [1, 2, 6])
+        }
+
+        function test_legendCanHideTheAverage() {
+            historyVisibilitySettings.value = {"1": true, "6": true}
+            const panel = createTemporaryObject(panelComponent, root)
+            compare(panel.visibleColumns, [1, 6])
+            const average = findChild(panel, "seriesVisibilityCheckBox_6")
+            average.checked = false
+            average.toggled()
+            tryCompare(panel, "visibleColumns", [1])
+        }
+
+        function test_missingAverageEntryDefaultsToVisible() {
+            historyVisibilitySettings.value = {"1": false}
+            const panel = createTemporaryObject(panelComponent, root)
+            compare(panel.visibleColumns, [6])
+            compare(findChild(panel, "seriesVisibilityCheckBox_6").checked, true)
+        }
+
+        function test_averageOnlyFallsBackToTheScoreAxisColumn() {
+            historyVisibilitySettings.value = {"1": false, "6": true}
+            const panel = createTemporaryObject(panelComponent, root)
+            compare(panel.yAxisColumn, 6)
+        }
+
+        function test_allLinesHiddenStillShowsTheLegend() {
+            historyVisibilitySettings.value = {"1": false, "2": false, "3": false, "4": false, "5": false, "6": false}
+            const panel = panelWith({runCount: 8, visibleRunCount: 8})
+            compare(panel.visibleColumns, [])
+            compare(panel.yAxisColumn, -1)
+            verify(findChild(panel, "seriesVisibilityCheckBox_6") !== null)
+        }
+
+        function test_legendRemainsWithAnEmptyRange() {
+            const panel = panelWith({runCount: 5, visibleRunCount: 0})
+            verify(findChild(panel, "historyLineToggles").visible)
+            compare(findChild(panel, "historyEmptyLabel").visible, true)
+        }
+
+        function test_legendScrollsInAShortPanelWithoutGrowingIt() {
+            const panel = createTemporaryObject(panelComponent, root, {height: 100})
+            const list = findChild(panel, "graphLineChipList")
+            tryVerify(() => list.contentHeight > list.height)
+            compare(panel.height, 100)
+            compare(findChild(panel, "graphLineChipScrollBar").policy, ScrollBar.AlwaysOn)
         }
 
         function test_visibleColumnsTrackSettings() {

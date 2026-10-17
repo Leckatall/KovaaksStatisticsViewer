@@ -31,7 +31,7 @@ namespace ksv::presentation {
         Q_PROPERTY(bool selectedRunVisible READ selectedRunVisible NOTIFY selectedRunVisibleChanged)
 
     public:
-        enum Column { RunIndex = 0, Score, Accuracy, Shots, Hits, Misses, ColumnCount };
+        enum Column { RunIndex = 0, Score, Accuracy, Shots, Hits, Misses, ScoreAverage, ColumnCount };
         Q_ENUM(Column)
 
         explicit CompletionHistoryViewModel(
@@ -55,7 +55,7 @@ namespace ksv::presentation {
         // Shots, hits and misses share the one counts policy. Takes effect on the next series() call.
         void setAxisPolicies(const AxisPolicyMap &policies);
 
-        // series objects for Score..Misses; identity is fixed at construction, only points/yAxis
+        // series objects for Score..ScoreAverage; identity is fixed at construction, only points/yAxis
         // mutate per refresh().
         [[nodiscard]] QQmlListProperty<SeriesModel> allSeries() const {
             return QQmlListProperty<SeriesModel>(const_cast<CompletionHistoryViewModel *>(this),

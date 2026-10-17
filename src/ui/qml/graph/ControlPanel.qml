@@ -4,8 +4,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import KovaaksStatsViewer
 
-// The per-run graph's line toggles, laid out as a vertical legend beside the plot they control: one
-// chip per enabled series, top to bottom in the line-list order, then "Configure...". Each chip's
+// A graph's line toggles, laid out as a vertical legend beside the plot they control: one
+// chip per enabled series, top to bottom in the line-list order, then (optionally) "Configure...". Each chip's
 // swatch is drawn in the line's exact colour at full opacity (filled while the line is shown,
 // outlined while hidden), and its label uses the normal text colour so it stays readable on every
 // series colour. The chips scroll when the panel is too short for them; "Configure..." stays
@@ -19,6 +19,7 @@ Item {
     // Widest a chip may get before its label is elided, so a long custom series name cannot
     // squeeze the plot.
     property real maximumChipWidth: 200
+    property bool showConfigureButton: true
 
     signal configureLinesRequested
 
@@ -34,8 +35,8 @@ Item {
     // is whatever the panel gives it: only one row is reported, so the legend never decides the
     // panel's height.
     implicitWidth: Math.max(chips.width + (chipList.scrollable ? chipScrollBar.width : 0),
-                            configureButton.implicitWidth)
-    implicitHeight: configureButton.implicitHeight
+                            root.showConfigureButton ? configureButton.implicitWidth : 0)
+    implicitHeight: root.showConfigureButton ? configureButton.implicitHeight : 1
 
     ColumnLayout {
         anchors.fill: parent
@@ -130,6 +131,7 @@ Item {
             id: configureButton
 
             objectName: "configureGraphLinesButton"
+            visible: root.showConfigureButton
             text: qsTr("Configure...")
             flat: true
             topPadding: 3

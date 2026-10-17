@@ -689,4 +689,87 @@ namespace {
         expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Misses})),
                        fitCounts);
     }
+
+    // ---- score average ---------------------------------------------------------------------
+
+    TEST_F(CompletionHistoryViewModelTest, ScoreAverageUsesThePrecomputedValueAtTheOriginalRunIndex) {
+        fake->history = {.scenario_name = "Air Angelic", .full_count = 11,
+                         .rows = {{.run_index = 11, .score = 110.0, .score_average = 105.5}}};
+        view_model.refresh();
+        const auto lines = view_model.series({CompletionHistoryViewModel::Score,
+                                              CompletionHistoryViewModel::ScoreAverage});
+        ASSERT_EQ(lines.size(), 2);
+        EXPECT_EQ(lines[1]->id(), QString("6"));
+        EXPECT_EQ(lines[1]->points, (QList<QPointF>{QPointF(11.0, 105.5)}));
+        EXPECT_EQ(lines[0]->yAxisId, lines[1]->yAxisId);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, ALowScoreAverageStretchesAFittedScoreAxisOnlyWhileVisible) {
+        fake->history = {.scenario_name = "Air Angelic", .full_count = 2,
+                         .rows = {{.run_index = 1, .score = 100.0, .score_average = 50.0},
+                                  {.run_index = 2, .score = 125.0, .score_average = 75.0}}};
+        view_model.refresh();
+        view_model.setAxisPolicies({{"score", FitVisibleData{}}});
+
+        ValueAxis scoreOnly;
+        scoreOnly.setRange(100.0, 125.0);
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Score})), scoreOnly);
+
+        const auto both = view_model.series({CompletionHistoryViewModel::Score, CompletionHistoryViewModel::ScoreAverage});
+        EXPECT_LE(yAxisOf(both, 0).min(), 50.0);
+        expectSameAxis(yAxisOf(both, 1), yAxisOf(both, 0));
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, FixedScoreBoundsApplyToTheScoreAverageToo) {
+        setHistory();
+        view_model.refresh();
+        view_model.setAxisPolicies({{"score", FixedBounds{10.0, 20.0}}});
+
+        const auto both = view_model.series({CompletionHistoryViewModel::Score, CompletionHistoryViewModel::ScoreAverage});
+        for (int i = 0; i < both.size(); ++i) {
+            EXPECT_DOUBLE_EQ(yAxisOf(both, i).min(), 10.0);
+            EXPECT_DOUBLE_EQ(yAxisOf(both, i).max(), 20.0);
+        }
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, TheTooltipSampleOfTheScoreAverageIsTheSuppliedValue) {
+        fake->history = {.scenario_name = "Air Angelic", .full_count = 2,
+                         .rows = {{.run_index = 1, .score = 100.0, .score_average = 100.0},
+                                  {.run_index = 2, .score = 120.0, .score_average = 110.0}}};
+        view_model.refresh();
+
+        const auto sample = view_model.series({CompletionHistoryViewModel::ScoreAverage}).front()->sampleAtX(2.0);
+        ASSERT_TRUE(sample.has_value());
+        EXPECT_DOUBLE_EQ(sample->y(), 110.0);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, TheScoreAverageDefaultsToItsOwnColourAndRestylesWithoutReadingHistory) {
+        setHistory();
+        view_model.refresh();
+        const int reads = fake->historyCalls;
+        const auto line = view_model.series({CompletionHistoryViewModel::ScoreAverage}).front();
+        EXPECT_EQ(line->color(), QColor("#AB47BC"));
+
+        fake->committedPresentation.seriesStyles["scoreAverage"] = {RgbaColor{1, 2, 3, 255}, 6.0};
+        fake->publishPresentation();
+
+        EXPECT_EQ(fake->historyCalls, reads);
+        EXPECT_EQ(view_model.series({CompletionHistoryViewModel::ScoreAverage}).front(), line);
+        EXPECT_EQ(line->color(), QColor(1, 2, 3));
+        EXPECT_DOUBLE_EQ(line->lineWidth, 6.0);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, EverySeriesKeepsItsIdentityAcrossRefreshes) {
+        setHistory();
+        view_model.refresh();
+        const QList<int> all{CompletionHistoryViewModel::Score, CompletionHistoryViewModel::Accuracy,
+                             CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Hits,
+                             CompletionHistoryViewModel::Misses, CompletionHistoryViewModel::ScoreAverage};
+        const auto before = view_model.series(all);
+        ASSERT_EQ(before.size(), 6);
+
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.series(all), before);
+    }
 }

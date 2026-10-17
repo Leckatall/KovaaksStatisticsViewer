@@ -36,6 +36,36 @@ TestCase {
         compare(manager.isSeriesVisible("3"), true)
     }
 
+    function cleanup() {
+        manager.historyColumnVisibility = {"1": true, "2": false, "3": false, "4": false, "5": false, "6": true}
+    }
+
+    function test_historyVisibilityPreservesOldChoicesAndDefaultsTheNewAverageOn() {
+        manager.historyColumnVisibility = {"1": false, "2": true}
+        compare(manager.isHistorySeriesVisible("1"), false)
+        compare(manager.isHistorySeriesVisible("2"), true)
+        compare(manager.isHistorySeriesVisible("6"), true)
+        compare(manager.isHistorySeriesVisible("3"), false)
+        manager.setHistorySeriesVisible("6", false)
+        compare(manager.isHistorySeriesVisible("6"), false)
+        compare(manager.historyColumnVisibility["2"], true)
+    }
+
+    function test_hidden_history_average_stays_hidden_after_restart() {
+        const before = Qt.createQmlObject(
+            'import "../../../src/ui/qml/graph"; VisualSettingsManager {}',
+            testCase, "historyBeforeRestartManager")
+        before.setHistorySeriesVisible("6", false)
+        before.destroy()
+        wait(50)
+        const after = Qt.createQmlObject(
+            'import "../../../src/ui/qml/graph"; VisualSettingsManager {}',
+            testCase, "historyRestartManager")
+        wait(50)
+        compare(after.isHistorySeriesVisible("6"), false)
+        after.destroy()
+    }
+
     function test_hidden_series_stays_hidden_after_restart() {
         // Simulated app restart: a fresh instance reading back whatever the previous
         // instance persisted, rather than reusing the shared `manager` from above.

@@ -12,13 +12,21 @@ Frame {
     property var settingsVm: null
 
     signal moreGraphSettingsRequested(string graphKey)
+    signal seriesVisibilityRequested(string seriesId, bool shown)
     readonly property var plottable: [
         CompletionHistoryViewModel.Score,
         CompletionHistoryViewModel.Accuracy,
         CompletionHistoryViewModel.Shots,
         CompletionHistoryViewModel.Hits,
-        CompletionHistoryViewModel.Misses
+        CompletionHistoryViewModel.Misses,
+        CompletionHistoryViewModel.ScoreAverage
     ]
+
+    // Mirrors VisualSettingsManager.isHistorySeriesVisible: maps saved before the average existed lack "6".
+    function isHistorySeriesVisible(id) {
+        const values = root.columnVisibility
+        return Object.prototype.hasOwnProperty.call(values, id) ? !!values[id] : id === "6"
+    }
     function seriesForColumn(column) {
         const series = root.historyVm.allSeries
         for (let i = 0; i < series.length; ++i) {
@@ -28,7 +36,7 @@ Frame {
     }
     readonly property var visibleColumns: root.plottable.filter(column => {
         const s = root.seriesForColumn(column)
-        return s && !!root.columnVisibility[s.id]
+        return s && root.isHistorySeriesVisible(s.id)
     })
 
     // History exists but the range shows none of it.
@@ -58,8 +66,39 @@ Frame {
         radius: 12
     }
 
+    ControlPanel {
+        id: legend
+
+        objectName: "historyLineToggles"
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: implicitWidth
+        showConfigureButton: false
+        graphVm: legendModel
+        visualSettings: legendVisibility
+    }
+
+    QtObject {
+        id: legendModel
+
+        readonly property var allSeries: root.historyVm.allSeries
+        readonly property var enabledSeriesIds: root.historyVm.allSeries.map(series => series.id)
+    }
+
+    QtObject {
+        id: legendVisibility
+
+        function isSeriesVisible(id) { return root.isHistorySeriesVisible(id) }
+        function setSeriesVisible(id, shown) { root.seriesVisibilityRequested(id, shown) }
+    }
+
     ColumnLayout {
-        anchors.fill: parent
+        anchors.left: legend.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 4
         spacing: 4
 
         RowLayout {

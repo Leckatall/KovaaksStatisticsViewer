@@ -52,6 +52,7 @@ namespace ksv::presentation {
             {"Shots", "shots", CountAxis},
             {"Hits", "hits", CountAxis},
             {"Misses", "misses", CountAxis},
+            {"Score average (10 runs)", "scoreAverage", ScoreAxis},
         }};
 
     }
@@ -95,7 +96,7 @@ namespace ksv::presentation {
         QList<SeriesModel *> result;
         result.reserve(columns.size());
         std::array<std::vector<int>, YAxisCount> membersByAxis;
-        // Plottable column order (Score, Accuracy, Shots, Hits, Misses), whatever order was asked for.
+        // Plottable column order (Score, Accuracy, Shots, Hits, Misses, ScoreAverage), whatever order was asked for.
         for (int column = Score; column < ColumnCount; ++column) {
             if (!columns.contains(column)) continue;
             result.append(m_series[column - Score]);
@@ -134,6 +135,7 @@ namespace ksv::presentation {
             m_points[Shots].append(QPointF(x, row.shots));
             m_points[Hits].append(QPointF(x, row.hits));
             m_points[Misses].append(QPointF(x, row.misses));
+            m_points[ScoreAverage].append(QPointF(x, row.score_average));
         }
         for (int column = Score; column < ColumnCount; ++column) {
             SeriesModel *series = m_series[column - Score];

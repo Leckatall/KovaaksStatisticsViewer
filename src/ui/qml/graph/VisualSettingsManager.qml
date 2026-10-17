@@ -39,8 +39,20 @@ Item {
     Settings {
         id: historySettings
         category: "historyGraph"
-        property var columnVisibility: ({"1": true, "2": false, "3": false, "4": false, "5": false})
+        property var columnVisibility: ({"1": true, "2": false, "3": false, "4": false, "5": false, "6": true})
         property string yAxisColumnKey: "1"
+    }
+
+    // Maps saved before the average existed have no "6" entry; it defaults to shown.
+    function isHistorySeriesVisible(id) {
+        const values = root.historyColumnVisibility
+        return Object.prototype.hasOwnProperty.call(values, id) ? !!values[id] : id === "6"
+    }
+
+    function setHistorySeriesVisible(id, shown) {
+        const next = Object.assign({}, root.historyColumnVisibility)
+        next[id] = shown
+        root.historyColumnVisibility = next
     }
 
     property alias visibleSeriesIds: visibilitySettings.visibleSeriesIds

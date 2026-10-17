@@ -101,14 +101,15 @@ TestCase {
                 "latest runs exists for scenario history only")
     }
 
-    function test_scenarioHistoryOffersLatestRunsFiveSeriesAndThreeAxesButNoWindow() {
+    function test_scenarioHistoryOffersLatestRunsSixSeriesAndThreeAxesButNoWindow() {
         const {dialog} = openOn("scenarioHistory")
 
         verify(!shown(dialog, "graphField_dataRange_averagingWindow"))
         const range = find(dialog, "graphField_dataRange_range")
         compare(range.entries.map(entry => entry.kind), ["allHistory", "recentDays", "latestRuns", "customDates"])
         compare(range.entries[0].text, "All runs")
-        compare(names(dialog, "graphSeriesRow_").length, 5)
+        compare(names(dialog, "graphSeriesRow_").length, 6)
+        compare(find(dialog, "graphSeriesName_scoreAverage").text, "Score average (10 runs)")
         compare(names(dialog, "graphAxis_"), ["graphAxis_accuracy", "graphAxis_counts", "graphAxis_score"])
     }
 

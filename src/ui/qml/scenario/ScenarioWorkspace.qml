@@ -77,6 +77,8 @@ Item {
                 columnVisibility: root.visualSettings.historyColumnVisibility
                 historyAxisSettings: root.visualSettings
                 settingsVm: root.settingsVm
+                onSeriesVisibilityRequested: (seriesId, shown) =>
+                    root.visualSettings.setHistorySeriesVisible(seriesId, shown)
                 onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
             }
             PlaytimeGraphPanel {

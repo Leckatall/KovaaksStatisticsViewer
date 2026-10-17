@@ -50,7 +50,7 @@ const groupNames = {
 const groupOrder = ["dataRange", "axes", "seriesStyle", "graphLines"]
 
 const seriesNames = {
-    scenarioHistory: {score: "Score", accuracy: "Accuracy", shots: "Shots", hits: "Hits", misses: "Misses"},
+    scenarioHistory: {score: "Score", accuracy: "Accuracy", shots: "Shots", hits: "Hits", misses: "Misses", scoreAverage: "Score average (10 runs)"},
     dailyPlaytime: {playtime: "Playtime"},
     benchmarkPlaytime: {playtime: "Playtime"},
     benchmarkRank: {rank: "Personal-best average rank"}
