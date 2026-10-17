@@ -1,6 +1,8 @@
 ---
 status: accepted
 date: 2026-09-10
+supersedes:
+  - '0003'
 ---
 
 # 0005: Own accepted benchmarks in a data service, editing in presentation, and profile reconciliation in the application layer

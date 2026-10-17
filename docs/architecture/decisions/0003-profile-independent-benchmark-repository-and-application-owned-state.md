@@ -1,6 +1,7 @@
 ---
-status: Superseded by ADR 0005
+status: superseded
 date: 2026-09-07
+superseded-by: '0005'
 ---
 
 # 0003: Keep the benchmark repository profile-independent and own accepted state and the draft in the application layer
