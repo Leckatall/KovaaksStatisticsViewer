@@ -27,6 +27,7 @@ qt_add_qml_module(ksv_ui
             qml/benchmark/BenchmarkIncompleteBody.qml
             qml/benchmark/BenchmarkTrackableBody.qml
             qml/benchmark/BenchmarkStatusSummary.qml
+            qml/benchmark/BenchmarkPicker.qml
             qml/benchmark/BenchmarkHistoryCard.qml
             qml/graph/ChartTitle.qml
             qml/graph/GraphGear.qml
