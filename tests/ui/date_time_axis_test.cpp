@@ -63,15 +63,55 @@ namespace {
                                                utcMs(QDate(2026, 8, 7)), utcMs(QDate(2026, 8, 8))}));
     }
 
-    TEST(DateTimeAxisTest, DateTimeAxisRoundsLongRangesToMonthBoundaries) {
+    TEST(DateTimeAxisTest, LongRangesKeepExactDataBoundsWithCalendarAlignedTicks) {
         DateTimeAxis axis;
         axis.setRange(utc(2026, 1, 15), utc(2026, 12, 20));
 
-        EXPECT_EQ(axis.min(), utcMs(QDate(2026, 1, 1)));
-        EXPECT_EQ(axis.max(), utcMs(QDate(2027, 1, 1)));
+        EXPECT_EQ(axis.min(), utcMs(QDate(2026, 1, 15)));
+        EXPECT_EQ(axis.max(), utcMs(QDate(2026, 12, 20)));
+        ASSERT_FALSE(axis.ticks().isEmpty());
         for (const qreal tick: axis.ticks()) {
+            EXPECT_GE(tick, axis.min());
+            EXPECT_LE(tick, axis.max());
             EXPECT_EQ(QDateTime::fromMSecsSinceEpoch(qint64(tick), QTimeZone::utc()).date().day(), 1);
         }
+    }
+
+    TEST(DateTimeAxisTest, UnalignedIntradayBoundsKeepOnlyInteriorTicksAndAnchorTheirDate) {
+        DateTimeAxis axis({.targetTicks = 4, .timeZone = QTimeZone::utc()});
+        axis.setRange(utc(2026, 8, 3, 9, 2), utc(2026, 8, 3, 9, 12));
+
+        EXPECT_EQ(axis.min(), utcMs(QDate(2026, 8, 3), QTime(9, 2)));
+        EXPECT_EQ(axis.max(), utcMs(QDate(2026, 8, 3), QTime(9, 12)));
+        EXPECT_EQ(axis.ticks(), (QList<qreal>{utcMs(QDate(2026, 8, 3), QTime(9, 5)),
+                                               utcMs(QDate(2026, 8, 3), QTime(9, 10))}));
+        ASSERT_FALSE(axis.ticks().isEmpty());
+        EXPECT_EQ(axis.formatTick(axis.ticks().front()), "Aug 3 09:05");
+    }
+
+    TEST(DateTimeAxisTest, SubMinuteRangesKeepExactBoundsAndOneReadableTick) {
+        DateTimeAxis axis;
+        const auto lo = utc(2026, 8, 3, 9, 2).addMSecs(10'125);
+        const auto hi = lo.addMSecs(20'250);
+        axis.setRange(lo, hi);
+
+        EXPECT_EQ(axis.min(), lo.toMSecsSinceEpoch());
+        EXPECT_EQ(axis.max(), hi.toMSecsSinceEpoch());
+        ASSERT_EQ(axis.ticks().size(), 1);
+        EXPECT_GE(axis.ticks().front(), axis.min());
+        EXPECT_LE(axis.ticks().front(), axis.max());
+        EXPECT_FALSE(axis.formatTick(axis.ticks().front()).isEmpty());
+    }
+
+    TEST(DateTimeAxisTest, WholeDayRangesWithoutMidnightKeepAnInteriorFallbackTick) {
+        DateTimeAxis axis({.wholeDays = true});
+        axis.setRange(utc(2026, 8, 3, 9), utc(2026, 8, 3, 15));
+
+        EXPECT_EQ(axis.min(), utcMs(QDate(2026, 8, 3), QTime(9, 0)));
+        EXPECT_EQ(axis.max(), utcMs(QDate(2026, 8, 3), QTime(15, 0)));
+        ASSERT_EQ(axis.ticks().size(), 1);
+        EXPECT_GE(axis.ticks().front(), axis.min());
+        EXPECT_LE(axis.ticks().front(), axis.max());
     }
 
     TEST(DateTimeAxisTest, DateTimeAxisExpandsASingleInstantAroundItsDate) {
@@ -85,9 +125,11 @@ namespace {
     TEST(DateTimeAxisTest, ReversedEndpointsAreNormalized) {
         DateTimeAxis forward;
         DateTimeAxis reversed;
-        forward.setRange(utc(2026, 8, 3), utc(2026, 8, 8));
-        reversed.setRange(utc(2026, 8, 8), utc(2026, 8, 3));
+        forward.setRange(utc(2026, 8, 3, 9, 2), utc(2026, 8, 8, 17, 12));
+        reversed.setRange(utc(2026, 8, 8, 17, 12), utc(2026, 8, 3, 9, 2));
 
+        EXPECT_EQ(reversed.min(), utcMs(QDate(2026, 8, 3), QTime(9, 2)));
+        EXPECT_EQ(reversed.max(), utcMs(QDate(2026, 8, 8), QTime(17, 12)));
         EXPECT_EQ(forward.min(), reversed.min());
         EXPECT_EQ(forward.max(), reversed.max());
         EXPECT_EQ(forward.ticks(), reversed.ticks());

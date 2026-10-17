@@ -154,23 +154,23 @@ namespace ksv::presentation {
 
         const CalendarInterval interval = calendarIntervalFor(lo.msecsTo(hi), m_options.targetTicks,
                                                               m_options.wholeDays);
-        const QDateTime min = floorDateTime(lo, interval, zone);
-        QDateTime max = floorDateTime(hi, interval, zone);
-        if (max < hi) max = advanceDateTime(max, interval);
+        QDateTime firstTick = floorDateTime(lo, interval, zone);
+        if (firstTick < lo) firstTick = advanceDateTime(firstTick, interval);
 
         QList<qreal> ticks;
-        for (QDateTime tick = min; tick <= max; tick = advanceDateTime(tick, interval))
+        for (QDateTime tick = firstTick; tick <= hi; tick = advanceDateTime(tick, interval))
             ticks.append(static_cast<qreal>(tick.toMSecsSinceEpoch()));
+        if (ticks.isEmpty()) ticks.append(static_cast<qreal>(lo.toMSecsSinceEpoch()));
 
         ValueTransform transform;
         const CalendarUnit unit = interval.unit;
-        const qint64 firstTickMs = min.toMSecsSinceEpoch();
+        const qint64 firstTickMs = qint64(ticks.front());
         transform.formatter = [unit, zone, firstTickMs](const qreal value) {
             return formatForInterval(unit, value, zone, firstTickMs);
         };
 
-        return replaceResolvedState(static_cast<qreal>(min.toMSecsSinceEpoch()),
-                                    static_cast<qreal>(max.toMSecsSinceEpoch()), std::move(ticks),
+        return replaceResolvedState(static_cast<qreal>(lo.toMSecsSinceEpoch()),
+                                    static_cast<qreal>(hi.toMSecsSinceEpoch()), std::move(ticks),
                                     std::move(transform));
     }
 

@@ -145,6 +145,19 @@ namespace {
         EXPECT_DOUBLE_EQ(view_model.xAxis().max(), epochDayMs(19504));
     }
 
+    TEST_F(PlaytimeGraphViewModelTest, LongSampleRangesDoNotPadTheDateTimeAxis) {
+        fake->series = {{19500, 600.0}, {19800, 600.0}};
+
+        fake->publish();
+
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), epochDayMs(19500));
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), epochDayMs(19800));
+        for (const auto tick: view_model.xAxis().ticks()) {
+            EXPECT_GE(tick, epochDayMs(19500));
+            EXPECT_LE(tick, epochDayMs(19800));
+        }
+    }
+
     TEST_F(PlaytimeGraphViewModelTest, StartsEmpty) {
         const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
         ASSERT_FALSE(series.isEmpty());
