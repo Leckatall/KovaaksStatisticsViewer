@@ -58,6 +58,7 @@ namespace ksv::presentation {
                 QVariantMap map;
                 QString nameKey;
                 QString filename;
+                std::optional<std::size_t> recency;
             };
             std::vector<Row> loaded;
             std::vector<Row> problems;
@@ -70,7 +71,7 @@ namespace ksv::presentation {
                 const QString displayName = q(choice.displayName);
                 if (isLoadedClassification(choice.classification)) {
                     map[QStringLiteral("name")] = displayName;
-                    loaded.push_back({map, displayName, q(choice.filename)});
+                    loaded.push_back({map, displayName, q(choice.filename), choice.recency});
                 } else {
                     const QString shown = displayName.isEmpty() ? q(choice.filename) : displayName;
                     map[QStringLiteral("name")] = shown;
@@ -82,6 +83,8 @@ namespace ksv::presentation {
             collator.setCaseSensitivity(Qt::CaseInsensitive);
             collator.setNumericMode(false);
             std::sort(loaded.begin(), loaded.end(), [&](const Row &a, const Row &b) {
+                if (a.recency.has_value() != b.recency.has_value()) return a.recency.has_value();
+                if (a.recency && *a.recency != *b.recency) return *a.recency < *b.recency;
                 const int byName = collator.compare(a.nameKey, b.nameKey);
                 if (byName != 0) return byName < 0;
                 return a.filename < b.filename;

@@ -10,7 +10,9 @@
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
+#include <cstddef>
 #include <memory>
+#include <vector>
 
 #include "presentation/benchmark_tracking_vm.h"
 #include "presentation/benchmark_history_vm.h"
@@ -85,6 +87,39 @@ TEST(BenchmarkTrackingViewModel, SelectorOrdersLoadedEntriesFirstThenProblemsWit
     EXPECT_EQ(entries.at(1).toMap().value("classification").toString(), "trackable");
     EXPECT_EQ(entries.at(3).toMap().value("classification").toString(), "unsupported");
     EXPECT_EQ(entries.at(4).toMap().value("classification").toString(), "invalid");
+}
+
+TEST(BenchmarkTrackingViewModel, SelectorOrdersRecentLoadedEntriesFirstThenAlphabeticalThenProblems) {
+    const auto withRecency = [](BenchmarkChoice choice, const std::size_t recency) {
+        choice.recency = recency;
+        return choice;
+    };
+    BenchmarkWorkspaceSnapshot snapshot;
+    snapshot.availability = BenchmarkTrackingState::NoSelection;
+    snapshot.choices = {
+        withRecency(vtChoice("m_banana.json", std::string{"b"}, "banana",
+                             BenchmarkChoiceClassification::Trackable, true), 1),
+        vtChoice("a_apple.json", std::string{"a1"}, "Apple",
+                 BenchmarkChoiceClassification::Incomplete, true),
+        vtChoice("z_apple.json", std::string{"a2"}, "apple",
+                 BenchmarkChoiceClassification::Trackable, true),
+        withRecency(vtChoice("d_cherry.json", std::string{"c"}, "Cherry",
+                             BenchmarkChoiceClassification::Trackable, true), 0),
+        withRecency(vtChoice("a_problem.json", std::nullopt, "",
+                             BenchmarkChoiceClassification::Invalid, false), 0),
+        vtChoice("c_bad.json", std::nullopt, "", BenchmarkChoiceClassification::Unsupported, false),
+    };
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto entries = vm.selectorEntries();
+    ASSERT_EQ(entries.size(), 6);
+    // Recency ascending leads; unrecorded loaded entries follow alphabetically; problems come last by
+    // filename even when they carry a recency.
+    std::vector<QString> filenames;
+    for (const auto &entry: entries) filenames.push_back(entry.toMap().value("filename").toString());
+    EXPECT_EQ(filenames, (std::vector<QString>{
+        "d_cherry.json", "m_banana.json", "a_apple.json", "z_apple.json", "a_problem.json", "c_bad.json"}));
 }
 
 TEST(BenchmarkTrackingViewModel, EmptyLibraryStateExposesInstallGuidance) {
