@@ -4,6 +4,23 @@
 #include <utility>
 
 namespace ksv::application {
+    namespace {
+        PlaytimeSeries includeInactiveDays(const PlaytimeSeries &samples) {
+            if (samples.empty()) return {};
+
+            PlaytimeSeries daily;
+            daily.reserve(static_cast<std::size_t>((samples.back().first - samples.front().first).count()) + 1);
+            auto nextDay = samples.front().first;
+            for (const auto &[day, seconds]: samples) {
+                for (; nextDay < day; nextDay += std::chrono::days{1})
+                    daily.emplace_back(nextDay, 0.0);
+                daily.emplace_back(day, seconds);
+                nextDay = day + std::chrono::days{1};
+            }
+            return daily;
+        }
+    }
+
     PlaytimeGraphUseCase::PlaytimeGraphUseCase(std::shared_ptr<IProfileService> profileService,
                                                std::shared_ptr<IGraphConfigurationUseCase> configuration,
                                                std::shared_ptr<data::IDaySource> daySource)
@@ -31,7 +48,7 @@ namespace ksv::application {
         const auto &preferences = committed.configuration->preferences(GraphKey::DailyPlaytime);
         const int window = effectiveAveragingWindow(preferences);
         if (m_fullWindowDays != window) {
-            m_full = m_profileService->getRollingTimeAverage(window);
+            m_full = includeInactiveDays(m_profileService->getRollingTimeAverage(window));
             m_fullWindowDays = window;
         }
         if (!m_anchorValid) {

@@ -91,13 +91,34 @@ namespace {
         EXPECT_EQ(snapshot.view.windowDays, 7);
     }
 
-    TEST_F(PlaytimeGraphUseCaseTest, OneDayWindowYieldsTheDailyTotalsOfDaysWithRuns) {
+    TEST_F(PlaytimeGraphUseCaseTest, OneDayWindowIncludesZeroTotalsForDaysWithoutRuns) {
         useRealAccounting({{100, 60.0F}, {101, 30.0F}, {104, 90.0F}});
         preferences().averagingWindowDays = 1;
 
         const auto snapshot = use_case.snapshot();
 
-        EXPECT_EQ(snapshot.samples, (PlaytimeSeries{{day(100), 60.0}, {day(101), 30.0}, {day(104), 90.0}}));
+        EXPECT_EQ(snapshot.samples, (PlaytimeSeries{{day(100), 60.0}, {day(101), 30.0},
+                                                   {day(102), 0.0}, {day(103), 0.0}, {day(104), 90.0}}));
+    }
+
+    TEST_F(PlaytimeGraphUseCaseTest, RollingWindowIncludesZeroDaysAfterEarlierPlaytimeLeavesTheWindow) {
+        useRealAccounting({{100, 60.0F}, {106, 90.0F}});
+
+        const auto snapshot = use_case.snapshot();
+
+        EXPECT_EQ(snapshot.samples, (PlaytimeSeries{{day(100), 60.0}, {day(101), 30.0}, {day(102), 20.0},
+                                                   {day(103), 0.0}, {day(104), 0.0}, {day(105), 0.0},
+                                                   {day(106), 30.0}}));
+    }
+
+    TEST_F(PlaytimeGraphUseCaseTest, CustomRangeRetainsZeroDaysWithinTheHistoryGap) {
+        useRealAccounting({{100, 60.0F}, {106, 90.0F}});
+        preferences().range = RangePreference{CustomDates{day(102), day(105)}, false};
+
+        const auto snapshot = use_case.snapshot();
+
+        EXPECT_EQ(snapshot.samples, (PlaytimeSeries{{day(102), 20.0}, {day(103), 0.0},
+                                                   {day(104), 0.0}, {day(105), 0.0}}));
     }
 
     TEST_F(PlaytimeGraphUseCaseTest, ARecentRangeShowsOnlyItsDaysAndKeepsTheirFullHistoryValues) {
