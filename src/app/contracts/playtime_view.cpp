@@ -11,6 +11,21 @@ namespace ksv::application {
         return preferences.range.value_or(RangePreference{});
     }
 
+    PlaytimeSeries includeInactiveDays(const std::span<const std::pair<std::chrono::sys_days, double> > samples) {
+        if (samples.empty()) return {};
+
+        PlaytimeSeries daily;
+        daily.reserve(static_cast<std::size_t>((samples.back().first - samples.front().first).count()) + 1);
+        auto nextDay = samples.front().first;
+        for (const auto &[day, seconds]: samples) {
+            for (; nextDay < day; nextDay += std::chrono::days{1})
+                daily.emplace_back(nextDay, 0.0);
+            daily.emplace_back(day, seconds);
+            nextDay = day + std::chrono::days{1};
+        }
+        return daily;
+    }
+
     PlaytimeSeries visiblePlaytime(const std::span<const std::pair<std::chrono::sys_days, double> > full,
                                    const RangeProjection &projection) {
         if (std::holds_alternative<NoRelevantHistory>(projection)) return {};

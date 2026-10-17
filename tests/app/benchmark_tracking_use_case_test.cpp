@@ -982,14 +982,40 @@ TEST(BenchmarkTrackingPlaytime, RequestsTheCommittedWindowAndReportsIt) {
     EXPECT_EQ(fixture.tracking->snapshot().playtime.windowDays, 7);
 }
 
-TEST(BenchmarkTrackingPlaytime, OneDayWindowYieldsTheDailyTotals) {
+TEST(BenchmarkTrackingPlaytime, OneDayWindowIncludesZeroTotalsForDaysWithoutRuns) {
     PlaytimeFixture fixture;
     useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}});
     fixture.playtimePreferences().averagingWindowDays = 1;
     fixture.start();
 
     EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime,
-              (Series{{epochDay(100), 60.0}, {epochDay(101), 30.0}, {epochDay(104), 90.0}}));
+              (Series{{epochDay(100), 60.0}, {epochDay(101), 30.0}, {epochDay(102), 0.0},
+                      {epochDay(103), 0.0}, {epochDay(104), 90.0}}));
+}
+
+TEST(BenchmarkTrackingPlaytime, RollingWindowIncludesZeroDaysAfterEarlierPlaytimeLeavesTheWindow) {
+    PlaytimeFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {106, 90.0F}});
+    fixture.start();
+
+    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime,
+              (Series{{epochDay(100), 60.0}, {epochDay(101), 30.0}, {epochDay(102), 20.0},
+                      {epochDay(103), 0.0}, {epochDay(104), 0.0}, {epochDay(105), 0.0},
+                      {epochDay(106), 30.0}}));
+}
+
+TEST(BenchmarkTrackingPlaytime, CustomRangeRetainsZeroDaysWithinTheHistoryGap) {
+    PlaytimeFixture fixture;
+    useRealAccounting(fixture, {{100, 60.0F}, {106, 90.0F}});
+    fixture.start();
+    const auto before = *fixture.tracking->projection();
+    fixture.playtimePreferences().range = RangePreference{CustomDates{epochDay(102), epochDay(105)}, false};
+    fixture.commitPlaytime();
+
+    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime,
+              (Series{{epochDay(102), 20.0}, {epochDay(103), 0.0},
+                      {epochDay(104), 0.0}, {epochDay(105), 0.0}}));
+    expectSameSummary(before, *fixture.tracking->projection());
 }
 
 TEST(BenchmarkTrackingPlaytime, ChangingTheWindowRecalculatesOnlyPlaytimeAndNeverTheSummaries) {

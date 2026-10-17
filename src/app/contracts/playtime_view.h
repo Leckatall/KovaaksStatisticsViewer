@@ -29,6 +29,8 @@ namespace ksv::application {
 
     [[nodiscard]] RangePreference effectiveRange(const GraphPreferences &preferences);
 
+    [[nodiscard]] PlaytimeSeries includeInactiveDays(std::span<const std::pair<std::chrono::sys_days, double> > samples);
+
     /**
      * @brief Samples a projection shows, with their full-history values untouched.
      * @param full Sorted by day.

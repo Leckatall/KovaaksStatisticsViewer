@@ -215,7 +215,8 @@ namespace ksv::application {
         const auto &preferences = committed.configuration->preferences(GraphKey::BenchmarkPlaytime);
         const int window = effectiveAveragingWindow(preferences);
         if (evaluation.fullPlaytimeWindowDays != window) {
-            evaluation.fullPlaytime = m_profileService->getRollingTimeAverage(evaluation.scenarios, window);
+            evaluation.fullPlaytime = includeInactiveDays(
+                m_profileService->getRollingTimeAverage(evaluation.scenarios, window));
             evaluation.fullPlaytimeWindowDays = window;
         }
         const auto projection = resolveRange(effectiveRange(preferences), m_daySource->today(),
