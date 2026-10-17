@@ -12,6 +12,7 @@
 #include "data/benchmarks_service.h"
 #include "usecases/benchmark_resolution_use_case.h"
 #include "usecases/benchmark_tracking_use_case.h"
+#include "usecases/recent_benchmarks.h"
 
 using namespace ksv;
 using namespace ksv::application;
@@ -640,6 +641,7 @@ namespace {
         std::shared_ptr<FakeDaySource> days = std::make_shared<FakeDaySource>();
         std::shared_ptr<BenchmarksService> benchmarks;
         std::shared_ptr<BenchmarkResolutionUseCase> resolution;
+        std::shared_ptr<RecentBenchmarks> recent;
         std::unique_ptr<BenchmarkTrackingUseCase> tracking;
 
         void build(const std::vector<std::string> &ids) {
@@ -648,10 +650,19 @@ namespace {
             repo->nextScan = {snapshot, std::nullopt};
             benchmarks = std::make_shared<BenchmarksService>(repo);
             resolution = std::make_shared<BenchmarkResolutionUseCase>(benchmarks, profile);
+            recent = std::make_shared<RecentBenchmarks>(settings);
             tracking = std::make_unique<BenchmarkTrackingUseCase>(benchmarks, resolution, profile, configuration, days,
-                                                                  settings);
+                                                                  recent);
+        }
+
+        std::optional<std::size_t> recencyOf(const std::string &id) const {
+            for (const auto &choice: tracking->snapshot().choices)
+                if (choice.id && choice.id->value == id) return choice.recency;
+            return std::nullopt;
         }
     };
+
+    using Ids = std::vector<std::string>;
 }
 
 TEST(BenchmarkTrackingDefaultSelection, NothingIsSelectedUntilAskedEvenWithASingleBenchmark) {
@@ -695,9 +706,10 @@ TEST(BenchmarkTrackingDefaultSelection, IgnoresProblemFilesWhenCountingTheOnlyBe
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.benchmarks = std::make_shared<BenchmarksService>(fixture.repo);
     fixture.resolution = std::make_shared<BenchmarkResolutionUseCase>(fixture.benchmarks, fixture.profile);
+    fixture.recent = std::make_shared<RecentBenchmarks>(fixture.settings);
     fixture.tracking = std::make_unique<BenchmarkTrackingUseCase>(fixture.benchmarks, fixture.resolution,
                                                                   fixture.profile, fixture.configuration,
-                                                                  fixture.days, fixture.settings);
+                                                                  fixture.days, fixture.recent);
 
     fixture.tracking->selectDefault();
 
@@ -707,7 +719,7 @@ TEST(BenchmarkTrackingDefaultSelection, IgnoresProblemFilesWhenCountingTheOnlyBe
 
 TEST(BenchmarkTrackingDefaultSelection, RestoresTheRememberedBenchmarkAmongSeveral) {
     RememberingFixture fixture;
-    fixture.settings->lastSelectedBenchmarkId = "b2";
+    fixture.settings->recentBenchmarkIds = {"b2"};
     fixture.build({"b1", "b2", "b3"});
 
     fixture.tracking->selectDefault();
@@ -719,7 +731,7 @@ TEST(BenchmarkTrackingDefaultSelection, RestoresTheRememberedBenchmarkAmongSever
 
 TEST(BenchmarkTrackingDefaultSelection, FallsBackToTheOnlyBenchmarkWhenTheRememberedOneIsGone) {
     RememberingFixture fixture;
-    fixture.settings->lastSelectedBenchmarkId = "deleted";
+    fixture.settings->recentBenchmarkIds = {"deleted"};
     fixture.build({"only"});
 
     fixture.tracking->selectDefault();
@@ -730,7 +742,7 @@ TEST(BenchmarkTrackingDefaultSelection, FallsBackToTheOnlyBenchmarkWhenTheRememb
 
 TEST(BenchmarkTrackingDefaultSelection, RememberedButMissingAmongSeveralSelectsNothing) {
     RememberingFixture fixture;
-    fixture.settings->lastSelectedBenchmarkId = "deleted";
+    fixture.settings->recentBenchmarkIds = {"deleted"};
     fixture.build({"b1", "b2"});
 
     fixture.tracking->selectDefault();
@@ -740,7 +752,7 @@ TEST(BenchmarkTrackingDefaultSelection, RememberedButMissingAmongSeveralSelectsN
 
 TEST(BenchmarkTrackingDefaultSelection, NeverReplacesAnExistingSelection) {
     RememberingFixture fixture;
-    fixture.settings->lastSelectedBenchmarkId = "b1";
+    fixture.settings->recentBenchmarkIds = {"b1"};
     fixture.build({"b1", "b2"});
     fixture.tracking->select(BenchmarkId{"b2"});
     int notifications = 0;
@@ -752,15 +764,113 @@ TEST(BenchmarkTrackingDefaultSelection, NeverReplacesAnExistingSelection) {
     EXPECT_EQ(notifications, 0);
 }
 
-TEST(BenchmarkTrackingDefaultSelection, ExplicitChoicesAreRememberedAndClearingForgetsThem) {
+TEST(BenchmarkTrackingDefaultSelection, SkipsAFrontIdThatIsNoLongerSelectableAndTakesTheNext) {
     RememberingFixture fixture;
+    fixture.settings->recentBenchmarkIds = {"deleted", "b3", "b1"};
+    fixture.build({"b1", "b2", "b3"});
+
+    fixture.tracking->selectDefault();
+
+    ASSERT_TRUE(fixture.tracking->selected());
+    EXPECT_EQ(fixture.tracking->selected()->value, "b3");
+}
+
+TEST(BenchmarkTrackingDefaultSelection, SkipsARecentIdThatNamesAProblemFile) {
+    RememberingFixture fixture;
+    fixture.settings->recentBenchmarkIds = {"bad", "b1"};
+    BenchmarkLibrarySnapshot snapshot;
+    snapshot.entries.push_back(fileFor(benchmark("b1"), "b1.json"));
+    snapshot.entries.push_back(fileFor(benchmark("b2"), "b2.json"));
+    snapshot.entries.push_back({"broken.json", "digest",
+                                ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, BenchmarkId{"bad"}, {}}});
+    fixture.repo->nextScan = {snapshot, std::nullopt};
+    fixture.benchmarks = std::make_shared<BenchmarksService>(fixture.repo);
+    fixture.resolution = std::make_shared<BenchmarkResolutionUseCase>(fixture.benchmarks, fixture.profile);
+    fixture.recent = std::make_shared<RecentBenchmarks>(fixture.settings);
+    fixture.tracking = std::make_unique<BenchmarkTrackingUseCase>(fixture.benchmarks, fixture.resolution,
+                                                                  fixture.profile, fixture.configuration,
+                                                                  fixture.days, fixture.recent);
+
+    fixture.tracking->selectDefault();
+
+    ASSERT_TRUE(fixture.tracking->selected());
+    EXPECT_EQ(fixture.tracking->selected()->value, "b1");
+}
+
+TEST(BenchmarkTrackingRecent, SelectMovesItsIdToTheFrontAndNotifiesExactlyOnce) {
+    RememberingFixture fixture;
+    fixture.settings->recentBenchmarkIds = {"b1", "b2"};
+    fixture.build({"b1", "b2", "b3"});
+    int notifications = 0;
+    fixture.tracking->onChanged([&] { ++notifications; });
+
+    fixture.tracking->select(BenchmarkId{"b3"});
+
+    EXPECT_EQ(notifications, 1);
+    EXPECT_EQ(fixture.settings->recentBenchmarkIds, (Ids{"b3", "b1", "b2"}));
+    EXPECT_EQ(fixture.recencyOf("b3"), 0U);
+    EXPECT_EQ(fixture.recencyOf("b1"), 1U);
+    EXPECT_EQ(fixture.recencyOf("b2"), 2U);
+}
+
+TEST(BenchmarkTrackingRecent, SelectingAnAlreadyFrontIdNotifiesOnce) {
+    RememberingFixture fixture;
+    fixture.settings->recentBenchmarkIds = {"b2", "b1"};
     fixture.build({"b1", "b2"});
+    int notifications = 0;
+    fixture.tracking->onChanged([&] { ++notifications; });
 
     fixture.tracking->select(BenchmarkId{"b2"});
-    EXPECT_EQ(fixture.settings->lastSelectedBenchmarkId, "b2");
+
+    EXPECT_EQ(notifications, 1);
+    EXPECT_EQ(fixture.settings->recentBenchmarkIds, (Ids{"b2", "b1"}));
+}
+
+TEST(BenchmarkTrackingRecent, ClearSelectionLeavesTheListUnchanged) {
+    RememberingFixture fixture;
+    fixture.build({"b1", "b2"});
+    fixture.tracking->select(BenchmarkId{"b2"});
+    const int writes = fixture.settings->recentBenchmarkIdsWrites;
 
     fixture.tracking->clearSelection();
-    EXPECT_TRUE(fixture.settings->lastSelectedBenchmarkId.empty());
+
+    EXPECT_EQ(fixture.settings->recentBenchmarkIds, (Ids{"b2"}));
+    EXPECT_EQ(fixture.settings->recentBenchmarkIdsWrites, writes);
+    EXPECT_EQ(fixture.recencyOf("b2"), 0U);
+}
+
+TEST(BenchmarkTrackingRecent, ChoicesCarryTheirIndexInTheListOrNothing) {
+    RememberingFixture fixture;
+    fixture.settings->recentBenchmarkIds = {"gone", "b3", "b1"};
+    fixture.build({"b1", "b2", "b3"});
+
+    EXPECT_EQ(fixture.recencyOf("b3"), 1U);
+    EXPECT_EQ(fixture.recencyOf("b1"), 2U);
+    EXPECT_EQ(fixture.recencyOf("b2"), std::nullopt);
+}
+
+TEST(BenchmarkTrackingRecent, ACreateMadeElsewhereReordersTheChoicesAndNotifiesOnce) {
+    RememberingFixture fixture;
+    fixture.settings->recentBenchmarkIds = {"b1"};
+    fixture.build({"b1", "b2"});
+    int notifications = 0;
+    fixture.tracking->onChanged([&] { ++notifications; });
+
+    fixture.recent->markCreated("b2");
+
+    EXPECT_EQ(notifications, 1);
+    EXPECT_EQ(fixture.recencyOf("b1"), 0U);
+    EXPECT_EQ(fixture.recencyOf("b2"), 1U);
+}
+
+TEST(BenchmarkTrackingRecent, WithoutAListChoicesHaveNoRecency) {
+    Fixture fixture;
+    fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
+    fixture.build();
+    fixture.tracking->select(BenchmarkId{"b1"});
+
+    ASSERT_EQ(fixture.tracking->snapshot().choices.size(), 1U);
+    EXPECT_FALSE(fixture.tracking->snapshot().choices.front().recency);
 }
 
 // The restart round trip: a choice made in one session is what the next session restores.

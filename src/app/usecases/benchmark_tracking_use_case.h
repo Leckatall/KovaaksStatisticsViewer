@@ -14,22 +14,22 @@
 #include "contracts/i_benchmark_resolution_use_case.h"
 #include "contracts/i_benchmark_tracking_use_case.h"
 #include "contracts/i_graph_configuration_use_case.h"
+#include "contracts/i_recent_benchmarks.h"
 #include "data/interfaces/i_benchmarks_service.h"
 #include "data/interfaces/i_day_source.h"
 #include "data/interfaces/i_profile_service.h"
-#include "data/interfaces/i_settings_service.h"
 
 namespace ksv::application {
     class BenchmarkTrackingUseCase final : public IBenchmarkTrackingUseCase {
     public:
-        // `settings` remembers the last explicit choice across launches; without it (tests) the
-        // remembered-benchmark half of selectDefault() simply never matches.
+        // `recent` is the list of viewed benchmarks that survives launches; without it (tests)
+        // nothing is remembered and every choice's recency is empty.
         BenchmarkTrackingUseCase(std::shared_ptr<data::IBenchmarksService> benchmarks,
                                  std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
                                  std::shared_ptr<IProfileService> profileService,
                                  std::shared_ptr<IGraphConfigurationUseCase> configuration,
                                  std::shared_ptr<data::IDaySource> daySource,
-                                 std::shared_ptr<ISettingsService> settings = nullptr);
+                                 std::shared_ptr<IRecentBenchmarks> recent = nullptr);
 
         void select(const domain::BenchmarkId &id) override;
         void clearSelection() override;
@@ -82,7 +82,9 @@ namespace ksv::application {
         std::shared_ptr<IProfileService> m_profileService;
         std::shared_ptr<IGraphConfigurationUseCase> m_configuration;
         std::shared_ptr<data::IDaySource> m_daySource;
-        std::shared_ptr<ISettingsService> m_settings;
+        std::shared_ptr<IRecentBenchmarks> m_recent;
+        // Set while select() records its own markViewed, whose onChanged must not announce a second time.
+        bool m_markingViewed = false;
         // Cached whole-library snapshot; the service returns it by value (a deep copy of every
         // definition), so it is re-fetched only when the library revision moves, not on every
         // profile change that merely invalidates projections.

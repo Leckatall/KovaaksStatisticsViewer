@@ -20,12 +20,15 @@ namespace ksv::application {
     public:
         virtual ~IBenchmarkTrackingUseCase() = default;
 
-        // An explicit choice; it is also remembered as the benchmark to restore on the next launch.
+        // An explicit choice; it moves to the front of the recent-benchmarks list, which is what
+        // the next launch restores from. Notifies once.
         virtual void select(const domain::BenchmarkId &id) = 0;
+        // Leaves the recent-benchmarks list untouched.
         virtual void clearSelection() = 0;
-        // Only acts while nothing is selected: selects the remembered benchmark if it is still
-        // selectable, otherwise the only selectable benchmark when exactly one exists. Otherwise
-        // (a selection already exists, or no single candidate) it changes nothing and does not notify.
+        // Only acts while nothing is selected: selects the first benchmark in the recent list that
+        // is still selectable, otherwise the only selectable benchmark when exactly one exists.
+        // Otherwise (a selection already exists, or no single candidate) it changes nothing and
+        // does not notify.
         virtual void selectDefault() = 0;
         // Valid until the next select/clearSelection or service callback; never retained by callers.
         [[nodiscard]] virtual const BenchmarkWorkspaceSnapshot &snapshot() const = 0;

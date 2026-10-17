@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -21,6 +22,8 @@ namespace ksv::application {
         BenchmarkChoiceClassification classification = BenchmarkChoiceClassification::Invalid;
         std::optional<int> schemaVersion;
         bool selectable = false;
+        // Index in the recent-benchmarks list, 0 being the most recent; empty when never viewed or created.
+        std::optional<std::size_t> recency;
     };
 
     // What the rank graph's committed range resolved to. The rank history itself stays whole in the

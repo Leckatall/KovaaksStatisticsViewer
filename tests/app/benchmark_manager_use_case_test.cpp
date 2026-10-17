@@ -10,9 +10,11 @@
 #include "fake_benchmark_resolution_use_case.h"
 #include "fake_benchmarks_service.h"
 #include "fake_playlist_reader.h"
+#include "fake_settings_service.h"
 #include "contracts/benchmark_editor_seed.h"
 #include "contracts/benchmark_manager_state.h"
 #include "usecases/benchmark_manager_use_case.h"
+#include "usecases/recent_benchmarks.h"
 
 using namespace ksv;
 using namespace ksv::application;
@@ -30,11 +32,14 @@ namespace {
         std::shared_ptr<FakeBenchmarkResolutionUseCase> resolution =
             std::make_shared<FakeBenchmarkResolutionUseCase>();
         std::shared_ptr<FakePlaylistReader> reader = std::make_shared<FakePlaylistReader>();
+        std::shared_ptr<FakeSettingsService> settings = std::make_shared<FakeSettingsService>();
+        std::shared_ptr<RecentBenchmarks> recent;
         std::unique_ptr<BenchmarkManagerUseCase> manager;
 
         void build() {
+            recent = std::make_shared<RecentBenchmarks>(settings);
             manager = std::make_unique<BenchmarkManagerUseCase>(benchmarks, resolution, reader,
-                                                                countingIds());
+                                                                countingIds(), recent);
         }
     };
 
@@ -196,6 +201,45 @@ TEST(BenchmarkManagerUseCase, SaveFailureIsForwardedVerbatim) {
 
     ASSERT_TRUE(outcome.error.has_value());
     EXPECT_EQ(*outcome.error, BenchmarkSaveError::Conflict);
+}
+
+TEST(BenchmarkManagerUseCaseRecent, ASuccessfulCreateIsMarkedCreated) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.settings->recentBenchmarkIds = {"viewed"};
+    fixture.build();
+    fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"fresh"}, "fresh.json", "d-fresh"},
+                                           std::nullopt};
+
+    ASSERT_TRUE(fixture.manager->save(savedBenchmark("fresh"), std::nullopt).ok());
+
+    EXPECT_EQ(fixture.recent->ids(), (std::vector<std::string>{"viewed", "fresh"}));
+}
+
+TEST(BenchmarkManagerUseCaseRecent, ReplacingAnExistingBenchmarkIsNotACreate) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
+    fixture.settings->recentBenchmarkIds = {"viewed"};
+    fixture.build();
+    fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d-b1-new"},
+                                           std::nullopt};
+
+    ASSERT_TRUE(fixture.manager->save(savedBenchmark("b1"), BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d-b1"})
+        .ok());
+
+    EXPECT_EQ(fixture.recent->ids(), (std::vector<std::string>{"viewed"}));
+}
+
+TEST(BenchmarkManagerUseCaseRecent, AFailedCreateIsNotMarkedCreated) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.settings->recentBenchmarkIds = {"viewed"};
+    fixture.build();
+    fixture.benchmarks->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::WriteFailed};
+
+    EXPECT_FALSE(fixture.manager->save(savedBenchmark("fresh"), std::nullopt).ok());
+
+    EXPECT_EQ(fixture.recent->ids(), (std::vector<std::string>{"viewed"}));
 }
 
 TEST(BenchmarkManagerUseCase, ResolveForwardsToStatelessResolutionAndRetainsNothing) {

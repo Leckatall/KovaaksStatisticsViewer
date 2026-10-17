@@ -57,15 +57,22 @@ namespace ksv::application {
         std::shared_ptr<IProfileService> profileService,
         std::shared_ptr<IGraphConfigurationUseCase> configuration,
         std::shared_ptr<data::IDaySource> daySource,
-        std::shared_ptr<ISettingsService> settings)
+        std::shared_ptr<IRecentBenchmarks> recent)
         : m_benchmarks(std::move(benchmarks)), m_resolution(std::move(resolution)),
           m_profileService(std::move(profileService)), m_configuration(std::move(configuration)),
-          m_daySource(std::move(daySource)), m_settings(std::move(settings)) {
+          m_daySource(std::move(daySource)), m_recent(std::move(recent)) {
         const auto reevaluate = [this] {
             m_cache.clear();
             refresh();
             notifyChanged();
         };
+        if (m_recent) {
+            m_recent->onChanged([this] {
+                if (m_markingViewed) return;
+                refresh();
+                notifyChanged();
+            });
+        }
         m_benchmarks->onChanged(reevaluate);
         m_resolution->onChanged(reevaluate);
         m_profileService->onProfileChanged(reevaluate);
@@ -91,7 +98,11 @@ namespace ksv::application {
         if (m_selected && *m_selected == id) return;
         m_selected = id;
         m_lastKnownSelectedDisplayName.clear();
-        if (m_settings) m_settings->setLastSelectedBenchmarkId(id.value);
+        if (m_recent) {
+            m_markingViewed = true;
+            m_recent->markViewed(id.value);
+            m_markingViewed = false;
+        }
         refresh();
         notifyChanged();
     }
@@ -100,7 +111,6 @@ namespace ksv::application {
         if (!m_selected) return;
         m_selected.reset();
         m_lastKnownSelectedDisplayName.clear();
-        if (m_settings) m_settings->setLastSelectedBenchmarkId({});
         refresh();
         notifyChanged();
     }
@@ -110,18 +120,16 @@ namespace ksv::application {
         const auto &choices = m_snapshot.choices;
         const auto selectable = [](const BenchmarkChoice &choice) { return choice.selectable && choice.id; };
 
-        if (m_settings) {
-            const std::string remembered = m_settings->getLastSelectedBenchmarkId();
-            if (!remembered.empty()) {
+        if (m_recent) {
+            for (const auto &remembered: m_recent->ids()) {
                 const auto found = std::find_if(choices.begin(), choices.end(), [&](const BenchmarkChoice &choice) {
                     return selectable(choice) && choice.id->value == remembered;
                 });
-                if (found != choices.end()) {
-                    // `select` rebuilds m_snapshot, which `found` points into; pass a copy.
-                    const domain::BenchmarkId id = *found->id;
-                    select(id);
-                    return;
-                }
+                if (found == choices.end()) continue;
+                // `select` rebuilds m_snapshot, which `found` points into; pass a copy.
+                const domain::BenchmarkId id = *found->id;
+                select(id);
+                return;
             }
         }
 
@@ -149,6 +157,14 @@ namespace ksv::application {
         m_snapshot.selectedId = m_selected;
         if (library) {
             for (const auto &entry: library->entries) m_snapshot.choices.push_back(choiceFor(entry));
+        }
+        if (m_recent) {
+            const auto &recent = m_recent->ids();
+            for (auto &choice: m_snapshot.choices) {
+                if (!choice.id) continue;
+                const auto found = std::ranges::find(recent, choice.id->value);
+                if (found != recent.end()) choice.recency = static_cast<std::size_t>(found - recent.begin());
+            }
         }
 
         if (!m_selected) {

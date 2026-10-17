@@ -46,7 +46,7 @@ A session lives in `.temp/ui-driver/<name>/` (default name `default`, pick anoth
 
 ### Benchmark fixtures
 
-The synthetic datasets copy every file in [`benchmarks/`](benchmarks) into the session and remember `driver-demo` as the selected benchmark (`--setting benchmarks/lastSelectedId=…` picks another). Their thresholds are fixed numbers picked against the rich profile's scores, so each row shows a different state; `DriverBenchmarkFixtureTest` (`tests/integration/driver_session_test.cpp`) fails when the run generator drifts from them.
+The synthetic datasets copy every file in [`benchmarks/`](benchmarks) into the session and remember `driver-demo` as the selected benchmark (`--setting 'benchmarks/recentIds=["…"]'` picks another). Their thresholds are fixed numbers picked against the rich profile's scores, so each row shows a different state; `DriverBenchmarkFixtureTest` (`tests/integration/driver_session_test.cpp`) fails when the run generator drifts from them.
 
 | File | Against `rich` |
 |---|---|
@@ -60,7 +60,7 @@ Other `start` options (all of them stored in `launch.json`, so `restart` reuses 
 | Option | Example | What it does |
 |---|---|---|
 | `--overlay DIR` (repeatable) | `--overlay tools/driver/tours/unreachable/broken` | Copies DIR's tree onto the session's `data/` after seeding, in order, replacing files. Lay it out like `data/`: `benchmarks/`, `FPSAimTrainer/performances/`, `FPSAimTrainer/stats/`, `profile.pb`. |
-| `--setting KEY=VALUE` (repeatable) | `--setting file/kovaaksDirs=` | Writes any QSettings key before the app reads settings. VALUE is JSON when it parses (`false`, `3`, `["a","b"]`), otherwise a string; `KEY=` removes the key. `file/kovaaksDirs`, `file/kovaaks` and `file/profilePath` are written in SettingsService's own URL encoding. Keys: `file/…`, `benchmarks/lastSelectedId`, `graph/…`, the legacy run-graph axis label `graphAxis/seriesId` (imported only while the graph document has no label of its own), and the QML `Settings {}` categories `window/`, `view/`, `historyGraph/`, `graphSeriesVisibility/` (`view/playtimeGraphVisible=false`). |
+| `--setting KEY=VALUE` (repeatable) | `--setting file/kovaaksDirs=` | Writes any QSettings key before the app reads settings. VALUE is JSON when it parses (`false`, `3`, `["a","b"]`), otherwise a string; `KEY=` removes the key. `file/kovaaksDirs`, `file/kovaaks` and `file/profilePath` are written in SettingsService's own URL encoding. Keys: `file/…`, `benchmarks/recentIds` (a JSON array of benchmark ids, most recent first; the app opens the first selectable one), `graph/…`, the legacy run-graph axis label `graphAxis/seriesId` (imported only while the graph document has no label of its own), and the QML `Settings {}` categories `window/`, `view/`, `historyGraph/`, `graphSeriesVisibility/` (`view/playtimeGraphVisible=false`). |
 | `--env KEY=VALUE` (repeatable) | `--env QT_SCALE_FACTOR=1.5` | Environment for `ksv_driver`, applied over the headless defaults; `KEY=` unsets. |
 | `--profile-spec FILE` | `--profile-spec tools/driver/specs/many-scenarios.json` | Builds `profile.pb` (and optionally a benchmark) from a JSON spec; see [Profile specs](#profile-specs). Combines with `--dataset empty` (the default with a spec), `first-run` or `fixtures`. |
 | `--inject PORT[.OP]=EFFECT[,EFFECT…]` (repeatable) | `--inject benchmarkStore.write=fail` | Fault and latency injection on the services `App` is built from; see [Fault injection](#fault-injection). |
@@ -228,9 +228,9 @@ A niche state should need a tour and some data files, not driver code. For examp
 
 1. **Spec**: [`composing-example/twins.json`](tours/composing-example/twins.json) makes a profile with `Solo Scenario` and two `Twin Scenario`s that have different hashes.
 2. **Overlay**: [`composing-example/overlay/benchmarks/matching.json`](tours/composing-example/overlay/benchmarks/matching.json) is a benchmark naming Solo (with its hash), Twin (no hash: two candidates) and `Ghost Scenario` (no hash, no such scenario).
-3. **Tour**: one `start` line composes them, and `--setting benchmarks/lastSelectedId=matching-demo` opens the Benchmarks tab on that benchmark:
+3. **Tour**: one `start` line composes them, and `--setting 'benchmarks/recentIds=["matching-demo"]'` opens the Benchmarks tab on that benchmark:
    ```
-   start --profile-spec "${TOUR_DATA}/twins.json" --overlay "${TOUR_DATA}/overlay" --setting benchmarks/lastSelectedId=matching-demo
+   start --profile-spec "${TOUR_DATA}/twins.json" --overlay "${TOUR_DATA}/overlay" --setting 'benchmarks/recentIds=["matching-demo"]'
    set M=win:benchmarkManagerDialog
    section benchmarks
    click benchmarksTab --shot=matching-rows

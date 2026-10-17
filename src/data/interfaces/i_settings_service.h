@@ -30,11 +30,6 @@ namespace ksv::application {
         // The run graph's Y-axis-label series ID as VisualSettingsManager.qml stored it; empty when unset.
         [[nodiscard]] virtual std::string getLegacyRunAxisLabelSeriesId() const = 0;
 
-        // The benchmark the user last chose in the Benchmarks workspace, so the next launch can
-        // show it again. Empty when none has been chosen (or the choice was cleared).
-        [[nodiscard]] virtual std::string getLastSelectedBenchmarkId() const = 0;
-        virtual void setLastSelectedBenchmarkId(const std::string &id) = 0;
-
         // Most recent first; the front is what opens next launch.
         [[nodiscard]] virtual std::vector<std::string> getRecentBenchmarkIds() const = 0;
         virtual void setRecentBenchmarkIds(const std::vector<std::string> &ids) = 0;

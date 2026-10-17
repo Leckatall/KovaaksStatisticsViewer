@@ -124,18 +124,6 @@ namespace ksv::qt_data {
         return m_settings.value(kLegacyRunAxisLabelKey).toString().toStdString();
     }
 
-    std::string SettingsService::getLastSelectedBenchmarkId() const {
-        const QMutexLocker locker(&m_settings_mutex);
-        return m_settings.value(kLastSelectedBenchmarkKey).toString().toStdString();
-    }
-
-    void SettingsService::setLastSelectedBenchmarkId(const std::string &id) {
-        const QMutexLocker locker(&m_settings_mutex);
-        if (id.empty()) m_settings.remove(kLastSelectedBenchmarkKey);
-        else m_settings.setValue(kLastSelectedBenchmarkKey, QString::fromStdString(id));
-        m_settings.sync();
-    }
-
     std::vector<std::string> SettingsService::getRecentBenchmarkIds() const {
         const QMutexLocker locker(&m_settings_mutex);
         if (m_settings.contains(kRecentBenchmarkIdsKey)) {

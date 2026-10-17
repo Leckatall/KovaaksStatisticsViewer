@@ -62,16 +62,6 @@ namespace ksv::tests_support {
             return legacyRunAxisLabelSeriesId;
         }
 
-        std::string lastSelectedBenchmarkId;
-        int lastSelectedBenchmarkWrites = 0;
-
-        [[nodiscard]] std::string getLastSelectedBenchmarkId() const override { return lastSelectedBenchmarkId; }
-
-        void setLastSelectedBenchmarkId(const std::string &id) override {
-            lastSelectedBenchmarkId = id;
-            ++lastSelectedBenchmarkWrites;
-        }
-
         std::vector<std::string> recentBenchmarkIds;
         int recentBenchmarkIdsWrites = 0;
 

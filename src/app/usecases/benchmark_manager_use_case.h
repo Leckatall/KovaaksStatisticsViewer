@@ -11,6 +11,7 @@
 #include "contracts/benchmark_manager_state.h"
 #include "contracts/i_benchmark_manager_use_case.h"
 #include "contracts/i_benchmark_resolution_use_case.h"
+#include "contracts/i_recent_benchmarks.h"
 #include "data/interfaces/i_benchmarks_service.h"
 #include "data/interfaces/i_playlist_reader.h"
 
@@ -20,7 +21,8 @@ namespace ksv::application {
         BenchmarkManagerUseCase(std::shared_ptr<data::IBenchmarksService> benchmarks,
                                 std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
                                 std::shared_ptr<IPlaylistReader> playlist,
-                                std::function<std::string()> idFactory);
+                                std::function<std::string()> idFactory,
+                                std::shared_ptr<IRecentBenchmarks> recent = nullptr);
 
         [[nodiscard]] const BenchmarkManagerState &state() const override { return m_state; }
         void onChanged(std::function<void()> callback) override {
@@ -55,6 +57,7 @@ namespace ksv::application {
         std::shared_ptr<IBenchmarkResolutionUseCase> m_resolution;
         std::shared_ptr<IPlaylistReader> m_playlist;
         std::function<std::string()> m_idFactory;
+        std::shared_ptr<IRecentBenchmarks> m_recent;
         BenchmarkManagerState m_state;
         std::vector<std::function<void()> > m_callbacks;
     };

@@ -31,6 +31,7 @@
 #include "usecases/benchmark_resolution_use_case.h"
 #include "usecases/benchmark_manager_use_case.h"
 #include "usecases/benchmark_tracking_use_case.h"
+#include "usecases/recent_benchmarks.h"
 #include "qt_data/benchmark_store.h"
 #include "qt_data/playlist_reader.h"
 #include "qt_data/system_day_source.h"
@@ -95,12 +96,13 @@ namespace ksv::application {
         m_benchmarksService = std::make_shared<data::BenchmarksService>(m_benchmarkStore);
         m_benchmarkResolutionUseCase = std::make_shared<BenchmarkResolutionUseCase>(
             m_benchmarksService, m_profileService);
+        const auto recentBenchmarks = std::make_shared<RecentBenchmarks>(m_settingsService);
         m_benchmarkManagerUseCase = std::make_shared<BenchmarkManagerUseCase>(
             m_benchmarksService, m_benchmarkResolutionUseCase, std::make_shared<qt_data::PlaylistReader>(),
-            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); });
+            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); }, recentBenchmarks);
         m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
             m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService, m_graphConfigurationUseCase,
-            m_daySource, m_settingsService);
+            m_daySource, recentBenchmarks);
 
         auto averageUseCase = std::make_shared<AverageLineUseCase>(m_profileService);
         m_graphUseCase = std::make_shared<GraphUseCase>(m_sessionController, m_graphConfigurationUseCase, averageUseCase);

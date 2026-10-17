@@ -37,6 +37,7 @@ target_sources(ksv_contracts PUBLIC
         i_benchmark_resolution_use_case.h
         i_benchmark_tracking_use_case.h
         i_benchmark_manager_use_case.h
+        i_recent_benchmarks.h
 )
 
 target_include_directories(ksv_contracts PUBLIC

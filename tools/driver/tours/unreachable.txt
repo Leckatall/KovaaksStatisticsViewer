@@ -38,11 +38,11 @@ eval benchmarkManagerVm.refresh()
 shot --name unavailable
 
 # Missing and non-increasing thresholds; --setting picks it over the demo benchmark.
-start --dataset rich --overlay "${TOUR_DATA}/incomplete" --setting benchmarks/lastSelectedId=incomplete-demo
+start --dataset rich --overlay "${TOUR_DATA}/incomplete" --setting 'benchmarks/recentIds=["incomplete-demo"]'
 click benchmarksTab --shot=incomplete
 
 # Two scenarios share a name, and one row names a scenario that does not exist.
-start --profile-spec "${TWINS}/twins.json" --overlay "${TWINS}/overlay" --setting benchmarks/lastSelectedId=matching-demo
+start --profile-spec "${TWINS}/twins.json" --overlay "${TWINS}/overlay" --setting 'benchmarks/recentIds=["matching-demo"]'
 click benchmarksTab --shot=unresolved-and-ambiguous-rows
 
 # ---- Settings ------------------------------------------------------------------

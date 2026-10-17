@@ -27,9 +27,10 @@ namespace ksv::application {
     BenchmarkManagerUseCase::BenchmarkManagerUseCase(
         std::shared_ptr<data::IBenchmarksService> benchmarks,
         std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
-        std::shared_ptr<IPlaylistReader> playlist, std::function<std::string()> idFactory)
+        std::shared_ptr<IPlaylistReader> playlist, std::function<std::string()> idFactory,
+        std::shared_ptr<IRecentBenchmarks> recent)
         : m_benchmarks(std::move(benchmarks)), m_resolution(std::move(resolution)),
-          m_playlist(std::move(playlist)), m_idFactory(std::move(idFactory)) {
+          m_playlist(std::move(playlist)), m_idFactory(std::move(idFactory)), m_recent(std::move(recent)) {
         m_benchmarks->onChanged([this] { rebuildAndNotify(); });
         m_resolution->onChanged([this] { rebuildAndNotify(); });
         m_state = build();
@@ -101,7 +102,9 @@ namespace ksv::application {
 
     data::BenchmarkSaveOutcome BenchmarkManagerUseCase::save(
         const domain::Benchmark &benchmark, const std::optional<data::BenchmarkEditToken> &token) {
-        return m_benchmarks->save({benchmark, token});
+        auto outcome = m_benchmarks->save({benchmark, token});
+        if (!token && outcome.ok() && m_recent) m_recent->markCreated(benchmark.id.value);
+        return outcome;
     }
 
     std::vector<domain::ScenarioResolution> BenchmarkManagerUseCase::resolve(

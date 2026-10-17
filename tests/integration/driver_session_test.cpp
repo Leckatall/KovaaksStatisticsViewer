@@ -427,7 +427,7 @@ namespace {
         EXPECT_EQ(assignment.key, "view/scenarioGraphVisible");
         EXPECT_EQ(assignment.value->typeId(), QMetaType::Bool);
 
-        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/lastSelectedId=driver-demo", assignment).isEmpty());
+        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/someId=driver-demo", assignment).isEmpty());
         EXPECT_EQ(assignment.value->toString(), "driver-demo");
 
         ASSERT_TRUE(driver::parseSettingAssignment("a/list=[\"x\", \"y\"]", assignment).isEmpty());
@@ -467,15 +467,16 @@ namespace {
         driver::SettingAssignment assignment;
         ASSERT_TRUE(driver::parseSettingAssignment("driverSettingTest/visible=false", assignment).isEmpty());
         ASSERT_TRUE(driver::applySetting(assignment, service).isEmpty());
-        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/lastSelectedId=spec-bench", assignment).isEmpty());
+        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/recentIds=[\"spec-bench\", \"other\"]", assignment)
+            .isEmpty());
         ASSERT_TRUE(driver::applySetting(assignment, service).isEmpty());
 
         const QSettings settings(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         EXPECT_FALSE(settings.value("driverSettingTest/visible", true).toBool());
-        EXPECT_EQ(service.getLastSelectedBenchmarkId(), "spec-bench");
+        EXPECT_EQ(service.getRecentBenchmarkIds(), (std::vector<std::string>{"spec-bench", "other"}));
 
-        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/lastSelectedId=", assignment).isEmpty());
+        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/recentIds=", assignment).isEmpty());
         ASSERT_TRUE(driver::applySetting(assignment, service).isEmpty());
-        EXPECT_EQ(service.getLastSelectedBenchmarkId(), "");
+        EXPECT_TRUE(service.getRecentBenchmarkIds().empty());
     }
 }
