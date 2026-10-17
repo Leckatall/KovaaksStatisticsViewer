@@ -13,4 +13,3 @@ The header Manage Benchmarks button, `_bodyOwnsManagerAction` and the `nextTierP
 `select()` marks a benchmark viewed (moves it to the front); a successful create in the Manager marks it created (inserted right behind the front); `selectDefault()` takes the first remembered id that is still selectable. Ids are never pruned or capped.
 `ISettingsService` stores the list under `benchmarks/recentIds`; `getRecentBenchmarkIds()` falls back to a one-item list from the legacy `benchmarks/lastSelectedId` while the new key is absent, and the first write removes the legacy key. `get/setLastSelectedBenchmarkId` are gone.
 `BenchmarkChoice::recency` carries each id's index in the list; `buildSelectorEntries` orders loaded entries by recency, then by name, with problem entries last by filename.
-`ksv_driver` and the tours now use `--setting 'benchmarks/recentIds=["X"]'`.
