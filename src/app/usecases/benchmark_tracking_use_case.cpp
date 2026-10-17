@@ -239,10 +239,19 @@ namespace ksv::application {
 
     void BenchmarkTrackingUseCase::applyRankRange(const Evaluation &evaluation) {
         const auto committed = m_configuration->current();
-        const auto projection = resolveRange(effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkRank)),
-                                             m_daySource->today(), evaluation.latestRunDay);
+        const auto range = effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkRank));
+        // Anchored at the last improvement, not the newest run: the rank series has no point after it.
+        const auto &history = evaluation.projection.averageRankHistory;
+        const auto latestImprovementDay = history.empty() ? std::nullopt : std::optional{history.back().day};
+        const auto projection = resolveRange(range, m_daySource->today(), latestImprovementDay);
         m_snapshot.rank = {};
-        if (const auto *interval = std::get_if<DayInterval>(&projection)) m_snapshot.rank.interval = *interval;
+        if (range.anchorToLatestRun) m_snapshot.rank.anchoredEnd = latestImprovementDay;
+        if (const auto *interval = std::get_if<DayInterval>(&projection)) {
+            m_snapshot.rank.interval = *interval;
+            // Dates running past the last point are cut back to it; dates wholly after it stay as entered.
+            const auto &end = m_snapshot.rank.anchoredEnd;
+            if (end && interval->first <= *end && *end < interval->last) m_snapshot.rank.interval->last = *end;
+        }
         m_snapshot.rank.noRelevantHistory = std::holds_alternative<NoRelevantHistory>(projection);
     }
 

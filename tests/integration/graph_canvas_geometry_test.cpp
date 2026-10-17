@@ -578,6 +578,22 @@ namespace {
             << "reference lines keep their own path in every mode";
     }
 
+    TEST(GraphCanvasConnectionTest, TheSeriesIsPaintedOverItsReferenceLines) {
+        StyledVm vm({QPointF(0.0, 10.0), QPointF(10.0, 10.0)}, 0.0, 10.0);
+        vm.model().referenceLines = {presentation::ReferenceLine{.value = 10.0, .color = QColor(kReferenceBlue)}};
+        presentation::ValueAxis fixed;
+        fixed.setRange(0.0, 50.0);
+        vm.model().yAxis = fixed;
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        const QPointF middle = vm.pixelOf(*canvas, QPointF(5.0, 10.0));
+        const QRect centre(int(middle.x()) - 10, int(middle.y()), 21, 1);
+
+        const QImage image = render(*canvas);
+
+        EXPECT_EQ(countColour(image, centre, kSeriesRed), centre.width());
+        EXPECT_EQ(countColour(image, centre, kReferenceBlue), 0);
+    }
+
     TEST(GraphCanvasConnectionTest, ALoneObservationWithCarryIsMarkedEvenWithMarkersOff) {
         StyledVm vm({QPointF(5.0, 40.0)}, 0.0, 10.0);
         vm.model().leadingCarry = QPointF(0.0, 40.0);

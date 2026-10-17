@@ -316,7 +316,6 @@ namespace ksv::ui {
     void GraphCanvas::drawReferenceLines(QPainter *painter, const QRectF &rect) const {
         if (!m_graphVm) return;
         painter->save();
-        // Over the lines: a reference level stays legible where a line runs along it.
         for (const auto *s: seriesInPaintOrder()) {
             if (s->referenceLines.isEmpty()) continue;
             const presentation::ValueAxis yAxis = yAxisFor(*s);
@@ -364,8 +363,8 @@ namespace ksv::ui {
         painter->setRenderHint(QPainter::Antialiasing, true);
         const QRectF rect = plotRect();
         drawAxes(painter, rect);
-        drawSeries(painter, rect);
         drawReferenceLines(painter, rect);
+        drawSeries(painter, rect);
         drawMarkedX(painter, rect);
     }
 

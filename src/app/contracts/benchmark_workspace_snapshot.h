@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -31,8 +32,11 @@ namespace ksv::application {
     struct RankRangeView {
         // Set when the range resolved to calendar dates; the X axis spans exactly this.
         std::optional<DayInterval> interval;
-        // An anchored preset found no contributing run: nothing is shown rather than borrowing an anchor.
+        // An anchored preset found no rank improvement to end at: nothing is shown rather than borrowing an anchor.
         bool noRelevantHistory = false;
+        // With the anchor flag on, the last improvement's day. `interval` is already cut back to it; a
+        // range without one (all history) must still end there instead of at the shared extent.
+        std::optional<std::chrono::sys_days> anchoredEnd;
 
         bool operator==(const RankRangeView &) const = default;
     };

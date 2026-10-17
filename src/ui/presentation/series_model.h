@@ -23,7 +23,7 @@
 
 namespace ksv::presentation {
     // A horizontal line drawn across the plot at `value` (display units, on the owning series' Y
-    // axis), over the series line, e.g. one per benchmark tier on the rank graph.
+    // axis), under the series line, e.g. one per benchmark tier on the rank graph.
     struct ReferenceLine {
         qreal value = 0.0;
         QColor color;
@@ -56,7 +56,7 @@ namespace ksv::presentation {
         // Pen width in pixels.
         qreal lineWidth = application::kDefaultSeriesWidth;
         ValueAxis::Options yAxisOptions;
-        // Painted over the line by GraphCanvas while this series is visible.
+        // Painted under the line by GraphCanvas while this series is visible.
         QList<ReferenceLine> referenceLines;
         // Actual observations: the only points tooltips, hit tests, selection and markers address.
         QList<QPointF> points;

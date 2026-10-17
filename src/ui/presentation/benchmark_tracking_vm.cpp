@@ -309,7 +309,14 @@ namespace ksv::presentation {
     }
 
     void BenchmarkTrackingViewModel::applyRankAxis(const application::BenchmarkWorkspaceSnapshot &snapshot) {
-        applyAxis(m_historyXAxis, snapshot.rank.interval);
+        const auto &rank = snapshot.rank;
+        if (!rank.interval && rank.anchoredEnd && m_appliedUnionMs) {
+            const qint64 end = std::min(m_appliedUnionMs->second, utcMidnightMs(*rank.anchoredEnd));
+            std::ignore = m_historyXAxis.setEpochMillisecondsRange(m_appliedUnionMs->first,
+                                                                   std::max(m_appliedUnionMs->first, end));
+            return;
+        }
+        applyAxis(m_historyXAxis, rank.interval);
     }
 
     void BenchmarkTrackingViewModel::applyPlaytimeAxis(const application::BenchmarkWorkspaceSnapshot &snapshot) {

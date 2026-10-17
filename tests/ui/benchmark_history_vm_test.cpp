@@ -93,6 +93,21 @@ TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxisWithout
     EXPECT_DOUBLE_EQ(rank.trailingCarry->y(), 2.0);
 }
 
+TEST(BenchmarkHistoryViewModel, AnAnchoredWholeRankHistoryEndsAtItsLastPointNotTheSharedExtent) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
+    snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 5), 600.0}, {ymd(2024, 3, 20), 1200.0}};
+    snapshot.rank.anchoredEnd = ymd(2024, 3, 6);
+    auto fake = fakeWith(snapshot);
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto &rank = *vm.rankHistory()->series({kValueColumn}).front();
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().min(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 4))));
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().max(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 6))));
+    EXPECT_FALSE(rank.trailingCarry);
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 20))));
+}
+
 TEST(BenchmarkHistoryViewModel, BothHistoriesShareTheUnionOfTheirXRanges) {
     auto snapshot = makeTrackableSnapshot();
     snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
