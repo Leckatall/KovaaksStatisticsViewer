@@ -311,6 +311,29 @@ namespace {
                   (QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId}));
     }
 
+    // --- What the labelled Y axis is titled. ---
+
+    TEST_F(GraphCanvasGeometryTest, SharedAxisTitleIsTheAxisName) {
+        canvas.setVisibleColumns(QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId, kExpectedFinal5sSeriesId});
+        canvas.setYAxisColumn(kScoreTotalSeriesId);
+
+        EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score Family");
+    }
+
+    TEST_F(GraphCanvasGeometryTest, IndependentLineTitleIsItsOwnName) {
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kAccuracySeriesId});
+        canvas.setYAxisColumn(kScoreSeriesId);
+
+        EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score");
+    }
+
+    TEST_F(GraphCanvasGeometryTest, MixedLinesTitleNamesOnlyTheLabelledAxis) {
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kScoreTotalSeriesId, kExpectedFinalSeriesId});
+        canvas.setYAxisColumn(kExpectedFinalSeriesId);
+
+        EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score Family");
+    }
+
     // --- Lines stack in the user's line-list order. ---
 
     // The labelled axis no longer pulls its line to the front: the first series in the list is

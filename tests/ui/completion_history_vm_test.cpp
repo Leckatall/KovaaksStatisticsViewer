@@ -112,6 +112,20 @@ namespace {
         EXPECT_EQ(accuracy_series.front()->formattedValueAtX(1.0), "45%");
     }
 
+    TEST_F(CompletionHistoryViewModelTest, EverySeriesCarriesTheNameOfItsAxis) {
+        using Column = CompletionHistoryViewModel;
+        const auto axisName = [this](const int column) {
+            return view_model.series({column}).front()->yAxisName;
+        };
+
+        EXPECT_EQ(axisName(Column::Score), "Score");
+        EXPECT_EQ(axisName(Column::ScoreAverage), "Score");
+        EXPECT_EQ(axisName(Column::Accuracy), "Accuracy");
+        EXPECT_EQ(axisName(Column::Shots), "Shots, hits and misses");
+        EXPECT_EQ(axisName(Column::Hits), "Shots, hits and misses");
+        EXPECT_EQ(axisName(Column::Misses), "Shots, hits and misses");
+    }
+
     TEST_F(CompletionHistoryViewModelTest, CountSeriesShareAnAxisButScoreDoesNot) {
         setHistory();
         view_model.refresh();

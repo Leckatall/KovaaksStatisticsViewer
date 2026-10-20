@@ -33,30 +33,6 @@ Frame {
     signal configureLinesRequested
     signal moreGraphSettingsRequested(string graphKey)
 
-    function seriesForColumn(column) {
-        if (!root.graphVm) return null
-        const series = root.graphVm.allSeries
-        for (let i = 0; i < series.length; ++i) {
-            if (series[i].column === column) return series[i]
-        }
-        return null
-    }
-
-    function nameForColumn(column) {
-        const series = root.seriesForColumn(column)
-        return series ? series.name : ""
-    }
-
-    // "Score" or "Score Total, Expected Final Score": every line the Y-axis numbers measure.
-    function namesForColumns(columns) {
-        const names = []
-        for (let i = 0; i < columns.length; ++i) {
-            const name = root.nameForColumn(columns[i])
-            if (name !== "") names.push(name)
-        }
-        return names.join(", ")
-    }
-
     Layout.fillHeight: true
     Layout.fillWidth: true
 
@@ -124,7 +100,7 @@ Frame {
                             YAxisTitle {
                                 labelObjectName: "scenarioYAxisTitleLabel"
                                 plotArea: canvasWithTooltip.plotArea
-                                text: root.namesForColumns(canvasWithTooltip.labelledYAxisColumns)
+                                text: canvasWithTooltip.labelledYAxisTitle
                             }
                             GraphCanvasWithTooltip {
                                 id: canvasWithTooltip

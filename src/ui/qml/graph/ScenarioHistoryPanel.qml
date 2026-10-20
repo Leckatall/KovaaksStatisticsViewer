@@ -130,14 +130,7 @@ Frame {
                     YAxisTitle {
                         labelObjectName: "historyYAxisTitleLabel"
                         plotArea: historyCanvas.plotArea
-                        text: {
-                            const names = []
-                            for (const column of historyCanvas.labelledYAxisColumns) {
-                                const s = root.seriesForColumn(column)
-                                if (s) names.push(s.name)
-                            }
-                            return names.join(", ")
-                        }
+                        text: historyCanvas.labelledYAxisTitle
                     }
                     GraphCanvasWithTooltip {
                         id: historyCanvas

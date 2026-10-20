@@ -48,6 +48,7 @@ namespace {
     // Built-in SeriesId from defaultSeriesConfigs() -- GraphCanvas' y-axis column is
     // always a series' SeriesId, not a position.
     constexpr int kAccuracySeriesId = 2;
+    constexpr int kScoreTotalSeriesId = 7;
 
     [[nodiscard]] int countPixelsNear(const QImage &image, const QRect &area, const QColor &colour) {
         constexpr int kTolerance = 8;
@@ -512,6 +513,47 @@ namespace {
             return label->property("text").toString() == accuracy.front()->name();
         }, 2000)) << "axis title stayed on '" << label->property("text").toString().toStdString()
                   << "' after the y-axis column moved to " << accuracy.front()->name().toStdString();
+    }
+
+    TEST_F(DashboardCleanSceneTest, YAxisTitleLabelNamesTheSharedAxis) {
+        auto *app = scene.app.get();
+        app->graphVm()->fetchData(scene.perfUrl);
+
+        auto *canvas = scene.canvasFor(app->graphVm());
+        ASSERT_NE(canvas, nullptr);
+        QObject *label = nullptr;
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            label = scene.root->findChild<QObject *>("scenarioYAxisTitleLabel");
+            return label != nullptr;
+        }, 2000)) << "no label named 'scenarioYAxisTitleLabel' found after loading a perf";
+
+        canvas->setYAxisColumn(kScoreTotalSeriesId);
+
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return label->property("text").toString() == "Score Family";
+        }, 2000)) << "axis title was '" << label->property("text").toString().toStdString() << "'";
+    }
+
+    TEST_F(DashboardCleanSceneTest, RenamingTheSharedAxisUpdatesTheYAxisTitle) {
+        auto *app = scene.app.get();
+        app->graphVm()->fetchData(scene.perfUrl);
+
+        auto *canvas = scene.canvasFor(app->graphVm());
+        ASSERT_NE(canvas, nullptr);
+        canvas->setYAxisColumn(kScoreTotalSeriesId);
+        ASSERT_EQ(canvas->property("labelledYAxisTitle").toString(), "Score Family");
+
+        const auto snapshot = app->graphConfigurationUseCase()->current();
+        ASSERT_NE(snapshot.configuration, nullptr);
+        auto candidate = *snapshot.configuration;
+        const auto axis = std::ranges::find_if(candidate.runSeries.axes, [](const auto &a) {
+            return a.id.value == 2;
+        });
+        ASSERT_NE(axis, candidate.runSeries.axes.end());
+        axis->name = "Renamed Axis";
+        ASSERT_TRUE(app->graphConfigurationUseCase()->save(candidate).accepted());
+
+        EXPECT_EQ(canvas->property("labelledYAxisTitle").toString(), "Renamed Axis");
     }
 
     TEST_F(DashboardCleanSceneTest, ScenarioHistoryCanvasUsesTheCompletionHistoryViewModel) {

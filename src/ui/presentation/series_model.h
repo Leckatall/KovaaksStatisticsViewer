@@ -68,6 +68,7 @@ namespace ksv::presentation {
         std::shared_ptr<const Axis> xAxis;
         std::optional<ValueAxis> yAxis;
         std::optional<uint64_t> yAxisId;
+        QString yAxisName;
 
         [[nodiscard]] std::optional<std::pair<qreal, qreal>> displayRange() const {
             std::optional<std::pair<qreal, qreal>> range;

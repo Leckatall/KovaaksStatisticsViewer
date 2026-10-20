@@ -23,6 +23,7 @@ Item {
     signal pointClicked(real dataX)
     readonly property int labelledYAxisColumn: canvas.labelledYAxisColumn
     readonly property var labelledYAxisColumns: canvas.labelledYAxisColumns
+    readonly property string labelledYAxisTitle: canvas.labelledYAxisTitle
     readonly property bool pointMarkersShown: canvas.pointMarkersShown
 
     Layout.fillHeight: true

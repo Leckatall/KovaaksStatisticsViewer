@@ -250,6 +250,24 @@ namespace {
         EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
     }
 
+    TEST_F(GraphViewModelTest, SeriesCarryTheNameOfTheirAxisAndIndependentOnesCarryNone) {
+        const AxisConfig sharedAxis{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity};
+        auto scoreTotal = defaultConfig(kScoreTotal);
+        scoreTotal.yAxisId = sharedAxis.id;
+        const SeriesConfig independent{SeriesId{10}, {"Solo", {}, true, 1}, numericConstant(1.0)};
+
+        fake_use_case->axes = {sharedAxis};
+        fake_use_case->addSeries(scoreTotal, pts({0, 1}, {5, 6}));
+        fake_use_case->addSeries(independent, pts({0, 1}, {1, 1}));
+        fake_use_case->run_duration = 1.0;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({kScoreTotal, 10});
+        ASSERT_EQ(series.size(), 2);
+        EXPECT_EQ(series[0]->yAxisName, "Score Family");
+        EXPECT_TRUE(series[1]->yAxisName.isEmpty());
+    }
+
     TEST_F(GraphViewModelTest, UngroupedSeriesEachKeepTheirOwnIndependentAxis) {
         const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0)};
         const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0)};

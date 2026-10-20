@@ -168,20 +168,37 @@ namespace ksv::ui {
         return any;
     }
 
-    QVariantList GraphCanvas::labelledYAxisColumns() const {
-        QVariantList columns;
-        if (!m_graphVm) return columns;
+    GraphCanvas::LabelledAxisGroup GraphCanvas::labelledAxisGroup() const {
+        LabelledAxisGroup group;
+        if (!m_graphVm) return group;
         const int labelledColumn = labelledYAxisColumn();
         const auto series = m_graphVm->series(visibleColumnIds());
         const auto labelled = std::ranges::find_if(series, [labelledColumn](const auto *s) {
             return s->column() == labelledColumn;
         });
-        if (labelled == series.end()) return columns;
-        const auto &sharedAxis = (*labelled)->yAxisId;
+        if (labelled == series.end()) return group;
+        group.labelled = *labelled;
+        const auto &sharedAxis = group.labelled->yAxisId;
         for (const auto *s: series) {
-            if (s == *labelled || (sharedAxis && s->yAxisId == sharedAxis)) columns.append(s->column());
+            if (s == group.labelled || (sharedAxis && s->yAxisId == sharedAxis)) group.members.append(s);
         }
+        return group;
+    }
+
+    QVariantList GraphCanvas::labelledYAxisColumns() const {
+        QVariantList columns;
+        for (const auto *s: labelledAxisGroup().members) columns.append(s->column());
         return columns;
+    }
+
+    QString GraphCanvas::labelledYAxisTitle() const {
+        const auto group = labelledAxisGroup();
+        if (!group.labelled) return {};
+        if (!group.labelled->yAxisId) return group.labelled->name();
+        if (!group.labelled->yAxisName.isEmpty()) return group.labelled->yAxisName;
+        QStringList names;
+        for (const auto *s: group.members) names.append(s->name());
+        return names.join(QStringLiteral(", "));
     }
 
     QList<const presentation::SeriesModel *> GraphCanvas::seriesInPaintOrder() const {

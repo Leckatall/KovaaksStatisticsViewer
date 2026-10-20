@@ -30,6 +30,8 @@ namespace ksv::ui {
         // Every visible column whose line is measured on the labelled Y axis: the labelled series
         // plus any series sharing its axis (same yAxisId).
         Q_PROPERTY(QVariantList labelledYAxisColumns READ labelledYAxisColumns NOTIFY labelledYAxisColumnChanged)
+        // The labelled axis' own name; a series with no shared axis titles it with its own name.
+        Q_PROPERTY(QString labelledYAxisTitle READ labelledYAxisTitle NOTIFY labelledYAxisColumnChanged)
         // Mark each real data point with a dot whenever the points are far enough apart to tell
         // apart (few points); dense series stay plain lines.
         Q_PROPERTY(bool pointMarkers READ pointMarkers WRITE setPointMarkers NOTIFY pointMarkersChanged)
@@ -73,6 +75,8 @@ namespace ksv::ui {
         [[nodiscard]] int labelledYAxisColumn() const;
 
         [[nodiscard]] QVariantList labelledYAxisColumns() const;
+
+        [[nodiscard]] QString labelledYAxisTitle() const;
 
         [[nodiscard]] bool pointMarkers() const { return m_pointMarkers; }
         void setPointMarkers(bool pointMarkers);
@@ -130,6 +134,13 @@ namespace ksv::ui {
         [[nodiscard]] QList<int> visibleColumnIds() const;
 
         [[nodiscard]] QList<const presentation::SeriesModel *> seriesInPaintOrder() const;
+
+        struct LabelledAxisGroup {
+            const presentation::SeriesModel *labelled = nullptr;
+            QList<const presentation::SeriesModel *> members;
+        };
+
+        [[nodiscard]] LabelledAxisGroup labelledAxisGroup() const;
 
         [[nodiscard]] const presentation::Axis &xAxisFor(const presentation::SeriesModel &series) const;
         [[nodiscard]] presentation::ValueAxis yAxisFor(const presentation::SeriesModel &series) const;

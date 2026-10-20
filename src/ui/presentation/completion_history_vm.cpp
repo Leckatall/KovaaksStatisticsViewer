@@ -23,6 +23,7 @@ namespace ksv::presentation {
         struct AxisDescriptor {
             ValueTransform transform;
             ValueAxis::Options options;
+            const char *name;
         };
 
         enum YAxis {
@@ -40,9 +41,9 @@ namespace ksv::presentation {
         constexpr std::array<std::string_view, YAxisCount> kAxisKeys{"score", "accuracy", "counts"};
 
         const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{{
-            {ValueTransform::identity(), {}},
-            {ValueTransform::percentage(), {}},
-            {ValueTransform::identity(), {}},
+            {ValueTransform::identity(), {}, "Score"},
+            {ValueTransform::percentage(), {}, "Accuracy"},
+            {ValueTransform::identity(), {}, "Shots, hits and misses"},
         }};
 
         const std::array<ColumnMeta, CompletionHistoryViewModel::ColumnCount> kColumnMeta{{
@@ -76,6 +77,7 @@ namespace ksv::presentation {
             series_model->transform = kYAxisMeta[kColumnMeta[column].yAxis].transform;
             // Lets the canvas tell which lines share the labelled axis (e.g. Shots/Hits/Misses).
             series_model->yAxisId = static_cast<uint64_t>(kColumnMeta[column].yAxis);
+            series_model->yAxisName = QString::fromLatin1(kYAxisMeta[kColumnMeta[column].yAxis].name);
             m_series.append(series_model);
         }
         m_use_case->onPresentationChanged([this] { applyPresentation(); });

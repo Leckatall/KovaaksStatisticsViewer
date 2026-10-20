@@ -122,6 +122,10 @@ namespace ksv::presentation {
             series->yAxisId = config.yAxisId
                                   ? std::optional<uint64_t>{config.yAxisId->value}
                                   : std::nullopt;
+            if (series->yAxisId) {
+                const auto axisIt = m_axesById.constFind(*series->yAxisId);
+                if (axisIt != m_axesById.constEnd()) series->yAxisName = QString::fromStdString(axisIt->name);
+            }
             series->setColumn(entry_id.toInt());
             // TODO(2026-08-18): Remove once SeriesModel gains displayPosition/width support by replacing
             // this placeholder with assignments from config.presentation.
