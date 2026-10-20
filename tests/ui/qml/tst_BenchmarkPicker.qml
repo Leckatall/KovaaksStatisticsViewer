@@ -57,10 +57,32 @@ TestCase {
         mouseClick(find("benchmarkSelectorTitle"))
         tryVerify(() => picker.popup.opened, 2000, "popup never opened")
         tryVerify(() => searchField().activeFocus, 2000, "search field never took focus")
+        waitForSettledLayout()
     }
 
     function setSearch(text) {
         searchField().text = text
+        waitForSettledLayout()
+    }
+
+    // `opened` and a text change both land before the popup's ColumnLayout relayouts. Until it does,
+    // the Manage row (declared last, so on top) still sits over the old rows' position: a click on an
+    // entry row then hits Manage and closes the popup.
+    function waitForSettledLayout() {
+        const query = searchField().text.toLowerCase()
+        const expected = picker.entries.map(entry => String(entry.name))
+            .filter(name => name.toLowerCase().includes(query))
+        expectRows(expected)
+        const popupItem = picker.popup.contentItem.parent
+        const list = find("benchmarkEntryList")
+        const manage = find("selectorManageBenchmarks")
+        tryVerify(() => {
+            const listBottom = list.visible ? list.mapToItem(popupItem, 0, list.height).y : 0
+            const manageTop = manage.mapToItem(popupItem, 0, 0).y
+            return (!list.visible || list.height === Math.min(list.contentHeight, 280))
+                && manageTop >= listBottom
+                && manageTop + manage.height <= popupItem.height
+        }, 2000, "popup layout never settled")
     }
 
     // Visible entry rows, top to bottom.
@@ -85,7 +107,7 @@ TestCase {
                   "highlighted " + JSON.stringify(highlightedNames()) + ", expected " + name)
     }
 
-    function row(name) { return find("selectorEntry_" + name) }
+    function row(name) { return rows().find(item => item.text === name) || null }
 
     // -- title ------------------------------------------------------------
 
