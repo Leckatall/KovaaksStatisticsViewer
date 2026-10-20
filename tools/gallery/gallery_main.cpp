@@ -64,6 +64,10 @@ int main(int argc, char *argv[]) {
     QCoreApplication::setApplicationVersion(KSV_VERSION);
 
     QTemporaryDir tmp;
+    // SettingsService names its file after the production app, so without this redirect the
+    // gallery's throwaway Kovaak's dir and profile path overwrite the user's real settings.
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, tmp.path() + "/settings");
     const QVariantList datasetPaths = createDatasetProfiles(tmp.path());
     if (datasetPaths.size() != static_cast<int>(gallery::kDatasetNames.size())) return -1;
 

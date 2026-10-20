@@ -26,6 +26,7 @@ int main(int argc, char *argv[]) {
     QGuiApplication::setOrganizationName("Lecka");
     QGuiApplication::setApplicationName("KovaaksStatsViewer");
     QGuiApplication::setApplicationVersion(KSV_VERSION);
+    QSettings::setDefaultFormat(QSettings::IniFormat);
     ksv::application::App app;
     if (app.start() != 0) return -1;
 

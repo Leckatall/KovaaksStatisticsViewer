@@ -15,7 +15,7 @@ namespace ksv::qt_data {
     class SettingsService: public QObject, public application::ISettingsService {
         Q_OBJECT
         public:
-        explicit SettingsService(QSettings::Format format = QSettings::NativeFormat, QObject *parent = nullptr);
+        explicit SettingsService(QSettings::Format format = QSettings::IniFormat, QObject *parent = nullptr);
         [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override;
         [[nodiscard]] bool isKovaaksDirSet() const override;
         void setKovaaksDirs(const std::vector<std::string> &dirs) override;

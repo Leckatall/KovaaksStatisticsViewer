@@ -16,10 +16,8 @@
 using namespace ksv::qt_data;
 
 namespace {
-    // Uses SettingsService(QSettings::IniFormat) + QSettings::setPath so these
-    // tests read/write a temp .ini file instead of the real Windows registry
-    // (SettingsService's default constructor argument, QSettings::NativeFormat,
-    // is what production code uses and must never be touched by tests).
+    // QSettings::setPath redirects the .ini file into a temp directory so these
+    // tests never touch the user's real settings file.
     class SettingsServiceTest : public testing::Test {
     protected:
         QTemporaryDir temp_dir;
