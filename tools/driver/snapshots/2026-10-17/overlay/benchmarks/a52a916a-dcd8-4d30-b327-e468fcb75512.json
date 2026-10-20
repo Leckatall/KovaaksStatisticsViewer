@@ -1,0 +1,174 @@
+{
+    "categories": [
+        {
+            "color": [
+                205,
+                127,
+                50,
+                255
+            ],
+            "id": "d6cd8805-ec5b-4818-80a9-16269ce20241",
+            "name": "Control Tracking",
+            "scenarios": [
+            ],
+            "subcategories": [
+                {
+                    "color": [
+                        192,
+                        192,
+                        192,
+                        255
+                    ],
+                    "id": "82fdc92d-a79b-4508-a0f9-f96b0f447bc1",
+                    "name": "Arm",
+                    "scenarios": [
+                        {
+                            "hash": "7bf6a4c4f98e83a728c53d2ff0aeb245",
+                            "id": "06fdb536-7606-4e04-9242-ee6f0a2772c6",
+                            "name": "Whisphere",
+                            "thresholds": [
+                                {
+                                    "score": 5750,
+                                    "tierId": "adc1e13d-ea49-4537-9470-e5d0e99856b2"
+                                },
+                                {
+                                    "score": 13250,
+                                    "tierId": "29b2b2fe-404a-459a-ab7d-2ca534f77041"
+                                }
+                            ]
+                        },
+                        {
+                            "hash": "eb4cea79e8fb05308f681a0a39eeeaf7",
+                            "id": "912d816d-b907-4ebe-add8-0d7e5f597e7c",
+                            "name": "WhisphereRawControl",
+                            "thresholds": [
+                                {
+                                    "score": 5300,
+                                    "tierId": "adc1e13d-ea49-4537-9470-e5d0e99856b2"
+                                },
+                                {
+                                    "score": 8800,
+                                    "tierId": "29b2b2fe-404a-459a-ab7d-2ca534f77041"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "color": [
+                192,
+                192,
+                192,
+                255
+            ],
+            "id": "cecdb2fd-53ed-4a9e-8083-3c87dc493ea7",
+            "name": "Reactive Tracking",
+            "scenarios": [
+                {
+                    "hash": "3e2bdea571f64cc14bd34096021810c8",
+                    "id": "d43ff9ed-d9f1-4ad5-9bf7-b13bdf1d6511",
+                    "name": "Polarized Hell Easy 20% Slower",
+                    "thresholds": [
+                        {
+                            "score": 1600,
+                            "tierId": "adc1e13d-ea49-4537-9470-e5d0e99856b2"
+                        },
+                        {
+                            "score": 2350,
+                            "tierId": "29b2b2fe-404a-459a-ab7d-2ca534f77041"
+                        }
+                    ]
+                }
+            ],
+            "subcategories": [
+            ]
+        },
+        {
+            "color": [
+                255,
+                215,
+                0,
+                255
+            ],
+            "id": "a4292c27-e39f-4d1a-b73e-b38320a5c1b1",
+            "name": "Flick Tech",
+            "scenarios": [
+                {
+                    "hash": "b7c77a17970ca709f423da00ff7db98e",
+                    "id": "ec1227b0-ca87-493c-b9a1-037c2f71d508",
+                    "name": "Pokeball Frenzy Auto TE Wide",
+                    "thresholds": [
+                        {
+                            "score": 1950,
+                            "tierId": "adc1e13d-ea49-4537-9470-e5d0e99856b2"
+                        },
+                        {
+                            "score": 2850,
+                            "tierId": "29b2b2fe-404a-459a-ab7d-2ca534f77041"
+                        }
+                    ]
+                }
+            ],
+            "subcategories": [
+            ]
+        },
+        {
+            "color": [
+                255,
+                140,
+                0,
+                255
+            ],
+            "id": "f5617504-de6a-4240-8df6-0af8ecb2b3f3",
+            "name": "Click Timing",
+            "scenarios": [
+                {
+                    "hash": "2df02b8b310425326aba29ec728bf4df",
+                    "id": "fa2a1128-4482-4885-b7eb-405e2a782e16",
+                    "name": "voxTargetClick 20% Small",
+                    "thresholds": [
+                        {
+                            "score": 62,
+                            "tierId": "adc1e13d-ea49-4537-9470-e5d0e99856b2"
+                        },
+                        {
+                            "score": 87,
+                            "tierId": "29b2b2fe-404a-459a-ab7d-2ca534f77041"
+                        }
+                    ]
+                }
+            ],
+            "subcategories": [
+            ]
+        }
+    ],
+    "id": "a52a916a-dcd8-4d30-b327-e468fcb75512",
+    "name": "Viscose Benchmarks Beta 2",
+    "schemaVersion": 1,
+    "tiers": [
+        {
+            "color": [
+                206,
+                61,
+                48,
+                255
+            ],
+            "id": "adc1e13d-ea49-4537-9470-e5d0e99856b2",
+            "name": "Cinnabar"
+        },
+        {
+            "color": [
+                156,
+                255,
+                145,
+                255
+            ],
+            "id": "29b2b2fe-404a-459a-ab7d-2ca534f77041",
+            "name": "Celadon"
+        }
+    ],
+    "uncategorized": [
+    ]
+}

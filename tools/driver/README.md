@@ -55,6 +55,10 @@ The synthetic datasets copy every file in [`benchmarks/`](benchmarks) into the s
 
 Under `single`, `short` and `bunched` only the 1wall6targets row has runs; the others show as unplayed.
 
+### Snapshots
+
+`tools/driver/snapshots/<date>/` is a copy of the real app's state: `overlay/` holds its `profile.pb` and `benchmarks/`, and `start.txt` is a batch whose one `start` line lays that overlay over `--dataset empty` and replays every registry setting as `--setting` (except `file/…`, which the driver points at the session). The KovaaK's folder is not copied, since the profile is the record of the runs. Start one with `ui_driver.py --session snapshot batch tools/driver/snapshots/2026-10-17/start.txt`; take a new one with `uv run python tools/driver/snapshots/take_snapshot.py tools/driver/snapshots/<date>`.
+
 Other `start` options (all of them stored in `launch.json`, so `restart` reuses them):
 
 | Option | Example | What it does |
