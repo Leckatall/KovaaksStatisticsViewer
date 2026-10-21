@@ -270,36 +270,36 @@ namespace ksv::application {
                                            rollingMean(primitive(PrimitiveMetric::Shots), 5));
         return {
             SeriesConfig{
-                SeriesId{1}, {"Score", line({224, 224, 224, 255}), true, 0},
+                SeriesId{1}, {"Score", line({0, 230, 118, 255}), true, 0},
                 runningSum(score), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{2}, {"Expected Final Score", line({167, 139, 250, 255}), true, 1, 1},
+                SeriesId{2}, {"Expected Final Score", line({255, 67, 199, 255}), true, 1, 1},
                 expectedFinalScore(), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{3}, {"Expected Final (Top 10%)", line({221, 214, 254, 255}), true, 2, 1},
+                SeriesId{3}, {"Expected Final (Top 10%)", line({255, 107, 152, 255}), true, 2, 1},
                 averageAcrossRuns(expectedFinalScore(), TopPercentile{10.0}), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{4}, {"Expected Final (Last 10 Runs)", line({139, 123, 196, 255}), true, 3, 1},
+                SeriesId{4}, {"Expected Final (Last 10 Runs)", line({157, 92, 255, 255}), true, 3, 1},
                 averageAcrossRuns(expectedFinalScore(), RecentRuns{10}), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{5}, {"Accuracy", line({46, 196, 160, 255}), true, 4},
+                SeriesId{5}, {"Accuracy", line({0, 212, 255, 255}), true, 4},
                 divide(runningSum(primitive(PrimitiveMetric::Hits)), runningSum(primitive(PrimitiveMetric::Shots))),
                 AxisId{2}, AxisTransformKind::Percentage
             },
             SeriesConfig{
-                SeriesId{6}, {"Accuracy (5s)", line({31, 138, 112, 255}), false, 5},
+                SeriesId{6}, {"Accuracy (5s)", line({0, 159, 191, 255}), false, 5},
                 accuracyOver5s, AxisId{2}, AxisTransformKind::Percentage
             },
             SeriesConfig{
-                SeriesId{7}, {"Score/s (5s)", line({158, 158, 158, 255}), false, 6},
+                SeriesId{7}, {"Score/s (5s)", line({0, 173, 88, 255}), false, 6},
                 rollingMean(score, 5)
             },
             SeriesConfig{
-                SeriesId{8}, {"Expected Final (Whole Run)", line({244, 143, 177, 255}), false, 7, 1},
+                SeriesId{8}, {"Expected Final (Whole Run)", line({236, 50, 255, 255}), false, 7, 1},
                 projectedFinalValue(runningSum(score)), AxisId{1}
             }
         };
