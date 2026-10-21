@@ -175,7 +175,7 @@ TestCase {
         }
     }
 
-    function test_generateProfileButton_delegatesToSessionVm() {
+    function test_generateProfileButton_asksForConfirmationBeforeRebuilding() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm()
@@ -185,7 +185,85 @@ TestCase {
         verify(button !== null, "no button named 'generateProfileButton' found in SettingsDialog Profile category")
         mouseClick(button)
 
-        compare(dialog.sessionVm.generateProfileCalls, 1, "clicking generateProfileButton should call sessionVm.generateProfile() once")
+        tryCompare(dialog.rebuildProfilePrompt, "visible", true)
+        compare(dialog.sessionVm.generateProfileCalls, 0, "the rebuild must wait for the confirmation")
+        dialog.rebuildProfilePrompt.close()
+    }
+
+    function test_rebuildPrompt_okRebuildsAndCancelDoesNot() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm()
+        })
+
+        dialog.rebuildProfilePrompt.buttonClicked(MessageDialog.Cancel, MessageDialog.RejectRole)
+        compare(dialog.sessionVm.generateProfileCalls, 0)
+        dialog.rebuildProfilePrompt.buttonClicked(MessageDialog.Ok, MessageDialog.AcceptRole)
+        compare(dialog.sessionVm.generateProfileCalls, 1)
+    }
+
+    function test_refreshAndRebuildShareOneActionRow() {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
+        const refresh = ItemLookup.findByObjectName(dialog.contentItem, "refreshProfileButton")
+        const rebuild = ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton")
+        compare(refresh.parent, rebuild.parent)
+    }
+
+    function resultLabelText(overrides) {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm(overrides)})
+        return ItemLookup.findByObjectName(dialog.contentItem, "profileResultLabel").text
+    }
+
+    function test_profileResultLabel_summarisesTheLastImport() {
+        compare(resultLabelText({profileImportOutcome: "succeeded", profileImportAdded: 3}), "Added 3 runs")
+        compare(resultLabelText({profileImportOutcome: "succeeded", profileImportAdded: 1, profileImportEnriched: 2}),
+                "Added 1 run; updated 2 runs")
+        compare(resultLabelText({profileImportOutcome: "succeeded", profileImportEnriched: 1}), "Updated 1 run")
+        compare(resultLabelText({profileImportOutcome: "succeeded"}), "Up to date")
+        compare(resultLabelText({profileImportOutcome: "partial", profileImportIssues: [{path: "a.perf", message: "x"}]}),
+                "No new runs imported")
+        compare(resultLabelText({profileImportOutcome: "failed", profileImportSaveFailed: true}),
+                "Save failed — previous profile unchanged")
+        compare(resultLabelText({profileImportOutcome: "failed"}), "Refresh failed")
+        compare(resultLabelText({profileImportOutcome: "none"}), "")
+    }
+
+    function test_profileResultLabel_showsProgressWhileBusy() {
+        compare(resultLabelText({profileImportBusy: true, profileImportDone: 12, profileImportTotal: 40}), "12 of 40 runs")
+        compare(resultLabelText({profileImportBusy: true}), "Scanning sources…")
+        compare(resultLabelText({profileImportBusy: true, profileImportPhase: "saving", profileImportTotal: 5}), "Saving…")
+    }
+
+    function test_profileIssuesFrame_hiddenWithoutIssues() {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "profileIssuesFrame").visible, false)
+    }
+
+    function test_profileIssuesFrame_listsEveryIssueByFileName() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm(),
+            sessionVm: makeFakeSessionVm({profileImportIssues: [
+                {path: "C:/a/b/broken.perf", message: "Incomplete file", retryable: true},
+                {path: "C:\\a\\old.perf", message: "Unreadable", retryable: false, previouslyFailed: true}
+            ]})
+        })
+        const frame = ItemLookup.findByObjectName(dialog.contentItem, "profileIssuesFrame")
+        compare(frame.visible, true)
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "profileIssuesHeader").text,
+                "2 source files could not be imported")
+        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileIssueLabel")
+        tryVerify(() => label !== null && label.text !== "")
+        verify(label.text.startsWith("broken.perf: "), label.text)
+        verify(label.text.indexOf("C:/a/b") < 0, label.text)
+    }
+
+    function test_openProfile_selectsTheProfilePageAndShowsTheDialog() {
+        const dialog = createTemporaryObject(settingsDialogComponent, testCase, {
+            settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm(), currentCategory: 2
+        })
+        dialog.openProfile()
+        compare(dialog.currentCategory, 0)
+        compare(dialog.visible, true)
     }
 
     function test_profileBuildProgressBar_hiddenWhenNoBuildIsRunning() {
@@ -246,37 +324,6 @@ TestCase {
 
         dialog.sessionVm.profileImportBusy = false
         compare(statusLabel.text, "Profile status: Not loaded")
-    }
-
-    function test_profileBuildProgressLabel_hiddenWhenNoBuildIsRunning() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm()
-        })
-        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
-        verify(label !== null, "no label named 'profileBuildProgressLabel' found in SettingsDialog Profile category")
-        compare(label.visible, false)
-    }
-
-    function test_profileBuildProgressLabel_saysFilesDoneOutOfTotal() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileImportBusy: true, profileImportProgress: 0.4,
-                                          profileImportDone: 2, profileImportTotal: 5})
-        })
-        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
-        compare(label.visible, true)
-        compare(label.text, "Rebuilding profile: 2 of 5 runs")
-    }
-
-    function test_profileBuildProgressLabel_saysScanningBeforeTheFirstReport() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileImportBusy: true})
-        })
-        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
-        compare(label.visible, true)
-        compare(label.text, "Scanning sources...")
     }
 
     function test_seriesEnabledSwitchesListAllSeriesConfigsAndReflectEnabledState() {

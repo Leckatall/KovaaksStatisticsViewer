@@ -83,16 +83,14 @@ ApplicationWindow {
         onAboutRequested: aboutDialog.open()
     }
 
+    footer: ProfileStatusBar {
+        objectName: "profileStatusBar"
+        sessionVm: root.sessionVm
+        onDetailsRequested: settingsDialog.openProfile()
+    }
+
     ColumnLayout {
         anchors.fill: parent
-
-        ProfileImportStatus {
-            objectName: "mainProfileImportStatus"
-            Layout.fillWidth: true
-            Layout.leftMargin: 12
-            Layout.rightMargin: 12
-            sessionVm: root.sessionVm
-        }
 
         FirstRunBanner {
             objectName: "firstRunBanner"

@@ -94,9 +94,11 @@ ApplicationWindow {
     }
 
     property int currentCategory: 0
+    readonly property int profileCategory: 0
     readonly property int graphLinesCategory: 1
     readonly property int graphsCategory: 2
     readonly property alias discardChangesPrompt: discardChangesPrompt
+    readonly property alias rebuildProfilePrompt: rebuildProfilePrompt
 
     function open() {
         root.settingsVm.beginVisit()
@@ -124,6 +126,11 @@ ApplicationWindow {
 
     function openGraphLines() {
         currentCategory = graphLinesCategory
+        open()
+    }
+
+    function openProfile() {
+        currentCategory = profileCategory
         open()
     }
 
@@ -169,6 +176,18 @@ ApplicationWindow {
                     return
             }
             root.close()
+        }
+    }
+
+    MessageDialog {
+        id: rebuildProfilePrompt
+        objectName: "rebuildProfilePrompt"
+        title: "Rebuild profile?"
+        text: "Rebuild re-reads every source file from scratch."
+        informativeText: "Runs whose source files have been moved or deleted will be removed from your profile. This cannot be undone."
+        buttons: MessageDialog.Ok | MessageDialog.Cancel
+        onButtonClicked: function (button) {
+            if (button === MessageDialog.Ok) root.sessionVm.generateProfile()
         }
     }
 
@@ -274,7 +293,35 @@ ApplicationWindow {
 
                 // Directories
                 ColumnLayout {
+                    id: profilePage
                     spacing: 16
+
+                    readonly property bool importBusy: root.sessionVm.profileImportBusy === true
+                    readonly property string importPhase: root.sessionVm.profileImportPhase || "idle"
+                    readonly property string importOutcome: root.sessionVm.profileImportOutcome || "none"
+                    readonly property var issues: root.sessionVm.profileImportIssues || []
+                    readonly property int added: root.sessionVm.profileImportAdded || 0
+                    readonly property int enriched: root.sessionVm.profileImportEnriched || 0
+                    readonly property bool saveFailed: root.sessionVm.profileImportSaveFailed === true
+                    readonly property bool resultIsError: !importBusy && (saveFailed || importOutcome === "failed")
+                    readonly property string resultText: {
+                        if (importBusy) {
+                            if (importPhase === "saving") return qsTr("Saving…")
+                            if (root.sessionVm.profileImportTotal === 0) return qsTr("Scanning sources…")
+                            return qsTr("%1 of %2 runs").arg(root.sessionVm.profileImportDone).arg(root.sessionVm.profileImportTotal)
+                        }
+                        if (saveFailed) return qsTr("Save failed — previous profile unchanged")
+                        if (importOutcome === "failed") return qsTr("Refresh failed")
+                        if (importOutcome === "none" || importOutcome === "stale") return ""
+                        const parts = []
+                        if (added > 0) parts.push(qsTr("Added %1").arg(runCount(added)))
+                        if (enriched > 0) parts.push(qsTr("updated %1").arg(runCount(enriched)))
+                        if (parts.length === 0) return issues.length === 0 ? qsTr("Up to date") : qsTr("No new runs imported")
+                        const joined = parts.join("; ")
+                        return joined.charAt(0).toUpperCase() + joined.slice(1)
+                    }
+
+                    function runCount(count) { return count === 1 ? qsTr("%1 run").arg(count) : qsTr("%1 runs").arg(count) }
 
                     Label {
                         text: "Profile"
@@ -300,6 +347,7 @@ ApplicationWindow {
                     }
 
                     RowLayout {
+                        Layout.fillWidth: true
                         spacing: 8
                         Rectangle {
                             width: 10
@@ -317,25 +365,91 @@ ApplicationWindow {
                                   (root.sessionVm.profileImportMode === "rebuild" ? "Rebuilding" : "Refreshing")
                                   : root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
                         }
+                        Label {
+                            objectName: "profileResultLabel"
+                            Layout.fillWidth: true
+                            visible: text !== ""
+                            elide: Text.ElideRight
+                            color: profilePage.resultIsError ? Theme.errorText : Qt.alpha(root.palette.text, 0.7)
+                            text: profilePage.resultText
+                        }
                     }
 
-                    Button {
-                        objectName: "refreshProfileButton"
-                        text: qsTr("Refresh Profile")
-                        enabled: root.settingsVm.kovaaksDirSet === true && !root.sessionVm.profileImportBusy
-                        onClicked: root.sessionVm.refreshProfile()
-                    }
-
-                    Button {
-                        objectName: "generateProfileButton"
-                        text: "Rebuild Profile from Kovaaks Directory"
-                        enabled: !root.sessionVm.profileImportBusy
-                        onClicked: root.sessionVm.generateProfile()
-                    }
-
-                    ProfileImportStatus {
+                    ProgressBar {
+                        objectName: "profileBuildProgressBar"
                         Layout.fillWidth: true
-                        sessionVm: root.sessionVm
+                        Layout.topMargin: -8
+                        visible: profilePage.importBusy
+                        indeterminate: profilePage.importPhase === "scanning" || profilePage.importPhase === "saving"
+                                       || root.sessionVm.profileImportTotal === 0
+                        value: root.sessionVm.profileImportProgress || 0
+                    }
+
+                    RowLayout {
+                        spacing: 8
+                        Button {
+                            objectName: "refreshProfileButton"
+                            text: qsTr("Refresh Profile")
+                            enabled: root.settingsVm.kovaaksDirSet === true && !root.sessionVm.profileImportBusy
+                            onClicked: root.sessionVm.refreshProfile()
+                        }
+                        Button {
+                            objectName: "generateProfileButton"
+                            flat: true
+                            text: qsTr("Rebuild from Scratch…")
+                            enabled: !root.sessionVm.profileImportBusy
+                            onClicked: rebuildProfilePrompt.open()
+                        }
+                    }
+
+                    Label {
+                        objectName: "profileActionsHint"
+                        Layout.fillWidth: true
+                        Layout.topMargin: -8
+                        wrapMode: Text.Wrap
+                        color: Qt.alpha(root.palette.text, 0.7)
+                        text: qsTr("Refresh imports only new source files. Rebuild re-reads every source file from scratch and drops runs whose files have been moved or deleted.")
+                    }
+
+                    Frame {
+                        objectName: "profileIssuesFrame"
+                        Layout.fillWidth: true
+                        visible: profilePage.issues.length > 0
+                        ColumnLayout {
+                            width: parent.width
+                            spacing: 6
+                            Label {
+                                objectName: "profileIssuesHeader"
+                                Layout.fillWidth: true
+                                font.bold: true
+                                text: profilePage.issues.length === 1 ? qsTr("1 source file could not be imported")
+                                    : qsTr("%1 source files could not be imported").arg(profilePage.issues.length)
+                            }
+                            ListView {
+                                id: issueList
+                                objectName: "profileIssueList"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.min(contentHeight, 160)
+                                clip: true
+                                model: profilePage.issues
+                                ScrollBar.vertical: ScrollBar {}
+                                delegate: Label {
+                                    id: issueDelegate
+                                    required property var modelData
+                                    objectName: "profileIssueLabel"
+                                    width: issueList.width
+                                    elide: Text.ElideMiddle
+                                    maximumLineCount: 1
+                                    readonly property string fileName: (modelData.path || "").split(/[\\/]/).pop()
+                                    text: fileName === "" ? modelData.message
+                                        : qsTr("%1: %2").arg(fileName).arg(modelData.message)
+                                    HoverHandler { id: issueHover }
+                                    ToolTip.visible: issueHover.hovered && modelData.path !== ""
+                                    ToolTip.text: modelData.path
+                                    ToolTip.delay: 500
+                                }
+                            }
+                        }
                     }
                     Item { Layout.fillHeight: true }
                 }

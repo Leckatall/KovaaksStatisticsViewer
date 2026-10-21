@@ -63,7 +63,7 @@ qt_add_qml_module(ksv_ui
             qml/common/ChromeIconButton.qml
             qml/shell/AppMenuBar.qml
             qml/shell/SettingsDialog.qml
-            qml/shell/ProfileImportStatus.qml
+            qml/shell/ProfileStatusBar.qml
             qml/benchmark/BenchmarkManagerDialog.qml
             qml/benchmark/BenchmarkEditorTable.qml
             qml/benchmark/BenchmarkMappingPanel.qml

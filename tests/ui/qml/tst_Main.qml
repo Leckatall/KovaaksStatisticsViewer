@@ -58,6 +58,10 @@ TestCase {
     QtObject {
         id: fakeSessionVm
         property int refreshCalls: 0
+        property bool profileImportBusy: false
+        property string profileImportOutcome: "none"
+        property var profileImportIssues: []
+        property bool profileImportSaveFailed: false
         function refreshProfile() { refreshCalls++ }
     }
     property var fakeHistoryVm: TestDoubles.makeFakeHistoryVm()
@@ -86,6 +90,14 @@ TestCase {
         verify(refresh !== null)
         refresh.trigger()
         compare(fakeSessionVm.refreshCalls, 1)
+    }
+
+    function test_profileStatusBarIsTheHiddenWindowFooterWhileIdle() {
+        const win = createMain()
+        const bar = win.footer
+        verify(bar !== null, "Main.qml has no footer")
+        compare(bar.objectName, "profileStatusBar")
+        compare(bar.visible, false)
     }
 
     function createMain(managerVm) {

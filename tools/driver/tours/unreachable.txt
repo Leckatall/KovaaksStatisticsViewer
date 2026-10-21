@@ -51,6 +51,7 @@ section settings
 start --dataset fixtures --inject decoder=delay:300
 eval settingsDialog.open()
 click "${S}/generateProfileButton" --settle 50
+click "win:rebuildProfilePrompt/text:OK" --settle 50
 shot --window settingsDialog --name rebuild-in-progress
 wait "${S}/profileBuildProgressBar" --gone --timeout 10000
 
