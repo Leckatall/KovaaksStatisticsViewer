@@ -41,8 +41,7 @@ namespace ksv::ui {
         Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY backgroundColorChanged)
         // Colour of a series with no colour of its own (a neutral line), and of its tooltip swatch.
         Q_PROPERTY(QColor foregroundColor READ foregroundColor WRITE setForegroundColor NOTIFY foregroundColorChanged)
-        // An x value (in the graph's data units) to mark with a vertical rule and a ring around each
-        // visible line's point there; NaN marks nothing.
+        // Selection uses graph data units; NaN marks nothing.
         Q_PROPERTY(qreal markedX READ markedX WRITE setMarkedX NOTIFY markedXChanged)
         Q_PROPERTY(QColor markerColor READ markerColor WRITE setMarkerColor NOTIFY markerColorChanged)
         // How consecutive observations are joined; the values match application::ConnectionMode.
@@ -167,7 +166,7 @@ namespace ksv::ui {
         QColor m_backgroundColor{"#2d2d2d"};
         QColor m_foregroundColor{Qt::white};
         qreal m_markedX = std::numeric_limits<qreal>::quiet_NaN();
-        QColor m_markerColor{"#E040FB"};
+        QColor m_markerColor{"#42d9e8"};
     };
 }
 

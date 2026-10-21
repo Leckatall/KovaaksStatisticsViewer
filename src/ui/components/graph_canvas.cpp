@@ -350,29 +350,18 @@ namespace ksv::ui {
     }
 
     void GraphCanvas::drawMarkedX(QPainter *painter, const QRectF &rect) const {
-        if (!m_graphVm || std::isnan(m_markedX)) return;
+        if (!m_graphVm || !std::isfinite(m_markedX)) return;
         const presentation::Axis &sharedXAxis = m_graphVm->xAxis();
         const qreal t = sharedXAxis.normalizedPosition(m_markedX);
         if (t < 0.0 || t > 1.0) return;
         const qreal pixelX = rect.left() + t * rect.width();
 
         painter->save();
-        QPen rulePen(m_markerColor, 2.0);
-        rulePen.setCapStyle(Qt::FlatCap);
-        painter->setPen(rulePen);
-        painter->drawLine(QPointF(pixelX, rect.top()), QPointF(pixelX, rect.bottom()));
-
-        // A ring in the marker colour around each visible line's point at the marked x, over the
-        // line's own colour, so the point reads as "this run" on every line.
-        constexpr qreal kRingRadius = 6.0;
-        for (const auto *s: seriesInPaintOrder()) {
-            const auto sample = s->sampleAtX(m_markedX);
-            if (!sample || sample->x() != m_markedX) continue;
-            const QPointF pixel = toPixel(*sample, rect, xAxisFor(*s), yAxisFor(*s));
-            painter->setPen(QPen(m_markerColor, 2.5));
-            painter->setBrush(colorFor(*s));
-            painter->drawEllipse(pixel, kRingRadius, kRingRadius);
-        }
+        painter->setClipRect(rect, Qt::IntersectClip);
+        QColor bandColor = m_markerColor;
+        bandColor.setAlphaF(bandColor.alphaF() * 0.25);
+        painter->fillRect(QRectF(pixelX - 4.0, rect.top(), 8.0, rect.height()), bandColor);
+        painter->fillRect(QRectF(pixelX - 1.0, rect.bottom() - 4.0, 2.0, 4.0), m_markerColor);
         painter->restore();
     }
 
@@ -381,8 +370,8 @@ namespace ksv::ui {
         const QRectF rect = plotRect();
         drawAxes(painter, rect);
         drawReferenceLines(painter, rect);
-        drawSeries(painter, rect);
         drawMarkedX(painter, rect);
+        drawSeries(painter, rect);
     }
 
     QVariantMap GraphCanvas::valuesAtX(const qreal x) const {

@@ -576,6 +576,73 @@ namespace {
         return image;
     }
 
+    TEST(GraphCanvasSelectionTest, SelectedRunHasASubtleNarrowBandWithoutEmphasizingItsValues) {
+        StyledVm vm({QPointF(0.0, 40.0), QPointF(5.0, 60.0), QPointF(10.0, 40.0)}, 0.0, 10.0);
+        presentation::ValueAxis fixed;
+        fixed.setRange(0.0, 100.0);
+        vm.model().yAxis = fixed;
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        canvas->setPointMarkers(true);
+        const QRectF plot = canvas->property("plotArea").toRectF();
+        const QPointF point = vm.pixelOf(*canvas, QPointF(5.0, 60.0));
+        const QImage unselected = render(*canvas);
+
+        canvas->setMarkedX(5.0);
+        const QImage selected = render(*canvas);
+        const int sampleY = int(plot.top()) + 17;
+        const QColor band = selected.pixelColor(int(point.x()) + 2, sampleY);
+        EXPECT_GT(band.alpha(), 0);
+        EXPECT_LT(band.alpha(), 40);
+        EXPECT_GT(band.green(), band.red());
+        EXPECT_GT(band.blue(), band.red());
+        int bandWidth = 0;
+        for (int x = int(plot.left()); x < plot.right(); ++x) {
+            if (selected.pixel(x, sampleY) != unselected.pixel(x, sampleY)) ++bandWidth;
+        }
+        EXPECT_GE(bandWidth, 7);
+        EXPECT_LE(bandWidth, 9);
+        EXPECT_EQ(selected.pixelColor(int(point.x()), int(point.y())), QColor(Qt::red));
+        for (int y = int(point.y()) - 10; y <= int(point.y()) + 10; ++y) {
+            for (int x = int(point.x()) - 10; x <= int(point.x()) + 10; ++x) {
+                if (std::abs(x - point.x()) <= 5.0) continue;
+                ASSERT_EQ(selected.pixel(x, y), unselected.pixel(x, y)) << x << "," << y;
+            }
+        }
+    }
+
+    TEST(GraphCanvasSelectionTest, EdgeRunBandsStayInsideThePlot) {
+        StyledVm vm({QPointF(0.0, 40.0), QPointF(10.0, 60.0)}, 0.0, 10.0);
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        const QRectF plot = canvas->property("plotArea").toRectF();
+        const QImage unselected = render(*canvas);
+        for (const qreal run: {0.0, 10.0}) {
+            canvas->setMarkedX(run);
+            const QImage selected = render(*canvas);
+            int changes = 0;
+            for (int y = 0; y < selected.height(); ++y) {
+                for (int x = 0; x < selected.width(); ++x) {
+                    if (selected.pixel(x, y) == unselected.pixel(x, y)) continue;
+                    ++changes;
+                    ASSERT_GE(x, std::floor(plot.left()));
+                    ASSERT_LT(x, std::ceil(plot.right()));
+                    ASSERT_GE(y, std::floor(plot.top()));
+                    ASSERT_LT(y, std::ceil(plot.bottom()));
+                }
+            }
+            EXPECT_GT(changes, 0);
+        }
+    }
+
+    TEST(GraphCanvasSelectionTest, MissingOrOutOfRangeSelectionDoesNotPaintABand) {
+        StyledVm vm({QPointF(0.0, 40.0), QPointF(10.0, 60.0)}, 0.0, 10.0);
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        const QImage unselected = render(*canvas);
+        for (const qreal run: {-1.0, 11.0, std::numeric_limits<qreal>::quiet_NaN()}) {
+            canvas->setMarkedX(run);
+            EXPECT_EQ(render(*canvas), unselected);
+        }
+    }
+
     int countColour(const QImage &image, const QRect &area, const QRgb colour) {
         int count = 0;
         const QRect bounded = area.intersected(image.rect());

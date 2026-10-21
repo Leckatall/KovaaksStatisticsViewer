@@ -14,7 +14,7 @@ Item {
     property bool pointMarkers: false
     // GraphCanvas.ConnectionMode: 0 smooth, 1 straight, 2 points only.
     property int connectionMode: 0
-    // An x value to mark with a rule and a ring on each line's point there; NaN marks nothing.
+    // Selection uses graph data units; NaN marks nothing.
     property real markedX: NaN
     // Whether a left click inside the plot reports the nearest data point's x through pointClicked.
     property bool clickable: false
