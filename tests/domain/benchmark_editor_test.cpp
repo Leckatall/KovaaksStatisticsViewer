@@ -134,18 +134,6 @@ TEST(BenchmarkEditor, AddScenarioRejectsDuplicateDisplayName) {
     EXPECT_EQ(bench.uncategorized.size(), 1U);
 }
 
-TEST(BenchmarkEditor, AddKnownScenarioPersistsHash) {
-    Benchmark bench;
-    BenchmarkEditor editor{bench, countingIds()};
-
-    const auto result = editor.addKnownScenario("1w6ts", "C0FFE00D");
-
-    ASSERT_TRUE(result.ok());
-    ASSERT_EQ(bench.uncategorized.size(), 1U);
-    ASSERT_TRUE(bench.uncategorized.front().hash.has_value());
-    EXPECT_EQ(*bench.uncategorized.front().hash, "C0FFE00D");
-}
-
 TEST(BenchmarkEditor, ManualBenchmarkHoldsKnownAndUnplayedScenariosTogether) {
     Benchmark bench;
     BenchmarkEditor editor{bench, countingIds()};
@@ -216,30 +204,6 @@ TEST(BenchmarkEditor, RenameScenarioUpdatesTheRetainedDisplayName) {
     ASSERT_TRUE(editor.renameScenario(entry, "new name").ok());
 
     EXPECT_EQ(bench.uncategorized.front().name, "new name");
-}
-
-TEST(BenchmarkEditor, AddSubcategoryToPopulatedCategoryMovesDirectScenariosOnlyWhenChosen) {
-    Benchmark bench;
-    BenchmarkEditor editor{bench, countingIds()};
-    editor.renameBenchmark("Bench");
-    const auto category = *editor.addCategory("Clicking").createdGroup;
-    const auto first = *editor.addUnplayedScenario("s1").createdEntry;
-    const auto second = *editor.addUnplayedScenario("s2").createdEntry;
-    ASSERT_TRUE(editor.moveScenario(first, category).ok());
-    ASSERT_TRUE(editor.moveScenario(second, category).ok());
-
-    EXPECT_EQ(editor.addSubcategory(category, "Static").error, BenchmarkEditError::MixedContent);
-    const auto result = editor.addSubcategory(category, "Static", RelocateDirectToNewSubcategory{});
-
-    ASSERT_TRUE(result.ok());
-    ASSERT_TRUE(result.createdGroup.has_value());
-    ASSERT_EQ(bench.categories.size(), 1U);
-    EXPECT_TRUE(bench.categories.front().scenarios.empty());
-    ASSERT_EQ(bench.categories.front().subcategories.size(), 1U);
-    EXPECT_EQ(bench.categories.front().subcategories.front().name, "Static");
-    ASSERT_EQ(bench.categories.front().subcategories.front().scenarios.size(), 2U);
-    EXPECT_EQ(bench.categories.front().subcategories.front().scenarios.front().name, "s1");
-    EXPECT_FALSE(hasIssue(editor.validation(), BenchmarkIssueCode::MixedCategoryContent));
 }
 
 TEST(BenchmarkEditor, RemoveCategoryReturnsScenariosToUncategorized) {

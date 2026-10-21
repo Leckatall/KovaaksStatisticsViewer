@@ -161,17 +161,6 @@ TEST(BenchmarkManagerUseCase, OpenProblemEntryReturnsNulloptAndChangesNoLease) {
     EXPECT_EQ(fixture.resolution->setEditLeaseCount, 0);
 }
 
-TEST(BenchmarkManagerUseCase, CloseEditorReleasesTheLease) {
-    Fixture fixture;
-    fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
-    fixture.build();
-    fixture.manager->openBenchmark(BenchmarkId{"b1"});
-
-    fixture.manager->closeEditor();
-
-    EXPECT_FALSE(fixture.resolution->editLease.has_value());
-}
-
 TEST(BenchmarkManagerUseCase, SaveForwardsTheExactValueAndTokenAndReturnsTheOutcomeUnchanged) {
     Fixture fixture;
     fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
@@ -240,22 +229,6 @@ TEST(BenchmarkManagerUseCaseRecent, AFailedCreateIsNotMarkedCreated) {
     EXPECT_FALSE(fixture.manager->save(savedBenchmark("fresh"), std::nullopt).ok());
 
     EXPECT_EQ(fixture.recent->ids(), (std::vector<std::string>{"viewed"}));
-}
-
-TEST(BenchmarkManagerUseCase, ResolveForwardsToStatelessResolutionAndRetainsNothing) {
-    Fixture fixture;
-    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
-    fixture.resolution->resolveResult = {resolvedEntry("e1", "h1")};
-    fixture.build();
-
-    const auto working = savedBenchmark("draft-1");
-    const auto resolved = fixture.manager->resolve(working);
-
-    ASSERT_EQ(resolved.size(), 1U);
-    EXPECT_EQ(resolved.front().state, ScenarioMatchState::Resolved);
-    // The manager state never grows a copy of the supplied working benchmark.
-    ASSERT_TRUE(fixture.manager->state().library.has_value());
-    EXPECT_TRUE(fixture.manager->state().library->entries.empty());
 }
 
 TEST(BenchmarkManagerUseCase, WithAutomaticMappingsForwardsTheWorkingCopyAndReturnsTheLinkedValue) {

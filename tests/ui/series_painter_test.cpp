@@ -14,6 +14,7 @@ namespace ksv::ui {
         SeriesPainter::paint(painter, {{5.0, 15.0}, {25.0, 15.0}}, Qt::blue);
 
         EXPECT_EQ(image.pixelColor(5, 15), QColor(Qt::blue));
+        EXPECT_EQ(image.pixelColor(5, 12).alpha(), 0) << "a marker disc would reach above the 3px line here";
     }
 
     TEST(SeriesPainterTest, MarkerStyleDrawsControlPointMarkers) {

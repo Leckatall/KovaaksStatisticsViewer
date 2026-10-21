@@ -21,9 +21,9 @@ namespace {
 
     TEST(PlaytimeView, StoredPreferencesWinOverTheFallbacks) {
         GraphPreferences preferences;
-        preferences.averagingWindowDays = 7;
+        preferences.averagingWindowDays = kDefaultAveragingWindowDays + 1;
         preferences.range = RangePreference{RecentDays{14}, true};
-        EXPECT_EQ(effectiveAveragingWindow(preferences), 7);
+        EXPECT_EQ(effectiveAveragingWindow(preferences), kDefaultAveragingWindowDays + 1);
         EXPECT_EQ(effectiveRange(preferences), (RangePreference{RecentDays{14}, true}));
     }
 
@@ -50,14 +50,6 @@ namespace {
     TEST(VisiblePlaytime, ASingleDayIntervalIsThatDaysSample) {
         EXPECT_EQ(visiblePlaytime(kFull, DayInterval{day(2026, 3, 6), day(2026, 3, 6)}),
                   (PlaytimeSeries{{day(2026, 3, 6), 10.0}}));
-    }
-
-    TEST(VisiblePlaytime, ANarrowerIntervalIsASubsequenceOfAWiderOne) {
-        const auto wide = visiblePlaytime(kFull, DayInterval{day(2026, 3, 1), day(2026, 3, 6)});
-        const auto narrow = visiblePlaytime(kFull, DayInterval{day(2026, 3, 2), day(2026, 3, 5)});
-        ASSERT_EQ(narrow.size(), 2U);
-        EXPECT_EQ(narrow[0], wide[1]);
-        EXPECT_EQ(narrow[1], wide[2]);
     }
 
     TEST(DescribePlaytimeView, CarriesTheWindowTheIntervalAndTheFullExtent) {

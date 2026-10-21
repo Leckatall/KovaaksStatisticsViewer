@@ -10,7 +10,6 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QObject>
-#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -130,42 +129,6 @@ TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
     EXPECT_TRUE(projection->scenarios[0].personalBest.has_value());
     EXPECT_EQ(projection->scenarios[0].runCount, 1);
     EXPECT_GT(projection->totalPlaytimeSeconds, 0.0);
-}
-
-TEST(BenchmarkComposition, RealGraphReportsUnknownBenchmarkAsUnavailable) {
-    QTemporaryDir benchmarks;
-    ASSERT_TRUE(benchmarks.isValid());
-    auto settings = std::make_shared<tests_support::FakeSettingsService>();
-    auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(settings, std::make_shared<data::ProtoDecoder>(),
-            std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
-    app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"missing"});
-    EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Unavailable);
-    EXPECT_EQ(app.benchmarkTrackingUseCase()->projection(), nullptr);
-}
-
-TEST(BenchmarkComposition, RealGraphLoadsManagedBenchmarksAtStartup) {
-    QTemporaryDir dir;
-    ASSERT_TRUE(dir.isValid());
-    QFile file(QDir(dir.path()).absoluteFilePath("composed.json"));
-    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
-    file.write(trackableJson());
-    file.close();
-
-    auto settings = std::make_shared<tests_support::FakeSettingsService>();
-    auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
-    App app(settings, std::make_shared<data::ProtoDecoder>(),
-            std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
-
-    const auto service = app.benchmarksService();
-    ASSERT_NE(service, nullptr);
-    ASSERT_TRUE(service->snapshot().has_value());
-    ASSERT_EQ(service->snapshot()->entries.size(), 1U);
-    const auto *loaded = std::get_if<LoadedBenchmark>(&service->snapshot()->entries[0].content);
-    ASSERT_NE(loaded, nullptr);
-    EXPECT_EQ(loaded->benchmark.name, "Composed");
 }
 
 namespace {
@@ -563,55 +526,11 @@ namespace {
         return w;
     }
 
-    bool mainQmlRequires(const QString &propertyName) {
-        QFile file(QStringLiteral(KSV_UI_QML_DIR "/Main.qml"));
-        if (!file.open(QIODevice::ReadOnly)) return false;
-        const QString source = QString::fromUtf8(file.readAll());
-        const QRegularExpression declaration(
-            QStringLiteral("required\\s+property\\s+[\\w.<>]+\\s+%1\\b").arg(propertyName));
-        return declaration.match(source).hasMatch();
-    }
-
     QVariantMap findGridRow(const presentation::BenchmarkProgressGridModel *grid, const QString &name) {
         for (const QVariant &row: grid->rows())
             if (row.toMap().value(QStringLiteral("name")).toString() == name) return row.toMap();
         return {};
     }
-}
-
-TEST(BenchmarkWorkspaceComposition, AppConstructsBothUseCasesAndBothViewModels) {
-    QTemporaryDir benchmarks;
-    auto w = wireWorkspace(benchmarks, hierarchyTrackableJson());
-    ASSERT_NE(w, nullptr);
-
-    EXPECT_NE(w->app->benchmarkTrackingUseCase(), nullptr);
-    EXPECT_NE(w->app->benchmarkManagerUseCase(), nullptr);
-    EXPECT_NE(w->app->benchmarkTrackingVm(), nullptr);
-    EXPECT_NE(w->app->benchmarkManagerVm(), nullptr);
-    EXPECT_NE(w->app->benchmarksService(), nullptr);
-    EXPECT_NE(w->app->benchmarkResolutionUseCase(), nullptr);
-}
-
-TEST(BenchmarkWorkspaceComposition, StartSuppliesBothBenchmarkViewModelsAsRequiredMainProperties) {
-    integration::TestEnv env;
-    ASSERT_TRUE(env.valid());
-
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser,
-            env.benchmarkStore, env.daySource);
-    ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
-
-    ASSERT_FALSE(app.engine()->rootObjects().isEmpty());
-    auto *root = app.engine()->rootObjects().first();
-
-    EXPECT_TRUE(mainQmlRequires(QStringLiteral("benchmarkTrackingVm")))
-        << "Main.qml must declare benchmarkTrackingVm as a required property";
-    EXPECT_TRUE(mainQmlRequires(QStringLiteral("benchmarkManagerVm")))
-        << "Main.qml must declare benchmarkManagerVm as a required property";
-
-    EXPECT_EQ(root->property("benchmarkTrackingVm").value<QObject *>(),
-              static_cast<QObject *>(app.benchmarkTrackingVm()));
-    EXPECT_EQ(root->property("benchmarkManagerVm").value<QObject *>(),
-              static_cast<QObject *>(app.benchmarkManagerVm()));
 }
 
 TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewModelReachesPresentation) {

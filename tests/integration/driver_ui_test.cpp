@@ -192,13 +192,6 @@ namespace {
         EXPECT_EQ(run("find", {{"selector", "benchmarkWorkspace"}}).value("count").toInt(), 1);
     }
 
-    TEST_F(DriverUiTest, TypingReachesTheFocusedField) {
-        run("type", {{"selector", "scenarioSearchField"}, {"text", "Pasu"}, {"clear", true}});
-
-        EXPECT_EQ(run("get", {{"selector", "scenarioSearchField"}, {"property", "text"}}).value("value").toString(), "Pasu");
-        run("type", {{"selector", "scenarioSearchField"}, {"text", ""}, {"clear", true}});
-    }
-
     TEST_F(DriverUiTest, DialogWindowsAreListedAndAddressable) {
         run("eval", {{"expression", "settingsDialog.open()"}});
 

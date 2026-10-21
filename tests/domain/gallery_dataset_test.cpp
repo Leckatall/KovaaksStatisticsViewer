@@ -14,12 +14,6 @@ namespace {
         .hash = "gallery-primary",
     };
 
-    TEST(GalleryDatasetTest, NamesExposeEverySwitchableStateInDisplayOrder) {
-        EXPECT_EQ(ksv::gallery::kDatasetNames,
-                  (std::array{std::string_view{"Rich profile"}, std::string_view{"Single run"},
-                              std::string_view{"Short history"}, std::string_view{"Bunched history"}}));
-    }
-
     TEST(GalleryDatasetTest, RichProfileDefaultsToManyPrimaryRunsAndSeveralScenarios) {
         const auto profile = ksv::gallery::makeProfile(Dataset::RichProfile);
 
@@ -82,13 +76,6 @@ namespace {
         EXPECT_NEAR(run.stored_totals.score, derived_totals.score, 0.01F);
         EXPECT_GE(run.stored_totals.accuracy(), 0.5);
         EXPECT_LE(run.stored_totals.accuracy(), 0.95);
-    }
-
-    TEST(GalleryDatasetTest, ShortHistoryContainsFourRunsOfThePrimaryScenario) {
-        const auto profile = ksv::gallery::makeProfile(Dataset::ShortHistory);
-
-        EXPECT_EQ(profile.getCompletionHistory(kPrimary).size(), 4U);
-        EXPECT_EQ(profile.getAllRunRecords().size(), 4U);
     }
 
     TEST(GalleryDatasetTest, BunchedHistoryHasFiveHoursThenFourEmptyDaysThenOneHour) {

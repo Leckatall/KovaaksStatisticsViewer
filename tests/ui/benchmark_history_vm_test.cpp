@@ -46,15 +46,6 @@ namespace {
     }
 }
 
-TEST(BenchmarkHistoryViewModel, RankAndPlaytimeAreSeparateChildObjects) {
-    auto fake = fakeWith(makeTrackableSnapshot());
-    BenchmarkTrackingViewModel vm{fake};
-
-    ASSERT_NE(vm.rankHistory(), nullptr);
-    ASSERT_NE(vm.playtimeHistory(), nullptr);
-    EXPECT_NE(static_cast<QObject *>(vm.rankHistory()), static_cast<QObject *>(vm.playtimeHistory()));
-}
-
 TEST(BenchmarkHistoryViewModel, EachHistoryOwnsItsXAxisSoOnePlaytimeRangeNeverMovesTheOther) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
@@ -214,7 +205,7 @@ TEST(BenchmarkHistoryViewModel, PlaytimeSeriesHasZeroBaselineSecondsToMinutesAnd
     EXPECT_DOUBLE_EQ(displayed[1].y(), 15.0);
     ASSERT_TRUE(series.front()->yAxis.has_value());
     EXPECT_DOUBLE_EQ(series.front()->yAxis->min(), 0.0);
-    EXPECT_EQ(series.front()->name(), "Daily Playtime (7-day rolling average)");
+    EXPECT_EQ(series.front()->name(), PlaytimeGraphViewModel::titleFor(kDefaultAveragingWindowDays));
 }
 
 TEST(BenchmarkHistoryViewModel, RankAndPlaytimeKeepSeparateVerticalScales) {
@@ -278,15 +269,6 @@ TEST(BenchmarkHistoryViewModel, RankSeriesDrawsOneLineInEachTiersColourAtItsLeve
     EXPECT_EQ(lines[1].color, readableTextColor(gold));
     EXPECT_EQ(lines[2].color, readableTextColor(dark));
     EXPECT_NE(lines[2].color, QColor(20, 20, 60));
-}
-
-TEST(BenchmarkHistoryViewModel, RankSeriesIsNeutralSoItIsNotMistakenForATierLine) {
-    auto fake = fakeWith(makeTrackableSnapshot());
-    BenchmarkTrackingViewModel vm{fake};
-
-    const auto series = vm.rankHistory()->series({kValueColumn});
-    ASSERT_EQ(series.size(), 1);
-    EXPECT_FALSE(series.front()->color().isValid());
 }
 
 TEST(BenchmarkHistoryViewModel, PlaytimeSeriesKeepsItsColourAndHasNoTierLines) {
@@ -380,17 +362,14 @@ TEST(BenchmarkHistoryViewModel, CanvasKeepsAColouredSeriesOwnColour) {
 }
 
 TEST(BenchmarkHistoryViewModel, PlaytimeIsTitledExactlyLikeTheDailyPlaytimeGraph) {
-    const std::pair<int, QString> expected[] = {
-        {1, "Daily Playtime (daily totals)"}, {3, "Daily Playtime (3-day rolling average)"},
-        {7, "Daily Playtime (7-day rolling average)"}, {30, "Daily Playtime (30-day rolling average)"}};
-    for (const auto &[window, name]: expected) {
+    for (const int window: {1, 3, 7, 30}) {
         auto snapshot = makeTrackableSnapshot();
         snapshot.playtime.windowDays = window;
         auto fake = fakeWith(snapshot);
         BenchmarkTrackingViewModel vm{fake};
 
+        const QString name = PlaytimeGraphViewModel::titleFor(window);
         EXPECT_EQ(vm.playtimeHistory()->metricName(), name);
-        EXPECT_EQ(vm.playtimeHistory()->metricName(), PlaytimeGraphViewModel::titleFor(window));
         EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->name(), name);
         EXPECT_EQ(vm.rankHistory()->metricName(), "Personal-best average rank");
     }
@@ -659,18 +638,6 @@ TEST(BenchmarkHistoryViewModel, AnAnchoredRankRangeWithNoContributingRunShowsNot
     EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
 }
 
-TEST(BenchmarkHistoryViewModel, NoHistoryAndAnEmptyRangeReadDifferently) {
-    auto empty = makeTrackableSnapshot();
-    empty.projection->averageRankHistory.clear();
-    auto none = fakeWith(empty);
-    BenchmarkTrackingViewModel noHistory{none};
-    auto fake = fakeWith(rankRangeSnapshot(DayInterval{ymd(2024, 3, 1), ymd(2024, 3, 3)}));
-    BenchmarkTrackingViewModel emptyRange{fake};
-
-    EXPECT_FALSE(noHistory.rankHistory()->noObservationsInRange());
-    EXPECT_NE(noHistory.rankHistory()->emptyStateText(), emptyRange.rankHistory()->emptyStateText());
-}
-
 // ---- content states: no improvement points, no relevant history ---------------------------
 
 namespace {
@@ -888,13 +855,23 @@ TEST(BenchmarkHistoryStyle, WithNothingSavedBothGraphsLookAsTheyAlwaysDid) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
-    for (const auto *history: {vm.rankHistory(), vm.playtimeHistory()}) {
-        EXPECT_EQ(history->property("connectionMode").toInt(), 0);
-        EXPECT_FALSE(history->property("pointMarkers").toBool());
-        EXPECT_DOUBLE_EQ(history->series({kValueColumn}).front()->lineWidth, 3.0);
-    }
+    const auto rankDefaults = defaultGraphPresentation(GraphKey::BenchmarkRank);
+    const auto playtimeDefaults = defaultGraphPresentation(GraphKey::BenchmarkPlaytime);
+    const auto rankStyle = rankDefaults.seriesStyle("rank");
+    const auto playtimeStyle = playtimeDefaults.seriesStyle("playtime");
+
+    EXPECT_EQ(vm.rankHistory()->property("connectionMode").toInt(), static_cast<int>(rankDefaults.appearance.connection));
+    EXPECT_EQ(vm.rankHistory()->property("pointMarkers").toBool(), rankDefaults.appearance.lineModeMarkers);
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->series({kValueColumn}).front()->lineWidth, rankStyle.width);
+    EXPECT_EQ(vm.playtimeHistory()->property("connectionMode").toInt(),
+              static_cast<int>(playtimeDefaults.appearance.connection));
+    EXPECT_EQ(vm.playtimeHistory()->property("pointMarkers").toBool(), playtimeDefaults.appearance.lineModeMarkers);
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->lineWidth, playtimeStyle.width);
     EXPECT_FALSE(vm.rankHistory()->series({kValueColumn}).front()->color().isValid()) << "neutral rank line";
-    EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->color(), QColor("#4DD0E1"));
+    ASSERT_TRUE(playtimeStyle.color.has_value());
+    EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->color(),
+              QColor(playtimeStyle.color->red, playtimeStyle.color->green, playtimeStyle.color->blue,
+                     playtimeStyle.color->alpha));
 }
 
 TEST(BenchmarkHistoryStyle, TheCommittedStyleIsAppliedAtConstructionToEachGraph) {

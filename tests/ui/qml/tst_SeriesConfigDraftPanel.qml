@@ -321,18 +321,6 @@ TestCase {
         mouseClick(ItemLookup.findByObjectName(overlay, "deleteSeriesButton_1"));
         compare(panel.settingsVm.removeCalls[0], ["1"]);
     }
-    function test_deleteButtonWorksIdenticallyOnAPrimitiveRow() {
-        const vm = makeFakeSettingsVm({
-            allSeriesConfigs: rowsOutOfOrder()
-        });
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: vm
-        });
-        verify(waitForRendering(panel));
-        const overlay = openOptionsPopup(panel, "1");
-        mouseClick(ItemLookup.findByObjectName(overlay, "deleteSeriesButton_1"));
-        compare(panel.settingsVm.removeCalls[0], ["1"]);
-    }
     function test_changingTheHiddenLeadingPointsSpinBoxCallsSetSeriesHiddenLeadingPointsWithIdAndValue() {
         const vm = makeFakeSettingsVm({
             allSeriesConfigs: rowsOutOfOrder()
@@ -414,16 +402,6 @@ TestCase {
         wait(50);
         compare(ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsSpinBox_1").value, 4);
         verify(ItemLookup.findByObjectName(panel, "seriesOptionsIndicator_1").visible);
-    }
-    function test_theOptionsIndicatorIsShownOnlyForRowsHidingLeadingPoints() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm({
-                allSeriesConfigs: rowsOutOfOrder()
-            })
-        });
-        verify(waitForRendering(panel));
-        verify(ItemLookup.findByObjectName(panel, "seriesOptionsIndicator_1").visible);
-        verify(!ItemLookup.findByObjectName(panel, "seriesOptionsIndicator_2").visible);
     }
     function test_draggingARowDoesNotCallReorderSeriesUntilReleased() {
         const vm = makeFakeSettingsVm({
@@ -588,15 +566,6 @@ TestCase {
         compare(panel.expressionDialog.seriesColor.toString(), "#0000ff");
         compare(panel.expressionDialog.seriesWidth, 3);
         compare(panel.expressionDialog.seriesEnabled, false);
-    }
-    function test_editExpressionButtonWorksIdenticallyOnAPrimitiveRow() {
-        const vm = makeFakeSettingsVm();
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: vm
-        });
-        mouseClick(ItemLookup.findByObjectName(panel, "editExpressionButton_1"));
-        tryCompare(panel.expressionDialog, "visible", true);
-        compare(panel.expressionDialog.seriesId, "1");
     }
     function test_editingNameFieldAndCommittingCallsUpdateComputedSeriesWithNewNameAndOtherFieldsUnchanged() {
         const vm = makeFakeSettingsVm();

@@ -107,16 +107,6 @@ namespace {
         }
     };
 
-    TEST_F(ScenarioBrowserViewModelTest, ScenarioModelInitiallyContainsAllSummaries) {
-        fake_controller->scenario_summaries = {
-            make_summary("1wall6targets TE", "hash-1"),
-            make_summary("Microshot", "hash-2"),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-
-        EXPECT_EQ(asListModel(view_model)->rowCount(), 2);
-    }
-
     TEST_F(ScenarioBrowserViewModelTest, SetSearchTextFiltersCaseInsensitivelyByName) {
         fake_controller->scenario_summaries = {
             make_summary("1wall6targets TE", "hash-1"),

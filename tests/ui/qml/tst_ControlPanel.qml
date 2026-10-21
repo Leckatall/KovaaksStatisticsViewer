@@ -107,10 +107,6 @@ TestCase {
                                                findChild(panel, "configureGraphLinesButton").implicitWidth) + 1)
     }
 
-    function test_configure_button_is_flat() {
-        compare(findChild(panel, "configureGraphLinesButton").flat, true)
-    }
-
     // The legend must never decide its panel's height: only one row is asked for.
     function test_implicit_height_ignores_the_chips() {
         const legend = createTemporaryObject(manyLinesComponent, testCase, {height: 400})

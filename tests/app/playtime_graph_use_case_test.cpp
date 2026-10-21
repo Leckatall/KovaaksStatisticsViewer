@@ -65,15 +65,19 @@ namespace {
         }
     };
 
-    TEST_F(PlaytimeGraphUseCaseTest, DefaultsToSevenDayAveragingOverTheLastThirtyDaysAnchoredToTheLatestRun) {
+    TEST_F(PlaytimeGraphUseCaseTest, DefaultsToTheDefaultWindowAndRangeAnchoredToTheLatestRun) {
+        const auto defaults = defaultGraphPreferences(GraphKey::DailyPlaytime);
+        const auto windowDays = *defaults.averagingWindowDays;
+        const auto rangeDays = std::get<RecentDays>(defaults.range->range).days;
+        ASSERT_TRUE(defaults.range->anchorToLatestRun);
         useRealAccounting({{100, 60.0F}, {101, 30.0F}});
         days->setToday(day(300));
 
         const auto snapshot = use_case.snapshot();
 
-        EXPECT_EQ(profile->rolling_time_average_window_days, 7);
-        EXPECT_EQ(snapshot.view.windowDays, 7);
-        EXPECT_EQ(snapshot.view.interval, std::optional(DayInterval{day(72), day(101)}));
+        EXPECT_EQ(profile->rolling_time_average_window_days, windowDays);
+        EXPECT_EQ(snapshot.view.windowDays, windowDays);
+        EXPECT_EQ(snapshot.view.interval, std::optional(DayInterval{day(101 - (rangeDays - 1)), day(101)}));
         ASSERT_EQ(snapshot.samples.size(), 2U);
         EXPECT_DOUBLE_EQ(snapshot.samples.front().second, 60.0);
         EXPECT_DOUBLE_EQ(snapshot.samples.back().second, 45.0);

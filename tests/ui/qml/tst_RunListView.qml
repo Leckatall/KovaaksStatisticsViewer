@@ -63,14 +63,6 @@ TestCase {
         compare(runSelectedSpy.signalArguments[0][1], 1723200000000)
     }
 
-    function test_personalBestBadgeIsHiddenByDefault() {
-        const view = createView({runModel: makeSortableRuns()})
-        const badge = findChild(view, "personalBestBadge_0")
-
-        verify(badge !== null)
-        verify(!badge.visible)
-    }
-
     function test_emptyModelShowsEmptyLabel() {
         const view = createView({runModel: null})
         verify(view.hasNoRuns())

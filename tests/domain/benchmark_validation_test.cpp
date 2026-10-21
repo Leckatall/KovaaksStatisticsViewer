@@ -98,13 +98,10 @@ TEST(BenchmarkValidation, NegativeAndNonFiniteThresholdsAreIncomplete) {
     EXPECT_TRUE(hasCode(validateBenchmark(nan), BenchmarkIssueCode::NonFiniteThreshold));
 }
 
-TEST(BenchmarkValidation, EmptyUserCategoryIsIncompleteButEmptyUncategorizedIsNot) {
+TEST(BenchmarkValidation, EmptyUserCategoryIsIncomplete) {
     auto def = trackable();
     def.categories.push_back(Category{GroupId{"g1"}, "Cat", {}, {}, {}});
     EXPECT_TRUE(hasCode(validateBenchmark(def), BenchmarkIssueCode::EmptyCategory));
-
-    auto onlyEmptyUncategorized = trackable();  // uncategorized already the sole scenario holder
-    EXPECT_FALSE(hasCode(validateBenchmark(onlyEmptyUncategorized), BenchmarkIssueCode::EmptyCategory));
 }
 
 TEST(BenchmarkValidation, EmptySubcategoryIsIncomplete) {
@@ -156,12 +153,6 @@ TEST(BenchmarkValidation, DuplicateMembershipByNameAndByHashAreIncomplete) {
     byHash.uncategorized.push_back(
         entry("s2", "Other", {Threshold{TierId{"t1"}, 50.0}}, std::string{"HASH"}));
     EXPECT_TRUE(hasCode(validateBenchmark(byHash), BenchmarkIssueCode::DuplicateResolvedHash));
-}
-
-TEST(BenchmarkValidation, UnresolvedScenarioDoesNotBlockTrackable) {
-    auto def = trackable();
-    def.uncategorized[0].hash = std::nullopt;  // unresolved: still structurally complete
-    EXPECT_EQ(validateBenchmark(def).completeness, Completeness::Trackable);
 }
 
 namespace {

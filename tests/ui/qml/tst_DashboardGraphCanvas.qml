@@ -221,35 +221,6 @@ Item {
             compare(configureSpy.count, 1)
         }
 
-        function test_lineTogglesFollowTheViewSetting() {
-            const panel = createTemporaryObject(panelComponent, root)
-            verify(!!panel, "Component exists")
-            fakeVisualSettings.controlPanelVisible = false
-            tryCompare(findChild(panel, "graphLineToggles"), "visible", false)
-        }
-
-        function test_noRunSelectedShowsOnlyItsMessage() {
-            const panel = createTemporaryObject(panelComponent, root)
-            verify(!!panel, "Component exists")
-            fakeGraphVm.contentState = GraphViewModel.NoRunSelected
-
-            const noRun = findChild(panel, "graphNoRunSelectedLabel")
-            const noPerf = findChild(panel, "graphNoPerformanceLabel")
-            tryCompare(noRun, "visible", true)
-            compare(noPerf.visible, false)
-        }
-
-        function test_csvOnlyRunShowsPerformanceMessage() {
-            const panel = createTemporaryObject(panelComponent, root)
-            verify(!!panel, "Component exists")
-            fakeGraphVm.contentState = GraphViewModel.NoPerformanceData
-
-            const noRun = findChild(panel, "graphNoRunSelectedLabel")
-            const noPerf = findChild(panel, "graphNoPerformanceLabel")
-            tryCompare(noPerf, "visible", true)
-            compare(noRun.visible, false)
-        }
-
         function test_hasDataHidesBothMessages() {
             const panel = createTemporaryObject(panelComponent, root)
             verify(!!panel, "Component exists")

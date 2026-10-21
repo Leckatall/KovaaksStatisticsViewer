@@ -34,6 +34,7 @@
 #include "presentation/playtime_graph_vm.h"
 #include "presentation/scenario_browser_vm.h"
 #include "presentation/settings_vm.h"
+#include "qt_data/graph_configuration_codec.h"
 #include "settings_service.h"
 
 #include "integration_env.h"
@@ -95,6 +96,22 @@ namespace {
     };
 
     StyleProbe probe(const presentation::GraphViewModelBase *vm) { return {vm->connectionMode(), vm->pointMarkers()}; }
+
+    StyleProbe defaultProbe(const GraphKey key) {
+        const auto appearance = defaultGraphPreferences(key).appearance;
+        return {static_cast<int>(appearance.connection), appearance.lineModeMarkers};
+    }
+
+    QString modeName(const ConnectionMode mode) {
+        const auto name = connectionModeName(mode);
+        return QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size()));
+    }
+
+    int defaultAveragingWindow(const GraphKey key) { return defaultGraphPreferences(key).averagingWindowDays.value(); }
+
+    int defaultLatestRunCount() {
+        return std::get<LatestRuns>(defaultGraphPreferences(GraphKey::ScenarioHistory).range->range).count;
+    }
 
     constexpr auto kBenchmarkJson = R"({
         "schemaVersion": 1, "id": "auto-1", "name": "Auto",
@@ -267,7 +284,8 @@ namespace {
         EXPECT_EQ(*committed().configuration, *snapshotBefore.configuration);
         EXPECT_EQ(env.graphConfigurationPersistence->load(), storedBefore);
         EXPECT_EQ(app->graphVm()->enabledSeriesIds(), enabledBefore);
-        EXPECT_EQ(vm->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 7);
+        EXPECT_EQ(vm->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(),
+                  defaultAveragingWindow(GraphKey::DailyPlaytime));
 
         const auto saved = vm->save();
         ASSERT_TRUE(saved["accepted"].toBool());
@@ -296,8 +314,9 @@ namespace {
         vm->revertChanges();
         EXPECT_TRUE(vm->isVisitOpen());
         EXPECT_FALSE(vm->hasPendingChanges());
-        EXPECT_EQ(vm->graphDraft("dailyPlaytime")["window"].toInt(), 7);
-        EXPECT_EQ(vm->graphDraft("scenarioHistory")["connection"].toString(), "smooth");
+        EXPECT_EQ(vm->graphDraft("dailyPlaytime")["window"].toInt(), defaultAveragingWindow(GraphKey::DailyPlaytime));
+        EXPECT_EQ(vm->graphDraft("scenarioHistory")["connection"].toString(),
+                  modeName(defaultGraphPreferences(GraphKey::ScenarioHistory).appearance.connection));
 
         // Save moves the baseline: a later discard returns to what was saved, not to the seed.
         ASSERT_TRUE(vm->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "9"));
@@ -407,8 +426,9 @@ namespace {
         ASSERT_TRUE(vm->resetGraph("scenarioHistory"));
         EXPECT_TRUE(vm->hasPendingChanges());
         EXPECT_EQ(vm->graphDraft("scenarioHistory")["rangeKind"].toString(), "latestRuns");
-        EXPECT_EQ(vm->graphDraft("scenarioHistory")["rangeCount"].toInt(), 100);
-        EXPECT_EQ(vm->graphDraft("scenarioHistory")["connection"].toString(), "smooth");
+        EXPECT_EQ(vm->graphDraft("scenarioHistory")["rangeCount"].toInt(), defaultLatestRunCount());
+        EXPECT_EQ(vm->graphDraft("scenarioHistory")["connection"].toString(),
+                  modeName(defaultGraphPreferences(GraphKey::ScenarioHistory).appearance.connection));
         EXPECT_EQ(vm->graphDraft("dailyPlaytime")["window"].toInt(), 9);
         EXPECT_EQ(vm->graphDraft("run")["connection"].toString(), "straight");
         EXPECT_EQ(vm->getAllSeriesConfigs(), lines);
@@ -434,7 +454,8 @@ namespace {
         EXPECT_EQ(after.runAxisLabelSeriesId, saved.configuration->runAxisLabelSeriesId);
         EXPECT_EQ(vm->getAllSeriesConfigs(), lines);
         EXPECT_EQ(vm->getAllAxes(), axes);
-        EXPECT_EQ(app->completionHistoryVm()->visibleRunCount(), 5);
+        EXPECT_EQ(app->completionHistoryVm()->visibleRunCount(),
+                  std::min(app->completionHistoryVm()->runCount(), defaultLatestRunCount()));
         EXPECT_EQ(env.graphConfigurationPersistence->load(), after);
         vm->endVisit();
     }
@@ -459,10 +480,10 @@ namespace {
         EXPECT_EQ(loaded.runAxisLabelSeriesId, SeriesId{12});
         EXPECT_EQ(app->graphVm()->axisLabelSeriesId(), "12");
 
-        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), 7);
-        EXPECT_EQ(dashboard().visibleRuns, 5);
-        EXPECT_EQ(probe(app->graphVm()), (StyleProbe{0, false}));
-        EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{0, true}));
+        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), defaultAveragingWindow(GraphKey::DailyPlaytime));
+        EXPECT_EQ(dashboard().visibleRuns, std::min(app->completionHistoryVm()->runCount(), defaultLatestRunCount()));
+        EXPECT_EQ(probe(app->graphVm()), defaultProbe(GraphKey::Run));
+        EXPECT_EQ(probe(app->completionHistoryVm()), defaultProbe(GraphKey::ScenarioHistory));
 
         // Loading leaves a valid v3 document as it is; the first accepted write stores version 4 with the
         // old sections untouched, and nothing is quarantined.
@@ -473,10 +494,11 @@ namespace {
         };
         const auto original = QJsonDocument::fromJson(QByteArray::fromStdString(v3Document())).object();
         EXPECT_EQ(storedDocument()["schemaVersion"].toInt(), 3);
-        ASSERT_TRUE(quick("dailyPlaytime", {{"window", 4}}));
-        ASSERT_TRUE(quick("dailyPlaytime", {{"window", 7}}));
+        const int defaultWindow = defaultAveragingWindow(GraphKey::DailyPlaytime);
+        ASSERT_TRUE(quick("dailyPlaytime", {{"window", defaultWindow + 1}}));
+        ASSERT_TRUE(quick("dailyPlaytime", {{"window", defaultWindow}}));
         const auto upgraded = storedDocument();
-        EXPECT_EQ(upgraded["schemaVersion"].toInt(), 5);
+        EXPECT_EQ(upgraded["schemaVersion"].toInt(), qt_data::kGraphConfigurationSchemaVersion);
         auto expectedSeries = original["series"].toArray();
         for (qsizetype index = 0; index < expectedSeries.size(); ++index) {
             auto series = expectedSeries[index].toObject();

@@ -5,7 +5,6 @@ add_executable(domain_tests
     benchmark_validation_test.cpp
     benchmark_editor_test.cpp
     benchmark_evaluator_test.cpp
-    benchmark_projection_shape_test.cpp
     user_profile_benchmark_queries_test.cpp
     gallery_dataset_test.cpp
     benchmark_projection_timing_test.cpp

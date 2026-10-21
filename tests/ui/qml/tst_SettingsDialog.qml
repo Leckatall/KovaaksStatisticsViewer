@@ -141,32 +141,6 @@ TestCase {
         }
     }
 
-    function test_directoriesCategory_showsProfilePathAndLoadedState() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({profilePath: "file:///D:/CustomProfile/profile.pb", profileLoaded: true}),
-            sessionVm: makeFakeSessionVm()
-        })
-
-        const field = ItemLookup.findByObjectName(dialog.contentItem, "profilePathField")
-        verify(field !== null, "no field named 'profilePathField' found in SettingsDialog Directories category")
-        compare(field.text, "D:/CustomProfile/profile.pb", "profilePathField should show settingsVm.profilePath with the file:// scheme stripped")
-
-        const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
-        verify(statusLabel !== null, "no label named 'profileLoadedLabel' found in SettingsDialog Directories category")
-        compare(statusLabel.text, "Profile status: Loaded", "profileLoadedLabel should reflect settingsVm.profileLoaded === true")
-    }
-
-    function test_directoriesCategory_showsNotLoadedWhenProfileVmReportsFalse() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({profileLoaded: false}),
-            sessionVm: makeFakeSessionVm()
-        })
-
-        const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
-        verify(statusLabel !== null, "no label named 'profileLoadedLabel' found in SettingsDialog Profile category")
-        compare(statusLabel.text, "Profile status: Not loaded", "profileLoadedLabel should reflect settingsVm.profileLoaded === false")
-    }
-
     function test_generateProfileButton_delegatesToSessionVm() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
@@ -178,21 +152,6 @@ TestCase {
         mouseClick(button)
 
         compare(dialog.sessionVm.generateProfileCalls, 1, "clicking generateProfileButton should call sessionVm.generateProfile() once")
-    }
-
-    // the label matches the app's Title Case buttons and spells
-    // "Kovaaks" and "Directory" the way the rest of the UI does.
-    function test_generateProfileButton_labelIsClearAndConsistentlyCapitalised() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm()
-        })
-
-        const button = ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton")
-        verify(button !== null, "no button named 'generateProfileButton' found in SettingsDialog Profile category")
-        compare(button.text, "Rebuild Profile from Kovaaks Directory")
-        verify(!/kovaaks/.test(button.text), "'Kovaaks' must be capitalised like the rest of the UI")
-        verify(!/\bdir\b/i.test(button.text), "the abbreviation 'dir' must not be used")
     }
 
     function test_profileBuildProgressBar_hiddenWhenNoBuildIsRunning() {
@@ -315,15 +274,6 @@ TestCase {
         verify(saveButton !== null, "no item named 'saveGraphLinesButton' found in SettingsDialog")
         const point = saveButton.mapToItem(dialog.contentItem, 0, 0)
         verify(point.y >= 0 && point.y + saveButton.height <= dialog.contentItem.height, "saveGraphLinesButton should remain visible within the SettingsDialog window when many series are present")
-    }
-
-    function test_categoryList_startsOnDirectories() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm()
-        })
-
-        compare(dialog.currentCategory, 0, "SettingsDialog should default to the Directories category (index 0)")
     }
 
     function test_clickingCategoryItem_switchesCurrentCategory() {

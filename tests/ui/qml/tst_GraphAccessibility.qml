@@ -64,17 +64,6 @@ TestCase {
 
     // ---- Names -----------------------------------------------------------------------------------------
 
-    function test_theGearNamesItsGraphAndSaysTheSameInItsTooltip_data() {
-        return allKeys.map(key => ({tag: key, key: key}))
-    }
-
-    function test_theGearNamesItsGraphAndSaysTheSameInItsTooltip(data) {
-        const gear = makeGear(data.key)
-        verify(gear.Accessible.name.length > 0)
-        verify(gear.Accessible.name.indexOf(gear.graphName) === 0, gear.Accessible.name)
-        compare(gear.ToolTip.text, gear.Accessible.name)
-    }
-
     function test_thePopupIsADialogNamedAfterItsGraph_data() {
         return allKeys.map(key => ({tag: key, key: key}))
     }

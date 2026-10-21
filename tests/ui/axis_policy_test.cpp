@@ -195,10 +195,11 @@ namespace {
 
     TEST(AxisPolicyTest, OtherBaseOptionsSurviveThePolicy) {
         SeriesModel series;
-        seriesOf(series, {QPointF(1, 0.0), QPointF(2, 7.0)});
+        seriesOf(series, {QPointF(1, 0.0), QPointF(2, 2.0)});
 
-        const ValueAxis axis = axisOver({&series}, FixedBounds{0.0, 7.0}, {.integral = true});
+        const ValueAxis axis = axisOver({&series}, FixedBounds{0.0, 2.0}, {.integral = true});
 
+        ASSERT_FALSE(axis.ticks().isEmpty());
         for (const qreal tick: axis.ticks()) EXPECT_DOUBLE_EQ(tick, std::round(tick));
     }
 
@@ -206,10 +207,16 @@ namespace {
         const AxisPolicyMap stored{{"score", FixedBounds{10.0, 20.0}}};
 
         EXPECT_EQ(axisPolicyFor(stored, GraphKey::ScenarioHistory, "score"), (AxisPolicy{FixedBounds{10.0, 20.0}}));
-        EXPECT_EQ(axisPolicyFor(stored, GraphKey::ScenarioHistory, "accuracy"), AxisPolicy{FitVisibleData{}});
-        EXPECT_EQ(axisPolicyFor(stored, GraphKey::ScenarioHistory, "counts"), AxisPolicy{StartAtZero{}});
-        EXPECT_EQ(axisPolicyFor({}, GraphKey::DailyPlaytime, "playtime"), AxisPolicy{StartAtZero{}});
-        EXPECT_EQ(axisPolicyFor({}, GraphKey::BenchmarkPlaytime, "playtime"), AxisPolicy{StartAtZero{}});
+        const auto defaultOf = [](const GraphKey graph, const std::string &axis) {
+            return defaultGraphPreferences(graph).axisPolicies.at(axis);
+        };
+        EXPECT_EQ(axisPolicyFor(stored, GraphKey::ScenarioHistory, "accuracy"),
+                  defaultOf(GraphKey::ScenarioHistory, "accuracy"));
+        EXPECT_EQ(axisPolicyFor(stored, GraphKey::ScenarioHistory, "counts"),
+                  defaultOf(GraphKey::ScenarioHistory, "counts"));
+        EXPECT_EQ(axisPolicyFor({}, GraphKey::DailyPlaytime, "playtime"), defaultOf(GraphKey::DailyPlaytime, "playtime"));
+        EXPECT_EQ(axisPolicyFor({}, GraphKey::BenchmarkPlaytime, "playtime"),
+                  defaultOf(GraphKey::BenchmarkPlaytime, "playtime"));
     }
 
     TEST(AxisPolicyTest, AGraphWithoutThatAxisHasNothingToLookUp) {

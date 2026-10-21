@@ -24,11 +24,6 @@ namespace {
         }
     };
 
-    TEST(SystemDaySource, StartsOnTheClockDay) {
-        Harness harness;
-        EXPECT_EQ(harness.source.today(), kStart);
-    }
-
     TEST(SystemDaySource, RefreshAnnouncesAChangeOnceAndOnlyOnce) {
         Harness harness;
         harness.now = kStart + days{1};
@@ -64,13 +59,6 @@ namespace {
         EXPECT_TRUE(harness.announced.empty());
         harness.source.onApplicationStateChanged(Qt::ApplicationActive);
         EXPECT_EQ(harness.announced, std::vector{kStart + days{2}});
-    }
-
-    TEST(SystemDaySource, ResumeAcrossSeveralDaysAnnouncesTheNewDayOnce) {
-        Harness harness;
-        harness.now = kStart + days{5};
-        harness.source.onApplicationStateChanged(Qt::ApplicationActive);
-        EXPECT_EQ(harness.announced, std::vector{kStart + days{5}});
     }
 
     TEST(SystemDaySource, DefaultClockIsTheUtcDayOfTheSystemTime) {

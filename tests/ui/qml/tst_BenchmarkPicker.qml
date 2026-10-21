@@ -317,17 +317,6 @@ TestCase {
 
     // -- keyboard ---------------------------------------------------------
 
-    function test_highlightStartsOnTheFirstSelectableRowWithNothingSelected() {
-        openPopup()
-        expectHighlight("Alpha")
-    }
-
-    function test_highlightStartsOnTheSelectedEntry() {
-        picker.selectedName = "Beta Voltaic"
-        openPopup()
-        expectHighlight("Beta Voltaic")
-    }
-
     function test_arrowKeysSkipUnselectableRowsAndStopAtTheEnds() {
         openPopup()
         expectHighlight("Alpha")

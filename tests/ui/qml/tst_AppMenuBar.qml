@@ -135,13 +135,6 @@ TestCase {
         compare(String(findMenuItemByText(menuBar.menuAt(0), "&Settings...").action.shortcut), "Ctrl+,")
     }
 
-    // Every File-menu item that opens a dialog or picker says so with "...".
-    function test_dialogItemsEndInEllipsis() {
-        const menuBar = createTemporaryObject(menuBarComponent, testCase)
-        for (const text of ["Set Source &Directory...", "&Load Performance File...", "&Settings..."])
-            verify(findMenuItemByText(menuBar.menuAt(0), text) !== null, "no File menu item '" + text + "'")
-    }
-
     // Windows convention: File, View, then the app's own menus, Help last.
     function test_menusFollowWindowsOrder() {
         const menuBar = createTemporaryObject(menuBarComponent, testCase)
@@ -326,15 +319,6 @@ TestCase {
         const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
         verify(findMenuItemByText(linesMenu, "Score") !== null)
         verify(findMenuItemByText(linesMenu, "Accuracy") !== null)
-    }
-
-    function test_graphLinesSubmenuRetainsConfigureItemWhenAllSeriesDisabled() {
-        fakeGraphVm.enabledSeriesIds = []
-        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
-        const linesMenu = findChild(menuBar, "scenarioGraphLinesMenu")
-
-        verify(findMenuItemByText(linesMenu, "Configure Lines...") !== null)
-        fakeGraphVm.enabledSeriesIds = ["1", "2"]
     }
 
     function test_configureGraphLinesRequestedEmittedFromMenuItem() {

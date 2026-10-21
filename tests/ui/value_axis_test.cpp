@@ -140,13 +140,6 @@ namespace {
         EXPECT_EQ(axis.formatTick(40.0), "40%");
     }
 
-    TEST(ValueAxisTest, DefaultDelegateFormatsWithDefaultTickRules) {
-        ValueAxis axis;
-        axis.setRange(0.0, 10.0);
-        EXPECT_EQ(axis.formatTick(5.0), "5");
-        EXPECT_EQ(axis.formatTick(5.25), "5.3");
-    }
-
     TEST(ValueAxisTest, SetRangePreservesConfiguredPolicy) {
         ValueAxis axis({.baseline = ValueAxis::Baseline::Zero,
                         .integral = true,

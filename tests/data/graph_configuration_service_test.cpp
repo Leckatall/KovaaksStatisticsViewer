@@ -70,9 +70,10 @@ namespace {
 
     TEST_F(GraphConfigurationServiceTest, NamesTheRunSeriesAndAxisLabelSections) {
         GraphConfigurationService service(persistence);
-        auto candidate = defaultGraphConfiguration();
-        candidate.runSeries.series.pop_back();
-        candidate.runAxisLabelSeriesId = SeriesId{2};
+        auto candidate = persistence->stored;
+        auto &first = candidate.runSeries.series.front();
+        first.presentation.name = "Renamed " + first.presentation.name;
+        candidate.runAxisLabelSeriesId = first.id;
         std::vector<GraphConfigurationChange> changes;
         service.onChanged([&](const GraphConfigurationChange &change) { changes.push_back(change); });
 

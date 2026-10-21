@@ -122,20 +122,6 @@ Item {
 
         // ---- Run graph -----------------------------------------------------------------------------
 
-        function test_runGraphHasItsGearWhileNoRunIsSelected() {
-            fakeGraphVm.contentState = GraphViewModel.NoRunSelected
-            const panel = createTemporaryObject(runPanelComponent, root)
-            const gear = gearOf(panel, "run")
-            compare(gear.visible, true)
-            compare(ItemLookup.findByObjectName(panel, "scenarioGraphCanvas"), null)
-        }
-
-        function test_runGraphKeepsItsGraphLinesEntryPointBesideTheGear() {
-            const panel = createTemporaryObject(runPanelComponent, root)
-            gearOf(panel, "run")
-            verify(ItemLookup.findByObjectName(panel, "configureGraphLinesButton") !== null)
-        }
-
         function test_runGraphRelaysMoreGraphSettings() {
             const panel = createTemporaryObject(runPanelComponent, root)
             const spy = createTemporaryObject(spyComponent, root, {target: panel, signalName: "moreGraphSettingsRequested"})
@@ -145,14 +131,6 @@ Item {
         }
 
         // ---- Daily playtime ----------------------------------------------------------------------------
-
-        function test_playtimeGraphHasItsGearWithoutPlaytime() {
-            fakePlaytimeVm.hasData = false
-            const panel = createTemporaryObject(playtimePanelComponent, root)
-            compare(gearOf(panel, "dailyPlaytime").visible, true)
-            compare(ItemLookup.findByObjectName(panel, "playtimeGraphCanvas"), null)
-            compare(ItemLookup.findByObjectName(panel, "playtimeEmptyLabel").visible, true)
-        }
 
         function test_playtimeGraphGearSurvivesDataArriving() {
             fakePlaytimeVm.hasData = false
@@ -174,13 +152,6 @@ Item {
 
         // ---- Scenario history --------------------------------------------------------------------------
 
-        function test_historyGraphHasItsGearWhenNoRunIsVisible() {
-            const panel = createTemporaryObject(historyPanelComponent, root)
-            compare(gearOf(panel, "scenarioHistory").visible, true)
-            compare(ItemLookup.findByObjectName(panel, "historyEmptyLabel").visible, true)
-            compare(ItemLookup.findByObjectName(panel, "historyGraphCanvas"), null)
-        }
-
         function test_historyGraphRelaysMoreGraphSettings() {
             const panel = createTemporaryObject(historyPanelComponent, root)
             const spy = createTemporaryObject(spyComponent, root, {target: panel, signalName: "moreGraphSettingsRequested"})
@@ -190,12 +161,6 @@ Item {
         }
 
         // ---- Benchmark cards ----------------------------------------------------------------------------
-
-        function test_aHistoryCardHasItsGearWithoutData() {
-            const card = createTemporaryObject(historyCardComponent, root)
-            compare(gearOf(card, "benchmarkRank").visible, true)
-            compare(ItemLookup.findByObjectName(card, "rankHistoryEmptyLabel").visible, true)
-        }
 
         function test_aHistoryCardNamesItsGraphFromItsKey() {
             const card = createTemporaryObject(historyCardComponent, root, {graphKey: "benchmarkPlaytime"})

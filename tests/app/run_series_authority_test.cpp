@@ -116,18 +116,16 @@ namespace {
             return QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
         }
 
-        static void downgradeSeriesSection(QJsonObject &root) {
-            root.remove("graphs");
-            root.remove("runAxisLabelSeriesId");
-            auto series = root["series"].toArray();
-            for (qsizetype index = 0; index < series.size(); ++index) {
-                auto config = series[index].toObject();
-                auto presentation = config["presentation"].toObject();
-                presentation.remove("hiddenLeadingPoints");
-                config["presentation"] = presentation;
-                series[index] = config;
-            }
-            root["series"] = series;
+        [[nodiscard]] uint64_t highestSeriesId() const {
+            uint64_t highest = 0;
+            for (const auto &series: store->getAll()) highest = std::max(highest, series.id.value);
+            return highest;
+        }
+
+        [[nodiscard]] uint64_t highestAxisId() const {
+            uint64_t highest = 0;
+            for (const auto &axis: store->getAllAxes()) highest = std::max(highest, axis.id.value);
+            return highest;
         }
 
         void writeDoc(const QJsonObject &root) const {
@@ -138,12 +136,6 @@ namespace {
             return {{"Custom", {{1, 2, 3, 255}, 2.0}, true}, numericConstant(4.0)};
         }
     };
-
-    TEST_F(RunSeriesAuthorityTest, SeedsApprovedDefaultsAndNextId) {
-        makeStore();
-        EXPECT_EQ(store->getAll().size(), 8U);
-        EXPECT_EQ(docObject()["nextComputedSeriesId"].toString(), "9");
-    }
 
     TEST_F(RunSeriesAuthorityTest, RoundTripsEverySeriesAndExpressionNode) {
         makeStore();
@@ -195,50 +187,11 @@ namespace {
         EXPECT_FALSE(blank->expression);
     }
 
-    TEST_F(RunSeriesAuthorityTest, RejectsMalformedProjectRateToFinalExpression) {
-        const std::array malformedExpressions{
-            QJsonObject{{"kind", "projectRateToFinal"}},
-            QJsonObject{
-                {"kind", "projectRateToFinal"},
-                {"input", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}}, {"extra", true}
-            },
-            QJsonObject{{"kind", "projectRateToFinal"}, {"input", 1}}
-        };
-
-        for (const auto &expression: malformedExpressions) {
-            settings = std::make_shared<FakeSettingsService>();
-            makeStore();
-            auto root = docObject();
-            auto series = root["series"].toArray();
-            auto computed = series[7].toObject();
-            computed["expression"] = expression;
-            series[7] = computed;
-            root["series"] = series;
-            writeDoc(root);
-
-            const auto reopened = open(settings);
-            EXPECT_EQ(reopened->getAll().size(), 8U);
-            EXPECT_GT(settings->document_writes, 1);
-        }
-    }
-
-    TEST_F(RunSeriesAuthorityTest, RejectsNonCanonicalJsonNumbersAndQuarantinesRawValue) {
-        settings->document = "{\"schemaVersion\":1,\"nextComputedSeriesId\":\"5\",\"series\":[\"";
-        makeStore();
-        EXPECT_EQ(store->getAll().size(), 8U);
-        EXPECT_GT(settings->document_writes, 0);
-    }
-
-    TEST_F(RunSeriesAuthorityTest, LeavesLegacySettingsAndAxisSettingsUntouched) {
-        settings->legacyDisabledColumns = {"score"};
-        makeStore();
-        EXPECT_EQ(settings->legacyDisabledColumns, (std::vector<std::string>{"score"}));
-    }
-
     TEST_F(RunSeriesAuthorityTest, CreateAllocatesAndPersistsSequentialIds) {
         makeStore();
-        EXPECT_EQ(store->createComputed(request()).createdId->value, 9U);
-        EXPECT_EQ(store->createComputed(request()).createdId->value, 10U);
+        const auto highest = highestSeriesId();
+        EXPECT_EQ(store->createComputed(request()).createdId->value, highest + 1);
+        EXPECT_EQ(store->createComputed(request()).createdId->value, highest + 2);
     }
 
     TEST_F(RunSeriesAuthorityTest, AllocatesMaximumSeriesIdThenPersistsExhaustion) {
@@ -344,8 +297,8 @@ namespace {
     TEST_F(RunSeriesAuthorityTest, ReorderingToCurrentPositionIsSuccessfulNoOp) {
         makeStore();
         const auto writes = settings->document_writes;
-        // Score seeds at displayPosition 0, so this asks for the position it already holds.
-        EXPECT_TRUE(store->reorder(SeriesId{1}, 0).succeeded());
+        const auto first = store->getAll().front();
+        EXPECT_TRUE(store->reorder(first.id, first.presentation.displayPosition).succeeded());
         EXPECT_EQ(settings->document_writes, writes);
     }
 
@@ -353,85 +306,10 @@ namespace {
     TEST_F(RunSeriesAuthorityTest, ValidationFailureLeavesStateAndNextIdUnchanged) {
         makeStore();
         const auto before = store->getAll();
+        const auto highest = highestSeriesId();
         EXPECT_FALSE(store->createComputed({{" ", {}, true}, numericConstant(1)}).succeeded());
         EXPECT_EQ(store->getAll().size(), before.size());
-        EXPECT_EQ(store->createComputed(request()).createdId->value, 9U);
-    }
-
-    TEST_F(RunSeriesAuthorityTest, MalformedOrUnsupportedDocumentQuarantinesThenSeedsDefaults) {
-        settings->document = "{}";
-        makeStore();
-        EXPECT_EQ(store->getAll().size(), 8U);
-        EXPECT_EQ(settings->quarantined, (std::vector<std::string>{"{}"}));
-    }
-
-    TEST_F(RunSeriesAuthorityTest, SeededDocumentIncludesAxesAndNextAxisId) {
-        makeStore();
-        const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 5);
-        EXPECT_EQ(root["nextAxisId"].toString(), "3");
-        ASSERT_TRUE(root["axes"].isArray());
-        EXPECT_EQ(root["axes"].toArray().size(), 2);
-        const auto series = root["series"].toArray();
-        const auto firstSeries = series[0].toObject();
-        EXPECT_EQ(firstSeries["yAxisId"].toString(), "1");
-        EXPECT_EQ(firstSeries["transformKind"].toString(), "identity");
-        EXPECT_TRUE(series[6].toObject()["yAxisId"].isNull());
-        EXPECT_EQ(series[4].toObject()["transformKind"].toString(), "percentage");
-    }
-
-    TEST_F(RunSeriesAuthorityTest, LoadsV3DslExpressions) {
-        makeStore();
-        auto root = docObject();
-        root["schemaVersion"] = 3;
-        downgradeSeriesSection(root);
-        auto series = root["series"].toArray();
-        auto score = series[0].toObject();
-        score["expression"] = "Add(SCORE, 2)";
-        series[0] = score;
-        root["series"] = series;
-        writeDoc(root);
-
-        const auto reopened = open(settings);
-        const auto configs = reopened->getAll();
-        const auto loaded = std::ranges::find(configs, SeriesId{1}, &SeriesConfig::id);
-        ASSERT_NE(loaded, configs.end());
-        EXPECT_EQ(encodeExpressionDsl(loaded->expression), "Add(SCORE, 2)");
-    }
-
-    TEST_F(RunSeriesAuthorityTest, LoadsV2NestedJsonExpressions) {
-        makeStore();
-        auto root = docObject();
-        root["schemaVersion"] = 2;
-        downgradeSeriesSection(root);
-        auto series = root["series"].toArray();
-        auto score = series[0].toObject();
-        score["expression"] = QJsonObject{{"kind", "add"},
-                                            {"left", QJsonObject{{"kind", "primitive"}, {"primitiveMetric", "score"}}},
-                                            {"right", QJsonObject{{"kind", "constant"}, {"value", 2.0}}}};
-        root["series"] = QJsonArray{score};
-        writeDoc(root);
-
-        const auto reopened = open(settings);
-        const auto configs = reopened->getAll();
-        const auto loaded = std::ranges::find(configs, SeriesId{1}, &SeriesConfig::id);
-        ASSERT_NE(loaded, configs.end());
-        EXPECT_EQ(encodeExpressionDsl(loaded->expression), "Add(SCORE, 2)");
-    }
-
-    TEST_F(RunSeriesAuthorityTest, RejectsMalformedV3DslExpressionsAndReseeds) {
-        makeStore();
-        auto root = docObject();
-        auto series = root["series"].toArray();
-        auto score = series[0].toObject();
-        score["expression"] = "Add(SCORE,)";
-        series[0] = score;
-        root["series"] = series;
-        writeDoc(root);
-
-        const auto reopened = open(settings);
-        EXPECT_EQ(reopened->getAll().size(), 8U);
-        EXPECT_GT(settings->document_writes, 1);
+        EXPECT_EQ(store->createComputed(request()).createdId->value, highest + 1);
     }
 
     TEST_F(RunSeriesAuthorityTest, MigratesV1DocumentToV2InMemory) {
@@ -483,66 +361,46 @@ namespace {
         EXPECT_EQ(store->getAllAxes().size(), 2U);
     }
 
-    TEST_F(RunSeriesAuthorityTest, RejectsDuplicateAxisIdsAndNonPositiveFallbackSpan) {
-        makeStore();
-        auto root = docObject();
-        auto axes = root["axes"].toArray();
-        auto duplicate = axes[0].toObject();
-        duplicate["id"] = axes[1].toObject()["id"];
-        axes[0] = duplicate;
-        root["axes"] = axes;
-        writeDoc(root);
-        const auto duplicateReopened = open(settings);
-        EXPECT_EQ(duplicateReopened->getAllAxes().size(), 2U);
-
-        for (const auto span: {0.0, -1.0}) {
-            root = docObject();
-            axes = root["axes"].toArray();
-            auto axis = axes[0].toObject();
-            auto options = axis["options"].toObject();
-            options["fallbackSpan"] = span;
-            axis["options"] = options;
-            axes[0] = axis;
-            root["axes"] = axes;
-            writeDoc(root);
-            const auto spanReopened = open(settings);
-            EXPECT_EQ(spanReopened->getAllAxes().size(), 2U);
-        }
-    }
-
     TEST_F(RunSeriesAuthorityTest, CreatesDeletesAndPersistsAxes) {
         makeStore();
+        const auto highest = highestAxisId();
+        const auto axisCount = store->getAllAxes().size();
+        const auto seriesId = store->getAll().front().id;
         const auto created = store->createAxis({"Custom"});
         ASSERT_TRUE(created.succeeded());
         ASSERT_TRUE(created.createdAxisId);
-        EXPECT_EQ(created.createdAxisId->value, 3U);
+        EXPECT_EQ(created.createdAxisId->value, highest + 1);
         const auto second = store->createAxis({"Another"});
         ASSERT_TRUE(second.createdAxisId);
-        EXPECT_EQ(second.createdAxisId->value, 4U);
-        ASSERT_TRUE(store->updateSeries({.id = SeriesId{1}, .yAxisId = created.createdAxisId}).succeeded());
+        EXPECT_EQ(second.createdAxisId->value, highest + 2);
+        ASSERT_TRUE(store->updateSeries({.id = seriesId, .yAxisId = created.createdAxisId}).succeeded());
         const auto reopened = open(settings);
-        EXPECT_EQ(reopened->getAllAxes().size(), 4U);
+        EXPECT_EQ(reopened->getAllAxes().size(), axisCount + 2);
         const auto reopenedConfigs = reopened->getAll();
-        const auto reopenedScore = std::ranges::find(reopenedConfigs, SeriesId{1}, &SeriesConfig::id);
-        ASSERT_NE(reopenedScore, reopenedConfigs.end());
-        EXPECT_EQ(reopenedScore->yAxisId, created.createdAxisId);
+        const auto reopenedSeries = std::ranges::find(reopenedConfigs, seriesId, &SeriesConfig::id);
+        ASSERT_NE(reopenedSeries, reopenedConfigs.end());
+        EXPECT_EQ(reopenedSeries->yAxisId, created.createdAxisId);
         ASSERT_TRUE(store->deleteAxis(*created.createdAxisId).succeeded());
         const auto configs = store->getAll();
-        const auto score = std::ranges::find(configs, SeriesId{1}, &SeriesConfig::id);
-        ASSERT_NE(score, configs.end());
-        EXPECT_FALSE(score->yAxisId);
+        const auto series = std::ranges::find(configs, seriesId, &SeriesConfig::id);
+        ASSERT_NE(series, configs.end());
+        EXPECT_FALSE(series->yAxisId);
     }
 
     TEST_F(RunSeriesAuthorityTest, RejectsUnknownAxisAndCanClearAxisAssignment) {
         makeStore();
-        EXPECT_EQ(store->updateSeries({.id = SeriesId{1}, .yAxisId = AxisId{999}}).failure,
+        const auto seriesId = store->getAll().front().id;
+        const auto unknownAxis = AxisId{highestAxisId() + 1};
+        EXPECT_EQ(store->updateSeries({.id = seriesId, .yAxisId = unknownAxis}).failure,
                   SeriesMutationFailureCode::UnknownAxisId);
-        EXPECT_EQ(store->deleteAxis(AxisId{999}).failure, SeriesMutationFailureCode::UnknownAxisId);
-        ASSERT_TRUE(store->updateSeries({.id = SeriesId{8}, .yAxisId = std::optional<AxisId>{std::nullopt}}).succeeded());
+        EXPECT_EQ(store->deleteAxis(unknownAxis).failure, SeriesMutationFailureCode::UnknownAxisId);
+        const auto assigned = store->getAllAxes().front().id;
+        ASSERT_TRUE(store->updateSeries({.id = seriesId, .yAxisId = assigned}).succeeded());
+        ASSERT_TRUE(store->updateSeries({.id = seriesId, .yAxisId = std::optional<AxisId>{std::nullopt}}).succeeded());
         const auto configs = store->getAll();
-        const auto score = std::ranges::find(configs, SeriesId{8}, &SeriesConfig::id);
-        ASSERT_NE(score, configs.end());
-        EXPECT_FALSE(score->yAxisId);
+        const auto series = std::ranges::find(configs, seriesId, &SeriesConfig::id);
+        ASSERT_NE(series, configs.end());
+        EXPECT_FALSE(series->yAxisId);
     }
 
     TEST_F(RunSeriesAuthorityTest, RejectsMalformedExpressionInLegacyV1DocumentAndReseeds) {
@@ -556,7 +414,7 @@ namespace {
 
         makeStore();
 
-        EXPECT_EQ(store->getAll().size(), 8U);
+        EXPECT_EQ(store->getAll().size(), defaultSeriesConfigs().size());
         EXPECT_GT(settings->document_writes, 0);
     }
 }

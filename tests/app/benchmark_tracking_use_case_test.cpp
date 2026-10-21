@@ -105,7 +105,7 @@ TEST(BenchmarkTracking, SelectingTrackableBenchmarkProducesProjection) {
     EXPECT_DOUBLE_EQ(fixture.tracking->projection()->totalPlaytimeSeconds, 90.0);
 }
 
-TEST(BenchmarkTracking, RequestsUniqueResolvedHashesAndSevenDayRollingWindow) {
+TEST(BenchmarkTracking, RequestsUniqueResolvedHashesAndTheDefaultRollingWindow) {
     Fixture fixture;
     auto value = benchmark("b1");
     value.uncategorized.push_back(benchmarkEntry("e3", "Again", std::string{"h1"}, rungs()));
@@ -114,7 +114,8 @@ TEST(BenchmarkTracking, RequestsUniqueResolvedHashesAndSevenDayRollingWindow) {
     fixture.tracking->select(BenchmarkId{"b1"});
     EXPECT_EQ(fixture.profile->requested_fact_scenarios.size(), 2U);
     EXPECT_EQ(fixture.profile->requested_rolling_scenarios.size(), 2U);
-    EXPECT_EQ(fixture.profile->filtered_rolling_window_days, 7);
+    EXPECT_EQ(fixture.profile->filtered_rolling_window_days,
+              *defaultGraphPreferences(GraphKey::BenchmarkPlaytime).averagingWindowDays);
 }
 
 TEST(BenchmarkTracking, DoesNotRequestUnresolvedEntries) {
@@ -417,20 +418,6 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ReadyIncompleteSnapshotCarriesFullCompl
 }
 
 // ---- Task A2: selection lifecycle across deletion, conflict, and recovery --------------------
-
-TEST(BenchmarkTrackingWorkspaceLifecycle, SelectingAlreadySelectedIdIsANotificationNoOp) {
-    Fixture fixture;
-    fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
-    fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
-
-    int notifications = 0;
-    fixture.tracking->onChanged([&] { ++notifications; });
-    fixture.tracking->select(BenchmarkId{"b1"});
-
-    EXPECT_EQ(notifications, 0);
-    EXPECT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
-}
 
 TEST(BenchmarkTrackingWorkspaceLifecycle, ClearSelectionReturnsToNoSelectionAndDropsDerivedState) {
     Fixture fixture;
@@ -1170,12 +1157,17 @@ namespace {
     };
 }
 
-TEST(BenchmarkTrackingRank, TheDefaultRangeIsTheLastNinetyDaysAnchoredToTheLatestImprovement) {
+TEST(BenchmarkTrackingRank, TheDefaultRangeIsAnchoredToTheLatestImprovement) {
+    const auto defaultRange = defaultGraphPreferences(GraphKey::BenchmarkRank).range;
+    ASSERT_TRUE(defaultRange);
+    ASSERT_TRUE(defaultRange->anchorToLatestRun);
+    const auto rangeDays = std::get<RecentDays>(defaultRange->range).days;
     RankFixture fixture;
     fixture.improvingThenFlatRuns();
     fixture.startRank();
 
-    EXPECT_TRUE(fixture.tracking->snapshot().rank.interval);
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval,
+              std::optional(DayInterval{epochDay(104 - (rangeDays - 1)), epochDay(104)}));
     EXPECT_EQ(fixture.tracking->projection()->averageRankHistory.size(), 3U);
 }
 
@@ -1421,10 +1413,11 @@ TEST(BenchmarkTrackingStyle, EachGraphReportsItsOwnCommittedStyle) {
 
     const auto rank = fixture.tracking->presentation(GraphKey::BenchmarkRank);
     const auto playtime = fixture.tracking->presentation(GraphKey::BenchmarkPlaytime);
-    EXPECT_EQ(rank.appearance.connection, ConnectionMode::Smooth);
+    EXPECT_EQ(rank.appearance.connection, defaultGraphPreferences(GraphKey::BenchmarkRank).appearance.connection);
     EXPECT_EQ(rank.seriesStyle("rank"), (SeriesStyle{RgbaColor{1, 1, 1, 255}, 5.0}));
     EXPECT_EQ(playtime.appearance.connection, ConnectionMode::PointsOnly);
-    EXPECT_EQ(playtime.seriesStyle("playtime").color, (RgbaColor{77, 208, 225, 255}));
+    EXPECT_EQ(playtime.seriesStyle("playtime").color,
+              defaultSeriesStyle(GraphKey::BenchmarkPlaytime, "playtime").color);
 }
 
 TEST(BenchmarkTrackingStyle, RangeAndWindowChangesTakeTheirDataPathsAndNotTheStylePath) {

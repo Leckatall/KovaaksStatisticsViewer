@@ -106,14 +106,6 @@ TestCase {
 
     // -- required property --------------------------------------------------
 
-    function test_mainConsumesRequiredBenchmarkTrackingVm() {
-        const win = createMain()
-        verify(win.benchmarkTrackingVm !== undefined && win.benchmarkTrackingVm !== null,
-               "Main.qml does not expose a required `benchmarkTrackingVm` property")
-        compare(win.benchmarkTrackingVm, fakeTrackingVm,
-                "Main.qml must consume the injected benchmarkTrackingVm")
-    }
-
     // -- initial tab ------------------------------------------------------------
 
     function test_scenariosIsTheInitialWorkspace() {

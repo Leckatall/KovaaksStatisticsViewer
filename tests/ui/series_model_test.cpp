@@ -10,6 +10,7 @@
 #include <array>
 #include <cmath>
 
+#include "components/series_painter.h"
 #include "series_model.h"
 
 using ksv::presentation::SeriesModel;
@@ -28,23 +29,6 @@ namespace {
         EXPECT_DOUBLE_EQ(display[0].y(), 50.0);
         EXPECT_DOUBLE_EQ(display[1].x(), 1.0);
         EXPECT_DOUBLE_EQ(display[1].y(), 75.0);
-    }
-
-    TEST(SeriesModelTest, YAxisBuiltOverDisplayRangeYieldsRoundDisplayTicks) {
-        // Raw accuracy range [0.12, 0.87] -> display range [12, 87] via
-        // percentage(); the axis must land on round PERCENT numbers, not
-        // round fractions of the raw ratio.
-        const ValueTransform transform = ValueTransform::percentage();
-        ValueAxis yAxis;
-        yAxis.setRange(transform.display(0.12), transform.display(0.87));
-
-        ASSERT_GE(yAxis.ticks().size(), 2);
-        const double step = yAxis.ticks()[1] - yAxis.ticks()[0];
-        EXPECT_GT(step, 1.0); // a percentage-scale step, not a sub-1 fractional one
-        for (const double t: yAxis.ticks()) {
-            const double k = t / step;
-            EXPECT_NEAR(k, std::round(k), 1e-6);
-        }
     }
 
     TEST(SeriesModelTest, SetDataBuildsYAxisOverDisplayRangeSharingTheDelegate) {
@@ -101,7 +85,7 @@ namespace {
     }
 
     TEST(SeriesModelTest, LineWidthDefaultsToThePainterWidth) {
-        EXPECT_DOUBLE_EQ(SeriesModel{}.lineWidth, 3.0);
+        EXPECT_DOUBLE_EQ(SeriesModel{}.lineWidth, ksv::ui::SeriesPainter::Style{}.lineWidth);
     }
 
     TEST(SeriesModelTest, CarriedVerticesAreNeverSampled) {

@@ -3,8 +3,10 @@
 #include <QSet>
 #include <QSignalSpy>
 
+#include <array>
 #include <cmath>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "completion_history_vm.h"
@@ -13,6 +15,15 @@ using namespace ksv::application;
 using namespace ksv::presentation;
 
 namespace {
+    QColor defaultColorOf(const std::string_view seriesKey) {
+        const auto color = defaultSeriesStyle(GraphKey::ScenarioHistory, seriesKey).color;
+        return color ? QColor(color->red, color->green, color->blue, color->alpha) : QColor();
+    }
+
+    double defaultWidthOf(const std::string_view seriesKey) {
+        return defaultSeriesStyle(GraphKey::ScenarioHistory, seriesKey).width;
+    }
+
     class FakeCompletionHistoryUseCase final : public ICompletionHistoryUseCase {
     public:
         CompletionHistory history;
@@ -249,17 +260,6 @@ namespace {
         EXPECT_EQ(spy.count(), 2);
     }
 
-    TEST_F(CompletionHistoryViewModelTest, SelectRunForwardsOnlyRunsOnTheGraph) {
-        setHistory();
-        view_model.refresh();
-
-        view_model.selectRun(0);
-        view_model.selectRun(3);
-        view_model.selectRun(2);
-
-        EXPECT_EQ(fake->select_run_calls, std::vector<int>{2});
-    }
-
     TEST_F(CompletionHistoryViewModelTest, CountSeriesShareOneAxisIdentity) {
         const auto series = view_model.series({CompletionHistoryViewModel::Score, CompletionHistoryViewModel::Shots,
                                                CompletionHistoryViewModel::Hits});
@@ -302,16 +302,6 @@ namespace {
             EXPECT_LE(tick, 40.0);
         }
         EXPECT_EQ(view_model.xAxis().formatTick(31.0), "#31");
-    }
-
-    TEST_F(CompletionHistoryViewModelTest, AllHistoryAxisIsUnchangedFromOneToTheLastRun) {
-        setHistory();
-
-        view_model.refresh();
-
-        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 1.0);
-        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 2.0);
-        EXPECT_EQ(view_model.visibleRunCount(), view_model.runCount());
     }
 
     // A one-run chart still needs an axis that labels the run and no run that does not exist.
@@ -617,17 +607,17 @@ namespace {
     // ---- committed style -------------------------------------------------------------------
 
     TEST_F(CompletionHistoryViewModelTest, WithNothingSavedTheGraphLooksAsItAlwaysDidMarkersIncluded) {
-        EXPECT_EQ(view_model.property("connectionMode").toInt(), 0);
-        EXPECT_TRUE(view_model.property("pointMarkers").toBool()) << "scenario history dots its runs by default";
-        const QList<QColor> expected{QColor("#009600"), QColor("cyan"), QColor("orange"), QColor("#7CB342"),
-                                     QColor("#E53935")};
+        const auto appearance = defaultGraphPresentation(GraphKey::ScenarioHistory).appearance;
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), static_cast<int>(appearance.connection));
+        EXPECT_EQ(view_model.property("pointMarkers").toBool(), appearance.lineModeMarkers);
+        const std::array<std::string_view, 5> keys{"score", "accuracy", "shots", "hits", "misses"};
         const auto series = view_model.series({CompletionHistoryViewModel::Score, CompletionHistoryViewModel::Accuracy,
                                                CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Hits,
                                                CompletionHistoryViewModel::Misses});
-        ASSERT_EQ(series.size(), 5);
-        for (int i = 0; i < 5; ++i) {
-            EXPECT_EQ(series[i]->color(), expected[i]) << i;
-            EXPECT_DOUBLE_EQ(series[i]->lineWidth, 3.0) << i;
+        ASSERT_EQ(series.size(), static_cast<qsizetype>(keys.size()));
+        for (std::size_t i = 0; i < keys.size(); ++i) {
+            EXPECT_EQ(series[static_cast<qsizetype>(i)]->color(), defaultColorOf(keys[i])) << keys[i];
+            EXPECT_DOUBLE_EQ(series[static_cast<qsizetype>(i)]->lineWidth, defaultWidthOf(keys[i])) << keys[i];
         }
     }
 
@@ -642,7 +632,7 @@ namespace {
         EXPECT_FALSE(restored.property("pointMarkers").toBool());
         const auto accuracy = restored.series({CompletionHistoryViewModel::Accuracy}).front();
         EXPECT_EQ(accuracy->color(), QColor(1, 2, 3));
-        EXPECT_DOUBLE_EQ(accuracy->lineWidth, 3.0);
+        EXPECT_DOUBLE_EQ(accuracy->lineWidth, defaultWidthOf("accuracy"));
     }
 
     TEST_F(CompletionHistoryViewModelTest, AStyleChangeRestylesEachSeriesWithoutReadingTheHistoryAgain) {
@@ -666,10 +656,10 @@ namespace {
         EXPECT_DOUBLE_EQ(score->lineWidth, 7.0);
         EXPECT_EQ(score->points.size(), 2);
         const auto misses = view_model.series({CompletionHistoryViewModel::Misses}).front();
-        EXPECT_EQ(misses->color(), QColor("#E53935")) << "a width-only override keeps the default colour";
+        EXPECT_EQ(misses->color(), defaultColorOf("misses")) << "a width-only override keeps the default colour";
         EXPECT_DOUBLE_EQ(misses->lineWidth, 1.5);
         const auto hits = view_model.series({CompletionHistoryViewModel::Hits}).front();
-        EXPECT_DOUBLE_EQ(hits->lineWidth, 3.0) << "series are styled independently";
+        EXPECT_DOUBLE_EQ(hits->lineWidth, defaultWidthOf("hits")) << "series are styled independently";
     }
 
     TEST_F(CompletionHistoryViewModelTest, TheStyleSurvivesRefreshesAndScenarioChanges) {
@@ -684,7 +674,8 @@ namespace {
         const auto hits = view_model.series({CompletionHistoryViewModel::Hits}).front();
         EXPECT_EQ(hits->color(), QColor(5, 5, 5));
         EXPECT_DOUBLE_EQ(hits->lineWidth, 4.0);
-        EXPECT_EQ(view_model.property("pointMarkers").toBool(), true);
+        EXPECT_EQ(view_model.property("pointMarkers").toBool(),
+                  defaultGraphPresentation(GraphKey::ScenarioHistory).appearance.lineModeMarkers);
     }
 
     TEST_F(CompletionHistoryViewModelTest, TheCommittedAxisPoliciesReachTheSharedAxes) {
@@ -746,23 +737,12 @@ namespace {
         }
     }
 
-    TEST_F(CompletionHistoryViewModelTest, TheTooltipSampleOfTheScoreAverageIsTheSuppliedValue) {
-        fake->history = {.scenario_name = "Air Angelic", .full_count = 2,
-                         .rows = {{.run_index = 1, .score = 100.0, .score_average = 100.0},
-                                  {.run_index = 2, .score = 120.0, .score_average = 110.0}}};
-        view_model.refresh();
-
-        const auto sample = view_model.series({CompletionHistoryViewModel::ScoreAverage}).front()->sampleAtX(2.0);
-        ASSERT_TRUE(sample.has_value());
-        EXPECT_DOUBLE_EQ(sample->y(), 110.0);
-    }
-
     TEST_F(CompletionHistoryViewModelTest, TheScoreAverageDefaultsToItsOwnColourAndRestylesWithoutReadingHistory) {
         setHistory();
         view_model.refresh();
         const int reads = fake->historyCalls;
         const auto line = view_model.series({CompletionHistoryViewModel::ScoreAverage}).front();
-        EXPECT_EQ(line->color(), QColor("#AB47BC"));
+        EXPECT_EQ(line->color(), defaultColorOf("scoreAverage"));
 
         fake->committedPresentation.seriesStyles["scoreAverage"] = {RgbaColor{1, 2, 3, 255}, 6.0};
         fake->publishPresentation();

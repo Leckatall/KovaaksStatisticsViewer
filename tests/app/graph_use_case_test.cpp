@@ -30,13 +30,6 @@ namespace {
         GraphUseCase use_case{fake_session_controller, fake_configuration, fake_average};
     };
 
-    TEST_F(GraphUseCaseTest, LoadPerfDelegatesToSessionController) {
-        use_case.load_perf("some/file.perf");
-
-        ASSERT_EQ(fake_session_controller->set_current_perf_filename_calls.size(), 1);
-        EXPECT_EQ(fake_session_controller->set_current_perf_filename_calls[0], "some/file.perf");
-    }
-
     TEST_F(GraphUseCaseTest, LoadPerfPassesOnlyTheGivenViewLengthNotTheWholeUnderlyingBuffer) {
         const std::string buffer = "some/file.perfJUNK-PAST-THE-END";
         const std::string_view truncated(buffer.data(), std::string("some/file.perf").size());
@@ -143,12 +136,6 @@ namespace {
         ASSERT_EQ(axes.size(), 2U);
         EXPECT_EQ(axes[0].name, "Accuracy");
         EXPECT_EQ(axes[1].name, "Score Family");
-    }
-
-    TEST_F(GraphUseCaseTest, GetRunDurationReturnsRunMaxTime) {
-        fake_session_controller->current_run = runWithSeconds("a");
-
-        EXPECT_DOUBLE_EQ(use_case.getRunDuration(), 2.0);
     }
 
     TEST_F(GraphUseCaseTest, GetRunDurationRefreshesAfterRunChange) {

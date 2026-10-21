@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "app/app.h"
+#include "app/contracts/expression_dsl.h"
 #include "app/contracts/run_series_editing.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "presentation/graph_vm.h"
@@ -21,11 +22,6 @@ using namespace ksv;
 using presentation::GraphViewModel;
 
 namespace {
-    // Built-in SeriesId from defaultSeriesConfigs() — GraphViewModel::column is always a series'
-    // SeriesId, not a position, and has no dedicated enum outside the class.
-    constexpr int kScoreSeriesId = 1;
-    constexpr int kAccuracySeriesId = 5;
-
     // Both tests drive the same wired pipeline and each fetches its own fixture, so
     // the App is built once for the suite rather than per test.
     class PerfPipelineTest : public testing::Test {
@@ -62,6 +58,34 @@ namespace {
             const auto series = graphVm->series(QList<int>{column});
             return series.isEmpty() ? QList<QPointF>{} : series.front()->points;
         }
+
+        // GraphViewModel::column is a series' SeriesId, not a position. Returns the column of an enabled run
+        // line computing `expression`, adding one when the committed lines have none, so the tests do not
+        // depend on which lines ship by default. Returns -1 when the line could not be added.
+        [[nodiscard]] static int columnFor(const application::Expression &expression, const std::string &name) {
+            const auto wanted = application::encodeExpressionDsl(expression);
+            auto candidate = *app->graphConfigurationUseCase()->current().configuration;
+            for (const auto &series: candidate.runSeries.series) {
+                if (series.presentation.enabled && application::encodeExpressionDsl(series.expression) == wanted)
+                    return static_cast<int>(series.id.value);
+            }
+            const auto created = application::createComputedSeries(
+                candidate.runSeries, {{name, {{255, 255, 255, 255}, 3.0}, true}, expression});
+            if (!created.succeeded() || !app->graphConfigurationUseCase()->save(candidate).accepted()) return -1;
+            return static_cast<int>(created.createdId->value);
+        }
+
+        [[nodiscard]] static int scoreColumn() {
+            return columnFor(application::runningSum(application::primitive(application::PrimitiveMetric::Score)),
+                             "Score");
+        }
+
+        [[nodiscard]] static int accuracyColumn() {
+            using application::PrimitiveMetric;
+            return columnFor(application::divide(application::runningSum(application::primitive(PrimitiveMetric::Hits)),
+                                                 application::runningSum(application::primitive(PrimitiveMetric::Shots))),
+                             "Accuracy");
+        }
     };
 
     std::unique_ptr<integration::TestEnv> PerfPipelineTest::env;
@@ -70,20 +94,24 @@ namespace {
     QString PerfPipelineTest::perfUrl;
 
     TEST_F(PerfPipelineTest, LoadingRealPerfPopulatesTitleAndSeries) {
+        const int score_column = scoreColumn();
+        ASSERT_NE(score_column, -1);
         graphVm->fetchData(perfUrl);
 
         EXPECT_TRUE(graphVm->scenarioTitle().contains("1wall6targets TE"));
 
-        const auto score = rawPoints(kScoreSeriesId);
+        const auto score = rawPoints(score_column);
         ASSERT_GE(score.size(), 2);
         // Time axis is built from real data and must span more than the empty default.
         EXPECT_GT(graphVm->xAxis().max(), 0.0);
     }
 
     TEST_F(PerfPipelineTest, DerivedAccuracyStaysWithinUnitRange) {
+        const int accuracy_column = accuracyColumn();
+        ASSERT_NE(accuracy_column, -1);
         graphVm->fetchData(perfUrl);
 
-        const auto accuracy = rawPoints(kAccuracySeriesId);
+        const auto accuracy = rawPoints(accuracy_column);
         ASSERT_FALSE(accuracy.isEmpty());
         for (const auto &point: accuracy) {
             EXPECT_GE(point.y(), 0.0);
@@ -91,19 +119,16 @@ namespace {
         }
     }
 
-    // No default line plots the per-second score, so the test adds one.
     TEST_F(PerfPipelineTest, ScoreIsTheRunningSumOfPerSecondScore) {
-        auto candidate = *app->graphConfigurationUseCase()->current().configuration;
-        const auto created = application::createComputedSeries(
-            candidate.runSeries,
-            {{"Score per second", {{255, 255, 255, 255}, 3.0}, true},
-             application::primitive(application::PrimitiveMetric::Score)});
-        ASSERT_TRUE(created.succeeded());
-        ASSERT_TRUE(app->graphConfigurationUseCase()->save(candidate).accepted());
+        const int per_second_column = columnFor(application::primitive(application::PrimitiveMetric::Score),
+                                                "Score per second");
+        const int score_column = scoreColumn();
+        ASSERT_NE(per_second_column, -1);
+        ASSERT_NE(score_column, -1);
         graphVm->fetchData(perfUrl);
 
-        const auto perSecond = rawPoints(static_cast<int>(created.createdId->value));
-        const auto total = rawPoints(kScoreSeriesId);
+        const auto perSecond = rawPoints(per_second_column);
+        const auto total = rawPoints(score_column);
         ASSERT_GE(total.size(), 2);
         ASSERT_EQ(total.size(), perSecond.size());
 
@@ -121,9 +146,11 @@ namespace {
         // and rebuilds series rather than caching the first run.
         const QString second = env->copyFixtureIntoPerformances("VT FlyTS Novice S5.perf");
         ASSERT_FALSE(second.isEmpty());
+        const int score_column = scoreColumn();
+        ASSERT_NE(score_column, -1);
 
         graphVm->fetchData(QUrl::fromLocalFile(second).toString());
         EXPECT_TRUE(graphVm->scenarioTitle().contains("VT FlyTS"));
-        EXPECT_GE(rawPoints(kScoreSeriesId).size(), 2);
+        EXPECT_GE(rawPoints(score_column).size(), 2);
     }
 }

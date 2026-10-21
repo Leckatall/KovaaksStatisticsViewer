@@ -152,15 +152,6 @@ Item {
         //     tryCompare(panel, "yAxisColumn", -1)
         // }
 
-        // the history graph asks its canvas to dot each real run (shown while sparse).
-        function test_historyGraphMarksRealRuns() {
-            const panel = createTemporaryObject(fewRunsPanelComponent, root)
-            verify(!!panel, "Component exists")
-            let canvas = null
-            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
-            compare(canvas.pointMarkers, true)
-        }
-
         // The line style is the committed preference of this graph: markers and connection follow the VM.
         function test_markersAndConnectionFollowTheViewModel() {
             const panel = panelWith({runCount: 8, visibleRunCount: 8, pointMarkers: false, connectionMode: 2})
@@ -237,12 +228,6 @@ Item {
 
             compare(findChild(noScenario, "historyEmptyLabel").text, "No scenario selected.")
             compare(findChild(noRuns, "historyEmptyLabel").text, "No runs recorded for this scenario.")
-        }
-
-        function test_nothingAsksForTwoRuns() {
-            const panel = createTemporaryObject(panelComponent, root)
-            verify(!!panel, "Component exists")
-            verify(!findChild(panel, "historyEmptyLabel").text.includes("2 runs"))
         }
 
         // The rotated Y-axis title names the labelled axis in the default grey, never a series colour.

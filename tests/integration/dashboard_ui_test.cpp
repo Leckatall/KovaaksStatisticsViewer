@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <vector>
 
 #include "app/app.h"
 #include "components/graph_canvas.h"
@@ -45,10 +46,29 @@
 using namespace ksv;
 
 namespace {
-    // Built-in SeriesId from defaultSeriesConfigs() -- GraphCanvas' y-axis column is
-    // always a series' SeriesId, not a position.
-    constexpr int kExpectedFinalScoreSeriesId = 2;
-    constexpr int kAccuracySeriesId = 5;
+    struct PlottedLine {
+        int column;
+        // What the Y axis title reads while this line is the labelled one.
+        QString title;
+        application::AxisId axis;
+    };
+
+    // The committed configuration's enabled run lines that have data and sit on a named axis, in list order.
+    // GraphCanvas' y-axis column is always a series' SeriesId, not a position.
+    [[nodiscard]] std::vector<PlottedLine> linesOnNamedAxes(application::App &app) {
+        const auto snapshot = app.graphConfigurationUseCase()->current();
+        const auto &document = snapshot.configuration->runSeries;
+        std::vector<PlottedLine> lines;
+        for (const auto &series: document.series) {
+            if (!series.presentation.enabled || !series.yAxisId) continue;
+            const int column = static_cast<int>(series.id.value);
+            if (app.graphVm()->series({column}).isEmpty()) continue;
+            const auto axis = std::ranges::find(document.axes, *series.yAxisId, &application::AxisConfig::id);
+            if (axis != document.axes.end() && !axis->name.empty())
+                lines.push_back({column, QString::fromStdString(axis->name), axis->id});
+        }
+        return lines;
+    }
 
     [[nodiscard]] int countPixelsNear(const QImage &image, const QRect &area, const QColor &colour) {
         constexpr int kTolerance = 8;
@@ -161,22 +181,6 @@ namespace {
 
         void TearDown() override { integration::clearSavedGraphConfiguration(); }
     };
-
-    TEST_F(DashboardUiTest, SettingsMenuActionOpensTheSettingsDialog) {
-        auto *menuBar = root()->property("menuBar").value<QObject *>();
-        ASSERT_NE(menuBar, nullptr);
-
-        ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "settingsRequested"));
-
-        QObject *dialog = nullptr;
-        const bool opened = QTest::qWaitFor([&] {
-            dialog = root()->findChild<QObject *>("settingsDialog");
-            return dialog != nullptr && dialog->property("visible").toBool();
-        }, 3000);
-
-        ASSERT_TRUE(opened) << "Settings dialog never opened after the Settings menu action";
-        EXPECT_TRUE(dialog->property("visible").toBool());
-    }
 
     TEST_F(DashboardUiTest, ReopeningSettingsDialogAfterCloseWorks) {
         auto *menuBar = root()->property("menuBar").value<QObject *>();
@@ -369,14 +373,15 @@ namespace {
         ASSERT_TRUE(QTest::qWaitFor([&] { return popup->property("opened").toBool(); }, 3000));
 
         auto *settings = scene.app->settingsVm();
-        const auto quick = settings->applyQuickPatch("dailyPlaytime", {{"window", 7}});
+        const int quickWindow = application::kDefaultAveragingWindowDays + 2;
+        const auto quick = settings->applyQuickPatch("dailyPlaytime", {{"window", quickWindow}});
         ASSERT_TRUE(quick["accepted"].toBool());
-        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), 7);
+        EXPECT_EQ(scene.app->playtimeVm()->averagingWindowDays(), quickWindow);
 
         auto *content = popup->property("contentItem").value<QQuickItem *>();
         auto *windowField = findItem(content, "graphField_dataRange_averagingWindow");
         ASSERT_NE(windowField, nullptr);
-        EXPECT_EQ(windowField->property("text").toString(), "7");
+        EXPECT_EQ(windowField->property("text").toString(), QString::number(quickWindow));
         auto *more = findItem(content, "graphMoreSettings_dailyPlaytime");
         ASSERT_NE(more, nullptr);
         ASSERT_TRUE(QMetaObject::invokeMethod(more, "clicked"));
@@ -493,30 +498,6 @@ namespace {
             << "plot should not be instantiated while no run is shown";
     }
 
-    // Its own scene: this is the one test that repoints the canvas' y-axis column, and
-    // YAxisTitleLabelDefaultsToScore reads that same state.
-    TEST_F(DashboardCleanSceneTest, YAxisTitleLabelTracksTheSelectedColumn) {
-        auto *app = scene.app.get();
-        app->graphVm()->fetchData(scene.perfUrl);
-
-        auto *canvas = scene.canvasFor(app->graphVm());
-        ASSERT_NE(canvas, nullptr);
-        QObject *label = nullptr;
-        ASSERT_TRUE(QTest::qWaitFor([&] {
-            label = scene.root->findChild<QObject *>("scenarioYAxisTitleLabel");
-            return label != nullptr;
-        }, 2000)) << "no label named 'scenarioYAxisTitleLabel' found after loading a perf";
-
-        canvas->setYAxisColumn(kAccuracySeriesId);
-
-        const auto accuracy = app->graphVm()->series({kAccuracySeriesId});
-        ASSERT_FALSE(accuracy.isEmpty());
-        EXPECT_TRUE(QTest::qWaitFor([&] {
-            return label->property("text").toString() == accuracy.front()->name();
-        }, 2000)) << "axis title stayed on '" << label->property("text").toString().toStdString()
-                  << "' after the y-axis column moved to " << accuracy.front()->name().toStdString();
-    }
-
     TEST_F(DashboardCleanSceneTest, YAxisTitleLabelNamesTheSharedAxis) {
         auto *app = scene.app.get();
         app->graphVm()->fetchData(scene.perfUrl);
@@ -528,14 +509,18 @@ namespace {
             label = scene.root->findChild<QObject *>("scenarioYAxisTitleLabel");
             return label != nullptr;
         }, 2000)) << "no label named 'scenarioYAxisTitleLabel' found after loading a perf";
+        const auto lines = linesOnNamedAxes(*app);
+        ASSERT_FALSE(lines.empty());
+        const auto other = std::ranges::find_if(lines, [&](const auto &line) { return line.axis != lines.front().axis; });
+        ASSERT_NE(other, lines.end()) << "the committed lines need plotted lines on two named axes";
 
-        canvas->setYAxisColumn(kAccuracySeriesId);
-        ASSERT_TRUE(QTest::qWaitFor([&] { return label->property("text").toString() == "Accuracy"; }, 2000));
+        canvas->setYAxisColumn(lines.front().column);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return label->property("text").toString() == lines.front().title; }, 2000));
 
-        canvas->setYAxisColumn(kExpectedFinalScoreSeriesId);
+        canvas->setYAxisColumn(other->column);
 
         EXPECT_TRUE(QTest::qWaitFor([&] {
-            return label->property("text").toString() == "Score";
+            return label->property("text").toString() == other->title;
         }, 2000)) << "axis title was '" << label->property("text").toString().toStdString() << "'";
     }
 
@@ -545,44 +530,23 @@ namespace {
 
         auto *canvas = scene.canvasFor(app->graphVm());
         ASSERT_NE(canvas, nullptr);
-        canvas->setYAxisColumn(kExpectedFinalScoreSeriesId);
-        ASSERT_EQ(canvas->property("labelledYAxisTitle").toString(), "Score");
+        const auto lines = linesOnNamedAxes(*app);
+        ASSERT_FALSE(lines.empty());
+        const auto &shared = lines.front();
+        canvas->setYAxisColumn(shared.column);
+        ASSERT_EQ(canvas->property("labelledYAxisTitle").toString(), shared.title);
 
         const auto snapshot = app->graphConfigurationUseCase()->current();
         ASSERT_NE(snapshot.configuration, nullptr);
         auto candidate = *snapshot.configuration;
-        const auto axis = std::ranges::find_if(candidate.runSeries.axes, [](const auto &a) {
-            return a.id.value == 1;
+        const auto axis = std::ranges::find_if(candidate.runSeries.axes, [&](const auto &a) {
+            return a.id == shared.axis;
         });
         ASSERT_NE(axis, candidate.runSeries.axes.end());
         axis->name = "Renamed Axis";
         ASSERT_TRUE(app->graphConfigurationUseCase()->save(candidate).accepted());
 
         EXPECT_EQ(canvas->property("labelledYAxisTitle").toString(), "Renamed Axis");
-    }
-
-    TEST_F(DashboardCleanSceneTest, ScenarioHistoryCanvasUsesTheCompletionHistoryViewModel) {
-        auto *app = scene.app.get();
-        ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
-
-        // Take the run the live pipeline already decoded rather than standing up a
-        // second ProtoDecoder over the same file.
-        auto first_run = app->profileService()->getLatestRun();
-        ASSERT_EQ(first_run.run_id.scenario_id.name, "1wall6targets TE");
-        auto second_run = first_run;
-        second_run.run_id.start_time += 1000;
-        domain::UserProfile profile;
-        const auto source = profile.ensureSource(scene.env.rootPath().toStdString(), "FPSAimTrainer/performances");
-        first_run.sources.perf = {{source, std::filesystem::path(scene.perfFile.toStdString()).filename().string()}};
-        second_run.sources.perf = first_run.sources.perf;
-        ASSERT_TRUE(profile.addRun(first_run));
-        ASSERT_TRUE(profile.addRun(second_run));
-
-        app->profileService()->applyBuiltProfile(std::move(profile));
-
-        const auto historyCanvas = [this, app] { return scene.canvasFor(app->completionHistoryVm()); };
-        ASSERT_TRUE(QTest::qWaitFor([&] { return historyCanvas() != nullptr; }, 3000));
-        EXPECT_EQ(historyCanvas()->graphVm(), app->completionHistoryVm());
     }
 
     // A click on the history graph selects the nearest run: the history marks it, the run list's

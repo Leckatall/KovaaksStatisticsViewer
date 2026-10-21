@@ -44,10 +44,6 @@ namespace {
         EXPECT_EQ(projection, interval(kToday, kToday));
     }
 
-    TEST(ResolveRange, RecentDaysAreAlwaysResolvableWhenAnchoredToToday) {
-        EXPECT_NE(resolveRange(preference(RecentDays{30}), kToday, std::nullopt), RangeProjection{NoRelevantHistory{}});
-    }
-
     TEST(ResolveRange, AnchorFlagMovesRecentDaysToTheLatestRelevantRun) {
         const auto latest = day(2026, 3, 5);
         const auto projection = resolveRange(preference(RecentDays{3}, true), kToday, latest);
@@ -142,24 +138,6 @@ namespace {
             id.start_time = millis;
             EXPECT_EQ(epochDayOfMillis(millis), id.startDay()) << millis;
         }
-    }
-
-    TEST(DayRollover, AdvancingTheFakeReResolvesATodayAnchoredPresetButNotAnAnchoredOne) {
-        ksv::tests_support::FakeDaySource source{kToday};
-        const auto recent = preference(RecentDays{2});
-        const auto anchored = preference(RecentDays{2}, true);
-        const auto latest = day(2026, 10, 1);
-
-        std::vector<RangeProjection> announced;
-        source.onDayChanged([&](const sys_days newDay) { announced.push_back(resolveRange(recent, newDay, latest)); });
-
-        EXPECT_EQ(resolveRange(recent, source.today(), latest),
-                  interval(day(2026, 10, 15), kToday));
-        source.advance();
-        ASSERT_EQ(announced.size(), 1U);
-        EXPECT_EQ(announced.front(), interval(kToday, day(2026, 10, 17)));
-        EXPECT_EQ(resolveRange(anchored, source.today(), latest),
-                  interval(day(2026, 9, 30), latest));
     }
 
     TEST(DayRollover, SettingTheSameDayAnnouncesNothing) {

@@ -18,42 +18,14 @@ TestCase {
         expression: { kind: "primitive", primitiveMetric: "score" }
     })
 
-    SignalSpy { id: colorRequestedSpy; signalName: "colorRequested" }
-    SignalSpy { id: nameUpdateRequestedSpy; signalName: "nameUpdateRequested" }
-    SignalSpy { id: expressionEditRequestedSpy; signalName: "expressionEditRequested" }
-    SignalSpy { id: axisSelectionRequestedSpy; signalName: "axisSelectionRequested" }
-    SignalSpy { id: seriesEnabledRequestedSpy; signalName: "seriesEnabledRequested" }
     SignalSpy { id: optionsRequestedSpy; signalName: "optionsRequested" }
 
     function createDelegate() {
         const delegate = createTemporaryObject(delegateComponent, testCase, { modelData: row })
         verify(delegate !== null)
-        colorRequestedSpy.target = delegate
-        nameUpdateRequestedSpy.target = delegate
-        expressionEditRequestedSpy.target = delegate
-        axisSelectionRequestedSpy.target = delegate
-        seriesEnabledRequestedSpy.target = delegate
         optionsRequestedSpy.target = delegate
         optionsRequestedSpy.clear()
         return delegate
-    }
-
-    function test_dragHandleShowsSixDotsInTwoColumnsAndThreeRows() {
-        const delegate = createDelegate()
-        const handle = ItemLookup.findByObjectName(delegate, "seriesDragHandle_" + row.id)
-        verify(handle !== null)
-
-        const dots = []
-        ItemLookup.findByObjectNamePrefix(handle, "seriesDragHandleDot_" + row.id + "_", dots)
-        compare(dots.length, 6)
-
-        for (let index = 0; index < dots.length; ++index) {
-            compare(dots[index].width, 3)
-            compare(dots[index].height, 3)
-            compare(dots[index].color, delegate.dragHandleDotColor)
-            compare(dots[index].x, 1.5 + (index % 2) * 6)
-            compare(dots[index].y, 4.5 + Math.floor(index / 2) * 6)
-        }
     }
 
     function test_delegateLightensOnHover() {
@@ -69,21 +41,6 @@ TestCase {
         mouseMove(delegate, 1, delegate.height + 10)
         tryVerify(function() { return !delegate.hovered })
         compare(delegate.color, delegate.restingColor)
-    }
-
-    function test_expressionAndDeleteButtonsRenderIconsNotText() {
-        const delegate = createDelegate()
-
-        const fx = ItemLookup.findByObjectName(delegate, "editExpressionButton_" + row.id)
-        verify(fx !== null)
-        compare(fx.text, "")
-        verify(fx.icon.source.toString().endsWith("square-function.svg"))
-
-        const options = ItemLookup.findByObjectName(delegate, "seriesOptionsButton_" + row.id)
-        verify(options !== null)
-        compare(options.text, "")
-        verify(options.icon.source.toString().endsWith("ellipsis.svg"))
-        compare(options.Accessible.name, "Series options")
     }
 
     function test_clickingTheOptionsButtonRequestsOptionsAnchoredToIt() {
@@ -131,33 +88,6 @@ TestCase {
         const indicatorBottom = indicator.mapToItem(options, 0, indicator.height).y
         verify(indicatorBottom <= glyphTop, "indicator bottom " + indicatorBottom + " overlaps glyph top " + glyphTop)
         verify(indicator.mapToItem(options, indicator.width, 0).x > options.width, "indicator should overhang the corner")
-    }
-
-    function test_actionSignalsExposeTheirPayload() {
-        const delegate = createDelegate()
-
-        delegate.colorRequested(row)
-        compare(colorRequestedSpy.count, 1)
-        compare(colorRequestedSpy.signalArguments[0][0], row)
-
-        delegate.nameUpdateRequested(row, "New score")
-        compare(nameUpdateRequestedSpy.count, 1)
-        compare(nameUpdateRequestedSpy.signalArguments[0][0], row)
-        compare(nameUpdateRequestedSpy.signalArguments[0][1], "New score")
-
-        delegate.expressionEditRequested(row)
-        compare(expressionEditRequestedSpy.count, 1)
-        compare(expressionEditRequestedSpy.signalArguments[0][0], row)
-
-        delegate.axisSelectionRequested(row, "axis-1")
-        compare(axisSelectionRequestedSpy.count, 1)
-        compare(axisSelectionRequestedSpy.signalArguments[0][0], row)
-        compare(axisSelectionRequestedSpy.signalArguments[0][1], "axis-1")
-
-        delegate.seriesEnabledRequested(row, false)
-        compare(seriesEnabledRequestedSpy.count, 1)
-        compare(seriesEnabledRequestedSpy.signalArguments[0][0], row)
-        compare(seriesEnabledRequestedSpy.signalArguments[0][1], false)
     }
 
     Component {

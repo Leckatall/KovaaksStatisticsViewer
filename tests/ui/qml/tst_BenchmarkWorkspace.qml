@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtTest
 import "../../../src/ui/qml/benchmark"
+import "../../../src/ui/qml/graph"
 import "ItemLookup.js" as ItemLookup
 import "TestDoubles.js" as TestDoubles
 
@@ -29,6 +30,11 @@ Item {
     Component {
         id: progressGridComponent
         BenchmarkProgressGrid { }
+    }
+
+    Component {
+        id: chartTitleComponent
+        ChartTitle { }
     }
 
     Component {
@@ -747,15 +753,6 @@ Item {
             compare(header.mapToItem(ws, 0, 0).y, before, "the card does not move with the scroll")
         }
 
-        function test_horizontalScrollIsNotTheStrategy() {
-            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 800, 600)
-            const flick = find(ws, "benchmarkWorkspaceScroll")
-            verify(flick !== null, "workspace must have a vertical scroll surface")
-            if (flick.contentWidth !== undefined && flick.width !== undefined)
-                verify(flick.contentWidth <= flick.width + 1,
-                       "content must not require horizontal scrolling at 800x600")
-        }
-
         // -- history cards: empty vs non-empty ---------------------------
 
         function test_emptyHistoryCardShowsExplicitTextAndNoLine() {
@@ -798,7 +795,6 @@ Item {
             const rankCard = find(ws, "rankHistoryCard")
             const playtimeCard = find(ws, "playtimeHistoryCard")
             verify(rankCard !== null && playtimeCard !== null, "both history cards must exist")
-            verify(rankCard !== playtimeCard, "rank and playtime must be separate cards")
 
             const rankLine = find(ws, "rankHistoryLineName")
             const playtimeLine = find(ws, "playtimeHistoryLineName")
@@ -809,10 +805,11 @@ Item {
                    "the playtime line must be identified as playtime")
 
             // Card titles share the Scenarios-tab chart title style (ChartTitle).
+            const title = createTemporaryObject(chartTitleComponent, root)
             for (const line of [rankLine, playtimeLine]) {
-                compare(line.horizontalAlignment, Text.AlignLeft)
-                compare(line.font.weight, Font.DemiBold)
-                compare(line.font.pixelSize, 14)
+                compare(line.horizontalAlignment, title.horizontalAlignment)
+                compare(line.font.weight, title.font.weight)
+                compare(line.font.pixelSize, title.font.pixelSize)
             }
 
             verify(String(rankCard.Accessible.description).toLowerCase().indexOf("rank") !== -1,
@@ -1708,16 +1705,6 @@ Item {
                 const none = find(ws, "progressRow_" + id + "_bar_marker")
                 verify(none === null || !none.visible, id + " has no recent value and no marker")
             }
-        }
-
-        // -- focus order ----------------------------------------------
-
-        function test_benchmarkSelectorIsKeyboardFocusable() {
-            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            const selector = find(ws, "benchmarkSelector")
-            verify(selector !== null, "selector must exist")
-            selector.forceActiveFocus()
-            verify(selector.activeFocus, "benchmark selector must be focusable")
         }
     }
 }

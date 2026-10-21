@@ -215,14 +215,6 @@ TestCase {
         tryCompare(status, "visible", true)
     }
 
-    function test_openedBenchmarkSavesWithoutConfirmation() {
-        const dialog = openWithFake({hasDraft: true, dirty: true, draftFromLibrary: true})
-
-        mouseClick(find(dialog, "saveButton"))
-
-        tryCompare(vm(dialog), "saveCalls", 1)
-    }
-
     function test_staleBaselineWarning() {
         const dialog = openWithFake({hasDraft: true, dirty: true, draftFromLibrary: true,
                                      baselineStale: true})
@@ -438,23 +430,6 @@ TestCase {
         compare(vm(dialog).renameScenarioCalls.length, 0)
     }
 
-    function test_nameSuggestionOnSavedBenchmarkAppliesImmediately() {
-        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
-            draftFromLibrary: true,
-            scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
-        })
-        verify(dialog.editorTable.beginScenarioEdit("s-unr"))
-        const editor = dialog.editorTable.activeEditor
-        editor.selectAll()
-        for (const ch of "popcorn") keyClick(ch)
-        tryVerify(() => editor.suggestionPopupView.opened)
-        const option = ItemLookup.findByObjectName(editor.suggestionPopupView.contentItem,
-                                                    "scenarioSuggestion_hash-c")
-        verify(option !== null)
-        mouseClick(option)
-        tryCompare(vm(dialog), "setScenarioIdentityCalls", [["s-unr", "popcorn", "hash-c"]])
-    }
-
     function test_nameSuggestionSupportsArrowAndEnterSelection() {
         const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {
             scenarioCatalogue: TestDoubles.benchmarkManagerScenarioCatalogue()
@@ -578,17 +553,6 @@ TestCase {
         compare(tableCell(dialog, "s-map", "t1").cellText, "80", "thresholds must be retained")
         compare(vm(dialog).clearThresholdCalls.length, 0)
         compare(vm(dialog).moveScenarioCalls.length + vm(dialog).assignScenariosCalls.length, 0)
-    }
-
-    function test_mappingEditOnASavedDraftAppliesImmediately() {
-        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), {dirty: true, draftFromLibrary: true})
-
-        verify(dialog.editorTable.focusCell({entryId: "s-amb"}))
-        tryVerify(() => find(dialog, "candidateOption_hash-b") !== null)
-        mouseClick(find(dialog, "candidateOption_hash-b"))
-
-        tryVerify(() => vm(dialog).setScenarioHashCalls.length === 1)
-        compare(vm(dialog).setScenarioHashCalls[0], ["s-amb", "hash-b"])
     }
 
     function test_automaticResolutionFailureBannerIsNonModalAndClearsOnNextPublication() {

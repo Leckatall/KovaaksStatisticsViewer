@@ -211,17 +211,6 @@ namespace {
         EXPECT_EQ(env->graphConfigurationPersistence->load(), *committed.configuration);
     }
 
-    TEST_F(CompositionRootTest, AQuickPatchIsCommittedAndStored) {
-        application::GraphQuickPatch patch;
-        patch.averagingWindowDays = 12;
-
-        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(application::GraphKey::DailyPlaytime, patch)
-            .accepted());
-
-        EXPECT_EQ(env->graphConfigurationPersistence->load().preferences(application::GraphKey::DailyPlaytime)
-                  .averagingWindowDays, 12);
-    }
-
     // ---- committed graph style reaches every graph view model --------------------------------
 
     struct StyleProbe {
@@ -233,16 +222,28 @@ namespace {
 
     StyleProbe probe(const presentation::GraphViewModelBase *vm) { return {vm->connectionMode(), vm->pointMarkers()}; }
 
+    StyleProbe defaultProbe(const application::GraphKey key) {
+        const auto appearance = application::defaultGraphPreferences(key).appearance;
+        return {static_cast<int>(appearance.connection), appearance.lineModeMarkers};
+    }
+
+    QColor colorOf(const application::SeriesStyle &style) {
+        const auto color = style.color.value();
+        return {color.red, color.green, color.blue, color.alpha};
+    }
+
     // STATE-08: nothing saved means every graph draws as it did before graph configuration existed.
     TEST_F(CompositionRootTest, WithNoSavedStyleEveryGraphLooksAsItAlwaysDid) {
-        EXPECT_EQ(probe(app->graphVm()), (StyleProbe{0, false}));
-        EXPECT_EQ(probe(app->playtimeVm()), (StyleProbe{0, false}));
-        EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{0, true}));
-        EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), (StyleProbe{0, false}));
-        EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{0, false}));
+        using application::GraphKey;
+        EXPECT_EQ(probe(app->graphVm()), defaultProbe(GraphKey::Run));
+        EXPECT_EQ(probe(app->playtimeVm()), defaultProbe(GraphKey::DailyPlaytime));
+        EXPECT_EQ(probe(app->completionHistoryVm()), defaultProbe(GraphKey::ScenarioHistory));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), defaultProbe(GraphKey::BenchmarkRank));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), defaultProbe(GraphKey::BenchmarkPlaytime));
         const auto score = app->completionHistoryVm()->series({presentation::CompletionHistoryViewModel::Score});
-        EXPECT_EQ(score.front()->color(), QColor("#009600"));
-        EXPECT_DOUBLE_EQ(score.front()->lineWidth, 3.0);
+        const auto defaultScore = application::defaultSeriesStyle(GraphKey::ScenarioHistory, "score");
+        EXPECT_EQ(score.front()->color(), colorOf(defaultScore));
+        EXPECT_DOUBLE_EQ(score.front()->lineWidth, defaultScore.width);
     }
 
     // SCOPE-03: a graph type owns its style; committing one never moves another.
@@ -254,14 +255,16 @@ namespace {
         patch.seriesStyles["playtime"] = {application::RgbaColor{1, 2, 3, 255}, 7.0};
         ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(GraphKey::DailyPlaytime, patch).accepted());
 
-        EXPECT_EQ(probe(app->playtimeVm()), (StyleProbe{2, false}));
+        EXPECT_EQ(probe(app->playtimeVm()),
+                  (StyleProbe{static_cast<int>(application::ConnectionMode::PointsOnly),
+                              defaultProbe(GraphKey::DailyPlaytime).markers}));
         const auto *daily = app->playtimeVm()->series({presentation::PlaytimeGraphViewModel::Playtime}).front();
         EXPECT_EQ(daily->color(), QColor(1, 2, 3));
         EXPECT_DOUBLE_EQ(daily->lineWidth, 7.0);
-        EXPECT_EQ(probe(app->graphVm()), (StyleProbe{0, false}));
-        EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{0, true}));
-        EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), (StyleProbe{0, false}));
-        EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{0, false}));
+        EXPECT_EQ(probe(app->graphVm()), defaultProbe(GraphKey::Run));
+        EXPECT_EQ(probe(app->completionHistoryVm()), defaultProbe(GraphKey::ScenarioHistory));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), defaultProbe(GraphKey::BenchmarkRank));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), defaultProbe(GraphKey::BenchmarkPlaytime));
         EXPECT_EQ(configuration->current().configuration->preferences(GraphKey::ScenarioHistory),
                   application::defaultGraphPreferences(GraphKey::ScenarioHistory));
 
@@ -269,9 +272,9 @@ namespace {
         restore.connection = application::ConnectionMode::Smooth;
         restore.seriesStyles["playtime"] = {};
         ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(GraphKey::DailyPlaytime, restore).accepted());
-        EXPECT_EQ(probe(app->playtimeVm()), (StyleProbe{0, false}));
+        EXPECT_EQ(probe(app->playtimeVm()), defaultProbe(GraphKey::DailyPlaytime));
         EXPECT_EQ(app->playtimeVm()->series({presentation::PlaytimeGraphViewModel::Playtime}).front()->color(),
-                  QColor("#4DD0E1"));
+                  colorOf(application::defaultSeriesStyle(GraphKey::DailyPlaytime, "playtime")));
     }
 
     TEST_F(CompositionRootTest, EachGraphKindTakesItsStyleThroughItsOwnWiring) {

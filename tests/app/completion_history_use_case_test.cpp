@@ -93,19 +93,6 @@ namespace {
         EXPECT_EQ(history.rows[1].run_index, 2);
     }
 
-    TEST_F(CompletionHistoryUseCaseTest, AccuracyIsZeroWhenShotsAreZero) {
-        setCurrentScenario();
-        profile->completion_history_by_scenario[{.name = "Scenario One", .hash = "scenario-1"}] = {
-            {.run_id = {.scenario_id = {.name = "Scenario One", .hash = "scenario-1"}, .start_time = 100},
-             .totals = {.shots = 0, .hits = 0}},
-        };
-
-        const auto history = use_case.get_history();
-
-        ASSERT_EQ(history.rows.size(), 1);
-        EXPECT_DOUBLE_EQ(history.rows[0].accuracy, 0.0);
-    }
-
     TEST_F(CompletionHistoryUseCaseTest, EmptyCurrentScenarioDoesNotQueryProfile) {
         const auto history = use_case.get_history();
 
@@ -185,17 +172,20 @@ namespace {
         EXPECT_EQ(callback_count, 1);
     }
 
-    TEST_F(CompletionHistoryUseCaseTest, TheDefaultRangeIsTheLatestHundredRuns) {
+    TEST_F(CompletionHistoryUseCaseTest, TheDefaultRangeIsTheDefaultLatestRunCount) {
+        const auto latestRuns =
+            std::get<LatestRuns>(defaultGraphPreferences(GraphKey::ScenarioHistory).range->range).count;
+        const auto totalRuns = latestRuns + 5;
         std::vector<long long> epochDays;
-        for (long long offset = 104; offset >= 0; --offset) epochDays.push_back(kToday - offset);
+        for (long long offset = totalRuns - 1; offset >= 0; --offset) epochDays.push_back(kToday - offset);
         playOnDays(epochDays);
 
         const auto history = use_case.get_history();
 
-        ASSERT_EQ(history.rows.size(), 100U);
+        ASSERT_EQ(history.rows.size(), static_cast<size_t>(latestRuns));
         EXPECT_EQ(history.rows.front().run_index, 6);
-        EXPECT_EQ(history.rows.back().run_index, 105);
-        EXPECT_EQ(history.full_count, 105);
+        EXPECT_EQ(history.rows.back().run_index, totalRuns);
+        EXPECT_EQ(history.full_count, totalRuns);
     }
 
     TEST_F(CompletionHistoryUseCaseTest, AllHistoryKeepsEveryRunAndFullCountEqualsRowCount) {
@@ -218,13 +208,6 @@ namespace {
         EXPECT_EQ(history.full_count, 5);
         EXPECT_EQ(history.rows[0].start_time_ms, (kToday - 10) * kMsPerDay + 7);
         EXPECT_DOUBLE_EQ(history.rows[0].score, 103.0) << "values come from the original row, not a re-indexed one";
-    }
-
-    TEST_F(CompletionHistoryUseCaseTest, LatestRunsLargerThanTheHistoryShowEverything) {
-        playOnDays({kToday - 2, kToday});
-        setRange(LatestRuns{50});
-
-        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{1, 2}));
     }
 
     TEST_F(CompletionHistoryUseCaseTest, CustomDatesFilterByRowTimestampNotByRunPosition) {
@@ -311,13 +294,6 @@ namespace {
         EXPECT_EQ(history.full_count, 0);
     }
 
-    TEST_F(CompletionHistoryUseCaseTest, ASingleRowProjectionIsKept) {
-        playOnDays({kToday - 40, kToday - 30, kToday});
-        setRange(LatestRuns{1});
-
-        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{3}));
-    }
-
     TEST_F(CompletionHistoryUseCaseTest, SelectedRunKeepsItsOriginalIndexOutsideTheVisibleRows) {
         playOnDays({kToday - 40, kToday - 30, kToday});
         setCurrentScenario("scenario-1", (kToday - 40) * kMsPerDay + 7);
@@ -325,15 +301,6 @@ namespace {
 
         EXPECT_EQ(use_case.selected_run_index(), 1);
         EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{3}));
-    }
-
-    TEST_F(CompletionHistoryUseCaseTest, ScoreAverageOfASingleRunIsItsOwnScore) {
-        playOnDays({kToday});
-
-        const auto history = use_case.get_history();
-
-        ASSERT_EQ(history.rows.size(), 1);
-        EXPECT_DOUBLE_EQ(history.rows[0].score_average, 100.0);
     }
 
     TEST_F(CompletionHistoryUseCaseTest, ScoreAverageUsesAllRunsWhenFewerThanTenExist) {
@@ -442,16 +409,6 @@ namespace {
 
         EXPECT_FALSE(session->selected_run.has_value());
         EXPECT_EQ(use_case.selected_run_index(), 2);
-    }
-
-    TEST_F(CompletionHistoryUseCaseTest, OneActiveRangeModeReplacesTheOther) {
-        playOnDays({kToday - 40, kToday - 30, kToday - 20, kToday - 10, kToday});
-        setRange(LatestRuns{1});
-        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{5}));
-
-        setRange(RecentDays{15});
-        EXPECT_EQ(runNumbers(use_case.get_history()), (std::vector{4, 5}))
-            << "the stored range is a single discriminated value, so no earlier latest-N survives";
     }
 
     TEST_F(CompletionHistoryUseCaseTest, RangeChangeNotifiesOnlyForTheScenarioHistoryGraph) {

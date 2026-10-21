@@ -73,6 +73,17 @@ namespace {
             return false;
         }
 
+        static QString qstring(const std::string_view text) {
+            return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
+        }
+
+        static QString nameOf(const GraphKey key) { return qstring(graphKeyName(key)); }
+
+        static QString modeOf(const AxisPolicy &policy) {
+            if (std::holds_alternative<StartAtZero>(policy)) return "zero";
+            return std::holds_alternative<FixedBounds>(policy) ? "fixed" : "fit";
+        }
+
         static QVariantMap seriesEntry(const QVariantMap &draft, const QString &key) {
             for (const auto &value: draft["series"].toList())
                 if (value.toMap()["key"] == key) return value.toMap();
@@ -89,59 +100,71 @@ namespace {
     TEST_F(GraphDraftTest, EachGraphDraftDescribesOnlyTheControlsItOffers) {
         const auto view_model = visit();
 
-        const auto run = view_model->graphDraft("run");
-        EXPECT_FALSE(run["hasRange"].toBool());
-        EXPECT_FALSE(run["hasWindow"].toBool());
-        EXPECT_TRUE(run["series"].toList().isEmpty());
-        EXPECT_TRUE(run["axes"].toList().isEmpty());
+        for (const auto key: kGraphKeys) {
+            SCOPED_TRACE(nameOf(key).toStdString());
+            const auto &descriptor = graphDescriptor(key);
+            const auto draft = view_model->graphDraft(nameOf(key));
 
-        const auto rank = view_model->graphDraft("benchmarkRank");
-        EXPECT_TRUE(rank["hasRange"].toBool());
-        EXPECT_FALSE(rank["hasWindow"].toBool());
-        EXPECT_TRUE(rank["axes"].toList().isEmpty());
-        ASSERT_EQ(rank["series"].toList().size(), 1);
-        EXPECT_EQ(rank["series"].toList()[0].toMap()["key"].toString(), "rank");
-
-        const auto daily = view_model->graphDraft("dailyPlaytime");
-        EXPECT_TRUE(daily["hasWindow"].toBool());
-        EXPECT_FALSE(daily["hasLatestRuns"].toBool());
-        ASSERT_EQ(daily["axes"].toList().size(), 1);
-
-        const auto history = view_model->graphDraft("scenarioHistory");
-        EXPECT_TRUE(history["hasLatestRuns"].toBool());
-        EXPECT_FALSE(history["hasWindow"].toBool());
-        EXPECT_EQ(history["series"].toList().size(), 6);
-        EXPECT_EQ(history["axes"].toList().size(), 3);
+            EXPECT_EQ(draft["hasRange"].toBool(), descriptor.dateRange);
+            EXPECT_EQ(draft["hasLatestRuns"].toBool(), descriptor.latestRuns);
+            EXPECT_EQ(draft["hasWindow"].toBool(), descriptor.averagingWindow);
+            const auto series = draft["series"].toList();
+            ASSERT_EQ(series.size(), static_cast<qsizetype>(descriptor.series.size()));
+            for (std::size_t i = 0; i < descriptor.series.size(); ++i)
+                EXPECT_EQ(series[static_cast<qsizetype>(i)].toMap()["key"].toString(), qstring(descriptor.series[i].key));
+            const auto axes = draft["axes"].toList();
+            ASSERT_EQ(axes.size(), static_cast<qsizetype>(descriptor.axes.size()));
+            for (std::size_t i = 0; i < descriptor.axes.size(); ++i)
+                EXPECT_EQ(axes[static_cast<qsizetype>(i)].toMap()["key"].toString(), qstring(descriptor.axes[i].key));
+        }
     }
 
     TEST_F(GraphDraftTest, AnAxisNamesTheSeriesThatShareIt) {
         const auto view_model = visit();
+        const auto &descriptor = graphDescriptor(GraphKey::ScenarioHistory);
+        const auto draft = view_model->graphDraft("scenarioHistory");
 
-        const auto counts = axisEntry(view_model->graphDraft("scenarioHistory"), "counts");
+        ASSERT_FALSE(descriptor.axes.empty());
+        for (const auto &axis: descriptor.axes) {
+            QStringList sharing;
+            for (const auto &series: descriptor.series)
+                if (series.axisKey == axis.key) sharing.append(qstring(series.key));
+            const auto entry = axisEntry(draft, qstring(axis.key));
 
-        EXPECT_EQ(counts["seriesKeys"].toStringList(), (QStringList{"shots", "hits", "misses"}));
-        EXPECT_EQ(counts["mode"].toString(), "zero");
-        EXPECT_EQ(axisEntry(view_model->graphDraft("scenarioHistory"), "score")["mode"].toString(), "fit");
+            EXPECT_EQ(entry["seriesKeys"].toStringList(), sharing) << axis.key;
+            EXPECT_EQ(entry["mode"].toString(), modeOf(axis.defaultPolicy)) << axis.key;
+        }
     }
 
     TEST_F(GraphDraftTest, TheDraftOfAFreshVisitShowsTheDefaults) {
         const auto view_model = visit();
+        const auto dailyDefaults = defaultGraphPreferences(GraphKey::DailyPlaytime);
+        const auto historyDefaults = defaultGraphPreferences(GraphKey::ScenarioHistory);
+        ASSERT_TRUE(dailyDefaults.range && std::holds_alternative<RecentDays>(dailyDefaults.range->range));
+        ASSERT_TRUE(dailyDefaults.averagingWindowDays);
+        ASSERT_TRUE(historyDefaults.range && std::holds_alternative<LatestRuns>(historyDefaults.range->range));
 
         const auto daily = view_model->graphDraft("dailyPlaytime");
+        const auto history = view_model->graphDraft("scenarioHistory");
 
         EXPECT_EQ(daily["rangeKind"].toString(), "recentDays");
-        EXPECT_TRUE(daily["anchor"].toBool());
-        EXPECT_EQ(daily["windowText"].toString(), "7");
-        EXPECT_EQ(view_model->graphDraft("scenarioHistory")["rangeKind"].toString(), "latestRuns");
-        EXPECT_EQ(daily["connection"].toString(), "smooth");
-        EXPECT_FALSE(daily["markers"].toBool());
-        EXPECT_TRUE(view_model->graphDraft("scenarioHistory")["markers"].toBool());
-        const auto score = seriesEntry(view_model->graphDraft("scenarioHistory"), "score");
+        EXPECT_EQ(daily["anchor"].toBool(), dailyDefaults.range->anchorToLatestRun);
+        EXPECT_EQ(daily["windowText"].toString(), english().toString(*dailyDefaults.averagingWindowDays));
+        EXPECT_EQ(history["rangeKind"].toString(), "latestRuns");
+        EXPECT_EQ(daily["connection"].toString(), qstring(connectionModeName(dailyDefaults.appearance.connection)));
+        EXPECT_EQ(daily["markers"].toBool(), dailyDefaults.appearance.lineModeMarkers);
+        EXPECT_EQ(history["markers"].toBool(), historyDefaults.appearance.lineModeMarkers);
+        const auto score = seriesEntry(history, "score");
+        const auto scoreStyle = defaultSeriesStyle(GraphKey::ScenarioHistory, "score");
+        ASSERT_TRUE(scoreStyle.color);
         EXPECT_FALSE(score["colorOverridden"].toBool());
         EXPECT_FALSE(score["widthOverridden"].toBool());
-        EXPECT_EQ(score["widthText"].toString(), "3");
-        EXPECT_EQ(score["color"].value<QColor>(), QColor(0, 150, 0, 255));
-        EXPECT_FALSE(seriesEntry(view_model->graphDraft("benchmarkRank"), "rank")["color"].value<QColor>().isValid());
+        EXPECT_EQ(score["widthText"].toString(), english().toString(scoreStyle.width));
+        EXPECT_EQ(score["color"].value<QColor>(),
+                  QColor(scoreStyle.color->red, scoreStyle.color->green, scoreStyle.color->blue,
+                         scoreStyle.color->alpha));
+        EXPECT_EQ(seriesEntry(view_model->graphDraft("benchmarkRank"), "rank")["color"].value<QColor>().isValid(),
+                  defaultSeriesStyle(GraphKey::BenchmarkRank, "rank").color.has_value());
         EXPECT_TRUE(view_model->draftIssues().isEmpty());
         EXPECT_FALSE(view_model->hasPendingChanges());
     }
@@ -159,27 +182,33 @@ namespace {
 
     TEST_F(GraphDraftTest, DraftEditsNotifyAndStayOutOfTheApplicationUntilSave) {
         const auto view_model = visit();
+        const auto committed = configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays;
+        ASSERT_TRUE(committed);
+        const int edited = *committed + 1;
         const QSignalSpy draftSpy(view_model.get(), &SettingsViewModel::graphDraftsChanged);
         const QSignalSpy pendingSpy(view_model.get(), &SettingsViewModel::pendingChangesChanged);
 
-        EXPECT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "5"));
+        EXPECT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow",
+                                              QString::number(edited)));
 
         EXPECT_EQ(draftSpy.count(), 1);
         EXPECT_EQ(pendingSpy.count(), 1);
         EXPECT_TRUE(view_model->hasPendingChanges());
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "5");
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), QString::number(edited));
         EXPECT_TRUE(configuration->saves.empty());
         EXPECT_TRUE(configuration->patches.empty());
-        EXPECT_EQ(configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 7);
-        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 7);
+        EXPECT_EQ(configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays, committed);
+        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), *committed);
     }
 
     TEST_F(GraphDraftTest, AnEditThatChangesNothingNotifiesNothing) {
         const auto view_model = visit();
+        const auto before = view_model->graphDraft("dailyPlaytime");
         const QSignalSpy draftSpy(view_model.get(), &SettingsViewModel::graphDraftsChanged);
 
-        EXPECT_TRUE(view_model->setGraphMarkers("dailyPlaytime", false));
-        EXPECT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "7"));
+        EXPECT_TRUE(view_model->setGraphMarkers("dailyPlaytime", before["markers"].toBool()));
+        EXPECT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow",
+                                              before["windowText"].toString()));
 
         EXPECT_EQ(draftSpy.count(), 0);
         EXPECT_FALSE(view_model->hasPendingChanges());
@@ -380,24 +409,30 @@ namespace {
 
     TEST_F(GraphDraftTest, SeriesColourAndWidthOverridesSetAndClearAndAnEmptyOverrideLeavesNoTrace) {
         const auto view_model = visit(english());
+        const auto defaults = defaultSeriesStyle(GraphKey::ScenarioHistory, "hits");
+        ASSERT_TRUE(defaults.color);
+        const QColor defaultColor(defaults.color->red, defaults.color->green, defaults.color->blue,
+                                  defaults.color->alpha);
+        const double overrideWidth = defaults.width + 2.0;
 
         ASSERT_TRUE(view_model->setSeriesColor("scenarioHistory", "hits", QColor(10, 20, 30, 255)));
         auto hits = seriesEntry(view_model->graphDraft("scenarioHistory"), "hits");
         EXPECT_TRUE(hits["colorOverridden"].toBool());
         EXPECT_EQ(hits["color"].value<QColor>(), QColor(10, 20, 30, 255));
-        ASSERT_TRUE(view_model->setGraphField("scenarioHistory", "seriesStyle", "hits", "width", "5"));
+        ASSERT_TRUE(view_model->setGraphField("scenarioHistory", "seriesStyle", "hits", "width",
+                                              english().toString(overrideWidth)));
         EXPECT_TRUE(seriesEntry(view_model->graphDraft("scenarioHistory"), "hits")["widthOverridden"].toBool());
         const auto stored = saved(*view_model).preferences(GraphKey::ScenarioHistory).seriesStyles.at("hits");
         EXPECT_EQ(stored.color, (RgbaColor{10, 20, 30, 255}));
-        EXPECT_EQ(stored.width, 5.0);
+        EXPECT_EQ(stored.width, overrideWidth);
 
         ASSERT_TRUE(view_model->clearSeriesOverride("scenarioHistory", "hits", "color"));
         ASSERT_TRUE(view_model->clearSeriesOverride("scenarioHistory", "hits", "width"));
 
         hits = seriesEntry(view_model->graphDraft("scenarioHistory"), "hits");
         EXPECT_FALSE(hits["colorOverridden"].toBool());
-        EXPECT_EQ(hits["color"].value<QColor>(), QColor(124, 179, 66, 255));
-        EXPECT_EQ(hits["widthText"].toString(), "3");
+        EXPECT_EQ(hits["color"].value<QColor>(), defaultColor);
+        EXPECT_EQ(hits["widthText"].toString(), english().toString(defaults.width));
         EXPECT_TRUE(saved(*view_model).preferences(GraphKey::ScenarioHistory).seriesStyles.empty());
         EXPECT_FALSE(view_model->hasPendingChanges());
     }
@@ -521,8 +556,9 @@ namespace {
 
     TEST_F(GraphDraftTest, EditsToSeveralGraphsAreHeldTogetherAndSurviveNavigation) {
         const auto view_model = visit(english());
+        const QString editedWindow = QString::number(kDefaultAveragingWindowDays + 1);
         view_model->setSelectedGraph("dailyPlaytime");
-        ASSERT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "7"));
+        ASSERT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", editedWindow));
         view_model->setSelectedGraph("scenarioHistory");
         ASSERT_TRUE(view_model->setGraphRangeKind("scenarioHistory", "latestRuns"));
         ASSERT_FALSE(view_model->setGraphField("scenarioHistory", "dataRange", "", "latestRuns", "5o"));
@@ -530,7 +566,7 @@ namespace {
         ASSERT_TRUE(view_model->setSeriesColor("benchmarkPlaytime", "playtime", QColor("#112233")));
         view_model->setSelectedGraph("dailyPlaytime");
 
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "7");
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), editedWindow);
         EXPECT_EQ(view_model->graphDraft("scenarioHistory")["rangeCountText"].toString(), "5o");
         EXPECT_TRUE(seriesEntry(view_model->graphDraft("benchmarkPlaytime"), "playtime")["colorOverridden"].toBool());
         EXPECT_FALSE(view_model->graphDraft("benchmarkRank")["markers"].toBool());
@@ -539,7 +575,9 @@ namespace {
 
     TEST_F(GraphDraftTest, AnInvalidFieldOnAnotherGraphBlocksSaveButKeepsEveryEdit) {
         const auto view_model = visit(english());
-        ASSERT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "7"));
+        const int editedWindow = kDefaultAveragingWindowDays + 1;
+        ASSERT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow",
+                                              QString::number(editedWindow)));
         ASSERT_FALSE(view_model->setGraphField("scenarioHistory", "seriesStyle", "hits", "width", "wide"));
         view_model->setSelectedGraph("benchmarkRank");
 
@@ -550,13 +588,13 @@ namespace {
         ASSERT_EQ(result["issues"].toList().size(), 1);
         EXPECT_TRUE(hasIssue(result["issues"].toList(), "scenarioHistory", "seriesStyle", "hits", "width",
                              "unparsedInput"));
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "7");
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), QString::number(editedWindow));
         EXPECT_EQ(seriesEntry(view_model->graphDraft("scenarioHistory"), "hits")["widthText"].toString(), "wide");
         EXPECT_TRUE(view_model->hasPendingChanges());
 
         ASSERT_TRUE(view_model->setGraphField("scenarioHistory", "seriesStyle", "hits", "width", "4"));
         EXPECT_TRUE(view_model->save()["accepted"].toBool());
-        EXPECT_EQ(configuration->saves.back().preferences(GraphKey::DailyPlaytime).averagingWindowDays, 7);
+        EXPECT_EQ(configuration->saves.back().preferences(GraphKey::DailyPlaytime).averagingWindowDays, editedWindow);
         EXPECT_EQ(configuration->saves.back().preferences(GraphKey::ScenarioHistory).seriesStyles.at("hits").width,
                   4.0);
     }
@@ -568,9 +606,15 @@ namespace {
         history.seriesStyles["score"].width = 8.0;
         history.axisPolicies["score"] = FixedBounds{1.0, 2.0};
         configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 9;
-        configuration->configuration.runAxisLabelSeriesId = SeriesId{4};
+        const auto &lineup = configuration->configuration.runSeries.series;
+        ASSERT_GE(lineup.size(), 2U);
+        const auto lineCount = lineup.size();
+        const auto toggledLine = lineup.front().id;
+        const bool toggledEnabled = !lineup.front().presentation.enabled;
+        const auto labelLine = lineup.back().id;
+        configuration->configuration.runAxisLabelSeriesId = labelLine;
         const auto view_model = visit(english());
-        ASSERT_TRUE(view_model->setSeriesEnabled("2", false)["succeeded"].toBool());
+        ASSERT_TRUE(view_model->setSeriesEnabled(QString::number(toggledLine.value), toggledEnabled)["succeeded"].toBool());
         ASSERT_FALSE(view_model->setGraphField("scenarioHistory", "seriesStyle", "hits", "width", "wide"));
         ASSERT_FALSE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "nine"));
 
@@ -583,18 +627,25 @@ namespace {
         EXPECT_EQ(candidate.preferences(GraphKey::ScenarioHistory), defaultGraphPreferences(GraphKey::ScenarioHistory));
         EXPECT_EQ(candidate.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 9);
         ASSERT_TRUE(candidate.runAxisLabelSeriesId);
-        EXPECT_EQ(candidate.runAxisLabelSeriesId->value, 4U);
-        EXPECT_EQ(candidate.runSeries.series.size(), 8U);
-        EXPECT_FALSE(candidate.runSeries.series[1].presentation.enabled) << "a Graph Lines edit survives the reset";
+        EXPECT_EQ(*candidate.runAxisLabelSeriesId, labelLine);
+        ASSERT_EQ(candidate.runSeries.series.size(), lineCount);
+        EXPECT_EQ(candidate.runSeries.series.front().presentation.enabled, toggledEnabled)
+            << "a Graph Lines edit survives the reset";
     }
 
     TEST_F(GraphDraftTest, ResettingTheRunGraphNeverTouchesItsGraphLines) {
+        const auto &lineup = configuration->configuration.runSeries;
+        ASSERT_GE(lineup.series.size(), 2U);
+        const auto lineCount = static_cast<qsizetype>(lineup.series.size());
+        const auto axisCount = static_cast<qsizetype>(lineup.axes.size());
+        const auto editedLine = QString::number(lineup.series.front().id.value);
+        const auto labelLine = QString::number(lineup.series.back().id.value);
         const auto view_model = visit();
         const auto axis = view_model->createAxis("Mine");
         ASSERT_TRUE(axis["succeeded"].toBool());
-        ASSERT_TRUE(view_model->updateSeriesAxis("1", axis["createdAxisId"].toString())["succeeded"].toBool());
+        ASSERT_TRUE(view_model->updateSeriesAxis(editedLine, axis["createdAxisId"].toString())["succeeded"].toBool());
         ASSERT_TRUE(view_model->createComputedSeries("Extra", "#123456", 2.0, true, "")["succeeded"].toBool());
-        view_model->setRunAxisLabelSeriesId("3");
+        view_model->setRunAxisLabelSeriesId(labelLine);
         ASSERT_TRUE(view_model->setGraphConnection("run", "straight"));
         ASSERT_TRUE(view_model->setGraphMarkers("run", true));
 
@@ -602,24 +653,27 @@ namespace {
 
         EXPECT_EQ(view_model->graphDraft("run")["connection"].toString(), "smooth");
         EXPECT_FALSE(view_model->graphDraft("run")["markers"].toBool());
-        EXPECT_EQ(view_model->getAllAxes().size(), 3);
-        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "3");
+        EXPECT_EQ(view_model->getAllAxes().size(), axisCount + 1);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), lineCount + 1);
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), labelLine);
         EXPECT_TRUE(view_model->hasPendingChanges());
     }
 
     TEST_F(GraphDraftTest, AResetIsCancellableAndNothingReachesTheApplicationBeforeSave) {
-        configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 9;
+        const auto defaultWindow = defaultGraphPreferences(GraphKey::DailyPlaytime).averagingWindowDays;
+        ASSERT_TRUE(defaultWindow);
+        const int committedWindow = *defaultWindow + 2;
+        configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = committedWindow;
         const auto view_model = visit();
 
         ASSERT_TRUE(view_model->resetGraph("dailyPlaytime"));
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "7");
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), english().toString(*defaultWindow));
         EXPECT_TRUE(view_model->hasPendingChanges());
         EXPECT_TRUE(configuration->saves.empty());
 
         view_model->revertChanges();
 
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "9");
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), english().toString(committedWindow));
         EXPECT_FALSE(view_model->hasPendingChanges());
         EXPECT_FALSE(view_model->resetGraph("nonsense"));
     }
@@ -634,19 +688,21 @@ namespace {
 
     TEST_F(GraphDraftTest, RevertAndEndVisitDropTheDraftTextAndItsIssues) {
         const auto view_model = visit(english());
+        const auto before = view_model->graphDraft("dailyPlaytime");
+        const bool editedMarkers = !before["markers"].toBool();
         ASSERT_FALSE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "x"));
-        ASSERT_TRUE(view_model->setGraphMarkers("dailyPlaytime", true));
+        ASSERT_TRUE(view_model->setGraphMarkers("dailyPlaytime", editedMarkers));
         ASSERT_FALSE(view_model->draftIssues().isEmpty());
 
         view_model->revertChanges();
 
         EXPECT_TRUE(view_model->draftIssues().isEmpty());
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "7");
-        EXPECT_FALSE(view_model->graphDraft("dailyPlaytime")["markers"].toBool());
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), before["windowText"].toString());
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["markers"].toBool(), before["markers"].toBool());
 
-        ASSERT_TRUE(view_model->setGraphMarkers("dailyPlaytime", true));
+        ASSERT_TRUE(view_model->setGraphMarkers("dailyPlaytime", editedMarkers));
         view_model->endVisit();
-        EXPECT_FALSE(view_model->graphDraft("dailyPlaytime")["markers"].toBool());
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["markers"].toBool(), before["markers"].toBool());
     }
 
     TEST_F(GraphDraftTest, TheDraftsFollowCommittedChangesOutsideAVisitAndIgnoreThemDuringOne) {
@@ -669,12 +725,12 @@ namespace {
 
         const auto limits = view_model->graphLimits();
 
-        EXPECT_EQ(limits["maxRecentDays"].toInt(), 36500);
-        EXPECT_EQ(limits["maxLatestRuns"].toInt(), 1000000);
-        EXPECT_EQ(limits["maxAveragingWindow"].toInt(), 3650);
-        EXPECT_EQ(limits["minWidth"].toDouble(), 0.5);
-        EXPECT_EQ(limits["maxWidth"].toDouble(), 12.0);
-        EXPECT_EQ(limits["maxBound"].toDouble(), 1e12);
+        EXPECT_EQ(limits["maxRecentDays"].toInt(), kMaximumRangeDays);
+        EXPECT_EQ(limits["maxLatestRuns"].toInt(), kMaximumLatestRuns);
+        EXPECT_EQ(limits["maxAveragingWindow"].toInt(), kMaximumAveragingWindowDays);
+        EXPECT_EQ(limits["minWidth"].toDouble(), kMinimumLineWidth);
+        EXPECT_EQ(limits["maxWidth"].toDouble(), kMaximumLineWidth);
+        EXPECT_EQ(limits["maxBound"].toDouble(), kMaximumAxisBoundMagnitude);
         EXPECT_EQ(limits["earliestDate"].toString(), "1970-01-01");
         EXPECT_EQ(limits["latestDate"].toString(), "9999-12-31");
         EXPECT_EQ(limits["earliestDateText"].toString(), "01.01.1970");
@@ -683,12 +739,20 @@ namespace {
 
     TEST_F(GraphDraftTest, AnAnchorToggleAndRangeKindAreInTheDraftEntry) {
         const auto view_model = visit();
-        ASSERT_TRUE(view_model->setGraphAnchor("benchmarkRank", true));
+        const auto defaults = defaultGraphPreferences(GraphKey::BenchmarkRank);
+        ASSERT_TRUE(defaults.range && std::holds_alternative<RecentDays>(defaults.range->range));
+        const bool flippedAnchor = !defaults.range->anchorToLatestRun;
+        ASSERT_TRUE(view_model->setGraphAnchor("benchmarkRank", flippedAnchor));
+        ASSERT_TRUE(view_model->setGraphRangeKind("benchmarkRank", "allHistory"));
+
+        auto draft = view_model->graphDraft("benchmarkRank");
+        EXPECT_EQ(draft["anchor"].toBool(), flippedAnchor);
+        EXPECT_EQ(draft["rangeKind"].toString(), "allHistory");
+
         ASSERT_TRUE(view_model->setGraphRangeKind("benchmarkRank", "recentDays"));
 
-        const auto draft = view_model->graphDraft("benchmarkRank");
-
-        EXPECT_TRUE(draft["anchor"].toBool());
+        draft = view_model->graphDraft("benchmarkRank");
+        EXPECT_EQ(draft["anchor"].toBool(), flippedAnchor);
         EXPECT_EQ(draft["rangeKind"].toString(), "recentDays");
         EXPECT_GT(draft["rangeCount"].toInt(), 0);
         EXPECT_EQ(draft["rangeCountText"].toString().toInt(), draft["rangeCount"].toInt());

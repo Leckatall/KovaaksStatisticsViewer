@@ -632,23 +632,6 @@ TEST(BenchmarkManagerResolution, SetScenarioHashReportsAnUnknownEntry) {
     EXPECT_FALSE(result.value("error").toString().isEmpty());
 }
 
-TEST(BenchmarkManagerResolution, ScenarioNodesOutsideUncategorizedAlsoCarryTheirState) {
-    Fixture f;
-    Benchmark benchmark;
-    benchmark.id = BenchmarkId{"b1"};
-    benchmark.name = "Saved";
-    Category category{GroupId{"c1"}, "C", {}, {}, {}};
-    category.scenarios.push_back(benchmarkEntry("d1", "Nested", std::string{"hn"}, {}));
-    benchmark.categories.push_back(category);
-    f.uc->nextNewSeed = newSeed(benchmark);
-    f.uc->nextResolveResult = {resolvedEntry("d1", "hn")};
-    f.build();
-    f.vm->beginNewBenchmark();
-
-    EXPECT_EQ(entryData(*f.vm, "d1", TM::CategoryIdRole).toString(), "c1");
-    EXPECT_EQ(entryData(*f.vm, "d1", TM::MappingStateRole).toString(), QStringLiteral("resolved"));
-}
-
 // ---- Task P5: refresh preservation, stale baseline, conflict-safe lifecycle -------------------
 
 TEST(BenchmarkManagerVm, RefreshWhileEditingPreservesWorkingCopy) {

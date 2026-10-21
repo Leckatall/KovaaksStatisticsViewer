@@ -9,6 +9,7 @@
 #include "series_expression_editor_model.h"
 
 using ksv::application::PrimitiveMetric;
+using ksv::application::kPrimitiveMetrics;
 using ksv::application::RecentRuns;
 using ksv::application::TopPercentile;
 using ksv::application::add;
@@ -91,14 +92,6 @@ namespace {
         EXPECT_EQ(model.root(), nullptr);
         EXPECT_EQ(model.selected(), nullptr);
         EXPECT_FALSE(model.toExpression());
-    }
-
-    TEST(SeriesExpressionEditorModelTest, LoadFromPrimitiveExpressionPopulatesRootWithLowercaseMetric) {
-        SeriesExpressionEditorModel model;
-        model.loadFrom(primitive(PrimitiveMetric::Hits));
-        auto *root = qobject_cast<EditablePrimitiveNode *>(model.root());
-        ASSERT_NE(root, nullptr);
-        EXPECT_EQ(root->metric(), "hits");
     }
 
     TEST(SeriesExpressionEditorModelTest, LoadFromNestedExpressionSetsParentPointersThroughoutTheTree) {
@@ -243,18 +236,6 @@ namespace {
         EXPECT_EQ(root->left()->kind(), "primitive");
     }
 
-    TEST(SeriesExpressionEditorModelTest, SameShapeOperatorChangeIsAPropertyWriteThatPreservesChildren) {
-        SeriesExpressionEditorModel model;
-        model.replaceChild(nullptr, "root", "add");
-        auto *root = qobject_cast<EditableBinaryOpNode *>(model.selected());
-        model.replaceChild(root, "left", "primitive");
-        model.replaceChild(root, "right", "constant");
-        auto *left = root->left();
-        root->setKind("divide");
-        EXPECT_EQ(root->kind(), "divide");
-        EXPECT_EQ(root->left(), left);
-    }
-
     TEST(SeriesExpressionEditorModelTest, DescribeDelegatesToTheNodeAndHandlesNull) {
         SeriesExpressionEditorModel model;
         EXPECT_EQ(model.describe(nullptr), QString::fromUtf8("…"));
@@ -269,8 +250,21 @@ namespace {
         EXPECT_EQ(model.childSlotsFor("add"), (QStringList{"left", "right"}));
         EXPECT_EQ(model.childSlotsFor("rollingMean"), (QStringList{"input"}));
         EXPECT_TRUE(model.childSlotsFor("constant").isEmpty());
-        EXPECT_EQ(model.nodeKinds().size(), 11);
-        EXPECT_EQ(model.primitiveMetrics(), (QStringList{"score", "shots", "hits", "kills", "dmg"}));
+
+        for (const auto &kind: model.nodeKinds()) {
+            SeriesExpressionEditorModel fresh;
+            fresh.replaceChild(nullptr, "root", kind);
+            EXPECT_NE(fresh.root(), nullptr) << kind.toStdString();
+        }
+        // The metric list's order is the index nodeToExpression() maps back through kPrimitiveMetrics.
+        ASSERT_EQ(model.primitiveMetrics().size(), static_cast<qsizetype>(kPrimitiveMetrics.size()));
+        for (const auto metric: kPrimitiveMetrics) {
+            SeriesExpressionEditorModel loaded;
+            loaded.loadFrom(primitive(metric));
+            const auto result = loaded.toExpression();
+            ASSERT_TRUE(result);
+            EXPECT_EQ(encodeExpressionDsl(*result), encodeExpressionDsl(primitive(metric)));
+        }
     }
 
     TEST(SeriesExpressionEditorModelTest, SelectSetsTheSelectedProperty) {

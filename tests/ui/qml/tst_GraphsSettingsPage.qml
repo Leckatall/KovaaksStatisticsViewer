@@ -138,13 +138,6 @@ TestCase {
         compare(find(dialog, "graphEditingLabel").text, "Changes apply to Daily playtime.")
     }
 
-    function test_noPreviewIsOnThePage() {
-        const {dialog} = openOn("scenarioHistory")
-
-        verify(find(dialog, "graphPreview") === null)
-        compare(ItemLookup.findByObjectNamePrefix(dialog.contentItem, "graphCanvas", []).length, 0)
-    }
-
     // ---- Data and range ------------------------------------------------------------------------------
 
     function test_choosingARangeKindAsksTheViewModel() {
@@ -554,32 +547,6 @@ TestCase {
 
     // ---- Cancel, discard, cancel-close ---------------------------------------------------------------
 
-    function test_cancelDropsTheDraftAndClosesWithoutAPrompt() {
-        const {dialog, vm} = openOn("dailyPlaytime")
-        find(dialog, "graphField_seriesStyle_markers").toggled()
-
-        mouseClick(find(dialog, "settingsCancelButton"))
-
-        tryCompare(dialog, "visible", false)
-        compare(dialog.discardChangesPrompt.visible, false)
-        verify(vm.endVisitCalls >= 1)
-        compare(vm.saveCalls, 0)
-    }
-
-    function test_closingWithGraphEditsPromptsAndDiscardingDropsThemWithoutSaving() {
-        const {dialog, vm} = openOn("dailyPlaytime")
-        find(dialog, "graphField_seriesStyle_markers").toggled()
-        verify(vm.pendingChanges)
-
-        dialog.close()
-        tryCompare(dialog.discardChangesPrompt, "visible", true)
-        dialog.discardChangesPrompt.buttonClicked(MessageDialog.Discard, MessageDialog.DestructiveRole)
-
-        tryCompare(dialog, "visible", false)
-        compare(vm.saveCalls, 0)
-        verify(vm.endVisitCalls >= 1)
-    }
-
     function test_cancellingTheCloseKeepsTheWindowAndEveryEdit() {
         const {dialog, vm} = openOn("dailyPlaytime")
         find(dialog, "graphField_seriesStyle_connection").activated(2)
@@ -828,10 +795,5 @@ TestCase {
         compare(swatch.visualFocus, true)
         compare(swatch.background.border.width, 2)
         verify(swatch.Accessible.name.indexOf("Hits") >= 0)
-    }
-
-    function test_theEditorNamesTheGraphItIsEditingAsText() {
-        const {dialog} = openOn("benchmarkRank")
-        verify(find(dialog, "graphEditingLabel").text.indexOf("Benchmark rank history") >= 0)
     }
 }

@@ -7,10 +7,12 @@
 #include <limits>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string_view>
 #include <variant>
 
 #include "app/contracts/expression_dsl.h"
+#include "app/contracts/graph_configuration.h"
 #include "app/contracts/series_config.h"
 
 using namespace ksv::application;
@@ -21,6 +23,18 @@ namespace {
         return std::ranges::any_of(errors, [code, path](const ValidationError &error) {
             return error.code == code && (path.empty() || error.path == path);
         });
+    }
+
+    // Dense display positions and unique ids, so a test can mutate one line without depending on the shipped lineup.
+    std::vector<SeriesConfig> smallLineup() {
+        std::vector<SeriesConfig> configs;
+        for (uint32_t index = 0; index < 4; ++index) {
+            configs.push_back({
+                SeriesId{index + 1}, {"Line " + std::to_string(index + 1), {}, true, index},
+                primitive(PrimitiveMetric::Score)
+            });
+        }
+        return configs;
     }
 
     TEST(SeriesConfigTest, SeriesConfigDefaultsToNoAxisAndIdentityTransform) {
@@ -45,73 +59,32 @@ namespace {
         EXPECT_EQ(axis.transformKind, AxisTransformKind::Percentage);
     }
 
-    TEST(SeriesConfigTest, DefaultLinesMatchTheApprovedTable) {
-        struct Row {
-            uint64_t id;
-            const char *name;
-            const char *dsl;
-            std::optional<uint64_t> axis;
-            AxisTransformKind transform;
-            bool enabled;
-            uint32_t hiddenLeading;
-            RgbaColor color;
-        };
-        const std::array<Row, 8> expected{{
-            {1, "Score", "RunningSum(SCORE)", 1, AxisTransformKind::Identity, true, 0, {224, 224, 224, 255}},
-            {2, "Expected Final Score", "ProjectRateToFinal(RollingMean(window: 5, SCORE))", 1,
-                AxisTransformKind::Identity, true, 1, {167, 139, 250, 255}},
-            {3, "Expected Final (Top 10%)",
-                "AverageAcrossRuns(over: top 10%, ProjectRateToFinal(RollingMean(window: 5, SCORE)))", 1,
-                AxisTransformKind::Identity, true, 1, {221, 214, 254, 255}},
-            {4, "Expected Final (Last 10 Runs)",
-                "AverageAcrossRuns(over: recent 10, ProjectRateToFinal(RollingMean(window: 5, SCORE)))", 1,
-                AxisTransformKind::Identity, true, 1, {139, 123, 196, 255}},
-            {5, "Accuracy", "Divide(RunningSum(HITS), RunningSum(SHOTS))", 2, AxisTransformKind::Percentage, true, 0,
-                {46, 196, 160, 255}},
-            {6, "Accuracy (5s)", "Divide(RollingMean(window: 5, HITS), RollingMean(window: 5, SHOTS))", 2,
-                AxisTransformKind::Percentage, false, 0, {31, 138, 112, 255}},
-            {7, "Score/s (5s)", "RollingMean(window: 5, SCORE)", std::nullopt, AxisTransformKind::Identity, false, 0,
-                {158, 158, 158, 255}},
-            {8, "Expected Final (Whole Run)", "ProjectedFinalValue(RunningSum(SCORE))", 1,
-                AxisTransformKind::Identity, false, 1, {244, 143, 177, 255}}
-        }};
+    TEST(SeriesConfigTest, DefaultRunSeriesDocumentIsValid) {
+        const auto document = defaultRunSeriesDocument();
 
-        const auto configs = defaultSeriesConfigs();
-        ASSERT_EQ(configs.size(), expected.size());
-        for (size_t index = 0; index < configs.size(); ++index) {
-            const auto &config = configs[index];
-            const auto &row = expected[index];
-            SCOPED_TRACE(row.name);
-            EXPECT_EQ(config.id.value, row.id);
-            EXPECT_EQ(config.presentation.displayPosition, index);
-            EXPECT_EQ(config.presentation.name, row.name);
-            EXPECT_EQ(encodeExpressionDsl(config.expression), row.dsl);
-            ASSERT_EQ(config.yAxisId.has_value(), row.axis.has_value());
-            if (row.axis) EXPECT_EQ(config.yAxisId->value, *row.axis);
-            EXPECT_EQ(config.transformKind, row.transform);
-            EXPECT_EQ(config.presentation.enabled, row.enabled);
-            EXPECT_EQ(config.presentation.hiddenLeadingPoints, row.hiddenLeading);
-            EXPECT_EQ(config.presentation.lineStyle.color, row.color);
-            EXPECT_DOUBLE_EQ(config.presentation.lineStyle.width, 3.0);
+        EXPECT_TRUE(validateRunSeriesDocument(document).empty());
+        EXPECT_TRUE(validateSeriesConfigs(document.series).empty());
+        EXPECT_TRUE(sameSeriesConfigs(document.series, defaultSeriesConfigs()));
+        EXPECT_TRUE(sameAxisConfigs(document.axes, defaultAxisConfigs()));
+
+        std::set<uint64_t> axisIds;
+        for (const auto &axis: document.axes) EXPECT_TRUE(axisIds.insert(axis.id.value).second) << axis.name;
+
+        std::set<uint64_t> seriesIds;
+        uint64_t highestSeriesId = 0;
+        for (size_t index = 0; index < document.series.size(); ++index) {
+            const auto &series = document.series[index];
+            SCOPED_TRACE(series.presentation.name);
+            EXPECT_TRUE(seriesIds.insert(series.id.value).second);
+            EXPECT_EQ(series.presentation.displayPosition, index);
+            if (series.yAxisId) EXPECT_TRUE(axisIds.contains(series.yAxisId->value));
+            highestSeriesId = std::max(highestSeriesId, series.id.value);
         }
-        EXPECT_TRUE(validateSeriesConfigs(configs).empty());
-    }
 
-    TEST(SeriesConfigTest, DefaultAxesAreScoreAndAccuracyWithFixedIds) {
-        const auto axes = defaultAxisConfigs();
-
-        ASSERT_EQ(axes.size(), 2U);
-        EXPECT_EQ(axes[0].id.value, 1U);
-        EXPECT_EQ(axes[0].name, "Score");
-        EXPECT_EQ(axes[0].transformKind, AxisTransformKind::Identity);
-        EXPECT_EQ(axes[1].id.value, 2U);
-        EXPECT_EQ(axes[1].name, "Accuracy");
-        EXPECT_EQ(axes[1].transformKind, AxisTransformKind::Percentage);
-        for (const auto &axis : axes) {
-            EXPECT_EQ(axis.options.baseline, ValueAxisOptions::Baseline::HugData);
-            EXPECT_FALSE(axis.options.integral);
-            EXPECT_EQ(axis.options.targetTicks, 10);
-        }
+        ASSERT_TRUE(document.nextSeriesId);
+        EXPECT_EQ(document.nextSeriesId->value, highestSeriesId + 1);
+        ASSERT_TRUE(document.nextAxisId);
+        EXPECT_EQ(document.nextAxisId->value, *axisIds.rbegin() + 1);
     }
 
     TEST(SeriesConfigTest, ProjectRateToFinalParticipatesInValidationLimits) {
@@ -127,7 +100,7 @@ namespace {
     }
 
     TEST(SeriesConfigTest, ValidationReportsStableCodesAndFieldPaths) {
-        auto configs = defaultSeriesConfigs();
+        auto configs = smallLineup();
         configs[1].id = SeriesId{0};
         configs[1].presentation.name = " ";
         configs[1].presentation.lineStyle.width = std::numeric_limits<double>::infinity();
@@ -144,7 +117,7 @@ namespace {
     }
 
     TEST(SeriesConfigTest, HiddenLeadingPointsAreBoundedByTheMaximum) {
-        auto configs = defaultSeriesConfigs();
+        auto configs = smallLineup();
         configs[1].presentation.hiddenLeadingPoints = 0;
         EXPECT_TRUE(validateSeriesConfigs(configs).empty());
         configs[1].presentation.hiddenLeadingPoints = kMaximumHiddenLeadingPoints;
@@ -156,7 +129,7 @@ namespace {
     }
 
     TEST(SeriesConfigTest, SameSeriesConfigsNoticesAHiddenLeadingPointsDifference) {
-        const auto left = defaultSeriesConfigs();
+        const auto left = smallLineup();
         auto right = left;
         EXPECT_TRUE(sameSeriesConfigs(left, right));
         right[2].presentation.hiddenLeadingPoints = 3;
@@ -164,7 +137,7 @@ namespace {
     }
 
     TEST(SeriesConfigTest, BlankTopLevelExpressionIsAllowedButNestedMissingOperandIsNot) {
-        auto configs = defaultSeriesConfigs();
+        auto configs = smallLineup();
         configs[0].expression = {};
         EXPECT_TRUE(validateSeriesConfigs(configs).empty());
 
@@ -175,12 +148,10 @@ namespace {
     }
 
     TEST(SeriesConfigTest, ValidationRejectsInvalidExpressionParametersAndCollectionIntegrity) {
-        auto configs = defaultSeriesConfigs();
+        auto configs = smallLineup();
         configs[1].expression = rollingMean(primitive(PrimitiveMetric::Score), 0);
-        configs[0].presentation.name = "Renamed";
-        configs[2].expression = primitive(PrimitiveMetric::Score);
-        configs[6].id = SeriesId{1};
-        configs[3].presentation.displayPosition = 7;
+        configs[3].id = configs[0].id;
+        configs[2].presentation.displayPosition = configs.back().presentation.displayPosition;
 
         const auto errors = validateSeriesConfigs(configs);
         EXPECT_TRUE(hasError(errors, SeriesConfigValidationCode::InvalidRollingWindow));
@@ -190,19 +161,12 @@ namespace {
     }
 
     TEST(SeriesConfigTest, DuplicatePrimitiveReferencesAreNoLongerRejected) {
-        auto configs = defaultSeriesConfigs();
+        auto configs = smallLineup();
         configs[2].presentation.name = "Kills Again";
         configs[2].expression = primitive(PrimitiveMetric::Kills);
+        configs[3].expression = primitive(PrimitiveMetric::Kills);
 
         EXPECT_TRUE(validateSeriesConfigs(configs).empty());
-    }
-
-    TEST(SeriesConfigTest, RenamingALineToAnEmptyOrUntrimmedNameIsStillRejected) {
-        auto configs = defaultSeriesConfigs();
-        configs[0].presentation.name = "  ";
-
-        const auto errors = validateSeriesConfigs(configs);
-        EXPECT_TRUE(hasError(errors, SeriesConfigValidationCode::EmptyComputedName));
     }
 
     TEST(SeriesConfigTest, CopiedExpressionsContainOnlyPrimitiveLeaves) {

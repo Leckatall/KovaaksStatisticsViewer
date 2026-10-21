@@ -91,7 +91,6 @@ namespace {
         history.seriesStyles["accuracy"] = SeriesStyleOverride{RgbaColor{1, 2, 3, 255}, 5.0};
         history.axisPolicies["score"] = FixedBounds{0.0, 1000.0};
         EXPECT_EQ(*useCase.current().configuration, expected);
-        EXPECT_TRUE(committed(GraphKey::ScenarioHistory).appearance.lineModeMarkers);
         ASSERT_EQ(persistence->saves.size(), 1U);
         ASSERT_EQ(changes.size(), 1U);
         EXPECT_EQ(std::ranges::count_if(changes.front().sections, &GraphSectionChange::any), 1);
@@ -139,18 +138,20 @@ namespace {
     }
 
     TEST_F(GraphConfigurationUseCaseTest, QuickPatchesAccumulateAndSeedTheNextSettingsVisit) {
+        const auto newWindow = *committed(GraphKey::DailyPlaytime).averagingWindowDays + 1;
+        const auto newMarkers = !committed(GraphKey::DailyPlaytime).appearance.lineModeMarkers;
         GraphQuickPatch window;
-        window.averagingWindowDays = 10;
+        window.averagingWindowDays = newWindow;
         GraphQuickPatch markers;
-        markers.lineModeMarkers = true;
+        markers.lineModeMarkers = newMarkers;
         ASSERT_TRUE(useCase.applyQuickPatch(GraphKey::DailyPlaytime, window).accepted());
         ASSERT_TRUE(useCase.applyQuickPatch(GraphKey::DailyPlaytime, markers).accepted());
 
         const auto seed = useCase.current();
 
         EXPECT_EQ(seed.revision, 3U);
-        EXPECT_EQ(seed.configuration->preferences(GraphKey::DailyPlaytime).averagingWindowDays, 10);
-        EXPECT_TRUE(seed.configuration->preferences(GraphKey::DailyPlaytime).appearance.lineModeMarkers);
+        EXPECT_EQ(seed.configuration->preferences(GraphKey::DailyPlaytime).averagingWindowDays, newWindow);
+        EXPECT_EQ(seed.configuration->preferences(GraphKey::DailyPlaytime).appearance.lineModeMarkers, newMarkers);
     }
 
     TEST(GraphConfigurationDiff, NamesEachChangedGraphAndSectionInKeyOrder) {

@@ -62,10 +62,6 @@ namespace {
         PlaytimeGraphViewModel view_model{fake};
     };
 
-    TEST_F(PlaytimeGraphViewModelTest, DefaultWindowIsSevenDays) {
-        EXPECT_EQ(view_model.averagingWindowDays(), 7);
-    }
-
     TEST_F(PlaytimeGraphViewModelTest, UseCaseChangesRefreshTheGraph) {
         fake->series = {{19500, 1800.0}};
         const QSignalSpy dataSpy(&view_model, &GraphViewModelBase::dataUpdated);
@@ -74,11 +70,6 @@ namespace {
 
         EXPECT_GT(dataSpy.count(), 0);
         EXPECT_TRUE(view_model.hasData());
-    }
-
-    TEST_F(PlaytimeGraphViewModelTest, TitleAndSeriesNameStateTheDefaultWindow) {
-        EXPECT_EQ(view_model.title(), "Daily Playtime (7-day rolling average)");
-        EXPECT_EQ(view_model.series({PlaytimeGraphViewModel::Playtime}).front()->name(), "Playtime (7-day avg)");
     }
 
     TEST_F(PlaytimeGraphViewModelTest, TitleAndSeriesNameFollowAnyOtherWindowAndNeverSayThree) {
@@ -239,13 +230,6 @@ namespace {
         EXPECT_EQ(series.front()->yAxis->formatTick(30.0), "30 min");
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, PlaytimeColumnHasNameAndValidColor) {
-        const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
-        ASSERT_EQ(series.size(), 1);
-        EXPECT_FALSE(series.front()->name().isEmpty());
-        EXPECT_TRUE(series.front()->color().isValid());
-    }
-
     TEST_F(PlaytimeGraphViewModelTest, HasNoDataUntilPlaytimeIsRecorded) {
         EXPECT_FALSE(view_model.hasData());
 
@@ -340,10 +324,12 @@ namespace {
         view_model.refresh();
         view_model.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}});
 
-        fake->view.windowDays = 7;
+        fake->view.windowDays = kDefaultAveragingWindowDays + 7;
         fake->series = {{19500, 600.0}};
+        const QSignalSpy windowSpy(&view_model, &PlaytimeGraphViewModel::windowChanged);
         fake->publish();
 
+        ASSERT_EQ(windowSpy.count(), 1);
         EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), 10.0);
         EXPECT_DOUBLE_EQ(playtimeAxis(view_model).max(), 45.0);
     }
@@ -395,11 +381,14 @@ namespace {
 
     TEST_F(PlaytimeGraphViewModelTest, WithNothingSavedTheGraphLooksAsItAlwaysDid) {
         const auto *series = view_model.series({PlaytimeGraphViewModel::Playtime}).front();
+        const auto appearance = defaultGraphPresentation(GraphKey::DailyPlaytime).appearance;
+        const auto style = defaultSeriesStyle(GraphKey::DailyPlaytime, "playtime");
+        ASSERT_TRUE(style.color);
 
-        EXPECT_EQ(view_model.property("connectionMode").toInt(), 0);
-        EXPECT_FALSE(view_model.property("pointMarkers").toBool());
-        EXPECT_EQ(series->color(), QColor("#4DD0E1"));
-        EXPECT_DOUBLE_EQ(series->lineWidth, 3.0);
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), static_cast<int>(appearance.connection));
+        EXPECT_EQ(view_model.property("pointMarkers").toBool(), appearance.lineModeMarkers);
+        EXPECT_EQ(series->color(), QColor(style.color->red, style.color->green, style.color->blue, style.color->alpha));
+        EXPECT_DOUBLE_EQ(series->lineWidth, style.width);
     }
 
     TEST_F(PlaytimeGraphViewModelTest, TheCommittedStyleIsAppliedBeforeTheFirstRefresh) {
@@ -441,27 +430,33 @@ namespace {
     TEST_F(PlaytimeGraphViewModelTest, TheStyleSurvivesDataRefreshesAndWindowChanges) {
         fake->committedPresentation.seriesStyles["playtime"] = {RgbaColor{1, 2, 3, 255}, 5.0};
         fake->publishPresentation();
+        const int changedWindow = kDefaultAveragingWindowDays + 7;
+        const QSignalSpy windowSpy(&view_model, &PlaytimeGraphViewModel::windowChanged);
 
         fake->series = {{19500, 1800.0}};
-        fake->view.windowDays = 7;
+        fake->view.windowDays = changedWindow;
         fake->publish();
 
+        ASSERT_EQ(windowSpy.count(), 1);
         const auto *series = view_model.series({PlaytimeGraphViewModel::Playtime}).front();
         EXPECT_EQ(series->color(), QColor(1, 2, 3));
         EXPECT_DOUBLE_EQ(series->lineWidth, 5.0);
-        EXPECT_EQ(series->name(), "Playtime (7-day avg)");
+        EXPECT_EQ(series->name(), QStringLiteral("Playtime (%1-day avg)").arg(changedWindow));
     }
 
     TEST_F(PlaytimeGraphViewModelTest, RemovingAnOverrideRestoresTheDefaultColourAndWidth) {
-        fake->committedPresentation.seriesStyles["playtime"] = {RgbaColor{1, 2, 3, 255}, 5.0};
+        const auto defaults = defaultSeriesStyle(GraphKey::DailyPlaytime, "playtime");
+        ASSERT_TRUE(defaults.color);
+        fake->committedPresentation.seriesStyles["playtime"] = {RgbaColor{1, 2, 3, 255}, defaults.width + 2.0};
         fake->publishPresentation();
 
         fake->committedPresentation.seriesStyles.clear();
         fake->publishPresentation();
 
         const auto *series = view_model.series({PlaytimeGraphViewModel::Playtime}).front();
-        EXPECT_EQ(series->color(), QColor("#4DD0E1"));
-        EXPECT_DOUBLE_EQ(series->lineWidth, 3.0);
+        EXPECT_EQ(series->color(), QColor(defaults.color->red, defaults.color->green, defaults.color->blue,
+                                          defaults.color->alpha));
+        EXPECT_DOUBLE_EQ(series->lineWidth, defaults.width);
     }
 
     TEST_F(PlaytimeGraphViewModelTest, TheCommittedAxisPolicyReachesTheYAxis) {

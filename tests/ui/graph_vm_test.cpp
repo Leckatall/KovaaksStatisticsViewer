@@ -22,11 +22,7 @@ namespace {
     // ids directly rather than a Column enum.
     constexpr int kTime = 0;
     constexpr int kScore = 1;
-    constexpr int kExpectedFinalScore = 2;
     constexpr int kAccuracy = 5;
-    constexpr int kAccuracy5s = 6;
-    constexpr int kScorePerSecond = 7;
-    constexpr int kExpectedFinalWholeRun = 8;
     constexpr int kInvalidColumn = 9999;
 
     SeriesConfig defaultConfig(const int id) {
@@ -191,34 +187,18 @@ namespace {
         EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{0.0, 1.0, 2.0}));
     }
 
-    TEST_F(GraphViewModelTest, DefaultLinesOnTheScoreAxisShareIt) {
-        fake_use_case->axes = defaultAxisConfigs();
-        for (const auto &config : defaultSeriesConfigs()) {
-            if (config.id.value == kScore) fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
-            else if (config.id.value == kExpectedFinalScore) fake_use_case->addSeries(config, pts({0, 1}, {100, 200}));
-        }
-        fake_use_case->run_duration = 1.0;
-        view_model.fetchMetadata();
-
-        const auto series = view_model.series({kScore, kExpectedFinalScore});
-        ASSERT_EQ(series.size(), 2);
-        ASSERT_TRUE(series[0]->yAxis.has_value());
-        ASSERT_TRUE(series[1]->yAxis.has_value());
-        EXPECT_DOUBLE_EQ(series[0]->yAxis->min(), series[1]->yAxis->min());
-        EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
-        EXPECT_GE(series[0]->yAxis->max(), 200.0);
-    }
-
     TEST_F(GraphViewModelTest, ALineWithoutAnAxisKeepsItsOwnScaleBesideTheSharedOne) {
-        fake_use_case->axes = defaultAxisConfigs();
-        for (const auto &config : defaultSeriesConfigs()) {
-            if (config.id.value == kScore) fake_use_case->addSeries(config, pts({0, 1}, {100, 200}));
-            else if (config.id.value == kScorePerSecond) fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
-        }
+        const AxisConfig sharedAxis{AxisId{5}, "Shared", {}, AxisTransformKind::Identity};
+        const SeriesConfig onAxis{SeriesId{10}, {"On axis", {}, true, 0}, numericConstant(1.0), sharedAxis.id};
+        const SeriesConfig alone{SeriesId{11}, {"Alone", {}, true, 1}, numericConstant(1.0)};
+
+        fake_use_case->axes = {sharedAxis};
+        fake_use_case->addSeries(onAxis, pts({0, 1}, {100, 200}));
+        fake_use_case->addSeries(alone, pts({0, 1}, {1, 2}));
         fake_use_case->run_duration = 1.0;
         view_model.fetchMetadata();
 
-        const auto series = view_model.series({kScore, kScorePerSecond});
+        const auto series = view_model.series({10, 11});
         ASSERT_EQ(series.size(), 2);
         ASSERT_TRUE(series[0]->yAxis.has_value());
         ASSERT_TRUE(series[1]->yAxis.has_value());
@@ -325,22 +305,6 @@ namespace {
         ASSERT_EQ(series.size(), 2);
         ASSERT_TRUE(series[0]->yAxis.has_value());
         EXPECT_EQ(series[0]->yAxis->formatTick(50.0), "50%");
-    }
-
-    TEST_F(GraphViewModelTest, FetchDataPopulatesEachDefaultLinesOwnColumn) {
-        for (const auto &config : defaultSeriesConfigs()) {
-            if (config.id.value == kAccuracy5s) fake_use_case->addSeries(config, pts({0, 1, 2}, {5, 10, 15}));
-            else if (config.id.value == kScorePerSecond) fake_use_case->addSeries(config, pts({0, 1, 2}, {1, 2, 3}));
-            else if (config.id.value == kExpectedFinalWholeRun)
-                fake_use_case->addSeries(config, pts({0, 1, 2}, {100, 200, 300}));
-        }
-        fake_use_case->run_duration = 2.0;
-
-        view_model.fetchData();
-
-        EXPECT_EQ(view_model.series({kAccuracy5s}).front()->points[0].y(), 5);
-        EXPECT_EQ(view_model.series({kScorePerSecond}).front()->points[1].y(), 2);
-        EXPECT_EQ(view_model.series({kExpectedFinalWholeRun}).front()->points[2].y(), 300.0);
     }
 
     TEST_F(GraphViewModelTest, SeriesReturnsTimeValuePairsInRowOrder) {
@@ -463,24 +427,29 @@ namespace {
         EXPECT_EQ(view_model.contentState(), GraphViewModel::NoRunSelected);
     }
 
-    TEST_F(GraphViewModelTest, ExpectedFinalWholeRunRendersUnderItsOwnColumnDespiteDisabledLinesBeforeIt) {
-        // Regression coverage: column is the series' own SeriesId, so mid-list (disabled) entries
-        // can no longer shift later lines under each other's name/color.
-        const auto configs = defaultSeriesConfigs();
-        ASSERT_FALSE(configs[5].presentation.enabled);
-        ASSERT_FALSE(configs[6].presentation.enabled);
-        ASSERT_EQ(configs[7].id.value, static_cast<uint64_t>(kExpectedFinalWholeRun));
-        for (const auto &config : configs) fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
+    // Regression coverage: column is the series' own SeriesId, so a line whose id differs from its
+    // position can no longer shift under another line's name/color.
+    TEST_F(GraphViewModelTest, ALineKeepsItsNameAndColourUnderItsOwnColumnWhenItsIdIsNotItsPosition) {
+        const auto config = [](const uint64_t id, const std::string &name, const uint32_t position,
+                               const RgbaColor color) {
+            return SeriesConfig{{id}, {name, {color, 2.0}, true, position}, primitive(PrimitiveMetric::Score)};
+        };
+        fake_use_case->addSeries(config(8, "Eight", 0, {200, 10, 10, 255}), pts({0, 1}, {1, 2}));
+        fake_use_case->addSeries(config(5, "Five", 1, {10, 200, 10, 255}), pts({0, 1}, {1, 2}));
+        fake_use_case->addSeries(config(3, "Three", 2, {10, 10, 200, 255}), pts({0, 1}, {1, 2}));
         fake_use_case->run_duration = 1.0;
 
         view_model.fetchMetadata();
 
-        EXPECT_EQ(view_model.columnForSeriesId("8"), kExpectedFinalWholeRun);
-        ASSERT_FALSE(view_model.series({kExpectedFinalWholeRun}).isEmpty());
-        EXPECT_EQ(view_model.series({kExpectedFinalWholeRun}).front()->name(), "Expected Final (Whole Run)");
+        EXPECT_EQ(view_model.columnForSeriesId("8"), 8);
+        ASSERT_FALSE(view_model.series({8}).isEmpty());
+        EXPECT_EQ(view_model.series({8}).front()->name(), "Eight");
+        EXPECT_EQ(view_model.series({8}).front()->color(), QColor(200, 10, 10, 255));
 
-        EXPECT_EQ(view_model.columnForSeriesId("5"), kAccuracy);
-        EXPECT_EQ(view_model.series({kAccuracy}).front()->name(), "Accuracy");
+        EXPECT_EQ(view_model.columnForSeriesId("5"), 5);
+        ASSERT_FALSE(view_model.series({5}).isEmpty());
+        EXPECT_EQ(view_model.series({5}).front()->name(), "Five");
+        EXPECT_EQ(view_model.series({5}).front()->color(), QColor(10, 200, 10, 255));
     }
 
     TEST_F(GraphViewModelTest, AxisLabelSeriesIdFollowsTheCommittedChoice) {
@@ -497,8 +466,10 @@ namespace {
     }
 
     TEST_F(GraphViewModelTest, WithNothingSavedTheRunGraphIsSmoothWithoutMarkers) {
-        EXPECT_EQ(view_model.property("connectionMode").toInt(), 0);
-        EXPECT_FALSE(view_model.property("pointMarkers").toBool());
+        const auto defaults = defaultGraphPresentation(GraphKey::Run).appearance;
+
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), static_cast<int>(defaults.connection));
+        EXPECT_EQ(view_model.property("pointMarkers").toBool(), defaults.lineModeMarkers);
     }
 
     TEST_F(GraphViewModelTest, TheCommittedConnectionAndMarkersApplyAtConstruction) {
@@ -532,7 +503,11 @@ namespace {
     // Graph Lines remains the run graph's series editor: its colours are the configured ones and the
     // painted width stays the painter default, not the stored per-line width.
     TEST_F(GraphViewModelTest, RunSeriesKeepTheirGraphLinesColourAndThePainterWidth) {
-        setSampleData();
+        const double storedWidth = kDefaultSeriesWidth + 3.0;
+        fake_use_case->addSeries(
+            SeriesConfig{{kScore}, {"Score", {{0, 150, 0, 255}, storedWidth}, true, 0}, primitive(PrimitiveMetric::Score)},
+            pts({0, 1, 2}, {10, 20, 30}));
+        fake_use_case->run_duration = 2.0;
         view_model.fetchMetadata();
         const auto before = view_model.series({kScore}).front()->color();
 
@@ -541,7 +516,7 @@ namespace {
 
         const auto score = view_model.series({kScore}).front();
         EXPECT_EQ(score->color(), before);
-        EXPECT_TRUE(score->color().isValid());
-        EXPECT_DOUBLE_EQ(score->lineWidth, 3.0);
+        EXPECT_EQ(score->color(), QColor(0, 150, 0, 255));
+        EXPECT_DOUBLE_EQ(score->lineWidth, kDefaultSeriesWidth);
     }
 }

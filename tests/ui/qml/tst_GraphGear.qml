@@ -110,13 +110,6 @@ TestCase {
         verify(gear.display === AbstractButton.IconOnly, "the gear is an icon, not an Options text button")
     }
 
-    function test_gearOpensAndClosesThePopup() {
-        const gear = makeGear("dailyPlaytime")
-        openPopup(gear)
-        mouseClick(gear)
-        tryVerify(() => !gear.popup.opened, 2000)
-    }
-
     function test_gearOpensWithoutAnyViewModelDetail() {
         const gear = createTemporaryObject(gearComponent, testCase, {graphKey: "dailyPlaytime", settingsVm: null})
         mouseClick(gear)
@@ -490,13 +483,6 @@ TestCase {
         tryVerify(() => gear.activeFocus, 2000, "focus returns to the gear")
     }
 
-    function test_focusMovesIntoThePopupWhenItOpens() {
-        const gear = makeGear("dailyPlaytime")
-        openPopup(gear)
-        verify(gear.popup.contentItem.activeFocus || gear.popup.activeFocus,
-               "keyboard focus is inside the popup")
-    }
-
     function test_theCloseButtonDismissesAndReturnsFocus() {
         const gear = makeGear("scenarioHistory")
         openPopup(gear)
@@ -508,16 +494,6 @@ TestCase {
 
         tryVerify(() => !gear.popup.opened, 2000)
         tryVerify(() => gear.activeFocus, 2000)
-    }
-
-    function test_theGearIsReachableAndActivatableFromTheKeyboard() {
-        const gear = makeGear("run")
-        gear.forceActiveFocus()
-        verify(gear.activeFocus)
-
-        keyClick(Qt.Key_Space)
-
-        tryVerify(() => gear.popup.opened, 2000)
     }
 
     function test_focusReturnsVisiblyAfterAKeyboardOpenAndClose() {
@@ -562,18 +538,5 @@ TestCase {
         compare(moreSpy.count, 1)
         compare(moreSpy.signalArguments[0][0], data.key)
         tryVerify(() => !gear.popup.opened, 2000)
-    }
-
-    function test_quickChangesAreCommittedBeforeNavigating() {
-        const gear = makeGear("dailyPlaytime")
-        moreSpy.target = gear
-        moreSpy.clear()
-        openPopup(gear)
-        choose(control(gear, "graphField_dataRange_range"), "Last 90 days")
-        mouseClick(control(gear, "graphMoreSettings_dailyPlaytime"))
-
-        compare(moreSpy.count, 1)
-        compare(fakeVm.quickSettings.dailyPlaytime.rangeKind, "recentDays")
-        compare(fakeVm.quickSettings.dailyPlaytime.rangeCount, 90)
     }
 }

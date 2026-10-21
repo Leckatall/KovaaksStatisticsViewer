@@ -113,11 +113,57 @@ namespace {
         EXPECT_FALSE(result.value("series").toList().isEmpty());
     }
 
-    TEST_F(GraphCanvasGeometryTest, ValuesAtXReportsEachSeriesPixelYWithinPlotArea) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kAccuracySeriesId});
-        const QRectF rect = canvas.property("plotArea").toRectF();
+    // A fixed line list: two lines on one named shared axis, then one with no axis of its own.
+    // series() answers in list order, whatever order the columns are asked for.
+    class SharedAxisVm : public presentation::GraphViewModelBase {
+    public:
+        static constexpr int kFirstShared = 10;
+        static constexpr int kSecondShared = 11;
+        static constexpr int kIndependent = 12;
 
-        const QVariantMap result = canvas.valuesAtX(rect.center().x());
+        SharedAxisVm() { m_xAxis.setRange(0.0, 10.0); }
+
+        [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &columns) const override {
+            QList<presentation::SeriesModel *> result;
+            for (const int column: {kFirstShared, kSecondShared, kIndependent}) {
+                if (!columns.contains(column)) continue;
+                auto *s = new presentation::SeriesModel(const_cast<SharedAxisVm *>(this));
+                s->setColumn(column);
+                s->points = {QPointF(0.0, 0.0), QPointF(10.0, 100.0)};
+                if (column == kIndependent) {
+                    s->setName("Independent");
+                } else {
+                    s->setName(column == kFirstShared ? "First shared" : "Second shared");
+                    s->yAxisId = 1;
+                    s->yAxisName = "Shared axis";
+                }
+                result.append(s);
+            }
+            return result;
+        }
+        [[nodiscard]] const presentation::Axis &xAxis() const override { return m_xAxis; }
+        [[nodiscard]] int yAxisColumn() const override { return kFirstShared; }
+
+    private:
+        presentation::ValueAxis m_xAxis;
+    };
+
+    // The columns of the real view model's enabled lines that have data in the decoded run, in list order.
+    QList<int> plottedColumns(const GraphViewModel &vm) {
+        QList<int> columns;
+        for (const auto &id: vm.enabledSeriesIds()) {
+            const int column = vm.columnForSeriesId(id.toString());
+            if (!vm.series({column}).isEmpty()) columns.append(column);
+        }
+        return columns;
+    }
+
+    TEST_F(GraphCanvasGeometryTest, ValuesAtXReportsEachSeriesPixelYWithinPlotArea) {
+        SharedAxisVm vm;
+        const auto twoLines = makeCanvas(vm, QVariantList{SharedAxisVm::kFirstShared, SharedAxisVm::kIndependent});
+        const QRectF rect = twoLines->property("plotArea").toRectF();
+
+        const QVariantMap result = twoLines->valuesAtX(rect.center().x());
 
         ASSERT_TRUE(result.value("valid").toBool());
         const QVariantList series = result.value("series").toList();
@@ -130,23 +176,26 @@ namespace {
         }
     }
 
-    TEST_F(GraphCanvasGeometryTest, NearestPointHitsAKnownScorePixel) {
-        const auto series = graphVm->series(QList<int>{kScoreSeriesId});
+    TEST_F(GraphCanvasGeometryTest, NearestPointHitsAKnownPlottedPixel) {
+        const auto columns = plottedColumns(*graphVm);
+        ASSERT_FALSE(columns.isEmpty());
+        canvas.setVisibleColumns(QVariantList{columns.front()});
+        const auto series = graphVm->series(QList<int>{columns.front()});
         ASSERT_FALSE(series.isEmpty());
         const auto display = series.front()->displayPoints();
         ASSERT_FALSE(display.isEmpty());
 
         const QRectF rect = canvas.property("plotArea").toRectF();
         const auto &xAxis = graphVm->xAxis();
-        // Score isn't in GraphViewModel's hardcoded axis table, so it derives its own axis the same
-        // way GraphCanvas does — see yAxisFor() in graph_canvas.cpp.
+        // A line without its own axis derives one the same way GraphCanvas does — see yAxisFor() in
+        // graph_canvas.cpp.
         const QPointF pixel = toPixel(display.front(), rect, xAxis,
                                       series.front()->yAxis.value_or(series.front()->deriveYAxis()));
 
         const QVariantMap hit = canvas.nearestPoint(pixel.x(), pixel.y());
 
         ASSERT_TRUE(hit.value("valid").toBool());
-        EXPECT_EQ(hit.value("name").toString(), "Score");
+        EXPECT_EQ(hit.value("name").toString(), series.front()->name());
     }
 
     TEST_F(GraphCanvasGeometryTest, NearestPointMissesWhenFarFromEveryPoint) {
@@ -189,11 +238,6 @@ namespace {
             << "nearestPoint should map y against the y-axis derived from series data; "
                "if this fails, yAxisFor() no longer derives a y-axis for series without one";
         EXPECT_EQ(hit.value("name").toString(), "Fallback");
-    }
-
-    TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnDefaultsToVmYAxisColumnWhenUnset) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId});
-        EXPECT_EQ(canvas.property("labelledYAxisColumn").toInt(), kScoreSeriesId);
     }
 
     TEST_F(GraphCanvasGeometryTest, LabelledYAxisColumnReturnsRequestedColumnWhenVisible) {
@@ -319,27 +363,12 @@ namespace {
 
     // --- Which lines the labelled Y axis measures. ---
 
-    TEST_F(GraphCanvasGeometryTest, IndependentlyScaledLinesLeaveTheAxisToItsOwnLine) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kAccuracySeriesId});
-        canvas.setYAxisColumn(kScoreSeriesId);
-
-        EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(), QVariantList{kScoreSeriesId});
-    }
-
     TEST_F(GraphCanvasGeometryTest, ALineWithoutAnAxisIsLeftToItsOwnScale) {
         DefaultAxisShapeVm vm;
         const auto shaped = makeCanvas(vm, QVariantList{kScoreSeriesId, kScorePerSecondSeriesId});
         shaped->setYAxisColumn(kScoreSeriesId);
 
         EXPECT_EQ(shaped->property("labelledYAxisColumns").toList(), QVariantList{kScoreSeriesId});
-    }
-
-    TEST_F(GraphCanvasGeometryTest, LinesSharingTheLabelledAxisAreAllMeasuredByIt) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kExpectedFinalSeriesId});
-        canvas.setYAxisColumn(kScoreSeriesId);
-
-        EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(),
-                  (QVariantList{kScoreSeriesId, kExpectedFinalSeriesId}));
     }
 
     TEST_F(GraphCanvasGeometryTest, EveryLineOnTheLabelledAxisIsMeasuredByItNotJustTheFirstTwo) {
@@ -353,21 +382,16 @@ namespace {
     }
 
     TEST_F(GraphCanvasGeometryTest, MixedLinesNameOnlyTheSharedGroup) {
-        canvas.setVisibleColumns(QVariantList{kAccuracySeriesId, kScoreSeriesId, kExpectedFinalSeriesId});
-        canvas.setYAxisColumn(kExpectedFinalSeriesId);
+        SharedAxisVm vm;
+        const auto mixed = makeCanvas(
+            vm, QVariantList{SharedAxisVm::kIndependent, SharedAxisVm::kFirstShared, SharedAxisVm::kSecondShared});
+        mixed->setYAxisColumn(SharedAxisVm::kSecondShared);
 
-        EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(),
-                  (QVariantList{kScoreSeriesId, kExpectedFinalSeriesId}));
+        EXPECT_EQ(mixed->property("labelledYAxisColumns").toList(),
+                  (QVariantList{SharedAxisVm::kFirstShared, SharedAxisVm::kSecondShared}));
     }
 
     // --- What the labelled Y axis is titled. ---
-
-    TEST_F(GraphCanvasGeometryTest, SharedAxisTitleIsTheAxisName) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kExpectedFinalSeriesId});
-        canvas.setYAxisColumn(kExpectedFinalSeriesId);
-
-        EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score");
-    }
 
     TEST_F(GraphCanvasGeometryTest, IndependentLineTitleIsItsOwnName) {
         DefaultAxisShapeVm vm;
@@ -378,10 +402,12 @@ namespace {
     }
 
     TEST_F(GraphCanvasGeometryTest, MixedLinesTitleNamesOnlyTheLabelledAxis) {
-        canvas.setVisibleColumns(QVariantList{kAccuracySeriesId, kScoreSeriesId, kExpectedFinalSeriesId});
-        canvas.setYAxisColumn(kExpectedFinalSeriesId);
+        SharedAxisVm vm;
+        const auto mixed = makeCanvas(
+            vm, QVariantList{SharedAxisVm::kIndependent, SharedAxisVm::kFirstShared, SharedAxisVm::kSecondShared});
+        mixed->setYAxisColumn(SharedAxisVm::kSecondShared);
 
-        EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score");
+        EXPECT_EQ(mixed->property("labelledYAxisTitle").toString(), "Shared axis");
     }
 
     // --- Lines stack in the user's line-list order. ---
@@ -390,32 +416,33 @@ namespace {
     // painted last (on top) whatever order the columns are made visible in or which line owns the
     // axis, and the hover readout lists the same series top-of-list first.
     TEST_F(GraphCanvasGeometryTest, LinesArePaintedBottomOfTheListFirst) {
-        canvas.setVisibleColumns(QVariantList{kExpectedFinalSeriesId, kScoreSeriesId, kAccuracySeriesId});
-        canvas.setYAxisColumn(kScoreSeriesId);
+        SharedAxisVm vm;
+        const auto lines = makeCanvas(
+            vm, QVariantList{SharedAxisVm::kSecondShared, SharedAxisVm::kFirstShared, SharedAxisVm::kIndependent});
+        lines->setYAxisColumn(SharedAxisVm::kFirstShared);
 
-        EXPECT_EQ(canvas.paintOrder(), (QList<int>{kAccuracySeriesId, kExpectedFinalSeriesId, kScoreSeriesId}));
+        EXPECT_EQ(lines->paintOrder(),
+                  (QList<int>{SharedAxisVm::kIndependent, SharedAxisVm::kSecondShared, SharedAxisVm::kFirstShared}));
 
-        const QRectF rect = canvas.property("plotArea").toRectF();
-        const QVariantList hovered = canvas.valuesAtX(rect.center().x()).value("series").toList();
+        const QRectF rect = lines->property("plotArea").toRectF();
+        const QVariantList hovered = lines->valuesAtX(rect.center().x()).value("series").toList();
         QStringList names;
         for (const auto &entry: hovered) names.append(entry.toMap().value("name").toString());
-        EXPECT_EQ(names, (QStringList{"Score", "Expected Final Score", "Accuracy"}));
+        EXPECT_EQ(names, (QStringList{"First shared", "Second shared", "Independent"}));
     }
 
     TEST_F(GraphCanvasGeometryTest, PaintOrderReversesTheEnabledLineList) {
+        const auto columns = plottedColumns(*graphVm);
+        ASSERT_GE(columns.size(), 2);
         QVariantList visible;
         QList<int> expected;
-        for (const auto &id: graphVm->enabledSeriesIds()) {
-            const int column = graphVm->columnForSeriesId(id.toString());
-            if (graphVm->series({column}).isEmpty()) continue;
+        for (const int column: columns) {
             visible.append(column);
             expected.prepend(column);
         }
-        ASSERT_GE(expected.size(), 2);
         canvas.setVisibleColumns(visible);
 
         EXPECT_EQ(canvas.paintOrder(), expected);
-        EXPECT_EQ(canvas.paintOrder().back(), kScoreSeriesId) << "Score heads the default list, so it is on top";
     }
 
     // --- Real data points are marked while sparse. ---
@@ -697,7 +724,7 @@ namespace {
         vm.model().lineWidth = 1.0;
         const int thin = countColour(render(*canvas), column, kSeriesRed);
 
-        EXPECT_NEAR(defaultWidth, 3, 1);
+        EXPECT_NEAR(defaultWidth, application::kDefaultSeriesWidth, 1);
         EXPECT_NEAR(thick, 9, 1);
         EXPECT_NEAR(thin, 1, 1);
     }

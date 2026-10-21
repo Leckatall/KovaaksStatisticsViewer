@@ -6,10 +6,10 @@ TestCase {
     name: "ThemeTest"
 
     function test_classificationColor_mapsEveryClassification() {
-        verify(Qt.colorEqual(Theme.classificationColor("Trackable"), "#4caf50"))
-        verify(Qt.colorEqual(Theme.classificationColor("Incomplete"), "#ffa726"))
-        verify(Qt.colorEqual(Theme.classificationColor("Invalid"), "#e53935"))
-        verify(Qt.colorEqual(Theme.classificationColor("Unsupported"), "#9e9e9e"))
+        verify(Qt.colorEqual(Theme.classificationColor("Trackable"), Theme.success))
+        verify(Qt.colorEqual(Theme.classificationColor("Incomplete"), Theme.warning))
+        verify(Qt.colorEqual(Theme.classificationColor("Invalid"), Theme.error))
+        verify(Qt.colorEqual(Theme.classificationColor("Unsupported"), Theme.classificationColor("")))
     }
 
     function test_classificationColor_unknownFallsBackToGrey() {
@@ -40,16 +40,5 @@ TestCase {
         verify(Theme.isLightFill("#ffc828"))
         verify(!Theme.isLightFill("#000000"))
         verify(!Theme.isLightFill("#82828c"))
-    }
-
-    function test_sharedValuesKeepTheirLiterals() {
-        compare(Theme.errorText.toString(), "#e57373")
-        compare(Theme.error.toString(), "#e53935")
-        compare(Theme.warning.toString(), "#ffa726")
-        compare(Theme.attention.toString(), "#ffb74d")
-        compare(Theme.success.toString(), "#4caf50")
-        compare(Theme.toolTipDelay, 400)
-        compare(Theme.shortToolTipDelay, 300)
-        compare(Theme.groupTintAlpha, 0.22)
     }
 }

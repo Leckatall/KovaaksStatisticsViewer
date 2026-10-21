@@ -14,6 +14,7 @@
 
 #include "app/contracts/expression_dsl.h"
 #include "qt_data/graph_configuration_persistence.h"
+#include "qt_data/series_config_codec.h"
 #include "qt_data/settings_service.h"
 #include "fake_settings_service.h"
 
@@ -183,12 +184,9 @@ namespace {
     }
 
     TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionFiveDocument) {
-        settings->legacyDisabledColumns = {"scoreTotal"};
         const auto loaded = load();
 
-        auto expected = defaultGraphConfiguration();
-        expected.runSeries.series[0].presentation.enabled = false;
-        EXPECT_EQ(loaded, expected);
+        EXPECT_EQ(loaded, defaultGraphConfiguration());
         EXPECT_TRUE(settings->quarantined.empty());
         ASSERT_EQ(settings->document_writes, 1);
         const auto root = docObject();
@@ -505,9 +503,8 @@ namespace {
 
         const auto loaded = load();
         EXPECT_EQ(settings->quarantined.size(), 1U);
-        auto expectedSeries = defaultSeriesConfigs();
-        expectedSeries[4].presentation.enabled = false;
-        EXPECT_TRUE(sameSeriesConfigs(loaded.runSeries.series, expectedSeries));
+        EXPECT_TRUE(sameSeriesConfigs(loaded.runSeries.series,
+                                      series_codec::seededRunSeries({"accuracy"}).series));
         for (const auto key: kGraphKeys)
             EXPECT_EQ(loaded.preferences(key), everyPreferenceKind().preferences(key)) << graphKeyName(key);
     }

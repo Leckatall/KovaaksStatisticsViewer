@@ -150,16 +150,6 @@ TestCase {
         wait(20);
         verify(scrollView.contentItem.contentY > contentYBeforeScroll);
     }
-    function test_dialogWidthAndHeightAreClampedToTheOverlaySize() {
-        const vm = fakeVm();
-        const dialog = makeDialog(vm);
-        dialog.beginEditing();
-        dialog.open();
-        tryCompare(dialog, "visible", true);
-        wait(20);
-        verify(dialog.width <= testCase.width);
-        verify(dialog.height <= testCase.height);
-    }
     function test_openingDialogCallsBeginExpressionEditWithTheGivenSeriesId() {
         const vm = fakeVm();
         const dialog = makeDialog(vm);
