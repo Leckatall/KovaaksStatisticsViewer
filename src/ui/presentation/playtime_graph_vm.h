@@ -54,6 +54,8 @@ namespace ksv::presentation {
         [[nodiscard]] bool noObservationsInRange() const { return m_historyAvailable && m_series->points.isEmpty(); }
         [[nodiscard]] QString emptyStateText() const;
         [[nodiscard]] QString title() const;
+        // Also titles the benchmark playtime card, so the two playtime graphs never word it differently.
+        [[nodiscard]] static QString titleFor(int windowDays);
         [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
         // Takes the "playtime" policy, in minutes; an absent key means the default. Kept across refreshes.

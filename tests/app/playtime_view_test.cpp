@@ -13,9 +13,9 @@ namespace {
     const PlaytimeSeries kFull{{day(2026, 3, 1), 60.0}, {day(2026, 3, 2), 30.0}, {day(2026, 3, 5), 45.0},
                                {day(2026, 3, 6), 10.0}};
 
-    TEST(PlaytimeView, UnsetPreferencesFallBackToThreeDaysOverAllHistory) {
+    TEST(PlaytimeView, UnsetPreferencesFallBackToTheDefaultWindowOverAllHistory) {
         const GraphPreferences preferences;
-        EXPECT_EQ(effectiveAveragingWindow(preferences), 3);
+        EXPECT_EQ(effectiveAveragingWindow(preferences), kDefaultAveragingWindowDays);
         EXPECT_EQ(effectiveRange(preferences), RangePreference{});
     }
 

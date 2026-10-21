@@ -19,7 +19,6 @@ TestCase {
                     enabled: true,
                     displayPosition: 0,
                     hiddenLeadingPoints: 0,
-                    isPrimitive: true,
                     yAxisId: "",
                     expression: "SCORE"
                 }
@@ -30,6 +29,13 @@ TestCase {
             reorderCalls: [],
             createAxisCalls: [],
             updateSeriesAxisCalls: [],
+            restoreDefaultGraphLinesCalls: 0,
+            restoreDefaultGraphLines: function () {
+                this.restoreDefaultGraphLinesCalls++;
+                return {
+                    succeeded: true
+                };
+            },
             createComputedSeries: function () {
                 this.createCalls.push(Array.from(arguments));
             },
@@ -96,7 +102,6 @@ TestCase {
                 enabled: false,
                 displayPosition: 1,
                 hiddenLeadingPoints: 0,
-                isPrimitive: false,
                 expression: "2"
             },
             {
@@ -107,7 +112,6 @@ TestCase {
                 enabled: true,
                 displayPosition: 0,
                 hiddenLeadingPoints: 2,
-                isPrimitive: true,
                 expression: "SCORE"
             }
         ];
@@ -122,7 +126,6 @@ TestCase {
                 width: 2,
                 enabled: true,
                 displayPosition: i,
-                isPrimitive: true,
                 expression: "SCORE"
             });
         }
@@ -155,9 +158,22 @@ TestCase {
         const call = panel.settingsVm.createCalls[0];
         compare(call[0], "New Series");
         compare(call[1], "#4CAF50");
-        compare(call[2], 2);
+        compare(call[2], 3);
         compare(call[3], true);
         compare(call[4], "");
+    }
+    function test_restoreDefaultLinesButtonCallsRestoreDefaultGraphLines() {
+        const vm = makeFakeSettingsVm();
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm
+        });
+        verify(waitForRendering(panel));
+        const button = ItemLookup.findByObjectName(panel, "restoreDefaultGraphLinesButton");
+        verify(button);
+        compare(button.Accessible.name, "Restore the default graph lines");
+        compare(panel.settingsVm.restoreDefaultGraphLinesCalls, 0);
+        button.clicked();
+        compare(panel.settingsVm.restoreDefaultGraphLinesCalls, 1);
     }
     function test_axisComboDefaultsToIndependentWhenRowHasNoYAxisId() {
         const panel = createTemporaryObject(panelComponent, testCase, {
@@ -196,7 +212,6 @@ TestCase {
                 width: 2,
                 enabled: true,
                 displayPosition: 0,
-                isPrimitive: true,
                 yAxisId: "2",
                 expression: "SCORE"
             }]
@@ -440,7 +455,6 @@ TestCase {
                 width: 2,
                 enabled: true,
                 displayPosition: 2,
-                isPrimitive: false,
                 expression: "3"
             },
             {
@@ -450,7 +464,6 @@ TestCase {
                 width: 2,
                 enabled: true,
                 displayPosition: 3,
-                isPrimitive: false,
                 expression: "4"
             }
         ]);

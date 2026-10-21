@@ -185,8 +185,22 @@ namespace {
         EXPECT_EQ(callback_count, 1);
     }
 
-    TEST_F(CompletionHistoryUseCaseTest, AllHistoryIsTheDefaultAndFullCountEqualsRowCount) {
+    TEST_F(CompletionHistoryUseCaseTest, TheDefaultRangeIsTheLatestHundredRuns) {
+        std::vector<long long> epochDays;
+        for (long long offset = 104; offset >= 0; --offset) epochDays.push_back(kToday - offset);
+        playOnDays(epochDays);
+
+        const auto history = use_case.get_history();
+
+        ASSERT_EQ(history.rows.size(), 100U);
+        EXPECT_EQ(history.rows.front().run_index, 6);
+        EXPECT_EQ(history.rows.back().run_index, 105);
+        EXPECT_EQ(history.full_count, 105);
+    }
+
+    TEST_F(CompletionHistoryUseCaseTest, AllHistoryKeepsEveryRunAndFullCountEqualsRowCount) {
         playOnDays({kToday - 30, kToday - 3, kToday});
+        setRange(AllHistory{});
 
         const auto history = use_case.get_history();
 

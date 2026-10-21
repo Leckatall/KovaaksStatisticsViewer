@@ -163,7 +163,7 @@ namespace {
         const auto view_model = make_view_model();
 
         EXPECT_FALSE(view_model->isVisitOpen());
-        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 8);
         EXPECT_EQ(view_model->getAllAxes().size(), 2);
     }
 
@@ -174,7 +174,7 @@ namespace {
         view_model->setRunAxisLabelSeriesId("2");
 
         EXPECT_TRUE(configuration->saves.empty());
-        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 8);
         EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
     }
 
@@ -189,7 +189,7 @@ namespace {
         EXPECT_EQ(visitSpy.count(), 1);
         EXPECT_FALSE(view_model->hasPendingChanges());
         EXPECT_EQ(view_model->runAxisLabelSeriesId(), "7");
-        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 8);
     }
 
     // Reopening or focusing an already open Settings window calls beginVisit() again; it must not
@@ -204,7 +204,7 @@ namespace {
 
         EXPECT_TRUE(view_model->hasPendingChanges());
         EXPECT_TRUE(rowIds(*view_model).contains(created["createdId"].toString()));
-        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 10);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
     }
 
     TEST_F(SettingsViewModelTest, DraftEditsNeverReachTheApplicationBoundary) {
@@ -295,7 +295,7 @@ namespace {
         EXPECT_TRUE(result["accepted"].toBool());
         ASSERT_EQ(configuration->saves.size(), 1U);
         const auto &candidate = configuration->saves.front();
-        EXPECT_EQ(candidate.runSeries.series.size(), 10U);
+        EXPECT_EQ(candidate.runSeries.series.size(), 9U);
         ASSERT_TRUE(candidate.runAxisLabelSeriesId);
         EXPECT_EQ(QString::number(candidate.runAxisLabelSeriesId->value), created["createdId"].toString());
         EXPECT_TRUE(view_model->isVisitOpen());
@@ -504,7 +504,7 @@ namespace {
         configuration->configuration.runSeries.series.pop_back();
         configuration->publish({}, true, false);
         EXPECT_EQ(spy.count(), 1);
-        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 8);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 7);
 
         view_model->beginVisit();
         view_model->setSeriesEnabled("2", false);
@@ -576,9 +576,72 @@ namespace {
 
         const auto created = view_model->createComputedSeries("Derived", "#123456", 2.0, true, "Add(SCORE, HITS)");
 
-        EXPECT_EQ(created["createdId"].toString(), "10");
-        EXPECT_EQ(row(*view_model, "10")["expression"].toString(), "Add(SCORE, HITS)");
-        EXPECT_EQ(row(*view_model, "10")["name"].toString(), "Derived");
+        EXPECT_EQ(created["createdId"].toString(), "9");
+        EXPECT_EQ(row(*view_model, "9")["expression"].toString(), "Add(SCORE, HITS)");
+        EXPECT_EQ(row(*view_model, "9")["name"].toString(), "Derived");
+    }
+
+    TEST_F(SettingsViewModelTest, RestoreDefaultGraphLinesStagesTheDefaultDocumentAndClearsTheAxisLabel) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_TRUE(view_model->removeComputedSeries("3")["succeeded"].toBool());
+        view_model->setRunAxisLabelSeriesId("3");
+        const QSignalSpy configSpy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
+
+        const auto result = view_model->restoreDefaultGraphLines();
+
+        EXPECT_TRUE(result["succeeded"].toBool());
+        EXPECT_GE(configSpy.count(), 1);
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
+        EXPECT_EQ(rowIds(*view_model), (QStringList{"1", "2", "3", "4", "5", "6", "7", "8"}));
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_TRUE(configuration->saves.empty());
+    }
+
+    TEST_F(SettingsViewModelTest, RestoreDefaultGraphLinesOverCustomisedLinesIsPendingAndRevertible) {
+        configuration->configuration.runSeries.series.pop_back();
+        configuration->configuration.runAxisLabelSeriesId = SeriesId{2};
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->hasPendingChanges());
+
+        ASSERT_TRUE(view_model->restoreDefaultGraphLines()["succeeded"].toBool());
+
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 8);
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
+        EXPECT_TRUE(configuration->saves.empty());
+
+        view_model->revertChanges();
+
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 7);
+        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "2");
+    }
+
+    TEST_F(SettingsViewModelTest, RestoreDefaultGraphLinesIsSavedAsTheDefaultDocument) {
+        configuration->configuration.runSeries.series.pop_back();
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_TRUE(view_model->restoreDefaultGraphLines()["succeeded"].toBool());
+
+        ASSERT_TRUE(view_model->save()["accepted"].toBool());
+
+        ASSERT_EQ(configuration->saves.size(), 1U);
+        EXPECT_EQ(configuration->saves.front().runSeries, defaultRunSeriesDocument());
+        EXPECT_FALSE(configuration->saves.front().runAxisLabelSeriesId);
+    }
+
+    TEST_F(SettingsViewModelTest, RestoreDefaultGraphLinesIsRefusedOutsideAVisit) {
+        configuration->configuration.runSeries.series.pop_back();
+        const auto view_model = make_view_model();
+        const QSignalSpy configSpy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
+
+        EXPECT_FALSE(view_model->restoreDefaultGraphLines()["succeeded"].toBool());
+
+        EXPECT_EQ(configSpy.count(), 0);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 7);
+        EXPECT_TRUE(configuration->saves.empty());
     }
 
     TEST_F(SettingsViewModelTest, UpdateComputedSeriesTreatsEmptyDslAsABlankExpression) {
@@ -691,7 +754,7 @@ namespace {
         EXPECT_TRUE(daily["hasRange"].toBool());
         EXPECT_FALSE(daily["hasLatestRuns"].toBool());
         EXPECT_TRUE(daily["hasWindow"].toBool());
-        EXPECT_EQ(daily["window"].toInt(), 3);
+        EXPECT_EQ(daily["window"].toInt(), 7);
 
         const auto history = quick["scenarioHistory"].toMap();
         EXPECT_TRUE(history["hasRange"].toBool());
@@ -710,7 +773,8 @@ namespace {
         const auto quick = view_model->quickSettings();
 
         const auto history = quick["scenarioHistory"].toMap();
-        EXPECT_EQ(history["rangeKind"].toString(), "allHistory");
+        EXPECT_EQ(history["rangeKind"].toString(), "latestRuns");
+        EXPECT_EQ(history["rangeCount"].toInt(), 100);
         EXPECT_EQ(history["connection"].toString(), "smooth");
         EXPECT_TRUE(history["markers"].toBool());
         EXPECT_FALSE(quick["dailyPlaytime"].toMap()["markers"].toBool());
@@ -843,16 +907,16 @@ namespace {
         const auto view_model = make_view_model();
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::quickSettingsChanged);
 
-        const auto result = view_model->applyQuickPatch("dailyPlaytime", {{"rangeKind", "recentDays"}, {"count", 30}});
+        const auto result = view_model->applyQuickPatch("dailyPlaytime", {{"rangeKind", "recentDays"}, {"count", 14}});
 
         EXPECT_TRUE(result["accepted"].toBool());
         ASSERT_EQ(configuration->patches.size(), 1u);
         EXPECT_EQ(configuration->patches[0].first, GraphKey::DailyPlaytime);
-        EXPECT_EQ(configuration->patches[0].second.range, (RangePreference{RecentDays{30}}));
+        EXPECT_EQ(configuration->patches[0].second.range, (RangePreference{RecentDays{14}, true}));
         EXPECT_TRUE(configuration->saves.empty());
         EXPECT_FALSE(view_model->isVisitOpen());
         EXPECT_EQ(spy.count(), 1);
-        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["rangeCount"].toInt(), 30);
+        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["rangeCount"].toInt(), 14);
     }
 
     TEST_F(SettingsViewModelTest, AQuickRangePatchKeepsTheStoredLatestRunAnchor) {
@@ -938,7 +1002,7 @@ namespace {
         EXPECT_EQ(zero["issues"].toList().at(0).toMap()["code"].toString(), "nonPositiveCount");
         EXPECT_EQ(huge["issues"].toList().at(0).toMap()["code"].toString(), "countTooLarge");
         EXPECT_EQ(beyond["issues"].toList().at(0).toMap()["code"].toString(), "countTooLarge");
-        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 3);
+        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 7);
     }
 
     TEST_F(SettingsViewModelTest, ARejectedPatchReportsTheUseCaseIssuesAndChangesNothing) {

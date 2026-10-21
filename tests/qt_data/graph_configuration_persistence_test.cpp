@@ -162,8 +162,28 @@ namespace {
         }
     };
 
+    TEST_F(GraphConfigurationPersistenceTest, FreshInstallSeedsExactlyTheDefaults) {
+        EXPECT_EQ(load(), defaultGraphConfiguration());
+        EXPECT_EQ(load().runSeries, defaultRunSeriesDocument());
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, LegacyDisabledColumnKeysMapOntoTheNewLinesById) {
+        settings->legacyDisabledColumns = {"scoreTotal", "accuracy", "shots"};
+        const auto loaded = load();
+
+        auto expected = defaultGraphConfiguration();
+        expected.runSeries.series[0].presentation.enabled = false;
+        expected.runSeries.series[4].presentation.enabled = false;
+        EXPECT_EQ(loaded, expected);
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, LegacyColumnKeysWithoutACounterpartAreIgnored) {
+        settings->legacyDisabledColumns = {"score", "shots", "kills", "dmg"};
+        EXPECT_EQ(load(), defaultGraphConfiguration());
+    }
+
     TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionFiveDocument) {
-        settings->legacyDisabledColumns = {"score"};
+        settings->legacyDisabledColumns = {"scoreTotal"};
         const auto loaded = load();
 
         auto expected = defaultGraphConfiguration();
@@ -184,11 +204,17 @@ namespace {
         EXPECT_TRUE(settings->quarantined.empty());
         EXPECT_EQ(settings->document_writes, 0);
         ASSERT_EQ(loaded.runSeries.series.size(), 3U);
-        EXPECT_TRUE(sameAxisConfigs(loaded.runSeries.axes, defaultAxisConfigs()));
+        ASSERT_EQ(loaded.runSeries.axes.size(), 2U);
+        EXPECT_EQ(loaded.runSeries.axes[0].id, AxisId{1});
+        EXPECT_EQ(loaded.runSeries.axes[0].name, "Accuracy");
+        EXPECT_EQ(loaded.runSeries.axes[0].transformKind, AxisTransformKind::Percentage);
+        EXPECT_EQ(loaded.runSeries.axes[1].id, AxisId{2});
+        EXPECT_EQ(loaded.runSeries.axes[1].name, "Score Family");
+        EXPECT_EQ(loaded.runSeries.axes[1].transformKind, AxisTransformKind::Identity);
         EXPECT_EQ(loaded.runSeries.series[1].transformKind, AxisTransformKind::Percentage);
         EXPECT_EQ(loaded.runSeries.series[2].yAxisId, AxisId{2});
         EXPECT_EQ(loaded.runSeries.nextSeriesId, SeriesId{10});
-        EXPECT_EQ(loaded.runSeries.nextAxisId, kFirstUserAxisId);
+        EXPECT_EQ(loaded.runSeries.nextAxisId, AxisId{3});
         for (const auto key: kGraphKeys) EXPECT_EQ(loaded.preferences(key), defaultGraphPreferences(key));
 
         save(loaded);
@@ -480,7 +506,7 @@ namespace {
         const auto loaded = load();
         EXPECT_EQ(settings->quarantined.size(), 1U);
         auto expectedSeries = defaultSeriesConfigs();
-        expectedSeries[1].presentation.enabled = false;
+        expectedSeries[4].presentation.enabled = false;
         EXPECT_TRUE(sameSeriesConfigs(loaded.runSeries.series, expectedSeries));
         for (const auto key: kGraphKeys)
             EXPECT_EQ(loaded.preferences(key), everyPreferenceKind().preferences(key)) << graphKeyName(key);

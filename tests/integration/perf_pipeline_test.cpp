@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "app/app.h"
+#include "app/contracts/run_series_editing.h"
 #include "formats/protobuf/proto_decoder.h"
 #include "presentation/graph_vm.h"
 
@@ -23,8 +24,7 @@ namespace {
     // Built-in SeriesId from defaultSeriesConfigs() — GraphViewModel::column is always a series'
     // SeriesId, not a position, and has no dedicated enum outside the class.
     constexpr int kScoreSeriesId = 1;
-    constexpr int kAccuracySeriesId = 2;
-    constexpr int kScoreTotalSeriesId = 7;
+    constexpr int kAccuracySeriesId = 5;
 
     // Both tests drive the same wired pipeline and each fetches its own fixture, so
     // the App is built once for the suite rather than per test.
@@ -52,6 +52,7 @@ namespace {
 
         // App holds shared_ptrs to services built over env's settings, so it goes first.
         static void TearDownTestSuite() {
+            integration::clearSavedGraphConfiguration();
             graphVm = nullptr;
             app.reset();
             env.reset();
@@ -90,19 +91,27 @@ namespace {
         }
     }
 
-    TEST_F(PerfPipelineTest, ScoreTotalIsTheRunningSumOfPerSecondScore) {
+    // No default line plots the per-second score, so the test adds one.
+    TEST_F(PerfPipelineTest, ScoreIsTheRunningSumOfPerSecondScore) {
+        auto candidate = *app->graphConfigurationUseCase()->current().configuration;
+        const auto created = application::createComputedSeries(
+            candidate.runSeries,
+            {{"Score per second", {{255, 255, 255, 255}, 3.0}, true},
+             application::primitive(application::PrimitiveMetric::Score)});
+        ASSERT_TRUE(created.succeeded());
+        ASSERT_TRUE(app->graphConfigurationUseCase()->save(candidate).accepted());
         graphVm->fetchData(perfUrl);
 
-        const auto score = rawPoints(kScoreSeriesId);
-        const auto total = rawPoints(kScoreTotalSeriesId);
+        const auto perSecond = rawPoints(static_cast<int>(created.createdId->value));
+        const auto total = rawPoints(kScoreSeriesId);
         ASSERT_GE(total.size(), 2);
-        ASSERT_EQ(total.size(), score.size());
+        ASSERT_EQ(total.size(), perSecond.size());
 
-        // ScoreTotal[i] must equal the cumulative sum of per-second Score up to i
+        // Score[i] must equal the cumulative sum of per-second score up to i
         // (buckets can be negative in Kovaaks, so it is a running sum, not monotonic).
         qreal running = 0.0;
         for (int i = 0; i < total.size(); ++i) {
-            running += score[i].y();
+            running += perSecond[i].y();
             EXPECT_NEAR(total[i].y(), running, 1e-3) << "running total diverged at index " << i;
         }
     }

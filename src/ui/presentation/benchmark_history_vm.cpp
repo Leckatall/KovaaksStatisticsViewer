@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "benchmark_format.h"
+#include "playtime_graph_vm.h"
 #include "series_style.h"
 #include "value_transform.h"
 
@@ -30,10 +31,7 @@ namespace ksv::presentation {
 
     QString BenchmarkHistoryViewModel::metricName() const {
         if (m_metric == AverageRank) return tr("Personal-best average rank");
-        // The default window keeps its spelled-out wording.
-        if (m_windowDays == 1) return tr("Daily playtime");
-        if (m_windowDays == 3) return tr("Three-day average playtime");
-        return tr("%1-day average playtime").arg(m_windowDays);
+        return PlaytimeGraphViewModel::titleFor(m_windowDays);
     }
 
     void BenchmarkHistoryViewModel::setAveragingWindowDays(const int days) {

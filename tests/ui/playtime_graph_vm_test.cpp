@@ -62,8 +62,8 @@ namespace {
         PlaytimeGraphViewModel view_model{fake};
     };
 
-    TEST_F(PlaytimeGraphViewModelTest, DefaultWindowIsThreeDays) {
-        EXPECT_EQ(view_model.averagingWindowDays(), 3);
+    TEST_F(PlaytimeGraphViewModelTest, DefaultWindowIsSevenDays) {
+        EXPECT_EQ(view_model.averagingWindowDays(), 7);
     }
 
     TEST_F(PlaytimeGraphViewModelTest, UseCaseChangesRefreshTheGraph) {
@@ -77,8 +77,8 @@ namespace {
     }
 
     TEST_F(PlaytimeGraphViewModelTest, TitleAndSeriesNameStateTheDefaultWindow) {
-        EXPECT_EQ(view_model.title(), "Daily Playtime (3-day rolling average)");
-        EXPECT_EQ(view_model.series({PlaytimeGraphViewModel::Playtime}).front()->name(), "Playtime (3-day avg)");
+        EXPECT_EQ(view_model.title(), "Daily Playtime (7-day rolling average)");
+        EXPECT_EQ(view_model.series({PlaytimeGraphViewModel::Playtime}).front()->name(), "Playtime (7-day avg)");
     }
 
     TEST_F(PlaytimeGraphViewModelTest, TitleAndSeriesNameFollowAnyOtherWindowAndNeverSayThree) {

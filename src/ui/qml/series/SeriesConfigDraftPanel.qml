@@ -254,10 +254,18 @@ Pane {
                 }
             }
         }
-        Button {
-            objectName: "addSeriesButton"
-            text: qsTr("Add series")
-            onClicked: root.settingsVm.createComputedSeries(qsTr("New Series"), "#4CAF50", 2.0, true, "")
+        RowLayout {
+            Button {
+                objectName: "addSeriesButton"
+                text: qsTr("Add series")
+                onClicked: root.settingsVm.createComputedSeries(qsTr("New Series"), "#4CAF50", 3.0, true, "")
+            }
+            Button {
+                Accessible.name: qsTr("Restore the default graph lines")
+                objectName: "restoreDefaultGraphLinesButton"
+                text: qsTr("Restore default lines")
+                onClicked: root.settingsVm.restoreDefaultGraphLines()
+            }
         }
         Label {
             id: seriesDraftErrorLabel

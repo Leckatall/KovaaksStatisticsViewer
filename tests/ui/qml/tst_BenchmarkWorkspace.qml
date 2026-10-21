@@ -781,7 +781,7 @@ Item {
                 metricName: "Personal-best average rank", hasData: true, connectionMode: 1, pointMarkers: true
             })
             fx.playtimeHistory = TestDoubles.makeFakeHistoryModel({
-                metricName: "Three-day average playtime", hasData: true, connectionMode: 2, pointMarkers: false
+                metricName: "Daily Playtime (7-day rolling average)", hasData: true, connectionMode: 2, pointMarkers: false
             })
             const ws = makeWorkspace(fx)
             const rank = find(ws, "rankHistoryCanvas")
@@ -806,7 +806,7 @@ Item {
                    "the rank line must be identified as personal-best average rank")
             verify(playtimeLine !== null
                    && String(playtimeLine.text).toLowerCase().indexOf("playtime") !== -1,
-                   "the playtime line must be identified as three-day average playtime")
+                   "the playtime line must be identified as playtime")
 
             // Card titles share the Scenarios-tab chart title style (ChartTitle).
             for (const line of [rankLine, playtimeLine]) {

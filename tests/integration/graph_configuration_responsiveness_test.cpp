@@ -236,6 +236,15 @@ namespace {
             return app->settingsVm()->applyQuickPatch(graph, patch)["accepted"].toBool();
         }
 
+        // The shipped ranges follow the latest run; rollover only moves ranges that follow today.
+        [[nodiscard]] bool followToday() const {
+            auto candidate = *app->graphConfigurationUseCase()->current().configuration;
+            for (const auto key: {application::GraphKey::DailyPlaytime, application::GraphKey::BenchmarkRank,
+                                  application::GraphKey::BenchmarkPlaytime})
+                candidate.preferences(key).range->anchorToLatestRun = false;
+            return app->graphConfigurationUseCase()->save(candidate).accepted();
+        }
+
         void recordTimings(const char *storage);
 
         [[nodiscard]] static double timedMs(const std::function<void()> &action) {
@@ -272,6 +281,7 @@ namespace {
     // ---- QUAL-04: which changes recompute what -----------------------------------------------
 
     TEST_F(LargeProfileTest, RangeStyleAndRolloverChangesNeverRecomputeFullHistory) {
+        ASSERT_TRUE(followToday());
         auto config = app->graphConfigurationUseCase();
         auto day = app->daySource();
         CountingProfile counting(app->profileService());
@@ -322,8 +332,8 @@ namespace {
 
         // Range: windowing happens on data already held.
         resetCounters();
-        ASSERT_TRUE(quick("dailyPlaytime", {{"rangeKind", "recentDays"}, {"count", 30}}));
-        ASSERT_TRUE(quick("benchmarkPlaytime", {{"rangeKind", "recentDays"}, {"count", 30}}));
+        ASSERT_TRUE(quick("dailyPlaytime", {{"rangeKind", "recentDays"}, {"count", 14}}));
+        ASSERT_TRUE(quick("benchmarkPlaytime", {{"rangeKind", "recentDays"}, {"count", 14}}));
         ASSERT_TRUE(quick("benchmarkRank", {{"rangeKind", "recentDays"}, {"count", 30}}));
         ASSERT_TRUE(quick("scenarioHistory", {{"rangeKind", "latestRuns"}, {"count", 50}}));
         readEverything();
@@ -401,8 +411,8 @@ namespace {
         constexpr int kSamples = 6;
         const auto toggleRange = [&](const char *graph) {
             return [this, graph](const int i) {
-                ASSERT_TRUE(quick(graph, i % 2 == 0 ? QVariantMap{{"rangeKind", "recentDays"}, {"count", 30}}
-                                                     : QVariantMap{{"rangeKind", "allHistory"}}));
+                ASSERT_TRUE(quick(graph, i % 2 == 0 ? QVariantMap{{"rangeKind", "allHistory"}}
+                                                     : QVariantMap{{"rangeKind", "recentDays"}, {"count", 30}}));
             };
         };
         const auto toggleStyle = [&](const char *graph) {
@@ -415,13 +425,13 @@ namespace {
         for (const auto *graph: {"dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkPlaytime"})
             record(measure(std::string("range change (recent 30 days <-> all history): ") + graph, kSamples, toggleRange(graph)));
         record(measure("range change (latest 100 runs <-> all runs): scenarioHistory", kSamples, [&](const int i) {
-            ASSERT_TRUE(quick("scenarioHistory", i % 2 == 0 ? QVariantMap{{"rangeKind", "latestRuns"}, {"count", 100}}
-                                                           : QVariantMap{{"rangeKind", "allHistory"}}));
+            ASSERT_TRUE(quick("scenarioHistory", i % 2 == 0 ? QVariantMap{{"rangeKind", "allHistory"}}
+                                                           : QVariantMap{{"rangeKind", "latestRuns"}, {"count", 100}}));
         }));
         for (const auto *graph: graphs)
             record(measure(std::string("style change (straight+markers <-> smooth): ") + graph, kSamples, toggleStyle(graph)));
 
-        constexpr std::array windows{7, 14, 30, 60, 90, 180};
+        constexpr std::array windows{5, 14, 30, 60, 90, 180};
         for (const auto *graph: {"dailyPlaytime", "benchmarkPlaytime"})
             record(measure(std::string("window change (a new window each time): ") + graph, kSamples, [&](const int i) {
                 ASSERT_TRUE(quick(graph, {{"window", windows[static_cast<std::size_t>(i)]}}));
@@ -431,6 +441,7 @@ namespace {
         }));
 
         // Rollover under today-anchored ranges (three graphs follow today).
+        ASSERT_TRUE(followToday());
         ASSERT_TRUE(quick("dailyPlaytime", {{"rangeKind", "recentDays"}, {"count", 30}}));
         ASSERT_TRUE(quick("scenarioHistory", {{"rangeKind", "recentDays"}, {"count", 30}}));
         ASSERT_TRUE(quick("benchmarkRank", {{"rangeKind", "recentDays"}, {"count", 30}}));
@@ -509,6 +520,8 @@ namespace {
         const auto summaryBefore = benchmarkSummary(*useCase->projection());
         ASSERT_GT(summaryBefore.size(), static_cast<qsizetype>(kBenchmarkScenarios));
 
+        ASSERT_TRUE(quick("scenarioHistory", {{"rangeKind", "allHistory"}}));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return history->visibleRunCount() == kHeavyRuns; }, 3000));
         history->selectRun(750);
         ASSERT_TRUE(QTest::qWaitFor([&] { return history->selectedRunIndex() == 750; }, 3000));
         const auto selectedRun = app->sessionController()->getCurrentRun().run_id;

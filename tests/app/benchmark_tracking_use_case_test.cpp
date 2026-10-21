@@ -105,7 +105,7 @@ TEST(BenchmarkTracking, SelectingTrackableBenchmarkProducesProjection) {
     EXPECT_DOUBLE_EQ(fixture.tracking->projection()->totalPlaytimeSeconds, 90.0);
 }
 
-TEST(BenchmarkTracking, RequestsUniqueResolvedHashesAndThreeDayRollingWindow) {
+TEST(BenchmarkTracking, RequestsUniqueResolvedHashesAndSevenDayRollingWindow) {
     Fixture fixture;
     auto value = benchmark("b1");
     value.uncategorized.push_back(benchmarkEntry("e3", "Again", std::string{"h1"}, rungs()));
@@ -114,7 +114,7 @@ TEST(BenchmarkTracking, RequestsUniqueResolvedHashesAndThreeDayRollingWindow) {
     fixture.tracking->select(BenchmarkId{"b1"});
     EXPECT_EQ(fixture.profile->requested_fact_scenarios.size(), 2U);
     EXPECT_EQ(fixture.profile->requested_rolling_scenarios.size(), 2U);
-    EXPECT_EQ(fixture.profile->filtered_rolling_window_days, 3);
+    EXPECT_EQ(fixture.profile->filtered_rolling_window_days, 7);
 }
 
 TEST(BenchmarkTracking, DoesNotRequestUnresolvedEntries) {
@@ -132,6 +132,7 @@ TEST(BenchmarkTracking, CopiesRollingPlaytime) {
     Fixture fixture;
     fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
     fixture.profile->filtered_rolling_time_average = {{std::chrono::sys_days{std::chrono::days{100}}, 45.0}};
+    fixture.playtimePreferences().range = RangePreference{};
     fixture.build();
     fixture.tracking->select(BenchmarkId{"b1"});
     ASSERT_NE(fixture.tracking->projection(), nullptr);
@@ -975,11 +976,11 @@ namespace {
 
 TEST(BenchmarkTrackingPlaytime, RequestsTheCommittedWindowAndReportsIt) {
     PlaytimeFixture fixture;
-    fixture.playtimePreferences().averagingWindowDays = 7;
+    fixture.playtimePreferences().averagingWindowDays = 5;
     fixture.start();
 
-    EXPECT_EQ(fixture.profile->filtered_rolling_window_days, 7);
-    EXPECT_EQ(fixture.tracking->snapshot().playtime.windowDays, 7);
+    EXPECT_EQ(fixture.profile->filtered_rolling_window_days, 5);
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.windowDays, 5);
 }
 
 TEST(BenchmarkTrackingPlaytime, OneDayWindowIncludesZeroTotalsForDaysWithoutRuns) {
@@ -996,6 +997,7 @@ TEST(BenchmarkTrackingPlaytime, OneDayWindowIncludesZeroTotalsForDaysWithoutRuns
 TEST(BenchmarkTrackingPlaytime, RollingWindowIncludesZeroDaysAfterEarlierPlaytimeLeavesTheWindow) {
     PlaytimeFixture fixture;
     useRealAccounting(fixture, {{100, 60.0F}, {106, 90.0F}});
+    fixture.playtimePreferences().averagingWindowDays = 3;
     fixture.start();
 
     EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime,
@@ -1007,6 +1009,7 @@ TEST(BenchmarkTrackingPlaytime, RollingWindowIncludesZeroDaysAfterEarlierPlaytim
 TEST(BenchmarkTrackingPlaytime, CustomRangeRetainsZeroDaysWithinTheHistoryGap) {
     PlaytimeFixture fixture;
     useRealAccounting(fixture, {{100, 60.0F}, {106, 90.0F}});
+    fixture.playtimePreferences().averagingWindowDays = 3;
     fixture.start();
     const auto before = *fixture.tracking->projection();
     fixture.playtimePreferences().range = RangePreference{CustomDates{epochDay(102), epochDay(105)}, false};
@@ -1021,6 +1024,7 @@ TEST(BenchmarkTrackingPlaytime, CustomRangeRetainsZeroDaysWithinTheHistoryGap) {
 TEST(BenchmarkTrackingPlaytime, ChangingTheWindowRecalculatesOnlyPlaytimeAndNeverTheSummaries) {
     PlaytimeFixture fixture;
     useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}});
+    fixture.playtimePreferences().averagingWindowDays = 3;
     fixture.start();
     const auto before = *fixture.tracking->projection();
     const auto factRequests = fixture.profile->fact_request_count;
@@ -1166,9 +1170,19 @@ namespace {
     };
 }
 
-TEST(BenchmarkTrackingRank, TheDefaultRangeIsTheWholeHistory) {
+TEST(BenchmarkTrackingRank, TheDefaultRangeIsTheLastNinetyDaysAnchoredToTheLatestImprovement) {
     RankFixture fixture;
     fixture.improvingThenFlatRuns();
+    fixture.startRank();
+
+    EXPECT_TRUE(fixture.tracking->snapshot().rank.interval);
+    EXPECT_EQ(fixture.tracking->projection()->averageRankHistory.size(), 3U);
+}
+
+TEST(BenchmarkTrackingRank, AllHistoryLeavesTheRankRangeUnrestricted) {
+    RankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.rankPreferences().range = RangePreference{};
     fixture.startRank();
 
     EXPECT_EQ(fixture.tracking->snapshot().rank, RankRangeView{});
@@ -1326,12 +1340,13 @@ TEST(BenchmarkTrackingRank, RankAndPlaytimeRangesNeverWriteEachOther) {
     fixture.days->setToday(epochDay(106));
     fixture.startRank();
     const auto playtime = fixture.tracking->projection()->rollingPlaytime;
+    const auto playtimeInterval = fixture.tracking->snapshot().playtime.interval;
 
     fixture.rankPreferences().range = RangePreference{RecentDays{2}, false};
     fixture.commitPlaytime(GraphKey::BenchmarkRank);
     EXPECT_EQ(fixture.rankOnly, 1);
     EXPECT_EQ(fixture.playtimeOnly, 0);
-    EXPECT_FALSE(fixture.tracking->snapshot().playtime.interval);
+    EXPECT_EQ(fixture.tracking->snapshot().playtime.interval, playtimeInterval);
     EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime, playtime);
 
     fixture.playtimePreferences().range = RangePreference{RecentDays{4}, false};

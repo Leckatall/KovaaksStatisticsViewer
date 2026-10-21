@@ -65,13 +65,26 @@ namespace {
         }
     };
 
-    TEST_F(PlaytimeGraphUseCaseTest, DefaultsToThreeDayAveragingOverAllHistory) {
-        profile->rolling_time_average = {{day(19500), 1800.0}, {day(19501), 2400.0}};
+    TEST_F(PlaytimeGraphUseCaseTest, DefaultsToSevenDayAveragingOverTheLastThirtyDaysAnchoredToTheLatestRun) {
+        useRealAccounting({{100, 60.0F}, {101, 30.0F}});
+        days->setToday(day(300));
 
         const auto snapshot = use_case.snapshot();
 
-        EXPECT_EQ(profile->rolling_time_average_window_days, 3);
-        EXPECT_EQ(snapshot.view.windowDays, 3);
+        EXPECT_EQ(profile->rolling_time_average_window_days, 7);
+        EXPECT_EQ(snapshot.view.windowDays, 7);
+        EXPECT_EQ(snapshot.view.interval, std::optional(DayInterval{day(72), day(101)}));
+        ASSERT_EQ(snapshot.samples.size(), 2U);
+        EXPECT_DOUBLE_EQ(snapshot.samples.front().second, 60.0);
+        EXPECT_DOUBLE_EQ(snapshot.samples.back().second, 45.0);
+    }
+
+    TEST_F(PlaytimeGraphUseCaseTest, AllHistoryHasNoIntervalAndKeepsEverySample) {
+        profile->rolling_time_average = {{day(19500), 1800.0}, {day(19501), 2400.0}};
+        preferences().range = RangePreference{};
+
+        const auto snapshot = use_case.snapshot();
+
         EXPECT_FALSE(snapshot.view.interval);
         EXPECT_EQ(snapshot.samples, profile->rolling_time_average);
     }
@@ -83,17 +96,18 @@ namespace {
     }
 
     TEST_F(PlaytimeGraphUseCaseTest, TheCommittedWindowIsWhatTheProfileIsAsked) {
-        preferences().averagingWindowDays = 7;
+        preferences().averagingWindowDays = 5;
 
         const auto snapshot = use_case.snapshot();
 
-        EXPECT_EQ(profile->rolling_time_average_window_days, 7);
-        EXPECT_EQ(snapshot.view.windowDays, 7);
+        EXPECT_EQ(profile->rolling_time_average_window_days, 5);
+        EXPECT_EQ(snapshot.view.windowDays, 5);
     }
 
     TEST_F(PlaytimeGraphUseCaseTest, OneDayWindowIncludesZeroTotalsForDaysWithoutRuns) {
         useRealAccounting({{100, 60.0F}, {101, 30.0F}, {104, 90.0F}});
         preferences().averagingWindowDays = 1;
+        preferences().range = RangePreference{};
 
         const auto snapshot = use_case.snapshot();
 
@@ -103,6 +117,8 @@ namespace {
 
     TEST_F(PlaytimeGraphUseCaseTest, RollingWindowIncludesZeroDaysAfterEarlierPlaytimeLeavesTheWindow) {
         useRealAccounting({{100, 60.0F}, {106, 90.0F}});
+        preferences().averagingWindowDays = 3;
+        preferences().range = RangePreference{};
 
         const auto snapshot = use_case.snapshot();
 
@@ -113,6 +129,7 @@ namespace {
 
     TEST_F(PlaytimeGraphUseCaseTest, CustomRangeRetainsZeroDaysWithinTheHistoryGap) {
         useRealAccounting({{100, 60.0F}, {106, 90.0F}});
+        preferences().averagingWindowDays = 3;
         preferences().range = RangePreference{CustomDates{day(102), day(105)}, false};
 
         const auto snapshot = use_case.snapshot();
@@ -123,6 +140,8 @@ namespace {
 
     TEST_F(PlaytimeGraphUseCaseTest, ARecentRangeShowsOnlyItsDaysAndKeepsTheirFullHistoryValues) {
         useRealAccounting({{100, 60.0F}, {101, 30.0F}, {104, 90.0F}, {106, 30.0F}});
+        preferences().averagingWindowDays = 3;
+        preferences().range = RangePreference{};
         const auto before = use_case.snapshot();
         days->setToday(day(106));
         preferences().range = RangePreference{RecentDays{3}, false};

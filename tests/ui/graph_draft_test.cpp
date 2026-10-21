@@ -129,9 +129,10 @@ namespace {
 
         const auto daily = view_model->graphDraft("dailyPlaytime");
 
-        EXPECT_EQ(daily["rangeKind"].toString(), "allHistory");
-        EXPECT_FALSE(daily["anchor"].toBool());
-        EXPECT_EQ(daily["windowText"].toString(), "3");
+        EXPECT_EQ(daily["rangeKind"].toString(), "recentDays");
+        EXPECT_TRUE(daily["anchor"].toBool());
+        EXPECT_EQ(daily["windowText"].toString(), "7");
+        EXPECT_EQ(view_model->graphDraft("scenarioHistory")["rangeKind"].toString(), "latestRuns");
         EXPECT_EQ(daily["connection"].toString(), "smooth");
         EXPECT_FALSE(daily["markers"].toBool());
         EXPECT_TRUE(view_model->graphDraft("scenarioHistory")["markers"].toBool());
@@ -161,16 +162,16 @@ namespace {
         const QSignalSpy draftSpy(view_model.get(), &SettingsViewModel::graphDraftsChanged);
         const QSignalSpy pendingSpy(view_model.get(), &SettingsViewModel::pendingChangesChanged);
 
-        EXPECT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "7"));
+        EXPECT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "5"));
 
         EXPECT_EQ(draftSpy.count(), 1);
         EXPECT_EQ(pendingSpy.count(), 1);
         EXPECT_TRUE(view_model->hasPendingChanges());
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "7");
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "5");
         EXPECT_TRUE(configuration->saves.empty());
         EXPECT_TRUE(configuration->patches.empty());
-        EXPECT_EQ(configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 3);
-        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 3);
+        EXPECT_EQ(configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 7);
+        EXPECT_EQ(view_model->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 7);
     }
 
     TEST_F(GraphDraftTest, AnEditThatChangesNothingNotifiesNothing) {
@@ -178,7 +179,7 @@ namespace {
         const QSignalSpy draftSpy(view_model.get(), &SettingsViewModel::graphDraftsChanged);
 
         EXPECT_TRUE(view_model->setGraphMarkers("dailyPlaytime", false));
-        EXPECT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "3"));
+        EXPECT_TRUE(view_model->setGraphField("dailyPlaytime", "dataRange", "", "averagingWindow", "7"));
 
         EXPECT_EQ(draftSpy.count(), 0);
         EXPECT_FALSE(view_model->hasPendingChanges());
@@ -494,6 +495,8 @@ namespace {
 
         EXPECT_TRUE(view_model->rawInputs().isEmpty());
         EXPECT_TRUE(view_model->draftIssues().isEmpty());
+        ASSERT_TRUE(view_model->setGraphRangeKind("scenarioHistory", "latestRuns"));
+        ASSERT_TRUE(view_model->setGraphField("scenarioHistory", "dataRange", "", "latestRuns", "100"));
         EXPECT_FALSE(view_model->hasPendingChanges());
     }
 
@@ -581,7 +584,7 @@ namespace {
         EXPECT_EQ(candidate.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 9);
         ASSERT_TRUE(candidate.runAxisLabelSeriesId);
         EXPECT_EQ(candidate.runAxisLabelSeriesId->value, 4U);
-        EXPECT_EQ(candidate.runSeries.series.size(), 9U);
+        EXPECT_EQ(candidate.runSeries.series.size(), 8U);
         EXPECT_FALSE(candidate.runSeries.series[1].presentation.enabled) << "a Graph Lines edit survives the reset";
     }
 
@@ -600,7 +603,7 @@ namespace {
         EXPECT_EQ(view_model->graphDraft("run")["connection"].toString(), "smooth");
         EXPECT_FALSE(view_model->graphDraft("run")["markers"].toBool());
         EXPECT_EQ(view_model->getAllAxes().size(), 3);
-        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 10);
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), 9);
         EXPECT_EQ(view_model->runAxisLabelSeriesId(), "3");
         EXPECT_TRUE(view_model->hasPendingChanges());
     }
@@ -610,7 +613,7 @@ namespace {
         const auto view_model = visit();
 
         ASSERT_TRUE(view_model->resetGraph("dailyPlaytime"));
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "3");
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "7");
         EXPECT_TRUE(view_model->hasPendingChanges());
         EXPECT_TRUE(configuration->saves.empty());
 
@@ -638,7 +641,7 @@ namespace {
         view_model->revertChanges();
 
         EXPECT_TRUE(view_model->draftIssues().isEmpty());
-        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "3");
+        EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "7");
         EXPECT_FALSE(view_model->graphDraft("dailyPlaytime")["markers"].toBool());
 
         ASSERT_TRUE(view_model->setGraphMarkers("dailyPlaytime", true));

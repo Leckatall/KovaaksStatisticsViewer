@@ -157,7 +157,7 @@ function makeFakeTrackingVm(overrides) {
         hasNextTier: false,
         scenarioCount: 0,
         rankHistory: makeFakeHistoryModel({metricName: "Personal-best average rank"}),
-        playtimeHistory: makeFakeHistoryModel({metricName: "Three-day average playtime"}),
+        playtimeHistory: makeFakeHistoryModel({metricName: "Daily Playtime (7-day rolling average)"}),
         progressGrid: makeFakeProgressGrid(),
         selectBenchmarkCalls: [],
         clearSelectionCalls: 0,
@@ -245,7 +245,7 @@ function trackingFixtureIncomplete() {
         scenariosAtNextTier: 0,
         scenarioCount: 4,
         rankHistory: makeFakeHistoryModel({hasData: false, metricName: "Personal-best average rank"}),
-        playtimeHistory: makeFakeHistoryModel({hasData: true, metricName: "Three-day average playtime"}),
+        playtimeHistory: makeFakeHistoryModel({hasData: true, metricName: "Daily Playtime (7-day rolling average)"}),
         progressGrid: makeFakeProgressGrid({
             tiers: fakeProgressTiers(),
             rows: [
@@ -288,7 +288,7 @@ function trackingFixtureTrackable() {
             emptyStateText: "No ranked history yet"
         }),
         playtimeHistory: makeFakeHistoryModel({
-            metricName: "Three-day average playtime", hasData: true,
+            metricName: "Daily Playtime (7-day rolling average)", hasData: true,
             emptyStateText: "No playtime history yet"
         }),
         // Rows in definition order: Uncategorized first, then Clicking's two

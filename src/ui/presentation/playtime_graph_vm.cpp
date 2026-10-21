@@ -33,8 +33,12 @@ namespace ksv::presentation {
     }
 
     QString PlaytimeGraphViewModel::title() const {
-        return m_windowDays == 1 ? tr("Daily Playtime (daily totals)")
-                                 : tr("Daily Playtime (%1-day rolling average)").arg(m_windowDays);
+        return titleFor(m_windowDays);
+    }
+
+    QString PlaytimeGraphViewModel::titleFor(const int windowDays) {
+        return windowDays == 1 ? tr("Daily Playtime (daily totals)")
+                               : tr("Daily Playtime (%1-day rolling average)").arg(windowDays);
     }
 
     QString PlaytimeGraphViewModel::emptyStateText() const {

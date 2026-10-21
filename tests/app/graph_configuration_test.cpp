@@ -43,20 +43,27 @@ namespace {
         EXPECT_FALSE(graphKeyFromName(""));
     }
 
-    // STATE-08: with nothing saved, every graph must look exactly as it did before the feature.
-    TEST(GraphConfigurationDefaults, PreserveTodaysExtentWindowsMarkersAndAxes) {
+    TEST(GraphConfigurationDefaults, EachGraphOpensOnItsOwnRecentRange) {
+        const auto range = [](const GraphKey key) {
+            const auto &preferences = defaultGraphPreferences(key);
+            EXPECT_TRUE(preferences.range) << graphKeyName(key);
+            return preferences.range.value_or(RangePreference{});
+        };
+        EXPECT_FALSE(defaultGraphPreferences(GraphKey::Run).range);
+        EXPECT_EQ(range(GraphKey::DailyPlaytime), (RangePreference{RecentDays{30}, true}));
+        EXPECT_EQ(range(GraphKey::ScenarioHistory), (RangePreference{LatestRuns{100}, false}));
+        EXPECT_EQ(range(GraphKey::BenchmarkRank), (RangePreference{RecentDays{90}, true}));
+        EXPECT_EQ(range(GraphKey::BenchmarkPlaytime), (RangePreference{RecentDays{30}, true}));
+        for (const auto key: kGraphKeys)
+            EXPECT_TRUE(validateGraphPreferences(key, defaultGraphPreferences(key)).empty()) << graphKeyName(key);
+    }
+
+    TEST(GraphConfigurationDefaults, WindowsMarkersAndAxesKeepTheirDefaults) {
         const auto configuration = defaultGraphConfiguration();
         for (const auto key: kGraphKeys) {
             const auto &preferences = configuration.preferences(key);
             EXPECT_EQ(preferences.appearance.connection, ConnectionMode::Smooth) << graphKeyName(key);
             EXPECT_TRUE(preferences.seriesStyles.empty()) << graphKeyName(key);
-            if (key == GraphKey::Run) {
-                EXPECT_FALSE(preferences.range);
-            } else {
-                ASSERT_TRUE(preferences.range) << graphKeyName(key);
-                EXPECT_EQ(preferences.range->range, GraphRange{AllHistory{}});
-                EXPECT_FALSE(preferences.range->anchorToLatestRun);
-            }
         }
         EXPECT_TRUE(configuration.preferences(GraphKey::ScenarioHistory).appearance.lineModeMarkers);
         EXPECT_FALSE(configuration.preferences(GraphKey::Run).appearance.lineModeMarkers);
@@ -64,8 +71,8 @@ namespace {
         EXPECT_FALSE(configuration.preferences(GraphKey::BenchmarkRank).appearance.lineModeMarkers);
         EXPECT_FALSE(configuration.preferences(GraphKey::BenchmarkPlaytime).appearance.lineModeMarkers);
 
-        EXPECT_EQ(configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 3);
-        EXPECT_EQ(configuration.preferences(GraphKey::BenchmarkPlaytime).averagingWindowDays, 3);
+        EXPECT_EQ(configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 7);
+        EXPECT_EQ(configuration.preferences(GraphKey::BenchmarkPlaytime).averagingWindowDays, 7);
         EXPECT_FALSE(configuration.preferences(GraphKey::Run).averagingWindowDays);
         EXPECT_FALSE(configuration.preferences(GraphKey::ScenarioHistory).averagingWindowDays);
         EXPECT_FALSE(configuration.preferences(GraphKey::BenchmarkRank).averagingWindowDays);
@@ -85,9 +92,16 @@ namespace {
         EXPECT_FALSE(configuration.runAxisLabelSeriesId);
         EXPECT_TRUE(sameSeriesConfigs(configuration.runSeries.series, defaultSeriesConfigs()));
         EXPECT_TRUE(sameAxisConfigs(configuration.runSeries.axes, defaultAxisConfigs()));
-        EXPECT_EQ(configuration.runSeries.nextSeriesId, kFirstUserComputedSeriesId);
-        EXPECT_EQ(configuration.runSeries.nextAxisId, kFirstUserAxisId);
+        EXPECT_EQ(configuration.runSeries.nextSeriesId, SeriesId{9});
+        EXPECT_EQ(configuration.runSeries.nextAxisId, AxisId{3});
         EXPECT_TRUE(validateGraphConfiguration(configuration).empty());
+    }
+
+    TEST(GraphConfigurationDefaults, DefaultRunSeriesDocumentDerivesItsAllocatorsFromTheDefaultLists) {
+        const auto document = defaultRunSeriesDocument();
+        EXPECT_EQ(document.nextSeriesId, SeriesId{9});
+        EXPECT_EQ(document.nextAxisId, AxisId{3});
+        EXPECT_TRUE(validateRunSeriesDocument(document).empty());
     }
 
     TEST(GraphConfigurationDefaults, SeriesStylesMatchTheExistingGraphColoursAndPainterWidth) {
@@ -336,7 +350,7 @@ namespace {
         auto configuration = defaultGraphConfiguration();
         configuration.runSeries.series[0].presentation.lineStyle.width = 100.0;
         configuration.runSeries.series[1].yAxisId = AxisId{99};
-        configuration.runSeries.nextSeriesId = SeriesId{9};
+        configuration.runSeries.nextSeriesId = SeriesId{8};
         configuration.runSeries.axes.push_back(configuration.runSeries.axes[0]);
         configuration.runSeries.nextAxisId = AxisId{2};
         const auto issues = validateGraphConfiguration(configuration);
@@ -398,11 +412,11 @@ namespace {
         EXPECT_EQ(sections(range, GraphKey::ScenarioHistory), (GraphSectionChange{.range = true}));
 
         auto anchor = before;
-        anchor.preferences(GraphKey::BenchmarkRank).range->anchorToLatestRun = true;
+        anchor.preferences(GraphKey::BenchmarkRank).range->anchorToLatestRun = false;
         EXPECT_EQ(sections(anchor, GraphKey::BenchmarkRank), (GraphSectionChange{.range = true}));
 
         auto window = before;
-        window.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 7;
+        window.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 5;
         EXPECT_EQ(sections(window, GraphKey::DailyPlaytime), (GraphSectionChange{.window = true}));
 
         auto connection = before;

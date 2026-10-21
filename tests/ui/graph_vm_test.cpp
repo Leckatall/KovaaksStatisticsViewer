@@ -22,13 +22,11 @@ namespace {
     // ids directly rather than a Column enum.
     constexpr int kTime = 0;
     constexpr int kScore = 1;
-    constexpr int kAccuracy = 2;
-    constexpr int kShots = 3;
-    constexpr int kKills = 5;
-    constexpr int kDmg = 6;
-    constexpr int kScoreTotal = 7;
-    constexpr int kExpectedFinalScore = 8;
-    constexpr int kExpectedFinalScoreRecent = 9;
+    constexpr int kExpectedFinalScore = 2;
+    constexpr int kAccuracy = 5;
+    constexpr int kAccuracy5s = 6;
+    constexpr int kScorePerSecond = 7;
+    constexpr int kExpectedFinalWholeRun = 8;
     constexpr int kInvalidColumn = 9999;
 
     SeriesConfig defaultConfig(const int id) {
@@ -193,20 +191,38 @@ namespace {
         EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{0.0, 1.0, 2.0}));
     }
 
-    TEST_F(GraphViewModelTest, SeriesGroupsTheScoreFamilyOntoOneSharedAxis) {
+    TEST_F(GraphViewModelTest, DefaultLinesOnTheScoreAxisShareIt) {
         fake_use_case->axes = defaultAxisConfigs();
-        for (const auto &config : defaultSeriesConfigs())
-            if (config.id.value == kScoreTotal || config.id.value == kExpectedFinalScore)
-                fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
+        for (const auto &config : defaultSeriesConfigs()) {
+            if (config.id.value == kScore) fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
+            else if (config.id.value == kExpectedFinalScore) fake_use_case->addSeries(config, pts({0, 1}, {100, 200}));
+        }
         fake_use_case->run_duration = 1.0;
         view_model.fetchMetadata();
 
-        const auto series = view_model.series({kScoreTotal, kExpectedFinalScore});
+        const auto series = view_model.series({kScore, kExpectedFinalScore});
         ASSERT_EQ(series.size(), 2);
         ASSERT_TRUE(series[0]->yAxis.has_value());
         ASSERT_TRUE(series[1]->yAxis.has_value());
         EXPECT_DOUBLE_EQ(series[0]->yAxis->min(), series[1]->yAxis->min());
         EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
+        EXPECT_GE(series[0]->yAxis->max(), 200.0);
+    }
+
+    TEST_F(GraphViewModelTest, ALineWithoutAnAxisKeepsItsOwnScaleBesideTheSharedOne) {
+        fake_use_case->axes = defaultAxisConfigs();
+        for (const auto &config : defaultSeriesConfigs()) {
+            if (config.id.value == kScore) fake_use_case->addSeries(config, pts({0, 1}, {100, 200}));
+            else if (config.id.value == kScorePerSecond) fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
+        }
+        fake_use_case->run_duration = 1.0;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({kScore, kScorePerSecond});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_NE(series[0]->yAxis->max(), series[1]->yAxis->max());
     }
 
     TEST_F(GraphViewModelTest, TwoComputedSeriesShareAUserCreatedAxis) {
@@ -232,7 +248,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, AComputedSeriesCanShareAnAxisWithABuiltInSeries) {
         const AxisConfig sharedAxis{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity};
-        auto scoreTotal = defaultConfig(kScoreTotal);
+        auto scoreTotal = defaultConfig(kScore);
         scoreTotal.yAxisId = sharedAxis.id;
         const SeriesConfig computed{SeriesId{10}, {"Custom", {}, true, 1}, numericConstant(1.0), sharedAxis.id};
 
@@ -242,7 +258,7 @@ namespace {
         fake_use_case->run_duration = 1.0;
         view_model.fetchMetadata();
 
-        const auto series = view_model.series({kScoreTotal, 10});
+        const auto series = view_model.series({kScore, 10});
         ASSERT_EQ(series.size(), 2);
         ASSERT_TRUE(series[0]->yAxis.has_value());
         ASSERT_TRUE(series[1]->yAxis.has_value());
@@ -252,7 +268,7 @@ namespace {
 
     TEST_F(GraphViewModelTest, SeriesCarryTheNameOfTheirAxisAndIndependentOnesCarryNone) {
         const AxisConfig sharedAxis{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity};
-        auto scoreTotal = defaultConfig(kScoreTotal);
+        auto scoreTotal = defaultConfig(kScore);
         scoreTotal.yAxisId = sharedAxis.id;
         const SeriesConfig independent{SeriesId{10}, {"Solo", {}, true, 1}, numericConstant(1.0)};
 
@@ -262,7 +278,7 @@ namespace {
         fake_use_case->run_duration = 1.0;
         view_model.fetchMetadata();
 
-        const auto series = view_model.series({kScoreTotal, 10});
+        const auto series = view_model.series({kScore, 10});
         ASSERT_EQ(series.size(), 2);
         EXPECT_EQ(series[0]->yAxisName, "Score Family");
         EXPECT_TRUE(series[1]->yAxisName.isEmpty());
@@ -311,19 +327,20 @@ namespace {
         EXPECT_EQ(series[0]->yAxis->formatTick(50.0), "50%");
     }
 
-    TEST_F(GraphViewModelTest, FetchDataPopulatesShotsKillsAndDmgColumns) {
+    TEST_F(GraphViewModelTest, FetchDataPopulatesEachDefaultLinesOwnColumn) {
         for (const auto &config : defaultSeriesConfigs()) {
-            if (config.id.value == kShots) fake_use_case->addSeries(config, pts({0, 1, 2}, {5, 10, 15}));
-            else if (config.id.value == kKills) fake_use_case->addSeries(config, pts({0, 1, 2}, {1, 2, 3}));
-            else if (config.id.value == kDmg) fake_use_case->addSeries(config, pts({0, 1, 2}, {100, 200, 300}));
+            if (config.id.value == kAccuracy5s) fake_use_case->addSeries(config, pts({0, 1, 2}, {5, 10, 15}));
+            else if (config.id.value == kScorePerSecond) fake_use_case->addSeries(config, pts({0, 1, 2}, {1, 2, 3}));
+            else if (config.id.value == kExpectedFinalWholeRun)
+                fake_use_case->addSeries(config, pts({0, 1, 2}, {100, 200, 300}));
         }
         fake_use_case->run_duration = 2.0;
 
         view_model.fetchData();
 
-        EXPECT_EQ(view_model.series({kShots}).front()->points[0].y(), 5);
-        EXPECT_EQ(view_model.series({kKills}).front()->points[1].y(), 2);
-        EXPECT_EQ(view_model.series({kDmg}).front()->points[2].y(), 300.0);
+        EXPECT_EQ(view_model.series({kAccuracy5s}).front()->points[0].y(), 5);
+        EXPECT_EQ(view_model.series({kScorePerSecond}).front()->points[1].y(), 2);
+        EXPECT_EQ(view_model.series({kExpectedFinalWholeRun}).front()->points[2].y(), 300.0);
     }
 
     TEST_F(GraphViewModelTest, SeriesReturnsTimeValuePairsInRowOrder) {
@@ -446,21 +463,24 @@ namespace {
         EXPECT_EQ(view_model.contentState(), GraphViewModel::NoRunSelected);
     }
 
-    TEST_F(GraphViewModelTest, ExpectedFinalScoreRecentRendersUnderItsOwnColumnDespiteHitsOccupyingASlot) {
-        // Regression coverage: column is the series' own SeriesId, so a mid-list (disabled) Hits entry
-        // can no longer shift later built-ins under each other's name/color.
-        for (const auto &config : defaultSeriesConfigs())
-            fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
+    TEST_F(GraphViewModelTest, ExpectedFinalWholeRunRendersUnderItsOwnColumnDespiteDisabledLinesBeforeIt) {
+        // Regression coverage: column is the series' own SeriesId, so mid-list (disabled) entries
+        // can no longer shift later lines under each other's name/color.
+        const auto configs = defaultSeriesConfigs();
+        ASSERT_FALSE(configs[5].presentation.enabled);
+        ASSERT_FALSE(configs[6].presentation.enabled);
+        ASSERT_EQ(configs[7].id.value, static_cast<uint64_t>(kExpectedFinalWholeRun));
+        for (const auto &config : configs) fake_use_case->addSeries(config, pts({0, 1}, {1, 2}));
         fake_use_case->run_duration = 1.0;
 
         view_model.fetchMetadata();
 
-        EXPECT_EQ(view_model.columnForSeriesId("9"), kExpectedFinalScoreRecent);
-        ASSERT_FALSE(view_model.series({kExpectedFinalScoreRecent}).isEmpty());
-        EXPECT_EQ(view_model.series({kExpectedFinalScoreRecent}).front()->name(), "Expected Final Score (5s)");
+        EXPECT_EQ(view_model.columnForSeriesId("8"), kExpectedFinalWholeRun);
+        ASSERT_FALSE(view_model.series({kExpectedFinalWholeRun}).isEmpty());
+        EXPECT_EQ(view_model.series({kExpectedFinalWholeRun}).front()->name(), "Expected Final (Whole Run)");
 
-        EXPECT_EQ(view_model.columnForSeriesId("5"), kKills);
-        EXPECT_EQ(view_model.series({kKills}).front()->name(), "Kills");
+        EXPECT_EQ(view_model.columnForSeriesId("5"), kAccuracy);
+        EXPECT_EQ(view_model.series({kAccuracy}).front()->name(), "Accuracy");
     }
 
     TEST_F(GraphViewModelTest, AxisLabelSeriesIdFollowsTheCommittedChoice) {

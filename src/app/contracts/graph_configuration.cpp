@@ -21,14 +21,14 @@ namespace ksv::application {
 
         std::array<GraphDescriptor, kGraphKeys.size()> makeDescriptors() {
             return {{
-                {GraphKey::Run, false, false, false, false, {}, {}},
+                {GraphKey::Run, false, false, false, false, {}, {}, {}},
                 {
-                    GraphKey::DailyPlaytime, true, false, true, false,
+                    GraphKey::DailyPlaytime, true, false, true, false, {RecentDays{30}, true},
                     {{"playtime", "playtime", kPlaytimeColor}},
                     {{"playtime", StartAtZero{}}}
                 },
                 {
-                    GraphKey::ScenarioHistory, true, true, false, true,
+                    GraphKey::ScenarioHistory, true, true, false, true, {LatestRuns{100}, false},
                     {
                         {"score", "score", RgbaColor{0, 150, 0, 255}},
                         {"accuracy", "accuracy", RgbaColor{0, 255, 255, 255}},
@@ -39,9 +39,9 @@ namespace ksv::application {
                     },
                     {{"score", FitVisibleData{}}, {"accuracy", FitVisibleData{}}, {"counts", StartAtZero{}}}
                 },
-                {GraphKey::BenchmarkRank, true, false, false, false, {{"rank", "", std::nullopt}}, {}},
+                {GraphKey::BenchmarkRank, true, false, false, false, {RecentDays{90}, true}, {{"rank", "", std::nullopt}}, {}},
                 {
-                    GraphKey::BenchmarkPlaytime, true, false, true, false,
+                    GraphKey::BenchmarkPlaytime, true, false, true, false, {RecentDays{30}, true},
                     {{"playtime", "playtime", kPlaytimeColor}},
                     {{"playtime", StartAtZero{}}}
                 },
@@ -152,7 +152,7 @@ namespace ksv::application {
     GraphPreferences defaultGraphPreferences(const GraphKey key) {
         const auto &descriptor = graphDescriptor(key);
         GraphPreferences preferences;
-        if (descriptor.dateRange) preferences.range = RangePreference{};
+        if (descriptor.dateRange) preferences.range = descriptor.defaultRange;
         if (descriptor.averagingWindow) preferences.averagingWindowDays = kDefaultAveragingWindowDays;
         preferences.appearance.lineModeMarkers = descriptor.defaultLineModeMarkers;
         for (const auto &axis: descriptor.axes) preferences.axisPolicies.emplace(axis.key, axis.defaultPolicy);
@@ -165,7 +165,11 @@ namespace ksv::application {
     }
 
     RunSeriesDocument defaultRunSeriesDocument() {
-        return {defaultSeriesConfigs(), kFirstUserComputedSeriesId, defaultAxisConfigs(), kFirstUserAxisId};
+        auto series = defaultSeriesConfigs();
+        auto axes = defaultAxisConfigs();
+        const auto highestSeriesId = std::ranges::max(series | std::views::transform(&SeriesConfig::id)).value;
+        const auto highestAxisId = std::ranges::max(axes | std::views::transform(&AxisConfig::id)).value;
+        return {std::move(series), SeriesId{highestSeriesId + 1}, std::move(axes), AxisId{highestAxisId + 1}};
     }
 
     GraphConfiguration defaultGraphConfiguration() {

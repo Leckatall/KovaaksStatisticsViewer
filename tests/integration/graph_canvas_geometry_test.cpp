@@ -31,11 +31,12 @@ namespace {
     // Built-in SeriesIds from defaultSeriesConfigs() — GraphViewModel::column is always a series'
     // SeriesId, not a position, and has no dedicated enum outside the class.
     constexpr int kScoreSeriesId = 1;
-    constexpr int kAccuracySeriesId = 2;
-    // Score Total, Expected Final Score and Expected Final Score (5s) share the "Score Family" axis.
-    constexpr int kScoreTotalSeriesId = 7;
-    constexpr int kExpectedFinalSeriesId = 8;
-    constexpr int kExpectedFinal5sSeriesId = 9;
+    // Score, Expected Final Score and Expected Final (Whole Run) share the "Score" axis.
+    constexpr int kExpectedFinalSeriesId = 2;
+    constexpr int kAccuracySeriesId = 5;
+    // Has no axis of its own choosing: it is scaled independently.
+    constexpr int kScorePerSecondSeriesId = 7;
+    constexpr int kExpectedFinalWholeRunSeriesId = 8;
 
     void configureCanvas(GraphCanvas &canvas, presentation::GraphViewModelBase *vm, const QVariantList &columns) {
         canvas.setWidth(800);
@@ -286,6 +287,36 @@ namespace {
         EXPECT_GT(sharedLeft, singleLeft);
     }
 
+    // The default lineup's axis shape for lines the single decoded run cannot supply: the real app
+    // enables no line without an axis, and a line off by default is not plotted.
+    class DefaultAxisShapeVm : public presentation::GraphViewModelBase {
+    public:
+        DefaultAxisShapeVm() { m_xAxis.setRange(0.0, 10.0); }
+
+        [[nodiscard]] QList<presentation::SeriesModel *> series(const QList<int> &columns) const override {
+            QList<presentation::SeriesModel *> result;
+            for (const int column: columns) {
+                auto *s = new presentation::SeriesModel(const_cast<DefaultAxisShapeVm *>(this));
+                s->setColumn(column);
+                s->points = {QPointF(0.0, 0.0), QPointF(10.0, 1.0)};
+                if (column == kScorePerSecondSeriesId) {
+                    s->setName("Score/s (5s)");
+                } else {
+                    s->setName(column == kScoreSeriesId ? "Score" : "Other");
+                    s->yAxisId = 1;
+                    s->yAxisName = "Score";
+                }
+                result.append(s);
+            }
+            return result;
+        }
+        [[nodiscard]] const presentation::Axis &xAxis() const override { return m_xAxis; }
+        [[nodiscard]] int yAxisColumn() const override { return kScoreSeriesId; }
+
+    private:
+        presentation::ValueAxis m_xAxis;
+    };
+
     // --- Which lines the labelled Y axis measures. ---
 
     TEST_F(GraphCanvasGeometryTest, IndependentlyScaledLinesLeaveTheAxisToItsOwnLine) {
@@ -295,43 +326,62 @@ namespace {
         EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(), QVariantList{kScoreSeriesId});
     }
 
+    TEST_F(GraphCanvasGeometryTest, ALineWithoutAnAxisIsLeftToItsOwnScale) {
+        DefaultAxisShapeVm vm;
+        const auto shaped = makeCanvas(vm, QVariantList{kScoreSeriesId, kScorePerSecondSeriesId});
+        shaped->setYAxisColumn(kScoreSeriesId);
+
+        EXPECT_EQ(shaped->property("labelledYAxisColumns").toList(), QVariantList{kScoreSeriesId});
+    }
+
     TEST_F(GraphCanvasGeometryTest, LinesSharingTheLabelledAxisAreAllMeasuredByIt) {
-        canvas.setVisibleColumns(QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId, kExpectedFinal5sSeriesId});
-        canvas.setYAxisColumn(kScoreTotalSeriesId);
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kExpectedFinalSeriesId});
+        canvas.setYAxisColumn(kScoreSeriesId);
 
         EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(),
-                  (QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId, kExpectedFinal5sSeriesId}));
+                  (QVariantList{kScoreSeriesId, kExpectedFinalSeriesId}));
+    }
+
+    TEST_F(GraphCanvasGeometryTest, EveryLineOnTheLabelledAxisIsMeasuredByItNotJustTheFirstTwo) {
+        DefaultAxisShapeVm vm;
+        const auto shaped = makeCanvas(
+            vm, QVariantList{kScoreSeriesId, kExpectedFinalSeriesId, kExpectedFinalWholeRunSeriesId});
+        shaped->setYAxisColumn(kScoreSeriesId);
+
+        EXPECT_EQ(shaped->property("labelledYAxisColumns").toList(),
+                  (QVariantList{kScoreSeriesId, kExpectedFinalSeriesId, kExpectedFinalWholeRunSeriesId}));
     }
 
     TEST_F(GraphCanvasGeometryTest, MixedLinesNameOnlyTheSharedGroup) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kScoreTotalSeriesId, kExpectedFinalSeriesId});
+        canvas.setVisibleColumns(QVariantList{kAccuracySeriesId, kScoreSeriesId, kExpectedFinalSeriesId});
         canvas.setYAxisColumn(kExpectedFinalSeriesId);
 
         EXPECT_EQ(canvas.property("labelledYAxisColumns").toList(),
-                  (QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId}));
+                  (QVariantList{kScoreSeriesId, kExpectedFinalSeriesId}));
     }
 
     // --- What the labelled Y axis is titled. ---
 
     TEST_F(GraphCanvasGeometryTest, SharedAxisTitleIsTheAxisName) {
-        canvas.setVisibleColumns(QVariantList{kScoreTotalSeriesId, kExpectedFinalSeriesId, kExpectedFinal5sSeriesId});
-        canvas.setYAxisColumn(kScoreTotalSeriesId);
-
-        EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score Family");
-    }
-
-    TEST_F(GraphCanvasGeometryTest, IndependentLineTitleIsItsOwnName) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kAccuracySeriesId});
-        canvas.setYAxisColumn(kScoreSeriesId);
+        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kExpectedFinalSeriesId});
+        canvas.setYAxisColumn(kExpectedFinalSeriesId);
 
         EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score");
     }
 
+    TEST_F(GraphCanvasGeometryTest, IndependentLineTitleIsItsOwnName) {
+        DefaultAxisShapeVm vm;
+        const auto shaped = makeCanvas(vm, QVariantList{kScoreSeriesId, kScorePerSecondSeriesId});
+        shaped->setYAxisColumn(kScorePerSecondSeriesId);
+
+        EXPECT_EQ(shaped->property("labelledYAxisTitle").toString(), "Score/s (5s)");
+    }
+
     TEST_F(GraphCanvasGeometryTest, MixedLinesTitleNamesOnlyTheLabelledAxis) {
-        canvas.setVisibleColumns(QVariantList{kScoreSeriesId, kScoreTotalSeriesId, kExpectedFinalSeriesId});
+        canvas.setVisibleColumns(QVariantList{kAccuracySeriesId, kScoreSeriesId, kExpectedFinalSeriesId});
         canvas.setYAxisColumn(kExpectedFinalSeriesId);
 
-        EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score Family");
+        EXPECT_EQ(canvas.property("labelledYAxisTitle").toString(), "Score");
     }
 
     // --- Lines stack in the user's line-list order. ---
@@ -340,16 +390,16 @@ namespace {
     // painted last (on top) whatever order the columns are made visible in or which line owns the
     // axis, and the hover readout lists the same series top-of-list first.
     TEST_F(GraphCanvasGeometryTest, LinesArePaintedBottomOfTheListFirst) {
-        canvas.setVisibleColumns(QVariantList{kScoreTotalSeriesId, kAccuracySeriesId, kScoreSeriesId});
-        canvas.setYAxisColumn(kScoreTotalSeriesId);
+        canvas.setVisibleColumns(QVariantList{kExpectedFinalSeriesId, kScoreSeriesId, kAccuracySeriesId});
+        canvas.setYAxisColumn(kScoreSeriesId);
 
-        EXPECT_EQ(canvas.paintOrder(), (QList<int>{kScoreTotalSeriesId, kAccuracySeriesId, kScoreSeriesId}));
+        EXPECT_EQ(canvas.paintOrder(), (QList<int>{kAccuracySeriesId, kExpectedFinalSeriesId, kScoreSeriesId}));
 
         const QRectF rect = canvas.property("plotArea").toRectF();
         const QVariantList hovered = canvas.valuesAtX(rect.center().x()).value("series").toList();
         QStringList names;
         for (const auto &entry: hovered) names.append(entry.toMap().value("name").toString());
-        EXPECT_EQ(names, (QStringList{"Score", "Accuracy", "Score Total"}));
+        EXPECT_EQ(names, (QStringList{"Score", "Expected Final Score", "Accuracy"}));
     }
 
     TEST_F(GraphCanvasGeometryTest, PaintOrderReversesTheEnabledLineList) {

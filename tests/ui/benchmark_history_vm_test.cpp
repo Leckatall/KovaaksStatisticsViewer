@@ -18,6 +18,7 @@
 #include "components/graph_canvas.h"
 #include "presentation/benchmark_format.h"
 #include "presentation/benchmark_tracking_vm.h"
+#include "presentation/playtime_graph_vm.h"
 #include "presentation/benchmark_history_vm.h"
 #include "presentation/graph_vm_base.h"
 #include "presentation/series_model.h"
@@ -201,7 +202,7 @@ TEST(BenchmarkHistoryViewModel, RankTooltipValueReadsAsTheTierAndProgressTowardT
     EXPECT_EQ(rank.yAxis->formatTick(2.0), "Silver");
 }
 
-TEST(BenchmarkHistoryViewModel, PlaytimeSeriesHasZeroBaselineSecondsToMinutesAndThreeDayLabel) {
+TEST(BenchmarkHistoryViewModel, PlaytimeSeriesHasZeroBaselineSecondsToMinutesAndTheDefaultWindowLabel) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
@@ -213,7 +214,7 @@ TEST(BenchmarkHistoryViewModel, PlaytimeSeriesHasZeroBaselineSecondsToMinutesAnd
     EXPECT_DOUBLE_EQ(displayed[1].y(), 15.0);
     ASSERT_TRUE(series.front()->yAxis.has_value());
     EXPECT_DOUBLE_EQ(series.front()->yAxis->min(), 0.0);
-    EXPECT_TRUE(series.front()->name().contains("three-day average playtime", Qt::CaseInsensitive));
+    EXPECT_EQ(series.front()->name(), "Daily Playtime (7-day rolling average)");
 }
 
 TEST(BenchmarkHistoryViewModel, RankAndPlaytimeKeepSeparateVerticalScales) {
@@ -378,10 +379,10 @@ TEST(BenchmarkHistoryViewModel, CanvasKeepsAColouredSeriesOwnColour) {
     EXPECT_EQ(canvas.colorFor(*series.front()), series.front()->color());
 }
 
-TEST(BenchmarkHistoryViewModel, PlaytimeNamesTheEffectiveWindowAndNeverCallsAnotherWindowThreeDay) {
+TEST(BenchmarkHistoryViewModel, PlaytimeIsTitledExactlyLikeTheDailyPlaytimeGraph) {
     const std::pair<int, QString> expected[] = {
-        {1, "Daily playtime"}, {3, "Three-day average playtime"}, {7, "7-day average playtime"},
-        {30, "30-day average playtime"}};
+        {1, "Daily Playtime (daily totals)"}, {3, "Daily Playtime (3-day rolling average)"},
+        {7, "Daily Playtime (7-day rolling average)"}, {30, "Daily Playtime (30-day rolling average)"}};
     for (const auto &[window, name]: expected) {
         auto snapshot = makeTrackableSnapshot();
         snapshot.playtime.windowDays = window;
@@ -389,6 +390,7 @@ TEST(BenchmarkHistoryViewModel, PlaytimeNamesTheEffectiveWindowAndNeverCallsAnot
         BenchmarkTrackingViewModel vm{fake};
 
         EXPECT_EQ(vm.playtimeHistory()->metricName(), name);
+        EXPECT_EQ(vm.playtimeHistory()->metricName(), PlaytimeGraphViewModel::titleFor(window));
         EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->name(), name);
         EXPECT_EQ(vm.rankHistory()->metricName(), "Personal-best average rank");
     }
@@ -406,7 +408,7 @@ TEST(BenchmarkHistoryViewModel, AWindowChangeRelabelsPlaytimeWithoutRebuildingTh
 
     EXPECT_EQ(changed.count(), 0);
     EXPECT_EQ(renamed.count(), 1);
-    EXPECT_EQ(vm.playtimeHistory()->metricName(), "10-day average playtime");
+    EXPECT_EQ(vm.playtimeHistory()->metricName(), "Daily Playtime (10-day rolling average)");
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->points.front().y(), 1000.0);
 }
 

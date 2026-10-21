@@ -165,6 +165,8 @@ namespace ksv::application {
         bool latestRuns = false;
         bool averagingWindow = false;
         bool defaultLineModeMarkers = false;
+        // Used when dateRange is set.
+        RangePreference defaultRange;
         std::vector<GraphSeriesDescriptor> series;
         std::vector<GraphAxisDescriptor> axes;
     };
@@ -173,7 +175,7 @@ namespace ksv::application {
 
     [[nodiscard]] bool offersSeries(const GraphDescriptor &descriptor, std::string_view seriesKey);
 
-    inline constexpr int kDefaultAveragingWindowDays = 3;
+    inline constexpr int kDefaultAveragingWindowDays = 7;
     // Equal to SeriesPainter's default line width.
     inline constexpr double kDefaultSeriesWidth = 3.0;
 

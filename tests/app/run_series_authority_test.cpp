@@ -141,8 +141,8 @@ namespace {
 
     TEST_F(RunSeriesAuthorityTest, SeedsApprovedDefaultsAndNextId) {
         makeStore();
-        EXPECT_EQ(store->getAll().size(), 9U);
-        EXPECT_EQ(docObject()["nextComputedSeriesId"].toString(), "10");
+        EXPECT_EQ(store->getAll().size(), 8U);
+        EXPECT_EQ(docObject()["nextComputedSeriesId"].toString(), "9");
     }
 
     TEST_F(RunSeriesAuthorityTest, RoundTripsEverySeriesAndExpressionNode) {
@@ -217,7 +217,7 @@ namespace {
             writeDoc(root);
 
             const auto reopened = open(settings);
-            EXPECT_EQ(reopened->getAll().size(), 9U);
+            EXPECT_EQ(reopened->getAll().size(), 8U);
             EXPECT_GT(settings->document_writes, 1);
         }
     }
@@ -225,7 +225,7 @@ namespace {
     TEST_F(RunSeriesAuthorityTest, RejectsNonCanonicalJsonNumbersAndQuarantinesRawValue) {
         settings->document = "{\"schemaVersion\":1,\"nextComputedSeriesId\":\"5\",\"series\":[\"";
         makeStore();
-        EXPECT_EQ(store->getAll().size(), 9U);
+        EXPECT_EQ(store->getAll().size(), 8U);
         EXPECT_GT(settings->document_writes, 0);
     }
 
@@ -237,8 +237,8 @@ namespace {
 
     TEST_F(RunSeriesAuthorityTest, CreateAllocatesAndPersistsSequentialIds) {
         makeStore();
+        EXPECT_EQ(store->createComputed(request()).createdId->value, 9U);
         EXPECT_EQ(store->createComputed(request()).createdId->value, 10U);
-        EXPECT_EQ(store->createComputed(request()).createdId->value, 11U);
     }
 
     TEST_F(RunSeriesAuthorityTest, AllocatesMaximumSeriesIdThenPersistsExhaustion) {
@@ -302,7 +302,7 @@ namespace {
         const auto renamed = std::ranges::find(afterUpdate, scoreId, &SeriesConfig::id);
         ASSERT_NE(renamed, afterUpdate.end());
         EXPECT_EQ(renamed->presentation.name, "Renamed Score");
-        EXPECT_FALSE(renamed->isPrimitive());
+        EXPECT_EQ(encodeExpressionDsl(renamed->expression), encodeExpressionDsl(numericConstant(4.0)));
 
         EXPECT_TRUE(store->removeComputed(scoreId).succeeded());
         const auto afterRemove = store->getAll();
@@ -355,13 +355,13 @@ namespace {
         const auto before = store->getAll();
         EXPECT_FALSE(store->createComputed({{" ", {}, true}, numericConstant(1)}).succeeded());
         EXPECT_EQ(store->getAll().size(), before.size());
-        EXPECT_EQ(store->createComputed(request()).createdId->value, 10U);
+        EXPECT_EQ(store->createComputed(request()).createdId->value, 9U);
     }
 
     TEST_F(RunSeriesAuthorityTest, MalformedOrUnsupportedDocumentQuarantinesThenSeedsDefaults) {
         settings->document = "{}";
         makeStore();
-        EXPECT_EQ(store->getAll().size(), 9U);
+        EXPECT_EQ(store->getAll().size(), 8U);
         EXPECT_EQ(settings->quarantined, (std::vector<std::string>{"{}"}));
     }
 
@@ -372,9 +372,12 @@ namespace {
         EXPECT_EQ(root["nextAxisId"].toString(), "3");
         ASSERT_TRUE(root["axes"].isArray());
         EXPECT_EQ(root["axes"].toArray().size(), 2);
-        const auto firstSeries = root["series"].toArray()[0].toObject();
-        EXPECT_TRUE(firstSeries["yAxisId"].isNull());
+        const auto series = root["series"].toArray();
+        const auto firstSeries = series[0].toObject();
+        EXPECT_EQ(firstSeries["yAxisId"].toString(), "1");
         EXPECT_EQ(firstSeries["transformKind"].toString(), "identity");
+        EXPECT_TRUE(series[6].toObject()["yAxisId"].isNull());
+        EXPECT_EQ(series[4].toObject()["transformKind"].toString(), "percentage");
     }
 
     TEST_F(RunSeriesAuthorityTest, LoadsV3DslExpressions) {
@@ -427,7 +430,7 @@ namespace {
         writeDoc(root);
 
         const auto reopened = open(settings);
-        EXPECT_EQ(reopened->getAll().size(), 9U);
+        EXPECT_EQ(reopened->getAll().size(), 8U);
         EXPECT_GT(settings->document_writes, 1);
     }
 
@@ -449,18 +452,15 @@ namespace {
     }
 
     TEST_F(RunSeriesAuthorityTest, MigratesEveryScoreFamilySeriesToTheSharedAxis) {
-        makeStore();
-        auto root = docObject();
-        root["schemaVersion"] = 1;
-        downgradeSeriesSection(root);
-        root.remove("axes");
-        root.remove("nextAxisId");
+        auto root = QJsonDocument::fromJson(legacyV1Document().toUtf8()).object();
         auto series = root["series"].toArray();
-        for (qsizetype index = 0; index < series.size(); ++index) {
-            auto config = series[index].toObject();
-            config.remove("yAxisId");
-            config.remove("transformKind");
-            series[index] = config;
+        for (const int id: {8, 9}) {
+            auto config = series[2].toObject();
+            config["id"] = QString::number(id);
+            auto presentation = config["presentation"].toObject();
+            presentation["displayPosition"] = static_cast<double>(id - 5);
+            config["presentation"] = presentation;
+            series.append(config);
         }
         root["series"] = series;
         writeDoc(root);
@@ -538,9 +538,9 @@ namespace {
         EXPECT_EQ(store->updateSeries({.id = SeriesId{1}, .yAxisId = AxisId{999}}).failure,
                   SeriesMutationFailureCode::UnknownAxisId);
         EXPECT_EQ(store->deleteAxis(AxisId{999}).failure, SeriesMutationFailureCode::UnknownAxisId);
-        ASSERT_TRUE(store->updateSeries({.id = SeriesId{7}, .yAxisId = std::optional<AxisId>{std::nullopt}}).succeeded());
+        ASSERT_TRUE(store->updateSeries({.id = SeriesId{8}, .yAxisId = std::optional<AxisId>{std::nullopt}}).succeeded());
         const auto configs = store->getAll();
-        const auto score = std::ranges::find(configs, SeriesId{7}, &SeriesConfig::id);
+        const auto score = std::ranges::find(configs, SeriesId{8}, &SeriesConfig::id);
         ASSERT_NE(score, configs.end());
         EXPECT_FALSE(score->yAxisId);
     }
@@ -556,7 +556,7 @@ namespace {
 
         makeStore();
 
-        EXPECT_EQ(store->getAll().size(), 9U);
+        EXPECT_EQ(store->getAll().size(), 8U);
         EXPECT_GT(settings->document_writes, 0);
     }
 }

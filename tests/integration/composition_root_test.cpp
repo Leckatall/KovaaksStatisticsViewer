@@ -130,7 +130,7 @@ namespace {
 
         patch.averagingWindowDays = application::kDefaultAveragingWindowDays;
         ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(application::GraphKey::DailyPlaytime, patch).accepted());
-        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), 3);
+        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), application::kDefaultAveragingWindowDays);
     }
 
     TEST_F(CompositionRootTest, ABenchmarkPlaytimeWindowChangeLeavesTheOtherGraphsWindowAlone) {
@@ -138,10 +138,11 @@ namespace {
         patch.averagingWindowDays = 12;
         ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(application::GraphKey::BenchmarkPlaytime, patch).accepted());
 
-        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), 3);
+        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), application::kDefaultAveragingWindowDays);
         const auto committed = app->graphConfigurationUseCase()->current();
         EXPECT_EQ(committed.configuration->preferences(application::GraphKey::BenchmarkPlaytime).averagingWindowDays, 12);
-        EXPECT_EQ(committed.configuration->preferences(application::GraphKey::DailyPlaytime).averagingWindowDays, 3);
+        EXPECT_EQ(committed.configuration->preferences(application::GraphKey::DailyPlaytime).averagingWindowDays,
+                  application::kDefaultAveragingWindowDays);
     }
 
     TEST_F(CompositionRootTest, TheInjectedDaySourceIsTheOneTheAppExposesAndAdvances) {

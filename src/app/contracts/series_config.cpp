@@ -204,8 +204,8 @@ namespace ksv::application {
 
         std::ranges::sort(series_ids);
         if (auto it = std::ranges::adjacent_find(series_ids, [](const auto &left, const auto &right) {
-                return left.first == right.first;
-            }); it != series_ids.end()) {
+            return left.first == right.first;
+        }); it != series_ids.end()) {
             errors.push_back({
                 SeriesConfigValidationCode::DuplicateComputedSeriesId,
                 "records[" + std::to_string(it->second) + "].id"
@@ -239,8 +239,10 @@ namespace ksv::application {
                 leftPresentation.lineStyle.width != rightPresentation.lineStyle.width ||
                 leftPresentation.enabled != rightPresentation.enabled ||
                 leftPresentation.displayPosition != rightPresentation.displayPosition ||
-                leftPresentation.hiddenLeadingPoints != rightPresentation.hiddenLeadingPoints || leftAxis != rightAxis ||
-                leftTransform != rightTransform || encodeExpressionDsl(leftExpression) != encodeExpressionDsl(rightExpression))
+                leftPresentation.hiddenLeadingPoints != rightPresentation.hiddenLeadingPoints || leftAxis != rightAxis
+                ||
+                leftTransform != rightTransform || encodeExpressionDsl(leftExpression) != encodeExpressionDsl(
+                    rightExpression))
                 return false;
         }
         return true;
@@ -261,64 +263,52 @@ namespace ksv::application {
     }
 
     std::vector<SeriesConfig> defaultSeriesConfigs() {
-        const auto line = [](const RgbaColor color) { return LineStyle{color, 2.0}; };
+        const auto line = [](const RgbaColor color) { return LineStyle{color, 3.0}; };
+        const auto score = primitive(PrimitiveMetric::Score);
+        const auto expectedFinalScore = [&] { return projectRateToFinal(rollingMean(score, 5)); };
+        const auto accuracyOver5s = divide(rollingMean(primitive(PrimitiveMetric::Hits), 5),
+                                           rollingMean(primitive(PrimitiveMetric::Shots), 5));
         return {
             SeriesConfig{
-                SeriesId{1},
-                {"Score", line({0, 150, 0, 255}), true, 0},
-                primitive(PrimitiveMetric::Score)
-            },
-
-            SeriesConfig{
-                SeriesId{2},
-                {"Accuracy", line({0, 255, 255, 255}), true, 1},
-                divide(primitive(PrimitiveMetric::Hits), primitive(PrimitiveMetric::Shots)),
-                std::nullopt,
-                AxisTransformKind::Percentage
+                SeriesId{1}, {"Score", line({224, 224, 224, 255}), true, 0},
+                runningSum(score), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{3},
-                {"Shots", line({255, 165, 0, 255}), true, 2},
-                primitive(PrimitiveMetric::Shots)
+                SeriesId{2}, {"Expected Final Score", line({167, 139, 250, 255}), true, 1, 1},
+                expectedFinalScore(), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{4},
-                {"Hits", line({100, 149, 237, 255}), false, 3},
-                primitive(PrimitiveMetric::Hits)
+                SeriesId{3}, {"Expected Final (Top 10%)", line({221, 214, 254, 255}), true, 2, 1},
+                averageAcrossRuns(expectedFinalScore(), TopPercentile{10.0}), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{5},
-                {"Kills", line({255, 0, 0, 255}), true, 4},
-                primitive(PrimitiveMetric::Kills)
+                SeriesId{4}, {"Expected Final (Last 10 Runs)", line({139, 123, 196, 255}), true, 3, 1},
+                averageAcrossRuns(expectedFinalScore(), RecentRuns{10}), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{6},
-                {"Dmg", line({255, 255, 0, 255}), true, 5},
-                primitive(PrimitiveMetric::Dmg)
+                SeriesId{5}, {"Accuracy", line({46, 196, 160, 255}), true, 4},
+                divide(runningSum(primitive(PrimitiveMetric::Hits)), runningSum(primitive(PrimitiveMetric::Shots))),
+                AxisId{2}, AxisTransformKind::Percentage
             },
             SeriesConfig{
-                SeriesId{7},
-                {"Score Total", line({128, 0, 128, 255}), true, 6},
-                runningSum(primitive(PrimitiveMetric::Score)),
-                AxisId{2}
+                SeriesId{6}, {"Accuracy (5s)", line({31, 138, 112, 255}), false, 5},
+                accuracyOver5s, AxisId{2}, AxisTransformKind::Percentage
             },
             SeriesConfig{
-                SeriesId{8}, {"Expected Final Score", line({255, 0, 255, 255}), true, 7, 1},
-                projectedFinalValue(runningSum(primitive(PrimitiveMetric::Score))),
-                AxisId{2}
+                SeriesId{7}, {"Score/s (5s)", line({158, 158, 158, 255}), false, 6},
+                rollingMean(score, 5)
             },
             SeriesConfig{
-                SeriesId{9}, {"Expected Final Score (5s)", line({0, 191, 255, 255}), true, 8, 1},
-                projectRateToFinal(rollingMean(primitive(PrimitiveMetric::Score), 5)),
-                AxisId{2}
+                SeriesId{8}, {"Expected Final (Whole Run)", line({244, 143, 177, 255}), false, 7, 1},
+                projectedFinalValue(runningSum(score)), AxisId{1}
             }
         };
     }
 
     std::vector<AxisConfig> defaultAxisConfigs() {
         return {
-            AxisConfig{AxisId{1}, "Accuracy", {}, AxisTransformKind::Percentage},
-            AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity}
+            AxisConfig{AxisId{1}, "Score", {}, AxisTransformKind::Identity},
+            AxisConfig{AxisId{2}, "Accuracy", {}, AxisTransformKind::Percentage}
         };
     }
 }

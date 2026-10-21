@@ -47,8 +47,8 @@ using namespace ksv;
 namespace {
     // Built-in SeriesId from defaultSeriesConfigs() -- GraphCanvas' y-axis column is
     // always a series' SeriesId, not a position.
-    constexpr int kAccuracySeriesId = 2;
-    constexpr int kScoreTotalSeriesId = 7;
+    constexpr int kExpectedFinalScoreSeriesId = 2;
+    constexpr int kAccuracySeriesId = 5;
 
     [[nodiscard]] int countPixelsNear(const QImage &image, const QRect &area, const QColor &colour) {
         constexpr int kTolerance = 8;
@@ -158,6 +158,8 @@ namespace {
             const QString error = scene.build();
             ASSERT_TRUE(error.isEmpty()) << error.toStdString();
         }
+
+        void TearDown() override { integration::clearSavedGraphConfiguration(); }
     };
 
     TEST_F(DashboardUiTest, SettingsMenuActionOpensTheSettingsDialog) {
@@ -527,10 +529,13 @@ namespace {
             return label != nullptr;
         }, 2000)) << "no label named 'scenarioYAxisTitleLabel' found after loading a perf";
 
-        canvas->setYAxisColumn(kScoreTotalSeriesId);
+        canvas->setYAxisColumn(kAccuracySeriesId);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return label->property("text").toString() == "Accuracy"; }, 2000));
+
+        canvas->setYAxisColumn(kExpectedFinalScoreSeriesId);
 
         EXPECT_TRUE(QTest::qWaitFor([&] {
-            return label->property("text").toString() == "Score Family";
+            return label->property("text").toString() == "Score";
         }, 2000)) << "axis title was '" << label->property("text").toString().toStdString() << "'";
     }
 
@@ -540,14 +545,14 @@ namespace {
 
         auto *canvas = scene.canvasFor(app->graphVm());
         ASSERT_NE(canvas, nullptr);
-        canvas->setYAxisColumn(kScoreTotalSeriesId);
-        ASSERT_EQ(canvas->property("labelledYAxisTitle").toString(), "Score Family");
+        canvas->setYAxisColumn(kExpectedFinalScoreSeriesId);
+        ASSERT_EQ(canvas->property("labelledYAxisTitle").toString(), "Score");
 
         const auto snapshot = app->graphConfigurationUseCase()->current();
         ASSERT_NE(snapshot.configuration, nullptr);
         auto candidate = *snapshot.configuration;
         const auto axis = std::ranges::find_if(candidate.runSeries.axes, [](const auto &a) {
-            return a.id.value == 2;
+            return a.id.value == 1;
         });
         ASSERT_NE(axis, candidate.runSeries.axes.end());
         axis->name = "Renamed Axis";

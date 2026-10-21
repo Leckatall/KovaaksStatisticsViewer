@@ -267,7 +267,7 @@ namespace {
         EXPECT_EQ(*committed().configuration, *snapshotBefore.configuration);
         EXPECT_EQ(env.graphConfigurationPersistence->load(), storedBefore);
         EXPECT_EQ(app->graphVm()->enabledSeriesIds(), enabledBefore);
-        EXPECT_EQ(vm->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 3);
+        EXPECT_EQ(vm->quickSettings()["dailyPlaytime"].toMap()["window"].toInt(), 7);
 
         const auto saved = vm->save();
         ASSERT_TRUE(saved["accepted"].toBool());
@@ -296,7 +296,7 @@ namespace {
         vm->revertChanges();
         EXPECT_TRUE(vm->isVisitOpen());
         EXPECT_FALSE(vm->hasPendingChanges());
-        EXPECT_EQ(vm->graphDraft("dailyPlaytime")["window"].toInt(), 3);
+        EXPECT_EQ(vm->graphDraft("dailyPlaytime")["window"].toInt(), 7);
         EXPECT_EQ(vm->graphDraft("scenarioHistory")["connection"].toString(), "smooth");
 
         // Save moves the baseline: a later discard returns to what was saved, not to the seed.
@@ -406,7 +406,8 @@ namespace {
         // Reset is a draft edit on the selected graph only.
         ASSERT_TRUE(vm->resetGraph("scenarioHistory"));
         EXPECT_TRUE(vm->hasPendingChanges());
-        EXPECT_EQ(vm->graphDraft("scenarioHistory")["rangeKind"].toString(), "allHistory");
+        EXPECT_EQ(vm->graphDraft("scenarioHistory")["rangeKind"].toString(), "latestRuns");
+        EXPECT_EQ(vm->graphDraft("scenarioHistory")["rangeCount"].toInt(), 100);
         EXPECT_EQ(vm->graphDraft("scenarioHistory")["connection"].toString(), "smooth");
         EXPECT_EQ(vm->graphDraft("dailyPlaytime")["window"].toInt(), 9);
         EXPECT_EQ(vm->graphDraft("run")["connection"].toString(), "straight");
@@ -418,7 +419,7 @@ namespace {
 
         // Cancellable.
         vm->revertChanges();
-        EXPECT_EQ(vm->graphDraft("scenarioHistory")["rangeKind"].toString(), "latestRuns");
+        EXPECT_EQ(vm->graphDraft("scenarioHistory")["rangeCount"].toInt(), 2);
         EXPECT_FALSE(vm->hasPendingChanges());
 
         // Saved: that graph returns to defaults; definitions, axes and every other graph are intact.
@@ -458,8 +459,7 @@ namespace {
         EXPECT_EQ(loaded.runAxisLabelSeriesId, SeriesId{12});
         EXPECT_EQ(app->graphVm()->axisLabelSeriesId(), "12");
 
-        // The same look as before graph configuration existed.
-        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), 3);
+        EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), 7);
         EXPECT_EQ(dashboard().visibleRuns, 5);
         EXPECT_EQ(probe(app->graphVm()), (StyleProbe{0, false}));
         EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{0, true}));
@@ -474,7 +474,7 @@ namespace {
         const auto original = QJsonDocument::fromJson(QByteArray::fromStdString(v3Document())).object();
         EXPECT_EQ(storedDocument()["schemaVersion"].toInt(), 3);
         ASSERT_TRUE(quick("dailyPlaytime", {{"window", 4}}));
-        ASSERT_TRUE(quick("dailyPlaytime", {{"window", 3}}));
+        ASSERT_TRUE(quick("dailyPlaytime", {{"window", 7}}));
         const auto upgraded = storedDocument();
         EXPECT_EQ(upgraded["schemaVersion"].toInt(), 5);
         auto expectedSeries = original["series"].toArray();

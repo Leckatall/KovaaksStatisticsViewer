@@ -878,7 +878,6 @@ namespace ksv::presentation {
                 {"enabled", config.presentation.enabled},
                 {"displayPosition", config.presentation.displayPosition},
                 {"hiddenLeadingPoints", config.presentation.hiddenLeadingPoints},
-                {"isPrimitive", config.isPrimitive()},
                 {"expression", QString::fromStdString(application::encodeExpressionDsl(config.expression))},
                 {"yAxisId", config.yAxisId ? QString::number(config.yAxisId->value) : QString()},
             });
@@ -1016,6 +1015,14 @@ namespace ksv::presentation {
         }
         return editRunSeries([&](application::RunSeriesDocument &document) {
             return application::updateSeries(document, request);
+        });
+    }
+
+    QVariantMap SettingsViewModel::restoreDefaultGraphLines() {
+        return editRunSeries([&](application::RunSeriesDocument &document) {
+            document = application::defaultRunSeriesDocument();
+            m_working->runAxisLabelSeriesId.reset();
+            return application::MutationResult{};
         });
     }
 

@@ -25,7 +25,7 @@ namespace {
 
         [[nodiscard]] static GraphConfiguration withTwoGraphChanges() {
             auto candidate = defaultGraphConfiguration();
-            candidate.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 7;
+            candidate.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 5;
             candidate.preferences(GraphKey::ScenarioHistory).appearance.connection = ConnectionMode::Straight;
             return candidate;
         }

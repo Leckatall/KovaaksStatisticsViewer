@@ -160,6 +160,8 @@ namespace ksv::presentation {
         Q_INVOKABLE SeriesExpressionEditorModel *beginExpressionEdit(const QString &id);
         Q_INVOKABLE QVariantMap createAxis(const QString &name);
         Q_INVOKABLE QVariantMap updateSeriesAxis(const QString &id, const QString &axisId);
+        // Replaces the lines and axes with the defaults and clears the axis-label choice, which may name a line that is gone.
+        Q_INVOKABLE QVariantMap restoreDefaultGraphLines();
         // An empty id clears the choice, so the run graph labels its first visible series.
         Q_INVOKABLE void setRunAxisLabelSeriesId(const QString &id);
 

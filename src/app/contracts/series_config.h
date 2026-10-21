@@ -32,8 +32,6 @@ namespace ksv::application {
         auto operator<=>(const SeriesId &) const = default;
     };
 
-    inline constexpr SeriesId kFirstUserComputedSeriesId{10};
-
     struct AxisId {
         uint64_t value = 0;
 
@@ -64,8 +62,6 @@ namespace ksv::application {
         ValueAxisOptions options;
         AxisTransformKind transformKind = AxisTransformKind::Identity;
     };
-
-    inline constexpr AxisId kFirstUserAxisId{3};
 
     struct RgbaColor {
         uint8_t red = 0;
@@ -199,10 +195,6 @@ namespace ksv::application {
         Expression expression;
         std::optional<AxisId> yAxisId;
         AxisTransformKind transformKind = AxisTransformKind::Identity;
-
-        [[nodiscard]] bool isPrimitive() const {
-            return expression && std::holds_alternative<PrimitiveReference>(expression->value());
-        }
     };
 
     enum class SeriesConfigValidationCode {

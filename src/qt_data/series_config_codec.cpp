@@ -248,12 +248,16 @@ namespace ksv::qt_data::series_codec {
         }
 
         RunSeriesDocument migrateV1ToV2(std::vector<SeriesConfig> configs, const SeriesId nextSeriesId) {
-            auto axes = defaultAxisConfigs();
+            // The v1 built-in ids 2/7/8/9 below refer to these axes; they must not follow the current defaults.
+            std::vector<AxisConfig> axes{
+                AxisConfig{AxisId{1}, "Accuracy", {}, AxisTransformKind::Percentage},
+                AxisConfig{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity}
+            };
             for (auto &config: configs) {
                 if (config.id.value == 7 || config.id.value == 8 || config.id.value == 9) config.yAxisId = axes[1].id;
                 config.transformKind = config.id.value == 2 ? AxisTransformKind::Percentage : AxisTransformKind::Identity;
             }
-            return {std::move(configs), nextSeriesId, std::move(axes), kFirstUserAxisId};
+            return {std::move(configs), nextSeriesId, std::move(axes), AxisId{3}};
         }
 
         std::optional<RunSeriesDocument> migrateV1ToV3(const QJsonObject &root) {
@@ -352,15 +356,18 @@ namespace ksv::qt_data::series_codec {
 
     RunSeriesDocument seededRunSeries(const std::vector<std::string> &legacyDisabledColumnKeys) {
         auto document = defaultRunSeriesDocument();
-        constexpr std::array<std::pair<const char *, unsigned>, 8> legacy{
+        // Maps the old column keys onto the current default lineup; keys with no counterpart are dropped.
+        constexpr std::array<std::pair<const char *, uint64_t>, 4> legacy{
             {
-                {"score", 0}, {"accuracy", 1}, {"shots", 2}, {"kills", 4},
-                {"dmg", 5}, {"scoreTotal", 6}, {"expectedFinalScore", 7}, {"expectedFinalScoreRecent", 8}
+                {"scoreTotal", 1}, {"expectedFinalScoreRecent", 2}, {"accuracy", 5}, {"expectedFinalScore", 8}
             }
         };
-        for (const auto &[legacyKey, recordIndex]: legacy) {
-            if (std::ranges::find(legacyDisabledColumnKeys, std::string(legacyKey)) != legacyDisabledColumnKeys.end())
-                document.series[recordIndex].presentation.enabled = false;
+        for (const auto &[legacyKey, seriesId]: legacy) {
+            if (std::ranges::find(legacyDisabledColumnKeys, std::string(legacyKey)) == legacyDisabledColumnKeys.end())
+                continue;
+            if (const auto line = std::ranges::find(document.series, SeriesId{seriesId}, &SeriesConfig::id);
+                line != document.series.end())
+                line->presentation.enabled = false;
         }
         return document;
     }
