@@ -60,6 +60,7 @@ qt_add_qml_module(ksv_ui
             qml/common/Theme.qml
             qml/common/ToolbarButton.qml
             qml/common/TooltipToolButton.qml
+            qml/common/ChromeIconButton.qml
             qml/shell/AppMenuBar.qml
             qml/shell/SettingsDialog.qml
             qml/benchmark/BenchmarkManagerDialog.qml
@@ -99,6 +100,7 @@ qt_add_qml_module(ksv_ui
             qml/icons/save.svg
             qml/icons/square-pen.svg
             qml/icons/settings.svg
+            qml/icons/x.svg
         SOURCES
             presentation/axis.h
             presentation/value_axis.h

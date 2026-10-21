@@ -8,7 +8,7 @@ import "GraphCatalog.js" as GraphCatalog
 // configuration through settingsVm.applyQuickPatch(); nothing here is a draft. The gear belongs in the
 // graph's header, outside any loader that needs plottable data, so it stays reachable when the graph
 // is empty.
-TooltipToolButton {
+ChromeIconButton {
     id: gear
 
     // One of run, dailyPlaytime, scenarioHistory, benchmarkRank, benchmarkPlaytime.
@@ -100,13 +100,12 @@ TooltipToolButton {
     objectName: "graphGear_" + graphKey
     text: qsTr("%1 settings").arg(graphName)
     icon.source: "../icons/settings.svg"
-    icon.width: 18
-    icon.height: 18
-    display: AbstractButton.IconOnly
+    active: quickPopup.opened
     padding: 4
     focusPolicy: Qt.StrongFocus
     Accessible.name: text
     ToolTip.text: text
+    ToolTip.visible: pointerHovered && ToolTip.text !== "" && !quickPopup.opened
 
     onClicked: quickPopup.opened ? quickPopup.close() : quickPopup.open()
 
@@ -124,13 +123,34 @@ TooltipToolButton {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
+        background: Rectangle {
+            color: gear.palette.window
+            border.color: gear.palette.mid
+            border.width: 1
+            radius: 8
+        }
+
+        // Returning focus with OtherFocusReason hides the gear's focus ring, losing a keyboard user's place.
+        // By `closed` the popup has usually handed focus back already, which makes forceActiveFocus(reason)
+        // a no-op, so the reason is assigned directly.
+        property bool keyboardDriven: false
+
         onAboutToShow: {
+            keyboardDriven = gear.visualFocus
             gear.windowError = ""
             gear.latestRunsError = ""
             gear.syncFields(true)
         }
         onOpened: gear.focusFirstControl()
-        onClosed: gear.forceActiveFocus()
+        onAboutToHide: {
+            const focused = gear.Window.activeFocusItem
+            if (focused && (focused.focusReason === Qt.TabFocusReason || focused.focusReason === Qt.BacktabFocusReason))
+                keyboardDriven = true
+        }
+        onClosed: {
+            gear.forceActiveFocus()
+            gear.focusReason = keyboardDriven ? Qt.TabFocusReason : Qt.OtherFocusReason
+        }
 
         contentItem: ColumnLayout {
             spacing: 8
@@ -147,9 +167,10 @@ TooltipToolButton {
                     font.bold: true
                     elide: Text.ElideRight
                 }
-                ToolButton {
+                ChromeIconButton {
                     objectName: "graphQuickClose_" + gear.graphKey
-                    text: "×"
+                    text: qsTr("Close")
+                    icon.source: "../icons/x.svg"
                     padding: 4
                     focusPolicy: Qt.StrongFocus
                     Accessible.name: qsTr("Close")

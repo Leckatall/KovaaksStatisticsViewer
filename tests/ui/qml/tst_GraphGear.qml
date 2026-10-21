@@ -124,6 +124,60 @@ TestCase {
         verify(shown(gear, "graphMoreSettings_dailyPlaytime"))
     }
 
+    // ---- Chrome ------------------------------------------------------------------------------------
+
+    function test_theGearIconIsTintedNotBlack() {
+        const gear = makeGear("run")
+        verify(Qt.colorEqual(gear.icon.color, "#000000") === false, "Lucide strokes use currentColor, which renders black")
+        verify(gear.icon.color.a > 0 && gear.icon.color.a < 1, "at rest the icon is set and muted")
+    }
+
+    function test_theGearBrightensAndFillsWhileThePopupIsOpen() {
+        const gear = makeGear("run")
+        mouseMove(testCase, 5, 500)
+        const restingAlpha = gear.icon.color.a
+        compare(gear.background.color.a, 0)
+        openPopup(gear)
+        mouseMove(testCase, 5, 500)
+        compare(gear.icon.color.a, 1)
+        verify(gear.background.color.a > 0, "the open gear keeps a fill")
+        mouseClick(gear)
+        tryVerify(() => !gear.popup.opened, 2000)
+        mouseMove(testCase, 5, 500)
+        tryCompare(gear.icon.color, "a", restingAlpha)
+        compare(gear.background.color.a, 0)
+    }
+
+    function test_theTooltipIsHiddenWhileThePopupIsOpen() {
+        const gear = makeGear("run")
+        mouseMove(gear, gear.width / 2, gear.height / 2)
+        tryVerify(() => gear.pointerHovered, 2000)
+        // Opened without a press, since pressing the button hides its tooltip regardless.
+        gear.popup.open()
+        tryVerify(() => gear.popup.opened, 2000)
+        wait(gear.ToolTip.delay + 200)
+        verify(gear.pointerHovered)
+        verify(!gear.ToolTip.visible)
+    }
+
+    function test_thePopupHasABorderedFrame() {
+        const gear = makeGear("run")
+        const frame = gear.popup.background
+        compare(frame.radius, 8)
+        compare(frame.border.width, 1)
+        verify(Qt.colorEqual(frame.border.color, gear.palette.mid), String(frame.border.color))
+        verify(Qt.colorEqual(frame.color, gear.palette.window), String(frame.color))
+    }
+
+    function test_theCloseButtonIsAnIcon() {
+        const gear = makeGear("run")
+        openPopup(gear)
+        const close = control(gear, "graphQuickClose_run")
+        verify(close !== null)
+        compare(close.display, AbstractButton.IconOnly)
+        verify(String(close.icon.source).endsWith("x.svg"), String(close.icon.source))
+    }
+
     // ---- Applicable controls only --------------------------------------------------------------------
 
     function test_popupOffersOnlyTheControlsTheGraphHas_data() {
@@ -464,6 +518,31 @@ TestCase {
         keyClick(Qt.Key_Space)
 
         tryVerify(() => gear.popup.opened, 2000)
+    }
+
+    function test_focusReturnsVisiblyAfterAKeyboardOpenAndClose() {
+        const gear = makeGear("run")
+        gear.forceActiveFocus(Qt.TabFocusReason)
+        verify(gear.visualFocus)
+        keyClick(Qt.Key_Space)
+        tryVerify(() => gear.popup.opened, 2000)
+
+        keyClick(Qt.Key_Escape)
+
+        tryVerify(() => !gear.popup.opened, 2000)
+        tryVerify(() => gear.activeFocus, 2000)
+        verify(gear.visualFocus, "a keyboard user must still see where focus landed")
+    }
+
+    function test_noFocusRingIsLeftAfterAMouseOpenAndClose() {
+        const gear = makeGear("run")
+        openPopup(gear)
+
+        mouseClick(gear)
+
+        tryVerify(() => !gear.popup.opened, 2000)
+        tryVerify(() => gear.activeFocus, 2000)
+        verify(!gear.visualFocus)
     }
 
     // ---- More graph settings -----------------------------------------------------------------------------
