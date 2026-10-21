@@ -5,22 +5,34 @@ from pathlib import Path
 import re
 import time
 from typing import Callable, Mapping
-from xml.etree import ElementTree
 
-from .catalog import RunnerSpec, catalog_for_scope, matches_pattern, parse_gtest_list, parse_qml_functions
+from .catalog import (
+    RunnerSpec,
+    all_runners,
+    catalog_for_scope,
+    gtest_targets,
+    matches_pattern,
+    parse_gtest_list,
+    parse_qml_functions,
+)
 from .config import RunnerSettings, Toolchain, ToolchainError, assert_cache, write_fingerprint
 from .diagnostics import reduce_build_failure, reduce_configure_failure, reduce_test_failure
 from .failures import Failure, render_diagnostic_report, render_test_report
-from .parsers import failures_from_ctest, parse_ctest_junit, parse_gtest_xml, parse_qt_txt
+from .parsers import (
+    UNUSABLE_REPORT,
+    failures_from_ctest,
+    gtest_report_case_count,
+    parse_ctest_junit,
+    parse_gtest_xml,
+    parse_qt_txt,
+)
 from .process import CommandResult, describe_exit_code, run_command
-
-
-# A runner killed mid-report leaves a truncated file; ElementTree raises a SyntaxError subclass for it.
-UNUSABLE_REPORT = (OSError, ValueError, ElementTree.ParseError)
 
 
 Execute = Callable[..., CommandResult]
 Emit = Callable[[str], None]
+
+CTEST_PARALLEL_JOBS = 4
 
 
 def _summary_duration(started: float, clock: Callable[[], float]) -> float:
@@ -218,6 +230,58 @@ def run_pipeline(
     ctest_exe = toolchain.cmake_exe.with_name("ctest.exe")
     if not ctest_exe.is_file():
         raise ToolchainError(f"CTest executable not found beside CMake: {ctest_exe}")
+    qml_input = repo_root / "tests" / "ui" / "qml"
+
+    def discover(to_list: list[RunnerSpec]) -> tuple[list[tuple[RunnerSpec, str]], int]:
+        """Enumerate every test of the given runners. A nonzero exit code means it already reported."""
+        found: list[tuple[RunnerSpec, str]] = []
+        for runner in to_list:
+            executable = build_dir / runner.relative_path
+            if not executable.is_file():
+                raise ToolchainError(f"Built test executable not found: {executable}")
+            enumeration_log = log_dir / f"{runner.target}-list.log"
+            if runner.kind == "gtest":
+                enumeration_command: list[str | Path] = [executable, "--gtest_list_tests"]
+                enumeration_environment = runner.environment
+            else:
+                enumeration_environment = {**runner.environment, "QT_FORCE_STDERR_LOGGING": "1"}
+                enumeration_command = [executable, "-input", qml_input, "-functions"]
+            enumeration = _invoke(
+                execute,
+                enumeration_command,
+                log_path=enumeration_log,
+                repo_root=repo_root,
+                process_environment=process_environment,
+                toolchain=toolchain,
+                settings=settings,
+                runner_environment=enumeration_environment,
+                show_all_output=args.show_all_output,
+                phase="test discovery",
+                emit=emit,
+            )
+            if enumeration.exit_code:
+                failures = reduce_test_failure(enumeration.output, repo_root)
+                if not any(failure.location for failure in failures):
+                    failures = [_silent_runner_failure(runner, enumeration.exit_code, [])]
+                report(
+                    render_test_report(
+                        failures,
+                        scope=args.scope,
+                        total=0,
+                        elapsed=_summary_duration(started, clock),
+                        repo_root=repo_root,
+                        log_paths=[enumeration_log],
+                    )
+                )
+                return [], enumeration.exit_code
+            discovered = (
+                parse_gtest_list(enumeration.output)
+                if runner.kind == "gtest"
+                else parse_qml_functions(enumeration.output)
+            )
+            found.extend((runner, test) for test in discovered)
+        return found, 0
+
     if args.scope == "all":
         list_log = log_dir / "ctest-list.log"
         listed = _invoke(
@@ -246,19 +310,66 @@ def run_pipeline(
             )
             return listed.exit_code
         count_match = re.search(r"Total Tests:\s+(\d+)", listed.output)
-        test_count = int(count_match.group(1)) if count_match else 0
+        ctest_total = int(count_match.group(1)) if count_match else 0
+        ctest_names = re.findall(r"^\s*Test\s+#\d+:\s+(\S+)", listed.output, re.MULTILINE)
         if args.list:
-            for line in listed.output.splitlines():
-                if re.match(r"^\s*Test\s+#\d+:", line):
-                    emit(line)
-            emit(f"Total: {test_count}")
+            discovered, exit_code = discover(all_runners())
+            if exit_code:
+                return exit_code
+            # Tests that are neither a runner executable nor a tst_*.qml file, e.g. contracts_qt_free.
+            others = [
+                name
+                for name in ctest_names
+                if name not in gtest_targets() and not name.startswith("tst_")
+            ]
+            for _, test in discovered:
+                emit(test)
+            for name in others:
+                emit(name)
+            emit(f"Total: {len(discovered) + len(others)}")
             return 0
+
+        gtest_report_dir = build_dir / "tests" / "gtest-reports"
+        qml_log_dir = build_dir / "tests" / "ui" / "qml-test-logs"
+        # A runner that crashes before writing its report must not be read as passing from the last run's.
+        for stale in (*gtest_report_dir.glob("*.xml"), *qml_log_dir.glob("*.txt")):
+            stale.unlink()
+
+        def count_unreported(target: str) -> int:
+            """Cases of an executable that wrote no report, by enumerating it; 0 if that fails too."""
+            runner = next(spec for spec in all_runners() if spec.target == target)
+            executable = build_dir / runner.relative_path
+            if not executable.is_file():
+                return 0
+            enumeration = _invoke(
+                execute,
+                [executable, "--gtest_list_tests"],
+                log_path=log_dir / f"{target}-list.log",
+                repo_root=repo_root,
+                process_environment=process_environment,
+                toolchain=toolchain,
+                settings=settings,
+                runner_environment=runner.environment,
+                show_all_output=args.show_all_output,
+                phase="test discovery",
+                emit=emit,
+            )
+            return 0 if enumeration.exit_code else len(parse_gtest_list(enumeration.output))
 
         ctest_log = log_dir / "ctest.log"
         junit_path = log_dir / "ctest.xml"
         tested = _invoke(
             execute,
-            [ctest_exe, "--test-dir", build_dir, "--output-on-failure", "--output-junit", junit_path],
+            [
+                ctest_exe,
+                "--test-dir",
+                build_dir,
+                "-j",
+                str(CTEST_PARALLEL_JOBS),
+                "--output-on-failure",
+                "--output-junit",
+                junit_path,
+            ],
             log_path=ctest_log,
             repo_root=repo_root,
             process_environment=process_environment,
@@ -270,13 +381,13 @@ def run_pipeline(
             emit=emit,
         )
         if tested.exit_code:
-            qml_log_dir = build_dir / "tests" / "ui" / "qml-test-logs"
             failures: list[Failure] = []
             note = ""
             if junit_path.is_file():
-                cases, reported_total = _read_ctest_junit(junit_path, repo_root, qml_log_dir)
+                cases, reported_total = _read_ctest_junit(junit_path, repo_root, qml_log_dir, gtest_report_dir)
                 failures = cases
-                test_count = reported_total or test_count
+                ctest_total = reported_total or ctest_total
+            test_count = _case_count(ctest_total, ctest_names, gtest_report_dir, count_unreported)
             if not failures:
                 failures = reduce_test_failure(tested.output, repo_root)
                 note = "(CTest wrote no usable JUnit report; recovered from console output)"
@@ -292,57 +403,14 @@ def run_pipeline(
                 )
             )
             return tested.exit_code
+        test_count = _case_count(ctest_total, ctest_names, gtest_report_dir, count_unreported)
         elapsed = _summary_duration(started, clock)
         emit(f"Scope all | jobs {settings.jobs} | tests {test_count} | {elapsed:.1f}s | PASS")
         return 0
 
-    qml_input = repo_root / "tests" / "ui" / "qml"
-    catalog: list[tuple[RunnerSpec, str]] = []
-    for runner in runners:
-        executable = build_dir / runner.relative_path
-        if not executable.is_file():
-            raise ToolchainError(f"Built test executable not found: {executable}")
-        enumeration_log = log_dir / f"{runner.target}-list.log"
-        if runner.kind == "gtest":
-            enumeration_command: list[str | Path] = [executable, "--gtest_list_tests"]
-            enumeration_environment = runner.environment
-        else:
-            enumeration_environment = {**runner.environment, "QT_FORCE_STDERR_LOGGING": "1"}
-            enumeration_command = [executable, "-input", qml_input, "-functions"]
-        enumeration = _invoke(
-            execute,
-            enumeration_command,
-            log_path=enumeration_log,
-            repo_root=repo_root,
-            process_environment=process_environment,
-            toolchain=toolchain,
-            settings=settings,
-            runner_environment=enumeration_environment,
-            show_all_output=args.show_all_output,
-            phase="test discovery",
-            emit=emit,
-        )
-        if enumeration.exit_code:
-            failures = reduce_test_failure(enumeration.output, repo_root)
-            if not any(failure.location for failure in failures):
-                failures = [_silent_runner_failure(runner, enumeration.exit_code, [])]
-            report(
-                render_test_report(
-                    failures,
-                    scope=args.scope,
-                    total=0,
-                    elapsed=_summary_duration(started, clock),
-                    repo_root=repo_root,
-                    log_paths=[enumeration_log],
-                )
-            )
-            return enumeration.exit_code
-        discovered = (
-            parse_gtest_list(enumeration.output)
-            if runner.kind == "gtest"
-            else parse_qml_functions(enumeration.output)
-        )
-        catalog.extend((runner, test) for test in discovered)
+    catalog, exit_code = discover(runners)
+    if exit_code:
+        return exit_code
 
     selected = [
         entry
@@ -442,9 +510,31 @@ def run_pipeline(
     return 0
 
 
-def _read_ctest_junit(junit_path: Path, repo_root: Path, qml_log_dir: Path) -> tuple[list[Failure], int]:
+def _read_ctest_junit(
+    junit_path: Path, repo_root: Path, qml_log_dir: Path, gtest_report_dir: Path
+) -> tuple[list[Failure], int]:
     try:
         cases, total = parse_ctest_junit(junit_path)
     except UNUSABLE_REPORT:
         return [], 0
-    return failures_from_ctest(cases, repo_root, qml_log_dir), total
+    return failures_from_ctest(cases, repo_root, qml_log_dir, gtest_report_dir), total
+
+
+def _case_count(
+    ctest_total: int,
+    ctest_names: list[str],
+    gtest_report_dir: Path,
+    count_unreported: Callable[[str], int],
+) -> int:
+    """CTest's total with each Google Test executable replaced by the cases its report lists.
+
+    An executable whose report is missing or unusable (it crashed) is counted by `count_unreported`.
+    """
+    executables = [name for name in ctest_names if name in gtest_targets()]
+    cases = 0
+    for name in executables:
+        try:
+            cases += gtest_report_case_count(gtest_report_dir / f"{name}.xml")
+        except UNUSABLE_REPORT:
+            cases += count_unreported(name)
+    return ctest_total - len(executables) + cases

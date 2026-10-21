@@ -58,6 +58,14 @@ def catalog_for_scope(scope: str) -> list[RunnerSpec]:
     return list(RUNNERS[scope])
 
 
+def all_runners() -> list[RunnerSpec]:
+    return [runner for runners in RUNNERS.values() for runner in runners]
+
+
+def gtest_targets() -> set[str]:
+    return {runner.target for runner in all_runners() if runner.kind == "gtest"}
+
+
 def parse_gtest_list(output: str) -> list[str]:
     tests: list[str] = []
     suite: str | None = None

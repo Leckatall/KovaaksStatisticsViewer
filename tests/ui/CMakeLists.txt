@@ -1,5 +1,4 @@
 find_package(GTest CONFIG REQUIRED)
-include(GoogleTest)
 
 add_executable(ui_tests
     ../support/qt_gtest_main.cpp
@@ -44,12 +43,24 @@ target_link_libraries(ui_tests PRIVATE
 )
 
 target_compile_definitions(ui_tests PRIVATE KSV_GTEST_GUI_APP)
+target_precompile_headers(ui_tests PRIVATE
+    <gtest/gtest.h>
+    <QColor>
+    <QDateTime>
+    <QLocale>
+    <QObject>
+    <QSignalSpy>
+    <QString>
+    <QVariant>
+    <QVariantMap>
+)
+
 # The workload measurement reads process private memory (GetProcessMemoryInfo).
 if(WIN32)
     target_link_libraries(ui_tests PRIVATE psapi)
 endif()
 ksv_copy_mingw_runtime_dlls(ui_tests)
-gtest_discover_tests(ui_tests)
+ksv_add_gtest_test(ui_tests)
 
 # Qt Quick Test suite: exercises the actual QML component files (menu
 # wiring, button clicks, checkbox bindings) in qml/tst_*.qml, as opposed to

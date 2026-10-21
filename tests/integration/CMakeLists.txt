@@ -1,5 +1,4 @@
 find_package(GTest CONFIG REQUIRED)
-include(GoogleTest)
 
 # Integration suite: links every layer together and drives the REAL wired
 # object graph (no hand-rolled fakes) against the checked-in .perf fixtures,
@@ -62,11 +61,24 @@ if(TARGET ksv_driver_core)
     target_link_libraries(integration_tests PRIVATE ksv_driver_core)
 endif()
 
+target_precompile_headers(integration_tests PRIVATE
+    <gtest/gtest.h>
+    <QColor>
+    <QDateTime>
+    <QDir>
+    <QFile>
+    <QSettings>
+    <QTemporaryDir>
+    <QUrl>
+    <QVariant>
+    <app/app.h>
+)
+
 ksv_copy_mingw_runtime_dlls(integration_tests)
 
 # Same offscreen/software/Fusion env the ui_qml_tests use: these tests build a
 # QGuiApplication and instantiate QtQuick items (GraphCanvas) / load Main.qml.
-gtest_discover_tests(integration_tests
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Fusion"
+ksv_add_gtest_test(integration_tests)
+set_tests_properties(integration_tests PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Fusion"
 )

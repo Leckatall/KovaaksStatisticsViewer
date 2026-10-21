@@ -1,5 +1,4 @@
 find_package(GTest CONFIG REQUIRED)
-include(GoogleTest)
 
 add_executable(app_tests
         ../support/qt_gtest_main.cpp
@@ -33,5 +32,11 @@ target_link_libraries(app_tests PRIVATE
         GTest::gtest
 )
 
+target_precompile_headers(app_tests PRIVATE
+    <gtest/gtest.h>
+    <algorithm>
+    <chrono>
+)
+
 ksv_copy_mingw_runtime_dlls(app_tests)
-gtest_discover_tests(app_tests)
+ksv_add_gtest_test(app_tests)

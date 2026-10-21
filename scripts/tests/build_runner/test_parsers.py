@@ -91,7 +91,7 @@ def test_ctest_junit_reports_the_total_and_skips_passing_cases(fixtures_dir: Pat
 def test_ctest_failures_recover_the_assertion_from_the_captured_output(fixtures_dir: Path) -> None:
     cases, _ = parse_ctest_junit(fixtures_dir / "ctest-junit.xml")
 
-    failures = failures_from_ctest(cases, REPO, fixtures_dir / "no-qml-logs-here")
+    failures = failures_from_ctest(cases, REPO, fixtures_dir / "no-qml-logs-here", fixtures_dir / "no-reports-here")
 
     assert failures[0] == Failure(
         test="BenchmarkDraft.MoveScenarioBackToUncategorized",
@@ -103,7 +103,7 @@ def test_ctest_failures_recover_the_assertion_from_the_captured_output(fixtures_
 def test_a_ctest_case_with_no_output_falls_back_to_its_status(fixtures_dir: Path) -> None:
     cases, _ = parse_ctest_junit(fixtures_dir / "ctest-junit.xml")
 
-    failures = failures_from_ctest(cases, REPO, fixtures_dir / "no-qml-logs-here")
+    failures = failures_from_ctest(cases, REPO, fixtures_dir / "no-qml-logs-here", fixtures_dir / "no-reports-here")
 
     assert failures[-1] == Failure(test="HangingIntegrationTest", message="Timeout", location="")
 
@@ -115,10 +115,74 @@ def test_a_qml_ctest_case_is_expanded_from_its_own_report(fixtures_dir: Path, tm
         (fixtures_dir / "qml-duplicates.log").read_text(encoding="utf-8"), encoding="utf-8"
     )
 
-    failures = failures_from_ctest([CtestCase("tst_BenchmarkWorkspace", "Failed", "")], REPO, logs)
+    failures = failures_from_ctest(
+        [CtestCase("tst_BenchmarkWorkspace", "Failed", "")], REPO, logs, tmp_path / "no-reports-here"
+    )
 
     assert len(failures) == 4
     assert failures[0].location == "tests/ui/qml/tst_BenchmarkWorkspace.qml:46"
+
+
+def test_a_failing_executable_case_is_expanded_from_its_own_gtest_report(fixtures_dir: Path, tmp_path: Path) -> None:
+    reports = tmp_path / "gtest-reports"
+    reports.mkdir()
+    (reports / "ui_tests.xml").write_text(
+        (fixtures_dir / "gtest-report.xml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    cases, _ = parse_ctest_junit(fixtures_dir / "ctest-junit-per-executable.xml")
+    ui_tests = [case for case in cases if case.name == "ui_tests"]
+
+    failures = failures_from_ctest(ui_tests, REPO, tmp_path / "no-qml-logs-here", reports)
+
+    assert [(failure.test, failure.location) for failure in failures] == [
+        (
+            "BenchmarkManagerVm.SaveSuccessUpdatesLocalBaselineFromAdmittedToken",
+            "tests/ui/benchmark_manager_vm_test.cpp:211",
+        ),
+        ("BenchmarkManagerVm.EditorCommandErrorSurfacesInReturnMap", "tests/ui/benchmark_manager_vm_test.cpp:352"),
+        ("BenchmarkManagerVm.EditorCommandErrorSurfacesInReturnMap", "tests/ui/benchmark_manager_vm_test.cpp:353"),
+    ]
+
+
+def test_an_executable_that_crashed_before_writing_its_report_is_named_with_its_output(
+    fixtures_dir: Path, tmp_path: Path
+) -> None:
+    cases, _ = parse_ctest_junit(fixtures_dir / "ctest-junit-per-executable.xml")
+    crashed = [case for case in cases if case.name == "integration_tests"]
+
+    failures = failures_from_ctest(crashed, REPO, tmp_path / "no-qml-logs-here", tmp_path / "gtest-reports")
+
+    assert len(failures) == 1
+    assert failures[0].test == "integration_tests"
+    assert failures[0].message.splitlines()[0] == "Exception: Other"
+    assert "deliberate abort diagnostic" in failures[0].message
+
+
+def test_a_report_with_no_failure_does_not_hide_a_crashed_executable(fixtures_dir: Path, tmp_path: Path) -> None:
+    reports = tmp_path / "gtest-reports"
+    reports.mkdir()
+    (reports / "integration_tests.xml").write_text(
+        '<testsuites tests="2" failures="0"><testsuite name="A"><testcase name="B" classname="A"/></testsuite></testsuites>',
+        encoding="utf-8",
+    )
+    cases, _ = parse_ctest_junit(fixtures_dir / "ctest-junit-per-executable.xml")
+    crashed = [case for case in cases if case.name == "integration_tests"]
+
+    failures = failures_from_ctest(crashed, REPO, tmp_path / "no-qml-logs-here", reports)
+
+    assert [failure.test for failure in failures] == ["integration_tests"]
+
+
+def test_a_truncated_gtest_report_falls_back_to_the_captured_output(fixtures_dir: Path, tmp_path: Path) -> None:
+    reports = tmp_path / "gtest-reports"
+    reports.mkdir()
+    (reports / "integration_tests.xml").write_text('<?xml version="1.0"?>\n<testsuites><testsuite name="A"', encoding="utf-8")
+    cases, _ = parse_ctest_junit(fixtures_dir / "ctest-junit-per-executable.xml")
+    crashed = [case for case in cases if case.name == "integration_tests"]
+
+    failures = failures_from_ctest(crashed, REPO, tmp_path / "no-qml-logs-here", reports)
+
+    assert [failure.test for failure in failures] == ["integration_tests"]
 
 
 def test_a_truncated_report_is_treated_as_unusable_rather_than_crashing_the_runner(tmp_path: Path) -> None:

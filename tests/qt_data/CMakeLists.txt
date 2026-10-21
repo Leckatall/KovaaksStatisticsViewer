@@ -1,5 +1,4 @@
 find_package(GTest CONFIG REQUIRED)
-include(GoogleTest)
 
 add_executable(qt_data_tests
     ../support/qt_gtest_main.cpp
@@ -43,5 +42,13 @@ target_compile_definitions(qt_data_tests PRIVATE
     TEST_FILES_DIR="${CMAKE_CURRENT_BINARY_DIR}/examples"
 )
 
+target_precompile_headers(qt_data_tests PRIVATE
+    <gtest/gtest.h>
+    <QDir>
+    <QFile>
+    <QSettings>
+    <QTemporaryDir>
+)
+
 ksv_copy_mingw_runtime_dlls(qt_data_tests)
-gtest_discover_tests(qt_data_tests)
+ksv_add_gtest_test(qt_data_tests)

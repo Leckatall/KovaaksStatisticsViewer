@@ -20,6 +20,9 @@ _GTEST_FAILED = re.compile(r"^\[\s*FAILED\s*\] (\S+) \(\d+ ms\)$")
 _QT_INCIDENT = re.compile(r"^(FAIL!|XPASS)\s*:\s+(\S+)\s*(.*)$")
 _QT_LOCATION = re.compile(r"^(.*)\((\d+)\) : failure location$")
 
+# A runner killed mid-report leaves a truncated file; ElementTree raises a SyntaxError subclass for it.
+UNUSABLE_REPORT = (OSError, ValueError, ElementTree.ParseError)
+
 
 def parse_gtest_xml(path: Path, repo_root: Path) -> list[Failure]:
     """Read the report written by `--gtest_output=xml:`. One Failure per `<failure>` element."""
@@ -158,18 +161,36 @@ def parse_ctest_junit(path: Path) -> tuple[list[CtestCase], int]:
     return cases, total
 
 
-def failures_from_ctest(cases: list[CtestCase], repo_root: Path, qml_log_dir: Path) -> list[Failure]:
+def gtest_report_case_count(path: Path) -> int:
+    """Number of cases in a `--gtest_output=xml:` report, from its root `<testsuites tests=...>`."""
+    return int(ElementTree.parse(path).getroot().get("tests") or 0)
+
+
+def failures_from_ctest(
+    cases: list[CtestCase], repo_root: Path, qml_log_dir: Path, gtest_report_dir: Path
+) -> list[Failure]:
     """Turn non-passing CTest cases into Failures.
 
-    `gtest_discover_tests` registers one CTest case per Google Test case, so the assertion is
-    in the captured output. The Qt Quick tests are registered one per `tst_*.qml` file and
-    write their report into `qml_log_dir` instead, leaving the captured output empty.
+    Each Google Test executable is one CTest case named after its target and writes its XML
+    report to `gtest_report_dir`; each `tst_*.qml` file is one case that writes its Qt Test
+    report into `qml_log_dir`. A case whose report is missing, unusable or lists no failure
+    (a crash before the framework wrote it) falls through to the captured output and CTest's
+    own reason, so it is still reported under its name.
     """
     failures: list[Failure] = []
     for case in cases:
         qml_report = qml_log_dir / f"{case.name}.txt"
         if case.name.startswith("tst_") and qml_report.is_file():
             found = parse_qt_txt(qml_report.read_text(encoding="utf-8", errors="replace"), repo_root)
+            if found:
+                failures.extend(found)
+                continue
+        gtest_report = gtest_report_dir / f"{case.name}.xml"
+        if gtest_report.is_file():
+            try:
+                found = parse_gtest_xml(gtest_report, repo_root)
+            except UNUSABLE_REPORT:
+                found = []
             if found:
                 failures.extend(found)
                 continue

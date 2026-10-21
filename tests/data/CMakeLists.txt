@@ -1,5 +1,4 @@
 find_package(GTest CONFIG REQUIRED)
-include(GoogleTest)
 
 add_executable(proto_decoder_tests
     proto_decoder_test.cpp
@@ -30,7 +29,7 @@ target_compile_definitions(proto_decoder_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(proto_decoder_tests)
-gtest_discover_tests(proto_decoder_tests)
+ksv_add_gtest_test(proto_decoder_tests)
 
 add_executable(stats_csv_parser_tests
     stats_csv_parser_test.cpp
@@ -46,7 +45,7 @@ target_compile_definitions(stats_csv_parser_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(stats_csv_parser_tests)
-gtest_discover_tests(stats_csv_parser_tests)
+ksv_add_gtest_test(stats_csv_parser_tests)
 
 add_executable(run_filename_tests
     run_filename_test.cpp
@@ -58,7 +57,7 @@ target_link_libraries(run_filename_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(run_filename_tests)
-gtest_discover_tests(run_filename_tests)
+ksv_add_gtest_test(run_filename_tests)
 
 add_executable(run_ingestor_tests
     run_ingestor_test.cpp
@@ -71,7 +70,7 @@ target_link_libraries(run_ingestor_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(run_ingestor_tests)
-gtest_discover_tests(run_ingestor_tests)
+ksv_add_gtest_test(run_ingestor_tests)
 
 add_executable(benchmarks_service_tests
     benchmarks_service_test.cpp
@@ -84,7 +83,7 @@ target_link_libraries(benchmarks_service_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(benchmarks_service_tests)
-gtest_discover_tests(benchmarks_service_tests)
+ksv_add_gtest_test(benchmarks_service_tests)
 
 add_executable(profile_service_tests
     profile_service_test.cpp
@@ -97,7 +96,7 @@ target_link_libraries(profile_service_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(profile_service_tests)
-gtest_discover_tests(profile_service_tests)
+ksv_add_gtest_test(profile_service_tests)
 
 add_executable(profile_builder_tests
     profile_builder_test.cpp
@@ -110,7 +109,7 @@ target_link_libraries(profile_builder_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(profile_builder_tests)
-gtest_discover_tests(profile_builder_tests)
+ksv_add_gtest_test(profile_builder_tests)
 
 add_executable(profile_serializer_tests
     profile_serializer_test.cpp
@@ -123,7 +122,7 @@ target_link_libraries(profile_serializer_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(profile_serializer_tests)
-gtest_discover_tests(profile_serializer_tests)
+ksv_add_gtest_test(profile_serializer_tests)
 
 add_executable(profile_v3_migrator_tests
     profile_v3_migrator_test.cpp
@@ -140,7 +139,7 @@ target_compile_definitions(profile_v3_migrator_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(profile_v3_migrator_tests)
-gtest_discover_tests(profile_v3_migrator_tests)
+ksv_add_gtest_test(profile_v3_migrator_tests)
 
 add_executable(graph_configuration_service_tests
     graph_configuration_service_test.cpp
@@ -153,4 +152,4 @@ target_link_libraries(graph_configuration_service_tests PRIVATE
 )
 
 ksv_copy_mingw_runtime_dlls(graph_configuration_service_tests)
-gtest_discover_tests(graph_configuration_service_tests)
+ksv_add_gtest_test(graph_configuration_service_tests)

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Win32-ninja" tests="4" failures="2" disabled="0" skipped="0" hostname="host" time="12" timestamp="2026-10-21T10:00:00">
+	<testcase name="domain_tests" classname="domain_tests" time="1.2" status="run">
+		<system-out></system-out>
+	</testcase>
+	<testcase name="ui_tests" classname="ui_tests" time="2.1" status="fail">
+		<failure message="Failed"/>
+		<system-out>[  FAILED  ] BenchmarkManagerVm.SaveSuccessUpdatesLocalBaselineFromAdmittedToken (0 ms)
+</system-out>
+	</testcase>
+	<testcase name="integration_tests" classname="integration_tests" time="0.4" status="fail">
+		<failure message="Exception: Other"/>
+		<system-out>[ RUN      ] AgentFaultInjection.DeliberateAbort
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  deliberate abort diagnostic
+</system-out>
+	</testcase>
+	<testcase name="tst_Main" classname="tst_Main" time="1.4" status="run">
+		<system-out></system-out>
+	</testcase>
+</testsuite>
