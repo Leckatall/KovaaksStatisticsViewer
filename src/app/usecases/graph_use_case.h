@@ -79,6 +79,9 @@ namespace ksv::application {
                 points.reserve(count);
                 for (size_t i = 0; i < count; ++i)
                     points.emplace_back(static_cast<double>(buckets.times[i]), (*ys)[i]);
+                // Must stay out of the evaluator: AverageAcrossRuns needs equal-length per-run vectors.
+                points.erase(points.begin(), points.begin() + std::min<size_t>(config.presentation.hiddenLeadingPoints,
+                                                                               points.size()));
                 return points;
             }
             return std::nullopt;

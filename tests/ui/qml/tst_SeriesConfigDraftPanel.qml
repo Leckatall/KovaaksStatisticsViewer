@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtTest
 import "../../../src/ui/qml/series"
 import "ItemLookup.js" as ItemLookup
@@ -17,6 +18,7 @@ TestCase {
                     width: 2,
                     enabled: true,
                     displayPosition: 0,
+                    hiddenLeadingPoints: 0,
                     isPrimitive: true,
                     yAxisId: "",
                     expression: "SCORE"
@@ -93,6 +95,7 @@ TestCase {
                 width: 3,
                 enabled: false,
                 displayPosition: 1,
+                hiddenLeadingPoints: 0,
                 isPrimitive: false,
                 expression: "2"
             },
@@ -103,6 +106,7 @@ TestCase {
                 width: 2,
                 enabled: true,
                 displayPosition: 0,
+                hiddenLeadingPoints: 2,
                 isPrimitive: true,
                 expression: "SCORE"
             }
@@ -284,13 +288,22 @@ TestCase {
         mouseClick(ItemLookup.findByObjectName(panel, "seriesColorSwatch_1"));
         compare(panel.colorDialog.selectedColor.toString(), "#009600");
     }
+    function openOptionsPopup(panel, id) {
+        mouseClick(ItemLookup.findByObjectName(panel, "seriesOptionsButton_" + id));
+        tryVerify(function () {
+            const item = ItemLookup.findByObjectName(Overlay.overlay, "deleteSeriesButton_" + id);
+            return item !== null && item.visible;
+        });
+        return Overlay.overlay;
+    }
     function test_deleteButtonCallsRemoveComputedSeriesWithRowId() {
         const vm = makeFakeSettingsVm();
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        ItemLookup.findByObjectName(panel, "deleteSeriesButton_1").clicked();
+        const overlay = openOptionsPopup(panel, "1");
+        mouseClick(ItemLookup.findByObjectName(overlay, "deleteSeriesButton_1"));
         compare(panel.settingsVm.removeCalls[0], ["1"]);
     }
     function test_deleteButtonWorksIdenticallyOnAPrimitiveRow() {
@@ -301,8 +314,101 @@ TestCase {
             settingsVm: vm
         });
         verify(waitForRendering(panel));
-        ItemLookup.findByObjectName(panel, "deleteSeriesButton_1").clicked();
+        const overlay = openOptionsPopup(panel, "1");
+        mouseClick(ItemLookup.findByObjectName(overlay, "deleteSeriesButton_1"));
         compare(panel.settingsVm.removeCalls[0], ["1"]);
+    }
+    function test_changingTheHiddenLeadingPointsSpinBoxCallsSetSeriesHiddenLeadingPointsWithIdAndValue() {
+        const vm = makeFakeSettingsVm({
+            allSeriesConfigs: rowsOutOfOrder()
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm
+        });
+        verify(waitForRendering(panel));
+        const overlay = openOptionsPopup(panel, "1");
+        const spinBox = ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsSpinBox_1");
+        verify(spinBox !== null);
+        compare(spinBox.value, 2);
+        compare(spinBox.to, vm.maximumHiddenLeadingPoints);
+        mouseClick(spinBox.up.indicator);
+        compare(panel.settingsVm.setSeriesHiddenLeadingPointsCalls, [["1", 3]]);
+    }
+    function test_theOptionsPopupOpensUnderItsButtonWithAHintThatReflectsTheCount() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: makeFakeSettingsVm({
+                allSeriesConfigs: rowsOutOfOrder()
+            })
+        });
+        verify(waitForRendering(panel));
+        const button = ItemLookup.findByObjectName(panel, "seriesOptionsButton_1");
+        const overlay = openOptionsPopup(panel, "1");
+        const corner = button.mapToItem(panel, button.width, button.height);
+        compare(panel.optionsAnchorRight, corner.x);
+        compare(panel.optionsAnchorBottom, corner.y);
+        verify(panel.optionsPopup.y > corner.y);
+        const popup = panel.optionsPopup;
+        compare(ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsHint").text,
+                "The line starts after its first 2 points.");
+        compare(ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsHint").color,
+                popup.palette.placeholderText);
+    }
+    function test_deletingASeriesClosesTheOptionsPopup() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: makeFakeSettingsVm({
+                allSeriesConfigs: rowsOutOfOrder()
+            })
+        });
+        verify(waitForRendering(panel));
+        const overlay = openOptionsPopup(panel, "2");
+        mouseClick(ItemLookup.findByObjectName(overlay, "deleteSeriesButton_2"));
+        compare(panel.settingsVm.removeCalls[0], ["2"]);
+        tryVerify(function () { return !panel.optionsPopup.visible; });
+    }
+    function test_theOptionsPopupClosesWhenItsSeriesDisappears() {
+        const vm = createTemporaryObject(liveSettingsVmComponent, testCase, {
+            allSeriesConfigs: rowsOutOfOrder()
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm
+        });
+        verify(waitForRendering(panel));
+        openOptionsPopup(panel, "1");
+        vm.allSeriesConfigs = vm.allSeriesConfigs.filter(function (row) { return row.id !== "1"; });
+        tryVerify(function () { return !panel.optionsPopup.visible; });
+        compare(panel.optionsTargetId, "");
+    }
+    function test_theOptionsPopupStaysOpenAcrossEditsThatRepublishTheRows() {
+        const vm = createTemporaryObject(liveSettingsVmComponent, testCase, {
+            allSeriesConfigs: rowsOutOfOrder()
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: vm
+        });
+        verify(waitForRendering(panel));
+        const overlay = openOptionsPopup(panel, "1");
+        mouseClick(ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsSpinBox_1").up.indicator);
+        compare(vm.setSeriesHiddenLeadingPointsCalls, [["1", 3]]);
+        wait(50);
+
+        const spinBox = ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsSpinBox_1");
+        verify(spinBox !== null && spinBox.visible, "the options popup closed after one step");
+        compare(spinBox.value, 3);
+        mouseClick(spinBox.up.indicator);
+        compare(vm.setSeriesHiddenLeadingPointsCalls, [["1", 3], ["1", 4]]);
+        wait(50);
+        compare(ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsSpinBox_1").value, 4);
+        verify(ItemLookup.findByObjectName(panel, "seriesOptionsIndicator_1").visible);
+    }
+    function test_theOptionsIndicatorIsShownOnlyForRowsHidingLeadingPoints() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: makeFakeSettingsVm({
+                allSeriesConfigs: rowsOutOfOrder()
+            })
+        });
+        verify(waitForRendering(panel));
+        verify(ItemLookup.findByObjectName(panel, "seriesOptionsIndicator_1").visible);
+        verify(!ItemLookup.findByObjectName(panel, "seriesOptionsIndicator_2").visible);
     }
     function test_draggingARowDoesNotCallReorderSeriesUntilReleased() {
         const vm = makeFakeSettingsVm({
@@ -496,7 +602,7 @@ TestCase {
         compare(call[4], true);
         compare(call[5], vm.allSeriesConfigs[0].expression);
     }
-    function test_everyRowShowsAColorSwatchNameFieldEditExpressionButtonAndDeleteButtonIncludingPrimitiveRows() {
+    function test_everyRowShowsAColorSwatchNameFieldEditExpressionButtonAndOptionsButtonIncludingPrimitiveRows() {
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: makeFakeSettingsVm({
                 allSeriesConfigs: rowsOutOfOrder()
@@ -507,7 +613,7 @@ TestCase {
             verify(ItemLookup.findByObjectName(panel, "seriesColorSwatch_" + id) !== null);
             verify(ItemLookup.findByObjectName(panel, "seriesNameField_" + id) !== null);
             verify(ItemLookup.findByObjectName(panel, "editExpressionButton_" + id) !== null);
-            verify(ItemLookup.findByObjectName(panel, "deleteSeriesButton_" + id) !== null);
+            verify(ItemLookup.findByObjectName(panel, "seriesOptionsButton_" + id) !== null);
         }
     }
     function test_manySeriesRowsScrollInsteadOfPushingSaveButtonOutOfBounds() {
@@ -629,6 +735,26 @@ TestCase {
         id: panelComponent
 
         SeriesConfigDraftPanel {
+        }
+    }
+
+    Component {
+        id: liveSettingsVmComponent
+
+        QtObject {
+            property var allSeriesConfigs: []
+            property var allAxes: []
+            property var issues: []
+            property bool pendingChanges: false
+            property int maximumHiddenLeadingPoints: 10
+            property var setSeriesHiddenLeadingPointsCalls: []
+            function setSeriesHiddenLeadingPoints(id, count) {
+                setSeriesHiddenLeadingPointsCalls = setSeriesHiddenLeadingPointsCalls.concat([[id, count]])
+                allSeriesConfigs = allSeriesConfigs.map(function(row) {
+                    return row.id === id ? Object.assign({}, row, { hiddenLeadingPoints: count }) : Object.assign({}, row)
+                })
+                return { succeeded: true }
+            }
         }
     }
 

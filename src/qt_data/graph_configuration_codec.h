@@ -6,7 +6,7 @@
 #include "app/contracts/graph_configuration.h"
 
 namespace ksv::qt_data {
-    inline constexpr int kGraphConfigurationSchemaVersion = 4;
+    inline constexpr int kGraphConfigurationSchemaVersion = 5;
 
     struct DecodedGraphConfiguration {
         application::GraphConfiguration configuration;
@@ -21,7 +21,7 @@ namespace ksv::qt_data {
     };
 
     // Each section decodes independently; nullopt only when the text is not a JSON object with a
-    // supported schemaVersion (1-4).
+    // supported schemaVersion (1-5).
     [[nodiscard]] std::optional<DecodedGraphConfiguration> decodeGraphConfigurationDocument(const std::string &raw);
 
     [[nodiscard]] std::string encodeGraphConfigurationDocument(const application::GraphConfiguration &configuration);

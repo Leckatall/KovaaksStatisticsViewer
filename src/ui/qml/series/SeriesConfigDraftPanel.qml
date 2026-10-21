@@ -12,6 +12,12 @@ Pane {
     property var displayRows: []
     property var colorTarget: null
     property var axisNameTarget: null
+    // The options popup lives here rather than in a row: every edit republishes allSeriesConfigs,
+    // which rebuilds every row delegate and would destroy a popup owned by one.
+    property string optionsTargetId: ""
+    readonly property var optionsTarget: displayRows.find(function(row) { return row.id === optionsTargetId }) || null
+    property real optionsAnchorRight: 0
+    property real optionsAnchorBottom: 0
     property string draggedSeriesId: ""
     property int dragOriginIndex: -1
     property int dragPreviewIndex: -1
@@ -23,6 +29,7 @@ Pane {
     readonly property alias expressionDialog: expressionDialog
     readonly property alias newAxisDialog: newAxisDialog
     readonly property alias newAxisNameField: newAxisNameField
+    readonly property alias optionsPopup: optionsPopup
     readonly property var axisComboModel: {
         const items = [{
             text: qsTr("Independent"),
@@ -54,6 +61,13 @@ Pane {
         }
         root.settingsVm.updateSeriesAxis(row.id, value)
     }
+    function openSeriesOptions(row, anchor) {
+        const corner = anchor.mapToItem(root, anchor.width, anchor.height)
+        optionsAnchorRight = corner.x
+        optionsAnchorBottom = corner.y
+        optionsTargetId = row.id
+        optionsPopup.open()
+    }
     function previewMove(position) {
         dragPreviewIndex = Math.max(0, Math.min(displayRows.length - 1, position))
     }
@@ -73,6 +87,7 @@ Pane {
 
     Component.onCompleted: refreshRows()
     onSourceRowsChanged: refreshRows()
+    onOptionsTargetChanged: if (!optionsTarget) optionsPopup.close()
 
     ColorDialog {
         id: colorDialog
@@ -97,6 +112,73 @@ Pane {
             if (result && result.succeeded && root.axisNameTarget)
                 root.settingsVm.updateSeriesAxis(root.axisNameTarget.id, result.createdAxisId)
             newAxisNameField.text = ""
+        }
+    }
+
+    Popup {
+        id: optionsPopup
+        objectName: "seriesOptionsPopup"
+        readonly property int hiddenLeadingPoints: root.optionsTarget ? root.optionsTarget.hiddenLeadingPoints || 0 : 0
+
+        x: root.optionsAnchorRight - width
+        y: root.optionsAnchorBottom + 4
+        padding: 12
+        margins: 8
+        popupType: Popup.Item
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onClosed: root.optionsTargetId = ""
+
+        contentItem: ColumnLayout {
+            spacing: 8
+
+            RowLayout {
+                spacing: 10
+
+                Label {
+                    text: qsTr("Hide leading points")
+                }
+
+                SpinBox {
+                    objectName: "hiddenLeadingPointsSpinBox_" + root.optionsTargetId
+                    from: 0
+                    to: root.settingsVm.maximumHiddenLeadingPoints
+                    value: optionsPopup.hiddenLeadingPoints
+                    onValueModified: root.settingsVm.setSeriesHiddenLeadingPoints(root.optionsTargetId, value)
+                }
+            }
+
+            Label {
+                objectName: "hiddenLeadingPointsHint"
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
+                Layout.minimumWidth: 220
+                text: optionsPopup.hiddenLeadingPoints === 0 ? qsTr("The whole line is drawn.")
+                      : optionsPopup.hiddenLeadingPoints === 1 ? qsTr("The line starts after its first point.")
+                      : qsTr("The line starts after its first %n points.", "", optionsPopup.hiddenLeadingPoints)
+                color: optionsPopup.palette.placeholderText
+                wrapMode: Text.WordWrap
+            }
+
+            MenuSeparator {
+                Layout.fillWidth: true
+            }
+
+            Button {
+                objectName: "deleteSeriesButton_" + root.optionsTargetId
+                Layout.fillWidth: true
+                flat: true
+                text: qsTr("Delete series")
+                icon.source: "../icons/trash-2.svg"
+                icon.width: 16
+                icon.height: 16
+                onClicked: {
+                    const id = root.optionsTargetId
+                    optionsPopup.close()
+                    root.settingsVm.removeComputedSeries(id)
+                }
+            }
         }
     }
 
@@ -165,7 +247,7 @@ Pane {
                             expressionDialog.open()
                         }
                         onAxisSelectionRequested: (row, value) => root.handleAxisSelection(row, value)
-                        onSeriesRemovalRequested: row => root.settingsVm.removeComputedSeries(row.id)
+                        onOptionsRequested: (row, anchor) => root.openSeriesOptions(row, anchor)
                         onSeriesEnabledRequested: (row, enabled) => root.settingsVm.setSeriesEnabled(row.id, enabled)
                         onReorderRequested: (seriesId, targetPosition) => root.settingsVm.reorderSeries(seriesId, targetPosition)
                     }

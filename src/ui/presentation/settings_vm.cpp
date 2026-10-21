@@ -470,6 +470,10 @@ namespace ksv::presentation {
 
     QVariantList SettingsViewModel::draftIssues() const { return issueList(m_draftIssues); }
 
+    int SettingsViewModel::maximumHiddenLeadingPoints() {
+        return static_cast<int>(application::kMaximumHiddenLeadingPoints);
+    }
+
     QVariantMap SettingsViewModel::graphLimits() const {
         return {
             {"maxRecentDays", application::kMaximumRangeDays},
@@ -873,6 +877,7 @@ namespace ksv::presentation {
                 {"width", config.presentation.lineStyle.width},
                 {"enabled", config.presentation.enabled},
                 {"displayPosition", config.presentation.displayPosition},
+                {"hiddenLeadingPoints", config.presentation.hiddenLeadingPoints},
                 {"isPrimitive", config.isPrimitive()},
                 {"expression", QString::fromStdString(application::encodeExpressionDsl(config.expression))},
                 {"yAxisId", config.yAxisId ? QString::number(config.yAxisId->value) : QString()},
@@ -915,6 +920,19 @@ namespace ksv::presentation {
         return editRunSeries([&](application::RunSeriesDocument &document) {
             return application::updateSeries(document, {
                 .id = {*value}, .presentation = application::UpdatedSeriesPresentation{.enabled = enabled}
+            });
+        });
+    }
+
+    QVariantMap SettingsViewModel::setSeriesHiddenLeadingPoints(const QString &id, const int count) {
+        const auto value = parseId(id);
+        if (!value || count < 0) return invalidMutationMap();
+        return editRunSeries([&](application::RunSeriesDocument &document) {
+            return application::updateSeries(document, {
+                .id = {*value},
+                .presentation = application::UpdatedSeriesPresentation{
+                    .hiddenLeadingPoints = static_cast<uint32_t>(count)
+                }
             });
         });
     }

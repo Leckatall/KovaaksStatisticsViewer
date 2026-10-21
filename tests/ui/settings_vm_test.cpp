@@ -234,6 +234,33 @@ namespace {
         EXPECT_EQ(view_model->getAllAxes().size(), 3);
     }
 
+    TEST_F(SettingsViewModelTest, SettingHiddenLeadingPointsEditsTheWorkingCopyAndFlagsPendingChanges) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->hasPendingChanges());
+        EXPECT_EQ(row(*view_model, "8")["hiddenLeadingPoints"].toInt(), 1);
+
+        ASSERT_TRUE(view_model->setSeriesHiddenLeadingPoints("8", 3)["succeeded"].toBool());
+
+        EXPECT_EQ(row(*view_model, "8")["hiddenLeadingPoints"].toInt(), 3);
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        ASSERT_TRUE(view_model->updateComputedSeries("8", "Renamed", "#123456", 2.0, true,
+                                                     "ProjectedFinalValue(RunningSum(SCORE))")["succeeded"].toBool());
+        EXPECT_EQ(row(*view_model, "8")["hiddenLeadingPoints"].toInt(), 3);
+    }
+
+    TEST_F(SettingsViewModelTest, HiddenLeadingPointsOutsideTheAllowedRangeAreRejected) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        EXPECT_FALSE(view_model->setSeriesHiddenLeadingPoints("8", -1)["succeeded"].toBool());
+        EXPECT_FALSE(view_model->setSeriesHiddenLeadingPoints(
+            "8", static_cast<int>(kMaximumHiddenLeadingPoints) + 1)["succeeded"].toBool());
+        EXPECT_EQ(row(*view_model, "8")["hiddenLeadingPoints"].toInt(), 1);
+        EXPECT_EQ(view_model->property("maximumHiddenLeadingPoints").toInt(),
+                  static_cast<int>(kMaximumHiddenLeadingPoints));
+    }
+
     TEST_F(SettingsViewModelTest, EditsNotifyTheEditorAndTheDirtyState) {
         const auto view_model = make_view_model();
         view_model->beginVisit();

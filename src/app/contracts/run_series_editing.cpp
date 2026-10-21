@@ -51,7 +51,8 @@ namespace ksv::application {
         auto edited = document;
         auto &config = edited.series[*index];
         if (request.presentation) {
-            const auto &[name, lineStyle, enabled] = *request.presentation;
+            const auto &[name, lineStyle, enabled, hiddenLeadingPoints] = *request.presentation;
+            if (hiddenLeadingPoints) config.presentation.hiddenLeadingPoints = *hiddenLeadingPoints;
             if (name) config.presentation.name = *name;
             if (lineStyle) config.presentation.lineStyle = *lineStyle;
             if (enabled) config.presentation.enabled = *enabled;

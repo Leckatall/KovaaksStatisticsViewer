@@ -137,19 +137,32 @@ namespace {
 
         void writeDoc(const QJsonObject &root) const { settings->document = compact(root); }
 
-        [[nodiscard]] QJsonObject savedV4Root(const GraphConfiguration &configuration) const {
+        [[nodiscard]] QJsonObject savedRoot(const GraphConfiguration &configuration) const {
             save(configuration);
             return docObject();
         }
 
         [[nodiscard]] QJsonObject v4RootWithV3Series() const {
-            auto root = savedV4Root(everyPreferenceKind());
+            auto root = savedRoot(everyPreferenceKind());
             for (const auto *key: {"series", "axes", "nextComputedSeriesId", "nextAxisId"}) root[key] = v3Root()[key];
+            root["schemaVersion"] = 4;
+            return root;
+        }
+
+        [[nodiscard]] static QJsonObject withPresentationKey(QJsonObject root, const QJsonValue &value) {
+            auto series = root["series"].toArray();
+            auto first = series[0].toObject();
+            auto presentation = first["presentation"].toObject();
+            if (value.isUndefined()) presentation.remove("hiddenLeadingPoints");
+            else presentation["hiddenLeadingPoints"] = value;
+            first["presentation"] = presentation;
+            series[0] = first;
+            root["series"] = series;
             return root;
         }
     };
 
-    TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionFourDocument) {
+    TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionFiveDocument) {
         settings->legacyDisabledColumns = {"score"};
         const auto loaded = load();
 
@@ -159,7 +172,7 @@ namespace {
         EXPECT_TRUE(settings->quarantined.empty());
         ASSERT_EQ(settings->document_writes, 1);
         const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 4);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 5);
         EXPECT_EQ(root["graphs"].toObject().keys(),
                   (QStringList{"benchmarkPlaytime", "benchmarkRank", "dailyPlaytime", "run", "scenarioHistory"}));
     }
@@ -179,7 +192,7 @@ namespace {
         for (const auto key: kGraphKeys) EXPECT_EQ(loaded.preferences(key), defaultGraphPreferences(key));
 
         save(loaded);
-        EXPECT_EQ(docObject()["schemaVersion"].toInt(), 4);
+        EXPECT_EQ(docObject()["schemaVersion"].toInt(), 5);
         EXPECT_EQ(load(), loaded);
     }
 
@@ -215,13 +228,58 @@ namespace {
         EXPECT_TRUE(settings->quarantined.empty());
         expectV3RootSeries(loaded.runSeries);
 
-        const auto root = savedV4Root(loaded);
-        EXPECT_EQ(root["schemaVersion"].toInt(), 4);
+        const auto root = savedRoot(loaded);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 5);
         EXPECT_TRUE(root["nextComputedSeriesId"].isNull());
         EXPECT_TRUE(root["nextAxisId"].isNull());
-        EXPECT_EQ(root["series"], v3Root()["series"]);
+        auto expectedSeries = v3Root()["series"].toArray();
+        for (qsizetype index = 0; index < expectedSeries.size(); ++index) {
+            auto series = expectedSeries[index].toObject();
+            auto presentation = series["presentation"].toObject();
+            presentation["hiddenLeadingPoints"] = 0;
+            series["presentation"] = presentation;
+            expectedSeries[index] = series;
+        }
+        EXPECT_EQ(root["series"], expectedSeries);
         EXPECT_EQ(root["axes"], v3Root()["axes"]);
         expectV3RootSeries(load().runSeries);
+        for (const auto &config: load().runSeries.series) EXPECT_EQ(config.presentation.hiddenLeadingPoints, 0U);
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, HiddenLeadingPointsRoundTripAndAreAlwaysWritten) {
+        auto configuration = everyPreferenceKind();
+        configuration.runSeries.series[2].presentation.hiddenLeadingPoints = 3;
+        save(configuration);
+
+        const auto root = docObject();
+        EXPECT_EQ(root["schemaVersion"].toInt(), 5);
+        for (const auto &item: root["series"].toArray())
+            EXPECT_TRUE(item.toObject()["presentation"].toObject()["hiddenLeadingPoints"].isDouble());
+        EXPECT_EQ(root["series"].toArray()[2].toObject()["presentation"].toObject()["hiddenLeadingPoints"].toInt(), 3);
+        EXPECT_EQ(load(), configuration);
+        EXPECT_TRUE(settings->quarantined.empty());
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, VersionFourSeriesWithoutTheKeyDecodeToZeroHiddenPoints) {
+        writeDoc(v4RootWithV3Series());
+        const auto loaded = load();
+        EXPECT_TRUE(settings->quarantined.empty());
+        expectV3RootSeries(loaded.runSeries);
+        for (const auto &config: loaded.runSeries.series) EXPECT_EQ(config.presentation.hiddenLeadingPoints, 0U);
+    }
+
+    // Older builds use exactKeys, so the version bump is what keeps the key out of v4 documents.
+    TEST_F(GraphConfigurationPersistenceTest, RejectsHiddenLeadingPointsKeyInVersionFourAndItsAbsenceOrExcessInFive) {
+        const auto rejected = [&](const QJsonObject &root) {
+            settings = std::make_shared<FakeSettingsService>();
+            writeDoc(root);
+            (void) load();
+            return settings->quarantined.size() == 1U;
+        };
+        EXPECT_TRUE(rejected(withPresentationKey(v4RootWithV3Series(), 2)));
+        EXPECT_TRUE(rejected(withPresentationKey(savedRoot(everyPreferenceKind()), QJsonValue::Undefined)));
+        EXPECT_TRUE(rejected(withPresentationKey(savedRoot(everyPreferenceKind()),
+                                                 static_cast<int>(kMaximumHiddenLeadingPoints) + 1)));
     }
 
     TEST_F(GraphConfigurationPersistenceTest, RoundTripsEveryPreferenceKind) {
@@ -233,7 +291,7 @@ namespace {
     }
 
     TEST_F(GraphConfigurationPersistenceTest, StoresCustomDatesAsIsoCalendarDates) {
-        const auto root = savedV4Root(everyPreferenceKind());
+        const auto root = savedRoot(everyPreferenceKind());
         const auto rankRange = root["graphs"].toObject()["benchmarkRank"].toObject()["range"].toObject();
         EXPECT_EQ(rankRange["kind"].toString(), "customDates");
         EXPECT_EQ(rankRange["start"].toString(), "2026-03-05");
@@ -295,7 +353,7 @@ namespace {
     }
 
     TEST_F(GraphConfigurationPersistenceTest, MissingGraphSectionsTakeDefaultsWithoutQuarantine) {
-        auto root = savedV4Root(everyPreferenceKind());
+        auto root = savedRoot(everyPreferenceKind());
         auto graphs = root["graphs"].toObject();
         graphs.remove("dailyPlaytime");
         root["graphs"] = graphs;
@@ -391,7 +449,7 @@ namespace {
     }
 
     TEST_F(GraphConfigurationPersistenceTest, QuarantinesUnknownGraphKeysAndANonObjectGraphsSection) {
-        auto root = savedV4Root(everyPreferenceKind());
+        auto root = savedRoot(everyPreferenceKind());
         auto graphs = root["graphs"].toObject();
         graphs["sessionTimeline"] = QJsonObject{};
         root["graphs"] = graphs;
@@ -411,7 +469,7 @@ namespace {
 
     TEST_F(GraphConfigurationPersistenceTest, AnInvalidSeriesSectionReseedsSeriesButKeepsValidGraphPreferences) {
         settings->legacyDisabledColumns = {"accuracy"};
-        auto root = savedV4Root(everyPreferenceKind());
+        auto root = savedRoot(everyPreferenceKind());
         auto series = root["series"].toArray();
         auto first = series[0].toObject();
         first["expression"] = "Add(SCORE,)";
@@ -430,7 +488,7 @@ namespace {
 
     TEST_F(GraphConfigurationPersistenceTest, UndecodableOrUnsupportedDocumentsFollowTheExistingRecoveryPath) {
         for (const std::string raw: {std::string("{\"schemaVersion\":4,"), std::string("[]"), std::string("{}"),
-                                     std::string("{\"schemaVersion\":5}"), std::string("{\"schemaVersion\":\"4\"}")}) {
+                                     std::string("{\"schemaVersion\":6}"), std::string("{\"schemaVersion\":\"4\"}")}) {
             settings = std::make_shared<FakeSettingsService>();
             settings->legacyRunAxisLabelSeriesId = "3";
             settings->document = raw;
@@ -439,7 +497,7 @@ namespace {
             auto expected = defaultGraphConfiguration();
             expected.runAxisLabelSeriesId = SeriesId{3};
             EXPECT_EQ(loaded, expected) << raw;
-            EXPECT_EQ(docObject()["schemaVersion"].toInt(), 4);
+            EXPECT_EQ(docObject()["schemaVersion"].toInt(), 5);
         }
     }
 
@@ -455,7 +513,7 @@ namespace {
         }
     };
 
-    TEST_F(GraphConfigurationQSettingsTest, LoadsAndSavesTheVersionFourSnapshotAcrossRestarts) {
+    TEST_F(GraphConfigurationQSettingsTest, LoadsAndSavesTheVersionFiveSnapshotAcrossRestarts) {
         {
             QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
             raw.setValue("graph/seriesConfigV1", QString::fromStdString(compact(v3Root())));
@@ -477,7 +535,7 @@ namespace {
         EXPECT_EQ(GraphConfigurationPersistence(settings).load(), configuration);
         const QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         const auto stored = QJsonDocument::fromJson(raw.value("graph/seriesConfigV1").toString().toUtf8()).object();
-        EXPECT_EQ(stored["schemaVersion"].toInt(), 4);
+        EXPECT_EQ(stored["schemaVersion"].toInt(), 5);
         EXPECT_EQ(raw.value("graphAxis/seriesId").toString(), "12");
     }
 }

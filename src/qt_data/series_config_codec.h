@@ -43,10 +43,10 @@ namespace ksv::qt_data::series_codec {
 
     [[nodiscard]] std::optional<application::RgbaColor> decodeColor(const QJsonValue &value);
 
-    // The series, axes and allocator keys of a schema-version-3 document root, without schemaVersion.
+    // The series, axes and allocator keys of a schema-version-4 document root, without schemaVersion.
     [[nodiscard]] QJsonObject encodeRunSeries(const application::RunSeriesDocument &document);
 
-    // `root` holds exactly the keys of the given schema version's format (1, 2 or 3); versions 1 and 2
+    // `root` holds exactly the keys of the given schema version's format (1 to 4); versions 1 and 2
     // migrate to the current series model.
     [[nodiscard]] std::optional<application::RunSeriesDocument> decodeRunSeries(const QJsonObject &root,
                                                                                 int schemaVersion);

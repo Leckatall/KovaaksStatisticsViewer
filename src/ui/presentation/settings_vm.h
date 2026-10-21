@@ -48,6 +48,7 @@ namespace ksv::presentation {
         Q_PROPERTY(QVariantMap graphDrafts READ graphDrafts NOTIFY graphDraftsChanged)
         Q_PROPERTY(QVariantList draftIssues READ draftIssues NOTIFY draftIssuesChanged)
         Q_PROPERTY(QVariantMap graphLimits READ graphLimits CONSTANT)
+        Q_PROPERTY(int maximumHiddenLeadingPoints READ maximumHiddenLeadingPoints CONSTANT)
 
     public:
         explicit SettingsViewModel(std::shared_ptr<application::ISettingsService> settings_service,
@@ -115,6 +116,7 @@ namespace ksv::presentation {
         [[nodiscard]] QVariantList draftIssues() const;
         // The stated input limits and the date format fields expect.
         [[nodiscard]] QVariantMap graphLimits() const;
+        [[nodiscard]] static int maximumHiddenLeadingPoints();
 
         // Every edit below changes only the working copy; it returns false when nothing was applied
         // (no visit, unknown graph or control, or text that does not parse completely).
@@ -148,6 +150,7 @@ namespace ksv::presentation {
 
         // Every edit below changes only the working copy and is refused outside a visit.
         Q_INVOKABLE QVariantMap setSeriesEnabled(const QString &id, bool enabled);
+        Q_INVOKABLE QVariantMap setSeriesHiddenLeadingPoints(const QString &id, int count);
         Q_INVOKABLE QVariantMap createComputedSeries(const QString &name, const QColor &color, double width,
                                                       bool enabled, const QString &expression);
         Q_INVOKABLE QVariantMap updateComputedSeries(const QString &id, const QString &name, const QColor &color,

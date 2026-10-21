@@ -37,6 +37,7 @@ namespace ksv::application {
         std::optional<std::string> name{};
         std::optional<LineStyle> lineStyle{};
         std::optional<bool> enabled{};
+        std::optional<uint32_t> hiddenLeadingPoints{};
     };
 
     struct UpdateSeriesRequest {

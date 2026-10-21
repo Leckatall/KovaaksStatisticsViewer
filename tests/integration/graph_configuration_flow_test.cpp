@@ -476,8 +476,16 @@ namespace {
         ASSERT_TRUE(quick("dailyPlaytime", {{"window", 4}}));
         ASSERT_TRUE(quick("dailyPlaytime", {{"window", 3}}));
         const auto upgraded = storedDocument();
-        EXPECT_EQ(upgraded["schemaVersion"].toInt(), 4);
-        EXPECT_EQ(upgraded["series"], original["series"]);
+        EXPECT_EQ(upgraded["schemaVersion"].toInt(), 5);
+        auto expectedSeries = original["series"].toArray();
+        for (qsizetype index = 0; index < expectedSeries.size(); ++index) {
+            auto series = expectedSeries[index].toObject();
+            auto presentation = series["presentation"].toObject();
+            presentation["hiddenLeadingPoints"] = 0;
+            series["presentation"] = presentation;
+            expectedSeries[index] = series;
+        }
+        EXPECT_EQ(upgraded["series"], expectedSeries);
         EXPECT_EQ(upgraded["axes"], original["axes"]);
         stored.beginGroup("graph/seriesConfigQuarantine");
         EXPECT_TRUE(stored.childKeys().isEmpty());

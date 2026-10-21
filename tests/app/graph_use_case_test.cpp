@@ -88,6 +88,34 @@ namespace {
         EXPECT_DOUBLE_EQ((*points)[1].second, 9.0);
     }
 
+    TEST_F(GraphUseCaseTest, GetSeriesValuesDropsHiddenLeadingPointsWithoutRenumberingX) {
+        auto run = runWithSeconds("a");
+        run.performance->samples.emplace_back(3.0F);
+        run.performance->samples.emplace_back(4.0F);
+        fake_session_controller->current_run = run;
+        fake_average->result = std::vector<double>{7.0, 9.0, 11.0, 13.0};
+        const auto series = [&](const uint32_t hidden) {
+            fake_configuration->configuration.runSeries.series = {
+                SeriesConfig{{1}, {"Score", {}, true, 0, hidden}, primitive(PrimitiveMetric::Score)}
+            };
+            return use_case.getSeriesValues(SeriesId{1});
+        };
+
+        const auto unfiltered = series(0);
+        ASSERT_TRUE(unfiltered.has_value());
+        ASSERT_EQ(unfiltered->size(), 4U);
+
+        const auto trimmed = series(2);
+        ASSERT_TRUE(trimmed.has_value());
+        ASSERT_EQ(trimmed->size(), 2U);
+        EXPECT_EQ((*trimmed)[0], (*unfiltered)[2]);
+        EXPECT_EQ((*trimmed)[1], (*unfiltered)[3]);
+
+        const auto exhausted = series(10);
+        ASSERT_TRUE(exhausted.has_value());
+        EXPECT_TRUE(exhausted->empty());
+    }
+
     TEST_F(GraphUseCaseTest, GetSeriesValuesReturnsNulloptWhenEvaluationFails) {
         fake_session_controller->current_run = runWithSeconds("a");
         fake_configuration->configuration.runSeries.series = {SeriesConfig{{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)}};

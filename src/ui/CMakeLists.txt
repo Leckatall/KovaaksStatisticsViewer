@@ -89,6 +89,7 @@ qt_add_qml_module(ksv_ui
             qml/icons/copy.svg
             qml/icons/clipboard-paste.svg
             qml/icons/trash-2.svg
+            qml/icons/ellipsis.svg
             qml/icons/square-function.svg
             qml/icons/refresh-cw.svg
             qml/icons/folder-open.svg

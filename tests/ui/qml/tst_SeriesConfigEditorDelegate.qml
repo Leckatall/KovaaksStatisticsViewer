@@ -14,6 +14,7 @@ TestCase {
         width: 2,
         enabled: true,
         displayPosition: 0,
+        hiddenLeadingPoints: 0,
         expression: { kind: "primitive", primitiveMetric: "score" }
     })
 
@@ -21,8 +22,8 @@ TestCase {
     SignalSpy { id: nameUpdateRequestedSpy; signalName: "nameUpdateRequested" }
     SignalSpy { id: expressionEditRequestedSpy; signalName: "expressionEditRequested" }
     SignalSpy { id: axisSelectionRequestedSpy; signalName: "axisSelectionRequested" }
-    SignalSpy { id: seriesRemovalRequestedSpy; signalName: "seriesRemovalRequested" }
     SignalSpy { id: seriesEnabledRequestedSpy; signalName: "seriesEnabledRequested" }
+    SignalSpy { id: optionsRequestedSpy; signalName: "optionsRequested" }
 
     function createDelegate() {
         const delegate = createTemporaryObject(delegateComponent, testCase, { modelData: row })
@@ -31,8 +32,9 @@ TestCase {
         nameUpdateRequestedSpy.target = delegate
         expressionEditRequestedSpy.target = delegate
         axisSelectionRequestedSpy.target = delegate
-        seriesRemovalRequestedSpy.target = delegate
         seriesEnabledRequestedSpy.target = delegate
+        optionsRequestedSpy.target = delegate
+        optionsRequestedSpy.clear()
         return delegate
     }
 
@@ -77,10 +79,58 @@ TestCase {
         compare(fx.text, "")
         verify(fx.icon.source.toString().endsWith("square-function.svg"))
 
-        const del = ItemLookup.findByObjectName(delegate, "deleteSeriesButton_" + row.id)
-        verify(del !== null)
-        compare(del.text, "")
-        verify(del.icon.source.toString().endsWith("trash-2.svg"))
+        const options = ItemLookup.findByObjectName(delegate, "seriesOptionsButton_" + row.id)
+        verify(options !== null)
+        compare(options.text, "")
+        verify(options.icon.source.toString().endsWith("ellipsis.svg"))
+        compare(options.Accessible.name, "Series options")
+    }
+
+    function test_clickingTheOptionsButtonRequestsOptionsAnchoredToIt() {
+        const delegate = createDelegate()
+        const options = ItemLookup.findByObjectName(delegate, "seriesOptionsButton_" + row.id)
+        mouseClick(options)
+        compare(optionsRequestedSpy.count, 1)
+        compare(optionsRequestedSpy.signalArguments[0][0], row)
+        compare(optionsRequestedSpy.signalArguments[0][1], options)
+    }
+
+    function test_theIndicatorAndTooltipReflectHiddenLeadingPoints() {
+        const delegate = createDelegate()
+        const indicator = ItemLookup.findByObjectName(delegate, "seriesOptionsIndicator_" + row.id)
+        const options = ItemLookup.findByObjectName(delegate, "seriesOptionsButton_" + row.id)
+        verify(indicator !== null)
+        verify(!indicator.visible)
+
+        const hiding = createTemporaryObject(delegateComponent, testCase, {
+            modelData: Object.assign({}, row, { hiddenLeadingPoints: 3 })
+        })
+        const hidingIndicator = ItemLookup.findByObjectName(hiding, "seriesOptionsIndicator_" + row.id)
+        const hidingOptions = ItemLookup.findByObjectName(hiding, "seriesOptionsButton_" + row.id)
+        verify(hidingIndicator.visible)
+        compare(hidingOptions.ToolTip.text, "Hiding the first 3 points")
+        compare(hidingOptions.Accessible.name, "Hiding the first 3 points")
+        compare(options.ToolTip.text, "Series options")
+
+        const hidingOne = createTemporaryObject(delegateComponent, testCase, {
+            modelData: Object.assign({}, row, { hiddenLeadingPoints: 1 })
+        })
+        compare(ItemLookup.findByObjectName(hidingOne, "seriesOptionsButton_" + row.id).ToolTip.text,
+                "Hiding the first point")
+    }
+
+    function test_theIndicatorSitsOnTheButtonCornerClearOfTheGlyph() {
+        const delegate = createTemporaryObject(delegateComponent, testCase, {
+            modelData: Object.assign({}, row, { hiddenLeadingPoints: 2 })
+        })
+        verify(waitForRendering(delegate))
+        const options = ItemLookup.findByObjectName(delegate, "seriesOptionsButton_" + row.id)
+        const indicator = ItemLookup.findByObjectName(delegate, "seriesOptionsIndicator_" + row.id)
+        const glyph = options.contentItem
+        const glyphTop = glyph.mapToItem(options, 0, (glyph.height - options.icon.height) / 2).y
+        const indicatorBottom = indicator.mapToItem(options, 0, indicator.height).y
+        verify(indicatorBottom <= glyphTop, "indicator bottom " + indicatorBottom + " overlaps glyph top " + glyphTop)
+        verify(indicator.mapToItem(options, indicator.width, 0).x > options.width, "indicator should overhang the corner")
     }
 
     function test_actionSignalsExposeTheirPayload() {
@@ -103,10 +153,6 @@ TestCase {
         compare(axisSelectionRequestedSpy.count, 1)
         compare(axisSelectionRequestedSpy.signalArguments[0][0], row)
         compare(axisSelectionRequestedSpy.signalArguments[0][1], "axis-1")
-
-        delegate.seriesRemovalRequested(row)
-        compare(seriesRemovalRequestedSpy.count, 1)
-        compare(seriesRemovalRequestedSpy.signalArguments[0][0], row)
 
         delegate.seriesEnabledRequested(row, false)
         compare(seriesEnabledRequestedSpy.count, 1)

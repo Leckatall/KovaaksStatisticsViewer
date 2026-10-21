@@ -34,8 +34,8 @@ Rectangle {
     signal nameUpdateRequested(var row, string name)
     signal expressionEditRequested(var row)
     signal axisSelectionRequested(var row, string value)
-    signal seriesRemovalRequested(var row)
     signal seriesEnabledRequested(var row, bool enabled)
+    signal optionsRequested(var row, Item anchor)
     signal reorderRequested(string seriesId, int targetPosition)
 
     Layout.fillWidth: true
@@ -185,17 +185,39 @@ Rectangle {
     }
 
     Button {
-        objectName: "deleteSeriesButton_" + root.row.id
-        icon.source: "../icons/trash-2.svg"
+        id: optionsButton
+        objectName: "seriesOptionsButton_" + root.row.id
+        readonly property int hiddenLeadingPoints: root.row.hiddenLeadingPoints || 0
+        // The app ships no translations, so a bare "%n point(s)" would show its "(s)" verbatim.
+        readonly property string description: hiddenLeadingPoints === 0 ? qsTr("Series options")
+                                              : hiddenLeadingPoints === 1 ? qsTr("Hiding the first point")
+                                              : qsTr("Hiding the first %n points", "", hiddenLeadingPoints)
+        icon.source: "../icons/ellipsis.svg"
         icon.width: 16
         icon.height: 16
         display: AbstractButton.IconOnly
         Layout.preferredWidth: contentItem.implicitWidth + (padding * 2)
-        Accessible.name: qsTr("Delete Series")
+        Accessible.name: description
         ToolTip.visible: hovered
         ToolTip.delay: 500
-        ToolTip.text: qsTr("Delete Series")
-        onClicked: root.seriesRemovalRequested(root.row)
+        ToolTip.text: description
+        onClicked: root.optionsRequested(root.row, optionsButton)
+
+        // Centred on the button corner so it never covers the glyph; the ring in the row colour
+        // separates it from the button frame.
+        Rectangle {
+            objectName: "seriesOptionsIndicator_" + root.row.id
+            width: 8
+            height: 8
+            radius: width / 2
+            x: parent.width - width / 2
+            y: -height / 2
+            color: root.palette.highlight
+            border.color: root.color
+            border.width: 1
+            visible: optionsButton.hiddenLeadingPoints > 0
+            Accessible.ignored: true
+        }
     }
 
     Switch {

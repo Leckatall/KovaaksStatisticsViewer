@@ -19,6 +19,12 @@ function makeFakeSettingsVm(overrides) {
             this.lastSetSeriesEnabledId = id
             this.lastSetSeriesEnabledValue = enabled
         },
+        maximumHiddenLeadingPoints: 10,
+        setSeriesHiddenLeadingPointsCalls: [],
+        setSeriesHiddenLeadingPoints: function (id, count) {
+            this.setSeriesHiddenLeadingPointsCalls.push([id, count])
+            return {succeeded: true}
+        },
         beginVisitCalls: 0,
         beginVisit: function () { this.beginVisitCalls++ },
         saveCalls: 0,

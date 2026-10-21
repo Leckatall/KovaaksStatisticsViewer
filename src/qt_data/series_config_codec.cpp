@@ -41,21 +41,28 @@ namespace ksv::qt_data::series_codec {
             return {
                 {"name", QString::fromStdString(presentation.name)}, {"enabled", presentation.enabled},
                 {"displayPosition", static_cast<double>(presentation.displayPosition)},
-                {"lineStyle", encodeStyle(presentation.lineStyle)}
+                {"lineStyle", encodeStyle(presentation.lineStyle)},
+                {"hiddenLeadingPoints", static_cast<double>(presentation.hiddenLeadingPoints)}
             };
         }
 
-        std::optional<SeriesPresentation> decodePresentation(const QJsonValue &value) {
+        std::optional<SeriesPresentation> decodePresentation(const QJsonValue &value,
+                                                             const bool hasHiddenLeadingPoints) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
-            if (!exactKeys(object, {"name", "enabled", "displayPosition", "lineStyle"}) || !object["name"].isString() ||
-                !object["enabled"].isBool())
+            const auto keysMatch = hasHiddenLeadingPoints
+                                       ? exactKeys(object, {"name", "enabled", "displayPosition", "lineStyle",
+                                                            "hiddenLeadingPoints"})
+                                       : exactKeys(object, {"name", "enabled", "displayPosition", "lineStyle"});
+            if (!keysMatch || !object["name"].isString() || !object["enabled"].isBool())
                 return std::nullopt;
             const auto position = boundedInteger<uint32_t>(object["displayPosition"]);
             const auto style = decodeStyle(object["lineStyle"]);
-            if (!position || !style) return std::nullopt;
+            const auto hidden = hasHiddenLeadingPoints ? boundedInteger<uint32_t>(object["hiddenLeadingPoints"])
+                                                       : std::optional<uint32_t>{0};
+            if (!position || !style || !hidden) return std::nullopt;
             return SeriesPresentation{
-                object["name"].toString().toStdString(), *style, object["enabled"].toBool(), *position
+                object["name"].toString().toStdString(), *style, object["enabled"].toBool(), *position, *hidden
             };
         }
 
@@ -194,13 +201,14 @@ namespace ksv::qt_data::series_codec {
         }
 
         std::optional<std::vector<SeriesConfig>> decodeSeriesArray(const QJsonValue &value, const bool expectAxisFields,
-                                                                    const bool expressionIsDsl = false) {
+                                                                    const bool expressionIsDsl = false,
+                                                                    const bool hasHiddenLeadingPoints = false) {
             if (!value.isArray()) return std::nullopt;
             std::vector<SeriesConfig> configs;
             for (const auto &item: value.toArray()) {
                 if (!item.isObject()) return std::nullopt;
                 const auto object = item.toObject();
-                const auto presentation = decodePresentation(object["presentation"]);
+                const auto presentation = decodePresentation(object["presentation"], hasHiddenLeadingPoints);
                 const auto id = decimalId(object["id"]);
                 if (!presentation || !id) return std::nullopt;
                 Expression expression;
@@ -256,7 +264,8 @@ namespace ksv::qt_data::series_codec {
             return migrateV1ToV2(std::move(*configs), SeriesId{*nextId});
         }
 
-        std::optional<RunSeriesDocument> decodeVersionedDocument(const QJsonObject &root, const bool expressionIsDsl) {
+        std::optional<RunSeriesDocument> decodeVersionedDocument(const QJsonObject &root, const bool expressionIsDsl,
+                                                                       const bool hasHiddenLeadingPoints) {
             if (!exactKeys(root, {"schemaVersion", "nextComputedSeriesId", "series", "axes", "nextAxisId"})) return {};
             const auto nextSeriesId = optionalDecimalId(root["nextComputedSeriesId"]);
             const auto nextAxisId = optionalDecimalId(root["nextAxisId"]);
@@ -267,7 +276,7 @@ namespace ksv::qt_data::series_codec {
                 if (!axis) return {};
                 axes.push_back(*axis);
             }
-            auto configs = decodeSeriesArray(root["series"], true, expressionIsDsl);
+            auto configs = decodeSeriesArray(root["series"], true, expressionIsDsl, hasHiddenLeadingPoints);
             if (!configs) return {};
             const auto nextSeries = nextSeriesId->has_value() ? std::optional{SeriesId{**nextSeriesId}} : std::nullopt;
             const auto nextAxis = nextAxisId->has_value() ? std::optional{AxisId{**nextAxisId}} : std::nullopt;
@@ -334,8 +343,9 @@ namespace ksv::qt_data::series_codec {
     std::optional<RunSeriesDocument> decodeRunSeries(const QJsonObject &root, const int schemaVersion) {
         std::optional<RunSeriesDocument> document;
         if (schemaVersion == 1) document = migrateV1ToV3(root);
-        else if (schemaVersion == 2) document = decodeVersionedDocument(root, false);
-        else if (schemaVersion == 3) document = decodeVersionedDocument(root, true);
+        else if (schemaVersion == 2) document = decodeVersionedDocument(root, false, false);
+        else if (schemaVersion == 3) document = decodeVersionedDocument(root, true, false);
+        else if (schemaVersion == 4) document = decodeVersionedDocument(root, true, true);
         if (!document || !validateRunSeriesDocument(*document).empty()) return {};
         return document;
     }

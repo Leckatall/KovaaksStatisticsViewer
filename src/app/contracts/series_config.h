@@ -79,6 +79,8 @@ namespace ksv::application {
     inline constexpr double kMinimumLineWidth = 0.5;
     inline constexpr double kMaximumLineWidth = 12.0;
 
+    inline constexpr uint32_t kMaximumHiddenLeadingPoints = 10;
+
     struct LineStyle {
         RgbaColor color{};
         double width = 2.0;
@@ -89,6 +91,7 @@ namespace ksv::application {
         LineStyle lineStyle{};
         bool enabled = true;
         uint32_t displayPosition = 0;
+        uint32_t hiddenLeadingPoints = 0;
     };
 
     struct RecentRuns {
@@ -210,6 +213,7 @@ namespace ksv::application {
         ComputedNameTooLong,
         NonFiniteLineWidth,
         LineWidthOutOfRange,
+        HiddenLeadingPointsOutOfRange,
         MissingExpressionInput,
         NonFiniteConstant,
         InvalidRollingWindow,

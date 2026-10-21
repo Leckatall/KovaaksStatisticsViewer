@@ -56,6 +56,13 @@ namespace ksv::application {
                 });
             }
 
+            if (presentation.hiddenLeadingPoints > kMaximumHiddenLeadingPoints) {
+                errors.push_back({
+                    SeriesConfigValidationCode::HiddenLeadingPointsOutOfRange,
+                    std::string(path) + ".hiddenLeadingPoints"
+                });
+            }
+
             const auto name = std::string_view{presentation.name};
             if (trim(name).empty()) {
                 errors.push_back({SeriesConfigValidationCode::EmptyComputedName, std::string(path) + ".name"});
@@ -231,7 +238,8 @@ namespace ksv::application {
                 leftPresentation.lineStyle.color != rightPresentation.lineStyle.color ||
                 leftPresentation.lineStyle.width != rightPresentation.lineStyle.width ||
                 leftPresentation.enabled != rightPresentation.enabled ||
-                leftPresentation.displayPosition != rightPresentation.displayPosition || leftAxis != rightAxis ||
+                leftPresentation.displayPosition != rightPresentation.displayPosition ||
+                leftPresentation.hiddenLeadingPoints != rightPresentation.hiddenLeadingPoints || leftAxis != rightAxis ||
                 leftTransform != rightTransform || encodeExpressionDsl(leftExpression) != encodeExpressionDsl(rightExpression))
                 return false;
         }
@@ -295,12 +303,12 @@ namespace ksv::application {
                 AxisId{2}
             },
             SeriesConfig{
-                SeriesId{8}, {"Expected Final Score", line({255, 0, 255, 255}), true, 7},
+                SeriesId{8}, {"Expected Final Score", line({255, 0, 255, 255}), true, 7, 1},
                 projectedFinalValue(runningSum(primitive(PrimitiveMetric::Score))),
                 AxisId{2}
             },
             SeriesConfig{
-                SeriesId{9}, {"Expected Final Score (5s)", line({0, 191, 255, 255}), true, 8},
+                SeriesId{9}, {"Expected Final Score (5s)", line({0, 191, 255, 255}), true, 8, 1},
                 projectRateToFinal(rollingMean(primitive(PrimitiveMetric::Score), 5)),
                 AxisId{2}
             }

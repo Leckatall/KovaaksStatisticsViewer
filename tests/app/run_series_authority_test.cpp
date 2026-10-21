@@ -116,9 +116,18 @@ namespace {
             return QJsonDocument::fromJson(QString::fromStdString(*settings->document).toUtf8()).object();
         }
 
-        static void removeVersionFourSections(QJsonObject &root) {
+        static void downgradeSeriesSection(QJsonObject &root) {
             root.remove("graphs");
             root.remove("runAxisLabelSeriesId");
+            auto series = root["series"].toArray();
+            for (qsizetype index = 0; index < series.size(); ++index) {
+                auto config = series[index].toObject();
+                auto presentation = config["presentation"].toObject();
+                presentation.remove("hiddenLeadingPoints");
+                config["presentation"] = presentation;
+                series[index] = config;
+            }
+            root["series"] = series;
         }
 
         void writeDoc(const QJsonObject &root) const {
@@ -300,6 +309,28 @@ namespace {
         EXPECT_TRUE(std::ranges::find(afterRemove, scoreId, &SeriesConfig::id) == afterRemove.end());
     }
 
+    TEST_F(RunSeriesAuthorityTest, HiddenLeadingPointsPatchChangesOnlyThatFieldAndIsKeptByOtherPatches) {
+        makeStore();
+        const SeriesId scoreId{1};
+        const auto find = [&] {
+            const auto all = store->getAll();
+            return *std::ranges::find(all, scoreId, &SeriesConfig::id);
+        };
+        const auto before = find();
+
+        ASSERT_TRUE(store->updateSeries({.id = scoreId, .presentation = UpdatedSeriesPresentation{
+                                             .hiddenLeadingPoints = 4U}}).succeeded());
+        const auto after = find();
+        EXPECT_EQ(after.presentation.hiddenLeadingPoints, 4U);
+        EXPECT_EQ(after.presentation.name, before.presentation.name);
+        EXPECT_EQ(after.presentation.enabled, before.presentation.enabled);
+        EXPECT_EQ(after.presentation.lineStyle.width, before.presentation.lineStyle.width);
+
+        ASSERT_TRUE(store->updateSeries({.id = scoreId, .presentation = UpdatedSeriesPresentation{
+                                             .name = "Renamed"}}).succeeded());
+        EXPECT_EQ(find().presentation.hiddenLeadingPoints, 4U);
+    }
+
     TEST_F(RunSeriesAuthorityTest, RejectsUnknownAndInvalidMutationRequestsWithoutNotification) {
         makeStore();
         int notifications = 0;
@@ -337,7 +368,7 @@ namespace {
     TEST_F(RunSeriesAuthorityTest, SeededDocumentIncludesAxesAndNextAxisId) {
         makeStore();
         const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 4);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 5);
         EXPECT_EQ(root["nextAxisId"].toString(), "3");
         ASSERT_TRUE(root["axes"].isArray());
         EXPECT_EQ(root["axes"].toArray().size(), 2);
@@ -350,7 +381,7 @@ namespace {
         makeStore();
         auto root = docObject();
         root["schemaVersion"] = 3;
-        removeVersionFourSections(root);
+        downgradeSeriesSection(root);
         auto series = root["series"].toArray();
         auto score = series[0].toObject();
         score["expression"] = "Add(SCORE, 2)";
@@ -369,7 +400,7 @@ namespace {
         makeStore();
         auto root = docObject();
         root["schemaVersion"] = 2;
-        removeVersionFourSections(root);
+        downgradeSeriesSection(root);
         auto series = root["series"].toArray();
         auto score = series[0].toObject();
         score["expression"] = QJsonObject{{"kind", "add"},
@@ -421,7 +452,7 @@ namespace {
         makeStore();
         auto root = docObject();
         root["schemaVersion"] = 1;
-        removeVersionFourSections(root);
+        downgradeSeriesSection(root);
         root.remove("axes");
         root.remove("nextAxisId");
         auto series = root["series"].toArray();

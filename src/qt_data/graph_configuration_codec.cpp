@@ -213,14 +213,14 @@ namespace ksv::qt_data {
         auto root = document.object();
         if (!root["schemaVersion"].isDouble()) return std::nullopt;
         const auto version = root["schemaVersion"].toDouble();
-        if (version != 1 && version != 2 && version != 3 && version != kGraphConfigurationSchemaVersion)
+        if (version != 1 && version != 2 && version != 3 && version != 4 && version != kGraphConfigurationSchemaVersion)
             return std::nullopt;
 
         DecodedGraphConfiguration decoded{defaultGraphConfiguration()};
         int seriesVersion = static_cast<int>(version);
-        if (seriesVersion == kGraphConfigurationSchemaVersion) {
-            // Version 4 is version 3's series section plus these two keys.
-            seriesVersion = 3;
+        if (seriesVersion == 4 || seriesVersion == kGraphConfigurationSchemaVersion) {
+            // Versions 4 and 5 add these two keys to the series section of version 3 and 4 respectively.
+            seriesVersion = seriesVersion == 4 ? 3 : 4;
             root["schemaVersion"] = seriesVersion;
             if (root.contains("runAxisLabelSeriesId")) {
                 const auto label = root.take("runAxisLabelSeriesId");

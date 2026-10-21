@@ -167,6 +167,33 @@ namespace {
                              "records[1].expression.input"));
     }
 
+    TEST(SeriesConfigTest, HiddenLeadingPointsAreBoundedByTheMaximum) {
+        auto configs = defaultSeriesConfigs();
+        configs[1].presentation.hiddenLeadingPoints = 0;
+        EXPECT_TRUE(validateSeriesConfigs(configs).empty());
+        configs[1].presentation.hiddenLeadingPoints = kMaximumHiddenLeadingPoints;
+        EXPECT_TRUE(validateSeriesConfigs(configs).empty());
+
+        configs[1].presentation.hiddenLeadingPoints = kMaximumHiddenLeadingPoints + 1;
+        EXPECT_TRUE(hasError(validateSeriesConfigs(configs), SeriesConfigValidationCode::HiddenLeadingPointsOutOfRange,
+                             "records[1].presentation.hiddenLeadingPoints"));
+    }
+
+    TEST(SeriesConfigTest, SameSeriesConfigsNoticesAHiddenLeadingPointsDifference) {
+        const auto left = defaultSeriesConfigs();
+        auto right = left;
+        EXPECT_TRUE(sameSeriesConfigs(left, right));
+        right[2].presentation.hiddenLeadingPoints = 3;
+        EXPECT_FALSE(sameSeriesConfigs(left, right));
+    }
+
+    TEST(SeriesConfigTest, OnlyTheProjectedFinalScoreDefaultsHideTheirFirstPoint) {
+        for (const auto &config : defaultSeriesConfigs()) {
+            const auto expected = config.id.value == 8 || config.id.value == 9 ? 1U : 0U;
+            EXPECT_EQ(config.presentation.hiddenLeadingPoints, expected) << config.id.value;
+        }
+    }
+
     TEST(SeriesConfigTest, BlankTopLevelExpressionIsAllowedButNestedMissingOperandIsNot) {
         auto configs = defaultSeriesConfigs();
         configs[0].expression = {};
