@@ -508,7 +508,7 @@ namespace {
         EXPECT_EQ(fake_serializer->save_count, 2);
     }
 
-    TEST_F(ProfileServiceTest, ArrivalThatVanishedDuringDecodeIsSkipped) {
+    TEST_F(ProfileServiceTest, ArrivalThatVanishedDuringDecodeIsSkippedAndRemembered) {
         fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
         const auto saves_before = fake_serializer->save_count;
@@ -517,7 +517,41 @@ namespace {
         arrive(makeRun("hash-2", 300));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 1);
-        EXPECT_EQ(fake_serializer->save_count, saves_before);
+        EXPECT_EQ(fake_serializer->save_count, saves_before + 1);
+        ASSERT_TRUE(fake_serializer->last_saved_profile);
+        EXPECT_EQ(fake_serializer->last_saved_profile->failedSources().size(), 1U);
+    }
+
+    TEST_F(ProfileServiceTest, FailuresOnlyResultSavesWithoutNotifyingProfileChanged) {
+        profile_service.setProfile({});
+        fake_file_service->perfs_to_return = {makeRun("bad", 100)};
+        fake_file_service->throw_for_indices.insert(0);
+        int notifications = 0;
+        profile_service.onProfileChanged([&] { ++notifications; });
+        ProfileImporter importer(fake_file_service, ingestor);
+        auto result = importer.run(profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual), {});
+        ASSERT_FALSE(result.changed);
+        ASSERT_TRUE(result.failures_changed);
+
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Partial);
+        EXPECT_EQ(fake_serializer->save_count, 1);
+        EXPECT_EQ(notifications, 0);
+        ASSERT_TRUE(fake_serializer->last_saved_profile);
+        EXPECT_EQ(fake_serializer->last_saved_profile->failedSources().size(), 1U);
+    }
+
+    TEST_F(ProfileServiceTest, BeginImportSkipsUnchangedFailuresOnlyForAutomaticRefreshes) {
+        profile_service.setProfile({});
+        const auto skips = [&](ProfileImportMode mode, ProfileImportReason reason) {
+            return profile_service.beginImport(mode, reason).skip_unchanged_failures;
+        };
+        EXPECT_TRUE(skips(ProfileImportMode::Refresh, ProfileImportReason::Startup));
+        EXPECT_TRUE(skips(ProfileImportMode::Refresh, ProfileImportReason::Live));
+        EXPECT_TRUE(skips(ProfileImportMode::Refresh, ProfileImportReason::SourceSettingsChanged));
+        EXPECT_FALSE(skips(ProfileImportMode::Refresh, ProfileImportReason::Manual));
+        EXPECT_FALSE(skips(ProfileImportMode::Refresh, ProfileImportReason::Retry));
+        EXPECT_FALSE(skips(ProfileImportMode::Rebuild, ProfileImportReason::Startup));
+        EXPECT_FALSE(skips(ProfileImportMode::Rebuild, ProfileImportReason::Manual));
     }
 
 

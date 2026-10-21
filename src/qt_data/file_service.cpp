@@ -177,10 +177,12 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)), 
             }
             const QDir perfs(directory.filePath("FPSAimTrainer/performances"));
             const QDir csvs(directory.filePath("FPSAimTrainer/stats"));
-            for (const auto &file : perfs.entryList({"*.perf"}, QDir::Files))
-                scan.perfs.push_back({root, "FPSAimTrainer/performances", file.toStdString()});
-            for (const auto &file : csvs.entryList({"*.csv"}, QDir::Files))
-                scan.csvs.push_back({root, "FPSAimTrainer/stats", file.toStdString()});
+            for (const auto &file : perfs.entryInfoList({"*.perf"}, QDir::Files))
+                scan.perfs.push_back({root, "FPSAimTrainer/performances", file.fileName().toStdString(),
+                    file.size(), file.lastModified().toMSecsSinceEpoch()});
+            for (const auto &file : csvs.entryInfoList({"*.csv"}, QDir::Files))
+                scan.csvs.push_back({root, "FPSAimTrainer/stats", file.fileName().toStdString(),
+                    file.size(), file.lastModified().toMSecsSinceEpoch()});
             for (const auto &subdir : {perfs, csvs}) {
                 const QFileInfo info(subdir.absolutePath());
                 if (info.exists() && !info.isReadable())

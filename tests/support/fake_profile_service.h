@@ -19,6 +19,7 @@ namespace ksv::tests_support {
         int generate_call_count = 0;
         int begin_build_count = 0;
         std::vector<application::ProfileImportMode> begun_modes;
+        std::vector<application::ProfileImportReason> begun_reasons;
         // When set, acceptImport() reports this outcome without applying the candidate.
         std::optional<application::ProfileImportOutcome> forced_outcome;
         bool force_save_failed = false;
@@ -58,6 +59,7 @@ namespace ksv::tests_support {
         application::ProfileImportRequest beginImport(application::ProfileImportMode mode, application::ProfileImportReason reason) override {
             ++begin_build_count;
             begun_modes.push_back(mode);
+            begun_reasons.push_back(reason);
             application::ProfileImportRequest request;
             request.mode = mode;
             request.reason = reason;

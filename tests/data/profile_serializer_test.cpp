@@ -209,6 +209,53 @@ namespace {
         EXPECT_TRUE(std::get<ksv::domain::UserProfile>(loaded).getScenarioList().empty());
     }
 
+    TEST_F(ProfileSerializerTest, RoundTripsFailedSources) {
+        ksv::domain::UserProfile profile;
+        const auto perfs = profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/performances");
+        const auto stats = profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/stats");
+        const std::vector<ksv::domain::FailedSource> failed{
+            {{perfs, "broken.perf"}, 123, 456789, "Performance metadata is incomplete or invalid"},
+            {{stats, "broken Stats.csv"}, 7, 8, "Stats CSV is incomplete or invalid"},
+        };
+        profile.setFailedSources(failed);
+
+        ASSERT_TRUE(serializer.save(profile, store_path));
+        const auto loaded = serializer.load(store_path);
+
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(loaded));
+        EXPECT_EQ(std::get<ksv::domain::UserProfile>(loaded).failedSources(), failed);
+    }
+
+    // An empty repeated field is not written, so this store is byte-identical to a v4 store written
+    // before failed_sources existed.
+    TEST_F(ProfileSerializerTest, StoreWithoutFailedSourcesLoadsAnEmptyList) {
+        ksv::domain::UserProfile profile;
+        profile.addRun(make_perf("Scenario", "hash", 100, 60.0F));
+        ASSERT_TRUE(serializer.save(profile, store_path));
+
+        const auto loaded = serializer.load(store_path);
+
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(loaded));
+        EXPECT_TRUE(std::get<ksv::domain::UserProfile>(loaded).failedSources().empty());
+    }
+
+    TEST_F(ProfileSerializerTest, FailedSourceWithUnresolvableDirectoryIsDropped) {
+        ksv::domain::UserProfile profile;
+        const auto perfs = profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/performances");
+        profile.setFailedSources({
+            {{perfs, "kept.perf"}, 1, 2, "kept"},
+            {{{99}, "orphan.perf"}, 3, 4, "orphan"},
+        });
+        ASSERT_TRUE(serializer.save(profile, store_path));
+
+        const auto loaded = serializer.load(store_path);
+
+        ASSERT_TRUE(std::holds_alternative<ksv::domain::UserProfile>(loaded));
+        const auto &failed = std::get<ksv::domain::UserProfile>(loaded).failedSources();
+        ASSERT_EQ(failed.size(), 1U);
+        EXPECT_EQ(failed.front().file.filename, "kept.perf");
+    }
+
     TEST_F(ProfileSerializerTest, ReadHeaderReturnsMetadataWrittenBySave) {
         const ksv::domain::UserProfile profile;
         ASSERT_TRUE(serializer.save(profile, store_path));

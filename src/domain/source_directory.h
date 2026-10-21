@@ -28,6 +28,15 @@ namespace ksv::domain {
         bool operator==(const SourceFileRef &) const = default;
     };
 
+    struct FailedSource {
+        SourceFileRef file;
+        std::int64_t size = -1;
+        std::int64_t modified_ms = -1;
+        std::string message;
+
+        bool operator==(const FailedSource &) const = default;
+    };
+
     class SourceRegistry {
     public:
         SourceRegistry() = default;

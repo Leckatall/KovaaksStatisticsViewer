@@ -3,6 +3,7 @@
 #include "source_path_key.h"
 #include "formats/csv/run_filename.h"
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -26,6 +27,21 @@ namespace ksv::data {
                 return std::tie(x.time, x.shots, x.hits, x.misses, x.dmg, x.dmg_possible, x.score, x.kills) ==
                     std::tie(y.time, y.shots, y.hits, y.misses, y.dmg, y.dmg_possible, y.score, y.kills);
             });
+        }
+        struct ScannedFile {
+            std::string root;
+            std::string subdir;
+            std::string filename;
+            std::int64_t size = -1;
+            std::int64_t modified_ms = -1;
+        };
+        using FailureFingerprints = std::map<std::string, std::tuple<std::int64_t, std::int64_t, std::string>>;
+        FailureFingerprints fingerprintsOf(const domain::UserProfile &profile) {
+            FailureFingerprints fingerprints;
+            for (const auto &failed : profile.failedSources())
+                if (const auto path = profile.sources().resolve(failed.file))
+                    fingerprints.emplace(sourcePathKey(*path), std::tuple{failed.size, failed.modified_ms, failed.message});
+            return fingerprints;
         }
     }
 
@@ -59,19 +75,41 @@ namespace ksv::data {
                     known_groups[groupKey(alias.root, alias.filename)] = alias.run_id;
                 }
             }
+            const auto baselineCopy = [&request] {
+                return request.mode == ProfileImportMode::Refresh && request.baseline
+                    ? std::make_shared<domain::UserProfile>(*request.baseline)
+                    : std::make_shared<domain::UserProfile>();
+            };
+            std::unordered_map<std::string, domain::FailedSource> previous;
+            if (request.mode == ProfileImportMode::Refresh && request.baseline) {
+                for (const auto &failed : request.baseline->failedSources())
+                    if (const auto path = request.baseline->sources().resolve(failed.file))
+                        previous.emplace(sourcePathKey(*path), failed);
+            }
+            std::unordered_map<std::string, ScannedFile> scanned;
+            std::unordered_map<std::string, domain::FailedSource> kept;
             std::map<std::string, RunFileGroup> groups;
-            for (const auto &perf : scan.perfs) {
-                if (!known_paths.contains(sourcePathKey(perf.absolutePath())))
-                    groups[groupKey(perf.root, perf.filename)].perf = perf;
-            }
-            for (const auto &csv : scan.csvs) {
-                if (!known_paths.contains(sourcePathKey(csv.absolutePath())))
-                    groups[groupKey(csv.root, csv.filename)].csv = csv;
-            }
-            if (groups.empty() && request.mode == ProfileImportMode::Refresh) return result;
-            auto candidate = request.mode == ProfileImportMode::Refresh && request.baseline
-                ? std::make_shared<domain::UserProfile>(*request.baseline)
-                : std::make_shared<domain::UserProfile>();
+            const auto admit = [&](const auto &file) {
+                const auto path_key = sourcePathKey(file.absolutePath());
+                scanned[path_key] = {file.root, file.subdir, file.filename, file.size, file.modified_ms};
+                if (known_paths.contains(path_key)) return false;
+                if (request.skip_unchanged_failures) {
+                    const auto found = previous.find(path_key);
+                    if (found != previous.end() && found->second.size == file.size &&
+                        found->second.modified_ms == file.modified_ms) {
+                        kept.emplace(path_key, found->second);
+                        result.summary.issues.push_back({file.absolutePath(), found->second.message, false, true});
+                        return false;
+                    }
+                }
+                return true;
+            };
+            for (const auto &perf : scan.perfs)
+                if (admit(perf)) groups[groupKey(perf.root, perf.filename)].perf = perf;
+            for (const auto &csv : scan.csvs)
+                if (admit(csv)) groups[groupKey(csv.root, csv.filename)].csv = csv;
+            std::shared_ptr<domain::UserProfile> candidate;
+            if (!groups.empty() || request.mode == ProfileImportMode::Rebuild) candidate = baselineCopy();
             if (request.mode == ProfileImportMode::Rebuild) result.changed = true;
             std::set<domain::ScenarioRunId> added;
             std::set<domain::ScenarioRunId> enriched;
@@ -98,7 +136,11 @@ namespace ksv::data {
                     const auto merge = conflicting ? domain::ImportMerge::Conflict
                         : candidate->mergeImportedRun(run, previous_id);
                     if (merge == domain::ImportMerge::Conflict) {
-                        result.summary.issues.push_back({group.perf ? group.perf->absolutePath() : group.csv->absolutePath(),
+                        // Both halves are reported, so both are recorded: a recorded perf alone would let
+                        // its csv merge by itself into the run the pair was rejected against.
+                        if (group.perf) result.summary.issues.push_back({group.perf->absolutePath(),
+                            "Source conflicts with an existing run", false});
+                        if (group.csv) result.summary.issues.push_back({group.csv->absolutePath(),
                             "Source conflicts with an existing run", false});
                     } else {
                         if (merge == domain::ImportMerge::Added || merge == domain::ImportMerge::Enriched) result.changed = true;
@@ -130,10 +172,42 @@ namespace ksv::data {
             }
             result.summary.added = added.size();
             result.summary.enriched = enriched.size();
-            if (result.changed) result.candidate = std::move(candidate);
+
+            std::vector<std::pair<const ScannedFile *, domain::FailedSource>> failures;
+            std::set<std::string> recorded;
+            FailureFingerprints next;
+            for (const auto &issue : result.summary.issues) {
+                const auto path_key = sourcePathKey(issue.path);
+                const auto file = scanned.find(path_key);
+                if (file == scanned.end() || !recorded.insert(path_key).second) continue;
+                const auto found = kept.find(path_key);
+                auto failed = issue.previously_failed && found != kept.end() ? found->second
+                    : domain::FailedSource{{}, file->second.size, file->second.modified_ms, issue.message};
+                next.emplace(path_key, std::tuple{failed.size, failed.modified_ms, failed.message});
+                failures.emplace_back(&file->second, std::move(failed));
+            }
+            // Without a baseline there is no loaded profile to update; a failures-only candidate would
+            // be saved over whatever profile file has not been loaded.
+            result.failures_changed = request.baseline && next != fingerprintsOf(*request.baseline);
+            if (result.changed || result.failures_changed) {
+                if (!result.changed) candidate = baselineCopy();
+                std::vector<domain::FailedSource> failed_sources;
+                failed_sources.reserve(failures.size());
+                for (auto &[file, failed] : failures) {
+                    failed.file = {candidate->ensureSource(file->root, file->subdir), file->filename};
+                    failed_sources.push_back(std::move(failed));
+                }
+                candidate->setFailedSources(failed_sources);
+                result.failed_sources = std::move(failed_sources);
+                result.candidate = std::move(candidate);
+            } else if (request.baseline) {
+                result.failed_sources = request.baseline->failedSources();
+            }
         } catch (const std::exception &error) {
             result.failed = true;
             result.changed = false;
+            result.failures_changed = false;
+            result.failed_sources.clear();
             result.candidate.reset();
             result.successful_aliases.clear();
             result.summary.issues.push_back({{}, error.what(), false});

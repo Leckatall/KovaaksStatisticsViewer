@@ -104,6 +104,9 @@ namespace ksv::data {
         }
         request.baseline = m_profile;
         request.known_aliases = m_aliases;
+        using enum application::ProfileImportReason;
+        request.skip_unchanged_failures = mode == application::ProfileImportMode::Refresh &&
+            (reason == Startup || reason == Live || reason == SourceSettingsChanged);
         return request;
     }
 
@@ -130,7 +133,7 @@ namespace ksv::data {
             return ProfileImportOutcome::Stale;
         m_active_import.reset();
         if (result.failed) return ProfileImportOutcome::Failed;
-        if (result.changed) {
+        if (result.changed || result.failures_changed) {
             try {
                 if (!result.candidate || !m_serializer->save(*result.candidate, m_filepath)) {
                     result.summary.save_failed = true;

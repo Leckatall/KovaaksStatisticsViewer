@@ -91,6 +91,23 @@ namespace {
         EXPECT_EQ(scan.issues[0].path, "Z:/missing-ksv-root");
     }
 
+    TEST_F(FileServiceTest, SourceScanFingerprintsEachFileWithItsSizeAndModifiedTime) {
+        makePerformancesDir();
+        makeStatsDir();
+        const auto perf_path = copyFixtureInto("1wall6targets TE.perf");
+        writeStatsFile("run Stats.csv");
+        FileService service(settings_service, decoder);
+        const auto scan = service.scanSources({kovaaks.root().toStdString()});
+        ASSERT_EQ(scan.perfs.size(), 1U);
+        ASSERT_EQ(scan.csvs.size(), 1U);
+        const QFileInfo perf(perf_path);
+        EXPECT_EQ(scan.perfs[0].size, perf.size());
+        EXPECT_EQ(scan.perfs[0].modified_ms, perf.lastModified().toMSecsSinceEpoch());
+        const QFileInfo csv(QDir(stats_dir()).filePath("run Stats.csv"));
+        EXPECT_EQ(scan.csvs[0].size, csv.size());
+        EXPECT_EQ(scan.csvs[0].modified_ms, csv.lastModified().toMSecsSinceEpoch());
+    }
+
     TEST_F(FileServiceTest, SourcesCreatedAfterWatcherConstructionAreDiscovered) {
         FileService service(settings_service, decoder);
         int invalidations = 0;

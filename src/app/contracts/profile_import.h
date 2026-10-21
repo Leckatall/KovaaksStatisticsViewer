@@ -11,7 +11,7 @@
 
 namespace ksv::application {
     enum class ProfileImportMode { Refresh, Rebuild };
-    enum class ProfileImportReason { Startup, Manual, Live, SourceSettingsChanged };
+    enum class ProfileImportReason { Startup, Manual, Live, SourceSettingsChanged, Retry };
     enum class ProfileImportPhase { Idle, Scanning, Importing, Saving };
     enum class ProfileImportOutcome { None, Succeeded, Partial, Failed, Stale };
 
@@ -19,6 +19,7 @@ namespace ksv::application {
         std::string path;
         std::string message;
         bool retryable = false;
+        bool previously_failed = false;
     };
     struct ProfileImportSummary {
         std::size_t added = 0;
@@ -44,6 +45,7 @@ namespace ksv::application {
         std::vector<std::string> roots;
         std::shared_ptr<const domain::UserProfile> baseline;
         std::vector<ProfileSourceAlias> known_aliases;
+        bool skip_unchanged_failures = false;
     };
     struct ProfileImportResult {
         ProfileImportToken token;
@@ -51,6 +53,8 @@ namespace ksv::application {
         ProfileImportSummary summary;
         bool changed = false;
         bool failed = false;
+        std::vector<domain::FailedSource> failed_sources;
+        bool failures_changed = false;
         std::vector<ProfileSourceAlias> successful_aliases;
         std::vector<std::pair<domain::ScenarioRunId, domain::ScenarioRunId>> rekeyed_runs;
     };

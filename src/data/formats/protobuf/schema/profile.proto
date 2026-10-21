@@ -16,6 +16,14 @@ message Header {
 message Store {
   repeated Run runs = 1;
   repeated SourceDirectory sources = 2;
+  repeated FailedSource failed_sources = 3;
+}
+
+message FailedSource {
+  SourceFileRef file = 1;
+  int64 size = 2;
+  int64 modified_ms = 3;
+  string message = 4;
 }
 
 message SourceDirectory {

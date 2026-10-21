@@ -3,8 +3,11 @@
 
 #include <QSemaphore>
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <tuple>
+#include <utility>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -27,6 +30,8 @@ namespace ksv::tests_support {
         std::set<std::size_t> throw_for_indices;
         std::set<std::string> paths_to_throw_for;
         std::vector<std::string> source_roots{"fake/kovaaks"};
+        // Keyed by absolutePath(); scanSources() stamps unlisted files {0, 0}.
+        std::unordered_map<std::string, std::pair<std::int64_t, std::int64_t>> fingerprints;
         bool gate_scan = false;
         QSemaphore scan_gate;
         QSemaphore scan_entered;
@@ -58,7 +63,15 @@ namespace ksv::tests_support {
 
         [[nodiscard]] std::vector<application::StatsFile> listStatsFiles() const override { return stats_files; }
         [[nodiscard]] application::SourceScan scanSources(const std::vector<std::string> &) const override {
-            return {listPerfFiles(), stats_files, scan_issues};
+            application::SourceScan scan{listPerfFiles(), stats_files, scan_issues};
+            const auto stamp = [this](auto &file) {
+                const auto found = fingerprints.find(file.absolutePath());
+                std::tie(file.size, file.modified_ms) = found != fingerprints.end()
+                    ? found->second : std::pair<std::int64_t, std::int64_t>{0, 0};
+            };
+            for (auto &perf : scan.perfs) stamp(perf);
+            for (auto &csv : scan.csvs) stamp(csv);
+            return scan;
         }
 
         [[nodiscard]] std::optional<data::ParsedStatsCsv> getStatsFromFile(

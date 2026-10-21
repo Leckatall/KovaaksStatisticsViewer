@@ -40,7 +40,7 @@ namespace ksv::application {
         m_build_thread.start();
         m_retry.setSingleShot(true);
         connect(&m_retry, &QTimer::timeout, this, [this] {
-            startImport(ProfileImportMode::Refresh, ProfileImportReason::Live);
+            startImport(ProfileImportMode::Refresh, ProfileImportReason::Retry);
         });
         SessionController::setCurrentRunToLatest();
         const auto lifetime = std::weak_ptr(m_lifetime);
@@ -79,8 +79,15 @@ namespace ksv::application {
     }
 
     void SessionController::refreshProfile(ProfileImportReason reason) {
+        // A Live arrival inside a retry window (e.g. a run's .csv landing just after its .perf failed
+        // transiently) must not skip the still-unchanged failure that window exists to re-read.
+        const bool retry_window = m_retry.isActive() ||
+            (m_build_in_flight && (m_active_request.reason == ProfileImportReason::Live ||
+                                   m_active_request.reason == ProfileImportReason::Retry)) ||
+            (m_refresh_requested && m_pending_reason == ProfileImportReason::Retry);
+        if (reason == ProfileImportReason::Live && retry_window) reason = ProfileImportReason::Retry;
+        else m_retry_attempt = 0;
         m_retry.stop();
-        m_retry_attempt = 0;
         startImport(ProfileImportMode::Refresh, reason);
     }
 
@@ -112,6 +119,7 @@ namespace ksv::application {
     void SessionController::refreshCurrentRun(const ProfileImportResult &result) {
         const bool latest = m_active_request.mode == ProfileImportMode::Rebuild ||
             m_active_request.reason == ProfileImportReason::Live ||
+            m_active_request.reason == ProfileImportReason::Retry ||
             (m_active_request.reason == ProfileImportReason::Startup &&
              m_started_selection_revision == m_selection_revision) ||
             m_current_run.run_id.scenario_id.hash.empty();
@@ -157,7 +165,8 @@ namespace ksv::application {
         emit profileImportStateChanged();
         const bool retryable = std::ranges::any_of(m_import_state.summary.issues,
             [](const auto &issue) { return issue.retryable; });
-        if (accepted && retryable && completed_reason == ProfileImportReason::Live && m_retry_attempt < 3)
+        const bool live = completed_reason == ProfileImportReason::Live || completed_reason == ProfileImportReason::Retry;
+        if (accepted && retryable && live && m_retry_attempt < 3)
             m_retry.start(250 * (1 << m_retry_attempt++));
     }
 

@@ -33,6 +33,19 @@ namespace {
         EXPECT_EQ(view_model.profileImportOutcome(), "failed");
     }
 
+    TEST_F(SessionViewModelTest, ImportIssuesCarryThePreviouslyFailedFlag) {
+        fake_controller->import_state.summary.issues = {
+            {"C:/a.perf", "broken", false, true},
+            {"C:/b.perf", "locked", true, false},
+        };
+        SessionViewModel view_model(fake_controller);
+        const auto issues = view_model.profileImportIssues();
+        ASSERT_EQ(issues.size(), 2);
+        EXPECT_TRUE(issues[0].toMap().value("previouslyFailed").toBool());
+        EXPECT_FALSE(issues[1].toMap().value("previouslyFailed").toBool());
+        EXPECT_TRUE(issues[1].toMap().contains("previouslyFailed"));
+    }
+
     TEST_F(SessionViewModelTest, GetScenarioListReturnsDisplayNamesNotHashes) {
         fake_controller->scenario_list = {ScenarioId{.name = "Long Jump", .hash = "hash-1"}};
         SessionViewModel view_model(fake_controller);

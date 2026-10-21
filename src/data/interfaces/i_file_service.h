@@ -5,6 +5,7 @@
 #ifndef KOVAAKSSTATSVIEWER_I_FILE_SERVICE_H
 #define KOVAAKSSTATSVIEWER_I_FILE_SERVICE_H
 
+#include <cstdint>
 #include <vector>
 #include <functional>
 #include <filesystem>
@@ -18,6 +19,8 @@ namespace ksv::application {
         std::string root;
         std::string subdir;
         std::string filename;
+        std::int64_t size = -1;
+        std::int64_t modified_ms = -1;
 
         [[nodiscard]] std::string absolutePath() const {
             return (std::filesystem::path(root) / subdir / filename).generic_string();
@@ -30,6 +33,8 @@ namespace ksv::application {
         std::string root;
         std::string subdir;
         std::string filename;
+        std::int64_t size = -1;
+        std::int64_t modified_ms = -1;
 
         [[nodiscard]] std::string absolutePath() const {
             return (std::filesystem::path(root) / subdir / filename).generic_string();

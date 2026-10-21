@@ -192,6 +192,32 @@ namespace {
         EXPECT_FALSE(started.wait(2300));
         EXPECT_EQ(started.count(), 4);
         EXPECT_EQ(controller->profileImportState().summary.issues.size(), 1U);
+        // Retry must stay distinct from Live: Live skips unchanged recorded failures, and the backoff
+        // exists precisely to re-read an unchanged file after a transient error.
+        EXPECT_EQ(fake_profile_service->begun_reasons, (std::vector{ProfileImportReason::Live,
+            ProfileImportReason::Retry, ProfileImportReason::Retry, ProfileImportReason::Retry}));
+    }
+
+    TEST_F(SessionControllerTest, LiveArrivalDuringRetryBackoffRunsAsRetry) {
+        fake_file_service->scan_issues = {{"source.perf", "Incomplete file", true}};
+        const auto controller = make_controller();
+        QSignalSpy started(controller.get(), &ISessionController::buildStarted);
+        controller->refreshProfile(ProfileImportReason::Live);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !controller->profileImportState().busy; }, 5000));
+        controller->refreshProfile(ProfileImportReason::Live);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return started.count() >= 2; }, 5000));
+        ASSERT_GE(fake_profile_service->begun_reasons.size(), 2U);
+        EXPECT_EQ(fake_profile_service->begun_reasons[1], ProfileImportReason::Retry);
+    }
+
+    TEST_F(SessionControllerTest, LiveArrivalOutsideARetryWindowStaysLive) {
+        const auto controller = make_controller();
+        controller->refreshProfile(ProfileImportReason::Live);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !controller->profileImportState().busy; }, 5000));
+        controller->refreshProfile(ProfileImportReason::Live);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !controller->profileImportState().busy; }, 5000));
+        EXPECT_EQ(fake_profile_service->begun_reasons,
+            (std::vector{ProfileImportReason::Live, ProfileImportReason::Live}));
     }
 
     TEST_F(SessionControllerTest, CsvEnrichmentRefreshesSelectedContentsWithoutChangingItsId) {

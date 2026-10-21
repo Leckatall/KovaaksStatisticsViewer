@@ -13,7 +13,9 @@
 #include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTest>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <chrono>
 #include <vector>
@@ -64,6 +66,44 @@ namespace {
         const auto loaded = serializer.load(path);
         ASSERT_TRUE(std::holds_alternative<domain::UserProfile>(loaded));
         EXPECT_EQ(std::get<domain::UserProfile>(loaded).getAllRunRecords().size(), 2U);
+    }
+
+    TEST(IncrementalProfileComposition, FailedSourceIsSkippedOnRestartAndRetriedOnManualRefresh) {
+        integration::TestEnv env;
+        ASSERT_TRUE(env.valid());
+        ASSERT_TRUE(env.makePerformancesDir());
+        ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+        const auto corrupt = env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf");
+        ASSERT_FALSE(corrupt.isEmpty());
+        ASSERT_TRUE(QFile::resize(corrupt, 16));
+        const auto makeApp = [&] {
+            return std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>(),
+                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource);
+        };
+        const auto corruptIssue = [](const application::ISessionController &controller)
+            -> std::optional<application::ProfileImportIssue> {
+            for (const auto &issue : controller.profileImportState().summary.issues)
+                if (std::filesystem::path(issue.path).filename() == "VT FlyTS Novice S5.perf") return issue;
+            return std::nullopt;
+        };
+        {
+            auto first = makeApp();
+            ASSERT_TRUE(QTest::qWaitFor([&] { return !first->sessionController()->profileImportState().busy; }, 5000));
+            const auto issue = corruptIssue(*first->sessionController());
+            ASSERT_TRUE(issue);
+            EXPECT_FALSE(issue->previously_failed);
+        }
+        auto second = makeApp();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !second->sessionController()->profileImportState().busy; }, 5000));
+        const auto skipped = corruptIssue(*second->sessionController());
+        ASSERT_TRUE(skipped);
+        EXPECT_TRUE(skipped->previously_failed);
+        EXPECT_FALSE(skipped->retryable);
+        second->sessionController()->refreshProfile(application::ProfileImportReason::Manual);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !second->sessionController()->profileImportState().busy; }, 5000));
+        const auto retried = corruptIssue(*second->sessionController());
+        ASSERT_TRUE(retried);
+        EXPECT_FALSE(retried->previously_failed);
     }
 
     TEST(IncrementalProfileComposition, CsvOnlyHistoryGainsCanonicalPerfAndSurvivesAnotherRestart) {

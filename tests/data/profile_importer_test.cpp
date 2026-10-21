@@ -278,4 +278,150 @@ namespace {
         ASSERT_TRUE(result.candidate);
         EXPECT_TRUE(result.candidate->getAllRunRecords().empty());
     }
+
+    class FailedSourceImportTest : public ProfileImporterTest {
+    protected:
+        const std::string path = "fake/kovaaks/FPSAimTrainer/performances/listed-perf-0";
+        data::ProfileImporter importer{files, ingestor};
+
+        void SetUp() override {
+            ProfileImporterTest::SetUp();
+            files->perfs_to_return = {tests_support::makeRun("h", 100)};
+            files->throw_for_indices.insert(0);
+            files->fingerprints[path] = {10, 20};
+        }
+
+        std::shared_ptr<const domain::UserProfile> recordFailure() {
+            request.reason = application::ProfileImportReason::Manual;
+            const auto result = importer.run(request, {});
+            EXPECT_EQ(result.failed_sources.size(), 1U);
+            return result.candidate;
+        }
+
+        void automatic(application::ProfileImportReason reason) {
+            request.reason = reason;
+            request.skip_unchanged_failures = true;
+        }
+    };
+
+    TEST_F(FailedSourceImportTest, FailingPerfOnManualRefreshIsRecordedWithItsFingerprint) {
+        const auto result = importer.run(request, {});
+        EXPECT_FALSE(result.changed);
+        EXPECT_TRUE(result.failures_changed);
+        ASSERT_TRUE(result.candidate);
+        EXPECT_EQ(result.summary.added, 0U);
+        ASSERT_EQ(result.failed_sources.size(), 1U);
+        const auto &failed = result.failed_sources.front();
+        EXPECT_EQ(failed.size, 10);
+        EXPECT_EQ(failed.modified_ms, 20);
+        EXPECT_EQ(failed.message, "File does not exist");
+        EXPECT_EQ(result.candidate->sources().resolve(failed.file), path);
+        EXPECT_EQ(result.candidate->failedSources(), result.failed_sources);
+    }
+
+    TEST_F(FailedSourceImportTest, StartupSkipsAnUnchangedRecordedFailureWithoutDecoding) {
+        request.baseline = recordFailure();
+        automatic(application::ProfileImportReason::Startup);
+        const auto decodes = files->decode_calls;
+        const auto result = importer.run(request, {});
+        EXPECT_EQ(files->decode_calls, decodes);
+        ASSERT_EQ(result.summary.issues.size(), 1U);
+        EXPECT_EQ(result.summary.issues.front().path, path);
+        EXPECT_EQ(result.summary.issues.front().message, "File does not exist");
+        EXPECT_TRUE(result.summary.issues.front().previously_failed);
+        EXPECT_FALSE(result.summary.issues.front().retryable);
+        EXPECT_FALSE(result.failures_changed);
+        EXPECT_FALSE(result.changed);
+        EXPECT_EQ(result.candidate, nullptr);
+        EXPECT_EQ(result.failed_sources, request.baseline->failedSources());
+    }
+
+    TEST_F(FailedSourceImportTest, LiveRetriesAChangedFingerprintAndDropsTheRecordOnSuccess) {
+        request.baseline = recordFailure();
+        files->throw_for_indices.clear();
+        files->fingerprints[path] = {11, 20};
+        automatic(application::ProfileImportReason::Live);
+        const auto decodes = files->decode_calls;
+        const auto result = importer.run(request, {});
+        EXPECT_EQ(files->decode_calls, decodes + 1);
+        EXPECT_EQ(result.summary.added, 1U);
+        EXPECT_TRUE(result.failures_changed);
+        ASSERT_TRUE(result.candidate);
+        EXPECT_TRUE(result.candidate->failedSources().empty());
+        EXPECT_TRUE(result.failed_sources.empty());
+    }
+
+    TEST_F(FailedSourceImportTest, ManualAndRetryDecodeARecordedFailureWithAnUnchangedFingerprint) {
+        request.baseline = recordFailure();
+        for (const auto reason : {application::ProfileImportReason::Manual, application::ProfileImportReason::Retry}) {
+            request.reason = reason;
+            request.skip_unchanged_failures = false;
+            const auto decodes = files->decode_calls;
+            const auto result = importer.run(request, {});
+            EXPECT_EQ(files->decode_calls, decodes + 1);
+            ASSERT_EQ(result.summary.issues.size(), 1U);
+            EXPECT_FALSE(result.summary.issues.front().previously_failed);
+            EXPECT_FALSE(result.failures_changed);
+        }
+    }
+
+    TEST_F(FailedSourceImportTest, RebuildIgnoresBaselineRecordsAndRecordsCurrentFailures) {
+        request.baseline = recordFailure();
+        request.mode = application::ProfileImportMode::Rebuild;
+        request.skip_unchanged_failures = true;
+        const auto decodes = files->decode_calls;
+        const auto result = importer.run(request, {});
+        EXPECT_EQ(files->decode_calls, decodes + 1);
+        ASSERT_EQ(result.summary.issues.size(), 1U);
+        EXPECT_FALSE(result.summary.issues.front().previously_failed);
+        ASSERT_TRUE(result.candidate);
+        ASSERT_EQ(result.candidate->failedSources().size(), 1U);
+        EXPECT_EQ(result.candidate->sources().resolve(result.candidate->failedSources().front().file), path);
+    }
+
+    TEST_F(FailedSourceImportTest, RecordedFileAbsentFromTheScanIsPruned) {
+        request.baseline = recordFailure();
+        files->perfs_to_return.clear();
+        automatic(application::ProfileImportReason::Startup);
+        const auto result = importer.run(request, {});
+        EXPECT_TRUE(result.failures_changed);
+        EXPECT_FALSE(result.changed);
+        ASSERT_TRUE(result.candidate);
+        EXPECT_TRUE(result.candidate->failedSources().empty());
+    }
+
+    TEST_F(ProfileImporterTest, ConflictingPairRecordsBothItsPerfAndItsCsv) {
+        auto baseline = std::make_shared<domain::UserProfile>();
+        auto existing = tests_support::makeRun("hash-1", 100, 42.0F, 0, 0, 30.0F);
+        existing.sources.perf = {baseline->ensureSource(files->source_roots.front(), "FPSAimTrainer/performances"),
+            "other.perf"};
+        baseline->addRun(existing);
+        request.baseline = baseline;
+        auto perf = tests_support::makeRun("hash-1", 100, 42.0F);
+        perf.performance.emplace();
+        files->perfs_to_return = {perf};
+        files->stats_files = {statsFile("listed-perf-0 Stats.csv")};
+        files->stats_by_path.emplace("listed-perf-0 Stats.csv", csvTotals("hash-1", 42.0F));
+
+        const auto result = data::ProfileImporter(files, ingestor).run(request, {});
+
+        ASSERT_EQ(result.summary.issues.size(), 2U);
+        ASSERT_EQ(result.failed_sources.size(), 2U);
+        ASSERT_TRUE(result.candidate);
+        std::vector<std::string> recorded;
+        for (const auto &failed : result.failed_sources)
+            recorded.push_back(result.candidate->sources().resolve(failed.file).value_or(""));
+        std::ranges::sort(recorded);
+        EXPECT_EQ(recorded, (std::vector<std::string>{"fake/kovaaks/FPSAimTrainer/performances/listed-perf-0",
+            "fake/kovaaks/FPSAimTrainer/stats/listed-perf-0 Stats.csv"}));
+    }
+
+    TEST_F(FailedSourceImportTest, DirectoryLevelScanIssueIsNeverRecorded) {
+        files->perfs_to_return.clear();
+        files->scan_issues = {{"fake/kovaaks", "Source directory is unavailable or unreadable", true}};
+        const auto result = importer.run(request, {});
+        EXPECT_EQ(result.summary.issues.size(), 1U);
+        EXPECT_FALSE(result.failures_changed);
+        EXPECT_TRUE(result.failed_sources.empty());
+    }
 }

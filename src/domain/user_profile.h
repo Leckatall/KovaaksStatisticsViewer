@@ -70,6 +70,10 @@ namespace ksv::domain {
 
         [[nodiscard]] const std::vector<Run> &getAllRunRecords() const;
 
+        [[nodiscard]] const std::vector<FailedSource> &failedSources() const;
+
+        void setFailedSources(std::vector<FailedSource> failed);
+
     private:
         [[nodiscard]] std::vector<std::size_t> mergedRunIndices(const std::vector<ScenarioId> &scenarios) const;
 
@@ -85,6 +89,7 @@ namespace ksv::domain {
         std::unordered_map<ScenarioId, ScenarioAggregate> m_scenario_aggregate;
         double m_total_time_all_scenarios = 0.0;
         std::optional<std::size_t> m_most_recent_index;
+        std::vector<FailedSource> m_failed_sources;
     };
 }
 

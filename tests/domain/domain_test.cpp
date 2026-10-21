@@ -200,6 +200,19 @@ namespace {
         EXPECT_FLOAT_EQ(profile.getCurrentRun(old.run_id)->stored_totals.score, 10);
     }
 
+    TEST(UserProfileTest, FailedSourcesRoundTripAndSurviveACopy) {
+        UserProfile profile;
+        const auto directory = profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/performances");
+        const std::vector<FailedSource> failed{
+            {{directory, "b.perf"}, 2, 20, "second"},
+            {{directory, "a.perf"}, 1, 10, "first"},
+        };
+        profile.setFailedSources(failed);
+        EXPECT_EQ(profile.failedSources(), failed);
+        const UserProfile copy = profile;
+        EXPECT_EQ(copy.failedSources(), failed);
+    }
+
     TEST(UserProfileTest, DuplicateRunIdIsSkippedAndReturnsFalse) {
         UserProfile profile;
         EXPECT_TRUE(profile.addRun(makeRun("scenario-1", 100)));

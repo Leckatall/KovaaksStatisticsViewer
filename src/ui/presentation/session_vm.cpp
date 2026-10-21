@@ -81,7 +81,7 @@ namespace ksv::presentation {
         QVariantList result;
         for (const auto &issue : m_import_state.summary.issues) result.push_back(QVariantMap{
             {"path", QString::fromStdString(issue.path)}, {"message", QString::fromStdString(issue.message)},
-            {"retryable", issue.retryable}});
+            {"retryable", issue.retryable}, {"previouslyFailed", issue.previously_failed}});
         return result;
     }
 }

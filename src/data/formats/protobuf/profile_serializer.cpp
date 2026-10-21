@@ -169,6 +169,14 @@ namespace ksv::data {
             }
         }
 
+        for (const auto &failed : profile.failedSources()) {
+            auto *failed_proto = proto.add_failed_sources();
+            writeSourceRef(failed_proto->mutable_file(), failed.file);
+            failed_proto->set_size(failed.size);
+            failed_proto->set_modified_ms(failed.modified_ms);
+            failed_proto->set_message(failed.message);
+        }
+
         profile::File file;
         auto* header = file.mutable_header();
         header->set_version(kStoreVersion);
@@ -321,6 +329,18 @@ namespace ksv::data {
             }
             profile.addRun(run);
         }
+
+        std::vector<domain::FailedSource> failed_sources;
+        for (const auto &failed_proto : proto.failed_sources()) {
+            domain::FailedSource failed{
+                .file = {{failed_proto.file().directory_id()}, failed_proto.file().filename()},
+                .size = failed_proto.size(),
+                .modified_ms = failed_proto.modified_ms(),
+                .message = failed_proto.message(),
+            };
+            if (profile.sources().resolve(failed.file)) failed_sources.push_back(std::move(failed));
+        }
+        profile.setFailedSources(std::move(failed_sources));
         return profile;
     }
 }

@@ -312,4 +312,12 @@ namespace ksv::domain {
     const std::vector<Run> &UserProfile::getAllRunRecords() const {
         return m_runs;
     }
+
+    const std::vector<FailedSource> &UserProfile::failedSources() const {
+        return m_failed_sources;
+    }
+
+    void UserProfile::setFailedSources(std::vector<FailedSource> failed) {
+        m_failed_sources = std::move(failed);
+    }
 }
