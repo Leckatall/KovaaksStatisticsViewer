@@ -4,6 +4,232 @@ The technical record — every change, user-visible or not. For the user-facing 
 [RELEASE_NOTES.md](RELEASE_NOTES.md). Pending entries live as fragments in `changelog.d/` and are
 assembled into both files at version bump.
 
+## v1.0.0-rc.1
+
+### Added
+
+#### Scenario & run selection
+- Clicking the Scenario History graph selects the run nearest the click. The run list scrolls to that run and the run graph shows it. `ICompletionHistoryUseCase::select_run` goes through `ISessionController`, so every selection path shares one current run.
+
+#### Graphing
+- Series expressions have a compact one-line text form (DSL) that can be copied and pasted in the expression editor. The codec lives in `ksv_contracts` and has no Qt dependency. Encoding is canonical, so decoding and re-encoding gives back the same bytes. This is what lets the old JSON codecs be retired.
+- The run graph explains why it is empty: "No run selected", or "Selected run does not support performance analysis" for CSV-only runs. This comes from a new `GraphViewModel::ContentState`.
+- Scenario History marks the selected run and follows selection from the run list and Recent. The `selected_run_index` contract supports this.
+- Per-graph configuration: each graph has a gear popup for quick settings, and there is a new Graphs settings page. Both cover the visible range (recent days, custom dates, latest N runs), the playtime averaging window, line style and markers, series colours and widths, and how each axis fits (fit visible data, start at zero, fixed bounds). How it is built:
+  - `GraphConfigurationService` is the single owner of the committed configuration. It validates a whole candidate before it writes or publishes anything, and `SeriesConfigStore`/`SeriesManagementUseCase` are retired.
+  - Saved as schema v4 of the series document. Each section is quarantined on its own, so one bad graph section doesn't reset the others.
+  - The Settings window edits one working copy for each visit and commits it on Save.
+  - Style changes take a separate path, so they never re-query the profile or re-evaluate a benchmark.
+  - Range projection keeps the original run numbers and full-history values. `IDaySource` keeps "today"-anchored ranges current while the app stays open.
+- Scenario History has a clickable metric legend (shared with the View menu) and a rolling average of the last 10 scores. The average is computed over the whole history before the range is applied, so the range never changes a run's value.
+- Run graph lines can hide their first 0–10 points. The Expected Final Score lines hide 1 by default. The setting is in a new options menu on each Graph Lines row. The graph configuration schema is now 5.
+
+#### Benchmarks
+- Benchmark library foundation: a Qt-free benchmark model and completeness validator, and a filesystem store with `schemaVersion` gating, atomic writes guarded by a content digest, and per-file classification.
+- Benchmark authoring: create a benchmark, import one from a KovaaK's playlist, then edit, validate, save, rename, delete and reopen it. Incomplete drafts are kept, and any action that would replace the draft confirms first.
+- Benchmark evaluation: the pure `evaluateBenchmark` projection gives per-scenario PB, recent average, tier and next threshold, plus official attained and completed rank with next-tier blockers, average rank, and a fully rebuilt rank history. Name-based definitions are matched to hash-based runs, and unique matches are saved automatically. Benchmark playtime uses the same accounting as the profile playtime graph, so the two can't drift apart.
+- New Benchmarks workspace tab. It shows rank status, next-tier blockers, rank and playtime history, and a scenario breakdown, all read from one consistent snapshot. The Benchmark Manager shows each scenario's match state, can add scenarios you have already played, resolves ambiguous names, and can change or clear a mapping without losing its thresholds.
+- Drag scenarios between rows in the benchmark editor to set their order, within a group or into another one.
+- Each category and subcategory shows its rank as a chip in that tier's colour.
+- Each scenario's tier bar marks your recent average with a tick.
+- Tier bars have distinct looks for unplayed scenarios, mappings that need fixing, scores above the top tier, and hatched tiers with no usable threshold. A threshold that is out of order hatches every chunk it bounds instead of filling from a value that may be wrong.
+- The Benchmark Manager shows "• Unsaved" while the open benchmark has unsaved changes. Undoing back to the saved copy clears it.
+- Each tier bar shows the personal best where its fill ends, in the colour of the rank you've reached.
+- Benchmarks marked incomplete, invalid or unsupported get an edit button that opens the Benchmark Manager on that benchmark without selecting it.
+- One benchmark row can link several versions (hashes) of a scenario. Their histories are merged in date order for PB, recent average and progress, and overlapping playtime is counted once. The store writes schema 2 and still reads schema 1.
+
+#### Data & Profile
+- Older KovaaK's runs that only have a CSV now appear in run history. A facet-based `Run` model replaces `ScenarioPerf`, `RunIngestor` handles file pairing for every ingest path, and the profile store moves to `profile.proto` v4 with the v3 upgrade kept in a migrator that can be dropped later.
+- Incremental profile import: the profile catches up on runs played while the app was closed, and Refresh Profile (File menu, F5, and Settings) imports new runs on demand. One `ProfileImporter` serves startup catch-up, manual refresh and live file notifications. It skips sources it has already recorded, and a late perf or CSV sibling enriches the existing run instead of adding a new one. Each changed batch is saved once and published only after the save succeeds; an unchanged refresh neither saves nor publishes.
+
+#### Build & packaging
+- `scripts/build_and_test.py` is the single entry point for Debug builds and tests. It has test scopes and wildcard matching, prints one line on success, and keeps full logs. Toolchain paths come from layered defaults and local overrides.
+- `ksv_driver` and `scripts/ui_driver.py`: a development-only UI driver that runs the real `App` against a throwaway session and can inspect, click, type and take screenshots without a display.
+- `scripts/make_dummy_kovaaks.py` generates a fake KovaaK's directory for testing the app on a machine without KovaaK's.
+- UI driver profile specs (`--profile-spec`) build test data from a declarative JSON file. Fault injection (`--inject`) can delay or fail decoder, CSV, benchmark-store and series-store calls.
+- UI driver tours and HTML contact-sheet reports. Named shots, batch variables and sections, and checked-in `smoke`, `full` and `unreachable` tours.
+- UI driver snapshot fixtures replay a real profile, benchmarks and settings. Includes `take_snapshot.py`.
+
+#### Architecture
+- `qDebug`/`qWarning`/`qCritical` output now includes file, line and function through a shared message pattern installed at startup.
+
+#### User Interface
+- Keyboard shortcuts: Ctrl+, opens Settings, Ctrl+O loads a performance file, and Ctrl+F jumps to the scenario search from either tab.
+
+#### Documentation
+- Conventions for Architecture Decision Records and the Architecture Description, plus `scripts/arch_doc.py` to validate and manage them.
+- An as-built Architecture Description with runtime views for the profile lifecycle and for run selection and rendering.
+- Requirements and design for the benchmark table editor.
+
+### Changed
+
+#### Graphing
+- A series can exist with no expression; it plots nothing. "Add series" now creates a blank series. Nested expressions with a missing input are still rejected.
+- `GraphViewModel` reads series points and the run duration through separate `IGraphUseCase` accessors. Refreshing metadata no longer evaluates series values.
+- Series configuration files store expressions as readable DSL text (schema v3). Older v1 and v2 JSON expressions still load.
+- Gridlines use a stronger colour.
+- On hover, graphs show a coloured marker on each line instead of a dot on every data point.
+- `AxisModel` is replaced by a read-only `Axis` contract with persistent `ValueAxis` and `DateTimeAxis` classes. Benchmark history graphs share one date axis.
+- Scenarios tab graph panels:
+  - Line toggles become a scrolling legend down the left side of the run graph.
+  - Lines are stacked in Graph Lines order, with the top entry drawn on top.
+  - The three panels share the height equally.
+  - The coloured Y axis and its caption are removed.
+- Scenario History now sits directly under the run graph, with Daily Playtime last. The View menu uses the same order.
+- `ValueAxis::setRange` is no longer `[[nodiscard]]`, which removes repeated build warnings.
+- The benchmark "Personal-best average rank" line runs flat to the graph's right edge.
+- The benchmark rank graph draws a reference line in each tier's colour at every tier level. The rank line is now a neutral colour so it can't be mistaken for a tier. Graphs can now use a neutral (foreground) series colour.
+- Graph configuration cleanup:
+  - Rows on the Graphs page are keyed, so typing in a field no longer loses focus after one character.
+  - Line-style controls and the catalogue are shared between the gear popup and the Graphs page.
+  - Contract helpers are consolidated (`SeriesStyle`, `connectionModeName`, `applyAxisPolicy`).
+- The graph settings gear is visible on the dark theme and stays highlighted while its popup is open. The popup has a proper frame. A new shared `ChromeIconButton` holds the styling.
+- New default graph settings:
+  - The run graph's default lineup is score, projected final score against top and recent runs, and running accuracy.
+  - The other graphs open on a recent range, and the playtime window defaults to 7 days.
+  - Existing settings are kept. "Restore default lines" switches to the new lineup.
+- New default run graph colours: green score, cyan accuracy, and magenta, rose and violet forecasts.
+- Scenario History marks the selected run with a slim translucent cyan band drawn behind the series, replacing the bright line and rings.
+- The Y-axis title shows the axis name instead of listing every line on that axis. `GraphCanvas::labelledYAxisTitle` replaces the name-joining code in QML.
+
+#### Benchmarks
+- Benchmark ownership is split along layer boundaries (ADR 0005):
+  - The accepted library is a Qt-free `BenchmarksService` over `IBenchmarkStore`.
+  - Matching profile runs to benchmarks moves into `BenchmarkResolutionUseCase` with an edit lease.
+  - Editing is a pure `domain::BenchmarkEditor` driven by `BenchmarkManagerViewModel`.
+- Benchmarks with an unnamed tier, scenario, category or subcategory are flagged as incomplete, and threshold problems point at the exact tier cell.
+- The benchmark editor becomes a compact scenario × rank table. It supports spreadsheet paste, fixing invalid thresholds in place, and one Undo history for the session.
+- Faster table editing: multi-cell selection, drag-and-drop grouping, add buttons in the table, and context menus.
+- Benchmark Manager layout:
+  - Double-click or Enter opens a benchmark.
+  - The library list sits in a resizable pane that can be hidden.
+  - The add controls are labelled and sit right under the last row.
+  - A `TableView` bug that left the rightmost ranks unreachable is fixed.
+- Benchmarks tab clarity:
+  - It opens on the last-viewed benchmark, or the only one.
+  - Next-tier progress is shown as bars, and rank names appear in their tier colours.
+  - Empty groups and the "Resolved" label are hidden.
+  - An empty library shows a single call to action.
+- The average rank is shown as a tier bar, with a tick where the completed rank ends.
+- The scenario mapping row in the Benchmark Manager is always shown, so selecting a cell no longer pushes the table down.
+- A single scenario progress grid, laid out like the editor table, replaces the blocker list and the breakdown table. Each scenario gets a tier-coloured bar up to the top tier, and blockers are marked.
+- Rank columns in the editor share the free width, so a five-rank benchmark fits at the default size. They never cut off a rank name.
+- A PB above the top tier is marked with a chevron past the end of the bar instead of a diamond.
+- The progress grid's PB and Recent columns are replaced by PB date and play count. The PB date is the earliest run that reached the PB score.
+- A category with no subcategories spans the Category and Subcategory columns, in both the editor table and the progress grid.
+- The progress heading counts the scenarios that block the next tier, matching the marked rows.
+- Tier bar threshold labels:
+  - Each bar labels every tier with the score needed to reach it.
+  - A label moves to the middle or start of its chunk instead of disappearing under the PB.
+  - Labels also avoid the recent-average marker, and the marker breaks behind the PB.
+  - A label inside a partly filled chunk is outlined, to show it is still a target.
+- A progress grid too wide for the window opens scrolled to its right end. The Category, Subcategory and Scenario columns stay pinned while the rest scrolls, and a user's scroll position is kept until the benchmark changes.
+- The benchmark selector shows only names for normal benchmarks. Incomplete, invalid and unsupported entries get coloured badges.
+- Each section of a tier bar again shows progress toward the tier it is named after, labelled at its end with the score that completes it. The average-rank bar reads the same way, on the same scale as the domain's normalized rank.
+- The progress grid fits more tiers before it scrolls: PB date and Plays come before the bar, tier headers are coloured names without swatches, and chunks are only as wide as the longest tier name.
+- The average rank reads as a tier and progress ("Bronze · 60% to Silver") in the rank graph tooltip and the summary bar.
+- An incomplete benchmark's page shows the progress table before the playtime chart.
+- The average rank graph caps its tiers at one above your best rank, so the line isn't squashed by tiers you haven't reached.
+- The benchmark name and summary stay pinned while you scroll:
+  - A searchable dropdown replaces the benchmark list, ordered by most recently viewed. A new `IRecentBenchmarks` holds that list and replaces `lastSelectedId`.
+  - Manage Benchmarks moves into the dropdown.
+  - Next tier shows how many scenarios block it.
+- Test coverage:
+  - The hidden progress heading for non-trackable benchmarks is now actually tested.
+  - The selector's "unsupported" label is now tested.
+  - An audit of the benchmark acceptance criteria added tests for every gap it found.
+
+#### Settings
+- Settings opens larger (860×620) and reopens at the size you last left it.
+- During a profile rebuild, the Profile page says "Rebuilding" and shows files done out of the total.
+- Settings are stored in `%APPDATA%\Lecka\KovaaksStatsViewer.ini` instead of the registry, including the QML `Settings {}` blocks. Registry settings are deliberately not migrated. The gallery now redirects its settings so it can't overwrite the real file.
+
+#### Data & Profile
+- Files that fail to import are remembered in the profile (`Store.failed_sources`, an additive field, so there is no store version bump). Automatic imports (startup, live, source-settings changes) skip a recorded failure while the file is unchanged. Refresh Profile, Rebuild and the backoff retry still re-read it, and any change to the file clears the skip. A failures-only result is saved without reloading the graphs.
+- Profile import status moves into a slim bar at the bottom of the window (`ProfileStatusBar.qml`, replacing `ProfileImportStatus.qml`). It appears only while busy, after a completed import worth noting, or for new problems. Settings → Profile shows Refresh and Rebuild side by side, lists problem files by name, and asks before rebuilding.
+
+#### Build & packaging
+- `build_and_test.py` takes an exclusive lock on `build-agent/`, so a second concurrent run fails fast instead of corrupting the build tree.
+- Build and test failures are read from the frameworks' own reports (GoogleTest XML, Qt Test text, CTest JUnit) and shown as one compact keyed report that drops nothing.
+- Build job count and process priority are machine-local settings (`KSV_BUILD_JOBS`, `KSV_BUILD_PRIORITY`). Linked git worktrees fall back to the main checkout's `toolchain.local.env`.
+- UI driver input and selectors:
+  - Mouse press, move and release can be held separately, and hover moves realistically.
+  - New `obj:` and `rawtext:` selectors.
+  - Selector text ignores menu mnemonics.
+  - Dialog and popup windows get stable owner-based names.
+- UI driver datasets ship fixed benchmark fixtures (`driver-demo`, and the 12-tier `driver-many-tiers`) in place of a generated benchmark where every row had the same state.
+- Test build and run time cut: one CTest test per GoogleTest executable, `ctest -j4`, and precompiled headers on the heavier test targets. A clean build plus full test run went from 434 s to 273 s.
+
+#### Architecture
+- Expression transport between C++ and QML uses canonical DSL text instead of a QVariantMap codec.
+- Shared test fixtures and support targets replace duplicated test scaffolding. Integration suites build the wired `App` once per suite, which roughly halves their run time.
+- Benchmark library snapshot DTOs move into `ksv_contracts`, so UI code can't reach the data-layer repository port through the presentation contract.
+- `App`'s injecting constructor requires `IStatsCsvParser` and `IBenchmarkStore` with no null fallback. Before this, test fixtures silently shared one AppData benchmarks directory.
+- Test suite review: 118 tests that earned nothing are removed. About 146 tests no longer depend on shipped defaults, and invariant tests replace the default-table tests.
+
+#### User Interface
+- Copy, paste, delete and the expression editor (ƒx) buttons show icons instead of text.
+- The component gallery serves deterministic synthetic profile datasets and the real production graph panels and expression editor.
+- Runs in the Scenarios tab are two-line cards again, with a clear hover highlight and a hand cursor. This restores them after the one-line table rows.
+- Scenarios tab left column:
+  - The Recent section has a fixed size with a visible scroll bar.
+  - The sort direction button says whether it is ascending or descending.
+  - An empty scenario list explains how runs get there.
+  - The first launch shows a welcome screen for choosing the Kovaaks folder.
+- The Scenarios and Benchmarks workspace tabs are larger and clearly mark the active tab.
+- Chart titles share one style (`ChartTitle.qml`): left-aligned, semibold, 14px.
+- "Set Source Directory..." and "Settings..." end in an ellipsis, like the other menu items that open a dialog.
+- The menu bar reads File, View, Benchmarks, Help.
+- QML sources are regrouped by feature. Group-structure rules move into C++, and shared components (`Theme`, `CreationField`, `ToolbarButton`, grid cells and others) replace inline copies. The benchmark dialog, table and grid are split into smaller components.
+
+### Removed
+
+#### Benchmarks
+- The Benchmark Manager's one-click Discard (X) button is removed. Leaving unsaved changes always goes through the Save/Discard prompt.
+- Editing and saving existing benchmarks no longer asks for confirmation about recalculating history.
+
+### Fixed
+
+#### Scenario & run selection
+- Selecting a scenario now switches both graphs to its latest run straight away. Before, they stayed on the previous scenario until you clicked one of its runs. The scenario browser also follows the current run when it changes elsewhere.
+
+#### Graphing
+- The completion history score axis no longer always starts at 0.
+- Graph readability:
+  - Axis labels no longer repeat or get cut off at the edges.
+  - Line toggles sit inside the run graph panel.
+  - Run history is dotted when there are few runs and no longer labels a run "#0".
+  - The playtime graph shows a message instead of empty axes.
+  - The run graph no longer shows a "1970-01-01" title when no run is selected.
+- Daily and benchmark playtime graphs show zero on inactive days. Before, the line joined activity across the gaps.
+- Date and time axes fit the data range exactly, with no extra space before or after it.
+
+#### Benchmarks
+- The benchmark rank and playtime history graphs draw their lines. Before, they showed only empty axes.
+- The editor's Undo, Paste and Save buttons are compact icon buttons on one row. Before, they wrapped onto two rows at the default size.
+- Naming a new subcategory and pressing Enter no longer opens a rename box on the category behind the relocation prompt. Focus now lands on the new subcategory, or on the category if you cancel.
+- Escape with the scenario suggestion list open only closes the list. Before, it committed the typed name as a rename.
+- Hiding and showing the library list no longer leaves the rank columns scrolled sideways with an empty gap.
+- Squeezing the editor pane keeps at least one rank column and its scrollbar in view, with the identifying columns narrowing to their content. Before, the ranks disappeared entirely.
+- Opening a benchmark with wider rank names no longer leaves the ranks scrolled part-way into the first rank.
+- Scenarios pasted or typed into a benchmark link to your runs as soon as you save. Before, they showed "Linking to your runs…" until the app restarted. Names that differ only by capitalisation or extra whitespace now match.
+- With "End date ranges at latest recorded run" on, the rank history graph ends at the latest rank improvement for every range instead of stretching past it. The rank line is now drawn over the tier lines.
+- `tst_BenchmarkPicker.qml` no longer fails intermittently: it waits for the popup layout to settle before clicking.
+
+#### Settings
+- Long paths in Settings > Profile wrap, so the whole path stays readable. The rebuild button is labelled "Rebuild Profile from Kovaaks Directory".
+
+#### Data & Profile
+- Paused CSV-only runs report the real scenario length instead of counting paused time.
+- Corrupt performance files and mismatched stats files no longer create or overwrite run data.
+
+#### Build & packaging
+- The About dialog in `ksv_driver` and `ksv_gallery` shows the app version.
+- UI driver sessions can no longer import the developer's real KovaaK's install. Sessions can be composed from overlays, settings and environment variables, and new file commands (`put`, `rm`, `edit`) wait until the app is idle.
+
+#### User Interface
+- View menu labels line up. Before, submenus and plain items sat further left than the items with check boxes.
+
 ## v0.6.0-beta
 
 ### Added

@@ -2,6 +2,92 @@
 
 What's new for people using the app. For the technical record, see [CHANGELOG.md](CHANGELOG.md).
 
+## v1.0.0-rc.1
+
+### Features & changes
+
+#### Scenario & run selection
+- Click a point on the Scenario History graph to select that run. The run list scrolls to it and the run graph shows it.
+- Run cards highlight on hover and show a hand cursor, so it's clear they can be clicked.
+- The Recent section stays a fixed size with a visible scroll bar.
+- The sort button says whether it's sorting ascending or descending.
+- An empty scenario list explains how runs get imported.
+- On first launch, a welcome screen asks you to choose your Kovaaks folder instead of showing empty graphs.
+
+#### Graphing
+- Every graph has a settings gear, and there's a new Graphs page in Settings. From either one you can choose:
+  - which dates or runs to show
+  - the playtime averaging window
+  - smooth lines, straight lines or points only, and whether to show markers
+  - series colours and line widths
+  - how each axis fits (fit the data, start at zero, or fixed bounds)
+- New defaults:
+  - The run graph shows your score, your projected final score against your top and recent runs, and your running accuracy, in new colours. Use "Restore default lines" in Graph Lines to switch to this lineup.
+  - Playtime graphs average over 7 days.
+  - Graphs open on a recent range instead of your whole history.
+- Graph lines can hide their first few points, so projections like Expected Final Score don't stretch the graph with their unreliable start.
+- A graph line's expression can be shown as one line of text, then copied and pasted to reuse it or share it. "Add series" now creates a blank line.
+- Scenario History:
+  - It sits right under the run graph.
+  - It has clickable line toggles and a rolling average of your last 10 scores.
+  - The selected run is marked with a slim band.
+  - Each run is dotted when there are only a few.
+- On the run graph, line toggles run down the left side. Lines stack in the order of your line list, and hovering shows a marker on each line.
+- The three graphs on the Scenarios tab share the height equally.
+- Gridlines are easier to see, chart titles share one style, and the Y-axis title names the axis.
+- An empty graph now says why it's empty: no run selected, a run with no performance data, no playtime yet, or nothing in the chosen range.
+
+#### Benchmarks
+- New Benchmarks tab for tracking your rank in a benchmark:
+  - Pick a benchmark from a searchable list, with the ones you viewed most recently first.
+  - A summary at the top shows your rank, your average rank as a tier bar (for example "Bronze · 60% to Silver"), and how many scenarios block the next tier.
+- Each scenario gets a tier-coloured progress bar. It shows the score needed for every tier, your personal best, and a mark for your recent average.
+- The progress grid also shows your PB date and play count.
+- Scenarios holding back your next rank are marked. Each category shows its own rank.
+- Scenarios that are unplayed or need fixing are labelled.
+- Rank and playtime history graphs show your progress over time, with a line at each tier.
+- The Benchmark Manager creates benchmarks, or imports them from a KovaaK's playlist. You edit them in a spreadsheet-like table:
+  - Paste cells straight from a spreadsheet.
+  - Undo.
+  - Drag scenarios into groups and into order.
+  - Use right-click menus.
+  - An "Unsaved" indicator shows pending changes, and closing asks before throwing them away.
+- Scenarios link to your runs automatically, even if the capitalisation or spacing differs. When a name is ambiguous, you choose which scenario it links to, and one row can combine several versions of a scenario.
+- Benchmarks that are incomplete, invalid or unsupported are flagged in the list, with a button that opens them in the Manager.
+
+#### Settings
+- Settings opens larger and remembers its size.
+- Long folder paths wrap so you can read the whole path.
+- Settings → Profile shows Refresh and Rebuild side by side, lists files that failed to import by name, and asks before rebuilding.
+- Settings are now stored in `%APPDATA%\Lecka\KovaaksStatsViewer.ini` instead of the Windows registry. Settings from earlier versions are not carried over, so set your Kovaaks folder, profile location and graph lines again if you had changed them.
+
+#### User Interface
+- The Scenarios and Benchmarks tabs are large and clearly show which one is active.
+- Copy, paste, delete and expression-editor buttons now show icons instead of text.
+- Keyboard shortcuts:
+  - Ctrl+, opens Settings.
+  - Ctrl+O loads a performance file.
+  - Ctrl+F jumps to the scenario search.
+- The menu bar reads File, View, Benchmarks, Help. Menu items that open a dialog end in "...".
+
+#### Under the hood
+- The profile now catches up on runs you played while the app was closed. Refresh Profile (File menu, F5, or Settings) picks up new runs whenever you want.
+- Import progress and problems show in a slim bar at the bottom of the window, only when there's something to report.
+- Files that fail to import are remembered instead of being retried every time the app starts or a new run arrives. Refresh Profile and Rebuild still retry them, and a file is retried automatically once it changes.
+- Older KovaaK's runs that only have a stats CSV now appear in your run history.
+
+### Bug fixes
+- Selecting a scenario switches the graphs to its latest run straight away, instead of waiting until you click one of its runs.
+- The scenario history score axis no longer always starts at 0.
+- Axis labels no longer repeat or get cut off at the edges.
+- Date axes fit the data, with no extra space at either end.
+- Scenario history no longer labels a run "#0".
+- The run graph no longer shows a "1970-01-01" date when no run is selected.
+- Playtime graphs show zero on days you didn't play, instead of drawing a line across the gap.
+- CSV-only runs that were paused now report their real length.
+- Corrupt performance files and mismatched stats files no longer create or overwrite run data.
+- View menu labels now line up.
+
 ## v0.6.0-beta
 
 ### Features & changes
