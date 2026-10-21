@@ -42,8 +42,10 @@ add_library(ksv_data STATIC
         formats/protobuf/profile_serializer.h
         formats/protobuf/migration/profile_v3_migrator.cpp
         formats/protobuf/migration/profile_v3_migrator.h
-        profile_builder.cpp
-        profile_builder.h
+        profile_importer.cpp
+        profile_importer.h
+        source_path_key.h
+        interfaces/i_profile_importer.h
         profile_service.cpp
         profile_service.h
         run_ingestor.cpp

@@ -12,11 +12,16 @@
 
 #include "domain/run.h"
 #include "domain/user_profile.h"
+#include "app/contracts/profile_import.h"
 
 namespace ksv::application {
     class IProfileService {
     public:
         virtual ~IProfileService() = default;
+        [[nodiscard]] virtual ProfileImportRequest beginImport(ProfileImportMode mode, ProfileImportReason reason) = 0;
+        virtual ProfileImportOutcome acceptImport(ProfileImportResult &result) = 0;
+        virtual void abandonImport(ProfileImportToken token) = 0;
+        virtual void onRefreshRequested(std::function<void(ProfileImportReason)> callback) = 0;
 
         // Builds synchronously. Prefer the build-request hook below: with a requester
         // installed, a missing or rejected stored profile goes through it instead of blocking here.
@@ -28,14 +33,6 @@ namespace ksv::application {
         // Installed by whoever owns a build worker. With no requester installed every
         // build path stays synchronous.
         virtual void onBuildRequested(std::function<void()> callback) = 0;
-
-        // Between beginProfileBuild() and applyBuiltProfile(), perf files arriving from
-        // the watcher are queued rather than applied, then replayed onto the built
-        // profile — a build that scanned the directory before the file landed must not
-        // silently drop it.
-        virtual void beginProfileBuild() = 0;
-
-        virtual void applyBuiltProfile(domain::UserProfile profile) = 0;
 
         [[nodiscard]] virtual std::vector<domain::ScenarioId> getScenarioList() const = 0;
 

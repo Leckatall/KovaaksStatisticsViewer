@@ -102,10 +102,16 @@ namespace {
         mutable Calls calls;
 
         void generateProfileFromDirectory() override { m_inner->generateProfileFromDirectory(); }
+        ProfileImportRequest beginImport(ProfileImportMode mode, ProfileImportReason reason) override {
+            return m_inner->beginImport(mode, reason);
+        }
+        ProfileImportOutcome acceptImport(ProfileImportResult &result) override { return m_inner->acceptImport(result); }
+        void abandonImport(ProfileImportToken token) override { m_inner->abandonImport(token); }
+        void onRefreshRequested(std::function<void(ProfileImportReason)> callback) override {
+            m_inner->onRefreshRequested(std::move(callback));
+        }
         void loadProfile() override { m_inner->loadProfile(); }
         void onBuildRequested(std::function<void()> callback) override { m_inner->onBuildRequested(std::move(callback)); }
-        void beginProfileBuild() override { m_inner->beginProfileBuild(); }
-        void applyBuiltProfile(domain::UserProfile profile) override { m_inner->applyBuiltProfile(std::move(profile)); }
         std::vector<domain::ScenarioId> getScenarioList() const override { return m_inner->getScenarioList(); }
         domain::Run getPerf(const std::string &path) const override { return m_inner->getPerf(path); }
         domain::Run getLatestRun() const override { return m_inner->getLatestRun(); }

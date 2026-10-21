@@ -4,26 +4,38 @@
 
 #include "profile_build_worker.h"
 
-#include "profile_builder.h"
 
 namespace ksv::application {
-    ProfileBuildWorker::ProfileBuildWorker(std::shared_ptr<IFileService> file_service,
-                                           std::shared_ptr<data::IRunIngestor> ingestor, QObject *parent)
-        : QObject(parent), m_file_service(std::move(file_service)), m_ingestor(std::move(ingestor)) {
+    ProfileBuildWorker::ProfileBuildWorker(std::shared_ptr<data::IProfileImporter> importer, QObject *parent)
+        : QObject(parent), m_importer(std::move(importer)) {
     }
 
-    void ProfileBuildWorker::build() {
+    void ProfileBuildWorker::build(ProfileImportRequest request) {
         // One queued signal per file would post thousands of events at a directory of
         // any size, all to move a bar by less than a pixel. Whole percent is the
         // finest step the bar can actually show.
         int last_percent = -1;
-        auto report = [this, &last_percent](const std::size_t done, const std::size_t total) {
+        auto report = [this, &last_percent](ProfileImportPhase phase, const std::size_t done, const std::size_t total) {
             const int percent = total == 0 ? 100 : static_cast<int>(done * 100 / total);
             if (percent == last_percent && done != total) return;
             last_percent = percent;
-            emit progress(static_cast<int>(done), static_cast<int>(total));
+            emit progress(phase, static_cast<int>(done), static_cast<int>(total));
         };
 
-        emit finished(data::ProfileBuilder{m_file_service, m_ingestor}.build(report));
+        try {
+            emit finished(m_importer->run(request, report));
+        } catch (const std::exception &error) {
+            ProfileImportResult result;
+            result.token = request.token;
+            result.failed = true;
+            result.summary.issues.push_back({{}, error.what(), false});
+            emit finished(std::move(result));
+        } catch (...) {
+            ProfileImportResult result;
+            result.token = request.token;
+            result.failed = true;
+            result.summary.issues.push_back({{}, "Unexpected import failure", false});
+            emit finished(std::move(result));
+        }
     }
 }

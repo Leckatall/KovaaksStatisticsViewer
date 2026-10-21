@@ -19,6 +19,7 @@
 #include "interfaces/i_proto_decoder.h"
 #include "../data/interfaces/i_file_service.h"
 #include "../data/interfaces/i_run_ingestor.h"
+#include "../data/interfaces/i_profile_importer.h"
 #include "data/interfaces/i_profile_service.h"
 #include "interfaces/i_settings_service.h"
 #include "data/interfaces/i_graph_configuration_persistence.h"
@@ -114,6 +115,7 @@ namespace ksv::application {
         std::shared_ptr<data::IStatsCsvParser> m_statsParser;
         std::shared_ptr<IFileService> m_fileService;
         std::shared_ptr<data::IRunIngestor> m_runIngestor;
+        std::shared_ptr<data::IProfileImporter> m_profileImporter;
         std::shared_ptr<IProfileService> m_profileService;
         std::shared_ptr<ISessionController> m_sessionController;
         std::shared_ptr<IGraphUseCase> m_graphUseCase;

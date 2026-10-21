@@ -38,6 +38,7 @@
 #include "settings_service.h"
 
 #include "integration_env.h"
+#include "profile_seeding.h"
 
 using namespace ksv;
 using namespace ksv::application;
@@ -180,7 +181,7 @@ namespace {
                 run.run_id.start_time += 10000 + kDayMs * i;
                 ASSERT_TRUE(profile.addRun(run));
             }
-            app->profileService()->applyBuiltProfile(std::move(profile));
+            ASSERT_EQ(ksv::tests_support::seedProfile(*app->profileService(), std::move(profile)), application::ProfileImportOutcome::Succeeded);
             ASSERT_TRUE(QTest::qWaitFor([&] { return app->completionHistoryVm()->runCount() == 5; }, 5000));
         }
 

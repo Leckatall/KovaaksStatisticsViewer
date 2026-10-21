@@ -6,17 +6,16 @@
 
 #include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <set>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 
 #include "profile_service.h"
+#include "profile_importer.h"
 #include "run_ingestor.h"
 #include "fake_file_service.h"
 #include "fake_settings_service.h"
-#include "cerr_capture.h"
 #include "run_builders.h"
 
 using namespace ksv::data;
@@ -35,21 +34,6 @@ namespace {
         return new_profile_dir() / "profile.pb";
     }
 
-    PerfFile perf_file(const std::string &filename, const std::string &root = "fake/kovaaks") {
-        return {root, "FPSAimTrainer/performances", filename};
-    }
-
-    // RunIngestor::buildLiveRun() probes the CSV sibling on the real filesystem, so
-    // the live-pairing tests need a real KovaaK's-shaped directory.
-    std::filesystem::path live_root() {
-        return std::filesystem::temp_directory_path() / "ksv_profile_service_live_test";
-    }
-
-    ksv::domain::UserProfile profile_for_roots(const std::vector<std::string> &roots) {
-        ksv::domain::UserProfile profile;
-        for (const auto &root: roots) profile.ensureSource(root, "FPSAimTrainer/performances");
-        return profile;
-    }
 
     class FakeProfileSerializer : public IProfileSerializer {
     public:
@@ -93,12 +77,115 @@ namespace {
         std::shared_ptr<IRunIngestor> ingestor = std::make_shared<RunIngestor>(fake_file_service);
         ProfileService profile_service{fake_file_service, fake_serializer, fake_settings, ingestor};
 
+        void arrive(ksv::domain::Run run) {
+            fake_file_service->perfs_to_return.push_back(std::move(run));
+            fake_file_service->notifySourcesChanged();
+        }
+
         void TearDown() override {
             std::filesystem::remove_all(new_profile_dir());
-            std::error_code ignored;
-            std::filesystem::remove_all(live_root(), ignored);
         }
     };
+
+    TEST_F(ProfileServiceTest, ChangedBatchSavesAndNotifiesOnceWhileNoopDoesNeither) {
+        profile_service.setProfile({});
+        fake_file_service->perfs_to_return = {makeRun("h1", 100), makeRun("h2", 200)};
+        int notifications = 0;
+        profile_service.onProfileChanged([&] { ++notifications; });
+        ProfileImporter importer(fake_file_service, ingestor);
+        auto request = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
+        auto result = importer.run(request, {});
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Succeeded);
+        EXPECT_EQ(profile_service.getScenarioList().size(), 2U);
+        EXPECT_EQ(fake_serializer->save_count, 1);
+        EXPECT_EQ(notifications, 1);
+        request = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
+        result = importer.run(request, {});
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Succeeded);
+        EXPECT_EQ(fake_serializer->save_count, 1);
+        EXPECT_EQ(notifications, 1);
+    }
+
+    TEST_F(ProfileServiceTest, SaveFailureKeepsAcceptedHistoryAndSourcesEligibleForRetry) {
+        profile_service.setProfile({});
+        fake_file_service->perfs_to_return = {makeRun("new", 100)};
+        ProfileImporter importer(fake_file_service, ingestor);
+        auto request = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
+        auto result = importer.run(request, {});
+        fake_serializer->save_result = false;
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Failed);
+        EXPECT_TRUE(result.summary.save_failed);
+        EXPECT_TRUE(profile_service.getScenarioList().empty());
+        fake_serializer->save_result = true;
+        request = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
+        result = importer.run(request, {});
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Succeeded);
+        EXPECT_EQ(profile_service.getScenarioList().size(), 1U);
+    }
+
+    TEST_F(ProfileServiceTest, ProfilePathRoundTripInvalidatesEarlierImportEvenWhenPathMatchesAgain) {
+        profile_service.setProfile({});
+        fake_file_service->perfs_to_return = {makeRun("old-job", 100)};
+        ProfileImporter importer(fake_file_service, ingestor);
+        const auto request = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
+        auto result = importer.run(request, {});
+        fake_serializer->profile_to_load.emplace();
+        fake_settings->setProfilePath(new_profile_path().string());
+        fake_settings->setProfilePath("test_profile.pb");
+        const auto saves = fake_serializer->save_count;
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Stale);
+        EXPECT_EQ(fake_serializer->save_count, saves);
+        EXPECT_TRUE(profile_service.getScenarioList().empty());
+    }
+
+    TEST_F(ProfileServiceTest, SourceRootRoundTripInvalidatesEarlierImport) {
+        profile_service.setProfile(ksv::domain::UserProfile{});
+        fake_file_service->perfs_to_return = {makeRun("old-job", 100)};
+        ProfileImporter importer(fake_file_service, ingestor);
+        auto result = importer.run(profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual), {});
+        fake_settings->setKovaaksDirs({"C:/different"});
+        fake_settings->setKovaaksDirs({"fake/kovaaks"});
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Stale);
+        EXPECT_EQ(fake_serializer->save_count, 0);
+        EXPECT_TRUE(profile_service.getScenarioList().empty());
+    }
+
+    TEST_F(ProfileServiceTest, PartialResultSavesOnceAndReturnsPartial) {
+        profile_service.setProfile({});
+        fake_file_service->perfs_to_return = {makeRun("good", 100), makeRun("bad", 200)};
+        fake_file_service->throw_for_indices.insert(1);
+        ProfileImporter importer(fake_file_service, ingestor);
+        auto result = importer.run(profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual), {});
+        ASSERT_FALSE(result.summary.issues.empty());
+
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Partial);
+        EXPECT_EQ(fake_serializer->save_count, 1);
+        EXPECT_EQ(profile_service.getScenarioList().size(), 1U);
+    }
+
+    TEST_F(ProfileServiceTest, AcceptingTheSameResultTwiceSavesOnceAndReturnsStale) {
+        profile_service.setProfile({});
+        fake_file_service->perfs_to_return = {makeRun("h", 100)};
+        ProfileImporter importer(fake_file_service, ingestor);
+        auto result = importer.run(profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual), {});
+
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Succeeded);
+        EXPECT_EQ(profile_service.acceptImport(result), ProfileImportOutcome::Stale);
+        EXPECT_EQ(fake_serializer->save_count, 1);
+    }
+
+    TEST_F(ProfileServiceTest, StaleResultDoesNotClearANewerActiveRequest) {
+        profile_service.setProfile({});
+        fake_file_service->perfs_to_return = {makeRun("h", 100)};
+        ProfileImporter importer(fake_file_service, ingestor);
+        const auto older = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
+        const auto newer = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
+        auto older_result = importer.run(older, {});
+        auto newer_result = importer.run(newer, {});
+
+        EXPECT_EQ(profile_service.acceptImport(older_result), ProfileImportOutcome::Stale);
+        EXPECT_EQ(profile_service.acceptImport(newer_result), ProfileImportOutcome::Succeeded);
+    }
 
     TEST_F(ProfileServiceTest, ScenarioListEmptyBeforeProfileGenerated) {
         EXPECT_TRUE(profile_service.getScenarioList().empty());
@@ -125,36 +212,22 @@ namespace {
         EXPECT_EQ(scenarios.size(), 2);
     }
 
-    TEST_F(ProfileServiceTest, AddPerfFileToProfileAddsIncrementally) {
+    TEST_F(ProfileServiceTest, SourcesChangedImportsAnArrivalIncrementally) {
         fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
-        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
-
-        const auto scenarios = profile_service.getScenarioList();
-        EXPECT_EQ(scenarios.size(), 2);
-    }
-
-    TEST_F(ProfileServiceTest, RegistersFilesChangedCallbackOnConstruction) {
-        // ProfileService should subscribe to IFileService::onFilesChanged so new
-        // files picked up by the watcher get folded into the profile automatically.
-        EXPECT_EQ(fake_file_service->callbackCount(), 1);
-
-        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
-        profile_service.generateProfileFromDirectory();
-
-        fake_file_service->perfs_by_path["watched.perf"] = makeRun("hash-3", 400);
-        fake_file_service->notifyFilesChanged(perf_file("watched.perf"));
+        arrive(makeRun("hash-2", 300));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
     }
 
-    TEST_F(ProfileServiceTest, FilesChangedCallbackBeforeProfileLoadedDoesNotCrash) {
+    TEST_F(ProfileServiceTest, RegistersSourcesChangedCallbackOnConstruction) {
         EXPECT_EQ(fake_file_service->callbackCount(), 1);
+    }
 
-        fake_file_service->perfs_by_path["watched.perf"] = makeRun("hash-1", 100);
-        fake_file_service->notifyFilesChanged(perf_file("watched.perf"));
+    TEST_F(ProfileServiceTest, SourcesChangedBeforeProfileLoadedDoesNotImport) {
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
+        fake_file_service->notifySourcesChanged();
 
         EXPECT_FALSE(profile_service.isProfileLoaded());
         EXPECT_TRUE(profile_service.getScenarioList().empty());
@@ -190,8 +263,7 @@ namespace {
         fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
-        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 500);
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
+        arrive(makeRun("hash-2", 500));
 
         const auto perf = profile_service.getLatestRun();
 
@@ -415,8 +487,7 @@ namespace {
         profile_service.generateProfileFromDirectory();
         EXPECT_EQ(notify_count, 1);
 
-        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
+        arrive(makeRun("hash-2", 300));
         EXPECT_EQ(notify_count, 2);
     }
 
@@ -428,79 +499,27 @@ namespace {
         EXPECT_EQ(fake_serializer->save_count, 1);
     }
 
-    TEST_F(ProfileServiceTest, AddPerfFileToProfileSavesToStore) {
+    TEST_F(ProfileServiceTest, ArrivalSavesToStore) {
         fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
-        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
+        arrive(makeRun("hash-2", 300));
 
         EXPECT_EQ(fake_serializer->save_count, 2);
     }
 
-    TEST_F(ProfileServiceTest, AddPerfFileToProfileSkipsAFileThatVanishedDuringDecode) {
+    TEST_F(ProfileServiceTest, ArrivalThatVanishedDuringDecodeIsSkipped) {
         fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
         const auto saves_before = fake_serializer->save_count;
 
-        const auto vanished = perf_file("vanished.perf");
-        fake_file_service->paths_to_throw_for.insert(vanished.absolutePath());
-        profile_service.addPerfFileToProfile(vanished);
+        fake_file_service->throw_for_indices.insert(1);
+        arrive(makeRun("hash-2", 300));
 
         EXPECT_EQ(profile_service.getScenarioList().size(), 1);
         EXPECT_EQ(fake_serializer->save_count, saves_before);
     }
 
-    TEST_F(ProfileServiceTest, AddPerfFileAttachesCsvStatsAndTotalsWhenTheSiblingExists) {
-        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
-        profile_service.generateProfileFromDirectory();
-
-        const auto root = live_root();
-        std::filesystem::create_directories(root / "FPSAimTrainer" / "stats");
-        { std::ofstream(root / "FPSAimTrainer" / "stats" / "live_run Stats.csv") << "placeholder"; }
-
-        const auto arrived = perf_file("live_run.perf", root.generic_string());
-        ksv::domain::Run decoded{
-            .run_id = {.scenario_id = {.name = "Scenario hash-2", .hash = "hash-2"}, .start_time = 300}};
-        decoded.performance.emplace();
-        decoded.stored_totals = {.score = 77.0F, .shots = 10, .hits = 8, .misses = 2};
-        fake_file_service->perfs_by_path[arrived.absolutePath()] = decoded;
-        fake_file_service->stats_by_path.emplace("live_run Stats.csv", ksv::data::ParsedStatsCsv{
-            .scenario_id = {.name = "Scenario hash-2", .hash = "hash-2"},
-            .totals = {.score = 77.0F, .shots = 10, .hits = 8, .misses = 2},
-            .stats = {.dpi = 400}});
-
-        profile_service.addPerfFileToProfile(arrived);
-
-        const auto run = profile_service.getCurrentRun({{"Scenario hash-2", "hash-2"}, 300});
-        ASSERT_TRUE(run.has_value());
-        ASSERT_TRUE(run->stats.has_value());
-        EXPECT_EQ(run->stats->dpi, 400);
-        EXPECT_EQ(run->totals().score, 77.0F);
-        EXPECT_TRUE(run->sources.csv.has_value());
-    }
-
-    TEST_F(ProfileServiceTest, AddPerfFileWithoutASiblingAddsPerfOnlyAndLogsTheDerivedStatsPath) {
-        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
-        profile_service.generateProfileFromDirectory();
-
-        const auto arrived = perf_file("orphan.perf");
-        fake_file_service->perfs_by_path[arrived.absolutePath()] = makeRun("hash-2", 300);
-
-        std::string logged;
-        {
-            const CerrCapture capture;
-            profile_service.addPerfFileToProfile(arrived);
-            logged = capture.str();
-        }
-
-        const auto run = profile_service.getCurrentRun({{"Scenario hash-2", "hash-2"}, 300});
-        ASSERT_TRUE(run.has_value());
-        EXPECT_FALSE(run->stats.has_value());
-        EXPECT_FALSE(run->sources.csv.has_value());
-        EXPECT_NE(logged.find("FPSAimTrainer/stats"), std::string::npos);
-        EXPECT_NE(logged.find("orphan Stats.csv"), std::string::npos);
-    }
 
     TEST_F(ProfileServiceTest, LoadProfileUsesStoreWhenAvailableAndSkipsDirectoryScan) {
         ksv::domain::UserProfile stored;
@@ -554,103 +573,28 @@ namespace {
         EXPECT_EQ(fake_serializer->save_count, 0);
     }
 
-    TEST_F(ProfileServiceTest, PerfFileArrivingDuringABuildIsQueuedNotApplied) {
+    TEST_F(ProfileServiceTest, ArrivalIsImportedOnceWithOneSaveAndOneNotification) {
+        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
+        profile_service.generateProfileFromDirectory();
+        int notifications = 0;
+        profile_service.onProfileChanged([&] { ++notifications; });
+
+        arrive(makeRun("hash-2", 300));
+
+        EXPECT_EQ(profile_service.getScenarioList().size(), 2);
+        EXPECT_EQ(fake_serializer->save_count, 2);
+        EXPECT_EQ(notifications, 1);
+    }
+
+    // A refresh that completes with nothing new must not rewrite the store.
+    TEST_F(ProfileServiceTest, RepeatedSourcesChangedWithNothingNewDoesNotSaveAgain) {
         fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         profile_service.generateProfileFromDirectory();
 
-        profile_service.beginProfileBuild();
-        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
+        fake_file_service->notifySourcesChanged();
+        fake_file_service->notifySourcesChanged();
 
-        EXPECT_EQ(profile_service.getScenarioList().size(), 1);
         EXPECT_EQ(fake_serializer->save_count, 1);
-    }
-
-    TEST_F(ProfileServiceTest, ApplyBuiltProfileReplaysQueuedPerfFiles) {
-        profile_service.beginProfileBuild();
-        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
-
-        auto built = profile_for_roots(fake_file_service->source_roots);
-        built.addRun(makeRun("hash-1", 100));
-        profile_service.applyBuiltProfile(std::move(built));
-
-        EXPECT_EQ(profile_service.getScenarioList().size(), 2);
-        EXPECT_EQ(fake_serializer->save_count, 1);
-        ASSERT_TRUE(fake_serializer->last_saved_profile.has_value());
-        const auto replayed = fake_serializer->last_saved_profile->getCurrentRun(
-            ksv::domain::ScenarioRunId{{"Scenario hash-2", "hash-2"}, 300});
-        ASSERT_TRUE(replayed.has_value());
-        ASSERT_TRUE(replayed->sources.perf.has_value());
-        EXPECT_EQ(fake_serializer->last_saved_profile->sources().resolve(*replayed->sources.perf),
-                  "fake/kovaaks/FPSAimTrainer/performances/new_run.perf");
-    }
-
-    TEST_F(ProfileServiceTest, ApplyBuiltProfileSkipsAVanishedPendingFileButKeepsOthers) {
-        profile_service.beginProfileBuild();
-        const auto vanished = perf_file("vanished.perf");
-        fake_file_service->paths_to_throw_for.insert(vanished.absolutePath());
-        profile_service.addPerfFileToProfile(vanished);
-        fake_file_service->perfs_by_path["surviving.perf"] = makeRun("hash-2", 300);
-        profile_service.addPerfFileToProfile(perf_file("surviving.perf"));
-
-        auto built = profile_for_roots(fake_file_service->source_roots);
-        built.addRun(makeRun("hash-1", 100));
-        profile_service.applyBuiltProfile(std::move(built));
-
-        EXPECT_EQ(profile_service.getScenarioList().size(), 2);
-        EXPECT_TRUE(profile_service.getCurrentRun({{"Scenario hash-2", "hash-2"}, 300}).has_value());
-    }
-
-    // A file that landed before the build's directory scan is already in the result;
-    // replaying it must not double-count the run.
-    TEST_F(ProfileServiceTest, ApplyBuiltProfileSkipsQueuedFileAlreadyInTheBuiltProfile) {
-        const auto perf = makeRun("hash-1", 100);
-        profile_service.beginProfileBuild();
-        fake_file_service->perfs_by_path["new_run.perf"] = perf;
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
-
-        auto built = profile_for_roots(fake_file_service->source_roots);
-        built.addRun(perf);
-        profile_service.applyBuiltProfile(std::move(built));
-
-        const auto scenarios = profile_service.getScenarioList();
-        ASSERT_EQ(scenarios.size(), 1);
-        EXPECT_EQ(profile_service.getRunCount(scenarios[0]).value_or(0), 1);
-    }
-
-    TEST_F(ProfileServiceTest, ApplyBuiltProfileDiscardsAResultFromAnotherSourceDirectory) {
-        fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
-        profile_service.generateProfileFromDirectory();
-        const auto saves_before = fake_serializer->save_count;
-
-        profile_service.beginProfileBuild();
-        auto stale = profile_for_roots({"D:/SomeOtherKovaaksDir"});
-        stale.addRun(makeRun("hash-stale", 500));
-        profile_service.applyBuiltProfile(std::move(stale));
-
-        const auto scenarios = profile_service.getScenarioList();
-        ASSERT_EQ(scenarios.size(), 1);
-        EXPECT_EQ(scenarios[0].hash, "hash-1");
-        EXPECT_EQ(fake_serializer->save_count, saves_before);
-    }
-
-    // The discarded build takes the queue with it otherwise, and the rebuild that
-    // follows would have nothing to replay.
-    TEST_F(ProfileServiceTest, QueuedPerfFilesSurviveADiscardedBuild) {
-        profile_service.beginProfileBuild();
-        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
-
-        auto stale = profile_for_roots({"D:/SomeOtherKovaaksDir"});
-        profile_service.applyBuiltProfile(std::move(stale));
-
-        profile_service.beginProfileBuild();
-        auto rebuilt = profile_for_roots(fake_file_service->source_roots);
-        rebuilt.addRun(makeRun("hash-1", 100));
-        profile_service.applyBuiltProfile(std::move(rebuilt));
-
-        EXPECT_EQ(profile_service.getScenarioList().size(), 2);
     }
 
     TEST_F(ProfileServiceTest, IsProfileLoadedFalseBeforeAnyLoadOrGenerate) {
@@ -708,8 +652,7 @@ namespace {
 
         fake_settings->setProfilePath(new_profile_path().string());
 
-        fake_file_service->perfs_by_path["new_run.perf"] = makeRun("hash-2", 300);
-        profile_service.addPerfFileToProfile(perf_file("new_run.perf"));
+        arrive(makeRun("hash-2", 300));
 
         // 1 save from the initial generate, 1 from the path-change's own fallback
         // generate (no store at the new path), 1 from the incremental add.

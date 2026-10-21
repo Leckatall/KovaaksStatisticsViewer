@@ -23,6 +23,7 @@ TestCase {
             kovaaksDir: "file:///C:/Kovaaks",
             profilePath: "file:///C:/Profile/profile.pb",
             profileLoaded: false,
+            kovaaksDirSet: true,
             allSeriesConfigs: [
                 {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
                 {id: "2", name: "Accuracy", color: "#00ffff", enabled: false, displayPosition: 1}
@@ -34,10 +35,19 @@ TestCase {
     Component {
         id: observableSessionVmComponent
         QtObject {
-            property bool profileBuildInProgress: false
-            property double profileBuildProgress: 0
-            property int profileBuildDone: 0
-            property int profileBuildTotal: 0
+            property bool profileImportBusy: false
+            property double profileImportProgress: 0
+            property int profileImportDone: 0
+            property int profileImportTotal: 0
+            property string profileImportMode: "rebuild"
+            property string profileImportPhase: "importing"
+            property string profileImportOutcome: "none"
+            property int profileImportAdded: 0
+            property int profileImportEnriched: 0
+            property var profileImportIssues: []
+            property bool profileImportSaveFailed: false
+            property int refreshCalls: 0
+            function refreshProfile() { refreshCalls++ }
             function generateProfile() {}
         }
     }
@@ -46,11 +56,35 @@ TestCase {
         return Object.assign({
             generateProfileCalls: 0,
             generateProfile: function () { this.generateProfileCalls++ },
-            profileBuildInProgress: false,
-            profileBuildProgress: 0,
-            profileBuildDone: 0,
-            profileBuildTotal: 0
+            profileImportBusy: false,
+            profileImportProgress: 0,
+            profileImportDone: 0,
+            profileImportMode: "rebuild",
+            profileImportPhase: "importing",
+            profileImportOutcome: "none",
+            profileImportAdded: 0,
+            profileImportEnriched: 0,
+            profileImportIssues: [],
+            profileImportSaveFailed: false,
+            profileImportTotal: 0
         }, overrides)
+    }
+
+    function test_refreshButtonDelegatesToSessionVm() {
+        const vm = createTemporaryObject(observableSessionVmComponent, testCase)
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: vm})
+        const button = ItemLookup.findByObjectName(dialog.contentItem, "refreshProfileButton")
+        verify(button !== null)
+        mouseClick(button)
+        compare(vm.refreshCalls, 1)
+    }
+
+    function test_refreshAndRebuildDisableTogether() {
+        const vm = createTemporaryObject(observableSessionVmComponent, testCase)
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: vm})
+        vm.profileImportBusy = true
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "refreshProfileButton").enabled, false)
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton").enabled, false)
     }
 
     // Opens the dialog and waits for its Popup content (created on open,
@@ -168,7 +202,8 @@ TestCase {
     function test_profileBuildProgressBar_showsProgressWhileBuilding() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4})
+            sessionVm: makeFakeSessionVm({profileImportBusy: true, profileImportProgress: 0.4,
+                                          profileImportDone: 2, profileImportTotal: 5})
         })
 
         const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
@@ -182,7 +217,7 @@ TestCase {
     function test_profileBuildProgressBar_indeterminateBeforeTheFirstReport() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileBuildInProgress: true})
+            sessionVm: makeFakeSessionVm({profileImportBusy: true})
         })
 
         const bar = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressBar")
@@ -192,24 +227,24 @@ TestCase {
     function test_profileStatus_saysRebuildingWhileABuildRuns_andRestoresAfter() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profileLoaded: true}),
-            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true})
+            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileImportBusy: true})
         })
         const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
         compare(statusLabel.text, "Profile status: Rebuilding", "a running rebuild replaces the loaded state in the status line")
 
-        dialog.sessionVm.profileBuildInProgress = false
+        dialog.sessionVm.profileImportBusy = false
         compare(statusLabel.text, "Profile status: Loaded", "the status line shows the real state again once the rebuild ends")
     }
 
     function test_profileStatus_notLoadedAfterAFailedRebuild() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({profileLoaded: false}),
-            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileBuildInProgress: true})
+            sessionVm: createTemporaryObject(observableSessionVmComponent, testCase, {profileImportBusy: true})
         })
         const statusLabel = ItemLookup.findByObjectName(dialog.contentItem, "profileLoadedLabel")
         compare(statusLabel.text, "Profile status: Rebuilding")
 
-        dialog.sessionVm.profileBuildInProgress = false
+        dialog.sessionVm.profileImportBusy = false
         compare(statusLabel.text, "Profile status: Not loaded")
     }
 
@@ -226,22 +261,22 @@ TestCase {
     function test_profileBuildProgressLabel_saysFilesDoneOutOfTotal() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileBuildInProgress: true, profileBuildProgress: 0.4,
-                                          profileBuildDone: 2, profileBuildTotal: 5})
+            sessionVm: makeFakeSessionVm({profileImportBusy: true, profileImportProgress: 0.4,
+                                          profileImportDone: 2, profileImportTotal: 5})
         })
         const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
         compare(label.visible, true)
-        compare(label.text, "Rebuilding profile: 2 of 5 files")
+        compare(label.text, "Rebuilding profile: 2 of 5 runs")
     }
 
     function test_profileBuildProgressLabel_saysScanningBeforeTheFirstReport() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm({profileBuildInProgress: true})
+            sessionVm: makeFakeSessionVm({profileImportBusy: true})
         })
         const label = ItemLookup.findByObjectName(dialog.contentItem, "profileBuildProgressLabel")
         compare(label.visible, true)
-        compare(label.text, "Scanning Kovaaks Directory...")
+        compare(label.text, "Scanning sources...")
     }
 
     function test_seriesEnabledSwitchesListAllSeriesConfigsAndReflectEnabledState() {

@@ -16,6 +16,7 @@
 #include "interfaces/i_profile_serializer.h"
 #include "interfaces/i_run_ingestor.h"
 #include "interfaces/i_settings_service.h"
+#include "interfaces/i_profile_importer.h"
 
 namespace ksv::data {
     class ProfileService : public application::IProfileService {
@@ -23,23 +24,25 @@ namespace ksv::data {
         ProfileService(std::shared_ptr<application::IFileService> file_service,
                        std::shared_ptr<application::IProfileSerializer> serializer,
                        std::shared_ptr<application::ISettingsService> settings_service,
-                       std::shared_ptr<IRunIngestor> ingestor);
+                       std::shared_ptr<IRunIngestor> ingestor,
+                       std::shared_ptr<IProfileImporter> importer = {});
+
+        [[nodiscard]] application::ProfileImportRequest beginImport(application::ProfileImportMode, application::ProfileImportReason) override;
+        application::ProfileImportOutcome acceptImport(application::ProfileImportResult &) override;
+        void abandonImport(application::ProfileImportToken) override;
+        void onRefreshRequested(std::function<void(application::ProfileImportReason)> callback) override {
+            m_refresh_requester = std::move(callback);
+        }
 
         void generateProfileFromDirectory() override;
 
         void loadProfile() override;
-
-        void addPerfFileToProfile(const application::PerfFile &perf_file);
 
         void setProfile(domain::UserProfile profile);
 
         void onBuildRequested(std::function<void()> callback) override {
             m_build_requester = std::move(callback);
         }
-
-        void beginProfileBuild() override;
-
-        void applyBuiltProfile(domain::UserProfile profile) override;
 
         [[nodiscard]] std::vector<domain::ScenarioId> getScenarioList() const override;
 
@@ -96,17 +99,23 @@ namespace ksv::data {
             for (auto &cb: m_callbacks) cb();
         }
 
-        void saveProfile() const;
-
         void ensureParentDir() const;
 
         void applyProfilePath();
+        void invalidateImports();
+        void requestRefresh(application::ProfileImportReason);
+        void acceptAliases(const application::ProfileImportResult &);
 
         std::filesystem::path m_filepath;
-        std::unique_ptr<domain::UserProfile> m_profile;
+        std::shared_ptr<const domain::UserProfile> m_profile;
+        std::shared_ptr<IProfileImporter> m_importer;
+        std::function<void(application::ProfileImportReason)> m_refresh_requester;
+        std::uint64_t m_generation = 0;
+        std::uint64_t m_next_request = 0;
+        std::optional<application::ProfileImportToken> m_active_import;
+        std::vector<application::ProfileSourceAlias> m_aliases;
+        std::shared_ptr<int> m_lifetime = std::make_shared<int>(0);
         std::function<void()> m_build_requester;
-        bool m_build_in_flight = false;
-        std::vector<application::PerfFile> m_pending_perf_files;
         std::shared_ptr<application::IFileService> m_file_service;
         std::shared_ptr<application::IProfileSerializer> m_serializer;
         std::shared_ptr<application::ISettingsService> m_settings_service;

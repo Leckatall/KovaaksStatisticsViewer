@@ -147,6 +147,59 @@ namespace {
         EXPECT_EQ(run->run_id.start_time, 100);
     }
 
+    TEST(UserProfileImportTest, LateCsvEnrichesOneRunWithoutLosingSamples) {
+        UserProfile profile;
+        auto original = makeRun("h", 100, 10, 5, 3, 30);
+        original.performance.emplace();
+        original.performance->add_data(1.0F, HITS, 3);
+        original.sources.perf = {profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/performances"), "run.perf"};
+        ASSERT_TRUE(profile.addRun(original));
+        auto incoming = makeRun("h", 100, 20, 8, 6, 35);
+        incoming.stats = Stats{};
+        incoming.sources.csv = {profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/stats"), "run Stats.csv"};
+        EXPECT_EQ(profile.mergeImportedRun(incoming), ImportMerge::Enriched);
+        EXPECT_EQ(profile.getRunCount(original.run_id.scenario_id), 1U);
+        EXPECT_DOUBLE_EQ(profile.getTotalTimeAllScenarios(), 30);
+        const auto merged = profile.getCurrentRun(original.run_id);
+        ASSERT_TRUE(merged);
+        EXPECT_FLOAT_EQ(merged->stored_totals.score, 20);
+        ASSERT_TRUE(merged->performance);
+        EXPECT_EQ(merged->performance->samples[0].hits, 3);
+        EXPECT_EQ(profile.mergeImportedRun(incoming), ImportMerge::Unchanged);
+    }
+
+    TEST(UserProfileImportTest, LatePerfRekeysCsvRunAndUpdatesOrderingAndDuration) {
+        UserProfile profile;
+        auto csv = makeRun("h", 100, 20, 8, 6, 30);
+        csv.sources.csv = {profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/stats"), "run Stats.csv"};
+        csv.stats = Stats{};
+        profile.addRun(csv);
+        profile.addRun(makeRun("h", 150, 5, 1, 1, 10));
+        auto perf = makeRun("h", 200, 10, 5, 3, 35);
+        perf.sources.perf = {profile.ensureSource("C:/Kovaaks", "FPSAimTrainer/performances"), "run.perf"};
+        perf.performance.emplace();
+        EXPECT_EQ(profile.mergeImportedRun(perf, csv.run_id), ImportMerge::Enriched);
+        EXPECT_FALSE(profile.getCurrentRun(csv.run_id));
+        ASSERT_TRUE(profile.getLatestRun());
+        EXPECT_EQ(profile.getLatestRun()->run_id.start_time, 200);
+        EXPECT_EQ(profile.getMostRecentRun(csv.run_id.scenario_id)->run_id.start_time, 200);
+        EXPECT_FLOAT_EQ(profile.getCurrentRun(perf.run_id)->stored_totals.score, 20);
+        EXPECT_EQ(profile.getRunCount(csv.run_id.scenario_id), 2U);
+        EXPECT_DOUBLE_EQ(profile.getTotalTimeAllScenarios(), 45);
+    }
+
+    TEST(UserProfileImportTest, RekeyCollisionLeavesBothRunsUnchanged) {
+        UserProfile profile;
+        const auto old = makeRun("h", 100, 10, 0, 0, 30);
+        const auto other = makeRun("h", 200, 20, 0, 0, 40);
+        profile.addRun(old);
+        profile.addRun(other);
+        EXPECT_EQ(profile.mergeImportedRun(other, old.run_id), ImportMerge::Conflict);
+        EXPECT_EQ(profile.getRunCount(old.run_id.scenario_id), 2U);
+        EXPECT_DOUBLE_EQ(profile.getTotalTimeAllScenarios(), 70);
+        EXPECT_FLOAT_EQ(profile.getCurrentRun(old.run_id)->stored_totals.score, 10);
+    }
+
     TEST(UserProfileTest, DuplicateRunIdIsSkippedAndReturnsFalse) {
         UserProfile profile;
         EXPECT_TRUE(profile.addRun(makeRun("scenario-1", 100)));

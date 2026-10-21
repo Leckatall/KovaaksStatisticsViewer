@@ -46,6 +46,54 @@ namespace ksv::domain {
         return true;
     }
 
+    ImportMerge UserProfile::mergeImportedRun(Run incoming, std::optional<ScenarioRunId> previous_id) {
+        const auto found = m_run_index.find(previous_id.value_or(incoming.run_id));
+        if (found == m_run_index.end()) {
+            if (previous_id) return ImportMerge::Conflict;
+            addRun(incoming);
+            return ImportMerge::Added;
+        }
+        const auto index = found->second;
+        const auto &old = m_runs[index];
+        if (!(old.run_id.scenario_id == incoming.run_id.scenario_id)) return ImportMerge::Conflict;
+        if (!(old.run_id == incoming.run_id) && m_run_index.contains(incoming.run_id)) return ImportMerge::Conflict;
+        Run merged = old;
+        bool changed = false;
+        if (!old.sources.perf && incoming.sources.perf) {
+            merged.sources.perf = incoming.sources.perf;
+            merged.performance = std::move(incoming.performance);
+            merged.run_id = incoming.run_id;
+            merged.scenario_length = incoming.scenario_length;
+            if (!old.sources.csv) merged.stored_totals = incoming.stored_totals;
+            changed = true;
+        }
+        if (!old.sources.csv && incoming.sources.csv) {
+            merged.sources.csv = incoming.sources.csv;
+            merged.stats = incoming.stats;
+            merged.stored_totals = incoming.stored_totals;
+            if (!merged.sources.perf) merged.scenario_length = incoming.scenario_length;
+            changed = true;
+        }
+        if (!changed) return ImportMerge::Unchanged;
+        const auto old_id = old.run_id;
+        const auto duration_delta = merged.scenario_length - old.scenario_length;
+        m_total_time_all_scenarios += duration_delta;
+        m_scenario_aggregate[old_id.scenario_id].total_time_seconds += duration_delta;
+        m_runs[index] = std::move(merged);
+        if (!(old_id == m_runs[index].run_id)) {
+            m_run_index.erase(old_id);
+            m_run_index.emplace(m_runs[index].run_id, index);
+            auto &indices = m_scenario_index[old_id.scenario_id];
+            std::erase(indices, index);
+            const auto position = std::ranges::upper_bound(indices, m_runs[index].run_id.start_time, {},
+                [this](std::size_t idx) { return m_runs[idx].run_id.start_time; });
+            indices.insert(position, index);
+            m_most_recent_index = static_cast<std::size_t>(std::ranges::max_element(m_runs, {},
+                [](const Run &run) { return run.run_id.start_time; }) - m_runs.begin());
+        }
+        return ImportMerge::Enriched;
+    }
+
     std::vector<ScenarioId> UserProfile::getScenarioList() const {
         std::vector<ScenarioId> keys;
         keys.reserve(m_scenario_index.size());

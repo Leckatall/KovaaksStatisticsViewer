@@ -42,6 +42,7 @@
 #include "settings_service.h"
 
 #include "integration_env.h"
+#include "profile_seeding.h"
 
 using namespace ksv;
 
@@ -564,7 +565,7 @@ namespace {
             run.run_id.start_time += 1000 * i;
             ASSERT_TRUE(profile.addRun(run));
         }
-        app->profileService()->applyBuiltProfile(std::move(profile));
+        ASSERT_EQ(ksv::tests_support::seedProfile(*app->profileService(), std::move(profile)), application::ProfileImportOutcome::Succeeded);
 
         auto *historyVm = app->completionHistoryVm();
         ui::GraphCanvas *canvas = nullptr;
@@ -617,7 +618,7 @@ namespace {
             run.run_id.start_time += 1000 * i;
             ASSERT_TRUE(profile.addRun(run));
         }
-        app->profileService()->applyBuiltProfile(std::move(profile));
+        ASSERT_EQ(ksv::tests_support::seedProfile(*app->profileService(), std::move(profile)), application::ProfileImportOutcome::Succeeded);
 
         auto *historyVm = app->completionHistoryVm();
         ui::GraphCanvas *canvas = nullptr;
@@ -690,7 +691,7 @@ namespace {
         second_run.sources.perf = first_run.sources.perf;
         ASSERT_TRUE(profile.addRun(first_run));
         ASSERT_TRUE(profile.addRun(second_run));
-        app->profileService()->applyBuiltProfile(std::move(profile));
+        ASSERT_EQ(ksv::tests_support::seedProfile(*app->profileService(), std::move(profile)), application::ProfileImportOutcome::Succeeded);
 
         auto *tracking = app->benchmarkTrackingVm();
         tracking->selectBenchmark("auto-1");

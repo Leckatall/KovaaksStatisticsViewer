@@ -13,6 +13,7 @@ target_sources(ksv_contracts PUBLIC
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
         FILES
         completion_history.h
+        profile_import.h
         scenario_summary.h
         run_performance.h
         graph_info.h

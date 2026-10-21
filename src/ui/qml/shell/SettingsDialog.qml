@@ -305,7 +305,7 @@ ApplicationWindow {
                             width: 10
                             height: 10
                             radius: width / 2
-                            color: root.sessionVm.profileBuildInProgress ? "#FFB300"
+                            color: root.sessionVm.profileImportBusy ? "#FFB300"
                                  : root.settingsVm.profileLoaded ? Theme.success : Theme.error
                             Layout.alignment: Qt.AlignVCenter
                         }
@@ -313,36 +313,29 @@ ApplicationWindow {
                             objectName: "profileLoadedLabel"
                             // The loaded flag describes the profile as it stood before the rebuild,
                             // so it is not shown while one is running.
-                            text: "Profile status: " + (root.sessionVm.profileBuildInProgress ? "Rebuilding"
+                            text: "Profile status: " + (root.sessionVm.profileImportBusy ?
+                                  (root.sessionVm.profileImportMode === "rebuild" ? "Rebuilding" : "Refreshing")
                                   : root.settingsVm.profileLoaded ? "Loaded" : "Not loaded")
                         }
                     }
 
                     Button {
+                        objectName: "refreshProfileButton"
+                        text: qsTr("Refresh Profile")
+                        enabled: root.settingsVm.kovaaksDirSet === true && !root.sessionVm.profileImportBusy
+                        onClicked: root.sessionVm.refreshProfile()
+                    }
+
+                    Button {
                         objectName: "generateProfileButton"
                         text: "Rebuild Profile from Kovaaks Directory"
-                        enabled: !root.sessionVm.profileBuildInProgress
+                        enabled: !root.sessionVm.profileImportBusy
                         onClicked: root.sessionVm.generateProfile()
                     }
 
-                    Label {
-                        objectName: "profileBuildProgressLabel"
-                        visible: root.sessionVm.profileBuildInProgress
-                        // The file count only arrives with the first per-file report.
-                        text: root.sessionVm.profileBuildTotal === 0
-                              ? "Scanning Kovaaks Directory..."
-                              : "Rebuilding profile: " + root.sessionVm.profileBuildDone
-                                + " of " + root.sessionVm.profileBuildTotal + " files"
-                    }
-
-                    ProgressBar {
-                        objectName: "profileBuildProgressBar"
+                    ProfileImportStatus {
                         Layout.fillWidth: true
-                        visible: root.sessionVm.profileBuildInProgress
-                        // The file count only arrives with the first per-file report; until then
-                        // there is nothing to show a fraction of.
-                        indeterminate: value === 0
-                        value: root.sessionVm.profileBuildProgress
+                        sessionVm: root.sessionVm
                     }
                     Item { Layout.fillHeight: true }
                 }

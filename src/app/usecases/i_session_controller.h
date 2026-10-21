@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "domain/run.h"
+#include "app/contracts/profile_import.h"
 #include <QObject>
 
 namespace ksv::application {
@@ -22,6 +23,8 @@ namespace ksv::application {
         virtual std::vector<domain::ScenarioId> getScenarioList() = 0;
 
         virtual void generateProfileFromDirectory() = 0;
+        virtual void refreshProfile(ProfileImportReason reason = ProfileImportReason::Manual) = 0;
+        [[nodiscard]] virtual ProfileImportState profileImportState() const = 0;
 
         virtual void setCurrentRunToLatest() = 0;
 
@@ -39,6 +42,7 @@ namespace ksv::application {
     signals:
         void currentRunChanged();
         void profileChanged();
+        void profileImportStateChanged();
 
         void buildStarted();
         void buildProgress(int done, int total);

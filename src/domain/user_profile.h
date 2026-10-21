@@ -15,6 +15,8 @@
 #include "source_directory.h"
 
 namespace ksv::domain {
+    enum class ImportMerge { Unchanged, Added, Enriched, Conflict };
+
     struct ScenarioAggregate {
         double total_time_seconds = 0.0;
         std::size_t run_count = 0;
@@ -25,6 +27,7 @@ namespace ksv::domain {
         explicit UserProfile(SourceRegistry sources = {});
 
         bool addRun(const Run &run);
+        ImportMerge mergeImportedRun(Run incoming, std::optional<ScenarioRunId> previous_id = std::nullopt);
 
         [[nodiscard]] std::vector<ScenarioId> getScenarioList() const;
 

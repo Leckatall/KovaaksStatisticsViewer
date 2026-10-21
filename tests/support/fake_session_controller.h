@@ -16,6 +16,12 @@ namespace ksv::tests_support {
         std::vector<std::string> set_current_perf_filename_calls;
         int generate_call_count = 0;
         bool build_in_progress = false;
+        application::ProfileImportState import_state;
+        int refresh_call_count = 0;
+        void refreshProfile(application::ProfileImportReason = application::ProfileImportReason::Manual) override {
+            ++refresh_call_count;
+        }
+        [[nodiscard]] application::ProfileImportState profileImportState() const override { return import_state; }
 
         std::vector<domain::ScenarioId> getScenarioList() override { return scenario_list; }
         void generateProfileFromDirectory() override { ++generate_call_count; }

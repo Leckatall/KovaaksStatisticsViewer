@@ -7,6 +7,7 @@
 
 #include <QObject>
 #include <QThread>
+#include <QTimer>
 
 #include "profile_build_worker.h"
 #include "run.h"
@@ -24,12 +25,16 @@ namespace ksv::application {
                           std::shared_ptr<IProfileService> profile_service,
                           std::shared_ptr<IFileService> file_service,
                           std::shared_ptr<data::IRunIngestor> ingestor, QObject *parent = nullptr);
+        SessionController(std::shared_ptr<ISettingsService>, std::shared_ptr<IProfileService>,
+            std::shared_ptr<IFileService>, std::shared_ptr<data::IProfileImporter>, QObject *parent = nullptr);
 
         ~SessionController() override;
 
         std::vector<domain::ScenarioId> getScenarioList() override;
 
         void generateProfileFromDirectory() override;
+        void refreshProfile(ProfileImportReason reason = ProfileImportReason::Manual) override;
+        [[nodiscard]] ProfileImportState profileImportState() const override { return m_import_state; }
 
         void setCurrentRun(const domain::Run& run) override;
 
@@ -44,11 +49,13 @@ namespace ksv::application {
         [[nodiscard]] bool isBuildInProgress() const override { return m_build_in_flight; }
 
     signals:
-        void buildRequested();
+        void buildRequested(ProfileImportRequest request);
 
     private:
         void startBuild();
-        void onBuildFinished(const domain::UserProfile& profile);
+        void startImport(ProfileImportMode, ProfileImportReason);
+        void onBuildFinished(ProfileImportResult result);
+        void refreshCurrentRun(const ProfileImportResult &);
 
         std::shared_ptr<ISettingsService> m_settings_service;
         std::shared_ptr<IProfileService> m_profile_service;
@@ -59,6 +66,16 @@ namespace ksv::application {
         ProfileBuildWorker* m_build_worker;
         bool m_build_in_flight = false;
         bool m_rebuild_requested = false;
+        bool m_refresh_requested = false;
+        ProfileImportReason m_pending_reason = ProfileImportReason::Live;
+        ProfileImportRequest m_active_request;
+        ProfileImportState m_import_state;
+        QTimer m_retry;
+        int m_retry_attempt = 0;
+        std::uint64_t m_selection_revision = 0;
+        std::uint64_t m_started_selection_revision = 0;
+        bool m_accepting = false;
+        std::shared_ptr<int> m_lifetime = std::make_shared<int>(0);
     };
 }
 

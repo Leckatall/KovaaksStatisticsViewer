@@ -55,7 +55,11 @@ TestCase {
     }
 
     QtObject { id: fakePlaytimeVm }
-    QtObject { id: fakeSessionVm }
+    QtObject {
+        id: fakeSessionVm
+        property int refreshCalls: 0
+        function refreshProfile() { refreshCalls++ }
+    }
     property var fakeHistoryVm: TestDoubles.makeFakeHistoryVm()
     property var fakeManagerVm: TestDoubles.makeFakeBenchmarkManagerVm({})
     property var fakeTrackingVm: TestDoubles.makeFakeTrackingVm(TestDoubles.trackingFixtureNoSelection())
@@ -66,8 +70,22 @@ TestCase {
     }
 
     function cleanup() {
+        fakeSessionVm.refreshCalls = 0
         fakeSettingsVm.kovaaksDirSet = true
         fakeScenarioBrowserVm.hasScenarios = true
+    }
+
+    function test_fileRefreshUsesTheSessionVm() {
+        const win = createMain()
+        const menu = win.menuBar.menuAt(0)
+        let refresh = null
+        for (let i = 0; i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.action && item.action.objectName === "refreshProfileAction") refresh = item.action
+        }
+        verify(refresh !== null)
+        refresh.trigger()
+        compare(fakeSessionVm.refreshCalls, 1)
     }
 
     function createMain(managerVm) {

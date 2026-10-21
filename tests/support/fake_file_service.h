@@ -18,6 +18,10 @@ namespace ksv::tests_support {
     public:
         std::vector<domain::Run> perfs_to_return;
         std::vector<application::StatsFile> stats_files;
+        std::optional<std::vector<application::PerfFile>> explicit_perfs;
+        std::vector<application::ProfileImportIssue> scan_issues;
+        mutable std::size_t decode_calls = 0;
+        mutable std::size_t parse_calls = 0;
         std::unordered_map<std::string, domain::Run> perfs_by_path;
         std::unordered_map<std::string, data::ParsedStatsCsv> stats_by_path;
         std::set<std::size_t> throw_for_indices;
@@ -33,6 +37,7 @@ namespace ksv::tests_support {
                 const_cast<QSemaphore &>(scan_gate).acquire();
             }
             std::vector<application::PerfFile> paths;
+            if (explicit_perfs) return *explicit_perfs;
             for (std::size_t i = 0; i < perfs_to_return.size(); ++i) {
                 paths.push_back({source_roots.front(), "FPSAimTrainer/performances", "listed-perf-" + std::to_string(i)});
             }
@@ -40,6 +45,7 @@ namespace ksv::tests_support {
         }
 
         [[nodiscard]] domain::Run getPerfFromFile(const std::string_view filename) const override {
+            ++decode_calls;
             const std::string path(filename);
             if (paths_to_throw_for.contains(path)) throw std::invalid_argument("File does not exist");
             if (const auto it = perfs_by_path.find(path); it != perfs_by_path.end()) return it->second;
@@ -51,9 +57,13 @@ namespace ksv::tests_support {
         }
 
         [[nodiscard]] std::vector<application::StatsFile> listStatsFiles() const override { return stats_files; }
+        [[nodiscard]] application::SourceScan scanSources(const std::vector<std::string> &) const override {
+            return {listPerfFiles(), stats_files, scan_issues};
+        }
 
         [[nodiscard]] std::optional<data::ParsedStatsCsv> getStatsFromFile(
             const std::filesystem::path &path) const override {
+            ++parse_calls;
             if (const auto it = stats_by_path.find(path.generic_string()); it != stats_by_path.end()) return it->second;
             if (const auto it = stats_by_path.find(path.filename().string()); it != stats_by_path.end()) return it->second;
             return std::nullopt;
@@ -61,18 +71,17 @@ namespace ksv::tests_support {
 
         [[nodiscard]] std::vector<std::string> sourceRoots() const override { return source_roots; }
 
-        void onFilesChanged(std::function<void(const application::PerfFile &)> callback) override {
-            callbacks.push_back(std::move(callback));
+        void onSourcesChanged(std::function<void()> callback) override {
+            source_callbacks.push_back(std::move(callback));
+        }
+        void notifySourcesChanged() const {
+            for (const auto &callback : source_callbacks) callback();
         }
 
-        void notifyFilesChanged(const application::PerfFile &file) const {
-            for (const auto &callback: callbacks) callback(file);
-        }
-
-        [[nodiscard]] std::size_t callbackCount() const { return callbacks.size(); }
+        [[nodiscard]] std::size_t callbackCount() const { return source_callbacks.size(); }
 
     private:
-        std::vector<std::function<void(const application::PerfFile &)>> callbacks;
+        std::vector<std::function<void()>> source_callbacks;
     };
 }
 

@@ -20,6 +20,19 @@ namespace {
         std::shared_ptr<FakeSessionController> fake_controller = std::make_shared<FakeSessionController>();
     };
 
+    TEST_F(SessionViewModelTest, ImportStateSurvivesConstructionAfterCompletionAndUpdatesOnFailure) {
+        fake_controller->import_state.outcome = ProfileImportOutcome::Succeeded;
+        fake_controller->import_state.summary.added = 7;
+        SessionViewModel view_model(fake_controller);
+        EXPECT_EQ(view_model.profileImportAdded(), 7);
+        EXPECT_EQ(view_model.profileImportOutcome(), "succeeded");
+        fake_controller->import_state.outcome = ProfileImportOutcome::Failed;
+        fake_controller->import_state.summary.save_failed = true;
+        emit fake_controller->profileImportStateChanged();
+        EXPECT_TRUE(view_model.profileImportSaveFailed());
+        EXPECT_EQ(view_model.profileImportOutcome(), "failed");
+    }
+
     TEST_F(SessionViewModelTest, GetScenarioListReturnsDisplayNamesNotHashes) {
         fake_controller->scenario_list = {ScenarioId{.name = "Long Jump", .hash = "hash-1"}};
         SessionViewModel view_model(fake_controller);

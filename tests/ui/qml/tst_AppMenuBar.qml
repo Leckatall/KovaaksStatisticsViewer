@@ -12,6 +12,22 @@ TestCase {
         AppMenuBar {}
     }
 
+    function test_refreshActionSignalsAndHonoursBusyState() {
+        const menu = createTemporaryObject(menuBarComponent, testCase, {profileRefreshAvailable: true})
+        verify(menu !== null)
+        let requested = 0
+        menu.refreshProfileRequested.connect(() => requested++)
+        const action = findMenuItemByText(menu.menuAt(0), "&Refresh Profile").action
+        action.trigger()
+        compare(requested, 1)
+        compare(String(action.shortcut), "F5")
+        menu.profileImportBusy = true
+        compare(action.enabled, false)
+        menu.profileImportBusy = false
+        menu.profileRefreshAvailable = false
+        compare(action.enabled, false)
+    }
+
     QtObject {
         id: fakeViewSettings
         property bool scenarioGraphVisible: true

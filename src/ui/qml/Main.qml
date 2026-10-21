@@ -71,6 +71,9 @@ ApplicationWindow {
         graphVm: root.graphVm
         historyVm: root.historyVm
         visualSettings: visualSettings
+        profileImportBusy: root.sessionVm.profileImportBusy === true
+        profileRefreshAvailable: root.settingsVm.kovaaksDirSet === true
+        onRefreshProfileRequested: root.sessionVm.refreshProfile()
         onSetSourceDirRequested: folderDialog.open()
         onSettingsRequested: settingsDialog.open()
         onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
@@ -82,6 +85,14 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
+
+        ProfileImportStatus {
+            objectName: "mainProfileImportStatus"
+            Layout.fillWidth: true
+            Layout.leftMargin: 12
+            Layout.rightMargin: 12
+            sessionVm: root.sessionVm
+        }
 
         FirstRunBanner {
             objectName: "firstRunBanner"

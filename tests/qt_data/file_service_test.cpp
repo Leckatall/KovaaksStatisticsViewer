@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
@@ -70,6 +71,35 @@ namespace {
         }
     };
 
+    TEST_F(FileServiceTest, StatsArrivalsInvalidateSourcesWithoutAPerfArrival) {
+        makePerformancesDir();
+        makeStatsDir();
+        FileService service(settings_service, decoder);
+        int invalidations = 0;
+        service.onSourcesChanged([&] { ++invalidations; });
+        writeStatsFile("new Stats.csv");
+        EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 3000));
+    }
+
+    TEST_F(FileServiceTest, SourceScanUsesCapturedRootsAndReportsUnavailableRoots) {
+        makePerformancesDir();
+        std::ignore = copyFixtureInto("1wall6targets TE.perf");
+        FileService service(settings_service, decoder);
+        const auto scan = service.scanSources({kovaaks.root().toStdString(), "Z:/missing-ksv-root"});
+        ASSERT_EQ(scan.perfs.size(), 1U);
+        ASSERT_EQ(scan.issues.size(), 1U);
+        EXPECT_EQ(scan.issues[0].path, "Z:/missing-ksv-root");
+    }
+
+    TEST_F(FileServiceTest, SourcesCreatedAfterWatcherConstructionAreDiscovered) {
+        FileService service(settings_service, decoder);
+        int invalidations = 0;
+        service.onSourcesChanged([&] { ++invalidations; });
+        makeStatsDir();
+        writeStatsFile("new Stats.csv");
+        EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 3000));
+    }
+
     TEST_F(FileServiceTest, ListPerfFilesReturnsEmptyWhenPerformancesDirMissing) {
         // No FPSAimTrainer/performances subdirectory created.
         const FileService file_service(settings_service, decoder);
@@ -106,45 +136,30 @@ namespace {
         EXPECT_EQ(perf.run_id.scenario_id.name, "1wall6targets TE");
     }
 
-    TEST_F(FileServiceTest, OnFilesChangedFiresWhenNewFileAppearsInPerformancesDir) {
+    TEST_F(FileServiceTest, SourcesChangedFiresWhenNewFileAppearsInPerformancesDir) {
         makePerformancesDir();
         FileService file_service(settings_service, decoder);
+        int invalidations = 0;
+        file_service.onSourcesChanged([&] { ++invalidations; });
 
-        bool notified = false;
-        PerfFile notified_file;
-        file_service.onFilesChanged([&](const PerfFile &file) {
-            notified = true;
-            notified_file = file;
-        });
+        std::ignore = copyFixtureInto("1wall6targets TE.perf");
 
-        const QString new_file = copyFixtureInto("1wall6targets TE.perf");
-
-        std::ignore = QTest::qWaitFor([&] { return notified; }, 5000);
-
-        ASSERT_TRUE(notified);
-        EXPECT_EQ(notified_file.root, kovaaks.root().toStdString());
-        EXPECT_EQ(notified_file.filename, "1wall6targets TE.perf");
-        EXPECT_EQ(notified_file.absolutePath(), QDir::fromNativeSeparators(new_file).toStdString());
+        EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 5000));
     }
 
-    TEST_F(FileServiceTest, OnFilesChangedReportsEachNewFileSeparately) {
+    TEST_F(FileServiceTest, EachSeparatedArrivalFiresSourcesChangedAgain) {
         makePerformancesDir();
         FileService file_service(settings_service, decoder);
+        int invalidations = 0;
+        file_service.onSourcesChanged([&] { ++invalidations; });
 
-        std::vector<PerfFile> notified_files;
-        file_service.onFilesChanged([&](const PerfFile &file) {
-            notified_files.push_back(file);
-        });
+        std::ignore = copyFixtureInto("1wall6targets TE.perf");
+        ASSERT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 5000));
+        QTest::qWait(750);
 
-        const QString first = copyFixtureInto("1wall6targets TE.perf");
-        std::ignore = QTest::qWaitFor([&] { return !notified_files.empty(); }, 5000);
-
-        const QString second = copyFixtureInto("VT FlyTS Novice S5.perf");
-        std::ignore = QTest::qWaitFor([&] { return notified_files.size() == 2; }, 5000);
-
-        ASSERT_EQ(notified_files.size(), 2);
-        EXPECT_EQ(notified_files[0].absolutePath(), QDir::fromNativeSeparators(first).toStdString());
-        EXPECT_EQ(notified_files[1].absolutePath(), QDir::fromNativeSeparators(second).toStdString());
+        const auto after_first = invalidations;
+        std::ignore = copyFixtureInto("VT FlyTS Novice S5.perf");
+        EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > after_first; }, 5000));
     }
 
     TEST_F(FileServiceTest, FollowsKovaaksDirChangeMidSession) {
@@ -158,21 +173,17 @@ namespace {
         const QString preexisting = QDir(new_performances_dir).absoluteFilePath("1wall6targets TE.perf");
         ASSERT_TRUE(QFile::copy(fixture_path("1wall6targets TE.perf"), preexisting));
 
-        std::vector<PerfFile> notified_files;
-        file_service.onFilesChanged([&](const PerfFile &file) {
-            notified_files.push_back(file);
-        });
+        int invalidations = 0;
+        file_service.onSourcesChanged([&] { ++invalidations; });
 
         settings_service->setKovaaksDirs({new_temp_dir.path().toStdString()});
+        std::ignore = QTest::qWaitFor([&] { return invalidations > 0; }, 750);
+        EXPECT_EQ(invalidations, 0);
 
         const QString new_file = QDir(new_performances_dir).absoluteFilePath("VT FlyTS Novice S5.perf");
         ASSERT_TRUE(QFile::copy(fixture_path("VT FlyTS Novice S5.perf"), new_file));
 
-        std::ignore = QTest::qWaitFor([&] { return !notified_files.empty(); }, 5000);
-
-        ASSERT_EQ(notified_files.size(), 1);
-        EXPECT_EQ(notified_files[0].root, new_temp_dir.path().toStdString());
-        EXPECT_EQ(notified_files[0].absolutePath(), QDir::fromNativeSeparators(new_file).toStdString());
+        EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 5000));
     }
 
     TEST_F(FileServiceTest, WatchesEveryConfiguredSourceRoot) {
@@ -183,19 +194,13 @@ namespace {
         ASSERT_TRUE(QDir().mkpath(second_performances));
         settings_service->dirs.push_back(second_root.path().toStdString());
         FileService file_service(settings_service, decoder);
+        int invalidations = 0;
+        file_service.onSourcesChanged([&] { ++invalidations; });
 
-        std::vector<PerfFile> notified_files;
-        file_service.onFilesChanged([&](const PerfFile &file) { notified_files.push_back(file); });
-
-        std::ignore = copyFixtureInto("1wall6targets TE.perf");
         ASSERT_TRUE(QFile::copy(fixture_path("VT FlyTS Novice S5.perf"),
                                QDir(second_performances).absoluteFilePath("VT FlyTS Novice S5.perf")));
-        std::ignore = QTest::qWaitFor([&] { return notified_files.size() == 2; }, 5000);
 
-        ASSERT_EQ(notified_files.size(), 2);
-        std::set<std::string> roots;
-        for (const auto &file : notified_files) roots.insert(file.root);
-        EXPECT_EQ(roots, (std::set<std::string>{kovaaks.root().toStdString(), second_root.path().toStdString()}));
+        EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 5000));
     }
 
     TEST_F(FileServiceTest, ListStatsFilesEnumeratesOnlyCsvInStatsDir) {
@@ -230,22 +235,49 @@ namespace {
         EXPECT_EQ(parser->last_path, std::filesystem::path("some/dir/S Stats.csv"));
     }
 
-    TEST_F(FileServiceTest, WatcherIgnoresFilesAddedToStatsDir) {
+    TEST_F(FileServiceTest, IrrelevantStatsSuffixesDoNotInvalidateSources) {
         makePerformancesDir();
         makeStatsDir();
         FileService file_service(settings_service, decoder);
+        int invalidations = 0;
+        file_service.onSourcesChanged([&] { ++invalidations; });
 
-        std::vector<PerfFile> notified_files;
-        file_service.onFilesChanged([&](const PerfFile &file) { notified_files.push_back(file); });
-
-        writeStatsFile("New Run Stats.csv");
-        std::ignore = QTest::qWaitFor([&] { return !notified_files.empty(); }, 750);
-        EXPECT_TRUE(notified_files.empty());
+        writeStatsFile("notes.txt");
+        std::ignore = QTest::qWaitFor([&] { return invalidations > 0; }, 750);
+        EXPECT_EQ(invalidations, 0);
 
         // The watcher is alive: a real .perf arrival still fires.
         std::ignore = copyFixtureInto("1wall6targets TE.perf");
-        std::ignore = QTest::qWaitFor([&] { return !notified_files.empty(); }, 5000);
-        ASSERT_EQ(notified_files.size(), 1);
-        EXPECT_EQ(notified_files[0].filename, "1wall6targets TE.perf");
+        EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 5000));
+    }
+
+    TEST_F(FileServiceTest, OnlyUnacknowledgedFilesInvalidateSourcesWhenTheyChangeInPlace) {
+        makePerformancesDir();
+        FileService file_service(settings_service, decoder);
+        int invalidations = 0;
+        file_service.onSourcesChanged([&] { ++invalidations; });
+
+        const QString path = copyFixtureInto("1wall6targets TE.perf");
+        ASSERT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 5000));
+        QTest::qWait(750);
+
+        const auto before_growth = invalidations;
+        {
+            QFile file(path);
+            ASSERT_TRUE(file.open(QIODevice::Append));
+            ASSERT_GT(file.write("growth"), 0);
+        }
+        EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > before_growth; }, 5000));
+
+        file_service.acknowledgeImport({QDir::fromNativeSeparators(path).toStdString()}, {});
+        QTest::qWait(750);
+        const auto before_touch = invalidations;
+        {
+            QFile file(path);
+            ASSERT_TRUE(file.open(QIODevice::ReadWrite));
+            ASSERT_TRUE(file.setFileTime(QDateTime::currentDateTime().addSecs(120), QFileDevice::FileModificationTime));
+        }
+        std::ignore = QTest::qWaitFor([&] { return invalidations > before_touch; }, 750);
+        EXPECT_EQ(invalidations, before_touch);
     }
 }

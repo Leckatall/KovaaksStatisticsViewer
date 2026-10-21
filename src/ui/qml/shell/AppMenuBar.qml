@@ -8,6 +8,8 @@ MenuBar {
     property var graphVm
     property var historyVm
     property var visualSettings
+    property bool profileImportBusy: false
+    property bool profileRefreshAvailable: false
 
     readonly property var historyColumns: root.historyVm ? root.historyVm.allSeries : []
 
@@ -15,6 +17,7 @@ MenuBar {
     signal settingsRequested()
     signal configureGraphLinesRequested()
     signal loadPerformanceFileRequested()
+    signal refreshProfileRequested()
     signal manageBenchmarksRequested()
     signal quitRequested()
     signal aboutRequested()
@@ -37,6 +40,14 @@ MenuBar {
             text: qsTr("&Load Performance File...")
             shortcut: "Ctrl+O"
             onTriggered: loadPerformanceFileRequested()
+        }
+
+        Action {
+            objectName: "refreshProfileAction"
+            text: qsTr("&Refresh Profile")
+            shortcut: "F5"
+            enabled: root.profileRefreshAvailable && !root.profileImportBusy
+            onTriggered: root.refreshProfileRequested()
         }
 
         Action {

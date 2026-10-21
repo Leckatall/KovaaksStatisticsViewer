@@ -18,6 +18,10 @@ namespace ksv::tests_support {
     public:
         int generate_call_count = 0;
         int begin_build_count = 0;
+        std::vector<application::ProfileImportMode> begun_modes;
+        // When set, acceptImport() reports this outcome without applying the candidate.
+        std::optional<application::ProfileImportOutcome> forced_outcome;
+        bool force_save_failed = false;
         int apply_count = 0;
         bool profile_loaded = false;
         std::vector<domain::ScenarioId> scenarios;
@@ -49,13 +53,40 @@ namespace ksv::tests_support {
         std::vector<std::function<void()>> stored_callbacks;
         std::function<void()> stored_build_requester;
         std::optional<domain::UserProfile> applied_profile;
+        std::function<void(application::ProfileImportReason)> stored_refresh_requester;
+        std::vector<std::string> import_roots{"C:/Kovaaks"};
+        application::ProfileImportRequest beginImport(application::ProfileImportMode mode, application::ProfileImportReason reason) override {
+            ++begin_build_count;
+            begun_modes.push_back(mode);
+            application::ProfileImportRequest request;
+            request.mode = mode;
+            request.reason = reason;
+            request.roots = import_roots;
+            request.baseline = applied_profile ? std::make_shared<const domain::UserProfile>(*applied_profile)
+                : std::make_shared<const domain::UserProfile>();
+            return request;
+        }
+        application::ProfileImportOutcome acceptImport(application::ProfileImportResult &result) override {
+            if (forced_outcome) {
+                result.summary.save_failed = force_save_failed;
+                return *forced_outcome;
+            }
+            if (result.candidate) {
+                latest_run = result.candidate->getLatestRun().value_or(domain::Run{});
+                for (const auto &run : result.candidate->getAllRunRecords()) run_by_id[run.run_id] = run;
+                applyBuiltProfile(*result.candidate);
+            }
+            return result.failed ? application::ProfileImportOutcome::Failed : application::ProfileImportOutcome::Succeeded;
+        }
+        void abandonImport(application::ProfileImportToken) override {}
+        void onRefreshRequested(std::function<void(application::ProfileImportReason)> callback) override {
+            stored_refresh_requester = std::move(callback);
+        }
 
         void generateProfileFromDirectory() override { ++generate_call_count; }
         void loadProfile() override { ++generate_call_count; }
         void onBuildRequested(std::function<void()> callback) override { stored_build_requester = std::move(callback); }
-        void beginProfileBuild() override { ++begin_build_count; }
-
-        void applyBuiltProfile(domain::UserProfile profile) override {
+        void applyBuiltProfile(domain::UserProfile profile) {
             ++apply_count;
             applied_profile = std::move(profile);
             scenarios = applied_profile->getScenarioList();

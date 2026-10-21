@@ -12,30 +12,32 @@
 #include "user_profile.h"
 #include "data/interfaces/i_file_service.h"
 #include "data/interfaces/i_run_ingestor.h"
+#include "data/interfaces/i_profile_importer.h"
 
 // UserProfile crosses a thread boundary as a queued signal argument, so Qt needs a
 // metatype for it. It is declared here rather than beside the type because domain
 // stays free of Qt.
 Q_DECLARE_METATYPE(ksv::domain::UserProfile)
+Q_DECLARE_METATYPE(ksv::application::ProfileImportRequest)
+Q_DECLARE_METATYPE(ksv::application::ProfileImportResult)
+Q_DECLARE_METATYPE(ksv::application::ProfileImportPhase)
 
 namespace ksv::application {
     class ProfileBuildWorker : public QObject {
         Q_OBJECT
 
     public:
-        ProfileBuildWorker(std::shared_ptr<IFileService> file_service,
-                           std::shared_ptr<data::IRunIngestor> ingestor, QObject *parent = nullptr);
+        explicit ProfileBuildWorker(std::shared_ptr<data::IProfileImporter> importer, QObject *parent = nullptr);
 
     public slots:
-        void build();
+        void build(ProfileImportRequest request);
 
     signals:
-        void progress(int done, int total);
-        void finished(domain::UserProfile profile);
+        void progress(ProfileImportPhase phase, int done, int total);
+        void finished(ProfileImportResult result);
 
     private:
-        std::shared_ptr<IFileService> m_file_service;
-        std::shared_ptr<data::IRunIngestor> m_ingestor;
+        std::shared_ptr<data::IProfileImporter> m_importer;
     };
 }
 

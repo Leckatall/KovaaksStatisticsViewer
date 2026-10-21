@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QSignalSpy>
+#include <QTest>
 #include <memory>
 #include <type_traits>
 #include <chrono>
@@ -25,10 +26,85 @@
 #include "presentation/settings_vm.h"
 
 #include "integration_env.h"
+#include "profile_store_files.h"
 
 using namespace ksv;
 
 namespace {
+    TEST(IncrementalProfileComposition, RestartCatchesOfflineRunsAndRefreshRetainsArchivedHistory) {
+        integration::TestEnv env;
+        ASSERT_TRUE(env.valid());
+        ASSERT_TRUE(env.makePerformancesDir());
+        ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
+        const auto makeApp = [&] {
+            return std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>(),
+                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource);
+        };
+        {
+            auto first = makeApp();
+            ASSERT_TRUE(QTest::qWaitFor([&] { return !first->sessionController()->profileImportState().busy; }, 5000));
+            ASSERT_EQ(first->profileService()->getScenarioList().size(), 1U);
+        }
+        ASSERT_FALSE(env.copyFixtureIntoPerformances("VT FlyTS Novice S5.perf").isEmpty());
+        auto second = makeApp();
+        EXPECT_TRUE(second->profileService()->isProfileLoaded());
+        EXPECT_TRUE(second->sessionController()->profileImportState().busy);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !second->sessionController()->profileImportState().busy; }, 5000));
+        EXPECT_EQ(second->profileService()->getScenarioList().size(), 2U);
+        EXPECT_EQ(second->sessionVm()->getScenarioList().size(), 2);
+        const auto path = env.profileStorePath().toStdString();
+        const auto before = tests_support::readFile(path);
+        ASSERT_TRUE(QFile::remove(QDir(env.performancesDir()).filePath("1wall6targets TE.perf")));
+        second->sessionController()->refreshProfile(application::ProfileImportReason::Manual);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !second->sessionController()->profileImportState().busy; }, 5000));
+        EXPECT_EQ(second->profileService()->getScenarioList().size(), 2U);
+        EXPECT_EQ(second->sessionController()->profileImportState().summary.added, 0U);
+        EXPECT_EQ(tests_support::readFile(path), before);
+        data::ProfileSerializer serializer;
+        const auto loaded = serializer.load(path);
+        ASSERT_TRUE(std::holds_alternative<domain::UserProfile>(loaded));
+        EXPECT_EQ(std::get<domain::UserProfile>(loaded).getAllRunRecords().size(), 2U);
+    }
+
+    TEST(IncrementalProfileComposition, CsvOnlyHistoryGainsCanonicalPerfAndSurvivesAnotherRestart) {
+        integration::TestEnv env;
+        ASSERT_TRUE(env.valid());
+        ASSERT_TRUE(env.makePerformancesDir());
+        ASSERT_TRUE(env.makeStatsDir());
+        const QString stem = "1wall6targets TE - Challenge - 2026.08.27-02.26.40";
+        ASSERT_FALSE(env.copyFixtureIntoStats("1wall6targets TE.csv", stem + " Stats.csv").isEmpty());
+        {
+            auto stack = env.makeProfileStack();
+            stack.profileService->generateProfileFromDirectory();
+            EXPECT_EQ(stack.profileService->getRecentRuns(10).size(), 1U);
+            EXPECT_FALSE(stack.profileService->getLatestRun().performance);
+        }
+        ASSERT_TRUE(QFile::copy(integration::fixturePath("1wall6targets TE.perf"),
+            QDir(env.performancesDir()).filePath(stem + " Performance.perf")));
+        {
+            application::App app(env.settings, std::make_shared<data::ProtoDecoder>(),
+                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource);
+            ASSERT_TRUE(QTest::qWaitFor([&] { return !app.sessionController()->profileImportState().busy; }, 5000));
+            ASSERT_EQ(app.profileService()->getRecentRuns(10).size(), 1U);
+            const auto run = app.profileService()->getLatestRun();
+            EXPECT_EQ(run.run_id.start_time, 1783733140000LL);
+            EXPECT_FLOAT_EQ(run.scenario_length, 60.0F);
+            EXPECT_EQ(run.stored_totals.shots, 180);
+            EXPECT_TRUE(run.performance);
+            EXPECT_TRUE(run.stats);
+            EXPECT_TRUE(run.sources.perf);
+            EXPECT_TRUE(run.sources.csv);
+        }
+        data::ProfileSerializer serializer;
+        const auto loaded = serializer.load(env.profileStorePath().toStdString());
+        ASSERT_TRUE(std::holds_alternative<domain::UserProfile>(loaded));
+        const auto &records = std::get<domain::UserProfile>(loaded).getAllRunRecords();
+        ASSERT_EQ(records.size(), 1U);
+        EXPECT_EQ(records[0].run_id.start_time, 1783733140000LL);
+        EXPECT_TRUE(records[0].performance);
+        EXPECT_TRUE(records[0].stats);
+    }
+
     // One App for the whole suite. Building it runs loadProfile(), which asks
     // SessionController for a build on its worker thread when no store is available,
     // and the result only lands once the event loop spins -- a wait every test used to

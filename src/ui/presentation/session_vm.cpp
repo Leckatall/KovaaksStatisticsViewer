@@ -25,6 +25,12 @@ namespace ksv::presentation {
         // App builds the profile before it builds the view models, so a build can
         // already be running by the time this connects.
         m_build_in_progress = m_session_controller->isBuildInProgress();
+        m_import_state = m_session_controller->profileImportState();
+        connect(m_session_controller.get(), &application::ISessionController::profileImportStateChanged,
+            this, [this] {
+                m_import_state = m_session_controller->profileImportState();
+                emit profileImportChanged();
+            });
 
         updateScenarioHashMap();
     }
@@ -48,5 +54,34 @@ namespace ksv::presentation {
 
     QStringList SessionViewModel::getScenarioList() {
         return m_scenario_hash_to_name.values();
+    }
+
+    QString SessionViewModel::profileImportPhase() const {
+        switch (m_import_state.phase) {
+        case application::ProfileImportPhase::Idle: return "idle";
+        case application::ProfileImportPhase::Scanning: return "scanning";
+        case application::ProfileImportPhase::Importing: return "importing";
+        case application::ProfileImportPhase::Saving: return "saving";
+        }
+        return "idle";
+    }
+
+    QString SessionViewModel::profileImportOutcome() const {
+        switch (m_import_state.outcome) {
+        case application::ProfileImportOutcome::None: return "none";
+        case application::ProfileImportOutcome::Succeeded: return "succeeded";
+        case application::ProfileImportOutcome::Partial: return "partial";
+        case application::ProfileImportOutcome::Failed: return "failed";
+        case application::ProfileImportOutcome::Stale: return "stale";
+        }
+        return "none";
+    }
+
+    QVariantList SessionViewModel::profileImportIssues() const {
+        QVariantList result;
+        for (const auto &issue : m_import_state.summary.issues) result.push_back(QVariantMap{
+            {"path", QString::fromStdString(issue.path)}, {"message", QString::fromStdString(issue.message)},
+            {"retryable", issue.retryable}});
+        return result;
     }
 }

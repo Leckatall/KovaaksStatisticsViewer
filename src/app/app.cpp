@@ -22,6 +22,7 @@
 #include "qt_data/file_service.h"
 #include "../data/profile_service.h"
 #include "../data/run_ingestor.h"
+#include "../data/profile_importer.h"
 #include "usecases/graph_use_case.h"
 #include "usecases/average_line_use_case.h"
 #include "qt_data/graph_configuration_persistence.h"
@@ -77,16 +78,17 @@ namespace ksv::application {
         m_statsParser = std::move(statsParser);
         m_fileService = std::make_shared<qt_data::FileService>(m_settingsService, m_protoDecoder, m_statsParser);
         m_runIngestor = std::make_shared<data::RunIngestor>(m_fileService);
+        m_profileImporter = std::make_shared<data::ProfileImporter>(m_fileService, m_runIngestor);
 
         m_profileService = std::make_shared<data::ProfileService>(
             m_fileService,
             std::make_shared<data::ProfileSerializer>(std::make_shared<data::ProfileV3Migrator>(m_runIngestor)),
-            m_settingsService, m_runIngestor);
+            m_settingsService, m_runIngestor, m_profileImporter);
         // SessionController installs the build requester, so it has to exist before the
         // first loadProfile() — otherwise a missing stored profile builds synchronously and blocks
         // startup for as long as a full directory scan takes.
         m_sessionController = std::make_shared<SessionController>(
-            m_settingsService, m_profileService, m_fileService, m_runIngestor);
+            m_settingsService, m_profileService, m_fileService, m_profileImporter);
         m_profileService->loadProfile();
 
         // Built before the initial profile load: the resolution use case subscribes to the profile

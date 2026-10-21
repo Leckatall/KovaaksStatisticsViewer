@@ -10,6 +10,7 @@
 #include <filesystem>
 
 #include "run.h"
+#include "app/contracts/profile_import.h"
 #include "interfaces/i_stats_csv_parser.h"
 
 namespace ksv::application {
@@ -37,6 +38,12 @@ namespace ksv::application {
         bool operator==(const StatsFile &) const = default;
     };
 
+    struct SourceScan {
+        std::vector<PerfFile> perfs;
+        std::vector<StatsFile> csvs;
+        std::vector<ProfileImportIssue> issues;
+    };
+
     class IFileService {
         public:
         virtual ~IFileService() = default;
@@ -44,11 +51,15 @@ namespace ksv::application {
         // report progress, which getAllPerfsFromFiles() could not.
         [[nodiscard]] virtual std::vector<PerfFile> listPerfFiles() const = 0;
         [[nodiscard]] virtual std::vector<StatsFile> listStatsFiles() const = 0;
+        [[nodiscard]] virtual SourceScan scanSources(const std::vector<std::string> &) const {
+            return {listPerfFiles(), listStatsFiles(), {}};
+        }
         [[nodiscard]] virtual domain::Run getPerfFromFile(std::string_view filename) const = 0;
         [[nodiscard]] virtual std::optional<data::ParsedStatsCsv> getStatsFromFile(
             const std::filesystem::path &path) const = 0;
         [[nodiscard]] virtual std::vector<std::string> sourceRoots() const = 0;
-        virtual void onFilesChanged(std::function<void(const PerfFile &)> callback) = 0;
+        virtual void onSourcesChanged(std::function<void()> callback) = 0;
+        virtual void acknowledgeImport(const std::vector<std::string> &, const std::vector<std::string> &) {}
     };
 }
 #endif //KOVAAKSSTATSVIEWER_I_FILE_SERVICE_H

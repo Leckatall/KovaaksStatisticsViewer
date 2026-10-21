@@ -201,4 +201,56 @@ namespace {
         ASSERT_TRUE(run->sources.csv.has_value());
         EXPECT_EQ(run->totals().shots, 180);
     }
+
+    TEST(RunIngestTest, UnreadablePerfReportsARetryableIssueAndNoRun) {
+        auto files = std::make_shared<ksv::tests_support::FakeFileService>();
+        const auto broken = perf("Broken Performance.perf");
+        files->paths_to_throw_for.insert(broken.absolutePath());
+        ksv::domain::UserProfile profile;
+
+        const auto result = ksv::data::RunIngestor(files).ingestRun(profile, broken, std::nullopt);
+
+        EXPECT_FALSE(result.run);
+        ASSERT_EQ(result.issues.size(), 1U);
+        EXPECT_EQ(result.issues[0].path, broken.absolutePath());
+        EXPECT_TRUE(result.issues[0].retryable);
+    }
+
+    TEST(RunIngestTest, CsvForAnotherScenarioLeavesThePerfRunIntactWithANonRetryableIssue) {
+        auto files = std::make_shared<ksv::tests_support::FakeFileService>();
+        ksv::domain::Run perf_run{.run_id = {.scenario_id = {.name = "Perf", .hash = "perf-hash"}, .start_time = 7},
+                                  .scenario_length = 60.0F};
+        perf_run.performance.emplace();
+        files->perfs_by_path.emplace("A Performance.perf", perf_run);
+        files->stats_by_path.emplace("A Stats.csv", ksv::data::ParsedStatsCsv{
+            .scenario_id = {.name = "Csv", .hash = "csv-hash"}, .totals = {.score = 99.0F}});
+        ksv::domain::UserProfile profile;
+
+        const auto result = ksv::data::RunIngestor(files).ingestRun(profile, perf("A Performance.perf"), csv("A Stats.csv"));
+
+        ASSERT_TRUE(result.run);
+        EXPECT_EQ(result.run->run_id.scenario_id.hash, "perf-hash");
+        EXPECT_FALSE(result.run->sources.csv);
+        ASSERT_EQ(result.issues.size(), 1U);
+        EXPECT_FALSE(result.issues[0].retryable);
+    }
+
+    TEST(RunIngestTest, NewCsvForAStoredPerfRunDoesNotDecodeThePerfAgain) {
+        auto files = std::make_shared<ksv::tests_support::FakeFileService>();
+        ksv::domain::Run stored{.run_id = {.scenario_id = {.name = "S", .hash = "hash"}, .start_time = 7},
+                                .scenario_length = 60.0F};
+        stored.performance.emplace();
+        files->stats_by_path.emplace("A Stats.csv", ksv::data::ParsedStatsCsv{
+            .scenario_id = {.name = "S", .hash = "hash"}, .totals = {.score = 99.0F}, .stats = {.dpi = 800}});
+        ksv::domain::UserProfile profile;
+
+        const auto result = ksv::data::RunIngestor(files).ingestSibling(profile, stored, std::nullopt, csv("A Stats.csv"));
+
+        EXPECT_EQ(files->decode_calls, 0U);
+        ASSERT_TRUE(result.run);
+        EXPECT_TRUE(result.run->performance.has_value());
+        EXPECT_TRUE(result.run->sources.csv.has_value());
+        EXPECT_EQ(result.run->stats->dpi, 800);
+        EXPECT_TRUE(result.issues.empty());
+    }
 }

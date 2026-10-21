@@ -37,7 +37,7 @@ RUNNERS = {
             "benchmarks_service_tests",
             "graph_configuration_service_tests",
             "profile_service_tests",
-            "profile_builder_tests",
+            "profile_importer_tests",
             "profile_serializer_tests",
             "profile_v3_migrator_tests",
         )

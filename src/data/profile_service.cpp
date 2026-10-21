@@ -4,7 +4,8 @@
 
 #include "profile_service.h"
 
-#include "profile_builder.h"
+#include "profile_importer.h"
+#include "source_path_key.h"
 
 #include <algorithm>
 #include <exception>
@@ -12,41 +13,55 @@
 #include <numeric>
 #include <set>
 #include <utility>
+#include <unordered_map>
 
 namespace ksv::data {
     ProfileService::ProfileService(std::shared_ptr<application::IFileService> file_service,
                                    std::shared_ptr<application::IProfileSerializer> serializer,
                                    std::shared_ptr<application::ISettingsService> settings_service,
-                                   std::shared_ptr<IRunIngestor> ingestor)
+                                   std::shared_ptr<IRunIngestor> ingestor,
+                                   std::shared_ptr<IProfileImporter> importer)
         : m_file_service(std::move(file_service)),
           m_serializer(std::move(serializer)),
           m_settings_service(std::move(settings_service)),
           m_ingestor(std::move(ingestor)) {
         m_profile = nullptr;
+        m_importer = importer ? std::move(importer) : std::make_shared<ProfileImporter>(m_file_service, m_ingestor);
         m_filepath = m_settings_service->getProfilePath();
         ensureParentDir();
-        m_file_service->onFilesChanged([this](const application::PerfFile &file) {
-            addPerfFileToProfile(file);
+        const auto lifetime = std::weak_ptr(m_lifetime);
+        m_file_service->onSourcesChanged([this, lifetime] {
+            if (!lifetime.expired() && (m_refresh_requester || m_profile)) requestRefresh(application::ProfileImportReason::Live);
         });
-        m_settings_service->onProfilePathChanged([this] {
-            applyProfilePath();
+        m_settings_service->onProfilePathChanged([this, lifetime] {
+            if (!lifetime.expired()) applyProfilePath();
+        });
+        m_settings_service->onKovaaksDirsChanged([this, lifetime] {
+            if (lifetime.expired()) return;
+            invalidateImports();
+            if (m_refresh_requester) requestRefresh(application::ProfileImportReason::SourceSettingsChanged);
         });
     }
 
     void ProfileService::setProfile(domain::UserProfile profile) {
-        m_profile = std::make_unique<domain::UserProfile>(std::move(profile));
+        invalidateImports();
+        m_profile = std::make_shared<domain::UserProfile>(std::move(profile));
         notifyProfileChanged();
     }
 
     void ProfileService::generateProfileFromDirectory() {
-        setProfile(ProfileBuilder{m_file_service, m_ingestor}.build());
-        saveProfile();
+        auto result = m_importer->run(beginImport(application::ProfileImportMode::Rebuild,
+            application::ProfileImportReason::Manual), {});
+        if (acceptImport(result) == application::ProfileImportOutcome::Failed && result.summary.save_failed)
+            std::cerr << "Failed to save profile to " << m_filepath << std::endl;
     }
 
     void ProfileService::loadProfile() {
+        invalidateImports();
         const auto result = m_serializer->load(m_filepath);
         if (const auto stored = std::get_if<domain::UserProfile>(&result)) {
             setProfile(std::move(*stored));
+            if (m_refresh_requester) requestRefresh(application::ProfileImportReason::Startup);
             return;
         }
         if (m_build_requester) {
@@ -54,36 +69,6 @@ namespace ksv::data {
             return;
         }
         generateProfileFromDirectory();
-    }
-
-    void ProfileService::beginProfileBuild() {
-        m_build_in_flight = true;
-    }
-
-    void ProfileService::applyBuiltProfile(domain::UserProfile profile) {
-        m_build_in_flight = false;
-
-        // A settings change can replace the configured roots while a build is running.
-        // The queued files survive a stale result so the follow-up build can replay them.
-        std::set<std::string> profile_roots;
-        for (const auto &source: profile.sources().entries()) {
-            if (source.parent.value == 0) profile_roots.insert(source.path);
-        }
-        const auto current_roots_list = m_file_service->sourceRoots();
-        const std::set current_roots(current_roots_list.begin(), current_roots_list.end());
-        if (profile_roots != current_roots) return;
-
-        const auto pending = std::exchange(m_pending_perf_files, {});
-        setProfile(std::move(profile));
-
-        bool replayed = false;
-        for (const auto &perf_file: pending) {
-            const auto run = m_ingestor->buildLiveRun(*m_profile, perf_file);
-            if (!run || m_profile->getCurrentRun(run->run_id)) continue;
-            replayed |= m_profile->addRun(*run);
-        }
-        if (replayed) notifyProfileChanged();
-        saveProfile();
     }
 
     void ProfileService::ensureParentDir() const {
@@ -98,23 +83,85 @@ namespace ksv::data {
         loadProfile();
     }
 
-    void ProfileService::addPerfFileToProfile(const application::PerfFile &perf_file) {
-        if (m_build_in_flight) {
-            m_pending_perf_files.push_back(perf_file);
-            return;
-        }
-        if (!m_profile) return;
-        const auto run = m_ingestor->buildLiveRun(*m_profile, perf_file);
-        if (!run) return;
-        m_profile->addRun(*run);
-        notifyProfileChanged();
-        saveProfile();
+    void ProfileService::invalidateImports() {
+        ++m_generation;
+        m_active_import.reset();
+        m_aliases.clear();
     }
 
-    void ProfileService::saveProfile() const {
-        if (!m_profile) return;
-        if (!m_serializer->save(*m_profile, m_filepath)) {
-            std::cerr << "Failed to save profile to " << m_filepath << std::endl;
+    application::ProfileImportRequest ProfileService::beginImport(application::ProfileImportMode mode,
+            application::ProfileImportReason reason) {
+        application::ProfileImportRequest request;
+        request.token = {m_generation, ++m_next_request};
+        m_active_import = request.token;
+        request.mode = mode;
+        request.reason = reason;
+        request.roots = m_file_service->sourceRoots();
+        for (auto &root : request.roots) {
+            std::error_code error;
+            const auto absolute = std::filesystem::absolute(root, error);
+            if (!error) root = absolute.lexically_normal().generic_string();
+        }
+        request.baseline = m_profile;
+        request.known_aliases = m_aliases;
+        return request;
+    }
+
+    void ProfileService::acceptAliases(const application::ProfileImportResult &result) {
+        std::unordered_map<domain::ScenarioRunId, domain::ScenarioRunId> rekeys;
+        for (const auto &[old_id, new_id] : result.rekeyed_runs) rekeys.emplace(old_id, new_id);
+        std::unordered_map<std::string, std::size_t> by_path;
+        by_path.reserve(m_aliases.size() + result.successful_aliases.size());
+        for (std::size_t index = 0; index < m_aliases.size(); ++index) {
+            auto &alias = m_aliases[index];
+            if (const auto found = rekeys.find(alias.run_id); found != rekeys.end()) alias.run_id = found->second;
+            by_path.emplace(sourcePathKey(alias.path), index);
+        }
+        for (const auto &alias : result.successful_aliases) {
+            auto [found, added] = by_path.emplace(sourcePathKey(alias.path), m_aliases.size());
+            if (added) m_aliases.push_back(alias);
+            else m_aliases[found->second] = alias;
+        }
+    }
+
+    application::ProfileImportOutcome ProfileService::acceptImport(application::ProfileImportResult &result) {
+        using application::ProfileImportOutcome;
+        if (!m_active_import || *m_active_import != result.token || result.token.generation != m_generation)
+            return ProfileImportOutcome::Stale;
+        m_active_import.reset();
+        if (result.failed) return ProfileImportOutcome::Failed;
+        if (result.changed) {
+            try {
+                if (!result.candidate || !m_serializer->save(*result.candidate, m_filepath)) {
+                    result.summary.save_failed = true;
+                    return ProfileImportOutcome::Failed;
+                }
+            } catch (const std::exception &error) {
+                result.summary.save_failed = true;
+                result.summary.issues.push_back({m_filepath.string(), error.what(), false});
+                return ProfileImportOutcome::Failed;
+            }
+            m_profile = result.candidate;
+        }
+        acceptAliases(result);
+        std::vector<std::string> successful;
+        std::vector<std::string> retryable;
+        for (const auto &alias : result.successful_aliases) successful.push_back(alias.path);
+        for (const auto &issue : result.summary.issues) if (issue.retryable) retryable.push_back(issue.path);
+        m_file_service->acknowledgeImport(successful, retryable);
+        if (result.changed) notifyProfileChanged();
+        return result.summary.issues.empty() ? ProfileImportOutcome::Succeeded : ProfileImportOutcome::Partial;
+    }
+
+    void ProfileService::abandonImport(application::ProfileImportToken token) {
+        if (m_active_import == token) m_active_import.reset();
+    }
+
+    void ProfileService::requestRefresh(application::ProfileImportReason reason) {
+        if (m_refresh_requester) m_refresh_requester(reason);
+        else {
+            auto result = m_importer->run(beginImport(application::ProfileImportMode::Refresh, reason), {});
+            acceptImport(result);
         }
     }
 

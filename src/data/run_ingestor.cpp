@@ -28,51 +28,70 @@ namespace ksv::data {
 
     RunIngestor::RunIngestor(std::shared_ptr<application::IFileService> file_service) : m_file_service(std::move(file_service)) {}
 
-    std::optional<domain::Run> RunIngestor::buildRun(domain::UserProfile &profile, std::optional<application::PerfFile> perf,
-                                                       std::optional<application::StatsFile> csv) const {
-        if (!perf && !csv) return std::nullopt;
-        std::optional<domain::Run> result;
+    IngestResult RunIngestor::ingestRun(domain::UserProfile &profile, std::optional<application::PerfFile> perf,
+                                       std::optional<application::StatsFile> csv) const {
+        return ingestSibling(profile, {}, std::move(perf), std::move(csv));
+    }
+
+    IngestResult RunIngestor::ingestSibling(domain::UserProfile &profile, domain::Run existing,
+            std::optional<application::PerfFile> perf, std::optional<application::StatsFile> csv) const {
+        IngestResult result;
+        if (!existing.run_id.scenario_id.hash.empty()) result.run = std::move(existing);
         if (perf) {
-            try { result = m_file_service->getPerfFromFile(perf->absolutePath()); }
-            catch (const std::exception &error) {
-                std::cerr << "Skipping " << perf->absolutePath() << ": " << error.what() << std::endl;
-                if (!csv) return std::nullopt;
+            try {
+                auto decoded = m_file_service->getPerfFromFile(perf->absolutePath());
+                if (decoded.run_id.scenario_id.hash.empty() || !std::isfinite(decoded.scenario_length) || decoded.scenario_length < 0) {
+                    result.issues.push_back({perf->absolutePath(), "Performance metadata is incomplete or invalid", true});
+                } else if (result.run && !(decoded.run_id.scenario_id == result.run->run_id.scenario_id)) {
+                    result.issues.push_back({perf->absolutePath(), "Perf/CSV identity differs", false});
+                } else {
+                    if (result.run && result.run->sources.csv) {
+                        decoded.sources.csv = result.run->sources.csv;
+                        decoded.stats = result.run->stats;
+                        decoded.stored_totals = result.run->stored_totals;
+                    }
+                    decoded.sources.perf = {{profile.ensureSource(perf->root, perf->subdir), perf->filename}};
+                    result.run = std::move(decoded);
+                }
+            } catch (const std::exception &error) {
+                result.issues.push_back({perf->absolutePath(), error.what(), true});
             }
-            if (result) result->sources.perf = {{profile.ensureSource(perf->root, perf->subdir), perf->filename}};
         }
         if (csv) {
-            const auto parsed = m_file_service->getStatsFromFile(csv->absolutePath());
-            if (!parsed && !result) return std::nullopt;
-            if (parsed) {
-                if (result && result->run_id.scenario_id.hash != parsed->scenario_id.hash) {
-                    std::cerr << "Perf/CSV totals or identity differ for " << csv->absolutePath() << std::endl;
-                    return result;
+            try {
+                const auto parsed = m_file_service->getStatsFromFile(csv->absolutePath());
+                if (!parsed) {
+                    result.issues.push_back({csv->absolutePath(), "Stats CSV is incomplete or invalid", true});
+                } else if (result.run && !(result.run->run_id.scenario_id == parsed->scenario_id)) {
+                    result.issues.push_back({csv->absolutePath(), "Perf/CSV totals or identity differ", false});
+                } else {
+                    if (!result.run) {
+                        const auto timing = deriveCsvTiming(csv->filename, parsed->challenge_start);
+                        if (!timing) {
+                            result.issues.push_back({csv->absolutePath(), "Cannot derive run timing from CSV filename", false});
+                            return result;
+                        }
+                        const auto paused = std::chrono::duration<float>(parsed->pause_duration).count();
+                        result.run = domain::Run{.run_id = {parsed->scenario_id, timing->start_time},
+                            .scenario_length = std::max(0.0F, timing->scenario_length - paused)};
+                    }
+                    result.run->stored_totals = parsed->totals;
+                    result.run->stats = parsed->stats;
+                    result.run->sources.csv = {{profile.ensureSource(csv->root, csv->subdir), csv->filename}};
                 }
-                if (result && (result->stored_totals.hits != parsed->totals.hits ||
-                    result->stored_totals.misses != parsed->totals.misses ||
-                    std::abs(result->stored_totals.score - parsed->totals.score) > 1e-4F)) {
-                    std::cerr << "Perf/CSV totals or identity differ for " << csv->absolutePath() << std::endl;
-                }
-                if (!result) {
-                    const auto timing = deriveCsvTiming(csv->filename, parsed->challenge_start);
-                    if (!timing) return std::nullopt;
-                    const auto paused_seconds = std::chrono::duration_cast<std::chrono::duration<float>>(
-                        parsed->pause_duration).count();
-                    const auto length = std::max(0.0F, timing->scenario_length - paused_seconds);
-                    result = domain::Run{.run_id = {.scenario_id = parsed->scenario_id, .start_time = timing->start_time}, .scenario_length = length};
-                }
-                result->stored_totals = parsed->totals;
-                result->stats = parsed->stats;
-                result->sources.csv = {{profile.ensureSource(csv->root, csv->subdir), csv->filename}};
+            } catch (const std::exception &error) {
+                result.issues.push_back({csv->absolutePath(), error.what(), true});
             }
         }
         return result;
     }
 
-    std::optional<domain::Run> RunIngestor::buildLiveRun(domain::UserProfile &profile, const application::PerfFile &perf) const {
-        const auto csv = statsSibling(perf);
-        if (!std::filesystem::exists(csv.absolutePath())) std::cerr << "Missing stats sibling " << csv.absolutePath() << std::endl;
-        return buildRun(profile, perf, std::filesystem::exists(csv.absolutePath()) ? std::optional{csv} : std::nullopt);
+    std::optional<domain::Run> RunIngestor::buildRun(domain::UserProfile &profile, std::optional<application::PerfFile> perf,
+                                                       std::optional<application::StatsFile> csv) const {
+        auto result = ingestRun(profile, std::move(perf), std::move(csv));
+        for (const auto &issue : result.issues)
+            std::cerr << "Skipping " << issue.path << ": " << issue.message << std::endl;
+        return std::move(result.run);
     }
 
     std::optional<domain::Run> RunIngestor::enrichStoredRun(domain::UserProfile &profile, domain::Run run) const {

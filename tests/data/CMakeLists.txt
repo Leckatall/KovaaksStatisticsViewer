@@ -98,18 +98,18 @@ target_link_libraries(profile_service_tests PRIVATE
 ksv_copy_mingw_runtime_dlls(profile_service_tests)
 ksv_add_gtest_test(profile_service_tests)
 
-add_executable(profile_builder_tests
-    profile_builder_test.cpp
+add_executable(profile_importer_tests
+    profile_importer_test.cpp
 )
 
-target_link_libraries(profile_builder_tests PRIVATE
+target_link_libraries(profile_importer_tests PRIVATE
     tests_support
     ksv_data
     GTest::gtest_main
 )
 
-ksv_copy_mingw_runtime_dlls(profile_builder_tests)
-ksv_add_gtest_test(profile_builder_tests)
+ksv_copy_mingw_runtime_dlls(profile_importer_tests)
+ksv_add_gtest_test(profile_importer_tests)
 
 add_executable(profile_serializer_tests
     profile_serializer_test.cpp

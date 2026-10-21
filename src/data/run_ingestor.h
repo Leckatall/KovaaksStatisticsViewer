@@ -17,8 +17,9 @@ namespace ksv::data {
     class RunIngestor final : public IRunIngestor {
     public:
         explicit RunIngestor(std::shared_ptr<application::IFileService> file_service);
+        [[nodiscard]] IngestResult ingestRun(domain::UserProfile &, std::optional<application::PerfFile>, std::optional<application::StatsFile>) const override;
+        [[nodiscard]] IngestResult ingestSibling(domain::UserProfile &, domain::Run, std::optional<application::PerfFile>, std::optional<application::StatsFile>) const override;
         [[nodiscard]] std::optional<domain::Run> buildRun(domain::UserProfile &, std::optional<application::PerfFile>, std::optional<application::StatsFile>) const override;
-        [[nodiscard]] std::optional<domain::Run> buildLiveRun(domain::UserProfile &, const application::PerfFile &) const override;
         [[nodiscard]] std::optional<domain::Run> enrichStoredRun(domain::UserProfile &, domain::Run) const override;
     private:
         std::shared_ptr<application::IFileService> m_file_service;
