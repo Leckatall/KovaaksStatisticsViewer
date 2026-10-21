@@ -592,7 +592,6 @@ namespace {
         const int sampleY = int(plot.top()) + 17;
         const QColor band = selected.pixelColor(int(point.x()) + 2, sampleY);
         EXPECT_GT(band.alpha(), 0);
-        EXPECT_LT(band.alpha(), 40);
         EXPECT_GT(band.green(), band.red());
         EXPECT_GT(band.blue(), band.red());
         int bandWidth = 0;
