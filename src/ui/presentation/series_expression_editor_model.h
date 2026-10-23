@@ -17,6 +17,7 @@ namespace ksv::presentation {
         Q_PROPERTY(ksv::presentation::EditableExpressionNode *selected READ selected NOTIFY selectedChanged)
         Q_PROPERTY(QStringList nodeKinds READ nodeKinds CONSTANT)
         Q_PROPERTY(QStringList primitiveMetrics READ primitiveMetrics CONSTANT)
+        Q_PROPERTY(QStringList finalStats READ finalStats CONSTANT)
         Q_PROPERTY(QString dslText READ toDslText NOTIFY dslTextChanged)
 
     public:
@@ -38,6 +39,7 @@ namespace ksv::presentation {
 
         [[nodiscard]] QStringList nodeKinds() const;
         [[nodiscard]] QStringList primitiveMetrics() const;
+        [[nodiscard]] QStringList finalStats() const;
         [[nodiscard]] std::optional<application::Expression> toExpression() const;
 
         // Canonical DSL text of the current expression, empty when it is incomplete/invalid.

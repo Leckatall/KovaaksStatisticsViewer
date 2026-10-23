@@ -14,6 +14,10 @@ using ksv::application::RecentRuns;
 using ksv::application::TopPercentile;
 using ksv::application::add;
 using ksv::application::averageAcrossRuns;
+using ksv::application::bestRun;
+using ksv::application::finalValue;
+using ksv::application::FinalStat;
+using ksv::application::kFinalStats;
 using ksv::application::divide;
 using ksv::application::encodeExpressionDsl;
 using ksv::application::multiply;
@@ -28,6 +32,8 @@ using ksv::presentation::EditableAverageAcrossRunsNode;
 using ksv::presentation::EditableBinaryOpNode;
 using ksv::presentation::EditableConstantNode;
 using ksv::presentation::EditableExpressionNode;
+using ksv::presentation::EditableFinalValueNode;
+using ksv::presentation::EditableUnaryOpNode;
 using ksv::presentation::EditablePrimitiveNode;
 using ksv::presentation::EditableRollingMeanNode;
 using ksv::presentation::SeriesExpressionEditorModel;
@@ -289,6 +295,9 @@ namespace {
             rollingMean(primitive(PrimitiveMetric::Score), 5),
             averageAcrossRuns(primitive(PrimitiveMetric::Score), RecentRuns{3}),
             averageAcrossRuns(primitive(PrimitiveMetric::Hits), TopPercentile{12.5}),
+            finalValue(FinalStat::Misses),
+            bestRun(finalValue(FinalStat::Dmg)),
+            subtract(runningSum(primitive(PrimitiveMetric::Score)), bestRun(runningSum(primitive(PrimitiveMetric::Score)))),
         };
         for (const auto &expression: expressions) {
             SeriesExpressionEditorModel model;
@@ -297,6 +306,32 @@ namespace {
             ASSERT_TRUE(result);
             EXPECT_EQ(encodeExpressionDsl(*result), encodeExpressionDsl(expression));
         }
+    }
+
+    TEST(SeriesExpressionEditorModelTest, FinalStatListOrderMatchesKFinalStats) {
+        SeriesExpressionEditorModel model;
+        ASSERT_EQ(model.finalStats().size(), static_cast<qsizetype>(kFinalStats.size()));
+        for (const auto stat: kFinalStats) {
+            SeriesExpressionEditorModel loaded;
+            loaded.loadFrom(finalValue(stat));
+            const auto *node = qobject_cast<EditableFinalValueNode *>(loaded.root());
+            ASSERT_NE(node, nullptr);
+            EXPECT_EQ(model.finalStats().indexOf(node->stat()), static_cast<int>(stat));
+            EXPECT_EQ(loaded.toDslText(), QString::fromStdString(encodeExpressionDsl(finalValue(stat))));
+        }
+    }
+
+    TEST(SeriesExpressionEditorModelTest, WrapSelectedInBestRunUsesTheUnaryPath) {
+        SeriesExpressionEditorModel model;
+        model.loadFrom(runningSum(primitive(PrimitiveMetric::Score)));
+        model.select(model.root());
+        model.wrapSelected("bestRun");
+        auto *wrapper = qobject_cast<EditableUnaryOpNode *>(model.root());
+        ASSERT_NE(wrapper, nullptr);
+        EXPECT_EQ(wrapper->kind(), "bestRun");
+        ASSERT_NE(wrapper->input(), nullptr);
+        EXPECT_EQ(wrapper->input()->kind(), "runningSum");
+        EXPECT_EQ(model.toDslText(), "BestRun(RunningSum(SCORE))");
     }
 
     TEST(SeriesExpressionEditorModelTest, RootChangedAndSelectedChangedFireOnlyWhenTheValueActuallyChanges) {

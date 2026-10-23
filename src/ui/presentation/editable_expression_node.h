@@ -50,6 +50,26 @@ namespace ksv::presentation {
         QString m_metric = "score";
     };
 
+    class EditableFinalValueNode : public EditableExpressionNode {
+        Q_OBJECT
+        QML_ELEMENT
+        Q_PROPERTY(QString stat READ stat WRITE setStat NOTIFY statChanged)
+
+    public:
+        explicit EditableFinalValueNode(QObject *parent = nullptr) : EditableExpressionNode(parent) {}
+
+        [[nodiscard]] QString kind() const override { return "final"; }
+        [[nodiscard]] QString describe() const override { return "Final(" + m_stat.toUpper() + ")"; }
+        [[nodiscard]] QString stat() const { return m_stat; }
+        void setStat(const QString &stat);
+
+    signals:
+        void statChanged();
+
+    private:
+        QString m_stat = "score";
+    };
+
     class EditableConstantNode : public EditableExpressionNode {
         Q_OBJECT
         QML_ELEMENT

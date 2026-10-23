@@ -99,6 +99,10 @@ namespace ksv::application {
                     if (!isKnownPrimitiveMetric(node.metric)) {
                         errors.push_back({SeriesConfigValidationCode::InvalidPrimitiveMetric, path + ".metric"});
                     }
+                } else if constexpr (std::same_as<Node, FinalValue>) {
+                    if (std::ranges::find(kFinalStats, node.stat) == kFinalStats.end()) {
+                        errors.push_back({SeriesConfigValidationCode::InvalidFinalStat, path + ".stat"});
+                    }
                 } else if constexpr (std::same_as<Node, NumericConstant>) {
                     if (!std::isfinite(node.value)) {
                         errors.push_back({SeriesConfigValidationCode::NonFiniteConstant, path + ".value"});
@@ -108,7 +112,7 @@ namespace ksv::application {
                     validate_input(node.left, "left");
                     validate_input(node.right, "right");
                 } else if constexpr (std::same_as<Node, RunningSum> || std::same_as<Node, ProjectedFinalValue> ||
-                                     std::same_as<Node, ProjectRateToFinal>) {
+                                     std::same_as<Node, ProjectRateToFinal> || std::same_as<Node, BestRun>) {
                     validate_input(node.input, "input");
                 } else if constexpr (std::same_as<Node, RollingMean>) {
                     if (node.window == 0) {
@@ -185,6 +189,9 @@ namespace ksv::application {
     Expression averageAcrossRuns(Expression input, const RunSelection selection) {
         return makeExpression(AverageAcrossRuns{std::move(input), selection});
     }
+
+    Expression finalValue(const FinalStat stat) { return makeExpression(FinalValue{stat}); }
+    Expression bestRun(Expression input) { return makeExpression(BestRun{std::move(input)}); }
 
     std::vector<ValidationError> validateSeriesConfigs(const std::vector<SeriesConfig> &configs) {
         std::vector<ValidationError> errors;

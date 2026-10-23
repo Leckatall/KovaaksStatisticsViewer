@@ -46,6 +46,15 @@ TestCase {
         compare(average.count, 7)
     }
 
+    function test_finalValueNodeResolvesFromQmlAndStatIsWritable() {
+        const node = Qt.createQmlObject(
+            'import KovaaksStatsViewer; EditableFinalValueNode { stat: "dmg" }', this, "inline")
+        compare(node.kind, "final")
+        compare(node.stat, "dmg")
+        node.stat = "hits"
+        compare(node.stat, "hits")
+    }
+
     function test_nestedChildConstructedInQmlSurvivesGarbageCollection() {
         const node = Qt.createQmlObject(
             'import KovaaksStatsViewer; EditableBinaryOpNode { left: EditablePrimitiveNode { metric: "kills" } }',

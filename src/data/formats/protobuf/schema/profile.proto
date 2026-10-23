@@ -43,6 +43,7 @@ message RunTotals {
   int32 hits = 3;
   int32 misses = 4;
   int32 kills = 5;
+  float damage = 6;
 }
 
 message Performance {

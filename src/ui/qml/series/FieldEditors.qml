@@ -16,6 +16,18 @@ QtObject {
         onActivated: if (node) node.metric = currentText
     }
 
+    component FinalValueEditor: ComboBox {
+        required property EditableFinalValueNode node
+        required property var treeModel
+
+        Layout.fillWidth: true
+        currentIndex: node && treeModel ? treeModel.finalStats.indexOf(node.stat) : -1
+        model: treeModel ? treeModel.finalStats : []
+        objectName: "finalStatComboBox"
+
+        onActivated: if (node) node.stat = currentText
+    }
+
     component ConstantEditor: SpinBox {
         required property EditableConstantNode node
 

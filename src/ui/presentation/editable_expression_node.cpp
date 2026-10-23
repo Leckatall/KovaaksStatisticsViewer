@@ -11,6 +11,12 @@ namespace ksv::presentation {
         emit metricChanged();
     }
 
+    void EditableFinalValueNode::setStat(const QString &stat) {
+        if (m_stat == stat) return;
+        m_stat = stat;
+        emit statChanged();
+    }
+
     void EditableConstantNode::setValue(double value) {
         if (m_value == value) return;
         m_value = value;
@@ -111,7 +117,7 @@ namespace ksv::presentation {
     QString EditableUnaryOpNode::describe() const {
         static const QMap<QString, QString> labels{
             {"runningSum", "RunningSum"}, {"projectedFinalValue", "ProjectedFinalValue"},
-            {"projectRateToFinal", "ProjectRateToFinal"}
+            {"projectRateToFinal", "ProjectRateToFinal"}, {"bestRun", "BestRun"}
         };
         const auto input_text = m_input ? m_input->describe() : QString::fromUtf8("…");
         return QString("%1(%2)").arg(labels.value(m_operator_kind), input_text);

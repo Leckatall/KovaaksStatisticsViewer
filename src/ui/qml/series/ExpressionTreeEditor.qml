@@ -11,12 +11,12 @@ Item {
     readonly property var ancestorChain: rootItem.model && rootItem.model.selected ? rootItem.model.ancestorChain(rootItem.model.selected) : []
 
     function accentColor(kind, alpha) {
-        const category = model.isBinary(kind) ? "binary" : kind === "averageAcrossRuns" ? "average" : (kind === "primitive" || kind === "constant") ? "leaf" : "unary";
+        const category = model.isBinary(kind) ? "binary" : (kind === "averageAcrossRuns" || kind === "bestRun") ? "average" : (kind === "primitive" || kind === "constant" || kind === "final") ? "leaf" : "unary";
         const rgb = ({ leaf: [76, 175, 80], binary: [255, 152, 0], average: [156, 39, 176], unary: [33, 150, 243] })[category];
         return Qt.rgba(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, alpha);
     }
     function kindLabel(kind) {
-        return ({ primitive: qsTr("Metric"), constant: qsTr("Constant"), add: qsTr("Add"), subtract: qsTr("Subtract"), multiply: qsTr("Multiply"), divide: qsTr("Divide"), runningSum: qsTr("Running sum"), rollingMean: qsTr("Rolling mean"), projectedFinalValue: qsTr("Projected final value"), projectRateToFinal: qsTr("Project rate to final"), averageAcrossRuns: qsTr("Average across runs") })[kind] || "";
+        return ({ primitive: qsTr("Metric"), constant: qsTr("Constant"), add: qsTr("Add"), subtract: qsTr("Subtract"), multiply: qsTr("Multiply"), divide: qsTr("Divide"), runningSum: qsTr("Running sum"), rollingMean: qsTr("Rolling mean"), projectedFinalValue: qsTr("Projected final value"), projectRateToFinal: qsTr("Project rate to final"), averageAcrossRuns: qsTr("Average across runs"), final: qsTr("Final stat"), bestRun: qsTr("Best run") })[kind] || "";
     }
 
     implicitHeight: mainColumn.implicitHeight
@@ -86,6 +86,12 @@ Item {
                                 treeModel: rootItem.model
                             }
                         }
+                        property Component finalValueEditorComponent: Component {
+                            FieldEditors.FinalValueEditor {
+                                node: pathCard.node
+                                treeModel: rootItem.model
+                            }
+                        }
                         property Component constantEditorComponent: Component { FieldEditors.ConstantEditor { node: pathCard.node } }
                         property Component binaryOpEditorComponent: Component {
                             FieldEditors.BinaryOpEditor {
@@ -97,7 +103,7 @@ Item {
                         property Component averageAcrossRunsEditorComponent: Component { FieldEditors.AverageAcrossRunsEditor { node: pathCard.node } }
 
                         function editorComponentFor(kind) {
-                            return ({ primitive: primitiveEditorComponent, constant: constantEditorComponent, add: binaryOpEditorComponent, subtract: binaryOpEditorComponent, multiply: binaryOpEditorComponent, divide: binaryOpEditorComponent, rollingMean: rollingMeanEditorComponent, averageAcrossRuns: averageAcrossRunsEditorComponent })[kind] || null;
+                            return ({ primitive: primitiveEditorComponent, final: finalValueEditorComponent, constant: constantEditorComponent, add: binaryOpEditorComponent, subtract: binaryOpEditorComponent, multiply: binaryOpEditorComponent, divide: binaryOpEditorComponent, rollingMean: rollingMeanEditorComponent, averageAcrossRuns: averageAcrossRunsEditorComponent })[kind] || null;
                         }
 
                         Layout.fillWidth: true
@@ -165,7 +171,7 @@ Item {
 
                 Layout.fillWidth: true
                 displayText: rootItem.kindLabel(currentText)
-                model: ["runningSum", "rollingMean", "projectedFinalValue", "projectRateToFinal", "averageAcrossRuns", "add", "subtract", "multiply", "divide"]
+                model: ["runningSum", "rollingMean", "projectedFinalValue", "projectRateToFinal", "averageAcrossRuns", "bestRun", "add", "subtract", "multiply", "divide"]
                 objectName: "wrapKindComboBox"
             }
             Button {

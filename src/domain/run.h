@@ -82,6 +82,8 @@ namespace ksv::domain {
         int hits = 0;
         int misses = 0;
         int kills = 0;
+        // nullopt for runs recorded before damage was tracked; 0 would read as "did no damage".
+        std::optional<float> damage;
 
         [[nodiscard]] double accuracy() const {
             return shots == 0 ? 0.0 : static_cast<double>(hits) / shots;

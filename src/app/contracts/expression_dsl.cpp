@@ -26,6 +26,18 @@ namespace ksv::application {
             return {};
         }
 
+        std::string_view finalStatToken(const FinalStat stat) {
+            switch (stat) {
+                case FinalStat::Score: return "SCORE";
+                case FinalStat::Shots: return "SHOTS";
+                case FinalStat::Hits: return "HITS";
+                case FinalStat::Misses: return "MISSES";
+                case FinalStat::Kills: return "KILLS";
+                case FinalStat::Dmg: return "DMG";
+            }
+            return {};
+        }
+
         std::string encodeSelection(const RunSelection &selection) {
             return std::visit([](const auto &value) -> std::string {
                 using Selection = std::decay_t<decltype(value)>;
@@ -66,6 +78,10 @@ namespace ksv::application {
             } else if constexpr (std::is_same_v<Node, AverageAcrossRuns>) {
                 return "AverageAcrossRuns(over: " + encodeSelection(node.selection) + ", "
                        + encodeExpressionDsl(node.input) + ")";
+            } else if constexpr (std::is_same_v<Node, FinalValue>) {
+                return "Final(" + std::string(finalStatToken(node.stat)) + ")";
+            } else if constexpr (std::is_same_v<Node, BestRun>) {
+                return "BestRun(" + encodeExpressionDsl(node.input) + ")";
             } else {
                 return {};
             }
@@ -163,8 +179,11 @@ namespace ksv::application {
                 std::optional<Expression> result;
                 if (name == "add" || name == "subtract" || name == "multiply" || name == "divide") {
                     result = parseBinary(name);
-                } else if (name == "runningsum" || name == "projectedfinalvalue" || name == "projectratetofinal") {
+                } else if (name == "runningsum" || name == "projectedfinalvalue" || name == "projectratetofinal" ||
+                           name == "bestrun") {
                     result = parseUnary(name);
+                } else if (name == "final") {
+                    result = parseFinal();
                 } else if (name == "rollingmean") {
                     result = parseRollingMean();
                 } else if (name == "averageacrossruns") {
@@ -190,7 +209,20 @@ namespace ksv::application {
                 if (!input) return std::nullopt;
                 if (name == "runningsum") return runningSum(*input);
                 if (name == "projectedfinalvalue") return projectedFinalValue(*input);
+                if (name == "bestrun") return bestRun(*input);
                 return projectRateToFinal(*input);
+            }
+
+            std::optional<Expression> parseFinal() {
+                const auto word = parseIdentifier();
+                if (!word) return std::nullopt;
+                if (*word == "score") return finalValue(FinalStat::Score);
+                if (*word == "shots") return finalValue(FinalStat::Shots);
+                if (*word == "hits") return finalValue(FinalStat::Hits);
+                if (*word == "misses") return finalValue(FinalStat::Misses);
+                if (*word == "kills") return finalValue(FinalStat::Kills);
+                if (*word == "dmg") return finalValue(FinalStat::Dmg);
+                return std::nullopt;
             }
 
             std::optional<Expression> parseRollingMean() {

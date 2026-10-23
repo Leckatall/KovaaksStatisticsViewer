@@ -86,6 +86,26 @@ namespace {
         EXPECT_FLOAT_EQ(perf.performance->samples[1].score, 20.0F);
         EXPECT_FLOAT_EQ(perf.totals().score, 30.0F);
     }
+    TEST_F(ProtoDecoderTest, decodeSumsDamageIntoStoredTotals) {
+        perf::PerfLog log = make_perf_log();
+        log.add_entries()->mutable_dmg()->set_value(40.0F);
+        log.mutable_entries(0)->set_time(0.0F);
+        auto *second = log.add_entries();
+        second->set_time(1.0F);
+        second->mutable_dmg()->set_value(25.5F);
+
+        const auto perf = decoder.decode(log);
+
+        ASSERT_TRUE(perf.totals().damage.has_value());
+        EXPECT_FLOAT_EQ(*perf.totals().damage, 65.5F);
+    }
+
+    TEST_F(ProtoDecoderTest, decodeRecordsZeroDamageWhenNoSampleDealtAny) {
+        const auto perf = decoder.decode(make_perf_log());
+        ASSERT_TRUE(perf.totals().damage.has_value());
+        EXPECT_FLOAT_EQ(*perf.totals().damage, 0.0F);
+    }
+
     // TODO(2026-08-16): Create implementation that matches this test
     // TEST_F(ProtoDecoderTest, DecodeFileDoesNotThrowWhenFileIsMissing) {
     //     // Correct contract: a missing file is a normal "nothing to decode" case

@@ -124,6 +124,39 @@ namespace {
         EXPECT_FALSE(decodeExpressionDsl("PONTIAC").has_value());                 // unknown metric
     }
 
+    TEST(ExpressionDslEncode, FinalStatTokensAndBestRun) {
+        EXPECT_EQ(encodeExpressionDsl(finalValue(FinalStat::Score)), "Final(SCORE)");
+        EXPECT_EQ(encodeExpressionDsl(finalValue(FinalStat::Shots)), "Final(SHOTS)");
+        EXPECT_EQ(encodeExpressionDsl(finalValue(FinalStat::Hits)), "Final(HITS)");
+        EXPECT_EQ(encodeExpressionDsl(finalValue(FinalStat::Misses)), "Final(MISSES)");
+        EXPECT_EQ(encodeExpressionDsl(finalValue(FinalStat::Kills)), "Final(KILLS)");
+        EXPECT_EQ(encodeExpressionDsl(finalValue(FinalStat::Dmg)), "Final(DMG)");
+        EXPECT_EQ(encodeExpressionDsl(bestRun(runningSum(primitive(PrimitiveMetric::Score)))),
+                  "BestRun(RunningSum(SCORE))");
+    }
+
+    TEST(ExpressionDslDecode, RoundTripsFinalForEveryStatAndNestedBestRun) {
+        for (const auto stat: kFinalStats) expectRoundTrips(finalValue(stat));
+        expectRoundTrips(bestRun(finalValue(FinalStat::Score)));
+        expectRoundTrips(subtract(runningSum(primitive(PrimitiveMetric::Score)),
+                                  bestRun(runningSum(primitive(PrimitiveMetric::Score)))));
+    }
+
+    TEST(ExpressionDslDecode, FinalAndBestRunDecodeCaseAndWhitespaceInsensitively) {
+        const auto decoded = decodeExpressionDsl("  bestrun( FINAL( misses ) ) ");
+        ASSERT_TRUE(decoded.has_value());
+        EXPECT_EQ(encodeExpressionDsl(*decoded), "BestRun(Final(MISSES))");
+    }
+
+    TEST(ExpressionDslDecode, RejectsMalformedFinalAndBestRun) {
+        EXPECT_FALSE(decodeExpressionDsl("Final(Add(SCORE, 1))").has_value());
+        EXPECT_FALSE(decodeExpressionDsl("Final()").has_value());
+        EXPECT_FALSE(decodeExpressionDsl("Final(FOO)").has_value());
+        EXPECT_FALSE(decodeExpressionDsl("Final(SCORE, HITS)").has_value());
+        EXPECT_FALSE(decodeExpressionDsl("Final").has_value());
+        EXPECT_FALSE(decodeExpressionDsl("BestRun()").has_value());
+    }
+
     TEST(ExpressionDslDecode, RejectsPositionalWindowWhenLabelRequired) {
         EXPECT_FALSE(decodeExpressionDsl("RollingMean(SCORE, window: 10)").has_value());
     }

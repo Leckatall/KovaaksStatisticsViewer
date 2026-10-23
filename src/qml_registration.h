@@ -28,6 +28,8 @@ namespace ksv {
             "KovaaksStatsViewer", 1, 0, "EditableExpressionNode", "Abstract base, use a concrete node type");
         qmlRegisterType<presentation::EditablePrimitiveNode>(
             "KovaaksStatsViewer", 1, 0, "EditablePrimitiveNode");
+        qmlRegisterType<presentation::EditableFinalValueNode>(
+            "KovaaksStatsViewer", 1, 0, "EditableFinalValueNode");
         qmlRegisterType<presentation::EditableConstantNode>(
             "KovaaksStatsViewer", 1, 0, "EditableConstantNode");
         qmlRegisterType<presentation::EditableBinaryOpNode>(

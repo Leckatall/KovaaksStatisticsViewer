@@ -416,6 +416,41 @@ namespace {
             "fake/kovaaks/FPSAimTrainer/stats/listed-perf-0 Stats.csv"}));
     }
 
+    class CsvDamageImportTest : public ProfileImporterTest {
+    protected:
+        application::ProfileImportResult importPairAgainstBaselineDamage(const std::optional<float> baseline_damage,
+                                                                         const std::optional<float> incoming_damage) {
+            auto baseline = std::make_shared<domain::UserProfile>();
+            auto existing = tests_support::makeRun("hash-1", 100, 42.0F, 0, 0, 30.0F);
+            existing.stored_totals.damage = baseline_damage;
+            existing.stats = csvTotals("hash-1", 42.0F).stats;
+            existing.sources.csv = {baseline->ensureSource(files->source_roots.front(), "FPSAimTrainer/stats"),
+                "other Stats.csv"};
+            baseline->addRun(existing);
+            request.baseline = baseline;
+            auto perf = tests_support::makeRun("hash-1", 100, 42.0F);
+            perf.performance.emplace();
+            files->perfs_to_return = {perf};
+            files->stats_files = {statsFile("listed-perf-0 Stats.csv")};
+            auto csv = csvTotals("hash-1", 42.0F);
+            csv.totals.damage = incoming_damage;
+            files->stats_by_path.emplace("listed-perf-0 Stats.csv", csv);
+            return data::ProfileImporter(files, ingestor).run(request, {});
+        }
+    };
+
+    TEST_F(CsvDamageImportTest, PreUpgradeRunWithoutDamageIsNotConflictedByTheSameCsvCarryingDamage) {
+        const auto result = importPairAgainstBaselineDamage(std::nullopt, 166.0F);
+        EXPECT_TRUE(result.summary.issues.empty());
+        EXPECT_TRUE(result.failed_sources.empty());
+    }
+
+    TEST_F(CsvDamageImportTest, DifferentPresentDamageValuesStillConflict) {
+        const auto result = importPairAgainstBaselineDamage(100.0F, 166.0F);
+        EXPECT_FALSE(result.summary.issues.empty());
+        EXPECT_FALSE(result.failed_sources.empty());
+    }
+
     TEST_F(FailedSourceImportTest, DirectoryLevelScanIssueIsNeverRecorded) {
         files->perfs_to_return.clear();
         files->scan_issues = {{"fake/kovaaks", "Source directory is unavailable or unreadable", true}};

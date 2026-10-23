@@ -15,12 +15,13 @@ namespace ksv::application {
         }
 
         std::optional<Values> evaluateNode(const domain::Run &, const BucketedRun &, const Expression &,
-                                           const IProfileService &);
+                                           const IProfileService &, size_t graphLength);
 
         std::optional<Values> evaluateAverage(const domain::Run &reference,
                                               const BucketedRun &referenceBuckets,
-                                              const AverageAcrossRuns &node, const IProfileService &profiles) {
-            const auto referenceValues = evaluateNode(reference, referenceBuckets, node.input, profiles);
+                                              const AverageAcrossRuns &node, const IProfileService &profiles,
+                                              const size_t graphLength) {
+            const auto referenceValues = evaluateNode(reference, referenceBuckets, node.input, profiles, graphLength);
             if (!referenceValues) return std::nullopt;
             struct Candidate {
                 domain::Run perf;
@@ -29,7 +30,7 @@ namespace ksv::application {
             std::vector<Candidate> candidates;
             for (const auto &candidate: profiles.getRunsForScenario(reference.run_id.scenario_id)) {
                 if (candidate.run_id == reference.run_id) continue;
-                const auto values = evaluateNode(candidate, bucketRun(candidate), node.input, profiles);
+                const auto values = evaluateNode(candidate, bucketRun(candidate), node.input, profiles, graphLength);
                 if (values && values->size() == referenceValues->size() && finite(*values))
                     candidates.push_back({
                         candidate, *values
@@ -67,16 +68,17 @@ namespace ksv::application {
         }
 
         std::optional<Values> evaluateNode(const domain::Run &perf, const BucketedRun &buckets,
-                                           const Expression &expression, const IProfileService &profiles) {
+                                           const Expression &expression, const IProfileService &profiles,
+                                           const size_t graphLength) {
             if (!expression) return std::nullopt;
             return std::visit([&](const auto &node) -> std::optional<Values> {
                 using Node = std::decay_t<decltype(node)>;
                 if constexpr (std::same_as<Node, PrimitiveReference>) return buckets.valuesFor(node.metric);
-                else if constexpr (std::same_as<Node, NumericConstant>) return Values(buckets.times.size(), node.value);
+                else if constexpr (std::same_as<Node, NumericConstant>) return Values(graphLength, node.value);
                 else if constexpr (std::same_as<Node, Add> || std::same_as<Node, Subtract> || std::same_as<Node,
                                        Multiply> || std::same_as<Node, Divide>) {
-                    const auto left = evaluateNode(perf, buckets, node.left, profiles);
-                    const auto right = evaluateNode(perf, buckets, node.right, profiles);
+                    const auto left = evaluateNode(perf, buckets, node.left, profiles, graphLength);
+                    const auto right = evaluateNode(perf, buckets, node.right, profiles, graphLength);
                     if (!left || !right || left->size() != right->size()) return std::nullopt;
                     Values result(left->size());
                     for (size_t i = 0; i < result.size(); ++i) {
@@ -87,12 +89,12 @@ namespace ksv::application {
                     }
                     return finite(result) ? std::optional{std::move(result)} : std::nullopt;
                 } else if constexpr (std::same_as<Node, RunningSum>) {
-                    auto values = evaluateNode(perf, buckets, node.input, profiles);
+                    auto values = evaluateNode(perf, buckets, node.input, profiles, graphLength);
                     if (!values) return std::nullopt;
                     for (size_t i = 1; i < values->size(); ++i) (*values)[i] += (*values)[i - 1];
                     return finite(*values) ? values : std::nullopt;
                 } else if constexpr (std::same_as<Node, RollingMean>) {
-                    const auto input = evaluateNode(perf, buckets, node.input, profiles);
+                    const auto input = evaluateNode(perf, buckets, node.input, profiles, graphLength);
                     if (!input) return std::nullopt;
                     Values result(input->size());
                     double sum = 0.0;
@@ -104,7 +106,7 @@ namespace ksv::application {
                     return finite(result) ? std::optional{std::move(result)} : std::nullopt;
                 } else if constexpr (std::same_as<Node, ProjectedFinalValue> || std::same_as<Node,
                                          ProjectRateToFinal>) {
-                    auto values = evaluateNode(perf, buckets, node.input, profiles);
+                    auto values = evaluateNode(perf, buckets, node.input, profiles, graphLength);
                     if (!values) return std::nullopt;
                     for (size_t i = 0; i < values->size(); ++i) {
                         if constexpr (std::same_as<Node, ProjectedFinalValue>)
@@ -112,7 +114,32 @@ namespace ksv::application {
                         else (*values)[i] *= values->size();
                     }
                     return finite(*values) ? values : std::nullopt;
-                } else return evaluateAverage(perf, buckets, node, profiles);
+                } else if constexpr (std::same_as<Node, FinalValue>) {
+                    const auto &totals = perf.totals();
+                    switch (node.stat) {
+                        case FinalStat::Score: return Values(graphLength, totals.score);
+                        case FinalStat::Shots: return Values(graphLength, totals.shots);
+                        case FinalStat::Hits: return Values(graphLength, totals.hits);
+                        case FinalStat::Misses: return Values(graphLength, totals.misses);
+                        case FinalStat::Kills: return Values(graphLength, totals.kills);
+                        case FinalStat::Dmg:
+                            if (!totals.damage) return std::nullopt;
+                            return Values(graphLength, *totals.damage);
+                    }
+                    return std::nullopt;
+                } else if constexpr (std::same_as<Node, BestRun>) {
+                    const domain::Run *best = nullptr;
+                    const auto runs = profiles.getRunsForScenario(perf.run_id.scenario_id);
+                    for (const auto &candidate: runs) {
+                        if (candidate.run_id == perf.run_id) continue;
+                        if (!best || candidate.totals().score > best->totals().score ||
+                            (candidate.totals().score == best->totals().score &&
+                             candidate.run_id.start_time < best->run_id.start_time))
+                            best = &candidate;
+                    }
+                    if (!best) return std::nullopt;
+                    return evaluateNode(*best, bucketRun(*best), node.input, profiles, graphLength);
+                } else return evaluateAverage(perf, buckets, node, profiles, graphLength);
             }, expression->value());
         }
     }
@@ -123,6 +150,8 @@ namespace ksv::application {
 
     std::optional<std::vector<double> > AverageLineUseCase::evaluate(const domain::Run &referenceRun,
                                                                      const Expression &expression) const {
-        return evaluateNode(referenceRun, bucketRun(referenceRun), expression, *m_profileService);
+        auto referenceBuckets = bucketRun(referenceRun);
+        const auto graphLength = referenceBuckets.times.size();
+        return evaluateNode(referenceRun, referenceBuckets, expression, *m_profileService, graphLength);
     }
 }

@@ -28,6 +28,13 @@ namespace ksv::data {
                     std::tie(y.time, y.shots, y.hits, y.misses, y.dmg, y.dmg_possible, y.score, y.kills);
             });
         }
+        // Damage joined RunTotals after profiles were saved, so an absent value on either side is not a difference.
+        bool sameTotalsForImport(const domain::RunTotals &a, const domain::RunTotals &b) {
+            auto lhs = a;
+            auto rhs = b;
+            if (!lhs.damage || !rhs.damage) lhs.damage = rhs.damage = std::nullopt;
+            return lhs == rhs;
+        }
         struct ScannedFile {
             std::string root;
             std::string subdir;
@@ -129,7 +136,7 @@ namespace ksv::data {
                     bool conflicting = false;
                     if (!existing && same_id) {
                         conflicting = (run.sources.csv && same_id->sources.csv &&
-                            (run.stored_totals != same_id->stored_totals || run.stats != same_id->stats)) ||
+                            (!sameTotalsForImport(run.stored_totals, same_id->stored_totals) || run.stats != same_id->stats)) ||
                             (run.sources.perf && same_id->sources.perf &&
                              (run.scenario_length != same_id->scenario_length || !samePerformance(run.performance, same_id->performance)));
                     }

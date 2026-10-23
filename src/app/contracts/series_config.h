@@ -26,6 +26,24 @@ namespace ksv::application {
         PrimitiveMetric::Dmg
     };
 
+    enum class FinalStat {
+        Score,
+        Shots,
+        Hits,
+        Misses,
+        Kills,
+        Dmg
+    };
+
+    inline constexpr std::array kFinalStats{
+        FinalStat::Score,
+        FinalStat::Shots,
+        FinalStat::Hits,
+        FinalStat::Misses,
+        FinalStat::Kills,
+        FinalStat::Dmg
+    };
+
     struct SeriesId {
         uint64_t value = 0;
 
@@ -153,10 +171,19 @@ namespace ksv::application {
         RunSelection selection;
     };
 
+    struct FinalValue {
+        FinalStat stat;
+    };
+
+    struct BestRun {
+        Expression input;
+    };
+
     class ExpressionNode {
     public:
         using Value = std::variant<PrimitiveReference, NumericConstant, Add, Subtract, Multiply, Divide,
-            RunningSum, RollingMean, ProjectedFinalValue, ProjectRateToFinal, AverageAcrossRuns>;
+            RunningSum, RollingMean, ProjectedFinalValue, ProjectRateToFinal, AverageAcrossRuns,
+            FinalValue, BestRun>;
 
         explicit ExpressionNode(Value value) : m_value(std::move(value)) {
         }
@@ -189,6 +216,10 @@ namespace ksv::application {
 
     [[nodiscard]] Expression averageAcrossRuns(Expression input, RunSelection selection);
 
+    [[nodiscard]] Expression finalValue(FinalStat stat);
+
+    [[nodiscard]] Expression bestRun(Expression input);
+
     struct SeriesConfig {
         SeriesId id;
         SeriesPresentation presentation;
@@ -199,6 +230,7 @@ namespace ksv::application {
 
     enum class SeriesConfigValidationCode {
         InvalidPrimitiveMetric,
+        InvalidFinalStat,
         InvalidComputedSeriesId,
         EmptyComputedName,
         ComputedNameNotTrimmed,

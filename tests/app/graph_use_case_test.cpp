@@ -81,6 +81,23 @@ namespace {
         EXPECT_DOUBLE_EQ((*points)[1].second, 9.0);
     }
 
+    TEST_F(GraphUseCaseTest, GetSeriesValuesClipsALongerBestRunAtTheCurrentRunsEndAndLetsAShorterOneEndEarly) {
+        fake_session_controller->current_run = runWithSeconds("a");
+        fake_configuration->configuration.runSeries.series = {
+            SeriesConfig{{1}, {"Best", {}, true, 0}, bestRun(primitive(PrimitiveMetric::Score))}
+        };
+
+        fake_average->result = std::vector<double>{1.0, 2.0, 3.0, 4.0};
+        const auto longer = use_case.getSeriesValues(SeriesId{1});
+        ASSERT_TRUE(longer.has_value());
+        EXPECT_EQ(longer->size(), 2U);
+
+        fake_average->result = std::vector<double>{1.0};
+        const auto shorter = use_case.getSeriesValues(SeriesId{1});
+        ASSERT_TRUE(shorter.has_value());
+        EXPECT_EQ(shorter->size(), 1U);
+    }
+
     TEST_F(GraphUseCaseTest, GetSeriesValuesDropsHiddenLeadingPointsWithoutRenumberingX) {
         auto run = runWithSeconds("a");
         run.performance->samples.emplace_back(3.0F);

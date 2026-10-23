@@ -129,7 +129,7 @@ namespace {
         ksv::domain::Run paired;
         paired.run_id = {{"Paired", "hash-paired"}, 1000};
         paired.scenario_length = 60.0F;
-        paired.stored_totals = {.score = 12.5F, .shots = 8, .hits = 6, .misses = 2, .kills = 5};
+        paired.stored_totals = {.score = 12.5F, .shots = 8, .hits = 6, .misses = 2, .kills = 5, .damage = 166.0F};
         paired.sources.perf = {{2}, "paired.perf"};
         paired.sources.csv = {{3}, "paired.csv"};
         paired.performance.emplace();

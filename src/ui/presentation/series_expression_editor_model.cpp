@@ -15,11 +15,15 @@ namespace ksv::presentation {
 
     QStringList SeriesExpressionEditorModel::nodeKinds() const {
         return {"primitive", "constant", "add", "subtract", "multiply", "divide", "runningSum", "rollingMean",
-                "projectedFinalValue", "projectRateToFinal", "averageAcrossRuns"};
+                "projectedFinalValue", "projectRateToFinal", "averageAcrossRuns", "final", "bestRun"};
     }
 
     QStringList SeriesExpressionEditorModel::primitiveMetrics() const {
         return {"score", "shots", "hits", "kills", "dmg"};
+    }
+
+    QStringList SeriesExpressionEditorModel::finalStats() const {
+        return {"score", "shots", "hits", "misses", "kills", "dmg"};
     }
 
     bool SeriesExpressionEditorModel::isBinary(const QString &kind) const {
@@ -29,13 +33,14 @@ namespace ksv::presentation {
     QStringList SeriesExpressionEditorModel::childSlotsFor(const QString &kind) const {
         if (isBinary(kind)) return {"left", "right"};
         if (kind == "runningSum" || kind == "rollingMean" || kind == "projectedFinalValue" ||
-            kind == "projectRateToFinal" || kind == "averageAcrossRuns") return {"input"};
+            kind == "projectRateToFinal" || kind == "averageAcrossRuns" || kind == "bestRun") return {"input"};
         return {};
     }
 
     EditableExpressionNode *SeriesExpressionEditorModel::makeNode(const QString &kind) {
         if (kind == "primitive") return new EditablePrimitiveNode();
         if (kind == "constant") return new EditableConstantNode();
+        if (kind == "final") return new EditableFinalValueNode();
         if (kind == "add" || kind == "subtract" || kind == "multiply" || kind == "divide") {
             auto *node = new EditableBinaryOpNode();
             node->setKind(kind);
@@ -43,7 +48,8 @@ namespace ksv::presentation {
         }
         if (kind == "rollingMean") return new EditableRollingMeanNode();
         if (kind == "averageAcrossRuns") return new EditableAverageAcrossRunsNode();
-        if (kind == "runningSum" || kind == "projectedFinalValue" || kind == "projectRateToFinal") {
+        if (kind == "runningSum" || kind == "projectedFinalValue" || kind == "projectRateToFinal" ||
+            kind == "bestRun") {
             auto *node = new EditableUnaryOpNode();
             node->setKind(kind);
             return node;
@@ -209,6 +215,10 @@ namespace ksv::presentation {
             const int metric = primitiveMetrics().indexOf(primitive->metric());
             if (metric < 0) return std::nullopt;
             return application::primitive(application::kPrimitiveMetrics[static_cast<size_t>(metric)]);
+        } else if (auto *finalNode = qobject_cast<EditableFinalValueNode *>(node)) {
+            const int stat = finalStats().indexOf(finalNode->stat());
+            if (stat < 0) return std::nullopt;
+            return application::finalValue(application::kFinalStats[static_cast<size_t>(stat)]);
         } else if (auto *constant = qobject_cast<EditableConstantNode *>(node)) {
             if (!std::isfinite(constant->value())) return std::nullopt;
             return application::numericConstant(constant->value());
@@ -227,6 +237,7 @@ namespace ksv::presentation {
             if (unary->kind() == "runningSum") return application::runningSum(*input);
             if (unary->kind() == "projectedFinalValue") return application::projectedFinalValue(*input);
             if (unary->kind() == "projectRateToFinal") return application::projectRateToFinal(*input);
+            if (unary->kind() == "bestRun") return application::bestRun(*input);
             return std::nullopt;
         } else if (auto *rollingMean = qobject_cast<EditableRollingMeanNode *>(node)) {
             const auto input = nodeToExpression(rollingMean->input());
@@ -258,6 +269,10 @@ namespace ksv::presentation {
             if constexpr (std::is_same_v<Node, application::PrimitiveReference>) {
                 auto *node = new EditablePrimitiveNode();
                 node->setMetric(primitiveMetrics().at(static_cast<int>(value.metric)));
+                return node;
+            } else if constexpr (std::is_same_v<Node, application::FinalValue>) {
+                auto *node = new EditableFinalValueNode();
+                node->setStat(finalStats().at(static_cast<int>(value.stat)));
                 return node;
             } else if constexpr (std::is_same_v<Node, application::NumericConstant>) {
                 auto *node = new EditableConstantNode();
@@ -295,6 +310,7 @@ namespace ksv::presentation {
                 auto *node = new EditableUnaryOpNode();
                 node->setKind(std::is_same_v<Node, application::RunningSum> ? "runningSum"
                     : std::is_same_v<Node, application::ProjectedFinalValue> ? "projectedFinalValue"
+                    : std::is_same_v<Node, application::BestRun> ? "bestRun"
                     : "projectRateToFinal");
                 node->setInput(nodeFromExpression(value.input));
                 return node;

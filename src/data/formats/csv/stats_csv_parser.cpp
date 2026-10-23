@@ -125,6 +125,8 @@ namespace ksv::data {
                 if (!kills) return std::nullopt;
                 parsed.totals.kills = *kills;
                 has_kills = true;
+            } else if (key == "Damage Done") {
+                if (const auto damage = parseFloat(value)) parsed.totals.damage = *damage;
             } else if (key == "Pause Count") {
                 // Non-critical: an unparseable value is ignored, not fatal, so older
                 // CSV variants without every field stay ingestible.

@@ -53,6 +53,25 @@ TestCase {
         combo.activated(1);
         compare(node.metric, "shots");
     }
+    function test_finalRootRendersStatComboBoxAndWritesNode() {
+        const node = createTemporaryObject(finalValueNodeComponent, testCase, { stat: "kills" });
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        verify(waitForRendering(editor));
+        const combo = ItemLookup.findByObjectName(editor, "finalStatComboBox");
+        compare(combo.currentText, "kills");
+        combo.currentIndex = 3;
+        combo.activated(3);
+        compare(node.stat, "misses");
+    }
+    function test_bestRunRootRendersNoFieldEditorAndShowsItsLabel() {
+        const node = makeUnary("bestRun");
+        const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
+        verify(waitForRendering(editor));
+        verify(ItemLookup.findByObjectName(editor, "finalStatComboBox") === null);
+        verify(ItemLookup.findByObjectName(editor, "metricComboBox") === null);
+        compare(editor.kindLabel("bestRun"), "Best run");
+        compare(editor.kindLabel("final"), "Final stat");
+    }
     function test_constantRootRendersSpinBoxAndWritesNode() {
         const node = createTemporaryObject(constantNodeComponent, testCase, { value: 1 });
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
@@ -234,6 +253,7 @@ TestCase {
 
     Component { id: editorComponent; ExpressionTreeEditor { height: 400; width: 500 } }
     Component { id: primitiveNodeComponent; EditablePrimitiveNode {} }
+    Component { id: finalValueNodeComponent; EditableFinalValueNode {} }
     Component { id: constantNodeComponent; EditableConstantNode {} }
     Component { id: binaryOpNodeComponent; EditableBinaryOpNode {} }
     Component { id: unaryOpNodeComponent; EditableUnaryOpNode {} }
@@ -246,8 +266,9 @@ TestCase {
         QtObject {
             property var root: null
             property var selected: null
-            property var nodeKinds: ["primitive", "constant", "add", "subtract", "multiply", "divide", "runningSum", "rollingMean", "projectedFinalValue", "projectRateToFinal", "averageAcrossRuns"]
+            property var nodeKinds: ["primitive", "constant", "add", "subtract", "multiply", "divide", "runningSum", "rollingMean", "projectedFinalValue", "projectRateToFinal", "averageAcrossRuns", "final", "bestRun"]
             property var primitiveMetrics: ["score", "shots", "hits", "kills", "dmg"]
+            property var finalStats: ["score", "shots", "hits", "misses", "kills", "dmg"]
             property var deleteCalls: []
             property var wrapCalls: []
             property var replaceCalls: []
@@ -259,7 +280,7 @@ TestCase {
             }
             function childSlotsFor(kind) {
                 if (isBinary(kind)) return ["left", "right"];
-                if (kind === "runningSum" || kind === "rollingMean" || kind === "projectedFinalValue" || kind === "projectRateToFinal" || kind === "averageAcrossRuns") return ["input"];
+                if (kind === "runningSum" || kind === "rollingMean" || kind === "projectedFinalValue" || kind === "projectRateToFinal" || kind === "averageAcrossRuns" || kind === "bestRun") return ["input"];
                 return [];
             }
             function describe(node) { return node ? node.kind : "…"; }

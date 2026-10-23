@@ -8,6 +8,7 @@ using ksv::presentation::EditableAverageAcrossRunsNode;
 using ksv::presentation::EditableBinaryOpNode;
 using ksv::presentation::EditableConstantNode;
 using ksv::presentation::EditableExpressionNode;
+using ksv::presentation::EditableFinalValueNode;
 using ksv::presentation::EditablePrimitiveNode;
 using ksv::presentation::EditableRollingMeanNode;
 using ksv::presentation::EditableUnaryOpNode;
@@ -26,6 +27,30 @@ namespace {
         node.setMetric("kills");
         EXPECT_EQ(node.metric(), "kills");
         EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST(EditableFinalValueNodeTest, DefaultsToScoreAndDescribesItselfAsTheDslText) {
+        EditableFinalValueNode node;
+        EXPECT_EQ(node.kind(), "final");
+        EXPECT_EQ(node.stat(), "score");
+        EXPECT_EQ(node.describe(), "Final(SCORE)");
+    }
+
+    TEST(EditableFinalValueNodeTest, SetStatEmitsStatChangedOnlyOnChange) {
+        EditableFinalValueNode node;
+        QSignalSpy spy(&node, &EditableFinalValueNode::statChanged);
+        node.setStat("misses");
+        node.setStat("misses");
+        EXPECT_EQ(node.stat(), "misses");
+        EXPECT_EQ(node.describe(), "Final(MISSES)");
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST(EditableUnaryOpNodeTest, BestRunDescribesItselfWithItsInput) {
+        EditableUnaryOpNode node;
+        node.setKind("bestRun");
+        node.setInput(new EditableFinalValueNode());
+        EXPECT_EQ(node.describe(), "BestRun(Final(SCORE))");
     }
 
     TEST(EditableConstantNodeTest, DefaultsToZeroAndReportsItsOwnKind) {

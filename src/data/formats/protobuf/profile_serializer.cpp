@@ -136,6 +136,7 @@ namespace ksv::data {
             totals->set_hits(run.stored_totals.hits);
             totals->set_misses(run.stored_totals.misses);
             totals->set_kills(run.stored_totals.kills);
+            if (run.stored_totals.damage) totals->set_damage(*run.stored_totals.damage);
 
             if (run.sources.perf) writeSourceRef(run_proto->mutable_perf_source(), *run.sources.perf);
             if (run.sources.csv) writeSourceRef(run_proto->mutable_csv_source(), *run.sources.csv);
@@ -289,6 +290,7 @@ namespace ksv::data {
                 .hits = totals.hits(),
                 .misses = totals.misses(),
                 .kills = totals.kills(),
+                .damage = totals.has_damage() ? std::optional{totals.damage()} : std::nullopt,
             };
 
             if (run_proto.has_perf_source()) {

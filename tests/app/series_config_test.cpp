@@ -99,6 +99,19 @@ namespace {
         EXPECT_TRUE(hasError(deepErrors, SeriesConfigValidationCode::ExpressionDepthLimit));
     }
 
+    TEST(SeriesConfigTest, FinalValueRejectsOutOfRangeStatAndBestRunRequiresInput) {
+        auto configs = smallLineup();
+        configs[0].expression = finalValue(static_cast<FinalStat>(99));
+        configs[1].expression = bestRun({});
+        configs[2].expression = bestRun(finalValue(FinalStat::Dmg));
+
+        const auto errors = validateSeriesConfigs(configs);
+        EXPECT_TRUE(hasError(errors, SeriesConfigValidationCode::InvalidFinalStat, "records[0].expression.stat"));
+        EXPECT_TRUE(hasError(errors, SeriesConfigValidationCode::MissingExpressionInput,
+                             "records[1].expression.input"));
+        EXPECT_EQ(errors.size(), 2U);
+    }
+
     TEST(SeriesConfigTest, ValidationReportsStableCodesAndFieldPaths) {
         auto configs = smallLineup();
         configs[1].id = SeriesId{0};

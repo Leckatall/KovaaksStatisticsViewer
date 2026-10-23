@@ -24,7 +24,9 @@ namespace ksv::data {
             if (entry.has_score()) run.performance->add_data(entry.time(), domain::DataPointType::SCORE, entry.score().value());
             if (entry.has_kills()) run.performance->add_data(entry.time(), domain::DataPointType::KILLS, entry.kills().value());
         }
+        run.stored_totals.damage = 0.0F;
         for (const auto &sample : run.performance->samples) {
+            *run.stored_totals.damage += sample.dmg;
             run.stored_totals.score += sample.score;
             run.stored_totals.shots += sample.shots;
             run.stored_totals.hits += sample.hits;

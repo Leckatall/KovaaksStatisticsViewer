@@ -284,6 +284,18 @@ namespace {
         EXPECT_TRUE(settings->quarantined.empty());
     }
 
+    TEST_F(GraphConfigurationPersistenceTest, FinalAndBestRunExpressionsRoundTripThroughTheDslText) {
+        auto configuration = everyPreferenceKind();
+        configuration.runSeries.series[0].expression = bestRun(finalValue(FinalStat::Misses));
+        configuration.runSeries.series[1].expression =
+            subtract(runningSum(primitive(PrimitiveMetric::Score)), bestRun(runningSum(primitive(PrimitiveMetric::Score))));
+        save(configuration);
+
+        EXPECT_EQ(docObject()["series"].toArray()[0].toObject()["expression"].toString(), "BestRun(Final(MISSES))");
+        EXPECT_EQ(load(), configuration);
+        EXPECT_TRUE(settings->quarantined.empty());
+    }
+
     TEST_F(GraphConfigurationPersistenceTest, VersionFourSeriesWithoutTheKeyDecodeToZeroHiddenPoints) {
         writeDoc(v4RootWithV3Series());
         const auto loaded = load();

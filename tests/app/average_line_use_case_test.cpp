@@ -26,6 +26,20 @@ namespace {
         return perf;
     }
 
+    ksv::domain::Run csvOnly(const long long start, const float score, const std::string hash = "scenario") {
+        ksv::domain::Run csv;
+        csv.run_id = {{"Scenario", hash}, start};
+        csv.stored_totals.score = score;
+        return csv;
+    }
+
+    std::optional<std::vector<double>> evaluate(const std::shared_ptr<FakeProfileService> &profiles,
+                                                const ksv::domain::Run &reference, const Expression &expression) {
+        return AverageLineUseCase{profiles}.evaluate(reference, expression);
+    }
+
+    const auto kScoreSum = [] { return runningSum(primitive(PrimitiveMetric::Score)); };
+
     TEST(BucketedRunTest, MatchesPerfColumnBuilderPrimitiveProjection) {
         ksv::domain::Run perf;
         perf.performance.emplace();
@@ -118,5 +132,101 @@ namespace {
         ASSERT_TRUE(result);
         ASSERT_EQ(result->size(), 1U);
         EXPECT_DOUBLE_EQ(result->front(), 1500000.0);
+    }
+
+    TEST(AverageLineUseCaseTest, FinalValueIsAFlatLineOfTheStoredTotalAtTheReferenceLength) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        auto reference = run(100, {2, 4, 6});
+        reference.stored_totals = {.score = 153.5F, .shots = 180, .hits = 166, .misses = 14, .kills = 150};
+        profiles->runs = {reference};
+        EXPECT_EQ(evaluate(profiles, reference, finalValue(FinalStat::Score)),
+                  (std::vector<double>{153.5, 153.5, 153.5}));
+        EXPECT_EQ(evaluate(profiles, reference, finalValue(FinalStat::Shots)), (std::vector<double>(3, 180.0)));
+        EXPECT_EQ(evaluate(profiles, reference, finalValue(FinalStat::Hits)), (std::vector<double>(3, 166.0)));
+        EXPECT_EQ(evaluate(profiles, reference, finalValue(FinalStat::Misses)), (std::vector<double>(3, 14.0)));
+        EXPECT_EQ(evaluate(profiles, reference, finalValue(FinalStat::Kills)), (std::vector<double>(3, 150.0)));
+    }
+
+    TEST(AverageLineUseCaseTest, FinalDamageIsAbsentWithoutAStoredDamageTotal) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        auto reference = run(100, {1, 2});
+        profiles->runs = {reference};
+        EXPECT_FALSE(evaluate(profiles, reference, finalValue(FinalStat::Dmg)));
+        reference.stored_totals.damage = 166.0F;
+        EXPECT_EQ(evaluate(profiles, reference, finalValue(FinalStat::Dmg)), (std::vector<double>{166.0, 166.0}));
+    }
+
+    TEST(AverageLineUseCaseTest, BestRunPicksHighestScoreAndExcludesTheCurrentRun) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {50, 50});
+        profiles->runs = {reference, run(200, {10, 10}), run(300, {30, 40}), run(400, {5, 5})};
+        EXPECT_EQ(evaluate(profiles, reference, bestRun(kScoreSum())), (std::vector<double>{30, 70}));
+    }
+
+    TEST(AverageLineUseCaseTest, BestRunBreaksScoreTiesTowardTheEarliestRun) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {1, 1});
+        profiles->runs = {reference, run(400, {5, 5}), run(200, {2, 8}), run(300, {9, 1})};
+        EXPECT_EQ(evaluate(profiles, reference, bestRun(primitive(PrimitiveMetric::Score))),
+                  (std::vector<double>{2, 8}));
+    }
+
+    TEST(AverageLineUseCaseTest, BestRunKeepsItsOwnLengthWhateverTheReferenceLength) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {1, 1});
+        profiles->runs = {reference, run(200, {5, 5, 5, 5})};
+        EXPECT_EQ(evaluate(profiles, reference, bestRun(primitive(PrimitiveMetric::Score)))->size(), 4U);
+        profiles->runs = {reference, run(200, {5})};
+        EXPECT_EQ(evaluate(profiles, reference, bestRun(primitive(PrimitiveMetric::Score)))->size(), 1U);
+    }
+
+    TEST(AverageLineUseCaseTest, BestRunOfFinalSpansTheReferenceEvenWhenTheBestRunHasNoPerf) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {1, 1, 1});
+        profiles->runs = {reference, csvOnly(200, 900.0F), run(300, {5})};
+        EXPECT_EQ(evaluate(profiles, reference, bestRun(finalValue(FinalStat::Score))),
+                  (std::vector<double>(3, 900.0)));
+    }
+
+    TEST(AverageLineUseCaseTest, BestRunOfPrimitiveBackedExpressionDoesNotFallBackWhenTheBestRunHasNoPerf) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {1, 1, 1});
+        profiles->runs = {reference, csvOnly(200, 900.0F), run(300, {5, 5, 5})};
+        const auto result = evaluate(profiles, reference, bestRun(kScoreSum()));
+        EXPECT_TRUE(!result || result->empty());
+    }
+
+    TEST(AverageLineUseCaseTest, BestRunIsAbsentWhenOnlyTheCurrentRunExists) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {1, 1});
+        profiles->runs = {reference};
+        EXPECT_FALSE(evaluate(profiles, reference, bestRun(finalValue(FinalStat::Score))));
+    }
+
+    TEST(AverageLineUseCaseTest, NestedBestRunMeansSecondBestBecauseTheInnerOneExcludesTheOuterBestRun) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {1, 1});
+        profiles->runs = {reference, run(200, {10, 10}), run(300, {30, 30}), run(400, {20, 20})};
+        EXPECT_EQ(evaluate(profiles, reference, bestRun(bestRun(primitive(PrimitiveMetric::Score)))),
+                  (std::vector<double>{20, 20}));
+    }
+
+    TEST(AverageLineUseCaseTest, SubtractingBestRunPaceFromMismatchedLengthsIsAbsent) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {1, 1});
+        profiles->runs = {reference, run(200, {5, 5, 5})};
+        EXPECT_FALSE(evaluate(profiles, reference, subtract(kScoreSum(), bestRun(kScoreSum()))));
+        profiles->runs = {reference, run(200, {5, 5})};
+        EXPECT_EQ(evaluate(profiles, reference, subtract(kScoreSum(), bestRun(kScoreSum()))),
+                  (std::vector<double>{-4, -8}));
+    }
+
+    TEST(AverageLineUseCaseTest, PurelyConstantAverageInputAdmitsCandidatesOfAnyLength) {
+        auto profiles = std::make_shared<FakeProfileService>();
+        const auto reference = run(100, {1, 1});
+        profiles->runs = {reference, run(200, {1}), run(300, {1, 2, 3})};
+        const auto result = evaluate(profiles, reference, averageAcrossRuns(numericConstant(3.0), RecentRuns{5}));
+        ASSERT_TRUE(result);
+        EXPECT_EQ(*result, (std::vector<double>{3.0, 3.0}));
     }
 }

@@ -32,6 +32,43 @@ namespace {
         EXPECT_FLOAT_EQ(parsed->stats.resolution_scale, 100.0F);
     }
 
+    TEST_F(StatsCsvParserTest, ParsesDamageDoneFromFooterNotFromTheWeaponSummaryHeader) {
+        const auto parsed = parser.parseFile(fixture("1wall6targets TE.csv"));
+
+        ASSERT_TRUE(parsed);
+        ASSERT_TRUE(parsed->totals.damage.has_value());
+        EXPECT_FLOAT_EQ(*parsed->totals.damage, 166.0F);
+    }
+
+    TEST_F(StatsCsvParserTest, DamageIsAbsentWhenMissingAndNonFatalWhenUnparseable) {
+        const auto write = [this](const std::string &damage_line) {
+            const auto path = std::filesystem::temp_directory_path() / "ksv_stats_csv_parser_damage.csv";
+            {
+                std::ofstream output(path);
+                output << "weapon summary\n\n"
+                       << "Scenario:, Fixture\n"
+                       << "Hash:, fixture-hash\n"
+                       << "Challenge Start:, 01:02:03.004\n"
+                       << "Score:, 42.5\n"
+                       << "Hit Count:, 4\n"
+                       << "Miss Count:, 1\n"
+                       << "Kills:, 3\n"
+                       << damage_line;
+            }
+            auto parsed = parser.parseFile(path);
+            std::filesystem::remove(path);
+            return parsed;
+        };
+
+        const auto absent = write("");
+        ASSERT_TRUE(absent);
+        EXPECT_FALSE(absent->totals.damage.has_value());
+
+        const auto unparseable = write("Damage Done:, lots\n");
+        ASSERT_TRUE(unparseable);
+        EXPECT_FALSE(unparseable->totals.damage.has_value());
+    }
+
     TEST_F(StatsCsvParserTest, IgnoresUnknownFooterKeysAndDefaultsMissingSettings) {
         const auto path = std::filesystem::temp_directory_path() / "ksv_stats_csv_parser_defaults.csv";
         {
