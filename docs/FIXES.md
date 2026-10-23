@@ -41,24 +41,24 @@ Static audit findings retained from the 2026-08-13 review. Each checkbox reports
 - [x] `onCurrentPerfChanged` behaviour is covered only by a no-op test double. Stale: already covered by the real App wiring in `CompositionRootTest.CurrentPerfChangeCascadesToGraphViewModelReload` (`tests/integration/composition_root_test.cpp`). (`tests/ui/graph_vm_test.cpp:27`, `FakeGraphUseCase::onCurrentPerfChanged`)
 - [x] `GraphUseCase` retains a console diagnostic. Removed while fixing the adjacent `string_view` bug above. (`src/app/usecases/graph_use_case.h:19`, `GraphUseCase::load_perf`)
 - [x] `FileService` retains a temporary watcher diagnostic loop. Stale: removed in `c18afb7`. (`src/qt_data/file_service.cpp:42`, `FileService::handleDirectoryChanged`)
-- [ ] Refreshing either list model performs a full model reset rather than scoped updates. (`src/ui/presentation/scenario_list_model.cpp:42`, `ScenarioListModel::setSummaries`; `src/ui/presentation/run_list_model.cpp:54`, `RunListModel::setRuns`)
-- [x] `activateScenario()` writes the active name before checking whether the hash changed. Name is now only written alongside the hash inside the "hash actually changed" branch, matching the domain's first-name-wins policy for a shared hash; covered by `ActivateScenarioRetainsFirstNameForARepeatedHash`. (`src/ui/presentation/scenario_browser_vm.cpp:68`, `ScenarioBrowserViewModel::activateScenario`)
-- [x] `runAt()` returns a pointer into a replaceable vector. Stale: `RunListModel::runAt()` no longer exists. (`src/ui/presentation/run_list_model.cpp:49`, `RunListModel::runAt`)
-- [x] QML can request `ScenarioPerf` by value without a declared metatype contract. Already fixed: `SessionViewModel::getCurrentPerf()` is no longer `Q_INVOKABLE`; only the `QString`-returning `getCurrentPerfScenario()` is exposed to QML. (`src/ui/presentation/session_vm.h:29`, `SessionViewModel::getCurrentPerf`)
+- [ ] Refreshing either list model performs a full model reset rather than scoped updates. (`src/ui/presentation/scenarios/scenario_list_model.cpp:42`, `ScenarioListModel::setSummaries`; `src/ui/presentation/scenarios/run_list_model.cpp:54`, `RunListModel::setRuns`)
+- [x] `activateScenario()` writes the active name before checking whether the hash changed. Name is now only written alongside the hash inside the "hash actually changed" branch, matching the domain's first-name-wins policy for a shared hash; covered by `ActivateScenarioRetainsFirstNameForARepeatedHash`. (`src/ui/presentation/scenarios/scenario_browser_vm.cpp:68`, `ScenarioBrowserViewModel::activateScenario`)
+- [x] `runAt()` returns a pointer into a replaceable vector. Stale: `RunListModel::runAt()` no longer exists. (`src/ui/presentation/scenarios/run_list_model.cpp:49`, `RunListModel::runAt`)
+- [x] QML can request `ScenarioPerf` by value without a declared metatype contract. Already fixed: `SessionViewModel::getCurrentPerf()` is no longer `Q_INVOKABLE`; only the `QString`-returning `getCurrentPerfScenario()` is exposed to QML. (`src/ui/presentation/app/session_vm.h:29`, `SessionViewModel::getCurrentPerf`)
 - [ ] `GraphCanvas` retains a bare view-model pointer without a destruction guard. (`src/ui/components/graph_canvas.h:77`, `GraphCanvas::m_graphVm`; `src/ui/components/graph_canvas.cpp:32`, `GraphCanvas::setGraphVm`)
 - [ ] `forRange()` accepts non-finite ranges and has no upper cap on derived tick counts. (`src/ui/presentation/axis_model.cpp:50`, `AxisModel::forRange`)
 
 ## QML performance and state
 
-- [ ] Pointer movement performs repeated linear sampling and by-value series copies. (`src/ui/qml/graph/GraphCanvasWithTooltip.qml:26`; `src/ui/components/graph_canvas.cpp:168`, `GraphCanvas::valuesAtX`; `src/ui/presentation/series_model.cpp:10`, `SeriesModel::sampleAtX`)
+- [ ] Pointer movement performs repeated linear sampling and by-value series copies. (`src/ui/qml/graph/GraphCanvasWithTooltip.qml:26`; `src/ui/components/graph_canvas.cpp:168`, `GraphCanvas::valuesAtX`; `src/ui/presentation/graphs/common/series/series_model.cpp:10`, `SeriesModel::sampleAtX`)
 - [ ] Tooltip series are rebuilt from a fresh model on every hover event. (`src/ui/qml/graph/GraphCanvasWithTooltip.qml:40`; `src/ui/qml/graph/GraphCanvasWithTooltip.qml:83`; `src/ui/components/graph_canvas.cpp:190`, `GraphCanvas::valuesAtX`)
 - [ ] Invisible tooltip-position bindings recompute during hover movement. (`src/ui/qml/graph/GraphCanvasWithTooltip.qml:55`)
-- [ ] Column visibility relies on unchecked checked-binding/write-back lockstep across separate definitions. (`src/ui/qml/shell/SettingsDialog.qml:231`; `src/ui/qml/Main.qml:25`; `src/ui/presentation/graph_vm.h:29`, `GraphViewModel::Column`)
+- [ ] Column visibility relies on unchecked checked-binding/write-back lockstep across separate definitions. (`src/ui/qml/shell/SettingsDialog.qml:231`; `src/ui/qml/Main.qml:25`; `src/ui/presentation/graphs/graph_vm.h:29`, `GraphViewModel::Column`)
 
 ## Architecture and project hygiene
 
-- [ ] Layer boundaries are unenforced, with direct cross-layer includes. (`CMakeLists.txt:39`; `src/ui/presentation/settings_vm.h:10`; `src/qt_data/file_service.h:17`)
-- [ ] The UI drives `IProfileService` directly. (`src/ui/presentation/settings_vm.h:43`; `src/ui/presentation/settings_vm.cpp:8`, `SettingsViewModel::SettingsViewModel`)
+- [ ] Layer boundaries are unenforced, with direct cross-layer includes. (`CMakeLists.txt:39`; `src/ui/presentation/app/settings_vm.h:10`; `src/qt_data/file_service.h:17`)
+- [ ] The UI drives `IProfileService` directly. (`src/ui/presentation/app/settings_vm.h:43`; `src/ui/presentation/app/settings_vm.cpp:8`, `SettingsViewModel::SettingsViewModel`)
 - [ ] The domain layer performs console I/O. (`src/domain/scenario_perf.h:120`, `ScenarioPerf::print`; `src/domain/user_profile.cpp:17`, `UserProfile::addScenarioPerf`)
 - [x] Integration tests use divergent manual QML registration. (`tests/integration/qt_test_main.cpp:16`, `registerQmlTypes`; `src/qml_registration.h:15`, `declare_metatypes`)
 - [ ] Release packaging leaves gallery construction enabled. (`CMakeLists.txt:99`; `scripts/package-release.ps1:137`)

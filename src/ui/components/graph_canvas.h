@@ -14,9 +14,9 @@
 #include <optional>
 #include <qqmlintegration.h>
 
-#include "presentation/graph_vm_base.h"
+#include "presentation/graphs/common/graph_vm_base.h"
 #include "series_painter.h"
-#include "presentation/series_model.h"
+#include "presentation/graphs/common/series/series_model.h"
 
 namespace ksv::ui {
     class GraphCanvas : public QQuickPaintedItem {

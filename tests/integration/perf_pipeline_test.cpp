@@ -14,7 +14,7 @@
 #include "app/contracts/expression_dsl.h"
 #include "app/contracts/run_series_editing.h"
 #include "formats/protobuf/proto_decoder.h"
-#include "presentation/graph_vm.h"
+#include "presentation/graphs/graph_vm.h"
 
 #include "integration_env.h"
 

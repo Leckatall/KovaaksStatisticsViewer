@@ -22,10 +22,10 @@
 
 #include "app/app.h"
 #include "formats/protobuf/proto_decoder.h"
-#include "presentation/benchmark_tracking_vm.h"
-#include "presentation/completion_history_vm.h"
-#include "presentation/playtime_graph_vm.h"
-#include "presentation/settings_vm.h"
+#include "presentation/benchmarks/tracking/benchmark_tracking_vm.h"
+#include "presentation/graphs/completion_history_vm.h"
+#include "presentation/graphs/playtime_graph_vm.h"
+#include "presentation/app/settings_vm.h"
 
 #include "integration_env.h"
 #include "profile_store_files.h"

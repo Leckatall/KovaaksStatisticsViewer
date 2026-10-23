@@ -1,0 +1,522 @@
+//
+// GraphViewModel tests using a hand-written fake IGraphUseCase.
+//
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <map>
+#include <optional>
+
+#include <QSignalSpy>
+#include <QUrl>
+
+#include "presentation/graphs/graph_vm.h"
+
+using namespace ksv::presentation;
+using namespace ksv::application;
+
+namespace {
+    // Built-in SeriesIds from defaultSeriesConfigs(). GraphViewModel::column is always a series'
+    // SeriesId value, never a position, and has no meaning outside the class — tests reference these
+    // ids directly rather than a Column enum.
+    constexpr int kTime = 0;
+    constexpr int kScore = 1;
+    constexpr int kAccuracy = 5;
+    constexpr int kInvalidColumn = 9999;
+
+    SeriesConfig defaultConfig(const int id) {
+        const auto configs = defaultSeriesConfigs();
+        const auto it = std::ranges::find_if(configs, [id](const SeriesConfig &c) {
+            return c.id.value == static_cast<uint64_t>(id);
+        });
+        if (it == configs.end()) throw std::out_of_range("no default series with that id");
+        return *it;
+    }
+
+    SeriesPoints pts(const std::vector<double> &times, const std::vector<double> &ys) {
+        SeriesPoints points;
+        for (size_t i = 0; i < ys.size(); ++i) points.emplace_back(times[i], ys[i]);
+        return points;
+    }
+
+    class FakeGraphUseCase : public IGraphUseCase {
+    public:
+        std::vector<std::string> load_perf_calls;
+        int load_latest_perf_calls = 0;
+        std::string run_label;
+
+        std::vector<SeriesConfig> series_configs;
+        std::map<uint64_t, std::optional<SeriesPoints>> series_values;
+        std::vector<AxisConfig> axes;
+        double run_duration = 0.0;
+        bool has_current_run = false;
+        bool has_performance = false;
+        std::optional<SeriesId> axis_label;
+        std::function<void()> axis_label_callback;
+
+        void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
+        void load_latest_perf() override { load_latest_perf_calls++; }
+        std::string get_run_label() override { return run_label; }
+        bool hasCurrentRun() const override { return has_current_run; }
+        bool currentRunHasPerformance() const override { return has_performance; }
+        void onCurrentPerfChanged(std::function<void()>) override {}
+        void onSeriesConfigChanged(std::function<void()>) override {}
+        std::optional<SeriesId> getAxisLabelSeriesId() override { return axis_label; }
+        void onAxisLabelChanged(std::function<void()> callback) override { axis_label_callback = std::move(callback); }
+
+        GraphPresentation committedPresentation = defaultGraphPresentation(GraphKey::Run);
+        std::vector<std::function<void()>> presentation_callbacks;
+        int series_value_calls = 0;
+        [[nodiscard]] GraphPresentation presentation() const override { return committedPresentation; }
+        void onPresentationChanged(std::function<void()> callback) override {
+            presentation_callbacks.push_back(std::move(callback));
+        }
+        void publishPresentation() const {
+            for (const auto &callback: presentation_callbacks) callback();
+        }
+
+        std::vector<SeriesConfig> getSeriesConfigs() override { return series_configs; }
+        std::optional<SeriesPoints> getSeriesValues(const SeriesId id) override {
+            ++series_value_calls;
+            const auto it = series_values.find(id.value);
+            return it == series_values.end() ? std::nullopt : it->second;
+        }
+        std::vector<AxisConfig> getAxes() override { return axes; }
+        double getRunDuration() override { return run_duration; }
+
+        void addSeries(const SeriesConfig &config, const SeriesPoints &points) {
+            series_configs.push_back(config);
+            series_values[config.id.value] = points;
+        }
+    };
+
+    class GraphViewModelTest : public testing::Test {
+    protected:
+        std::shared_ptr<FakeGraphUseCase> fake_use_case = std::make_shared<FakeGraphUseCase>();
+        GraphViewModel view_model{fake_use_case};
+
+        // One value per whole second, using the built-in Score/Accuracy SeriesConfigs.
+        void setSampleData() {
+            for (const auto &config : defaultSeriesConfigs()) {
+                if (config.id.value == kScore) fake_use_case->addSeries(config, pts({0, 1, 2}, {10, 20, 30}));
+                else if (config.id.value == kAccuracy) fake_use_case->addSeries(config, pts({0, 1, 2}, {0.5, 0.6, 0.7}));
+            }
+            fake_use_case->run_duration = 2.0;
+        }
+    };
+
+    TEST_F(GraphViewModelTest, StartsEmptyWithDefaultBounds) {
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 0.0);
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 60.0);
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataRefreshesSeriesWithoutLoadingPerf) {
+        setSampleData();
+
+        view_model.fetchData();
+
+        EXPECT_TRUE(fake_use_case->load_perf_calls.empty());
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataWithEmptyIdIsIgnoredAndDoesNotLoadPerf) {
+        view_model.fetchData("");
+
+        EXPECT_TRUE(fake_use_case->load_perf_calls.empty());
+        EXPECT_TRUE(view_model.series({kScore}).isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, FetchLatestDataCallsLoadLatestPerfOnUseCase) {
+        view_model.fetchLatestData();
+
+        EXPECT_EQ(fake_use_case->load_latest_perf_calls, 1);
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataWithScenarioIdCallsLoadPerfWithLocalPath) {
+        view_model.fetchData(QUrl::fromLocalFile("C:/perfs/run.perf").toString());
+
+        ASSERT_EQ(fake_use_case->load_perf_calls.size(), 1);
+        EXPECT_EQ(fake_use_case->load_perf_calls[0], "C:/perfs/run.perf");
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataPopulatesAllThreeColumns) {
+        setSampleData();
+
+        view_model.fetchData();
+
+        const auto accuracy = view_model.series({kAccuracy});
+        ASSERT_FALSE(accuracy.isEmpty());
+        EXPECT_NEAR(accuracy.front()->points[2].y(), 0.7, 1e-6);
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataUpdatesScenarioTitleFromUseCase) {
+        setSampleData();
+        fake_use_case->run_label = "Air Angelic (2026-08-07, 14:23:00)";
+
+        const QSignalSpy spy(&view_model, &GraphViewModel::scenarioTitleChanged);
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.scenarioTitle(), QString("Air Angelic (2026-08-07, 14:23:00)"));
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataEmitsBoundsChanged) {
+        setSampleData();
+
+        const QSignalSpy spy(&view_model, &GraphViewModel::boundsChanged);
+        view_model.fetchData();
+
+        EXPECT_GT(spy.count(), 0);
+    }
+
+    TEST_F(GraphViewModelTest, FetchDataEmitsDataUpdated) {
+        setSampleData();
+
+        const QSignalSpy spy(&view_model, &GraphViewModelBase::dataUpdated);
+        view_model.fetchData();
+
+        EXPECT_GT(spy.count(), 0);
+    }
+
+    TEST_F(GraphViewModelTest, RecomputeBoundsSnapsTheTimeAxisToNiceNumbers) {
+        setSampleData();
+        view_model.fetchData();
+
+        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 0.0);
+        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 2.0);
+        EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{0.0, 1.0, 2.0}));
+    }
+
+    TEST_F(GraphViewModelTest, ALineWithoutAnAxisKeepsItsOwnScaleBesideTheSharedOne) {
+        const AxisConfig sharedAxis{AxisId{5}, "Shared", {}, AxisTransformKind::Identity};
+        const SeriesConfig onAxis{SeriesId{10}, {"On axis", {}, true, 0}, numericConstant(1.0), sharedAxis.id};
+        const SeriesConfig alone{SeriesId{11}, {"Alone", {}, true, 1}, numericConstant(1.0)};
+
+        fake_use_case->axes = {sharedAxis};
+        fake_use_case->addSeries(onAxis, pts({0, 1}, {100, 200}));
+        fake_use_case->addSeries(alone, pts({0, 1}, {1, 2}));
+        fake_use_case->run_duration = 1.0;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({10, 11});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_NE(series[0]->yAxis->max(), series[1]->yAxis->max());
+    }
+
+    TEST_F(GraphViewModelTest, TwoComputedSeriesShareAUserCreatedAxis) {
+        const AxisConfig customAxis{AxisId{5}, "Custom", {}, AxisTransformKind::Identity};
+        const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0), customAxis.id};
+        const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0), customAxis.id};
+
+        fake_use_case->axes = {customAxis};
+        fake_use_case->addSeries(first, pts({0, 1}, {2, 4}));
+        fake_use_case->addSeries(second, pts({0, 1}, {10, 20}));
+        fake_use_case->run_duration = 1.0;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({10, 11});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->min(), series[1]->yAxis->min());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
+        EXPECT_LE(series[0]->yAxis->min(), 2.0);
+        EXPECT_GE(series[0]->yAxis->max(), 20.0);
+    }
+
+    TEST_F(GraphViewModelTest, AComputedSeriesCanShareAnAxisWithABuiltInSeries) {
+        const AxisConfig sharedAxis{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity};
+        auto scoreTotal = defaultConfig(kScore);
+        scoreTotal.yAxisId = sharedAxis.id;
+        const SeriesConfig computed{SeriesId{10}, {"Custom", {}, true, 1}, numericConstant(1.0), sharedAxis.id};
+
+        fake_use_case->axes = {sharedAxis};
+        fake_use_case->addSeries(scoreTotal, pts({0, 1}, {5, 6}));
+        fake_use_case->addSeries(computed, pts({0, 1}, {1, 1}));
+        fake_use_case->run_duration = 1.0;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({kScore, 10});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->min(), series[1]->yAxis->min());
+        EXPECT_DOUBLE_EQ(series[0]->yAxis->max(), series[1]->yAxis->max());
+    }
+
+    TEST_F(GraphViewModelTest, SeriesCarryTheNameOfTheirAxisAndIndependentOnesCarryNone) {
+        const AxisConfig sharedAxis{AxisId{2}, "Score Family", {}, AxisTransformKind::Identity};
+        auto scoreTotal = defaultConfig(kScore);
+        scoreTotal.yAxisId = sharedAxis.id;
+        const SeriesConfig independent{SeriesId{10}, {"Solo", {}, true, 1}, numericConstant(1.0)};
+
+        fake_use_case->axes = {sharedAxis};
+        fake_use_case->addSeries(scoreTotal, pts({0, 1}, {5, 6}));
+        fake_use_case->addSeries(independent, pts({0, 1}, {1, 1}));
+        fake_use_case->run_duration = 1.0;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({kScore, 10});
+        ASSERT_EQ(series.size(), 2);
+        EXPECT_EQ(series[0]->yAxisName, "Score Family");
+        EXPECT_TRUE(series[1]->yAxisName.isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, UngroupedSeriesEachKeepTheirOwnIndependentAxis) {
+        const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0)};
+        const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0)};
+
+        fake_use_case->addSeries(first, pts({0, 1}, {2, 4}));
+        fake_use_case->addSeries(second, pts({0, 1}, {100, 200}));
+        fake_use_case->run_duration = 1.0;
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({10, 11});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        ASSERT_TRUE(series[1]->yAxis.has_value());
+        EXPECT_NE(series[0]->yAxis->max(), series[1]->yAxis->max());
+    }
+
+    TEST_F(GraphViewModelTest, SeriesTransformKindScalesDisplayedValues) {
+        const SeriesConfig accuracy = defaultConfig(kAccuracy);
+        fake_use_case->addSeries(accuracy, pts({0}, {0.5}));
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({kAccuracy});
+        ASSERT_EQ(series.size(), 1);
+        ASSERT_TRUE(series[0]->displayRange().has_value());
+        EXPECT_DOUBLE_EQ(series[0]->displayRange()->first, 50.0);
+    }
+
+    TEST_F(GraphViewModelTest, GroupedAxisTransformKindFormatsTheSharedAxis) {
+        const AxisConfig percentAxis{AxisId{5}, "Percent", {}, AxisTransformKind::Percentage};
+        const SeriesConfig first{SeriesId{10}, {"A", {}, true, 0}, numericConstant(1.0), percentAxis.id};
+        const SeriesConfig second{SeriesId{11}, {"B", {}, true, 1}, numericConstant(1.0), percentAxis.id};
+
+        fake_use_case->axes = {percentAxis};
+        fake_use_case->addSeries(first, pts({0}, {0.5}));
+        fake_use_case->addSeries(second, pts({0}, {0.5}));
+        view_model.fetchMetadata();
+
+        const auto series = view_model.series({10, 11});
+        ASSERT_EQ(series.size(), 2);
+        ASSERT_TRUE(series[0]->yAxis.has_value());
+        EXPECT_EQ(series[0]->yAxis->formatTick(50.0), "50%");
+    }
+
+    TEST_F(GraphViewModelTest, SeriesReturnsTimeValuePairsInRowOrder) {
+        setSampleData();
+        view_model.fetchData();
+
+        const auto series = view_model.series({kScore});
+        ASSERT_FALSE(series.isEmpty());
+        const auto &points = series.front()->points;
+        ASSERT_EQ(points.size(), 3);
+        EXPECT_DOUBLE_EQ(points[0].x(), 0.0);
+        EXPECT_DOUBLE_EQ(points[0].y(), 10.0);
+        EXPECT_DOUBLE_EQ(points[1].x(), 1.0);
+        EXPECT_DOUBLE_EQ(points[1].y(), 20.0);
+        EXPECT_DOUBLE_EQ(points[2].x(), 2.0);
+        EXPECT_DOUBLE_EQ(points[2].y(), 30.0);
+    }
+
+    TEST_F(GraphViewModelTest, SeriesReturnsEmptyWhenNoDataLoaded) {
+        EXPECT_TRUE(view_model.series({kScore}).isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, SeriesOmitsColumnsWithNoDrawableSeries) {
+        setSampleData();
+        view_model.fetchData();
+
+        EXPECT_TRUE(view_model.series({kTime}).isEmpty());
+        EXPECT_TRUE(view_model.series({kInvalidColumn}).isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, XAxisIdentityIsStableAcrossRefresh) {
+        setSampleData();
+        const Axis *const before = &view_model.xAxis();
+
+        view_model.fetchData();
+
+        EXPECT_EQ(&view_model.xAxis(), before);
+    }
+
+    TEST_F(GraphViewModelTest, XAxisDelegateFormatsSecondsWithSuffix) {
+        setSampleData();
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.xAxis().formatTick(20.0), "20s");
+    }
+
+    TEST_F(GraphViewModelTest, AdaptsResolvedSeriesAndExcludesUnavailableFromBounds) {
+        view_model.fetchData();
+        EXPECT_TRUE(view_model.enabledSeriesIds().isEmpty());
+    }
+
+    TEST_F(GraphViewModelTest, ResolvesColumnsForEnabledSeriesIds) {
+        fake_use_case->addSeries(
+            SeriesConfig{{1}, {"Score", {{0, 150, 0, 255}, 2.0}, true, 0}, primitive(PrimitiveMetric::Score)},
+            pts({0, 1}, {10, 20}));
+        fake_use_case->run_duration = 1.0;
+
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.enabledSeriesIds(), (QVariantList{"1"}));
+        EXPECT_EQ(view_model.columnForSeriesId("1"), kScore);
+        EXPECT_EQ(view_model.seriesIdForColumn(kScore), "1");
+        EXPECT_EQ(view_model.columnForSeriesId("missing"), -1);
+    }
+
+    // series() follows the series config (line-list) order, not the lexical order of the id
+    // strings ("10" < "2" < "9"), and not the order the columns were asked for.
+    TEST_F(GraphViewModelTest, SeriesFollowTheLineListOrder) {
+        const auto config = [](const uint64_t id, const std::string &name, const uint32_t position) {
+            return SeriesConfig{{id}, {name, {{0, 150, 0, 255}, 2.0}, true, position}, primitive(PrimitiveMetric::Score)};
+        };
+        fake_use_case->addSeries(config(9, "Nine", 0), pts({0, 1}, {1, 2}));
+        fake_use_case->addSeries(config(10, "Ten", 1), pts({0, 1}, {1, 2}));
+        fake_use_case->addSeries(config(2, "Two", 2), pts({0, 1}, {1, 2}));
+        fake_use_case->run_duration = 1.0;
+
+        view_model.fetchData();
+
+        QList<int> columns;
+        for (const auto *s: view_model.series({2, 10, 9})) columns.append(s->column());
+        EXPECT_EQ(columns, (QList<int>{9, 10, 2}));
+        EXPECT_EQ(view_model.enabledSeriesIds(), (QVariantList{"9", "10", "2"}));
+    }
+
+    TEST_F(GraphViewModelTest, ContentStateStartsAtNoRunSelected) {
+        EXPECT_EQ(view_model.contentState(), GraphViewModel::NoRunSelected);
+    }
+
+    TEST_F(GraphViewModelTest, ContentStateIsHasDataWhenRunHasPerformance) {
+        setSampleData();
+        fake_use_case->has_current_run = true;
+        fake_use_case->has_performance = true;
+
+        const QSignalSpy spy(&view_model, &GraphViewModel::contentStateChanged);
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.contentState(), GraphViewModel::HasData);
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(GraphViewModelTest, ContentStateIsNoPerformanceForCsvOnlyRun) {
+        fake_use_case->has_current_run = true;
+        fake_use_case->has_performance = false;
+
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.contentState(), GraphViewModel::NoPerformanceData);
+    }
+
+    TEST_F(GraphViewModelTest, ContentStateReturnsToNoRunSelectedWhenRunCleared) {
+        fake_use_case->has_current_run = true;
+        fake_use_case->has_performance = true;
+        view_model.fetchData();
+        ASSERT_EQ(view_model.contentState(), GraphViewModel::HasData);
+
+        fake_use_case->has_current_run = false;
+        fake_use_case->has_performance = false;
+        view_model.fetchData();
+
+        EXPECT_EQ(view_model.contentState(), GraphViewModel::NoRunSelected);
+    }
+
+    // Regression coverage: column is the series' own SeriesId, so a line whose id differs from its
+    // position can no longer shift under another line's name/color.
+    TEST_F(GraphViewModelTest, ALineKeepsItsNameAndColourUnderItsOwnColumnWhenItsIdIsNotItsPosition) {
+        const auto config = [](const uint64_t id, const std::string &name, const uint32_t position,
+                               const RgbaColor color) {
+            return SeriesConfig{{id}, {name, {color, 2.0}, true, position}, primitive(PrimitiveMetric::Score)};
+        };
+        fake_use_case->addSeries(config(8, "Eight", 0, {200, 10, 10, 255}), pts({0, 1}, {1, 2}));
+        fake_use_case->addSeries(config(5, "Five", 1, {10, 200, 10, 255}), pts({0, 1}, {1, 2}));
+        fake_use_case->addSeries(config(3, "Three", 2, {10, 10, 200, 255}), pts({0, 1}, {1, 2}));
+        fake_use_case->run_duration = 1.0;
+
+        view_model.fetchMetadata();
+
+        EXPECT_EQ(view_model.columnForSeriesId("8"), 8);
+        ASSERT_FALSE(view_model.series({8}).isEmpty());
+        EXPECT_EQ(view_model.series({8}).front()->name(), "Eight");
+        EXPECT_EQ(view_model.series({8}).front()->color(), QColor(200, 10, 10, 255));
+
+        EXPECT_EQ(view_model.columnForSeriesId("5"), 5);
+        ASSERT_FALSE(view_model.series({5}).isEmpty());
+        EXPECT_EQ(view_model.series({5}).front()->name(), "Five");
+        EXPECT_EQ(view_model.series({5}).front()->color(), QColor(10, 200, 10, 255));
+    }
+
+    TEST_F(GraphViewModelTest, AxisLabelSeriesIdFollowsTheCommittedChoice) {
+        EXPECT_EQ(view_model.axisLabelSeriesId(), "");
+        ASSERT_TRUE(static_cast<bool>(fake_use_case->axis_label_callback));
+        const QSignalSpy spy(&view_model, &GraphViewModel::axisLabelSeriesIdChanged);
+
+        fake_use_case->axis_label = SeriesId{7};
+        fake_use_case->axis_label_callback();
+        fake_use_case->axis_label_callback();
+
+        EXPECT_EQ(view_model.axisLabelSeriesId(), "7");
+        EXPECT_EQ(spy.count(), 1);
+    }
+
+    TEST_F(GraphViewModelTest, WithNothingSavedTheRunGraphIsSmoothWithoutMarkers) {
+        const auto defaults = defaultGraphPresentation(GraphKey::Run).appearance;
+
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), static_cast<int>(defaults.connection));
+        EXPECT_EQ(view_model.property("pointMarkers").toBool(), defaults.lineModeMarkers);
+    }
+
+    TEST_F(GraphViewModelTest, TheCommittedConnectionAndMarkersApplyAtConstruction) {
+        auto restored_use_case = std::make_shared<FakeGraphUseCase>();
+        restored_use_case->committedPresentation.appearance = {ConnectionMode::Straight, true};
+
+        GraphViewModel restored{restored_use_case};
+
+        EXPECT_EQ(restored.property("connectionMode").toInt(), static_cast<int>(ConnectionMode::Straight));
+        EXPECT_TRUE(restored.property("pointMarkers").toBool());
+    }
+
+    TEST_F(GraphViewModelTest, AStyleChangeRestylesWithoutRefetchingSeriesOrRebuildingTheLineList) {
+        setSampleData();
+        view_model.fetchData();
+        const int reads = fake_use_case->series_value_calls;
+        const QSignalSpy styleSpy(&view_model, &GraphViewModelBase::styleChanged);
+        const QSignalSpy configSpy(&view_model, &GraphViewModel::seriesConfigurationChanged);
+        const QSignalSpy dataSpy(&view_model, &GraphViewModelBase::dataUpdated);
+
+        fake_use_case->committedPresentation.appearance = {ConnectionMode::PointsOnly, false};
+        fake_use_case->publishPresentation();
+
+        EXPECT_EQ(fake_use_case->series_value_calls, reads);
+        EXPECT_EQ(styleSpy.count(), 1);
+        EXPECT_EQ(configSpy.count(), 0);
+        EXPECT_EQ(dataSpy.count(), 0);
+        EXPECT_EQ(view_model.property("connectionMode").toInt(), static_cast<int>(ConnectionMode::PointsOnly));
+    }
+
+    // Graph Lines remains the run graph's series editor: its colours are the configured ones and the
+    // painted width stays the painter default, not the stored per-line width.
+    TEST_F(GraphViewModelTest, RunSeriesKeepTheirGraphLinesColourAndThePainterWidth) {
+        const double storedWidth = kDefaultSeriesWidth + 3.0;
+        fake_use_case->addSeries(
+            SeriesConfig{{kScore}, {"Score", {{0, 150, 0, 255}, storedWidth}, true, 0}, primitive(PrimitiveMetric::Score)},
+            pts({0, 1, 2}, {10, 20, 30}));
+        fake_use_case->run_duration = 2.0;
+        view_model.fetchMetadata();
+        const auto before = view_model.series({kScore}).front()->color();
+
+        fake_use_case->committedPresentation.appearance = {ConnectionMode::Straight, true};
+        fake_use_case->publishPresentation();
+
+        const auto score = view_model.series({kScore}).front();
+        EXPECT_EQ(score->color(), before);
+        EXPECT_EQ(score->color(), QColor(0, 150, 0, 255));
+        EXPECT_DOUBLE_EQ(score->lineWidth, kDefaultSeriesWidth);
+    }
+}

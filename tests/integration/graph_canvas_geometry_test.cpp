@@ -18,8 +18,8 @@
 #include "app/contracts/i_completion_history_use_case.h"
 #include "components/graph_canvas.h"
 #include "formats/protobuf/proto_decoder.h"
-#include "presentation/completion_history_vm.h"
-#include "presentation/graph_vm.h"
+#include "presentation/graphs/completion_history_vm.h"
+#include "presentation/graphs/graph_vm.h"
 
 #include "integration_env.h"
 

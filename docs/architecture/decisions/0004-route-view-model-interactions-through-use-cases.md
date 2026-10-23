@@ -10,7 +10,7 @@ retrospective: true
 
 View models translate presentation state and user actions, while application use cases own workflows and coordinate services. Most current view models follow that boundary: `CompletionHistoryViewModel`, `GraphViewModel`, `PlaytimeGraphViewModel`, and `ScenarioBrowserViewModel` depend on use-case contracts, and `SessionViewModel` depends on the application controller contract.
 
-Two view models currently bypass it. [`SettingsViewModel`](../../../src/ui/presentation/settings_vm.h) directly depends on `ISettingsService` and `IProfileService`, and [`BenchmarkManagerViewModel`](../../../src/ui/presentation/benchmark_manager_vm.h) directly depends on `IBenchmarkLibraryService`. The decision maker recalls these as expedient implementation shortcuts rather than intended exceptions.
+Two view models currently bypass it. [`SettingsViewModel`](../../../src/ui/presentation/app/settings_vm.h) directly depends on `ISettingsService` and `IProfileService`, and [`BenchmarkManagerViewModel`](../../../src/ui/presentation/benchmarks/manager/benchmark_manager_vm.h) directly depends on `IBenchmarkLibraryService`. The decision maker recalls these as expedient implementation shortcuts rather than intended exceptions.
 
 Without an explicit dependency boundary, adding a direct service dependency can create a second path for application behavior and move workflow coordination into the presentation layer.
 

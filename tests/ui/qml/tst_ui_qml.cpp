@@ -11,7 +11,7 @@
 #include <QTemporaryDir>
 
 #include "usecases/i_session_controller.h"
-#include "presentation/benchmark_table_model.h"
+#include "presentation/benchmarks/manager/benchmark_table_model.h"
 #include "qml_registration.h"
 
 // Test-only: lets a JS fake manager hand BenchmarkEditorTable a real BenchmarkTableModel, since a

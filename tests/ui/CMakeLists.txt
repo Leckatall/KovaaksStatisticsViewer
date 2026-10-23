@@ -2,31 +2,31 @@ find_package(GTest CONFIG REQUIRED)
 
 add_executable(ui_tests
     ../support/qt_gtest_main.cpp
-    value_axis_test.cpp
-    axis_policy_test.cpp
-    date_time_axis_test.cpp
-    value_transform_test.cpp
-    series_model_test.cpp
-    graph_vm_test.cpp
-    playtime_graph_vm_test.cpp
-    completion_history_vm_test.cpp
-    editable_expression_node_test.cpp
-    session_vm_test.cpp
-    settings_vm_test.cpp
-    graph_draft_test.cpp
-    series_expression_editor_model_test.cpp
-    monotone_spline_test.cpp
+    graphs/common/axes/value_axis_test.cpp
+    graphs/common/axes/axis_policy_test.cpp
+    graphs/common/axes/date_time_axis_test.cpp
+    graphs/common/axes/value_transform_test.cpp
+    graphs/common/series/series_model_test.cpp
+    graphs/graph_vm_test.cpp
+    graphs/playtime_graph_vm_test.cpp
+    graphs/completion_history_vm_test.cpp
+    expression/editable_expression_node_test.cpp
+    app/session_vm_test.cpp
+    app/settings_vm_test.cpp
+    app/graph_draft_test.cpp
+    expression/series_expression_editor_model_test.cpp
+    graphs/common/series/monotone_spline_test.cpp
     series_painter_test.cpp
-    scenario_browser_vm_test.cpp
-    benchmark_issue_text_test.cpp
-    benchmark_manager_vm_test.cpp
-    benchmark_tracking_vm_test.cpp
-    benchmark_history_vm_test.cpp
-    benchmark_progress_grid_model_test.cpp
-    benchmark_table_contract_test.cpp
-    benchmark_cell_input_test.cpp
-    benchmark_clipboard_matrix_test.cpp
-    benchmark_table_workload_test.cpp
+    scenarios/scenario_browser_vm_test.cpp
+    benchmarks/manager/benchmark_issue_text_test.cpp
+    benchmarks/manager/benchmark_manager_vm_test.cpp
+    benchmarks/tracking/benchmark_tracking_vm_test.cpp
+    benchmarks/tracking/benchmark_history_vm_test.cpp
+    benchmarks/tracking/benchmark_progress_grid_model_test.cpp
+    benchmarks/manager/benchmark_table_contract_test.cpp
+    benchmarks/manager/benchmark_cell_input_test.cpp
+    benchmarks/manager/benchmark_clipboard_matrix_test.cpp
+    benchmarks/manager/benchmark_table_workload_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE

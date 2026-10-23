@@ -8,14 +8,14 @@
 #include <QObject>
 #include <QQmlApplicationEngine>
 
-#include "graph_vm.h"
-#include "completion_history_vm.h"
-#include "playtime_graph_vm.h"
-#include "scenario_browser_vm.h"
-#include "session_vm.h"
-#include "settings_vm.h"
-#include "benchmark_manager_vm.h"
-#include "benchmark_tracking_vm.h"
+#include "presentation/graphs/graph_vm.h"
+#include "presentation/graphs/completion_history_vm.h"
+#include "presentation/graphs/playtime_graph_vm.h"
+#include "presentation/scenarios/scenario_browser_vm.h"
+#include "presentation/app/session_vm.h"
+#include "presentation/app/settings_vm.h"
+#include "presentation/benchmarks/manager/benchmark_manager_vm.h"
+#include "presentation/benchmarks/tracking/benchmark_tracking_vm.h"
 #include "interfaces/i_proto_decoder.h"
 #include "../data/interfaces/i_file_service.h"
 #include "../data/interfaces/i_run_ingestor.h"

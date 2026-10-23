@@ -9,7 +9,7 @@
 #include <QPen>
 #include <QPointF>
 
-#include "presentation/monotone_spline.h"
+#include "presentation/graphs/common/series/monotone_spline.h"
 
 namespace ksv::ui {
     namespace {

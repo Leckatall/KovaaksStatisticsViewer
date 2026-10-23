@@ -79,7 +79,7 @@ flowchart TB
 
 **Key:** boxes group responsibilities rather than enumerate classes or build targets. Every solid arrow points from a consumer to capabilities it uses; an unlabelled arrow always has that one meaning.
 
-Evidence: [`src/app/app.cpp`](../../src/app/app.cpp), [`src/ui/qml/Main.qml`](../../src/ui/qml/Main.qml), [`src/ui/presentation/scenario_browser_vm.cpp`](../../src/ui/presentation/scenario_browser_vm.cpp), [`src/app/usecases/scenario_browser_use_case.h`](../../src/app/usecases/scenario_browser_use_case.h), [`src/app/session_controller.cpp`](../../src/app/session_controller.cpp), and [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp).
+Evidence: [`src/app/app.cpp`](../../src/app/app.cpp), [`src/ui/qml/Main.qml`](../../src/ui/qml/Main.qml), [`src/ui/presentation/scenarios/scenario_browser_vm.cpp`](../../src/ui/presentation/scenarios/scenario_browser_vm.cpp), [`src/app/usecases/scenario_browser_use_case.h`](../../src/app/usecases/scenario_browser_use_case.h), [`src/app/session_controller.cpp`](../../src/app/session_controller.cpp), and [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp).
 
 Runtime requests move from QML through presentation adapters into application use cases, session coordination, and service/store ports. Reverse refresh paths use the observer mechanisms described under Architectural strategy and constraints. `App` constructs the production service, use-case, controller, and presentation graph and owns the QML engine; `SessionController` has the narrower responsibility for profile-build thread and worker lifetime. These implementation details remain in prose because they do not require separate root-level diagrams.
 
@@ -127,7 +127,7 @@ flowchart TB
 
 **Key:** the cylinder is KSV-owned persistent storage; the other boxes are data or processing roles. Every solid arrow means that run-history data is supplied to the next role or store. It does not identify the caller that initiates the transfer.
 
-Evidence: [`src/qt_data/file_service.cpp`](../../src/qt_data/file_service.cpp), [`src/data/run_ingestor.cpp`](../../src/data/run_ingestor.cpp), [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/app/usecases/scenario_browser_use_case.h`](../../src/app/usecases/scenario_browser_use_case.h), and [`src/ui/presentation/graph_vm.cpp`](../../src/ui/presentation/graph_vm.cpp).
+Evidence: [`src/qt_data/file_service.cpp`](../../src/qt_data/file_service.cpp), [`src/data/run_ingestor.cpp`](../../src/data/run_ingestor.cpp), [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/app/usecases/scenario_browser_use_case.h`](../../src/app/usecases/scenario_browser_use_case.h), and [`src/ui/presentation/graphs/graph_vm.cpp`](../../src/ui/presentation/graphs/graph_vm.cpp).
 
 The original exports remain external inputs and are not a recovery source after acceptance. `profile.pb` is the persistent authority, while the accepted in-memory profile supplies current application queries and presentation projections. [Profile lifecycle][profile-lifecycle] owns the detailed migration, quarantine, worker, and live-ingestion paths.
 

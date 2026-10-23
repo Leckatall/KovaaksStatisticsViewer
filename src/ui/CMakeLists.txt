@@ -103,65 +103,65 @@ qt_add_qml_module(ksv_ui
             qml/icons/settings.svg
             qml/icons/x.svg
         SOURCES
-            presentation/axis.h
-            presentation/value_axis.h
-            presentation/value_axis.cpp
-            presentation/date_time_axis.h
-            presentation/date_time_axis.cpp
-            presentation/value_transform.h
-            presentation/series_model.h
-            presentation/series_model.cpp
-            presentation/series_style.h
-            presentation/axis_policy.h
-            presentation/axis_policy.cpp
-            presentation/graph_vm_base.h
-            presentation/graph_vm.h
-            presentation/graph_vm.cpp
-            presentation/series_expression_editor_model.h
-            presentation/series_expression_editor_model.cpp
-            presentation/editable_expression_node.h
-            presentation/editable_expression_node.cpp
-            presentation/playtime_graph_vm.h
-            presentation/playtime_graph_vm.cpp
-            presentation/completion_history_vm.h
-            presentation/completion_history_vm.cpp
+            presentation/graphs/common/axes/axis.h
+            presentation/graphs/common/axes/value_axis.h
+            presentation/graphs/common/axes/value_axis.cpp
+            presentation/graphs/common/axes/date_time_axis.h
+            presentation/graphs/common/axes/date_time_axis.cpp
+            presentation/graphs/common/axes/value_transform.h
+            presentation/graphs/common/series/series_model.h
+            presentation/graphs/common/series/series_model.cpp
+            presentation/graphs/common/series/series_style.h
+            presentation/graphs/common/axes/axis_policy.h
+            presentation/graphs/common/axes/axis_policy.cpp
+            presentation/graphs/common/graph_vm_base.h
+            presentation/graphs/graph_vm.h
+            presentation/graphs/graph_vm.cpp
+            presentation/expression/series_expression_editor_model.h
+            presentation/expression/series_expression_editor_model.cpp
+            presentation/expression/editable_expression_node.h
+            presentation/expression/editable_expression_node.cpp
+            presentation/graphs/playtime_graph_vm.h
+            presentation/graphs/playtime_graph_vm.cpp
+            presentation/graphs/completion_history_vm.h
+            presentation/graphs/completion_history_vm.cpp
         components/graph_canvas.h
         components/graph_canvas.cpp
         components/axis_painter.h
         components/axis_painter.cpp
         components/series_painter.h
         components/series_painter.cpp
-            presentation/monotone_spline.h
-            presentation/session_vm.h
-            presentation/session_vm.cpp
-            presentation/settings_vm.h
-            presentation/settings_vm.cpp
-            presentation/benchmark_issue_text.h
-            presentation/benchmark_issue_text.cpp
-            presentation/benchmark_format.h
-            presentation/benchmark_format.cpp
-            presentation/benchmark_manager_vm.h
-            presentation/benchmark_manager_vm.cpp
-            presentation/benchmark_table_model.h
-            presentation/benchmark_table_model.cpp
-            presentation/benchmark_cell_input.h
-            presentation/benchmark_cell_input.cpp
-            presentation/benchmark_clipboard_matrix.h
-            presentation/benchmark_clipboard_matrix.cpp
-            presentation/benchmark_clipboard_adapter.h
-            presentation/benchmark_clipboard_adapter.cpp
-            presentation/benchmark_history_vm.h
-            presentation/benchmark_history_vm.cpp
-            presentation/benchmark_progress_grid_model.h
-            presentation/benchmark_progress_grid_model.cpp
-            presentation/benchmark_tracking_vm.h
-            presentation/benchmark_tracking_vm.cpp
-            presentation/scenario_list_model.h
-            presentation/scenario_list_model.cpp
-            presentation/run_list_model.h
-            presentation/run_list_model.cpp
-            presentation/scenario_browser_vm.h
-            presentation/scenario_browser_vm.cpp
+            presentation/graphs/common/series/monotone_spline.h
+            presentation/app/session_vm.h
+            presentation/app/session_vm.cpp
+            presentation/app/settings_vm.h
+            presentation/app/settings_vm.cpp
+            presentation/benchmarks/manager/benchmark_issue_text.h
+            presentation/benchmarks/manager/benchmark_issue_text.cpp
+            presentation/benchmarks/benchmark_format.h
+            presentation/benchmarks/benchmark_format.cpp
+            presentation/benchmarks/manager/benchmark_manager_vm.h
+            presentation/benchmarks/manager/benchmark_manager_vm.cpp
+            presentation/benchmarks/manager/benchmark_table_model.h
+            presentation/benchmarks/manager/benchmark_table_model.cpp
+            presentation/benchmarks/manager/benchmark_cell_input.h
+            presentation/benchmarks/manager/benchmark_cell_input.cpp
+            presentation/benchmarks/manager/benchmark_clipboard_matrix.h
+            presentation/benchmarks/manager/benchmark_clipboard_matrix.cpp
+            presentation/benchmarks/manager/benchmark_clipboard_adapter.h
+            presentation/benchmarks/manager/benchmark_clipboard_adapter.cpp
+            presentation/benchmarks/tracking/benchmark_history_vm.h
+            presentation/benchmarks/tracking/benchmark_history_vm.cpp
+            presentation/benchmarks/tracking/benchmark_progress_grid_model.h
+            presentation/benchmarks/tracking/benchmark_progress_grid_model.cpp
+            presentation/benchmarks/tracking/benchmark_tracking_vm.h
+            presentation/benchmarks/tracking/benchmark_tracking_vm.cpp
+            presentation/scenarios/scenario_list_model.h
+            presentation/scenarios/scenario_list_model.cpp
+            presentation/scenarios/run_list_model.h
+            presentation/scenarios/run_list_model.cpp
+            presentation/scenarios/scenario_browser_vm.h
+            presentation/scenarios/scenario_browser_vm.cpp
         DEPENDENCIES QtCore
 )
 
@@ -169,6 +169,14 @@ qt_add_qml_module(ksv_ui
 
 target_include_directories(ksv_ui PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/presentation
         ${CMAKE_CURRENT_SOURCE_DIR}/components
+)
+
+# qmltyperegistrar includes each QML_ELEMENT header by bare filename behind __has_include, so a header
+# missing from the include path drops its type from registration without any diagnostic. Every directory
+# holding a QML_ELEMENT header must be listed here.
+target_include_directories(ksv_ui PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/presentation/benchmarks/manager
+        ${CMAKE_CURRENT_SOURCE_DIR}/presentation/expression
+        ${CMAKE_CURRENT_SOURCE_DIR}/presentation/scenarios
 )

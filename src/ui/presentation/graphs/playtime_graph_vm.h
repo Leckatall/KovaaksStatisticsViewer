@@ -1,0 +1,83 @@
+//
+// Created by Lecka on 08/08/2026.
+//
+
+#ifndef KOVAAKSSTATSVIEWER_PLAYTIME_GRAPH_VM_H
+#define KOVAAKSSTATSVIEWER_PLAYTIME_GRAPH_VM_H
+
+#include <QList>
+#include <QPointF>
+#include <memory>
+#include <qqmlintegration.h>
+
+#include "presentation/graphs/common/axes/axis_policy.h"
+#include "presentation/graphs/common/axes/date_time_axis.h"
+#include "presentation/graphs/common/graph_vm_base.h"
+#include "app/contracts/i_playtime_graph_use_case.h"
+
+namespace ksv::presentation {
+    // Calendar-date vs rolling-average playtime. Adapts IPlaytimeGraphUseCase output for GraphCanvas.
+    class PlaytimeGraphViewModel : public GraphViewModelBase {
+        Q_OBJECT
+        // False when there is no playtime to plot; the panel then shows an empty state, not axes.
+        Q_PROPERTY(bool hasData READ hasData NOTIFY dataUpdated)
+        // Whether the unfiltered history has any playtime, whatever the range shows.
+        Q_PROPERTY(bool historyAvailable READ historyAvailable NOTIFY dataUpdated)
+        Q_PROPERTY(int visibleSampleCount READ visibleSampleCount NOTIFY dataUpdated)
+        // History exists but the range shows no sample.
+        Q_PROPERTY(bool noObservationsInRange READ noObservationsInRange NOTIFY dataUpdated)
+        Q_PROPERTY(QString emptyStateText READ emptyStateText NOTIFY dataUpdated)
+        // Names the effective averaging window, so it can never describe a different one than is plotted.
+        Q_PROPERTY(QString title READ title NOTIFY windowChanged)
+        Q_PROPERTY(int averagingWindowDays READ averagingWindowDays NOTIFY windowChanged)
+
+    public:
+        // Column ids for the two axes; Playtime is the only drawn series.
+        enum Column { Date = 0, Playtime = 1 };
+        Q_ENUM(Column)
+
+        explicit PlaytimeGraphViewModel(std::shared_ptr<application::IPlaytimeGraphUseCase> useCase,
+                                        QObject *parent = nullptr);
+
+        [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override {
+            QList<SeriesModel *> result;
+            for (const int c: columns) if (c == Playtime) result.append(m_series);
+            return result;
+        }
+        [[nodiscard]] const Axis &xAxis() const override { return m_xAxis; }
+
+        [[nodiscard]] int yAxisColumn() const override { return Playtime; }
+
+        [[nodiscard]] bool hasData() const { return !m_series->points.isEmpty(); }
+        [[nodiscard]] bool historyAvailable() const { return m_historyAvailable; }
+        [[nodiscard]] int visibleSampleCount() const { return static_cast<int>(m_series->points.size()); }
+        [[nodiscard]] bool noObservationsInRange() const { return m_historyAvailable && m_series->points.isEmpty(); }
+        [[nodiscard]] QString emptyStateText() const;
+        [[nodiscard]] QString title() const;
+        // Also titles the benchmark playtime card, so the two playtime graphs never word it differently.
+        [[nodiscard]] static QString titleFor(int windowDays);
+        [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
+
+        // Takes the "playtime" policy, in minutes; an absent key means the default. Kept across refreshes.
+        void setAxisPolicies(const AxisPolicyMap &policies);
+
+    public slots:
+        // Re-reads the use case; it also runs on the use case's own change notifications.
+        void refresh();
+
+    signals:
+        void windowChanged();
+
+    private:
+        void applyPresentation();
+
+        std::shared_ptr<application::IPlaytimeGraphUseCase> m_useCase;
+        int m_windowDays = application::kDefaultAveragingWindowDays;
+        application::AxisPolicy m_axisPolicy;
+        DateTimeAxis m_xAxis;
+        bool m_historyAvailable = false;
+        SeriesModel *m_series; // raw seconds + a seconds->minutes transform
+    };
+}
+
+#endif //KOVAAKSSTATSVIEWER_PLAYTIME_GRAPH_VM_H
