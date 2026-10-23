@@ -251,10 +251,11 @@ TestCase {
         compare(frame.visible, true)
         compare(ItemLookup.findByObjectName(dialog.contentItem, "profileIssuesHeader").text,
                 "2 source files could not be imported")
-        const label = ItemLookup.findByObjectName(dialog.contentItem, "profileIssueLabel")
-        tryVerify(() => label !== null && label.text !== "")
-        verify(label.text.startsWith("broken.perf: "), label.text)
-        verify(label.text.indexOf("C:/a/b") < 0, label.text)
+        const text = ItemLookup.findByObjectName(dialog.contentItem, "profileIssueText")
+        tryVerify(() => text !== null && text.text !== "")
+        compare(text.text, "broken.perf: Incomplete file\nold.perf: Unreadable")
+        compare(text.readOnly, true)
+        compare(text.selectByMouse, true)
     }
 
     function test_openProfile_selectsTheProfilePageAndShowsTheDialog() {

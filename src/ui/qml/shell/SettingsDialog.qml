@@ -425,28 +425,22 @@ ApplicationWindow {
                                 text: profilePage.issues.length === 1 ? qsTr("1 source file could not be imported")
                                     : qsTr("%1 source files could not be imported").arg(profilePage.issues.length)
                             }
-                            ListView {
-                                id: issueList
-                                objectName: "profileIssueList"
+                            ScrollView {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: Math.min(contentHeight, 160)
-                                clip: true
-                                model: profilePage.issues
-                                ScrollBar.vertical: ScrollBar {}
-                                delegate: Label {
-                                    id: issueDelegate
-                                    required property var modelData
-                                    objectName: "profileIssueLabel"
-                                    width: issueList.width
-                                    elide: Text.ElideMiddle
-                                    maximumLineCount: 1
-                                    readonly property string fileName: (modelData.path || "").split(/[\\/]/).pop()
-                                    text: fileName === "" ? modelData.message
-                                        : qsTr("%1: %2").arg(fileName).arg(modelData.message)
-                                    HoverHandler { id: issueHover }
-                                    ToolTip.visible: issueHover.hovered && modelData.path !== ""
-                                    ToolTip.text: modelData.path
-                                    ToolTip.delay: 500
+                                Layout.preferredHeight: Math.min(issueText.implicitHeight, 160)
+                                TextArea {
+                                    id: issueText
+                                    objectName: "profileIssueText"
+                                    readOnly: true
+                                    selectByMouse: true
+                                    wrapMode: TextEdit.NoWrap
+                                    padding: 0
+                                    background: null
+                                    text: profilePage.issues.map(issue => {
+                                        const fileName = (issue.path || "").split(/[\\/]/).pop()
+                                        return fileName === "" ? issue.message
+                                            : qsTr("%1: %2").arg(fileName).arg(issue.message)
+                                    }).join("\n")
                                 }
                             }
                         }
