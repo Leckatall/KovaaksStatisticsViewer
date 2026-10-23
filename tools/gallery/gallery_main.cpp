@@ -71,6 +71,8 @@ int main(int argc, char *argv[]) {
     const QVariantList datasetPaths = createDatasetProfiles(tmp.path());
     if (datasetPaths.size() != static_cast<int>(gallery::kDatasetNames.size())) return -1;
 
+    // An empty folder is invalid and would put the invalid-folder banner over every gallery view.
+    if (!QDir(tmp.path()).mkpath("FPSAimTrainer/performances")) return -1;
     auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
     settings->setKovaaksDirs({tmp.path().toStdString()});
     settings->setProfilePath(datasetPaths.front().toUrl().toLocalFile().toStdString());

@@ -42,6 +42,7 @@
 #include "settings_service.h"
 
 #include "integration_env.h"
+#include "kovaaks_dir.h"
 #include "profile_seeding.h"
 
 using namespace ksv;
@@ -769,10 +770,10 @@ namespace {
         EXPECT_EQ(browser->activeScenarioHash().toStdString(), other.hash);
     }
 
-    // before a folder is configured exactly one call to choose it is shown --
+    // while the Kovaaks folder is invalid exactly one call to choose it is shown --
     // the Scenarios workspace's full welcome when nothing has been imported, or the
-    // banner when runs are already there (e.g. from the default Steam path) -- and it
-    // opens the folder dialog; choosing a folder dismisses both.
+    // banner when runs are already there (e.g. from an existing profile) -- and it
+    // opens the folder dialog; choosing a valid folder dismisses both.
     TEST(FirstRunUiTest, FolderPromptOpensFolderDialogAndHidesAfterDirectorySelection) {
         QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         raw.remove("file/kovaaks");
@@ -782,6 +783,7 @@ namespace {
         QTemporaryDir tempDir;
         ASSERT_TRUE(tempDir.isValid());
         const auto settings = std::make_shared<qt_data::SettingsService>(QSettings::IniFormat);
+        settings->setFallbackKovaaksDir(QDir(tempDir.path()).filePath("no-kovaaks-install").toStdString());
         settings->setProfilePath(QDir(tempDir.path()).filePath("profile.pb").toStdString());
         const auto graphConfigurationPersistence = std::make_shared<qt_data::GraphConfigurationPersistence>(settings);
         QTemporaryDir benchmarksDir;
@@ -793,7 +795,7 @@ namespace {
         ASSERT_EQ(app.start(), 0) << "Main.qml failed to load";
 
         auto *root = app.engine()->rootObjects().first();
-        auto *banner = root->findChild<QObject *>("firstRunBanner");
+        auto *banner = root->findChild<QObject *>("invalidKovaaksDirBanner");
         auto *welcome = root->findChild<QObject *>("firstRunWelcome");
         auto *dialog = root->findChild<QObject *>("kovaaksFolderDialog");
         ASSERT_NE(banner, nullptr);
@@ -809,7 +811,10 @@ namespace {
         ASSERT_TRUE(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 3000));
         dialog->setProperty("visible", false);
 
-        app.settingsVm()->setKovaaksDir(QUrl::fromLocalFile("D:/Kovaaks"));
+        tests_support::KovaaksDir kovaaks;
+        ASSERT_TRUE(kovaaks.valid());
+        ASSERT_TRUE(kovaaks.makeStatsDir());
+        app.settingsVm()->setKovaaksDir(QUrl::fromLocalFile(kovaaks.root()));
 
         EXPECT_TRUE(QTest::qWaitFor([&] {
             return !banner->property("visible").toBool() && !welcome->property("visible").toBool();

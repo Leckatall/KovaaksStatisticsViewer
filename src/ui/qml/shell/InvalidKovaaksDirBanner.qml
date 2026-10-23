@@ -13,13 +13,13 @@ Frame {
 
         Label {
             Layout.fillWidth: true
-            text: "Choose your Kovaaks folder to start viewing your statistics."
+            text: qsTr("Your current Kovaaks directory is invalid. Please change it.")
             wrapMode: Text.Wrap
         }
 
         Button {
             objectName: "chooseKovaaksFolderButton"
-            text: "Choose Kovaaks Folder..."
+            text: qsTr("Choose Kovaaks Folder...")
             onClicked: root.chooseFolderRequested()
         }
     }

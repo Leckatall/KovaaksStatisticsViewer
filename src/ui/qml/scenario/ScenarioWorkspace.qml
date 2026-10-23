@@ -12,13 +12,13 @@ Item {
     required property var scenarioBrowserVm
     required property var visualSettings
     property var settingsVm: null
-    // Whether a Kovaaks folder has been configured (SettingsViewModel.kovaaksDirSet).
-    property bool kovaaksFolderSet: true
+    // Whether every configured Kovaaks folder is usable (SettingsViewModel.kovaaksDirValid).
+    property bool kovaaksFolderValid: true
 
-    // First run: no folder configured and nothing imported (e.g. from an existing
-    // profile or the default Steam path). The workspace then shows a welcome with
-    // choosing the folder as its one action instead of a screen of empty graphs.
-    readonly property bool welcomeVisible: !kovaaksFolderSet && !scenarioBrowserVm.hasScenarios
+    // First run: no usable folder and nothing imported (e.g. from an existing
+    // profile). The workspace then shows a welcome with choosing the folder as its
+    // one action instead of a screen of empty graphs.
+    readonly property bool welcomeVisible: !kovaaksFolderValid && !scenarioBrowserVm.hasScenarios
 
     signal configureGraphLinesRequested()
     signal moreGraphSettingsRequested(string graphKey)

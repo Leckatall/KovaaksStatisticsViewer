@@ -12,6 +12,7 @@
 #include <QSignalSpy>
 
 #include "settings_vm.h"
+#include "fake_file_service.h"
 #include "fake_graph_configuration_use_case.h"
 #include "fake_profile_service.h"
 #include "fake_settings_service.h"
@@ -29,6 +30,7 @@ namespace {
             service->profile_path = "C:/Profile/profile.pb";
             return service;
         }();
+        std::shared_ptr<FakeFileService> files = std::make_shared<FakeFileService>();
         std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
         std::shared_ptr<FakeGraphConfigurationUseCase> configuration =
             std::make_shared<FakeGraphConfigurationUseCase>();
@@ -44,7 +46,7 @@ namespace {
         }
 
         std::unique_ptr<SettingsViewModel> make(const QLocale &locale = english()) {
-            auto view_model = std::make_unique<SettingsViewModel>(settings, profile, configuration);
+            auto view_model = std::make_unique<SettingsViewModel>(settings, files, profile, configuration);
             view_model->setLocale(locale);
             return view_model;
         }

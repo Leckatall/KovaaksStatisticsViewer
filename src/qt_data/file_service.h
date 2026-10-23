@@ -36,6 +36,7 @@ namespace ksv::qt_data {
         [[nodiscard]] domain::Run getPerfFromFile(std::string_view filename) const override;
         [[nodiscard]] std::optional<data::ParsedStatsCsv> getStatsFromFile(const std::filesystem::path &path) const override;
         [[nodiscard]] std::vector<std::string> sourceRoots() const override;
+        [[nodiscard]] bool hasValidSourceRoots() const override;
 
         void onSourcesChanged(std::function<void()> callback) override {
             m_source_callbacks.push_back(std::move(callback));

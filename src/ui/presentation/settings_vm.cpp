@@ -214,10 +214,12 @@ namespace ksv::presentation {
 
     SettingsViewModel::SettingsViewModel(
         std::shared_ptr<application::ISettingsService> settings_service,
+        std::shared_ptr<application::IFileService> file_service,
         std::shared_ptr<application::IProfileService> profile_service,
         std::shared_ptr<application::IGraphConfigurationUseCase> configuration,
         QObject *parent) : QObject(parent),
                            m_settings_service(std::move(settings_service)),
+                           m_file_service(std::move(file_service)),
                            m_profile_service(std::move(profile_service)),
                            m_configuration(std::move(configuration)),
                            m_kovaaks_dir([&] {

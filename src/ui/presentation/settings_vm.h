@@ -16,6 +16,7 @@
 #include <QtCore>
 #include <QColor>
 
+#include "data/interfaces/i_file_service.h"
 #include "data/interfaces/i_profile_service.h"
 #include "data/interfaces/i_settings_service.h"
 #include "app/contracts/i_graph_configuration_use_case.h"
@@ -33,7 +34,8 @@ namespace ksv::presentation {
     class SettingsViewModel : public QObject {
         Q_OBJECT
         Q_PROPERTY(QUrl kovaaksDir READ getKovaaksDir WRITE setKovaaksDir NOTIFY kovaaksDirChanged)
-        Q_PROPERTY(bool kovaaksDirSet READ isKovaaksDirSet NOTIFY kovaaksDirChanged)
+        // Re-checked only when the directory is set here, not when the filesystem changes underneath it.
+        Q_PROPERTY(bool kovaaksDirValid READ isKovaaksDirValid NOTIFY kovaaksDirChanged)
         Q_PROPERTY(QUrl profilePath READ getProfilePath WRITE setProfilePath NOTIFY profilePathChanged)
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
         Q_PROPERTY(QVariantList allSeriesConfigs READ getAllSeriesConfigs NOTIFY seriesConfigurationChanged)
@@ -52,12 +54,13 @@ namespace ksv::presentation {
 
     public:
         explicit SettingsViewModel(std::shared_ptr<application::ISettingsService> settings_service,
+                                   std::shared_ptr<application::IFileService> file_service,
                                    std::shared_ptr<application::IProfileService> profile_service,
                                    std::shared_ptr<application::IGraphConfigurationUseCase> configuration,
                                    QObject *parent = nullptr);
 
         Q_INVOKABLE [[nodiscard]] QUrl getKovaaksDir() const { return m_kovaaks_dir; }
-        [[nodiscard]] bool isKovaaksDirSet() const { return m_settings_service->isKovaaksDirSet(); }
+        [[nodiscard]] bool isKovaaksDirValid() const { return m_file_service->hasValidSourceRoots(); }
 
         Q_INVOKABLE void setKovaaksDir(const QUrl &dir);
 
@@ -228,6 +231,7 @@ namespace ksv::presentation {
         void revalidateDraft();
 
         std::shared_ptr<application::ISettingsService> m_settings_service;
+        std::shared_ptr<application::IFileService> m_file_service;
         std::shared_ptr<application::IProfileService> m_profile_service;
         std::shared_ptr<application::IGraphConfigurationUseCase> m_configuration;
         QUrl m_kovaaks_dir;

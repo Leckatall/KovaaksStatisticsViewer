@@ -5,16 +5,16 @@ import "ItemLookup.js" as ItemLookup
 
 TestCase {
     id: testCase
-    name: "FirstRunBannerTest"
+    name: "InvalidKovaaksDirBannerTest"
 
     Component {
         id: bannerComponent
-        FirstRunBanner {}
+        InvalidKovaaksDirBanner {}
     }
 
     function test_chooseFolderRequested_emittedWhenButtonClicked() {
         const banner = createTemporaryObject(bannerComponent, testCase)
-        verify(banner !== null, "FirstRunBanner failed to instantiate")
+        verify(banner !== null, "InvalidKovaaksDirBanner failed to instantiate")
 
         let emitted = 0
         banner.chooseFolderRequested.connect(() => emitted++)

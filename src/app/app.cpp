@@ -128,7 +128,7 @@ namespace ksv::application {
 
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
         m_settingsVm = new presentation::SettingsViewModel(
-            m_settingsService, m_profileService, m_graphConfigurationUseCase, this);
+            m_settingsService, m_fileService, m_profileService, m_graphConfigurationUseCase, this);
         m_scenarioBrowserUseCase = std::make_shared<ScenarioBrowserUseCase>(m_sessionController, m_profileService);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_scenarioBrowserUseCase, this);
 

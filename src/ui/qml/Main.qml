@@ -72,7 +72,7 @@ ApplicationWindow {
         historyVm: root.historyVm
         visualSettings: visualSettings
         profileImportBusy: root.sessionVm.profileImportBusy === true
-        profileRefreshAvailable: root.settingsVm.kovaaksDirSet === true
+        profileRefreshAvailable: root.settingsVm.kovaaksDirValid === true
         onRefreshProfileRequested: root.sessionVm.refreshProfile()
         onSetSourceDirRequested: folderDialog.open()
         onSettingsRequested: settingsDialog.open()
@@ -92,13 +92,13 @@ ApplicationWindow {
     ColumnLayout {
         anchors.fill: parent
 
-        FirstRunBanner {
-            objectName: "firstRunBanner"
+        InvalidKovaaksDirBanner {
+            objectName: "invalidKovaaksDirBanner"
             Layout.fillWidth: true
             // While the Scenarios workspace shows its full first-run welcome the
             // banner would only repeat it (and would shift the tab bar when switching
-            // tabs); it remains for a folder-less setup that still has runs to show.
-            visible: !root.settingsVm.kovaaksDirSet && !scenarioWorkspace.welcomeVisible
+            // tabs); it remains for an invalid folder that still has runs to show.
+            visible: !root.settingsVm.kovaaksDirValid && !scenarioWorkspace.welcomeVisible
             onChooseFolderRequested: folderDialog.open()
         }
 
@@ -200,7 +200,7 @@ ApplicationWindow {
             ScenarioWorkspace {
                 id: scenarioWorkspace
                 objectName: "scenarioWorkspace"
-                kovaaksFolderSet: root.settingsVm.kovaaksDirSet
+                kovaaksFolderValid: root.settingsVm.kovaaksDirValid
                 onChooseKovaaksFolderRequested: folderDialog.open()
                 graphVm: root.graphVm
                 playtimeVm: root.playtimeVm

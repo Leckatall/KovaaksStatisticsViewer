@@ -11,6 +11,7 @@
 #include "app/contracts/expression_dsl.h"
 #include "settings_vm.h"
 #include "series_expression_editor_model.h"
+#include "fake_file_service.h"
 #include "fake_graph_configuration_use_case.h"
 #include "fake_profile_service.h"
 #include "fake_settings_service.h"
@@ -29,12 +30,13 @@ namespace {
             settings->profile_path = "C:/Profile/profile.pb";
             return settings;
         }();
+        std::shared_ptr<FakeFileService> fake_file_service = std::make_shared<FakeFileService>();
         std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
         std::shared_ptr<FakeGraphConfigurationUseCase> configuration =
             std::make_shared<FakeGraphConfigurationUseCase>();
 
         std::unique_ptr<SettingsViewModel> make_view_model() {
-            return std::make_unique<SettingsViewModel>(fake_service, fake_profile_service, configuration);
+            return std::make_unique<SettingsViewModel>(fake_service, fake_file_service, fake_profile_service, configuration);
         }
 
         static QVariantMap row(const SettingsViewModel &viewModel, const QString &id) {
@@ -101,11 +103,11 @@ namespace {
         EXPECT_EQ(spy.count(), 0);
     }
 
-    TEST_F(SettingsViewModelTest, KovaaksDirSetReflectsServiceValueAtConstruction) {
-        fake_service->dirs.clear();
+    TEST_F(SettingsViewModelTest, KovaaksDirValidReflectsTheFileService) {
+        fake_file_service->source_roots_valid = false;
         const auto view_model = make_view_model();
 
-        EXPECT_FALSE(view_model->isKovaaksDirSet());
+        EXPECT_FALSE(view_model->isKovaaksDirValid());
     }
 
     TEST_F(SettingsViewModelTest, SetKovaaksDirPreservesAdditionalDirectories) {
@@ -117,15 +119,16 @@ namespace {
         EXPECT_EQ(fake_service->dirs, (std::vector<std::string>{"E:/Replacement", "D:/Secondary"}));
     }
 
-    TEST_F(SettingsViewModelTest, KovaaksDirSetBecomesTrueAfterSetKovaaksDir) {
-        fake_service->dirs.clear();
+    TEST_F(SettingsViewModelTest, SettingAValidKovaaksDirNotifiesThatValidityChanged) {
+        fake_file_service->source_roots_valid = false;
         const auto view_model = make_view_model();
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::kovaaksDirChanged);
 
+        fake_file_service->source_roots_valid = true;
         view_model->setKovaaksDir(QUrl::fromLocalFile("D:/NewDir"));
 
         EXPECT_EQ(spy.count(), 1);
-        EXPECT_TRUE(view_model->isKovaaksDirSet());
+        EXPECT_TRUE(view_model->isKovaaksDirValid());
     }
 
     TEST_F(SettingsViewModelTest, SetProfilePathUpdatesSettingsServiceAndEmitsOnChange) {

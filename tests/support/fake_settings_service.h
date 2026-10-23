@@ -20,7 +20,6 @@ namespace ksv::tests_support {
         int document_writes = 0;
 
         [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override { return dirs; }
-        [[nodiscard]] bool isKovaaksDirSet() const override { return !dirs.empty(); }
 
         void setKovaaksDirs(const std::vector<std::string> &new_dirs) override {
             dirs = new_dirs;

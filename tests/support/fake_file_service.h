@@ -30,6 +30,7 @@ namespace ksv::tests_support {
         std::set<std::size_t> throw_for_indices;
         std::set<std::string> paths_to_throw_for;
         std::vector<std::string> source_roots{"fake/kovaaks"};
+        bool source_roots_valid = true;
         // Keyed by absolutePath(); scanSources() stamps unlisted files {0, 0}.
         std::unordered_map<std::string, std::pair<std::int64_t, std::int64_t>> fingerprints;
         bool gate_scan = false;
@@ -83,6 +84,7 @@ namespace ksv::tests_support {
         }
 
         [[nodiscard]] std::vector<std::string> sourceRoots() const override { return source_roots; }
+        [[nodiscard]] bool hasValidSourceRoots() const override { return source_roots_valid; }
 
         void onSourcesChanged(std::function<void()> callback) override {
             source_callbacks.push_back(std::move(callback));

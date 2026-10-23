@@ -32,7 +32,7 @@ TestCase {
     QtObject {
         id: fakeSettingsVm
         property string kovaaksDir: ""
-        property bool kovaaksDirSet: true
+        property bool kovaaksDirValid: true
         property var setKovaaksDir: function () {}
     }
 
@@ -75,7 +75,7 @@ TestCase {
 
     function cleanup() {
         fakeSessionVm.refreshCalls = 0
-        fakeSettingsVm.kovaaksDirSet = true
+        fakeSettingsVm.kovaaksDirValid = true
         fakeScenarioBrowserVm.hasScenarios = true
     }
 
@@ -334,7 +334,7 @@ TestCase {
     }
 
     function test_firstRunWithNothingImportedShowsOnlyTheWelcome() {
-        fakeSettingsVm.kovaaksDirSet = false
+        fakeSettingsVm.kovaaksDirValid = false
         fakeScenarioBrowserVm.hasScenarios = false
         const win = createMain()
 
@@ -353,7 +353,7 @@ TestCase {
         }
         verify(!isShown(ItemLookup.findByObjectName(workspace, "scenarioSearchPanel")),
                "the empty scenario list must not be shown behind the welcome")
-        verify(!find(win, "firstRunBanner").visible,
+        verify(!find(win, "invalidKovaaksDirBanner").visible,
                "the banner would only repeat the welcome")
 
         welcomeSpy.target = workspace
@@ -366,11 +366,11 @@ TestCase {
         signalName: "chooseKovaaksFolderRequested"
     }
 
-    function test_firstRunBannerHidesOnTheBenchmarksTabToo() {
-        fakeSettingsVm.kovaaksDirSet = false
+    function test_invalidFolderBannerHidesOnTheBenchmarksTabToo() {
+        fakeSettingsVm.kovaaksDirValid = false
         fakeScenarioBrowserVm.hasScenarios = false
         const win = createMain()
-        const banner = find(win, "firstRunBanner")
+        const banner = find(win, "invalidKovaaksDirBanner")
         const barYOnScenarios = tabBar(win).y
 
         tabBar(win).currentIndex = 1
@@ -379,23 +379,23 @@ TestCase {
         compare(tabBar(win).y, barYOnScenarios, "switching tabs must not move the tab bar")
     }
 
-    function test_folderNotSetButRunsAvailableShowsWorkspaceAndBanner() {
-        fakeSettingsVm.kovaaksDirSet = false
+    function test_invalidFolderWithRunsShowsWorkspaceAndBanner() {
+        fakeSettingsVm.kovaaksDirValid = false
         fakeScenarioBrowserVm.hasScenarios = true
         const win = createMain()
 
         verify(!isShown(find(win, "firstRunWelcome")), "imported runs must not be hidden behind the welcome")
         verify(isShown(ItemLookup.findByObjectName(find(win, "scenarioWorkspace"), "scenarioSearchPanel")))
-        verify(find(win, "firstRunBanner").visible, "the banner still asks for the folder")
+        verify(find(win, "invalidKovaaksDirBanner").visible, "the banner reports the invalid folder")
     }
 
-    function test_configuredFolderShowsTheWorkspaceWithoutWelcomeOrBanner() {
-        fakeSettingsVm.kovaaksDirSet = true
+    function test_validFolderShowsTheWorkspaceWithoutWelcomeOrBanner() {
+        fakeSettingsVm.kovaaksDirValid = true
         fakeScenarioBrowserVm.hasScenarios = false
         const win = createMain()
 
         verify(!isShown(find(win, "firstRunWelcome")))
-        verify(!find(win, "firstRunBanner").visible)
+        verify(!find(win, "invalidKovaaksDirBanner").visible)
         verify(isShown(ItemLookup.findByObjectName(find(win, "scenarioWorkspace"), "scenarioSearchPanel")))
     }
 }

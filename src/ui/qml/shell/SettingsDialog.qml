@@ -390,7 +390,7 @@ ApplicationWindow {
                         Button {
                             objectName: "refreshProfileButton"
                             text: qsTr("Refresh Profile")
-                            enabled: root.settingsVm.kovaaksDirSet === true && !root.sessionVm.profileImportBusy
+                            enabled: root.settingsVm.kovaaksDirValid === true && !root.sessionVm.profileImportBusy
                             onClicked: root.sessionVm.refreshProfile()
                         }
                         Button {

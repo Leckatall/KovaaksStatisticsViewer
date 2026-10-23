@@ -17,7 +17,6 @@ namespace ksv::qt_data {
         public:
         explicit SettingsService(QSettings::Format format = QSettings::IniFormat, QObject *parent = nullptr);
         [[nodiscard]] std::vector<std::string> getKovaaksDirs() const override;
-        [[nodiscard]] bool isKovaaksDirSet() const override;
         void setKovaaksDirs(const std::vector<std::string> &dirs) override;
         [[nodiscard]] std::string getProfilePath() const override;
         void setProfilePath(const std::string &path) override;

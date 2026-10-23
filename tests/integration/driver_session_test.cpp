@@ -455,8 +455,9 @@ namespace {
         ASSERT_TRUE(apply("file/profilePath=D:/Sandbox/profile.pb").isEmpty());
         EXPECT_EQ(service.getProfilePath(), "D:/Sandbox/profile.pb");
 
+        service.setFallbackKovaaksDir("D:/Sandbox/fallback");
         ASSERT_TRUE(apply("file/kovaaksDirs=").isEmpty());
-        EXPECT_FALSE(service.isKovaaksDirSet());
+        EXPECT_EQ(service.getKovaaksDirs(), (std::vector<std::string>{"D:/Sandbox/fallback"}));
 
         EXPECT_FALSE(apply("file/kovaaksDirs=42").isEmpty());
         EXPECT_FALSE(apply("file/profilePath=[1]").isEmpty());

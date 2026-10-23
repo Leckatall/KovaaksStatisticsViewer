@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import KovaaksStatsViewer
 
-// What the Scenarios workspace shows before a Kovaaks folder is configured and
+// What the Scenarios workspace shows while no usable Kovaaks folder is configured and
 // nothing has been imported: a welcome whose one primary action is choosing the
 // folder, instead of a screen of empty graphs.
 Item {

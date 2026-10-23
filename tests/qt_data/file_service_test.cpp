@@ -117,6 +117,53 @@ namespace {
         EXPECT_TRUE(QTest::qWaitFor([&] { return invalidations > 0; }, 3000));
     }
 
+    TEST_F(FileServiceTest, SourceRootsAreValidWhenEveryRootHasAStatsDirectory) {
+        makeStatsDir();
+        const FileService service(settings_service, decoder);
+
+        EXPECT_TRUE(service.hasValidSourceRoots());
+    }
+
+    TEST_F(FileServiceTest, SourceRootsAreValidWithOnlyAPerformancesDirectory) {
+        makePerformancesDir();
+        const FileService service(settings_service, decoder);
+
+        EXPECT_TRUE(service.hasValidSourceRoots());
+    }
+
+    TEST_F(FileServiceTest, SourceRootsAreInvalidWithoutAnyKovaaksDirectory) {
+        const FileService service(settings_service, decoder);
+
+        EXPECT_FALSE(service.hasValidSourceRoots());
+    }
+
+    // Picking the inner FPSAimTrainer folder of the Steam install is an easy mistake:
+    // it holds stats/ directly rather than FPSAimTrainer/stats.
+    TEST_F(FileServiceTest, SourceRootsAreInvalidWhenTheInnerInstallFolderIsChosen) {
+        makeStatsDir();
+        settings_service->dirs = {QDir(kovaaks.root()).filePath("FPSAimTrainer").toStdString()};
+        const FileService service(settings_service, decoder);
+
+        EXPECT_FALSE(service.hasValidSourceRoots());
+    }
+
+    TEST_F(FileServiceTest, SourceRootsAreInvalidWhenAnyRootLacksKovaaksDirectories) {
+        makeStatsDir();
+        const ksv::tests_support::KovaaksDir second;
+        ASSERT_TRUE(second.valid());
+        settings_service->dirs = {kovaaks.root().toStdString(), second.root().toStdString()};
+        const FileService service(settings_service, decoder);
+
+        EXPECT_FALSE(service.hasValidSourceRoots());
+    }
+
+    TEST_F(FileServiceTest, SourceRootsAreInvalidWhenThereAreNone) {
+        settings_service->dirs.clear();
+        const FileService service(settings_service, decoder);
+
+        EXPECT_FALSE(service.hasValidSourceRoots());
+    }
+
     TEST_F(FileServiceTest, ListPerfFilesReturnsEmptyWhenPerformancesDirMissing) {
         // No FPSAimTrainer/performances subdirectory created.
         const FileService file_service(settings_service, decoder);

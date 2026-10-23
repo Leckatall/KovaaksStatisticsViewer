@@ -10,6 +10,11 @@
 #include <QDateTime>
 
 namespace ksv::qt_data {
+    namespace {
+        constexpr auto kPerformancesSubdir = "FPSAimTrainer/performances";
+        constexpr auto kStatsSubdir = "FPSAimTrainer/stats";
+    }
+
     FileService::FileService(std::shared_ptr<application::ISettingsService> settings_service,
         std::shared_ptr<application::IProtoDecoder> decoder, std::shared_ptr<data::IStatsCsvParser> stats_parser, QObject *parent): QObject(parent),
 m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)), m_stats_parser(std::move(stats_parser)){
@@ -30,8 +35,8 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)), 
         std::vector<PerfDir> result;
         for (const auto &root : sourceRoots()) {
             QDir directory(QString::fromStdString(root));
-            if (directory.cd("FPSAimTrainer/performances")) {
-                result.push_back({root, "FPSAimTrainer/performances", directory});
+            if (directory.cd(kPerformancesSubdir)) {
+                result.push_back({root, kPerformancesSubdir, directory});
             }
         }
         return result;
@@ -66,7 +71,7 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)), 
             }
             if (directory.exists()) directories.push_back(directory.absolutePath());
             const QDir install(QString::fromStdString(root));
-            for (const auto &subdir : {"FPSAimTrainer", "FPSAimTrainer/performances", "FPSAimTrainer/stats"}) {
+            for (const auto &subdir : {"FPSAimTrainer", kPerformancesSubdir, kStatsSubdir}) {
                 const QDir child(install.filePath(subdir));
                 if (child.exists()) directories.push_back(child.absolutePath());
             }
@@ -159,9 +164,9 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)), 
         std::vector<application::StatsFile> paths;
         for (const auto &root : sourceRoots()) {
             QDir directory(QString::fromStdString(root));
-            if (!directory.cd("FPSAimTrainer/stats")) continue;
+            if (!directory.cd(kStatsSubdir)) continue;
             for (const auto &file : directory.entryList({"*.csv"}, QDir::Files)) {
-                paths.push_back({root, "FPSAimTrainer/stats", file.toStdString()});
+                paths.push_back({root, kStatsSubdir, file.toStdString()});
             }
         }
         return paths;
@@ -175,13 +180,13 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)), 
                 scan.issues.push_back({root, "Source directory is unavailable or unreadable", true});
                 continue;
             }
-            const QDir perfs(directory.filePath("FPSAimTrainer/performances"));
-            const QDir csvs(directory.filePath("FPSAimTrainer/stats"));
+            const QDir perfs(directory.filePath(kPerformancesSubdir));
+            const QDir csvs(directory.filePath(kStatsSubdir));
             for (const auto &file : perfs.entryInfoList({"*.perf"}, QDir::Files))
-                scan.perfs.push_back({root, "FPSAimTrainer/performances", file.fileName().toStdString(),
+                scan.perfs.push_back({root, kPerformancesSubdir, file.fileName().toStdString(),
                     file.size(), file.lastModified().toMSecsSinceEpoch()});
             for (const auto &file : csvs.entryInfoList({"*.csv"}, QDir::Files))
-                scan.csvs.push_back({root, "FPSAimTrainer/stats", file.fileName().toStdString(),
+                scan.csvs.push_back({root, kStatsSubdir, file.fileName().toStdString(),
                     file.size(), file.lastModified().toMSecsSinceEpoch()});
             for (const auto &subdir : {perfs, csvs}) {
                 const QFileInfo info(subdir.absolutePath());
@@ -202,6 +207,14 @@ m_settings_service(std::move(settings_service)), m_decoder(std::move(decoder)), 
 
     std::vector<std::string> FileService::sourceRoots() const {
         return m_settings_service->getKovaaksDirs();
+    }
+
+    bool FileService::hasValidSourceRoots() const {
+        const auto roots = sourceRoots();
+        return !roots.empty() && std::ranges::all_of(roots, [](const std::string &root) {
+            const QDir directory(QString::fromStdString(root));
+            return directory.exists(kPerformancesSubdir) || directory.exists(kStatsSubdir);
+        });
     }
 
 }

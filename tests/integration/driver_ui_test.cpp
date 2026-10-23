@@ -98,6 +98,8 @@ namespace {
 
         [[nodiscard]] QString build() {
             if (!env.valid()) return "temp dir invalid";
+            // An empty folder is invalid, which swaps the workspace these tests drive for the welcome.
+            if (!env.makePerformancesDir()) return "could not create performances dir";
             app = std::make_unique<application::App>(
                 env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
                 env.statsParser, env.benchmarkStore, env.daySource);

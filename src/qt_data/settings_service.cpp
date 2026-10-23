@@ -58,11 +58,6 @@ namespace ksv::qt_data {
         return readDirListSetting("file/kovaaksDirs");
     }
 
-    bool SettingsService::isKovaaksDirSet() const {
-        const QMutexLocker locker(&m_settings_mutex);
-        return m_settings.contains("file/kovaaksDirs") || m_settings.contains("file/kovaaks");
-    }
-
     void SettingsService::setFallbackKovaaksDir(const std::string &dir) {
         const QMutexLocker locker(&m_settings_mutex);
         m_fallback_kovaaks_dir = dir;

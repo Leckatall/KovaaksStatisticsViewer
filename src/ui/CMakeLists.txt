@@ -85,7 +85,7 @@ qt_add_qml_module(ksv_ui
             qml/series/ExpressionEditorDialog.qml
             qml/shell/AboutDialog.qml
             qml/shell/DirectoryPickerRow.qml
-            qml/shell/FirstRunBanner.qml
+            qml/shell/InvalidKovaaksDirBanner.qml
             qml/shell/FirstRunWelcome.qml
         RESOURCES
             qml/icons/copy.svg

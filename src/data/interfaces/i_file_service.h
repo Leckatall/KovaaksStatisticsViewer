@@ -12,7 +12,7 @@
 
 #include "run.h"
 #include "app/contracts/profile_import.h"
-#include "interfaces/i_stats_csv_parser.h"
+#include "data/interfaces/i_stats_csv_parser.h"
 
 namespace ksv::application {
     struct PerfFile {
@@ -63,6 +63,8 @@ namespace ksv::application {
         [[nodiscard]] virtual std::optional<data::ParsedStatsCsv> getStatsFromFile(
             const std::filesystem::path &path) const = 0;
         [[nodiscard]] virtual std::vector<std::string> sourceRoots() const = 0;
+        // True when there is at least one root and every root holds a KovaaK's performances or stats directory.
+        [[nodiscard]] virtual bool hasValidSourceRoots() const = 0;
         virtual void onSourcesChanged(std::function<void()> callback) = 0;
         virtual void acknowledgeImport(const std::vector<std::string> &, const std::vector<std::string> &) {}
     };

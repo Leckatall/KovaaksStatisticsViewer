@@ -33,7 +33,6 @@ namespace {
 
         settings.setFallbackKovaaksDir("D:/Sandbox/no-kovaaks-install");
 
-        EXPECT_FALSE(settings.isKovaaksDirSet());
         EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{"D:/Sandbox/no-kovaaks-install"}));
         settings.setKovaaksDirs({"D:/Games/Configured"});
         EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{"D:/Games/Configured"}));
@@ -68,29 +67,6 @@ namespace {
         const SettingsService settings(QSettings::IniFormat);
 
         EXPECT_EQ(settings.getKovaaksDirs(), (std::vector<std::string>{"D:/Current"}));
-    }
-
-    TEST_F(SettingsServiceTest, IsKovaaksDirSetFalseWhenNeverConfigured) {
-        const SettingsService settings(QSettings::IniFormat);
-
-        EXPECT_FALSE(settings.isKovaaksDirSet());
-    }
-
-    TEST_F(SettingsServiceTest, IsKovaaksDirSetTrueAfterSetKovaaksDir) {
-        SettingsService settings(QSettings::IniFormat);
-
-        settings.setKovaaksDirs({"D:/Games/FPSAimTrainer"});
-
-        EXPECT_TRUE(settings.isKovaaksDirSet());
-    }
-
-    TEST_F(SettingsServiceTest, IsKovaaksDirSetTrueForLegacyKey) {
-        QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
-        raw.setValue("file/kovaaks", QUrl::fromLocalFile("C:/Legacy"));
-
-        const SettingsService settings(QSettings::IniFormat);
-
-        EXPECT_TRUE(settings.isKovaaksDirSet());
     }
 
     TEST_F(SettingsServiceTest, ReturnsAppDataProfileFileForProfilePathWhenUnset) {
