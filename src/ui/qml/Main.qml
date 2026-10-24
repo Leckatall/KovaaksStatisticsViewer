@@ -14,10 +14,7 @@ ApplicationWindow {
 
     visible: true
     title: "Kovaaks Stats Viewer"
-    // The app's accent, propagated to every control and popup below. The dark
-    // scheme itself is pinned in main.cpp, not here.
-    palette.accent: "#00BCD4"
-    palette.highlight: "#00838F"
+    palette: Theme.palette
 
     VisualSettingsManager {
         id: visualSettings

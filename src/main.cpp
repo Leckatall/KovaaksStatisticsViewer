@@ -17,8 +17,8 @@ int main(int argc, char *argv[]) {
     ksv::declare_metatypes();
     QQuickStyle::setStyle("Fusion");
     QGuiApplication qapp(argc, argv);
-    // Fusion takes its colours from the system palette; pin the scheme so the app
-    // stays dark regardless of the OS light/dark setting. Needs the QGuiApplication.
+    // The app's own windows take their colours from Theme.palette; the scheme still drives
+    // the native title bars and file/message/colour dialogs. Needs the QGuiApplication.
     QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
     QCoreApplication::setOrganizationName("Lecka");
     QCoreApplication::setApplicationName("KovaaksStatsViewer");

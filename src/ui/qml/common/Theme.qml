@@ -2,6 +2,40 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    // The app's complete palette. Every top-level window must set `palette: Theme.palette`:
+    // a role a window leaves unset falls back to the Windows theme, which derives colours
+    // from the user's accent and gives Switch/CheckBox their own per-control palette.
+    readonly property Palette palette: Palette {
+        window: "#1E1E1E"
+        windowText: "#FFFFFF"
+        base: "#2D2D2D"
+        alternateBase: "#343434"
+        text: "#FFFFFF"
+        button: "#3C3C3C"
+        buttonText: "#FFFFFF"
+        brightText: "#65BCFF"
+        light: "#787878"
+        midlight: "#5A5A5A"
+        mid: "#282828"
+        dark: "#1E1E1E"
+        shadow: "#000000"
+        highlight: "#00838F"
+        highlightedText: "#FFFFFF"
+        link: "#65BCFF"
+        linkVisited: "#32A6FF"
+        toolTipBase: "#3C3C3C"
+        toolTipText: "#D4D4D4"
+        placeholderText: "#80FFFFFF"
+        accent: "#00BCD4"
+
+        disabled {
+            windowText: "#9D9D9D"
+            base: "#1E1E1E"
+            text: "#9D9D9D"
+            buttonText: "#9D9D9D"
+        }
+    }
+
     readonly property color errorText: "#E57373"
     readonly property color error: "#E53935"
     readonly property color warning: "#FFA726"

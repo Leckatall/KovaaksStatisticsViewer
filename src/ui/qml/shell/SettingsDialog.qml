@@ -12,6 +12,7 @@ ApplicationWindow {
     title: "Settings"
     flags: Qt.Dialog
     modality: Qt.WindowModal
+    palette: Theme.palette
     width: defaultWidth
     height: defaultHeight
     minimumWidth: Math.min(floorWidth, _limitWidth())

@@ -72,7 +72,7 @@ Other `start` options (all of them stored in `launch.json`, so `restart` reuses 
 
 Overlays, the driver's own settings and `--setting` apply only when a session is freshly seeded. `restart` (and `start --keep`) never re-applies them over the session's current state; `start --keep --overlay …/--setting …` applies the ones passed explicitly. `--env` and `--inject` apply on every launch.
 
-**Headless rendering.** The headless run uses the `offscreen` platform with the software renderer, which is the same setup the QML tests use. The offscreen platform has no fonts, ignores the dark colour scheme and turns hover effects off, so `ksv_driver` points it at the Windows fonts, uses Segoe UI 9pt, turns hover effects on, and writes the Windows dark palette into every window (`driver_main.cpp` holds the snapshot of that palette). The result matches the real app closely. Use `--visible` when exact native rendering matters.
+**Headless rendering.** The headless run uses the `offscreen` platform with the software renderer, which is the same setup the QML tests use. The offscreen platform has no fonts and turns hover effects off, so `ksv_driver` points it at the Windows fonts, uses Segoe UI 9pt and turns hover effects on. Colours need no help: every app window takes its full palette from `Theme.palette`, so headless runs show the same colours as the real app. Use `--visible` when exact native rendering matters.
 
 ## Commands
 

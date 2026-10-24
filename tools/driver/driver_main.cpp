@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include <QColor>
 #include <QCommandLineParser>
 #include <QDir>
 #include <QFont>
@@ -16,11 +15,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QPalette>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
-#include <QWindow>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
@@ -56,9 +53,9 @@ namespace {
         return code;
     }
 
-    // The offscreen QPA has no font directory of its own and no colour-scheme
-    // support, so headless runs would render tofu boxes on a light palette.
-    // Point it at the Windows fonts before QGuiApplication starts...
+    // The offscreen QPA has no font directory of its own, so headless runs would
+    // render tofu boxes. Point it at the Windows fonts before QGuiApplication starts.
+    // Colours need nothing here: every window takes Theme.palette.
     void prepareHeadlessFonts() {
         if (!qEnvironmentVariableIsEmpty("QT_QPA_FONTDIR")) return;
         const QString windows = qEnvironmentVariable("WINDIR", QStringLiteral("C:/Windows"));
@@ -67,76 +64,13 @@ namespace {
 
     bool isHeadlessPlatform() { return QGuiApplication::platformName() != u"windows"; }
 
-    // ...and the offscreen theme ignores setColorScheme(Dark), while Qt Quick
-    // Controls take their palette from the platform theme, not the app palette.
-    // This is what the windows QPA produces for the dark scheme (captured from
-    // Qt 6.12); headless runs write it into every window's palette after load so
-    // screenshots match the real app. Columns: QML name, role, enabled, disabled.
-    struct PaletteEntry {
-        const char *name;
-        QPalette::ColorRole role;
-        const char *normal;
-        const char *disabled;
-    };
-    constexpr PaletteEntry kWindowsDarkPalette[]{
-        {"window", QPalette::Window, "#1e1e1e", "#1e1e1e"},
-        {"windowText", QPalette::WindowText, "#ffffff", "#9d9d9d"},
-        {"base", QPalette::Base, "#2d2d2d", "#1e1e1e"},
-        {"alternateBase", QPalette::AlternateBase, "#00457b", "#343434"},
-        {"text", QPalette::Text, "#ffffff", "#9d9d9d"},
-        {"button", QPalette::Button, "#3c3c3c", "#3c3c3c"},
-        {"buttonText", QPalette::ButtonText, "#ffffff", "#9d9d9d"},
-        {"brightText", QPalette::BrightText, "#65bcff", "#65bcff"},
-        {"light", QPalette::Light, "#787878", "#787878"},
-        {"midlight", QPalette::Midlight, "#5a5a5a", "#5a5a5a"},
-        {"mid", QPalette::Mid, "#282828", "#282828"},
-        {"dark", QPalette::Dark, "#1e1e1e", "#1e1e1e"},
-        {"shadow", QPalette::Shadow, "#000000", "#000000"},
-        {"highlight", QPalette::Highlight, "#00838f", "#00838f"},
-        {"highlightedText", QPalette::HighlightedText, "#ffffff", "#ffffff"},
-        {"link", QPalette::Link, "#65bcff", "#0000ff"},
-        {"linkVisited", QPalette::LinkVisited, "#32a6ff", "#ff00ff"},
-        {"toolTipBase", QPalette::ToolTipBase, "#3c3c3c", "#ffffdc"},
-        {"toolTipText", QPalette::ToolTipText, "#d4d4d4", "#000000"},
-        {"placeholderText", QPalette::PlaceholderText, "#80ffffff", "#80ffffff"},
-        {"accent", QPalette::Accent, "#00bcd4", "#00bcd4"},
-    };
-
-    // Windows' default UI font plus the app palette (for QPainter-drawn items).
-    // The offscreen theme also turns hover effects off, so controls would ignore
-    // the pointer (no hover highlight, no cascading submenus); Windows has them on.
+    // Windows' default UI font. The offscreen theme also turns hover effects off,
+    // so controls would ignore the pointer (no hover highlight, no cascading
+    // submenus); Windows has them on.
     void applyHeadlessAppLook() {
         if (!isHeadlessPlatform()) return;
         QGuiApplication::styleHints()->setUseHoverEffects(true);
         QGuiApplication::setFont(QFont(QStringLiteral("Segoe UI"), 9));
-        QPalette palette;
-        for (const auto &entry: kWindowsDarkPalette) {
-            palette.setColor(QPalette::Active, entry.role, QColor(entry.normal));
-            palette.setColor(QPalette::Inactive, entry.role, QColor(entry.normal));
-            palette.setColor(QPalette::Disabled, entry.role, QColor(entry.disabled));
-        }
-        QGuiApplication::setPalette(palette);
-    }
-
-    // Writes the palette into each Qt Quick window's `palette` color groups
-    // (QQuickPalette / QQuickColorGroup, reached through their meta-properties).
-    // Main.qml sets its own accent/highlight on the main window; those are kept.
-    void applyHeadlessWindowPalettes(const QObject *mainWindow) {
-        if (!isHeadlessPlatform()) return;
-        for (QWindow *window: QGuiApplication::topLevelWindows()) {
-            auto *palette = window->property("palette").value<QObject *>();
-            if (!palette) continue;
-            for (const char *group: {"active", "inactive", "disabled"}) {
-                auto *colorGroup = palette->property(group).value<QObject *>();
-                if (!colorGroup) continue;
-                const bool disabled = qstrcmp(group, "disabled") == 0;
-                for (const auto &entry: kWindowsDarkPalette) {
-                    const bool setByMain = qstrcmp(entry.name, "accent") == 0 || qstrcmp(entry.name, "highlight") == 0;
-                    if (setByMain && window == mainWindow) continue;
-                    colorGroup->setProperty(entry.name, QColor(disabled ? entry.disabled : entry.normal));
-                }
-            }
-        }
     }
 
     bool writeSessionFile(const QString &path, const QJsonObject &content) {
@@ -279,7 +213,6 @@ int main(int argc, char *argv[]) {
         if (engine->rootObjects().isEmpty()) return fail(3, "Main.qml failed to load (see the log above)");
     }
     QObject *root = engine->rootObjects().first();
-    applyHeadlessWindowPalettes(root);
     if (auto *window = qobject_cast<QQuickWindow *>(root)) {
         window->resize(sizeMatch.captured(1).toInt(), sizeMatch.captured(2).toInt());
     }

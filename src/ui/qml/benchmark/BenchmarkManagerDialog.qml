@@ -10,6 +10,7 @@ ApplicationWindow {
     title: qsTr("Benchmark Manager")
     flags: Qt.Dialog
     modality: Qt.WindowModal
+    palette: Theme.palette
     width: 1180
     height: 760
     minimumWidth: 900
