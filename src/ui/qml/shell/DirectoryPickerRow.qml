@@ -3,8 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import KovaaksStatsViewer
 
-// A labelled, read-only path field (directory or file) with a "Browse..."
-// button, shared by SettingsDialog's path-setting rows.
+// A labelled, read-only path field (directory or file) with a folder
+// icon browse button, shared by SettingsDialog's path-setting rows.
 ColumnLayout {
     id: root
     spacing: 6
@@ -36,11 +36,12 @@ ColumnLayout {
             text: root.dir.toString().replace("file:///", "")
             Accessible.name: root.label
         }
-        Button {
+        ChromeIconButton {
             objectName: root.objectNamePrefix + "BrowseButton"
-            text: "Browse…"
             Layout.alignment: Qt.AlignTop
-            flat: true
+            icon.source: "../icons/folder-open.svg"
+            Accessible.name: qsTr("Browse…")
+            ToolTip.text: qsTr("Browse…")
             onClicked: root.browseRequested()
         }
     }

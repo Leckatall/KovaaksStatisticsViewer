@@ -82,12 +82,18 @@ Rectangle {
             }
         }
 
+        HoverHandler {
+            id: handleHover
+            objectName: "seriesDragHandleHover_" + root.row.id
+            cursorShape: Qt.OpenHandCursor
+        }
+
         DragHandler {
             id: drag
             target: null
             dragThreshold: 0
             grabPermissions: PointerHandler.CanTakeOverFromAnything
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: Qt.ClosedHandCursor
 
             onActiveChanged: {
                 if (active) {

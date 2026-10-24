@@ -43,6 +43,16 @@ TestCase {
         compare(delegate.color, delegate.restingColor)
     }
 
+    function test_hoveringTheDragHandleShowsAnOpenHandAndDraggingAClosedOne() {
+        const delegate = createDelegate()
+        const handle = ItemLookup.findByObjectName(delegate, "seriesDragHandle_1")
+        const hover = handle.data.find(function(child) { return child.objectName === "seriesDragHandleHover_1" })
+        verify(hover !== undefined)
+        compare(hover.cursorShape, Qt.OpenHandCursor)
+        const drag = handle.data.find(function(child) { return child.cursorShape === Qt.ClosedHandCursor })
+        verify(drag !== undefined)
+    }
+
     function test_clickingTheOptionsButtonRequestsOptionsAnchoredToIt() {
         const delegate = createDelegate()
         const options = ItemLookup.findByObjectName(delegate, "seriesOptionsButton_" + row.id)

@@ -278,21 +278,5 @@ Pane {
             visible: text.length > 0
             wrapMode: Text.WordWrap
         }
-        // These act on the whole settings visit, which has one working copy for every section.
-        RowLayout {
-            Layout.fillWidth: true
-            Button {
-                enabled: root.settingsVm.pendingChanges
-                objectName: "saveGraphLinesButton"
-                text: qsTr("Save Changes")
-                onClicked: root.settingsVm.save()
-            }
-            Button {
-                enabled: root.settingsVm.pendingChanges
-                objectName: "discardGraphLineChangesButton"
-                text: qsTr("Discard Changes")
-                onClicked: root.settingsVm.revertChanges()
-            }
-        }
     }
 }

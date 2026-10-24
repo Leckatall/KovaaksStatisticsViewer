@@ -123,4 +123,23 @@ TestCase {
         verify(second.highlighted)
         verify(!first.highlighted)
     }
+
+    function test_hoveringARowTintsItAndKeepsTheSelectedRowHighlighted() {
+        const view = createView({currentScenarioHash: "hash-1"})
+        const selected = findChild(view, "scenarioItem_0")
+        const other = findChild(view, "scenarioItem_1")
+        const colorOf = item => item.background.color.toString()
+        mouseMove(view, 1, view.height - 1)
+        const resting = colorOf(other)
+
+        mouseMove(other, other.width / 2, other.height / 2)
+        tryVerify(() => colorOf(other) !== resting)
+        const hovered = colorOf(other)
+
+        mousePress(other, other.width / 2, other.height / 2)
+        tryVerify(() => colorOf(other) !== hovered)
+        mouseRelease(other, other.width / 2, other.height / 2)
+
+        compare(colorOf(selected), selected.palette.highlight.toString())
+    }
 }

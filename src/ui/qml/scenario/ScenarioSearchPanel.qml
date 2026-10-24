@@ -112,6 +112,18 @@ ColumnLayout {
             objectName: "scenarioItem_" + index
             width: scenarioList.width - (scenarioList.ScrollBar.vertical.visible ? scenarioList.ScrollBar.vertical.width : 0)
 
+            HoverHandler {
+                id: rowHover
+                cursorShape: Qt.PointingHandCursor
+            }
+
+            // Tints towards the text colour like ScenarioRunItem; the selected row keeps the style's highlight.
+            background: Rectangle {
+                color: delegateRoot.highlighted ? delegateRoot.palette.highlight
+                       : Qt.tint(delegateRoot.palette.base,
+                                 Qt.alpha(delegateRoot.palette.text, delegateRoot.down ? 0.12 : rowHover.hovered ? 0.07 : 0.0))
+            }
+
             contentItem: RowLayout {
                 Label {
                     Layout.fillWidth: true

@@ -242,34 +242,6 @@ TestCase {
         compare(panel.settingsVm.createAxisCalls[0], ["Custom"]);
         compare(panel.settingsVm.updateSeriesAxisCalls[0], ["1", "9"]);
     }
-    // There is one working copy per settings visit, so these act on all of it, not only on Graph Lines.
-    function test_clickingDiscardRevertsTheWholeVisitWithoutSaving() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm({
-                pendingChanges: true
-            })
-        });
-        verify(waitForRendering(panel));
-
-        mouseClick(ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton"));
-
-        compare(panel.settingsVm.revertCalls, 1);
-        compare(panel.settingsVm.saveCalls, 0);
-        compare(panel.settingsVm.endVisitCalls, 0);
-    }
-    function test_clickingSaveSavesTheWholeVisit() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm({
-                pendingChanges: true
-            })
-        });
-        verify(waitForRendering(panel));
-
-        mouseClick(ItemLookup.findByObjectName(panel, "saveGraphLinesButton"));
-
-        compare(panel.settingsVm.saveCalls, 1);
-        compare(panel.settingsVm.endVisitCalls, 0);
-    }
     function test_errorLabelExplainsAValidationRejection() {
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: makeFakeSettingsVm({
@@ -598,7 +570,7 @@ TestCase {
             verify(ItemLookup.findByObjectName(panel, "seriesOptionsButton_" + id) !== null);
         }
     }
-    function test_manySeriesRowsScrollInsteadOfPushingSaveButtonOutOfBounds() {
+    function test_manySeriesRowsScrollInsteadOfOverflowingThePanel() {
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: makeFakeSettingsVm({
                 allSeriesConfigs: manyRows(),
@@ -611,10 +583,10 @@ TestCase {
         const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
         verify(scrollView !== null, "expected a seriesListScrollView wrapping the series rows");
 
-        const saveButton = ItemLookup.findByObjectName(panel, "saveGraphLinesButton");
-        verify(saveButton !== null);
-        const point = saveButton.mapToItem(panel, 0, 0);
-        verify(point.y >= 0 && point.y + saveButton.height <= panel.height, "saveGraphLinesButton should stay within the panel's bounds when many series are present");
+        const addButton = ItemLookup.findByObjectName(panel, "addSeriesButton");
+        verify(addButton !== null);
+        const point = addButton.mapToItem(panel, 0, 0);
+        verify(point.y >= 0 && point.y + addButton.height <= panel.height, "addSeriesButton should stay within the panel's bounds when many series are present");
 
         const flick = scrollView.contentItem;
         verify(flick.contentHeight > scrollView.height, "expected the series list to exceed the scroll viewport");
@@ -679,33 +651,15 @@ TestCase {
         compare(panel.displayRows[0].id, "1");
         compare(panel.displayRows[1].id, "2");
     }
-    function test_saveAndDiscardButtonsDisabledWithoutPendingChanges() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm({
-                pendingChanges: false
-            })
-        });
-        verify(waitForRendering(panel));
-
-        const saveButton = ItemLookup.findByObjectName(panel, "saveGraphLinesButton");
-        const discardButton = ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton");
-        verify(saveButton !== null);
-        verify(discardButton !== null);
-        compare(saveButton.enabled, false);
-        compare(discardButton.enabled, false);
-    }
-    function test_saveAndDiscardButtonsEnabledWithPendingChanges() {
+    function test_theWholeVisitIsSavedAndRevertedFromTheDialogFooterNotThePanel() {
         const panel = createTemporaryObject(panelComponent, testCase, {
             settingsVm: makeFakeSettingsVm({
                 pendingChanges: true
             })
         });
         verify(waitForRendering(panel));
-
-        const saveButton = ItemLookup.findByObjectName(panel, "saveGraphLinesButton");
-        const discardButton = ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton");
-        compare(saveButton.enabled, true);
-        compare(discardButton.enabled, true);
+        compare(ItemLookup.findByObjectName(panel, "saveGraphLinesButton"), null);
+        compare(ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton"), null);
     }
     height: 400
     name: "SeriesConfigDraftPanelTest"

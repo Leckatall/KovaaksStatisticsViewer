@@ -343,20 +343,15 @@ TestCase {
         compare(accuracySwitch.checked, false)
     }
 
-    function test_manySeriesRowsSaveButtonStaysWithinTheSettingsWindowWhenScrolling() {
-        const rows = []
-        for (let i = 0; i < 20; i++)
-            rows.push({id: String(i), name: "Series " + i, color: "#009600", enabled: true, displayPosition: i})
+    function test_graphLinesPageHasNoSaveOrDiscardButtonsOfItsOwn() {
         const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({allSeriesConfigs: rows, pendingChanges: true}),
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
             sessionVm: makeFakeSessionVm()
         })
         selectCategory(dialog, "Graph Lines")
 
-        const saveButton = ItemLookup.findByObjectName(dialog.contentItem, "saveGraphLinesButton")
-        verify(saveButton !== null, "no item named 'saveGraphLinesButton' found in SettingsDialog")
-        const point = saveButton.mapToItem(dialog.contentItem, 0, 0)
-        verify(point.y >= 0 && point.y + saveButton.height <= dialog.contentItem.height, "saveGraphLinesButton should remain visible within the SettingsDialog window when many series are present")
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "saveGraphLinesButton"), null)
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "discardGraphLineChangesButton"), null)
     }
 
     function test_clickingCategoryItem_switchesCurrentCategory() {
