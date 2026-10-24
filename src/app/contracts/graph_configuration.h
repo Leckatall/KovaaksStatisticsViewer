@@ -209,11 +209,26 @@ namespace ksv::application {
 
     [[nodiscard]] RunSeriesDocument defaultRunSeriesDocument();
 
+    // The run graph's labelled Y axis: a named axis, or a line with no axis, which is scaled on its own.
+    using RunAxisLabel = std::variant<AxisId, SeriesId>;
+
+    // A line on a named axis stands for that axis.
+    [[nodiscard]] RunAxisLabel runAxisLabelFor(const RunSeriesDocument &document, SeriesId line);
+
+    // `label` after a Graph Lines edit: cleared when its axis or line is gone, and moved to the axis a
+    // line has since joined.
+    [[nodiscard]] std::optional<RunAxisLabel> reconciledRunAxisLabel(const RunSeriesDocument &document,
+                                                                     const std::optional<RunAxisLabel> &label);
+
+    // The lines drawn against `label`, in display order; empty without a label.
+    [[nodiscard]] std::vector<SeriesId> runAxisLabelLines(const RunSeriesDocument &document,
+                                                          const std::optional<RunAxisLabel> &label);
+
     struct GraphConfiguration {
         std::array<GraphPreferences, kGraphKeys.size()> graphs;
         RunSeriesDocument runSeries;
-        // The run graph's Y-axis-label series; absent means the first visible one.
-        std::optional<SeriesId> runAxisLabelSeriesId;
+        // Absent means the run graph labels its first visible line.
+        std::optional<RunAxisLabel> runAxisLabel;
 
         [[nodiscard]] GraphPreferences &preferences(const GraphKey key) {
             return graphs[static_cast<std::size_t>(key)];

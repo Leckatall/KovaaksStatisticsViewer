@@ -57,6 +57,24 @@ namespace ksv::presentation {
             return ok ? std::optional{value} : std::nullopt;
         }
 
+        QString runAxisLabelKeyOf(const application::RunAxisLabel &label) {
+            return std::visit([]<typename Id>(const Id &id) {
+                return (std::same_as<Id, application::AxisId> ? QStringLiteral("axis:") : QStringLiteral("series:")) +
+                       QString::number(id.value);
+            }, label);
+        }
+
+        std::optional<application::RunAxisLabel> parseRunAxisLabelKey(const QString &key) {
+            const auto separator = key.indexOf(':');
+            if (separator < 0) return std::nullopt;
+            const auto kind = key.left(separator);
+            const auto value = parseId(key.mid(separator + 1));
+            if (!value) return std::nullopt;
+            if (kind == "axis") return application::AxisId{*value};
+            if (kind == "series") return application::SeriesId{*value};
+            return std::nullopt;
+        }
+
         application::RgbaColor rgba(const QColor &color) {
             return {static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
                     static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())};
@@ -899,9 +917,27 @@ namespace ksv::presentation {
         return result;
     }
 
-    QString SettingsViewModel::runAxisLabelSeriesId() const {
-        const auto label = shownConfiguration()->runAxisLabelSeriesId;
-        return label ? QString::number(label->value) : QString();
+    QVariantList SettingsViewModel::runAxisLabelChoices() const {
+        QVariantList result;
+        QSet<QString> listed;
+        const auto &document = shownConfiguration()->runSeries;
+        for (const auto &config: document.series) {
+            if (!config.presentation.enabled) continue;
+            const auto label = application::runAxisLabelFor(document, config.id);
+            const auto key = runAxisLabelKeyOf(label);
+            if (listed.contains(key)) continue;
+            listed.insert(key);
+            const auto *axis = std::get_if<application::AxisId>(&label);
+            const auto name = axis ? std::ranges::find(document.axes, *axis, &application::AxisConfig::id)->name
+                                   : config.presentation.name;
+            result.append(QVariantMap{{"key", key}, {"name", QString::fromStdString(name)}});
+        }
+        return result;
+    }
+
+    QString SettingsViewModel::runAxisLabelKey() const {
+        const auto &label = shownConfiguration()->runAxisLabel;
+        return label ? runAxisLabelKeyOf(*label) : QString();
     }
 
     QVariantMap SettingsViewModel::editRunSeries(
@@ -909,6 +945,7 @@ namespace ksv::presentation {
         if (!m_working) return invalidMutationMap();
         const auto result = edit(m_working->runSeries);
         if (result.succeeded()) {
+            m_working->runAxisLabel = application::reconciledRunAxisLabel(m_working->runSeries, m_working->runAxisLabel);
             emit seriesConfigurationChanged();
             refreshPendingChanges();
         }
@@ -1023,21 +1060,21 @@ namespace ksv::presentation {
     QVariantMap SettingsViewModel::restoreDefaultGraphLines() {
         return editRunSeries([&](application::RunSeriesDocument &document) {
             document = application::defaultRunSeriesDocument();
-            m_working->runAxisLabelSeriesId.reset();
+            m_working->runAxisLabel.reset();
             return application::MutationResult{};
         });
     }
 
-    void SettingsViewModel::setRunAxisLabelSeriesId(const QString &id) {
+    void SettingsViewModel::setRunAxisLabel(const QString &key) {
         if (!m_working) return;
-        std::optional<application::SeriesId> label;
-        if (!id.isEmpty()) {
-            const auto value = parseId(id);
-            if (!value) return;
-            label = application::SeriesId{*value};
+        std::optional<application::RunAxisLabel> label;
+        if (!key.isEmpty()) {
+            label = parseRunAxisLabelKey(key);
+            if (!label) return;
         }
-        if (label == m_working->runAxisLabelSeriesId) return;
-        m_working->runAxisLabelSeriesId = label;
+        label = application::reconciledRunAxisLabel(m_working->runSeries, label);
+        if (label == m_working->runAxisLabel) return;
+        m_working->runAxisLabel = label;
         emit seriesConfigurationChanged();
         refreshPendingChanges();
     }

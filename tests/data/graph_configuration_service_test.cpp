@@ -73,7 +73,7 @@ namespace {
         auto candidate = persistence->stored;
         auto &first = candidate.runSeries.series.front();
         first.presentation.name = "Renamed " + first.presentation.name;
-        candidate.runAxisLabelSeriesId = first.id;
+        candidate.runAxisLabel = first.id;
         std::vector<GraphConfigurationChange> changes;
         service.onChanged([&](const GraphConfigurationChange &change) { changes.push_back(change); });
 

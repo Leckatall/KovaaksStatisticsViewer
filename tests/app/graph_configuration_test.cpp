@@ -348,8 +348,44 @@ namespace {
         right.runSeries.axes[0].options.fallbackSpan = 2.0;
         EXPECT_NE(left, right);
         right = defaultGraphConfiguration();
-        right.runAxisLabelSeriesId = SeriesId{1};
+        right.runAxisLabel = SeriesId{1};
         EXPECT_NE(left, right);
+        left.runAxisLabel = AxisId{1};
+        EXPECT_NE(left, right);
+    }
+
+    // Default lineup: lines 1-4 and 8 share the Score axis (1), 5 and 6 the Accuracy axis (2); 7 has none.
+    TEST(RunAxisLabel, ALineOnANamedAxisStandsForThatAxisAndAnyOtherLineForItself) {
+        const auto document = defaultRunSeriesDocument();
+        EXPECT_EQ(runAxisLabelFor(document, SeriesId{3}), RunAxisLabel{AxisId{1}});
+        EXPECT_EQ(runAxisLabelFor(document, SeriesId{6}), RunAxisLabel{AxisId{2}});
+        EXPECT_EQ(runAxisLabelFor(document, SeriesId{7}), RunAxisLabel{SeriesId{7}});
+        EXPECT_EQ(runAxisLabelFor(document, SeriesId{99}), RunAxisLabel{SeriesId{99}});
+    }
+
+    TEST(RunAxisLabel, LabelledLinesAreEveryLineOnTheAxisOrTheLineItselfInDisplayOrder) {
+        const auto document = defaultRunSeriesDocument();
+        EXPECT_TRUE(runAxisLabelLines(document, std::nullopt).empty());
+        EXPECT_EQ(runAxisLabelLines(document, AxisId{1}),
+                  (std::vector{SeriesId{1}, SeriesId{2}, SeriesId{3}, SeriesId{4}, SeriesId{8}}));
+        EXPECT_EQ(runAxisLabelLines(document, SeriesId{7}), std::vector{SeriesId{7}});
+        EXPECT_TRUE(runAxisLabelLines(document, AxisId{42}).empty());
+    }
+
+    TEST(RunAxisLabel, ReconcilingDropsAGoneAxisOrLineAndMovesALineToTheAxisItJoined) {
+        auto document = defaultRunSeriesDocument();
+        EXPECT_FALSE(reconciledRunAxisLabel(document, std::nullopt));
+        EXPECT_EQ(reconciledRunAxisLabel(document, AxisId{2}), RunAxisLabel{AxisId{2}});
+        EXPECT_EQ(reconciledRunAxisLabel(document, SeriesId{7}), RunAxisLabel{SeriesId{7}});
+        EXPECT_EQ(reconciledRunAxisLabel(document, SeriesId{3}), RunAxisLabel{AxisId{1}});
+        EXPECT_FALSE(reconciledRunAxisLabel(document, SeriesId{99}));
+        EXPECT_FALSE(reconciledRunAxisLabel(document, AxisId{99}));
+
+        document.series[6].yAxisId = AxisId{2};
+        EXPECT_EQ(reconciledRunAxisLabel(document, SeriesId{7}), RunAxisLabel{AxisId{2}});
+
+        document.axes.pop_back();
+        EXPECT_FALSE(reconciledRunAxisLabel(document, AxisId{2}));
     }
 
     TEST(GraphConfigurationDiff, NamesTheSectionsOfEachChangedGraph) {

@@ -19,6 +19,10 @@ namespace ksv::application {
 
         constexpr RgbaColor kPlaytimeColor{77, 208, 225, 255};
 
+        bool hasAxis(const RunSeriesDocument &document, const AxisId id) {
+            return std::ranges::find(document.axes, id, &AxisConfig::id) != document.axes.end();
+        }
+
         std::array<GraphDescriptor, kGraphKeys.size()> makeDescriptors() {
             return {{
                 {GraphKey::Run, false, false, false, false, {}, {}, {}},
@@ -179,6 +183,37 @@ namespace ksv::application {
         return configuration;
     }
 
+    RunAxisLabel runAxisLabelFor(const RunSeriesDocument &document, const SeriesId line) {
+        const auto found = std::ranges::find(document.series, line, &SeriesConfig::id);
+        if (found != document.series.end() && found->yAxisId &&
+            hasAxis(document, *found->yAxisId))
+            return *found->yAxisId;
+        return line;
+    }
+
+    std::vector<SeriesId> runAxisLabelLines(const RunSeriesDocument &document, const std::optional<RunAxisLabel> &label) {
+        std::vector<SeriesId> lines;
+        if (!label) return lines;
+        for (const auto &config: document.series) {
+            const bool labelled = std::visit([&]<typename Id>(const Id &id) {
+                if constexpr (std::same_as<Id, AxisId>) return config.yAxisId == id;
+                else return config.id == id;
+            }, *label);
+            if (labelled) lines.push_back(config.id);
+        }
+        return lines;
+    }
+
+    std::optional<RunAxisLabel> reconciledRunAxisLabel(const RunSeriesDocument &document,
+                                                       const std::optional<RunAxisLabel> &label) {
+        if (!label) return std::nullopt;
+        if (const auto *axis = std::get_if<AxisId>(&*label))
+            return hasAxis(document, *axis) ? label : std::nullopt;
+        const auto line = std::get<SeriesId>(*label);
+        if (std::ranges::find(document.series, line, &SeriesConfig::id) == document.series.end()) return std::nullopt;
+        return runAxisLabelFor(document, line);
+    }
+
     std::vector<GraphConfigurationIssue> validateGraphPreferences(const GraphKey key,
                                                                   const GraphPreferences &preferences) {
         std::vector<GraphConfigurationIssue> issues;
@@ -290,7 +325,7 @@ namespace ksv::application {
             };
         }
         change.runSeries = !(before.runSeries == after.runSeries);
-        change.runAxisLabel = before.runAxisLabelSeriesId != after.runAxisLabelSeriesId;
+        change.runAxisLabel = before.runAxisLabel != after.runAxisLabel;
         return change;
     }
 }

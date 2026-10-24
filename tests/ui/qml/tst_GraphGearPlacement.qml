@@ -22,7 +22,7 @@ Item {
         property string scenarioTitle: ""
         property var enabledSeriesIds: []
         property var allSeries: []
-        property string axisLabelSeriesId: ""
+        property var axisLabelSeriesIds: []
         property bool pointMarkers: false
         property int connectionMode: 0
         property var columnForSeriesId: function (id) { return -1 }

@@ -27,7 +27,8 @@ TestCase {
             allSeriesConfigs: [
                 {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
                 {id: "2", name: "Accuracy", color: "#00ffff", enabled: false, displayPosition: 1}
-            ]
+            ],
+            runAxisLabelChoices: [{key: "series:1", name: "Score"}]
         }, overrides))
     }
 
@@ -387,13 +388,6 @@ TestCase {
             || ItemLookup.findByObjectName(dialog.footer, name)
     }
 
-    function twoVisibleRows() {
-        return [
-            {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
-            {id: "2", name: "Accuracy", color: "#00ffff", enabled: true, displayPosition: 1}
-        ]
-    }
-
     function test_openingTheDialogBeginsAVisit() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm(),
@@ -586,23 +580,32 @@ TestCase {
         compare(dialog.settingsVm.beginVisitCalls, 2)
     }
 
-    function test_yAxisLabelSelectorShowsTheWorkingCopyChoice() {
+    function axisChoices() {
+        return [
+            {key: "axis:1", name: "Score"},
+            {key: "series:7", name: "Score/s (5s)"}
+        ]
+    }
+
+    function test_yAxisSelectorListsTheAxisChoicesAndShowsTheWorkingCopyChoice() {
         const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelSeriesId: "2", allSeriesConfigs: twoVisibleRows()}),
+            settingsVm: makeFakeSettingsVm({runAxisLabelKey: "series:7", runAxisLabelChoices: axisChoices()}),
             sessionVm: makeFakeSessionVm()
         })
         selectCategory(dialog, "Graph Lines")
 
         const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
         verify(combo !== null)
+        compare(combo.count, 2)
+        compare(combo.textAt(0), "Score")
         compare(combo.currentIndex, 1)
-        compare(combo.displayText, "Accuracy")
+        compare(combo.displayText, "Score/s (5s)")
     }
 
     // The label choice joins the working copy of the visit instead of being persisted by QML.
-    function test_choosingAYAxisLabelEditsTheWorkingCopy() {
+    function test_choosingAYAxisEditsTheWorkingCopy() {
         const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({allSeriesConfigs: twoVisibleRows()}),
+            settingsVm: makeFakeSettingsVm({runAxisLabelChoices: axisChoices()}),
             sessionVm: makeFakeSessionVm()
         })
         selectCategory(dialog, "Graph Lines")
@@ -610,12 +613,33 @@ TestCase {
 
         combo.activated(1)
 
-        compare(dialog.settingsVm.setRunAxisLabelSeriesIdCalls, ["2"])
+        compare(dialog.settingsVm.setRunAxisLabelCalls, ["series:7"])
     }
 
-    function test_anUnknownYAxisLabelFallsBackToTheFirstVisibleSeries() {
+    function test_theYAxisListHighlightsTheEntryUnderTheKeyboardOrPointer() {
         const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelSeriesId: "99"}),
+            settingsVm: makeFakeSettingsVm({runAxisLabelChoices: axisChoices()}),
+            sessionVm: makeFakeSessionVm()
+        })
+        selectCategory(dialog, "Graph Lines")
+        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
+        combo.forceActiveFocus()
+        combo.popup.open()
+        tryCompare(combo.popup, "opened", true)
+        const list = combo.popup.contentItem
+        tryVerify(() => list.itemAtIndex(1) !== null)
+
+        keyClick(Qt.Key_Down)
+
+        tryCompare(combo, "highlightedIndex", 1)
+        verify(list.itemAtIndex(1).highlighted)
+        verify(!list.itemAtIndex(0).highlighted)
+        combo.popup.close()
+    }
+
+    function test_anUnknownYAxisFallsBackToTheFirstChoice() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({runAxisLabelKey: "axis:99", runAxisLabelChoices: axisChoices()}),
             sessionVm: makeFakeSessionVm()
         })
         selectCategory(dialog, "Graph Lines")

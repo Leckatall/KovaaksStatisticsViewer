@@ -17,7 +17,8 @@ QtObject {
     property var allSeriesConfigs: []
     property var allAxes: []
     property var rawInputs: []
-    property string runAxisLabelSeriesId: ""
+    property var runAxisLabelChoices: []
+    property string runAxisLabelKey: ""
     property bool pendingChanges: false
     property int beginVisitCalls: 0
     property int endVisitCalls: 0
@@ -30,7 +31,7 @@ QtObject {
         return saveResult
     }
     function revertChanges() { pendingChanges = false }
-    function setRunAxisLabelSeriesId(id) {}
+    function setRunAxisLabel(key) {}
     function setKovaaksDir(dir) {}
     function setProfilePath(path) {}
     property var patches: []

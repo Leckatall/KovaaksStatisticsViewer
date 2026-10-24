@@ -178,15 +178,15 @@ namespace {
         const auto view_model = make_view_model();
 
         EXPECT_FALSE(view_model->createComputedSeries("Line", "#123456", 2.0, true, "")["succeeded"].toBool());
-        view_model->setRunAxisLabelSeriesId(lineId(1));
+        view_model->setRunAxisLabel("series:" + lineId(1));
 
         EXPECT_TRUE(configuration->saves.empty());
         EXPECT_EQ(view_model->getAllSeriesConfigs().size(), lineCount());
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
+        EXPECT_EQ(view_model->runAxisLabelKey(), "");
     }
 
     TEST_F(SettingsViewModelTest, BeginVisitSeedsACleanWorkingCopyFromTheCommittedConfiguration) {
-        configuration->configuration.runAxisLabelSeriesId = committedLineup().series.back().id;
+        configuration->configuration.runAxisLabel = AxisId{2};
         const auto view_model = make_view_model();
         const QSignalSpy visitSpy(view_model.get(), &SettingsViewModel::visitOpenChanged);
 
@@ -195,7 +195,7 @@ namespace {
         EXPECT_TRUE(view_model->isVisitOpen());
         EXPECT_EQ(visitSpy.count(), 1);
         EXPECT_FALSE(view_model->hasPendingChanges());
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), lastLineId());
+        EXPECT_EQ(view_model->runAxisLabelKey(), "axis:2");
         EXPECT_EQ(view_model->getAllSeriesConfigs().size(), lineCount());
     }
 
@@ -233,13 +233,14 @@ namespace {
         ASSERT_TRUE(view_model->setSeriesEnabled(disabledLine, false)["succeeded"].toBool());
         ASSERT_TRUE(view_model->reorderSeries(reorderedLine, 0)["succeeded"].toBool());
         ASSERT_TRUE(view_model->removeComputedSeries(createdId)["succeeded"].toBool());
-        view_model->setRunAxisLabelSeriesId(reorderedLine);
+        const auto label = "axis:" + axis["createdAxisId"].toString();
+        view_model->setRunAxisLabel(label);
 
         EXPECT_TRUE(configuration->saves.empty());
         EXPECT_TRUE(configuration->patches.empty());
         EXPECT_EQ(configuration->configuration, committed);
         EXPECT_TRUE(view_model->hasPendingChanges());
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), reorderedLine);
+        EXPECT_EQ(view_model->runAxisLabelKey(), label);
         EXPECT_EQ(row(*view_model, axisLine)["yAxisId"].toString(), axis["createdAxisId"].toString());
         EXPECT_FALSE(row(*view_model, disabledLine)["enabled"].toBool());
         EXPECT_EQ(row(*view_model, reorderedLine)["displayPosition"].toInt(), 0);
@@ -309,7 +310,7 @@ namespace {
         const auto seededLineCount = committedLineup().series.size();
         view_model->beginVisit();
         const auto created = view_model->createComputedSeries("Saved", "#123456", 2.0, true, "");
-        view_model->setRunAxisLabelSeriesId(created["createdId"].toString());
+        view_model->setRunAxisLabel("series:" + created["createdId"].toString());
 
         const auto result = view_model->save();
 
@@ -317,8 +318,9 @@ namespace {
         ASSERT_EQ(configuration->saves.size(), 1U);
         const auto &candidate = configuration->saves.front();
         EXPECT_EQ(candidate.runSeries.series.size(), seededLineCount + 1);
-        ASSERT_TRUE(candidate.runAxisLabelSeriesId);
-        EXPECT_EQ(QString::number(candidate.runAxisLabelSeriesId->value), created["createdId"].toString());
+        ASSERT_TRUE(candidate.runAxisLabel);
+        ASSERT_TRUE(std::holds_alternative<SeriesId>(*candidate.runAxisLabel));
+        EXPECT_EQ(QString::number(std::get<SeriesId>(*candidate.runAxisLabel).value), created["createdId"].toString());
         EXPECT_TRUE(view_model->isVisitOpen());
         EXPECT_FALSE(view_model->hasPendingChanges());
     }
@@ -337,19 +339,18 @@ namespace {
 
     TEST_F(SettingsViewModelTest, RevertRestoresTheLastSuccessfulSaveRatherThanTheInitialSeed) {
         const auto view_model = make_view_model();
-        const auto labelLine = lineId(1);
         view_model->beginVisit();
         const auto saved = view_model->createComputedSeries("Saved", "#123456", 2.0, true, "");
         ASSERT_TRUE(view_model->save()["accepted"].toBool());
         const auto unsaved = view_model->createComputedSeries("Unsaved", "#123456", 2.0, true, "");
-        view_model->setRunAxisLabelSeriesId(labelLine);
+        view_model->setRunAxisLabel("axis:1");
 
         view_model->revertChanges();
 
         EXPECT_FALSE(view_model->hasPendingChanges());
         EXPECT_TRUE(rowIds(*view_model).contains(saved["createdId"].toString()));
         EXPECT_FALSE(rowIds(*view_model).contains(unsaved["createdId"].toString()));
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
+        EXPECT_EQ(view_model->runAxisLabelKey(), "");
         EXPECT_EQ(configuration->saves.size(), 1U);
     }
 
@@ -482,20 +483,21 @@ namespace {
     TEST_F(SettingsViewModelTest, EditsInSeveralSectionsSurviveGraphSwitchesAndRefocusing) {
         const auto view_model = make_view_model();
         const auto disabledLine = lineId(1);
-        const auto labelLine = lineId(2);
+        // Line 7 of the default lineup has no axis.
+        const auto label = "series:" + lineId(6);
         view_model->beginVisit();
         view_model->setSeriesEnabled(disabledLine, false);
         view_model->setSelectedGraph("scenarioHistory");
         view_model->setRawInput("scenarioHistory", "dataRange", "", "latestRuns", "ten");
         view_model->setSelectedGraph("run");
-        view_model->setRunAxisLabelSeriesId(labelLine);
+        view_model->setRunAxisLabel(label);
 
         view_model->beginVisit();
         view_model->setSelectedGraph("scenarioHistory");
 
         EXPECT_FALSE(row(*view_model, disabledLine)["enabled"].toBool());
         EXPECT_EQ(view_model->rawInput("scenarioHistory", "dataRange", "", "latestRuns").toString(), "ten");
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), labelLine);
+        EXPECT_EQ(view_model->runAxisLabelKey(), label);
         EXPECT_TRUE(configuration->saves.empty());
     }
 
@@ -513,15 +515,74 @@ namespace {
     }
 
     TEST_F(SettingsViewModelTest, ClearingTheAxisLabelFallsBackToTheFirstVisibleSeries) {
-        configuration->configuration.runAxisLabelSeriesId = SeriesId{4};
+        configuration->configuration.runAxisLabel = AxisId{1};
         const auto view_model = make_view_model();
         view_model->beginVisit();
 
-        view_model->setRunAxisLabelSeriesId("");
+        view_model->setRunAxisLabel("");
         view_model->save();
 
         ASSERT_EQ(configuration->saves.size(), 1U);
-        EXPECT_FALSE(configuration->saves.front().runAxisLabelSeriesId);
+        EXPECT_FALSE(configuration->saves.front().runAxisLabel);
+    }
+
+    // Default lineup: enabled lines 1-4 share the Score axis and line 5 is on Accuracy; line 6 (also
+    // Accuracy) and line 7 (no axis) start disabled.
+    TEST_F(SettingsViewModelTest, AxisLabelChoicesCollapseASharedAxisIntoOneEntry) {
+        const auto view_model = make_view_model();
+        EXPECT_EQ(view_model->runAxisLabelChoices(),
+                  (QVariantList{QVariantMap{{"key", "axis:1"}, {"name", "Score"}},
+                                QVariantMap{{"key", "axis:2"}, {"name", "Accuracy"}}}));
+    }
+
+    TEST_F(SettingsViewModelTest, AxisLabelChoicesListALineWithNoAxisByItsOwnName) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_TRUE(view_model->setSeriesEnabled(lineId(6), true)["succeeded"].toBool());
+
+        const auto choices = view_model->runAxisLabelChoices();
+        ASSERT_EQ(choices.size(), 3);
+        EXPECT_EQ(choices[2].toMap(), (QVariantMap{{"key", "series:" + lineId(6)},
+                                                   {"name", QString::fromStdString(committedLineup().series[6].presentation.name)}}));
+    }
+
+    TEST_F(SettingsViewModelTest, AxisLabelChoicesHideAnAxisWithNoEnabledLine) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_TRUE(view_model->setSeriesEnabled(lineId(4), false)["succeeded"].toBool());
+
+        EXPECT_EQ(view_model->runAxisLabelChoices(),
+                  (QVariantList{QVariantMap{{"key", "axis:1"}, {"name", "Score"}}}));
+    }
+
+    TEST_F(SettingsViewModelTest, ChoosingALineOnAnAxisChoosesItsAxisAndMalformedKeysAreIgnored) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        view_model->setRunAxisLabel("series:" + lineId(4));
+        EXPECT_EQ(view_model->runAxisLabelKey(), "axis:2");
+
+        for (const auto *key: {"line:7", "axis:x", "axis", "7"}) {
+            view_model->setRunAxisLabel(key);
+            EXPECT_EQ(view_model->runAxisLabelKey(), "axis:2") << key;
+        }
+    }
+
+    TEST_F(SettingsViewModelTest, TheAxisLabelFollowsItsLineOntoAnAxisAndIsClearedWhenTheLineIsRemoved) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const auto created = view_model->createComputedSeries("Mine", "#123456", 2.0, true, "");
+        const auto createdId = created["createdId"].toString();
+        view_model->setRunAxisLabel("series:" + createdId);
+        EXPECT_EQ(view_model->runAxisLabelKey(), "series:" + createdId);
+
+        ASSERT_TRUE(view_model->updateSeriesAxis(createdId, "2")["succeeded"].toBool());
+        EXPECT_EQ(view_model->runAxisLabelKey(), "axis:2");
+
+        ASSERT_TRUE(view_model->updateSeriesAxis(createdId, "")["succeeded"].toBool());
+        view_model->setRunAxisLabel("series:" + createdId);
+        ASSERT_TRUE(view_model->removeComputedSeries(createdId)["succeeded"].toBool());
+        EXPECT_EQ(view_model->runAxisLabelKey(), "");
     }
 
     TEST_F(SettingsViewModelTest, CommittedChangesRefreshTheEditorOnlyOutsideAVisit) {
@@ -618,14 +679,14 @@ namespace {
         for (const auto &config: defaultRunSeriesDocument().series) defaultIds.append(QString::number(config.id.value));
         view_model->beginVisit();
         ASSERT_TRUE(view_model->removeComputedSeries(removedLine)["succeeded"].toBool());
-        view_model->setRunAxisLabelSeriesId(removedLine);
+        view_model->setRunAxisLabel("axis:2");
         const QSignalSpy configSpy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
 
         const auto result = view_model->restoreDefaultGraphLines();
 
         EXPECT_TRUE(result["succeeded"].toBool());
         EXPECT_GE(configSpy.count(), 1);
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
+        EXPECT_EQ(view_model->runAxisLabelKey(), "");
         EXPECT_EQ(rowIds(*view_model), defaultIds);
         EXPECT_FALSE(view_model->hasPendingChanges());
         EXPECT_TRUE(configuration->saves.empty());
@@ -634,8 +695,7 @@ namespace {
     TEST_F(SettingsViewModelTest, RestoreDefaultGraphLinesOverCustomisedLinesIsPendingAndRevertible) {
         const auto defaultLineCount = static_cast<qsizetype>(defaultRunSeriesDocument().series.size());
         configuration->configuration.runSeries.series.pop_back();
-        configuration->configuration.runAxisLabelSeriesId = committedLineup().series.front().id;
-        const auto labelLine = lineId(0);
+        configuration->configuration.runAxisLabel = AxisId{1};
         const auto view_model = make_view_model();
         view_model->beginVisit();
         ASSERT_FALSE(view_model->hasPendingChanges());
@@ -644,14 +704,14 @@ namespace {
 
         EXPECT_TRUE(view_model->hasPendingChanges());
         EXPECT_EQ(view_model->getAllSeriesConfigs().size(), defaultLineCount);
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), "");
+        EXPECT_EQ(view_model->runAxisLabelKey(), "");
         EXPECT_TRUE(configuration->saves.empty());
 
         view_model->revertChanges();
 
         EXPECT_FALSE(view_model->hasPendingChanges());
         EXPECT_EQ(view_model->getAllSeriesConfigs().size(), defaultLineCount - 1);
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), labelLine);
+        EXPECT_EQ(view_model->runAxisLabelKey(), "axis:1");
     }
 
     TEST_F(SettingsViewModelTest, RestoreDefaultGraphLinesIsSavedAsTheDefaultDocument) {
@@ -664,7 +724,7 @@ namespace {
 
         ASSERT_EQ(configuration->saves.size(), 1U);
         EXPECT_EQ(configuration->saves.front().runSeries, defaultRunSeriesDocument());
-        EXPECT_FALSE(configuration->saves.front().runAxisLabelSeriesId);
+        EXPECT_FALSE(configuration->saves.front().runAxisLabel);
     }
 
     TEST_F(SettingsViewModelTest, RestoreDefaultGraphLinesIsRefusedOutsideAVisit) {
@@ -924,7 +984,7 @@ namespace {
         const auto view_model = make_view_model();
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::quickSettingsChanged);
 
-        configuration->configuration.runAxisLabelSeriesId = SeriesId{2};
+        configuration->configuration.runAxisLabel = SeriesId{2};
         configuration->publishDiff();
 
         EXPECT_EQ(spy.count(), 0);

@@ -16,7 +16,7 @@ Item {
         property string scenarioTitle: "Air Angelic"
         property var enabledSeriesIds: []
         property var allSeries: []
-        property string axisLabelSeriesId: ""
+        property var axisLabelSeriesIds: []
         property bool pointMarkers: false
         property int connectionMode: 0
         property var columnForSeriesId: function (id) { return -1 }
@@ -63,7 +63,7 @@ Item {
             {"id": "7", "name": "Score Total", "color": "#800080", "column": 7},
             {"id": "8", "name": "Expected Final Score", "color": "#ff00ff", "column": 8}
         ]
-        property string axisLabelSeriesId: ""
+        property var axisLabelSeriesIds: []
         property var columnForSeriesId: function (id) { return Number(id) }
         property var seriesIdForColumn: function (column) { return String(column) }
     }
@@ -89,7 +89,7 @@ Item {
             fakeGraphVm.pointMarkers = false
             fakeGraphVm.connectionMode = 0
             fakeVisualSettings.controlPanelVisible = true
-            manyLinesGraphVm.axisLabelSeriesId = ""
+            manyLinesGraphVm.axisLabelSeriesIds = []
             configureSpy.clear()
         }
 
@@ -206,11 +206,28 @@ Item {
             verify(!!panel, "Component exists")
             compare(panel.yAxisColumn, 1)
 
-            manyLinesGraphVm.axisLabelSeriesId = "3"
+            manyLinesGraphVm.axisLabelSeriesIds = ["3"]
             compare(panel.yAxisColumn, 3)
 
-            manyLinesGraphVm.axisLabelSeriesId = "42"
+            manyLinesGraphVm.axisLabelSeriesIds = ["42"]
             compare(panel.yAxisColumn, 1, "a label naming no visible series falls back to the first visible one")
+        }
+
+        // A chosen axis labels its first visible line, in the order the lines are shown.
+        function test_yAxisColumnIsTheFirstVisibleLineOnTheChosenAxis() {
+            const panel = createTemporaryObject(manyLinesPanelComponent, root)
+            verify(!!panel, "Component exists")
+            const isSeriesVisible = fakeVisualSettings.isSeriesVisible
+            fakeVisualSettings.isSeriesVisible = id => id !== "4"
+            manyLinesGraphVm.axisLabelSeriesIds = ["42", "4", "6", "2"]
+            compare(panel.yAxisColumn, 2)
+
+            fakeVisualSettings.isSeriesVisible = id => id !== "2" && id !== "4"
+            compare(panel.yAxisColumn, 6)
+
+            fakeVisualSettings.isSeriesVisible = id => id === "1"
+            compare(panel.yAxisColumn, 1, "with no line on the axis visible the first visible line is labelled")
+            fakeVisualSettings.isSeriesVisible = isSeriesVisible
         }
 
         function test_configureButtonIsForwardedByThePanel() {

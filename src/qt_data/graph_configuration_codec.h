@@ -6,7 +6,7 @@
 #include "app/contracts/graph_configuration.h"
 
 namespace ksv::qt_data {
-    inline constexpr int kGraphConfigurationSchemaVersion = 5;
+    inline constexpr int kGraphConfigurationSchemaVersion = 6;
 
     struct DecodedGraphConfiguration {
         application::GraphConfiguration configuration;
@@ -15,13 +15,13 @@ namespace ksv::qt_data {
         bool hasRejectedSections = false;
         // The series section was among them; its replacement does not yet honour legacy settings.
         bool runSeriesRejected = false;
-        // A version-4 document's own run-axis-label choice, including an explicit "none", which legacy
-        // selections never override.
+        // The document's own run-axis-label choice, including an explicit "none", which legacy
+        // selections never override. Not yet reconciled with the series section.
         bool runAxisLabelStored = false;
     };
 
     // Each section decodes independently; nullopt only when the text is not a JSON object with a
-    // supported schemaVersion (1-5).
+    // supported schemaVersion (1-6).
     [[nodiscard]] std::optional<DecodedGraphConfiguration> decodeGraphConfigurationDocument(const std::string &raw);
 
     [[nodiscard]] std::string encodeGraphConfigurationDocument(const application::GraphConfiguration &configuration);

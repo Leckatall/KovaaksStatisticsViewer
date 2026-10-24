@@ -98,8 +98,9 @@ namespace ksv::application {
 
         void onSeriesConfigChanged(std::function<void()> callback) override { m_config_callbacks.push_back(std::move(callback)); }
 
-        [[nodiscard]] std::optional<SeriesId> getAxisLabelSeriesId() override {
-            return m_configuration->current().configuration->runAxisLabelSeriesId;
+        [[nodiscard]] std::vector<SeriesId> getAxisLabelSeriesIds() override {
+            const auto configuration = m_configuration->current().configuration;
+            return runAxisLabelLines(configuration->runSeries, configuration->runAxisLabel);
         }
 
         void onAxisLabelChanged(std::function<void()> callback) override {

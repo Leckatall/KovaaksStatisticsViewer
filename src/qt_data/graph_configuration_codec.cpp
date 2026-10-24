@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <vector>
 
@@ -186,6 +187,32 @@ namespace ksv::qt_data {
             return preferences;
         }
 
+        QJsonObject encodeRunAxisLabel(const RunAxisLabel &label) {
+            return std::visit([]<typename Id>(const Id &id) -> QJsonObject {
+                return {{std::same_as<Id, AxisId> ? "axis" : "series", QString::number(id.value)}};
+            }, label);
+        }
+
+        // The outer optional is empty when the value is malformed; the inner one when it is an explicit "none".
+        std::optional<std::optional<RunAxisLabel>> decodeRunAxisLabel(const QJsonValue &value) {
+            if (value.isNull()) return std::optional<RunAxisLabel>{};
+            if (!value.isObject()) return std::nullopt;
+            const auto object = value.toObject();
+            if (exactKeys(object, {"axis"})) {
+                if (const auto id = decimalId(object["axis"])) return std::optional<RunAxisLabel>{AxisId{*id}};
+            } else if (exactKeys(object, {"series"})) {
+                if (const auto id = decimalId(object["series"])) return std::optional<RunAxisLabel>{SeriesId{*id}};
+            }
+            return std::nullopt;
+        }
+
+        // Versions 4 and 5 store a line's id; the loader moves it to the line's axis.
+        std::optional<std::optional<RunAxisLabel>> decodeLegacyRunAxisLabel(const QJsonValue &value) {
+            if (value.isNull()) return std::optional<RunAxisLabel>{};
+            if (const auto id = decimalId(value)) return std::optional<RunAxisLabel>{SeriesId{*id}};
+            return std::nullopt;
+        }
+
         void decodeGraphs(const QJsonValue &value, DecodedGraphConfiguration &decoded) {
             if (!value.isObject()) {
                 decoded.hasRejectedSections = true;
@@ -213,22 +240,22 @@ namespace ksv::qt_data {
         auto root = document.object();
         if (!root["schemaVersion"].isDouble()) return std::nullopt;
         const auto version = root["schemaVersion"].toDouble();
-        if (version != 1 && version != 2 && version != 3 && version != 4 && version != kGraphConfigurationSchemaVersion)
+        if (version != std::floor(version) || version < 1 || version > kGraphConfigurationSchemaVersion)
             return std::nullopt;
 
         DecodedGraphConfiguration decoded{defaultGraphConfiguration()};
         int seriesVersion = static_cast<int>(version);
-        if (seriesVersion == 4 || seriesVersion == kGraphConfigurationSchemaVersion) {
-            // Versions 4 and 5 add these two keys to the series section of version 3 and 4 respectively.
+        if (seriesVersion >= 4) {
+            // Versions 4 and up add these keys to the series section of version 3 (4) or 4 (5 and up).
             seriesVersion = seriesVersion == 4 ? 3 : 4;
             root["schemaVersion"] = seriesVersion;
-            if (root.contains("runAxisLabelSeriesId")) {
-                const auto label = root.take("runAxisLabelSeriesId");
-                if (label.isNull()) {
+            const QString labelKey = version >= 6 ? "runAxisLabel" : "runAxisLabelSeriesId";
+            if (root.contains(labelKey)) {
+                const auto value = root.take(labelKey);
+                const auto label = version >= 6 ? decodeRunAxisLabel(value) : decodeLegacyRunAxisLabel(value);
+                if (label) {
                     decoded.runAxisLabelStored = true;
-                } else if (const auto id = decimalId(label)) {
-                    decoded.runAxisLabelStored = true;
-                    decoded.configuration.runAxisLabelSeriesId = SeriesId{*id};
+                    decoded.configuration.runAxisLabel = *label;
                 } else {
                     decoded.hasRejectedSections = true;
                 }
@@ -248,9 +275,8 @@ namespace ksv::qt_data {
     std::string encodeGraphConfigurationDocument(const GraphConfiguration &configuration) {
         auto root = encodeRunSeries(configuration.runSeries);
         root["schemaVersion"] = kGraphConfigurationSchemaVersion;
-        root["runAxisLabelSeriesId"] = configuration.runAxisLabelSeriesId
-                                           ? QJsonValue(QString::number(configuration.runAxisLabelSeriesId->value))
-                                           : QJsonValue();
+        root["runAxisLabel"] = configuration.runAxisLabel ? QJsonValue(encodeRunAxisLabel(*configuration.runAxisLabel))
+                                                          : QJsonValue();
         QJsonObject graphs;
         for (const auto key: kGraphKeys) {
             graphs[latin1(graphKeyName(key))] = encodeGraph(configuration.preferences(key));

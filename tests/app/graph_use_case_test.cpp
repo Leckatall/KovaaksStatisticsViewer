@@ -229,15 +229,20 @@ namespace {
     TEST_F(GraphUseCaseTest, AxisLabelIsReadFromCommittedConfigurationAndFollowsOnlyItsChanges) {
         int notifications = 0;
         use_case.onAxisLabelChanged([&] { ++notifications; });
-        EXPECT_FALSE(use_case.getAxisLabelSeriesId());
+        EXPECT_TRUE(use_case.getAxisLabelSeriesIds().empty());
 
-        fake_configuration->configuration.runAxisLabelSeriesId = SeriesId{4};
+        fake_configuration->configuration.runAxisLabel = SeriesId{7};
         fake_configuration->publish({}, true, false);
         EXPECT_EQ(notifications, 0);
 
         fake_configuration->publish({}, false, true);
         EXPECT_EQ(notifications, 1);
-        EXPECT_EQ(use_case.getAxisLabelSeriesId(), SeriesId{4});
+        EXPECT_EQ(use_case.getAxisLabelSeriesIds(), std::vector{SeriesId{7}});
+    }
+
+    TEST_F(GraphUseCaseTest, AChosenAxisLabelsEveryLineOnIt) {
+        fake_configuration->configuration.runAxisLabel = AxisId{2};
+        EXPECT_EQ(use_case.getAxisLabelSeriesIds(), (std::vector{SeriesId{5}, SeriesId{6}}));
     }
 
     TEST_F(GraphUseCaseTest, RunGraphStyleIsItsConnectionModeAndMarkersFromCommittedConfiguration) {
@@ -272,7 +277,7 @@ namespace {
 
         fake_configuration->configuration.preferences(GraphKey::ScenarioHistory).appearance.connection =
             ConnectionMode::Straight;
-        fake_configuration->configuration.runAxisLabelSeriesId = SeriesId{2};
+        fake_configuration->configuration.runAxisLabel = SeriesId{2};
         fake_configuration->publishDiff();
 
         EXPECT_EQ(presentation, 0);

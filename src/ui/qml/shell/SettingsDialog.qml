@@ -89,11 +89,6 @@ ApplicationWindow {
         }
     }
 
-    function seriesName(id) {
-        const series = root.settingsVm.allSeriesConfigs.find(s => s.id === id)
-        return series ? series.name : id
-    }
-
     property int currentCategory: 0
     readonly property int profileCategory: 0
     readonly property int graphLinesCategory: 1
@@ -454,19 +449,7 @@ ApplicationWindow {
                     id: graphLinesPage
                     spacing: 8
 
-                    readonly property var enabledSeriesConfigs: root.settingsVm.allSeriesConfigs.filter(s => s.enabled)
-
-                    readonly property var visibleAxisColumns: {
-                        const seenPositions = new Set()
-                        const result = []
-                        for (const series of graphLinesPage.enabledSeriesConfigs) {
-                            if (!seenPositions.has(series.displayPosition)) {
-                                seenPositions.add(series.displayPosition)
-                                result.push(series.id)
-                            }
-                        }
-                        return result
-                    }
+                    readonly property var axisLabelChoices: root.settingsVm.runAxisLabelChoices
 
                     Label {
                         text: "Graph Lines"
@@ -480,26 +463,30 @@ ApplicationWindow {
                         spacing: 12
 
                         Label {
-                            text: "Y-axis labels"
+                            text: "Y-axis"
                             Layout.alignment: Qt.AlignVCenter
                         }
                         ComboBox {
                             id: yAxisColumnComboBox
                             objectName: "yAxisColumnComboBox"
                             Layout.fillWidth: true
-                            enabled: graphLinesPage.visibleAxisColumns.length > 0
-                            model: graphLinesPage.visibleAxisColumns
-                            displayText: enabled ? root.seriesName(graphLinesPage.visibleAxisColumns[currentIndex]) : ""
+                            enabled: graphLinesPage.axisLabelChoices.length > 0
+                            model: graphLinesPage.axisLabelChoices
+                            textRole: "name"
+                            valueRole: "key"
+                            displayText: enabled ? graphLinesPage.axisLabelChoices[currentIndex].name : ""
                             delegate: ItemDelegate {
                                 required property var modelData
+                                required property int index
                                 width: yAxisColumnComboBox.width
-                                text: root.seriesName(modelData)
+                                text: modelData.name
+                                highlighted: yAxisColumnComboBox.highlightedIndex === index
                             }
                             currentIndex: {
-                                const idx = graphLinesPage.visibleAxisColumns.indexOf(root.settingsVm.runAxisLabelSeriesId)
+                                const idx = graphLinesPage.axisLabelChoices.findIndex(c => c.key === root.settingsVm.runAxisLabelKey)
                                 return idx >= 0 ? idx : 0
                             }
-                            onActivated: index => root.settingsVm.setRunAxisLabelSeriesId(graphLinesPage.visibleAxisColumns[index])
+                            onActivated: index => root.settingsVm.setRunAxisLabel(graphLinesPage.axisLabelChoices[index].key)
                         }
                     }
 

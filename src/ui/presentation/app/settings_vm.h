@@ -42,7 +42,10 @@ namespace ksv::presentation {
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
         Q_PROPERTY(QVariantList allSeriesConfigs READ getAllSeriesConfigs NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantList allAxes READ getAllAxes NOTIFY seriesConfigurationChanged)
-        Q_PROPERTY(QString runAxisLabelSeriesId READ runAxisLabelSeriesId NOTIFY seriesConfigurationChanged)
+        // {key, name} per Y axis the run graph can label: each named axis with an enabled line, and each
+        // enabled line with no axis, in display order.
+        Q_PROPERTY(QVariantList runAxisLabelChoices READ runAxisLabelChoices NOTIFY seriesConfigurationChanged)
+        Q_PROPERTY(QString runAxisLabelKey READ runAxisLabelKey NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(bool visitOpen READ isVisitOpen NOTIFY visitOpenChanged)
         Q_PROPERTY(bool pendingChanges READ hasPendingChanges NOTIFY pendingChangesChanged)
         Q_PROPERTY(QString selectedGraph READ selectedGraph WRITE setSelectedGraph NOTIFY selectedGraphChanged)
@@ -151,7 +154,9 @@ namespace ksv::presentation {
         // ---- Graph Lines: the working copy during a visit, the committed configuration otherwise -----
         Q_INVOKABLE [[nodiscard]] QVariantList getAllSeriesConfigs() const;
         Q_INVOKABLE [[nodiscard]] QVariantList getAllAxes() const;
-        [[nodiscard]] QString runAxisLabelSeriesId() const;
+        [[nodiscard]] QVariantList runAxisLabelChoices() const;
+        // "axis:<id>" or "series:<id>"; empty when nothing is chosen.
+        [[nodiscard]] QString runAxisLabelKey() const;
 
         // Every edit below changes only the working copy and is refused outside a visit.
         Q_INVOKABLE QVariantMap setSeriesEnabled(const QString &id, bool enabled);
@@ -165,10 +170,11 @@ namespace ksv::presentation {
         Q_INVOKABLE SeriesExpressionEditorModel *beginExpressionEdit(const QString &id);
         Q_INVOKABLE QVariantMap createAxis(const QString &name);
         Q_INVOKABLE QVariantMap updateSeriesAxis(const QString &id, const QString &axisId);
-        // Replaces the lines and axes with the defaults and clears the axis-label choice, which may name a line that is gone.
+        // Replaces the lines and axes with the defaults and clears the axis-label choice.
         Q_INVOKABLE QVariantMap restoreDefaultGraphLines();
-        // An empty id clears the choice, so the run graph labels its first visible series.
-        Q_INVOKABLE void setRunAxisLabelSeriesId(const QString &id);
+        // Takes a runAxisLabelChoices key; an empty key clears the choice, so the run graph labels its
+        // first visible line.
+        Q_INVOKABLE void setRunAxisLabel(const QString &key);
 
     signals:
         void kovaaksDirChanged();

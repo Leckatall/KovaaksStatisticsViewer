@@ -46,9 +46,13 @@ namespace ksv::presentation {
                                                                  secondsDelegate()) {
         fetchMetadata();
         recomputeBounds();
-        m_graphUseCase->onSeriesConfigChanged([this] { fetchMetadata(); });
-        refreshAxisLabelSeriesId();
-        m_graphUseCase->onAxisLabelChanged([this] { refreshAxisLabelSeriesId(); });
+        // A line moving between axes changes which lines the chosen axis labels.
+        m_graphUseCase->onSeriesConfigChanged([this] {
+            fetchMetadata();
+            refreshAxisLabelSeriesIds();
+        });
+        refreshAxisLabelSeriesIds();
+        m_graphUseCase->onAxisLabelChanged([this] { refreshAxisLabelSeriesIds(); });
         m_graphUseCase->onPresentationChanged([this] { applyPresentation(); });
         applyPresentation();
     }
@@ -58,12 +62,12 @@ namespace ksv::presentation {
         emit styleChanged();
     }
 
-    void GraphViewModel::refreshAxisLabelSeriesId() {
-        const auto id = m_graphUseCase->getAxisLabelSeriesId();
-        const QString value = id ? QString::number(id->value) : QString();
-        if (value == m_axisLabelSeriesId) return;
-        m_axisLabelSeriesId = value;
-        emit axisLabelSeriesIdChanged();
+    void GraphViewModel::refreshAxisLabelSeriesIds() {
+        QStringList ids;
+        for (const auto id: m_graphUseCase->getAxisLabelSeriesIds()) ids.append(QString::number(id.value));
+        if (ids == m_axisLabelSeriesIds) return;
+        m_axisLabelSeriesIds = std::move(ids);
+        emit axisLabelSeriesIdsChanged();
     }
 
     QList<SeriesModel *> GraphViewModel::series(const QList<int> &columns) const {
