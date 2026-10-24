@@ -24,6 +24,18 @@ configure_file(
     COPYONLY
 )
 
+configure_file(
+    "${TEST_FILES_DIR}/1wall6targets TE - Challenge - 2020.05.29-08.10.33 Stats.csv"
+    "${CMAKE_CURRENT_BINARY_DIR}/examples/1wall6targets TE - Challenge - 2020.05.29-08.10.33 Stats.csv"
+    COPYONLY
+)
+
+configure_file(
+    "${TEST_FILES_DIR}/1w4ts Voltaic - Challenge - 2021.08.16-07.36.22 Stats.csv"
+    "${CMAKE_CURRENT_BINARY_DIR}/examples/1w4ts Voltaic - Challenge - 2021.08.16-07.36.22 Stats.csv"
+    COPYONLY
+)
+
 target_compile_definitions(proto_decoder_tests PRIVATE
     TEST_FILES_DIR="${CMAKE_CURRENT_BINARY_DIR}/examples"
 )

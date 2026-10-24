@@ -52,6 +52,13 @@ namespace ksv::data {
         return {.root = perf.root, .subdir = std::move(subdir), .filename = pairingStem(perf.filename) + " Stats.csv"};
     }
 
+    std::optional<std::chrono::milliseconds> endTimeOfDay(const std::string_view filename) {
+        const auto end_tm = endTimeFrom(pairingStem(filename));
+        if (!end_tm) return std::nullopt;
+        using namespace std::chrono;
+        return duration_cast<milliseconds>(hours{end_tm->tm_hour} + minutes{end_tm->tm_min} + seconds{end_tm->tm_sec});
+    }
+
     std::optional<CsvTiming> deriveCsvTiming(const std::string_view filename,
                                                const std::chrono::milliseconds challenge_start) {
         auto end_tm = endTimeFrom(pairingStem(filename));

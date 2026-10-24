@@ -19,6 +19,7 @@ namespace ksv::data {
     [[nodiscard]] application::StatsFile statsSibling(const application::PerfFile &perf);
     [[nodiscard]] std::optional<CsvTiming> deriveCsvTiming(
         std::string_view filename, std::chrono::milliseconds challenge_start);
+    [[nodiscard]] std::optional<std::chrono::milliseconds> endTimeOfDay(std::string_view filename);
 }
 
 #endif // KOVAAKSSTATSVIEWER_RUN_FILENAME_H
