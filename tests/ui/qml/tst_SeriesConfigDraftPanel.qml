@@ -661,6 +661,25 @@ TestCase {
         compare(ItemLookup.findByObjectName(panel, "saveGraphLinesButton"), null);
         compare(ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton"), null);
     }
+    function test_dragCursorOverlayIsEnabledOnlyWhileARowIsDragged() {
+        const panel = createTemporaryObject(panelComponent, testCase, {
+            settingsVm: makeFakeSettingsVm({
+                allSeriesConfigs: rowsOutOfOrder()
+            })
+        });
+        verify(waitForRendering(panel));
+        const overlay = ItemLookup.findByObjectName(panel, "seriesDragCursorOverlay");
+        verify(overlay !== null);
+        compare(overlay.enabled, false);
+
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_1");
+        const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
+        mousePress(panel, start.x, start.y);
+        mouseMove(panel, start.x, start.y + 20, -1, Qt.LeftButton);
+        tryCompare(overlay, "enabled", true);
+        mouseRelease(panel, start.x, start.y + 20);
+        tryCompare(overlay, "enabled", false);
+    }
     height: 400
     name: "SeriesConfigDraftPanelTest"
     visible: true

@@ -279,4 +279,19 @@ Pane {
             wrapMode: Text.WordWrap
         }
     }
+
+    // A handler's cursorShape only applies over its own item, so this holds the closed hand once the pointer leaves the handle.
+    Item {
+        id: dragCursorOverlay
+        parent: root
+        objectName: "seriesDragCursorOverlay"
+        anchors.fill: parent
+        enabled: root.draggedSeriesId !== ""
+        visible: enabled
+        z: 100
+
+        HoverHandler {
+            cursorShape: Qt.ClosedHandCursor
+        }
+    }
 }
