@@ -40,7 +40,7 @@ namespace {
     TEST_F(GraphConfigurationUseCaseTest, SavingAValidCandidateCommitsWritesAndPublishesIt) {
         auto candidate = *useCase.current().configuration;
         candidate.preferences(GraphKey::BenchmarkRank).range = RangePreference{RecentDays{30}, false};
-        candidate.runAxisLabelSeriesId = SeriesId{3};
+        candidate.runAxisLabel = AxisId{1};
 
         const auto result = useCase.save(candidate);
 

@@ -24,8 +24,9 @@ namespace ksv::presentation {
         Q_PROPERTY(QVariantList enabledSeriesIds READ enabledSeriesIds NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)
         Q_PROPERTY(ContentState contentState READ contentState NOTIFY contentStateChanged)
-        // Empty when no series is chosen; the dashboard then labels the first visible series.
-        Q_PROPERTY(QString axisLabelSeriesId READ axisLabelSeriesId NOTIFY axisLabelSeriesIdChanged)
+        // The lines on the chosen Y axis, in display order. The dashboard labels the first visible one,
+        // or the first visible line when none is.
+        Q_PROPERTY(QStringList axisLabelSeriesIds READ axisLabelSeriesIds NOTIFY axisLabelSeriesIdsChanged)
 
     public:
         // What the runtime graph can honestly say about the run it holds: nothing selected, a run with
@@ -48,7 +49,7 @@ namespace ksv::presentation {
 
         [[nodiscard]] ContentState contentState() const { return m_contentState; }
 
-        [[nodiscard]] QString axisLabelSeriesId() const { return m_axisLabelSeriesId; }
+        [[nodiscard]] QStringList axisLabelSeriesIds() const { return m_axisLabelSeriesIds; }
 
         [[nodiscard]] int yAxisColumn() const override { return kDefaultYAxisSeriesId; }
 
@@ -67,7 +68,7 @@ namespace ksv::presentation {
         void scenarioTitleChanged();
         void seriesConfigurationChanged();
         void contentStateChanged();
-        void axisLabelSeriesIdChanged();
+        void axisLabelSeriesIdsChanged();
 
     private:
         // Fallback y-axis column when nothing else is specified; the built-in Score primitive, id 1.
@@ -85,9 +86,9 @@ namespace ksv::presentation {
         QString m_scenarioTitle;
         QVariantList m_enabledSeriesIds;
         ContentState m_contentState = NoRunSelected;
-        QString m_axisLabelSeriesId;
+        QStringList m_axisLabelSeriesIds;
 
-        void refreshAxisLabelSeriesId();
+        void refreshAxisLabelSeriesIds();
         void applyPresentation();
     };
 }

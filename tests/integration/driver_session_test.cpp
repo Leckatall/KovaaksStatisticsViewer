@@ -382,7 +382,7 @@ namespace {
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings), plan);
         auto configuration = graphs->load();
         EXPECT_EQ(configuration, application::defaultGraphConfiguration());
-        configuration.runAxisLabelSeriesId = application::SeriesId{2};
+        configuration.runAxisLabel = application::SeriesId{2};
         graphs->save(configuration);
         EXPECT_EQ(settings->document, "{}");
         EXPECT_TRUE(settings->quarantined.empty());

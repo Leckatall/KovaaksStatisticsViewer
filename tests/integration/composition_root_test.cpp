@@ -288,17 +288,17 @@ namespace {
         auto *settingsVm = app->settingsVm();
         settingsVm->beginVisit();
         const auto before = app->graphVm()->enabledSeriesIds();
-        const auto labelBefore = app->graphVm()->axisLabelSeriesId();
+        const auto labelBefore = app->graphVm()->axisLabelSeriesIds();
         const auto writtenBefore = env->graphConfigurationPersistence->load();
 
         const auto created = settingsVm->createComputedSeries("Draft line", QColor("#4CAF50"), 2.0, true, "");
         ASSERT_TRUE(created["succeeded"].toBool());
         const auto id = created["createdId"].toString();
-        settingsVm->setRunAxisLabelSeriesId(id);
+        settingsVm->setRunAxisLabel("series:" + id);
 
         EXPECT_TRUE(settingsVm->hasPendingChanges());
         EXPECT_EQ(app->graphVm()->enabledSeriesIds(), before);
-        EXPECT_EQ(app->graphVm()->axisLabelSeriesId(), labelBefore);
+        EXPECT_EQ(app->graphVm()->axisLabelSeriesIds(), labelBefore);
         EXPECT_EQ(env->graphConfigurationPersistence->load(), writtenBefore);
 
         ASSERT_TRUE(settingsVm->save()["accepted"].toBool());
@@ -306,7 +306,7 @@ namespace {
         EXPECT_FALSE(settingsVm->hasPendingChanges());
         EXPECT_TRUE(settingsVm->isVisitOpen());
         EXPECT_TRUE(app->graphVm()->enabledSeriesIds().contains(id));
-        EXPECT_EQ(app->graphVm()->axisLabelSeriesId(), id);
+        EXPECT_EQ(app->graphVm()->axisLabelSeriesIds(), QStringList{id});
         const auto stored = env->graphConfigurationPersistence->load();
         EXPECT_EQ(stored, *app->graphConfigurationService()->snapshot().configuration);
         settingsVm->endVisit();

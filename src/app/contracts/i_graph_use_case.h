@@ -38,8 +38,8 @@ namespace ksv::application {
 
         virtual void onSeriesConfigChanged(std::function<void()>) = 0;
 
-        // The committed Y-axis-label series; absent means the first visible series.
-        [[nodiscard]] virtual std::optional<SeriesId> getAxisLabelSeriesId() = 0;
+        // The lines on the committed labelled Y axis, in display order; empty means the first visible line.
+        [[nodiscard]] virtual std::vector<SeriesId> getAxisLabelSeriesIds() = 0;
         virtual void onAxisLabelChanged(std::function<void()>) = 0;
 
         // Connection mode and marker preference only: the run graph's series keep Graph Lines colours

@@ -409,8 +409,8 @@ namespace {
         ASSERT_TRUE(axis["succeeded"].toBool());
         const auto series = vm->createComputedSeries("Mine", QColor("#4CAF50"), 2.0, true, "");
         ASSERT_TRUE(series["succeeded"].toBool());
-        ASSERT_TRUE(vm->updateSeriesAxis(series["createdId"].toString(), axis["createdId"].toString())["succeeded"].toBool());
-        vm->setRunAxisLabelSeriesId(series["createdId"].toString());
+        ASSERT_TRUE(vm->updateSeriesAxis(series["createdId"].toString(), axis["createdAxisId"].toString())["succeeded"].toBool());
+        vm->setRunAxisLabel("axis:" + axis["createdAxisId"].toString());
         ASSERT_TRUE(vm->setGraphRangeKind("scenarioHistory", "latestRuns"));
         ASSERT_TRUE(vm->setGraphField("scenarioHistory", "dataRange", "", "latestRuns", "2"));
         ASSERT_TRUE(vm->setGraphConnection("scenarioHistory", "straight"));
@@ -420,7 +420,7 @@ namespace {
         const auto saved = committed();
         const auto lines = vm->getAllSeriesConfigs();
         const auto axes = vm->getAllAxes();
-        const auto label = vm->runAxisLabelSeriesId();
+        const auto label = vm->runAxisLabelKey();
         ASSERT_FALSE(label.isEmpty());
 
         // Reset is a draft edit on the selected graph only.
@@ -434,7 +434,7 @@ namespace {
         EXPECT_EQ(vm->graphDraft("run")["connection"].toString(), "straight");
         EXPECT_EQ(vm->getAllSeriesConfigs(), lines);
         EXPECT_EQ(vm->getAllAxes(), axes);
-        EXPECT_EQ(vm->runAxisLabelSeriesId(), label);
+        EXPECT_EQ(vm->runAxisLabelKey(), label);
         EXPECT_EQ(committed().revision, saved.revision) << "nothing is applied before Save";
         EXPECT_EQ(app->completionHistoryVm()->visibleRunCount(), 2);
 
@@ -452,7 +452,7 @@ namespace {
         EXPECT_EQ(after.preferences(GraphKey::Run), defaultGraphPreferences(GraphKey::Run));
         EXPECT_EQ(after.preferences(GraphKey::DailyPlaytime), saved.configuration->preferences(GraphKey::DailyPlaytime));
         EXPECT_EQ(after.runSeries, saved.configuration->runSeries);
-        EXPECT_EQ(after.runAxisLabelSeriesId, saved.configuration->runAxisLabelSeriesId);
+        EXPECT_EQ(after.runAxisLabel, saved.configuration->runAxisLabel);
         EXPECT_EQ(vm->getAllSeriesConfigs(), lines);
         EXPECT_EQ(vm->getAllAxes(), axes);
         EXPECT_EQ(app->completionHistoryVm()->visibleRunCount(),
@@ -478,8 +478,9 @@ namespace {
         ASSERT_EQ(loaded.runSeries.axes.size(), 2U);
         EXPECT_FALSE(loaded.runSeries.nextSeriesId.has_value());
         EXPECT_FALSE(loaded.runSeries.nextAxisId.has_value());
-        EXPECT_EQ(loaded.runAxisLabelSeriesId, SeriesId{12});
-        EXPECT_EQ(app->graphVm()->axisLabelSeriesId(), "12");
+        // The legacy selector named line 12, which sits on axis 7.
+        EXPECT_EQ(loaded.runAxisLabel, RunAxisLabel{AxisId{7}});
+        EXPECT_EQ(app->graphVm()->axisLabelSeriesIds(), QStringList{"12"});
 
         EXPECT_EQ(app->playtimeVm()->averagingWindowDays(), defaultAveragingWindow(GraphKey::DailyPlaytime));
         EXPECT_EQ(dashboard().visibleRuns, std::min(app->completionHistoryVm()->runCount(), defaultLatestRunCount()));
@@ -518,7 +519,7 @@ namespace {
         raw.setValue("graphAxis/seriesId", "1");
         raw.sync();
         ASSERT_NO_FATAL_FAILURE(startSeededApp(true));
-        EXPECT_EQ(committed().configuration->runAxisLabelSeriesId, SeriesId{12});
+        EXPECT_EQ(committed().configuration->runAxisLabel, RunAxisLabel{AxisId{7}});
         EXPECT_EQ(*committed().configuration, loaded);
     }
 

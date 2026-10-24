@@ -52,7 +52,7 @@ namespace {
         double run_duration = 0.0;
         bool has_current_run = false;
         bool has_performance = false;
-        std::optional<SeriesId> axis_label;
+        std::vector<SeriesId> axis_label;
         std::function<void()> axis_label_callback;
 
         void load_perf(const std::string_view filename) override { load_perf_calls.emplace_back(filename); }
@@ -62,7 +62,7 @@ namespace {
         bool currentRunHasPerformance() const override { return has_performance; }
         void onCurrentPerfChanged(std::function<void()>) override {}
         void onSeriesConfigChanged(std::function<void()>) override {}
-        std::optional<SeriesId> getAxisLabelSeriesId() override { return axis_label; }
+        std::vector<SeriesId> getAxisLabelSeriesIds() override { return axis_label; }
         void onAxisLabelChanged(std::function<void()> callback) override { axis_label_callback = std::move(callback); }
 
         GraphPresentation committedPresentation = defaultGraphPresentation(GraphKey::Run);
@@ -452,16 +452,16 @@ namespace {
         EXPECT_EQ(view_model.series({5}).front()->color(), QColor(10, 200, 10, 255));
     }
 
-    TEST_F(GraphViewModelTest, AxisLabelSeriesIdFollowsTheCommittedChoice) {
-        EXPECT_EQ(view_model.axisLabelSeriesId(), "");
+    TEST_F(GraphViewModelTest, AxisLabelSeriesIdsFollowTheCommittedChoice) {
+        EXPECT_TRUE(view_model.axisLabelSeriesIds().isEmpty());
         ASSERT_TRUE(static_cast<bool>(fake_use_case->axis_label_callback));
-        const QSignalSpy spy(&view_model, &GraphViewModel::axisLabelSeriesIdChanged);
+        const QSignalSpy spy(&view_model, &GraphViewModel::axisLabelSeriesIdsChanged);
 
-        fake_use_case->axis_label = SeriesId{7};
+        fake_use_case->axis_label = {SeriesId{7}, SeriesId{2}};
         fake_use_case->axis_label_callback();
         fake_use_case->axis_label_callback();
 
-        EXPECT_EQ(view_model.axisLabelSeriesId(), "7");
+        EXPECT_EQ(view_model.axisLabelSeriesIds(), (QStringList{"7", "2"}));
         EXPECT_EQ(spy.count(), 1);
     }
 

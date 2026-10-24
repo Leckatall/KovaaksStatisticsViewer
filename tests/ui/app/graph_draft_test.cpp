@@ -613,8 +613,8 @@ namespace {
         const auto lineCount = lineup.size();
         const auto toggledLine = lineup.front().id;
         const bool toggledEnabled = !lineup.front().presentation.enabled;
-        const auto labelLine = lineup.back().id;
-        configuration->configuration.runAxisLabelSeriesId = labelLine;
+        const auto label = runAxisLabelFor(configuration->configuration.runSeries, lineup.back().id);
+        configuration->configuration.runAxisLabel = label;
         const auto view_model = visit(english());
         ASSERT_TRUE(view_model->setSeriesEnabled(QString::number(toggledLine.value), toggledEnabled)["succeeded"].toBool());
         ASSERT_FALSE(view_model->setGraphField("scenarioHistory", "seriesStyle", "hits", "width", "wide"));
@@ -628,8 +628,7 @@ namespace {
         const auto candidate = saved(*view_model);
         EXPECT_EQ(candidate.preferences(GraphKey::ScenarioHistory), defaultGraphPreferences(GraphKey::ScenarioHistory));
         EXPECT_EQ(candidate.preferences(GraphKey::DailyPlaytime).averagingWindowDays, 9);
-        ASSERT_TRUE(candidate.runAxisLabelSeriesId);
-        EXPECT_EQ(*candidate.runAxisLabelSeriesId, labelLine);
+        EXPECT_EQ(candidate.runAxisLabel, label);
         ASSERT_EQ(candidate.runSeries.series.size(), lineCount);
         EXPECT_EQ(candidate.runSeries.series.front().presentation.enabled, toggledEnabled)
             << "a Graph Lines edit survives the reset";
@@ -641,13 +640,13 @@ namespace {
         const auto lineCount = static_cast<qsizetype>(lineup.series.size());
         const auto axisCount = static_cast<qsizetype>(lineup.axes.size());
         const auto editedLine = QString::number(lineup.series.front().id.value);
-        const auto labelLine = QString::number(lineup.series.back().id.value);
         const auto view_model = visit();
         const auto axis = view_model->createAxis("Mine");
         ASSERT_TRUE(axis["succeeded"].toBool());
         ASSERT_TRUE(view_model->updateSeriesAxis(editedLine, axis["createdAxisId"].toString())["succeeded"].toBool());
         ASSERT_TRUE(view_model->createComputedSeries("Extra", "#123456", 2.0, true, "")["succeeded"].toBool());
-        view_model->setRunAxisLabelSeriesId(labelLine);
+        const auto label = "axis:" + axis["createdAxisId"].toString();
+        view_model->setRunAxisLabel(label);
         ASSERT_TRUE(view_model->setGraphConnection("run", "straight"));
         ASSERT_TRUE(view_model->setGraphMarkers("run", true));
 
@@ -657,7 +656,7 @@ namespace {
         EXPECT_FALSE(view_model->graphDraft("run")["markers"].toBool());
         EXPECT_EQ(view_model->getAllAxes().size(), axisCount + 1);
         EXPECT_EQ(view_model->getAllSeriesConfigs().size(), lineCount + 1);
-        EXPECT_EQ(view_model->runAxisLabelSeriesId(), labelLine);
+        EXPECT_EQ(view_model->runAxisLabelKey(), label);
         EXPECT_TRUE(view_model->hasPendingChanges());
     }
 

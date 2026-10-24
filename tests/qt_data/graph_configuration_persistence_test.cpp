@@ -114,7 +114,7 @@ namespace {
         benchmarkPlaytime.averagingWindowDays = 1;
 
         configuration.preferences(GraphKey::Run).appearance = {ConnectionMode::Straight, true};
-        configuration.runAxisLabelSeriesId = SeriesId{7};
+        configuration.runAxisLabel = SeriesId{7};
         return configuration;
     }
 
@@ -147,6 +147,18 @@ namespace {
             auto root = savedRoot(everyPreferenceKind());
             for (const auto *key: {"series", "axes", "nextComputedSeriesId", "nextAxisId"}) root[key] = v3Root()[key];
             root["schemaVersion"] = 4;
+            root.remove("runAxisLabel");
+            // v3Root()'s "Custom" line, on the "Mine" axis (7).
+            root["runAxisLabelSeriesId"] = "12";
+            return root;
+        }
+
+        // A version-5 document: the default lineup, labelled by a line's id.
+        [[nodiscard]] QJsonObject v5Root(const QJsonValue &labelSeriesId) const {
+            auto root = savedRoot(everyPreferenceKind());
+            root["schemaVersion"] = 5;
+            root.remove("runAxisLabel");
+            root["runAxisLabelSeriesId"] = labelSeriesId;
             return root;
         }
 
@@ -183,14 +195,14 @@ namespace {
         EXPECT_EQ(load(), defaultGraphConfiguration());
     }
 
-    TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionFiveDocument) {
+    TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionSixDocument) {
         const auto loaded = load();
 
         EXPECT_EQ(loaded, defaultGraphConfiguration());
         EXPECT_TRUE(settings->quarantined.empty());
         ASSERT_EQ(settings->document_writes, 1);
         const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 5);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 6);
         EXPECT_EQ(root["graphs"].toObject().keys(),
                   (QStringList{"benchmarkPlaytime", "benchmarkRank", "dailyPlaytime", "run", "scenarioHistory"}));
     }
@@ -216,7 +228,7 @@ namespace {
         for (const auto key: kGraphKeys) EXPECT_EQ(loaded.preferences(key), defaultGraphPreferences(key));
 
         save(loaded);
-        EXPECT_EQ(docObject()["schemaVersion"].toInt(), 5);
+        EXPECT_EQ(docObject()["schemaVersion"].toInt(), 6);
         EXPECT_EQ(load(), loaded);
     }
 
@@ -253,7 +265,7 @@ namespace {
         expectV3RootSeries(loaded.runSeries);
 
         const auto root = savedRoot(loaded);
-        EXPECT_EQ(root["schemaVersion"].toInt(), 5);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 6);
         EXPECT_TRUE(root["nextComputedSeriesId"].isNull());
         EXPECT_TRUE(root["nextAxisId"].isNull());
         auto expectedSeries = v3Root()["series"].toArray();
@@ -276,7 +288,7 @@ namespace {
         save(configuration);
 
         const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 5);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 6);
         for (const auto &item: root["series"].toArray())
             EXPECT_TRUE(item.toObject()["presentation"].toObject()["hiddenLeadingPoints"].isDouble());
         EXPECT_EQ(root["series"].toArray()[2].toObject()["presentation"].toObject()["hiddenLeadingPoints"].toInt(), 3);
@@ -355,35 +367,88 @@ namespace {
     }
 
     TEST_F(GraphConfigurationPersistenceTest, ImportsTheLegacyRunAxisLabelWhenTheDocumentHasNone) {
-        settings->legacyRunAxisLabelSeriesId = "7";
+        settings->legacyRunAxisLabelSeriesId = "1";
         writeDoc(v3Root());
-        EXPECT_EQ(load().runAxisLabelSeriesId, SeriesId{7});
+        EXPECT_EQ(load().runAxisLabel, RunAxisLabel{SeriesId{1}});
 
         settings->document.reset();
         settings->document_writes = 0;
-        EXPECT_EQ(load().runAxisLabelSeriesId, SeriesId{7});
-        EXPECT_EQ(docObject()["runAxisLabelSeriesId"].toString(), "7");
+        settings->legacyRunAxisLabelSeriesId = "7";
+        EXPECT_EQ(load().runAxisLabel, RunAxisLabel{SeriesId{7}});
+        EXPECT_EQ(docObject()["runAxisLabel"].toObject(), (QJsonObject{{"series", "7"}}));
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, ALegacyRunAxisLabelOnANamedAxisBecomesThatAxis) {
+        settings->legacyRunAxisLabelSeriesId = "12";
+        writeDoc(v3Root());
+        EXPECT_EQ(load().runAxisLabel, RunAxisLabel{AxisId{7}});
+
+        settings->legacyRunAxisLabelSeriesId = "99";
+        EXPECT_FALSE(load().runAxisLabel);
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, AVersionFiveRunAxisLabelBecomesItsLinesAxisUnlessTheLineHasNone) {
+        writeDoc(v5Root("3"));
+        EXPECT_EQ(load().runAxisLabel, RunAxisLabel{AxisId{1}});
+        writeDoc(v5Root("7"));
+        EXPECT_EQ(load().runAxisLabel, RunAxisLabel{SeriesId{7}});
+        writeDoc(v5Root(QJsonValue()));
+        settings->legacyRunAxisLabelSeriesId = "3";
+        EXPECT_FALSE(load().runAxisLabel);
+        EXPECT_TRUE(settings->quarantined.empty());
+
+        settings->legacyRunAxisLabelSeriesId.clear();
+        writeDoc(v5Root("x"));
+        EXPECT_FALSE(load().runAxisLabel);
+        EXPECT_EQ(settings->quarantined.size(), 1U);
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, StoresTheRunAxisLabelAsAnAxisOrALine) {
+        auto configuration = everyPreferenceKind();
+        configuration.runAxisLabel = AxisId{2};
+        EXPECT_EQ(savedRoot(configuration)["runAxisLabel"].toObject(), (QJsonObject{{"axis", "2"}}));
+        EXPECT_FALSE(docObject().contains("runAxisLabelSeriesId"));
+        EXPECT_EQ(load(), configuration);
+
+        configuration.runAxisLabel = SeriesId{7};
+        EXPECT_EQ(savedRoot(configuration)["runAxisLabel"].toObject(), (QJsonObject{{"series", "7"}}));
+        EXPECT_EQ(load(), configuration);
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, QuarantinesAMalformedRunAxisLabel) {
+        for (const auto &label: {QJsonValue("7"), QJsonValue(QJsonObject{{"line", "7"}}),
+                                 QJsonValue(QJsonObject{{"axis", "x"}}),
+                                 QJsonValue(QJsonObject{{"axis", "1"}, {"series", "7"}})}) {
+            settings = std::make_shared<FakeSettingsService>();
+            auto root = savedRoot(everyPreferenceKind());
+            root["runAxisLabel"] = label;
+            writeDoc(root);
+            const auto loaded = load();
+            EXPECT_EQ(settings->quarantined.size(), 1U) << compact(root);
+            EXPECT_FALSE(loaded.runAxisLabel) << compact(root);
+            EXPECT_EQ(loaded.runSeries, everyPreferenceKind().runSeries) << compact(root);
+        }
     }
 
     TEST_F(GraphConfigurationPersistenceTest, PrefersTheDocumentsRunAxisLabelOverTheLegacySetting) {
         auto configuration = defaultGraphConfiguration();
-        configuration.runAxisLabelSeriesId = SeriesId{2};
+        configuration.runAxisLabel = AxisId{2};
         save(configuration);
         settings->legacyRunAxisLabelSeriesId = "7";
-        EXPECT_EQ(load().runAxisLabelSeriesId, SeriesId{2});
+        EXPECT_EQ(load().runAxisLabel, RunAxisLabel{AxisId{2}});
 
-        // An explicit "no selection" in a version-four document is also the document's own choice.
-        configuration.runAxisLabelSeriesId.reset();
+        // An explicit "no selection" is also the document's own choice.
+        configuration.runAxisLabel.reset();
         save(configuration);
-        EXPECT_TRUE(docObject()["runAxisLabelSeriesId"].isNull());
-        EXPECT_FALSE(load().runAxisLabelSeriesId);
+        EXPECT_TRUE(docObject()["runAxisLabel"].isNull());
+        EXPECT_FALSE(load().runAxisLabel);
     }
 
     TEST_F(GraphConfigurationPersistenceTest, IgnoresAnEmptyOrMalformedLegacyRunAxisLabel) {
         for (const auto *legacy: {"", "abc", "0", "07", "-1"}) {
             settings->legacyRunAxisLabelSeriesId = legacy;
             writeDoc(v3Root());
-            EXPECT_FALSE(load().runAxisLabelSeriesId) << legacy;
+            EXPECT_FALSE(load().runAxisLabel) << legacy;
             EXPECT_TRUE(settings->quarantined.empty()) << legacy;
         }
     }
@@ -407,7 +472,7 @@ namespace {
         EXPECT_TRUE(settings->quarantined.empty());
         for (const auto key: kGraphKeys)
             EXPECT_EQ(withoutGraphs.preferences(key), defaultGraphPreferences(key));
-        EXPECT_EQ(withoutGraphs.runAxisLabelSeriesId, SeriesId{7});
+        EXPECT_EQ(withoutGraphs.runAxisLabel, RunAxisLabel{SeriesId{7}});
     }
 
     TEST_F(GraphConfigurationPersistenceTest, QuarantinesAnInvalidGraphSectionAndKeepsSeriesAxesAndOtherGraphs) {
@@ -429,7 +494,7 @@ namespace {
                               GraphKey::BenchmarkPlaytime})
             EXPECT_EQ(loaded.preferences(key), configuration.preferences(key)) << graphKeyName(key);
         expectV3RootSeries(loaded.runSeries);
-        EXPECT_EQ(loaded.runAxisLabelSeriesId, SeriesId{7});
+        EXPECT_EQ(loaded.runAxisLabel, RunAxisLabel{AxisId{7}});
 
         // The recovered document is written back so the next start does not quarantine it again.
         EXPECT_EQ(settings->document_writes, 1);
@@ -500,7 +565,7 @@ namespace {
         loaded = load();
         EXPECT_EQ(settings->quarantined.size(), 1U);
         for (const auto key: kGraphKeys) EXPECT_EQ(loaded.preferences(key), defaultGraphPreferences(key));
-        EXPECT_EQ(loaded.runAxisLabelSeriesId, SeriesId{7});
+        EXPECT_EQ(loaded.runAxisLabel, RunAxisLabel{SeriesId{7}});
     }
 
     TEST_F(GraphConfigurationPersistenceTest, AnInvalidSeriesSectionReseedsSeriesButKeepsValidGraphPreferences) {
@@ -523,16 +588,17 @@ namespace {
 
     TEST_F(GraphConfigurationPersistenceTest, UndecodableOrUnsupportedDocumentsFollowTheExistingRecoveryPath) {
         for (const std::string raw: {std::string("{\"schemaVersion\":4,"), std::string("[]"), std::string("{}"),
-                                     std::string("{\"schemaVersion\":6}"), std::string("{\"schemaVersion\":\"4\"}")}) {
+                                     std::string("{\"schemaVersion\":7}"), std::string("{\"schemaVersion\":\"4\"}")}) {
             settings = std::make_shared<FakeSettingsService>();
             settings->legacyRunAxisLabelSeriesId = "3";
             settings->document = raw;
             const auto loaded = load();
             EXPECT_EQ(settings->quarantined, (std::vector<std::string>{raw}));
             auto expected = defaultGraphConfiguration();
-            expected.runAxisLabelSeriesId = SeriesId{3};
+            // Line 3 is on the default Score axis.
+            expected.runAxisLabel = AxisId{1};
             EXPECT_EQ(loaded, expected) << raw;
-            EXPECT_EQ(docObject()["schemaVersion"].toInt(), 5);
+            EXPECT_EQ(docObject()["schemaVersion"].toInt(), 6);
         }
     }
 
@@ -548,7 +614,7 @@ namespace {
         }
     };
 
-    TEST_F(GraphConfigurationQSettingsTest, LoadsAndSavesTheVersionFiveSnapshotAcrossRestarts) {
+    TEST_F(GraphConfigurationQSettingsTest, LoadsAndSavesTheVersionSixSnapshotAcrossRestarts) {
         {
             QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
             raw.setValue("graph/seriesConfigV1", QString::fromStdString(compact(v3Root())));
@@ -561,8 +627,9 @@ namespace {
             GraphConfigurationPersistence persistence(settings);
             const auto upgraded = persistence.load();
             expectV3RootSeries(upgraded.runSeries);
-            EXPECT_EQ(upgraded.runAxisLabelSeriesId, SeriesId{12});
+            EXPECT_EQ(upgraded.runAxisLabel, RunAxisLabel{AxisId{7}});
             configuration.runSeries = upgraded.runSeries;
+            configuration.runAxisLabel = upgraded.runAxisLabel;
             persistence.save(configuration);
         }
 
@@ -570,7 +637,7 @@ namespace {
         EXPECT_EQ(GraphConfigurationPersistence(settings).load(), configuration);
         const QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         const auto stored = QJsonDocument::fromJson(raw.value("graph/seriesConfigV1").toString().toUtf8()).object();
-        EXPECT_EQ(stored["schemaVersion"].toInt(), 5);
+        EXPECT_EQ(stored["schemaVersion"].toInt(), 6);
         EXPECT_EQ(raw.value("graphAxis/seriesId").toString(), "12");
     }
 }
