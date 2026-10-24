@@ -62,6 +62,26 @@ endif()
 ksv_copy_mingw_runtime_dlls(ui_tests)
 ksv_add_gtest_test(ui_tests)
 
+# Kept apart from ui_tests so that nothing in the process calls declare_metatypes().
+add_executable(ui_metatype_tests
+    ../support/qt_gtest_main.cpp
+    qml_signature_metatypes_test.cpp
+)
+
+target_link_libraries(ui_metatype_tests PRIVATE
+    ksv_ui
+    ksv_app
+    ksv_data
+    ksv_domain
+    Qt6::Core
+    Qt6::Quick
+    Qt6::Qml
+    GTest::gtest
+)
+
+ksv_copy_mingw_runtime_dlls(ui_metatype_tests)
+ksv_add_gtest_test(ui_metatype_tests)
+
 # Qt Quick Test suite: exercises the actual QML component files (menu
 # wiring, button clicks, checkbox bindings) in qml/tst_*.qml, as opposed to
 # ui_tests above which only covers the plain-C++ view-model logic behind them.

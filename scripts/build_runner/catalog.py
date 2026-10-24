@@ -44,7 +44,7 @@ RUNNERS = {
     ],
     "qt-data": [_gtest("qt_data_tests")],
     "app": [_gtest("app_tests")],
-    "ui-cpp": [_gtest("ui_tests")],
+    "ui-cpp": [_gtest("ui_tests"), _gtest("ui_metatype_tests")],
     "qml": [RunnerSpec("ui_qml_tests", "qml", "ui_qml_tests.exe", QML_ENVIRONMENT)],
     "integration": [RunnerSpec("integration_tests", "gtest", "integration_tests.exe", QML_ENVIRONMENT)],
 }

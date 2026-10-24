@@ -24,6 +24,8 @@
 
 namespace ksv::presentation {
     class SeriesExpressionEditorModel;
+    // beginExpressionEdit() returns this type to QML; moc needs it complete to build the return metatype.
+    Q_MOC_INCLUDE("presentation/expression/series_expression_editor_model.h")
 
     // Owns the Settings window's one working copy of the whole graph configuration for a visit,
     // with its baseline, unparsed input and the issues of the last rejected Save. Nothing here reaches
