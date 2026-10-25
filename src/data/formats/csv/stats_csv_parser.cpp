@@ -18,14 +18,14 @@ namespace ksv::data {
         std::optional<int> parseInt(const std::string_view value) {
             int parsed = 0;
             const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
-            if (error != std::errc{} || end != value.end()) return std::nullopt;
+            if (error != std::errc{} || end != value.data() + value.size()) return std::nullopt;
             return parsed;
         }
 
         std::optional<float> parseFloat(const std::string_view value) {
             float parsed = 0.0F;
             const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
-            if (error != std::errc{} || end != value.end() || !std::isfinite(parsed)) return std::nullopt;
+            if (error != std::errc{} || end != value.data() + value.size() || !std::isfinite(parsed)) return std::nullopt;
             return parsed;
         }
 

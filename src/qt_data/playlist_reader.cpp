@@ -33,7 +33,7 @@ namespace ksv::qt_data {
         const auto scenarioList = root["scenarioList"].toArray();
         for (qsizetype i = 0; i < scenarioList.size(); ++i) {
             if (!scenarioList[i].isObject()) continue;
-            const auto scenarioName = scenarioList[i].toObject()["scenario_name"];
+            const QJsonValue scenarioName = scenarioList[i].toObject().value("scenario_name");
             if (!scenarioName.isString()) continue;
             const auto text = scenarioName.toString();
             if (text.trimmed().isEmpty()) continue;

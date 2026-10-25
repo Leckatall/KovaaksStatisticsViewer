@@ -24,8 +24,9 @@ def toolchain_tree(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     paths = {
         "KSV_CMAKE_EXE": tmp_path / "cmake" / "cmake.exe",
         "KSV_NINJA_EXE": tmp_path / "ninja" / "ninja.exe",
-        "KSV_C_COMPILER": tmp_path / "mingw" / "gcc.exe",
-        "KSV_CXX_COMPILER": tmp_path / "mingw" / "c++.exe",
+        "KSV_C_COMPILER": tmp_path / "msvc" / "cl.exe",
+        "KSV_CXX_COMPILER": tmp_path / "msvc" / "cl.exe",
+        "KSV_VCVARS_BAT": tmp_path / "msvc" / "vcvars64.bat",
         "KSV_VCPKG_TOOLCHAIN": tmp_path / "vcpkg" / "vcpkg.cmake",
         "KSV_VCPKG_BIN_DIR": tmp_path / "vcpkg" / "bin",
         "KSV_PROTOC_EXE": tmp_path / "vcpkg" / "protoc.exe",
@@ -40,7 +41,7 @@ def toolchain_tree(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             path.write_bytes(key.encode())
 
     values = {key: str(path) for key, path in paths.items()}
-    values["KSV_VCPKG_TRIPLET"] = "x64-mingw-dynamic"
+    values["KSV_VCPKG_TRIPLET"] = "x64-windows"
     defaults = "\n".join(f"{key}={value}" for key, value in values.items()) + "\n"
     defaults += "KSV_BUILD_JOBS=8\nKSV_BUILD_PRIORITY=normal\n"
     (scripts_dir / "toolchain.defaults.env").write_text(defaults, encoding="utf-8")

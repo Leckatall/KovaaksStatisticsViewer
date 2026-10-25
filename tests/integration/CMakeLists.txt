@@ -74,7 +74,6 @@ target_precompile_headers(integration_tests PRIVATE
     <app/app.h>
 )
 
-ksv_copy_mingw_runtime_dlls(integration_tests)
 
 # Same offscreen/software/Fusion env the ui_qml_tests use: these tests build a
 # QGuiApplication and instantiate QtQuick items (GraphCanvas) / load Main.qml.

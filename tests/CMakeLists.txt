@@ -13,7 +13,7 @@ endfunction()
 
 # Test targets that carry a target_precompile_headers keep their own PCH rather than sharing one
 # via REUSE_FROM: their compile definitions (TEST_FILES_DIR, KSV_GTEST_GUI_APP, KSV_UI_QML_DIR)
-# and Qt module sets differ, and GCC rejects a PCH built under different ones.
+# and Qt module sets differ, and MSVC rejects a PCH built under different ones.
 add_subdirectory(support)
 add_subdirectory(domain)
 add_subdirectory(data)

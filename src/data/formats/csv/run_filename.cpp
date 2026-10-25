@@ -10,7 +10,7 @@ namespace ksv::data {
 
         bool parseInt(const std::string_view value, int &result) {
             const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), result);
-            return error == std::errc{} && end == value.end();
+            return error == std::errc{} && end == value.data() + value.size();
         }
 
         std::optional<std::tm> endTimeFrom(std::string_view filename) {

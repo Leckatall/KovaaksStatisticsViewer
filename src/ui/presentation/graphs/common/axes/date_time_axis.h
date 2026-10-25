@@ -24,8 +24,8 @@ namespace ksv::presentation {
             bool wholeDays = false;
         };
 
-        // Default arguments referring to Options (a nested type of this class) trigger a GCC 11
-        // MinGW bug when written inline (`Options options = {}`); this overload delegates instead.
+        // GCC and Clang reject a default argument that needs Options' default member initializers
+        // before this class is complete (`Options options = {}`, CWG 1397); this overload delegates instead.
         DateTimeAxis();
         explicit DateTimeAxis(Options options);
 

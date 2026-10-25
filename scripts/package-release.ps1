@@ -2,16 +2,17 @@
 .SYNOPSIS
     Builds KovaaksStatsViewer in Release mode and packages it into a
     self-contained, zipped folder that can run on a PC without Qt,
-    vcpkg, or MinGW installed.
+    vcpkg, or the Visual C++ Redistributable installed.
 
 .DESCRIPTION
-    1. Configures + builds a Release build with the same vcpkg toolchain/
-       triplet (x64-mingw-dynamic) the CLion Debug profile uses.
+    1. Loads the MSVC environment from KSV_VCVARS_BAT, then configures +
+       builds a Release build with the same vcpkg toolchain/triplet
+       (x64-windows) the Debug build uses.
     2. Runs windeployqt to pull in Qt DLLs, platform plugins, and the
        compiled QML module.
     3. Copies the vcpkg runtime DLLs (protobuf, abseil, ...) and the
-       MinGW runtime DLLs, since windeployqt only knows about Qt's own
-       dependencies.
+       MSVC runtime DLLs app-locally, since windeployqt only knows about
+       Qt's own dependencies.
     4. Smoke-tests the packaged exe under a scrubbed PATH.
     5. Zips the result as KovaaksStatsViewer-<Version>-win64.zip.
 
@@ -47,7 +48,7 @@ param(
     [string]$VcpkgTriplet,
     [string]$VcpkgBinDir,
 
-    [string]$MingwBinDir,
+    [string]$VcVarsBat,
     [string]$CCompiler,
     [string]$CxxCompiler,
     [string]$CMakeExe,
@@ -96,10 +97,7 @@ $toolchainOverrides = @{}
 if ($PSBoundParameters.ContainsKey("VcpkgToolchain")) { $toolchainOverrides.KSV_VCPKG_TOOLCHAIN = $VcpkgToolchain }
 if ($PSBoundParameters.ContainsKey("VcpkgTriplet")) { $toolchainOverrides.KSV_VCPKG_TRIPLET = $VcpkgTriplet }
 if ($PSBoundParameters.ContainsKey("VcpkgBinDir")) { $toolchainOverrides.KSV_VCPKG_BIN_DIR = $VcpkgBinDir }
-if ($PSBoundParameters.ContainsKey("MingwBinDir")) {
-    $toolchainOverrides.KSV_C_COMPILER = Join-Path $MingwBinDir "gcc.exe"
-    $toolchainOverrides.KSV_CXX_COMPILER = Join-Path $MingwBinDir "c++.exe"
-}
+if ($PSBoundParameters.ContainsKey("VcVarsBat")) { $toolchainOverrides.KSV_VCVARS_BAT = $VcVarsBat }
 if ($PSBoundParameters.ContainsKey("CCompiler")) { $toolchainOverrides.KSV_C_COMPILER = $CCompiler }
 if ($PSBoundParameters.ContainsKey("CxxCompiler")) { $toolchainOverrides.KSV_CXX_COMPILER = $CxxCompiler }
 if ($PSBoundParameters.ContainsKey("CMakeExe")) { $toolchainOverrides.KSV_CMAKE_EXE = $CMakeExe }
@@ -119,7 +117,7 @@ $NinjaExe = $toolchain.NinjaExe
 $QtBinDir = $toolchain.QtBinDir
 $Qt6Dir = $toolchain.Qt6Dir
 $ProtocExe = $toolchain.ProtocExe
-$MingwBinDir = Split-Path -Parent $CxxCompiler
+$VcVarsBat = $toolchain.VcVarsBat
 
 if (-not $Version) {
     $Version = & (Join-Path $PSScriptRoot "version.ps1") -RepoRoot $RepoRoot
@@ -135,6 +133,12 @@ Write-Host "Repo    : $RepoRoot"
 Write-Host "Dist    : $DistDir"
 
 Assert-PathExists (Join-Path $QtBinDir "windeployqt.exe") "windeployqt"
+
+Import-KsvVcVars $VcVarsBat
+# The folder is named after the platform toolset (VC143 for VS 2022, VC145 for VS 2026), so find it rather than pin one.
+$CrtDir = Get-ChildItem (Join-Path $env:VCToolsRedistDir "x64") -Directory -Filter "Microsoft.VC14*.CRT" -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty FullName
+if (-not $CrtDir) { throw "MSVC runtime redistributable directory not found under: $env:VCToolsRedistDir\x64" }
 
 if ($ValidateOnly) {
     Write-Host "`n== Environment OK ==" -ForegroundColor Green
@@ -222,7 +226,7 @@ $WinDeployQt = Join-Path $QtBinDir "windeployqt.exe"
 
 & $WinDeployQt `
     --release `
-    --compiler-runtime `
+    --no-compiler-runtime `
     --qmldir "$RepoRoot/src/ui/qml" `
     $ExePath
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
@@ -235,22 +239,16 @@ Write-Host "`n-- Copying vcpkg runtime DLLs ($VcpkgTriplet) --" -ForegroundColor
 # a dependency walker (e.g. `ntldd -R`) if a smaller package matters.
 Copy-Item "$VcpkgBinDir/*.dll" -Destination $DistDir -Force
 
-Write-Host "`n-- Forcing MinGW runtime DLLs to match the compiler that built the app --" -ForegroundColor Cyan
-# windeployqt's --compiler-runtime pulls its own mingw runtime (from Qt's mingw
-# build) and the vcpkg triplet bin/ may ship yet another copy. Both can
-# overwrite libwinpthread-1.dll with a version that's missing symbols abseil
-# needs (e.g. pthread_cond_timedwait64), which surfaces as "The procedure
-# entry point ... could not be located" at launch. The only copy proven to
-# work is the one next to the compiler that actually built myapp.exe/abseil
-# (see the matching comment in the top-level CMakeLists.txt), so copy those
-# in last and unconditionally overwrite whatever's already in dist/.
-foreach ($dll in @("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll")) {
-    $src = Join-Path $MingwBinDir $dll
-    # Fatal, not a warning: this is the exact condition the comment above describes as breaking
-    # startup on a clean PC, and a release that ships without it looks successful until a user runs it.
-    Assert-PathExists $src "MinGW runtime DLL $dll"
-    Copy-Item $src -Destination $DistDir -Force
-    Write-Host "  forced $dll from $MingwBinDir"
+Write-Host "`n-- Copying MSVC runtime DLLs app-locally --" -ForegroundColor Cyan
+# windeployqt --compiler-runtime would only drop vc_redist.x64.exe beside the app and leave running it to
+# the user. Shipping the CRT DLLs themselves keeps the zip runnable as extracted. The smoke test below
+# cannot catch a missing CRT on a developer machine, where System32 has one, so the copies are asserted.
+$CrtDlls = @(Get-ChildItem -LiteralPath $CrtDir -Filter "*.dll")
+if (-not $CrtDlls) { throw "No MSVC runtime DLLs found in $CrtDir" }
+foreach ($dll in $CrtDlls) {
+    Copy-Item $dll.FullName -Destination $DistDir -Force
+    Assert-PathExists (Join-Path $DistDir $dll.Name) "Packaged MSVC runtime DLL $($dll.Name)"
+    Write-Host "  copied $($dll.Name)"
 }
 
 if (-not $SkipSmokeTest) {
@@ -278,13 +276,16 @@ if (-not $SkipSmokeTest) {
     }
     else {
         # Loading these proves the whole dependency chain resolved out of dist/ alone: the Qt stack up
-        # through QML, the vcpkg libs windeployqt knows nothing about, and the MinGW runtime forced in
+        # through QML, the vcpkg libs windeployqt knows nothing about, and the MSVC runtime copied in
         # above. All are present in a healthy start.
         $RequiredModules = @(
             "Qt6Core.dll", "Qt6Gui.dll", "Qt6Qml.dll", "Qt6Quick.dll",
-            "libprotobuf.dll", "libabseil_dll.dll",
-            "libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll"
+            "libprotobuf.dll", "abseil_dll.dll",
+            "vcruntime140.dll", "msvcp140.dll"
         )
+        # The MSVC runtime also resolves from System32 here, so for it the module's location is the
+        # evidence: it must have been loaded from dist/.
+        $AppLocalModules = @("vcruntime140.dll", "msvcp140.dll")
 
         $SavedPath     = $env:PATH
         $SavedPlatform = $env:QT_QPA_PLATFORM
@@ -306,7 +307,16 @@ if (-not $SkipSmokeTest) {
                 throw "Packaged exe started but never loaded: $($Missing -join ', '). It is almost certainly stuck on a loader error dialog because a DLL is missing from dist/ ($($Loaded.Count) modules loaded). Re-run with -SkipSmokeTest to package anyway."
             }
 
-            Write-Host "  loaded $($Loaded.Count) modules under a scrubbed PATH, including the full Qt/vcpkg/MinGW chain"
+            $DistFull = (Resolve-Path -LiteralPath $DistDir).Path.TrimEnd('\')
+            $Foreign = $proc.Modules | Where-Object {
+                ($AppLocalModules -contains $_.ModuleName) -and
+                -not $_.FileName.StartsWith("$DistFull\", [StringComparison]::OrdinalIgnoreCase)
+            } | ForEach-Object { $_.FileName }
+            if ($Foreign) {
+                throw "The MSVC runtime was loaded from outside dist/: $($Foreign -join ', '). The app-local copies are not being used."
+            }
+
+            Write-Host "  loaded $($Loaded.Count) modules under a scrubbed PATH, including the full Qt/vcpkg/MSVC runtime chain"
         }
         finally {
             $env:PATH = $SavedPath
@@ -355,4 +365,4 @@ finally {
 Write-Host "`n== Done ==" -ForegroundColor Green
 Write-Host "Folder : $DistDir"
 Write-Host "Zip    : $ZipPath"
-Write-Host "`nThe smoke test only proves it starts. Before publishing, test this folder on a machine/account without Qt, vcpkg, or MinGW on PATH." -ForegroundColor Yellow
+Write-Host "`nThe smoke test only proves it starts. Before publishing, test this folder on a machine/account without Qt, vcpkg, or the Visual C++ Redistributable installed." -ForegroundColor Yellow

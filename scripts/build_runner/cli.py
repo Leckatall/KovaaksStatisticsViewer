@@ -10,6 +10,7 @@ import traceback
 from .config import (
     ToolchainError,
     build_fingerprint,
+    developer_environment,
     find_local_env,
     fingerprint_matches,
     resolve_runner_settings,
@@ -91,7 +92,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 log_dir=log_dir,
                 toolchain=toolchain,
                 settings=settings,
-                process_environment=os.environ,
+                process_environment=developer_environment(toolchain.vcvars_bat, os.environ),
                 fingerprint=fingerprint,
             )
     except (ToolchainError, OSError, ValueError) as error:

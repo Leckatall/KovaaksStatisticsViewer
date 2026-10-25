@@ -38,5 +38,4 @@ target_precompile_headers(app_tests PRIVATE
     <chrono>
 )
 
-ksv_copy_mingw_runtime_dlls(app_tests)
 ksv_add_gtest_test(app_tests)

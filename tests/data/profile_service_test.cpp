@@ -88,7 +88,7 @@ namespace {
     };
 
     TEST_F(ProfileServiceTest, ChangedBatchSavesAndNotifiesOnceWhileNoopDoesNeither) {
-        profile_service.setProfile({});
+        profile_service.setProfile(ksv::domain::UserProfile{});
         fake_file_service->perfs_to_return = {makeRun("h1", 100), makeRun("h2", 200)};
         int notifications = 0;
         profile_service.onProfileChanged([&] { ++notifications; });
@@ -107,7 +107,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, SaveFailureKeepsAcceptedHistoryAndSourcesEligibleForRetry) {
-        profile_service.setProfile({});
+        profile_service.setProfile(ksv::domain::UserProfile{});
         fake_file_service->perfs_to_return = {makeRun("new", 100)};
         ProfileImporter importer(fake_file_service, ingestor);
         auto request = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
@@ -124,7 +124,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, ProfilePathRoundTripInvalidatesEarlierImportEvenWhenPathMatchesAgain) {
-        profile_service.setProfile({});
+        profile_service.setProfile(ksv::domain::UserProfile{});
         fake_file_service->perfs_to_return = {makeRun("old-job", 100)};
         ProfileImporter importer(fake_file_service, ingestor);
         const auto request = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
@@ -151,7 +151,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, PartialResultSavesOnceAndReturnsPartial) {
-        profile_service.setProfile({});
+        profile_service.setProfile(ksv::domain::UserProfile{});
         fake_file_service->perfs_to_return = {makeRun("good", 100), makeRun("bad", 200)};
         fake_file_service->throw_for_indices.insert(1);
         ProfileImporter importer(fake_file_service, ingestor);
@@ -164,7 +164,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, AcceptingTheSameResultTwiceSavesOnceAndReturnsStale) {
-        profile_service.setProfile({});
+        profile_service.setProfile(ksv::domain::UserProfile{});
         fake_file_service->perfs_to_return = {makeRun("h", 100)};
         ProfileImporter importer(fake_file_service, ingestor);
         auto result = importer.run(profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual), {});
@@ -175,7 +175,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, StaleResultDoesNotClearANewerActiveRequest) {
-        profile_service.setProfile({});
+        profile_service.setProfile(ksv::domain::UserProfile{});
         fake_file_service->perfs_to_return = {makeRun("h", 100)};
         ProfileImporter importer(fake_file_service, ingestor);
         const auto older = profile_service.beginImport(ProfileImportMode::Refresh, ProfileImportReason::Manual);
@@ -523,7 +523,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, FailuresOnlyResultSavesWithoutNotifyingProfileChanged) {
-        profile_service.setProfile({});
+        profile_service.setProfile(ksv::domain::UserProfile{});
         fake_file_service->perfs_to_return = {makeRun("bad", 100)};
         fake_file_service->throw_for_indices.insert(0);
         int notifications = 0;
@@ -541,7 +541,7 @@ namespace {
     }
 
     TEST_F(ProfileServiceTest, BeginImportSkipsUnchangedFailuresOnlyForAutomaticRefreshes) {
-        profile_service.setProfile({});
+        profile_service.setProfile(ksv::domain::UserProfile{});
         const auto skips = [&](ProfileImportMode mode, ProfileImportReason reason) {
             return profile_service.beginImport(mode, reason).skip_unchanged_failures;
         };

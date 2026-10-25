@@ -46,7 +46,6 @@ def _command_environment(
 ) -> dict[str, str]:
     environment = dict(base)
     path_entries = [
-        str(toolchain.cxx_compiler.parent),
         str(toolchain.vcpkg_bin_dir),
         str(toolchain.qt_bin_dir),
     ]

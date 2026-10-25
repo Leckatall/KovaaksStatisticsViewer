@@ -193,7 +193,8 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     ASSERT_TRUE(service->snapshot().has_value());
     ASSERT_EQ(service->snapshot()->entries.size(), 1U);
     EXPECT_EQ(service->snapshot()->entries.front().filename, benchmarkId.value + ".json");
-    const auto *savedImport = std::get_if<LoadedBenchmark>(&service->snapshot()->entries.front().content);
+    const auto savedSnapshot = service->snapshot();
+    const auto *savedImport = std::get_if<LoadedBenchmark>(&savedSnapshot->entries.front().content);
     ASSERT_NE(savedImport, nullptr);
     EXPECT_EQ(savedImport->completeness.completeness, domain::Completeness::Incomplete);
 
@@ -307,8 +308,8 @@ TEST(BenchmarkComposition, UnsupportedFileIsReportedAndNeverRewrittenByAutomatic
     }
 
     ASSERT_TRUE(app.benchmarksService()->snapshot().has_value());
-    const auto *problem =
-        std::get_if<ProblemBenchmark>(&app.benchmarksService()->snapshot()->entries.at(0).content);
+    const auto problemSnapshot = app.benchmarksService()->snapshot();
+    const auto *problem = std::get_if<ProblemBenchmark>(&problemSnapshot->entries.at(0).content);
     ASSERT_NE(problem, nullptr);
     EXPECT_EQ(problem->problem, BenchmarkFileProblem::Unsupported);
     EXPECT_EQ(problem->schemaVersion, std::make_optional(99));
@@ -355,7 +356,8 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
 
     ASSERT_TRUE(service->snapshot().has_value());
     ASSERT_EQ(service->snapshot()->entries.size(), 1U);
-    const auto *refreshed = std::get_if<LoadedBenchmark>(&service->snapshot()->entries.front().content);
+    const auto refreshedSnapshot = service->snapshot();
+    const auto *refreshed = std::get_if<LoadedBenchmark>(&refreshedSnapshot->entries.front().content);
     ASSERT_NE(refreshed, nullptr);
     EXPECT_EQ(refreshed->benchmark.name, "Externally Edited");   // library reflects the external file
 
@@ -371,8 +373,8 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
         ASSERT_TRUE(file.open(QIODevice::ReadOnly));
         EXPECT_EQ(file.readAll(), externallyEditedJson("b1"));  // file on disk intact
     }
-    const auto *afterConflict =
-        std::get_if<LoadedBenchmark>(&service->snapshot()->entries.front().content);
+    const auto afterConflictSnapshot = service->snapshot();
+    const auto *afterConflict = std::get_if<LoadedBenchmark>(&afterConflictSnapshot->entries.front().content);
     ASSERT_NE(afterConflict, nullptr);
     EXPECT_EQ(afterConflict->benchmark.name, "Externally Edited");  // accepted memory still the refreshed value
 }
@@ -826,7 +828,8 @@ TEST(BenchmarkTableComposition, ConflictAndFailedWriteKeepSession) {
         ASSERT_TRUE(file.open(QIODevice::ReadOnly));
         EXPECT_EQ(file.readAll(), external) << "a conflicting save never overwrites the external edit";
     }
-    const auto *accepted = std::get_if<LoadedBenchmark>(&service->snapshot()->entries.front().content);
+    const auto acceptedSnapshot = service->snapshot();
+    const auto *accepted = std::get_if<LoadedBenchmark>(&acceptedSnapshot->entries.front().content);
     ASSERT_NE(accepted, nullptr);
     EXPECT_EQ(accepted->benchmark.uncategorized.size() + accepted->benchmark.categories.size(), 1U);
     EXPECT_EQ(accepted->benchmark.name, "Tracked") << "the accepted snapshot is the one before the attempt";

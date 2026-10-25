@@ -59,7 +59,6 @@ target_precompile_headers(ui_tests PRIVATE
 if(WIN32)
     target_link_libraries(ui_tests PRIVATE psapi)
 endif()
-ksv_copy_mingw_runtime_dlls(ui_tests)
 ksv_add_gtest_test(ui_tests)
 
 # Kept apart from ui_tests so that nothing in the process calls declare_metatypes().
@@ -79,7 +78,6 @@ target_link_libraries(ui_metatype_tests PRIVATE
     GTest::gtest
 )
 
-ksv_copy_mingw_runtime_dlls(ui_metatype_tests)
 ksv_add_gtest_test(ui_metatype_tests)
 
 # Qt Quick Test suite: exercises the actual QML component files (menu
@@ -93,8 +91,6 @@ target_link_libraries(ui_qml_tests PRIVATE
     Qt6::Quick
     Qt6::Qml
 )
-
-ksv_copy_mingw_runtime_dlls(ui_qml_tests)
 
 # Register each tst_*.qml file as its own CTest test (instead of one
 # add_test running the whole -input directory) so a failure in one

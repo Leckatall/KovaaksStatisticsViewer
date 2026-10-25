@@ -65,4 +65,3 @@ target_compile_definitions(ksv_driver PRIVATE
         KSV_VERSION="${KSV_VERSION}"
 )
 
-ksv_copy_mingw_runtime_dlls(ksv_driver)

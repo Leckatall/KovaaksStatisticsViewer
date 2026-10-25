@@ -920,7 +920,8 @@ namespace ksv::presentation {
     QVariantList SettingsViewModel::runAxisLabelChoices() const {
         QVariantList result;
         QSet<QString> listed;
-        const auto &document = shownConfiguration()->runSeries;
+        const auto shown = shownConfiguration();
+        const auto &document = shown->runSeries;
         for (const auto &config: document.series) {
             if (!config.presentation.enabled) continue;
             const auto label = application::runAxisLabelFor(document, config.id);
@@ -936,7 +937,8 @@ namespace ksv::presentation {
     }
 
     QString SettingsViewModel::runAxisLabelKey() const {
-        const auto &label = shownConfiguration()->runAxisLabel;
+        const auto shown = shownConfiguration();
+        const auto &label = shown->runAxisLabel;
         return label ? runAxisLabelKeyOf(*label) : QString();
     }
 
