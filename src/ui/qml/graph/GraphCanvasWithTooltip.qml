@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import KovaaksStatsViewer
@@ -147,19 +148,23 @@ Item {
                 model: hoverArea.hoverInfo.valid ? hoverArea.hoverInfo.series : []
 
                 Row {
+                    id: seriesRow
+
+                    required property var modelData
+
                     spacing: 5
 
                     Rectangle {
                         width: 10
                         height: 10
                         radius: 2
-                        color: modelData.color
+                        color: seriesRow.modelData.color
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
                         color: root.palette.toolTipText
                         font.pixelSize: 11
-                        text: root.showSeriesNames ? modelData.name + ": " + modelData.value : modelData.value
+                        text: root.showSeriesNames ? seriesRow.modelData.name + ": " + seriesRow.modelData.value : seriesRow.modelData.value
                     }
                 }
             }

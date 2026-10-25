@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -156,7 +157,7 @@ ColumnLayout {
             required property var modelData
             required property int index
             width: libraryList.width
-            objectName: "libraryEntry_" + index
+            objectName: "libraryEntry_" + libraryEntry.index
             // The list owns the keyboard focus; the rows only select.
             focusPolicy: Qt.NoFocus
             highlighted: libraryPane.selectedEntryFilename === libraryEntry.modelData.filename
@@ -178,8 +179,8 @@ ColumnLayout {
                     Layout.fillWidth: true
                 }
                 Rectangle {
-                    width: 8
-                    height: 8
+                    Layout.preferredWidth: 8
+                    Layout.preferredHeight: 8
                     radius: 4
                     color: Theme.classificationColor(libraryEntry.modelData.classification)
                 }

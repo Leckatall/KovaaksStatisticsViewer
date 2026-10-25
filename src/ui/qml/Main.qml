@@ -7,17 +7,17 @@ import KovaaksStatsViewer
 
 ApplicationWindow {
     id: root
-    width: visualSettings.windowWidth
-    height: visualSettings.windowHeight
-    onWidthChanged: visualSettings.windowWidth = width
-    onHeightChanged: visualSettings.windowHeight = height
+    width: visualSettingsManager.windowWidth
+    height: visualSettingsManager.windowHeight
+    onWidthChanged: visualSettingsManager.windowWidth = width
+    onHeightChanged: visualSettingsManager.windowHeight = height
 
     visible: true
     title: "Kovaaks Stats Viewer"
     palette: Theme.palette
 
     VisualSettingsManager {
-        id: visualSettings
+        id: visualSettingsManager
         objectName: "visualSettings"
     }
 
@@ -67,7 +67,7 @@ ApplicationWindow {
     menuBar: AppMenuBar {
         graphVm: root.graphVm
         historyVm: root.historyVm
-        visualSettings: visualSettings
+        visualSettings: visualSettingsManager
         profileImportBusy: root.sessionVm.profileImportBusy === true
         profileRefreshAvailable: root.settingsVm.kovaaksDirValid === true
         onRefreshProfileRequested: root.sessionVm.refreshProfile()
@@ -86,6 +86,55 @@ ApplicationWindow {
         onDetailsRequested: settingsDialog.openProfile()
     }
 
+    // A workspace switcher styled as the app's primary navigation: tall tabs,
+    // the active one raised to the content colour with an accent underline, the
+    // inactive one dimmed. Sized by content (not stretched across the window) so
+    // the bar reads as a set of destinations rather than a table header.
+    component WorkspaceTabButton: TabButton {
+        id: tab
+        readonly property int minimumTabWidth: 150
+
+        implicitHeight: 42
+        leftPadding: 24
+        rightPadding: 24
+        // An explicit width stops TabBar from stretching the tabs to fill the window.
+        width: Math.max(minimumTabWidth, implicitContentWidth + leftPadding + rightPadding)
+
+        background: Rectangle {
+            color: tab.checked
+                   ? tab.palette.window
+                   : (tab.hovered ? Qt.alpha(tab.palette.text, 0.08) : "transparent")
+
+            Rectangle {
+                // Accent underline marks the active workspace.
+                visible: tab.checked
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 3
+                color: tab.palette.accent
+            }
+            Rectangle {
+                // Keyboard focus ring; the bar takes focus for Left/Right switching.
+                visible: tab.visualFocus
+                anchors.fill: parent
+                anchors.margins: 2
+                color: "transparent"
+                border.width: 1
+                border.color: tab.palette.accent
+            }
+        }
+        contentItem: Label {
+            text: tab.text
+            font.pixelSize: 15
+            font.bold: tab.checked
+            color: tab.checked ? tab.palette.text : Qt.alpha(tab.palette.text, 0.62)
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
 
@@ -97,55 +146,6 @@ ApplicationWindow {
             // tabs); it remains for an invalid folder that still has runs to show.
             visible: !root.settingsVm.kovaaksDirValid && !scenarioWorkspace.welcomeVisible
             onChooseFolderRequested: folderDialog.open()
-        }
-
-        // A workspace switcher styled as the app's primary navigation: tall tabs,
-        // the active one raised to the content colour with an accent underline, the
-        // inactive one dimmed. Sized by content (not stretched across the window) so
-        // the bar reads as a set of destinations rather than a table header.
-        component WorkspaceTabButton: TabButton {
-            id: tab
-            readonly property int minimumTabWidth: 150
-
-            implicitHeight: 42
-            leftPadding: 24
-            rightPadding: 24
-            // An explicit width stops TabBar from stretching the tabs to fill the window.
-            width: Math.max(minimumTabWidth, implicitContentWidth + leftPadding + rightPadding)
-
-            background: Rectangle {
-                color: tab.checked
-                       ? tab.palette.window
-                       : (tab.hovered ? Qt.alpha(tab.palette.text, 0.08) : "transparent")
-
-                Rectangle {
-                    // Accent underline marks the active workspace.
-                    visible: tab.checked
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: 3
-                    color: tab.palette.accent
-                }
-                Rectangle {
-                    // Keyboard focus ring; the bar takes focus for Left/Right switching.
-                    visible: tab.visualFocus
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    color: "transparent"
-                    border.width: 1
-                    border.color: tab.palette.accent
-                }
-            }
-            contentItem: Label {
-                text: tab.text
-                font.pixelSize: 15
-                font.bold: tab.checked
-                color: tab.checked ? tab.palette.text : Qt.alpha(tab.palette.text, 0.62)
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
         }
 
         TabBar {
@@ -203,7 +203,7 @@ ApplicationWindow {
                 playtimeVm: root.playtimeVm
                 historyVm: root.historyVm
                 scenarioBrowserVm: root.scenarioBrowserVm
-                visualSettings: visualSettings
+                visualSettings: visualSettingsManager
                 settingsVm: root.settingsVm
                 onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
                 onMoreGraphSettingsRequested: graphKey => settingsDialog.openGraph(graphKey)
@@ -235,9 +235,9 @@ ApplicationWindow {
     Connections {
         target: root.graphVm
         function onSeriesConfigurationChanged() {
-            visualSettings.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
+            visualSettingsManager.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
         }
     }
 
-    Component.onCompleted: visualSettings.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
+    Component.onCompleted: visualSettingsManager.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
 }

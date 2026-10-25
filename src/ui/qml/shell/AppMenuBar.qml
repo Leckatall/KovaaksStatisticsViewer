@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import KovaaksStatsViewer
@@ -33,13 +34,13 @@ MenuBar {
         Action {
             id: setSoruceDirAction
             text: qsTr("Set Source &Directory...")
-            onTriggered: setSourceDirRequested()
+            onTriggered: root.setSourceDirRequested()
         }
         Action {
             id: loadPerformanceFileAction
             text: qsTr("&Load Performance File...")
             shortcut: "Ctrl+O"
-            onTriggered: loadPerformanceFileRequested()
+            onTriggered: root.loadPerformanceFileRequested()
         }
 
         Action {
@@ -54,13 +55,13 @@ MenuBar {
             id: settingsAction
             text: qsTr("&Settings...")
             shortcut: "Ctrl+,"
-            onTriggered: settingsRequested()
+            onTriggered: root.settingsRequested()
         }
         MenuSeparator {
         }
         Action {
             text: qsTr("&Quit")
-            onTriggered: quitRequested()
+            onTriggered: root.quitRequested()
         }
     }
     Menu {
@@ -81,11 +82,13 @@ MenuBar {
             Repeater {
                 model: root.graphVm ? root.graphVm.allSeries : []
                 MenuItem {
+                    id: seriesItem
+
                     required property var modelData
-                    text: modelData.name
+                    text: seriesItem.modelData.name
                     checkable: true
-                    checked: root.visualSettings.isSeriesVisible(modelData.id)
-                    onTriggered: root.visualSettings.setSeriesVisible(modelData.id, checked)
+                    checked: root.visualSettings.isSeriesVisible(seriesItem.modelData.id)
+                    onTriggered: root.visualSettings.setSeriesVisible(seriesItem.modelData.id, seriesItem.checked)
                 }
             }
             MenuSeparator {}
@@ -108,11 +111,13 @@ MenuBar {
             Repeater {
                 model: root.historyColumns
                 MenuItem {
+                    id: historyItem
+
                     required property var modelData
-                    text: modelData.name
+                    text: historyItem.modelData.name
                     checkable: true
-                    checked: root.visualSettings.isHistorySeriesVisible(modelData.id)
-                    onTriggered: root.visualSettings.setHistorySeriesVisible(modelData.id, checked)
+                    checked: root.visualSettings.isHistorySeriesVisible(historyItem.modelData.id)
+                    onTriggered: root.visualSettings.setHistorySeriesVisible(historyItem.modelData.id, historyItem.checked)
                 }
             }
         }
@@ -167,7 +172,7 @@ MenuBar {
         title: qsTr("&Help")
         Action {
             text: qsTr("&About")
-            onTriggered: aboutRequested()
+            onTriggered: root.aboutRequested()
         }
     }
 }

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -135,7 +136,7 @@ Item {
             // A Loader rather than a hidden item: no summary exists outside the trackable state.
             Loader {
                 Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : 0
+                Layout.preferredHeight: item ? (item as Item).implicitHeight : 0
                 active: root._bodyState === "trackable"
                 visible: active
                 sourceComponent: BenchmarkStatusSummary {

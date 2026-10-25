@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -20,8 +21,8 @@ Item {
     signal graphLinesRequested()
     signal issueActivated(var issue)
 
-    readonly property alias colorDialog: colorDialog
-    readonly property alias scroller: scroller
+    readonly property alias colorDialog: seriesColorDialog
+    readonly property alias scroller: editorScroll
 
     readonly property var draft: (settingsVm.graphDrafts || {})[graphKey] || ({})
     readonly property var limits: settingsVm.graphLimits || ({})
@@ -36,7 +37,7 @@ Item {
     readonly property string axisKeys: axisRows.map(r => r.key).join(",")
     readonly property string seriesKeys: seriesRows.map(r => r.key).join(",")
     readonly property bool isRunGraph: graphKey === "run"
-    readonly property bool wide: scroller.availableWidth >= 560
+    readonly property bool wide: editorScroll.availableWidth >= 560
 
     readonly property var sortedIssues: GraphCatalog.sortedIssues(settingsVm.draftIssues || [])
     readonly property bool summaryShown: (settingsVm.issues || []).length > 0 && sortedIssues.length > 0
@@ -158,7 +159,7 @@ Item {
     // ---- Focus and scrolling ----------------------------------------------------------------------------
 
     function ensureVisible(item) {
-        const flick = scroller.contentItem
+        const flick = editorScroll.contentItem as Flickable
         const top = item.mapToItem(flick.contentItem, 0, 0).y
         const bottom = top + item.height
         const margin = 8
@@ -212,20 +213,20 @@ Item {
     }
 
     function pickColor(row) {
-        colorDialog.seriesKey = row.key
-        colorDialog.selectedColor = row.color ? row.color : scroller.palette.text
-        colorDialog.open()
+        seriesColorDialog.seriesKey = row.key
+        seriesColorDialog.selectedColor = row.color ? row.color : editorScroll.palette.text
+        seriesColorDialog.open()
     }
 
     ColorDialog {
-        id: colorDialog
+        id: seriesColorDialog
         property string seriesKey
         options: ColorDialog.ShowAlphaChannel
         onAccepted: root.settingsVm.setSeriesColor(root.graphKey, seriesKey, selectedColor)
     }
 
     OverflowScrollView {
-        id: scroller
+        id: editorScroll
         objectName: "graphEditorScroll"
         anchors.fill: parent
 
@@ -233,7 +234,7 @@ Item {
             id: content
             objectName: "graphSettingsContent"
             // The bar is drawn over the view's right edge, so its width is kept clear whether or not it shows.
-            width: scroller.availableWidth - scroller.ScrollBar.vertical.width - 4
+            width: editorScroll.availableWidth - editorScroll.ScrollBar.vertical.width - 4
             spacing: 16
 
             // ---- Issues of the last rejected Save --------------------------------------------------------

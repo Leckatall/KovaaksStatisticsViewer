@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -27,9 +28,9 @@ Pane {
     property real dragRowHeight: 0
     readonly property alias colorDialog: colorDialog
     readonly property alias expressionDialog: expressionDialog
-    readonly property alias newAxisDialog: newAxisDialog
+    readonly property alias newAxisDialog: axisCreationDialog
     readonly property alias newAxisNameField: newAxisNameField
-    readonly property alias optionsPopup: optionsPopup
+    readonly property alias optionsPopup: seriesOptionsPopup
     readonly property var axisComboModel: {
         const items = [{
             text: qsTr("Independent"),
@@ -56,7 +57,7 @@ Pane {
     function handleAxisSelection(row, value) {
         if (value === "__new__") {
             root.axisNameTarget = row
-            newAxisDialog.open()
+            axisCreationDialog.open()
             return
         }
         root.settingsVm.updateSeriesAxis(row.id, value)
@@ -66,7 +67,7 @@ Pane {
         optionsAnchorRight = corner.x
         optionsAnchorBottom = corner.y
         optionsTargetId = row.id
-        optionsPopup.open()
+        seriesOptionsPopup.open()
     }
     function previewMove(position) {
         dragPreviewIndex = Math.max(0, Math.min(displayRows.length - 1, position))
@@ -87,7 +88,7 @@ Pane {
 
     Component.onCompleted: refreshRows()
     onSourceRowsChanged: refreshRows()
-    onOptionsTargetChanged: if (!optionsTarget) optionsPopup.close()
+    onOptionsTargetChanged: if (!optionsTarget) seriesOptionsPopup.close()
 
     ColorDialog {
         id: colorDialog
@@ -96,7 +97,7 @@ Pane {
     }
     ExpressionEditorDialog { id: expressionDialog; settingsVm: root.settingsVm }
     Dialog {
-        id: newAxisDialog
+        id: axisCreationDialog
         objectName: "newAxisDialog"
         title: qsTr("New axis")
         standardButtons: Dialog.Ok | Dialog.Cancel
@@ -116,7 +117,7 @@ Pane {
     }
 
     Popup {
-        id: optionsPopup
+        id: seriesOptionsPopup
         objectName: "seriesOptionsPopup"
         readonly property int hiddenLeadingPoints: root.optionsTarget ? root.optionsTarget.hiddenLeadingPoints || 0 : 0
 
@@ -144,7 +145,7 @@ Pane {
                     objectName: "hiddenLeadingPointsSpinBox_" + root.optionsTargetId
                     from: 0
                     to: root.settingsVm.maximumHiddenLeadingPoints
-                    value: optionsPopup.hiddenLeadingPoints
+                    value: seriesOptionsPopup.hiddenLeadingPoints
                     onValueModified: root.settingsVm.setSeriesHiddenLeadingPoints(root.optionsTargetId, value)
                 }
             }
@@ -154,10 +155,10 @@ Pane {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
                 Layout.minimumWidth: 220
-                text: optionsPopup.hiddenLeadingPoints === 0 ? qsTr("The whole line is drawn.")
-                      : optionsPopup.hiddenLeadingPoints === 1 ? qsTr("The line starts after its first point.")
-                      : qsTr("The line starts after its first %n points.", "", optionsPopup.hiddenLeadingPoints)
-                color: optionsPopup.palette.placeholderText
+                text: seriesOptionsPopup.hiddenLeadingPoints === 0 ? qsTr("The whole line is drawn.")
+                      : seriesOptionsPopup.hiddenLeadingPoints === 1 ? qsTr("The line starts after its first point.")
+                      : qsTr("The line starts after its first %n points.", "", seriesOptionsPopup.hiddenLeadingPoints)
+                color: seriesOptionsPopup.palette.placeholderText
                 wrapMode: Text.WordWrap
             }
 
@@ -175,7 +176,7 @@ Pane {
                 icon.height: 16
                 onClicked: {
                     const id = root.optionsTargetId
-                    optionsPopup.close()
+                    seriesOptionsPopup.close()
                     root.settingsVm.removeComputedSeries(id)
                 }
             }
@@ -199,7 +200,7 @@ Pane {
             readonly property real autoScrollSpeed: 6
 
             function applyAutoScrollTick() {
-                const flick = contentItem
+                const flick = contentItem as Flickable
                 const maxContentY = Math.max(0, flick.contentHeight - flick.height)
                 const requestedContentY = flick.contentY + autoScrollDirection * autoScrollSpeed
                 const clampedContentY = Math.max(0, Math.min(maxContentY, requestedContentY))

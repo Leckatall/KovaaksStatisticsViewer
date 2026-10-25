@@ -22,7 +22,7 @@ namespace ksv::ui {
     class GraphCanvas : public QQuickPaintedItem {
         Q_OBJECT
         QML_ELEMENT
-        Q_PROPERTY(presentation::GraphViewModelBase *graphVm READ graphVm WRITE setGraphVm NOTIFY graphVmChanged)
+        Q_PROPERTY(ksv::presentation::GraphViewModelBase *graphVm READ graphVm WRITE setGraphVm NOTIFY graphVmChanged)
         Q_PROPERTY(QVariantList visibleColumns READ visibleColumns WRITE setVisibleColumns NOTIFY visibleColumnsChanged)
         Q_PROPERTY(QRectF plotArea READ plotRect NOTIFY plotAreaChanged)
         Q_PROPERTY(int yAxisColumn READ yAxisColumn WRITE setYAxisColumn NOTIFY yAxisColumnChanged)

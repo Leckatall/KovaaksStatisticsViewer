@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import KovaaksStatsViewer
@@ -5,23 +6,23 @@ import KovaaksStatsViewer
 Rectangle {
     id: groupCell
     required property var modelData
-    property Item grid: null
-    readonly property var column: grid.columns[String(modelData.column)]
-    readonly property bool spansBoth: grid.spansSubcategory(modelData)
+    property var grid: null
+    readonly property var column: groupCell.grid.columns[String(modelData.column)]
+    readonly property bool spansBoth: groupCell.grid.spansSubcategory(modelData)
     readonly property string tint: String(modelData.color || "")
 
     objectName: "progressGroup_" + (String(modelData.id).length > 0 ? modelData.id : "uncategorized")
     visible: column.width > 0
     z: 3
-    x: column.x + grid.pinOffset
-    y: grid.headerHeight + Number(modelData.start) * grid.rowHeight
-    width: spansBoth ? column.width + grid.columns.subcategory.width : column.width
-    height: Number(modelData.span) * grid.rowHeight
-    color: grid.palette.base
+    x: column.x + groupCell.grid.pinOffset
+    y: groupCell.grid.headerHeight + Number(modelData.start) * groupCell.grid.rowHeight
+    width: spansBoth ? column.width + groupCell.grid.columns.subcategory.width : column.width
+    height: Number(modelData.span) * groupCell.grid.rowHeight
+    color: groupCell.grid.palette.base
     Accessible.role: Accessible.Cell
     Accessible.name: String(modelData.name)
 
-    HoverHandler { blocking: grid.pinning }
+    HoverHandler { blocking: groupCell.grid.pinning }
     Rectangle {
         anchors.fill: parent
         visible: groupCell.tint.length > 0
@@ -29,10 +30,10 @@ Rectangle {
     }
     GridCellBorders {}
     Row {
-        x: grid.cellPadding
-        width: Math.max(0, groupCell.width - 2 * grid.cellPadding)
-        height: grid.rowHeight
-        spacing: grid.rankChipSpacing
+        x: groupCell.grid.cellPadding
+        width: Math.max(0, groupCell.width - 2 * groupCell.grid.cellPadding)
+        height: groupCell.grid.rowHeight
+        spacing: groupCell.grid.rankChipSpacing
 
         Label {
             objectName: groupCell.objectName + "_name"
@@ -51,11 +52,11 @@ Rectangle {
             objectName: groupCell.objectName + "_rank"
             visible: String(groupCell.modelData.rankText || "").length > 0
             anchors.verticalCenter: parent.verticalCenter
-            width: rankLabel.implicitWidth + 2 * grid.rankChipPadding
+            width: rankLabel.implicitWidth + 2 * groupCell.grid.rankChipPadding
             height: rankLabel.implicitHeight + 4
             radius: height / 2
-            color: tierColor.length > 0 ? Qt.alpha(tierColor, 0.28) : grid.palette.base
-            border.color: tierColor.length > 0 ? tierColor : grid.palette.mid
+            color: rankChip.tierColor.length > 0 ? Qt.alpha(rankChip.tierColor, 0.28) : groupCell.grid.palette.base
+            border.color: rankChip.tierColor.length > 0 ? rankChip.tierColor : groupCell.grid.palette.mid
             Accessible.role: Accessible.StaticText
             Accessible.name: qsTr("%1 rank: %2").arg(String(groupCell.modelData.name)).arg(rankLabel.text)
 
@@ -65,7 +66,7 @@ Rectangle {
                 font.pixelSize: 11
                 text: String(groupCell.modelData.rankText || "")
                 color: String(groupCell.modelData.rankColor || "").length > 0
-                       ? groupCell.modelData.rankColor : grid.palette.placeholderText
+                       ? groupCell.modelData.rankColor : groupCell.grid.palette.placeholderText
             }
         }
     }

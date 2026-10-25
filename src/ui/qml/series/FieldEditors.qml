@@ -43,20 +43,15 @@ QtObject {
     component BinaryOpEditor: ComboBox {
         required property EditableBinaryOpNode node
         required property var kindLabel
+        readonly property var operatorKinds: ["add", "subtract", "multiply", "divide"]
 
         Layout.fillWidth: true
-        currentIndex: node ? model.indexOf(node.operatorKind) : -1
-        displayText: kindLabel(currentText)
-        model: ["add", "subtract", "multiply", "divide"]
+        currentIndex: node ? operatorKinds.indexOf(node.operatorKind) : -1
+        model: operatorKinds.map(kind => ({ text: kindLabel(kind) }))
+        textRole: "text"
         objectName: "operatorComboBox"
 
-        delegate: ItemDelegate {
-            required property var modelData
-
-            text: kindLabel(modelData)
-        }
-
-        onActivated: if (node) node.operatorKind = currentText
+        onActivated: if (node) node.operatorKind = operatorKinds[currentIndex]
     }
 
     component RollingMeanEditor: SpinBox {

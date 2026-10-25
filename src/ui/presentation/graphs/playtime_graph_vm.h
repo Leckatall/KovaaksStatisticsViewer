@@ -19,6 +19,8 @@ namespace ksv::presentation {
     // Calendar-date vs rolling-average playtime. Adapts IPlaytimeGraphUseCase output for GraphCanvas.
     class PlaytimeGraphViewModel : public GraphViewModelBase {
         Q_OBJECT
+        QML_ELEMENT
+        QML_UNCREATABLE("Created in C++")
         // False when there is no playtime to plot; the panel then shows an empty state, not axes.
         Q_PROPERTY(bool hasData READ hasData NOTIFY dataUpdated)
         // Whether the unfiltered history has any playtime, whatever the range shows.

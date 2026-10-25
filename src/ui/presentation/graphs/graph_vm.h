@@ -20,6 +20,8 @@
 namespace ksv::presentation {
     class GraphViewModel : public GraphViewModelBase {
         Q_OBJECT
+        QML_ELEMENT
+        QML_UNCREATABLE("Created in C++")
         Q_PROPERTY(QQmlListProperty<SeriesModel> allSeries READ allSeries NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantList enabledSeriesIds READ enabledSeriesIds NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QString scenarioTitle READ scenarioTitle NOTIFY scenarioTitleChanged)

@@ -46,7 +46,7 @@ ColumnLayout {
 
     TextMetrics {
         id: nameMetrics
-        font: Qt.application.font
+        font: scenarioSearch.nameFont
         text: root.widestScenarioName
     }
 

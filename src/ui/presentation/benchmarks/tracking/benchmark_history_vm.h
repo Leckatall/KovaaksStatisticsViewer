@@ -30,6 +30,8 @@ namespace ksv::presentation {
 
     class BenchmarkHistoryViewModel final : public GraphViewModelBase {
         Q_OBJECT
+        QML_ELEMENT
+        QML_UNCREATABLE("Created in C++")
         // Whether line modes have anything to draw: an observation, or a rank carried into the range.
         Q_PROPERTY(bool hasData READ hasData NOTIFY dataUpdated)
         // Whether the unfiltered history has any observation, whatever the range shows.

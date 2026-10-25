@@ -93,7 +93,7 @@ ApplicationWindow {
     readonly property int profileCategory: 0
     readonly property int graphLinesCategory: 1
     readonly property int graphsCategory: 2
-    readonly property alias discardChangesPrompt: discardChangesPrompt
+    readonly property alias discardChangesPrompt: unsavedChangesPrompt
     readonly property alias rebuildProfilePrompt: rebuildProfilePrompt
 
     function open() {
@@ -142,14 +142,14 @@ ApplicationWindow {
     onClosing: (close) => {
         if (root.settingsVm.pendingChanges) {
             close.accepted = false
-            discardChangesPrompt.open()
+            unsavedChangesPrompt.open()
             return
         }
         root.settingsVm.endVisit()
     }
 
     MessageDialog {
-        id: discardChangesPrompt
+        id: unsavedChangesPrompt
         objectName: "discardChangesPrompt"
         title: "Save changes?"
         text: "You have unsaved changes."
@@ -346,9 +346,9 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         spacing: 8
                         Rectangle {
-                            width: 10
-                            height: 10
-                            radius: width / 2
+                            Layout.preferredWidth: 10
+                            Layout.preferredHeight: 10
+                            radius: 5
                             color: root.sessionVm.profileImportBusy ? "#FFB300"
                                  : root.settingsVm.profileLoaded ? Theme.success : Theme.error
                             Layout.alignment: Qt.AlignVCenter

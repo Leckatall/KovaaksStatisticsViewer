@@ -143,7 +143,7 @@ ChromeIconButton {
         }
         onOpened: gear.focusFirstControl()
         onAboutToHide: {
-            const focused = gear.Window.activeFocusItem
+            const focused = quickPopup.contentItem.Window.activeFocusItem as Control
             if (focused && (focused.focusReason === Qt.TabFocusReason || focused.focusReason === Qt.BacktabFocusReason))
                 keyboardDriven = true
         }

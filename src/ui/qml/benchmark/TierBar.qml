@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import KovaaksStatsViewer
@@ -238,25 +239,25 @@ Item {
         delegate: Item {
             id: chunk
             required property int index
-            readonly property real fill: root.fillAt(index)
-            readonly property var tier: root.tiers[index]
-            readonly property color fillColor: tier && String(tier.barColor || "").length > 0
-                                               ? tier.barColor : root.palette.highlight
+            readonly property real fill: root.fillAt(chunk.index)
+            readonly property var tier: root.tiers[chunk.index]
+            readonly property color fillColor: chunk.tier && String(chunk.tier.barColor || "").length > 0
+                                               ? chunk.tier.barColor : root.palette.highlight
             // Dark text on a light tier colour, light text on a dark one.
-            readonly property color onFillColor: Theme.isLightFill(fillColor)
+            readonly property color onFillColor: Theme.isLightFill(chunk.fillColor)
                                                  ? Qt.rgba(0.1, 0.1, 0.1, 0.85) : Qt.rgba(1, 1, 1, 0.9)
-            readonly property string labelText: root.labelAt(index)
+            readonly property string labelText: root.labelAt(chunk.index)
             // "end" | "middle" | "start": where the label sits, clear of the value; "" for nowhere.
-            readonly property string labelPlacement: root.labelPlacementAt(index, thresholdLabel.implicitWidth)
-            readonly property bool labelShown: labelText.length > 0 && !root.missingAt(index)
+            readonly property string labelPlacement: root.labelPlacementAt(chunk.index, thresholdLabel.implicitWidth)
+            readonly property bool labelShown: chunk.labelText.length > 0 && !root.missingAt(chunk.index)
                                                && root.edgeState !== "unplayed" && root.edgeState !== "unmatched"
-                                               && labelPlacement.length > 0
+                                               && chunk.labelPlacement.length > 0
             // Scales with the bar, so it keeps its margin in a taller or shorter one.
             readonly property real labelPixelSize: Math.max(8, Math.round(root.height * 0.62))
 
-            objectName: root.objectName.length > 0 ? root.objectName + "_chunk_" + index : ""
-            x: root.chunkLeft(index)
-            width: Math.max(0, root.chunkRight(index) - x)
+            objectName: root.objectName.length > 0 ? root.objectName + "_chunk_" + chunk.index : ""
+            x: root.chunkLeft(chunk.index)
+            width: Math.max(0, root.chunkRight(chunk.index) - chunk.x)
             height: root.height
 
             Rectangle {
@@ -318,8 +319,9 @@ Item {
                 Repeater {
                     model: parent.visible ? Math.ceil((chunk.width + chunk.height) / 6) + 1 : 0
                     delegate: Rectangle {
+                        id: hatchStripe
                         required property int index
-                        x: index * 6 - chunk.height
+                        x: hatchStripe.index * 6 - chunk.height
                         y: -chunk.height / 2
                         width: 2
                         height: chunk.height * 2

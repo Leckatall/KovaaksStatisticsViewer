@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import KovaaksStatsViewer
@@ -6,7 +7,7 @@ Item {
     id: rowItem
     required property var modelData
     required property int index
-    property Item grid: null
+    property var grid: null
 
     component ValueCell: Label {
         required property real columnX
@@ -22,46 +23,47 @@ Item {
 
     objectName: "progressRow_" + modelData.entryId
     x: 0
-    y: grid.headerHeight + index * grid.rowHeight
-    width: grid.columns.total
-    height: grid.rowHeight
+    y: rowItem.grid.headerHeight + index * rowItem.grid.rowHeight
+    width: rowItem.grid.columns.total
+    height: rowItem.grid.rowHeight
     Accessible.role: Accessible.Row
     Accessible.name: String(modelData.name)
 
     Rectangle {
         anchors.fill: parent
-        color: grid.palette.base
+        color: rowItem.grid.palette.base
     }
     Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 1
-        color: grid.palette.mid
+        color: rowItem.grid.palette.mid
     }
     // The pinned columns' own background, so scrolled cells pass under it.
     Rectangle {
         z: 1
-        visible: grid.pinning
-        x: grid.pinOffset
-        width: grid.pinnedWidth
+        visible: rowItem.grid.pinning
+        x: rowItem.grid.pinOffset
+        width: rowItem.grid.pinnedWidth
         height: rowItem.height - 1
-        color: grid.palette.base
+        color: rowItem.grid.palette.base
         HoverHandler { blocking: true }
     }
     Repeater {
         model: ["category", "subcategory", "scenario", "pbDate", "plays", "progress", "next"]
         delegate: Rectangle {
+            id: columnLine
             required property string modelData
-            readonly property bool pinned: modelData === "category" || modelData === "subcategory"
-                                           || modelData === "scenario"
-            visible: grid.columns[modelData].width > 0
-            z: pinned ? 2 : 0
-            x: grid.columns[modelData].x + grid.columns[modelData].width - 1
-               + (pinned ? grid.pinOffset : 0)
+            readonly property bool pinned: columnLine.modelData === "category" || columnLine.modelData === "subcategory"
+                                           || columnLine.modelData === "scenario"
+            visible: rowItem.grid.columns[columnLine.modelData].width > 0
+            z: columnLine.pinned ? 2 : 0
+            x: rowItem.grid.columns[columnLine.modelData].x + rowItem.grid.columns[columnLine.modelData].width - 1
+               + (columnLine.pinned ? rowItem.grid.pinOffset : 0)
             width: 1
             height: rowItem.height
-            color: grid.palette.mid
+            color: rowItem.grid.palette.mid
         }
     }
 
@@ -70,8 +72,8 @@ Item {
         objectName: rowItem.modelData.blocker === true ? "progressRow_" + rowItem.modelData.entryId + "_blocker" : ""
         visible: rowItem.modelData.blocker === true
         z: 2
-        x: grid.columns.scenario.x + grid.pinOffset + grid.cellPadding - 4
-        width: grid.markerSpace
+        x: rowItem.grid.columns.scenario.x + rowItem.grid.pinOffset + rowItem.grid.cellPadding - 4
+        width: rowItem.grid.markerSpace
         height: rowItem.height
         Accessible.role: Accessible.Indicator
         Accessible.name: String(rowItem.modelData.blockerText || "")
@@ -81,7 +83,7 @@ Item {
             width: 9
             height: 9
             rotation: 45
-            color: String(rowItem.modelData.blockerColor || "") || grid.palette.highlight
+            color: String(rowItem.modelData.blockerColor || "") || rowItem.grid.palette.highlight
         }
         HoverHandler { id: blockerHover }
         ToolTip.visible: blockerHover.hovered
@@ -93,8 +95,8 @@ Item {
         id: nameLabel
         objectName: "progressRow_" + rowItem.modelData.entryId + "_name"
         z: 2
-        x: grid.columns.scenario.x + grid.pinOffset + grid.cellPadding + grid.markerSpace
-        width: Math.max(0, grid.columns.scenario.width - 2 * grid.cellPadding - grid.markerSpace)
+        x: rowItem.grid.columns.scenario.x + rowItem.grid.pinOffset + rowItem.grid.cellPadding + rowItem.grid.markerSpace
+        width: Math.max(0, rowItem.grid.columns.scenario.width - 2 * rowItem.grid.cellPadding - rowItem.grid.markerSpace)
         height: rowItem.height
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
@@ -108,14 +110,14 @@ Item {
 
     TierBar {
         objectName: "progressRow_" + rowItem.modelData.entryId + "_bar"
-        x: grid.barX
+        x: rowItem.grid.barX
         y: Math.round((rowItem.height - height) / 2)
-        width: grid.barWidth
-        height: grid.barHeight
+        width: rowItem.grid.barWidth
+        height: rowItem.grid.barHeight
         marker: rowItem.modelData.recentPosition !== undefined
                 ? Number(rowItem.modelData.recentPosition) : -1
         markerDescription: String(rowItem.modelData.recentDescription || "")
-        tiers: grid.tiers
+        tiers: rowItem.grid.tiers
         fills: rowItem.modelData.fills || []
         labels: rowItem.modelData.thresholdTexts || []
         valueText: rowItem.modelData.personalBestText !== "—"
@@ -130,28 +132,28 @@ Item {
 
     ValueCell {
         objectName: "progressRow_" + rowItem.modelData.entryId + "_personalBestDate"
-        columnX: grid.columns.pbDate.x
-        columnWidth: grid.columns.pbDate.width
+        columnX: rowItem.grid.columns.pbDate.x
+        columnWidth: rowItem.grid.columns.pbDate.width
         text: String(rowItem.modelData.personalBestDateText)
         Accessible.name: qsTr("PB date %1").arg(text)
     }
     ValueCell {
         objectName: "progressRow_" + rowItem.modelData.entryId + "_playCount"
-        columnX: grid.columns.plays.x
-        columnWidth: grid.columns.plays.width
+        columnX: rowItem.grid.columns.plays.x
+        columnWidth: rowItem.grid.columns.plays.width
         text: String(rowItem.modelData.playCountText)
         Accessible.name: qsTr("Plays %1").arg(text)
     }
     Row {
         objectName: "progressRow_" + rowItem.modelData.entryId + "_next"
-        x: grid.columns.next.x + grid.cellPadding
-        width: Math.max(0, grid.columns.next.width - 2 * grid.cellPadding)
+        x: rowItem.grid.columns.next.x + rowItem.grid.cellPadding
+        width: Math.max(0, rowItem.grid.columns.next.width - 2 * rowItem.grid.cellPadding)
         height: rowItem.height
         layoutDirection: Qt.RightToLeft
         spacing: 4
         clip: true
         // Read by tests and assistive tech as one value.
-        readonly property string text: grid.nextText(rowItem.modelData)
+        readonly property string text: rowItem.grid.nextText(rowItem.modelData)
         Accessible.role: Accessible.StaticText
         Accessible.name: qsTr("Next tier %1").arg(text)
 
@@ -159,14 +161,14 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             text: String(rowItem.modelData.nextThresholdText)
             color: String(rowItem.modelData.nextTierText || "").length > 0
-                   ? grid.palette.text : grid.palette.placeholderText
+                   ? rowItem.grid.palette.text : rowItem.grid.palette.placeholderText
         }
         Label {
             anchors.verticalCenter: parent.verticalCenter
             visible: text.length > 0
             text: String(rowItem.modelData.nextTierText || "")
             color: String(rowItem.modelData.nextTierColor || "").length > 0
-                   ? rowItem.modelData.nextTierColor : grid.palette.text
+                   ? rowItem.modelData.nextTierColor : rowItem.grid.palette.text
         }
     }
 }

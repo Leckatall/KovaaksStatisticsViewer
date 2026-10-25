@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import KovaaksStatsViewer
@@ -5,8 +6,8 @@ import KovaaksStatsViewer
 TextField {
     id: editor
 
-    property Item cell: null
-    property Item table: null
+    property var cell: null
+    property var table: null
 
     property bool committed: false
     property bool cancelled: false
@@ -133,8 +134,8 @@ TextField {
         focus: false
         MenuItem { focusPolicy: Qt.NoFocus; text: qsTr("Cut"); enabled: editor.selectedText !== ""; onTriggered: editor.cut() }
         MenuItem { focusPolicy: Qt.NoFocus; text: qsTr("Copy"); enabled: editor.selectedText !== ""; onTriggered: editor.copy() }
-        MenuItem { focusPolicy: Qt.NoFocus; objectName: "sessionPasteAction"; text: qsTr("Paste"); onTriggered: Qt.callLater(table.pasteFromClipboard) }
-        MenuItem { focusPolicy: Qt.NoFocus; objectName: "sessionUndoAction"; text: qsTr("Undo"); onTriggered: Qt.callLater(table.undo) }
+        MenuItem { focusPolicy: Qt.NoFocus; objectName: "sessionPasteAction"; text: qsTr("Paste"); onTriggered: Qt.callLater(editor.table.pasteFromClipboard) }
+        MenuItem { focusPolicy: Qt.NoFocus; objectName: "sessionUndoAction"; text: qsTr("Undo"); onTriggered: Qt.callLater(editor.table.undo) }
         MenuSeparator {}
         MenuItem { focusPolicy: Qt.NoFocus; text: qsTr("Select All"); onTriggered: editor.selectAll() }
     }
@@ -162,7 +163,7 @@ TextField {
                 objectName: "scenarioSuggestion_" + suggestion.modelData.hash
                 width: suggestionList.width
                 text: qsTr("%1 · %2").arg(suggestion.modelData.name).arg(suggestion.modelData.hash)
-                highlighted: index === editor.suggestionIndex
+                highlighted: suggestion.index === editor.suggestionIndex
                 focusPolicy: Qt.NoFocus
                 Accessible.name: qsTr("Use played scenario %1, hash %2")
                     .arg(suggestion.modelData.name).arg(suggestion.modelData.hash)

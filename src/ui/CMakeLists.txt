@@ -177,6 +177,9 @@ target_include_directories(ksv_ui PUBLIC
 # holding a QML_ELEMENT header must be listed here.
 target_include_directories(ksv_ui PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/benchmarks/manager
+        ${CMAKE_CURRENT_SOURCE_DIR}/presentation/benchmarks/tracking
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/expression
+        ${CMAKE_CURRENT_SOURCE_DIR}/presentation/graphs
+        ${CMAKE_CURRENT_SOURCE_DIR}/presentation/graphs/common
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/scenarios
 )

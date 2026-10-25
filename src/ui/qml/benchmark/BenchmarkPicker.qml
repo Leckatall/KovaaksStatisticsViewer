@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -109,13 +110,14 @@ Item {
                 Repeater {
                     model: [45, -45]
                     delegate: Rectangle {
+                        id: arm
                         required property int modelData
                         width: 6
                         height: 1.5
                         radius: height / 2
-                        x: (modelData > 0 ? 4 : 8) - width / 2
+                        x: (arm.modelData > 0 ? 4 : 8) - width / 2
                         y: 6 - height / 2
-                        rotation: modelData
+                        rotation: arm.modelData
                         color: root.palette.placeholderText
                     }
                 }
@@ -192,12 +194,12 @@ Item {
                     id: entryRow
                     required property var modelData
                     required property int index
-                    readonly property bool rowSelectable: root._selectable(modelData)
-                    readonly property bool isSelected: modelData.name === root.selectedName
-                    readonly property string kind: String(modelData.classification).toLowerCase()
+                    readonly property bool rowSelectable: root._selectable(entryRow.modelData)
+                    readonly property bool isSelected: entryRow.modelData.name === root.selectedName
+                    readonly property string kind: String(entryRow.modelData.classification).toLowerCase()
                     // Every exception (incomplete, invalid, unsupported) carries a chip and a way to
                     // the manager, where its details are shown.
-                    readonly property bool hasWarning: kind !== "trackable"
+                    readonly property bool hasWarning: entryRow.kind !== "trackable"
                     width: ListView.view.width
                     implicitHeight: entryDelegate.implicitHeight
                     height: entryDelegate.implicitHeight

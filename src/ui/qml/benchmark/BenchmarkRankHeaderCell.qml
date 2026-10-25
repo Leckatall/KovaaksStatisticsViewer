@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import KovaaksStatsViewer
@@ -6,22 +7,22 @@ FocusScope {
     id: headerCell
     required property var model
     required property int column
-    property Item table: null
+    property var table: null
     readonly property string tierId: headerCell.model.tierId !== undefined ? headerCell.model.tierId : ""
     readonly property string headerName: headerCell.model.display !== undefined ? headerCell.model.display : ""
     readonly property var headerIssues: headerCell.model.issues || []
     readonly property var headerColor: headerCell.model.headerColor !== undefined ? headerCell.model.headerColor : "transparent"
     property bool editingName: false
     objectName: headerCell.tierId !== "" ? "rankHeader_" + headerCell.tierId : ""
-    implicitWidth: table.thresholdWidth
-    implicitHeight: table.headerHeight
+    implicitWidth: headerCell.table.thresholdWidth
+    implicitHeight: headerCell.table.headerHeight
     activeFocusOnTab: headerCell.tierId !== ""
     Accessible.role: Accessible.ColumnHeader
     Accessible.name: headerCell.headerName !== "" ? headerCell.headerName : qsTr("Unnamed rank")
     Accessible.description: headerCell.headerIssues.join("; ")
     onActiveFocusChanged: if (activeFocus) {
-        table.focusedTierId = headerCell.tierId
-        table.headerFocused = true
+        headerCell.table.focusedTierId = headerCell.tierId
+        headerCell.table.headerFocused = true
     }
 
     function beginRename() {
@@ -36,7 +37,7 @@ FocusScope {
             headerCell.beginRename()
             event.accepted = true
         } else {
-            table.handleCommandKey(event)
+            headerCell.table.handleCommandKey(event)
         }
     }
 
@@ -48,8 +49,8 @@ FocusScope {
         acceptedButtons: Qt.RightButton
         onTapped: eventPoint => {
             headerCell.forceActiveFocus()
-            const point = headerCell.mapToItem(table, eventPoint.position.x, eventPoint.position.y)
-            table.rankContextRequested(headerCell.tierId, point.x, point.y)
+            const point = headerCell.mapToItem(headerCell.table, eventPoint.position.x, eventPoint.position.y)
+            headerCell.table.rankContextRequested(headerCell.tierId, point.x, point.y)
         }
     }
 
@@ -72,7 +73,7 @@ FocusScope {
         anchors.verticalCenter: parent.verticalCenter
         swatchColor: headerCell.headerColor
         Accessible.name: qsTr("Colour of rank %1").arg(headerCell.Accessible.name)
-        onClicked: table.colorSwatchRequested("tier", headerCell.tierId, headerCell.headerColor)
+        onClicked: headerCell.table.colorSwatchRequested("tier", headerCell.tierId, headerCell.headerColor)
     }
     Loader {
         anchors.fill: parent
@@ -97,7 +98,7 @@ FocusScope {
             onEditingFinished: {
                 const returnFocus = rankNameEditor.activeFocus
                 if (!rankNameEditor.cancelled && rankNameEditor.text !== headerCell.headerName)
-                    table.manager.renameTier(headerCell.tierId, rankNameEditor.text)
+                    headerCell.table.manager.renameTier(headerCell.tierId, rankNameEditor.text)
                 headerCell.editingName = false
                 if (returnFocus) headerCell.forceActiveFocus()
             }
@@ -106,14 +107,14 @@ FocusScope {
     Label {
         anchors.fill: parent
         anchors.margins: 4
-        anchors.leftMargin: table.rankHeaderLabelLeftInset
-        anchors.rightMargin: table.rankHeaderLabelRightInset
+        anchors.leftMargin: headerCell.table.rankHeaderLabelLeftInset
+        anchors.rightMargin: headerCell.table.rankHeaderLabelRightInset
         visible: !headerCell.editingName
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         font.bold: true
         font.italic: headerCell.headerName === ""
-        text: table.rankHeaderText(headerCell.headerName, headerCell.headerIssues.length > 0)
+        text: headerCell.table.rankHeaderText(headerCell.headerName, headerCell.headerIssues.length > 0)
     }
 }

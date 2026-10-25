@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -78,7 +79,7 @@ Item {
                         required property int index
                         required property var modelData
 
-                        focused: index === rootItem.ancestorChain.length - 1
+                        focused: pathCard.index === rootItem.ancestorChain.length - 1
 
                         property Component primitiveEditorComponent: Component {
                             FieldEditors.PrimitiveEditor {
@@ -107,11 +108,11 @@ Item {
                         }
 
                         Layout.fillWidth: true
-                        Layout.leftMargin: index * 16
+                        Layout.leftMargin: pathCard.index * 16
                         accentColorFn: rootItem.accentColor
                         kindLabel: rootItem.kindLabel
-                        node: modelData
-                        objectName: "pathCard_" + index
+                        node: pathCard.modelData
+                        objectName: "pathCard_" + pathCard.index
 
                         onDeleteRequested: rootItem.model.deleteNode(pathCard.node)
                         onSelected: rootItem.model.select(pathCard.node)

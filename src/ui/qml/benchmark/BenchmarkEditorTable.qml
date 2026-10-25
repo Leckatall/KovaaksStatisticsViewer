@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -16,9 +17,9 @@ FocusScope {
     required property var manager
 
     // The open cell editor, if any; commitActiveEdit() flushes it.
-    property Item activeEditor: null
-    readonly property alias identityView: identityView
-    readonly property alias thresholdView: thresholdView
+    property BenchmarkCellEditor activeEditor: null
+    readonly property alias identityView: identityTableView
+    readonly property alias thresholdView: thresholdTableView
     readonly property alias selectionModel: selection
     readonly property var tableModel: root.manager ? root.manager.tableModel : null
 
@@ -31,7 +32,7 @@ FocusScope {
     readonly property var identityHeaders: [qsTr("Category"), qsTr("Subcategory"), qsTr("Scenario")]
     property int identityContentRevision: 0
     readonly property var identityContentWidths: {
-        root.identityContentRevision
+        void root.identityContentRevision
         const bold = text => Math.ceil(identityBoldMetrics.advanceWidth(text))
         const plain = text => Math.ceil(identityMetrics.advanceWidth(text))
         // The header labels and the add controls under the columns.
@@ -60,7 +61,7 @@ FocusScope {
         const give = Math.min(1, (total - room) / slack)
         return preferred.map((width, column) => Math.floor(width - (width - content[column]) * give))
     }
-    onIdentityWidthsChanged: Qt.callLater(identityView.forceLayout)
+    onIdentityWidthsChanged: Qt.callLater(identityTableView.forceLayout)
     // The narrowest the table can be with every identifying column fitting its content and one
     // rank column (the widest header's width) in view; the editor never gets narrower.
     readonly property int minimumTableWidth: root.identityContentWidths[0] + root.identityContentWidths[1]
@@ -69,7 +70,7 @@ FocusScope {
     // Every rank column has the same width (the scrollbar's position estimate relies on it): an
     // equal share of what the identifying columns and the add-rank slot leave, but never narrower
     // than the widest rank header needs, so no header is clipped; below that the ranks scroll.
-    readonly property int tierCount: Math.max(0, thresholdView.columns - root.thresholdKind)
+    readonly property int tierCount: Math.max(0, thresholdTableView.columns - root.thresholdKind)
     readonly property int availableRankWidth: Math.max(0, tableBody.width - root.identityTotalWidth - root.rankSlotWidth)
     readonly property int thresholdWidth: root.tierCount > 0
                                           ? Math.max(root.rankHeaderMinimumWidth,
@@ -82,7 +83,7 @@ FocusScope {
     readonly property int rankHeaderChromeWidth: root.rankHeaderLabelLeftInset + root.rankHeaderLabelRightInset
     property int tierHeaderRevision: 0
     readonly property int rankHeaderMinimumWidth: {
-        root.tierHeaderRevision
+        void root.tierHeaderRevision
         let widest = rankHeaderMetrics.advanceWidth(root.rankHeaderText("", false))
         const headers = root.tableModel && typeof root.tableModel.tierHeaders === "function"
                         ? root.tableModel.tierHeaders() : []
@@ -112,26 +113,26 @@ FocusScope {
         }
         root.laidOutThresholdWidth = width
         if (previous === 0 || !root.tableModel) {
-            thresholdView.forceLayout()
+            thresholdTableView.forceLayout()
             rankHeader.forceLayout()
             root.clampRankScroll()
             return
         }
         const scrolledRanks = root.rankScrollOnReset >= 0
                               ? root.rankScrollOnReset
-                              : Math.max(0, thresholdView.contentX - root.thresholdKind * previous) / previous
-        const contentY = thresholdView.contentY
-        const hadFocus = thresholdView.activeFocus
+                              : Math.max(0, thresholdTableView.contentX - root.thresholdKind * previous) / previous
+        const contentY = thresholdTableView.contentY
+        const hadFocus = thresholdTableView.activeFocus
         // The rebuild may clear the selection model; the manager's anchors put it back.
         root.restoringSelection = true
-        thresholdView.model = null
-        thresholdView.model = Qt.binding(() => root.tableModel)
-        thresholdView.forceLayout()
-        thresholdView.contentY = contentY
-        thresholdView.contentX = root.rankScrollStart + Math.min(scrolledRanks * width, root.rankScrollRange)
-        if (thresholdView.columns === root.tableModel.columnCount()) root.rankScrollOnReset = -1
+        thresholdTableView.model = null
+        thresholdTableView.model = Qt.binding(() => root.tableModel)
+        thresholdTableView.forceLayout()
+        thresholdTableView.contentY = contentY
+        thresholdTableView.contentX = root.rankScrollStart + Math.min(scrolledRanks * width, root.rankScrollRange)
+        if (thresholdTableView.columns === root.tableModel.columnCount()) root.rankScrollOnReset = -1
         rankHeader.forceLayout()
-        if (hadFocus) thresholdView.forceActiveFocus()
+        if (hadFocus) thresholdTableView.forceActiveFocus()
         root.scheduleSelectionRestore()
     }
 
@@ -144,16 +145,16 @@ FocusScope {
     function noteRankScrollBeforeReset() {
         const width = root.laidOutThresholdWidth
         if (width <= 0 || root.rankScrollOnReset >= 0) return
-        root.rankScrollOnReset = Math.max(0, thresholdView.contentX - root.rankScrollStart) / width
+        root.rankScrollOnReset = Math.max(0, thresholdTableView.contentX - root.rankScrollStart) / width
     }
     function restoreRankScrollAfterReset() {
         if (root.rankScrollOnReset < 0 || root.activeEditor || !root.tableModel) return
-        if (thresholdView.columns !== root.tableModel.columnCount()
+        if (thresholdTableView.columns !== root.tableModel.columnCount()
                 || root.laidOutThresholdWidth !== root.thresholdWidth) return
         const target = root.rankScrollStart + Math.min(root.rankScrollOnReset * root.thresholdWidth,
                                                        root.rankScrollRange)
         root.rankScrollOnReset = -1
-        if (Math.abs(target - thresholdView.contentX) > 0.5) thresholdView.contentX = target
+        if (Math.abs(target - thresholdTableView.contentX) > 0.5) thresholdTableView.contentX = target
     }
 
     // The threshold view's horizontal scroll range: from the first rank right after the scenario
@@ -167,8 +168,8 @@ FocusScope {
     function clampRankScroll() {
         if (root.activeEditor || root.laidOutThresholdWidth !== root.thresholdWidth) return
         const start = root.rankScrollStart
-        const clamped = Math.min(Math.max(thresholdView.contentX, start), start + root.rankScrollRange)
-        if (Math.abs(clamped - thresholdView.contentX) > 0.5) thresholdView.contentX = clamped
+        const clamped = Math.min(Math.max(thresholdTableView.contentX, start), start + root.rankScrollRange)
+        if (Math.abs(clamped - thresholdTableView.contentX) > 0.5) thresholdTableView.contentX = clamped
     }
 
     function rankHeaderText(name, hasIssues) {
@@ -216,10 +217,10 @@ FocusScope {
     // Height of the always-visible horizontal scrollbar, which sits under the threshold body when
     // the ranks do not all fit.
     readonly property int horizontalBarReserve: thresholdHorizontalBar.visible ? thresholdHorizontalBar.height : 0
-    readonly property int tableContentHeight: root.headerHeight + thresholdView.rows * root.rowHeight
+    readonly property int tableContentHeight: root.headerHeight + thresholdTableView.rows * root.rowHeight
                                               + root.horizontalBarReserve
     // The width the rank columns take when all of them are laid out.
-    readonly property int rankColumnsWidth: Math.max(0, thresholdView.columns - root.thresholdKind) * root.thresholdWidth
+    readonly property int rankColumnsWidth: Math.max(0, thresholdTableView.columns - root.thresholdKind) * root.thresholdWidth
 
     // Context for the dialog's rank, group and row controls: the rank or group last focused (by
     // cell, header or group list), and the current row's entry, spans and mapping.
@@ -400,7 +401,7 @@ FocusScope {
     }
 
     function viewForColumn(column) {
-        return column >= root.thresholdKind ? thresholdView : identityView
+        return column >= root.thresholdKind ? thresholdTableView : identityTableView
     }
 
     function moveCurrent(row, column) {
@@ -470,7 +471,7 @@ FocusScope {
         if (anchor.tierId) {
             const column = model.columnForTier(anchor.tierId)
             if (column < 0) return false
-            thresholdView.positionViewAtColumn(column, TableView.Contain)
+            thresholdTableView.positionViewAtColumn(column, TableView.Contain)
             rankHeader.forceLayout()
             if (!root.focusRankHeader(anchor.tierId)) Qt.callLater(root.focusRankHeader, anchor.tierId)
             return true
@@ -500,10 +501,10 @@ FocusScope {
         }
         root.moveCurrent(row, 2)
         const index = root.tableModel.index(row, 2)
-        if (identityView.itemAtIndex(index) === null) return
+        if (identityTableView.itemAtIndex(index) === null) return
         root.pendingScenarioEdit = ""
         pendingEditExpiry.stop()
-        identityView.edit(index)
+        identityTableView.edit(index)
     }
 
     function beginGroupRename(groupId) {
@@ -512,7 +513,7 @@ FocusScope {
         const group = (root.manager.groups || []).find(item => item.id === groupId)
         const column = group && group.kind === "subcategory" ? 1 : 0
         root.moveCurrent(row, column)
-        identityView.edit(root.tableModel.index(row, column))
+        identityTableView.edit(root.tableModel.index(row, column))
         return true
     }
 
@@ -524,9 +525,9 @@ FocusScope {
         const info = model.rowInfo(firstRow)
         if (info.categoryId !== groupId) return false
         // The category cell that shows the label, as TableCell.groupLabelShown decides it.
-        const labelRow = Math.max(firstRow, identityView.topRow)
+        const labelRow = Math.max(firstRow, identityTableView.topRow)
         if (labelRow >= firstRow + info.categorySpanLength) return false
-        const item = identityView.itemAtIndex(model.index(labelRow, 0))
+        const item = identityTableView.itemAtIndex(model.index(labelRow, 0)) as TableCell
         if (!item) return false
         item.addingSubcategory = true
         item.subcategoryField.forceActiveFocus()
@@ -608,7 +609,7 @@ FocusScope {
     function targetAtScene(scenePoint) {
         const listed = groupList.groupAtScene(scenePoint)
         if (listed !== null) return listed
-        for (const item of identityView.contentItem.children) {
+        for (const item of identityTableView.contentItem.children) {
             if (item.isGroup && item.groupId !== "" && root.localPointIn(item.face, scenePoint)) return item.groupId
         }
         if (root.localPointIn(uncategorizedDropZone, scenePoint)) return ""
@@ -621,7 +622,7 @@ FocusScope {
         const model = root.tableModel
         if (!model) return null
         const containerOf = info => info.subcategoryId !== "" ? info.subcategoryId : info.categoryId
-        for (const view of [identityView, thresholdView]) {
+        for (const view of [identityTableView, thresholdTableView]) {
             for (const item of view.contentItem.children) {
                 if (item.columnKind === undefined || item.columnKind < 2) continue
                 const local = root.localPointIn(item, scenePoint)
@@ -738,7 +739,7 @@ FocusScope {
     }
 
     Connections {
-        target: identityView
+        target: identityTableView
         function onBottomRowChanged() { root.runPendingScenarioEdit() }
         function onRowsChanged() { root.runPendingScenarioEdit() }
         function onHeightChanged() { root.runPendingScenarioEdit() }
@@ -763,7 +764,7 @@ FocusScope {
     }
 
     component TableCell: Rectangle {
-        id: cell
+        id: tableCell
 
         required property int row
         required property int column
@@ -795,7 +796,7 @@ FocusScope {
         readonly property int spanStart: columnKind === 0 ? categorySpanStart : subcategorySpanStart
         readonly property int spanLength: columnKind === 0 ? categorySpanLength : subcategorySpanLength
         readonly property var groupColor: columnKind === 0 ? categoryColor : subcategoryColor
-        readonly property int topRow: cell.TableView.view ? cell.TableView.view.topRow : 0
+        readonly property int topRow: tableCell.TableView.view ? tableCell.TableView.view.topRow : 0
         // A span shows its name once: on its first row, or on the top visible row when the first
         // row has scrolled away, so a clipped span stays readable.
         readonly property bool groupLabelShown: isGroup && spanLength > 0 && row === Math.max(spanStart, topRow)
@@ -818,8 +819,6 @@ FocusScope {
         readonly property bool coveredBySpan: root.coveredBySpan(columnKind, subcategoryId)
         // What the cell draws and where it takes pointer input: wider than the cell when it spans.
         readonly property alias face: face
-        // Inside `BenchmarkCellEditor { … }` below, `cell` names the editor's own property, not this id.
-        readonly property Item cellItem: cell
 
         objectName: "cell_" + entryId + "_" + root.columnKey(columnKind, tierId)
         implicitWidth: 80
@@ -839,79 +838,79 @@ FocusScope {
         Rectangle {
             id: face
             objectName: "cellFace"
-            width: cell.spansBoth ? root.identityWidths[0] + root.identityWidths[1] : cell.width
-            height: cell.height
-            color: cell.current ? Qt.alpha(palette.highlight, 0.48)
-                 : cell.selected ? Qt.alpha(palette.highlight, 0.3)
-                 : cell.rowHighlighted ? Qt.alpha(palette.highlight, 0.14)
-                 : cell.isGroup && cell.groupId !== "" && root.hoverDropGroupId === cell.groupId ? Qt.alpha(palette.highlight, 0.45)
-                 : cell.isGroup && cell.groupId !== "" ? Qt.alpha(cell.groupColor, Theme.groupTintAlpha)
+            width: tableCell.spansBoth ? root.identityWidths[0] + root.identityWidths[1] : tableCell.width
+            height: tableCell.height
+            color: tableCell.current ? Qt.alpha(palette.highlight, 0.48)
+                 : tableCell.selected ? Qt.alpha(palette.highlight, 0.3)
+                 : tableCell.rowHighlighted ? Qt.alpha(palette.highlight, 0.14)
+                 : tableCell.isGroup && tableCell.groupId !== "" && root.hoverDropGroupId === tableCell.groupId ? Qt.alpha(palette.highlight, 0.45)
+                 : tableCell.isGroup && tableCell.groupId !== "" ? Qt.alpha(tableCell.groupColor, Theme.groupTintAlpha)
                  : palette.base
 
-            GridCellBorders { showBottom: cell.lastRowOfSpan }
+            GridCellBorders { showBottom: tableCell.lastRowOfSpan }
             Rectangle {
                 // Retained input and domain issues get a textual explanation too (Accessible and
                 // tooltip); the marker is only a pointer to it.
-                visible: (cell.issues || []).length > 0 || cell.inputState !== ""
+                visible: (tableCell.issues || []).length > 0 || tableCell.inputState !== ""
                 anchors.top: parent.top
                 anchors.left: parent.left
                 width: 6
                 height: 6
-                color: cell.inputState !== "" ? Theme.error : Theme.warning
+                color: tableCell.inputState !== "" ? Theme.error : Theme.warning
             }
             Rectangle {
                 readonly property var insertion: root.dropInsertion
-                visible: cell.columnKind >= 2 && insertion !== null && insertion.row === cell.row
+                visible: tableCell.columnKind >= 2 && insertion !== null && insertion.row === tableCell.row
                 y: insertion && insertion.above ? 0 : parent.height - height
                 width: parent.width
                 height: 2
-                color: cell.palette.highlight
+                color: tableCell.palette.highlight
             }
 
             Label {
                 anchors.fill: parent
                 anchors.leftMargin: 6
                 anchors.rightMargin: groupSwatch.visible ? groupSwatch.width + (addSubcategoryPlus.visible ? 34 : 10) : 6
-                visible: !cell.editing && !cell.addingSubcategory
+                visible: !tableCell.editing && !tableCell.addingSubcategory
                 verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: cell.columnKind === root.thresholdKind ? Text.AlignRight : Text.AlignLeft
+                horizontalAlignment: tableCell.columnKind === root.thresholdKind ? Text.AlignRight : Text.AlignLeft
                 elide: Text.ElideRight
-                text: cell.cellText !== "" ? cell.cellText
-                    : cell.columnKind === root.thresholdKind ? "—"
-                    : cell.unnamedScenario ? qsTr("Unnamed scenario") : ""
-                font.italic: cell.inputState !== "" || cell.unnamedScenario
-                font.bold: cell.isGroup
-                color: cell.inputState !== "" ? Theme.errorText
-                     : cell.unnamedScenario ? cell.palette.placeholderText : cell.palette.text
+                text: tableCell.cellText !== "" ? tableCell.cellText
+                    : tableCell.columnKind === root.thresholdKind ? "—"
+                    : tableCell.unnamedScenario ? qsTr("Unnamed scenario") : ""
+                font.italic: tableCell.inputState !== "" || tableCell.unnamedScenario
+                font.bold: tableCell.isGroup
+                color: tableCell.inputState !== "" ? Theme.errorText
+                     : tableCell.unnamedScenario ? tableCell.palette.placeholderText : tableCell.palette.text
             }
 
             TableSwatch {
                 id: groupSwatch
-                objectName: "groupSwatch_" + cell.groupId
-                visible: cell.groupLabelShown && cell.groupId !== "" && !cell.editing && !cell.addingSubcategory
+                objectName: "groupSwatch_" + tableCell.groupId
+                visible: tableCell.groupLabelShown && tableCell.groupId !== "" && !tableCell.editing && !tableCell.addingSubcategory
                 anchors.right: parent.right
                 anchors.rightMargin: 6
                 anchors.verticalCenter: parent.verticalCenter
-                swatchColor: cell.groupColor
-                Accessible.name: qsTr("Colour of group %1").arg(cell.groupLabelText)
-                onClicked: root.colorSwatchRequested("group", cell.groupId, cell.groupColor)
+                swatchColor: tableCell.groupColor
+                Accessible.name: qsTr("Colour of group %1").arg(tableCell.groupLabelText)
+                onClicked: root.colorSwatchRequested("group", tableCell.groupId, tableCell.groupColor)
             }
 
             TooltipToolButton {
                 id: addSubcategoryPlus
-                objectName: "addSubcategoryPlus_" + cell.categoryId
-                visible: cell.columnKind === 0 && cell.groupLabelShown && cell.categoryId !== ""
-                         && !cell.editing && !cell.addingSubcategory
+                objectName: "addSubcategoryPlus_" + tableCell.categoryId
+                visible: tableCell.columnKind === 0 && tableCell.groupLabelShown && tableCell.categoryId !== ""
+                         && !tableCell.editing && !tableCell.addingSubcategory
                 anchors.right: groupSwatch.left
                 anchors.verticalCenter: parent.verticalCenter
                 width: 22
                 height: 22
                 text: "+"
                 focusPolicy: Qt.NoFocus
-                Accessible.name: qsTr("Add subcategory to %1").arg(cell.categoryName)
+                Accessible.name: qsTr("Add subcategory to %1").arg(tableCell.categoryName)
                 ToolTip.text: Accessible.name
                 onClicked: {
-                    cell.addingSubcategory = true
+                    tableCell.addingSubcategory = true
                     subcategoryCreationField.forceActiveFocus()
                 }
             }
@@ -919,21 +918,21 @@ FocusScope {
             CreationField {
                 id: subcategoryCreationField
                 objectName: "subcategoryCreationField"
-                visible: cell.addingSubcategory
+                visible: tableCell.addingSubcategory
                 anchors.fill: parent
                 placeholderText: qsTr("Subcategory name")
-                focusReturnTarget: cell.TableView.view
+                focusReturnTarget: tableCell.TableView.view
                 swallowReturn: true
-                submit: name => root.requestCreation({kind: "subcategory", categoryId: cell.categoryId, name: name})
-                onDone: cell.addingSubcategory = false
+                submit: name => root.requestCreation({kind: "subcategory", categoryId: tableCell.categoryId, name: name})
+                onDone: tableCell.addingSubcategory = false
             }
 
             DragHandler {
                 id: rowDrag
                 target: null
-                enabled: cell.columnKind >= 2 && !cell.editing
+                enabled: tableCell.columnKind >= 2 && !tableCell.editing
                 onActiveChanged: {
-                    if (active) root.beginRowDrag(cell.entryId)
+                    if (active) root.beginRowDrag(tableCell.entryId)
                     else if (root.draggingRows) {
                         root.dropAtScene(rowDrag.centroid.scenePosition)
                         root.draggingRows = false
@@ -947,16 +946,16 @@ FocusScope {
             TapHandler {
                 acceptedButtons: Qt.RightButton
                 onTapped: eventPoint => {
-                    const point = cell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
-                    if (cell.isGroup && cell.groupId !== "") {
-                        root.focusedGroupId = cell.groupId
-                        root.groupContextRequested(cell.groupId, point.x, point.y)
-                    } else if (!cell.isGroup) {
-                        if (!root.selectionHasEntry(cell.entryId))
-                            root.moveCurrent(cell.row, cell.column)
+                    const point = tableCell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
+                    if (tableCell.isGroup && tableCell.groupId !== "") {
+                        root.focusedGroupId = tableCell.groupId
+                        root.groupContextRequested(tableCell.groupId, point.x, point.y)
+                    } else if (!tableCell.isGroup) {
+                        if (!root.selectionHasEntry(tableCell.entryId))
+                            root.moveCurrent(tableCell.row, tableCell.column)
                         else
-                            selection.setCurrentIndex(root.tableModel.index(cell.row, cell.column), ItemSelectionModel.NoUpdate)
-                        root.rowContextRequested(cell.entryId, point.x, point.y)
+                            selection.setCurrentIndex(root.tableModel.index(tableCell.row, tableCell.column), ItemSelectionModel.NoUpdate)
+                        root.rowContextRequested(tableCell.entryId, point.x, point.y)
                     }
                 }
             }
@@ -964,23 +963,23 @@ FocusScope {
             TapHandler {
                 id: selectTap
                 acceptedButtons: Qt.LeftButton
-                enabled: !cell.editing && !cell.addingSubcategory
-                onTapped: root.selectCell(cell.row, cell.column, selectTap.point.modifiers)
+                enabled: !tableCell.editing && !tableCell.addingSubcategory
+                onTapped: root.selectCell(tableCell.row, tableCell.column, selectTap.point.modifiers)
                 onDoubleTapped: {
-                    root.selectCell(cell.row, cell.column, selectTap.point.modifiers)
-                    if (cell.columnKind >= 2 || cell.groupId !== "")
-                        cell.TableView.view.edit(root.tableModel.index(cell.row, cell.column))
+                    root.selectCell(tableCell.row, tableCell.column, selectTap.point.modifiers)
+                    if (tableCell.columnKind >= 2 || tableCell.groupId !== "")
+                        tableCell.TableView.view.edit(root.tableModel.index(tableCell.row, tableCell.column))
                 }
             }
         }
 
-        ToolTip.visible: hover.hovered && ((cell.issues || []).length > 0 || cell.valueState !== "")
-        ToolTip.text: cell.Accessible.description
+        ToolTip.visible: hover.hovered && ((tableCell.issues || []).length > 0 || tableCell.valueState !== "")
+        ToolTip.text: tableCell.Accessible.description
         HoverHandler {
             id: hover
         }
 
-        TableView.editDelegate: BenchmarkCellEditor { cell: cellItem; table: root }
+        TableView.editDelegate: BenchmarkCellEditor { cell: tableCell; table: root }
     }
 
     ColumnLayout {
@@ -1036,7 +1035,7 @@ FocusScope {
                 }
 
                 TableView {
-                    id: identityView
+                    id: identityTableView
                     objectName: "identityView"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -1047,7 +1046,7 @@ FocusScope {
                     selectionBehavior: TableView.SelectCells
                     selectionMode: TableView.ExtendedSelection
                     pointerNavigationEnabled: false
-                    syncView: thresholdView
+                    syncView: thresholdTableView
                     syncDirection: Qt.Vertical
                     columnWidthProvider: (column) => column < root.thresholdKind ? root.identityWidths[column] : 0
                     rowHeightProvider: () => root.rowHeight
@@ -1102,7 +1101,7 @@ FocusScope {
                 FocusScope {
                     id: emptyRankHeader
                     objectName: "emptyRankHeader"
-                    visible: thresholdView.columns <= root.thresholdKind
+                    visible: thresholdTableView.columns <= root.thresholdKind
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.headerHeight
                     activeFocusOnTab: visible
@@ -1140,7 +1139,7 @@ FocusScope {
                     Layout.maximumWidth: root.rankColumnsWidth
                     Layout.preferredHeight: root.headerHeight
                     clip: true
-                    syncView: thresholdView
+                    syncView: thresholdTableView
                     // The same widths as the body: columns the body has not loaded (the identifying
                     // ones, once scrolled away) must not fall back to the delegate's implicit width,
                     // or the header drifts three columns away from its body.
@@ -1197,7 +1196,7 @@ FocusScope {
                         spacing: 0
 
                         TableView {
-                            id: thresholdView
+                            id: thresholdTableView
                             objectName: "thresholdView"
                             Layout.fillWidth: true
                             Layout.fillHeight: true

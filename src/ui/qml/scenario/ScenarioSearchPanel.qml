@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -13,6 +14,7 @@ ColumnLayout {
     property string emptyHint: qsTr("Runs you play in Kovaaks are imported from your Kovaaks folder automatically. "
                                      + "If you have played before, check the folder under File › Set Source Directory.")
     property var scenarioModel
+    readonly property font nameFont: searchField.font
     property alias searchText: searchField.text
     property bool showSort: true
     property bool sortAscending: false
@@ -107,9 +109,9 @@ ColumnLayout {
             required property string name
             required property int runCount
 
-            highlighted: root.currentScenarioHash === hash
+            highlighted: root.currentScenarioHash === delegateRoot.hash
             implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
-            objectName: "scenarioItem_" + index
+            objectName: "scenarioItem_" + delegateRoot.index
             width: scenarioList.width - (scenarioList.ScrollBar.vertical.visible ? scenarioList.ScrollBar.vertical.width : 0)
 
             HoverHandler {
@@ -134,7 +136,7 @@ ColumnLayout {
                 }
             }
 
-            onClicked: root.scenarioActivated(hash, name)
+            onClicked: root.scenarioActivated(delegateRoot.hash, delegateRoot.name)
         }
 
         // The empty state sits at the top of the list area, where the eye already is.

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import KovaaksStatsViewer
@@ -364,17 +365,18 @@ Item {
                     id: tierHeader
                     required property var modelData
                     required property int index
-                    readonly property real leadingInset: index === 0 ? root.barInset : 0
-                    readonly property real trailingInset: index === root.tiers.length - 1 ? root.barInset : 0
-                    objectName: "progressTierHeader_" + index
-                    x: root.barX + root.tierEdge(index) - leadingInset
+                    readonly property real leadingInset: tierHeader.index === 0 ? root.barInset : 0
+                    readonly property real trailingInset: tierHeader.index === root.tiers.length - 1 ? root.barInset : 0
+                    objectName: "progressTierHeader_" + tierHeader.index
+                    x: root.barX + root.tierEdge(tierHeader.index) - tierHeader.leadingInset
                     y: 0
-                    width: root.tierEdge(index + 1) - root.tierEdge(index) + leadingInset + trailingInset
+                    width: root.tierEdge(tierHeader.index + 1) - root.tierEdge(tierHeader.index)
+                           + tierHeader.leadingInset + tierHeader.trailingInset
                     height: root.headerHeight
                     color: root.palette.button
                     border.color: root.palette.mid
                     Accessible.role: Accessible.ColumnHeader
-                    Accessible.name: String(modelData.name)
+                    Accessible.name: String(tierHeader.modelData.name)
 
                     Rectangle {
                         anchors.left: parent.left
