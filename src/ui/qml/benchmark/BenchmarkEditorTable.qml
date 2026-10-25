@@ -111,16 +111,22 @@ FocusScope {
             root.clampRankScroll()
             return
         }
+        const scrolledRanks = root.rankScrollOnReset >= 0
+                              ? root.rankScrollOnReset
+                              : previous > 0 ? Math.max(0, thresholdTableView.contentX - root.thresholdKind * previous) / previous
+                                             : 0
+        // The new laid-out width moves the views' left margin, which can lay the threshold view out
+        // (and emit layoutChanged) synchronously, before rankScrollStart has followed: a restore
+        // then would land part-way into a rank and use up the pending reset scroll.
+        root.relayingOutRanks = true
         root.laidOutThresholdWidth = width
+        root.relayingOutRanks = false
         if (previous === 0 || !root.tableModel) {
             thresholdTableView.forceLayout()
             rankHeader.forceLayout()
             root.clampRankScroll()
             return
         }
-        const scrolledRanks = root.rankScrollOnReset >= 0
-                              ? root.rankScrollOnReset
-                              : Math.max(0, thresholdTableView.contentX - root.thresholdKind * previous) / previous
         const contentY = thresholdTableView.contentY
         const hadFocus = thresholdTableView.activeFocus
         // The rebuild may clear the selection model; the manager's anchors put it back.
@@ -142,13 +148,14 @@ FocusScope {
     // into a column. So the ranks scrolled past the first are noted when the reset starts and put
     // back once the view has caught up with the new model at the current width. -1: none pending.
     property real rankScrollOnReset: -1
+    property bool relayingOutRanks: false
     function noteRankScrollBeforeReset() {
         const width = root.laidOutThresholdWidth
         if (width <= 0 || root.rankScrollOnReset >= 0) return
         root.rankScrollOnReset = Math.max(0, thresholdTableView.contentX - root.rankScrollStart) / width
     }
     function restoreRankScrollAfterReset() {
-        if (root.rankScrollOnReset < 0 || root.activeEditor || !root.tableModel) return
+        if (root.rankScrollOnReset < 0 || root.relayingOutRanks || root.activeEditor || !root.tableModel) return
         if (thresholdTableView.columns !== root.tableModel.columnCount()
                 || root.laidOutThresholdWidth !== root.thresholdWidth) return
         const target = root.rankScrollStart + Math.min(root.rankScrollOnReset * root.thresholdWidth,
