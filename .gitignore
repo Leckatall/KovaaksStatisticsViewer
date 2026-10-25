@@ -82,6 +82,9 @@ Testing/
 # Jetbrains IDE
 .*/
 
+
+.qmlls.ini
+
 # AI files
 CLAUDE.md
 AGENTS.md
