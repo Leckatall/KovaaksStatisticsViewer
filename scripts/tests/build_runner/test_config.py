@@ -12,6 +12,7 @@ from scripts.build_runner.config import (
     RunnerSettings,
     ToolchainError,
     assert_cache,
+    developer_environment,
     find_local_env,
     fingerprint_matches,
     main_worktree_root,
@@ -193,3 +194,39 @@ def test_existing_fingerprint_json_is_compared_semantically(tmp_path: Path) -> N
     right.write_text(json.dumps({"files": {"a": "1", "b": "2"}, "schema": 1}, indent=2), encoding="utf-8")
 
     assert fingerprint_matches(left, json.loads(right.read_text(encoding="utf-8")))
+
+
+def _fake_cmd(stdout: str, returncode: int = 0):
+    calls: list[dict] = []
+
+    def run(command, **kwargs):
+        calls.append({"command": command, **kwargs})
+        return subprocess.CompletedProcess(command, returncode, stdout=stdout.encode("utf-16-le"), stderr=b"")
+
+    return run, calls
+
+
+def test_developer_environment_overlays_vcvars_output_on_the_base(tmp_path: Path) -> None:
+    vcvars = tmp_path / "vcvars64.bat"
+    run, calls = _fake_cmd("Path=C:/msvc/bin;C:/base\r\nINCLUDE=C:/msvc/include\r\nKEPT=new\r\n")
+
+    environment = developer_environment(vcvars, {"PATH": "C:/base", "KEPT": "old", "Other": "x"}, run=run)
+
+    assert environment["PATH"] == "C:/msvc/bin;C:/base"
+    assert "Path" not in environment
+    assert environment["INCLUDE"] == "C:/msvc/include"
+    assert environment["KEPT"] == "new"
+    assert environment["OTHER"] == "x"
+    assert str(vcvars) in calls[0]["command"]
+    assert calls[0]["env"]["PATH"] == "C:/base"
+
+
+def test_developer_environment_rejects_a_failing_or_empty_vcvars(tmp_path: Path) -> None:
+    vcvars = tmp_path / "vcvars64.bat"
+    failing, _ = _fake_cmd("", returncode=1)
+    empty, _ = _fake_cmd("PATH=C:/base\r\n")
+
+    with pytest.raises(ToolchainError, match="exit code 1"):
+        developer_environment(vcvars, {}, run=failing)
+    with pytest.raises(ToolchainError, match="INCLUDE is empty"):
+        developer_environment(vcvars, {}, run=empty)

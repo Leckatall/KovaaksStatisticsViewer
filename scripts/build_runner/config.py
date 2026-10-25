@@ -16,6 +16,7 @@ TOOLCHAIN_KEYS = (
     "KSV_NINJA_EXE",
     "KSV_C_COMPILER",
     "KSV_CXX_COMPILER",
+    "KSV_VCVARS_BAT",
     "KSV_VCPKG_TOOLCHAIN",
     "KSV_VCPKG_TRIPLET",
     "KSV_VCPKG_BIN_DIR",
@@ -50,6 +51,7 @@ class Toolchain:
     ninja_exe: Path
     c_compiler: Path
     cxx_compiler: Path
+    vcvars_bat: Path
     vcpkg_toolchain: Path
     vcpkg_triplet: str
     vcpkg_bin_dir: Path
@@ -206,6 +208,7 @@ def resolve_toolchain(
         ninja_exe=_resolve_path(resolved["KSV_NINJA_EXE"], "Ninja executable"),
         c_compiler=_resolve_path(resolved["KSV_C_COMPILER"], "C compiler"),
         cxx_compiler=_resolve_path(resolved["KSV_CXX_COMPILER"], "C++ compiler"),
+        vcvars_bat=_resolve_path(resolved["KSV_VCVARS_BAT"], "MSVC vcvars script"),
         vcpkg_toolchain=_resolve_path(resolved["KSV_VCPKG_TOOLCHAIN"], "vcpkg toolchain file"),
         vcpkg_triplet=triplet,
         vcpkg_bin_dir=_resolve_path(
@@ -215,6 +218,34 @@ def resolve_toolchain(
         qt_bin_dir=_resolve_path(resolved["KSV_QT_BIN_DIR"], "Qt bin directory", directory=True),
         qt6_dir=_resolve_path(resolved["KSV_QT6_DIR"], "Qt6 CMake package directory", directory=True),
     )
+
+
+def developer_environment(
+    vcvars_bat: Path,
+    base: Mapping[str, str],
+    *,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> dict[str, str]:
+    """`base` with the MSVC compiler environment (INCLUDE, LIB, PATH, ...) that `vcvars_bat` sets up."""
+    # /u makes cmd's own `set` write UTF-16, so values outside the console code page survive.
+    result = run(
+        f'cmd.exe /d /u /s /c ""{vcvars_bat}" >nul && set"',
+        env=dict(base),
+        capture_output=True,
+    )
+    output = result.stdout.decode("utf-16-le", errors="replace")
+    if result.returncode != 0:
+        errors = result.stderr.decode("mbcs", errors="replace")
+        raise ToolchainError(f"{vcvars_bat} failed with exit code {result.returncode}:\n{output}{errors}")
+    # Windows names are case-insensitive but a dict is not: cmd prints `Path`, os.environ holds `PATH`.
+    environment = {key.upper(): value for key, value in base.items()}
+    for line in output.splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key:
+            environment[key.upper()] = value
+    if not environment.get("INCLUDE"):
+        raise ToolchainError(f"{vcvars_bat} did not set up an MSVC environment (INCLUDE is empty).")
+    return environment
 
 
 def normalized_path(path: Path | str) -> str:
@@ -273,21 +304,15 @@ def _sha256(path: Path) -> str:
 
 
 def build_fingerprint(toolchain: Toolchain) -> dict[str, object]:
-    compiler_dir = toolchain.cxx_compiler.parent
     files = [
         toolchain.cmake_exe,
         toolchain.ninja_exe,
         toolchain.c_compiler,
         toolchain.cxx_compiler,
+        toolchain.vcvars_bat,
         toolchain.vcpkg_toolchain,
         toolchain.protoc_exe,
-        compiler_dir / "libgcc_s_seh-1.dll",
-        compiler_dir / "libstdc++-6.dll",
-        compiler_dir / "libwinpthread-1.dll",
-        toolchain.vcpkg_bin_dir / "libabseil_dll.dll",
-        toolchain.vcpkg_bin_dir / "libprotobuf-lite.dll",
-        toolchain.vcpkg_bin_dir / "libprotobuf.dll",
-        toolchain.vcpkg_bin_dir / "libprotoc.dll",
+        *sorted(toolchain.vcpkg_bin_dir.glob("*.dll")),
         *sorted(toolchain.qt6_dir.rglob("*.cmake")),
     ]
     hashes: dict[str, str] = {}
@@ -296,7 +321,7 @@ def build_fingerprint(toolchain: Toolchain) -> dict[str, object]:
             raise ToolchainError(f"Fingerprint input is missing: {path}")
         hashes[normalized_path(path)] = _sha256(path)
     return {
-        "schema": 1,
+        "schema": 2,
         "generator": "Ninja",
         "buildType": "Debug",
         "buildTesting": "ON",
@@ -305,6 +330,7 @@ def build_fingerprint(toolchain: Toolchain) -> dict[str, object]:
         "ninja": normalized_path(toolchain.ninja_exe),
         "cCompiler": normalized_path(toolchain.c_compiler),
         "cxxCompiler": normalized_path(toolchain.cxx_compiler),
+        "vcvars": normalized_path(toolchain.vcvars_bat),
         "vcpkgToolchain": normalized_path(toolchain.vcpkg_toolchain),
         "vcpkgTriplet": toolchain.vcpkg_triplet,
         "vcpkgBin": normalized_path(toolchain.vcpkg_bin_dir),

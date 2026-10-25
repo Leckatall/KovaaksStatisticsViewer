@@ -103,6 +103,7 @@ function Get-KsvToolchainConfig {
         "KSV_NINJA_EXE",
         "KSV_C_COMPILER",
         "KSV_CXX_COMPILER",
+        "KSV_VCVARS_BAT",
         "KSV_VCPKG_TOOLCHAIN",
         "KSV_VCPKG_TRIPLET",
         "KSV_VCPKG_BIN_DIR",
@@ -139,6 +140,7 @@ function Get-KsvToolchainConfig {
         NinjaExe = Resolve-KsvToolchainPath $resolved["KSV_NINJA_EXE"] "Ninja executable"
         CCompiler = Resolve-KsvToolchainPath $resolved["KSV_C_COMPILER"] "C compiler"
         CxxCompiler = Resolve-KsvToolchainPath $resolved["KSV_CXX_COMPILER"] "C++ compiler"
+        VcVarsBat = Resolve-KsvToolchainPath $resolved["KSV_VCVARS_BAT"] "MSVC vcvars script"
         VcpkgToolchain = Resolve-KsvToolchainPath $resolved["KSV_VCPKG_TOOLCHAIN"] "vcpkg toolchain file"
         VcpkgTriplet = $resolved["KSV_VCPKG_TRIPLET"].Trim()
         VcpkgBinDir = Resolve-KsvToolchainPath $resolved["KSV_VCPKG_BIN_DIR"] "vcpkg triplet bin directory" "Container"
@@ -148,4 +150,28 @@ function Get-KsvToolchainConfig {
     }
 
     return [pscustomobject]$config
+}
+
+function Import-KsvVcVars {
+    param([Parameter(Mandatory = $true)][string]$VcVarsBat)
+
+    # cmd /u makes its own `set` write UTF-16, so values outside the console code page survive.
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "cmd.exe"
+    $psi.Arguments = "/d /u /s /c `"`"$VcVarsBat`" >nul 2>&1 && set`""
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::Unicode
+    $process = [System.Diagnostics.Process]::Start($psi)
+    $output = $process.StandardOutput.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) { throw "$VcVarsBat failed with exit code $($process.ExitCode)" }
+
+    foreach ($line in $output -split "`r?`n") {
+        $separator = $line.IndexOf("=")
+        if ($separator -gt 0) {
+            [Environment]::SetEnvironmentVariable($line.Substring(0, $separator), $line.Substring($separator + 1), "Process")
+        }
+    }
+    if (-not $env:INCLUDE) { throw "$VcVarsBat did not set up an MSVC environment (INCLUDE is empty)." }
 }

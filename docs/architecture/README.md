@@ -181,19 +181,19 @@ Implementation anchors: [`src/data/formats/protobuf/schema/profile.proto`](../..
 
 ## Build, deployment, and development topology
 
-The application uses C++20, CMake, Ninja, Qt 6.12.0, MinGW, and vcpkg-provided Protocol Buffers. `scripts/toolchain.defaults.env` records the canonical Windows toolchain, while process environment values and the ignored `scripts/toolchain.local.env` provide controlled overrides. A linked git worktree without its own `toolchain.local.env` reads the main worktree's, so one machine-local file serves every checkout.
+The application uses C++20, CMake, Ninja, Qt 6.12.0, MSVC (Visual Studio 2022 toolset, `x64-windows` vcpkg triplet), and vcpkg-provided Protocol Buffers. `scripts/toolchain.defaults.env` records the canonical Windows toolchain, including the `vcvars64.bat` from which the build runner and the packaging script load the MSVC compiler environment themselves, while process environment values and the ignored `scripts/toolchain.local.env` provide controlled overrides. A linked git worktree without its own `toolchain.local.env` reads the main worktree's, so one machine-local file serves every checkout.
 
-The sanctioned Debug path is `uv run python scripts/build_and_test.py`. It configures and validates a repository-local `build-agent/` tree, fingerprints the resolved tools and runtime dependencies before incremental reuse, and retains full phase logs under `.temp/build-and-test/`. The runner consumes native stdout itself: success is summarized, while compiler, linker, GoogleTest, and QML failures are selected and printed without a separate log-read step. Focused logical scopes run the corresponding GoogleTest or Qt Quick Test executable with low-noise framework settings; the default path builds every target and runs the complete CTest suite. Parallel compiler jobs (`KSV_BUILD_JOBS`, default eight) and the process priority of everything the runner starts (`KSV_BUILD_PRIORITY`) are machine settings resolved from the same layered files and environment; they are deliberately not command-line options and not part of the toolchain fingerprint. Protocol Buffer generation uses a build-local `protoc` runtime assembled from the resolved vcpkg and compiler installations, so configuring does not mutate the dependency installation.
+The sanctioned Debug path is `uv run python scripts/build_and_test.py`. It configures and validates a repository-local `build-agent/` tree, fingerprints the resolved tools and runtime dependencies before incremental reuse, and retains full phase logs under `.temp/build-and-test/`. The runner consumes native stdout itself: success is summarized, while compiler, linker, GoogleTest, and QML failures are selected and printed without a separate log-read step. Focused logical scopes run the corresponding GoogleTest or Qt Quick Test executable with low-noise framework settings; the default path builds every target and runs the complete CTest suite. Parallel compiler jobs (`KSV_BUILD_JOBS`, default eight) and the process priority of everything the runner starts (`KSV_BUILD_PRIORITY`) are machine settings resolved from the same layered files and environment; they are deliberately not command-line options and not part of the toolchain fingerprint. Protocol Buffer generation runs vcpkg's `protoc` in place; the `x64-windows` port installs its runtime DLLs beside it.
 
 The Release packaging script:
 
 1. performs a clean Release configure and build by default;
 2. runs `windeployqt` for Qt and QML dependencies;
-3. copies vcpkg and compiler-matched MinGW runtime DLLs;
-4. smoke-tests the packaged executable with toolchain paths removed from `PATH`; and
+3. copies the vcpkg runtime DLLs and the MSVC runtime DLLs from the toolset's redistributable directory;
+4. smoke-tests the packaged executable with toolchain paths removed from `PATH`, requiring the MSVC runtime to load from the package itself; and
 5. produces a self-contained `win64` ZIP.
 
-The compiler-matched MinGW DLL copies are part of the deployment architecture: multiple installed MinGW runtimes can otherwise satisfy DLL lookup with ABI-incompatible files.
+The MSVC runtime ships app-locally rather than through `vc_redist.x64.exe`, so the extracted ZIP runs on a machine without the Visual C++ Redistributable.
 
 Tests mirror the production layers, with integration tests constructing the real object graph against fixture files. Qt Quick Tests cover QML behavior. The development-only gallery loads the real application wiring against disposable data and supports QML preview. The development-only UI driver (`ksv_driver`, driven by `scripts/ui_driver.py`) also runs the real wiring against a disposable session. It serves screenshots, item-tree inspection and synthesized input over a localhost socket, so agents can see and exercise the UI. Both tools are excluded from Release builds.
 

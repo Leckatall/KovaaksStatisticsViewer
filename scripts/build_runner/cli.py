@@ -10,6 +10,7 @@ import traceback
 from .config import (
     ToolchainError,
     build_fingerprint,
+    developer_environment,
     find_local_env,
     fingerprint_matches,
     resolve_runner_settings,
@@ -20,7 +21,7 @@ from .locking import build_tree_lock
 from .orchestrator import run_pipeline
 
 
-SCOPES = ("all", "domain", "data", "qt-data", "app", "ui", "ui-cpp", "qml", "integration")
+SCOPES = ("all", "domain", "data", "qt-data", "app", "ui", "ui-cpp", "qml", "integration", "qmllint")
 
 
 class UsageError(RuntimeError):
@@ -49,6 +50,8 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(arguments)
     if args.scope == "all" and args.match:
         raise UsageError("--match requires a focused scope; it cannot be used with --scope all.")
+    if args.scope == "qmllint" and (args.match or args.list or args.build_only):
+        raise UsageError("--scope qmllint takes no --match, --list or --build-only; it lints every QML module.")
     if args.build_only and args.list:
         raise UsageError("--build-only and --list cannot be combined.")
     if args.build_only and args.match:
@@ -91,7 +94,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 log_dir=log_dir,
                 toolchain=toolchain,
                 settings=settings,
-                process_environment=os.environ,
+                process_environment=developer_environment(toolchain.vcvars_bat, os.environ),
                 fingerprint=fingerprint,
             )
     except (ToolchainError, OSError, ValueError) as error:

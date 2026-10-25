@@ -153,8 +153,9 @@ TEST(BenchmarksService, SaveNewIncompleteBenchmarkReturnsAdmittedTokenAndPublish
     EXPECT_EQ(store->lastWriteFilename, "b9.json");
     EXPECT_FALSE(store->lastWriteDigest.has_value());
 
-    ASSERT_TRUE(service.snapshot().has_value());
-    const auto *entry = loadedFor(*service.snapshot(), "b9.json");
+    const auto snapshot = service.snapshot();
+    ASSERT_TRUE(snapshot.has_value());
+    const auto *entry = loadedFor(*snapshot, "b9.json");
     ASSERT_NE(entry, nullptr);
     EXPECT_EQ(entry->benchmark.name, "Fresh");
     EXPECT_EQ(entry->completeness.completeness, domain::Completeness::Incomplete);
@@ -207,8 +208,9 @@ TEST(BenchmarksService, SaveConflictOrWriteFailurePreservesAcceptedState) {
                   failure == BenchmarkWriteFailure::ExternalModificationConflict
                       ? BenchmarkSaveError::Conflict
                       : BenchmarkSaveError::WriteFailed);
-        ASSERT_TRUE(service.snapshot().has_value());
-        const auto *entry = loadedFor(*service.snapshot(), "b1.json");
+        const auto snapshot = service.snapshot();
+        ASSERT_TRUE(snapshot.has_value());
+        const auto *entry = loadedFor(*snapshot, "b1.json");
         ASSERT_NE(entry, nullptr);
         EXPECT_EQ(entry->benchmark.name, "Alpha");
         EXPECT_EQ(service.snapshot()->entries.at(0).digest, "d1");
@@ -317,10 +319,11 @@ TEST(BenchmarksService, BatchInstallsExactlySuccessfulReplacementsAndReportsEver
     EXPECT_FALSE(outcome.outcomes[2].ok());
     EXPECT_EQ(outcome.outcomes[2].error, BenchmarkSaveError::WriteFailed);
 
-    ASSERT_TRUE(service.snapshot().has_value());
-    const auto *a = loadedFor(*service.snapshot(), "a.json");
-    const auto *b = loadedFor(*service.snapshot(), "b.json");
-    const auto *c = loadedFor(*service.snapshot(), "c.json");
+    const auto snapshot = service.snapshot();
+    ASSERT_TRUE(snapshot.has_value());
+    const auto *a = loadedFor(*snapshot, "a.json");
+    const auto *b = loadedFor(*snapshot, "b.json");
+    const auto *c = loadedFor(*snapshot, "c.json");
     ASSERT_NE(a, nullptr);
     ASSERT_NE(b, nullptr);
     ASSERT_NE(c, nullptr);

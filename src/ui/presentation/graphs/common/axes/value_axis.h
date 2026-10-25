@@ -30,8 +30,8 @@ namespace ksv::presentation {
             bool niceBounds = true;
         };
 
-        // Default arguments referring to Options (a nested type of this class) trigger a GCC 11
-        // MinGW bug when written inline (`Options options = {}`); these overloads delegate instead.
+        // GCC and Clang reject a default argument that needs Options' default member initializers
+        // before this class is complete (`Options options = {}`, CWG 1397); these overloads delegate instead.
         ValueAxis();
         explicit ValueAxis(Options options);
         ValueAxis(Options options, ValueTransform transform);

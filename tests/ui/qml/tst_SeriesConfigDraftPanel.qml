@@ -492,8 +492,7 @@ TestCase {
             mouseMove(panel, start.x, start.y + (bottomEdge.y - start.y) * step / 8, -1, Qt.LeftButton);
             wait(10);
         }
-        wait(1800);
-        compare(panel.dragPreviewIndex, 19);
+        tryCompare(panel, "dragPreviewIndex", 19, 5000);
         mouseRelease(panel, start.x, bottomEdge.y);
         wait(20);
     }

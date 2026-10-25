@@ -1,36 +1,6 @@
 
 find_package(Protobuf REQUIRED)
 
-set(_ksv_protoc_executable protobuf::protoc)
-if(WIN32 AND Protobuf_PROTOC_EXECUTABLE)
-    # protoc is a MinGW executable whose runtime DLLs live outside tools/protobuf in a vcpkg install.
-    # Stage the complete runtime beside a build-local copy instead of mutating the dependency install.
-    set(_ksv_protoc_runtime_dir "${CMAKE_CURRENT_BINARY_DIR}/protoc-runtime")
-    file(MAKE_DIRECTORY "${_ksv_protoc_runtime_dir}")
-    get_filename_component(_protoc_dir "${Protobuf_PROTOC_EXECUTABLE}" DIRECTORY)
-    get_filename_component(_vcpkg_triplet_bin_dir "${_protoc_dir}/../../bin" ABSOLUTE)
-    get_filename_component(_mingw_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
-
-    set(_ksv_protoc_runtime_files
-        "${Protobuf_PROTOC_EXECUTABLE}"
-        "${_vcpkg_triplet_bin_dir}/libabseil_dll.dll"
-        "${_vcpkg_triplet_bin_dir}/libprotobuf-lite.dll"
-        "${_vcpkg_triplet_bin_dir}/libprotobuf.dll"
-        "${_vcpkg_triplet_bin_dir}/libprotoc.dll"
-        "${_mingw_bin_dir}/libgcc_s_seh-1.dll"
-        "${_mingw_bin_dir}/libstdc++-6.dll"
-        "${_mingw_bin_dir}/libwinpthread-1.dll"
-    )
-    foreach(_runtime_file IN LISTS _ksv_protoc_runtime_files)
-        if(NOT EXISTS "${_runtime_file}")
-            message(FATAL_ERROR "Required protoc runtime file not found: ${_runtime_file}")
-        endif()
-        get_filename_component(_runtime_name "${_runtime_file}" NAME)
-        file(COPY_FILE "${_runtime_file}" "${_ksv_protoc_runtime_dir}/${_runtime_name}" ONLY_IF_DIFFERENT)
-    endforeach()
-    set(_ksv_protoc_executable "${_ksv_protoc_runtime_dir}/protoc.exe")
-endif()
-
 add_library(ksv_data STATIC
         formats/csv/run_filename.cpp
         formats/csv/run_filename.h
@@ -83,7 +53,7 @@ target_link_libraries(ksv_data PUBLIC
 )
 
 protobuf_generate(TARGET ksv_data PROTO_SRCS PROTO_HDRS
-        PROTOC_EXE "${_ksv_protoc_executable}"
+        PROTOC_EXE protobuf::protoc
         PROTOS ${PROTO_FILES})
 
 

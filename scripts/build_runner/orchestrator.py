@@ -27,6 +27,7 @@ from .parsers import (
     parse_qt_txt,
 )
 from .process import CommandResult, describe_exit_code, run_command
+from .qmllint import QMLLINT_TARGET, REPORT_GLOB, UNUSABLE_LINT_REPORT, parse_qmllint_json, render_qmllint_report
 
 
 Execute = Callable[..., CommandResult]
@@ -46,7 +47,6 @@ def _command_environment(
 ) -> dict[str, str]:
     environment = dict(base)
     path_entries = [
-        str(toolchain.cxx_compiler.parent),
         str(toolchain.vcpkg_bin_dir),
         str(toolchain.qt_bin_dir),
     ]
@@ -182,6 +182,21 @@ def run_pipeline(
     assert_cache(build_dir / "CMakeCache.txt", toolchain)
     if fingerprint is not None:
         write_fingerprint(build_dir / ".ksv-toolchain-fingerprint.json", fingerprint)
+
+    if args.scope == "qmllint":
+        return _run_qmllint(
+            args,
+            build_dir=build_dir,
+            repo_root=repo_root,
+            log_dir=log_dir,
+            toolchain=toolchain,
+            settings=settings,
+            process_environment=process_environment,
+            execute=execute,
+            emit=emit,
+            started=started,
+            clock=clock,
+        )
 
     build_command: list[str | Path] = [
         toolchain.cmake_exe,
@@ -507,6 +522,73 @@ def run_pipeline(
         )
         return 1
     emit(f"Scope {args.scope} | jobs {settings.jobs} | tests {len(selected)} | {elapsed:.1f}s | PASS")
+    return 0
+
+
+def _run_qmllint(
+    args,
+    *,
+    build_dir: Path,
+    repo_root: Path,
+    log_dir: Path,
+    toolchain: Toolchain,
+    settings: RunnerSettings,
+    process_environment: Mapping[str, str],
+    execute: Execute,
+    emit: Emit,
+    started: float,
+    clock: Callable[[], float],
+) -> int:
+    # A report left by the last run must not be read as this run's if qmllint dies before writing.
+    for stale in build_dir.glob(REPORT_GLOB):
+        stale.unlink()
+    build_log = log_dir / "qmllint.log"
+    build = _invoke(
+        execute,
+        [toolchain.cmake_exe, "--build", build_dir, "--parallel", str(settings.jobs), "--target", QMLLINT_TARGET],
+        log_path=build_log,
+        repo_root=repo_root,
+        process_environment=process_environment,
+        toolchain=toolchain,
+        settings=settings,
+        runner_environment=None,
+        show_all_output=args.show_all_output,
+        phase="build",
+        emit=emit,
+    )
+    findings = []
+    reports = sorted(build_dir.glob(REPORT_GLOB))
+    for report_path in reports:
+        try:
+            findings.extend(parse_qmllint_json(report_path, repo_root))
+        except UNUSABLE_LINT_REPORT as error:
+            raise ToolchainError(f"qmllint report is unusable: {report_path} ({error})") from error
+    failing = [finding for finding in findings if finding.fails]
+
+    # qmllint exits zero on warnings, so a failed build with nothing failing in the reports means a
+    # dependency (moc, qmltyperegistrar) failed to compile or qmllint itself crashed.
+    if build.exit_code and not failing:
+        for line in render_diagnostic_report(
+            reduce_build_failure(build.output, repo_root),
+            kind="build",
+            scope=args.scope,
+            elapsed=_summary_duration(started, clock),
+            repo_root=repo_root,
+            log_paths=[build_log],
+        ):
+            emit(line)
+        return build.exit_code
+    if not reports:
+        raise ToolchainError(f"{QMLLINT_TARGET} built but wrote no {REPORT_GLOB} report in {build_dir}.")
+
+    elapsed = _summary_duration(started, clock)
+    if failing:
+        for line in render_qmllint_report(
+            findings, scope=args.scope, elapsed=elapsed, repo_root=repo_root, log_paths=[build_log]
+        ):
+            emit(line)
+        return 1
+    emit(f"Scope qmllint | jobs {settings.jobs} | findings 0 ({len(findings)} info) | {elapsed:.1f}s | PASS")
     return 0
 
 

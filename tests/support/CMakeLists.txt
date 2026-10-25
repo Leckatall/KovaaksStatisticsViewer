@@ -1,6 +1,5 @@
-# Headers with no Qt or ksv_data dependency, so domain_tests can use them without
-# picking up the MinGW runtime-DLL requirement that linking anything above
-# ksv_domain would bring (see ksv_copy_mingw_runtime_dlls in the top-level file).
+# Headers with no Qt or ksv_data dependency, so domain_tests can use them and still link
+# nothing above ksv_domain.
 add_library(tests_support_domain INTERFACE)
 
 target_sources(tests_support_domain INTERFACE

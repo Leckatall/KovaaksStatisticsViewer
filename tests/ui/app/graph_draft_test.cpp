@@ -466,7 +466,8 @@ namespace {
         ASSERT_TRUE(view_model->setGraphField("scenarioHistory", "axes", "accuracy", "fixedMin", "80"));
         ASSERT_TRUE(view_model->setGraphField("scenarioHistory", "axes", "accuracy", "fixedMax", "99.5"));
 
-        const auto &policy = saved(*view_model).preferences(GraphKey::ScenarioHistory).axisPolicies.at("accuracy");
+        const auto configuration = saved(*view_model);
+        const auto &policy = configuration.preferences(GraphKey::ScenarioHistory).axisPolicies.at("accuracy");
         const auto &bounds = std::get<FixedBounds>(policy);
         EXPECT_EQ(bounds.minimum, 80.0);
         EXPECT_EQ(bounds.maximum, 99.5);

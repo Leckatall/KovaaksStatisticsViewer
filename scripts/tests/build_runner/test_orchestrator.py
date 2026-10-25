@@ -41,6 +41,7 @@ def make_toolchain(values: dict[str, str], tmp_path: Path) -> Toolchain:
         ninja_exe=Path(values["KSV_NINJA_EXE"]),
         c_compiler=Path(values["KSV_C_COMPILER"]),
         cxx_compiler=Path(values["KSV_CXX_COMPILER"]),
+        vcvars_bat=Path(values["KSV_VCVARS_BAT"]),
         vcpkg_toolchain=Path(values["KSV_VCPKG_TOOLCHAIN"]),
         vcpkg_triplet=values["KSV_VCPKG_TRIPLET"],
         vcpkg_bin_dir=Path(values["KSV_VCPKG_BIN_DIR"]),

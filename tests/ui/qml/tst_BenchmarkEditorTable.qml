@@ -1290,12 +1290,11 @@ TestCase {
         verify(table.thresholdWidth > before, "fixture: the new ranks are wider, " + before + " -> " + table.thresholdWidth)
         verify(table.rankColumnsWidth > table.availableRankWidth, "fixture: the new ranks overflow")
         waitForRendering(table)
-        wait(50)
 
-        const expected = rankScrollStart(table) + data.scrolled * table.thresholdWidth
+        const expected = () => rankScrollStart(table) + data.scrolled * table.thresholdWidth
+        tryVerify(() => Math.abs(view.contentX - expected()) <= 0.5, 3000,
+                  "whole ranks scrolled past: contentX " + view.contentX + ", expected " + expected())
         fuzzyCompare(table.rankScrollStart, rankScrollStart(table), 0.5)
-        fuzzyCompare(view.contentX, expected, 0.5,
-                     "whole ranks scrolled past: contentX " + view.contentX + ", expected " + expected)
         if (data.scrolled === 0) {
             tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_w0") !== null && cellFor(table, "a", "w0") !== null)
             fuzzyCompare(ItemLookup.findByObjectName(table, "rankHeader_w0").mapToItem(table, 0, 0).x,
