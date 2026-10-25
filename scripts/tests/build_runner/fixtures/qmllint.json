@@ -1,0 +1,28 @@
+{
+    "files": [
+        {
+            "filename": "C:/repo/src/ui/qml/Main.qml",
+            "success": false,
+            "warnings": [
+                {"charOffset": 89, "column": 1, "id": "unused-imports", "length": 6, "line": 5, "message": "Unused import", "suggestions": [], "type": "info"},
+                {"charOffset": 2000, "column": 25, "id": "id-shadows-member", "length": 14, "line": 70, "message": "Id for object VisualSettingsManager shadows property \"visualSettings\". Rename one or the other.", "suggestions": [], "type": "warning"},
+                {"charOffset": 490, "column": 13, "id": "id-shadows-member", "length": 14, "line": 20, "message": "Note: Id defined here", "suggestions": [], "type": "warning"},
+                {"charOffset": 4091, "column": 20, "id": "Quick.layout-positioning", "length": 76, "line": 114, "message": "Detected width on an item that is managed by a layout in C:/repo/src/ui/qml/Main.qml.", "suggestions": [], "type": "warning"}
+            ]
+        },
+        {
+            "filename": "C:/repo/src/ui/qml/benchmark/BenchmarkCellEditor.qml",
+            "success": false,
+            "warnings": [
+                {"charOffset": 6337, "column": 126, "id": "unqualified", "length": 5, "line": 136, "message": "Unqualified access", "type": "warning", "suggestions": [{"charOffset": 6337, "column": 126, "documentEdits": [{"filename": "C:/repo/src/ui/qml/benchmark/BenchmarkCellEditor.qml", "location": {"charOffset": 6337, "column": 126, "length": 0, "line": 136}, "replacement": "editor."}], "isAutoApplicable": true, "length": 0, "line": 136, "message": "table is a member of a parent element.\n      You can qualify the access with its id to avoid this warning.\n"}]},
+                {"charOffset": 7000, "column": 24, "id": "unqualified", "length": 5, "line": 163, "message": "Unqualified access", "type": "warning", "suggestions": []}
+            ]
+        },
+        {
+            "filename": "C:/repo/src/ui/qml/shell/AboutDialog.qml",
+            "success": true,
+            "warnings": []
+        }
+    ],
+    "revision": 4
+}

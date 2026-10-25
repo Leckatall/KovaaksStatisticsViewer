@@ -51,7 +51,7 @@ RUNNERS = {
 
 
 def catalog_for_scope(scope: str) -> list[RunnerSpec]:
-    if scope == "all":
+    if scope in ("all", "qmllint"):
         return []
     if scope == "ui":
         return [*RUNNERS["ui-cpp"], *RUNNERS["qml"]]
