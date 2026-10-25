@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.25)
 project(KovaaksStatsViewer VERSION 1.0.0)
 
 # project(VERSION) accepts numeric fields only, so the pre-release suffix lives here. This file is the
@@ -58,7 +58,7 @@ add_subdirectory(src/qt_data)
 #add_subdirectory(src/controllers)
 
 # Main executable
-add_executable(ksv
+qt_add_executable(ksv
         src/main.cpp
         #        resources.qrc
 )
