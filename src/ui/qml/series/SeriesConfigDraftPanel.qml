@@ -12,7 +12,6 @@ Pane {
     property var sourceRows: settingsVm.allSeriesConfigs
     property var displayRows: []
     property var colorTarget: null
-    property var axisNameTarget: null
     // The options popup lives here rather than in a row: every edit republishes allSeriesConfigs,
     // which rebuilds every row delegate and would destroy a popup owned by one.
     property string optionsTargetId: ""
@@ -29,7 +28,7 @@ Pane {
     readonly property alias colorDialog: colorDialog
     readonly property alias expressionDialog: expressionDialog
     readonly property alias newAxisDialog: axisCreationDialog
-    readonly property alias newAxisNameField: newAxisNameField
+    readonly property alias newAxisNameField: axisCreationDialog.nameField
     readonly property alias optionsPopup: seriesOptionsPopup
     readonly property var axisComboModel: {
         const items = [{
@@ -42,7 +41,7 @@ Pane {
                 value: axis.id
             })
         items.push({
-            text: qsTr("+ New axis..."),
+            text: qsTr("+ New axis…"),
             value: "__new__"
         })
         return items
@@ -56,8 +55,7 @@ Pane {
     }
     function handleAxisSelection(row, value) {
         if (value === "__new__") {
-            root.axisNameTarget = row
-            axisCreationDialog.open()
+            axisCreationDialog.openFor(row.id)
             return
         }
         root.settingsVm.updateSeriesAxis(row.id, value)
@@ -96,25 +94,7 @@ Pane {
         onAccepted: if (root.colorTarget) root.settingsVm.updateComputedSeries(root.colorTarget.id, root.colorTarget.name, selectedColor, root.colorTarget.width, root.colorTarget.enabled, root.colorTarget.expression)
     }
     ExpressionEditorDialog { id: expressionDialog; settingsVm: root.settingsVm }
-    Dialog {
-        id: axisCreationDialog
-        objectName: "newAxisDialog"
-        title: qsTr("New axis")
-        standardButtons: Dialog.Ok | Dialog.Cancel
-
-        TextField {
-            id: newAxisNameField
-            objectName: "newAxisNameField"
-            placeholderText: qsTr("Axis name")
-        }
-
-        onAccepted: {
-            const result = root.settingsVm.createAxis(newAxisNameField.text)
-            if (result && result.succeeded && root.axisNameTarget)
-                root.settingsVm.updateSeriesAxis(root.axisNameTarget.id, result.createdAxisId)
-            newAxisNameField.text = ""
-        }
-    }
+    AxisNameDialog { id: axisCreationDialog; settingsVm: root.settingsVm }
 
     Popup {
         id: seriesOptionsPopup

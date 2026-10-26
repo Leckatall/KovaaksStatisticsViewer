@@ -192,7 +192,13 @@ Rectangle {
         Layout.minimumWidth: implicitContentWidth + (padding * 2) + 10
         Layout.preferredWidth: implicitContentWidth + (padding * 2) + 20
         currentIndex: root.axisComboIndexFor(root.row.yAxisId)
-        onActivated: root.axisSelectionRequested(root.row, root.axisComboModel[currentIndex].value)
+        onActivated: {
+            const value = root.axisComboModel[currentIndex].value
+            // Activation breaks the binding; without this a cancelled "+ New axis…" leaves the combo on that
+            // entry. Restored before emitting, because a real axis change rebuilds this row.
+            currentIndex = Qt.binding(() => root.axisComboIndexFor(root.row.yAxisId))
+            root.axisSelectionRequested(root.row, value)
+        }
     }
 
     Button {

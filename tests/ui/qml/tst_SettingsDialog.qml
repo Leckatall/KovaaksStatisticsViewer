@@ -27,8 +27,7 @@ TestCase {
             allSeriesConfigs: [
                 {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
                 {id: "2", name: "Accuracy", color: "#00ffff", enabled: false, displayPosition: 1}
-            ],
-            runAxisLabelChoices: [{key: "series:1", name: "Score"}]
+            ]
         }, overrides))
     }
 
@@ -575,73 +574,89 @@ TestCase {
         compare(dialog.settingsVm.beginVisitCalls, 2)
     }
 
-    function axisChoices() {
-        return [
-            {key: "axis:1", name: "Score"},
-            {key: "series:7", name: "Score/s (5s)"}
-        ]
-    }
-
-    function test_yAxisSelectorListsTheAxisChoicesAndShowsTheWorkingCopyChoice() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelKey: "series:7", runAxisLabelChoices: axisChoices()}),
-            sessionVm: makeFakeSessionVm()
-        })
+    function test_graphLinesHasLinesAndAxesTabsAndNoYAxisCombo() {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
         selectCategory(dialog, "Graph Lines")
 
-        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
-        verify(combo !== null)
-        compare(combo.count, 2)
-        compare(combo.textAt(0), "Score")
-        compare(combo.currentIndex, 1)
-        compare(combo.displayText, "Score/s (5s)")
+        verify(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Lines") !== null)
+        verify(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Axes") !== null)
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox"), null)
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 0)
     }
 
-    // The label choice joins the working copy of the visit instead of being persisted by QML.
-    function test_choosingAYAxisEditsTheWorkingCopy() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelChoices: axisChoices()}),
-            sessionVm: makeFakeSessionVm()
-        })
+    function test_switchingTabsKeepsTheVisitOpenAndDoesNotRevert() {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
         selectCategory(dialog, "Graph Lines")
-        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
 
-        combo.activated(1)
+        mouseClick(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Axes"))
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
+        mouseClick(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Lines"))
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 0)
 
-        compare(dialog.settingsVm.setRunAxisLabelCalls, ["series:7"])
+        compare(dialog.settingsVm.revertCalls, 0)
+        compare(dialog.settingsVm.endVisitCalls, 0)
     }
 
-    function test_theYAxisListHighlightsTheEntryUnderTheKeyboardOrPointer() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelChoices: axisChoices()}),
-            sessionVm: makeFakeSessionVm()
-        })
+    function test_beginningAVisitReturnsToTheLinesTab() {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
         selectCategory(dialog, "Graph Lines")
-        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
-        combo.forceActiveFocus()
-        combo.popup.open()
-        tryCompare(combo.popup, "opened", true)
-        const list = combo.popup.contentItem
-        tryVerify(() => list.itemAtIndex(1) !== null)
+        mouseClick(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Axes"))
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
+        dialog.close()
+        tryCompare(dialog, "visible", false)
 
-        keyClick(Qt.Key_Down)
+        dialog.open()
 
-        tryCompare(combo, "highlightedIndex", 1)
-        verify(list.itemAtIndex(1).highlighted)
-        verify(!list.itemAtIndex(0).highlighted)
-        combo.popup.close()
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 0)
     }
 
-    function test_anUnknownYAxisFallsBackToTheFirstChoice() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelKey: "axis:99", runAxisLabelChoices: axisChoices()}),
+    function test_reopeningDuringAVisitKeepsTheAxesTab() {
+        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
+        selectCategory(dialog, "Graph Lines")
+        mouseClick(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Axes"))
+
+        dialog.openGraphLines()
+
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
+    }
+
+    function openDialogRejectingAnAxisName() {
+        const issue = {graph: "run", group: "graphLines", target: "axis:2", field: "name", code: "axisNameDuplicate"}
+        return openDialog({
+            settingsVm: makeFakeSettingsVm({
+                pendingChanges: true,
+                saveResult: {accepted: false, issues: [issue]},
+                axisOverview: {shownKey: "axis:1", independentLines: [], sharedAxes: [
+                    {id: "1", key: "axis:1", name: "Score", nameText: "Score", nameIssue: "", lineIds: [],
+                     lineNames: [], hasEnabledLine: false, shown: true},
+                    {id: "2", key: "axis:2", name: "Accuracy", nameText: "score", nameIssue: "axisNameDuplicate",
+                     lineIds: [], lineNames: [], hasEnabledLine: false, shown: false}
+                ]}
+            }),
             sessionVm: makeFakeSessionVm()
         })
-        selectCategory(dialog, "Graph Lines")
+    }
 
-        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
-        compare(combo.currentIndex, 0)
-        compare(combo.displayText, "Score")
+    // Focus lands before Save returns: the tab and page switches show the field synchronously.
+    function test_aSaveRejectedForAnAxisNameOpensTheAxesTabOnThatField() {
+        const dialog = openDialogRejectingAnAxisName()
+        selectCategory(dialog, "Graph Lines")
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 0)
+
+        mouseClick(findInDialog(dialog, "settingsSaveButton"))
+
+        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
+        compare(dialog.activeFocusItem.objectName, "axisNameField_2")
+    }
+
+    function test_aSaveRejectedForAnAxisNameFromAnotherPageFocusesThatField() {
+        const dialog = openDialogRejectingAnAxisName()
+        compare(dialog.currentCategory, dialog.profileCategory)
+
+        mouseClick(findInDialog(dialog, "settingsSaveButton"))
+
+        compare(dialog.currentCategory, dialog.graphLinesCategory)
+        compare(dialog.activeFocusItem.objectName, "axisNameField_2")
     }
 
     // ---- Graphs category ---------------------------------------------------------------------------

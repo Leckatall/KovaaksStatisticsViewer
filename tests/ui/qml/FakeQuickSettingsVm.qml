@@ -17,7 +17,7 @@ QtObject {
     property var allSeriesConfigs: []
     property var allAxes: []
     property var rawInputs: []
-    property var runAxisLabelChoices: []
+    property var axisOverview: ({shownKey: "", sharedAxes: [], independentLines: []})
     property string runAxisLabelKey: ""
     property bool pendingChanges: false
     property int beginVisitCalls: 0

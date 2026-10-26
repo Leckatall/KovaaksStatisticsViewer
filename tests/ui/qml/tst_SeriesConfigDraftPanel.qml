@@ -27,7 +27,6 @@ TestCase {
             updateCalls: [],
             removeCalls: [],
             reorderCalls: [],
-            createAxisCalls: [],
             updateSeriesAxisCalls: [],
             restoreDefaultGraphLinesCalls: 0,
             restoreDefaultGraphLines: function () {
@@ -47,13 +46,6 @@ TestCase {
             },
             reorderSeries: function () {
                 this.reorderCalls.push(Array.from(arguments));
-            },
-            createAxis: function () {
-                this.createAxisCalls.push(Array.from(arguments));
-                return {
-                    succeeded: true,
-                    createdAxisId: "9"
-                };
             },
             updateSeriesAxis: function () {
                 this.updateSeriesAxisCalls.push(Array.from(arguments));
@@ -238,9 +230,56 @@ TestCase {
         const dialog = panel.newAxisDialog;
         verify(dialog !== null);
         panel.newAxisNameField.text = "Custom";
-        dialog.accepted();
-        compare(panel.settingsVm.createAxisCalls[0], ["Custom"]);
-        compare(panel.settingsVm.updateSeriesAxisCalls[0], ["1", "9"]);
+        const create = ItemLookup.findByObjectName(dialog.footer, "newAxisCreateButton");
+        create.clicked();
+        compare(dialog.settingsVm.createAxisCalls, ["Custom"]);
+        compare(dialog.settingsVm.updateSeriesAxisCalls[0], ["1", "9"]);
+    }
+    // Choosing an axis republishes the lines, which rebuilds the row whose dropdown is still handling
+    // the activation.
+    function test_choosingAnAxisInTheDropdownRebuildsItsRowCleanly() {
+        let panel = null;
+        const vm = makeFakeSettingsVm({
+            allAxes: [{id: "2", name: "Score Family"}],
+            updateSeriesAxis: function (id, axisId) {
+                this.updateSeriesAxisCalls.push([id, axisId]);
+                panel.sourceRows = panel.sourceRows.map(row => Object.assign({}, row, {
+                    yAxisId: row.id === id ? axisId : row.yAxisId
+                }));
+                return {succeeded: true};
+            }
+        });
+        panel = createTemporaryObject(panelComponent, testCase, {settingsVm: vm});
+        verify(waitForRendering(panel));
+        failOnWarning(/.*/);
+        const combo = ItemLookup.findByObjectName(panel, "axisCombo_1");
+
+        combo.currentIndex = 1;
+        combo.activated(1);
+
+        compare(panel.settingsVm.updateSeriesAxisCalls, [["1", "2"]]);
+        tryVerify(() => ItemLookup.findByObjectName(panel, "axisCombo_1") !== null);
+        const rebuilt = ItemLookup.findByObjectName(panel, "axisCombo_1");
+        verify(rebuilt !== combo, "the activation rebuilt the row");
+        compare(rebuilt.currentText, "Score Family");
+    }
+    function test_cancellingNewAxisRestoresTheLinesAxisDropdown() {
+        const vm = makeFakeSettingsVm({
+            allAxes: [{id: "2", name: "Score Family"}],
+            allSeriesConfigs: [{
+                id: "1", name: "Score", color: "#009600", width: 2, enabled: true,
+                displayPosition: 0, hiddenLeadingPoints: 0, yAxisId: "2", expression: "SCORE"
+            }]
+        });
+        const panel = createTemporaryObject(panelComponent, testCase, {settingsVm: vm});
+        verify(waitForRendering(panel));
+        const combo = ItemLookup.findByObjectName(panel, "axisCombo_1");
+        combo.currentIndex = combo.count - 1;
+        combo.activated(combo.currentIndex);
+        const cancel = ItemLookup.findByObjectName(panel.newAxisDialog.footer, "newAxisCancelButton");
+        cancel.clicked();
+        compare(combo.currentText, "Score Family");
+        compare(panel.newAxisDialog.settingsVm.createAxisCalls.length, 0);
     }
     function test_errorLabelExplainsAValidationRejection() {
         const panel = createTemporaryObject(panelComponent, testCase, {

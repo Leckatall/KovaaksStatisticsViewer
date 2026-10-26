@@ -42,10 +42,8 @@ namespace ksv::presentation {
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
         Q_PROPERTY(QVariantList allSeriesConfigs READ getAllSeriesConfigs NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantList allAxes READ getAllAxes NOTIFY seriesConfigurationChanged)
-        // {key, name} per Y axis the run graph can label: each named axis with an enabled line, and each
-        // enabled line with no axis, in display order.
-        Q_PROPERTY(QVariantList runAxisLabelChoices READ runAxisLabelChoices NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QString runAxisLabelKey READ runAxisLabelKey NOTIFY seriesConfigurationChanged)
+        Q_PROPERTY(QVariantMap axisOverview READ axisOverview NOTIFY axisOverviewChanged)
         Q_PROPERTY(bool visitOpen READ isVisitOpen NOTIFY visitOpenChanged)
         Q_PROPERTY(bool pendingChanges READ hasPendingChanges NOTIFY pendingChangesChanged)
         Q_PROPERTY(QString selectedGraph READ selectedGraph WRITE setSelectedGraph NOTIFY selectedGraphChanged)
@@ -154,9 +152,12 @@ namespace ksv::presentation {
         // ---- Graph Lines: the working copy during a visit, the committed configuration otherwise -----
         Q_INVOKABLE [[nodiscard]] QVariantList getAllSeriesConfigs() const;
         Q_INVOKABLE [[nodiscard]] QVariantList getAllAxes() const;
-        [[nodiscard]] QVariantList runAxisLabelChoices() const;
         // "axis:<id>" or "series:<id>"; empty when nothing is chosen.
         [[nodiscard]] QString runAxisLabelKey() const;
+        // {shownKey, sharedAxes, independentLines}. shownKey is the row that supplies the run graph's
+        // labels, which is the first enabled line's when nothing is chosen. A shared axis carries its
+        // stored name, the text its field shows (pending input, else the name) and that text's issue.
+        [[nodiscard]] QVariantMap axisOverview() const;
 
         // Every edit below changes only the working copy and is refused outside a visit.
         Q_INVOKABLE QVariantMap setSeriesEnabled(const QString &id, bool enabled);
@@ -168,11 +169,21 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap removeComputedSeries(const QString &id);
         Q_INVOKABLE QVariantMap reorderSeries(const QString &id, int displayPosition);
         Q_INVOKABLE SeriesExpressionEditorModel *beginExpressionEdit(const QString &id);
+        // Axis names are trimmed and must be nonblank and unique ignoring case; an axis may always keep its
+        // own stored name. createAxis and a known-axis renameAxis report `issue`: "", "axisNameBlank" or
+        // "axisNameDuplicate". After a successful axis create, rename or delete, every pending axis name
+        // that no longer breaks the rule is applied.
         Q_INVOKABLE QVariantMap createAxis(const QString &name);
+        // {succeeded, issue}. A rejected name is held as pending raw input at graphLines/axis:<id>/name,
+        // reporting its own issue code, and leaves the stored name alone.
+        Q_INVOKABLE QVariantMap renameAxis(const QString &id, const QString &text);
+        // Its lines become independent; a label on it passes to the first enabled one of them.
+        Q_INVOKABLE QVariantMap deleteAxis(const QString &id);
         Q_INVOKABLE QVariantMap updateSeriesAxis(const QString &id, const QString &axisId);
-        // Replaces the lines and axes with the defaults and clears the axis-label choice.
+        // Replaces the lines and axes with the defaults, clears the axis-label choice and drops pending
+        // axis names.
         Q_INVOKABLE QVariantMap restoreDefaultGraphLines();
-        // Takes a runAxisLabelChoices key; an empty key clears the choice, so the run graph labels its
+        // Takes an axisOverview row key; an empty key clears the choice, so the run graph labels its
         // first visible line.
         Q_INVOKABLE void setRunAxisLabel(const QString &key);
 
@@ -181,6 +192,8 @@ namespace ksv::presentation {
         void profilePathChanged();
         void profileLoadedChanged();
         void seriesConfigurationChanged();
+        // Also emitted alone when only pending axis-name text changed, so the Lines rows are not rebuilt.
+        void axisOverviewChanged();
         void visitOpenChanged();
         void pendingChangesChanged();
         void selectedGraphChanged();
@@ -211,6 +224,24 @@ namespace ksv::presentation {
         [[nodiscard]] static std::optional<FieldKey> fieldKey(const QString &graph, const QString &group,
                                                               const QString &target, const QString &field);
         QVariantMap editRunSeries(const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit);
+        // Applies `edit` to the working copy and reconciles the axis label, without emitting.
+        application::MutationResult applyRunSeriesEdit(
+            const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit);
+        void graphLinesChanged(bool documentChanged, bool axisNamesChanged);
+
+        // ---- Axis names ----
+        [[nodiscard]] static FieldKey axisNameKey(application::AxisId axis);
+        [[nodiscard]] static std::optional<application::AxisId> axisNameTarget(const FieldKey &key);
+        // Checked against the stored names of the shown configuration, never against pending text.
+        [[nodiscard]] std::optional<QString> axisNameIssue(const QString &trimmed,
+                                                           std::optional<application::AxisId> excluding) const;
+        // The issue a pending text reports: an axis name's own rule code, else unparsedInput.
+        [[nodiscard]] QString rawInputCode(const FieldKey &key, const QString &text) const;
+        // Drops pending names of deleted axes and applies those that now pass, until none changes.
+        // Returns {document changed, pending text changed}; emits nothing.
+        std::pair<bool, bool> recheckPendingAxisNames();
+        // Keeps the last rejected Save's axis-name issues in step with the pending text they report.
+        void syncAxisNameIssues();
         // Installs `working` (no visit when empty) with no unparsed input and no Save issues.
         void replaceWorkingCopy(std::optional<application::GraphConfiguration> working);
         [[nodiscard]] static Issue toIssue(const application::GraphConfigurationIssue &issue);

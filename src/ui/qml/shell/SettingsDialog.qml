@@ -98,7 +98,11 @@ ApplicationWindow {
 
     function open() {
         root.settingsVm.beginVisit()
-        if (!visible) _fitToScreen()
+        // Hidden means the previous visit ended, so this one is new.
+        if (!visible) {
+            graphLinesTabBar.setCurrentIndex(0)
+            _fitToScreen()
+        }
         visible = true
         raise()
         requestActivate()
@@ -109,6 +113,11 @@ ApplicationWindow {
         if (!issue) return
         if (issue.group === "graphLines") {
             currentCategory = graphLinesCategory
+            const axis = /^axis:(.+)$/.exec(issue.target)
+            if (axis && issue.field === "name") {
+                graphLinesTabBar.setCurrentIndex(1)
+                axesPanel.focusAxisName(axis[1])
+            }
             return
         }
         if (GraphCatalog.isKnown(issue.graph)) root.settingsVm.selectedGraph = issue.graph
@@ -449,8 +458,6 @@ ApplicationWindow {
                     id: graphLinesPage
                     spacing: 8
 
-                    readonly property var axisLabelChoices: root.settingsVm.runAxisLabelChoices
-
                     Label {
                         text: "Graph Lines"
                         font.pixelSize: 18
@@ -458,42 +465,44 @@ ApplicationWindow {
                         Layout.bottomMargin: 4
                     }
 
-                    RowLayout {
+                    TabBar {
+                        id: graphLinesTabBar
+                        objectName: "graphLinesTabBar"
                         Layout.fillWidth: true
-                        spacing: 12
 
-                        Label {
-                            text: "Y-axis"
-                            Layout.alignment: Qt.AlignVCenter
+                        TabButton {
+                            objectName: "graphLinesTab_Lines"
+                            text: qsTr("Lines")
                         }
-                        ComboBox {
-                            id: yAxisColumnComboBox
-                            objectName: "yAxisColumnComboBox"
-                            Layout.fillWidth: true
-                            enabled: graphLinesPage.axisLabelChoices.length > 0
-                            model: graphLinesPage.axisLabelChoices
-                            textRole: "name"
-                            valueRole: "key"
-                            displayText: enabled ? graphLinesPage.axisLabelChoices[currentIndex].name : ""
-                            delegate: ItemDelegate {
-                                required property var modelData
-                                required property int index
-                                width: yAxisColumnComboBox.width
-                                text: modelData.name
-                                highlighted: yAxisColumnComboBox.highlightedIndex === index
-                            }
-                            currentIndex: {
-                                const idx = graphLinesPage.axisLabelChoices.findIndex(c => c.key === root.settingsVm.runAxisLabelKey)
-                                return idx >= 0 ? idx : 0
-                            }
-                            onActivated: index => root.settingsVm.setRunAxisLabel(graphLinesPage.axisLabelChoices[index].key)
+                        TabButton {
+                            objectName: "graphLinesTab_Axes"
+                            text: qsTr("Axes")
                         }
                     }
 
-                    SeriesConfigDraftPanel {
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: Qt.alpha(root.palette.text, 0.7)
+                        text: graphLinesTabBar.currentIndex === 0
+                              ? qsTr("Edit lines and assign the scale each line uses.")
+                              : qsTr("Choose the scale used for Y-axis labels. Line assignments stay the same.")
+                    }
+
+                    StackLayout {
+                        id: graphLinesStack
+                        objectName: "graphLinesStack"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        settingsVm: root.settingsVm
+                        currentIndex: graphLinesTabBar.currentIndex
+
+                        SeriesConfigDraftPanel {
+                            settingsVm: root.settingsVm
+                        }
+                        AxesPanel {
+                            id: axesPanel
+                            settingsVm: root.settingsVm
+                        }
                     }
                 }
 
