@@ -191,13 +191,14 @@ ScrollView {
             columnSpacing: 8
             rowSpacing: 4
 
-            TextField {
+            CommitOnFinishField {
                 id: nameInput
                 objectName: "axisNameField_" + axisRow.axisId
                 Layout.row: 0
                 Layout.column: 0
                 Layout.fillWidth: true
                 text: axisRow.nameText
+                committedText: axisRow.nameText
                 Accessible.name: qsTr("Name of axis %1").arg(axisRow.name)
                 Accessible.description: errorLabel.text
                 // Typing breaks the binding; restoring it shows what the VM kept, trimmed or rejected.

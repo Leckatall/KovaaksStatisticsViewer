@@ -620,6 +620,134 @@ TestCase {
         compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
     }
 
+    // Names commit on editingFinished, so until the field loses focus the visit holds no change.
+    function openEditingDialog() {
+        const {dialog, vm} = openObservableDialog()
+        vm.allSeriesConfigs = [{id: "1", name: "Score", color: "#009600", width: 2, enabled: true, displayPosition: 0,
+                                hiddenLeadingPoints: 0, yAxisId: "", expression: "SCORE"}]
+        vm.axisOverview = {shownKey: "axis:1", independentLines: [], sharedAxes: [
+            {id: "1", key: "axis:1", name: "Score", nameText: "Score", nameIssue: "", lineIds: [],
+             lineNames: [], hasEnabledLine: false, shown: true}
+        ]}
+        dialog.open()
+        verify(waitForRendering(dialog.contentItem))
+        selectCategory(dialog, "Graph Lines")
+        return {dialog: dialog, vm: vm}
+    }
+
+    function startTyping(dialog, fieldName, text) {
+        const field = findInDialog(dialog, fieldName)
+        verify(field !== null, "no field " + fieldName)
+        field.forceActiveFocus()
+        field.text = text
+        compare(dialog.activeFocusItem, field)
+        compare(dialog.settingsVm.calls.length, 0)
+    }
+
+    function startTypingAnAxisName(dialog) {
+        mouseClick(findInDialog(dialog, "graphLinesTab_Axes"))
+        startTyping(dialog, "axisNameField_1", "Points")
+    }
+
+    function test_closingWhileAnAxisNameIsBeingTypedOffersToSaveIt() {
+        const {dialog, vm} = openEditingDialog()
+        startTypingAnAxisName(dialog)
+
+        dialog.close()
+
+        compare(vm.callsNamed("renameAxis").map(c => c.args), [["1", "Points"]])
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        compare(vm.endVisitCalls, 0)
+    }
+
+    function test_closingWhileALineNameIsBeingTypedOffersToSaveIt() {
+        const {dialog, vm} = openEditingDialog()
+        startTyping(dialog, "seriesNameField_1", "Total")
+
+        dialog.close()
+
+        compare(vm.callsNamed("updateComputedSeries").map(c => c.args), [["1", "Total"]])
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        compare(vm.endVisitCalls, 0)
+    }
+
+    function test_saveCommitsAnAxisNameThatIsStillBeingTyped() {
+        const {dialog, vm} = openEditingDialog()
+        startTypingAnAxisName(dialog)
+        const save = findInDialog(dialog, "settingsSaveButton")
+        verify(save.enabled, "Save is offered while a name is being typed")
+
+        mouseClick(save)
+
+        compare(vm.callsNamed("renameAxis").map(c => c.args), [["1", "Points"]])
+        compare(vm.saveCalls, 1)
+    }
+
+    // A pointer press hands Save the focus, which commits the field by itself; activation that leaves
+    // focus in the field relies on Save committing it before saving.
+    function test_saveActivatedWhileTheFieldKeepsFocusCommitsItFirst() {
+        const {dialog, vm} = openEditingDialog()
+        startTypingAnAxisName(dialog)
+        const field = findInDialog(dialog, "axisNameField_1")
+
+        findInDialog(dialog, "settingsSaveButton").clicked()
+
+        compare(dialog.activeFocusItem, field)
+        compare(vm.callsNamed("renameAxis").map(c => c.args), [["1", "Points"]])
+        compare(vm.saveCalls, 1)
+        // The fake's commit marks the visit dirty and its save cleans it, so this holds only if the commit came first.
+        compare(vm.pendingChanges, false)
+    }
+
+    function test_focusingANameWithoutTypingLeavesSaveDisabled() {
+        const {dialog, vm} = openEditingDialog()
+        mouseClick(findInDialog(dialog, "graphLinesTab_Axes"))
+        const field = findInDialog(dialog, "axisNameField_1")
+
+        field.forceActiveFocus()
+
+        compare(dialog.activeFocusItem, field)
+        compare(findInDialog(dialog, "settingsSaveButton").enabled, false)
+    }
+
+    function test_typingANameBackToItsSavedTextDisablesSaveAgain() {
+        const {dialog, vm} = openEditingDialog()
+        startTypingAnAxisName(dialog)
+        const save = findInDialog(dialog, "settingsSaveButton")
+        verify(save.enabled)
+
+        findInDialog(dialog, "axisNameField_1").text = "Score"
+
+        compare(save.enabled, false)
+    }
+
+    // Graphs-page fields report every edit as it is typed, so focusing one leaves nothing to commit.
+    function test_focusingAGraphsFieldLeavesSaveDisabled() {
+        const {dialog} = openObservableDialog()
+        dialog.openGraph("dailyPlaytime")
+        verify(waitForRendering(dialog.contentItem))
+        const field = findInDialog(dialog, "graphField_dataRange_averagingWindow")
+        verify(field !== null)
+
+        field.forceActiveFocus()
+
+        tryCompare(field, "activeFocus", true)
+        compare(findInDialog(dialog, "settingsSaveButton").enabled, false)
+    }
+
+    function test_closingWithAnUntouchedNameFocusedCommitsNothing() {
+        const {dialog, vm} = openEditingDialog()
+        const field = findInDialog(dialog, "seriesNameField_1")
+        field.forceActiveFocus()
+        compare(dialog.activeFocusItem, field)
+
+        dialog.close()
+
+        compare(vm.callsNamed("updateComputedSeries").length, 0)
+        compare(vm.endVisitCalls, 1)
+        tryCompare(dialog, "visible", false)
+    }
+
     function openDialogRejectingAnAxisName() {
         const issue = {graph: "run", group: "graphLines", target: "axis:2", field: "name", code: "axisNameDuplicate"}
         return openDialog({

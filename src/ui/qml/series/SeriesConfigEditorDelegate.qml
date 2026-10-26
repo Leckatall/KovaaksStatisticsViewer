@@ -158,11 +158,12 @@ Rectangle {
         }
     }
 
-    TextField {
+    CommitOnFinishField {
         id: nameField
         objectName: "seriesNameField_" + root.row.id
         Layout.fillWidth: true
         text: root.row.name
+        committedText: root.row.name
         onEditingFinished: root.nameUpdateRequested(root.row, text)
         Component.onCompleted: cursorPosition = 0
     }

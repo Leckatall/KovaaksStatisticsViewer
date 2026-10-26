@@ -71,9 +71,10 @@ ApplicationWindow {
         Button {
             objectName: "settingsSaveButton"
             text: qsTr("Save")
-            enabled: root.settingsVm.pendingChanges
+            enabled: root.settingsVm.pendingChanges || root.hasUncommittedEdit()
             DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
             onClicked: {
+                root.commitActiveEdit()
                 const result = root.settingsVm.save()
                 if (!result.accepted) root.focusFirstIssue(result.issues)
             }
@@ -148,7 +149,20 @@ ApplicationWindow {
         Qt.callLater(() => { if (!graphEditor.focusFirstControl()) graphSelector.forceActiveFocus() })
     }
 
+    function hasUncommittedEdit(): bool {
+        const field = root.activeFocusItem as CommitOnFinishField
+        return field !== null && field.uncommittedEdit
+    }
+
+    // Line and axis names commit on editingFinished, which closing the window doesn't trigger.
+    function commitActiveEdit() {
+        const field = root.activeFocusItem as CommitOnFinishField
+        if (field && field.uncommittedEdit)
+            field.editingFinished()
+    }
+
     onClosing: (close) => {
+        root.commitActiveEdit()
         if (root.settingsVm.pendingChanges) {
             close.accepted = false
             unsavedChangesPrompt.open()

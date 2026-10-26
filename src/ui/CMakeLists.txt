@@ -53,6 +53,7 @@ qt_add_qml_module(ksv_ui
             qml/scenario/SortControls.qml
             qml/scenario/ScenarioRunItem.qml
             qml/common/ActionButton.qml
+            qml/common/CommitOnFinishField.qml
             qml/common/CreationField.qml
             qml/common/GridCellBorders.qml
             qml/common/GridHeaderCell.qml

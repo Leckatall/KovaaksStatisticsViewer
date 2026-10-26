@@ -238,4 +238,9 @@ QtObject {
     }
 
     function resetGraph(graph) { record("resetGraph", [graph]); return true }
+
+    // ---- Graph Lines ---------------------------------------------------------------------------------
+
+    function renameAxis(id, text) { record("renameAxis", [id, text]); return {succeeded: true, issue: ""} }
+    function updateComputedSeries(id, name) { record("updateComputedSeries", [id, name]); return {succeeded: true} }
 }
