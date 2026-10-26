@@ -403,6 +403,37 @@ namespace {
         EXPECT_FALSE(series->yAxisId);
     }
 
+    TEST_F(RunSeriesAuthorityTest, RenamingAnAxisChangesOnlyItsName) {
+        const auto original = defaultRunSeriesDocument();
+        auto document = original;
+        ASSERT_GE(document.axes.size(), 2u);
+        ASSERT_TRUE(renameAxis(document, AxisId{2}, "  Hit rate ").succeeded());
+        EXPECT_EQ(document.axes[1].name, "  Hit rate ");
+        EXPECT_EQ(document.axes[1].id, original.axes[1].id);
+        for (const size_t i: {size_t{0}, size_t{1}}) {
+            const auto &after = document.axes[i].options;
+            const auto &before = original.axes[i].options;
+            EXPECT_EQ(after.baseline, before.baseline);
+            EXPECT_EQ(after.integral, before.integral);
+            EXPECT_EQ(after.targetTicks, before.targetTicks);
+            EXPECT_EQ(after.fallbackSpan, before.fallbackSpan);
+            EXPECT_EQ(document.axes[i].transformKind, original.axes[i].transformKind);
+        }
+        EXPECT_EQ(document.axes[0].name, original.axes[0].name);
+        EXPECT_EQ(document.nextAxisId, original.nextAxisId);
+        ASSERT_EQ(document.series.size(), original.series.size());
+        for (size_t i = 0; i < document.series.size(); ++i)
+            EXPECT_EQ(document.series[i].yAxisId, original.series[i].yAxisId);
+    }
+
+    TEST_F(RunSeriesAuthorityTest, RenamingAnUnknownAxisFailsAndLeavesTheDocumentUntouched) {
+        const auto original = defaultRunSeriesDocument();
+        auto document = original;
+        EXPECT_EQ(renameAxis(document, AxisId{999}, "Nope").failure, SeriesMutationFailureCode::UnknownAxisId);
+        ASSERT_EQ(document.axes.size(), original.axes.size());
+        for (size_t i = 0; i < document.axes.size(); ++i) EXPECT_EQ(document.axes[i].name, original.axes[i].name);
+    }
+
     TEST_F(RunSeriesAuthorityTest, RejectsMalformedExpressionInLegacyV1DocumentAndReseeds) {
         auto root = QJsonDocument::fromJson(legacyV1Document().toUtf8()).object();
         auto series = root["series"].toArray();
