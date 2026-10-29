@@ -7,6 +7,7 @@
 #include <chrono>
 
 #include <QSignalSpy>
+#include <QMetaProperty>
 
 #include "app/contracts/expression_dsl.h"
 #include "presentation/app/settings_vm.h"
@@ -91,6 +92,67 @@ namespace {
                     "averagingWindow"};
         }
     };
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsIsAnEmptyListBeforeAnyVisit) {
+        const auto view_model = make_view_model();
+        EXPECT_TRUE(view_model->changedGraphs().isEmpty());
+        const int index = view_model->metaObject()->indexOfProperty("changedGraphs");
+        ASSERT_GE(index, 0);
+        EXPECT_STREQ(view_model->metaObject()->property(index).notifySignal().name().constData(), "changedGraphsChanged");
+    }
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsNamesPreferenceChangesAndNotifiesOnlyWhenListChanges) {
+        const auto vm = make_view_model();
+        vm->beginVisit();
+        const QSignalSpy spy(vm.get(), &SettingsViewModel::changedGraphsChanged);
+        EXPECT_TRUE(vm->setGraphMarkers("dailyPlaytime", true));
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"dailyPlaytime"}));
+        EXPECT_EQ(!vm->changedGraphs().isEmpty(), vm->hasPendingChanges());
+        vm->setGraphMarkers("dailyPlaytime", true);
+        EXPECT_EQ(spy.count(), 1);
+        vm->setGraphMarkers("dailyPlaytime", false);
+        EXPECT_TRUE(vm->changedGraphs().isEmpty());
+        EXPECT_EQ(!vm->changedGraphs().isEmpty(), vm->hasPendingChanges());
+        EXPECT_EQ(spy.count(), 2);
+    }
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsCountsRunLinesAndAxisLabel) {
+        const auto vm = make_view_model();
+        vm->beginVisit();
+        ASSERT_TRUE(vm->setSeriesEnabled(lineId(5), true)["succeeded"].toBool());
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"run"}));
+        vm->revertChanges();
+        vm->setRunAxisLabel("axis:2");
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"run"}));
+    }
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsCountsUnparsedInputsInCatalogOrder) {
+        const auto vm = make_view_model();
+        vm->beginVisit();
+        EXPECT_FALSE(vm->setGraphField("scenarioHistory", "dataRange", "", "latestRuns", "abc"));
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"scenarioHistory"}));
+        vm->renameAxis("1", "");
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"run", "scenarioHistory"}));
+        EXPECT_EQ(!vm->changedGraphs().isEmpty(), vm->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsClearsOnSaveRevertAndEndVisit) {
+        const auto vm = make_view_model();
+        vm->beginVisit();
+        vm->setGraphMarkers("dailyPlaytime", true);
+        ASSERT_EQ(vm->changedGraphs(), (QStringList{"dailyPlaytime"}));
+        ASSERT_TRUE(vm->save()["accepted"].toBool());
+        EXPECT_TRUE(vm->changedGraphs().isEmpty());
+        vm->setGraphMarkers("dailyPlaytime", false);
+        ASSERT_EQ(vm->changedGraphs(), (QStringList{"dailyPlaytime"}));
+        vm->revertChanges();
+        EXPECT_TRUE(vm->changedGraphs().isEmpty());
+        vm->setGraphMarkers("dailyPlaytime", false);
+        ASSERT_EQ(vm->changedGraphs(), (QStringList{"dailyPlaytime"}));
+        vm->endVisit();
+        EXPECT_TRUE(vm->changedGraphs().isEmpty());
+        EXPECT_FALSE(vm->hasPendingChanges());
+    }
 
     TEST_F(SettingsViewModelTest, KovaaksDirReflectsServiceValueAtConstruction) {
         fake_service->dirs = {"D:/CustomDir"};
@@ -420,6 +482,26 @@ namespace {
         EXPECT_EQ(second["group"].toString(), "graphLines");
         EXPECT_EQ(second["target"].toString(), "records[0].yAxisId");
         EXPECT_EQ(second["code"].toString(), "unknownAxis");
+    }
+
+    // The Settings sidebar marks a graph from draftIssues, so a line edit that repairs the document must
+    // clear its issue and the rejected Save's list together.
+    TEST_F(SettingsViewModelTest, AGraphLinesEditThatRepairsTheDocumentClearsItsIssues) {
+        configuration->configuration.runSeries.series.front().yAxisId = AxisId{999};
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_EQ(view_model->draftIssues().size(), 1);
+        EXPECT_EQ(view_model->draftIssues()[0].toMap()["target"].toString(), "records[0].yAxisId");
+        configuration->rejectSavesWith = {
+            {GraphConfigurationIssueCode::InvalidRunSeries, GraphKey::Run, "graphLines", "records[0].yAxisId", ""}
+        };
+        ASSERT_FALSE(view_model->save()["accepted"].toBool());
+        ASSERT_EQ(view_model->issues().size(), 1);
+
+        ASSERT_TRUE(view_model->updateSeriesAxis(lineId(0), "")["succeeded"].toBool());
+
+        EXPECT_TRUE(view_model->draftIssues().isEmpty());
+        EXPECT_TRUE(view_model->issues().isEmpty());
     }
 
     TEST_F(SettingsViewModelTest, ASuccessfulSaveOrARevertClearsEarlierIssues) {

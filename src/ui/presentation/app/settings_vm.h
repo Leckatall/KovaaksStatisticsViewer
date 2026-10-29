@@ -42,10 +42,10 @@ namespace ksv::presentation {
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
         Q_PROPERTY(QVariantList allSeriesConfigs READ getAllSeriesConfigs NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantList allAxes READ getAllAxes NOTIFY seriesConfigurationChanged)
-        Q_PROPERTY(QString runAxisLabelKey READ runAxisLabelKey NOTIFY seriesConfigurationChanged)
         Q_PROPERTY(QVariantMap axisOverview READ axisOverview NOTIFY axisOverviewChanged)
         Q_PROPERTY(bool visitOpen READ isVisitOpen NOTIFY visitOpenChanged)
         Q_PROPERTY(bool pendingChanges READ hasPendingChanges NOTIFY pendingChangesChanged)
+        Q_PROPERTY(QStringList changedGraphs READ changedGraphs NOTIFY changedGraphsChanged)
         Q_PROPERTY(QString selectedGraph READ selectedGraph WRITE setSelectedGraph NOTIFY selectedGraphChanged)
         Q_PROPERTY(QVariantList issues READ issues NOTIFY issuesChanged)
         Q_PROPERTY(QVariantList rawInputs READ rawInputs NOTIFY rawInputsChanged)
@@ -88,6 +88,7 @@ namespace ksv::presentation {
         [[nodiscard]] bool isVisitOpen() const { return m_working.has_value(); }
         // Includes unparsed input, so closing cannot silently drop it.
         [[nodiscard]] bool hasPendingChanges() const;
+        [[nodiscard]] QStringList changedGraphs() const { return m_changedGraphs; }
 
         [[nodiscard]] QString selectedGraph() const;
         void setSelectedGraph(const QString &graph);
@@ -143,7 +144,7 @@ namespace ksv::presentation {
         Q_INVOKABLE bool clearSeriesOverride(const QString &graph, const QString &series, const QString &field);
         // fit, zero or fixed; unparsed text of the bound fields is dropped unless the mode is fixed.
         Q_INVOKABLE bool setAxisMode(const QString &graph, const QString &axis, const QString &mode);
-        // Stages the graph's presentation defaults only; Graph Lines and other graphs are untouched.
+        // Stages the graph's presentation defaults only; its lines, axes and other graphs are untouched.
         Q_INVOKABLE bool resetGraph(const QString &graph);
 
         // The locale that numbers and dates are read and shown in; the system's unless a test sets it.
@@ -196,6 +197,7 @@ namespace ksv::presentation {
         void axisOverviewChanged();
         void visitOpenChanged();
         void pendingChangesChanged();
+        void changedGraphsChanged();
         void selectedGraphChanged();
         void issuesChanged();
         void rawInputsChanged();
@@ -228,6 +230,8 @@ namespace ksv::presentation {
         application::MutationResult applyRunSeriesEdit(
             const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit);
         void graphLinesChanged(bool documentChanged, bool axisNamesChanged);
+        // editRunSeries for an edit that adds or removes an axis, which can settle pending axis names.
+        QVariantMap editAxes(const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit);
 
         // ---- Axis names ----
         [[nodiscard]] static FieldKey axisNameKey(application::AxisId axis);
@@ -251,6 +255,8 @@ namespace ksv::presentation {
         void refreshPendingChanges();
         // After any edit of the working copy's graph preferences or unparsed text.
         void draftChanged();
+        // Revalidates the draft and drops the rejected Save's issues once the draft has none left.
+        void settleIssues();
         void setDraftIssues(std::vector<Issue> issues);
         [[nodiscard]] QString rawOr(const FieldKey &key, const QString &shown) const;
         [[nodiscard]] application::GraphPreferences *draftPreferences(const QString &graph,
@@ -283,6 +289,7 @@ namespace ksv::presentation {
         QLocale m_locale;
         application::GraphKey m_selectedGraph = application::GraphKey::Run;
         bool m_pendingChanges = false;
+        QStringList m_changedGraphs;
     };
 }
 

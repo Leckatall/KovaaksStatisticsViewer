@@ -337,7 +337,23 @@ namespace ksv::presentation {
     }
 
     void SettingsViewModel::refreshPendingChanges() {
-        const bool pending = hasPendingChanges();
+        QStringList changed;
+        if (m_working) {
+            const auto diff = application::diffGraphConfigurations(m_baseline, *m_working);
+            for (const auto key: application::kGraphKeys) {
+                const bool raw = std::ranges::any_of(m_rawInput, [key](const auto &entry) {
+                    return entry.first.graph == key;
+                });
+                const bool runChanged = key == application::GraphKey::Run && (diff.runSeries || diff.runAxisLabel);
+                if (raw || runChanged || diff.sectionsOf(key).any()) changed.append(graphName(key));
+            }
+        }
+        // The diff covers every field of the configuration, so the changed list is the whole answer.
+        const bool pending = !changed.isEmpty();
+        if (changed != m_changedGraphs) {
+            m_changedGraphs = std::move(changed);
+            emit changedGraphsChanged();
+        }
         if (pending == m_pendingChanges) return;
         m_pendingChanges = pending;
         emit pendingChangesChanged();
@@ -663,10 +679,14 @@ namespace ksv::presentation {
 
     void SettingsViewModel::draftChanged() {
         emit graphDraftsChanged();
+        settleIssues();
+        refreshPendingChanges();
+    }
+
+    void SettingsViewModel::settleIssues() {
         revalidateDraft();
         // The list of the last rejected Save is only worth showing while something it named is still wrong.
         if (m_draftIssues.empty()) setIssues({});
-        refreshPendingChanges();
     }
 
     void SettingsViewModel::setDraftIssues(std::vector<Issue> issues) {
@@ -964,9 +984,16 @@ namespace ksv::presentation {
         if (axisNamesChanged) {
             emit rawInputsChanged();
             syncAxisNameIssues();
-            revalidateDraft();
         }
+        if (documentChanged || axisNamesChanged) settleIssues();
         refreshPendingChanges();
+    }
+
+    QVariantMap SettingsViewModel::editAxes(
+        const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit) {
+        const auto result = applyRunSeriesEdit(edit);
+        if (result.succeeded()) graphLinesChanged(true, recheckPendingAxisNames().second);
+        return mutationMap(result);
     }
 
     // ---- Axis names ---------------------------------------------------------------------------------
@@ -1191,23 +1218,14 @@ namespace ksv::presentation {
     }
 
     QVariantMap SettingsViewModel::createAxis(const QString &name) {
-        auto map = invalidMutationMap();
-        map["issue"] = QString();
-        if (!m_working) return map;
         const auto trimmed = name.trimmed();
-        if (const auto issue = axisNameIssue(trimmed, std::nullopt)) {
-            map["issue"] = *issue;
-            return map;
-        }
-        const auto result = applyRunSeriesEdit([&](application::RunSeriesDocument &document) {
-            return application::createAxis(document, {trimmed.toStdString()});
-        });
-        if (result.succeeded()) {
-            const auto [applied, rawChanged] = recheckPendingAxisNames();
-            graphLinesChanged(true, rawChanged);
-        }
-        map = mutationMap(result);
-        map["issue"] = QString();
+        const auto issue = m_working ? axisNameIssue(trimmed, std::nullopt) : std::nullopt;
+        auto map = m_working && !issue
+            ? editAxes([&](application::RunSeriesDocument &document) {
+                return application::createAxis(document, {trimmed.toStdString()});
+            })
+            : invalidMutationMap();
+        map["issue"] = issue.value_or(QString());
         return map;
     }
 
@@ -1248,17 +1266,12 @@ namespace ksv::presentation {
         const auto value = parseId(id);
         if (!m_working || !value) return invalidMutationMap();
         const application::AxisId axis{*value};
-        const auto result = applyRunSeriesEdit([&](application::RunSeriesDocument &document) {
+        return editAxes([&](application::RunSeriesDocument &document) {
             const auto label = application::runAxisLabelAfterDeletingAxis(document, m_working->runAxisLabel, axis);
             auto deleted = application::deleteAxis(document, axis);
             if (deleted.succeeded()) m_working->runAxisLabel = label;
             return deleted;
         });
-        if (result.succeeded()) {
-            const auto [applied, rawChanged] = recheckPendingAxisNames();
-            graphLinesChanged(true, rawChanged);
-        }
-        return mutationMap(result);
     }
 
     QVariantMap SettingsViewModel::updateSeriesAxis(const QString &id, const QString &axisId) {
@@ -1302,8 +1315,6 @@ namespace ksv::presentation {
         label = application::reconciledRunAxisLabel(m_working->runSeries, label);
         if (label == m_working->runAxisLabel) return;
         m_working->runAxisLabel = label;
-        emit seriesConfigurationChanged();
-        emit axisOverviewChanged();
-        refreshPendingChanges();
+        graphLinesChanged(true, false);
     }
 }
