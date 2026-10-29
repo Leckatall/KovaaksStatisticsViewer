@@ -7,7 +7,7 @@ status: approved
 
 Give users quick access to recent training data and control over graph presentation without permanently taking space away from their charts. Each graph has a gear button opening a small popup for frequent adjustments and a **More graph settings…** action leading to that graph's detailed settings.
 
-Detailed settings use one graph selector and grouped controls for the selected graph. They contain no graph preview. Settings belong to the graph type and remain consistent when users change runs, scenarios, or benchmarks. Only applicable options appear.
+Detailed settings list graphs in the sidebar and group each graph's controls on its own page. They contain no graph preview. Settings belong to the graph type and remain consistent when users change runs, scenarios, or benchmarks. Only applicable options appear.
 
 The [agreed Excalidraw mockup](graph-popup-and-settings.excalidraw) illustrates the popup and settings layout. It is a layout reference, not a complete inventory of applicable controls; the requirements and applicability table below govern scope.
 
@@ -44,7 +44,7 @@ The user chooses **More graph settings…**. Settings open with the originating 
 
 ### Manage DashboardGraph's lines
 
-The user can change DashboardGraph's whole-graph connection mode and point-marker visibility. For individual lines they follow a link to the existing Graph Lines section. There are no axis-fitting controls or duplicate individual-series editor for this graph in the new page.
+The user can change DashboardGraph's whole-graph connection mode and point-marker visibility alongside its individual lines and axes. There are no axis-fitting controls for this graph.
 
 ## Observable requirements
 
@@ -60,7 +60,7 @@ Trace: O1–O4.
 
 | Graph                                        | Date/run range                                          | Rolling-average window               | Y-axis fitting                                         | Series appearance                                | Whole-graph line mode and markers |
 | -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------ | ------------------------------------------------ | --------------------------------- |
-| DashboardGraph / run graph                   | None; its horizontal dimension remains elapsed run time | No new graph-level averaging control | Not offered                                            | Link to existing Graph Lines section             | Offered                           |
+| DashboardGraph / run graph                   | None; its horizontal dimension remains elapsed run time | No new graph-level averaging control | Not offered                                            | Run graph Lines & style and Axes sections        | Offered                           |
 | Daily playtime                               | Date presets, all time, custom dates                    | Offered in calendar days             | Numeric fitting                                        | Playtime series                                  | Offered                           |
 | Scenario history                             | Latest N runs, all runs, date presets, custom dates     | Not offered                          | Numeric fitting for its existing axes                  | Existing history series                          | Offered                           |
 | Benchmark personal-best average-rank history | Date presets, all time, custom dates                    | Not offered                          | Retain the tier-based axis; no generic numeric fitting | Existing rank series, preserving tier references | Offered                           |
@@ -75,9 +75,9 @@ Trace: O1, O3, O4.
 - **UI-01 — Gear entry point.** Use a gear icon at each graph to open its quick popup. Give it an accessible name identifying graph settings and a discoverable tooltip; a permanent “Options” text button is not part of the design.
 - **UI-02 — Compact popup.** Limit the popup to applicable frequent adjustments: range selection, playtime averaging window, whole-graph line mode, and point-marker visibility. Detailed axis bounds and individual-series appearance belong in settings. Existing series visibility controls remain available in their existing locations.
 - **UI-03 — Contextual settings link.** Put **More graph settings…** at the bottom of the popup. Activating it closes the popup and opens graph settings with the originating graph selected and its current effective values represented.
-- **UI-04 — One graph editor.** Present a graph selector at the top of the Graphs settings page. Organize the selected graph's controls under Data & range, Axes, and Series & style as applicable. Whole-graph line mode and markers remain available even where individual-series editing is delegated elsewhere.
+- **UI-04 — One graph editor.** Present each graph in the Settings sidebar. Organize its controls under Data & range, Lines & style, and Axes as applicable. Whole-graph line mode and markers remain available alongside individual-series editing.
 - **UI-05 — No preview or inspector.** Do not place a preview graph in settings or introduce a persistent dashboard inspector. Detailed controls remain usable without taking permanent horizontal space from dashboard graphs.
-- **UI-06 — DashboardGraph delegation.** For DashboardGraph, show a clearly labelled link to the existing Graph Lines section instead of individual-series appearance controls. Do not show an Axes group. Navigating through that link preserves the settings visit and its draft.
+- **UI-06 — DashboardGraph editing.** For DashboardGraph, include individual-series controls in Lines & style and the existing axis controls in Axes. Navigation preserves the settings visit and its draft.
 - **UI-07 — Usable settings dimensions.** Keep graph selection, group labels, editing, Save, and Cancel reachable at the application's supported settings-window sizes and text scales. Allow settings content to scroll or reflow rather than clip controls.
 
 ### Visible data ranges
@@ -132,8 +132,8 @@ Trace: O4.
 - **STATE-03 — Save the complete draft.** Save validates, applies, and persists all graph changes made during that settings visit, not only those for the currently selected graph. Return the visit to a clean state after successful saving.
 - **STATE-04 — Cancel the complete draft.** Cancel discards all unsaved edits across the settings visit. It restores the effective configuration from the start of the draft or its last successful Save. It does not undo popup changes committed before that draft began.
 - **STATE-05 — Closing with unsaved changes.** Closing settings with pending changes offers Save, Discard, and Cancel closing. A Save rejected by validation keeps the settings and draft available. Discard closes without applying the draft; cancelling the close retains it. Persistence follows EDGE-05.
-- **STATE-06 — Existing Graph Lines continuity.** Keep edits made through the existing Graph Lines section within the same settings-visit Save/Cancel behaviour. Navigation between the new graph page and that section does not drop drafts or independently commit unsaved graph changes.
-- **STATE-07 — Reset scope.** Provide Reset this graph in detailed settings. It stages the selected graph's configuration defaults in the draft and follows the same Save/Cancel rules. It does not reset other graphs, delete computed-series definitions, or remove user-created axes from Graph Lines.
+- **STATE-06 — Run graph editing continuity.** Keep edits to the Run graph's lines and axes within the same settings-visit Save/Cancel behaviour. Navigation between graph pages does not drop drafts or independently commit unsaved graph changes.
+- **STATE-07 — Reset scope.** Provide Reset to defaults in detailed settings. It stages the selected graph's configuration defaults in the draft and follows the same Save/Cancel rules. It does not reset other graphs, delete computed-series definitions, or remove user-created axes from Graph Lines.
 - **STATE-08 — Persistent preferences and defaults.** Restore saved settings on restart. Without a saved preference, preserve each graph's existing data extent, averaging window, and appearance, including three-day playtime averaging and all available history. New preferences do not require a profile rebuild.
 
 ### Invalid input, empty states, and recovery
@@ -201,4 +201,4 @@ These details fill in the agreed feature; they are not claims of explicit user v
 - The numeric fitting choices and tier-axis exception make the mockup's general Axes group concrete while preserving specialised rank meaning. New axis-assignment features, tick-density controls, logarithmic scales, and free-form axis labels are outside this scope.
 - Reset restores presentation defaults; it does not edit or delete the content managed by the existing Graph Lines editor. Exact colour-picker presentation and accepted positive line-width limits can follow the application's established controls and validation.
 - A user-selectable dash pattern is outside this scope. Colour, width, markers, and the three connection modes are the initial appearance capabilities.
-- The exact placement of the gear and compact arrangement of quick controls can follow each graph's available space. The graph selector and settings groups express the accepted structure; the drawing's pixel dimensions do not constrain implementation.
+- The exact placement of the gear and compact arrangement of quick controls can follow each graph's available space. The sidebar and settings groups express the accepted structure; the drawing's pixel dimensions do not constrain implementation.
