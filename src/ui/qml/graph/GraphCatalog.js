@@ -42,12 +42,11 @@ function wholeNumberText(value) {
 const groupNames = {
     dataRange: "Data & range",
     axes: "Axes",
-    seriesStyle: "Series & style",
-    graphLines: "Graph Lines"
+    seriesStyle: "Lines & style"
 }
 
 // The order the groups appear on the Graphs page; an issue list reads the same way.
-const groupOrder = ["dataRange", "axes", "seriesStyle", "graphLines"]
+const groupOrder = ["dataRange", "seriesStyle", "axes"]
 
 const seriesNames = {
     scenarioHistory: {score: "Score", accuracy: "Accuracy", shots: "Shots", hits: "Hits", misses: "Misses", scoreAverage: "Score average (10 runs)"},
@@ -65,10 +64,6 @@ const axisInfo = {
     },
     dailyPlaytime: {playtime: {name: "Playtime", unit: "minutes"}},
     benchmarkPlaytime: {playtime: {name: "Playtime", unit: "minutes"}}
-}
-
-function groupName(group) {
-    return groupNames[group] || group
 }
 
 function graphIndex(key) {
@@ -91,11 +86,41 @@ function axisUnit(graph, key) {
 }
 
 // Issues in the order a person reads the pages: graph, then group, then position within the group.
-function sortedIssues(issues) {
-    const rank = issue => graphIndex(issue.graph) * 10 + Math.max(0, groupOrder.indexOf(issue.group))
-    return issues.map((issue, position) => ({issue: issue, position: position}))
-        .sort((a, b) => rank(a.issue) - rank(b.issue) || a.position - b.position)
-        .map(entry => entry.issue)
+function sortedIssues(issues, drafts, overview) {
+    function sortKey(issue) {
+        const issueTarget = issue.target || ""
+        const axisName = issue.group === "graphLines" && issueTarget.startsWith("axis:") && issue.field === "name"
+        const group = issue.group === "graphLines" ? (axisName ? "axes" : "seriesStyle") : issue.group
+        const graph = graphIndex(issue.graph)
+        const section = groupOrder.indexOf(group)
+        const draft = (drafts || {})[issue.graph] || {}
+        let row = 0
+        let field = 0
+        if (group === "dataRange") {
+            field = ["range", "averagingWindow", "recentDays", "latestRuns", "startDate", "endDate", "anchor"].indexOf(issue.field)
+        } else if (group === "seriesStyle") {
+            const common = ["connection", "markers"].indexOf(issue.field)
+            if (common >= 0) field = common
+            else {
+                const index = (draft.series || []).findIndex(r => r.key === issueTarget)
+                row = issue.group === "graphLines" ? 1 : (index < 0 ? 999 : index + 1)
+                field = ["color", "width"].indexOf(issue.field)
+            }
+        } else if (group === "axes") {
+            const rows = axisName ? ((overview || {}).sharedAxes || []) : (draft.axes || [])
+            const target = axisName ? issueTarget.substring(5) : issueTarget
+            const index = rows.findIndex(r => String(r.id !== undefined ? r.id : r.key) === target)
+            row = index < 0 ? 999 : index
+            field = axisName ? 0 : ["fitMode", "fixedMin", "fixedMax"].indexOf(issue.field || "fitMode")
+        }
+        return [graph < 0 ? 999 : graph, section < 0 ? 999 : section, row, field < 0 ? 999 : field]
+    }
+    return issues.map((issue, position) => ({issue: issue, position: position, key: sortKey(issue)}))
+        .sort((a, b) => {
+            for (let i = 0; i < a.key.length; ++i)
+                if (a.key[i] !== b.key[i]) return a.key[i] - b.key[i]
+            return a.position - b.position
+        }).map(entry => entry.issue)
 }
 
 // objectName of the control an issue is about; empty when the issue names no control.
@@ -116,4 +141,20 @@ function findByObjectName(root, name) {
         if (found) return found
     }
     return null
+}
+
+function isWithin(item, ancestor) {
+    for (let current = item; current; current = current.parent)
+        if (current === ancestor) return true
+    return false
+}
+
+// Scrolls `flick` the least distance that shows `item` with `margin` clear above and below it.
+function ensureVisible(flick, item, margin) {
+    const top = item.mapToItem(flick.contentItem, 0, 0).y
+    const bottom = top + item.height
+    if (top - margin < flick.contentY)
+        flick.contentY = Math.max(0, top - margin)
+    else if (bottom + margin > flick.contentY + flick.height)
+        flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, bottom + margin - flick.height))
 }

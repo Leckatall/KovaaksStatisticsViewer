@@ -37,7 +37,10 @@ ColumnLayout {
             id: input
             objectName: root.fieldName
             Layout.fillWidth: true
+            Layout.preferredWidth: inputMetrics.height * 9
+            Layout.maximumWidth: Layout.preferredWidth
             Layout.minimumWidth: 72
+            FontMetrics { id: inputMetrics; font: input.font }
             graphKey: root.graphKey
             shown: root.shown
             placeholderText: root.placeholder
@@ -51,6 +54,7 @@ ColumnLayout {
             visible: text !== ""
             text: root.unit
         }
+        Item { Layout.fillWidth: true }
     }
 
     Label {

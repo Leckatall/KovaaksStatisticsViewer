@@ -11,6 +11,7 @@ ColumnLayout {
     property string title
 
     default property alias content: body.data
+    readonly property alias heading: header
 
     Layout.fillWidth: true
     spacing: 8

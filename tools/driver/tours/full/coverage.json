@@ -33,7 +33,7 @@
   {"area": "Datasets", "state": "empty: lists and empty library", "shot": "empty-benchmarks"},
   {"area": "Datasets", "state": "first-run welcome", "shot": "first-run-welcome"},
   {"area": "Settings", "state": "Profile page", "shot": "profile-page"},
-  {"area": "Settings", "state": "Graph Lines page", "shot": "graph-lines-page"},
+  {"area": "Settings", "state": "Run graph settings", "shot": "run-graph-settings"},
   {"area": "Settings", "state": "Edit-expression tooltip", "shot": "edit-expression-tooltip"},
   {"area": "Settings", "state": "Dirty draft", "shot": "dirty-draft"},
   {"area": "Settings", "state": "Axis combo open", "shot": "axis-combo-open"},

@@ -14,6 +14,39 @@ TestCase {
     visible: true
 
     Component {
+        id: externalFixture
+        ScrollView {
+            id: page
+            property var vm
+            property alias panel: panel
+            width: 700
+            height: 250
+            contentWidth: availableWidth
+            AxesPanel {
+                id: panel
+                width: page.availableWidth
+                settingsVm: page.vm
+            }
+        }
+    }
+    function test_theFixtureHostsThePanelInAnExternalScrollView() {
+        const page = createTemporaryObject(externalFixture, testCase, {vm: makeFakeSettingsVm()})
+        verify(page !== null)
+        compare(page.panel.parent, page.contentItem.contentItem)
+    }
+    function test_thePanelSizesToItsContentInsideThePage() {
+        const axes = []
+        for (let i = 0; i < 8; ++i)
+            axes.push(sharedAxis(String(i), "Axis " + i, []))
+        const page = createTemporaryObject(externalFixture, testCase, {
+            vm: makeFakeSettingsVm({axisOverview: {sharedAxes: axes, independentLines: []}})
+        })
+        verify(waitForRendering(page))
+        verify(page.panel.implicitHeight > page.height)
+        verify(page.contentItem.contentHeight > page.height)
+    }
+
+    Component {
         id: panelComponent
         AxesPanel {}
     }
@@ -128,8 +161,9 @@ TestCase {
     }
 
     function makePanel(vm, width) {
-        const panel = createTemporaryObject(panelComponent, testCase,
-                                            {settingsVm: vm || makeFakeSettingsVm(), width: width || 800, height: 900})
+        const page = createTemporaryObject(externalFixture, testCase,
+                                           {vm: vm || makeFakeSettingsVm(), width: width || 800, height: 900})
+        const panel = page.panel
         verify(panel !== null)
         verify(waitForRendering(panel))
         return panel
@@ -472,7 +506,7 @@ TestCase {
         verify(narrowShow.mapToItem(narrowRow, 0, 0).y >= fieldBottom, "narrow rows put Show below the name")
         verify(narrowDelete.mapToItem(narrowRow, 0, 0).y >= fieldBottom, "narrow rows put Delete below the name")
         fuzzyCompare(narrowField.width, narrowRow.availableWidth, 1, "the name field takes the whole narrow row")
-        verify(narrowDelete.mapToItem(narrow, narrowDelete.width, 0).x <= narrow.availableWidth)
+        verify(narrowDelete.mapToItem(narrow, narrowDelete.width, 0).x <= narrow.width)
 
         const besideName = find(wide, "independentName_7")
         const besideShow = find(wide, "showOnYAxis_series:7")
@@ -484,7 +518,7 @@ TestCase {
         const narrowLine = find(narrow, "independentRow_7")
         verify(lineShow.mapToItem(narrowLine, 0, 0).y >= lineName.mapToItem(narrowLine, 0, 0).y + lineName.height,
                "narrow independent rows put Show below the line name")
-        verify(lineShow.mapToItem(narrow, lineShow.width, 0).x <= narrow.availableWidth)
+        verify(lineShow.mapToItem(narrow, lineShow.width, 0).x <= narrow.width)
     }
 
     function test_keyboardReachesEveryAction() {

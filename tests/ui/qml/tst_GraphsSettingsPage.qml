@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtTest
 import QtQuick.Dialogs
+import QtCore
 import "../../../src/ui/qml/shell"
 import "ItemLookup.js" as ItemLookup
 
@@ -12,6 +13,13 @@ TestCase {
     width: 700
     height: 500
     visible: true
+
+    Settings { id: testSettings; category: "window" }
+    function init() {
+        testSettings.setValue("settingsDialogPage", "")
+        testSettings.setValue("settingsDialogSection", "")
+        testSettings.sync()
+    }
 
     Component {
         id: settingsDialogComponent
@@ -58,7 +66,7 @@ TestCase {
     }
 
     function select(dialog, vm, graph) {
-        vm.selectedGraph = graph
+        dialog.openGraph(graph)
         verify(waitForRendering(dialog.contentItem))
     }
 
@@ -68,21 +76,6 @@ TestCase {
     }
 
     // ---- Control omission (AC01) --------------------------------------------------------------------
-
-    function test_theRunGraphOffersOnlyLineStyleAndTheGraphLinesLink() {
-        const {dialog} = openOn("run")
-
-        verify(!shown(dialog, "graphGroup_dataRange"), "the run graph has no date range or averaging")
-        verify(!shown(dialog, "graphGroup_axes"), "no axis fitting for the run graph")
-        verify(shown(dialog, "graphGroup_seriesStyle"))
-        verify(shown(dialog, "graphField_seriesStyle_connection"))
-        verify(shown(dialog, "graphField_seriesStyle_markers"))
-        verify(shown(dialog, "graphLinesLink"), "individual lines are delegated to Graph Lines")
-        compare(names(dialog, "graphField_dataRange_"), [])
-        compare(names(dialog, "graphField_axes_"), [])
-        compare(names(dialog, "graphSeriesRow_"), [], "no series appearance editor on the run graph")
-        verify(shown(dialog, "graphResetButton"))
-    }
 
     function test_dailyPlaytimeOffersRangeWindowOneAxisAndOneSeries() {
         const {dialog} = openOn("dailyPlaytime")
@@ -135,7 +128,7 @@ TestCase {
     function test_theEditorNamesTheGraphItChanges() {
         const {dialog} = openOn("dailyPlaytime")
 
-        compare(find(dialog, "graphEditingLabel").text, "Changes apply to Daily playtime.")
+        compare(find(dialog, "graphPageTitle").text, "Daily playtime")
     }
 
     // ---- Data and range ------------------------------------------------------------------------------
@@ -367,18 +360,6 @@ TestCase {
         compare(swatch.usesThemeColor, true)
     }
 
-    function test_theGraphLinesLinkOpensGraphLinesWithoutEndingTheVisit() {
-        const {dialog, vm} = openOn("run")
-        const visits = vm.beginVisitCalls
-
-        clickNamed(dialog, "graphLinesLink")
-
-        compare(dialog.currentCategory, dialog.graphLinesCategory)
-        compare(vm.endVisitCalls, 0)
-        compare(vm.beginVisitCalls, visits)
-        compare(vm.selectedGraph, "run")
-    }
-
     // ---- Errors --------------------------------------------------------------------------------------
 
     function issue(graph, group, target, field, code) {
@@ -437,8 +418,8 @@ TestCase {
         vm.draftIssues = [issue("dailyPlaytime", "dataRange", "", "averagingWindow", "unparsedInput")]
 
         select(dialog, vm, "scenarioHistory")
-        mouseClick(find(dialog, "categoryItem_Graph Lines"))
-        mouseClick(find(dialog, "categoryItem_Graphs"))
+        find(dialog, "settingsNav_profile").clicked()
+        find(dialog, "settingsNav_scenarioHistory").clicked()
         select(dialog, vm, "dailyPlaytime")
 
         compare(find(dialog, "graphField_dataRange_averagingWindow").text, "x")
@@ -462,64 +443,7 @@ TestCase {
 
     // ---- Save with issues ----------------------------------------------------------------------------
 
-    function test_aRejectedSaveNamesTheGraphGroupAndControlAndFocusesTheFirstIssue() {
-        const {dialog, vm} = openOn("scenarioHistory")
-        const problems = [
-            issue("dailyPlaytime", "dataRange", "", "averagingWindow", "nonPositiveCount"),
-            issue("scenarioHistory", "seriesStyle", "hits", "width", "lineWidthOutOfRange")
-        ]
-        vm.pendingChanges = true
-        vm.draftIssues = problems
-        vm.saveResult = {accepted: false, issues: problems}
-
-        mouseClick(find(dialog, "settingsSaveButton"))
-
-        compare(vm.saveCalls, 1)
-        const summary = find(dialog, "graphIssueSummary")
-        tryVerify(() => summary.visible)
-        const lines = ItemLookup.findByObjectNamePrefix(dialog.contentItem, "graphIssueLink_", [])
-            .filter(item => item.visible).map(item => item.text)
-        compare(lines.length, 2)
-        verify(lines[0].indexOf("Daily playtime › Data & range › Rolling average") === 0, lines[0])
-        verify(lines[1].indexOf("Scenario history › Series & style › Hits line width") === 0, lines[1])
-        compare(vm.selectedGraph, "dailyPlaytime", "focus goes to the first issue, switching graph")
-        tryVerify(() => find(dialog, "graphField_dataRange_averagingWindow").activeFocus, 2000)
-        compare(dialog.visible, true)
-    }
-
-    function test_activatingAnIssueLinkJumpsToItsControl() {
-        const {dialog, vm} = openOn("scenarioHistory")
-        const problems = [
-            issue("dailyPlaytime", "dataRange", "", "averagingWindow", "nonPositiveCount"),
-            issue("scenarioHistory", "seriesStyle", "hits", "width", "lineWidthOutOfRange")
-        ]
-        vm.pendingChanges = true
-        vm.draftIssues = problems
-        vm.saveResult = {accepted: false, issues: problems}
-        mouseClick(find(dialog, "settingsSaveButton"))
-        tryVerify(() => vm.selectedGraph === "dailyPlaytime")
-
-        clickNamed(dialog, "graphIssueLink_1")
-
-        compare(vm.selectedGraph, "scenarioHistory")
-        tryVerify(() => find(dialog, "graphField_seriesStyle_hits_width").activeFocus, 2000)
-    }
-
-    function test_theSummaryDisappearsOnceTheIssuesAreFixed() {
-        const {dialog, vm} = openOn("dailyPlaytime")
-        const problems = [issue("dailyPlaytime", "dataRange", "", "averagingWindow", "nonPositiveCount")]
-        vm.pendingChanges = true
-        vm.draftIssues = problems
-        vm.saveResult = {accepted: false, issues: problems}
-        mouseClick(find(dialog, "settingsSaveButton"))
-        tryVerify(() => find(dialog, "graphIssueSummary").visible)
-
-        vm.draftIssues = []
-
-        tryVerify(() => !find(dialog, "graphIssueSummary").visible)
-    }
-
-    function test_aGraphLinesIssueOpensGraphLinesInsteadOfTheGraphsPage() {
+    function test_aGraphLinesIssueOpensRunGraph() {
         const {dialog, vm} = openOn("dailyPlaytime")
         const problems = [issue("run", "graphLines", "records[0].yAxisId", "", "unknownAxis")]
         vm.pendingChanges = true
@@ -528,7 +452,7 @@ TestCase {
 
         mouseClick(find(dialog, "settingsSaveButton"))
 
-        tryCompare(dialog, "currentCategory", dialog.graphLinesCategory)
+        tryCompare(dialog, "currentPage", "run")
     }
 
     // ---- Reset ---------------------------------------------------------------------------------------
@@ -541,8 +465,7 @@ TestCase {
         compare(vm.callsNamed("resetGraph").map(c => c.args), [["scenarioHistory"]])
         compare(vm.saveCalls, 0)
         compare(vm.endVisitCalls, 0)
-        compare(find(dialog, "graphResetButton").text, "Reset this graph")
-        verify(find(dialog, "graphResetNote").text.indexOf("Graph Lines") >= 0, "the note says Graph Lines are untouched")
+        compare(find(dialog, "graphResetButton").text, "Reset to defaults")
     }
 
     // ---- Cancel, discard, cancel-close ---------------------------------------------------------------
@@ -597,7 +520,7 @@ TestCase {
         dialog.height = dialog.floorHeight
         verify(waitForRendering(dialog.contentItem))
 
-        verify(inside(dialog, find(dialog, "graphSelector")), "the graph selector is on screen")
+        verify(inside(dialog, find(dialog, "settingsNav_scenarioHistory")), "the graph entry is on screen")
         for (const name of ["settingsSaveButton", "settingsCancelButton"]) {
             const button = find(dialog, name)
             verify(button.visible, name)
@@ -608,12 +531,14 @@ TestCase {
         verify(scroller.contentHeight > scroller.height, "more content than room: it scrolls")
 
         const reset = find(dialog, "graphResetButton")
+        verify(inside(dialog, reset))
+        const last = find(dialog, "graphField_axes_counts_fitMode")
         const flick = scroller.contentItem
         flick.contentY = Math.max(0, flick.contentHeight - flick.height)
         verify(waitForRendering(dialog.contentItem))
-        const resetAt = reset.mapToItem(scroller, 0, 0).y
-        verify(resetAt >= 0 && resetAt + reset.height <= scroller.height + 1,
-               "the last control is reachable by scrolling (at " + resetAt + " of " + scroller.height + ")")
+        const lastAt = last.mapToItem(scroller, 0, 0).y
+        verify(lastAt >= 0 && lastAt + last.height <= scroller.height + 1,
+               "the last control is reachable by scrolling")
     }
 
     function test_theScrollBarNeverCoversAControlOrAUnit_data() {
@@ -701,7 +626,6 @@ TestCase {
 
         tryVerify(() => find(dialog, data.first) !== null && find(dialog, data.first).activeFocus, 2000,
                   data.first + " should hold keyboard focus")
-        verify(!find(dialog, "graphSelector").activeFocus)
     }
 
     // Walks the window's Tab order from `start` and returns the objectNames it passes before returning.
@@ -730,14 +654,65 @@ TestCase {
             const quiet = name === "graphField_dataRange_latestRuns" && find(dialog, name) && !find(dialog, name).visible
             if (!quiet) verify(walk.names.indexOf(name) >= 0, name + " is not reachable by Tab; saw " + JSON.stringify(walk.names))
         }
-        verify(walk.names.indexOf("graphSelector") >= 0, "the graph selector is reachable by Tab")
+        verify(walk.names.indexOf("settingsNav_scenarioHistory") >= 0, "the graph entry is reachable by Tab")
+    }
+
+    function test_graphPageCompositionAndSections() {
+        const {dialog} = openOn("run")
+        const editor = find(dialog, "graphSettingsEditor")
+        verify(ItemLookup.findByObjectName(editor, "seriesConfigDraftPanel") !== null)
+        verify(ItemLookup.findByObjectName(editor, "axesPanel") !== null)
+        compare(editor.sections, ["seriesStyle", "axes"])
+    }
+
+    function test_graphPageHeader() {
+        const {dialog} = openOn("dailyPlaytime")
+        compare(find(dialog, "graphPageTitle").text, "Daily playtime")
+        compare(find(dialog, "graphResetButton").text, "Reset to defaults")
+    }
+
+    function test_graphFieldsAreCompact() {
+        const {dialog} = openOn("dailyPlaytime")
+        const field = find(dialog, "graphField_dataRange_averagingWindow")
+        verify(field.width < find(dialog, "graphEditorScroll").width / 2)
+        const unit = find(dialog, "graphField_dataRange_averagingWindow_unit")
+        verify(unit.mapToItem(field, 0, 0).x - field.width < 20)
+    }
+
+    function test_graphSeriesCardsHaveHeaders() {
+        const {dialog} = openOn("scenarioHistory")
+        const row = find(dialog, "graphSeriesRow_score")
+        const swatch = find(dialog, "graphField_seriesStyle_score_color")
+        const name = find(dialog, "graphSeriesName_score")
+        verify(swatch.mapToItem(row, 0, 0).x < name.mapToItem(row, 0, 0).x)
+        compare(find(dialog, "graphSeriesHeader_name").text, "Name")
+        compare(find(dialog, "graphSeriesHeader_width").text, "Width")
+    }
+
+    function test_graphPageScrollsToSections() {
+        const {dialog} = openOn("scenarioHistory")
+        const editor = find(dialog, "graphSettingsEditor")
+        editor.scrollToSection("seriesStyle")
+        verify(editor.scroller.contentItem.contentY > 0)
+        compare(editor.sectionInView, "seriesStyle")
+    }
+
+    function test_graphSectionsFollowReadingOrder() {
+        const {dialog} = openOn("dailyPlaytime")
+        const data = find(dialog, "graphGroup_dataRange")
+        const lines = find(dialog, "graphGroup_seriesStyle")
+        const axes = find(dialog, "graphGroup_axes")
+        const content = find(dialog, "graphSettingsContent")
+        verify(data.mapToItem(content, 0, 0).y < lines.mapToItem(content, 0, 0).y)
+        verify(lines.mapToItem(content, 0, 0).y < axes.mapToItem(content, 0, 0).y)
+        compare(lines.text, "Lines & style")
     }
 
     function test_theEditorsControlsComeInTheOrderTheyAreRead() {
         const {dialog} = openOn("dailyPlaytime")
         const walk = tabOrderFrom(find(dialog, "graphField_dataRange_range"))
         const order = ["graphField_dataRange_range", "graphField_dataRange_averagingWindow", "graphField_dataRange_anchor",
-                       "graphField_axes_playtime_fitMode", "graphField_seriesStyle_connection", "graphResetButton"]
+                       "graphField_seriesStyle_connection", "graphField_axes_playtime_fitMode"]
         const names = ["graphField_dataRange_range"].concat(walk.names)
         let last = -1
         for (const name of order) {

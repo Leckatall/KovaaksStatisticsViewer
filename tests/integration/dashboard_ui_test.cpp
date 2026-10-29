@@ -153,7 +153,6 @@ namespace {
                     QMetaObject::invokeMethod(dialog, "close");
                     QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000);
                 }
-                dialog->setProperty("currentCategory", 0);
             }
             if (auto *visualSettings = scene->root->findChild<QObject *>("visualSettings")) {
                 visualSettings->setProperty("visibleSeriesIds", scene->app->graphVm()->enabledSeriesIds());
@@ -225,7 +224,7 @@ namespace {
         }, 2000));
     }
 
-    TEST_F(DashboardUiTest, ConfigureActionsOpenGraphLinesSettingsCategory) {
+    TEST_F(DashboardUiTest, ConfigureActionsOpenTheRunGraphAtLinesAndStyle) {
         auto *menuBar = root()->property("menuBar").value<QObject *>();
         ASSERT_NE(menuBar, nullptr);
         ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "configureGraphLinesRequested"));
@@ -233,18 +232,22 @@ namespace {
         auto *dialog = root()->findChild<QObject *>("settingsDialog");
         ASSERT_NE(dialog, nullptr);
         ASSERT_TRUE(QTest::qWaitFor([&] {
-            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 1;
+            return dialog->property("visible").toBool() && dialog->property("currentPage").toString() == "run"
+                && dialog->property("currentSection").toString() == "seriesStyle"
+                && app()->settingsVm()->selectedGraph() == "run";
         }, 3000));
 
+        ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "openProfile"));
         ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
         ASSERT_TRUE(QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000));
-        dialog->setProperty("currentCategory", 0);
 
         auto *button = root()->findChild<QObject *>("configureGraphLinesButton");
         ASSERT_NE(button, nullptr);
         ASSERT_TRUE(QMetaObject::invokeMethod(button, "clicked"));
         EXPECT_TRUE(QTest::qWaitFor([&] {
-            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 1;
+            return dialog->property("visible").toBool() && dialog->property("currentPage").toString() == "run"
+                && dialog->property("currentSection").toString() == "seriesStyle"
+                && app()->settingsVm()->selectedGraph() == "run";
         }, 3000));
     }
 
@@ -391,15 +394,13 @@ namespace {
         auto *dialog = scene.root->findChild<QObject *>("settingsDialog");
         ASSERT_NE(dialog, nullptr);
         ASSERT_TRUE(QTest::qWaitFor([&] {
-            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 2;
+            return dialog->property("visible").toBool()
+                && dialog->property("currentPage").toString() == "dailyPlaytime";
         }, 3000));
         EXPECT_FALSE(popup->property("opened").toBool());
         EXPECT_EQ(settings->selectedGraph(), "dailyPlaytime");
         EXPECT_TRUE(settings->isVisitOpen());
         EXPECT_FALSE(settings->hasPendingChanges());
-        auto *selector = findItem(dialog->property("contentItem").value<QQuickItem *>(), "graphSelector");
-        ASSERT_NE(selector, nullptr);
-        EXPECT_EQ(selector->property("currentIndex").toInt(), 1);
     }
 
     // Typing into the real Graphs page edits the visit's working copy only; Save commits it, and an

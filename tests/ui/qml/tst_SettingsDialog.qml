@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import QtQuick.Dialogs
+import QtCore
 import "../../../src/ui/qml/shell"
 import "ItemLookup.js" as ItemLookup
 import "TestDoubles.js" as TestDoubles
@@ -12,6 +13,13 @@ TestCase {
     width: 700
     height: 500
     visible: true
+
+    Settings { id: testSettings; category: "window" }
+    function init() {
+        testSettings.setValue("settingsDialogPage", "")
+        testSettings.setValue("settingsDialogSection", "")
+        testSettings.sync()
+    }
 
     Component {
         id: settingsDialogComponent
@@ -95,15 +103,6 @@ TestCase {
         dialog.open()
         verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never became visible after open()")
         return dialog
-    }
-
-    function selectCategory(dialog, categoryName) {
-        const item = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_" + categoryName)
-        verify(item !== null, "no category item named 'categoryItem_" + categoryName + "' found in SettingsDialog")
-        mouseClick(item)
-        // StackLayout doesn't flip the new page's `visible` synchronously
-        // with the click, so give it a render pass before inspecting it.
-        verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never re-rendered after selecting category '" + categoryName + "'")
     }
 
     // Opens at 860x620 (bounded only by the room the main window or screen gives it), never
@@ -260,10 +259,10 @@ TestCase {
 
     function test_openProfile_selectsTheProfilePageAndShowsTheDialog() {
         const dialog = createTemporaryObject(settingsDialogComponent, testCase, {
-            settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm(), currentCategory: 2
+            settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm(), currentPage: "run"
         })
         dialog.openProfile()
-        compare(dialog.currentCategory, 0)
+        compare(dialog.currentPage, "profile")
         compare(dialog.visible, true)
     }
 
@@ -333,7 +332,7 @@ TestCase {
             sessionVm: makeFakeSessionVm()
         })
 
-        selectCategory(dialog, "Graph Lines")
+        dialog.openGraphLines()
 
         const scoreSwitch = ItemLookup.findByObjectName(dialog.contentItem, "seriesEnabledSwitch_1")
         const accuracySwitch = ItemLookup.findByObjectName(dialog.contentItem, "seriesEnabledSwitch_2")
@@ -348,24 +347,13 @@ TestCase {
             settingsVm: makeFakeSettingsVm({pendingChanges: true}),
             sessionVm: makeFakeSessionVm()
         })
-        selectCategory(dialog, "Graph Lines")
+        dialog.openGraphLines()
 
         compare(ItemLookup.findByObjectName(dialog.contentItem, "saveGraphLinesButton"), null)
         compare(ItemLookup.findByObjectName(dialog.contentItem, "discardGraphLineChangesButton"), null)
     }
 
-    function test_clickingCategoryItem_switchesCurrentCategory() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm()
-        })
-
-        selectCategory(dialog, "Graph Lines")
-
-        compare(dialog.currentCategory, 1, "clicking the 'Graph Lines' category item should switch currentCategory to index 1")
-    }
-
-    function test_openGraphLinesOpensDialogOnGraphLinesCategory() {
+    function test_openGraphLinesOpensRunGraph() {
         const dialog = createTemporaryObject(settingsDialogComponent, testCase, {
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm()
@@ -374,7 +362,7 @@ TestCase {
         dialog.openGraphLines()
 
         tryCompare(dialog, "visible", true)
-        compare(dialog.currentCategory, dialog.graphLinesCategory)
+        compare(dialog.currentPage, "run")
     }
 
     function findInDialog(dialog, name) {
@@ -533,9 +521,9 @@ TestCase {
             sessionVm: makeFakeSessionVm()
         })
 
-        selectCategory(dialog, "Graph Lines")
-        selectCategory(dialog, "Directories")
-        selectCategory(dialog, "Graph Lines")
+        dialog.openGraphLines()
+        dialog.openProfile()
+        dialog.openGraphLines()
 
         compare(dialog.settingsVm.beginVisitCalls, 1)
         compare(dialog.settingsVm.endVisitCalls, 0)
@@ -574,52 +562,6 @@ TestCase {
         compare(dialog.settingsVm.beginVisitCalls, 2)
     }
 
-    function test_graphLinesHasLinesAndAxesTabsAndNoYAxisCombo() {
-        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
-        selectCategory(dialog, "Graph Lines")
-
-        verify(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Lines") !== null)
-        verify(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Axes") !== null)
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox"), null)
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 0)
-    }
-
-    function test_switchingTabsKeepsTheVisitOpenAndDoesNotRevert() {
-        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
-        selectCategory(dialog, "Graph Lines")
-
-        mouseClick(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Axes"))
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
-        mouseClick(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Lines"))
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 0)
-
-        compare(dialog.settingsVm.revertCalls, 0)
-        compare(dialog.settingsVm.endVisitCalls, 0)
-    }
-
-    function test_beginningAVisitReturnsToTheLinesTab() {
-        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
-        selectCategory(dialog, "Graph Lines")
-        mouseClick(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Axes"))
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
-        dialog.close()
-        tryCompare(dialog, "visible", false)
-
-        dialog.open()
-
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 0)
-    }
-
-    function test_reopeningDuringAVisitKeepsTheAxesTab() {
-        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
-        selectCategory(dialog, "Graph Lines")
-        mouseClick(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesTab_Axes"))
-
-        dialog.openGraphLines()
-
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
-    }
-
     // Names commit on editingFinished, so until the field loses focus the visit holds no change.
     function openEditingDialog() {
         const {dialog, vm} = openObservableDialog()
@@ -631,7 +573,7 @@ TestCase {
         ]}
         dialog.open()
         verify(waitForRendering(dialog.contentItem))
-        selectCategory(dialog, "Graph Lines")
+        dialog.openGraphLines()
         return {dialog: dialog, vm: vm}
     }
 
@@ -645,7 +587,7 @@ TestCase {
     }
 
     function startTypingAnAxisName(dialog) {
-        mouseClick(findInDialog(dialog, "graphLinesTab_Axes"))
+        dialog.jumpToSection("axes")
         startTyping(dialog, "axisNameField_1", "Points")
     }
 
@@ -701,7 +643,7 @@ TestCase {
 
     function test_focusingANameWithoutTypingLeavesSaveDisabled() {
         const {dialog, vm} = openEditingDialog()
-        mouseClick(findInDialog(dialog, "graphLinesTab_Axes"))
+        dialog.jumpToSection("axes")
         const field = findInDialog(dialog, "axisNameField_1")
 
         field.forceActiveFocus()
@@ -752,6 +694,7 @@ TestCase {
         const issue = {graph: "run", group: "graphLines", target: "axis:2", field: "name", code: "axisNameDuplicate"}
         return openDialog({
             settingsVm: makeFakeSettingsVm({
+                selectedGraph: "run",
                 pendingChanges: true,
                 saveResult: {accepted: false, issues: [issue]},
                 axisOverview: {shownKey: "axis:1", independentLines: [], sharedAxes: [
@@ -768,22 +711,20 @@ TestCase {
     // Focus lands before Save returns: the tab and page switches show the field synchronously.
     function test_aSaveRejectedForAnAxisNameOpensTheAxesTabOnThatField() {
         const dialog = openDialogRejectingAnAxisName()
-        selectCategory(dialog, "Graph Lines")
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 0)
-
+        dialog.openGraphLines()
         mouseClick(findInDialog(dialog, "settingsSaveButton"))
 
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "graphLinesStack").currentIndex, 1)
+        compare(dialog.currentSection, "axes")
         compare(dialog.activeFocusItem.objectName, "axisNameField_2")
     }
 
     function test_aSaveRejectedForAnAxisNameFromAnotherPageFocusesThatField() {
         const dialog = openDialogRejectingAnAxisName()
-        compare(dialog.currentCategory, dialog.profileCategory)
+        compare(dialog.currentPage, "profile")
 
         mouseClick(findInDialog(dialog, "settingsSaveButton"))
 
-        compare(dialog.currentCategory, dialog.graphLinesCategory)
+        compare(dialog.currentPage, "run")
         compare(dialog.activeFocusItem.objectName, "axisNameField_2")
     }
 
@@ -801,52 +742,6 @@ TestCase {
         return {dialog: dialog, vm: vm}
     }
 
-    function test_graphsCategoryFollowsGraphLinesInTheSidebar() {
-        const {dialog} = openObservableDialog()
-        dialog.open()
-        verify(waitForRendering(dialog.contentItem))
-
-        const lines = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_Graph Lines")
-        const graphs = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_Graphs")
-        verify(graphs !== null, "no categoryItem_Graphs in the sidebar")
-        compare(graphs.text, "Graphs")
-        verify(graphs.mapToItem(dialog.contentItem, 0, 0).y > lines.mapToItem(dialog.contentItem, 0, 0).y)
-        compare(dialog.graphsCategory, 2)
-    }
-
-    function test_choosingGraphsShowsTheGraphsPageWithItsSelector() {
-        const {dialog, vm} = openObservableDialog()
-        dialog.open()
-        verify(waitForRendering(dialog.contentItem))
-
-        selectCategory(dialog, "Graphs")
-
-        compare(dialog.currentCategory, dialog.graphsCategory)
-        const page = ItemLookup.findByObjectName(dialog.contentItem, "graphsSettingsPage")
-        verify(page !== null && page.visible)
-        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
-        verify(selector !== null)
-        const names = []
-        for (let i = 0; i < selector.count; ++i) names.push(selector.textAt(i))
-        compare(names, ["Run graph", "Daily playtime", "Scenario history", "Benchmark rank history", "Benchmark playtime"])
-        compare(selector.currentIndex, 0)
-        compare(selector.Accessible.name, "Graph")
-    }
-
-    function test_theSelectorChoosesTheGraphBeingEdited() {
-        const {dialog, vm} = openObservableDialog()
-        dialog.open()
-        selectCategory(dialog, "Graphs")
-        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
-
-        selector.currentIndex = 3
-        selector.activated(3)
-
-        compare(vm.selectedGraph, "benchmarkRank")
-        vm.selectedGraph = "dailyPlaytime"
-        compare(selector.currentIndex, 1, "the selector follows the view model")
-    }
-
     function test_openGraphOpensTheVisitOnThatGraphAndFocusesTheEditor() {
         const {dialog, vm} = openObservableDialog()
 
@@ -854,24 +749,34 @@ TestCase {
         verify(waitForRendering(dialog.contentItem))
 
         compare(dialog.visible, true)
-        compare(dialog.currentCategory, dialog.graphsCategory)
+        compare(dialog.currentPage, "scenarioHistory")
         compare(vm.selectedGraph, "scenarioHistory")
         compare(vm.beginVisitCalls, 1)
-        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
-        compare(selector.currentIndex, 2)
         const first = ItemLookup.findByObjectName(dialog.contentItem, "graphField_dataRange_range")
         tryVerify(() => first !== null && first.activeFocus, 2000, "focus moves into the graph editor")
-        verify(!selector.activeFocus)
     }
 
-    function test_openGraphWithAnUnknownKeyStillOpensTheGraphsPage() {
+    function test_openGraphWithAnUnknownKeyOpensTheRememberedPlace() {
         const {dialog, vm} = openObservableDialog()
         vm.selectedGraph = "dailyPlaytime"
 
         dialog.openGraph("nonsense")
 
-        compare(dialog.currentCategory, dialog.graphsCategory)
+        compare(dialog.currentPage, "profile")
         compare(vm.selectedGraph, "dailyPlaytime")
+    }
+
+    function test_aRememberedSectionTheGraphNoLongerOffersKeepsTheGraph() {
+        const {dialog, vm} = openObservableDialog()
+        testSettings.setValue("settingsDialogPage", "dailyPlaytime")
+        testSettings.setValue("settingsDialogSection", "noSuchSection")
+        testSettings.sync()
+
+        dialog.open()
+
+        compare(dialog.currentPage, "dailyPlaytime")
+        compare(vm.selectedGraph, "dailyPlaytime")
+        tryCompare(dialog, "currentSection", "dataRange")
     }
 
     function test_openGraphOnAnAlreadyOpenDialogSwitchesGraphWithoutEndingTheVisit() {

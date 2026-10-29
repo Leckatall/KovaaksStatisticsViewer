@@ -8,6 +8,71 @@ import "TestDoubles.js" as TestDoubles
 TestCase {
     id: testCase
 
+    Component {
+        id: externalFixture
+        ScrollView {
+            id: page
+            property var vm
+            property alias panel: panel
+            width: 400
+            height: 400
+            contentWidth: availableWidth
+            SeriesConfigDraftPanel {
+                id: panel
+                width: page.availableWidth
+                settingsVm: page.vm
+                scrollView: page
+            }
+        }
+    }
+    function test_theFixtureHostsThePanelInAnExternalScrollView() {
+        const page = createTemporaryObject(externalFixture, testCase, {vm: makeFakeSettingsVm()})
+        verify(page !== null)
+        compare(page.panel.scrollView, page)
+    }
+    function test_thePanelHasNoScrollViewOfItsOwnAndGrowsWithItsRows() {
+        const page = createTemporaryObject(externalFixture, testCase, {
+            vm: makeFakeSettingsVm({allSeriesConfigs: manyRows()})
+        })
+        verify(waitForRendering(page))
+        compare(ItemLookup.findByObjectName(page.panel, "seriesListScrollView"), null)
+        const row = ItemLookup.findByObjectName(page.panel, "seriesNameField_19")
+        const button = ItemLookup.findByObjectName(page.panel, "addSeriesButton")
+        verify(button.mapToItem(page.panel, 0, 0).y > row.mapToItem(page.panel, 0, 0).y)
+        verify(page.contentItem.contentHeight > page.height)
+    }
+    function test_aHeaderRowNamesEachColumnAboveItsControl_data() {
+        return [{tag: "compact", width: 400}, {tag: "wide", width: 700}]
+    }
+    function test_aHeaderRowNamesEachColumnAboveItsControl(data) {
+        const page = createTemporaryObject(externalFixture, testCase, {
+            vm: makeFakeSettingsVm({allSeriesConfigs: rowsOutOfOrder()}), width: data.width
+        })
+        verify(waitForRendering(page))
+        const columns = [["name", "Name", "seriesNameField_1"],
+                         ["expression", "Expr.", "editExpressionButton_1"],
+                         ["axis", "Axis", "axisCombo_1"],
+                         ["more", "More", "seriesOptionsButton_1"],
+                         ["visible", "Visible", "seriesEnabledSwitch_1"]]
+        for (const [name, label, controlName] of columns) {
+            const header = ItemLookup.findByObjectName(page.panel, "seriesColumnHeader_" + name)
+            const control = ItemLookup.findByObjectName(page.panel, controlName)
+            verify(header !== null)
+            compare(header.text, label)
+            verify(header.Accessible.ignored)
+            const hp = header.mapToItem(page.panel, header.width / 2, 0)
+            const cp = control.mapToItem(page.panel, 0, 0)
+            verify(hp.x >= cp.x && hp.x <= cp.x + control.width, name + ": " + hp.x + " vs " + cp.x + ".." + (cp.x + control.width))
+            verify(hp.y < cp.y)
+        }
+    }
+
+    function makePanel(properties) {
+        const page = createTemporaryObject(externalFixture, testCase, {
+            vm: properties.settingsVm, height: properties.height || 400
+        })
+        return page.panel
+    }
     function makeFakeSettingsVm(overrides) {
         return TestDoubles.makeFakeSettingsVm(Object.assign({
             allSeriesConfigs: [
@@ -125,7 +190,7 @@ TestCase {
     }
     function test_acceptingColorDialogCallsUpdateComputedSeriesWithNewColorAndOtherFieldsUnchanged() {
         const vm = makeFakeSettingsVm();
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -142,7 +207,7 @@ TestCase {
     }
     function test_addSeriesButtonCreatesABlankSeriesWithoutAuthoringAnExpression() {
         const vm = makeFakeSettingsVm();
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -156,7 +221,7 @@ TestCase {
     }
     function test_restoreDefaultLinesButtonCallsRestoreDefaultGraphLines() {
         const vm = makeFakeSettingsVm();
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -168,7 +233,7 @@ TestCase {
         compare(panel.settingsVm.restoreDefaultGraphLinesCalls, 1);
     }
     function test_axisComboDefaultsToIndependentWhenRowHasNoYAxisId() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: makeFakeSettingsVm()
         });
         verify(waitForRendering(panel));
@@ -183,7 +248,7 @@ TestCase {
                 name: "Score Family"
             }]
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -208,7 +273,7 @@ TestCase {
                 expression: "SCORE"
             }]
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -221,7 +286,7 @@ TestCase {
         const vm = makeFakeSettingsVm({
             allAxes: []
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -249,7 +314,7 @@ TestCase {
                 return {succeeded: true};
             }
         });
-        panel = createTemporaryObject(panelComponent, testCase, {settingsVm: vm});
+        panel = makePanel({settingsVm: vm});
         verify(waitForRendering(panel));
         failOnWarning(/.*/);
         const combo = ItemLookup.findByObjectName(panel, "axisCombo_1");
@@ -271,7 +336,7 @@ TestCase {
                 displayPosition: 0, hiddenLeadingPoints: 0, yAxisId: "2", expression: "SCORE"
             }]
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {settingsVm: vm});
+        const panel = makePanel({settingsVm: vm});
         verify(waitForRendering(panel));
         const combo = ItemLookup.findByObjectName(panel, "axisCombo_1");
         combo.currentIndex = combo.count - 1;
@@ -281,33 +346,8 @@ TestCase {
         compare(combo.currentText, "Score Family");
         compare(panel.newAxisDialog.settingsVm.createAxisCalls.length, 0);
     }
-    function test_errorLabelExplainsAValidationRejection() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm({
-                pendingChanges: true,
-                issues: [{graph: "run", group: "graphLines", target: "records[0].yAxisId", field: "", code: "unknownAxis"}]
-            })
-        });
-        verify(waitForRendering(panel));
-
-        const label = ItemLookup.findByObjectName(panel, "seriesDraftErrorLabel");
-        verify(label !== null);
-        compare(label.visible, true);
-        verify(/invalid/i.test(label.text), "the message must say the changes were rejected as invalid: " + label.text);
-        verify(!/try again/i.test(label.text), "a rejection is not a transient failure: " + label.text);
-    }
-    function test_errorLabelHiddenWithoutIssues() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm({
-                pendingChanges: true
-            })
-        });
-        verify(waitForRendering(panel));
-
-        compare(ItemLookup.findByObjectName(panel, "seriesDraftErrorLabel").visible, false);
-    }
     function test_colorSwatchClickOpensColorDialogSeededWithRowColor() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: makeFakeSettingsVm()
         });
         verify(waitForRendering(panel));
@@ -324,7 +364,7 @@ TestCase {
     }
     function test_deleteButtonCallsRemoveComputedSeriesWithRowId() {
         const vm = makeFakeSettingsVm();
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -336,7 +376,7 @@ TestCase {
         const vm = makeFakeSettingsVm({
             allSeriesConfigs: rowsOutOfOrder()
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -349,7 +389,7 @@ TestCase {
         compare(panel.settingsVm.setSeriesHiddenLeadingPointsCalls, [["1", 3]]);
     }
     function test_theOptionsPopupOpensUnderItsButtonWithAHintThatReflectsTheCount() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: makeFakeSettingsVm({
                 allSeriesConfigs: rowsOutOfOrder()
             })
@@ -368,7 +408,7 @@ TestCase {
                 popup.palette.placeholderText);
     }
     function test_deletingASeriesClosesTheOptionsPopup() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: makeFakeSettingsVm({
                 allSeriesConfigs: rowsOutOfOrder()
             })
@@ -383,7 +423,7 @@ TestCase {
         const vm = createTemporaryObject(liveSettingsVmComponent, testCase, {
             allSeriesConfigs: rowsOutOfOrder()
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -396,7 +436,7 @@ TestCase {
         const vm = createTemporaryObject(liveSettingsVmComponent, testCase, {
             allSeriesConfigs: rowsOutOfOrder()
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -418,7 +458,7 @@ TestCase {
         const vm = makeFakeSettingsVm({
             allSeriesConfigs: rowsOutOfOrder()
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -459,7 +499,7 @@ TestCase {
         const vm = makeFakeSettingsVm({
             allSeriesConfigs: rows
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -481,92 +521,51 @@ TestCase {
         compare(panel.settingsVm.reorderCalls.length, 1);
         compare(panel.settingsVm.reorderCalls[0], ["1", 1]);
     }
-    function test_draggingNearTheBottomEdgeAutoScrollsTheSeriesList() {
-        const vm = makeFakeSettingsVm({
-            allSeriesConfigs: manyRows(),
-            pendingChanges: true
-        });
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: vm,
-            height: 250
-        });
-        verify(waitForRendering(panel));
-
-        const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
-        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_0");
-        const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
-        const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
-
-        mousePress(panel, start.x, start.y);
-        wait(20);
-        for (let step = 1; step <= 8; step++) {
-            mouseMove(panel, start.x, start.y + (bottomEdge.y - start.y) * step / 8, -1, Qt.LeftButton);
-            wait(10);
+    function test_draggingNearThePageBottomEdgeAutoScrollsThePage() {
+        const panel = makePanel({settingsVm: makeFakeSettingsVm({allSeriesConfigs: manyRows()}), height: 250})
+        const page = panel.scrollView
+        verify(waitForRendering(page))
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_0")
+        const start = handle.mapToItem(page, handle.width / 2, handle.height / 2)
+        mousePress(page, start.x, start.y)
+        wait(20)
+        for (let step = 1; step <= 8; ++step) {
+            mouseMove(page, start.x, start.y + (page.height - 5 - start.y) * step / 8, -1, Qt.LeftButton)
+            wait(10)
         }
-        wait(300);
-
-        verify(scrollView.contentItem.contentY > 0, "expected dragging near the bottom edge to auto-scroll the series list");
-
-        mouseRelease(panel, start.x, bottomEdge.y);
-        wait(20);
+        wait(300)
+        verify(page.contentItem.contentY > 0)
+        const first = panel.dragPreviewIndex
+        wait(300)
+        verify(panel.dragPreviewIndex > first)
+        mouseRelease(page, start.x, page.height - 5)
     }
-    function test_draggingToTheEndOfALongListWhileAutoScrollingReordersToTheCorrectFinalPosition() {
-        const vm = makeFakeSettingsVm({
-            allSeriesConfigs: manyRows(),
-            pendingChanges: true
-        });
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: vm,
-            height: 250
-        });
-        verify(waitForRendering(panel));
-
-        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_0");
-        const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
-        const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
-        const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
-        mousePress(panel, start.x, start.y);
-        wait(20);
-        for (let step = 1; step <= 8; step++) {
-            mouseMove(panel, start.x, start.y + (bottomEdge.y - start.y) * step / 8, -1, Qt.LeftButton);
-            wait(10);
+    function test_droppingAfterThePageAutoScrolledReordersToTheLastPosition() {
+        const vm = makeFakeSettingsVm({allSeriesConfigs: manyRows()})
+        const panel = makePanel({settingsVm: vm, height: 250})
+        const page = panel.scrollView
+        verify(waitForRendering(page))
+        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_0")
+        const start = handle.mapToItem(page, handle.width / 2, handle.height / 2)
+        mousePress(page, start.x, start.y)
+        wait(20)
+        for (let step = 1; step <= 8; ++step) {
+            mouseMove(page, start.x, start.y + (page.height - 5 - start.y) * step / 8, -1, Qt.LeftButton)
+            wait(10)
         }
-        tryCompare(panel, "dragPreviewIndex", 19, 5000);
-        mouseRelease(panel, start.x, bottomEdge.y);
-        wait(20);
-    }
-    function test_holdingThePointerStillNearTheEdgeStillAdvancesTheDropTargetAsTheListScrolls() {
-        const vm = makeFakeSettingsVm({
-            allSeriesConfigs: manyRows(),
-            pendingChanges: true
-        });
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: vm,
-            height: 250
-        });
-        verify(waitForRendering(panel));
-
-        const handle = ItemLookup.findByObjectName(panel, "seriesDragHandle_0");
-        const start = handle.mapToItem(panel, handle.width / 2, handle.height / 2);
-        const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
-        const bottomEdge = scrollView.mapToItem(panel, scrollView.width / 2, scrollView.height - 5);
-
-        mousePress(panel, start.x, start.y);
-        wait(20);
-        for (let step = 1; step <= 8; step++) {
-            mouseMove(panel, start.x, start.y + (bottomEdge.y - start.y) * step / 8, -1, Qt.LeftButton);
-            wait(10);
-        }
-        wait(500);
-        verify(panel.dragPreviewIndex > 0, "expected auto-scrolling while holding still near the edge to advance the drop target");
-        mouseRelease(panel, start.x, bottomEdge.y);
-        wait(20);
+        tryVerify(() => page.contentItem.contentY >= page.contentItem.contentHeight - page.contentItem.height, 5000)
+        compare(panel.draggedSeriesId, "0")
+        const releasePoint = page.mapToItem(panel, start.x, page.height - 5)
+        mouseRelease(panel, releasePoint.x, releasePoint.y)
+        wait(20)
+        compare(panel.settingsVm.reorderCalls.length, 1)
+        compare(panel.settingsVm.reorderCalls[0], ["0", 19])
     }
     function test_editExpressionButtonOpensExpressionEditorDialogWithThisRowsSeriesId() {
         const vm = makeFakeSettingsVm({
             allSeriesConfigs: rowsOutOfOrder()
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         mouseClick(ItemLookup.findByObjectName(panel, "editExpressionButton_2"));
@@ -579,7 +578,7 @@ TestCase {
     }
     function test_editingNameFieldAndCommittingCallsUpdateComputedSeriesWithNewNameAndOtherFieldsUnchanged() {
         const vm = makeFakeSettingsVm();
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -595,7 +594,7 @@ TestCase {
         compare(call[5], vm.allSeriesConfigs[0].expression);
     }
     function test_everyRowShowsAColorSwatchNameFieldEditExpressionButtonAndOptionsButtonIncludingPrimitiveRows() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: makeFakeSettingsVm({
                 allSeriesConfigs: rowsOutOfOrder()
             })
@@ -608,36 +607,11 @@ TestCase {
             verify(ItemLookup.findByObjectName(panel, "seriesOptionsButton_" + id) !== null);
         }
     }
-    function test_manySeriesRowsScrollInsteadOfOverflowingThePanel() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
-            settingsVm: makeFakeSettingsVm({
-                allSeriesConfigs: manyRows(),
-                pendingChanges: true
-            }),
-            height: 250
-        });
-        verify(waitForRendering(panel));
-
-        const scrollView = ItemLookup.findByObjectName(panel, "seriesListScrollView");
-        verify(scrollView !== null, "expected a seriesListScrollView wrapping the series rows");
-
-        const addButton = ItemLookup.findByObjectName(panel, "addSeriesButton");
-        verify(addButton !== null);
-        const point = addButton.mapToItem(panel, 0, 0);
-        verify(point.y >= 0 && point.y + addButton.height <= panel.height, "addSeriesButton should stay within the panel's bounds when many series are present");
-
-        const flick = scrollView.contentItem;
-        verify(flick.contentHeight > scrollView.height, "expected the series list to exceed the scroll viewport");
-        const maxContentY = flick.contentHeight - flick.height;
-        verify(maxContentY > 0);
-        flick.contentY = maxContentY;
-        compare(flick.contentY, maxContentY, "expected the Flickable to move to the bottom of the series list");
-    }
     function test_reentrantModelResetDuringDragReleaseLeavesCleanDragState() {
         const vm = createTemporaryObject(reentrantSettingsVmComponent, testCase, {
             allSeriesConfigs: rowsOutOfOrder()
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -661,7 +635,7 @@ TestCase {
         const vm = makeFakeSettingsVm({
             allSeriesConfigs: rowsOutOfOrder()
         });
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: vm
         });
         verify(waitForRendering(panel));
@@ -680,7 +654,7 @@ TestCase {
         compare(panel.settingsVm.reorderCalls[0], ["1", 1]);
     }
     function test_rowsRenderedOrderedByDisplayPosition() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: makeFakeSettingsVm({
                 allSeriesConfigs: rowsOutOfOrder()
             })
@@ -690,7 +664,7 @@ TestCase {
         compare(panel.displayRows[1].id, "2");
     }
     function test_theWholeVisitIsSavedAndRevertedFromTheDialogFooterNotThePanel() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: makeFakeSettingsVm({
                 pendingChanges: true
             })
@@ -700,7 +674,7 @@ TestCase {
         compare(ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton"), null);
     }
     function test_dragCursorOverlayIsEnabledOnlyWhileARowIsDragged() {
-        const panel = createTemporaryObject(panelComponent, testCase, {
+        const panel = makePanel({
             settingsVm: makeFakeSettingsVm({
                 allSeriesConfigs: rowsOutOfOrder()
             })

@@ -9,6 +9,11 @@ Rectangle {
 
     required property var modelData
     property var row: modelData
+    readonly property alias nameControl: nameField
+    readonly property alias expressionControl: expressionButton
+    readonly property alias axisControl: axisCombo
+    readonly property alias moreControl: optionsButton
+    readonly property alias visibleControl: enabledSwitch
     required property var displayRows
     required property var dragState
     required property var scrollView
@@ -169,6 +174,7 @@ Rectangle {
     }
 
     Button {
+        id: expressionButton
         objectName: "editExpressionButton_" + root.row.id
         icon.source: "../icons/square-function.svg"
         icon.width: 16
@@ -239,6 +245,7 @@ Rectangle {
     }
 
     Switch {
+        id: enabledSwitch
         checked: root.row.enabled
         objectName: "seriesEnabledSwitch_" + root.row.id
         onToggled: root.seriesEnabledRequested(root.row, checked)

@@ -115,11 +115,11 @@ TestCase {
                 property real dragRowHeight: 0
                 function previewMove(position) {}
             }
-            scrollView: QtObject {
+            scrollView: Item {
                 property real autoScrollAccumulatedDelta: 0
                 property int autoScrollDirection: 0
                 property real autoScrollEdgeThreshold: 32
-                property real height: 100
+                height: 100
             }
             axisComboModel: [
                 { text: "Independent", value: "" },

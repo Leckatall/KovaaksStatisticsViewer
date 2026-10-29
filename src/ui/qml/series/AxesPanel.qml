@@ -5,9 +5,10 @@ import QtQuick.Layouts
 import KovaaksStatsViewer
 import "axisNames.js" as AxisNames
 
-ScrollView {
+Item {
     id: root
 
+    // The host scrolls the focused field into view, as GraphSettingsEditor does for its whole page.
     required property var settingsVm
     readonly property var overview: settingsVm.axisOverview
     readonly property var sharedAxes: overview && overview.sharedAxes ? overview.sharedAxes : []
@@ -23,7 +24,7 @@ ScrollView {
     readonly property alias deleteDialog: deleteAxisDialog
 
     objectName: "axesPanel"
-    contentWidth: availableWidth
+    implicitHeight: content.implicitHeight
 
     Component.onCompleted: syncRows()
     onOverviewChanged: syncRows()
@@ -89,11 +90,6 @@ ScrollView {
 
     // ---- Actions -------------------------------------------------------------------------------------
 
-    function chooseYAxis(key, shown) {
-        if (!shown)
-            settingsVm.setRunAxisLabel(key)
-    }
-
     function requestDelete(id, lineCount) {
         if (lineCount === 0) {
             settingsVm.deleteAxis(id)
@@ -117,30 +113,6 @@ ScrollView {
             row.nameField.forceActiveFocus(Qt.OtherFocusReason)
     }
 
-    function ensureVisible(item) {
-        const flick = root.contentItem as Flickable
-        const top = item.mapToItem(flick.contentItem, 0, 0).y
-        const bottom = top + item.height
-        const margin = 8
-        if (top - margin < flick.contentY)
-            flick.contentY = Math.max(0, top - margin)
-        else if (bottom + margin > flick.contentY + flick.height)
-            flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, bottom + margin - flick.height))
-    }
-
-    function isWithin(item, ancestor) {
-        for (let current = item; current; current = current.parent)
-            if (current === ancestor)
-                return true
-        return false
-    }
-
-    Window.onActiveFocusItemChanged: {
-        const item = root.Window.activeFocusItem
-        if (item && isWithin(item, content))
-            ensureVisible(item)
-    }
-
     // ---- Content -------------------------------------------------------------------------------------
 
     ButtonGroup {
@@ -156,6 +128,7 @@ ScrollView {
         required property bool shown
 
         objectName: "showOnYAxis_" + rowKey
+        ButtonGroup.group: yAxisSelection
         checkable: false
         checked: shown
         highlighted: shown
@@ -164,6 +137,7 @@ ScrollView {
         Accessible.checkable: true
         Accessible.checked: shown
         Accessible.name: qsTr("Show %1 on Y-axis").arg(rowName)
+        onClicked: if (!shown) root.settingsVm.setRunAxisLabel(rowKey)
     }
 
     component AxisRow: Frame {
@@ -232,8 +206,6 @@ ScrollView {
                     rowKey: axisRow.key
                     rowName: axisRow.name
                     shown: axisRow.shown
-                    ButtonGroup.group: yAxisSelection
-                    onClicked: root.chooseYAxis(rowKey, shown)
                 }
 
                 ActionButton {
@@ -276,7 +248,7 @@ ScrollView {
 
     ColumnLayout {
         id: content
-        width: root.availableWidth
+        width: root.width
         spacing: 6
 
         Label {
@@ -372,8 +344,6 @@ ScrollView {
                         rowKey: independentRow.key
                         rowName: independentRow.name
                         shown: independentRow.shown
-                        ButtonGroup.group: yAxisSelection
-                        onClicked: root.chooseYAxis(rowKey, shown)
                     }
                 }
             }
