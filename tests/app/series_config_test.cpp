@@ -87,6 +87,26 @@ namespace {
         EXPECT_EQ(document.nextAxisId->value, *axisIds.rbegin() + 1);
     }
 
+    TEST(SeriesConfigTest, DefaultHighScoreLineIsEnabledOnTheScoreAxis) {
+        const auto configs = defaultSeriesConfigs();
+        const auto highScore = std::ranges::find(configs, std::string("High Score"),
+                                                 [](const SeriesConfig &config) { return config.presentation.name; });
+
+        ASSERT_NE(highScore, configs.end());
+        EXPECT_TRUE(highScore->presentation.enabled);
+        EXPECT_EQ(highScore->yAxisId, AxisId{1});
+        EXPECT_EQ(encodeExpressionDsl(highScore->expression), "BestRun(Final(SCORE))");
+    }
+
+    // Lines built from other runs are context for the current run, so they must not compete with it visually.
+    TEST(SeriesConfigTest, DefaultLinesAreTranslucentOnlyWhenBuiltFromOtherRuns) {
+        const std::set<uint64_t> otherRunLines{3, 4, 9};
+        for (const auto &config: defaultSeriesConfigs()) {
+            SCOPED_TRACE(config.presentation.name);
+            EXPECT_EQ(config.presentation.lineStyle.color.alpha, otherRunLines.contains(config.id.value) ? 128 : 255);
+        }
+    }
+
     TEST(SeriesConfigTest, ProjectRateToFinalParticipatesInValidationLimits) {
         const SeriesConfig missing{SeriesId{9}, {"Missing", {}, true, 0}, projectRateToFinal({})};
         const auto missingErrors = validateSeriesConfigs({missing});

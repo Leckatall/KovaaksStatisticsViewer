@@ -31,7 +31,7 @@ namespace {
     // Built-in SeriesIds from defaultSeriesConfigs() — GraphViewModel::column is always a series'
     // SeriesId, not a position, and has no dedicated enum outside the class.
     constexpr int kScoreSeriesId = 1;
-    // Score, Expected Final Score and Expected Final (Whole Run) share the "Score" axis.
+    // Score, Exp. Score (5s) and Exp. Score (Whole Run) share the "Score" axis.
     constexpr int kExpectedFinalSeriesId = 2;
     constexpr int kAccuracySeriesId = 5;
     // Has no axis of its own choosing: it is scaled independently.

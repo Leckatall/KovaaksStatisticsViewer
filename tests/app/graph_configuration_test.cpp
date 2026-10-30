@@ -370,7 +370,7 @@ namespace {
         const auto document = defaultRunSeriesDocument();
         EXPECT_TRUE(runAxisLabelLines(document, std::nullopt).empty());
         EXPECT_EQ(runAxisLabelLines(document, AxisId{1}),
-                  (std::vector{SeriesId{1}, SeriesId{2}, SeriesId{3}, SeriesId{4}, SeriesId{8}}));
+                  (std::vector{SeriesId{1}, SeriesId{2}, SeriesId{3}, SeriesId{4}, SeriesId{8}, SeriesId{9}}));
         EXPECT_EQ(runAxisLabelLines(document, SeriesId{7}), std::vector{SeriesId{7}});
         EXPECT_TRUE(runAxisLabelLines(document, AxisId{42}).empty());
     }

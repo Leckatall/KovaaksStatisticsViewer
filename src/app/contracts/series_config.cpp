@@ -281,15 +281,15 @@ namespace ksv::application {
                 runningSum(score), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{2}, {"Expected Final Score", line({255, 67, 199, 255}), true, 1, 1},
+                SeriesId{2}, {"Exp. Score (5s)", line({255, 67, 199, 255}), true, 1, 1},
                 expectedFinalScore(), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{3}, {"Expected Final (Top 10%)", line({255, 107, 152, 255}), true, 2, 1},
+                SeriesId{3}, {"Exp. Score (5s, Top 10%)", line({255, 107, 152, 128}), true, 2, 1},
                 averageAcrossRuns(expectedFinalScore(), TopPercentile{10.0}), AxisId{1}
             },
             SeriesConfig{
-                SeriesId{4}, {"Expected Final (Last 10 Runs)", line({157, 92, 255, 255}), true, 3, 1},
+                SeriesId{4}, {"Exp. Score (5s, Last 10)", line({157, 92, 255, 128}), true, 3, 1},
                 averageAcrossRuns(expectedFinalScore(), RecentRuns{10}), AxisId{1}
             },
             SeriesConfig{
@@ -306,8 +306,12 @@ namespace ksv::application {
                 rollingMean(score, 5)
             },
             SeriesConfig{
-                SeriesId{8}, {"Expected Final (Whole Run)", line({236, 50, 255, 255}), false, 7, 1},
+                SeriesId{8}, {"Exp. Score (Whole Run)", line({236, 50, 255, 255}), false, 7, 1},
                 projectedFinalValue(runningSum(score)), AxisId{1}
+            },
+            SeriesConfig{
+                SeriesId{9}, {"High Score", line({76, 175, 80, 128}), true, 8},
+                bestRun(finalValue(FinalStat::Score)), AxisId{1}
             }
         };
     }
