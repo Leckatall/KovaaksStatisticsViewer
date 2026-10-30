@@ -274,7 +274,9 @@ Item {
                             ComboBox {
                                 id: rangeCombo
                                 objectName: "graphField_dataRange_range"
-                                Layout.preferredWidth: Math.min(parent.width, rangeMetrics.height * 16)
+                                implicitContentWidthPolicy: ComboBox.WidestText
+                                Layout.fillWidth: true
+                                Layout.maximumWidth: Math.max(implicitWidth, rangeMetrics.height * 16)
                                 FontMetrics { id: rangeMetrics; font: rangeCombo.font }
                                 readonly property var entries: root.rangeKinds
                                 model: entries
@@ -614,7 +616,9 @@ Item {
                             ComboBox {
                                 id: fitCombo
                                 objectName: "graphField_axes_" + axis.modelData + "_fitMode"
-                                Layout.preferredWidth: Math.min(parent.width, fitMetrics.height * 16)
+                                implicitContentWidthPolicy: ComboBox.WidestText
+                                Layout.fillWidth: true
+                                Layout.maximumWidth: Math.max(implicitWidth, fitMetrics.height * 16)
                                 FontMetrics { id: fitMetrics; font: fitCombo.font }
                                 readonly property var entries: root.fitEntries
                                 model: entries

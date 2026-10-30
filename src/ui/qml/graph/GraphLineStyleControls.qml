@@ -32,8 +32,9 @@ ColumnLayout {
         ComboBox {
             id: connectionCombo
             objectName: "graphField_seriesStyle_connection"
-            Layout.fillWidth: !root.compact
-            Layout.preferredWidth: root.compact ? Math.min(parent.width, comboMetrics.height * 16) : -1
+            implicitContentWidthPolicy: ComboBox.WidestText
+            Layout.fillWidth: true
+            Layout.maximumWidth: root.compact ? Math.max(implicitWidth, comboMetrics.height * 16) : Number.POSITIVE_INFINITY
             FontMetrics { id: comboMetrics; font: connectionCombo.font }
             model: GraphCatalog.connectionModes
             textRole: "text"
