@@ -117,7 +117,7 @@ The user opens the managed benchmark directory, copies a compatible KSV benchmar
 - A subcategory is a category nested within another category, and the same satisfaction rules apply to it.
 - A category containing scenarios is satisfied for a tier when at least one of those scenarios has attained the tier.
 - A category containing subcategories is satisfied for a tier when every subcategory is satisfied.
-- Creating the first subcategory in a populated direct-scenario category requires the user to place its existing scenarios into subcategories or return them to Uncategorized.
+- Creating a subcategory in a populated category leaves its direct scenarios in place. The benchmark stays incomplete until they are moved into a subcategory or to Uncategorized.
 - An empty user-created category or subcategory makes the benchmark incomplete, so benchmark-wide rank calculations are unavailable until it contains a scenario.
 
 ### Scenario identity and resolution

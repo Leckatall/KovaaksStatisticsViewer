@@ -85,12 +85,6 @@ wait "${M}/uncategorizedDropZone"
 shot --window benchmarkManagerDialog --name row-drag-drop-line
 mouse release --at 5 5
 
-# Adding a subcategory to a category that holds scenarios asks where they go.
-click "${M}/addSubcategoryPlus_tracking"
-type Smooth --into "${M}/subcategoryCreationField" --enter
-shot --window benchmarkManagerDialog --name relocation-prompt
-click "${M}/subcategoryRelocationPrompt > text:Cancel"
-
 # A threshold that is not a number.
 dblclick "${M}/thresholdView > cell_entry-gallery-primary_iron"
 type abc --enter
