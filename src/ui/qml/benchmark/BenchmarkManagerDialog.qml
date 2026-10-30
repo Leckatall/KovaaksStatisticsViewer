@@ -680,8 +680,6 @@ ApplicationWindow {
                         onMoveSelectionRequested: (entryIds, targetId, beforeId) => root.runTableCommand(
                             () => root.vm().assignScenarios(entryIds, targetId, beforeId))
                         onScenarioIdentityRequested: (entryId, name, hash) => root.requestScenarioIdentity(entryId, name, hash)
-                        onRenameGroupRequested: (groupId, name) => root.runTableCommand(
-                            () => root.vm().renameGroup(groupId, name))
                         onRowContextRequested: (entryId, x, y) => {
                             rowContextMenu.popup(editorTable, x, y)
                         }

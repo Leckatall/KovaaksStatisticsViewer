@@ -280,7 +280,6 @@ FocusScope {
     signal groupContextRequested(string groupId, real x, real y)
     signal rankContextRequested(string tierId, real x, real y)
     signal scenarioIdentityRequested(string entryId, string name, string hash)
-    signal renameGroupRequested(string groupId, string name)
 
     readonly property var kindKeys: ["category", "subcategory", "scenario"]
     readonly property int thresholdKind: 3
