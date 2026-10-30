@@ -541,12 +541,17 @@ function benchmarkManagementDesc() {
     const g1 = {id: "g1", name: "Clicking", color: "#009600"}
     const g2 = {id: "g2", name: "Tracking", color: "#000096"}
     const p = {id: "p", name: "Precise", color: "#960000"}
+    const hollow = {id: "hollow", name: "Hollow", color: "#444444", issues: ["A subcategory has no scenarios."]}
+    const gE = {id: "gE", name: "Empty", color: "#888888",
+                issues: ["A category has neither scenarios nor subcategories."]}
     return {
         tiers: [{id: "t1", name: "Gold", color: "#FFD700"}, {id: "t2", name: ""}],
         rows: [
             {entryId: "a", name: "1w6ts", category: g1, cells: {t1: {displayText: "100"}}},
             {entryId: "b", name: "1w4ts", category: g1, cells: {}},
             {entryId: "c", name: "smoothbot", category: g2, subcategory: p, cells: {}},
+            {emptyGroupId: "hollow", category: g2, subcategory: hollow},
+            {emptyGroupId: "gE", category: gE},
             {entryId: "u-res", name: "resolved one", mappingState: "resolved",
              mappingCandidates: [benchmarkManagerCandidate("hash-a", 5, new Date(2024, 2, 3))], cells: {}},
             {entryId: "u-amb", name: "ambiguous one", mappingState: "ambiguous",

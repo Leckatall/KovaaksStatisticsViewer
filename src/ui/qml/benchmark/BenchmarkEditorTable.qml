@@ -30,6 +30,8 @@ FocusScope {
     // the room it has to spare; minimumTableWidth is where that runs out.
     readonly property var identityPreferredWidths: [130, 120, 200]
     readonly property var identityHeaders: [qsTr("Category"), qsTr("Subcategory"), qsTr("Scenario")]
+    readonly property string unassignedText: qsTr("⚠ Unassigned")
+    readonly property string dropHintText: qsTr("+ Drop scenarios here")
     property int identityContentRevision: 0
     readonly property var identityContentWidths: {
         void root.identityContentRevision
@@ -44,10 +46,19 @@ FocusScope {
         const rows = root.tableModel && typeof root.tableModel.identityTexts === "function"
                      ? root.tableModel.identityTexts() : []
         for (const row of rows) {
-            widths[0] = Math.max(widths[0], bold(row.category) + (row.categoryId !== "" ? 54 : 12))
-            if (row.subcategoryId !== "")
-                widths[1] = Math.max(widths[1], bold(row.subcategory) + 30)
-            widths[2] = Math.max(widths[2], plain(row.scenario !== "" ? row.scenario : qsTr("Unnamed scenario")) + 12)
+            const emptyCategory = row.emptyGroup && row.subcategoryId === ""
+            const emptySubcategory = row.emptyGroup && row.subcategoryId !== ""
+            const category = emptyCategory ? root.emptyGroupLabel(row.category) : row.category
+            widths[0] = Math.max(widths[0], bold(category) + (row.categoryId !== "" ? 54 : 12))
+            if (row.subcategoryId !== "") {
+                const subcategory = emptySubcategory ? root.emptyGroupLabel(row.subcategory) : row.subcategory
+                widths[1] = Math.max(widths[1], bold(subcategory) + 30)
+            } else if (row.unassigned) {
+                widths[1] = Math.max(widths[1], bold(root.unassignedText) + 12)
+            }
+            const scenario = row.emptyGroup ? root.dropHintText
+                           : row.scenario !== "" ? row.scenario : qsTr("Unnamed scenario")
+            widths[2] = Math.max(widths[2], plain(scenario) + 12)
         }
         return widths.map((width, column) => Math.min(width, root.identityPreferredWidths[column]))
     }
@@ -183,6 +194,10 @@ FocusScope {
         return (name !== "" ? name : qsTr("Unnamed")) + (hasIssues ? " ⚠" : "")
     }
 
+    function emptyGroupLabel(name) {
+        return qsTr("%1 (empty)").arg(name !== "" ? name : qsTr("(unnamed)"))
+    }
+
     FontMetrics {
         id: rankHeaderMetrics
         font.bold: true
@@ -230,7 +245,7 @@ FocusScope {
     readonly property int rankColumnsWidth: Math.max(0, thresholdTableView.columns - root.thresholdKind) * root.thresholdWidth
 
     // Context for the dialog's rank, group and row controls: the rank or group last focused (by
-    // cell, header or group list), and the current row's entry, spans and mapping.
+    // cell or header), and the current row's entry, spans and mapping.
     property string focusedTierId: ""
     property string focusedGroupId: ""
     property var currentRowInfo: ({})
@@ -270,21 +285,23 @@ FocusScope {
     readonly property var kindKeys: ["category", "subcategory", "scenario"]
     readonly property int thresholdKind: 3
 
-    // A row with no subcategory sits straight under its category (or in Uncategorized): the data
-    // layer never mixes direct scenarios and subcategories in one category. Its Category cell then
-    // spans the Subcategory column, which has nothing to show for that row.
-    function spansSubcategory(columnKind, subcategoryId) {
-        return columnKind === 0 && subcategoryId === ""
+    // A row with no subcategory sits straight under its category (or in Uncategorized), so its
+    // Category cell spans the Subcategory column, which has nothing to show for that row. The
+    // exception is an Unassigned row: a draft may keep direct scenarios beside subcategories, and
+    // that row's Subcategory cell carries the warning.
+    function spansSubcategory(columnKind, subcategoryId, unassigned) {
+        return columnKind === 0 && subcategoryId === "" && !unassigned
     }
-    function coveredBySpan(columnKind, subcategoryId) {
-        return columnKind === 1 && subcategoryId === ""
+    function coveredBySpan(columnKind, subcategoryId, unassigned) {
+        return columnKind === 1 && subcategoryId === "" && !unassigned
     }
     // The current cell never rests on a covered Subcategory cell: keyboard moves (or a click on
     // the span, which already lands on the Category cell) end on the spanning Category cell.
     function redirectCoveredCurrent() {
         const current = selection.currentIndex
         if (root.restoringSelection || !current.valid || !root.tableModel) return false
-        if (!root.coveredBySpan(current.column, String(root.tableModel.rowInfo(current.row).subcategoryId || "")))
+        const info = root.tableModel.rowInfo(current.row)
+        if (!root.coveredBySpan(current.column, String(info.subcategoryId || ""), !!info.unassigned))
             return false
         root.moveCurrent(current.row, 0)
         return true
@@ -318,11 +335,14 @@ FocusScope {
         editor.ownerView.closeEditor()
     }
 
-    // The model index a stable {entryId, tierId?, columnKind?} anchor addresses now; invalid when
-    // its row is gone.
+    // The model index a stable {entryId, emptyGroupId?, tierId?, columnKind?} anchor addresses now;
+    // invalid when its row is gone. An emptyGroupId anchor outlives its empty row: once the group
+    // gains scenarios it addresses the group's first row.
     function anchorIndex(anchor) {
         const model = root.tableModel
-        const row = anchor && anchor.entryId ? model.rowForEntry(anchor.entryId) : -1
+        const row = !anchor ? -1
+                  : anchor.emptyGroupId ? model.firstRowOfGroup(anchor.emptyGroupId)
+                  : anchor.entryId ? model.rowForEntry(anchor.entryId) : -1
         if (row < 0) return model.index(-1, -1)
         let column = 2
         if (anchor.tierId) {
@@ -334,18 +354,20 @@ FocusScope {
         return model.index(row, column)
     }
 
-    // Where a paste lands: a rank header, the manager's current cell (group cells are forwarded so
-    // the session can explain the rejection), or the end of an empty table. Null when a populated
-    // table has no destination. The manager's anchor, not the visual current index, is read, so a
-    // paste issued straight after a reset lands before the visual selection is rebuilt.
+    // Where a paste lands: a rank header, the manager's current cell (group cells and empty rows
+    // are forwarded so the session can explain the rejection), or the end of a table with no
+    // scenarios. Null when a populated table has no destination. The manager's anchor, not the
+    // visual current index, is read, so a paste issued straight after a reset lands before the
+    // visual selection is rebuilt.
     function pasteDestination() {
         // An empty tierId is the placeholder header of a rankless table: the names append ranks.
         if (root.headerFocused) return {kind: "rankHeader", tierId: root.focusedTierId}
         const model = root.tableModel
-        if (!model || model.rowCount() === 0) return {kind: "append"}
+        if (!model || model.scenarioRowCount() === 0) return {kind: "append"}
         const index = root.anchorIndex(root.manager.currentCell)
         if (!index.valid) return null
         const anchor = model.anchorAt(index.row, index.column)
+        if (anchor.emptyGroupId) return {kind: "emptyGroup"}
         const info = model.rowInfo(index.row)
         switch (anchor.columnKind) {
         case 0: return {kind: "category", groupId: info.categoryId}
@@ -455,19 +477,14 @@ FocusScope {
     }
 
     // Moves focus to a stable anchor: {entryId, tierId?, columnKind?} for a cell, {tierId} for a
-    // rank header, or {groupId} for a group (its first row, or the group list when it is empty).
+    // rank header, or {groupId} for a group's first row.
     function focusCell(anchor) {
         const model = root.tableModel
         if (!model || !anchor) return false
         root.commitActiveEdit()
         if (anchor.groupId) {
             const row = model.firstRowOfGroup(anchor.groupId)
-            if (row < 0) {
-                const item = groupList.focusButton(anchor.groupId)
-                if (!item) return false
-                item.forceActiveFocus()
-                return true
-            }
+            if (row < 0) return false
             const group = (root.manager.groups || []).find(g => g.id === anchor.groupId)
             return root.moveCurrent(row, group && group.kind === "subcategory" ? 1 : 0)
         }
@@ -516,7 +533,7 @@ FocusScope {
 
     function beginGroupRename(groupId) {
         const row = root.tableModel.firstRowOfGroup(groupId)
-        if (row < 0) return groupList.beginRename(groupId)
+        if (row < 0) return false
         const group = (root.manager.groups || []).find(item => item.id === groupId)
         const column = group && group.kind === "subcategory" ? 1 : 0
         root.moveCurrent(row, column)
@@ -525,7 +542,6 @@ FocusScope {
     }
 
     function beginSubcategoryCreation(groupId) {
-        if (groupList.beginSubcategoryCreation(groupId)) return true
         const model = root.tableModel
         const firstRow = model ? model.firstRowOfGroup(groupId) : -1
         if (firstRow < 0) return false
@@ -560,8 +576,9 @@ FocusScope {
         const current = selection.currentIndex
         if (!current.valid || root.headerFocused) return
         if (current.column >= root.thresholdKind) root.focusedTierId = root.tableModel.anchorAt(current.row, current.column).tierId
-        else if (current.column === 0) root.focusedGroupId = root.currentRowInfo.categoryId
+        if (current.column === 0) root.focusedGroupId = root.currentRowInfo.categoryId
         else if (current.column === 1) root.focusedGroupId = root.currentRowInfo.subcategoryId
+        else if (root.currentRowInfo.emptyGroupId !== "") root.focusedGroupId = root.currentRowInfo.emptyGroupId
     }
 
     function publishCurrent() {
@@ -612,10 +629,14 @@ FocusScope {
         return local.x >= 0 && local.y >= 0 && local.x < item.width && local.y < item.height ? local : null
     }
 
-    // Whole-group targets, which append: a group list button, a group cell or the Uncategorized zone.
+    // Whole-group targets, which append: any cell of an empty row, a group cell or the Uncategorized
+    // zone.
     function targetAtScene(scenePoint) {
-        const listed = groupList.groupAtScene(scenePoint)
-        if (listed !== null) return listed
+        for (const view of [identityTableView, thresholdTableView]) {
+            for (const item of view.contentItem.children) {
+                if (item.emptyGroupId && root.localPointIn(item.face, scenePoint)) return item.emptyGroupId
+            }
+        }
         for (const item of identityTableView.contentItem.children) {
             if (item.isGroup && item.groupId !== "" && root.localPointIn(item.face, scenePoint)) return item.groupId
         }
@@ -796,8 +817,20 @@ FocusScope {
         required property var subcategoryColor
         required property int subcategorySpanStart
         required property int subcategorySpanLength
+        required property string emptyGroupId
+        required property bool unassigned
 
         readonly property bool isGroup: columnKind < 2
+        readonly property bool emptyRow: emptyGroupId !== ""
+        readonly property bool unassignedCell: columnKind === 1 && unassigned
+        readonly property bool emptyGroupCell: emptyRow && groupId === emptyGroupId
+        readonly property bool dropHint: emptyRow && columnKind === 2
+        // On an empty subcategory's row the Category cell still belongs to the category's span.
+        readonly property bool standsForEmptyGroup: emptyRow && (!isGroup || emptyGroupCell)
+        readonly property string emptyGroupName: subcategoryId !== "" ? subcategoryName : categoryName
+        readonly property bool dropHovered: root.hoverDropGroupId !== ""
+                                            && (root.hoverDropGroupId === emptyGroupId
+                                                || (isGroup && root.hoverDropGroupId === groupId))
         readonly property bool rowHighlighted: root.selectionHasEntry(entryId)
         readonly property string groupId: columnKind === 0 ? categoryId : columnKind === 1 ? subcategoryId : ""
         readonly property int spanStart: columnKind === 0 ? categorySpanStart : subcategorySpanStart
@@ -809,9 +842,12 @@ FocusScope {
         readonly property bool groupLabelShown: isGroup && spanLength > 0 && row === Math.max(spanStart, topRow)
         readonly property string groupLabelText: columnKind === 0 ? categoryName : subcategoryName
         readonly property bool lastRowOfSpan: !isGroup || spanLength === 0 || row === spanStart + spanLength - 1
-        readonly property string cellText: isGroup ? (groupLabelShown ? groupLabelText : "") : displayText
-        readonly property bool unnamedScenario: columnKind === 2 && displayText === ""
-        readonly property string valueState: columnKind !== root.thresholdKind ? ""
+        readonly property string cellText: unassignedCell ? root.unassignedText
+            : isGroup ? (!groupLabelShown ? "" : emptyGroupCell ? root.emptyGroupLabel(groupLabelText) : groupLabelText)
+            : dropHint ? root.dropHintText
+            : displayText
+        readonly property bool unnamedScenario: columnKind === 2 && displayText === "" && !emptyRow
+        readonly property string valueState: columnKind !== root.thresholdKind || emptyRow ? ""
             : inputState === "nonFinite" ? qsTr("Non-finite input")
             : inputState === "invalid" ? qsTr("Invalid input")
             : !hasValue ? qsTr("Missing threshold") : ""
@@ -822,12 +858,18 @@ FocusScope {
         // A category cell whose rows have no subcategory (scenarios straight under the category,
         // or Uncategorized) spans the Subcategory column too; that row's Subcategory cell is
         // covered: hidden and inert, while the spanning cell draws over it.
-        readonly property bool spansBoth: root.spansSubcategory(columnKind, subcategoryId)
-        readonly property bool coveredBySpan: root.coveredBySpan(columnKind, subcategoryId)
+        readonly property bool spansBoth: root.spansSubcategory(columnKind, subcategoryId, unassigned)
+        readonly property bool coveredBySpan: root.coveredBySpan(columnKind, subcategoryId, unassigned)
         // What the cell draws and where it takes pointer input: wider than the cell when it spans.
         readonly property alias face: face
 
-        objectName: "cell_" + entryId + "_" + root.columnKey(columnKind, tierId)
+        // TableView logs a warning when edit() is called on a cell the model marks read-only.
+        function openEditor() {
+            if (tableCell.isGroup ? tableCell.groupId !== "" : !tableCell.emptyRow)
+                tableCell.TableView.view.edit(root.tableModel.index(tableCell.row, tableCell.column))
+        }
+
+        objectName: "cell_" + (entryId !== "" ? entryId : "empty-" + emptyGroupId) + "_" + root.columnKey(columnKind, tierId)
         implicitWidth: 80
         implicitHeight: root.rowHeight
         // TableView sizes every cell to its column, so a spanning cell draws past its right edge,
@@ -839,7 +881,9 @@ FocusScope {
 
         Accessible.role: Accessible.Cell
         Accessible.ignored: coveredBySpan
-        Accessible.name: cellText !== "" ? cellText : unnamedScenario ? qsTr("Unnamed scenario") : valueState
+        Accessible.name: standsForEmptyGroup ? qsTr("%1: drop scenarios here").arg(root.emptyGroupLabel(emptyGroupName))
+            : unassignedCell ? qsTr("Unassigned subcategory")
+            : cellText !== "" ? cellText : unnamedScenario ? qsTr("Unnamed scenario") : valueState
         Accessible.description: [stateLabel].concat(issues || []).filter(t => t !== "").join("; ")
 
         Rectangle {
@@ -849,16 +893,25 @@ FocusScope {
             height: tableCell.height
             color: tableCell.current ? Qt.alpha(palette.highlight, 0.48)
                  : tableCell.selected ? Qt.alpha(palette.highlight, 0.3)
+                 : tableCell.unassignedCell ? Qt.alpha(Theme.warning, 0.2)
                  : tableCell.rowHighlighted ? Qt.alpha(palette.highlight, 0.14)
-                 : tableCell.isGroup && tableCell.groupId !== "" && root.hoverDropGroupId === tableCell.groupId ? Qt.alpha(palette.highlight, 0.45)
+                 : tableCell.dropHovered ? Qt.alpha(palette.highlight, 0.45)
                  : tableCell.isGroup && tableCell.groupId !== "" ? Qt.alpha(tableCell.groupColor, Theme.groupTintAlpha)
                  : palette.base
 
             GridCellBorders { showBottom: tableCell.lastRowOfSpan }
             Rectangle {
+                objectName: "unassignedBorder"
+                visible: tableCell.unassignedCell
+                anchors.fill: parent
+                color: "transparent"
+                border.color: Theme.warning
+            }
+            Rectangle {
+                objectName: "issueMarker"
                 // Retained input and domain issues get a textual explanation too (Accessible and
-                // tooltip); the marker is only a pointer to it.
-                visible: (tableCell.issues || []).length > 0 || tableCell.inputState !== ""
+                // tooltip); the marker is only a pointer to it. The Unassigned cell is its own warning.
+                visible: ((tableCell.issues || []).length > 0 || tableCell.inputState !== "") && !tableCell.unassignedCell
                 anchors.top: parent.top
                 anchors.left: parent.left
                 width: 6
@@ -875,6 +928,7 @@ FocusScope {
             }
 
             Label {
+                objectName: "cellLabel"
                 anchors.fill: parent
                 anchors.leftMargin: 6
                 anchors.rightMargin: groupSwatch.visible ? groupSwatch.width + (addSubcategoryPlus.visible ? 34 : 10) : 6
@@ -883,12 +937,13 @@ FocusScope {
                 horizontalAlignment: tableCell.columnKind === root.thresholdKind ? Text.AlignRight : Text.AlignLeft
                 elide: Text.ElideRight
                 text: tableCell.cellText !== "" ? tableCell.cellText
-                    : tableCell.columnKind === root.thresholdKind ? "—"
+                    : tableCell.columnKind === root.thresholdKind && !tableCell.emptyRow ? "—"
                     : tableCell.unnamedScenario ? qsTr("Unnamed scenario") : ""
-                font.italic: tableCell.inputState !== "" || tableCell.unnamedScenario
+                font.italic: tableCell.inputState !== "" || tableCell.unnamedScenario || tableCell.dropHint
                 font.bold: tableCell.isGroup
                 color: tableCell.inputState !== "" ? Theme.errorText
-                     : tableCell.unnamedScenario ? tableCell.palette.placeholderText : tableCell.palette.text
+                     : tableCell.unnamedScenario || tableCell.dropHint ? tableCell.palette.placeholderText
+                     : tableCell.palette.text
             }
 
             TableSwatch {
@@ -937,7 +992,7 @@ FocusScope {
             DragHandler {
                 id: rowDrag
                 target: null
-                enabled: tableCell.columnKind >= 2 && !tableCell.editing
+                enabled: tableCell.columnKind >= 2 && !tableCell.emptyRow && !tableCell.editing
                 onActiveChanged: {
                     if (active) root.beginRowDrag(tableCell.entryId)
                     else if (root.draggingRows) {
@@ -954,9 +1009,10 @@ FocusScope {
                 acceptedButtons: Qt.RightButton
                 onTapped: eventPoint => {
                     const point = tableCell.mapToItem(root, eventPoint.position.x, eventPoint.position.y)
-                    if (tableCell.isGroup && tableCell.groupId !== "") {
-                        root.focusedGroupId = tableCell.groupId
-                        root.groupContextRequested(tableCell.groupId, point.x, point.y)
+                    const menuGroupId = tableCell.groupId !== "" ? tableCell.groupId : tableCell.emptyGroupId
+                    if (menuGroupId !== "") {
+                        root.focusedGroupId = menuGroupId
+                        root.groupContextRequested(menuGroupId, point.x, point.y)
                     } else if (!tableCell.isGroup) {
                         if (!root.selectionHasEntry(tableCell.entryId))
                             root.moveCurrent(tableCell.row, tableCell.column)
@@ -974,8 +1030,7 @@ FocusScope {
                 onTapped: root.selectCell(tableCell.row, tableCell.column, selectTap.point.modifiers)
                 onDoubleTapped: {
                     root.selectCell(tableCell.row, tableCell.column, selectTap.point.modifiers)
-                    if (tableCell.columnKind >= 2 || tableCell.groupId !== "")
-                        tableCell.TableView.view.edit(root.tableModel.index(tableCell.row, tableCell.column))
+                    tableCell.openEditor()
                 }
             }
         }
@@ -992,23 +1047,6 @@ FocusScope {
     ColumnLayout {
         anchors.fill: parent
         spacing: 4
-
-        BenchmarkEmptyGroupList {
-            id: groupList
-            Layout.fillWidth: true
-            groups: root.manager && root.manager.groups
-                ? root.manager.groups.filter(group => group.scenarioCount === 0 && group.kind !== "uncategorized") : []
-            focusedGroupId: root.focusedGroupId
-            hoverDropGroupId: root.hoverDropGroupId
-            submitSubcategory: (categoryId, name) => root.requestCreation({kind: "subcategory", categoryId: categoryId, name: name})
-            onGroupFocused: groupId => root.focusedGroupId = groupId
-            onContextRequested: (groupId, x, y) => {
-                const p = groupList.mapToItem(root, x, y)
-                root.focusedGroupId = groupId
-                root.groupContextRequested(groupId, p.x, p.y)
-            }
-            onRenameRequested: (groupId, name) => root.renameGroupRequested(groupId, name)
-        }
 
         // The table is capped at its own content, so the add-category and add-scenario controls
         // below sit directly under the last row; taller content scrolls inside the cap.
@@ -1063,8 +1101,9 @@ FocusScope {
                     Keys.onPressed: (event) => root.handleCommandKey(event)
                     Keys.onLeftPressed: (event) => {
                         const current = selection.currentIndex
+                        const info = current.valid ? root.tableModel.rowInfo(current.row) : ({})
                         if (current.valid && current.column === 2
-                                && root.spansSubcategory(0, String(root.tableModel.rowInfo(current.row).subcategoryId || ""))) {
+                                && root.spansSubcategory(0, String(info.subcategoryId || ""), !!info.unassigned)) {
                             root.moveCurrent(current.row, 0)
                             event.accepted = true
                         } else {
@@ -1073,8 +1112,9 @@ FocusScope {
                     }
                     Keys.onRightPressed: (event) => {
                         const current = selection.currentIndex
+                        const info = current.valid ? root.tableModel.rowInfo(current.row) : ({})
                         if (current.valid && current.column === 0
-                                && root.spansSubcategory(0, String(root.tableModel.rowInfo(current.row).subcategoryId || ""))) {
+                                && root.spansSubcategory(0, String(info.subcategoryId || ""), !!info.unassigned)) {
                             root.moveCurrent(current.row, 2)
                             event.accepted = true
                         } else if (current.valid && current.column === root.thresholdKind - 1

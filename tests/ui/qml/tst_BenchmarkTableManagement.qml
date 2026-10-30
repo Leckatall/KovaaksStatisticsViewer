@@ -157,6 +157,42 @@ TestCase {
         compare(table.activeEditor, null)
     }
 
+    function test_creatingASubcategoryLeavesFocusOnItsNewRow() {
+        const ref = {}
+        const dialog = openTableDialog({
+            addSubcategory: function (categoryId, name) {
+                this.addSubcategoryCalls.push([categoryId, name])
+                this.groups = this.groups.concat([{id: "fresh", kind: "subcategory", parentId: categoryId,
+                                                   name: name, color: "#123456", scenarioCount: 0, issues: []}])
+                const desc = TestDoubles.benchmarkManagementDesc()
+                const tracking = desc.rows[2].category
+                desc.rows.splice(4, 0, {emptyGroupId: "fresh", category: tracking,
+                                        subcategory: {id: "fresh", name: name}})
+                ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(desc))
+                return {ok: true, createdId: "fresh"}
+            }
+        }, ref)
+        const table = dialog.editorTable
+        tryVerify(() => find(dialog, "addSubcategoryPlus_g2") !== null)
+        waitForRendering(dialog.contentItem)
+
+        verify(table.focusCell({groupId: "g2"}))
+        mouseClick(find(dialog, "addSubcategoryPlus_g2"))
+        tryVerify(() => {
+            const cell = ItemLookup.findByObjectName(table.identityView.contentItem, "cell_c_category")
+            return cell !== null && cell.subcategoryField.activeFocus
+        })
+        keyClick(Qt.Key_S)
+        keyClick(Qt.Key_Return)
+
+        compare(vm(dialog).addSubcategoryCalls, [["g2", "s"]])
+        tryVerify(() => table.selectionModel.currentIndex.row === 4
+                  && table.selectionModel.currentIndex.column === 1)
+        tryCompare(dialog, "currentGroupId", "fresh")
+        tryVerify(() => table.identityView.activeFocus, 2000, "focus stays on the table")
+        compare(table.manager.currentCell.emptyGroupId, "fresh")
+    }
+
     // One Remove over several selected rows is one session command, hence one Undo step.
     function test_removingSelectedRowsIsOneCommand() {
         const dialog = openTableDialog()
@@ -169,20 +205,24 @@ TestCase {
         compare(vm(dialog).commandLog, ["removeScenarios"])
     }
 
-    function test_emptyGroupCanBeRenamedFromItsChip() {
+    function test_emptyGroupIsRenamedInItsTableCell() {
         const dialog = openTableDialog()
-        verify(dialog.editorTable.beginGroupRename("gE"))
-        const field = find(dialog, "emptyGroupRenameField_gE")
-        verify(field !== null && field.visible)
-        field.text = "New group"
+        const table = dialog.editorTable
+        tryVerify(() => find(dialog, "cell_empty-gE_category") !== null)
+        waitForRendering(dialog.contentItem)
+        verify(table.beginGroupRename("gE"))
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.text, "Empty", "the editor starts from the bare name")
+        table.activeEditor.text = "New group"
         keyClick(Qt.Key_Return)
         compare(vm(dialog).renameGroupCalls, [["gE", "New group"]])
     }
 
     function test_groupAndRankHeadersOpenContextMenus() {
         const dialog = openTableDialog()
-        const group = find(dialog, "groupListItem_gE")
-        verify(group !== null)
+        tryVerify(() => find(dialog, "cell_empty-gE_scenario") !== null)
+        waitForRendering(dialog.contentItem)
+        const group = find(dialog, "cell_empty-gE_scenario")
         mouseClick(group, group.width / 2, group.height / 2, Qt.RightButton)
         tryVerify(() => dialog.groupContextMenu.opened)
         compare(dialog.currentGroupId, "gE")
