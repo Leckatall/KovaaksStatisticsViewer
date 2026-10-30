@@ -57,7 +57,7 @@ wait "${S}/profileBuildProgressBar" --gone --timeout 10000
 
 start --dataset rich
 eval settingsDialog.open()
-click "${S}/text:Graph Lines"
+click "${S}/settingsNav_run"
 # A held drag: the reorder preview exists only while the button is down.
 mouse press "${S}/seriesDragHandle_1"
 mouse move "${S}/seriesDragHandle_3"

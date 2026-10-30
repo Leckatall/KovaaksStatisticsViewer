@@ -153,7 +153,6 @@ namespace {
                     QMetaObject::invokeMethod(dialog, "close");
                     QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000);
                 }
-                dialog->setProperty("currentCategory", 0);
             }
             if (auto *visualSettings = scene->root->findChild<QObject *>("visualSettings")) {
                 visualSettings->setProperty("visibleSeriesIds", scene->app->graphVm()->enabledSeriesIds());
@@ -225,7 +224,7 @@ namespace {
         }, 2000));
     }
 
-    TEST_F(DashboardUiTest, ConfigureActionsOpenGraphLinesSettingsCategory) {
+    TEST_F(DashboardUiTest, ConfigureActionsOpenTheRunGraphAtLinesAndStyle) {
         auto *menuBar = root()->property("menuBar").value<QObject *>();
         ASSERT_NE(menuBar, nullptr);
         ASSERT_TRUE(QMetaObject::invokeMethod(menuBar, "configureGraphLinesRequested"));
@@ -233,18 +232,22 @@ namespace {
         auto *dialog = root()->findChild<QObject *>("settingsDialog");
         ASSERT_NE(dialog, nullptr);
         ASSERT_TRUE(QTest::qWaitFor([&] {
-            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 1;
+            return dialog->property("visible").toBool() && dialog->property("currentPage").toString() == "run"
+                && dialog->property("currentSection").toString() == "seriesStyle"
+                && app()->settingsVm()->selectedGraph() == "run";
         }, 3000));
 
+        ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "openProfile"));
         ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
         ASSERT_TRUE(QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 3000));
-        dialog->setProperty("currentCategory", 0);
 
         auto *button = root()->findChild<QObject *>("configureGraphLinesButton");
         ASSERT_NE(button, nullptr);
         ASSERT_TRUE(QMetaObject::invokeMethod(button, "clicked"));
         EXPECT_TRUE(QTest::qWaitFor([&] {
-            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 1;
+            return dialog->property("visible").toBool() && dialog->property("currentPage").toString() == "run"
+                && dialog->property("currentSection").toString() == "seriesStyle"
+                && app()->settingsVm()->selectedGraph() == "run";
         }, 3000));
     }
 
@@ -391,15 +394,13 @@ namespace {
         auto *dialog = scene.root->findChild<QObject *>("settingsDialog");
         ASSERT_NE(dialog, nullptr);
         ASSERT_TRUE(QTest::qWaitFor([&] {
-            return dialog->property("visible").toBool() && dialog->property("currentCategory").toInt() == 2;
+            return dialog->property("visible").toBool()
+                && dialog->property("currentPage").toString() == "dailyPlaytime";
         }, 3000));
         EXPECT_FALSE(popup->property("opened").toBool());
         EXPECT_EQ(settings->selectedGraph(), "dailyPlaytime");
         EXPECT_TRUE(settings->isVisitOpen());
         EXPECT_FALSE(settings->hasPendingChanges());
-        auto *selector = findItem(dialog->property("contentItem").value<QQuickItem *>(), "graphSelector");
-        ASSERT_NE(selector, nullptr);
-        EXPECT_EQ(selector->property("currentIndex").toInt(), 1);
     }
 
     // Typing into the real Graphs page edits the visit's working copy only; Save commits it, and an
@@ -549,6 +550,116 @@ namespace {
         ASSERT_TRUE(app->graphConfigurationUseCase()->save(candidate).accepted());
 
         EXPECT_EQ(canvas->property("labelledYAxisTitle").toString(), "Renamed Axis");
+    }
+
+    TEST_F(DashboardCleanSceneTest, RenamingAnAxisInSettingsAndSavingRetitlesTheYAxis) {
+        auto *app = scene.app.get();
+        app->graphVm()->fetchData(scene.perfUrl);
+        auto *canvas = scene.canvasFor(app->graphVm());
+        ASSERT_NE(canvas, nullptr);
+        const auto lines = linesOnNamedAxes(*app);
+        ASSERT_FALSE(lines.empty());
+        canvas->setYAxisColumn(lines.front().column);
+        ASSERT_EQ(canvas->property("labelledYAxisTitle").toString(), lines.front().title);
+
+        auto *settings = app->settingsVm();
+        settings->beginVisit();
+        const auto renamed = settings->renameAxis(QString::number(lines.front().axis.value), "  Renamed  ");
+        ASSERT_TRUE(renamed["succeeded"].toBool());
+        ASSERT_TRUE(settings->save()["accepted"].toBool());
+        settings->endVisit();
+
+        EXPECT_TRUE(QTest::qWaitFor([&] {
+            return canvas->property("labelledYAxisTitle").toString() == "Renamed";
+        }, 2000)) << "axis title was '" << canvas->property("labelledYAxisTitle").toString().toStdString() << "'";
+    }
+
+    TEST_F(DashboardCleanSceneTest, ARejectedAxisNameDoesNotReachTheGraph) {
+        auto *app = scene.app.get();
+        const auto &axes = app->graphConfigurationUseCase()->current().configuration->runSeries.axes;
+        ASSERT_GE(axes.size(), 2u);
+        const auto first = axes[0];
+        const auto second = axes[1];
+
+        auto *settings = app->settingsVm();
+        settings->beginVisit();
+        const auto result = settings->renameAxis(QString::number(first.id.value),
+                                                 QString::fromStdString(second.name).toUpper());
+        EXPECT_FALSE(result["succeeded"].toBool());
+        EXPECT_FALSE(settings->save()["accepted"].toBool());
+        settings->endVisit();
+
+        const auto &committed = app->graphConfigurationUseCase()->current().configuration->runSeries.axes;
+        const auto kept = std::ranges::find(committed, first.id, &application::AxisConfig::id);
+        ASSERT_NE(kept, committed.end());
+        EXPECT_EQ(kept->name, first.name);
+    }
+
+    TEST_F(DashboardCleanSceneTest, DeletingTheShownAxisInSettingsLabelsItsFirstEnabledLine) {
+        auto *app = scene.app.get();
+        const auto before = *app->graphConfigurationUseCase()->current().configuration;
+        const auto &document = before.runSeries;
+        const auto enabled = [&](const application::SeriesId id) {
+            return std::ranges::find(document.series, id, &application::SeriesConfig::id)->presentation.enabled;
+        };
+        const auto firstVisible = std::ranges::find_if(document.series, [](const auto &s) { return s.presentation.enabled; });
+        ASSERT_NE(firstVisible, document.series.end());
+        // An axis whose first enabled line is not the graph's first visible line, so a cleared label
+        // (which falls back to that line) cannot pass for the hand-over.
+        const auto axisId = std::ranges::find_if(document.axes, [&](const auto &axis) {
+            const auto lines = application::runAxisLabelLines(document, application::RunAxisLabel{axis.id});
+            const auto first = std::ranges::find_if(lines, enabled);
+            return first != lines.end() && *first != firstVisible->id;
+        });
+        ASSERT_NE(axisId, document.axes.end());
+        const auto onAxis = application::runAxisLabelLines(document, application::RunAxisLabel{axisId->id});
+        const auto firstEnabled = std::ranges::find_if(onAxis, enabled);
+        ASSERT_NE(firstEnabled, onAxis.end());
+        const auto expectedLabel = QString::number(firstEnabled->value);
+        const auto axisKey = QString::number(axisId->id.value);
+
+        auto *settings = app->settingsVm();
+        settings->beginVisit();
+        settings->setRunAxisLabel("axis:" + axisKey);
+        ASSERT_TRUE(settings->save()["accepted"].toBool());
+        ASSERT_TRUE(settings->deleteAxis(axisKey)["succeeded"].toBool());
+        ASSERT_TRUE(settings->save()["accepted"].toBool());
+        settings->endVisit();
+
+        EXPECT_EQ(app->graphVm()->axisLabelSeriesIds(), QStringList{expectedLabel});
+        const auto &after = app->graphConfigurationUseCase()->current().configuration->runSeries;
+        for (const auto id: onAxis) {
+            const auto line = std::ranges::find(after.series, id, &application::SeriesConfig::id);
+            ASSERT_NE(line, after.series.end());
+            EXPECT_FALSE(line->yAxisId.has_value());
+        }
+    }
+
+    TEST_F(DashboardCleanSceneTest, CancellingSettingsRestoresTheSavedYAxisChoice) {
+        auto *app = scene.app.get();
+        const auto committedLabel = app->graphConfigurationUseCase()->current().configuration->runAxisLabel;
+
+        auto *settings = app->settingsVm();
+        settings->beginVisit();
+        const auto overview = settings->axisOverview();
+        const auto shown = overview["shownKey"].toString();
+        QString other;
+        for (const auto &row: overview["sharedAxes"].toList())
+            if (row.toMap()["key"].toString() != shown) other = row.toMap()["key"].toString();
+        ASSERT_FALSE(other.isEmpty());
+        const auto savedKey = settings->runAxisLabelKey();
+        settings->setRunAxisLabel(other);
+        ASSERT_EQ(settings->runAxisLabelKey(), other);
+
+        settings->revertChanges();
+
+        EXPECT_EQ(settings->runAxisLabelKey(), savedKey);
+        EXPECT_EQ(settings->axisOverview()["shownKey"].toString(), shown);
+        EXPECT_FALSE(settings->hasPendingChanges());
+        ASSERT_TRUE(settings->save()["accepted"].toBool());
+        settings->endVisit();
+
+        EXPECT_EQ(app->graphConfigurationUseCase()->current().configuration->runAxisLabel, committedLabel);
     }
 
     // A click on the history graph selects the nearest run: the history marks it, the run list's

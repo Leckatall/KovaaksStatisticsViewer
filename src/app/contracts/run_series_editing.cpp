@@ -98,6 +98,14 @@ namespace ksv::application {
         return install(document, std::move(edited), std::nullopt, id);
     }
 
+    MutationResult renameAxis(RunSeriesDocument &document, const AxisId id, std::string name) {
+        const auto found = std::ranges::find(document.axes, id, &AxisConfig::id);
+        if (found == document.axes.end()) return {{}, SeriesMutationFailureCode::UnknownAxisId};
+        auto edited = document;
+        edited.axes[static_cast<size_t>(std::distance(document.axes.begin(), found))].name = std::move(name);
+        return install(document, std::move(edited));
+    }
+
     MutationResult deleteAxis(RunSeriesDocument &document, const AxisId id) {
         const auto found = std::ranges::find(document.axes, id, &AxisConfig::id);
         if (found == document.axes.end()) return {{}, SeriesMutationFailureCode::UnknownAxisId};

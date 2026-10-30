@@ -52,6 +52,8 @@ qt_add_qml_module(ksv_ui
             qml/scenario/RunListView.qml
             qml/scenario/SortControls.qml
             qml/scenario/ScenarioRunItem.qml
+            qml/common/ActionButton.qml
+            qml/common/CommitOnFinishField.qml
             qml/common/CreationField.qml
             qml/common/GridCellBorders.qml
             qml/common/GridHeaderCell.qml
@@ -83,6 +85,9 @@ qt_add_qml_module(ksv_ui
             qml/series/FoldedChip.qml
             qml/series/KindChooser.qml
             qml/series/ExpressionEditorDialog.qml
+            qml/series/AxisNameDialog.qml
+            qml/series/AxesPanel.qml
+            qml/series/axisNames.js
             qml/shell/AboutDialog.qml
             qml/shell/DirectoryPickerRow.qml
             qml/shell/InvalidKovaaksDirBanner.qml

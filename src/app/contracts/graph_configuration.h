@@ -220,6 +220,12 @@ namespace ksv::application {
     [[nodiscard]] std::optional<RunAxisLabel> reconciledRunAxisLabel(const RunSeriesDocument &document,
                                                                      const std::optional<RunAxisLabel> &label);
 
+    // The label to keep when `deleted` is removed from `before`: unchanged unless it was that axis, which
+    // passes to the first enabled line on it, else its first line, else nothing.
+    [[nodiscard]] std::optional<RunAxisLabel> runAxisLabelAfterDeletingAxis(const RunSeriesDocument &before,
+                                                                            const std::optional<RunAxisLabel> &label,
+                                                                            AxisId deleted);
+
     // The lines drawn against `label`, in display order; empty without a label.
     [[nodiscard]] std::vector<SeriesId> runAxisLabelLines(const RunSeriesDocument &document,
                                                           const std::optional<RunAxisLabel> &label);

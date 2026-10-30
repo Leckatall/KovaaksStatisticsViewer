@@ -9,10 +9,11 @@ Pane {
     id: root
 
     required property var settingsVm
+    required property ScrollView scrollView
     property var sourceRows: settingsVm.allSeriesConfigs
     property var displayRows: []
+    property var headerFirstRow: null
     property var colorTarget: null
-    property var axisNameTarget: null
     // The options popup lives here rather than in a row: every edit republishes allSeriesConfigs,
     // which rebuilds every row delegate and would destroy a popup owned by one.
     property string optionsTargetId: ""
@@ -29,7 +30,7 @@ Pane {
     readonly property alias colorDialog: colorDialog
     readonly property alias expressionDialog: expressionDialog
     readonly property alias newAxisDialog: axisCreationDialog
-    readonly property alias newAxisNameField: newAxisNameField
+    readonly property alias newAxisNameField: axisCreationDialog.nameField
     readonly property alias optionsPopup: seriesOptionsPopup
     readonly property var axisComboModel: {
         const items = [{
@@ -42,7 +43,7 @@ Pane {
                 value: axis.id
             })
         items.push({
-            text: qsTr("+ New axis..."),
+            text: qsTr("+ New axis…"),
             value: "__new__"
         })
         return items
@@ -56,8 +57,7 @@ Pane {
     }
     function handleAxisSelection(row, value) {
         if (value === "__new__") {
-            root.axisNameTarget = row
-            axisCreationDialog.open()
+            axisCreationDialog.openFor(row.id)
             return
         }
         root.settingsVm.updateSeriesAxis(row.id, value)
@@ -96,25 +96,7 @@ Pane {
         onAccepted: if (root.colorTarget) root.settingsVm.updateComputedSeries(root.colorTarget.id, root.colorTarget.name, selectedColor, root.colorTarget.width, root.colorTarget.enabled, root.colorTarget.expression)
     }
     ExpressionEditorDialog { id: expressionDialog; settingsVm: root.settingsVm }
-    Dialog {
-        id: axisCreationDialog
-        objectName: "newAxisDialog"
-        title: qsTr("New axis")
-        standardButtons: Dialog.Ok | Dialog.Cancel
-
-        TextField {
-            id: newAxisNameField
-            objectName: "newAxisNameField"
-            placeholderText: qsTr("Axis name")
-        }
-
-        onAccepted: {
-            const result = root.settingsVm.createAxis(newAxisNameField.text)
-            if (result && result.succeeded && root.axisNameTarget)
-                root.settingsVm.updateSeriesAxis(root.axisNameTarget.id, result.createdAxisId)
-            newAxisNameField.text = ""
-        }
-    }
+    AxisNameDialog { id: axisCreationDialog; settingsVm: root.settingsVm }
 
     Popup {
         id: seriesOptionsPopup
@@ -183,78 +165,96 @@ Pane {
         }
     }
 
+    Item {
+        id: autoScroll
+        parent: root.scrollView
+        // Covers the viewport, which sits inside the ScrollView's padding.
+        x: root.scrollView.leftPadding
+        y: root.scrollView.topPadding
+        width: root.scrollView.availableWidth
+        height: root.scrollView.availableHeight
+        property int autoScrollDirection: 0
+        property real autoScrollAccumulatedDelta: 0
+        readonly property real autoScrollEdgeThreshold: 32
+        readonly property real autoScrollSpeed: 6
+        function applyAutoScrollTick() {
+            const flick = root.scrollView.contentItem as Flickable
+            const maxContentY = Math.max(0, flick.contentHeight - flick.height)
+            const next = Math.max(0, Math.min(maxContentY, flick.contentY + autoScrollDirection * autoScrollSpeed))
+            const delta = next - flick.contentY
+            flick.contentY = next
+            if (delta === 0)
+                return
+            autoScrollAccumulatedDelta += delta
+            root.dragTranslationY = root.dragRawTranslationY + autoScrollAccumulatedDelta
+            root.previewMove(root.dragOriginIndex + Math.round(root.dragTranslationY / root.dragRowHeight))
+        }
+        Timer {
+            interval: 16
+            running: autoScroll.autoScrollDirection !== 0
+            repeat: true
+            onTriggered: autoScroll.applyAutoScrollTick()
+        }
+    }
+
     ColumnLayout {
-        anchors.fill: parent
-        spacing: 8
+        width: root.availableWidth
+        spacing: 5
 
-        ScrollView {
-            id: seriesListScrollView
-            objectName: "seriesListScrollView"
+        Item {
+            id: columnHeaders
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            contentWidth: availableWidth
-
-            property int autoScrollDirection: 0
-            property real autoScrollAccumulatedDelta: 0
-            readonly property real autoScrollEdgeThreshold: 32
-            readonly property real autoScrollSpeed: 6
-
-            function applyAutoScrollTick() {
-                const flick = contentItem as Flickable
-                const maxContentY = Math.max(0, flick.contentHeight - flick.height)
-                const requestedContentY = flick.contentY + autoScrollDirection * autoScrollSpeed
-                const clampedContentY = Math.max(0, Math.min(maxContentY, requestedContentY))
-                const appliedDelta = clampedContentY - flick.contentY
-                flick.contentY = clampedContentY
-                if (appliedDelta === 0)
-                    return
-
-                autoScrollAccumulatedDelta += appliedDelta
-                root.dragTranslationY = root.dragRawTranslationY + autoScrollAccumulatedDelta
-                root.previewMove(root.dragOriginIndex + Math.round(root.dragTranslationY / root.dragRowHeight))
-            }
-
-            Timer {
-                interval: 16
-                running: seriesListScrollView.autoScrollDirection !== 0
-                repeat: true
-                onTriggered: seriesListScrollView.applyAutoScrollTick()
-            }
-
-            ColumnLayout {
-                width: seriesListScrollView.availableWidth
-                spacing: 5
-
-                Repeater {
-                    model: root.displayRows
-
-                    SeriesConfigEditorDelegate {
-                        displayRows: root.displayRows
-                        dragState: root
-                        scrollView: seriesListScrollView
-                        axisComboModel: root.axisComboModel
-                        onColorRequested: row => {
-                            root.colorTarget = row
-                            colorDialog.selectedColor = row.color
-                            colorDialog.open()
-                        }
-                        onNameUpdateRequested: (row, name) => root.settingsVm.updateComputedSeries(row.id, name, row.color, row.width, row.enabled, row.expression)
-                        onExpressionEditRequested: row => {
-                            expressionDialog.seriesId = row.id
-                            expressionDialog.seriesName = row.name
-                            expressionDialog.seriesColor = row.color
-                            expressionDialog.seriesWidth = row.width
-                            expressionDialog.seriesEnabled = row.enabled
-                            expressionDialog.open()
-                        }
-                        onAxisSelectionRequested: (row, value) => root.handleAxisSelection(row, value)
-                        onOptionsRequested: (row, anchor) => root.openSeriesOptions(row, anchor)
-                        onSeriesEnabledRequested: (row, enabled) => root.settingsVm.setSeriesEnabled(row.id, enabled)
-                        onReorderRequested: (seriesId, targetPosition) => root.settingsVm.reorderSeries(seriesId, targetPosition)
-                    }
+            implicitHeight: 20
+            readonly property var firstRow: root.headerFirstRow
+            Repeater {
+                model: [
+                    { key: "name", text: qsTr("Name"), property: "nameControl" },
+                    { key: "expression", text: qsTr("Expr."), property: "expressionControl" },
+                    { key: "axis", text: qsTr("Axis"), property: "axisControl" },
+                    { key: "more", text: qsTr("More"), property: "moreControl" },
+                    { key: "visible", text: qsTr("Visible"), property: "visibleControl" }
+                ]
+                Label {
+                    required property var modelData
+                    readonly property var target: columnHeaders.firstRow ? columnHeaders.firstRow[modelData.property] : null
+                    objectName: "seriesColumnHeader_" + modelData.key
+                    text: modelData.text
+                    Accessible.ignored: true
+                    x: target ? target.x + target.parent.x + columnHeaders.firstRow.x + (target.width - width) / 2 : 0
                 }
             }
         }
+        Repeater {
+            onItemAdded: (index, item) => { if (index === 0) root.headerFirstRow = item }
+            onItemRemoved: (index, item) => { if (root.headerFirstRow === item) root.headerFirstRow = null }
+            model: root.displayRows
+
+            SeriesConfigEditorDelegate {
+                displayRows: root.displayRows
+                dragState: root
+                scrollView: autoScroll
+                axisComboModel: root.axisComboModel
+                onColorRequested: row => {
+                    root.colorTarget = row
+                    colorDialog.selectedColor = row.color
+                    colorDialog.open()
+                }
+                onNameUpdateRequested: (row, name) => root.settingsVm.updateComputedSeries(row.id, name, row.color, row.width, row.enabled, row.expression)
+                onExpressionEditRequested: row => {
+                    expressionDialog.seriesId = row.id
+                    expressionDialog.seriesName = row.name
+                    expressionDialog.seriesColor = row.color
+                    expressionDialog.seriesWidth = row.width
+                    expressionDialog.seriesEnabled = row.enabled
+                    expressionDialog.open()
+                }
+                onAxisSelectionRequested: (row, value) => root.handleAxisSelection(row, value)
+                onOptionsRequested: (row, anchor) => root.openSeriesOptions(row, anchor)
+                onSeriesEnabledRequested: (row, enabled) => root.settingsVm.setSeriesEnabled(row.id, enabled)
+                onReorderRequested: (seriesId, targetPosition) => root.settingsVm.reorderSeries(seriesId, targetPosition)
+            }
+        }
+
         RowLayout {
             Button {
                 objectName: "addSeriesButton"
@@ -267,17 +267,6 @@ Pane {
                 text: qsTr("Restore default lines")
                 onClicked: root.settingsVm.restoreDefaultGraphLines()
             }
-        }
-        Label {
-            id: seriesDraftErrorLabel
-            Layout.fillWidth: true
-            color: Theme.error
-            objectName: "seriesDraftErrorLabel"
-            text: (root.settingsVm.issues || []).length > 0
-                  ? qsTr("Changes weren't saved because some settings are invalid. Your edits are still here; correct them and save again.")
-                  : ""
-            visible: text.length > 0
-            wrapMode: Text.WordWrap
         }
     }
 

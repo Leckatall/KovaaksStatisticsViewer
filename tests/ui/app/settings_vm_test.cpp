@@ -7,6 +7,7 @@
 #include <chrono>
 
 #include <QSignalSpy>
+#include <QMetaProperty>
 
 #include "app/contracts/expression_dsl.h"
 #include "presentation/app/settings_vm.h"
@@ -69,11 +70,89 @@ namespace {
 
         [[nodiscard]] QString lastAxisId() const { return QString::number(committedLineup().axes.back().id.value); }
 
+        [[nodiscard]] QString lineName(const std::size_t position) const {
+            return QString::fromStdString(committedLineup().series.at(position).presentation.name);
+        }
+
+        static QVariantMap sharedAxis(const SettingsViewModel &viewModel, const QString &id) {
+            for (const auto &value: viewModel.axisOverview()["sharedAxes"].toList())
+                if (value.toMap()["id"].toString() == id) return value.toMap();
+            return {};
+        }
+
+        static QStringList sharedAxisIds(const SettingsViewModel &viewModel) {
+            QStringList ids;
+            for (const auto &value: viewModel.axisOverview()["sharedAxes"].toList())
+                ids.append(value.toMap()["id"].toString());
+            return ids;
+        }
+
         static GraphConfigurationIssue windowIssue() {
             return {GraphConfigurationIssueCode::NonPositiveCount, GraphKey::DailyPlaytime, "dataRange", "",
                     "averagingWindow"};
         }
     };
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsIsAnEmptyListBeforeAnyVisit) {
+        const auto view_model = make_view_model();
+        EXPECT_TRUE(view_model->changedGraphs().isEmpty());
+        const int index = view_model->metaObject()->indexOfProperty("changedGraphs");
+        ASSERT_GE(index, 0);
+        EXPECT_STREQ(view_model->metaObject()->property(index).notifySignal().name().constData(), "changedGraphsChanged");
+    }
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsNamesPreferenceChangesAndNotifiesOnlyWhenListChanges) {
+        const auto vm = make_view_model();
+        vm->beginVisit();
+        const QSignalSpy spy(vm.get(), &SettingsViewModel::changedGraphsChanged);
+        EXPECT_TRUE(vm->setGraphMarkers("dailyPlaytime", true));
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"dailyPlaytime"}));
+        EXPECT_EQ(!vm->changedGraphs().isEmpty(), vm->hasPendingChanges());
+        vm->setGraphMarkers("dailyPlaytime", true);
+        EXPECT_EQ(spy.count(), 1);
+        vm->setGraphMarkers("dailyPlaytime", false);
+        EXPECT_TRUE(vm->changedGraphs().isEmpty());
+        EXPECT_EQ(!vm->changedGraphs().isEmpty(), vm->hasPendingChanges());
+        EXPECT_EQ(spy.count(), 2);
+    }
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsCountsRunLinesAndAxisLabel) {
+        const auto vm = make_view_model();
+        vm->beginVisit();
+        ASSERT_TRUE(vm->setSeriesEnabled(lineId(5), true)["succeeded"].toBool());
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"run"}));
+        vm->revertChanges();
+        vm->setRunAxisLabel("axis:2");
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"run"}));
+    }
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsCountsUnparsedInputsInCatalogOrder) {
+        const auto vm = make_view_model();
+        vm->beginVisit();
+        EXPECT_FALSE(vm->setGraphField("scenarioHistory", "dataRange", "", "latestRuns", "abc"));
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"scenarioHistory"}));
+        vm->renameAxis("1", "");
+        EXPECT_EQ(vm->changedGraphs(), (QStringList{"run", "scenarioHistory"}));
+        EXPECT_EQ(!vm->changedGraphs().isEmpty(), vm->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, ChangedGraphsClearsOnSaveRevertAndEndVisit) {
+        const auto vm = make_view_model();
+        vm->beginVisit();
+        vm->setGraphMarkers("dailyPlaytime", true);
+        ASSERT_EQ(vm->changedGraphs(), (QStringList{"dailyPlaytime"}));
+        ASSERT_TRUE(vm->save()["accepted"].toBool());
+        EXPECT_TRUE(vm->changedGraphs().isEmpty());
+        vm->setGraphMarkers("dailyPlaytime", false);
+        ASSERT_EQ(vm->changedGraphs(), (QStringList{"dailyPlaytime"}));
+        vm->revertChanges();
+        EXPECT_TRUE(vm->changedGraphs().isEmpty());
+        vm->setGraphMarkers("dailyPlaytime", false);
+        ASSERT_EQ(vm->changedGraphs(), (QStringList{"dailyPlaytime"}));
+        vm->endVisit();
+        EXPECT_TRUE(vm->changedGraphs().isEmpty());
+        EXPECT_FALSE(vm->hasPendingChanges());
+    }
 
     TEST_F(SettingsViewModelTest, KovaaksDirReflectsServiceValueAtConstruction) {
         fake_service->dirs = {"D:/CustomDir"};
@@ -405,6 +484,26 @@ namespace {
         EXPECT_EQ(second["code"].toString(), "unknownAxis");
     }
 
+    // The Settings sidebar marks a graph from draftIssues, so a line edit that repairs the document must
+    // clear its issue and the rejected Save's list together.
+    TEST_F(SettingsViewModelTest, AGraphLinesEditThatRepairsTheDocumentClearsItsIssues) {
+        configuration->configuration.runSeries.series.front().yAxisId = AxisId{999};
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_EQ(view_model->draftIssues().size(), 1);
+        EXPECT_EQ(view_model->draftIssues()[0].toMap()["target"].toString(), "records[0].yAxisId");
+        configuration->rejectSavesWith = {
+            {GraphConfigurationIssueCode::InvalidRunSeries, GraphKey::Run, "graphLines", "records[0].yAxisId", ""}
+        };
+        ASSERT_FALSE(view_model->save()["accepted"].toBool());
+        ASSERT_EQ(view_model->issues().size(), 1);
+
+        ASSERT_TRUE(view_model->updateSeriesAxis(lineId(0), "")["succeeded"].toBool());
+
+        EXPECT_TRUE(view_model->draftIssues().isEmpty());
+        EXPECT_TRUE(view_model->issues().isEmpty());
+    }
+
     TEST_F(SettingsViewModelTest, ASuccessfulSaveOrARevertClearsEarlierIssues) {
         configuration->rejectSavesWith = {windowIssue()};
         const auto view_model = make_view_model();
@@ -528,31 +627,360 @@ namespace {
 
     // Default lineup: enabled lines 1-4 share the Score axis and line 5 is on Accuracy; line 6 (also
     // Accuracy) and line 7 (no axis) start disabled.
-    TEST_F(SettingsViewModelTest, AxisLabelChoicesCollapseASharedAxisIntoOneEntry) {
-        const auto view_model = make_view_model();
-        EXPECT_EQ(view_model->runAxisLabelChoices(),
-                  (QVariantList{QVariantMap{{"key", "axis:1"}, {"name", "Score"}},
-                                QVariantMap{{"key", "axis:2"}, {"name", "Accuracy"}}}));
-    }
-
-    TEST_F(SettingsViewModelTest, AxisLabelChoicesListALineWithNoAxisByItsOwnName) {
+    TEST_F(SettingsViewModelTest, TheAxisOverviewListsUnusedAxesAndDisabledLines) {
         const auto view_model = make_view_model();
         view_model->beginVisit();
-        ASSERT_TRUE(view_model->setSeriesEnabled(lineId(6), true)["succeeded"].toBool());
+        const auto created = view_model->createAxis("Unused")["createdAxisId"].toString();
+        ASSERT_TRUE(view_model->setSeriesEnabled(lineId(4), false)["succeeded"].toBool());
 
-        const auto choices = view_model->runAxisLabelChoices();
-        ASSERT_EQ(choices.size(), 3);
-        EXPECT_EQ(choices[2].toMap(), (QVariantMap{{"key", "series:" + lineId(6)},
-                                                   {"name", QString::fromStdString(committedLineup().series[6].presentation.name)}}));
+        const auto overview = view_model->axisOverview();
+
+        EXPECT_EQ(sharedAxisIds(*view_model), (QStringList{"1", "2", created}));
+        const auto accuracy = sharedAxis(*view_model, "2");
+        EXPECT_EQ(accuracy["key"].toString(), "axis:2");
+        EXPECT_EQ(accuracy["name"].toString(), "Accuracy");
+        EXPECT_EQ(accuracy["lineIds"].toStringList(), (QStringList{lineId(4), lineId(5)}));
+        EXPECT_EQ(accuracy["lineNames"].toStringList(), (QStringList{lineName(4), lineName(5)}));
+        EXPECT_FALSE(accuracy["hasEnabledLine"].toBool());
+        EXPECT_TRUE(sharedAxis(*view_model, "1")["hasEnabledLine"].toBool());
+        const auto unused = sharedAxis(*view_model, created);
+        EXPECT_TRUE(unused["lineIds"].toStringList().isEmpty());
+        EXPECT_FALSE(unused["hasEnabledLine"].toBool());
+
+        const auto independent = overview["independentLines"].toList();
+        ASSERT_EQ(independent.size(), 1);
+        EXPECT_EQ(independent[0].toMap(), (QVariantMap{{"id", lineId(6)}, {"key", "series:" + lineId(6)},
+                                                       {"name", lineName(6)}, {"enabled", false}, {"shown", false}}));
     }
 
-    TEST_F(SettingsViewModelTest, AxisLabelChoicesHideAnAxisWithNoEnabledLine) {
+    TEST_F(SettingsViewModelTest, TheAxisOverviewTicksTheRowThatSuppliesLabelsWhenNothingIsChosen) {
+        ASSERT_FALSE(configuration->configuration.runAxisLabel);
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        EXPECT_EQ(view_model->axisOverview()["shownKey"].toString(), "axis:1");
+        EXPECT_TRUE(sharedAxis(*view_model, "1")["shown"].toBool());
+        EXPECT_FALSE(sharedAxis(*view_model, "2")["shown"].toBool());
+        EXPECT_EQ(view_model->runAxisLabelKey(), "");
+        EXPECT_FALSE(view_model->hasPendingChanges());
+
+        ASSERT_TRUE(view_model->setSeriesEnabled(lineId(6), true)["succeeded"].toBool());
+        view_model->setRunAxisLabel("series:" + lineId(6));
+
+        EXPECT_EQ(view_model->axisOverview()["shownKey"].toString(), "series:" + lineId(6));
+        EXPECT_TRUE(view_model->axisOverview()["independentLines"].toList().value(0).toMap()["shown"].toBool());
+        EXPECT_FALSE(sharedAxis(*view_model, "1")["shown"].toBool());
+    }
+
+    TEST_F(SettingsViewModelTest, ChoosingARowStagesTheLabelAndCancelRestoresTheSavedOne) {
+        configuration->configuration.runAxisLabel = AxisId{1};
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        view_model->setRunAxisLabel("axis:2");
+
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        EXPECT_EQ(view_model->axisOverview()["shownKey"].toString(), "axis:2");
+
+        view_model->revertChanges();
+
+        EXPECT_EQ(view_model->runAxisLabelKey(), "axis:1");
+        EXPECT_EQ(view_model->axisOverview()["shownKey"].toString(), "axis:1");
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_TRUE(configuration->saves.empty());
+    }
+
+    // ---- Axis names ---------------------------------------------------------------------------
+
+    TEST_F(SettingsViewModelTest, RenamingAnAxisTrimsItsNameAndKeepsItsLines) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        const auto result = view_model->renameAxis("1", "  Points ");
+
+        EXPECT_TRUE(result["succeeded"].toBool());
+        EXPECT_EQ(result["issue"].toString(), "");
+        EXPECT_EQ(sharedAxis(*view_model, "1")["name"].toString(), "Points");
+        for (std::size_t position = 0; position < 4; ++position)
+            EXPECT_EQ(row(*view_model, lineId(position))["yAxisId"].toString(), "1");
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_TRUE(view_model->hasPendingChanges());
+    }
+
+    // The Lines tab's axis dropdowns read allAxes, which only follows seriesConfigurationChanged.
+    TEST_F(SettingsViewModelTest, AValidAxisRenameRefreshesTheLinesAxisDropdowns) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const QSignalSpy linesSpy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
+
+        ASSERT_TRUE(view_model->renameAxis("1", "Points")["succeeded"].toBool());
+
+        EXPECT_GE(linesSpy.count(), 1);
+        const auto axes = view_model->getAllAxes();
+        ASSERT_FALSE(axes.isEmpty());
+        EXPECT_EQ(axes[0].toMap()["name"].toString(), "Points");
+    }
+
+    TEST_F(SettingsViewModelTest, ABlankAxisNameIsKeptAsPendingInputAndBlocksSave) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        const auto result = view_model->renameAxis("1", "   ");
+
+        EXPECT_FALSE(result["succeeded"].toBool());
+        EXPECT_EQ(result["issue"].toString(), "axisNameBlank");
+        const auto axis = sharedAxis(*view_model, "1");
+        EXPECT_EQ(axis["name"].toString(), "Score");
+        EXPECT_EQ(axis["nameText"].toString(), "   ");
+        EXPECT_EQ(axis["nameIssue"].toString(), "axisNameBlank");
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        ASSERT_EQ(view_model->draftIssues().size(), 1);
+        EXPECT_EQ(view_model->draftIssues()[0].toMap()["code"].toString(), "axisNameBlank");
+
+        const auto saved = view_model->save();
+
+        EXPECT_FALSE(saved["accepted"].toBool());
+        EXPECT_TRUE(configuration->saves.empty());
+        ASSERT_EQ(view_model->issues().size(), 1);
+        const auto issue = view_model->issues()[0].toMap();
+        EXPECT_EQ(issue["code"].toString(), "axisNameBlank");
+        EXPECT_EQ(issue["group"].toString(), "graphLines");
+        EXPECT_EQ(issue["target"].toString(), "axis:1");
+        EXPECT_EQ(issue["field"].toString(), "name");
+    }
+
+    TEST_F(SettingsViewModelTest, ADuplicateAxisNameIgnoresCaseAndIsRejected) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        const auto result = view_model->renameAxis("2", " score ");
+
+        EXPECT_FALSE(result["succeeded"].toBool());
+        EXPECT_EQ(result["issue"].toString(), "axisNameDuplicate");
+        EXPECT_EQ(sharedAxis(*view_model, "2")["name"].toString(), "Accuracy");
+        EXPECT_EQ(sharedAxis(*view_model, "2")["nameText"].toString(), " score ");
+        EXPECT_EQ(sharedAxis(*view_model, "2")["nameIssue"].toString(), "axisNameDuplicate");
+    }
+
+    TEST_F(SettingsViewModelTest, RenamingAnAxisToItsOwnNameIsAccepted) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        EXPECT_TRUE(view_model->renameAxis("1", "Score")["succeeded"].toBool());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+
+        EXPECT_TRUE(view_model->renameAxis("1", "score")["succeeded"].toBool());
+        EXPECT_EQ(sharedAxis(*view_model, "1")["name"].toString(), "score");
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+    }
+
+    TEST_F(SettingsViewModelTest, TypingTheOriginalNameBackClearsThePendingInput) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->renameAxis("1", "")["succeeded"].toBool());
+
+        EXPECT_TRUE(view_model->renameAxis("1", "Score")["succeeded"].toBool());
+
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_EQ(sharedAxis(*view_model, "1")["nameText"].toString(), "Score");
+        EXPECT_EQ(sharedAxis(*view_model, "1")["nameIssue"].toString(), "");
+        EXPECT_TRUE(view_model->draftIssues().isEmpty());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, APendingNameIsAppliedOnceItNoLongerClashes) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->renameAxis("2", "Score")["succeeded"].toBool());
+        ASSERT_EQ(sharedAxis(*view_model, "2")["name"].toString(), "Accuracy");
+
+        ASSERT_TRUE(view_model->renameAxis("1", "Points")["succeeded"].toBool());
+
+        EXPECT_EQ(sharedAxis(*view_model, "2")["name"].toString(), "Score");
+        EXPECT_EQ(sharedAxis(*view_model, "2")["nameIssue"].toString(), "");
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_TRUE(view_model->save()["accepted"].toBool());
+    }
+
+    // Rebuilding the Lines rows destroys an open options popup, so a name the user is still typing must
+    // only refresh the axis overview.
+    TEST_F(SettingsViewModelTest, AnAxisNameEditDoesNotRebuildTheLines) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const QSignalSpy linesSpy(view_model.get(), &SettingsViewModel::seriesConfigurationChanged);
+        const QSignalSpy overviewSpy(view_model.get(), &SettingsViewModel::axisOverviewChanged);
+
+        ASSERT_FALSE(view_model->renameAxis("1", "")["succeeded"].toBool());
+
+        EXPECT_EQ(linesSpy.count(), 0);
+        EXPECT_GE(overviewSpy.count(), 1);
+    }
+
+    TEST_F(SettingsViewModelTest, RevertingDiscardsPendingAxisNames) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->renameAxis("1", "")["succeeded"].toBool());
+
+        view_model->revertChanges();
+
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_EQ(sharedAxis(*view_model, "1")["nameText"].toString(), "Score");
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, CreatingAnAxisTrimsAndRejectsBlankOrDuplicateNames) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+
+        const auto blank = view_model->createAxis("  ");
+        const auto duplicate = view_model->createAxis("ACCURACY");
+
+        EXPECT_FALSE(blank["succeeded"].toBool());
+        EXPECT_EQ(blank["issue"].toString(), "axisNameBlank");
+        EXPECT_FALSE(duplicate["succeeded"].toBool());
+        EXPECT_EQ(duplicate["issue"].toString(), "axisNameDuplicate");
+        EXPECT_EQ(sharedAxisIds(*view_model), (QStringList{"1", "2"}));
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+
+        const auto created = view_model->createAxis(" Speed ");
+
+        EXPECT_TRUE(created["succeeded"].toBool());
+        EXPECT_EQ(created["issue"].toString(), "");
+        EXPECT_EQ(sharedAxis(*view_model, created["createdAxisId"].toString())["name"].toString(), "Speed");
+    }
+
+    TEST_F(SettingsViewModelTest, CreatingAnAxisDoesNotAssignIt) {
+        const auto view_model = make_view_model();
+        const auto linesBefore = view_model->getAllSeriesConfigs();
+        view_model->beginVisit();
+
+        const auto created = view_model->createAxis("Speed")["createdAxisId"].toString();
+
+        EXPECT_TRUE(sharedAxis(*view_model, created)["lineIds"].toStringList().isEmpty());
+        EXPECT_EQ(view_model->getAllSeriesConfigs(), linesBefore);
+    }
+
+    TEST_F(SettingsViewModelTest, DeletingAnAxisReturnsItsLinesToIndependentAndKeepsThem) {
+        const auto view_model = make_view_model();
+        const auto linesBefore = lineCount();
+        view_model->beginVisit();
+
+        EXPECT_TRUE(view_model->deleteAxis("2")["succeeded"].toBool());
+
+        EXPECT_EQ(view_model->getAllSeriesConfigs().size(), linesBefore);
+        EXPECT_EQ(row(*view_model, lineId(4))["yAxisId"].toString(), "");
+        EXPECT_EQ(row(*view_model, lineId(5))["yAxisId"].toString(), "");
+        EXPECT_EQ(sharedAxisIds(*view_model), (QStringList{"1"}));
+        QStringList independent;
+        for (const auto &line: view_model->axisOverview()["independentLines"].toList())
+            independent.append(line.toMap()["id"].toString());
+        EXPECT_EQ(independent, (QStringList{lineId(4), lineId(5), lineId(6)}));
+    }
+
+    TEST_F(SettingsViewModelTest, DeletingTheShownAxisShowsItsFirstEnabledLine) {
+        configuration->configuration.runAxisLabel = AxisId{2};
         const auto view_model = make_view_model();
         view_model->beginVisit();
         ASSERT_TRUE(view_model->setSeriesEnabled(lineId(4), false)["succeeded"].toBool());
+        ASSERT_TRUE(view_model->setSeriesEnabled(lineId(5), true)["succeeded"].toBool());
 
-        EXPECT_EQ(view_model->runAxisLabelChoices(),
-                  (QVariantList{QVariantMap{{"key", "axis:1"}, {"name", "Score"}}}));
+        ASSERT_TRUE(view_model->deleteAxis("2")["succeeded"].toBool());
+
+        EXPECT_EQ(view_model->runAxisLabelKey(), "series:" + lineId(5));
+        EXPECT_EQ(view_model->axisOverview()["shownKey"].toString(), "series:" + lineId(5));
+    }
+
+    TEST_F(SettingsViewModelTest, DeletingAnAxisDropsItsPendingName) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->renameAxis("2", "")["succeeded"].toBool());
+
+        ASSERT_TRUE(view_model->deleteAxis("2")["succeeded"].toBool());
+
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_TRUE(view_model->save()["accepted"].toBool());
+    }
+
+    TEST_F(SettingsViewModelTest, DeletingAnAxisCanUnblockAnotherPendingName) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->renameAxis("1", "accuracy")["succeeded"].toBool());
+
+        ASSERT_TRUE(view_model->deleteAxis("2")["succeeded"].toBool());
+
+        EXPECT_EQ(sharedAxis(*view_model, "1")["name"].toString(), "accuracy");
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+    }
+
+    // Axis 1's pending name only stops clashing once axis 2's pending name has been applied, which
+    // happens later in the same document-order pass.
+    TEST_F(SettingsViewModelTest, PendingNamesFreedByAnotherPendingNameAreAppliedToo) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        const auto speed = view_model->createAxis("Speed")["createdAxisId"].toString();
+        ASSERT_FALSE(view_model->renameAxis("1", "Accuracy")["succeeded"].toBool());
+        ASSERT_FALSE(view_model->renameAxis("2", "Speed")["succeeded"].toBool());
+
+        ASSERT_TRUE(view_model->renameAxis(speed, "Pace")["succeeded"].toBool());
+
+        EXPECT_EQ(sharedAxis(*view_model, "1")["name"].toString(), "Accuracy");
+        EXPECT_EQ(sharedAxis(*view_model, "2")["name"].toString(), "Speed");
+        EXPECT_EQ(sharedAxis(*view_model, speed)["name"].toString(), "Pace");
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+    }
+
+    TEST_F(SettingsViewModelTest, FixingARejectedNameClearsTheRejectedSavesIssues) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->renameAxis("1", "")["succeeded"].toBool());
+        ASSERT_FALSE(view_model->save()["accepted"].toBool());
+        ASSERT_EQ(view_model->issues().size(), 1);
+
+        ASSERT_TRUE(view_model->renameAxis("1", "Points")["succeeded"].toBool());
+
+        EXPECT_TRUE(view_model->issues().isEmpty());
+    }
+
+    // Persisted configurations may already hold case-equal names, which must stay editable.
+    TEST_F(SettingsViewModelTest, AnAxisCanTakeBackItsOwnNameWhenAnotherAxisSharesIt) {
+        configuration->configuration.runSeries.axes.at(1).name = "score";
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->renameAxis("1", "")["succeeded"].toBool());
+
+        const auto restored = view_model->renameAxis("1", " Score ");
+
+        EXPECT_TRUE(restored["succeeded"].toBool());
+        EXPECT_EQ(restored["issue"].toString(), "");
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_EQ(sharedAxis(*view_model, "1")["name"].toString(), "Score");
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, AxisEditsAreRefusedOutsideAVisitOrForAnUnknownAxis) {
+        const auto view_model = make_view_model();
+        EXPECT_FALSE(view_model->renameAxis("1", "Points")["succeeded"].toBool());
+        EXPECT_FALSE(view_model->deleteAxis("1")["succeeded"].toBool());
+
+        view_model->beginVisit();
+        EXPECT_FALSE(view_model->renameAxis("99", "Points")["succeeded"].toBool());
+        EXPECT_FALSE(view_model->renameAxis("x", "Points")["succeeded"].toBool());
+        EXPECT_FALSE(view_model->deleteAxis("99")["succeeded"].toBool());
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, RestoringDefaultLinesDropsPendingAxisNames) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_FALSE(view_model->renameAxis("1", "")["succeeded"].toBool());
+
+        ASSERT_TRUE(view_model->restoreDefaultGraphLines()["succeeded"].toBool());
+
+        EXPECT_TRUE(view_model->rawInputs().isEmpty());
+        EXPECT_EQ(sharedAxis(*view_model, "1")["nameText"].toString(), "Score");
+        EXPECT_FALSE(view_model->hasPendingChanges());
     }
 
     TEST_F(SettingsViewModelTest, ChoosingALineOnAnAxisChoosesItsAxisAndMalformedKeysAreIgnored) {

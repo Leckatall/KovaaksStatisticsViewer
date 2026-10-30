@@ -7,9 +7,28 @@ function makeFakeSettingsVm(overrides) {
     return Object.assign({
         allAxes: [],
         pendingChanges: false,
+        changedGraphs: [],
+        // The real VM starts on the run graph; a plain object cannot notify a later change.
+        selectedGraph: "run",
         issues: [],
-        runAxisLabelChoices: [],
-        runAxisLabelKey: "",
+        axisOverview: {shownKey: "", sharedAxes: [], independentLines: []},
+        createAxisCalls: [],
+        createAxisResult: {succeeded: true, createdAxisId: "9", issue: ""},
+        createAxis: function (name) {
+            this.createAxisCalls.push(name)
+            return this.createAxisResult
+        },
+        renameAxisCalls: [],
+        renameAxisResult: {succeeded: true, issue: ""},
+        renameAxis: function (id, text) {
+            this.renameAxisCalls.push([id, text])
+            return this.renameAxisResult
+        },
+        deleteAxisCalls: [],
+        deleteAxis: function (id) {
+            this.deleteAxisCalls.push(id)
+            return {succeeded: true}
+        },
         setRunAxisLabelCalls: [],
         setRunAxisLabel: function (key) { this.setRunAxisLabelCalls.push(key) },
         setSeriesEnabledCalls: 0,

@@ -11,6 +11,7 @@ ColumnLayout {
 
     // smooth, straight or pointsOnly.
     property string connection
+    property bool compact: false
     property bool markers
 
     readonly property alias connectionCombo: connectionCombo
@@ -31,7 +32,10 @@ ColumnLayout {
         ComboBox {
             id: connectionCombo
             objectName: "graphField_seriesStyle_connection"
+            implicitContentWidthPolicy: ComboBox.WidestText
             Layout.fillWidth: true
+            Layout.maximumWidth: root.compact ? Math.max(implicitWidth, comboMetrics.height * 16) : Number.POSITIVE_INFINITY
+            FontMetrics { id: comboMetrics; font: connectionCombo.font }
             model: GraphCatalog.connectionModes
             textRole: "text"
             currentIndex: root.connectionIndex()

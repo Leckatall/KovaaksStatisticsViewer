@@ -14,12 +14,20 @@ QtObject {
     property url kovaaksDir: "file:///C:/Kovaaks"
     property url profilePath: "file:///C:/Profile/profile.pb"
     property bool profileLoaded: false
+    property int maximumHiddenLeadingPoints: 10000
     property var allSeriesConfigs: []
+    function updateSeriesAxis(id, value) { record("updateSeriesAxis", [id, value]) }
+    function setSeriesHiddenLeadingPoints(id, value) { record("setSeriesHiddenLeadingPoints", [id, value]) }
+    function removeComputedSeries(id) { record("removeComputedSeries", [id]) }
+    function setSeriesEnabled(id, enabled) { record("setSeriesEnabled", [id, enabled]) }
+    function reorderSeries(id, position) { record("reorderSeries", [id, position]) }
+    function createComputedSeries(name, color, width, enabled, expression) { record("createComputedSeries", [name, color, width, enabled, expression]) }
+    function restoreDefaultGraphLines() { record("restoreDefaultGraphLines", []) }
     property var allAxes: []
     property var rawInputs: []
-    property var runAxisLabelChoices: []
-    property string runAxisLabelKey: ""
+    property var axisOverview: ({shownKey: "", sharedAxes: [], independentLines: []})
     property bool pendingChanges: false
+    property var changedGraphs: []
     property int beginVisitCalls: 0
     property int endVisitCalls: 0
     function beginVisit() { beginVisitCalls++ }
@@ -128,6 +136,8 @@ QtObject {
     // ---- Graph drafts --------------------------------------------------------------------------------
 
     property var draftIssues: []
+    // As the real one does, a rejected Save's list goes once the draft has nothing left to fix.
+    onDraftIssuesChanged: if (!draftIssues.length) issues = []
     property var calls: []
     property var graphLimits: ({
         maxRecentDays: 36500, maxLatestRuns: 1000000, maxAveragingWindow: 3650,
@@ -238,4 +248,9 @@ QtObject {
     }
 
     function resetGraph(graph) { record("resetGraph", [graph]); return true }
+
+    // ---- Graph Lines ---------------------------------------------------------------------------------
+
+    function renameAxis(id, text) { record("renameAxis", [id, text]); return {succeeded: true, issue: ""} }
+    function updateComputedSeries(id, name) { record("updateComputedSeries", [id, name]); return {succeeded: true} }
 }

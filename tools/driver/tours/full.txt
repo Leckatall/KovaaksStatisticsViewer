@@ -95,7 +95,7 @@ section settings
 start --dataset rich
 eval settingsDialog.open()
 shot --window settingsDialog --name profile-page
-click "${S}/text:Graph Lines" --shot=graph-lines-page
+click "${S}/settingsNav_run" --shot=run-graph-settings
 hover "${S}/editExpressionButton_2" --settle 1200 --shot=edit-expression-tooltip
 type " (x)" --into "${S}/seriesNameField_2" --enter --shot=dirty-draft
 click "${S}/axisCombo_2" --shot=axis-combo-open

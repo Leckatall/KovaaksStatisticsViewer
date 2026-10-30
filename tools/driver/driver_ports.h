@@ -60,7 +60,7 @@ namespace ksv::driver {
         std::shared_ptr<data::IStatsCsvParser> inner, std::shared_ptr<FaultPlan> plan);
     [[nodiscard]] std::shared_ptr<data::IBenchmarkStore> injectBenchmarkStore(
         std::shared_ptr<data::IBenchmarkStore> inner, std::shared_ptr<FaultPlan> plan);
-    // Port `seriesStore`: the graph-configuration document, Graph Lines included.
+    // Port `seriesStore`: the graph-configuration document, including the Run graph's lines and axes.
     [[nodiscard]] std::shared_ptr<data::IGraphConfigurationPersistence> injectGraphConfigurationPersistence(
         std::shared_ptr<data::IGraphConfigurationPersistence> inner, std::shared_ptr<FaultPlan> plan);
 }

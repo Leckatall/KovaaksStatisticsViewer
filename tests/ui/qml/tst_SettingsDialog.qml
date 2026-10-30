@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import QtQuick.Dialogs
+import QtCore
 import "../../../src/ui/qml/shell"
 import "ItemLookup.js" as ItemLookup
 import "TestDoubles.js" as TestDoubles
@@ -12,6 +13,13 @@ TestCase {
     width: 700
     height: 500
     visible: true
+
+    Settings { id: testSettings; category: "window" }
+    function init() {
+        testSettings.setValue("settingsDialogPage", "")
+        testSettings.setValue("settingsDialogSection", "")
+        testSettings.sync()
+    }
 
     Component {
         id: settingsDialogComponent
@@ -27,8 +35,7 @@ TestCase {
             allSeriesConfigs: [
                 {id: "1", name: "Score", color: "#009600", enabled: true, displayPosition: 0},
                 {id: "2", name: "Accuracy", color: "#00ffff", enabled: false, displayPosition: 1}
-            ],
-            runAxisLabelChoices: [{key: "series:1", name: "Score"}]
+            ]
         }, overrides))
     }
 
@@ -96,15 +103,6 @@ TestCase {
         dialog.open()
         verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never became visible after open()")
         return dialog
-    }
-
-    function selectCategory(dialog, categoryName) {
-        const item = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_" + categoryName)
-        verify(item !== null, "no category item named 'categoryItem_" + categoryName + "' found in SettingsDialog")
-        mouseClick(item)
-        // StackLayout doesn't flip the new page's `visible` synchronously
-        // with the click, so give it a render pass before inspecting it.
-        verify(waitForRendering(dialog.contentItem), "SettingsDialog contentItem never re-rendered after selecting category '" + categoryName + "'")
     }
 
     // Opens at 860x620 (bounded only by the room the main window or screen gives it), never
@@ -261,10 +259,10 @@ TestCase {
 
     function test_openProfile_selectsTheProfilePageAndShowsTheDialog() {
         const dialog = createTemporaryObject(settingsDialogComponent, testCase, {
-            settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm(), currentCategory: 2
+            settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm(), currentPage: "run"
         })
         dialog.openProfile()
-        compare(dialog.currentCategory, 0)
+        compare(dialog.currentPage, "profile")
         compare(dialog.visible, true)
     }
 
@@ -334,7 +332,7 @@ TestCase {
             sessionVm: makeFakeSessionVm()
         })
 
-        selectCategory(dialog, "Graph Lines")
+        dialog.openGraphLines()
 
         const scoreSwitch = ItemLookup.findByObjectName(dialog.contentItem, "seriesEnabledSwitch_1")
         const accuracySwitch = ItemLookup.findByObjectName(dialog.contentItem, "seriesEnabledSwitch_2")
@@ -349,24 +347,13 @@ TestCase {
             settingsVm: makeFakeSettingsVm({pendingChanges: true}),
             sessionVm: makeFakeSessionVm()
         })
-        selectCategory(dialog, "Graph Lines")
+        dialog.openGraphLines()
 
         compare(ItemLookup.findByObjectName(dialog.contentItem, "saveGraphLinesButton"), null)
         compare(ItemLookup.findByObjectName(dialog.contentItem, "discardGraphLineChangesButton"), null)
     }
 
-    function test_clickingCategoryItem_switchesCurrentCategory() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm(),
-            sessionVm: makeFakeSessionVm()
-        })
-
-        selectCategory(dialog, "Graph Lines")
-
-        compare(dialog.currentCategory, 1, "clicking the 'Graph Lines' category item should switch currentCategory to index 1")
-    }
-
-    function test_openGraphLinesOpensDialogOnGraphLinesCategory() {
+    function test_openGraphLinesOpensRunGraph() {
         const dialog = createTemporaryObject(settingsDialogComponent, testCase, {
             settingsVm: makeFakeSettingsVm(),
             sessionVm: makeFakeSessionVm()
@@ -375,7 +362,7 @@ TestCase {
         dialog.openGraphLines()
 
         tryCompare(dialog, "visible", true)
-        compare(dialog.currentCategory, dialog.graphLinesCategory)
+        compare(dialog.currentPage, "run")
     }
 
     function findInDialog(dialog, name) {
@@ -534,9 +521,9 @@ TestCase {
             sessionVm: makeFakeSessionVm()
         })
 
-        selectCategory(dialog, "Graph Lines")
-        selectCategory(dialog, "Directories")
-        selectCategory(dialog, "Graph Lines")
+        dialog.openGraphLines()
+        dialog.openProfile()
+        dialog.openGraphLines()
 
         compare(dialog.settingsVm.beginVisitCalls, 1)
         compare(dialog.settingsVm.endVisitCalls, 0)
@@ -575,73 +562,170 @@ TestCase {
         compare(dialog.settingsVm.beginVisitCalls, 2)
     }
 
-    function axisChoices() {
-        return [
-            {key: "axis:1", name: "Score"},
-            {key: "series:7", name: "Score/s (5s)"}
-        ]
+    // Names commit on editingFinished, so until the field loses focus the visit holds no change.
+    function openEditingDialog() {
+        const {dialog, vm} = openObservableDialog()
+        vm.allSeriesConfigs = [{id: "1", name: "Score", color: "#009600", width: 2, enabled: true, displayPosition: 0,
+                                hiddenLeadingPoints: 0, yAxisId: "", expression: "SCORE"}]
+        vm.axisOverview = {shownKey: "axis:1", independentLines: [], sharedAxes: [
+            {id: "1", key: "axis:1", name: "Score", nameText: "Score", nameIssue: "", lineIds: [],
+             lineNames: [], hasEnabledLine: false, shown: true}
+        ]}
+        dialog.open()
+        verify(waitForRendering(dialog.contentItem))
+        dialog.openGraphLines()
+        return {dialog: dialog, vm: vm}
     }
 
-    function test_yAxisSelectorListsTheAxisChoicesAndShowsTheWorkingCopyChoice() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelKey: "series:7", runAxisLabelChoices: axisChoices()}),
-            sessionVm: makeFakeSessionVm()
-        })
-        selectCategory(dialog, "Graph Lines")
-
-        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
-        verify(combo !== null)
-        compare(combo.count, 2)
-        compare(combo.textAt(0), "Score")
-        compare(combo.currentIndex, 1)
-        compare(combo.displayText, "Score/s (5s)")
+    function startTyping(dialog, fieldName, text) {
+        const field = findInDialog(dialog, fieldName)
+        verify(field !== null, "no field " + fieldName)
+        field.forceActiveFocus()
+        field.text = text
+        compare(dialog.activeFocusItem, field)
+        compare(dialog.settingsVm.calls.length, 0)
     }
 
-    // The label choice joins the working copy of the visit instead of being persisted by QML.
-    function test_choosingAYAxisEditsTheWorkingCopy() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelChoices: axisChoices()}),
-            sessionVm: makeFakeSessionVm()
-        })
-        selectCategory(dialog, "Graph Lines")
-        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
-
-        combo.activated(1)
-
-        compare(dialog.settingsVm.setRunAxisLabelCalls, ["series:7"])
+    function startTypingAnAxisName(dialog) {
+        dialog.jumpToSection("axes")
+        startTyping(dialog, "axisNameField_1", "Points")
     }
 
-    function test_theYAxisListHighlightsTheEntryUnderTheKeyboardOrPointer() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelChoices: axisChoices()}),
-            sessionVm: makeFakeSessionVm()
-        })
-        selectCategory(dialog, "Graph Lines")
-        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
-        combo.forceActiveFocus()
-        combo.popup.open()
-        tryCompare(combo.popup, "opened", true)
-        const list = combo.popup.contentItem
-        tryVerify(() => list.itemAtIndex(1) !== null)
+    function test_closingWhileAnAxisNameIsBeingTypedOffersToSaveIt() {
+        const {dialog, vm} = openEditingDialog()
+        startTypingAnAxisName(dialog)
 
-        keyClick(Qt.Key_Down)
+        dialog.close()
 
-        tryCompare(combo, "highlightedIndex", 1)
-        verify(list.itemAtIndex(1).highlighted)
-        verify(!list.itemAtIndex(0).highlighted)
-        combo.popup.close()
+        compare(vm.callsNamed("renameAxis").map(c => c.args), [["1", "Points"]])
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        compare(vm.endVisitCalls, 0)
     }
 
-    function test_anUnknownYAxisFallsBackToTheFirstChoice() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({runAxisLabelKey: "axis:99", runAxisLabelChoices: axisChoices()}),
+    function test_closingWhileALineNameIsBeingTypedOffersToSaveIt() {
+        const {dialog, vm} = openEditingDialog()
+        startTyping(dialog, "seriesNameField_1", "Total")
+
+        dialog.close()
+
+        compare(vm.callsNamed("updateComputedSeries").map(c => c.args), [["1", "Total"]])
+        tryCompare(dialog.discardChangesPrompt, "visible", true)
+        compare(vm.endVisitCalls, 0)
+    }
+
+    function test_saveCommitsAnAxisNameThatIsStillBeingTyped() {
+        const {dialog, vm} = openEditingDialog()
+        startTypingAnAxisName(dialog)
+        const save = findInDialog(dialog, "settingsSaveButton")
+        verify(save.enabled, "Save is offered while a name is being typed")
+
+        mouseClick(save)
+
+        compare(vm.callsNamed("renameAxis").map(c => c.args), [["1", "Points"]])
+        compare(vm.saveCalls, 1)
+    }
+
+    // A pointer press hands Save the focus, which commits the field by itself; activation that leaves
+    // focus in the field relies on Save committing it before saving.
+    function test_saveActivatedWhileTheFieldKeepsFocusCommitsItFirst() {
+        const {dialog, vm} = openEditingDialog()
+        startTypingAnAxisName(dialog)
+        const field = findInDialog(dialog, "axisNameField_1")
+
+        findInDialog(dialog, "settingsSaveButton").clicked()
+
+        compare(dialog.activeFocusItem, field)
+        compare(vm.callsNamed("renameAxis").map(c => c.args), [["1", "Points"]])
+        compare(vm.saveCalls, 1)
+        // The fake's commit marks the visit dirty and its save cleans it, so this holds only if the commit came first.
+        compare(vm.pendingChanges, false)
+    }
+
+    function test_focusingANameWithoutTypingLeavesSaveDisabled() {
+        const {dialog, vm} = openEditingDialog()
+        dialog.jumpToSection("axes")
+        const field = findInDialog(dialog, "axisNameField_1")
+
+        field.forceActiveFocus()
+
+        compare(dialog.activeFocusItem, field)
+        compare(findInDialog(dialog, "settingsSaveButton").enabled, false)
+    }
+
+    function test_typingANameBackToItsSavedTextDisablesSaveAgain() {
+        const {dialog, vm} = openEditingDialog()
+        startTypingAnAxisName(dialog)
+        const save = findInDialog(dialog, "settingsSaveButton")
+        verify(save.enabled)
+
+        findInDialog(dialog, "axisNameField_1").text = "Score"
+
+        compare(save.enabled, false)
+    }
+
+    // Graphs-page fields report every edit as it is typed, so focusing one leaves nothing to commit.
+    function test_focusingAGraphsFieldLeavesSaveDisabled() {
+        const {dialog} = openObservableDialog()
+        dialog.openGraph("dailyPlaytime")
+        verify(waitForRendering(dialog.contentItem))
+        const field = findInDialog(dialog, "graphField_dataRange_averagingWindow")
+        verify(field !== null)
+
+        field.forceActiveFocus()
+
+        tryCompare(field, "activeFocus", true)
+        compare(findInDialog(dialog, "settingsSaveButton").enabled, false)
+    }
+
+    function test_closingWithAnUntouchedNameFocusedCommitsNothing() {
+        const {dialog, vm} = openEditingDialog()
+        const field = findInDialog(dialog, "seriesNameField_1")
+        field.forceActiveFocus()
+        compare(dialog.activeFocusItem, field)
+
+        dialog.close()
+
+        compare(vm.callsNamed("updateComputedSeries").length, 0)
+        compare(vm.endVisitCalls, 1)
+        tryCompare(dialog, "visible", false)
+    }
+
+    function openDialogRejectingAnAxisName() {
+        const issue = {graph: "run", group: "graphLines", target: "axis:2", field: "name", code: "axisNameDuplicate"}
+        return openDialog({
+            settingsVm: makeFakeSettingsVm({
+                selectedGraph: "run",
+                pendingChanges: true,
+                saveResult: {accepted: false, issues: [issue]},
+                axisOverview: {shownKey: "axis:1", independentLines: [], sharedAxes: [
+                    {id: "1", key: "axis:1", name: "Score", nameText: "Score", nameIssue: "", lineIds: [],
+                     lineNames: [], hasEnabledLine: false, shown: true},
+                    {id: "2", key: "axis:2", name: "Accuracy", nameText: "score", nameIssue: "axisNameDuplicate",
+                     lineIds: [], lineNames: [], hasEnabledLine: false, shown: false}
+                ]}
+            }),
             sessionVm: makeFakeSessionVm()
         })
-        selectCategory(dialog, "Graph Lines")
+    }
 
-        const combo = ItemLookup.findByObjectName(dialog.contentItem, "yAxisColumnComboBox")
-        compare(combo.currentIndex, 0)
-        compare(combo.displayText, "Score")
+    // Focus lands before Save returns: the tab and page switches show the field synchronously.
+    function test_aSaveRejectedForAnAxisNameOpensTheAxesTabOnThatField() {
+        const dialog = openDialogRejectingAnAxisName()
+        dialog.openGraphLines()
+        mouseClick(findInDialog(dialog, "settingsSaveButton"))
+
+        compare(dialog.currentSection, "axes")
+        compare(dialog.activeFocusItem.objectName, "axisNameField_2")
+    }
+
+    function test_aSaveRejectedForAnAxisNameFromAnotherPageFocusesThatField() {
+        const dialog = openDialogRejectingAnAxisName()
+        compare(dialog.currentPage, "profile")
+
+        mouseClick(findInDialog(dialog, "settingsSaveButton"))
+
+        compare(dialog.currentPage, "run")
+        compare(dialog.activeFocusItem.objectName, "axisNameField_2")
     }
 
     // ---- Graphs category ---------------------------------------------------------------------------
@@ -658,52 +742,6 @@ TestCase {
         return {dialog: dialog, vm: vm}
     }
 
-    function test_graphsCategoryFollowsGraphLinesInTheSidebar() {
-        const {dialog} = openObservableDialog()
-        dialog.open()
-        verify(waitForRendering(dialog.contentItem))
-
-        const lines = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_Graph Lines")
-        const graphs = ItemLookup.findByObjectName(dialog.contentItem, "categoryItem_Graphs")
-        verify(graphs !== null, "no categoryItem_Graphs in the sidebar")
-        compare(graphs.text, "Graphs")
-        verify(graphs.mapToItem(dialog.contentItem, 0, 0).y > lines.mapToItem(dialog.contentItem, 0, 0).y)
-        compare(dialog.graphsCategory, 2)
-    }
-
-    function test_choosingGraphsShowsTheGraphsPageWithItsSelector() {
-        const {dialog, vm} = openObservableDialog()
-        dialog.open()
-        verify(waitForRendering(dialog.contentItem))
-
-        selectCategory(dialog, "Graphs")
-
-        compare(dialog.currentCategory, dialog.graphsCategory)
-        const page = ItemLookup.findByObjectName(dialog.contentItem, "graphsSettingsPage")
-        verify(page !== null && page.visible)
-        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
-        verify(selector !== null)
-        const names = []
-        for (let i = 0; i < selector.count; ++i) names.push(selector.textAt(i))
-        compare(names, ["Run graph", "Daily playtime", "Scenario history", "Benchmark rank history", "Benchmark playtime"])
-        compare(selector.currentIndex, 0)
-        compare(selector.Accessible.name, "Graph")
-    }
-
-    function test_theSelectorChoosesTheGraphBeingEdited() {
-        const {dialog, vm} = openObservableDialog()
-        dialog.open()
-        selectCategory(dialog, "Graphs")
-        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
-
-        selector.currentIndex = 3
-        selector.activated(3)
-
-        compare(vm.selectedGraph, "benchmarkRank")
-        vm.selectedGraph = "dailyPlaytime"
-        compare(selector.currentIndex, 1, "the selector follows the view model")
-    }
-
     function test_openGraphOpensTheVisitOnThatGraphAndFocusesTheEditor() {
         const {dialog, vm} = openObservableDialog()
 
@@ -711,24 +749,34 @@ TestCase {
         verify(waitForRendering(dialog.contentItem))
 
         compare(dialog.visible, true)
-        compare(dialog.currentCategory, dialog.graphsCategory)
+        compare(dialog.currentPage, "scenarioHistory")
         compare(vm.selectedGraph, "scenarioHistory")
         compare(vm.beginVisitCalls, 1)
-        const selector = ItemLookup.findByObjectName(dialog.contentItem, "graphSelector")
-        compare(selector.currentIndex, 2)
         const first = ItemLookup.findByObjectName(dialog.contentItem, "graphField_dataRange_range")
         tryVerify(() => first !== null && first.activeFocus, 2000, "focus moves into the graph editor")
-        verify(!selector.activeFocus)
     }
 
-    function test_openGraphWithAnUnknownKeyStillOpensTheGraphsPage() {
+    function test_openGraphWithAnUnknownKeyOpensTheRememberedPlace() {
         const {dialog, vm} = openObservableDialog()
         vm.selectedGraph = "dailyPlaytime"
 
         dialog.openGraph("nonsense")
 
-        compare(dialog.currentCategory, dialog.graphsCategory)
+        compare(dialog.currentPage, "profile")
         compare(vm.selectedGraph, "dailyPlaytime")
+    }
+
+    function test_aRememberedSectionTheGraphNoLongerOffersKeepsTheGraph() {
+        const {dialog, vm} = openObservableDialog()
+        testSettings.setValue("settingsDialogPage", "dailyPlaytime")
+        testSettings.setValue("settingsDialogSection", "noSuchSection")
+        testSettings.sync()
+
+        dialog.open()
+
+        compare(dialog.currentPage, "dailyPlaytime")
+        compare(vm.selectedGraph, "dailyPlaytime")
+        tryCompare(dialog, "currentSection", "dataRange")
     }
 
     function test_openGraphOnAnAlreadyOpenDialogSwitchesGraphWithoutEndingTheVisit() {

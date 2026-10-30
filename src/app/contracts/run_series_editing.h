@@ -65,5 +65,6 @@ namespace ksv::application {
 
     MutationResult createAxis(RunSeriesDocument &document, const CreateAxisRequest &request);
 
+    MutationResult renameAxis(RunSeriesDocument &document, AxisId id, std::string name);
     MutationResult deleteAxis(RunSeriesDocument &document, AxisId id);
 }

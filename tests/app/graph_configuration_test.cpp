@@ -388,6 +388,34 @@ namespace {
         EXPECT_FALSE(reconciledRunAxisLabel(document, AxisId{2}));
     }
 
+    TEST(RunAxisLabelAfterDeletingAxis, DeletingTheLabelledAxisPassesTheLabelToItsFirstEnabledLine) {
+        auto document = defaultRunSeriesDocument();
+        document.series[0].presentation.enabled = false;
+        EXPECT_EQ(runAxisLabelAfterDeletingAxis(document, AxisId{1}, AxisId{1}), RunAxisLabel{SeriesId{2}});
+    }
+
+    TEST(RunAxisLabelAfterDeletingAxis, DeletingTheLabelledAxisWithOnlyDisabledLinesPassesTheLabelToItsFirstLine) {
+        auto document = defaultRunSeriesDocument();
+        for (auto &config: document.series) if (config.yAxisId == AxisId{2}) config.presentation.enabled = false;
+        EXPECT_EQ(runAxisLabelAfterDeletingAxis(document, AxisId{2}, AxisId{2}), RunAxisLabel{SeriesId{5}});
+    }
+
+    TEST(RunAxisLabelAfterDeletingAxis, DeletingTheLabelledAxisWithNoLinesClearsTheLabel) {
+        auto document = defaultRunSeriesDocument();
+        for (auto &config: document.series) if (config.yAxisId == AxisId{2}) config.yAxisId = std::nullopt;
+        EXPECT_FALSE(runAxisLabelAfterDeletingAxis(document, AxisId{2}, AxisId{2}));
+    }
+
+    TEST(RunAxisLabelAfterDeletingAxis, DeletingAnotherAxisLeavesTheLabelUnchanged) {
+        const auto document = defaultRunSeriesDocument();
+        EXPECT_EQ(runAxisLabelAfterDeletingAxis(document, AxisId{1}, AxisId{2}), RunAxisLabel{AxisId{1}});
+        EXPECT_EQ(runAxisLabelAfterDeletingAxis(document, SeriesId{7}, AxisId{2}), RunAxisLabel{SeriesId{7}});
+    }
+
+    TEST(RunAxisLabelAfterDeletingAxis, NoLabelStaysNoLabel) {
+        EXPECT_FALSE(runAxisLabelAfterDeletingAxis(defaultRunSeriesDocument(), std::nullopt, AxisId{1}));
+    }
+
     TEST(GraphConfigurationDiff, NamesTheSectionsOfEachChangedGraph) {
         const auto before = defaultGraphConfiguration();
         const auto sections = [&](const GraphConfiguration &after, const GraphKey graph) {

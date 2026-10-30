@@ -9,6 +9,11 @@ Rectangle {
 
     required property var modelData
     property var row: modelData
+    readonly property alias nameControl: nameField
+    readonly property alias expressionControl: expressionButton
+    readonly property alias axisControl: axisCombo
+    readonly property alias moreControl: optionsButton
+    readonly property alias visibleControl: enabledSwitch
     required property var displayRows
     required property var dragState
     required property var scrollView
@@ -158,16 +163,18 @@ Rectangle {
         }
     }
 
-    TextField {
+    CommitOnFinishField {
         id: nameField
         objectName: "seriesNameField_" + root.row.id
         Layout.fillWidth: true
         text: root.row.name
+        committedText: root.row.name
         onEditingFinished: root.nameUpdateRequested(root.row, text)
         Component.onCompleted: cursorPosition = 0
     }
 
     Button {
+        id: expressionButton
         objectName: "editExpressionButton_" + root.row.id
         icon.source: "../icons/square-function.svg"
         icon.width: 16
@@ -192,7 +199,13 @@ Rectangle {
         Layout.minimumWidth: implicitContentWidth + (padding * 2) + 10
         Layout.preferredWidth: implicitContentWidth + (padding * 2) + 20
         currentIndex: root.axisComboIndexFor(root.row.yAxisId)
-        onActivated: root.axisSelectionRequested(root.row, root.axisComboModel[currentIndex].value)
+        onActivated: {
+            const value = root.axisComboModel[currentIndex].value
+            // Activation breaks the binding; without this a cancelled "+ New axis…" leaves the combo on that
+            // entry. Restored before emitting, because a real axis change rebuilds this row.
+            currentIndex = Qt.binding(() => root.axisComboIndexFor(root.row.yAxisId))
+            root.axisSelectionRequested(root.row, value)
+        }
     }
 
     Button {
@@ -232,6 +245,7 @@ Rectangle {
     }
 
     Switch {
+        id: enabledSwitch
         checked: root.row.enabled
         objectName: "seriesEnabledSwitch_" + root.row.id
         onToggled: root.seriesEnabledRequested(root.row, checked)

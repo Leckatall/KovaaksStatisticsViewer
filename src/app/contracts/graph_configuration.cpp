@@ -204,6 +204,21 @@ namespace ksv::application {
         return lines;
     }
 
+    std::optional<RunAxisLabel> runAxisLabelAfterDeletingAxis(const RunSeriesDocument &before,
+                                                              const std::optional<RunAxisLabel> &label,
+                                                              const AxisId deleted) {
+        const auto *axis = label ? std::get_if<AxisId>(&*label) : nullptr;
+        if (!axis || *axis != deleted) return label;
+        const SeriesConfig *first = nullptr;
+        for (const auto &config: before.series) {
+            if (config.yAxisId != deleted) continue;
+            if (config.presentation.enabled) return RunAxisLabel{config.id};
+            if (!first) first = &config;
+        }
+        if (first) return RunAxisLabel{first->id};
+        return std::nullopt;
+    }
+
     std::optional<RunAxisLabel> reconciledRunAxisLabel(const RunSeriesDocument &document,
                                                        const std::optional<RunAxisLabel> &label) {
         if (!label) return std::nullopt;

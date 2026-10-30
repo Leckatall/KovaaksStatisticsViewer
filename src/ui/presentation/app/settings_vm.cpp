@@ -102,6 +102,13 @@ namespace ksv::presentation {
 
         // Raw input is never part of a candidate, so its issue has no GraphConfigurationIssueCode.
         constexpr auto kUnparsedInputCode = "unparsedInput";
+        // The axis naming rule is presentation-only: persisted configurations may already hold blank or
+        // duplicate names, which validateGraphConfiguration must keep accepting.
+        constexpr auto kAxisNameBlankCode = "axisNameBlank";
+        constexpr auto kAxisNameDuplicateCode = "axisNameDuplicate";
+        constexpr auto kGraphLinesGroup = "graphLines";
+        constexpr auto kAxisTargetPrefix = "axis:";
+        constexpr auto kAxisNameField = "name";
 
         QString qstring(const std::string_view text) {
             return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
@@ -253,7 +260,10 @@ namespace ksv::presentation {
                 if (!self->isVisitOpen()) emit self->graphDraftsChanged();
             }
             if (self->isVisitOpen()) return;
-            if (change.runSeries || change.runAxisLabel) emit self->seriesConfigurationChanged();
+            if (change.runSeries || change.runAxisLabel) {
+                emit self->seriesConfigurationChanged();
+                emit self->axisOverviewChanged();
+            }
         });
     }
 
@@ -286,7 +296,7 @@ namespace ksv::presentation {
     QVariantMap SettingsViewModel::save() {
         if (!m_working) return {{"accepted", true}, {"issues", QVariantList{}}};
         std::vector<Issue> issues;
-        for (const auto &key: m_rawInput | std::views::keys) issues.push_back({key, kUnparsedInputCode});
+        for (const auto &[key, text]: m_rawInput) issues.push_back({key, rawInputCode(key, text)});
         if (issues.empty()) {
             for (const auto &issue: m_configuration->save(*m_working).issues) issues.push_back(toIssue(issue));
         }
@@ -316,6 +326,7 @@ namespace ksv::presentation {
         setIssues({});
         if (visitChanged) emit visitOpenChanged();
         emit seriesConfigurationChanged();
+        emit axisOverviewChanged();
         emit graphDraftsChanged();
         revalidateDraft();
         refreshPendingChanges();
@@ -326,7 +337,23 @@ namespace ksv::presentation {
     }
 
     void SettingsViewModel::refreshPendingChanges() {
-        const bool pending = hasPendingChanges();
+        QStringList changed;
+        if (m_working) {
+            const auto diff = application::diffGraphConfigurations(m_baseline, *m_working);
+            for (const auto key: application::kGraphKeys) {
+                const bool raw = std::ranges::any_of(m_rawInput, [key](const auto &entry) {
+                    return entry.first.graph == key;
+                });
+                const bool runChanged = key == application::GraphKey::Run && (diff.runSeries || diff.runAxisLabel);
+                if (raw || runChanged || diff.sectionsOf(key).any()) changed.append(graphName(key));
+            }
+        }
+        // The diff covers every field of the configuration, so the changed list is the whole answer.
+        const bool pending = !changed.isEmpty();
+        if (changed != m_changedGraphs) {
+            m_changedGraphs = std::move(changed);
+            emit changedGraphsChanged();
+        }
         if (pending == m_pendingChanges) return;
         m_pendingChanges = pending;
         emit pendingChangesChanged();
@@ -381,6 +408,10 @@ namespace ksv::presentation {
             it->second = text;
         }
         emit rawInputsChanged();
+        if (axisNameTarget(*key)) {
+            emit axisOverviewChanged();
+            syncAxisNameIssues();
+        }
         emit graphDraftsChanged();
         revalidateDraft();
         refreshPendingChanges();
@@ -391,6 +422,10 @@ namespace ksv::presentation {
         const auto key = fieldKey(graph, group, target, field);
         if (!key || m_rawInput.erase(*key) == 0) return;
         emit rawInputsChanged();
+        if (axisNameTarget(*key)) {
+            emit axisOverviewChanged();
+            syncAxisNameIssues();
+        }
         auto issues = m_issues;
         std::erase_if(issues, [&](const Issue &issue) { return issue.key == *key && issue.code == kUnparsedInputCode; });
         if (issues.size() != m_issues.size()) setIssues(std::move(issues));
@@ -644,10 +679,14 @@ namespace ksv::presentation {
 
     void SettingsViewModel::draftChanged() {
         emit graphDraftsChanged();
+        settleIssues();
+        refreshPendingChanges();
+    }
+
+    void SettingsViewModel::settleIssues() {
         revalidateDraft();
         // The list of the last rejected Save is only worth showing while something it named is still wrong.
         if (m_draftIssues.empty()) setIssues({});
-        refreshPendingChanges();
     }
 
     void SettingsViewModel::setDraftIssues(std::vector<Issue> issues) {
@@ -659,7 +698,7 @@ namespace ksv::presentation {
     void SettingsViewModel::revalidateDraft() {
         std::vector<Issue> live;
         if (m_working) {
-            for (const auto &key: m_rawInput | std::views::keys) live.push_back({key, kUnparsedInputCode});
+            for (const auto &[key, text]: m_rawInput) live.push_back({key, rawInputCode(key, text)});
             for (const auto &issue: application::validateGraphConfiguration(*m_working)) {
                 auto converted = toIssue(issue);
                 if (!m_rawInput.contains(converted.key)) live.push_back(std::move(converted));
@@ -917,25 +956,6 @@ namespace ksv::presentation {
         return result;
     }
 
-    QVariantList SettingsViewModel::runAxisLabelChoices() const {
-        QVariantList result;
-        QSet<QString> listed;
-        const auto shown = shownConfiguration();
-        const auto &document = shown->runSeries;
-        for (const auto &config: document.series) {
-            if (!config.presentation.enabled) continue;
-            const auto label = application::runAxisLabelFor(document, config.id);
-            const auto key = runAxisLabelKeyOf(label);
-            if (listed.contains(key)) continue;
-            listed.insert(key);
-            const auto *axis = std::get_if<application::AxisId>(&label);
-            const auto name = axis ? std::ranges::find(document.axes, *axis, &application::AxisConfig::id)->name
-                                   : config.presentation.name;
-            result.append(QVariantMap{{"key", key}, {"name", QString::fromStdString(name)}});
-        }
-        return result;
-    }
-
     QString SettingsViewModel::runAxisLabelKey() const {
         const auto shown = shownConfiguration();
         const auto &label = shown->runAxisLabel;
@@ -945,13 +965,174 @@ namespace ksv::presentation {
     QVariantMap SettingsViewModel::editRunSeries(
         const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit) {
         if (!m_working) return invalidMutationMap();
-        const auto result = edit(m_working->runSeries);
-        if (result.succeeded()) {
-            m_working->runAxisLabel = application::reconciledRunAxisLabel(m_working->runSeries, m_working->runAxisLabel);
-            emit seriesConfigurationChanged();
-            refreshPendingChanges();
-        }
+        const auto result = applyRunSeriesEdit(edit);
+        if (result.succeeded()) graphLinesChanged(true, false);
         return mutationMap(result);
+    }
+
+    application::MutationResult SettingsViewModel::applyRunSeriesEdit(
+        const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit) {
+        auto result = edit(m_working->runSeries);
+        if (result.succeeded())
+            m_working->runAxisLabel = application::reconciledRunAxisLabel(m_working->runSeries, m_working->runAxisLabel);
+        return result;
+    }
+
+    void SettingsViewModel::graphLinesChanged(const bool documentChanged, const bool axisNamesChanged) {
+        if (documentChanged) emit seriesConfigurationChanged();
+        if (documentChanged || axisNamesChanged) emit axisOverviewChanged();
+        if (axisNamesChanged) {
+            emit rawInputsChanged();
+            syncAxisNameIssues();
+        }
+        if (documentChanged || axisNamesChanged) settleIssues();
+        refreshPendingChanges();
+    }
+
+    QVariantMap SettingsViewModel::editAxes(
+        const std::function<application::MutationResult(application::RunSeriesDocument &)> &edit) {
+        const auto result = applyRunSeriesEdit(edit);
+        if (result.succeeded()) graphLinesChanged(true, recheckPendingAxisNames().second);
+        return mutationMap(result);
+    }
+
+    // ---- Axis names ---------------------------------------------------------------------------------
+
+    SettingsViewModel::FieldKey SettingsViewModel::axisNameKey(const application::AxisId axis) {
+        return {application::GraphKey::Run, kGraphLinesGroup, kAxisTargetPrefix + std::to_string(axis.value),
+                kAxisNameField};
+    }
+
+    std::optional<application::AxisId> SettingsViewModel::axisNameTarget(const FieldKey &key) {
+        if (key.graph != application::GraphKey::Run || key.group != kGraphLinesGroup || key.field != kAxisNameField ||
+            !key.target.starts_with(kAxisTargetPrefix))
+            return std::nullopt;
+        const auto value = parseId(QString::fromStdString(key.target.substr(std::string_view(kAxisTargetPrefix).size())));
+        if (!value) return std::nullopt;
+        return application::AxisId{*value};
+    }
+
+    std::optional<QString> SettingsViewModel::axisNameIssue(const QString &trimmed,
+                                                            const std::optional<application::AxisId> excluding) const {
+        if (trimmed.isEmpty()) return kAxisNameBlankCode;
+        const auto shown = shownConfiguration();
+        for (const auto &axis: shown->runSeries.axes) {
+            if (axis.id == excluding) continue;
+            if (QString::compare(QString::fromStdString(axis.name), trimmed, Qt::CaseInsensitive) == 0)
+                return kAxisNameDuplicateCode;
+        }
+        return std::nullopt;
+    }
+
+    QString SettingsViewModel::rawInputCode(const FieldKey &key, const QString &text) const {
+        if (const auto axis = axisNameTarget(key)) {
+            if (const auto issue = axisNameIssue(text.trimmed(), axis)) return *issue;
+        }
+        return kUnparsedInputCode;
+    }
+
+    std::pair<bool, bool> SettingsViewModel::recheckPendingAxisNames() {
+        bool documentChanged = false;
+        bool rawChanged = false;
+        const auto &axes = m_working->runSeries.axes;
+        for (auto it = m_rawInput.begin(); it != m_rawInput.end();) {
+            const auto axis = axisNameTarget(it->first);
+            if (axis && std::ranges::find(axes, *axis, &application::AxisConfig::id) == axes.end()) {
+                it = m_rawInput.erase(it);
+                rawChanged = true;
+            } else {
+                ++it;
+            }
+        }
+        // Applying one name can free another's, earlier or later in the order, so repeat until settled.
+        for (bool progressed = true; progressed;) {
+            progressed = false;
+            std::vector<application::AxisId> ids;
+            for (const auto &axis: m_working->runSeries.axes) ids.push_back(axis.id);
+            for (const auto id: ids) {
+                const auto pending = m_rawInput.find(axisNameKey(id));
+                if (pending == m_rawInput.end()) continue;
+                const auto trimmed = pending->second.trimmed();
+                if (axisNameIssue(trimmed, id)) continue;
+                m_rawInput.erase(pending);
+                rawChanged = progressed = true;
+                const auto applied = applyRunSeriesEdit([&](application::RunSeriesDocument &document) {
+                    return application::renameAxis(document, id, trimmed.toStdString());
+                });
+                documentChanged |= applied.succeeded();
+            }
+        }
+        return {documentChanged, rawChanged};
+    }
+
+    void SettingsViewModel::syncAxisNameIssues() {
+        auto issues = m_issues;
+        std::erase_if(issues, [&](const Issue &issue) {
+            return axisNameTarget(issue.key) && !m_rawInput.contains(issue.key);
+        });
+        for (auto &issue: issues) {
+            if (axisNameTarget(issue.key)) issue.code = rawInputCode(issue.key, m_rawInput.at(issue.key));
+        }
+        if (issues != m_issues) setIssues(std::move(issues));
+    }
+
+    QVariantMap SettingsViewModel::axisOverview() const {
+        const auto shown = shownConfiguration();
+        const auto &document = shown->runSeries;
+        QString shownKey;
+        if (shown->runAxisLabel) {
+            shownKey = runAxisLabelKeyOf(*shown->runAxisLabel);
+        } else if (const auto first = std::ranges::find_if(document.series, [](const application::SeriesConfig &config) {
+            return config.presentation.enabled;
+        }); first != document.series.end()) {
+            shownKey = runAxisLabelKeyOf(application::runAxisLabelFor(document, first->id));
+        }
+        const auto lineFor = [&](const application::SeriesId id) -> const application::SeriesConfig & {
+            return *std::ranges::find(document.series, id, &application::SeriesConfig::id);
+        };
+
+        QVariantList sharedAxes;
+        for (const auto &axis: document.axes) {
+            const auto key = runAxisLabelKeyOf(axis.id);
+            const auto name = QString::fromStdString(axis.name);
+            const auto pending = m_rawInput.find(axisNameKey(axis.id));
+            QStringList lineIds;
+            QStringList lineNames;
+            bool hasEnabledLine = false;
+            for (const auto id: application::runAxisLabelLines(document, application::RunAxisLabel{axis.id})) {
+                const auto &line = lineFor(id);
+                lineIds.append(QString::number(id.value));
+                lineNames.append(QString::fromStdString(line.presentation.name));
+                hasEnabledLine |= line.presentation.enabled;
+            }
+            sharedAxes.append(QVariantMap{
+                {"id", QString::number(axis.id.value)},
+                {"key", key},
+                {"name", name},
+                {"nameText", pending == m_rawInput.end() ? name : pending->second},
+                {"nameIssue", pending == m_rawInput.end() ? QString() : rawInputCode(pending->first, pending->second)},
+                {"lineIds", lineIds},
+                {"lineNames", lineNames},
+                {"hasEnabledLine", hasEnabledLine},
+                {"shown", key == shownKey},
+            });
+        }
+
+        QVariantList independentLines;
+        for (const auto &config: document.series) {
+            const auto label = application::runAxisLabelFor(document, config.id);
+            if (!std::holds_alternative<application::SeriesId>(label)) continue;
+            const auto key = runAxisLabelKeyOf(label);
+            independentLines.append(QVariantMap{
+                {"id", QString::number(config.id.value)},
+                {"key", key},
+                {"name", QString::fromStdString(config.presentation.name)},
+                {"enabled", config.presentation.enabled},
+                {"shown", key == shownKey},
+            });
+        }
+
+        return {{"shownKey", shownKey}, {"sharedAxes", sharedAxes}, {"independentLines", independentLines}};
     }
 
     QVariantMap SettingsViewModel::setSeriesEnabled(const QString &id, const bool enabled) {
@@ -1037,8 +1218,59 @@ namespace ksv::presentation {
     }
 
     QVariantMap SettingsViewModel::createAxis(const QString &name) {
-        return editRunSeries([&](application::RunSeriesDocument &document) {
-            return application::createAxis(document, {name.toStdString()});
+        const auto trimmed = name.trimmed();
+        const auto issue = m_working ? axisNameIssue(trimmed, std::nullopt) : std::nullopt;
+        auto map = m_working && !issue
+            ? editAxes([&](application::RunSeriesDocument &document) {
+                return application::createAxis(document, {trimmed.toStdString()});
+            })
+            : invalidMutationMap();
+        map["issue"] = issue.value_or(QString());
+        return map;
+    }
+
+    QVariantMap SettingsViewModel::renameAxis(const QString &id, const QString &text) {
+        const auto value = parseId(id);
+        if (!m_working || !value) return invalidMutationMap();
+        const application::AxisId axis{*value};
+        const auto &axes = m_working->runSeries.axes;
+        const auto found = std::ranges::find(axes, axis, &application::AxisConfig::id);
+        if (found == axes.end()) return invalidMutationMap();
+        const auto key = axisNameKey(axis);
+        const auto trimmed = text.trimmed();
+        // Its own stored name is always accepted, even where a persisted configuration already
+        // breaks the rule by sharing it with another axis.
+        const bool unchanged = trimmed == QString::fromStdString(found->name);
+        if (const auto issue = unchanged ? std::nullopt : axisNameIssue(trimmed, axis)) {
+            const auto [it, inserted] = m_rawInput.try_emplace(key, text);
+            const bool rawChanged = inserted || it->second != text;
+            it->second = text;
+            if (rawChanged) graphLinesChanged(false, true);
+            return {{"succeeded", false}, {"issue", *issue}};
+        }
+        bool rawChanged = m_rawInput.erase(key) > 0;
+        bool documentChanged = false;
+        if (!unchanged) {
+            documentChanged = applyRunSeriesEdit([&](application::RunSeriesDocument &document) {
+                return application::renameAxis(document, axis, trimmed.toStdString());
+            }).succeeded();
+            const auto [applied, dropped] = recheckPendingAxisNames();
+            documentChanged |= applied;
+            rawChanged |= dropped;
+        }
+        if (documentChanged || rawChanged) graphLinesChanged(documentChanged, rawChanged);
+        return {{"succeeded", true}, {"issue", QString()}};
+    }
+
+    QVariantMap SettingsViewModel::deleteAxis(const QString &id) {
+        const auto value = parseId(id);
+        if (!m_working || !value) return invalidMutationMap();
+        const application::AxisId axis{*value};
+        return editAxes([&](application::RunSeriesDocument &document) {
+            const auto label = application::runAxisLabelAfterDeletingAxis(document, m_working->runAxisLabel, axis);
+            auto deleted = application::deleteAxis(document, axis);
+            if (deleted.succeeded()) m_working->runAxisLabel = label;
+            return deleted;
         });
     }
 
@@ -1060,11 +1292,17 @@ namespace ksv::presentation {
     }
 
     QVariantMap SettingsViewModel::restoreDefaultGraphLines() {
-        return editRunSeries([&](application::RunSeriesDocument &document) {
+        if (!m_working) return invalidMutationMap();
+        const auto rawDropped = std::erase_if(m_rawInput, [](const auto &entry) {
+            return axisNameTarget(entry.first).has_value();
+        }) > 0;
+        const auto result = applyRunSeriesEdit([&](application::RunSeriesDocument &document) {
             document = application::defaultRunSeriesDocument();
             m_working->runAxisLabel.reset();
             return application::MutationResult{};
         });
+        graphLinesChanged(true, rawDropped);
+        return mutationMap(result);
     }
 
     void SettingsViewModel::setRunAxisLabel(const QString &key) {
@@ -1077,7 +1315,6 @@ namespace ksv::presentation {
         label = application::reconciledRunAxisLabel(m_working->runSeries, label);
         if (label == m_working->runAxisLabel) return;
         m_working->runAxisLabel = label;
-        emit seriesConfigurationChanged();
-        refreshPendingChanges();
+        graphLinesChanged(true, false);
     }
 }

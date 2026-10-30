@@ -175,7 +175,7 @@ Generation is deterministic: runs are seeded from their scenario and run index, 
 | `decoder` | `decode`, `decode_file` | a thrown `std::runtime_error`, as a bad `.perf` does | `decode_file`: `SessionController`'s worker thread during profile builds (startup, Rebuild Profile); the GUI thread for live imports and File > Load Performance File. `decode` is not called through the port. |
 | `csv` | `parseFile` | `std::nullopt` | as `decode_file` |
 | `benchmarkStore` | `scan`, `write`, `remove` | `DirectoryUnavailable` / `WriteFailed` | GUI thread |
-| `seriesStore` | `load`, `save` (the graph-configuration document, Graph Lines included) | `load`: the default configuration, leaving the stored document untouched; `save`: nothing is written and nothing reports it, since writes are never verified | GUI thread (`load` once, while `App` is built) |
+| `seriesStore` | `load`, `save` (the graph-configuration document, including the Run graph's lines and axes) | `load`: the default configuration, leaving the stored document untouched; `save`: nothing is written and nothing reports it, since writes are never verified | GUI thread (`load` once, while `App` is built) |
 
 | Effect | Meaning |
 |---|---|
