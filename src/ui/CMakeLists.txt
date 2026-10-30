@@ -58,6 +58,7 @@ qt_add_qml_module(ksv_ui
             qml/common/ActionButton.qml
             qml/common/CommitOnFinishField.qml
             qml/common/CreationField.qml
+            qml/common/DragHandleDots.qml
             qml/common/GridCellBorders.qml
             qml/common/GridHeaderCell.qml
             qml/common/ListScrollBar.qml

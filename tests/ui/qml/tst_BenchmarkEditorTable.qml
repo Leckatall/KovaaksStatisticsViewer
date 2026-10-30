@@ -332,14 +332,14 @@ TestCase {
         verify(table.focusCell({entryId: "a", columnKind: 2}))
         table.selectionModel.select(table.tableModel.index(table.tableModel.rowForEntry("b"), 2),
                                     ItemSelectionModel.Select)
-        const source = cellFor(table, "a", "scenario")
+        const source = rowHandle(table, "a")
         const target = cellFor(table, "empty-g2", "scenario")
         verify(source !== null && target !== null)
         const start = source.mapToItem(table, source.width / 2, source.height / 2)
         const end = target.mapToItem(table, target.width / 2, target.height / 2)
         mouseDrag(source, source.width / 2, source.height / 2,
                   end.x - start.x, end.y - start.y, Qt.LeftButton)
-        verify(dragStates.indexOf(true) !== -1, "the scenario drag handler must activate")
+        verify(dragStates.indexOf(true) !== -1, "the handle's drag handler must activate")
         verify(hoverTargets.indexOf("g2") !== -1, "the empty group's drop area must receive the drag")
         tryCompare(moves, "length", 1)
         compare(moves[0], [["a", "b"], "g2"])
@@ -672,7 +672,7 @@ TestCase {
         table.dropInsertionChanged.connect(() => {
             if (table.dropInsertion) indicators.push([table.dropInsertion.row, table.dropInsertion.above])
         })
-        const source = cellFor(table, "c", "scenario")
+        const source = rowHandle(table, "c")
         const target = cellFor(table, "a", "scenario")
         const start = source.mapToItem(table, source.width / 2, source.height / 2)
         const end = target.mapToItem(table, target.width / 2, target.height * 0.25)
@@ -682,6 +682,374 @@ TestCase {
         compare(moves[0], [["c"], "g1", "a"])
         verify(indicators.some(i => i[0] === 0 && i[1]), "the line must mark the gap above row a")
         compare(table.dropInsertion, null, "the line is gone once the drop lands")
+    }
+
+    // ---------------------------------------------------------------------------
+    // Drag selection, the row move handle and the row highlight.
+    // ---------------------------------------------------------------------------
+
+    function rowHandle(table, entryId) {
+        return ItemLookup.findByObjectName(table.identityView.contentItem, "rowHandle_" + entryId)
+    }
+
+    function centreOf(table, item) {
+        return item.mapToItem(table, item.width / 2, item.height / 2)
+    }
+
+    function pressOn(table, item) {
+        const point = centreOf(table, item)
+        mousePress(table, point.x, point.y)
+        return point
+    }
+
+    function dragPointer(table, from, to) {
+        for (const fraction of [0.25, 0.5, 1]) {
+            mouseMove(table, from.x + (to.x - from.x) * fraction, from.y + (to.y - from.y) * fraction,
+                      -1, Qt.LeftButton)
+        }
+        return to
+    }
+
+    function dragAcross(table, fromItem, toItem) {
+        const to = dragPointer(table, pressOn(table, fromItem), centreOf(table, toItem))
+        mouseRelease(table, to.x, to.y)
+    }
+
+    // Row a and b sit in Clicking / Static, c and d directly under Tracking, e in Uncategorized.
+    function fiveRowDesc() {
+        const clicking = {id: "g1", name: "Clicking"}
+        const tracking = {id: "g2", name: "Tracking"}
+        const row = (id, category, subcategory) => ({
+            entryId: id, category: category, subcategory: subcategory, name: "Scenario " + id,
+            cells: {t1: {displayText: "1"}, t2: {displayText: "2"}}
+        })
+        return {tiers: [{id: "t1", name: "Gold"}, {id: "t2", name: "Silver"}], rows: [
+            row("a", clicking, {id: "s1", name: "Static"}),
+            row("b", clicking, {id: "s1", name: "Static"}),
+            row("c", tracking),
+            row("d", tracking),
+            row("e")
+        ]}
+    }
+
+    readonly property var fiveRowGroups: ({groups: [
+        {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2},
+        {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 2},
+        {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2}
+    ]})
+
+    // Taller than its viewport, with room left in the test window below the view.
+    function scrollingTable() {
+        const rows = []
+        for (let i = 0; i < 24; ++i)
+            rows.push({entryId: "r" + i, name: "Row " + i, cells: {t1: {displayText: String(i)}}})
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: rows})
+        table.height = 320
+        tryVerify(() => table.thresholdView.height < table.thresholdView.contentHeight)
+        tryVerify(() => cellFor(table, "r1", "scenario") !== null)
+        return table
+    }
+
+    function viewportBottom(table) {
+        return table.thresholdView.mapToItem(table, 0, table.thresholdView.height).y
+    }
+
+    function viewportTop(table) {
+        return table.thresholdView.mapToItem(table, 0, 0).y
+    }
+
+    // Upward, because a flick dragging down from the top has nowhere to go and would pass unseen.
+    // The Control drag, which the range handler refuses, shows the view really does flick.
+    function test_rangeDragBeatsTheViewsOwnFlick() {
+        const table = scrollingTable()
+        const view = table.thresholdView
+        const from = pressOn(table, cellFor(table, "r5", "scenario"))
+        const to = dragPointer(table, from, centreOf(table, cellFor(table, "r3", "scenario")))
+        compare(selectedIdsOf(table), ["r3", "r4", "r5"])
+        compare(view.contentY, 0, "the drag must select, not flick the view")
+        mouseRelease(table, to.x, to.y)
+        compare(view.contentY, 0)
+
+        mousePress(table, from.x, from.y, Qt.LeftButton, Qt.ControlModifier)
+        for (const fraction of [0.25, 0.5, 1]) {
+            mouseMove(table, from.x, from.y + (to.y - from.y) * fraction, -1, Qt.LeftButton, Qt.ControlModifier)
+        }
+        mouseRelease(table, to.x, to.y, Qt.LeftButton, Qt.ControlModifier)
+        tryVerify(() => view.contentY > 0, 2000, "an unclaimed drag flicks the view")
+    }
+
+    function test_rangeDragSurvivesItsPressedRowScrollingAway() {
+        const table = scrollingTable()
+        const view = table.thresholdView
+        const from = pressOn(table, cellFor(table, "r1", "scenario"))
+        const below = dragPointer(table, from, {x: from.x, y: viewportBottom(table) + 10})
+        tryVerify(() => view.contentY >= table.rowHeight * 6, 5000)
+        tryVerify(() => cellFor(table, "r1", "scenario") === null, 2000, "the pressed row's delegate is gone")
+
+        const inside = dragPointer(table, below, {x: from.x, y: (viewportTop(table) + viewportBottom(table)) / 2})
+        tryVerify(() => {
+            const stopped = view.contentY
+            wait(100)
+            return view.contentY === stopped
+        }, 3000, "scrolling stops once the pointer leaves the edge")
+        const endRow = table.selectionModel.currentIndex.row
+        const endCell = cellFor(table, "r" + endRow, "scenario")
+        verify(endCell !== null)
+        verify(Math.abs(centreOf(table, endCell).y - inside.y) <= table.rowHeight, "the drag still tracks the pointer")
+        mouseRelease(table, inside.x, inside.y)
+
+        const expected = []
+        for (let row = 1; row <= endRow; ++row) expected.push("r" + row)
+        compare(selectedIdsOf(table), expected.sort())
+        const settled = view.contentY
+        wait(120)
+        compare(view.contentY, settled, "release ends the auto-scroll")
+    }
+
+    function test_rangeDragKeepsTrackingFromOneViewToTheOther() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const from = pressOn(table, cellFor(table, "a", "scenario"))
+        let at = dragPointer(table, from, centreOf(table, cellFor(table, "b", "t1")))
+        compare(selectedIdsOf(table), ["a", "b"])
+        at = dragPointer(table, at, centreOf(table, cellFor(table, "d", "t2")))
+        compare(selectedIdsOf(table), ["a", "b", "c", "d"])
+        verify(isCurrent(table, "d", 4), "the current cell follows the pointer into the ranks")
+        mouseRelease(table, at.x, at.y)
+        compare(table.manager.selectedEntryIds.slice().sort(), ["a", "b", "c", "d"])
+        compare(currentAnchorOf(table).tierId, "t2", "paste lands at the drag's end cell")
+
+        const back = pressOn(table, cellFor(table, "e", "t2"))
+        at = dragPointer(table, back, centreOf(table, cellFor(table, "c", "scenario")))
+        compare(selectedIdsOf(table), ["c", "d", "e"])
+        mouseRelease(table, at.x, at.y)
+    }
+
+    function test_dragLeftOfScenarioStaysOnTheScenarioColumn() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "c", "category"))
+        compare(selectedIdsOf(table), ["a", "b", "c"])
+        verify(isCurrent(table, "c", 2))
+    }
+
+    function test_dragPastTheScenarioColumnOfARanklessTableKeepsTrackingRows() {
+        const table = makeTable({tiers: [], rows: [
+            {entryId: "a", name: "Alpha", cells: {}},
+            {entryId: "b", name: "Beta", cells: {}}
+        ]})
+        const from = pressOn(table, cellFor(table, "a", "scenario"))
+        const row = centreOf(table, cellFor(table, "b", "scenario"))
+        const to = dragPointer(table, from, {x: table.identityTotalWidth + 40, y: row.y})
+        compare(selectedIdsOf(table), ["a", "b"])
+        mouseRelease(table, to.x, to.y)
+    }
+
+    function test_dragAcrossRowsSelectsThemAndHighlightsScenarioThroughTheLastRank() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "b", "scenario"))
+        compare(selectedIdsOf(table), ["a", "b"])
+        compare(table.selectionModel.selectedIndexes.length, 2, "one Scenario index per row")
+
+        for (const column of ["scenario", "t1", "t2"]) {
+            const cell = cellFor(table, "a", column)
+            verify(cell.rowHighlighted, column + " is part of the highlighted row")
+            verify(ItemLookup.findByObjectName(cell, "rowHighlightOutline").visible, column + " has the outline")
+        }
+        for (const column of ["category", "subcategory"]) {
+            const cell = cellFor(table, "a", column)
+            verify(!cell.rowHighlighted, column + " is not tinted by the row")
+            verify(!ItemLookup.findByObjectName(cell, "rowHighlightOutline").visible)
+        }
+        verify(Qt.colorEqual(cellFor(table, "a", "t2").face.color, cellFor(table, "a", "scenario").face.color),
+               "a rank of a selected row is as strong as the selected cell")
+        verify(!cellFor(table, "c", "scenario").rowHighlighted)
+    }
+
+    function test_directlySelectedGroupCellKeepsItsOwnTint() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const group = cellFor(table, "a", "category")
+        const other = cellFor(table, "c", "category")
+        mouseClick(group)
+        mouseClick(other, other.width / 2, other.height / 2, Qt.LeftButton, Qt.ControlModifier)
+        tryVerify(() => group.selected && !group.current)
+        verify(!group.rowHighlighted)
+        verify(Qt.colorEqual(group.face.color, Qt.alpha(table.palette.highlight, 0.3)))
+    }
+
+    function test_longRangePublishesOnce() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const from = pressOn(table, cellFor(table, "a", "scenario"))
+        const to = centreOf(table, cellFor(table, "e", "scenario"))
+        let publishes = 0
+        table.selectedCellAnchorsChanged.connect(() => ++publishes)
+        mouseMove(table, to.x, to.y, -1, Qt.LeftButton)
+        compare(selectedIdsOf(table), ["a", "b", "c", "d", "e"])
+        compare(publishes, 1)
+        mouseRelease(table, to.x, to.y)
+    }
+
+    function test_dragAcrossAnEmptyRowLeavesItOut() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "u", "scenario"))
+        compare(selectedIdsOf(table), ["a", "u"])
+        compare(table.selectionModel.selectedIndexes.length, 2)
+        verify(!cellFor(table, "empty-hollow", "scenario").rowHighlighted)
+        verify(!cellFor(table, "empty-gE", "t1").rowHighlighted)
+    }
+
+    function test_dragPastTheBottomEdgeScrollsAndExtendsTheSelection() {
+        const table = scrollingTable()
+        const view = table.thresholdView
+        const from = pressOn(table, cellFor(table, "r1", "t1"))
+        const below = dragPointer(table, from, {x: from.x, y: viewportBottom(table) + 10})
+        const lastTop = view.originY + view.contentHeight - view.height
+        tryCompare(view, "contentY", lastTop, 5000, "the view scrolls to its end and no further")
+        tryVerify(() => selectedIdsOf(table).indexOf("r23") !== -1, 2000, "the selection reaches the last row")
+        compare(selectedIdsOf(table).length, 23)
+
+        const above = dragPointer(table, below, {x: from.x, y: viewportTop(table) - 10})
+        tryCompare(view, "contentY", view.originY, 5000, "and back up to its start")
+        tryCompare(table.selectionModel.currentIndex, "row", 0, 2000)
+        mouseRelease(table, above.x, above.y)
+        compare(selectedIdsOf(table), ["r0", "r1"])
+    }
+
+    function test_draggingAScenarioRowsRankCellSelectsRowsAndMovesNone() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const moves = []
+        table.moveSelectionRequested.connect(ids => moves.push(ids))
+        dragAcross(table, cellFor(table, "b", "t1"), cellFor(table, "c", "t1"))
+        compare(selectedIdsOf(table), ["b", "c"])
+        verify(!table.draggingRows)
+        compare(moves, [])
+    }
+
+    function test_draggingAnEmptyRowsRankCellSelectsAndMovesNothing() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        const moves = []
+        table.moveSelectionRequested.connect(ids => moves.push(ids))
+        dragAcross(table, cellFor(table, "empty-gE", "t1"), cellFor(table, "u", "t1"))
+        compare(selectedIdsOf(table), [])
+        compare(moves, [])
+    }
+
+    function test_draggingACategoryCellStartsNoSelection() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        dragAcross(table, cellFor(table, "c", "category"), cellFor(table, "e", "t1"))
+        compare(selectedIdsOf(table), [])
+        verify(!table.selectionModel.currentIndex.valid)
+    }
+
+    function test_noRangeDragWhileAnEditorIsOpen() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        verify(table.focusCell({entryId: "a", tierId: "t1"}))
+        keyClick(Qt.Key_Return)
+        tryVerify(() => table.activeEditor !== null)
+        dragAcross(table, cellFor(table, "c", "t1"), cellFor(table, "e", "t1"))
+        compare(selectedIdsOf(table), ["a"])
+    }
+
+    function test_plainDragReplacesTheSelectionAndModifiedDragLeavesIt() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        mouseClick(cellFor(table, "e", "scenario"))
+        compare(selectedIdsOf(table), ["e"])
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "b", "scenario"))
+        compare(selectedIdsOf(table), ["a", "b"])
+
+        const from = centreOf(table, cellFor(table, "c", "scenario"))
+        const to = centreOf(table, cellFor(table, "d", "scenario"))
+        mousePress(table, from.x, from.y, Qt.LeftButton, Qt.ControlModifier)
+        mouseMove(table, to.x, to.y, -1, Qt.LeftButton, Qt.ControlModifier)
+        mouseRelease(table, to.x, to.y, Qt.LeftButton, Qt.ControlModifier)
+        compare(selectedIdsOf(table), ["a", "b"])
+    }
+
+    function test_modelResetAfterADragRestoresTheSelection() {
+        const ref = {}
+        const table = makeTable(fiveRowDesc(), fiveRowGroups, ref)
+        dragAcross(table, cellFor(table, "b", "scenario"), cellFor(table, "d", "t1"))
+        compare(selectedIdsOf(table), ["b", "c", "d"])
+
+        const reordered = fiveRowDesc()
+        reordered.rows.reverse()
+        ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(reordered))
+        tryCompare(table.selectionModel.selectedIndexes, "length", 3)
+        compare(selectedIdsOf(table), ["b", "c", "d"])
+        verify(isCurrent(table, "d", 3))
+        tryVerify(() => cellFor(table, "c", "t2") !== null && cellFor(table, "c", "t2").rowHighlighted)
+        verify(!cellFor(table, "a", "t2").rowHighlighted)
+    }
+
+    function test_handleMovesTheWholeSelectionWhenItsRowIsSelected() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const moves = []
+        table.moveSelectionRequested.connect((ids, target) => moves.push([ids.slice().sort(), target]))
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "b", "scenario"))
+        dragAcross(table, rowHandle(table, "a"), cellFor(table, "c", "category"))
+        compare(moves, [[["a", "b"], "g2"]])
+        compare(selectedIdsOf(table), ["a", "b"], "the handle drag leaves the selection alone")
+    }
+
+    function test_handleMovesJustItsOwnRowOutsideTheSelection() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const moves = []
+        table.moveSelectionRequested.connect((ids, target) => moves.push([ids, target]))
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "b", "scenario"))
+        dragAcross(table, rowHandle(table, "e"), cellFor(table, "c", "category"))
+        compare(moves, [[["e"], "g2"]])
+    }
+
+    // With the series handle's zero threshold a click would count as a drag and drop the row.
+    function test_clickingTheHandleSelectsTheRowWithoutMovingIt() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const moves = []
+        table.moveSelectionRequested.connect(ids => moves.push(ids))
+        mouseClick(rowHandle(table, "b"))
+        compare(selectedIdsOf(table), ["b"])
+        verify(!table.draggingRows)
+        compare(moves, [])
+    }
+
+    function test_handleBeatsTheRangeDragAndTheFlick() {
+        const table = scrollingTable()
+        const moves = []
+        table.moveSelectionRequested.connect(ids => moves.push(ids))
+        const from = pressOn(table, rowHandle(table, "r5"))
+        const to = dragPointer(table, from, centreOf(table, cellFor(table, "r3", "scenario")))
+        verify(table.draggingRows)
+        compare(table.thresholdView.contentY, 0)
+        compare(selectedIdsOf(table), [])
+        mouseRelease(table, to.x, to.y)
+        compare(moves, [["r5"]])
+    }
+
+    function test_handleSitsOnlyOnScenarioRowsAndPushesTheLabelRight() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        const handles = ItemLookup.findByObjectNamePrefix(table.identityView.contentItem, "rowHandle_", [])
+                        .map(item => item.objectName).sort()
+        compare(handles, ["rowHandle_a", "rowHandle_d", "rowHandle_u"])
+
+        const scenario = cellFor(table, "a", "scenario")
+        const handle = rowHandle(table, "a")
+        const label = ItemLookup.findByObjectName(scenario, "cellLabel")
+        verify(handle.mapToItem(scenario, 0, 0).x >= 0)
+        verify(label.mapToItem(scenario, 0, 0).x >= handle.mapToItem(scenario, handle.width, 0).x,
+               "the label clears the handle")
+        const dropHint = ItemLookup.findByObjectName(cellFor(table, "empty-gE", "scenario"), "cellLabel")
+        verify(dropHint.mapToItem(dropHint.parent, 0, 0).x < label.mapToItem(scenario, 0, 0).x)
+
+        const hover = handle.data.find(child => child.cursorShape === Qt.OpenHandCursor)
+        verify(hover !== undefined, "the handle offers an open hand at rest")
+    }
+
+    // The label sits past the handle, so the width that fits a name has to count it.
+    function test_scenarioContentWidthCountsTheHandle() {
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", name: "A somewhat longer scenario", cells: {}}
+        ]})
+        const label = ItemLookup.findByObjectName(cellFor(table, "a", "scenario"), "cellLabel")
+        const fits = Math.min(table.identityPreferredWidths[2], label.implicitWidth + 12 + table.rowHandleWidth)
+        verify(table.identityContentWidths[2] >= fits - 1,
+               table.identityContentWidths[2] + " is under " + fits)
     }
 
     function test_controlClickSelectsSeparateCellsAndHighlightsBothRows() {

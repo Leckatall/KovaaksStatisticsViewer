@@ -32,6 +32,7 @@ FocusScope {
     readonly property var identityHeaders: [qsTr("Category"), qsTr("Subcategory"), qsTr("Scenario")]
     readonly property string unassignedText: qsTr("⚠ Unassigned")
     readonly property string dropHintText: qsTr("+ Drop scenarios here")
+    readonly property int rowHandleWidth: 18
     property int identityContentRevision: 0
     readonly property var identityContentWidths: {
         void root.identityContentRevision
@@ -58,7 +59,7 @@ FocusScope {
             }
             const scenario = row.emptyGroup ? root.dropHintText
                            : row.scenario !== "" ? row.scenario : qsTr("Unnamed scenario")
-            widths[2] = Math.max(widths[2], plain(scenario) + 12)
+            widths[2] = Math.max(widths[2], plain(scenario) + 12 + (row.emptyGroup ? 0 : root.rowHandleWidth))
         }
         return widths.map((width, column) => Math.min(width, root.identityPreferredWidths[column]))
     }
@@ -258,6 +259,8 @@ FocusScope {
     // Whether a rank header held focus when the model reset destroyed it.
     property bool restoreHeaderFocus: false
     property var selectedCellAnchors: []
+    // Every live cell reads this for its highlight; selectedIds() would rebuild the list per cell.
+    property var selectedEntryLookup: ({})
     property var dragEntryIds: []
     property bool draggingRows: false
     property string hoverDropGroupId: ""
@@ -601,6 +604,89 @@ FocusScope {
         return root.selectedIds().indexOf(entryId) !== -1
     }
 
+    function rebuildSelectedEntryLookup() {
+        const lookup = {}
+        for (const id of root.selectedIds()) lookup[id] = true
+        root.selectedEntryLookup = lookup
+    }
+
+    // ---- Drag selection ----------------------------------------------------------------------
+
+    property int rangeAnchorRow: -1
+    property int rangeEndRow: -1
+    property point rangePointer
+    property int rangeScrollDirection: 0
+    readonly property int rangeScrollEdge: 24
+
+    // cellAtPosition() is (-1, -1) for a cell that is not laid out, and auto-scroll asks for rows
+    // before the view has loaded them.
+    function viewportCell(view, scenePoint) {
+        const local = view.mapFromItem(null, scenePoint.x, scenePoint.y)
+        const x = Math.max(0, Math.min(local.x, view.width - 1))
+        const y = Math.max(0, Math.min(local.y, view.height - 1))
+        return view.cellAtPosition(view.contentItem.mapFromItem(view, x, y))
+    }
+
+    // Falls back to the Scenario column when the point misses every rank, which also keeps rows
+    // tracking in a table with no ranks.
+    function rangeCellAtScene(scenePoint) {
+        const pastIdentity = thresholdTableView.mapFromItem(null, scenePoint.x, 0).x >= 0
+        const rank = pastIdentity ? root.viewportCell(thresholdTableView, scenePoint) : null
+        const cell = rank && rank.x >= root.thresholdKind ? rank : root.viewportCell(identityTableView, scenePoint)
+        return Qt.point(Math.max(cell.x, 2), cell.y)
+    }
+
+    function beginRangeDrag(view, pressPoint, scenePoint) {
+        const local = view.contentItem.mapFromItem(null, pressPoint.x, pressPoint.y)
+        const cell = view.cellAtPosition(local)
+        if (cell.x < 2 || cell.y < 0 || !root.tableModel.rowInfo(cell.y).entryId) return
+        root.rangeAnchorRow = cell.y
+        view.forceActiveFocus()
+        root.trackRangeDrag(scenePoint)
+    }
+
+    function trackRangeDrag(scenePoint) {
+        if (root.rangeAnchorRow < 0) return
+        root.rangePointer = scenePoint
+        const y = thresholdTableView.mapFromItem(null, scenePoint.x, scenePoint.y).y
+        root.rangeScrollDirection = y < root.rangeScrollEdge ? -1
+            : y > thresholdTableView.height - root.rangeScrollEdge ? 1 : 0
+        root.extendRangeDrag()
+    }
+
+    // Selects only each row's Scenario index, because rowHighlighted paints the row. flags() drops
+    // empty rows. restoringSelection holds back the per-row publishing.
+    function extendRangeDrag() {
+        const cell = root.rangeCellAtScene(root.rangePointer)
+        if (cell.y < 0) return
+        const model = root.tableModel
+        if (cell.y !== root.rangeEndRow) {
+            root.rangeEndRow = cell.y
+            root.restoringSelection = true
+            selection.clearSelection()
+            for (let r = Math.min(root.rangeAnchorRow, cell.y); r <= Math.max(root.rangeAnchorRow, cell.y); ++r)
+                selection.select(model.index(r, 2), ItemSelectionModel.Select)
+            root.restoringSelection = false
+            root.rebuildSelectedEntryLookup()
+            root.publishSelection()
+        }
+        selection.setCurrentIndex(model.index(cell.y, cell.x), ItemSelectionModel.NoUpdate)
+    }
+
+    function stepRangeScroll() {
+        const view = thresholdTableView
+        const last = Math.max(view.originY, view.originY + view.contentHeight - view.height)
+        const next = view.contentY + root.rangeScrollDirection * root.rowHeight / 2
+        view.contentY = Math.max(view.originY, Math.min(last, next))
+        root.extendRangeDrag()
+    }
+
+    function endRangeDrag() {
+        root.rangeAnchorRow = -1
+        root.rangeEndRow = -1
+        root.rangeScrollDirection = 0
+    }
+
     function canDropOn(groupId) {
         if (groupId === "") return true
         const groups = root.manager && root.manager.groups ? root.manager.groups : []
@@ -730,6 +816,7 @@ FocusScope {
         if (index.row !== current.row || index.column !== current.column)
             selection.setCurrentIndex(index, ItemSelectionModel.NoUpdate)
         root.restoringSelection = false
+        root.rebuildSelectedEntryLookup()
 
         if (root.focusedTierId !== "" && model.columnForTier(root.focusedTierId) < 0) {
             root.focusedTierId = ""
@@ -745,6 +832,7 @@ FocusScope {
         function onDataChanged() { root.refreshCurrentRow() }
         function onModelAboutToBeReset() {
             root.restoringSelection = true
+            root.endRangeDrag()
             const header = root.headerFocused ? root.rankHeaderItem(root.focusedTierId) : null
             root.restoreHeaderFocus = header !== null && header.activeFocus
         }
@@ -765,6 +853,13 @@ FocusScope {
         onTriggered: root.pendingScenarioEdit = ""
     }
 
+    Timer {
+        interval: 40
+        repeat: true
+        running: root.rangeScrollDirection !== 0
+        onTriggered: root.stepRangeScroll()
+    }
+
     Connections {
         target: identityTableView
         function onBottomRowChanged() { root.runPendingScenarioEdit() }
@@ -776,7 +871,27 @@ FocusScope {
         id: selection
         model: root.tableModel
         onCurrentChanged: if (!root.redirectCoveredCurrent()) root.publishCurrent()
-        onSelectionChanged: root.publishSelection()
+        // Whoever sets restoringSelection rebuilds the lookup once when it is done.
+        onSelectionChanged: {
+            if (root.restoringSelection) return
+            root.rebuildSelectedEntryLookup()
+            root.publishSelection()
+        }
+    }
+
+    // One per view, on its contentItem: auto-scroll recycles the delegate under the drag, which
+    // would end a drag held by the delegate.
+    component RangeDragHandler: DragHandler {
+        id: rangeDrag
+        required property TableView view
+        target: null
+        enabled: root.activeEditor === null
+        acceptedModifiers: Qt.NoModifier
+        onActiveChanged: {
+            if (active) root.beginRangeDrag(rangeDrag.view, rangeDrag.centroid.scenePressPosition, rangeDrag.centroid.scenePosition)
+            else root.endRangeDrag()
+        }
+        onCentroidChanged: if (active) root.trackRangeDrag(rangeDrag.centroid.scenePosition)
     }
 
     // A labelled "+ Add ..." control that extends the table. It keeps keyboard focus (Tab) and
@@ -830,7 +945,8 @@ FocusScope {
         readonly property bool dropHovered: root.hoverDropGroupId !== ""
                                             && (root.hoverDropGroupId === emptyGroupId
                                                 || (isGroup && root.hoverDropGroupId === groupId))
-        readonly property bool rowHighlighted: root.selectionHasEntry(entryId)
+        readonly property bool rowHighlighted: columnKind >= 2 && root.selectedEntryLookup[entryId] === true
+        readonly property bool hasRowHandle: columnKind === 2 && !emptyRow
         readonly property string groupId: columnKind === 0 ? categoryId : columnKind === 1 ? subcategoryId : ""
         readonly property int spanStart: columnKind === 0 ? categorySpanStart : subcategorySpanStart
         readonly property int spanLength: columnKind === 0 ? categorySpanLength : subcategorySpanLength
@@ -891,9 +1007,8 @@ FocusScope {
             width: tableCell.spansBoth ? root.identityWidths[0] + root.identityWidths[1] : tableCell.width
             height: tableCell.height
             color: tableCell.current ? Qt.alpha(palette.highlight, 0.48)
-                 : tableCell.selected ? Qt.alpha(palette.highlight, 0.3)
+                 : tableCell.selected || tableCell.rowHighlighted ? Qt.alpha(palette.highlight, 0.3)
                  : tableCell.unassignedCell ? Qt.alpha(Theme.warning, 0.2)
-                 : tableCell.rowHighlighted ? Qt.alpha(palette.highlight, 0.14)
                  : tableCell.dropHovered ? Qt.alpha(palette.highlight, 0.45)
                  : tableCell.isGroup && tableCell.groupId !== "" ? Qt.alpha(tableCell.groupColor, Theme.groupTintAlpha)
                  : palette.base
@@ -905,6 +1020,13 @@ FocusScope {
                 anchors.fill: parent
                 color: "transparent"
                 border.color: Theme.warning
+            }
+            Rectangle {
+                objectName: "rowHighlightOutline"
+                visible: tableCell.rowHighlighted
+                anchors.fill: parent
+                color: "transparent"
+                border.color: tableCell.palette.highlight
             }
             Rectangle {
                 objectName: "issueMarker"
@@ -929,7 +1051,7 @@ FocusScope {
             Label {
                 objectName: "cellLabel"
                 anchors.fill: parent
-                anchors.leftMargin: 6
+                anchors.leftMargin: tableCell.hasRowHandle ? root.rowHandleWidth + 6 : 6
                 anchors.rightMargin: groupSwatch.visible ? groupSwatch.width + (addSubcategoryPlus.visible ? 34 : 10) : 6
                 visible: !tableCell.editing && !tableCell.addingSubcategory
                 verticalAlignment: Text.AlignVCenter
@@ -988,20 +1110,43 @@ FocusScope {
                 onDone: tableCell.addingSubcategory = false
             }
 
-            DragHandler {
-                id: rowDrag
-                target: null
-                enabled: tableCell.columnKind >= 2 && !tableCell.emptyRow && !tableCell.editing
-                onActiveChanged: {
-                    if (active) root.beginRowDrag(tableCell.entryId)
-                    else if (root.draggingRows) {
-                        root.dropAtScene(rowDrag.centroid.scenePosition)
-                        root.draggingRows = false
-                        root.dragEntryIds = []
-                        root.dropInsertion = null
+            Loader {
+                active: tableCell.hasRowHandle
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: root.rowHandleWidth
+                sourceComponent: Item {
+                    objectName: "rowHandle_" + tableCell.entryId
+
+                    DragHandleDots {
+                        anchors.centerIn: parent
+                    }
+
+                    HoverHandler {
+                        cursorShape: Qt.OpenHandCursor
+                    }
+
+                    DragHandler {
+                        id: rowDrag
+                        target: null
+                        enabled: !tableCell.editing
+                        // Unlike the series handle, keeps the default threshold: at 0 a click on
+                        // the handle would count as a drag and drop the row.
+                        grabPermissions: PointerHandler.CanTakeOverFromAnything
+                        cursorShape: Qt.ClosedHandCursor
+                        onActiveChanged: {
+                            if (active) root.beginRowDrag(tableCell.entryId)
+                            else if (root.draggingRows) {
+                                root.dropAtScene(rowDrag.centroid.scenePosition)
+                                root.draggingRows = false
+                                root.dragEntryIds = []
+                                root.dropInsertion = null
+                            }
+                        }
+                        onTranslationChanged: if (active) root.hoverAtScene(rowDrag.centroid.scenePosition)
                     }
                 }
-                onTranslationChanged: if (active) root.hoverAtScene(rowDrag.centroid.scenePosition)
             }
 
             TapHandler {
@@ -1095,6 +1240,8 @@ FocusScope {
                     columnWidthProvider: (column) => column < root.thresholdKind ? root.identityWidths[column] : 0
                     rowHeightProvider: () => root.rowHeight
                     delegate: TableCell {}
+
+                    RangeDragHandler { view: identityTableView }
 
                     onActiveFocusChanged: if (activeFocus) root.headerFocused = false
                     Keys.onPressed: (event) => root.handleCommandKey(event)
@@ -1261,6 +1408,9 @@ FocusScope {
                             onLayoutChanged: root.restoreRankScrollAfterReset()
                             delegate: TableCell {}
                             ScrollBar.vertical: ScrollBar {}
+
+                            RangeDragHandler { view: thresholdTableView }
+
                             // Always shown while the ranks overflow, under the body rather than over its last
                             // row, so a rank column cut off at the edge is visibly reachable by scrolling.
                             ScrollBar.horizontal: ScrollBar {
