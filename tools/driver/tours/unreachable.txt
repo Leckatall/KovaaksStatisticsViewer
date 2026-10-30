@@ -1,4 +1,4 @@
-# Every state the 2026-10-11 sweep could not reach, each reached with general
+# Faults and transient states, reached with general
 # session arguments (--setting, --profile-spec, --overlay, --inject, put/rm/edit),
 # held gestures (mouse press/move/release) and stable dialog keys; none of them
 # has driver code of its own. Data files live in tools/driver/tours/unreachable/.
@@ -52,6 +52,7 @@ start --dataset fixtures --inject decoder=delay:300
 eval settingsDialog.open()
 click "${S}/generateProfileButton" --settle 50
 click "win:rebuildProfilePrompt/text:OK" --settle 50
+wait "${S}/profileBuildProgressBar"
 shot --window settingsDialog --name rebuild-in-progress
 wait "${S}/profileBuildProgressBar" --gone --timeout 10000
 
@@ -61,6 +62,7 @@ click "${S}/settingsNav_run"
 # A held drag: the reorder preview exists only while the button is down.
 mouse press "${S}/seriesDragHandle_1"
 mouse move "${S}/seriesDragHandle_3"
+wait "${S}/seriesConfigDraftPanel" --prop draggedSeriesId --equals '"1"'
 shot --window settingsDialog --name series-drag-preview
 mouse release
 
@@ -76,8 +78,10 @@ shot --window benchmarkManagerDialog --name resolution-write-failed
 
 # Held row drag: drop insertion line and the Move to Uncategorized zone. The
 # release lands outside the table, so nothing moves.
-mouse press "${M}/cell_entry-gallery-pasu_scenario"
-mouse move "${M}/cell_entry-gallery-flyts_scenario"
+mouse press "${M}/identityView > cell_entry-gallery-pasu_scenario"
+mouse move "${M}/identityView > cell_entry-gallery-flyts_scenario"
+wait "${M}/editorTable" --prop draggingRows --equals true
+wait "${M}/uncategorizedDropZone"
 shot --window benchmarkManagerDialog --name row-drag-drop-line
 mouse release --at 5 5
 
@@ -88,14 +92,13 @@ shot --window benchmarkManagerDialog --name relocation-prompt
 click "${M}/subcategoryRelocationPrompt > text:Cancel"
 
 # A threshold that is not a number.
-dblclick "${M}/cell_entry-gallery-primary_iron"
+dblclick "${M}/thresholdView > cell_entry-gallery-primary_iron"
 type abc --enter
 shot --window benchmarkManagerDialog --name normalization-warning
 
-# Saving: the retrospective prompt, then the injected write failure.
+# Saving goes directly to the store; this session injects a write failure.
 click "${M}/saveButton"
-shot --window retrospectivePrompt --with-context --name retrospective-prompt
-click "win:retrospectivePrompt/text:Save"
+wait --expr "benchmarkManagerDialog.statusIsError && benchmarkManagerVm.dirty"
 shot --window benchmarkManagerDialog --name save-failed
 
 # Closing with unsaved changes; the prompt is keyed by its MessageDialog.

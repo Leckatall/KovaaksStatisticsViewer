@@ -1,10 +1,10 @@
-# The 2026-10-11 full-state sweep as a repeatable tour: every state the sweep
-# reached by hand, with named shots grouped by area. The states it could not
-# reach are in unreachable.txt.
+# Main screens, graph controls and settings, with named shots grouped by area.
+# Faults and held gestures are in unreachable.txt.
 #
 #   uv run python scripts/ui_driver.py tour full --report
 set M=win:benchmarkManagerDialog
 set S=win:settingsDialog
+options --fail-on-warnings
 
 # ---- Scenarios -----------------------------------------------------------------
 section scenarios
@@ -24,22 +24,30 @@ type "" --into scenarioSearchField --clear
 click scenarioSortCombo --shot=sort-combo-open
 key Escape
 hover scenarioSortDirectionButton --settle 1200 --shot=sort-direction-tooltip
-click "text:View"
-click "text:Scenario Graph" --shot=run-graph-hidden
-click "text:View"
-click "text:Scenario Graph"
-click "text:View"
+click "type:MenuBarItem & text:View"
+click "text:Graphs"
+click graphVisibility_run
+wait --expr "!visualSettingsManager.scenarioGraphVisible"
+shot --name run-graph-hidden
+click "type:MenuBarItem & text:View"
+click "text:Graphs"
+click graphVisibility_run
+click "type:MenuBarItem & text:View"
 click "text:Graph Line Toggles" --shot=line-toggles-hidden
-click "text:View"
+click "type:MenuBarItem & text:View"
 click "text:Graph Line Toggles"
-click "text:View"
+click "type:MenuBarItem & text:View"
 click "text:Selection Panel"
-click "text:View"
-click "text:Playtime Graph" --shot=selection-and-playtime-hidden
-click "text:View"
+click "type:MenuBarItem & text:View"
+click "text:Graphs"
+click graphVisibility_dailyPlaytime
+wait --expr "!visualSettingsManager.playtimeGraphVisible && !visualSettingsManager.selectionPanelVisible"
+shot --name selection-and-playtime-hidden
+click "type:MenuBarItem & text:View"
 click "text:Selection Panel"
-click "text:View"
-click "text:Playtime Graph"
+click "type:MenuBarItem & text:View"
+click "text:Graphs"
+click graphVisibility_dailyPlaytime
 click "text:Help"
 click "text:About" --shot=about-dialog
 key Escape
@@ -48,8 +56,12 @@ key Escape
 section menus
 click "text:File" --shot=file
 key Escape
-click "text:View" --shot=view
+click "type:MenuBarItem & text:View" --shot=view
+click "text:Graphs"
+wait graphVisibility_benchmarkPlaytime
+shot --name view-graphs-submenu
 hover "text:Scenario Graph Lines" --settle 400 --shot=view-graph-lines-submenu
+hover "text:Scenario History Lines" --settle 400 --shot=view-history-lines-submenu
 hover "text:Selection Panel Sections" --settle 400 --shot=view-selection-sections-submenu
 key Escape
 key Escape
@@ -75,6 +87,60 @@ resize 960x700
 shot --name many-tiers-960x700
 resize 1280x800
 
+# ---- Quick graph settings ------------------------------------------------------
+section graph-controls
+start --dataset rich
+click graphGear_run
+wait graphQuickClose_run
+shot --name run-quick-settings
+click graphField_seriesStyle_connection
+key End
+key Return
+wait graphField_seriesStyle_markers --prop enabled --equals false
+shot --name points-only-markers
+key Escape
+click graphGear_dailyPlaytime
+wait graphQuickClose_dailyPlaytime
+shot --name daily-playtime-quick-settings
+type 0 --into graphField_dataRange_averagingWindow --clear
+wait graphField_dataRange_averagingWindow_error
+shot --name quick-settings-invalid-window
+type 7 --into graphField_dataRange_averagingWindow --clear
+wait graphField_dataRange_averagingWindow_error --gone
+key Escape
+click graphGear_scenarioHistory
+wait graphQuickClose_scenarioHistory
+shot --name scenario-history-quick-settings
+type 0 --into graphField_dataRange_latestRuns --clear
+wait graphField_dataRange_latestRuns_error
+shot --name quick-settings-invalid-run-count
+type 25 --into graphField_dataRange_latestRuns --clear
+wait graphField_dataRange_latestRuns_error --gone
+click graphMoreSettings_scenarioHistory
+wait --expr "settingsDialog.visible && settingsDialog.currentPage === 'scenarioHistory'"
+shot --window settingsDialog --name more-settings-navigation
+click "${S}/settingsCancelButton"
+click graphGear_run
+click graphQuickHide_run
+wait graphHiddenUndo
+shot --name quick-hide-notice
+click graphHiddenUndo
+wait graphGear_run
+click benchmarksTab
+click graphGear_benchmarkRank
+wait graphQuickClose_benchmarkRank
+shot --name benchmark-rank-quick-settings
+key Escape
+click graphGear_benchmarkRecentRank
+wait graphQuickClose_benchmarkRecentRank
+shot --name benchmark-recent-rank-quick-settings
+key Escape
+scroll benchmarkWorkspaceScroll --dy 5 --settle 800
+click graphGear_benchmarkPlaytime
+wait graphQuickClose_benchmarkPlaytime
+shot --name benchmark-playtime-quick-settings
+key Escape
+
 # ---- Datasets ------------------------------------------------------------------
 section datasets
 start --dataset single
@@ -93,7 +159,7 @@ shot --name first-run-welcome
 # ---- Settings ------------------------------------------------------------------
 section settings
 start --dataset rich
-eval settingsDialog.open()
+eval settingsDialog.openProfile()
 shot --window settingsDialog --name profile-page
 click "${S}/settingsNav_run" --shot=run-graph-settings
 hover "${S}/editExpressionButton_2" --settle 1200 --shot=edit-expression-tooltip
@@ -102,7 +168,86 @@ click "${S}/axisCombo_2" --shot=axis-combo-open
 key Escape
 click "${S}/editExpressionButton_2"
 shot --window settingsDialog --name expression-editor
-shot --all-windows --name expression-editor-windows
+key Escape --window settingsDialog
+click "${S}/seriesOptionsButton_2"
+wait "${S}/hiddenLeadingPointsSpinBox_2"
+shot --window settingsDialog --name series-options
+key Escape --window settingsDialog
+click "${S}/axisCombo_2"
+key End --window settingsDialog
+key Return --window settingsDialog
+wait "${S}/newAxisNameField"
+shot --window settingsDialog --name new-axis-dialog
+click "${S}/newAxisCreateButton"
+wait "${S}/newAxisErrorLabel"
+shot --window settingsDialog --name new-axis-invalid-name
+type "Tour axis" --into "${S}/newAxisNameField"
+click "${S}/newAxisCreateButton"
+wait "${S}/newAxisNameField" --gone
+click "${S}/settingsNav_run_axes"
+shot --window settingsDialog --name run-axes
+click "${S}/settingsNav_dailyPlaytime"
+shot --window settingsDialog --name daily-playtime-settings
+click "${S}/settingsNav_dailyPlaytime_seriesStyle"
+shot --window settingsDialog --name daily-playtime-style
+click "${S}/settingsNav_dailyPlaytime_axes"
+shot --window settingsDialog --name daily-playtime-axes
+click "${S}/settingsNav_scenarioHistory"
+shot --window settingsDialog --name scenario-history-settings
+click "${S}/settingsNav_scenarioHistory_seriesStyle"
+shot --window settingsDialog --name scenario-history-style
+click "${S}/settingsNav_scenarioHistory_axes"
+shot --window settingsDialog --name scenario-history-axes
+click "${S}/graphField_axes_score_fitMode"
+key End --window settingsDialog
+key Return --window settingsDialog
+wait "${S}/graphField_axes_score_fixedMin"
+shot --window settingsDialog --name fixed-axis-bounds
+click "${S}/settingsNav_benchmarkRank"
+shot --window settingsDialog --name benchmark-rank-settings
+click "${S}/settingsNav_benchmarkRank_seriesStyle"
+shot --window settingsDialog --name benchmark-rank-style
+click "${S}/settingsNav_benchmarkRecentRank"
+shot --window settingsDialog --name benchmark-recent-rank-settings
+click "${S}/settingsNav_benchmarkRecentRank_seriesStyle"
+shot --window settingsDialog --name benchmark-recent-rank-style
+click "${S}/settingsNav_benchmarkPlaytime"
+shot --window settingsDialog --name benchmark-playtime-settings
+click "${S}/settingsNav_benchmarkPlaytime_seriesStyle"
+shot --window settingsDialog --name benchmark-playtime-style
+click "${S}/settingsNav_benchmarkPlaytime_axes"
+shot --window settingsDialog --name benchmark-playtime-axes
+click "${S}/settingsNav_scenarioHistory"
+click "${S}/graphField_dataRange_range"
+key End --window settingsDialog
+key Return --window settingsDialog
+wait "${S}/graphField_dataRange_startDate"
+shot --window settingsDialog --name custom-date-range
+type invalid --into "${S}/graphField_dataRange_startDate" --clear
+wait "${S}/graphField_dataRange_startDate_error"
+shot --window settingsDialog --name settings-invalid-date
+click "${S}/settingsNav_dailyPlaytime"
+shot --window settingsDialog --name settings-cross-page-issue
+click "${S}/settingsSaveButton"
+wait --expr "settingsDialog.saveRejected && settingsDialog.currentPage === 'scenarioHistory'"
+shot --window settingsDialog --name settings-save-rejected
+eval settingsDialog.close()
+wait --expr "settingsDialog.discardChangesPrompt.visible"
+shot --window discardChangesPrompt --with-context --name settings-discard-prompt
+click "win:discardChangesPrompt/text:Cancel"
+click "${S}/settingsCancelButton"
+eval "settingsDialog.openGraph('dailyPlaytime')"
+type 13 --into "${S}/graphField_dataRange_averagingWindow" --clear
+click "${S}/settingsSaveButton"
+wait --expr "!settingsVm.pendingChanges"
+click "${S}/graphResetButton"
+wait --expr "settingsVm.pendingChanges"
+shot --window settingsDialog --name settings-reset-draft
+click "${S}/settingsSaveButton"
+wait --expr "!settingsVm.pendingChanges && !settingsDialog.saveRejected"
+shot --window settingsDialog --name settings-saved
+resize 680x460 --window settingsDialog
+shot --window settingsDialog --name settings-minimum-size
 
 # ---- Benchmark Manager ---------------------------------------------------------
 section manager
@@ -110,9 +255,11 @@ start --dataset rich
 invoke obj:manageBenchmarksAction trigger
 shot --window benchmarkManagerDialog --name library-only
 dblclick "${M}/libraryEntry_0" --shot=draft-open
-rclick "${M}/cell_entry-gallery-pasu_scenario" --shot=row-context-menu
+rclick "${M}/identityView > cell_entry-gallery-pasu_scenario"
+wait "${M}/type:MenuItem & text:Remove selected scenarios"
+shot --window benchmarkManagerDialog --name row-context-menu
 key Escape --window benchmarkManagerDialog
-rclick "${M}/cell_entry-gallery-primary_category" --shot=group-context-menu
+rclick "${M}/identityView > cell_entry-gallery-primary_category" --shot=group-context-menu
 key Escape --window benchmarkManagerDialog
 rclick "${M}/rankHeader_iron" --shot=rank-context-menu
 key Escape --window benchmarkManagerDialog
@@ -122,11 +269,11 @@ click "${M}/addCategoryPlus" --shot=add-category-inline
 key Escape --window benchmarkManagerDialog
 click "${M}/addSubcategoryPlus_clicking" --shot=add-subcategory-inline
 key Escape --window benchmarkManagerDialog
-dblclick "${M}/cell_entry-gallery-pasu_scenario"
+dblclick "${M}/identityView > cell_entry-gallery-pasu_scenario"
 type Ga --shot=cell-edit-suggestions
 key Escape --window benchmarkManagerDialog
-click "${M}/cell_entry-gallery-primary_scenario"
-click "${M}/cell_entry-gallery-smoothbot_scenario" --mods shift --shot=multi-row-selection
+click "${M}/identityView > cell_entry-gallery-primary_scenario"
+click "${M}/identityView > cell_entry-gallery-smoothbot_scenario" --mods shift --shot=multi-row-selection
 click "${M}/libraryToggleButton" --shot=library-collapsed-toolbar
 hover "${M}/saveButton" --settle 1200 --shot=toolbar-tooltip
 click "${M}/libraryToggleButton"

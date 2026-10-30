@@ -17,7 +17,7 @@ click benchmarksTab --shot=matching-rows
 section manager
 invoke obj:manageBenchmarksAction trigger
 dblclick "${M}/libraryEntry_0"
-click "${M}/cell_entry-twin_scenario"
+click "${M}/identityView > cell_entry-twin_scenario"
 shot --window benchmarkManagerDialog --name ambiguous-row-mapping
-click "${M}/cell_entry-ghost_scenario"
+click "${M}/identityView > cell_entry-ghost_scenario"
 shot --window benchmarkManagerDialog --name unresolved-row-mapping

@@ -207,12 +207,14 @@ A failing step stops the batch unless `--keep-going`. Either way the batch ends 
 
 | Tour | Covers |
 |---|---|
-| `smoke` | the main screens of every dataset at 1280x800 and 960x700, failing on any app warning; about 20 s. Run it before committing UI changes; it is not wired into CTest. |
-| `full` | every state of the 2026-10-11 sweep, with named shots |
-| `unreachable` | every state that sweep could not reach: data states, faults, held gestures and dialog prompts |
+| `smoke` | the main screens of every dataset at 1280x800 and 960x700, failing on any app warning. Run it before committing UI changes; it is not wired into CTest. |
+| `full` | main screens and menus, all six graph gear popups and settings pages, settings sections, axis creation, series options, validation, save/discard/reset flows and the Benchmark Manager; fails on app warnings |
+| `unreachable` | data states, injected faults, held gestures and dialog prompts, including direct benchmark save failure |
 | `composing-example` | the worked example below |
 
 `report` builds a self-contained page (images embedded; `--link` links them instead): a summary with failed steps, the coverage table, then the shots grouped by subdirectory with their labels, the command that took them and any app warnings. Click a shot to enlarge it. Without an `index.jsonl` it lists the numbered PNGs.
+
+Every checked-in tour has a coverage checklist. The Python tour tests parse the CLI steps and require a distinct checklist entry for every named capture. Tours use `wait` assertions for transient and validation states before capturing them. The report's captured/missing marker still checks labels, so review the step failures and images as well; a checklist is the tour's declared scope, not an exhaustive inventory of every possible UI state. Omit `--report` to run a tour and inspect its screenshots, `summary.json` and `shots/index.jsonl` without creating HTML.
 
 ## Composing a session
 

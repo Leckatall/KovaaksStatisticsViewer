@@ -198,6 +198,29 @@ def test_every_checked_in_tour_parses() -> None:
         report.load_coverage(coverage)
 
 
+@pytest.mark.parametrize("tour", sorted(TOURS_DIR.glob("*.txt")), ids=lambda path: path.stem)
+def test_tour_coverage_accounts_for_every_named_capture(tour: Path) -> None:
+    labels = []
+    for raw in tour.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.split()[0] in ("set", "section", "options"):
+            continue
+        words = shlex.split(substitute(line, VariableStub()))
+        ns = parse_args(words, batch=words[0] not in ("start", "stop", "restart"))
+        label = ns.name if words[0] == "shot" else getattr(ns, "shot_name", None)
+        if label:
+            assert not getattr(ns, "all_windows", False), "Select one window so the recorded label is unambiguous"
+            labels.append(label)
+
+    coverage_file = tour.with_suffix("") / "coverage.json"
+    assert coverage_file.is_file(), f"{tour.stem} has no coverage checklist"
+    coverage = report.load_coverage(coverage_file)
+    declared = [entry["shot"] for entry in coverage]
+    assert len(labels) == len(set(labels)), "Capture labels must identify one state each"
+    assert len(declared) == len(set(declared)), "Coverage states must identify distinct captures"
+    assert set(declared) == set(labels)
+
+
 class VariableStub(dict):
     def __contains__(self, key: object) -> bool:
         return True

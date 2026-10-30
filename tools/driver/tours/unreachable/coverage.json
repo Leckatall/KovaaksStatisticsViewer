@@ -13,7 +13,6 @@
   {"area": "Manager", "state": "Row drag: drop line and Move to Uncategorized", "shot": "row-drag-drop-line"},
   {"area": "Manager", "state": "Subcategory relocation prompt", "shot": "relocation-prompt"},
   {"area": "Manager", "state": "Normalization warning (non-numeric threshold)", "shot": "normalization-warning"},
-  {"area": "Manager", "state": "Retrospective prompt (by stable key)", "shot": "retrospective-prompt"},
   {"area": "Manager", "state": "Save failed (saveStatusLabel)", "shot": "save-failed"},
   {"area": "Manager", "state": "Dirty-close prompt (by stable key)", "shot": "dirty-close-prompt"},
   {"area": "Manager", "state": "Stale baseline warning", "shot": "stale-baseline-warning"},
