@@ -102,7 +102,8 @@ function makeFakeHistoryModel(overrides) {
         observationCount: 0,
         hasCarriedState: false,
         noObservationsInRange: false,
-        noImprovementPoints: false,
+        noPointsInRange: false,
+        noPointsText: "",
         emptyStateText: "No history yet",
         // Minimal GraphViewModelBase-ish surface so a card can bind it as graphVm
         // without throwing while the metric is empty.
@@ -177,6 +178,7 @@ function makeFakeTrackingVm(overrides) {
         hasNextTier: false,
         scenarioCount: 0,
         rankHistory: makeFakeHistoryModel({metricName: "Personal-best average rank"}),
+        recentRankHistory: makeFakeHistoryModel({metricName: "Recent average rank"}),
         playtimeHistory: makeFakeHistoryModel({metricName: "Daily Playtime (7-day rolling average)"}),
         progressGrid: makeFakeProgressGrid(),
         selectBenchmarkCalls: [],
@@ -239,6 +241,7 @@ function trackingFixtureUnavailable() {
         averageRank: "",
         totalPlaytime: "",
         rankHistory: makeFakeHistoryModel({hasData: false}),
+        recentRankHistory: makeFakeHistoryModel({hasData: false, metricName: "Recent average rank"}),
         playtimeHistory: makeFakeHistoryModel({hasData: false}),
         progressGrid: makeFakeProgressGrid()
     }
@@ -265,6 +268,7 @@ function trackingFixtureIncomplete() {
         scenariosAtNextTier: 0,
         scenarioCount: 4,
         rankHistory: makeFakeHistoryModel({hasData: false, metricName: "Personal-best average rank"}),
+        recentRankHistory: makeFakeHistoryModel({hasData: false, metricName: "Recent average rank"}),
         playtimeHistory: makeFakeHistoryModel({hasData: true, metricName: "Daily Playtime (7-day rolling average)"}),
         progressGrid: makeFakeProgressGrid({
             tiers: fakeProgressTiers(),
@@ -306,6 +310,10 @@ function trackingFixtureTrackable() {
         rankHistory: makeFakeHistoryModel({
             metricName: "Personal-best average rank", hasData: true,
             emptyStateText: "No ranked history yet"
+        }),
+        recentRankHistory: makeFakeHistoryModel({
+            metricName: "Recent average rank", hasData: true,
+            emptyStateText: "No recent rank history yet"
         }),
         playtimeHistory: makeFakeHistoryModel({
             metricName: "Daily Playtime (7-day rolling average)", hasData: true,

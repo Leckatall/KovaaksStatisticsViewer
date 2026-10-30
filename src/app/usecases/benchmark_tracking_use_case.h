@@ -44,7 +44,9 @@ namespace ksv::application {
         void onPlaytimeChanged(std::function<void()> callback) override {
             m_playtimeCallbacks.push_back(std::move(callback));
         }
-        void onRankChanged(std::function<void()> callback) override { m_rankCallbacks.push_back(std::move(callback)); }
+        void onRankChanged(std::function<void(GraphKey)> callback) override {
+            m_rankCallbacks.push_back(std::move(callback));
+        }
         [[nodiscard]] GraphPresentation presentation(const GraphKey graph) const override {
             return presentationOf(graph, m_configuration->current().configuration->preferences(graph));
         }
@@ -72,10 +74,11 @@ namespace ksv::application {
         // range, recomputing the full series only when the window differs from the one it holds.
         void applyPlaytimeView(Evaluation &evaluation);
         void refreshPlaytimeOnly();
-        // Resolves the rank graph's range into m_snapshot.rank. The rank history is never filtered,
-        // so a range change needs no re-evaluation.
-        void applyRankRange(const Evaluation &evaluation);
-        void refreshRankOnly();
+        // Resolves a rank graph's range into its snapshot view: BenchmarkRank into `rank`,
+        // BenchmarkRecentRank into `recentRank`. Neither rank history is ever filtered, so a range
+        // change needs no re-evaluation.
+        void applyRankRange(GraphKey graph, const Evaluation &evaluation);
+        void refreshRankOnly(GraphKey graph);
 
         std::shared_ptr<data::IBenchmarksService> m_benchmarks;
         std::shared_ptr<IBenchmarkResolutionUseCase> m_resolution;
@@ -102,7 +105,7 @@ namespace ksv::application {
         BenchmarkWorkspaceSnapshot m_snapshot;
         std::vector<std::function<void()> > m_callbacks;
         std::vector<std::function<void()> > m_playtimeCallbacks;
-        std::vector<std::function<void()> > m_rankCallbacks;
+        std::vector<std::function<void(GraphKey)> > m_rankCallbacks;
         std::vector<std::function<void()> > m_presentationCallbacks;
     };
 }

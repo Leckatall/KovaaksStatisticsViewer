@@ -304,7 +304,7 @@ namespace {
         playtime->onPresentationChanged([&] { ++playtimeStyle; });
         tracking->onChanged([&] { ++trackingChanged; });
         tracking->onPlaytimeChanged([&] { ++trackingPlaytime; });
-        tracking->onRankChanged([&] { ++trackingRank; });
+        tracking->onRankChanged([&](GraphKey) { ++trackingRank; });
         tracking->onPresentationChanged([&] { ++trackingStyle; });
         history->onRangeChanged([&] { ++historyRange; });
         history->onPresentationChanged([&] { ++historyStyle; });

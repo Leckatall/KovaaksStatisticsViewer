@@ -138,16 +138,19 @@ namespace ksv::presentation {
     BenchmarkTrackingViewModel::BenchmarkTrackingViewModel(
         std::shared_ptr<application::IBenchmarkTrackingUseCase> useCase, QObject *parent)
         : QObject(parent), m_useCase(std::move(useCase)),
-          // Both history metrics are one point per UTC day, so the axis never ticks in hours.
-          m_historyXAxis(DateTimeAxis::Options{.wholeDays = true}),
+          // Every history metric is one point per UTC day, so the axis never ticks in hours.
+          m_rankXAxis(DateTimeAxis::Options{.wholeDays = true}),
+          m_recentRankXAxis(DateTimeAxis::Options{.wholeDays = true}),
           m_playtimeXAxis(DateTimeAxis::Options{.wholeDays = true}),
-          m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, m_historyXAxis, this)),
+          m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, m_rankXAxis, this)),
+          m_recentRankHistory(
+              new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RecentAverageRank, m_recentRankXAxis, this)),
           m_playtimeHistory(
               new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, m_playtimeXAxis, this)),
           m_progressGrid(new BenchmarkProgressGridModel(this)) {
         m_useCase->onChanged([this] { rebuild(); });
         m_useCase->onPlaytimeChanged([this] { rebuildPlaytime(); });
-        m_useCase->onRankChanged([this] { rebuildRank(); });
+        m_useCase->onRankChanged([this](const application::GraphKey graph) { rebuildRank(graph); });
         m_useCase->onPresentationChanged([this] { applyPresentation(); });
         applyPresentation();
         rebuild();
@@ -155,6 +158,7 @@ namespace ksv::presentation {
 
     void BenchmarkTrackingViewModel::applyPresentation() {
         m_rankHistory->setPresentation(m_useCase->presentation(application::GraphKey::BenchmarkRank));
+        m_recentRankHistory->setPresentation(m_useCase->presentation(application::GraphKey::BenchmarkRecentRank));
         m_playtimeHistory->setPresentation(m_useCase->presentation(application::GraphKey::BenchmarkPlaytime));
     }
 
@@ -253,14 +257,18 @@ namespace ksv::presentation {
         m_rankPresent = trackable && projection != nullptr;
         m_rankTiers = std::move(rankTiers);
         m_rankExtentMs.reset();
-        if (m_rankPresent)
+        m_recentRankExtentMs.reset();
+        if (m_rankPresent) {
             for (const auto &point: projection->averageRankHistory) widenExtent(m_rankExtentMs, utcMidnightMs(point.day));
+            for (const auto &point: projection->recentAverageRankHistory)
+                widenExtent(m_recentRankExtentMs, utcMidnightMs(point.day));
+        }
 
         const QList<QPointF> playtime = playtimePoints(snapshot);
         m_appliedUnionMs = unionExtent();
-        applyRankAxis(snapshot);
+        for (const auto graph: {application::GraphKey::BenchmarkRank, application::GraphKey::BenchmarkRecentRank})
+            rebuildRank(graph);
         applyPlaytimeAxis(snapshot);
-        updateRankHistory(snapshot);
         m_playtimeHistory->setAveragingWindowDays(snapshot.playtime.windowDays);
         m_playtimeHistory->update(playtimeContent(snapshot, playtime), projection != nullptr, {});
 
@@ -289,9 +297,10 @@ namespace ksv::presentation {
 
     std::optional<BenchmarkTrackingViewModel::ExtentMs> BenchmarkTrackingViewModel::unionExtent() const {
         std::optional<ExtentMs> combined = m_rankExtentMs;
-        if (m_playtimeExtentMs) {
-            widenExtent(combined, m_playtimeExtentMs->first);
-            widenExtent(combined, m_playtimeExtentMs->second);
+        for (const auto &extent: {m_recentRankExtentMs, m_playtimeExtentMs}) {
+            if (!extent) continue;
+            widenExtent(combined, extent->first);
+            widenExtent(combined, extent->second);
         }
         return combined;
     }
@@ -308,15 +317,13 @@ namespace ksv::presentation {
         }
     }
 
-    void BenchmarkTrackingViewModel::applyRankAxis(const application::BenchmarkWorkspaceSnapshot &snapshot) {
-        const auto &rank = snapshot.rank;
-        if (!rank.interval && rank.anchoredEnd && m_appliedUnionMs) {
-            const qint64 end = std::min(m_appliedUnionMs->second, utcMidnightMs(*rank.anchoredEnd));
-            std::ignore = m_historyXAxis.setEpochMillisecondsRange(m_appliedUnionMs->first,
-                                                                   std::max(m_appliedUnionMs->first, end));
+    void BenchmarkTrackingViewModel::applyRankAxis(DateTimeAxis &axis, const application::RankRangeView &view) const {
+        if (!view.interval && view.anchoredEnd && m_appliedUnionMs) {
+            const qint64 end = std::min(m_appliedUnionMs->second, utcMidnightMs(*view.anchoredEnd));
+            std::ignore = axis.setEpochMillisecondsRange(m_appliedUnionMs->first, std::max(m_appliedUnionMs->first, end));
             return;
         }
-        applyAxis(m_historyXAxis, rank.interval);
+        applyAxis(axis, view.interval);
     }
 
     void BenchmarkTrackingViewModel::applyPlaytimeAxis(const application::BenchmarkWorkspaceSnapshot &snapshot) {
@@ -331,32 +338,32 @@ namespace ksv::presentation {
         return content;
     }
 
-    void BenchmarkTrackingViewModel::updateRankHistory(const application::BenchmarkWorkspaceSnapshot &snapshot) {
+    void BenchmarkTrackingViewModel::updateRankHistory(BenchmarkHistoryViewModel &history, const DateTimeAxis &axis,
+                                                       const std::span<const domain::AverageRankPoint> full,
+                                                       const application::RankRangeView &view) const {
         BenchmarkHistoryViewModel::Content content;
-        const domain::BenchmarkProjection *projection = snapshot.projection ? &*snapshot.projection : nullptr;
-        if (m_rankPresent && projection) {
+        if (m_rankPresent) {
             // An anchor with no contributing run is no history at all, whatever the projection still holds.
-            content.historyAvailable = !projection->averageRankHistory.empty() && !snapshot.rank.noRelevantHistory;
-            for (const auto &point: projection->averageRankHistory)
-                content.fullHistoryPeak = std::max(content.fullHistoryPeak, point.averageRank);
+            content.historyAvailable = !full.empty() && !view.noRelevantHistory;
+            for (const auto &point: full) content.fullHistoryPeak = std::max(content.fullHistoryPeak, point.averageRank);
         }
         if (!content.historyAvailable) {
-            m_rankHistory->update(content, m_rankPresent, m_rankTiers);
+            history.update(content, m_rankPresent, m_rankTiers);
             return;
         }
 
         const auto pointOf = [](const domain::AverageRankPoint &point) {
             return QPointF(static_cast<qreal>(utcMidnightMs(point.day)), point.averageRank);
         };
-        const auto &full = projection->averageRankHistory;
-        // A personal-best rank never lapses: the level held after the last improvement is drawn flat
-        // to the right-hand edge, and one reached before a range opens is carried in from its left
-        // edge. Both are geometry only; the observations stay the actual improvements.
+        // Neither rank lapses between points: a personal best is never lost, and a recent average
+        // only moves when the scenario is played again. So the level held after the last point is
+        // drawn flat to the right-hand edge, and one reached before a range opens is carried in from
+        // its left edge. Both are geometry only; the observations stay the series' actual points.
         std::optional<double> held;
         qreal rightEdge = 0.0;
-        if (const auto &interval = snapshot.rank.interval) {
+        if (const auto &interval = view.interval) {
             const auto window = domain::rankHistoryWindow(full, interval->first, interval->last);
-            for (const auto &point: window.improvements) content.observations.append(pointOf(point));
+            for (const auto &point: window.points) content.observations.append(pointOf(point));
             const auto leftEdge = static_cast<qreal>(utcMidnightMs(interval->first));
             if (window.established) {
                 held = window.established->averageRank;
@@ -366,26 +373,32 @@ namespace ksv::presentation {
             rightEdge = static_cast<qreal>(utcMidnightMs(interval->last));
         } else {
             for (const auto &point: full) content.observations.append(pointOf(point));
-            rightEdge = m_historyXAxis.max();
+            rightEdge = axis.max();
         }
         if (!content.observations.isEmpty()) held = content.observations.last().y();
         const qreal lastX = content.observations.isEmpty() ? -std::numeric_limits<qreal>::infinity()
                                                            : content.observations.last().x();
         if (held && lastX < rightEdge) content.trailingCarry = QPointF(rightEdge, *held);
-        m_rankHistory->update(content, m_rankPresent, m_rankTiers);
+        history.update(content, m_rankPresent, m_rankTiers);
     }
 
-    void BenchmarkTrackingViewModel::rebuildRank() {
+    void BenchmarkTrackingViewModel::rebuildRank(const application::GraphKey graph) {
         const application::BenchmarkWorkspaceSnapshot &snapshot = m_useCase->snapshot();
-        applyRankAxis(snapshot);
-        updateRankHistory(snapshot);
+        const bool recent = graph == application::GraphKey::BenchmarkRecentRank;
+        auto &axis = recent ? m_recentRankXAxis : m_rankXAxis;
+        const auto &view = recent ? snapshot.recentRank : snapshot.rank;
+        std::span<const domain::AverageRankPoint> full;
+        if (snapshot.projection)
+            full = recent ? snapshot.projection->recentAverageRankHistory : snapshot.projection->averageRankHistory;
+        applyRankAxis(axis, view);
+        updateRankHistory(recent ? *m_recentRankHistory : *m_rankHistory, axis, full, view);
     }
 
     void BenchmarkTrackingViewModel::rebuildPlaytime() {
         const application::BenchmarkWorkspaceSnapshot &snapshot = m_useCase->snapshot();
         const QList<QPointF> playtime = playtimePoints(snapshot);
         if (unionExtent() != m_appliedUnionMs) {
-            // The rank axis, and the rank line held flat to its edge, depend on the shared extent.
+            // The rank axes, and the rank lines held flat to their edges, depend on the shared extent.
             rebuild();
             return;
         }

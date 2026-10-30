@@ -561,6 +561,8 @@ TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewM
     ASSERT_NE(vm->progressGrid(), nullptr);
     EXPECT_FALSE(vm->progressGrid()->rows().isEmpty());
     EXPECT_TRUE(vm->playtimeHistory()->hasData());
+    ASSERT_NE(vm->recentRankHistory(), nullptr);
+    EXPECT_TRUE(vm->recentRankHistory()->hasData());
 
     const QVariantMap scenario = findGridRow(vm->progressGrid(), QStringLiteral("Wall Six"));
     ASSERT_FALSE(scenario.isEmpty()) << "the progress grid never surfaced the mapped scenario";
@@ -579,6 +581,7 @@ TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewM
     EXPECT_GT(projection->totalPlaytimeSeconds, 0.0);
     EXPECT_FALSE(projection->rollingPlaytime.empty());
     EXPECT_FALSE(projection->averageRankHistory.empty());
+    EXPECT_FALSE(projection->recentAverageRankHistory.empty());
     EXPECT_TRUE(projection->attainedRank.has_value());
     EXPECT_EQ(projection->categories.size(), 1U);
 }

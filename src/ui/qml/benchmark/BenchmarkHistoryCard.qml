@@ -9,7 +9,7 @@ Frame {
 
     property var historyModel
     property string namePrefix: "history"
-    // benchmarkRank or benchmarkPlaytime.
+    // benchmarkRank, benchmarkRecentRank or benchmarkPlaytime.
     required property string graphKey
     property var settingsVm: null
 
@@ -65,13 +65,12 @@ Frame {
                      && root.historyModel.noObservationsInRange === true
         }
         Label {
-            objectName: root.namePrefix + "NoImprovementLabel"
+            objectName: root.namePrefix + "NoPointsLabel"
             Layout.fillWidth: true
-            visible: root.hasData && root.historyModel.noImprovementPoints === true
+            visible: root.hasData && root.historyModel.noPointsInRange === true
             wrapMode: Text.WordWrap
             color: root.palette.placeholderText
-            text: qsTr("This range has no improvement points, so Points only draws nothing. "
-                       + "Choose a line style to see your rank held through it.")
+            text: root.historyModel ? root.historyModel.noPointsText : ""
         }
 
         Loader {

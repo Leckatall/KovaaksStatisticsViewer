@@ -17,17 +17,17 @@ OverflowScrollView {
     signal manageBenchmarksRequested()
     signal moreGraphSettingsRequested(string graphKey)
 
-    // Explicit x/y placement rather than a Flow: the two history cards
+    // Explicit x/y placement rather than a Flow: the three history cards
     // stay direct children (the scroll-order test walks them by index) yet
     // their side-by-side / stacked geometry resolves without a layout
-    // polish, which the responsive tests rely on.
+    // polish, which the responsive tests rely on. Wide, the two rank cards
+    // share a row and playtime spans the one below.
     Item {
         id: trackableScrollColumn
         objectName: "trackableScrollColumn"
         width: benchmarkWorkspaceScroll.bodyWidth
         implicitWidth: width
-        implicitHeight: benchmarkWorkspaceScroll.wide ? rankCard.y + Math.max(rankCard.height, playtimeCard.height)
-                                                      : playtimeCard.y + playtimeCard.height
+        implicitHeight: playtimeCard.y + playtimeCard.height
 
         readonly property real gap: 12
         readonly property real halfWidth: Math.floor((width - gap) / 2)
@@ -59,12 +59,28 @@ OverflowScrollView {
         }
 
         BenchmarkHistoryCard {
-            id: playtimeCard
-            objectName: "playtimeHistoryCard"
+            id: recentRankCard
+            objectName: "recentRankHistoryCard"
             x: benchmarkWorkspaceScroll.wide ? (trackableScrollColumn.halfWidth + trackableScrollColumn.gap) : 0
             y: benchmarkWorkspaceScroll.wide ? rankCard.y
                                              : (rankCard.y + rankCard.height + trackableScrollColumn.gap)
             width: benchmarkWorkspaceScroll.wide ? trackableScrollColumn.halfWidth : trackableScrollColumn.width
+            height: Math.max(implicitHeight, 220)
+            namePrefix: "recentRankHistory"
+            graphKey: "benchmarkRecentRank"
+            settingsVm: benchmarkWorkspaceScroll.settingsVm
+            onMoreGraphSettingsRequested: key => benchmarkWorkspaceScroll.moreGraphSettingsRequested(key)
+            historyModel: benchmarkWorkspaceScroll.trackingVm ? benchmarkWorkspaceScroll.trackingVm.recentRankHistory : null
+        }
+
+        BenchmarkHistoryCard {
+            id: playtimeCard
+            objectName: "playtimeHistoryCard"
+            x: 0
+            y: benchmarkWorkspaceScroll.wide
+               ? rankCard.y + Math.max(rankCard.height, recentRankCard.height) + trackableScrollColumn.gap
+               : recentRankCard.y + recentRankCard.height + trackableScrollColumn.gap
+            width: trackableScrollColumn.width
             height: Math.max(implicitHeight, 220)
             namePrefix: "playtimeHistory"
             graphKey: "benchmarkPlaytime"

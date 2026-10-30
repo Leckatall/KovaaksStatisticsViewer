@@ -54,6 +54,7 @@ QtObject {
         dailyPlaytime: entry({hasWindow: true, window: 3}),
         scenarioHistory: entry({hasLatestRuns: true, markers: true}),
         benchmarkRank: entry({}),
+        benchmarkRecentRank: entry({}),
         benchmarkPlaytime: entry({hasWindow: true, window: 3})
     })
 
@@ -158,6 +159,7 @@ QtObject {
                                 axes: [axisRow("score", "fit", ["score", "scoreAverage"]), axisRow("accuracy", "fit", ["accuracy"]),
                                        axisRow("counts", "zero", ["shots", "hits", "misses"])]}),
         benchmarkRank: draft({series: [seriesRow("rank", undefined)], axes: []}),
+        benchmarkRecentRank: draft({series: [seriesRow("rank", undefined)], axes: []}),
         benchmarkPlaytime: draft({hasWindow: true, window: 3, windowText: "3",
                                   series: [seriesRow("playtime", "#4dd0e1")],
                                   axes: [axisRow("playtime", "zero", ["playtime"])]})

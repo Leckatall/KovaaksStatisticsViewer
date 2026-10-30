@@ -36,11 +36,12 @@ TestCase {
             dailyPlaytime: fakeVm.entry({hasWindow: true, window: 3}),
             scenarioHistory: fakeVm.entry({hasLatestRuns: true, markers: true}),
             benchmarkRank: fakeVm.entry({}),
+            benchmarkRecentRank: fakeVm.entry({}),
             benchmarkPlaytime: fakeVm.entry({hasWindow: true, window: 3})
         })
     }
 
-    readonly property var allKeys: ["run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkPlaytime"]
+    readonly property var allKeys: ["run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"]
 
     function makeGear(key) {
         const gear = createTemporaryObject(gearComponent, testCase, {graphKey: key, settingsVm: fakeVm})
@@ -97,6 +98,7 @@ TestCase {
             {tag: "dailyPlaytime", key: "dailyPlaytime", name: "Daily playtime"},
             {tag: "scenarioHistory", key: "scenarioHistory", name: "Scenario history"},
             {tag: "benchmarkRank", key: "benchmarkRank", name: "Benchmark rank history"},
+            {tag: "benchmarkRecentRank", key: "benchmarkRecentRank", name: "Benchmark recent rank"},
             {tag: "benchmarkPlaytime", key: "benchmarkPlaytime", name: "Benchmark playtime"}
         ]
     }
@@ -179,6 +181,7 @@ TestCase {
             {tag: "dailyPlaytime", key: "dailyPlaytime", range: true, runs: false, window: true},
             {tag: "scenarioHistory", key: "scenarioHistory", range: true, runs: true, window: false},
             {tag: "benchmarkRank", key: "benchmarkRank", range: true, runs: false, window: false},
+            {tag: "benchmarkRecentRank", key: "benchmarkRecentRank", range: true, runs: false, window: false},
             {tag: "benchmarkPlaytime", key: "benchmarkPlaytime", range: true, runs: false, window: true}
         ]
     }

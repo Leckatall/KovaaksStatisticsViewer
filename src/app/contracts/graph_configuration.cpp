@@ -12,7 +12,7 @@ namespace ksv::application {
         using namespace std::chrono;
 
         constexpr std::array<std::string_view, kGraphKeys.size()> kGraphKeyNames{
-            "run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkPlaytime"
+            "run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"
         };
 
         constexpr std::array<std::string_view, 3> kConnectionModeNames{"smooth", "straight", "pointsOnly"};
@@ -44,6 +44,10 @@ namespace ksv::application {
                     {{"score", FitVisibleData{}}, {"accuracy", FitVisibleData{}}, {"counts", StartAtZero{}}}
                 },
                 {GraphKey::BenchmarkRank, true, false, false, false, {RecentDays{90}, true}, {{"rank", "", std::nullopt}}, {}},
+                {
+                    GraphKey::BenchmarkRecentRank, true, false, false, false, {RecentDays{90}, true},
+                    {{"rank", "", std::nullopt}}, {}
+                },
                 {
                     GraphKey::BenchmarkPlaytime, true, false, true, false, {RecentDays{30}, true},
                     {{"playtime", "playtime", kPlaytimeColor}},

@@ -49,7 +49,7 @@ TestCase {
             flick = flick.parent
         verify(flick !== null, "sidebar has a scrolling viewport")
         for (const key of ["profile", "run", "dailyPlaytime", "scenarioHistory", "scenarioHistory_dataRange",
-                           "scenarioHistory_seriesStyle", "scenarioHistory_axes", "benchmarkRank", "benchmarkPlaytime"]) {
+                           "scenarioHistory_seriesStyle", "scenarioHistory_axes", "benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"]) {
             const item = find(dialog, "settingsNav_" + key)
             verify(item !== null, key)
             const p = item.mapToItem(list, 0, 0)

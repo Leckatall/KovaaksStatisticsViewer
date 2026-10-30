@@ -11,7 +11,7 @@ import "GraphCatalog.js" as GraphCatalog
 ChromeIconButton {
     id: gear
 
-    // One of run, dailyPlaytime, scenarioHistory, benchmarkRank, benchmarkPlaytime.
+    // One of run, dailyPlaytime, scenarioHistory, benchmarkRank, benchmarkRecentRank, benchmarkPlaytime.
     required property string graphKey
     // The SettingsViewModel; the popup still opens, with defaults, without one.
     property var settingsVm: null

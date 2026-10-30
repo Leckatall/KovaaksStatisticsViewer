@@ -187,11 +187,22 @@ Item {
         function test_trackableBenchmarkHasAGearOnEachHistoryCard() {
             const fixture = TestDoubles.trackingFixtureTrackable()
             fixture.rankHistory = TestDoubles.makeFakeHistoryModel({hasData: false})
+            fixture.recentRankHistory = TestDoubles.makeFakeHistoryModel({hasData: false})
             fixture.playtimeHistory = TestDoubles.makeFakeHistoryModel({hasData: false})
             const ws = makeWorkspace(fixture)
 
             tryVerify(() => ItemLookup.findByObjectName(ws, "graphGear_benchmarkRank") !== null, 2000)
+            tryVerify(() => ItemLookup.findByObjectName(ws, "graphGear_benchmarkRecentRank") !== null, 2000)
             tryVerify(() => ItemLookup.findByObjectName(ws, "graphGear_benchmarkPlaytime") !== null, 2000)
+        }
+
+        function test_theRecentRankCardsGearOpensItsOwnGraphSettings() {
+            const trackable = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            const spy = createTemporaryObject(spyComponent, root, {target: trackable, signalName: "moreGraphSettingsRequested"})
+            tryVerify(() => ItemLookup.findByObjectName(trackable, "graphGear_benchmarkRecentRank") !== null, 2000)
+            openAndClickMore(ItemLookup.findByObjectName(trackable, "graphGear_benchmarkRecentRank"), "benchmarkRecentRank")
+            compare(spy.count, 1)
+            compare(spy.signalArguments[0][0], "benchmarkRecentRank")
         }
 
         function test_incompleteBenchmarkHasAGearOnItsPlaytimeCard() {

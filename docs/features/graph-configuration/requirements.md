@@ -30,7 +30,7 @@ Problem evidence and the chosen interaction are based on the project owner's exp
 - **O3 — Preserve chart space:** keep frequent adjustments near the graph and put detailed configuration in settings.
 - **O4 — Keep configuration predictable:** make scope, persistence, cancellation, and recovery understandable across graphs.
 
-Scope includes the run graph (`DashboardGraph` in the product discussion), daily playtime, scenario history, benchmark personal-best average-rank history, and benchmark rolling playtime. The two benchmark charts have distinct configurations. The feature does not introduce per-scenario or per-benchmark configuration profiles, new computed-series capabilities, additional spline algorithms, or a new series editor for DashboardGraph.
+Scope includes the run graph (`DashboardGraph` in the product discussion), daily playtime, scenario history, benchmark personal-best average-rank history, benchmark recent-average rank history, and benchmark rolling playtime. The benchmark charts have distinct configurations. The feature does not introduce per-scenario or per-benchmark configuration profiles, new computed-series capabilities, additional spline algorithms, or a new series editor for DashboardGraph.
 
 ## Main journeys
 
@@ -64,9 +64,10 @@ Trace: O1–O4.
 | Daily playtime                               | Date presets, all time, custom dates                    | Offered in calendar days             | Numeric fitting                                        | Playtime series                                  | Offered                           |
 | Scenario history                             | Latest N runs, all runs, date presets, custom dates     | Not offered                          | Numeric fitting for its existing axes                  | Existing history series                          | Offered                           |
 | Benchmark personal-best average-rank history | Date presets, all time, custom dates                    | Not offered                          | Retain the tier-based axis; no generic numeric fitting | Existing rank series, preserving tier references | Offered                           |
+| Benchmark recent-average rank history        | Date presets, all time, custom dates                    | Not offered                          | Retain the tier-based axis; no generic numeric fitting | Rank series, preserving tier references          | Offered                           |
 | Benchmark rolling playtime                   | Date presets, all time, custom dates                    | Offered in calendar days             | Numeric fitting                                        | Existing playtime series                         | Offered                           |
 
-The rank-axis treatment is a compatibility assumption: tier names and reference levels remain meaningful rather than becoming generic numeric bounds. Per-graph ownership means the two benchmark charts can have different selected ranges; both retain all-history defaults when no preference has been saved.
+The rank-axis treatment is a compatibility assumption: tier names and reference levels remain meaningful rather than becoming generic numeric bounds. Per-graph ownership means the benchmark charts can have different selected ranges; both retain all-history defaults when no preference has been saved.
 
 ### Entry points and settings layout
 

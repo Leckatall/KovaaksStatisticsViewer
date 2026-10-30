@@ -23,15 +23,27 @@ namespace ksv::presentation {
         m_presentation = presentation;
         const bool modeChanged = connectionMode() != static_cast<int>(presentation.appearance.connection);
         setAppearance(presentation.appearance);
-        applySeriesStyle(*m_series, presentation, m_metric == AverageRank ? "rank" : "playtime");
+        applySeriesStyle(*m_series, presentation, isRank() ? "rank" : "playtime");
         setAxisPolicies(presentation.axisPolicies);
         emit styleChanged();
         if (modeChanged) emit contentStateChanged();
     }
 
     QString BenchmarkHistoryViewModel::metricName() const {
-        if (m_metric == AverageRank) return tr("Personal-best average rank");
+        switch (m_metric) {
+            case AverageRank: return tr("Personal-best average rank");
+            case RecentAverageRank: return tr("Recent average rank");
+            case RollingPlaytime: break;
+        }
         return PlaytimeGraphViewModel::titleFor(m_windowDays);
+    }
+
+    QString BenchmarkHistoryViewModel::noPointsText() const {
+        if (m_metric == RecentAverageRank)
+            return tr("This range has no play days, so Points only draws nothing. "
+                      "Choose a line style to see your recent rank held through it.");
+        return tr("This range has no improvement points, so Points only draws nothing. "
+                  "Choose a line style to see your rank held through it.");
     }
 
     void BenchmarkHistoryViewModel::setAveragingWindowDays(const int days) {
@@ -109,8 +121,8 @@ namespace ksv::presentation {
         m_series->leadingCarry = content.leadingCarry;
         m_series->trailingCarry = content.trailingCarry;
 
-        if (m_metric == AverageRank) {
-            m_series->setName(tr("Personal-best average rank"));
+        if (isRank()) {
+            m_series->setName(metricName());
             // The hover tooltip reads the rank as a tier and progress, not as a bare number.
             m_series->transform = ValueTransform::identity();
             std::vector<QString> tierNames;

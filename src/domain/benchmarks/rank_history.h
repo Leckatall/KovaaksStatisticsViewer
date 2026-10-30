@@ -12,13 +12,13 @@ namespace ksv::domain {
     // A date window onto a retrospective rank history that was evaluated in full, so every value in
     // it is the one the whole history gave that day.
     struct RankHistoryWindow {
-        // The last improvement before the window opens: the rank already held on its first day.
+        // The last point before the window opens: the rank already held on its first day.
         std::optional<AverageRankPoint> established;
-        std::vector<AverageRankPoint> improvements;
+        std::vector<AverageRankPoint> points;
     };
 
     /**
-     * @param history Oldest first, as BenchmarkProjection::averageRankHistory.
+     * @param history Oldest first, as BenchmarkProjection::averageRankHistory or recentAverageRankHistory.
      * @param first,last Inclusive.
      */
     [[nodiscard]] RankHistoryWindow rankHistoryWindow(std::span<const AverageRankPoint> history,

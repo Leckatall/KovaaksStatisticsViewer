@@ -59,6 +59,10 @@ namespace ksv::domain {
         int scenariosAtNextTier = 0;
         std::optional<double> averageRank;
         std::vector<AverageRankPoint> averageRankHistory;
+        // Oldest first, one point for every day a benchmark scenario was played, improving or not:
+        // the mean normalized value of each entry's latest-five recent average. Unlike
+        // averageRankHistory it can fall, and it never feeds attainment.
+        std::vector<AverageRankPoint> recentAverageRankHistory;
         double totalPlaytimeSeconds = 0.0;
         // Display series supplied by the caller and never read by the evaluation, so a different
         // window or range cannot change a summary.

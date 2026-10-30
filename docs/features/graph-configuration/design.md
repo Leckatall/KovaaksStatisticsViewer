@@ -108,7 +108,7 @@ An injectable day source supplies the current UTC epoch day, matching `ScenarioR
 
 ### Configuration model
 
-Use stable graph keys such as `run`, `dailyPlaytime`, `scenarioHistory`, `benchmarkRank`, and `benchmarkPlaytime`. They never contain a selected run, scenario hash, benchmark ID or visible series position.
+Use stable graph keys such as `run`, `dailyPlaytime`, `scenarioHistory`, `benchmarkRank`, `benchmarkRecentRank`, and `benchmarkPlaytime`. They never contain a selected run, scenario hash, benchmark ID or visible series position.
 
 Each graph's applicable values include:
 

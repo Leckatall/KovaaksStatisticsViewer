@@ -17,7 +17,7 @@ status: in-progress
 
 This document proposes the technical design for [Scenario benchmark tracking](requirements.md). It decides how benchmark definitions are represented and persisted, how the application reconciles name-based membership with hash-based run identity, how benchmark projections are derived from the authoritative profile, and how management and tracking fit into the existing Qt/QML application.
 
-The design does not define implementation tasks, publish a third-party benchmark schema, retain historical definition versions, or change the authority of `profile.pb`. It also does not introduce a benchmark rank derived from recent performance; recent averages remain scenario-level context.
+The design does not define implementation tasks, publish a third-party benchmark schema, retain historical definition versions, or change the authority of `profile.pb`. A benchmark rank derived from recent performance appears only as a secondary history line (see Recent-average rank sampling); it never feeds attainment.
 
 ## Design basis
 
@@ -319,7 +319,11 @@ Tracking receives a full main-window workspace because it is an ongoing analysis
 
 ### Personal-best event sampling
 
-Average-rank history emits an end-of-day point only when a benchmark scenario establishes a strict personal best. Non-improving play days are intentionally absent; recent performance remains separate scenario-level context.
+Average-rank history emits an end-of-day point only when a benchmark scenario establishes a strict personal best. Non-improving play days are intentionally absent; recent performance has its own history.
+
+### Recent-average rank sampling
+
+The recent-average rank history emits an end-of-day point for every day on which any benchmark scenario was played. At each point every entry contributes the mean of its latest five runs up to that day, merged across its linked hashes in the same order as the scenario recent average and normalized on its own ladder; an entry with no runs contributes zero. The value is the equal-weight mean across entries, so the last point always equals the mean of the current per-scenario recent averages. It is computed in the same chronological sweep as the personal-best history, only for Trackable definitions, and never stored. Between play days the value is held, because a recent average only changes when the scenario is played again.
 
 ### Rejected alternatives
 
@@ -379,7 +383,7 @@ Average-rank history emits an end-of-day point only when a benchmark scenario es
 
 **Design subset:** Main-window workspace navigation, selection and unavailable states, status summary, separate rank and playtime histories, hierarchical scenario breakdown, manager entry point, and responsive/accessibility behavior.
 
-**Intentional deferrals:** Recent-average benchmark rank, definition history, community catalogues, and cumulative-time progress.
+**Intentional deferrals:** Definition history, community catalogues, and cumulative-time progress.
 
 **Dependencies:** Resolved projections and manager availability.
 
@@ -393,7 +397,7 @@ Average-rank history emits an end-of-day point only when a benchmark scenario es
 - Automatic resolution can update a saved benchmark outside a manual editing session. The dirty-draft exclusion and atomic publication boundary prevent hidden overwrites, but users may still observe a file modification caused by newly accepted run data.
 - Strict exact-name matching favors attribution safety over convenience. Similar or renamed scenarios require manual resolution.
 - The current-definition rule makes edits understandable and storage simple but can reshape past graphs and ranks. The manager must warn before structural or threshold changes are saved.
-- PB-only history is sparse and monotonic for an unchanged definition, but intentionally says nothing about ordinary practice variance. Scenario recent averages supply that separate context.
+- PB-only history is sparse and monotonic for an unchanged definition, but intentionally says nothing about ordinary practice variance. Scenario recent averages, and the recent-average rank history built from them, supply that separate context.
 - Main-thread evaluation keeps the first implementation simple and testable but is unsupported by workload measurements. The cached, asynchronous-ready use-case boundary limits the cost of changing that choice.
 - A modal manager matches the established desktop interaction but prevents side-by-side comparison with tracking. It must therefore retain draft context and return predictably to the previously selected benchmark.
 - Whole-directory enumeration failure retains the previous library because absence cannot be distinguished from inaccessible state. A successful enumeration is authoritative even when individual files are bad.

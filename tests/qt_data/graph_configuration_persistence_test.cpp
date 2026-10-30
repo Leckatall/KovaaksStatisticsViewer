@@ -108,6 +108,10 @@ namespace {
                                                  year_month_day{year{2026}, month{10}, day{16}}}, true};
         rank.seriesStyles["rank"] = SeriesStyleOverride{RgbaColor{255, 0, 0, 255}, 4.0};
 
+        auto &recentRank = configuration.preferences(GraphKey::BenchmarkRecentRank);
+        recentRank.range = RangePreference{AllHistory{}, false};
+        recentRank.appearance = {ConnectionMode::Straight, true};
+
         auto &benchmarkPlaytime = configuration.preferences(GraphKey::BenchmarkPlaytime);
         benchmarkPlaytime.range = RangePreference{CustomDates{year_month_day{year{1970}, month{1}, day{1}},
                                                               year_month_day{year{9999}, month{12}, day{31}}}, false};
@@ -204,7 +208,25 @@ namespace {
         const auto root = docObject();
         EXPECT_EQ(root["schemaVersion"].toInt(), 6);
         EXPECT_EQ(root["graphs"].toObject().keys(),
-                  (QStringList{"benchmarkPlaytime", "benchmarkRank", "dailyPlaytime", "run", "scenarioHistory"}));
+                  (QStringList{"benchmarkPlaytime", "benchmarkRank", "benchmarkRecentRank", "dailyPlaytime", "run",
+                               "scenarioHistory"}));
+    }
+
+    // The recent-rank graph joined without a schema bump: a document saved before it existed
+    // must load cleanly, with the new graph at its defaults.
+    TEST_F(GraphConfigurationPersistenceTest, ADocumentFromBeforeTheRecentRankGraphLoadsWithItsDefaults) {
+        auto root = savedRoot(everyPreferenceKind());
+        auto graphs = root["graphs"].toObject();
+        graphs.remove("benchmarkRecentRank");
+        root["graphs"] = graphs;
+        writeDoc(root);
+
+        const auto loaded = load();
+        EXPECT_TRUE(settings->quarantined.empty());
+        EXPECT_EQ(loaded.preferences(GraphKey::BenchmarkRecentRank),
+                  defaultGraphPreferences(GraphKey::BenchmarkRecentRank));
+        EXPECT_EQ(loaded.preferences(GraphKey::BenchmarkRank),
+                  everyPreferenceKind().preferences(GraphKey::BenchmarkRank));
     }
 
     TEST_F(GraphConfigurationPersistenceTest, MigratesVersionOneSeriesAndAddsDefaultGraphPreferences) {
@@ -491,7 +513,7 @@ namespace {
         EXPECT_EQ(settings->quarantined, (std::vector<std::string>{raw}));
         EXPECT_EQ(loaded.preferences(GraphKey::DailyPlaytime), defaultGraphPreferences(GraphKey::DailyPlaytime));
         for (const auto key: {GraphKey::Run, GraphKey::ScenarioHistory, GraphKey::BenchmarkRank,
-                              GraphKey::BenchmarkPlaytime})
+                              GraphKey::BenchmarkRecentRank, GraphKey::BenchmarkPlaytime})
             EXPECT_EQ(loaded.preferences(key), configuration.preferences(key)) << graphKeyName(key);
         expectV3RootSeries(loaded.runSeries);
         EXPECT_EQ(loaded.runAxisLabel, RunAxisLabel{AxisId{7}});

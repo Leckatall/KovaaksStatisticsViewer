@@ -29,8 +29,11 @@ TestCase {
 
     function test_sidebarListsGraphsAndSwitchesPages() {
         const {dialog, vm} = makeDialog()
-        for (const key of ["profile", "run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkPlaytime"])
+        for (const key of ["profile", "run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"])
             verify(find(dialog, "settingsNav_" + key) !== null, key)
+        const top = key => find(dialog, "settingsNav_" + key).mapToItem(dialog.contentItem, 0, 0).y
+        verify(top("benchmarkRank") < top("benchmarkRecentRank") && top("benchmarkRecentRank") < top("benchmarkPlaytime"),
+               "the recent-rank graph is listed between the rank and playtime graphs")
         mouseClick(find(dialog, "settingsNav_dailyPlaytime"))
         compare(dialog.currentPage, "dailyPlaytime")
         compare(vm.selectedGraph, "dailyPlaytime")

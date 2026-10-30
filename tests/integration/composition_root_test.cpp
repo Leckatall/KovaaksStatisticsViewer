@@ -261,6 +261,22 @@ namespace {
                   application::kDefaultAveragingWindowDays);
     }
 
+    TEST_F(CompositionRootTest, ARecentRankRangeChangeLeavesTheRankGraphsRangeAndAxisAlone) {
+        const auto rankAxisMin = app->benchmarkTrackingVm()->rankHistory()->xAxis().min();
+        const auto rankAxisMax = app->benchmarkTrackingVm()->rankHistory()->xAxis().max();
+        application::GraphQuickPatch patch;
+        patch.range = application::RangePreference{application::RecentDays{7}, false};
+        ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(application::GraphKey::BenchmarkRecentRank, patch)
+                        .accepted());
+
+        const auto committed = app->graphConfigurationUseCase()->current();
+        EXPECT_EQ(committed.configuration->preferences(application::GraphKey::BenchmarkRecentRank).range, patch.range);
+        EXPECT_EQ(committed.configuration->preferences(application::GraphKey::BenchmarkRank),
+                  application::defaultGraphPreferences(application::GraphKey::BenchmarkRank));
+        EXPECT_DOUBLE_EQ(app->benchmarkTrackingVm()->rankHistory()->xAxis().min(), rankAxisMin);
+        EXPECT_DOUBLE_EQ(app->benchmarkTrackingVm()->rankHistory()->xAxis().max(), rankAxisMax);
+    }
+
     TEST_F(CompositionRootTest, TheInjectedDaySourceIsTheOneTheAppExposesAndAdvances) {
         ASSERT_EQ(app->daySource(), env->daySource);
 
@@ -355,6 +371,7 @@ namespace {
         EXPECT_EQ(probe(app->playtimeVm()), defaultProbe(GraphKey::DailyPlaytime));
         EXPECT_EQ(probe(app->completionHistoryVm()), defaultProbe(GraphKey::ScenarioHistory));
         EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), defaultProbe(GraphKey::BenchmarkRank));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->recentRankHistory()), defaultProbe(GraphKey::BenchmarkRecentRank));
         EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), defaultProbe(GraphKey::BenchmarkPlaytime));
         const auto score = app->completionHistoryVm()->series({presentation::CompletionHistoryViewModel::Score});
         const auto defaultScore = application::defaultSeriesStyle(GraphKey::ScenarioHistory, "score");
@@ -380,6 +397,7 @@ namespace {
         EXPECT_EQ(probe(app->graphVm()), defaultProbe(GraphKey::Run));
         EXPECT_EQ(probe(app->completionHistoryVm()), defaultProbe(GraphKey::ScenarioHistory));
         EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), defaultProbe(GraphKey::BenchmarkRank));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->recentRankHistory()), defaultProbe(GraphKey::BenchmarkRecentRank));
         EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), defaultProbe(GraphKey::BenchmarkPlaytime));
         EXPECT_EQ(configuration->current().configuration->preferences(GraphKey::ScenarioHistory),
                   application::defaultGraphPreferences(GraphKey::ScenarioHistory));
@@ -405,17 +423,20 @@ namespace {
         commit(GraphKey::Run, application::ConnectionMode::Straight, true);
         commit(GraphKey::ScenarioHistory, application::ConnectionMode::PointsOnly, false);
         commit(GraphKey::BenchmarkRank, application::ConnectionMode::Straight, false);
+        commit(GraphKey::BenchmarkRecentRank, application::ConnectionMode::PointsOnly, false);
         commit(GraphKey::BenchmarkPlaytime, application::ConnectionMode::PointsOnly, true);
 
         EXPECT_EQ(probe(app->graphVm()), (StyleProbe{1, true}));
         EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{2, false}));
         EXPECT_EQ(probe(app->benchmarkTrackingVm()->rankHistory()), (StyleProbe{1, false}));
+        EXPECT_EQ(probe(app->benchmarkTrackingVm()->recentRankHistory()), (StyleProbe{2, false}));
         EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{2, true}));
         EXPECT_EQ(probe(app->playtimeVm()), (StyleProbe{0, false}));
 
         commit(GraphKey::Run, application::ConnectionMode::Smooth, false);
         commit(GraphKey::ScenarioHistory, application::ConnectionMode::Smooth, true);
         commit(GraphKey::BenchmarkRank, application::ConnectionMode::Smooth, false);
+        commit(GraphKey::BenchmarkRecentRank, application::ConnectionMode::Smooth, false);
         commit(GraphKey::BenchmarkPlaytime, application::ConnectionMode::Smooth, false);
         EXPECT_EQ(probe(app->completionHistoryVm()), (StyleProbe{0, true}));
         EXPECT_EQ(probe(app->benchmarkTrackingVm()->playtimeHistory()), (StyleProbe{0, false}));
@@ -428,23 +449,24 @@ namespace {
         QSignalSpy historyData(app->completionHistoryVm(), &presentation::GraphViewModelBase::dataUpdated);
         QSignalSpy runData(app->graphVm(), &presentation::GraphViewModelBase::dataUpdated);
         QSignalSpy rankData(app->benchmarkTrackingVm()->rankHistory(), &presentation::GraphViewModelBase::dataUpdated);
+        QSignalSpy recentRankData(app->benchmarkTrackingVm()->recentRankHistory(),
+                                  &presentation::GraphViewModelBase::dataUpdated);
         QSignalSpy playtimeStyle(app->playtimeVm(), &presentation::GraphViewModelBase::styleChanged);
 
         application::GraphQuickPatch patch;
         patch.connection = application::ConnectionMode::Straight;
-        for (const auto key: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
-                              GraphKey::BenchmarkRank, GraphKey::BenchmarkPlaytime})
+        for (const auto key: application::kGraphKeys)
             ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(key, patch).accepted());
 
         EXPECT_EQ(playtimeData.count(), 0);
         EXPECT_EQ(historyData.count(), 0);
         EXPECT_EQ(runData.count(), 0);
         EXPECT_EQ(rankData.count(), 0);
+        EXPECT_EQ(recentRankData.count(), 0);
         EXPECT_EQ(playtimeStyle.count(), 1);
 
         patch.connection = application::ConnectionMode::Smooth;
-        for (const auto key: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
-                              GraphKey::BenchmarkRank, GraphKey::BenchmarkPlaytime})
+        for (const auto key: application::kGraphKeys)
             ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(key, patch).accepted());
     }
 

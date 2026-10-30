@@ -70,6 +70,7 @@ TestCase {
             {tag: "daily", graph: "dailyPlaytime", sections: ["dataRange", "seriesStyle", "axes"]},
             {tag: "scenario", graph: "scenarioHistory", sections: ["dataRange", "seriesStyle", "axes"]},
             {tag: "rank", graph: "benchmarkRank", sections: ["dataRange", "seriesStyle"]},
+            {tag: "recentRank", graph: "benchmarkRecentRank", sections: ["dataRange", "seriesStyle"]},
             {tag: "benchmark", graph: "benchmarkPlaytime", sections: ["dataRange", "seriesStyle", "axes"]}
         ]
     }

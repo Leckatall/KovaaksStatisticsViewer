@@ -25,7 +25,7 @@ TestCase {
         }
     }
 
-    readonly property var allKeys: ["run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkPlaytime"]
+    readonly property var allKeys: ["run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"]
 
     function init() {
         fakeVm.patches = []
@@ -35,6 +35,7 @@ TestCase {
             dailyPlaytime: fakeVm.entry({hasWindow: true, window: 3}),
             scenarioHistory: fakeVm.entry({hasLatestRuns: true, markers: true}),
             benchmarkRank: fakeVm.entry({}),
+            benchmarkRecentRank: fakeVm.entry({}),
             benchmarkPlaytime: fakeVm.entry({hasWindow: true, window: 3})
         })
     }
@@ -81,6 +82,7 @@ TestCase {
             {tag: "scenarioHistory", key: "scenarioHistory"},
             {tag: "dailyPlaytime", key: "dailyPlaytime"},
             {tag: "benchmarkRank", key: "benchmarkRank"},
+            {tag: "benchmarkRecentRank", key: "benchmarkRecentRank"},
             {tag: "run", key: "run"}
         ]
     }

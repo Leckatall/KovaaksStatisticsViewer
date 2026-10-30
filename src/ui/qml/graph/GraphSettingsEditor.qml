@@ -14,7 +14,7 @@ Item {
     objectName: "graphSettingsEditor"
 
     required property var settingsVm
-    // One of run, dailyPlaytime, scenarioHistory, benchmarkRank, benchmarkPlaytime.
+    // One of run, dailyPlaytime, scenarioHistory, benchmarkRank, benchmarkRecentRank, benchmarkPlaytime.
     required property string graphKey
 
     readonly property alias colorDialog: seriesColorDialog

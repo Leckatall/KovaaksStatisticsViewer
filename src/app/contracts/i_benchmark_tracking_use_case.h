@@ -42,11 +42,13 @@ namespace ksv::application {
         // Fired instead of onChanged when only the playtime graph's window or range moved: the
         // snapshot's projection summaries and rank history are the ones the last onChanged delivered.
         virtual void onPlaytimeChanged(std::function<void()> callback) = 0;
-        // Likewise for the rank graph's range: only the snapshot's `rank` view moved.
-        virtual void onRankChanged(std::function<void()> callback) = 0;
-        // `graph` is BenchmarkRank or BenchmarkPlaytime; selecting another benchmark never changes it.
+        // Likewise for a rank graph's range: only the snapshot view of the named graph moved -
+        // `rank` for BenchmarkRank, `recentRank` for BenchmarkRecentRank.
+        virtual void onRankChanged(std::function<void(GraphKey)> callback) = 0;
+        // `graph` is BenchmarkRank, BenchmarkRecentRank or BenchmarkPlaytime; selecting another
+        // benchmark never changes it.
         [[nodiscard]] virtual GraphPresentation presentation(GraphKey graph) const = 0;
-        // Fires for a committed style change of either benchmark graph and nothing else: no
+        // Fires for a committed style change of any benchmark graph and nothing else: no
         // evaluation, projection or range moved.
         virtual void onPresentationChanged(std::function<void()> callback) = 0;
     };

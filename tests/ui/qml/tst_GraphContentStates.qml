@@ -254,7 +254,7 @@ Item {
             const card = makeCard({hasData: false})
             verify(shown(card, "rankHistoryEmptyLabel"))
             verify(!shown(card, "rankHistoryEmptyHint"))
-            verify(!shown(card, "rankHistoryNoImprovementLabel"))
+            verify(!shown(card, "rankHistoryNoPointsLabel"))
             verifyGearOpens(gearOf(card, "benchmarkRank"))
         }
 
@@ -265,27 +265,28 @@ Item {
             const hint = find(card, "rankHistoryEmptyHint")
             verify(hint !== null && hint.visible)
             verify(hint.text.indexOf("range") >= 0)
-            verify(!shown(card, "rankHistoryNoImprovementLabel"))
+            verify(!shown(card, "rankHistoryNoPointsLabel"))
             verifyGearOpens(gearOf(card, "benchmarkRank"))
         }
 
         function test_pointsOnlyOverACarriedRankExplainsThereAreNoImprovementPoints() {
             const card = makeCard({hasData: true, historyAvailable: true, hasCarriedState: true,
-                                   noObservationsInRange: true, noImprovementPoints: true, connectionMode: 2})
-            const notice = find(card, "rankHistoryNoImprovementLabel")
+                                   noObservationsInRange: true, noPointsInRange: true, connectionMode: 2,
+                                   noPointsText: "This range has no improvement points."})
+            const notice = find(card, "rankHistoryNoPointsLabel")
             verify(notice !== null && notice.visible, "the empty plot is explained")
-            verify(notice.text.indexOf("improvement") >= 0)
+            compare(notice.text, "This range has no improvement points.", "the view model words it for its metric")
             verify(!shown(card, "rankHistoryEmptyLabel"), "this is not the empty-range state")
             verify(!shown(card, "rankHistoryEmptyHint"))
             verifyGearOpens(gearOf(card, "benchmarkRank"))
         }
 
-        function test_theNoImprovementNoticeFollowsTheViewModel() {
+        function test_theNoPointsNoticeFollowsTheViewModel() {
             const model = TestDoubles.makeFakeHistoryModel({hasData: true, hasCarriedState: true, historyAvailable: true})
             const card = createTemporaryObject(cardComponent, root, {historyModel: model})
-            verify(!shown(card, "rankHistoryNoImprovementLabel"))
-            card.historyModel = Object.assign({}, model, {noImprovementPoints: true, connectionMode: 2})
-            verify(shown(card, "rankHistoryNoImprovementLabel"))
+            verify(!shown(card, "rankHistoryNoPointsLabel"))
+            card.historyModel = Object.assign({}, model, {noPointsInRange: true, connectionMode: 2})
+            verify(shown(card, "rankHistoryNoPointsLabel"))
         }
 
         function test_aCardWithoutAViewModelStillHasItsGear() {
@@ -313,7 +314,9 @@ Item {
             tryVerify(() => find(ws, "incompleteBody") !== null, 2000)
             verify(find(ws, "incompleteBody").visible)
             compare(find(ws, "rankHistoryCard"), null, "completeness gates keep rank hidden")
+            compare(find(ws, "recentRankHistoryCard"), null, "and the recent rank too")
             compare(find(ws, "graphGear_benchmarkRank"), null, "no rank gear without a rank graph")
+            compare(find(ws, "graphGear_benchmarkRecentRank"), null)
             verify(shown(ws, "playtimeHistoryEmptyHint"), "an empty playtime range hints at widening it")
             verifyGearOpens(gearOf(ws, "benchmarkPlaytime"))
         }
@@ -330,6 +333,7 @@ Item {
             const ws = makeWorkspace(data.fixture)
             tryVerify(() => find(ws, data.body) !== null, 2000)
             compare(find(ws, "rankHistoryCard"), null)
+            compare(find(ws, "recentRankHistoryCard"), null)
             compare(find(ws, "playtimeHistoryCard"), null)
         }
     }

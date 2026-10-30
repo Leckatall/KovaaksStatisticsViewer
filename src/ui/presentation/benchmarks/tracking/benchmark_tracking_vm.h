@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -20,8 +21,8 @@
 
 namespace ksv::presentation {
     // Adapts one IBenchmarkTrackingUseCase revision into the benchmark workspace's QML surface:
-    // selector entries, explicit state, status summary, and three owned presentation-only child
-    // models (two history graphs and the scenario progress grid). Its only dependency is the
+    // selector entries, explicit state, status summary, and four owned presentation-only child
+    // models (three history graphs and the scenario progress grid). Its only dependency is the
     // use case - never a service, profile, or repository. After an onChanged notification it reads
     // one BenchmarkWorkspaceSnapshot, builds every replacement value plus all child models, installs
     // them, and only then emits changed(), so QML never sees a new state over a stale child model.
@@ -56,6 +57,7 @@ namespace ksv::presentation {
         Q_PROPERTY(bool hasNextTier READ hasNextTier NOTIFY changed)
         Q_PROPERTY(int scenarioCount READ scenarioCount NOTIFY changed)
         Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *rankHistory READ rankHistory CONSTANT)
+        Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *recentRankHistory READ recentRankHistory CONSTANT)
         Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *playtimeHistory READ playtimeHistory CONSTANT)
         Q_PROPERTY(ksv::presentation::BenchmarkProgressGridModel *progressGrid READ progressGrid CONSTANT)
 
@@ -84,6 +86,7 @@ namespace ksv::presentation {
         [[nodiscard]] bool hasNextTier() const { return m_hasNextTier; }
         [[nodiscard]] int scenarioCount() const { return m_scenarioCount; }
         [[nodiscard]] BenchmarkHistoryViewModel *rankHistory() const { return m_rankHistory; }
+        [[nodiscard]] BenchmarkHistoryViewModel *recentRankHistory() const { return m_recentRankHistory; }
         [[nodiscard]] BenchmarkHistoryViewModel *playtimeHistory() const { return m_playtimeHistory; }
         [[nodiscard]] BenchmarkProgressGridModel *progressGrid() const { return m_progressGrid; }
 
@@ -104,31 +107,38 @@ namespace ksv::presentation {
         void applyPresentation();
         // A window or range change: only the playtime history and its axis move.
         void rebuildPlaytime();
-        // A rank range change: only the rank history and its axis move.
-        void rebuildRank();
+        // A rank range change: only that graph's history and its axis move. `graph` is BenchmarkRank
+        // or BenchmarkRecentRank.
+        void rebuildRank(application::GraphKey graph);
         QList<QPointF> playtimePoints(const application::BenchmarkWorkspaceSnapshot &snapshot);
         [[nodiscard]] static BenchmarkHistoryViewModel::Content playtimeContent(
             const application::BenchmarkWorkspaceSnapshot &snapshot, const QList<QPointF> &points);
-        void updateRankHistory(const application::BenchmarkWorkspaceSnapshot &snapshot);
-        // The union both graphs default to; empty when neither has a sample.
+        // `full` is empty without a projection.
+        void updateRankHistory(BenchmarkHistoryViewModel &history, const DateTimeAxis &axis,
+                               std::span<const domain::AverageRankPoint> full,
+                               const application::RankRangeView &view) const;
+        // The union every graph defaults to; empty when none has a sample.
         [[nodiscard]] std::optional<ExtentMs> unionExtent() const;
         // A graph with a date range spans exactly it; without one it spans the last applied union,
-        // which either graph only reads and neither graph's range ever writes.
+        // which every graph only reads and no graph's range ever writes.
         void applyAxis(DateTimeAxis &axis, const std::optional<application::DayInterval> &interval) const;
-        void applyRankAxis(const application::BenchmarkWorkspaceSnapshot &snapshot);
+        void applyRankAxis(DateTimeAxis &axis, const application::RankRangeView &view) const;
         void applyPlaytimeAxis(const application::BenchmarkWorkspaceSnapshot &snapshot);
 
         std::shared_ptr<application::IBenchmarkTrackingUseCase> m_useCase;
-        // Must precede m_rankHistory/m_playtimeHistory: each child holds a non-owning pointer to its
-        // axis and is constructed with a reference to it, so the axes must outlive them.
-        DateTimeAxis m_historyXAxis;
+        // Must precede the history children: each holds a non-owning pointer to its axis and is
+        // constructed with a reference to it, so the axes must outlive them.
+        DateTimeAxis m_rankXAxis;
+        DateTimeAxis m_recentRankXAxis;
         DateTimeAxis m_playtimeXAxis;
         BenchmarkHistoryViewModel *m_rankHistory;
+        BenchmarkHistoryViewModel *m_recentRankHistory;
         BenchmarkHistoryViewModel *m_playtimeHistory;
         BenchmarkProgressGridModel *m_progressGrid;
 
-        // Of the full rank history, whatever its range shows.
+        // Of the full rank histories, whatever their ranges show.
         std::optional<ExtentMs> m_rankExtentMs;
+        std::optional<ExtentMs> m_recentRankExtentMs;
         // Of the full-history playtime series, not of what its range shows.
         std::optional<ExtentMs> m_playtimeExtentMs;
         std::optional<ExtentMs> m_appliedUnionMs;

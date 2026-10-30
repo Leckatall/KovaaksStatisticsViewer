@@ -299,6 +299,16 @@ namespace {
         // The personal-best average climbs in several steps over the month.
         ASSERT_GE(projection.averageRankHistory.size(), 5U);
         EXPECT_GT(projection.averageRankHistory.back().averageRank - projection.averageRankHistory.front().averageRank, 0.5);
+
+        // The recent-average line has a point on every play day, at least as many as the PB line,
+        // and ends at the mean of each scenario's current recent average.
+        ASSERT_GE(projection.recentAverageRankHistory.size(), projection.averageRankHistory.size());
+        double recentMean = 0.0;
+        for (const auto &row: projection.scenarios)
+            recentMean += domain::normalizedTierValue(seeded.benchmark.tiers, seeded.entry(row.entryId.value).thresholds,
+                                                      row.recentAverage);
+        recentMean /= static_cast<double>(projection.scenarios.size());
+        EXPECT_NEAR(projection.recentAverageRankHistory.back().averageRank, recentMean, 1e-9);
     }
 
     TEST(DriverBenchmarkFixtureTest, ManyTiersBenchmarkRanksEveryRowOnATwelveTierLadder) {

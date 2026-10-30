@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <deque>
 #include <functional>
+#include <numeric>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -319,31 +321,50 @@ namespace ksv::domain {
             for (const auto &hash: mappedScenarioHashes(found->second->hash, found->second->additionalHashes))
                 entriesByHash[hash].push_back(index);
         }
-        // Running sum of every entry's normalized value rather than re-averaging per point, so the
+        // Running sums of every entry's normalized value rather than re-averaging per point, so the
         // sweep stays linear in runs plus emitted points. runFacts is chronological by contract
         // (UserProfile::getRunFacts), so each day is one contiguous block and no day is revisited.
-        std::vector<double> normalized(projection.scenarios.size(), 0.0);
-        std::vector<std::optional<double> > best(projection.scenarios.size());
+        const auto normalizedOf = [&](const std::size_t scenarioIndex, const double score) {
+            return states[scenarioIndex].ladder ? normalizedFromLadder(*states[scenarioIndex].ladder, score) : 0.0;
+        };
+        struct EntrySweep {
+            std::optional<double> best;
+            double bestNormalized = 0.0;
+            std::deque<double> recent;
+            double recentNormalized = 0.0;
+        };
+        std::vector<EntrySweep> sweeps(projection.scenarios.size());
         double normalizedRunning = 0.0;
+        double recentRunning = 0.0;
         const auto entryCount = static_cast<double>(projection.scenarios.size());
         for (std::size_t index = 0; index < runFacts.size();) {
             const auto day = runFacts[index].run_id.startDay();
+            bool played = false;
             bool improved = false;
             for (; index < runFacts.size() && runFacts[index].run_id.startDay() == day; ++index) {
                 const auto bucket = entriesByHash.find(runFacts[index].run_id.scenario_id.hash);
                 if (bucket == entriesByHash.end()) continue;
+                played = true;
                 const auto score = static_cast<double>(runFacts[index].score);
                 for (const auto scenarioIndex: bucket->second) {
-                    if (best[scenarioIndex] && score <= *best[scenarioIndex]) continue;
-                    best[scenarioIndex] = score;
-                    const double updated = states[scenarioIndex].ladder
-                        ? normalizedFromLadder(*states[scenarioIndex].ladder, best[scenarioIndex]) : 0.0;
-                    normalizedRunning += updated - normalized[scenarioIndex];
-                    normalized[scenarioIndex] = updated;
+                    auto &sweep = sweeps[scenarioIndex];
+                    sweep.recent.push_back(score);
+                    if (sweep.recent.size() > kRecentRuns) sweep.recent.pop_front();
+                    // Summed oldest first, as projectScenario does, so the last point equals its average.
+                    const double total = std::accumulate(sweep.recent.begin(), sweep.recent.end(), 0.0);
+                    const double recentUpdated =
+                        normalizedOf(scenarioIndex, total / static_cast<double>(sweep.recent.size()));
+                    recentRunning += recentUpdated - std::exchange(sweep.recentNormalized, recentUpdated);
+
+                    if (sweep.best && score <= *sweep.best) continue;
+                    sweep.best = score;
+                    const double updated = normalizedOf(scenarioIndex, score);
+                    normalizedRunning += updated - std::exchange(sweep.bestNormalized, updated);
                     improved = true;
                 }
             }
             if (improved) projection.averageRankHistory.push_back({day, normalizedRunning / entryCount});
+            if (played) projection.recentAverageRankHistory.push_back({day, recentRunning / entryCount});
         }
         return projection;
     }

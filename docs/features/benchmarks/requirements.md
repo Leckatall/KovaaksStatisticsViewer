@@ -37,7 +37,7 @@ KSV already retains run history with scenario identity, score, duration, and tim
 - Predicting how long a user will take to attain the next rank.
 - Plotting benchmark progress as a function of cumulative time played. The stored data and metrics may support a later product decision, but this relationship is not part of this feature.
 - Defining progress above the highest configured tier. For now, scores at or above the highest threshold are interpreted as that tier for average-rank calculation because no higher interpolation interval exists.
-- Making a rank derived from the recent average part of the primary experience. This may be considered later as a low-priority secondary statistic and would never affect attainment.
+- Making a rank derived from the recent average part of the primary experience. It is shown only as a secondary history (see Recent performance) and never affects attainment.
 - Preserving historical versions of benchmark definitions or their former interpretations.
 - Continuously watching benchmark files, merging concurrent edits, or maintaining a live relationship with an imported playlist.
 - Publishing a stable schema or API for third-party consumers. Human readability and KSV-to-KSV copying do not constitute a compatibility promise to other applications.
@@ -157,6 +157,7 @@ The user opens the managed benchmark directory, copies a compatible KSV benchmar
 - When fewer than five runs exist, the average uses all available runs and indicates the smaller sample where necessary for correct interpretation.
 - Recent average may rise or fall and never grants or revokes permanent attainment.
 - Personal best and recent average are distinctly labelled and visually distinguishable.
+- A secondary recent-average rank history shows, for every day a benchmark scenario was played, the equal-weight mean of each scenario's recent average converted onto its own tier ladder, with unplayed scenarios counting as zero. It may fall as well as rise, holds its value between play days, is available only for complete benchmarks, and never affects attained or completed ranks.
 
 ### Benchmark playtime
 
@@ -169,7 +170,7 @@ The user opens the managed benchmark directory, copies a compatible KSV benchmar
 
 - The tracking view and Benchmark Manager are separate product surfaces: tracking explains performance, while management changes its definition.
 - A benchmark status summary displays official attained rank, highest completed rank, current average rank, total playtime, and the remaining requirements for the next tier.
-- The history area displays the personal-best average-rank line and benchmark-filtered rolling-playtime line.
+- The history area displays the personal-best average-rank line, the recent-average rank line, and the benchmark-filtered rolling-playtime line.
 - The scenario breakdown follows the category hierarchy and shows each scenario's personal best, recent five-run average, attained tier, next threshold, and matching state.
 - Rank colors, category colors, names, and hierarchy are used consistently across summary and detail views without relying on color alone.
 

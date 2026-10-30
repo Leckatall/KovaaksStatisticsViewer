@@ -29,8 +29,8 @@ TEST(RankHistoryWindow, TheLastEarlierImprovementIsTheEstablishedRankAndInRangeO
 
     ASSERT_TRUE(window.established);
     expectPoint(*window.established, 12, 1.5);
-    ASSERT_EQ(window.improvements.size(), 1U);
-    expectPoint(window.improvements[0], 20, 2.0);
+    ASSERT_EQ(window.points.size(), 1U);
+    expectPoint(window.points[0], 20, 2.0);
 }
 
 TEST(RankHistoryWindow, AWindowWithoutImprovementsStillHasItsEstablishedRank) {
@@ -39,7 +39,7 @@ TEST(RankHistoryWindow, AWindowWithoutImprovementsStillHasItsEstablishedRank) {
 
     ASSERT_TRUE(window.established);
     expectPoint(*window.established, 20, 2.0);
-    EXPECT_TRUE(window.improvements.empty());
+    EXPECT_TRUE(window.points.empty());
 }
 
 TEST(RankHistoryWindow, NothingIsEstablishedBeforeTheFirstImprovement) {
@@ -47,12 +47,12 @@ TEST(RankHistoryWindow, NothingIsEstablishedBeforeTheFirstImprovement) {
 
     const auto straddling = rankHistoryWindow(full, day(5), day(11));
     EXPECT_FALSE(straddling.established);
-    ASSERT_EQ(straddling.improvements.size(), 1U);
-    expectPoint(straddling.improvements[0], 10, 1.0);
+    ASSERT_EQ(straddling.points.size(), 1U);
+    expectPoint(straddling.points[0], 10, 1.0);
 
     const auto before = rankHistoryWindow(full, day(1), day(9));
     EXPECT_FALSE(before.established);
-    EXPECT_TRUE(before.improvements.empty());
+    EXPECT_TRUE(before.points.empty());
 }
 
 TEST(RankHistoryWindow, BothEndsAreInclusive) {
@@ -61,9 +61,9 @@ TEST(RankHistoryWindow, BothEndsAreInclusive) {
 
     ASSERT_TRUE(window.established);
     expectPoint(*window.established, 10, 1.0);
-    ASSERT_EQ(window.improvements.size(), 2U);
-    expectPoint(window.improvements[0], 12, 1.5);
-    expectPoint(window.improvements[1], 20, 2.0);
+    ASSERT_EQ(window.points.size(), 2U);
+    expectPoint(window.points[0], 12, 1.5);
+    expectPoint(window.points[1], 20, 2.0);
 }
 
 TEST(RankHistoryWindow, AWindowAfterTheLastImprovementCarriesTheCurrentRank) {
@@ -72,7 +72,7 @@ TEST(RankHistoryWindow, AWindowAfterTheLastImprovementCarriesTheCurrentRank) {
 
     ASSERT_TRUE(window.established);
     expectPoint(*window.established, 25, 2.5);
-    EXPECT_TRUE(window.improvements.empty());
+    EXPECT_TRUE(window.points.empty());
 }
 
 TEST(RankHistoryWindow, WindowedValuesAreTheFullEvaluationsValues) {
@@ -93,6 +93,6 @@ TEST(RankHistoryWindow, WindowedValuesAreTheFullEvaluationsValues) {
     const auto window = rankHistoryWindow(projection.averageRankHistory, day(104), day(106));
     ASSERT_TRUE(window.established);
     EXPECT_DOUBLE_EQ(window.established->averageRank, projection.averageRankHistory[1].averageRank);
-    ASSERT_EQ(window.improvements.size(), 1U);
-    EXPECT_DOUBLE_EQ(window.improvements[0].averageRank, projection.averageRankHistory[2].averageRank);
+    ASSERT_EQ(window.points.size(), 1U);
+    EXPECT_DOUBLE_EQ(window.points[0].averageRank, projection.averageRankHistory[2].averageRank);
 }

@@ -77,19 +77,24 @@ namespace ksv::application {
         m_resolution->onChanged(reevaluate);
         m_profileService->onProfileChanged(reevaluate);
         m_configuration->onChanged([this](const GraphConfigurationChange &change) {
-            if (change.sectionsOf(GraphKey::BenchmarkRank).range) refreshRankOnly();
+            const auto &rank = change.sectionsOf(GraphKey::BenchmarkRank);
+            const auto &recentRank = change.sectionsOf(GraphKey::BenchmarkRecentRank);
             const auto &playtime = change.sectionsOf(GraphKey::BenchmarkPlaytime);
+            if (rank.range) refreshRankOnly(GraphKey::BenchmarkRank);
+            if (recentRank.range) refreshRankOnly(GraphKey::BenchmarkRecentRank);
             if (playtime.range || playtime.window) refreshPlaytimeOnly();
-            // One announcement however many of the two graphs restyled.
-            if (change.sectionsOf(GraphKey::BenchmarkRank).style || playtime.style)
+            // One announcement however many of the benchmark graphs restyled.
+            if (rank.style || recentRank.style || playtime.style)
                 for (const auto &callback: m_presentationCallbacks) callback();
         });
         m_daySource->onDayChanged([this](std::chrono::sys_days) {
             const auto committed = m_configuration->current();
-            if (followsToday(effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkRank))))
-                refreshRankOnly();
-            if (followsToday(effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkPlaytime))))
-                refreshPlaytimeOnly();
+            const auto follows = [&](const GraphKey graph) {
+                return followsToday(effectiveRange(committed.configuration->preferences(graph)));
+            };
+            for (const auto graph: {GraphKey::BenchmarkRank, GraphKey::BenchmarkRecentRank})
+                if (follows(graph)) refreshRankOnly(graph);
+            if (follows(GraphKey::BenchmarkPlaytime)) refreshPlaytimeOnly();
         });
         refresh();
     }
@@ -196,7 +201,8 @@ namespace ksv::application {
         if (cached != m_cache.end()) {
             m_projection = cached->second.projection;
             applyPlaytimeView(cached->second);
-            applyRankRange(cached->second);
+            applyRankRange(GraphKey::BenchmarkRank, cached->second);
+            applyRankRange(GraphKey::BenchmarkRecentRank, cached->second);
             m_state = BenchmarkTrackingState::Ready;
         } else {
             m_state = BenchmarkTrackingState::Unavailable;
@@ -238,30 +244,34 @@ namespace ksv::application {
         for (const auto &callback: m_playtimeCallbacks) callback();
     }
 
-    void BenchmarkTrackingUseCase::applyRankRange(const Evaluation &evaluation) {
+    void BenchmarkTrackingUseCase::applyRankRange(const GraphKey graph, const Evaluation &evaluation) {
+        const bool recent = graph == GraphKey::BenchmarkRecentRank;
+        const auto &history = recent ? evaluation.projection.recentAverageRankHistory
+                                     : evaluation.projection.averageRankHistory;
+        auto &view = recent ? m_snapshot.recentRank : m_snapshot.rank;
         const auto committed = m_configuration->current();
-        const auto range = effectiveRange(committed.configuration->preferences(GraphKey::BenchmarkRank));
-        // Anchored at the last improvement, not the newest run: the rank series has no point after it.
-        const auto &history = evaluation.projection.averageRankHistory;
-        const auto latestImprovementDay = history.empty() ? std::nullopt : std::optional{history.back().day};
-        const auto projection = resolveRange(range, m_daySource->today(), latestImprovementDay);
-        m_snapshot.rank = {};
-        if (range.anchorToLatestRun) m_snapshot.rank.anchoredEnd = latestImprovementDay;
+        const auto range = effectiveRange(committed.configuration->preferences(graph));
+        // Anchored at the series' last point, not the newest run: the personal-best series has no
+        // point after its last improvement, so anchoring later would only stretch the held level.
+        const auto lastPointDay = history.empty() ? std::nullopt : std::optional{history.back().day};
+        const auto projection = resolveRange(range, m_daySource->today(), lastPointDay);
+        view = {};
+        if (range.anchorToLatestRun) view.anchoredEnd = lastPointDay;
         if (const auto *interval = std::get_if<DayInterval>(&projection)) {
-            m_snapshot.rank.interval = *interval;
+            view.interval = *interval;
             // Dates running past the last point are cut back to it; dates wholly after it stay as entered.
-            const auto &end = m_snapshot.rank.anchoredEnd;
-            if (end && interval->first <= *end && *end < interval->last) m_snapshot.rank.interval->last = *end;
+            const auto &end = view.anchoredEnd;
+            if (end && interval->first <= *end && *end < interval->last) view.interval->last = *end;
         }
-        m_snapshot.rank.noRelevantHistory = std::holds_alternative<NoRelevantHistory>(projection);
+        view.noRelevantHistory = std::holds_alternative<NoRelevantHistory>(projection);
     }
 
-    void BenchmarkTrackingUseCase::refreshRankOnly() {
+    void BenchmarkTrackingUseCase::refreshRankOnly(const GraphKey graph) {
         if (m_state != BenchmarkTrackingState::Ready || !m_selected) return;
         const auto cached = m_cache.find(*m_selected);
         if (cached == m_cache.end()) return;
-        applyRankRange(cached->second);
-        for (const auto &callback: m_rankCallbacks) callback();
+        applyRankRange(graph, cached->second);
+        for (const auto &callback: m_rankCallbacks) callback(graph);
     }
 
     BenchmarkTrackingUseCase::Evaluation BenchmarkTrackingUseCase::evaluate(

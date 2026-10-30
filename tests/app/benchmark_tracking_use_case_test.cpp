@@ -1138,6 +1138,7 @@ TEST(BenchmarkTrackingPlaytime, OtherGraphsAndUnselectedStatesAreNotRefreshed) {
 namespace {
     struct RankFixture : PlaytimeFixture {
         int rankOnly = 0;
+        int recentOnly = 0;
 
         GraphPreferences &rankPreferences() {
             return configuration->configuration.preferences(GraphKey::BenchmarkRank);
@@ -1145,7 +1146,9 @@ namespace {
 
         void startRank() {
             start();
-            tracking->onRankChanged([this] { ++rankOnly; });
+            tracking->onRankChanged([this](const GraphKey graph) {
+                ++(graph == GraphKey::BenchmarkRecentRank ? recentOnly : rankOnly);
+            });
         }
 
         void improvingThenFlatRuns() {
@@ -1362,6 +1365,102 @@ TEST(BenchmarkTrackingRank, OtherGraphsAndUnselectedStatesAreNotRefreshed) {
     EXPECT_EQ(fixture.rankOnly, 0);
 }
 
+// ---- recent rank range --------------------------------------------------------------------
+
+namespace {
+    struct RecentRankFixture : RankFixture {
+        GraphPreferences &recentPreferences() {
+            return configuration->configuration.preferences(GraphKey::BenchmarkRecentRank);
+        }
+    };
+}
+
+TEST(BenchmarkTrackingRecentRank, ARangeChangeMovesOnlyTheRecentRankView) {
+    RecentRankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.startRank();
+    const auto rank = fixture.tracking->snapshot().rank;
+    const auto factRequests = fixture.profile->fact_request_count;
+
+    fixture.recentPreferences().range = RangePreference{
+        CustomDates{std::chrono::year_month_day{epochDay(102)}, std::chrono::year_month_day{epochDay(106)}}, false};
+    fixture.commitPlaytime(GraphKey::BenchmarkRecentRank);
+
+    EXPECT_EQ(fixture.recentOnly, 1);
+    EXPECT_EQ(fixture.rankOnly, 0);
+    EXPECT_EQ(fixture.tracked, 0);
+    EXPECT_EQ(fixture.playtimeOnly, 0);
+    EXPECT_EQ(fixture.tracking->snapshot().recentRank.interval,
+              std::optional(DayInterval{epochDay(102), epochDay(106)}));
+    EXPECT_EQ(fixture.tracking->snapshot().rank, rank);
+    EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
+}
+
+TEST(BenchmarkTrackingRecentRank, ARankRangeChangeLeavesTheRecentRankViewAlone) {
+    RecentRankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.startRank();
+    const auto recent = fixture.tracking->snapshot().recentRank;
+
+    fixture.rankPreferences().range = RangePreference{RecentDays{2}, false};
+    fixture.commitPlaytime(GraphKey::BenchmarkRank);
+
+    EXPECT_EQ(fixture.rankOnly, 1);
+    EXPECT_EQ(fixture.recentOnly, 0);
+    EXPECT_EQ(fixture.tracking->snapshot().recentRank, recent);
+}
+
+// The recent line has a point on every play day, so it is anchored at the last one even when that
+// day improved nothing and the rank graph's anchor stays earlier.
+TEST(BenchmarkTrackingRecentRank, TheAnchorIsTheLastPlayDayNotTheLastImprovement) {
+    RecentRankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.days->setToday(epochDay(400));
+    fixture.rankPreferences().range = RangePreference{RecentDays{3}, true};
+    fixture.recentPreferences().range = RangePreference{RecentDays{3}, true};
+    fixture.startRank();
+
+    ASSERT_EQ(fixture.tracking->projection()->recentAverageRankHistory.back().day, epochDay(110));
+    EXPECT_EQ(fixture.tracking->snapshot().recentRank.interval,
+              std::optional(DayInterval{epochDay(108), epochDay(110)}));
+    EXPECT_EQ(fixture.tracking->snapshot().recentRank.anchoredEnd, std::optional(epochDay(110)));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
+}
+
+TEST(BenchmarkTrackingRecentRank, AnAnchoredRangeWithoutContributingRunsHasNoRelevantHistory) {
+    RecentRankFixture fixture;
+    fixture.days->setToday(epochDay(400));
+    fixture.recentPreferences().range = RangePreference{RecentDays{5}, true};
+    fixture.startRank();
+
+    EXPECT_TRUE(fixture.tracking->snapshot().recentRank.noRelevantHistory);
+    EXPECT_FALSE(fixture.tracking->snapshot().recentRank.interval);
+}
+
+TEST(BenchmarkTrackingRecentRank, ATodayAnchoredRangeFollowsADayChangeAlone) {
+    RecentRankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.days->setToday(epochDay(110));
+    fixture.recentPreferences().range = RangePreference{RecentDays{5}, false};
+    fixture.startRank();
+
+    fixture.days->advance();
+
+    EXPECT_EQ(fixture.recentOnly, 1);
+    EXPECT_EQ(fixture.rankOnly, 0);
+    EXPECT_EQ(fixture.tracked, 0);
+    EXPECT_EQ(fixture.tracking->snapshot().recentRank.interval,
+              std::optional(DayInterval{epochDay(107), epochDay(111)}));
+}
+
+TEST(BenchmarkTrackingRecentRank, UnselectedStatesAreNotRefreshed) {
+    RecentRankFixture fixture;
+    fixture.startRank();
+    fixture.tracking->clearSelection();
+    fixture.commitPlaytime(GraphKey::BenchmarkRecentRank);
+    EXPECT_EQ(fixture.recentOnly, 0);
+}
+
 // ---- committed style ----------------------------------------------------------------------
 
 namespace {
@@ -1418,6 +1517,24 @@ TEST(BenchmarkTrackingStyle, EachGraphReportsItsOwnCommittedStyle) {
     EXPECT_EQ(playtime.appearance.connection, ConnectionMode::PointsOnly);
     EXPECT_EQ(playtime.seriesStyle("playtime").color,
               defaultSeriesStyle(GraphKey::BenchmarkPlaytime, "playtime").color);
+}
+
+TEST(BenchmarkTrackingStyle, TheRecentRankGraphsStyleIsAnnouncedOnceAndReportedOnItsOwn) {
+    StyleFixture fixture;
+    fixture.startStyle();
+
+    auto &recent = fixture.configuration->configuration.preferences(GraphKey::BenchmarkRecentRank);
+    recent.appearance.connection = ConnectionMode::PointsOnly;
+    recent.seriesStyles["rank"] = {RgbaColor{7, 7, 7, 255}, 2.0};
+    fixture.publishStyleEdits();
+
+    EXPECT_EQ(fixture.style, 1);
+    EXPECT_EQ(fixture.rankOnly, 0);
+    const auto presentation = fixture.tracking->presentation(GraphKey::BenchmarkRecentRank);
+    EXPECT_EQ(presentation.appearance.connection, ConnectionMode::PointsOnly);
+    EXPECT_EQ(presentation.seriesStyle("rank"), (SeriesStyle{RgbaColor{7, 7, 7, 255}, 2.0}));
+    EXPECT_EQ(fixture.tracking->presentation(GraphKey::BenchmarkRank).seriesStyle("rank"),
+              defaultSeriesStyle(GraphKey::BenchmarkRank, "rank"));
 }
 
 TEST(BenchmarkTrackingStyle, RangeAndWindowChangesTakeTheirDataPathsAndNotTheStylePath) {

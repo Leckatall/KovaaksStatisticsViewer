@@ -23,6 +23,7 @@ namespace ksv::application {
         DailyPlaytime,
         ScenarioHistory,
         BenchmarkRank,
+        BenchmarkRecentRank,
         BenchmarkPlaytime
     };
 
@@ -31,6 +32,7 @@ namespace ksv::application {
         GraphKey::DailyPlaytime,
         GraphKey::ScenarioHistory,
         GraphKey::BenchmarkRank,
+        GraphKey::BenchmarkRecentRank,
         GraphKey::BenchmarkPlaytime
     };
 

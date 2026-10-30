@@ -9,7 +9,7 @@ namespace ksv::domain {
         const auto begin = std::ranges::lower_bound(history, first, {}, &AverageRankPoint::day);
         if (begin != history.begin()) window.established = *std::prev(begin);
         const auto end = std::ranges::upper_bound(begin, history.end(), last, {}, &AverageRankPoint::day);
-        window.improvements.assign(begin, end);
+        window.points.assign(begin, end);
         return window;
     }
 }

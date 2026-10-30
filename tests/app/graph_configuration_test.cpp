@@ -37,6 +37,7 @@ namespace {
         EXPECT_EQ(graphKeyName(GraphKey::DailyPlaytime), "dailyPlaytime");
         EXPECT_EQ(graphKeyName(GraphKey::ScenarioHistory), "scenarioHistory");
         EXPECT_EQ(graphKeyName(GraphKey::BenchmarkRank), "benchmarkRank");
+        EXPECT_EQ(graphKeyName(GraphKey::BenchmarkRecentRank), "benchmarkRecentRank");
         EXPECT_EQ(graphKeyName(GraphKey::BenchmarkPlaytime), "benchmarkPlaytime");
         for (const auto key: kGraphKeys) EXPECT_EQ(graphKeyFromName(graphKeyName(key)), key);
         EXPECT_FALSE(graphKeyFromName("Run"));
@@ -84,12 +85,14 @@ namespace {
                   (std::vector<std::string>{"score", "accuracy", "shots", "hits", "misses", "scoreAverage"}));
         EXPECT_EQ(seriesKeys(GraphKey::DailyPlaytime), (std::vector<std::string>{"playtime"}));
         EXPECT_EQ(seriesKeys(GraphKey::BenchmarkRank), (std::vector<std::string>{"rank"}));
+        EXPECT_EQ(seriesKeys(GraphKey::BenchmarkRecentRank), (std::vector<std::string>{"rank"}));
         EXPECT_EQ(seriesKeys(GraphKey::BenchmarkPlaytime), (std::vector<std::string>{"playtime"}));
 
         EXPECT_EQ(axisKeys(GraphKey::ScenarioHistory), (std::vector<std::string>{"score", "accuracy", "counts"}));
         EXPECT_EQ(axisKeys(GraphKey::DailyPlaytime), (std::vector<std::string>{"playtime"}));
         EXPECT_EQ(axisKeys(GraphKey::BenchmarkPlaytime), (std::vector<std::string>{"playtime"}));
         EXPECT_TRUE(axisKeys(GraphKey::BenchmarkRank).empty());
+        EXPECT_TRUE(axisKeys(GraphKey::BenchmarkRecentRank).empty());
         EXPECT_TRUE(axisKeys(GraphKey::Run).empty());
 
         const auto &history = graphDescriptor(GraphKey::ScenarioHistory).series;
@@ -113,7 +116,7 @@ namespace {
 
     TEST(GraphConfigurationValidation, AcceptsEveryValidRangeKindWithinItsStatedLimits) {
         for (const auto key: {GraphKey::DailyPlaytime, GraphKey::ScenarioHistory, GraphKey::BenchmarkRank,
-                              GraphKey::BenchmarkPlaytime}) {
+                              GraphKey::BenchmarkRecentRank, GraphKey::BenchmarkPlaytime}) {
             EXPECT_TRUE(validateGraphPreferences(key, withRange(key, RecentDays{1})).empty());
             EXPECT_TRUE(validateGraphPreferences(key, withRange(key, RecentDays{kMaximumRangeDays})).empty());
             EXPECT_TRUE(validateGraphPreferences(key, withRange(key, CustomDates{date(2026, 3, 5), date(2026, 3, 5)}))
@@ -480,6 +483,27 @@ namespace {
         EXPECT_EQ(change.sectionsOf(GraphKey::DailyPlaytime), (GraphSectionChange{.range = true}));
         for (const auto graph: {GraphKey::Run, GraphKey::ScenarioHistory, GraphKey::BenchmarkRank})
             EXPECT_FALSE(change.sectionsOf(graph).any()) << graphKeyName(graph);
+    }
+
+    TEST(GraphDescriptors, TheRecentRankGraphOffersWhatTheRankGraphOffers) {
+        const auto &rank = graphDescriptor(GraphKey::BenchmarkRank);
+        const auto &recent = graphDescriptor(GraphKey::BenchmarkRecentRank);
+        EXPECT_EQ(recent.dateRange, rank.dateRange);
+        EXPECT_EQ(recent.latestRuns, rank.latestRuns);
+        EXPECT_EQ(recent.averagingWindow, rank.averagingWindow);
+        EXPECT_EQ(recent.defaultLineModeMarkers, rank.defaultLineModeMarkers);
+        EXPECT_EQ(recent.defaultRange, rank.defaultRange);
+        EXPECT_EQ(defaultGraphPreferences(GraphKey::BenchmarkRecentRank), defaultGraphPreferences(GraphKey::BenchmarkRank));
+        EXPECT_EQ(defaultSeriesStyle(GraphKey::BenchmarkRecentRank, "rank"), defaultSeriesStyle(GraphKey::BenchmarkRank, "rank"));
+    }
+
+    TEST(GraphConfigurationDiff, TheTwoRankGraphsRangesAreIndependent) {
+        const auto before = defaultGraphConfiguration();
+        auto after = before;
+        after.preferences(GraphKey::BenchmarkRecentRank).range->range = AllHistory{};
+        const auto change = diffGraphConfigurations(before, after);
+        EXPECT_EQ(change.sectionsOf(GraphKey::BenchmarkRecentRank), (GraphSectionChange{.range = true}));
+        EXPECT_FALSE(change.sectionsOf(GraphKey::BenchmarkRank).any());
     }
 
     TEST(GraphPresentation, OverridesLayerOverTheDefaultOneFieldAtATime) {

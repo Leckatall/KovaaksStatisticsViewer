@@ -1,11 +1,12 @@
 .pragma library
 
-// Display names of the five configurable graphs, in the order the Graphs settings page lists them.
+// Display names of the configurable graphs, in the order the Graphs settings page lists them.
 const graphs = [
     {key: "run", name: "Run graph"},
     {key: "dailyPlaytime", name: "Daily playtime"},
     {key: "scenarioHistory", name: "Scenario history"},
     {key: "benchmarkRank", name: "Benchmark rank history"},
+    {key: "benchmarkRecentRank", name: "Benchmark recent rank"},
     {key: "benchmarkPlaytime", name: "Benchmark playtime"}
 ]
 
@@ -52,7 +53,8 @@ const seriesNames = {
     scenarioHistory: {score: "Score", accuracy: "Accuracy", shots: "Shots", hits: "Hits", misses: "Misses", scoreAverage: "Score average (10 runs)"},
     dailyPlaytime: {playtime: "Playtime"},
     benchmarkPlaytime: {playtime: "Playtime"},
-    benchmarkRank: {rank: "Personal-best average rank"}
+    benchmarkRank: {rank: "Personal-best average rank"},
+    benchmarkRecentRank: {rank: "Recent average rank"}
 }
 
 // Bounds are typed in the unit the axis shows: accuracy as a percentage, playtime in minutes.

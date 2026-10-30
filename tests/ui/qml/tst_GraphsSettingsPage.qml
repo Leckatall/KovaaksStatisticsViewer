@@ -117,6 +117,17 @@ TestCase {
         verify(find(dialog, "graphSeriesSelector") === null, "a single series needs no selector")
     }
 
+    function test_benchmarkRecentRankOffersTheSameControlsAsBenchmarkRank() {
+        const {dialog} = openOn("benchmarkRecentRank")
+
+        verify(shown(dialog, "graphGroup_dataRange"))
+        verify(!shown(dialog, "graphGroup_axes"), "the tier axis offers no numeric fitting")
+        verify(!shown(dialog, "graphField_dataRange_averagingWindow"))
+        compare(names(dialog, "graphSeriesRow_"), ["graphSeriesRow_rank"])
+        compare(find(dialog, "graphSeriesName_rank").text, "Recent average rank")
+        compare(find(dialog, "graphPageTitle").text, "Benchmark recent rank")
+    }
+
     function test_benchmarkPlaytimeOffersTheSameControlsAsDailyPlaytime() {
         const {dialog} = openOn("benchmarkPlaytime")
 
@@ -543,7 +554,7 @@ TestCase {
 
     function test_theScrollBarNeverCoversAControlOrAUnit_data() {
         const rows = []
-        for (const graph of ["run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkPlaytime"]) {
+        for (const graph of ["run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"]) {
             rows.push({tag: graph + " at the default size", graph: graph, floor: false})
             rows.push({tag: graph + " at the floor", graph: graph, floor: true})
         }

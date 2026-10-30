@@ -49,13 +49,21 @@ namespace ksv::tests_ui {
         void onPlaytimeChanged(std::function<void()> callback) override {
             m_playtimeCallbacks.push_back(std::move(callback));
         }
-        void onRankChanged(std::function<void()> callback) override { m_rankCallbacks.push_back(std::move(callback)); }
+        void onRankChanged(std::function<void(application::GraphKey)> callback) override {
+            m_rankCallbacks.push_back(std::move(callback));
+        }
         application::GraphPresentation rankPresentation =
             application::defaultGraphPresentation(application::GraphKey::BenchmarkRank);
+        application::GraphPresentation recentRankPresentation =
+            application::defaultGraphPresentation(application::GraphKey::BenchmarkRecentRank);
         application::GraphPresentation playtimePresentation =
             application::defaultGraphPresentation(application::GraphKey::BenchmarkPlaytime);
         [[nodiscard]] application::GraphPresentation presentation(const application::GraphKey graph) const override {
-            return graph == application::GraphKey::BenchmarkRank ? rankPresentation : playtimePresentation;
+            switch (graph) {
+                case application::GraphKey::BenchmarkRank: return rankPresentation;
+                case application::GraphKey::BenchmarkRecentRank: return recentRankPresentation;
+                default: return playtimePresentation;
+            }
         }
         void onPresentationChanged(std::function<void()> callback) override {
             m_presentationCallbacks.push_back(std::move(callback));
@@ -76,15 +84,15 @@ namespace ksv::tests_ui {
                 if (callback) callback();
         }
 
-        void publishRank() const {
+        void publishRank(const application::GraphKey graph = application::GraphKey::BenchmarkRank) const {
             for (const auto &callback: m_rankCallbacks)
-                if (callback) callback();
+                if (callback) callback(graph);
         }
 
     private:
         std::vector<std::function<void()> > m_callbacks;
         std::vector<std::function<void()> > m_playtimeCallbacks;
-        std::vector<std::function<void()> > m_rankCallbacks;
+        std::vector<std::function<void(application::GraphKey)> > m_rankCallbacks;
         std::vector<std::function<void()> > m_presentationCallbacks;
     };
 
@@ -137,8 +145,8 @@ namespace ksv::tests_ui {
     }
 
     // A Ready + Trackable revision for benchmark "b1": three tiers, one "Clicking" category holding
-    // "s1", one uncategorized "s2", attained Silver with Gold next, two blockers, and two-day rank
-    // and rolling-playtime histories.
+    // "s1", one uncategorized "s2", attained Silver with Gold next, two blockers, two-day rank and
+    // rolling-playtime histories, and a three-day recent-rank history that dips on its last day.
     inline application::BenchmarkWorkspaceSnapshot makeTrackableSnapshot() {
         domain::Benchmark definition;
         definition.id = domain::BenchmarkId{"b1"};
@@ -179,6 +187,11 @@ namespace ksv::tests_ui {
         projection.averageRankHistory = {
             {ymd(2024, 3, 4), 1.0},
             {ymd(2024, 3, 6), 2.5},
+        };
+        projection.recentAverageRankHistory = {
+            {ymd(2024, 3, 4), 1.0},
+            {ymd(2024, 3, 5), 1.4},
+            {ymd(2024, 3, 6), 1.2},
         };
         projection.rollingPlaytime = {
             {ymd(2024, 3, 4), 1800.0},

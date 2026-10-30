@@ -452,6 +452,7 @@ Item {
 
             compare(find(ws, "benchmarkStatusSummary"), null, "no stale status summary in Unavailable")
             compare(find(ws, "rankHistoryCard"), null, "no stale rank graph in Unavailable")
+            compare(find(ws, "recentRankHistoryCard"), null, "no stale recent-rank graph in Unavailable")
             compare(find(ws, "playtimeHistoryCard"), null, "no stale playtime graph in Unavailable")
             compare(find(ws, "benchmarkProgressGrid"), null, "no stale progress grid in Unavailable")
         }
@@ -474,6 +475,8 @@ Item {
             }
             compare(find(ws, "rankHistoryCard"), null,
                     "incomplete definitions must not render the average-rank chart")
+            compare(find(ws, "recentRankHistoryCard"), null,
+                    "nor the recent-rank chart")
             verify(find(ws, "progressRow_sc-1_bar") !== null,
                    "the incomplete body lists its scenarios in the progress grid too")
         }
@@ -723,14 +726,16 @@ Item {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             const col = scrollColumn(ws)
             const rank = indexInColumn(col, "rankHistoryCard")
+            const recent = indexInColumn(col, "recentRankHistoryCard")
             const playtime = indexInColumn(col, "playtimeHistoryCard")
             const grid = indexInColumn(col, "benchmarkProgressGrid")
-            verify(rank >= 0 && playtime >= 0 && grid >= 0,
+            verify(rank >= 0 && recent >= 0 && playtime >= 0 && grid >= 0,
                    "all content blocks must be present in the scroll column")
             compare(grid, 0, "the progress grid is the first block")
             compare(indexInColumn(col, "benchmarkStatusSummary"), -1, "the summary lives in the pinned card")
             verify(grid < rank, "the progress grid comes before the history cards")
-            verify(rank < playtime, "average-rank card comes before rolling-playtime card")
+            verify(rank < recent, "average-rank card comes before the recent-rank card")
+            verify(recent < playtime, "recent-rank card comes before rolling-playtime card")
         }
 
         function test_headerCardIsPinnedOutsideTheScrollingBody() {
@@ -777,15 +782,21 @@ Item {
             fx.rankHistory = TestDoubles.makeFakeHistoryModel({
                 metricName: "Personal-best average rank", hasData: true, connectionMode: 1, pointMarkers: true
             })
+            fx.recentRankHistory = TestDoubles.makeFakeHistoryModel({
+                metricName: "Recent average rank", hasData: true, connectionMode: 0, pointMarkers: true
+            })
             fx.playtimeHistory = TestDoubles.makeFakeHistoryModel({
                 metricName: "Daily Playtime (7-day rolling average)", hasData: true, connectionMode: 2, pointMarkers: false
             })
             const ws = makeWorkspace(fx)
             const rank = find(ws, "rankHistoryCanvas")
+            const recent = find(ws, "recentRankHistoryCanvas")
             const playtime = find(ws, "playtimeHistoryCanvas")
-            verify(rank !== null && playtime !== null, "both history canvases must exist")
+            verify(rank !== null && recent !== null && playtime !== null, "every history canvas must exist")
             compare(rank.connectionMode, 1)
             compare(rank.pointMarkers, true)
+            compare(recent.connectionMode, 0)
+            compare(recent.pointMarkers, true)
             compare(playtime.connectionMode, 2)
             compare(playtime.pointMarkers, false)
         }
@@ -797,16 +808,21 @@ Item {
             verify(rankCard !== null && playtimeCard !== null, "both history cards must exist")
 
             const rankLine = find(ws, "rankHistoryLineName")
+            const recentLine = find(ws, "recentRankHistoryLineName")
             const playtimeLine = find(ws, "playtimeHistoryLineName")
             verify(rankLine !== null && String(rankLine.text).toLowerCase().indexOf("average rank") !== -1,
                    "the rank line must be identified as personal-best average rank")
+            verify(recentLine !== null && String(recentLine.text).toLowerCase().indexOf("recent average rank") !== -1,
+                   "the recent line must be identified as recent average rank")
             verify(playtimeLine !== null
                    && String(playtimeLine.text).toLowerCase().indexOf("playtime") !== -1,
                    "the playtime line must be identified as playtime")
+            verify(String(find(ws, "recentRankHistoryCard").Accessible.description).toLowerCase()
+                   .indexOf("recent average rank") !== -1, "recent card description must include its metric name")
 
             // Card titles share the Scenarios-tab chart title style (ChartTitle).
             const title = createTemporaryObject(chartTitleComponent, root)
-            for (const line of [rankLine, playtimeLine]) {
+            for (const line of [rankLine, recentLine, playtimeLine]) {
                 compare(line.horizontalAlignment, title.horizontalAlignment)
                 compare(line.font.weight, title.font.weight)
                 compare(line.font.pixelSize, title.font.pixelSize)
@@ -1032,12 +1048,18 @@ Item {
         function test_wideLayoutPutsHistoriesSideBySideWithAlignedMetricColumns() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 1200, 800)
             const rank = find(ws, "rankHistoryCard")
+            const recent = find(ws, "recentRankHistoryCard")
             const playtime = find(ws, "playtimeHistoryCard")
-            verify(rank !== null && playtime !== null, "both history cards must exist")
+            verify(rank !== null && recent !== null && playtime !== null, "every history card must exist")
             const rankPos = rank.mapToItem(ws, 0, 0)
+            const recentPos = recent.mapToItem(ws, 0, 0)
             const playtimePos = playtime.mapToItem(ws, 0, 0)
-            verify(Math.abs(rankPos.y - playtimePos.y) < 4 && playtimePos.x > rankPos.x + 10,
-                   "at >=1000px content width the two history cards sit side by side")
+            verify(Math.abs(rankPos.y - recentPos.y) < 4 && recentPos.x > rankPos.x + 10,
+                   "at >=1000px content width the two rank cards sit side by side")
+            verify(playtimePos.y >= Math.max(rankPos.y + rank.height, recentPos.y + recent.height) - 1,
+                   "playtime sits below both rank cards")
+            verify(Math.abs(playtimePos.x - rankPos.x) < 4 && Math.abs(playtime.width - find(ws, "trackableScrollColumn").width) < 1,
+                   "playtime spans the column")
             const grid = find(ws, "benchmarkProgressGrid")
             // The offscreen test font is wide, so whether the grid fits is the
             // driver's to check; here the scroll bar shows exactly when it overflows.
@@ -1049,12 +1071,16 @@ Item {
         function test_narrowLayoutStacksHistoriesAndScrollsTheGridInItsOwnFrame() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 800, 600)
             const rank = find(ws, "rankHistoryCard")
+            const recent = find(ws, "recentRankHistoryCard")
             const playtime = find(ws, "playtimeHistoryCard")
-            verify(rank !== null && playtime !== null, "both history cards must exist")
+            verify(rank !== null && recent !== null && playtime !== null, "every history card must exist")
             const rankPos = rank.mapToItem(ws, 0, 0)
+            const recentPos = recent.mapToItem(ws, 0, 0)
             const playtimePos = playtime.mapToItem(ws, 0, 0)
-            verify(Math.abs(rankPos.x - playtimePos.x) < 4 && playtimePos.y > rankPos.y + 10,
-                   "below 1000px content width the history cards stack")
+            verify(Math.abs(rankPos.x - recentPos.x) < 4 && Math.abs(rankPos.x - playtimePos.x) < 4,
+                   "below 1000px content width the history cards share a left edge")
+            verify(recentPos.y >= rankPos.y + rank.height - 1 && playtimePos.y >= recentPos.y + recent.height - 1,
+                   "and stack rank, recent rank, playtime")
 
             // The grid never pushes the page sideways: it fits, or it scrolls inside
             // its own frame with a visible scroll bar.
@@ -1240,6 +1266,18 @@ Item {
             verify(gridTop >= summaryBottom - 1, "summary and grid must not overlap at " + data.tag)
             verify(rank.mapToItem(ws, 0, 0).y >= grid.mapToItem(ws, 0, grid.height).y - 1,
                    "grid and history cards must not overlap at " + data.tag)
+            const cards = ["rankHistoryCard", "recentRankHistoryCard", "playtimeHistoryCard"].map(name => {
+                const card = find(ws, name)
+                const at = card.mapToItem(ws, 0, 0)
+                return {name: name, left: at.x, top: at.y, right: at.x + card.width, bottom: at.y + card.height}
+            })
+            for (let i = 0; i < cards.length; ++i)
+                for (let j = i + 1; j < cards.length; ++j) {
+                    const a = cards[i], b = cards[j]
+                    const apart = a.right <= b.left + 1 || b.right <= a.left + 1
+                                  || a.bottom <= b.top + 1 || b.bottom <= a.top + 1
+                    verify(apart, a.name + " and " + b.name + " must not overlap at " + data.tag)
+                }
 
             const col = find(ws, "trackableScrollColumn")
             verify(col !== null && col.width <= ws.width + 1, "content must fit the width at " + data.tag)
