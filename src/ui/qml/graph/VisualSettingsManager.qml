@@ -8,11 +8,31 @@ Item {
 
     property alias windowWidth: windowSettings.width
     property alias windowHeight: windowSettings.height
+    property alias windowX: windowSettings.x
+    property alias windowY: windowSettings.y
+    property alias windowHasPosition: windowSettings.hasPosition
     Settings {
         id: windowSettings
         category: "window"
         property int width: 1200
         property int height: 800
+        // No position fits every monitor layout, so until one is saved the OS places the window.
+        property bool hasPosition: false
+        property int x: 0
+        property int y: 0
+    }
+
+    // A saved position can point at a monitor that has since been unplugged or rearranged; restoring
+    // it is only safe while enough of the window's top edge is on some screen to drag it back.
+    function isVisibleOnScreens(x, y, width, height, screens) {
+        const margin = 100
+        for (const screen of screens) {
+            const overlap = Math.min(x + width, screen.virtualX + screen.width) - Math.max(x, screen.virtualX)
+            if (overlap >= Math.min(margin, width)
+                    && y >= screen.virtualY && y <= screen.virtualY + screen.height - margin)
+                return true
+        }
+        return false
     }
 
     property alias scenarioGraphVisible: panelSettings.scenarioGraphVisible

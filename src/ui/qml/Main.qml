@@ -9,10 +9,33 @@ ApplicationWindow {
     id: root
     width: visualSettingsManager.windowWidth
     height: visualSettingsManager.windowHeight
-    onWidthChanged: visualSettingsManager.windowWidth = width
-    onHeightChanged: visualSettingsManager.windowHeight = height
+    // Maximised and minimised geometry (Windows parks a minimised window at -32000) must not
+    // overwrite the windowed geometry that the next launch restores.
+    readonly property bool recordsGeometry: visibility === Window.Windowed
+    onWidthChanged: if (root.recordsGeometry) visualSettingsManager.windowWidth = root.width
+    onHeightChanged: if (root.recordsGeometry) visualSettingsManager.windowHeight = root.height
+    onXChanged: root.recordPosition()
+    onYChanged: root.recordPosition()
 
-    visible: true
+    function recordPosition() {
+        if (!root.recordsGeometry) return
+        visualSettingsManager.windowX = root.x
+        visualSettingsManager.windowY = root.y
+        visualSettingsManager.windowHasPosition = true
+    }
+
+    function restorePosition() {
+        const settings = visualSettingsManager
+        if (settings.windowHasPosition && settings.isVisibleOnScreens(
+                settings.windowX, settings.windowY, root.width, root.height, Application.screens)) {
+            root.x = settings.windowX
+            root.y = settings.windowY
+        }
+    }
+
+    // Shown only once Component.onCompleted has restored the saved position: a window shown during
+    // creation is placed by the OS first, and that placement is recorded over the saved position.
+    visible: false
     title: "Kovaaks Stats Viewer"
     palette: Theme.palette
 
@@ -239,5 +262,9 @@ ApplicationWindow {
         }
     }
 
-    Component.onCompleted: visualSettingsManager.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
+    Component.onCompleted: {
+        visualSettingsManager.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
+        root.restorePosition()
+        root.visible = true
+    }
 }
