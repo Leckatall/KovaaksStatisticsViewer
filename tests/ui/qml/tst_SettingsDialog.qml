@@ -499,6 +499,22 @@ TestCase {
         compare(dialog.settingsVm.endVisitCalls, 0)
     }
 
+    // Disabling the Save button while it holds focus moves activeFocusItem, which its own `enabled` binding reads.
+    function test_saveButtonDisablingWhileFocusedIsNotABindingLoop() {
+        const dialog = openDialog({
+            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
+            sessionVm: makeFakeSessionVm()
+        })
+        const save = findInDialog(dialog, "settingsSaveButton")
+        save.forceActiveFocus()
+        verify(save.activeFocus)
+
+        failOnWarning(/Binding loop/)
+        dialog.settingsVm = Object.assign({}, dialog.settingsVm, {pendingChanges: false})
+
+        compare(save.enabled, false)
+    }
+
     function test_footerCancelDropsTheVisitAndClosesWithoutPrompting() {
         const dialog = openDialog({
             settingsVm: makeFakeSettingsVm({pendingChanges: true}),

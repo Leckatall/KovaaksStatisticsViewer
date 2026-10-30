@@ -269,15 +269,18 @@ ApplicationWindow {
         Qt.callLater(() => focusNav(key))
     }
 
+    // Disabling the focused Save button changes activeFocusItem mid-evaluation of its own `enabled`
+    // binding; this property only changes when focus enters or leaves a field, which breaks that loop.
+    readonly property CommitOnFinishField focusedField: root.activeFocusItem as CommitOnFinishField
+
     function hasUncommittedEdit(): bool {
-        const field = root.activeFocusItem as CommitOnFinishField
-        return field !== null && field.uncommittedEdit
+        return focusedField !== null && focusedField.uncommittedEdit
     }
 
     // Line and axis names commit on editingFinished, which closing the window doesn't trigger.
     function commitActiveEdit() {
         if (hasUncommittedEdit())
-            (root.activeFocusItem as CommitOnFinishField).editingFinished()
+            focusedField.editingFinished()
     }
 
     onClosing: (close) => {
