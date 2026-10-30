@@ -2480,3 +2480,198 @@ TEST(BenchmarkManagerResolution, ClearingLinkedMappingsCanBeUndoneAndUnknownEntr
     ASSERT_TRUE(f.vm->undo().value("ok").toBool());
     EXPECT_EQ(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList(), (QStringList{"old", "new"}));
 }
+
+// ── Group commands ──────────────────────────────────────────────────────────────────────────────
+
+namespace {
+    QStringList groupNames(const BenchmarkManagerViewModel &vm) {
+        QStringList names;
+        for (const auto &group: vm.groups()) names << group.toMap()["name"].toString();
+        return names;
+    }
+
+    QStringList idsOf(const std::vector<ScenarioEntry> &entries) {
+        QStringList ids;
+        for (const auto &entry: entries) ids << QString::fromStdString(entry.id.value);
+        return ids;
+    }
+}
+
+TEST(BenchmarkGroupCommands, OptionsAreEmptyWithoutADraft) {
+    Fixture f;
+    f.build();
+
+    const auto options = f.vm->groupCommandOptions("anything", QString());
+
+    EXPECT_TRUE(options["actions"].toList().isEmpty());
+    EXPECT_FALSE(options["exactMatch"].toBool());
+}
+
+TEST(BenchmarkGroupCommands, OptionsDescribeCreateAndMoveActions) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto options = f.vm->groupCommandOptions("Category g3", QString());
+
+    EXPECT_FALSE(options["exactMatch"].toBool());
+    const auto actions = options["actions"].toList();
+    ASSERT_GE(actions.size(), 1);
+    const auto create = actions.front().toMap();
+    EXPECT_EQ(create["kind"].toString(), "create");
+    EXPECT_EQ(create["name"].toString(), "Category g3");
+    EXPECT_EQ(create["parentId"].toString(), "");
+
+    const auto exact = f.vm->groupCommandOptions("category g2", QString());
+    EXPECT_TRUE(exact["exactMatch"].toBool());
+    const auto move = exact["actions"].toList().front().toMap();
+    EXPECT_EQ(move["kind"].toString(), "move");
+    EXPECT_EQ(move["targetId"].toString(), "g2");
+    EXPECT_EQ(move["path"].toString(), "Category g2");
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignIsOneUndoStepThatRestoresGroupsMembershipAndSelection) {
+    TableFixture f;
+    f.open(projectionBench());
+    const auto groupsBefore = groupNames(*f.vm);
+    f.vm->setSelectedEntryIds({"u", "a"});
+
+    const auto result = f.vm->createGroupAndAssign({"u", "a"}, "Fresh", QString());
+
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+    const auto createdId = result["createdId"].toString();
+    ASSERT_FALSE(createdId.isEmpty());
+    const auto &draft = working(f);
+    ASSERT_EQ(draft.categories.size(), 3U);
+    EXPECT_EQ(QString::fromStdString(draft.categories.back().id.value), createdId);
+    EXPECT_EQ(draft.categories.back().name, "Fresh");
+    EXPECT_EQ(idsOf(draft.categories.back().scenarios), (QStringList{"a", "u"}));
+
+    ASSERT_TRUE(f.vm->undo()["ok"].toBool());
+    EXPECT_EQ(groupNames(*f.vm), groupsBefore);
+    EXPECT_EQ(working(f), projectionBench());
+    EXPECT_EQ(f.vm->selectedEntryIds(), (QStringList{"u", "a"}));
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignPlacesScenariosInVisibleOrderNotClickOrder) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    ASSERT_TRUE(f.vm->createGroupAndAssign({"u", "e", "a"}, "Fresh", QString())["ok"].toBool());
+
+    EXPECT_EQ(idsOf(working(f).categories.back().scenarios), (QStringList{"a", "e", "u"}));
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignUnderAParentMakesASubcategory) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->createGroupAndAssign({"u"}, "Deep", "g2");
+
+    ASSERT_TRUE(result["ok"].toBool());
+    const auto &g2 = working(f).categories.at(1);
+    ASSERT_EQ(g2.subcategories.size(), 3U);
+    EXPECT_EQ(QString::fromStdString(g2.subcategories.back().id.value), result["createdId"].toString());
+    EXPECT_EQ(idsOf(g2.subcategories.back().scenarios), QStringList{"u"});
+}
+
+TEST(BenchmarkGroupCommands, CreatingASubcategoryUnderAPopulatedCategoryLeavesItsDirectScenarios) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    ASSERT_TRUE(f.vm->createGroupAndAssign({"u"}, "Deep", "g1")["ok"].toBool());
+
+    const auto &g1 = working(f).categories.at(0);
+    EXPECT_EQ(idsOf(g1.scenarios), (QStringList{"a", "b"}));
+    ASSERT_EQ(g1.subcategories.size(), 1U);
+    EXPECT_EQ(idsOf(g1.subcategories.front().scenarios), QStringList{"u"});
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignWithAnUnknownEntryChangesNothing) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->createGroupAndAssign({"u", "missing"}, "Fresh", QString());
+
+    EXPECT_FALSE(result["ok"].toBool());
+    EXPECT_EQ(working(f), projectionBench());
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignRejectsABlankNameAndAnUnknownParent) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    EXPECT_FALSE(f.vm->createGroupAndAssign({"u"}, "   ", QString())["ok"].toBool());
+    EXPECT_FALSE(f.vm->createGroupAndAssign({"u"}, "Fresh", "missing")["ok"].toBool());
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CommaEntryCreatesTrimmedNamesInOneUndoStep) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->addCategories(" Alpha ,Beta,  , Gamma ,");
+
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+    EXPECT_TRUE(result["skipped"].toStringList().isEmpty());
+    const auto &categories = working(f).categories;
+    ASSERT_EQ(categories.size(), 5U);
+    EXPECT_EQ(categories.at(2).name, "Alpha");
+    EXPECT_EQ(categories.at(3).name, "Beta");
+    EXPECT_EQ(categories.at(4).name, "Gamma");
+    EXPECT_EQ(result["createdIds"].toStringList(),
+              (QStringList{QString::fromStdString(categories.at(2).id.value),
+                           QString::fromStdString(categories.at(3).id.value),
+                           QString::fromStdString(categories.at(4).id.value)}));
+
+    ASSERT_TRUE(f.vm->undo()["ok"].toBool());
+    EXPECT_EQ(working(f), projectionBench());
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CommaEntrySkipsDuplicatesCaseInsensitivelyAndNamesThem) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->addCategories("Alpha, alpha, category G1, uncategorized, Beta");
+
+    ASSERT_TRUE(result["ok"].toBool());
+    EXPECT_EQ(result["createdIds"].toStringList().size(), 2);
+    EXPECT_EQ(result["skipped"].toStringList(), (QStringList{"alpha", "category G1", "uncategorized"}));
+    const auto &categories = working(f).categories;
+    ASSERT_EQ(categories.size(), 4U);
+    EXPECT_EQ(categories.at(2).name, "Alpha");
+    EXPECT_EQ(categories.at(3).name, "Beta");
+}
+
+TEST(BenchmarkGroupCommands, CommaEntryWhereEverythingIsSkippedLeavesNoUndoStep) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->addCategories("Category g1, CATEGORY G2");
+
+    ASSERT_TRUE(result["ok"].toBool());
+    EXPECT_TRUE(result["createdIds"].toStringList().isEmpty());
+    EXPECT_EQ(result["skipped"].toStringList(), (QStringList{"Category g1", "CATEGORY G2"}));
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CommaEntryWithNoNamesIsAnError) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    for (const QString &input: {QString(), QStringLiteral("  "), QStringLiteral(" , ,")}) {
+        const auto result = f.vm->addCategories(input);
+        EXPECT_FALSE(result["ok"].toBool()) << input.toStdString();
+        EXPECT_FALSE(result["error"].toString().isEmpty());
+    }
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CommaEntryNeedsAnOpenDraft) {
+    Fixture f;
+    f.build();
+
+    EXPECT_FALSE(f.vm->addCategories("Alpha")["ok"].toBool());
+}

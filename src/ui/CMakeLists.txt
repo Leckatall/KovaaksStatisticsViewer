@@ -149,6 +149,8 @@ qt_add_qml_module(ksv_ui
             presentation/benchmarks/manager/benchmark_issue_text.cpp
             presentation/benchmarks/benchmark_format.h
             presentation/benchmarks/benchmark_format.cpp
+            presentation/benchmarks/manager/benchmark_group_command.h
+            presentation/benchmarks/manager/benchmark_group_command.cpp
             presentation/benchmarks/manager/benchmark_manager_vm.h
             presentation/benchmarks/manager/benchmark_manager_vm.cpp
             presentation/benchmarks/manager/benchmark_table_model.h

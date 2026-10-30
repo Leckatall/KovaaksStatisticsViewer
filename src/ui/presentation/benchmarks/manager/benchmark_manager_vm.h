@@ -145,6 +145,17 @@ namespace ksv::presentation {
         // An empty `beforeEntryId` appends to the target group.
         Q_INVOKABLE QVariantMap assignScenarios(const QStringList &entryIds, const QString &targetGroupId,
                                                 const QString &beforeEntryId = QString());
+        // Splits on commas and creates the new categories as one edit and one Undo step. Names that
+        // repeat within the list, match an existing category or equal Uncategorized
+        // (case-insensitively) are returned in `skipped` instead. Returns `createdIds` and `skipped`.
+        Q_INVOKABLE QVariantMap addCategories(const QString &commaSeparatedNames);
+        // `actions` is a list of {kind: "create", name, parentId} or {kind: "move", targetId, path};
+        // an empty `targetId` is Uncategorized.
+        Q_INVOKABLE QVariantMap groupCommandOptions(const QString &query, const QString &parentCategoryId) const;
+        // Creates a category (or a subcategory of a non-empty `parentCategoryId`) and moves the
+        // scenarios into it as one Undo step. `createdId` names the new group.
+        Q_INVOKABLE QVariantMap createGroupAndAssign(const QStringList &entryIds, const QString &name,
+                                                     const QString &parentCategoryId);
         Q_INVOKABLE QVariantMap reorderSubcategory(const QString &id, int position);
         Q_INVOKABLE QVariantMap reorderScenario(const QString &entryId, int position);
         Q_INVOKABLE QVariantMap undo();
@@ -188,6 +199,8 @@ namespace ksv::presentation {
         // joins the selection. A current cell on an empty-group row lives and dies with the group.
         void restoreSelection(const QStringList &ids, const QVariantMap &cell, int fallbackPosition);
         void pruneCellInputs();
+        // Selection arrives in click order; a batch keeps the rows' current visible order. Requires a draft.
+        [[nodiscard]] std::vector<domain::ScenarioEntryId> inVisibleOrder(const QStringList &entryIds) const;
 
         std::shared_ptr<application::IBenchmarkManagerUseCase> m_useCase;
 

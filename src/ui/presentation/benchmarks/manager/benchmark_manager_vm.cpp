@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <QDateTime>
 #include <QLocale>
+#include <QSet>
 #include <QTimeZone>
 #include <QUuid>
 #include <cstddef>
@@ -17,6 +18,7 @@
 
 #include "presentation/benchmarks/manager/benchmark_cell_input.h"
 #include "presentation/benchmarks/manager/benchmark_clipboard_matrix.h"
+#include "presentation/benchmarks/manager/benchmark_group_command.h"
 #include "presentation/benchmarks/benchmark_format.h"
 
 namespace ksv::presentation {
@@ -966,7 +968,15 @@ namespace ksv::presentation {
                                                            const QString &targetGroupId,
                                                            const QString &beforeEntryId) {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
-        // Selection arrives in click order; the batch keeps the rows' current visible order.
+        const auto ordered = inVisibleOrder(entryIds);
+        std::optional<domain::ScenarioEntryId> before;
+        if (!beforeEntryId.isEmpty()) before = domain::ScenarioEntryId{beforeEntryId.toStdString()};
+        return applyEdit([&](domain::BenchmarkEditor &e) {
+            return e.assignScenarios(ordered, toGroupTarget(targetGroupId), before);
+        });
+    }
+
+    std::vector<domain::ScenarioEntryId> BenchmarkManagerViewModel::inVisibleOrder(const QStringList &entryIds) const {
         std::unordered_map<std::string, std::size_t> visibleIndex;
         for (const auto &id: visibleEntryOrder(*m_draft)) visibleIndex.emplace(id.value, visibleIndex.size());
         std::vector<domain::ScenarioEntryId> ordered;
@@ -975,11 +985,79 @@ namespace ksv::presentation {
             const auto found = visibleIndex.find(id.value);
             return found == visibleIndex.end() ? visibleIndex.size() : found->second;
         });
-        std::optional<domain::ScenarioEntryId> before;
-        if (!beforeEntryId.isEmpty()) before = domain::ScenarioEntryId{beforeEntryId.toStdString()};
-        return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.assignScenarios(ordered, toGroupTarget(targetGroupId), before);
+        return ordered;
+    }
+
+    QVariantMap BenchmarkManagerViewModel::groupCommandOptions(const QString &query,
+                                                               const QString &parentCategoryId) const {
+        QVariantList actions;
+        if (!m_draft) return QVariantMap{{"actions", actions}, {"exactMatch", false}};
+        const auto options = buildGroupCommandOptions(*m_draft, query, parentCategoryId);
+        for (const auto &action: options.actions) {
+            if (action.kind == GroupCommandAction::Kind::Create)
+                actions.push_back(QVariantMap{{"kind", QStringLiteral("create")},
+                                              {"name", action.name},
+                                              {"parentId", action.parentId}});
+            else
+                actions.push_back(QVariantMap{{"kind", QStringLiteral("move")},
+                                              {"targetId", action.targetId},
+                                              {"path", action.path}});
+        }
+        return QVariantMap{{"actions", actions}, {"exactMatch", options.exactMatch}};
+    }
+
+    QVariantMap BenchmarkManagerViewModel::createGroupAndAssign(const QStringList &entryIds, const QString &name,
+                                                                const QString &parentCategoryId) {
+        if (!m_draft) return errorMap(tr("No benchmark is open."));
+        const auto trimmed = name.trimmed();
+        if (trimmed.isEmpty()) return errorMap(tr("Enter a name for the group."));
+        const auto ordered = inVisibleOrder(entryIds);
+        return applyEdit([&](domain::BenchmarkEditor &e) -> domain::BenchmarkEditResult {
+            const auto creation = parentCategoryId.isEmpty()
+                                      ? e.addCategory(trimmed.toStdString())
+                                      : e.addSubcategory(domain::GroupId{parentCategoryId.toStdString()},
+                                                         trimmed.toStdString());
+            if (creation.error) return creation;
+            const auto assignment = e.assignScenarios(ordered, *creation.createdGroup, std::nullopt);
+            return assignment.error ? assignment : creation;
         });
+    }
+
+    QVariantMap BenchmarkManagerViewModel::addCategories(const QString &commaSeparatedNames) {
+        if (!m_draft) return errorMap(tr("No benchmark is open."));
+        QStringList requested;
+        for (const auto &part: commaSeparatedNames.split(QLatin1Char(','))) {
+            const auto trimmed = part.trimmed();
+            if (!trimmed.isEmpty()) requested.push_back(trimmed);
+        }
+        if (requested.isEmpty()) return errorMap(tr("Enter at least one category name."));
+
+        QSet<QString> taken{tr("Uncategorized").toLower()};
+        for (const auto &category: m_draft->categories) taken.insert(QString::fromStdString(category.name).toLower());
+        QStringList toCreate;
+        QStringList skipped;
+        for (const auto &name: requested) {
+            if (taken.contains(name.toLower())) {
+                skipped.push_back(name);
+                continue;
+            }
+            taken.insert(name.toLower());
+            toCreate.push_back(name);
+        }
+
+        QStringList createdIds;
+        if (!toCreate.isEmpty()) {
+            const auto result = applyEdit([&](domain::BenchmarkEditor &e) -> domain::BenchmarkEditResult {
+                for (const auto &name: toCreate) {
+                    const auto created = e.addCategory(name.toStdString());
+                    if (created.error) return created;
+                    createdIds.push_back(idString(*created.createdGroup));
+                }
+                return domain::BenchmarkEditResult{};
+            });
+            if (!result.value("ok").toBool()) return result;
+        }
+        return QVariantMap{{"ok", true}, {"createdIds", createdIds}, {"skipped", skipped}};
     }
 
     QVariantMap BenchmarkManagerViewModel::reorderSubcategory(const QString &id, int position) {
