@@ -2,12 +2,12 @@
 
 // Display names of the configurable graphs, in the order the Graphs settings page lists them.
 const graphs = [
-    {key: "run", name: "Run graph"},
-    {key: "dailyPlaytime", name: "Daily playtime"},
-    {key: "scenarioHistory", name: "Scenario history"},
-    {key: "benchmarkRank", name: "Benchmark rank history"},
-    {key: "benchmarkRecentRank", name: "Benchmark recent rank"},
-    {key: "benchmarkPlaytime", name: "Benchmark playtime"}
+    {key: "run", name: "Run graph", workspace: "Scenarios"},
+    {key: "dailyPlaytime", name: "Daily playtime", workspace: "Scenarios"},
+    {key: "scenarioHistory", name: "Scenario history", workspace: "Scenarios"},
+    {key: "benchmarkRank", name: "Benchmark rank history", workspace: "Benchmarks"},
+    {key: "benchmarkRecentRank", name: "Benchmark recent rank", workspace: "Benchmarks"},
+    {key: "benchmarkPlaytime", name: "Benchmark playtime", workspace: "Benchmarks"}
 ]
 
 function isKnown(key) {
@@ -17,6 +17,11 @@ function isKnown(key) {
 function nameOf(key) {
     const found = graphs.find(graph => graph.key === key)
     return found ? found.name : key
+}
+
+function workspaceOf(key) {
+    const found = graphs.find(graph => graph.key === key)
+    return found ? found.workspace : ""
 }
 
 // ---- Shared by the gear popup and the Graphs page ----------------------------------------------
@@ -153,6 +158,8 @@ function isWithin(item, ancestor) {
 
 // Scrolls `flick` the least distance that shows `item` with `margin` clear above and below it.
 function ensureVisible(flick, item, margin) {
+    // Unsized until its layout's first polish, when everything looks out of view.
+    if (flick.height <= 0) return
     const top = item.mapToItem(flick.contentItem, 0, 0).y
     const bottom = top + item.height
     if (top - margin < flick.contentY)

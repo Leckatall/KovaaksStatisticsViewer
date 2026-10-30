@@ -34,6 +34,7 @@ Frame {
     // Raised by the line toggles' "Configure..." button.
     signal configureLinesRequested
     signal moreGraphSettingsRequested(string graphKey)
+    signal hideGraphRequested(string graphKey)
 
     Layout.fillHeight: true
     Layout.fillWidth: true
@@ -82,6 +83,7 @@ Frame {
                     graphKey: "run"
                     settingsVm: root.settingsVm
                     onMoreSettingsRequested: key => root.moreGraphSettingsRequested(key)
+                    onHideGraphRequested: key => root.hideGraphRequested(key)
                 }
             }
             // One always-present, always-filling slot so the plot and the empty-state messages occupy

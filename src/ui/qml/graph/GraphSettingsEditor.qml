@@ -16,6 +16,10 @@ Item {
     required property var settingsVm
     // One of run, dailyPlaytime, scenarioHistory, benchmarkRank, benchmarkRecentRank, benchmarkPlaytime.
     required property string graphKey
+    // Visibility is a saved layout preference, not part of the visit's working copy.
+    property var visualSettings: null
+
+    readonly property bool graphShown: visualSettings ? visualSettings.isGraphVisible(graphKey) : true
 
     readonly property alias colorDialog: seriesColorDialog
     readonly property alias scroller: editorScroll
@@ -42,10 +46,10 @@ Item {
         if (isRunGraph || axisRows.length > 0) result.push("axes")
         return result
     }
-    readonly property var sectionHeadings: ({
-        dataRange: dataRangeGroup.heading,
-        seriesStyle: seriesStyleGroup.heading,
-        axes: axesGroup.heading
+    readonly property var sectionGroups: ({
+        dataRange: dataRangeGroup,
+        seriesStyle: seriesStyleGroup,
+        axes: axesGroup
     })
     readonly property string sectionInView: {
         const flick = editorScroll.contentItem as Flickable
@@ -53,15 +57,17 @@ Item {
         const maximum = Math.max(0, flick.contentHeight - flick.height)
         if (maximum > 0 && y >= maximum - 1) return sections[sections.length - 1]
         let current = sections[0]
+        // Reads each group's own y, not mapToItem(): that notifies nothing, so this binding would keep
+        // the positions from before the layout's first polish, when every group is still at 0.
         for (const section of sections) {
-            const heading = sectionHeadings[section]
-            if (heading.mapToItem(flick.contentItem, 0, 0).y <= y + heading.height)
+            const group = sectionGroups[section]
+            if (group.y <= y + group.heading.height)
                 current = section
         }
         return current
     }
     function scrollToSection(group) {
-        const heading = sectionHeadings[group]
+        const heading = sectionGroups[group] ? sectionGroups[group].heading : null
         if (!heading || !sections.includes(group)) return
         const flick = editorScroll.contentItem as Flickable
         flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height,
@@ -185,8 +191,11 @@ Item {
     function focusFirstControl() {
         const first = firstTabStop(content)
         if (!first) return false
-        ensureVisible(first)
+        const flick = editorScroll.contentItem as Flickable
         first.forceActiveFocus(Qt.TabFocusReason)
+        // Set after focusing, which scrolls too: the page opens at its top, with the heading row and
+        // Reset to defaults above this field in view.
+        flick.contentY = 0
         return true
     }
 
@@ -215,27 +224,59 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         spacing: 8
-        RowLayout {
+        Rectangle {
+            objectName: "graphVisibilityCard"
             Layout.fillWidth: true
-            Label {
-                objectName: "graphPageTitle"
-                Layout.fillWidth: true
-                text: root.graphName
-                font.pixelSize: 18
-                font.bold: true
+            implicitHeight: cardRow.implicitHeight + 28
+            radius: 6
+            color: root.graphShown ? Theme.graphShownSurface : Theme.graphHiddenSurface
+            border.color: root.graphShown ? Theme.graphShownBorder : Theme.graphHiddenBorder
+
+            Rectangle {
+                objectName: "graphVisibilityEdge"
+                width: 4
+                radius: 2
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.margins: 1
+                color: root.graphShown ? visibilitySwitch.palette.accent : Theme.graphHiddenEdge
             }
-            Button {
-                objectName: "graphResetButton"
-                readonly property string scopeText: root.isRunGraph
-                    ? qsTr("Stages Run graph's default line style. Your lines and axes are kept; use Restore default lines for those.")
-                    : qsTr("Stages this graph's defaults for every section. Save or Cancel decides.")
-                text: qsTr("Reset to defaults")
-                flat: true
-                Accessible.name: qsTr("Reset %1 to its defaults").arg(root.graphName)
-                Accessible.description: scopeText
-                ToolTip.text: scopeText
-                ToolTip.visible: hovered
-                onClicked: root.settingsVm.resetGraph(root.graphKey)
+            RowLayout {
+                id: cardRow
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 10
+
+                Image {
+                    objectName: "graphVisibilityIcon"
+                    source: root.graphShown ? "../icons/eye.svg" : "../icons/eye-off.svg"
+                    sourceSize.width: 26
+                    sourceSize.height: 26
+                    Layout.preferredWidth: 26
+                    Layout.preferredHeight: 26
+                    Accessible.ignored: true
+                }
+                Label {
+                    objectName: "graphPageTitle"
+                    Layout.fillWidth: true
+                    text: root.graphName
+                    font.pixelSize: 18
+                    font.bold: true
+                    elide: Text.ElideRight
+                    Accessible.role: Accessible.Heading
+                }
+                Switch {
+                    id: visibilitySwitch
+                    objectName: "graphVisibleSwitch"
+                    visible: root.visualSettings !== null
+                    text: qsTr("Show graph")
+                    checked: root.graphShown
+                    Accessible.name: qsTr("Show %1 graph").arg(root.graphName)
+                    Accessible.description: (root.graphShown ? qsTr("Shown in %1") : qsTr("Hidden from %1"))
+                        .arg(GraphCatalog.workspaceOf(root.graphKey))
+                    onToggled: root.visualSettings.setGraphVisible(root.graphKey, checked)
+                }
             }
         }
         OverflowScrollView {
@@ -243,6 +284,29 @@ Item {
             objectName: "graphEditorScroll"
             Layout.fillWidth: true
             Layout.fillHeight: true
+
+            // The button shares the first section's heading row. It comes first so it is tabbed to before
+            // the fields, and stays outside `content` so opening a graph still focuses its first field.
+            Item {
+                width: content.width
+                implicitHeight: content.implicitHeight
+
+                Button {
+                    id: resetButton
+                    objectName: "graphResetButton"
+                    readonly property string scopeText: root.isRunGraph
+                        ? qsTr("Stages Run graph's default line style. Your lines, axes and visibility are kept; use Restore default lines for lines and axes.")
+                        : qsTr("Stages this graph's defaults for every section. Visibility is kept. Save or Cancel decides.")
+                    anchors.right: parent.right
+                    z: 1
+                    text: qsTr("Reset to defaults")
+                    flat: true
+                    Accessible.name: qsTr("Reset %1 to its defaults").arg(root.graphName)
+                    Accessible.description: scopeText
+                    ToolTip.text: scopeText
+                    ToolTip.visible: hovered
+                    onClicked: root.settingsVm.resetGraph(root.graphKey)
+                }
 
             ColumnLayout {
                 id: content
@@ -256,6 +320,7 @@ Item {
                     id: dataRangeGroup
                     groupName: "dataRange"
                     title: qsTr("Data & range")
+                    headerMinimumHeight: root.sections[0] === groupName ? resetButton.implicitHeight : 0
                     visible: root.sections.includes("dataRange")
 
                     GridLayout {
@@ -435,6 +500,7 @@ Item {
                     id: seriesStyleGroup
                     groupName: "seriesStyle"
                     title: qsTr("Lines & style")
+                    headerMinimumHeight: root.sections[0] === groupName ? resetButton.implicitHeight : 0
 
                     GraphLineStyleControls {
                         Layout.fillWidth: true
@@ -677,6 +743,7 @@ Item {
                 }
 
                 Item { Layout.preferredHeight: 4 }
+            }
             }
         }
     }

@@ -42,6 +42,12 @@ QtObject {
     readonly property color attention: "#FFB74D"
     readonly property color success: "#4CAF50"
 
+    readonly property color graphShownSurface: "#203035"
+    readonly property color graphShownBorder: "#39727B"
+    readonly property color graphHiddenSurface: "#303236"
+    readonly property color graphHiddenBorder: "#7C818A"
+    readonly property color graphHiddenEdge: "#B8BEC8"
+
     readonly property int toolTipDelay: 400
     readonly property int shortToolTipDelay: 300
 

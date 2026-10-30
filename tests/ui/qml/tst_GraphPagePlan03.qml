@@ -64,6 +64,14 @@ TestCase {
         verify(Lookup.findByObjectName(editor, "seriesConfigDraftPanel") !== null)
         verify(Lookup.findByObjectName(editor, "axesPanel") !== null)
     }
+    // Focus reaches a just-opened settings page before its layout has sized the view. Scrolling then
+    // would strand the page below its heading row and Reset to defaults.
+    function test_ensureVisibleLeavesAnUnsizedViewAlone() {
+        const flick = {height: 0, contentY: 0, contentHeight: 669, contentItem: null}
+        const field = {height: 24, mapToItem: () => ({y: 51})}
+        Catalog.ensureVisible(flick, field, 8)
+        compare(flick.contentY, 0)
+    }
     function test_sections_data() {
         return [
             {tag: "run", graph: "run", sections: ["seriesStyle", "axes"]},

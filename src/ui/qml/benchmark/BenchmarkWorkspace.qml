@@ -9,6 +9,7 @@ Item {
 
     property var trackingVm
     property var settingsVm: null
+    property var visualSettings: null
 
     signal manageBenchmarksRequested()
     signal moreGraphSettingsRequested(string graphKey)
@@ -276,6 +277,7 @@ Item {
         BenchmarkIncompleteBody {
             trackingVm: root.trackingVm
             settingsVm: root.settingsVm
+            visualSettings: root.visualSettings
             bodyWidth: root._contentWidth
             wide: root._wide
             onManageBenchmarksRequested: root.manageBenchmarksRequested()
@@ -288,6 +290,7 @@ Item {
         BenchmarkTrackableBody {
             trackingVm: root.trackingVm
             settingsVm: root.settingsVm
+            visualSettings: root.visualSettings
             bodyWidth: root._contentWidth
             wide: root._wide
             onManageBenchmarksRequested: root.manageBenchmarksRequested()

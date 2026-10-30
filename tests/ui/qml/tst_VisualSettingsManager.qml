@@ -36,8 +36,88 @@ TestCase {
         compare(manager.isSeriesVisible("3"), true)
     }
 
+    readonly property var graphProperties: ({
+        run: "scenarioGraphVisible",
+        dailyPlaytime: "playtimeGraphVisible",
+        scenarioHistory: "scenarioHistoryGraphVisible",
+        benchmarkRank: "benchmarkRankGraphVisible",
+        benchmarkRecentRank: "benchmarkRecentRankGraphVisible",
+        benchmarkPlaytime: "benchmarkPlaytimeGraphVisible"
+    })
+
     function cleanup() {
         manager.historyColumnVisibility = {"1": true, "2": false, "3": false, "4": false, "5": false, "6": true}
+        for (const key of Object.keys(graphProperties)) manager.setGraphVisible(key, true)
+        manager.dismissHideNotice()
+    }
+
+    function test_every_graph_key_reads_and_writes_its_own_saved_setting() {
+        for (const key of Object.keys(graphProperties)) {
+            compare(manager.isGraphVisible(key), true, key)
+            manager.setGraphVisible(key, false)
+            compare(manager[graphProperties[key]], false, key)
+            compare(manager.isGraphVisible(key), false, key)
+            manager.setGraphVisible(key, true)
+        }
+    }
+
+    function test_quick_hide_hides_the_graph_and_raises_its_notice() {
+        manager.quickHideGraph("benchmarkRank")
+        compare(manager.benchmarkRankGraphVisible, false)
+        compare(manager.hideNoticeGraph, "benchmarkRank")
+    }
+
+    function test_undo_restores_the_graph_and_clears_the_notice() {
+        manager.quickHideGraph("run")
+        manager.undoQuickHide()
+        compare(manager.scenarioGraphVisible, true)
+        compare(manager.hideNoticeGraph, "")
+    }
+
+    function test_dismiss_clears_the_notice_and_keeps_the_graph_hidden() {
+        manager.quickHideGraph("run")
+        manager.dismissHideNotice()
+        compare(manager.scenarioGraphVisible, false)
+        compare(manager.hideNoticeGraph, "")
+    }
+
+    function test_a_second_quick_hide_replaces_the_notice_and_leaves_the_first_graph_hidden() {
+        manager.quickHideGraph("run")
+        manager.quickHideGraph("dailyPlaytime")
+        compare(manager.hideNoticeGraph, "dailyPlaytime")
+        compare(manager.scenarioGraphVisible, false)
+    }
+
+    function test_restoring_a_graph_elsewhere_retires_its_notice_for_good() {
+        manager.quickHideGraph("run")
+        manager.scenarioGraphVisible = true
+        compare(manager.hideNoticeGraph, "")
+        manager.scenarioGraphVisible = false
+        compare(manager.hideNoticeGraph, "")
+    }
+
+    function test_restoring_another_graph_keeps_the_notice() {
+        manager.playtimeGraphVisible = false
+        manager.quickHideGraph("run")
+        manager.playtimeGraphVisible = true
+        compare(manager.hideNoticeGraph, "run")
+    }
+
+    function test_the_notice_does_not_survive_a_restart_but_the_hidden_graph_does() {
+        const before = Qt.createQmlObject(
+            'import "../../../src/ui/qml/graph"; VisualSettingsManager {}',
+            testCase, "noticeBeforeRestartManager")
+        before.quickHideGraph("benchmarkPlaytime")
+        before.destroy()
+        wait(50)
+        const after = Qt.createQmlObject(
+            'import "../../../src/ui/qml/graph"; VisualSettingsManager {}',
+            testCase, "noticeAfterRestartManager")
+        compare(after.benchmarkPlaytimeGraphVisible, false)
+        compare(after.hideNoticeGraph, "")
+        after.benchmarkPlaytimeGraphVisible = true
+        after.destroy()
+        wait(50)
     }
 
     function test_historyVisibilityPreservesOldChoicesAndDefaultsTheNewAverageOn() {

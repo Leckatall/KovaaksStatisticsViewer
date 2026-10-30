@@ -14,6 +14,7 @@ Frame {
     property var settingsVm: null
 
     signal moreGraphSettingsRequested(string graphKey)
+    signal hideGraphRequested(string graphKey)
 
     readonly property bool hasData: root.historyModel !== undefined
                                     && root.historyModel !== null
@@ -46,6 +47,7 @@ Frame {
                 graphKey: root.graphKey
                 settingsVm: root.settingsVm
                 onMoreSettingsRequested: key => root.moreGraphSettingsRequested(key)
+                onHideGraphRequested: key => root.hideGraphRequested(key)
             }
         }
 

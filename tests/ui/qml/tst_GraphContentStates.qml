@@ -321,6 +321,30 @@ Item {
             verifyGearOpens(gearOf(ws, "benchmarkPlaytime"))
         }
 
+        Component {
+            id: visibilityComponent
+            FakeGraphVisibility {}
+        }
+
+        function test_anIncompleteBenchmarkOffersRecoveryWhenItsOnlyGraphIsHidden() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureIncomplete())
+            const visibility = createTemporaryObject(visibilityComponent, ws)
+            ws.visualSettings = visibility
+            tryVerify(() => find(ws, "incompleteBody") !== null, 2000)
+            verify(shown(ws, "playtimeHistoryCard"))
+            verify(!shown(ws, "noGraphsShown"))
+
+            visibility.quickHideGraph("benchmarkPlaytime")
+            verify(!shown(ws, "playtimeHistoryCard"))
+            verify(shown(ws, "noGraphsShown"))
+            verify(shown(ws, "graphHiddenNotice_benchmarkPlaytime"))
+            verify(shown(ws, "incompleteBody"), "the rest of the page stays")
+
+            visibility.dismissHideNotice()
+            verify(!shown(ws, "graphHiddenNotice_benchmarkPlaytime"))
+            verify(shown(ws, "noGraphsShown"), "dismissing the notice must not remove recovery")
+        }
+
         function test_statesWithoutBenchmarkGraphsStayAsTheyWere_data() {
             return [
                 {tag: "emptyLibrary", fixture: TestDoubles.trackingFixtureEmptyLibrary(), body: "emptyLibraryBody"},

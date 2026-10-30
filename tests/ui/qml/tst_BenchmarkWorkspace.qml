@@ -1043,6 +1043,100 @@ Item {
                          "the Scenario column follows Category directly")
         }
 
+        // -- graph visibility ------------------------------------------
+
+        Component {
+            id: visibilityComponent
+            FakeGraphVisibility {}
+        }
+
+        // 1200 is wide enough for the rank cards to share a row, 800 stacks them.
+        function workspaceWithVisibility(width) {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable(), width, 800)
+            ws.visualSettings = createTemporaryObject(visibilityComponent, ws)
+            const column = find(ws, "trackableScrollColumn")
+            verify(column !== null)
+            return {
+                visibility: ws.visualSettings, column: column, grid: find(ws, "benchmarkProgressGrid"),
+                rank: find(ws, "rankHistoryCard"), recent: find(ws, "recentRankHistoryCard"),
+                playtime: find(ws, "playtimeHistoryCard"), ws: ws
+            }
+        }
+
+        function test_withOneRankCardHiddenTheOtherTakesTheFullRow_data() {
+            return [{tag: "wide", width: 1200}, {tag: "narrow", width: 800}]
+        }
+
+        function test_withOneRankCardHiddenTheOtherTakesTheFullRow(data) {
+            const {visibility, column, rank, recent} = workspaceWithVisibility(data.width)
+            const top = rank.y
+
+            visibility.benchmarkRankGraphVisible = false
+            compare(rank.visible, false)
+            compare(recent.x, 0)
+            compare(recent.y, top)
+            compare(recent.width, column.width)
+
+            visibility.benchmarkRankGraphVisible = true
+            visibility.benchmarkRecentRankGraphVisible = false
+            compare(recent.visible, false)
+            compare(rank.width, column.width)
+        }
+
+        function test_playtimeRisesToTheGridWhenBothRankCardsAreHidden() {
+            const {visibility, rank, playtime} = workspaceWithVisibility(1200)
+            const top = rank.y
+            visibility.benchmarkRankGraphVisible = false
+            visibility.benchmarkRecentRankGraphVisible = false
+            compare(playtime.y, top)
+        }
+
+        function test_aHiddenPlaytimeCardLeavesNoScrollSpace_data() {
+            return [{tag: "wide", width: 1200}, {tag: "narrow", width: 800}]
+        }
+
+        function test_aHiddenPlaytimeCardLeavesNoScrollSpace(data) {
+            const {visibility, column, recent} = workspaceWithVisibility(data.width)
+            visibility.benchmarkPlaytimeGraphVisible = false
+            compare(column.implicitHeight, recent.y + recent.height)
+        }
+
+        function test_theNoticeStandsInTheHiddenGraphsSlot() {
+            const {visibility, ws, rank, recent} = workspaceWithVisibility(1200)
+            const recentX = recent.x
+            visibility.quickHideGraph("benchmarkRank")
+            const notice = find(ws, "graphHiddenNotice_benchmarkRank")
+            verify(notice !== null && notice.visible)
+            compare(notice.x, 0)
+            compare(notice.y, rank.y)
+            compare(notice.width, rank.width)
+            compare(recent.x, recentX, "the row keeps its shape until the notice goes")
+
+            visibility.dismissHideNotice()
+            compare(recent.x, 0)
+        }
+
+        function test_aNoticeForAScenarioGraphStaysOutOfThisWorkspace() {
+            const {visibility, ws} = workspaceWithVisibility(1200)
+            visibility.quickHideGraph("dailyPlaytime")
+            verify(find(ws, "graphHiddenNotice_") !== null, "the unused notice has no graph")
+            compare(find(ws, "graphHiddenNotice_").visible, false)
+        }
+
+        function test_recoveryAppearsOnceEveryGraphIsHiddenAndKeepsTheGrid() {
+            const {visibility, ws, column, grid} = workspaceWithVisibility(1200)
+            const recovery = find(ws, "noGraphsShown")
+            compare(recovery.visible, false)
+            visibility.benchmarkRankGraphVisible = false
+            visibility.benchmarkRecentRankGraphVisible = false
+            compare(recovery.visible, false)
+            visibility.benchmarkPlaytimeGraphVisible = false
+            compare(recovery.visible, true)
+            verify(grid.visible)
+            verify(recovery.y >= grid.y + grid.height)
+            compare(column.implicitHeight, recovery.y + recovery.height)
+        }
+
         // -- responsive layout -----------------------------------------
 
         function test_wideLayoutPutsHistoriesSideBySideWithAlignedMetricColumns() {

@@ -9,6 +9,7 @@ ColumnLayout {
     // dataRange, axes or seriesStyle: the suffix of the header's objectName.
     required property string groupName
     property string title
+    property real headerMinimumHeight: 0
 
     default property alias content: body.data
     readonly property alias heading: header
@@ -20,6 +21,8 @@ ColumnLayout {
         id: header
         objectName: "graphGroup_" + group.groupName
         Layout.fillWidth: true
+        Layout.minimumHeight: group.headerMinimumHeight
+        verticalAlignment: Text.AlignVCenter
         text: group.title
         font.bold: true
         Accessible.role: Accessible.Heading

@@ -38,6 +38,9 @@ Item {
     property alias scenarioGraphVisible: panelSettings.scenarioGraphVisible
     property alias playtimeGraphVisible: panelSettings.playtimeGraphVisible
     property alias scenarioHistoryGraphVisible: panelSettings.scenarioHistoryGraphVisible
+    property alias benchmarkRankGraphVisible: panelSettings.benchmarkRankGraphVisible
+    property alias benchmarkRecentRankGraphVisible: panelSettings.benchmarkRecentRankGraphVisible
+    property alias benchmarkPlaytimeGraphVisible: panelSettings.benchmarkPlaytimeGraphVisible
     property alias controlPanelVisible: panelSettings.controlPanelVisible
     property alias selectionPanelVisible: panelSettings.selectionPanelVisible
     property alias recentRunsSectionVisible: panelSettings.recentRunsSectionVisible
@@ -48,11 +51,59 @@ Item {
         property bool scenarioGraphVisible: true
         property bool playtimeGraphVisible: true
         property bool scenarioHistoryGraphVisible: true
+        property bool benchmarkRankGraphVisible: true
+        property bool benchmarkRecentRankGraphVisible: true
+        property bool benchmarkPlaytimeGraphVisible: true
         property bool controlPanelVisible: true
         property bool selectionPanelVisible: true
         property bool recentRunsSectionVisible: true
         property bool scenarioBrowserSectionVisible: true
     }
+
+    readonly property var graphVisibilityProperties: ({
+        run: "scenarioGraphVisible",
+        dailyPlaytime: "playtimeGraphVisible",
+        scenarioHistory: "scenarioHistoryGraphVisible",
+        benchmarkRank: "benchmarkRankGraphVisible",
+        benchmarkRecentRank: "benchmarkRecentRankGraphVisible",
+        benchmarkPlaytime: "benchmarkPlaytimeGraphVisible"
+    })
+
+    function isGraphVisible(graphKey) {
+        return root[root.graphVisibilityProperties[graphKey]]
+    }
+
+    function setGraphVisible(graphKey, shown) {
+        root[root.graphVisibilityProperties[graphKey]] = shown
+    }
+
+    // The graph a quick hide's Undo/Dismiss notice is standing in for. Session feedback, so it stays
+    // outside every Settings block: a notice never returns after a restart.
+    property string hideNoticeGraph: ""
+
+    function quickHideGraph(graphKey) {
+        root.setGraphVisible(graphKey, false)
+        root.hideNoticeGraph = graphKey
+    }
+
+    function undoQuickHide() {
+        if (root.hideNoticeGraph !== "") root.setGraphVisible(root.hideNoticeGraph, true)
+    }
+
+    function dismissHideNotice() {
+        root.hideNoticeGraph = ""
+    }
+
+    // Otherwise a graph shown from elsewhere and hidden again would bring its old notice back.
+    function clearNoticeOfShownGraph() {
+        if (root.hideNoticeGraph !== "" && root.isGraphVisible(root.hideNoticeGraph)) root.hideNoticeGraph = ""
+    }
+    onScenarioGraphVisibleChanged: clearNoticeOfShownGraph()
+    onPlaytimeGraphVisibleChanged: clearNoticeOfShownGraph()
+    onScenarioHistoryGraphVisibleChanged: clearNoticeOfShownGraph()
+    onBenchmarkRankGraphVisibleChanged: clearNoticeOfShownGraph()
+    onBenchmarkRecentRankGraphVisibleChanged: clearNoticeOfShownGraph()
+    onBenchmarkPlaytimeGraphVisibleChanged: clearNoticeOfShownGraph()
 
     property alias historyColumnVisibility: historySettings.columnVisibility
     property alias historyAxisColumnKey: historySettings.yAxisColumnKey

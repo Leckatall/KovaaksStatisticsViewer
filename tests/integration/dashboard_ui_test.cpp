@@ -26,6 +26,7 @@
 #include <QUrl>
 #include <QVariant>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -337,6 +338,42 @@ namespace {
                    height(run) > height(playtime);
         }, 2000)) << "with playtime hidden: " << height(run) << ", " << height(history);
         visualSettings->setProperty("playtimeGraphVisible", true);
+    }
+
+    // A gear's Hide graph reaches the saved visibility through the real panels and workspace, and its
+    // notice undoes it.
+    TEST_F(DashboardUiTest, QuickHideFromAGearCanBeUndone) {
+        auto *playtime = root()->findChild<QObject *>("playtimeGraphPanel");
+        auto *notice = root()->findChild<QObject *>("graphHiddenNotice_dailyPlaytime");
+        QObject *visualSettings = root()->findChild<QObject *>("visualSettings");
+        ASSERT_TRUE(playtime && notice && visualSettings);
+        auto *gear = playtime->findChild<QObject *>("graphGear_dailyPlaytime");
+        ASSERT_TRUE(gear);
+
+        ASSERT_TRUE(QMetaObject::invokeMethod(gear, "hideGraphRequested", Q_ARG(QString, "dailyPlaytime")));
+        EXPECT_FALSE(visualSettings->property("playtimeGraphVisible").toBool());
+        EXPECT_FALSE(playtime->property("visible").toBool());
+        EXPECT_TRUE(notice->property("visible").toBool());
+
+        ASSERT_TRUE(QMetaObject::invokeMethod(notice, "undo"));
+        EXPECT_TRUE(visualSettings->property("playtimeGraphVisible").toBool());
+        EXPECT_TRUE(playtime->property("visible").toBool());
+        EXPECT_FALSE(notice->property("visible").toBool());
+    }
+
+    TEST_F(DashboardUiTest, HidingEveryScenarioGraphOffersRecovery) {
+        auto *workspace = root()->findChild<QObject *>("scenarioWorkspace");
+        QObject *visualSettings = root()->findChild<QObject *>("visualSettings");
+        ASSERT_TRUE(workspace && visualSettings);
+        auto *recovery = workspace->findChild<QObject *>("noGraphsShown");
+        ASSERT_TRUE(recovery);
+        EXPECT_FALSE(recovery->property("visible").toBool());
+
+        const std::array graphs{"scenarioGraphVisible", "scenarioHistoryGraphVisible", "playtimeGraphVisible"};
+        for (const auto *graph: graphs) visualSettings->setProperty(graph, false);
+        EXPECT_TRUE(recovery->property("visible").toBool());
+        for (const auto *graph: graphs) visualSettings->setProperty(graph, true);
+        EXPECT_FALSE(recovery->property("visible").toBool());
     }
 
     // The panels about the selected scenario (run graph, its history) sit together, above the

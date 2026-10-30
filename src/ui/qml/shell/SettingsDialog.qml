@@ -67,6 +67,7 @@ ApplicationWindow {
 
     required property var settingsVm
     required property var sessionVm
+    property var visualSettings: null
 
     // One working copy per visit: Save keeps the window open and clean, Cancel drops every edit
     // since the visit began or last saved and closes.
@@ -337,13 +338,18 @@ ApplicationWindow {
     component CategoryButton: ItemDelegate {
         id: catButton
         padding: 10
-        rightPadding: 18
+        rightPadding: graphHidden && marker !== "" ? 29 : 18
         Layout.fillWidth: true
         focusPolicy: Qt.StrongFocus
         property bool emphasised: false
         property string marker: ""
-        Accessible.description: marker === "issue" ? qsTr("Has a setting to fix before saving") :
-                                marker === "changed" ? qsTr("Has unsaved changes") : ""
+        property bool graphHidden: false
+        Accessible.description: {
+            const status = marker === "issue" ? qsTr("Has a setting to fix before saving") :
+                           marker === "changed" ? qsTr("Has unsaved changes") : ""
+            if (!graphHidden) return status
+            return status === "" ? qsTr("Hidden") : qsTr("Hidden. %1").arg(status)
+        }
         Keys.onUpPressed: root.moveSidebar(catButton, -1)
         Keys.onDownPressed: root.moveSidebar(catButton, 1)
         onActiveFocusChanged: if (activeFocus) GraphCatalog.ensureVisible(sidebarScroll.contentItem as Flickable, catButton, 0)
@@ -359,6 +365,19 @@ ApplicationWindow {
             font.bold: catButton.highlighted || catButton.emphasised
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
+        }
+        // Sits in the right padding the marker dot reserves, so hiding a graph leaves its name's size alone.
+        // Only an entry with both steps the icon inward, past the dot.
+        Image {
+            objectName: "hiddenStatus_" + catButton.objectName
+            anchors.right: parent.right
+            anchors.rightMargin: catButton.marker !== "" ? 15 : 4
+            anchors.verticalCenter: parent.verticalCenter
+            visible: catButton.graphHidden
+            source: "../icons/eye-off.svg"
+            sourceSize.width: 14
+            sourceSize.height: 14
+            Accessible.ignored: true
         }
     }
 
@@ -441,6 +460,8 @@ ApplicationWindow {
                                     text: graphEntry.modelData.name
                                     emphasised: root.currentPage === graphEntry.modelData.key
                                     marker: root.markerFor(graphEntry.modelData.key)
+                                    graphHidden: root.visualSettings !== null
+                                                 && !root.visualSettings.isGraphVisible(graphEntry.modelData.key)
                                     onClicked: root.selectGraph(graphEntry.modelData.key, true)
                                     Rectangle {
                                         objectName: graphButton.objectName + "_accent"
@@ -649,6 +670,7 @@ ApplicationWindow {
                             anchors.fill: parent
                             settingsVm: root.settingsVm
                             graphKey: root.settingsVm.selectedGraph
+                            visualSettings: root.visualSettings
                         }
                     }
                 }

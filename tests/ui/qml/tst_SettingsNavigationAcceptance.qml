@@ -86,8 +86,8 @@ TestCase {
             verify(right <= list.width + 1, entry.objectName)
         }
         const title = find(dialog, "graphPageTitle")
-        const reset = find(dialog, "graphResetButton")
-        verify(title.mapToItem(null, title.width, 0).x <= reset.mapToItem(null, 0, 0).x + 1)
+        const card = find(dialog, "graphVisibilityCard")
+        verify(title.mapToItem(card, title.width, 0).x <= card.width)
     }
 
     function test_tabCyclesSidebarPageSaveCancelAndBack() {

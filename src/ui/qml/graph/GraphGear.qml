@@ -20,6 +20,7 @@ ChromeIconButton {
 
     // Emitted after the popup has closed.
     signal moreSettingsRequested(string graphKey)
+    signal hideGraphRequested(string graphKey)
 
     readonly property string graphName: GraphCatalog.nameOf(graphKey)
 
@@ -286,6 +287,24 @@ ChromeIconButton {
                 onClicked: {
                     quickPopup.close()
                     gear.moreSettingsRequested(gear.graphKey)
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: gear.palette.mid
+            }
+
+            Button {
+                objectName: "graphQuickHide_" + gear.graphKey
+                Layout.fillWidth: true
+                flat: true
+                text: qsTr("Hide graph")
+                Accessible.name: qsTr("Hide %1").arg(gear.graphName)
+                onClicked: {
+                    quickPopup.close()
+                    gear.hideGraphRequested(gear.graphKey)
                 }
             }
         }

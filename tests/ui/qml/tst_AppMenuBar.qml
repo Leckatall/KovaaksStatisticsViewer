@@ -28,11 +28,8 @@ TestCase {
         compare(action.enabled, false)
     }
 
-    QtObject {
+    FakeGraphVisibility {
         id: fakeViewSettings
-        property bool scenarioGraphVisible: true
-        property bool playtimeGraphVisible: true
-        property bool scenarioHistoryGraphVisible: true
         property bool controlPanelVisible: true
         property bool selectionPanelVisible: true
         property bool recentRunsSectionVisible: true
@@ -200,22 +197,6 @@ TestCase {
         verify(menuBar !== null, "AppMenuBar failed to instantiate")
         const viewMenu = menuBar.menuAt(1)
 
-        const scenarioGraphItem = findMenuItemByText(viewMenu, "Scenario Graph")
-        verify(scenarioGraphItem !== null)
-        compare(scenarioGraphItem.action.checked, true)
-        scenarioGraphItem.action.trigger()
-        compare(fakeViewSettings.scenarioGraphVisible, false, "triggering the checkable action should flip viewSettings")
-
-        const playtimeItem = findMenuItemByText(viewMenu, "Playtime Graph")
-        verify(playtimeItem !== null)
-        playtimeItem.action.trigger()
-        compare(fakeViewSettings.playtimeGraphVisible, false)
-
-        const historyItem = findMenuItemByText(viewMenu, "Scenario History")
-        verify(historyItem !== null)
-        historyItem.action.trigger()
-        compare(fakeViewSettings.scenarioHistoryGraphVisible, false)
-
         const controlPanelItem = findMenuItemByText(viewMenu, "Graph Line Toggles")
         verify(controlPanelItem !== null)
         controlPanelItem.action.trigger()
@@ -235,19 +216,42 @@ TestCase {
         return -1
     }
 
-    // The graph entries follow the panels' top-to-bottom order: the two about the selected
-    // scenario, then the all-scenario playtime graph.
-    function test_viewMenuGraphEntriesFollowPanelOrder() {
+    function test_viewGraphsMenuListsEveryGraphGroupedByWorkspace() {
         const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
-        const viewMenu = menuBar.menuAt(1)
-        const order = ["Scenario Graph", "Scenario Graph Lines", "Scenario History", "Scenario History Lines",
-                       "Playtime Graph"]
+        const graphsMenu = findChild(menuBar, "viewGraphsMenu")
+        verify(graphsMenu !== null, "viewGraphsMenu not found")
+        const order = ["Scenarios", "Run graph", "Daily playtime", "Scenario history",
+                       "Benchmarks", "Benchmark rank history", "Benchmark recent rank", "Benchmark playtime"]
         let previous = -1
         for (const text of order) {
-            const index = indexOfMenuItem(viewMenu, text)
+            const index = indexOfMenuItem(graphsMenu, text)
             verify(index > previous, "'" + text + "' at " + index + " should come after index " + previous)
             previous = index
         }
+    }
+
+    function test_viewGraphsEntriesReadAndWriteEachGraphsVisibility_data() {
+        return [
+            {tag: "run", text: "Run graph", property: "scenarioGraphVisible"},
+            {tag: "daily", text: "Daily playtime", property: "playtimeGraphVisible"},
+            {tag: "history", text: "Scenario history", property: "scenarioHistoryGraphVisible"},
+            {tag: "rank", text: "Benchmark rank history", property: "benchmarkRankGraphVisible"},
+            {tag: "recentRank", text: "Benchmark recent rank", property: "benchmarkRecentRankGraphVisible"},
+            {tag: "benchmarkPlaytime", text: "Benchmark playtime", property: "benchmarkPlaytimeGraphVisible"}
+        ]
+    }
+
+    function test_viewGraphsEntriesReadAndWriteEachGraphsVisibility(data) {
+        fakeViewSettings[data.property] = true
+        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
+        const item = findMenuItemByText(findChild(menuBar, "viewGraphsMenu"), data.text)
+        verify(item !== null)
+        compare(item.checked, true)
+        item.toggle()
+        item.triggered()
+        compare(fakeViewSettings[data.property], false)
+        fakeViewSettings[data.property] = true
+        compare(item.checked, true, "the entry follows changes made elsewhere")
     }
 
     // Where an item's label text starts: the item's left padding plus the content item's own
@@ -263,8 +267,8 @@ TestCase {
     function test_viewMenuLabelsStartAtTheSameX() {
         const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
         const viewMenu = menuBar.menuAt(1)
-        const checkableX = labelX(viewMenu, "Scenario Graph")
-        verify(checkableX > findMenuItemByText(viewMenu, "Scenario Graph").padding, "label indented past the check box")
+        const checkableX = labelX(viewMenu, "Graph Line Toggles")
+        verify(checkableX > findMenuItemByText(viewMenu, "Graph Line Toggles").padding, "label indented past the check box")
         fuzzyCompare(labelX(viewMenu, "Scenario Graph Lines"), checkableX, 1)
         fuzzyCompare(labelX(viewMenu, "Selection Panel Sections"), checkableX, 1)
 

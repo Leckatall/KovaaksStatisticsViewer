@@ -12,6 +12,7 @@ Frame {
     property var settingsVm: null
 
     signal moreGraphSettingsRequested(string graphKey)
+    signal hideGraphRequested(string graphKey)
     signal seriesVisibilityRequested(string seriesId, bool shown)
     readonly property var plottable: [
         CompletionHistoryViewModel.Score,
@@ -115,6 +116,7 @@ Frame {
                 graphKey: "scenarioHistory"
                 settingsVm: root.settingsVm
                 onMoreSettingsRequested: key => root.moreGraphSettingsRequested(key)
+                onHideGraphRequested: key => root.hideGraphRequested(key)
             }
         }
 

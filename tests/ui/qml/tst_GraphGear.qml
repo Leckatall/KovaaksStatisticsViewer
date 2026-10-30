@@ -73,6 +73,16 @@ TestCase {
         combo.activated(index)
     }
 
+    function test_hideGraphClosesThePopupAndAsksToHideThatGraph() {
+        const gear = makeGear("dailyPlaytime")
+        const requested = []
+        gear.hideGraphRequested.connect(key => requested.push(key))
+        openPopup(gear)
+        mouseClick(control(gear, "graphQuickHide_dailyPlaytime"))
+        tryVerify(() => !gear.popup.visible)
+        compare(requested, ["dailyPlaytime"])
+    }
+
     function typeInto(field, text) {
         field.forceActiveFocus()
         field.selectAll()

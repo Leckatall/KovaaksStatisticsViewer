@@ -75,6 +75,112 @@ TestCase {
             .filter(item => item.visible && !item.objectName.endsWith("_error")).map(item => item.objectName).sort()
     }
 
+    // ---- Visibility -----------------------------------------------------------------------------------
+
+    Component {
+        id: visibilityComponent
+        FakeGraphVisibility {}
+    }
+
+    function openWithVisibility(graph) {
+        const opened = openOn(graph)
+        const visibility = createTemporaryObject(visibilityComponent, testCase)
+        opened.dialog.visualSettings = visibility
+        verify(waitForRendering(opened.dialog.contentItem))
+        return {dialog: opened.dialog, vm: opened.vm, visibility: visibility}
+    }
+
+    function test_withoutVisibilitySettingsThePageOffersNoSwitch() {
+        const {dialog} = openOn("dailyPlaytime")
+        verify(!shown(dialog, "graphVisibleSwitch"))
+        compare(find(dialog, "graphPageTitle").text, "Daily playtime")
+    }
+
+    function test_theCardShowsTheSelectedGraphsVisibility() {
+        const {dialog, visibility} = openWithVisibility("dailyPlaytime")
+        visibility.setGraphVisible("benchmarkRank", false)
+        const toggle = find(dialog, "graphVisibleSwitch")
+        const icon = find(dialog, "graphVisibilityIcon")
+        compare(toggle.checked, true)
+        verify(String(icon.source).endsWith("eye.svg"))
+        compare(toggle.Accessible.description, "Shown in Scenarios")
+
+        dialog.openGraph("benchmarkRank")
+        compare(toggle.checked, false)
+        verify(String(icon.source).endsWith("eye-off.svg"))
+        compare(toggle.Accessible.description, "Hidden from Benchmarks")
+        compare(toggle.Accessible.name, "Show Benchmark rank history graph")
+    }
+
+    function test_theSwitchAppliesAtOnceWithoutUnsavedChanges() {
+        const {dialog, vm, visibility} = openWithVisibility("dailyPlaytime")
+        const toggle = find(dialog, "graphVisibleSwitch")
+        mouseClick(toggle)
+        compare(visibility.playtimeGraphVisible, false)
+        compare(vm.pendingChanges, false)
+        compare(find(dialog, "settingsSaveButton").enabled, false)
+        verify(String(find(dialog, "graphVisibilityIcon").source).endsWith("eye-off.svg"))
+
+        visibility.playtimeGraphVisible = true
+        compare(toggle.checked, true, "the switch follows a change made in the View menu after being toggled")
+    }
+
+    function test_cancelAndResetLeaveVisibilityAlone() {
+        const {dialog, visibility} = openWithVisibility("dailyPlaytime")
+        mouseClick(find(dialog, "graphVisibleSwitch"))
+        mouseClick(find(dialog, "graphResetButton"))
+        compare(visibility.playtimeGraphVisible, false)
+        mouseClick(find(dialog, "settingsCancelButton"))
+        compare(visibility.playtimeGraphVisible, false)
+    }
+
+    function test_theSidebarMarksEveryHiddenGraph() {
+        const {dialog, visibility} = openWithVisibility("dailyPlaytime")
+        verify(!shown(dialog, "hiddenStatus_settingsNav_dailyPlaytime"))
+        const entry = find(dialog, "settingsNav_dailyPlaytime")
+        const shownHeight = entry.height
+        const shownNameWidth = entry.contentItem.width
+        visibility.setGraphVisible("dailyPlaytime", false)
+        visibility.setGraphVisible("benchmarkRank", false)
+        verify(waitForRendering(dialog.contentItem))
+        const icon = find(dialog, "hiddenStatus_settingsNav_dailyPlaytime")
+        verify(icon.visible)
+        verify(String(icon.source).endsWith("eye-off.svg"))
+        verify(shown(dialog, "hiddenStatus_settingsNav_benchmarkRank"))
+        verify(!shown(dialog, "hiddenStatus_settingsNav_run"))
+        compare(entry.height, shownHeight, "the entry keeps its size")
+        compare(entry.contentItem.width, shownNameWidth, "the name keeps its size")
+        verify(entry.contentItem.x + entry.contentItem.width <= icon.x, "the name stops short of the icon")
+        compare(find(dialog, "settingsNav_benchmarkRank").Accessible.description, "Hidden")
+    }
+
+    function test_tabRunsFromTheSwitchThroughResetToTheFields() {
+        const {dialog} = openWithVisibility("dailyPlaytime")
+        find(dialog, "graphVisibleSwitch").forceActiveFocus(Qt.TabFocusReason)
+        tryVerify(() => dialog.activeFocusItem === find(dialog, "graphVisibleSwitch"))
+        keyClick(Qt.Key_Tab)
+        compare(dialog.activeFocusItem.objectName, "graphResetButton")
+        keyClick(Qt.Key_Tab)
+        compare(dialog.activeFocusItem.objectName, "graphField_dataRange_range")
+    }
+
+    function test_openingAGraphFocusesItsFirstField() {
+        const {dialog} = openWithVisibility("dailyPlaytime")
+        tryVerify(() => dialog.activeFocusItem !== null)
+        compare(dialog.activeFocusItem.objectName, "graphField_dataRange_range")
+    }
+
+    // Focusing the first field from further down the page would stop with that field at the top edge,
+    // scrolling away the heading row and Reset to defaults above it.
+    function test_openingAGraphLeavesThePageAtItsTop() {
+        const {dialog} = openWithVisibility("dailyPlaytime")
+        dialog.openGraph("dailyPlaytime")
+        const flick = find(dialog, "graphEditorScroll").contentItem
+        flick.contentY = 100
+        verify(waitForRendering(dialog.contentItem))
+        compare(flick.contentY, 0)
+    }
+
     // ---- Control omission (AC01) --------------------------------------------------------------------
 
     function test_dailyPlaytimeOffersRangeWindowOneAxisAndOneSeries() {

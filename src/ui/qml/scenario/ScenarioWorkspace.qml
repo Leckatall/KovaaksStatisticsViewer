@@ -19,6 +19,9 @@ Item {
     // profile). The workspace then shows a welcome with choosing the folder as its
     // one action instead of a screen of empty graphs.
     readonly property bool welcomeVisible: !kovaaksFolderValid && !scenarioBrowserVm.hasScenarios
+    readonly property bool allGraphsHidden: !visualSettings.scenarioGraphVisible
+                                            && !visualSettings.scenarioHistoryGraphVisible
+                                            && !visualSettings.playtimeGraphVisible
 
     signal configureGraphLinesRequested()
     signal moreGraphSettingsRequested(string graphKey)
@@ -66,6 +69,12 @@ Item {
                 settingsVm: root.settingsVm
                 onConfigureLinesRequested: root.configureGraphLinesRequested()
                 onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
+                onHideGraphRequested: key => root.visualSettings.quickHideGraph(key)
+            }
+            GraphHiddenNotice {
+                Layout.fillWidth: true
+                graphKey: "run"
+                visualSettings: root.visualSettings
             }
             ScenarioHistoryPanel {
                 objectName: "scenarioHistoryPanel"
@@ -80,6 +89,12 @@ Item {
                 onSeriesVisibilityRequested: (seriesId, shown) =>
                     root.visualSettings.setHistorySeriesVisible(seriesId, shown)
                 onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
+                onHideGraphRequested: key => root.visualSettings.quickHideGraph(key)
+            }
+            GraphHiddenNotice {
+                Layout.fillWidth: true
+                graphKey: "scenarioHistory"
+                visualSettings: root.visualSettings
             }
             PlaytimeGraphPanel {
                 objectName: "playtimeGraphPanel"
@@ -90,6 +105,23 @@ Item {
                 playtimeVm: root.playtimeVm
                 settingsVm: root.settingsVm
                 onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
+                onHideGraphRequested: key => root.visualSettings.quickHideGraph(key)
+            }
+            GraphHiddenNotice {
+                Layout.fillWidth: true
+                graphKey: "dailyPlaytime"
+                visualSettings: root.visualSettings
+            }
+            NoGraphsShown {
+                Layout.fillWidth: true
+                visible: root.allGraphsHidden
+                message: qsTr("Your scenario graphs are hidden. Choose which graphs to show.")
+                visualSettings: root.visualSettings
+            }
+            // Keeps the notice and the recovery at the top with no panel left to fill the column.
+            Item {
+                Layout.fillHeight: true
+                visible: root.allGraphsHidden
             }
         }
         SelectionPanel {

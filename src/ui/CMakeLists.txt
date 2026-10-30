@@ -31,12 +31,15 @@ qt_add_qml_module(ksv_ui
             qml/benchmark/BenchmarkHistoryCard.qml
             qml/graph/ChartTitle.qml
             qml/graph/GraphGear.qml
+            qml/graph/GraphHiddenNotice.qml
             qml/graph/GraphLineStyleControls.qml
             qml/graph/GraphRangeHint.qml
             qml/graph/GraphSettingsEditor.qml
             qml/graph/GraphSettingsGroup.qml
             qml/graph/GraphNumberField.qml
             qml/graph/GraphTextInput.qml
+            qml/graph/GraphVisibilityMenu.qml
+            qml/graph/NoGraphsShown.qml
             qml/graph/GraphCatalog.js
             qml/benchmark/BenchmarkProgressGrid.qml
             qml/benchmark/TierBar.qml
@@ -107,6 +110,8 @@ qt_add_qml_module(ksv_ui
             qml/icons/square-pen.svg
             qml/icons/settings.svg
             qml/icons/x.svg
+            qml/icons/eye.svg
+            qml/icons/eye-off.svg
         SOURCES
             presentation/graphs/common/axes/axis.h
             presentation/graphs/common/axes/value_axis.h

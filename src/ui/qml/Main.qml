@@ -71,6 +71,7 @@ ApplicationWindow {
         id: settingsDialog
         settingsVm: root.settingsVm
         sessionVm: root.sessionVm
+        visualSettings: visualSettingsManager
     }
 
     AboutDialog {
@@ -236,6 +237,7 @@ ApplicationWindow {
                 objectName: "benchmarkWorkspace"
                 trackingVm: root.benchmarkTrackingVm
                 settingsVm: root.settingsVm
+                visualSettings: visualSettingsManager
                 onManageBenchmarksRequested: benchmarkManagerDialog.open()
                 onMoreGraphSettingsRequested: graphKey => settingsDialog.openGraph(graphKey)
                 onEditBenchmarkRequested: (filename, benchmarkId) =>

@@ -11,6 +11,7 @@ Frame {
     property var settingsVm: null
 
     signal moreGraphSettingsRequested(string graphKey)
+    signal hideGraphRequested(string graphKey)
 
     Layout.fillHeight: true
     Layout.fillWidth: true
@@ -39,6 +40,7 @@ Frame {
                 graphKey: "dailyPlaytime"
                 settingsVm: root.settingsVm
                 onMoreSettingsRequested: key => root.moreGraphSettingsRequested(key)
+                onHideGraphRequested: key => root.hideGraphRequested(key)
             }
         }
         // The plot and the empty state share one slot so the panel keeps its size either way.

@@ -8,8 +8,11 @@ OverflowScrollView {
 
     property var trackingVm
     property var settingsVm: null
+    property var visualSettings: null
     property real bodyWidth
     property bool wide
+
+    readonly property bool playtimeShown: !visualSettings || visualSettings.benchmarkPlaytimeGraphVisible
 
     signal manageBenchmarksRequested()
     signal moreGraphSettingsRequested(string graphKey)
@@ -71,11 +74,26 @@ OverflowScrollView {
             objectName: "playtimeHistoryCard"
             Layout.fillWidth: true
             Layout.minimumHeight: 200
+            visible: incompleteScroll.playtimeShown
             namePrefix: "playtimeHistory"
             graphKey: "benchmarkPlaytime"
             settingsVm: incompleteScroll.settingsVm
             onMoreGraphSettingsRequested: key => incompleteScroll.moreGraphSettingsRequested(key)
+            onHideGraphRequested: key => incompleteScroll.visualSettings.quickHideGraph(key)
             historyModel: incompleteScroll.trackingVm ? incompleteScroll.trackingVm.playtimeHistory : null
+        }
+
+        GraphHiddenNotice {
+            Layout.fillWidth: true
+            graphKey: "benchmarkPlaytime"
+            visualSettings: incompleteScroll.visualSettings
+        }
+
+        NoGraphsShown {
+            Layout.fillWidth: true
+            visible: !incompleteScroll.playtimeShown
+            message: qsTr("Your benchmark graphs are hidden. Choose which graphs to show.")
+            visualSettings: incompleteScroll.visualSettings
         }
     }
 }
