@@ -1,0 +1,2 @@
+# Prepare this snapshot session with prepare.ps1 before replay.
+start --keep --dataset empty --size 1386x754

@@ -1,0 +1,1792 @@
+{
+    "categories": [
+        {
+            "color": [
+                205,
+                127,
+                50,
+                255
+            ],
+            "id": "a2dd45cb-2822-4f5e-affe-ff6140fcc451",
+            "name": "Control Tracking",
+            "scenarios": [
+            ],
+            "subcategories": [
+                {
+                    "color": [
+                        33,
+                        150,
+                        243,
+                        255
+                    ],
+                    "id": "0a89fc19-271b-47d2-80dd-450b2b7f46a1",
+                    "name": "Arm",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "eb4cea79e8fb05308f681a0a39eeeaf7"
+                            ],
+                            "id": "cbab164e-4b6b-4562-aaef-de5fe1a8c161",
+                            "name": "WhisphereRawControl",
+                            "thresholds": [
+                                {
+                                    "score": 5300,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 6700,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 7600,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 8800,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 10000,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 10900,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 11800,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 13000,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "7bf6a4c4f98e83a728c53d2ff0aeb245"
+                            ],
+                            "id": "94d6018f-95cf-4f54-9c22-7d71b1a23ac3",
+                            "name": "Whisphere",
+                            "thresholds": [
+                                {
+                                    "score": 5750,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 8250,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 10750,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 13250,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 15250,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 17250,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 19250,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 20500,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "f15adb3a2ffe0afa93afb74093023854"
+                            ],
+                            "id": "9ff561f2-5a30-4af5-83e1-b1ad43f6261b",
+                            "name": "SmoothBot Invincible Goated",
+                            "thresholds": [
+                                {
+                                    "score": 1700,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 2200,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 2750,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 3250,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 3800,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 4300,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 4650,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 5000,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        76,
+                        175,
+                        80,
+                        255
+                    ],
+                    "id": "5c35f5d1-5758-428e-a4a8-2bf4e7b3b045",
+                    "name": "Wrist",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "26b00e629b9789f2717c4e0e432c531f"
+                            ],
+                            "id": "fd55b72f-f5a9-43b3-b3df-21ba828f8dc8",
+                            "name": "Leaptrack Goated 75% Slightly Larger",
+                            "thresholds": [
+                                {
+                                    "score": 1400,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 1750,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 2000,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 2250,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 2500,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 2750,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 3000,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 3275,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "d6496286ff5b2c6e874680fd125c49b0"
+                            ],
+                            "id": "1b6347b2-50fa-4642-9b7c-0260c8f4075f",
+                            "name": "Controlsphere rAim Easy",
+                            "thresholds": [
+                                {
+                                    "score": 7400,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 8500,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 9600,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 10700,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 11900,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 13100,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 14300,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 15100,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "de629646958f54755fa9f2fadbcebe80"
+                            ],
+                            "id": "0dcbb55c-c0bc-4855-84bf-a7a200896b5d",
+                            "name": "VT Controlsphere Novice S5 Hard",
+                            "thresholds": [
+                                {
+                                    "score": 2100,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 2500,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 2950,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 3250,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 3550,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 3800,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 4100,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 4400,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        156,
+                        39,
+                        176,
+                        255
+                    ],
+                    "id": "79617b19-f846-498a-b787-095a6f3e5441",
+                    "name": "Fingertip",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "e0b5e98156e40c6ec0ffc74e9318d64c"
+                            ],
+                            "id": "c060aeea-7563-4850-8335-447bbf87789c",
+                            "name": "Air Angelic 4 Voltaic Easy",
+                            "thresholds": [
+                                {
+                                    "score": 1900,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 2300,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 2650,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 3000,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 3400,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 3750,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 4100,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 4450,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "fdb1ecc11bd81ee46e112137d378a637"
+                            ],
+                            "id": "6700ca5b-219d-4bfb-a5a1-ef63bd98f1f0",
+                            "name": "cloverRawControl Easy",
+                            "thresholds": [
+                                {
+                                    "score": 5000,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 6100,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 7000,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 8100,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 9200,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 10100,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 10900,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 11700,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "eb3693fdca0fc335ff256402f33946e6"
+                            ],
+                            "id": "4e3fa989-6dfb-4c20-ad7e-37d695ff172f",
+                            "name": "Controlsphere Far Larger",
+                            "thresholds": [
+                                {
+                                    "score": 7800,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 8600,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 9300,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 10000,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 10800,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 11700,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 12700,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 13600,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        233,
+                        30,
+                        99,
+                        255
+                    ],
+                    "id": "05e01625-e642-47ca-88cb-bd7f6ca4cc88",
+                    "name": "Blending",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "1baf73e67b35de6ed0c49eb46046f0d8"
+                            ],
+                            "id": "86876ace-3b64-466a-b2b7-ba505a6b61e5",
+                            "name": "PGTI Voltaic Easy",
+                            "thresholds": [
+                                {
+                                    "score": 800,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 1100,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 1400,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 1700,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 2000,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 2300,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 2750,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 3200,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "212a32ea5b0b80c146b8a819d1b27bee"
+                            ],
+                            "id": "ca2dbf8a-afda-4823-b9bb-c632cb00d440",
+                            "name": "Air CELESTIAL No UFO Easy",
+                            "thresholds": [
+                                {
+                                    "score": 825,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 840,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 855,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 865,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 881,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 890,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 902,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 908,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "be22ca5ff130bf5a75dc683ddb4f4589"
+                            ],
+                            "id": "d43edd12-5b7f-42ea-9c8b-477933e935ba",
+                            "name": "Whisphere Small & Slow 75%",
+                            "thresholds": [
+                                {
+                                    "score": 5500,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 7500,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 9500,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 11500,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 13500,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 15500,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 17500,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 19000,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "color": [
+                192,
+                192,
+                192,
+                255
+            ],
+            "id": "2bb337f7-f225-4a54-8520-a10aaf83ed9d",
+            "name": "Reactive Tracking",
+            "scenarios": [
+            ],
+            "subcategories": [
+                {
+                    "color": [
+                        33,
+                        150,
+                        243,
+                        255
+                    ],
+                    "id": "4f291997-9da4-436c-b892-783476cfc14f",
+                    "name": "Control",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "98ab96d66009c4e079f26e7e6c925ecd"
+                            ],
+                            "id": "686f39b9-60b3-4c88-af85-263f147372af",
+                            "name": "Ground Plaza Sparky V3",
+                            "thresholds": [
+                                {
+                                    "score": 862,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 872,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 882,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 888,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 894,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 900,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 905,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 909,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "4f5f44b7580639efcb723edfc61f4d35"
+                            ],
+                            "id": "3ad7003b-585c-40bf-9260-f01c277ee76c",
+                            "name": "Controlsphere OW",
+                            "thresholds": [
+                                {
+                                    "score": 4800,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 5700,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 6400,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 7300,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 8100,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 8900,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 9800,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 10500,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        76,
+                        175,
+                        80,
+                        255
+                    ],
+                    "id": "eb76e286-9fb8-454a-8527-01ce96e4a4f5",
+                    "name": "Speed",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "246da4fd2d148581ff9ece399757bc73"
+                            ],
+                            "id": "53eee643-077f-41c6-bb34-317ea799698d",
+                            "name": "Flicker Plaza rAim Easy",
+                            "thresholds": [
+                                {
+                                    "score": 860,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 870,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 881,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 891,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 900,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 908,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 913,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 917,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "3e2bdea571f64cc14bd34096021810c8"
+                            ],
+                            "id": "315e7b3c-5f6a-46d8-8a4a-08428d2dcc68",
+                            "name": "Polarized Hell Easy 20% Slower",
+                            "thresholds": [
+                                {
+                                    "score": 1600,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 1850,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 2100,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 2350,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 2600,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 2850,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 3150,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 3350,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        156,
+                        39,
+                        176,
+                        255
+                    ],
+                    "id": "7d0b061f-cd28-4701-8e1b-d71a7a150220",
+                    "name": "Reading",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "5069644cb70a315b05fb1d544a3b88e0"
+                            ],
+                            "id": "2fb61d16-4a73-4afd-bb7c-4d6538de10d7",
+                            "name": "Air Pure Intermediate",
+                            "thresholds": [
+                                {
+                                    "score": 847,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 862,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 876,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 886,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 895,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 902,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 906,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 910,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "fc4f6b39f20241e1842ebcf21322303b"
+                            ],
+                            "id": "44c6cbcc-5c03-428a-adc2-9b51c3a54937",
+                            "name": "Air Voltaic Easy Invincible 4",
+                            "thresholds": [
+                                {
+                                    "score": 1800,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 2150,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 2500,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 2950,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 3350,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 3750,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 4150,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 4450,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "color": [
+                255,
+                215,
+                0,
+                255
+            ],
+            "id": "6eef9ea8-2792-4288-923b-b39b44cd9bcd",
+            "name": "Flick Tech",
+            "scenarios": [
+            ],
+            "subcategories": [
+                {
+                    "color": [
+                        33,
+                        150,
+                        243,
+                        255
+                    ],
+                    "id": "077358e6-f820-40c5-9913-e0ca35de8b5c",
+                    "name": "Speed",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "b7c77a17970ca709f423da00ff7db98e"
+                            ],
+                            "id": "b59b62ed-c310-4de1-b612-4d17d69c9b7c",
+                            "name": "Pokeball Frenzy Auto TE Wide",
+                            "thresholds": [
+                                {
+                                    "score": 1950,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 2250,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 2550,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 2850,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 3150,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 3400,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 3600,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 3800,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "4ddf9fbf0aef15b0904244b308e8768d",
+                                "81a95f54261c31930abead90b6ad60eb"
+                            ],
+                            "id": "1d0355cf-02ec-456b-9538-885dce071ee4",
+                            "name": "1w3ts Reload",
+                            "thresholds": [
+                                {
+                                    "score": 66,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 76,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 86,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 96,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 106,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 116,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 126,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 135,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "415f36d79032a3d01c2c3fce394016dd"
+                            ],
+                            "id": "87948fd6-b88c-4984-ab17-6209ec53b188",
+                            "name": "voxTargetSwitch 2",
+                            "thresholds": [
+                                {
+                                    "score": 78,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 88,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 98,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 107,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 116,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 123,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 130,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 136,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        76,
+                        175,
+                        80,
+                        255
+                    ],
+                    "id": "72511420-fc02-4043-bd2a-3eb973ff4c01",
+                    "name": "Stability",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "ac32bbee9f2f8e61413910fdc3a1299d"
+                            ],
+                            "id": "8b7cdc79-b555-4bb8-99f9-e6e54456ebff",
+                            "name": "beanTS",
+                            "thresholds": [
+                                {
+                                    "score": 88,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 103,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 115,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 127,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 136,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 143,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 149,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 156,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "296969932d58fcdf1e7e92a7952eb85a"
+                            ],
+                            "id": "c1154f68-8635-49d4-bd62-dec6cd87ced1",
+                            "name": "FloatTS Angelic Easy",
+                            "thresholds": [
+                                {
+                                    "score": 70,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 79,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 86,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 93,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 100,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 107,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 115,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 123,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        156,
+                        39,
+                        176,
+                        255
+                    ],
+                    "id": "c6656e17-7872-4019-bc62-43d2d7c081c3",
+                    "name": "Micro",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "09ffde65c51a42be571a5f13a5fe0944"
+                            ],
+                            "id": "7458dbf3-98f2-4139-91b8-8ac763d3f0e9",
+                            "name": "waldoTS Intermediate",
+                            "thresholds": [
+                                {
+                                    "score": 108,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 117,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 126,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 135,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 144,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 153,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 162,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 170,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "45e6e7c2a285f5c31889264bafdf5b8b"
+                            ],
+                            "id": "03bd9350-db74-44ea-a5ba-61bddfdda967",
+                            "name": "devTS Goated NR Static 5Bot",
+                            "thresholds": [
+                                {
+                                    "score": 600,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 650,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 705,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 760,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 810,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 840,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 870,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 900,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        233,
+                        30,
+                        99,
+                        255
+                    ],
+                    "id": "42366f66-1eb9-4a80-8cf6-e31ad5a9f69d",
+                    "name": "Post-flick",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "6b73cac805d0b7c7410de5e504d88201"
+                            ],
+                            "id": "87deb81f-651d-49a4-9089-7164a31c7e0f",
+                            "name": "domiSwitch Easy",
+                            "thresholds": [
+                                {
+                                    "score": 4200,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 4700,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 5200,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 5700,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 6150,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 6600,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 7100,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 7600,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "ec652a02944edf8ea184825c8a88b55b"
+                            ],
+                            "id": "523a6f5d-89c8-4e20-9480-0a9710229b86",
+                            "name": "tamTargetSwitch Smooth Easy",
+                            "thresholds": [
+                                {
+                                    "score": 22,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 26,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 29,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 32,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 34,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 36,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 38,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 41,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "color": [
+                255,
+                140,
+                0,
+                255
+            ],
+            "id": "e09a7bf1-8c72-4250-ad1e-85e466c9c17b",
+            "name": "Click Timing",
+            "scenarios": [
+            ],
+            "subcategories": [
+                {
+                    "color": [
+                        33,
+                        150,
+                        243,
+                        255
+                    ],
+                    "id": "1996e2d4-4d8a-4f7f-9c68-5cb3503fece6",
+                    "name": "Reading",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "a4c66d1aa3d13aee44477f647297d23b"
+                            ],
+                            "id": "4ac89599-47b5-4271-b236-5b479f0268f9",
+                            "name": "1wall5targets_pasu Reload",
+                            "thresholds": [
+                                {
+                                    "score": 70,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 85,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 100,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 115,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 130,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 142,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 155,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 165,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "8a238e56c5372398b70c77ed3a133d01"
+                            ],
+                            "id": "b9f866fd-edf8-4270-a249-db849f33c39e",
+                            "name": "VT Bounceshot Intermediate",
+                            "thresholds": [
+                                {
+                                    "score": 550,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 640,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 720,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 780,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 850,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 900,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 980,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 1060,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "4620c5f04b92b147581ef85e29c5b11e"
+                            ],
+                            "id": "cd07ac95-5be1-4651-9007-724a1bbfc7a0",
+                            "name": "Controlsphere Click",
+                            "thresholds": [
+                                {
+                                    "score": 27,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 33,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 39,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 45,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 50,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 56,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 61,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 67,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        76,
+                        175,
+                        80,
+                        255
+                    ],
+                    "id": "cdd4c6af-847e-4471-b75d-6401efff147b",
+                    "name": "Precision",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "3096e4b4d12c47d3643f7ccfc13be47a"
+                            ],
+                            "id": "ede15c85-d694-43b0-b522-10fd65549d32",
+                            "name": "Popcorn MV Intermediate",
+                            "thresholds": [
+                                {
+                                    "score": 150,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 190,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 240,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 280,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 330,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 380,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 430,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 480,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "63b4e8bedaf6cbc146cab02bb5d29b7a"
+                            ],
+                            "id": "75ce2266-9a7d-4e62-bd60-443f0341702a",
+                            "name": "Pasu Angelic 20% Larger",
+                            "thresholds": [
+                                {
+                                    "score": 72,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 79,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 85,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 90,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 96,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 103,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 110,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 115,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "f637584c938e75cddb0f36c2805a0549"
+                            ],
+                            "id": "ba9408cb-37ca-4fa9-b899-ca6cec60f11d",
+                            "name": "1w2ts Pasu Perfected",
+                            "thresholds": [
+                                {
+                                    "score": 60,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 70,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 80,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 88,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 96,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 101,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 107,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 112,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "color": [
+                        156,
+                        39,
+                        176,
+                        255
+                    ],
+                    "id": "d5ead648-cf65-4f44-bb8d-4105cd20e6f3",
+                    "name": "Stability",
+                    "scenarios": [
+                        {
+                            "hashes": [
+                                "a5bfbe1a078117004434b99e01b7ea40"
+                            ],
+                            "id": "49c75bdd-a39f-48cf-8f05-32eb27a790be",
+                            "name": "1w3ts Pasu Perfected Micro Goated Larger",
+                            "thresholds": [
+                                {
+                                    "score": 900,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 1000,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 1100,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 1200,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 1300,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 1400,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 1500,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 1600,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "ff529e7444a754bf5611c0d43a99163e"
+                            ],
+                            "id": "3b0d94be-9524-4993-90aa-d43f3f9c7f46",
+                            "name": "Floating Heads Timing 400% Larger",
+                            "thresholds": [
+                                {
+                                    "score": 1950,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 2300,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 2650,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 3000,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 3350,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 3650,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 3900,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 4200,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        },
+                        {
+                            "hashes": [
+                                "2df02b8b310425326aba29ec728bf4df"
+                            ],
+                            "id": "62dd0160-b3d1-432b-9032-72222eca54c0",
+                            "name": "voxTargetClick 20% Small",
+                            "thresholds": [
+                                {
+                                    "score": 62,
+                                    "tierId": "70f32681-e2c2-4195-a01f-1d2076b6178c"
+                                },
+                                {
+                                    "score": 72,
+                                    "tierId": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a"
+                                },
+                                {
+                                    "score": 80,
+                                    "tierId": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4"
+                                },
+                                {
+                                    "score": 87,
+                                    "tierId": "5ee35f78-e2af-4722-9041-4a8d5b998fe9"
+                                },
+                                {
+                                    "score": 95,
+                                    "tierId": "ee06066b-5ffb-4fd1-810e-e6202450651c"
+                                },
+                                {
+                                    "score": 102,
+                                    "tierId": "9d3260b2-18b0-4eb6-9040-1e0fc17061de"
+                                },
+                                {
+                                    "score": 108,
+                                    "tierId": "a5876016-229e-4be9-9989-b693c664c578"
+                                },
+                                {
+                                    "score": 116,
+                                    "tierId": "3c335724-47f0-4416-b605-9a087113de22"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "id": "1d24f105-87db-46d2-8c88-66f34c5d4dad",
+    "name": "Real Viscose Benchmarks Intermediate",
+    "schemaVersion": 2,
+    "tiers": [
+        {
+            "color": [
+                206,
+                61,
+                48,
+                255
+            ],
+            "id": "70f32681-e2c2-4195-a01f-1d2076b6178c",
+            "name": "Cinnabar"
+        },
+        {
+            "color": [
+                248,
+                89,
+                57,
+                255
+            ],
+            "id": "899d54ea-5fa9-4cd1-b9ac-e8383c35916a",
+            "name": "Vermillion"
+        },
+        {
+            "color": [
+                241,
+                195,
+                56,
+                255
+            ],
+            "id": "b5a92310-d5e6-4a4f-a40c-9af390ee32a4",
+            "name": "Saffron"
+        },
+        {
+            "color": [
+                156,
+                255,
+                145,
+                255
+            ],
+            "id": "5ee35f78-e2af-4722-9041-4a8d5b998fe9",
+            "name": "Celadon"
+        },
+        {
+            "color": [
+                2,
+                164,
+                211,
+                255
+            ],
+            "id": "ee06066b-5ffb-4fd1-810e-e6202450651c",
+            "name": "Cerulean"
+        },
+        {
+            "color": [
+                194,
+                194,
+                255,
+                255
+            ],
+            "id": "9d3260b2-18b0-4eb6-9040-1e0fc17061de",
+            "name": "Lavender"
+        },
+        {
+            "color": [
+                92,
+                56,
+                150,
+                255
+            ],
+            "id": "a5876016-229e-4be9-9989-b693c664c578",
+            "name": "Indigo"
+        },
+        {
+            "color": [
+                199,
+                67,
+                117,
+                255
+            ],
+            "id": "3c335724-47f0-4416-b605-9a087113de22",
+            "name": "Fuchsia"
+        }
+    ],
+    "uncategorized": [
+    ]
+}

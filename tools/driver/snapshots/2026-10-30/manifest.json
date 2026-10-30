@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-30",
+  "settings_source": "INI",
+  "benchmark_count": 4,
+  "window_size": [
+    1386,
+    754
+  ],
+  "files": {
+    "overlay/benchmarks/1d24f105-87db-46d2-8c88-66f34c5d4dad.json": {
+      "bytes": 81834,
+      "sha256": "2edda0c8670c5f72189183b1bd536d79fa0310fd04cd65d35290a0c0b38c75e3"
+    },
+    "overlay/benchmarks/a52a916a-dcd8-4d30-b327-e468fcb75512.json": {
+      "bytes": 5664,
+      "sha256": "8a321bb04604b39920d72e709caa5976327c984c7964cdee191f4734f63f0a82"
+    },
+    "overlay/benchmarks/a52a916a-dcd8-4d30-b327-e468fcb75513.json": {
+      "bytes": 13513,
+      "sha256": "3521920f34c5bbdbfd97a6fcb3b4db3609047dc36a7d74515beb3defffd97fc2"
+    },
+    "overlay/benchmarks/d9b92840-b4dc-4cef-bd9f-8843ffbc0919.json": {
+      "bytes": 30778,
+      "sha256": "56f359008cabcb8bc381fbaeae89f9396ca696a0d3681c0d5ef0ca371471731e"
+    },
+    "overlay/profile.pb": {
+      "bytes": 11143927,
+      "sha256": "bbebf8a1210a0e3a376808bbf65e5c9f8e546da985c3a98eb44e50fb9acb629d"
+    },
+    "prepare.ps1": {
+      "bytes": 1870,
+      "sha256": "f173a0fa877aa43ab62dadf17c61ea9765ddef0b0e74aec5abb666093c6e7353"
+    },
+    "README.md": {
+      "bytes": 1413,
+      "sha256": "82e887256d2fd1ae302784bc696bd80f7f646a340f474775d528de48501b029b"
+    },
+    "settings.ini": {
+      "bytes": 25466,
+      "sha256": "9fa42d0193bac4b512b80e060ef48af89a9f63aae820509f72ebc0167926730a"
+    },
+    "start.txt": {
+      "bytes": 111,
+      "sha256": "9daff18dadbe29c40a2f4ee75e2e75a9504e1af4c71041ea6933c8bcc2b03994"
+    }
+  },
+  "retained_saved_settings": 54,
+  "redirected_file_settings": 2
+}
