@@ -78,7 +78,7 @@ shot --window benchmarkManagerDialog --name resolution-write-failed
 
 # Held row drag: drop insertion line and the Move to Uncategorized zone. The
 # release lands outside the table, so nothing moves.
-mouse press "${M}/identityView > cell_entry-gallery-pasu_scenario"
+mouse press "${M}/identityView > rowHandle_entry-gallery-pasu"
 mouse move "${M}/identityView > cell_entry-gallery-flyts_scenario"
 wait "${M}/editorTable" --prop draggingRows --equals true
 wait "${M}/uncategorizedDropZone"
