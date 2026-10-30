@@ -47,9 +47,7 @@ namespace {
         r = editor.appendUnnamedScenarios(std::size_t{2});
         r = editor.assignScenarios(std::vector<ScenarioEntryId>{}, EditorGroupTarget{});
         r = editor.assignScenarios(std::vector<ScenarioEntryId>{}, EditorGroupTarget{}, std::optional<ScenarioEntryId>{});
-        r = editor.addSubcategory(GroupId{"c"}, "sub", DirectScenarioRelocation{RelocateDirectToUncategorized{}});
-        r = editor.addSubcategory(GroupId{"c"}, "sub",
-                                  DirectScenarioRelocation{RelocateDirectToNewSubcategory{}});
+        r = editor.addSubcategory(GroupId{"c"}, "sub");
         r = editor.reorderSubcategory(GroupId{"s"}, std::size_t{0});
         r = editor.reorderScenario(ScenarioEntryId{"e"}, std::size_t{0});
 
@@ -99,7 +97,7 @@ namespace {
         m = vm.pasteText(QVariantMap{{"kind", "threshold"}}, QStringLiteral("1"));
         m = vm.assignScenarios(QStringList{}, QString());
         m = vm.assignScenarios(QStringList{}, QString(), QString());
-        m = vm.addSubcategoryRelocating(QStringLiteral("c"), QStringLiteral("s"), QStringLiteral("uncategorized"));
+        m = vm.addSubcategory(QStringLiteral("c"), QStringLiteral("s"));
         m = vm.reorderSubcategory(QStringLiteral("s"), 0);
         m = vm.reorderScenario(QStringLiteral("e"), 0);
         m = vm.undo();

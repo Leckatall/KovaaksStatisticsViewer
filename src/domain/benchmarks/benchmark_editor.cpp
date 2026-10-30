@@ -89,9 +89,8 @@ namespace ksv::domain {
         std::optional<BenchmarkEditError> groupTargetError(Benchmark &benchmark, const EditorGroupTarget &to) {
             const auto *targetGroup = std::get_if<GroupId>(&to);
             if (!targetGroup) return std::nullopt;
-            const auto *category = findCategory(benchmark, *targetGroup);
-            if (!category && !findSubcategory(benchmark, *targetGroup)) return BenchmarkEditError::UnknownGroup;
-            if (category && !category->subcategories.empty()) return BenchmarkEditError::MixedContent;
+            if (!findCategory(benchmark, *targetGroup) && !findSubcategory(benchmark, *targetGroup))
+                return BenchmarkEditError::UnknownGroup;
             return std::nullopt;
         }
 
@@ -286,26 +285,12 @@ namespace ksv::domain {
     }
 
     BenchmarkEditResult BenchmarkEditor::addSubcategory(const GroupId &categoryId, const std::string &name) {
-        auto *category = findCategory(m_target, categoryId);
-        if (!category) return {BenchmarkEditError::UnknownGroup};
-        if (!category->scenarios.empty()) return {BenchmarkEditError::MixedContent};
-        return addSubcategory(categoryId, name, RelocateDirectToUncategorized{});
-    }
-
-    BenchmarkEditResult BenchmarkEditor::addSubcategory(const GroupId &categoryId, const std::string &name,
-                                                        const DirectScenarioRelocation &relocation) {
         auto &benchmark = m_target;
         auto *category = findCategory(benchmark, categoryId);
         if (!category) return {BenchmarkEditError::UnknownGroup};
         const auto id = GroupId{newId()};
-        std::vector<ScenarioEntry> direct = std::move(category->scenarios);
-        category->scenarios.clear();
-        Subcategory created{id, name, paletteColor(benchmark.categories.size() + category->subcategories.size()), {}};
-        if (std::holds_alternative<RelocateDirectToNewSubcategory>(relocation))
-            created.scenarios = std::move(direct);
-        else
-            for (auto &entry: direct) benchmark.uncategorized.push_back(std::move(entry));
-        category->subcategories.push_back(std::move(created));
+        category->subcategories.push_back(
+            Subcategory{id, name, paletteColor(benchmark.categories.size() + category->subcategories.size()), {}});
         return {std::nullopt, std::nullopt, id};
     }
 

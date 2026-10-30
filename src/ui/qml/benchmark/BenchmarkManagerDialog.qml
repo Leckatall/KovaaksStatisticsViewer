@@ -29,7 +29,6 @@ ApplicationWindow {
     readonly property alias rowContextMenu: rowContextMenu
     readonly property alias groupContextMenu: groupContextMenu
     readonly property alias rankContextMenu: rankContextMenu
-    readonly property alias subcategoryRelocationPrompt: subcategoryRelocationPrompt
     readonly property alias editorTable: editorTable
 
     property string selectedEntryFilename: ""
@@ -291,19 +290,12 @@ ApplicationWindow {
             : root.vm().reorderSubcategory(group.id, target))
     }
 
-    // A category's first subcategory under existing direct scenarios needs the user to say where
-    // those scenarios go; the manager never reorganizes them invisibly.
     function requestSubcategory(categoryId, name) {
         root.commitActiveEdits()
         if (name.trim() === "") return false
-        const category = (root.vm().groups || []).find(g => g.id === categoryId)
-        if (category && category.subcategoryNeedsRelocation === true) {
-            subcategoryRelocationPrompt.categoryId = categoryId
-            subcategoryRelocationPrompt.subcategoryName = name
-            subcategoryRelocationPrompt.open()
-            return true
-        }
-        return root.runTableCommand(() => root.vm().addSubcategory(categoryId, name)).ok
+        const result = root.runTableCommand(() => root.vm().addSubcategory(categoryId, name))
+        if (result.ok) Qt.callLater(editorTable.focusCell, {groupId: result.createdId})
+        return result.ok
     }
 
     function focusValidationIssue(issue) {
@@ -361,53 +353,6 @@ ApplicationWindow {
             // draft-replacing transition too; deleting any other entry leaves the draft alone.
             if (deleteConfirmPrompt.targetId === root.vm().draftId) root.runWhenClean(remove)
             else remove()
-        }
-    }
-
-    Dialog {
-        id: subcategoryRelocationPrompt
-        objectName: "subcategoryRelocationPrompt"
-        title: qsTr("Add a subcategory")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Cancel
-        property string categoryId
-        property string subcategoryName
-        // The group the table focuses once the prompt has closed: the new subcategory when one
-        // was created, otherwise (Cancel, Escape, a failed command) the category it was asked for.
-        property string focusGroupAfterClose
-
-        function relocate(choice) {
-            const categoryId = subcategoryRelocationPrompt.categoryId
-            const name = subcategoryRelocationPrompt.subcategoryName
-            const result = root.runTableCommand(() => root.vm().addSubcategoryRelocating(categoryId, name, choice))
-            if (result && result.ok && result.createdId) subcategoryRelocationPrompt.focusGroupAfterClose = result.createdId
-            subcategoryRelocationPrompt.close()
-        }
-
-        onAboutToShow: subcategoryRelocationPrompt.focusGroupAfterClose = subcategoryRelocationPrompt.categoryId
-        // Closing hands focus back to the table, which held it when the prompt opened; once the
-        // popup has finished restoring it, the table moves its current cell to that group.
-        onClosed: Qt.callLater(editorTable.focusCell, {groupId: subcategoryRelocationPrompt.focusGroupAfterClose})
-
-        ColumnLayout {
-            spacing: 8
-            Label {
-                Layout.maximumWidth: 420
-                wrapMode: Text.WordWrap
-                text: qsTr("This category already holds scenarios directly. A category cannot hold both "
-                           + "scenarios and subcategories, so choose where its scenarios go.")
-            }
-            Button {
-                objectName: "relocateToNewSubcategory"
-                text: qsTr("Move them into \"%1\"").arg(subcategoryRelocationPrompt.subcategoryName)
-                onClicked: subcategoryRelocationPrompt.relocate("newSubcategory")
-            }
-            Button {
-                objectName: "relocateToUncategorized"
-                text: qsTr("Move them to Uncategorized")
-                onClicked: subcategoryRelocationPrompt.relocate("uncategorized")
-            }
         }
     }
 

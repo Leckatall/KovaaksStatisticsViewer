@@ -952,41 +952,7 @@ namespace {
     }
 }
 
-TEST(BenchmarkTableProjection, GroupsSayWhetherTheyAcceptScenariosAndNeedRelocation) {
-    TableFixture f;
-    f.open(mixedBench());
-
-    struct Expected {
-        QString id;
-        bool accepts;
-        bool needsRelocation;
-    };
-    const std::vector<Expected> categories{
-        {"g1", false, false},
-        {"g2", false, false},
-        {"empty", true, false},
-        {"direct", true, true},
-    };
-    for (const auto &[id, accepts, needsRelocation]: categories) {
-        const auto group = groupById(*f.vm, id);
-        ASSERT_FALSE(group.isEmpty()) << id.toStdString();
-        EXPECT_EQ(group["acceptsScenarios"].toBool(), accepts) << id.toStdString();
-        EXPECT_TRUE(group.contains("subcategoryNeedsRelocation")) << id.toStdString();
-        EXPECT_EQ(group["subcategoryNeedsRelocation"].toBool(), needsRelocation) << id.toStdString();
-    }
-    for (const QString id: {"m-sub", "p", "q", "hollow"}) {
-        const auto group = groupById(*f.vm, id);
-        ASSERT_FALSE(group.isEmpty()) << id.toStdString();
-        EXPECT_TRUE(group.contains("acceptsScenarios")) << id.toStdString();
-        EXPECT_TRUE(group["acceptsScenarios"].toBool()) << id.toStdString();
-    }
-
-    ASSERT_TRUE(f.vm->addSubcategoryRelocating("direct", "New", "newSubcategory")["ok"].toBool());
-    EXPECT_FALSE(groupById(*f.vm, "direct")["acceptsScenarios"].toBool());
-    EXPECT_FALSE(groupById(*f.vm, "direct")["subcategoryNeedsRelocation"].toBool());
-}
-
-TEST(BenchmarkTableProjection, AssignTargetsListUncategorizedThenEveryGroupThatAcceptsScenarios) {
+TEST(BenchmarkTableProjection, AssignTargetsListUncategorizedThenEveryCategoryAndSubcategory) {
     TableFixture f;
     f.open(mixedBench());
 
@@ -995,15 +961,55 @@ TEST(BenchmarkTableProjection, AssignTargetsListUncategorizedThenEveryGroupThatA
         ids << target.toMap()["id"].toString();
         labels << target.toMap()["label"].toString();
     }
-    EXPECT_EQ(ids, (QStringList{"", "m-sub", "p", "q", "hollow", "empty", "direct"}));
-    EXPECT_EQ(labels, (QStringList{"Uncategorized", "Category g1 / Sub m-sub", "Category g2 / Sub p",
-                                   "Category g2 / Sub q", "Category g2 / Sub hollow", "Category empty",
-                                   "Category direct"}));
+    EXPECT_EQ(ids, (QStringList{"", "g1", "m-sub", "g2", "p", "q", "hollow", "empty", "direct"}));
+    EXPECT_EQ(labels, (QStringList{"Uncategorized", "Category g1", "Category g1 › Sub m-sub", "Category g2",
+                                   "Category g2 › Sub p", "Category g2 › Sub q",
+                                   "Category g2 › Sub hollow", "Category empty", "Category direct"}));
 
     f.vm->discard();
     QStringList closed;
     for (const auto &target: f.vm->property("assignTargets").toList()) closed << target.toMap()["id"].toString();
     EXPECT_EQ(closed, QStringList{""});
+}
+
+TEST(BenchmarkTableProjection, GroupsNoLongerAdvertiseRelocationFlags) {
+    TableFixture f;
+    f.open(mixedBench());
+
+    for (const auto &entry: f.vm->groups()) {
+        const auto group = entry.toMap();
+        EXPECT_FALSE(group.contains("acceptsScenarios")) << group["id"].toString().toStdString();
+        EXPECT_FALSE(group.contains("subcategoryNeedsRelocation")) << group["id"].toString().toStdString();
+    }
+}
+
+TEST(BenchmarkTableProjection, AssigningToADividedCategoryKeepsTheDraftIncomplete) {
+    TableFixture f;
+    f.open(projectionBench());
+    ASSERT_TRUE(f.vm->addSubcategory("g1", "Static")["ok"].toBool());
+
+    const auto result = f.vm->assignScenarios({"u"}, "g1");
+
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+    EXPECT_FALSE(f.vm->draftTrackable());
+    const auto mixedIssue = std::ranges::any_of(f.vm->validationIssues(), [](const QVariant &issue) {
+        return issue.toMap()["targetId"].toString() == QStringLiteral("g1");
+    });
+    EXPECT_TRUE(mixedIssue);
+}
+
+TEST(BenchmarkTableProjection, MixedDraftSavesAsIs) {
+    TableFixture f;
+    f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"}, std::nullopt};
+    f.open(mixedBench());
+
+    ASSERT_FALSE(f.vm->draftTrackable());
+    ASSERT_TRUE(f.vm->save()["ok"].toBool());
+
+    ASSERT_EQ(f.uc->saveCalls.size(), 1U);
+    const auto &saved = f.uc->saveCalls.back().first.categories.at(0);
+    EXPECT_FALSE(saved.scenarios.empty());
+    EXPECT_FALSE(saved.subcategories.empty());
 }
 
 TEST(BenchmarkTableProjection, RowInfoPlacesEachRowWithinTheCollectionThatHoldsIt) {

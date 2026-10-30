@@ -519,12 +519,6 @@ function makeFakeBenchmarkManagerVm(overrides) {
             this.assignScenariosCalls.push(before ? [entryIds, target, before] : [entryIds, target])
             return this.assignResult || {ok: true}
         },
-        addSubcategoryRelocatingCalls: [],
-        addSubcategoryRelocating: function (categoryId, name, relocation) {
-            this.commandLog.push("addSubcategoryRelocating")
-            this.addSubcategoryRelocatingCalls.push([categoryId, name, relocation])
-            return {ok: true, createdId: "subcategory-1"}
-        },
         reorderSubcategoryCalls: [],
         reorderSubcategory: function (id, position) {
             this.commandLog.push("reorderSubcategory")
@@ -565,12 +559,12 @@ function benchmarkManagementDesc() {
 
 function benchmarkManagementGroups() {
     return [
-        {id: "g1", kind: "category", parentId: "", name: "Clicking", color: "#009600", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-        {id: "g2", kind: "category", parentId: "", name: "Tracking", color: "#000096", scenarioCount: 1, acceptsScenarios: false, subcategoryNeedsRelocation: false, issues: []},
-        {id: "p", kind: "subcategory", parentId: "g2", name: "Precise", color: "#960000", scenarioCount: 1, acceptsScenarios: true, issues: []},
-        {id: "hollow", kind: "subcategory", parentId: "g2", name: "Hollow", color: "#444444", scenarioCount: 0, acceptsScenarios: true,
+        {id: "g1", kind: "category", parentId: "", name: "Clicking", color: "#009600", scenarioCount: 2, issues: []},
+        {id: "g2", kind: "category", parentId: "", name: "Tracking", color: "#000096", scenarioCount: 1, issues: []},
+        {id: "p", kind: "subcategory", parentId: "g2", name: "Precise", color: "#960000", scenarioCount: 1, issues: []},
+        {id: "hollow", kind: "subcategory", parentId: "g2", name: "Hollow", color: "#444444", scenarioCount: 0,
          issues: ["A subcategory has no scenarios."]},
-        {id: "gE", kind: "category", parentId: "", name: "Empty", color: "#888888", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false,
+        {id: "gE", kind: "category", parentId: "", name: "Empty", color: "#888888", scenarioCount: 0,
          issues: ["A category has neither scenarios nor subcategories."]}
     ]
 }
@@ -579,8 +573,9 @@ function benchmarkManagementAssignTargets() {
     return [
         {id: "", label: "Uncategorized"},
         {id: "g1", label: "Clicking"},
-        {id: "p", label: "Tracking / Precise"},
-        {id: "hollow", label: "Tracking / Hollow"},
+        {id: "g2", label: "Tracking"},
+        {id: "p", label: "Tracking › Precise"},
+        {id: "hollow", label: "Tracking › Hollow"},
         {id: "gE", label: "Empty"}
     ]
 }

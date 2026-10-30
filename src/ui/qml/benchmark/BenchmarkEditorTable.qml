@@ -589,7 +589,7 @@ FocusScope {
         if (groupId === "") return true
         const groups = root.manager && root.manager.groups ? root.manager.groups : []
         const group = groups.find(item => item.id === groupId)
-        return group !== undefined && group.acceptsScenarios === true
+        return group !== undefined
     }
 
     function beginRowDrag(entryId) {

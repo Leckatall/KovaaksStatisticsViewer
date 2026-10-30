@@ -44,9 +44,6 @@ namespace ksv::presentation {
                     return QObject::tr("That scenario is already in this benchmark.");
                 case domain::BenchmarkEditError::PositionOutOfRange:
                     return QObject::tr("That position is out of range.");
-                case domain::BenchmarkEditError::MixedContent:
-                    return QObject::tr("A category cannot hold both scenarios and subcategories. Move its "
-                                       "scenarios into a subcategory or to Uncategorized first.");
             }
             return {};
         }
@@ -254,17 +251,10 @@ namespace ksv::presentation {
             for (const auto &category: draft.categories) {
                 int count = static_cast<int>(category.scenarios.size());
                 for (const auto &sub: category.subcategories) count += static_cast<int>(sub.scenarios.size());
-                auto described = describe(category, QStringLiteral("category"), QString(), count);
-                described["acceptsScenarios"] = category.subcategories.empty();
-                described["subcategoryNeedsRelocation"] =
-                    category.subcategories.empty() && !category.scenarios.empty();
-                groups.push_back(described);
-                for (const auto &sub: category.subcategories) {
-                    auto subDescribed = describe(sub, QStringLiteral("subcategory"), idString(category.id),
-                                                 static_cast<int>(sub.scenarios.size()));
-                    subDescribed["acceptsScenarios"] = true;
-                    groups.push_back(subDescribed);
-                }
+                groups.push_back(describe(category, QStringLiteral("category"), QString(), count));
+                for (const auto &sub: category.subcategories)
+                    groups.push_back(describe(sub, QStringLiteral("subcategory"), idString(category.id),
+                                              static_cast<int>(sub.scenarios.size())));
             }
             return groups;
         }
@@ -274,12 +264,11 @@ namespace ksv::presentation {
             if (!draft) return targets;
             for (const auto &category: draft->categories) {
                 const auto categoryName = QString::fromStdString(category.name);
-                if (category.subcategories.empty())
-                    targets.push_back(QVariantMap{{"id", idString(category.id)}, {"label", categoryName}});
+                targets.push_back(QVariantMap{{"id", idString(category.id)}, {"label", categoryName}});
                 for (const auto &sub: category.subcategories)
                     targets.push_back(QVariantMap{
                         {"id", idString(sub.id)},
-                        {"label", categoryName + " / " + QString::fromStdString(sub.name)},
+                        {"label", categoryName + QStringLiteral(" › ") + QString::fromStdString(sub.name)},
                     });
             }
             return targets;
@@ -945,13 +934,6 @@ namespace ksv::presentation {
                                                            const QString &targetGroupId,
                                                            const QString &beforeEntryId) {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
-        // The generic MixedContent text advises relocating a category's own scenarios, which is the
-        // wrong remedy when the rows being assigned are what would mix it.
-        if (std::ranges::any_of(m_draft->categories, [&](const domain::Category &category) {
-                return category.id.value == targetGroupId.toStdString() && !category.subcategories.empty();
-            }))
-            return errorMap(tr("That category is divided into subcategories. Assign the rows to one of its "
-                               "subcategories instead."));
         // Selection arrives in click order; the batch keeps the rows' current visible order.
         std::unordered_map<std::string, std::size_t> visibleIndex;
         for (const auto &id: visibleEntryOrder(*m_draft)) visibleIndex.emplace(id.value, visibleIndex.size());
@@ -965,17 +947,6 @@ namespace ksv::presentation {
         if (!beforeEntryId.isEmpty()) before = domain::ScenarioEntryId{beforeEntryId.toStdString()};
         return applyEdit([&](domain::BenchmarkEditor &e) {
             return e.assignScenarios(ordered, toGroupTarget(targetGroupId), before);
-        });
-    }
-
-    QVariantMap BenchmarkManagerViewModel::addSubcategoryRelocating(const QString &categoryId, const QString &name,
-                                                                    const QString &relocation) {
-        domain::DirectScenarioRelocation choice{domain::RelocateDirectToUncategorized{}};
-        if (relocation == QStringLiteral("newSubcategory")) choice = domain::RelocateDirectToNewSubcategory{};
-        else if (relocation != QStringLiteral("uncategorized"))
-            return errorMap(tr("Choose where the category's scenarios should go."));
-        return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.addSubcategory(domain::GroupId{categoryId.toStdString()}, name.toStdString(), choice);
         });
     }
 

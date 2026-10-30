@@ -78,9 +78,9 @@ TestCase {
     function test_compactRowsHeadersAndScrolledSpans() {
         const desc = TestDoubles.benchmarkTableLargeDesc(200, 151, 170)
         const table = makeTable(desc, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Category g1", scenarioCount: 151, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-            {id: "g2", kind: "category", parentId: "", name: "Category g2", scenarioCount: 49, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-            {id: "gEmpty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false,
+            {id: "g1", kind: "category", parentId: "", name: "Category g1", scenarioCount: 151, issues: []},
+            {id: "g2", kind: "category", parentId: "", name: "Category g2", scenarioCount: 49, issues: []},
+            {id: "gEmpty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0,
              issues: ["A category has neither scenarios nor subcategories."]}
         ]})
         verify(table.identityView, "the table must expose its identifying-column view")
@@ -142,8 +142,8 @@ TestCase {
             {entryId: "a", category: group, name: "Alpha", cells: {t1: {displayText: "1"}}},
             {entryId: "b", category: group, name: "Beta", cells: {t1: {displayText: "2"}}}
         ]}, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-            {id: "empty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false, issues: []},
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, issues: []},
+            {id: "empty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, issues: []},
             {id: "uncategorized", kind: "uncategorized", parentId: "", name: "Uncategorized", scenarioCount: 0, issues: []}
         ]})
 
@@ -172,9 +172,9 @@ TestCase {
             {entryId: "c", category: tracking, name: "Gamma", cells: {}},
             {entryId: "d", name: "Delta", cells: {}}
         ]}, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 1, acceptsScenarios: false, subcategoryNeedsRelocation: false, issues: []},
-            {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 1, acceptsScenarios: true, issues: []},
-            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []}
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 1, issues: []},
+            {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 1, issues: []},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, issues: []}
         ]})
         const spanWidth = table.identityWidths[0] + table.identityWidths[1]
 
@@ -229,7 +229,7 @@ TestCase {
             {entryId: "b", category: tracking, name: "Beta", cells: {}},
             {entryId: "c", category: tracking, name: "Gamma", cells: {}}
         ]}, {groups: [
-            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []}
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, issues: []}
         ]})
         const requests = []
         table.creationHandler = request => {
@@ -273,17 +273,17 @@ TestCase {
         tryVerify(() => table.activeEditor === null)
     }
 
-    function test_dragSelectionMovesRowsOnlyToValidGroupOrUncategorized() {
+    function test_dragSelectionMovesRowsToAnyExistingGroupOrUncategorized() {
         const group = {id: "g1", name: "Clicking"}
         const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
             {entryId: "a", category: group, name: "Alpha", cells: {}},
             {entryId: "b", category: group, name: "Beta", cells: {}},
             {entryId: "c", name: "Gamma", cells: {}}
         ]}, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true},
-            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false},
-            {id: "g3", kind: "category", parentId: "", name: "Divided", scenarioCount: 1, acceptsScenarios: false, subcategoryNeedsRelocation: false},
-            {id: "sub", kind: "subcategory", parentId: "g3", name: "Precise", scenarioCount: 1, acceptsScenarios: true}
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0},
+            {id: "g3", kind: "category", parentId: "", name: "Divided", scenarioCount: 1},
+            {id: "sub", kind: "subcategory", parentId: "g3", name: "Precise", scenarioCount: 1}
         ]})
         const moves = []
         table.moveSelectionRequested.connect((ids, target) => moves.push([ids, target]))
@@ -292,8 +292,12 @@ TestCase {
                                     ItemSelectionModel.Select)
         table.beginRowDrag("a")
         verify(ItemLookup.findByObjectName(table, "uncategorizedDropZone").visible)
+        table.dropRows("nowhere")
+        compare(moves.length, 0, "a group that does not exist must reject the drop")
         table.dropRows("g3")
-        compare(moves.length, 0, "a divided category must reject the drop")
+        compare(moves, [[["a", "b"], "g3"]], "a divided category accepts the drop")
+        moves.length = 0
+        table.beginRowDrag("a")
         const categoryCell = cellFor(table, "a", "category")
         const categoryPoint = categoryCell.mapToItem(null, categoryCell.width / 2, categoryCell.height / 2)
         compare(table.targetAtScene(categoryPoint), "g1", "the spanning category cell is a drop target")
@@ -313,8 +317,8 @@ TestCase {
             {entryId: "a", category: group, name: "Alpha", cells: {}},
             {entryId: "b", category: group, name: "Beta", cells: {}}
         ]}, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true},
-            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false}
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0}
         ]})
         const moves = []
         const dragStates = []
@@ -348,7 +352,7 @@ TestCase {
             {entryId: "a", category: group, name: "Alpha", cells: {}},
             {entryId: "b", category: group, name: "Beta", cells: {}},
             {entryId: "c", name: "Gamma", cells: {}}
-        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true}]})
+        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2}]})
         const insertion = (entryId, column, fraction) => {
             const found = table.rowInsertionAtScene(scenePointIn(cellFor(table, entryId, column), fraction))
             return found ? [found.groupId, found.beforeEntryId] : null
@@ -367,7 +371,7 @@ TestCase {
             {entryId: "a", category: group, name: "Alpha", cells: {}},
             {entryId: "b", category: group, name: "Beta", cells: {}},
             {entryId: "c", name: "Gamma", cells: {}}
-        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true}]})
+        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2}]})
         const moves = []
         const indicators = []
         table.moveSelectionRequested.connect((ids, target, before) => moves.push([ids, target, before]))
@@ -447,7 +451,7 @@ TestCase {
         const table = makeTable({
             tiers: [{id: "t1", name: "Bronze"}, {id: "t2", name: "Silver", issues: ["Two tiers share the same name."]}],
             rows: rows
-        }, {groups: [{id: "gEmpty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false,
+        }, {groups: [{id: "gEmpty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0,
                       issues: ["A category has neither scenarios nor subcategories."]}]})
 
         verify(table.focusCell({entryId: "a", tierId: "t1"}), "focusCell must accept a stable cell anchor")

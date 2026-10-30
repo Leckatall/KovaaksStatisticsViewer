@@ -144,10 +144,6 @@ namespace ksv::presentation {
         // An empty `beforeEntryId` appends to the target group.
         Q_INVOKABLE QVariantMap assignScenarios(const QStringList &entryIds, const QString &targetGroupId,
                                                 const QString &beforeEntryId = QString());
-        // `relocation` says where a populated category's direct scenarios go: "uncategorized" or
-        // "newSubcategory" (the subcategory being created).
-        Q_INVOKABLE QVariantMap addSubcategoryRelocating(const QString &categoryId, const QString &name,
-                                                         const QString &relocation);
         Q_INVOKABLE QVariantMap reorderSubcategory(const QString &id, int position);
         Q_INVOKABLE QVariantMap reorderScenario(const QString &entryId, int position);
         Q_INVOKABLE QVariantMap undo();
