@@ -30,6 +30,7 @@ ApplicationWindow {
     readonly property alias groupContextMenu: groupContextMenu
     readonly property alias rankContextMenu: rankContextMenu
     readonly property alias editorTable: editorTable
+    readonly property alias groupCommand: groupCommand
 
     property string selectedEntryFilename: ""
     // Hides the Library list while a benchmark is open, so the table gets the whole window.
@@ -38,6 +39,8 @@ ApplicationWindow {
     property bool statusIsError: false
     property string importStatus: ""
     property string tableStatus: ""
+    // A tableStatus that reports success rather than a problem.
+    property bool tableStatusIsNotice: false
     property var pendingAction: null
     // Bumped after every command and session publication, so bindings over view-model state that
     // is not itself observable (the plain-JS test double) re-read it.
@@ -213,8 +216,99 @@ ApplicationWindow {
         root.commitActiveEdits()
         const result = command()
         root.tableStatus = result && result.ok === false ? result.error : ""
+        root.tableStatusIsNotice = false
         root.sessionRevision++
         return result
+    }
+
+    function showNotice(text) {
+        root.tableStatus = text
+        root.tableStatusIsNotice = true
+    }
+
+    function groupName(id) {
+        const group = (root.vm().groups || []).find(g => g.id === id)
+        return group ? group.name : ""
+    }
+
+    // "Parent › Child" for a subcategory, matching the Ctrl+G list's paths.
+    function groupPath(id) {
+        if (id === "") return qsTr("Uncategorized")
+        const group = (root.vm().groups || []).find(g => g.id === id)
+        if (!group) return ""
+        return group.kind === "subcategory" ? root.groupName(group.parentId) + " › " + group.name : group.name
+    }
+
+    function requestCategories(text) {
+        const result = root.runTableCommand(() => root.vm().addCategories(text))
+        if (!result.ok) return false
+        const names = result.createdIds.map(root.groupName).filter(name => name !== "")
+        const count = result.createdIds.length
+        let message = count === 0 ? qsTr("No categories added.")
+                    : count === 1 ? qsTr("Added 1 empty category")
+                    : qsTr("Added %1 empty categories").arg(count)
+        if (count > 0) message += names.length > 0 ? ": " + names.join(", ") + "." : "."
+        if (result.skipped.length > 0)
+            message += " " + qsTr("Skipped: %1.").arg(result.skipped.join(", "))
+        root.showNotice(message)
+        return true
+    }
+
+    // ---- Group command (Ctrl+G) ---------------------------------------------------------------
+
+    function openGroupCommand() {
+        root.commitActiveEdits()
+        const ids = root.selectedEntryIds()
+        if (ids.length === 0) {
+            root.tableStatus = qsTr("Select one or more scenarios first.")
+            root.tableStatusIsNotice = false
+            return
+        }
+        const model = root.vm().tableModel
+        groupCommand.scenarioNames = ids
+            .map(id => model.rowInfo(model.rowForEntry(id)))
+            .filter(info => info.row !== undefined)
+            .sort((a, b) => a.row - b.row)
+            .map(info => info.name)
+        groupCommand.parentCategories = (root.vm().groups || [])
+            .filter(group => group.kind === "category")
+            .map(group => ({id: group.id, name: group.name}))
+        groupCommand.open()
+    }
+
+    // Focus goes back through the session's own selection: focusCell() would collapse it to the
+    // current cell.
+    function returnFocusToTable() {
+        Qt.callLater(() => {
+            editorTable.restoreSessionSelection()
+            editorTable.revealCurrent()
+        })
+    }
+
+    function createGroupAndMove(name, parentCategoryId) {
+        const ids = root.selectedEntryIds()
+        const result = root.runTableCommand(() => root.vm().createGroupAndAssign(ids, name, parentCategoryId))
+        if (result.ok) {
+            const single = ids.length === 1
+            root.showNotice(parentCategoryId === ""
+                ? (single ? qsTr("Created “%1” and moved 1 scenario.").arg(name)
+                          : qsTr("Created “%1” and moved %2 scenarios.").arg(name).arg(ids.length))
+                : (single ? qsTr("Created “%1” under %2 and moved 1 scenario.").arg(name).arg(root.groupName(parentCategoryId))
+                          : qsTr("Created “%1” under %2 and moved %3 scenarios.").arg(name)
+                                .arg(root.groupName(parentCategoryId)).arg(ids.length)))
+        }
+        root.returnFocusToTable()
+    }
+
+    function moveToGroup(targetGroupId) {
+        const ids = root.selectedEntryIds()
+        const result = root.runTableCommand(() => root.vm().assignScenarios(ids, targetGroupId))
+        if (result.ok) {
+            const destination = root.groupPath(targetGroupId)
+            root.showNotice(ids.length === 1 ? qsTr("Moved 1 scenario to %1.").arg(destination)
+                                             : qsTr("Moved %1 scenarios to %2.").arg(ids.length).arg(destination))
+        }
+        root.returnFocusToTable()
     }
 
     // ---- Row, rank and group commands ------------------------------------------------------------
@@ -610,7 +704,7 @@ ApplicationWindow {
                         readonly property string message: root.tableStatus !== "" ? root.tableStatus : editorTable.statusText
                         visible: message !== ""
                         text: message
-                        color: Theme.errorText
+                        color: root.tableStatusIsNotice && root.tableStatus !== "" ? root.palette.windowText : Theme.errorText
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
@@ -671,7 +765,7 @@ ApplicationWindow {
                         }
                         creationHandler: request => {
                             switch (request.kind) {
-                            case "category": return root.runTableCommand(() => root.vm().addCategory(request.name)).ok
+                            case "categories": return root.requestCategories(request.text)
                             case "subcategory": return root.requestSubcategory(request.categoryId, request.name)
                             case "rank": return root.runTableCommand(() => root.vm().addTier(request.name)).ok
                             }
@@ -703,5 +797,20 @@ ApplicationWindow {
                 }
             }
         }
+    }
+
+    BenchmarkGroupCommand {
+        id: groupCommand
+        parent: Overlay.overlay
+        optionsProvider: (query, parentCategoryId) => root.vm().groupCommandOptions(query, parentCategoryId)
+        onCreateRequested: (name, parentCategoryId) => root.createGroupAndMove(name, parentCategoryId)
+        onMoveRequested: targetGroupId => root.moveToGroup(targetGroupId)
+    }
+
+    Shortcut {
+        objectName: "groupCommandShortcut"
+        sequence: "Ctrl+G"
+        enabled: root.vm().hasDraft && !groupCommand.visible
+        onActivated: root.openGroupCommand()
     }
 }

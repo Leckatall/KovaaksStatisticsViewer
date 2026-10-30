@@ -127,7 +127,6 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap removeScenarios(const QStringList &entryIds);
         Q_INVOKABLE QVariantMap setThreshold(const QString &entryId, const QString &tierId, double score);
         Q_INVOKABLE QVariantMap clearThreshold(const QString &entryId, const QString &tierId);
-        Q_INVOKABLE QVariantMap addCategory(const QString &name);
         Q_INVOKABLE QVariantMap renameGroup(const QString &id, const QString &name);
         Q_INVOKABLE QVariantMap setGroupColor(const QString &id, const QColor &color);
         Q_INVOKABLE QVariantMap reorderCategory(const QString &id, int position);

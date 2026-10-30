@@ -268,7 +268,7 @@ FocusScope {
     property var dropInsertion: null
     property bool addingRank: false
     property bool addingCategory: false
-    // (request) => bool, answered synchronously; `request` is {kind: "category", name},
+    // (request) => bool, answered synchronously; `request` is {kind: "categories", text},
     // {kind: "subcategory", categoryId, name} or {kind: "rank", name}.
     property var creationHandler: null
     // The entry whose scenario cell opens for editing once its row has a delegate.
@@ -1471,9 +1471,9 @@ FocusScope {
                 visible: !root.addingCategory
                 width: root.identityWidths[0]
                 height: root.rowHeight
-                text: qsTr("+ Add category")
-                Accessible.name: qsTr("Add category")
-                ToolTip.text: qsTr("Add a category to group scenarios")
+                text: qsTr("+ Add categories")
+                Accessible.name: qsTr("Add categories")
+                ToolTip.text: qsTr("Add one or more categories to group scenarios")
                 onClicked: {
                     root.addingCategory = true
                     categoryCreationName.forceActiveFocus()
@@ -1483,16 +1483,17 @@ FocusScope {
                 id: categoryCreationName
                 objectName: "categoryCreationName"
                 visible: root.addingCategory
-                width: root.identityWidths[0]
+                width: root.identityWidths[0] + root.identityWidths[1] + root.identityWidths[2]
                 height: root.rowHeight
-                placeholderText: qsTr("Category name")
-                submit: name => root.requestCreation({kind: "category", name: name})
+                placeholderText: qsTr("Category names, separated by commas")
+                submit: text => root.requestCreation({kind: "categories", text: text})
                 onDone: root.addingCategory = false
             }
-            Item { width: root.identityWidths[1]; height: root.rowHeight }
+            Item { visible: !root.addingCategory; width: root.identityWidths[1]; height: root.rowHeight }
             AddRowButton {
                 id: addScenarioPlus
                 objectName: "addScenarioPlus"
+                visible: !root.addingCategory
                 width: root.identityWidths[2]
                 height: root.rowHeight
                 text: qsTr("+ Add scenario")
@@ -1500,6 +1501,17 @@ FocusScope {
                 ToolTip.text: qsTr("Add a scenario to Uncategorized")
                 onClicked: root.addScenarioRequested()
             }
+        }
+
+        Label {
+            id: tableHint
+            objectName: "tableHint"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: root.palette.placeholderText
+            text: root.addingCategory
+                  ? qsTr("Separate category names with commas. Press Enter to add each as an empty, visible row; Esc cancels. Example: Speed, Precision, Control.")
+                  : qsTr("Drag across cells to select scenarios. Use the six-dot handle to move them, or press Ctrl+G to group them.\nTip: Add categories accepts comma-separated names.")
         }
 
         // Takes the space the table leaves, so the controls above stay under the last row.

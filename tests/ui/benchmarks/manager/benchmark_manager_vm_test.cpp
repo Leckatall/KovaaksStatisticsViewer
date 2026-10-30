@@ -371,7 +371,7 @@ TEST(BenchmarkManagerVm, EditorCommandsMutateLocallyThroughBenchmarkEditor) {
 
     EXPECT_TRUE(f.vm->addUnplayedScenario("S2")["ok"].toBool());
     EXPECT_TRUE(f.vm->setThreshold("e1", "gold", 250.0)["ok"].toBool());
-    EXPECT_TRUE(f.vm->addCategory("Clicking")["ok"].toBool());
+    EXPECT_TRUE(f.vm->addCategories("Clicking")["ok"].toBool());
 
     // Local benchmark and its projections changed, driven by domain::BenchmarkEditor.
     EXPECT_EQ(scenarioNames(*f.vm), (QStringList{"S", "S2"}));

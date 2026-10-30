@@ -94,7 +94,7 @@ TestCase {
         const categoryName = find(dialog, "categoryCreationName")
         categoryName.text = "Aim"
         keyClick(Qt.Key_Return)
-        compare(vm(dialog).addCategoryCalls, ["Aim"])
+        compare(vm(dialog).addCategoriesCalls, ["Aim"])
 
         vm(dialog).selectedEntryIds = ["c", "a"]
         dialog.assignSelection("g1")

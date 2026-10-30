@@ -1724,7 +1724,7 @@ TestCase {
 
         // A visible label, not a bare glyph, and a tooltip that says what the control does.
         verify(String(category.text).length > 1 && String(scenario.text).length > 1)
-        verify(String(category.text).toLowerCase().indexOf("category") !== -1, category.text)
+        verify(String(category.text).toLowerCase().indexOf("categor") !== -1, category.text)
         verify(String(scenario.text).toLowerCase().indexOf("scenario") !== -1, scenario.text)
         verify(String(category.ToolTip.text).length > 0 && String(scenario.ToolTip.text).length > 0)
         verify(String(scenario.ToolTip.text).toLowerCase().indexOf("uncategorized") !== -1)
@@ -2014,5 +2014,67 @@ TestCase {
 
         table.width = 1100
         tryCompare(table, "identityTotalWidth", preferredTotal)
+    }
+
+    // ---- Comma-separated category entry and the table hint --------------------------------------
+
+    function test_categoryFieldSpansTheIdentityColumnsAndEscapeCancels() {
+        const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const requests = []
+        table.creationHandler = request => { requests.push(request); return true }
+        const plus = ItemLookup.findByObjectName(table, "addCategoryPlus")
+        const addScenario = ItemLookup.findByObjectName(table, "addScenarioPlus")
+        const field = ItemLookup.findByObjectName(table, "categoryCreationName")
+        compare(plus.text, "+ Add categories")
+        compare(plus.Accessible.name, "Add categories")
+
+        mouseClick(plus)
+        tryVerify(() => field.visible && field.activeFocus)
+        compare(field.placeholderText, "Category names, separated by commas")
+        compare(field.width, table.identityWidths[0] + table.identityWidths[1] + table.identityWidths[2])
+        verify(!addScenario.visible, "the add-scenario button yields its space to the field")
+
+        field.text = "Speed"
+        keyClick(Qt.Key_Escape)
+        tryVerify(() => !field.visible)
+        verify(addScenario.visible)
+        compare(requests.length, 0)
+    }
+
+    function test_categoryFieldSendsTheRawTextAndStaysOpenOnlyWhenRejected() {
+        const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const requests = []
+        let accept = false
+        table.creationHandler = request => { requests.push(request); return accept }
+        const field = ItemLookup.findByObjectName(table, "categoryCreationName")
+
+        mouseClick(ItemLookup.findByObjectName(table, "addCategoryPlus"))
+        tryVerify(() => field.visible && field.activeFocus)
+        field.text = "Speed, Precision"
+        keyClick(Qt.Key_Return)
+        compare(requests, [{kind: "categories", text: "Speed, Precision"}])
+        verify(field.visible, "a rejected entry stays for correction")
+        compare(field.text, "Speed, Precision")
+
+        accept = true
+        keyClick(Qt.Key_Return)
+        tryVerify(() => !field.visible)
+        compare(requests.length, 2)
+    }
+
+    function test_tableHintChangesWhileAddingCategories() {
+        const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const hint = ItemLookup.findByObjectName(table, "tableHint")
+        verify(hint !== null && hint.visible)
+        verify(hint.text.indexOf("Drag across cells to select scenarios.") === 0, hint.text)
+        verify(hint.text.indexOf("Ctrl+G") !== -1)
+        verify(hint.text.indexOf("Tip: Add categories accepts comma-separated names.") !== -1)
+
+        mouseClick(ItemLookup.findByObjectName(table, "addCategoryPlus"))
+        tryCompare(hint, "text", "Separate category names with commas. Press Enter to add each as an empty, "
+                   + "visible row; Esc cancels. Example: Speed, Precision, Control.")
+
+        keyClick(Qt.Key_Escape)
+        tryVerify(() => hint.text.indexOf("Drag across cells") === 0)
     }
 }

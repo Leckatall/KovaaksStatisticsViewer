@@ -765,10 +765,6 @@ namespace ksv::presentation {
         });
     }
 
-    QVariantMap BenchmarkManagerViewModel::addCategory(const QString &name) {
-        return applyEdit([&](domain::BenchmarkEditor &e) { return e.addCategory(name.toStdString()); });
-    }
-
     QVariantMap BenchmarkManagerViewModel::renameGroup(const QString &id, const QString &name) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
             return e.renameGroup(domain::GroupId{id.toStdString()}, name.toStdString());

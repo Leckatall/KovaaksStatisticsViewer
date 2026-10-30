@@ -467,8 +467,27 @@ function makeFakeBenchmarkManagerVm(overrides) {
             this.clearThresholdCalls.push([entryId, tierId])
             return {ok: true}
         },
-        addCategoryCalls: [],
-        addCategory: function (name) { this.commandLog.push("addCategory"); this.addCategoryCalls.push(name); return {ok: true, createdId: "category-1"} },
+        addCategoriesCalls: [],
+        addCategoriesResult: null,
+        addCategories: function (text) {
+            this.commandLog.push("addCategories")
+            this.addCategoriesCalls.push(text)
+            return this.addCategoriesResult || {ok: true, createdIds: ["category-1"], skipped: []}
+        },
+        groupCommandOptionsCalls: [],
+        groupCommandOptions: function (query, parentCategoryId) {
+            this.groupCommandOptionsCalls.push([query, parentCategoryId])
+            const name = query.trim()
+            return {actions: name === "" ? [] : [{kind: "create", name: name, parentId: parentCategoryId}],
+                    exactMatch: false}
+        },
+        createGroupAndAssignCalls: [],
+        createGroupAndAssignResult: null,
+        createGroupAndAssign: function (entryIds, name, parentCategoryId) {
+            this.commandLog.push("createGroupAndAssign")
+            this.createGroupAndAssignCalls.push([Array.prototype.slice.call(entryIds), name, parentCategoryId])
+            return this.createGroupAndAssignResult || {ok: true, createdId: "category-1"}
+        },
         renameGroupCalls: [],
         renameGroup: function (id, name) { this.renameGroupCalls.push([id, name]); return {ok: true} },
         setGroupColorCalls: [],

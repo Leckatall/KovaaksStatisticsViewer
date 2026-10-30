@@ -906,7 +906,7 @@ TEST(BenchmarkTableComposition, GroupedPlaylistMappingAndUndo) {
     // Expand, then group two rows chosen out of visible order, then reorder inside the group.
     ASSERT_TRUE(vm->pasteText(at("append"), "Extra")["ok"].toBool());
     ASSERT_EQ(tableRowIds(*vm).size(), 37);
-    const QString category = vm->addCategory("Clicking")["createdId"].toString();
+    const QString category = vm->addCategories("Clicking")["createdIds"].toStringList().value(0);
     const QString first = seeded.at(1);
     const QString third = seeded.at(3);
     ASSERT_TRUE(vm->assignScenarios({third, first}, category)["ok"].toBool());
