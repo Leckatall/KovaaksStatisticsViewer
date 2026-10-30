@@ -657,8 +657,10 @@ function benchmarkTableProjection(desc) {
                 issues: cell.issues || []
             }
         })
+        const emptyGroupRow = !!row.emptyGroupId
         return {
-            entryId: row.entryId, name: row.name !== undefined ? row.name : "Scenario " + row.entryId,
+            entryId: row.entryId || "", emptyGroupId: row.emptyGroupId || "", unassigned: !!row.unassigned,
+            name: row.name !== undefined ? row.name : (emptyGroupRow ? "" : "Scenario " + row.entryId),
             scenarioIssues: row.scenarioIssues || [],
             category: row.category ? {id: row.category.id, name: row.category.name,
                                       color: row.category.color || "#336699", issues: row.category.issues || []}
@@ -667,7 +669,7 @@ function benchmarkTableProjection(desc) {
                                             color: row.subcategory.color || "#669933",
                                             issues: row.subcategory.issues || []}
                                          : {id: "", name: "", issues: []},
-            mappingState: row.mappingState || "unresolved",
+            mappingState: row.mappingState || (emptyGroupRow ? "" : "unresolved"),
             mappingCandidates: row.mappingCandidates || [],
             mappedHashes: row.mappedHashes || [],
             cells: cells

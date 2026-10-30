@@ -665,8 +665,11 @@ namespace {
     QStringList tableRowIds(presentation::BenchmarkManagerViewModel &vm) {
         QStringList ids;
         auto *model = vm.tableModel();
-        for (int row = 0; row < model->rowCount(); ++row)
-            ids.push_back(model->data(model->index(row, 2), TableRole::EntryIdRole).toString());
+        for (int row = 0; row < model->rowCount(); ++row) {
+            const auto cell = model->index(row, 2);
+            if (model->data(cell, TableRole::EmptyGroupIdRole).toString().isEmpty())
+                ids.push_back(model->data(cell, TableRole::EntryIdRole).toString());
+        }
         return ids;
     }
 

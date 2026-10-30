@@ -138,7 +138,8 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap editThresholdText(const QString &entryId, const QString &tierId,
                                                   const QString &text);
         // `destination.kind` is "scenario" / "threshold" (with entryId, and tierId for a threshold),
-        // "rankHeader" (with tierId) or "append" for an empty table.
+        // "rankHeader" (with tierId) or "append" for a table with no scenario rows. "category",
+        // "subcategory" and "emptyGroup" are refused because a group is not a paste target.
         Q_INVOKABLE QVariantMap pasteText(const QVariantMap &destination, const QString &text);
         // An empty `targetGroupId` targets Uncategorized.
         // An empty `beforeEntryId` appends to the target group.
@@ -182,9 +183,10 @@ namespace ksv::presentation {
             QVariantMap currentCell;
         };
         // Reconciles the anchors against m_draft, announcing both in one selectionChanged. A lost
-        // row falls back to the row now at `fallbackRow` (where it sat before the table changed),
-        // a lost tier to the Scenario column; a fallback row never joins the selection.
-        void restoreSelection(const QStringList &ids, const QVariantMap &cell, int fallbackRow);
+        // row falls back to the scenario now at `fallbackPosition` (its index among scenario rows
+        // before the table changed), a lost tier to the Scenario column; a fallback row never
+        // joins the selection. A current cell on an empty-group row lives and dies with the group.
+        void restoreSelection(const QStringList &ids, const QVariantMap &cell, int fallbackPosition);
         void pruneCellInputs();
 
         std::shared_ptr<application::IBenchmarkManagerUseCase> m_useCase;

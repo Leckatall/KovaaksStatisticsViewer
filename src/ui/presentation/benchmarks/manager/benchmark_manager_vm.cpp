@@ -60,6 +60,15 @@ namespace ksv::presentation {
             return static_cast<std::size_t>(found - draft.tiers.begin());
         }
 
+        bool groupExists(const domain::Benchmark &draft, const QString &groupId) {
+            const domain::GroupId id{groupId.toStdString()};
+            return std::ranges::any_of(draft.categories, [&](const domain::Category &category) {
+                return category.id == id || std::ranges::any_of(category.subcategories, [&](const domain::Subcategory &sub) {
+                    return sub.id == id;
+                });
+            });
+        }
+
         // Only table elements (tiers, groups, scenarios) are focusable from a validation issue;
         // a benchmark-wide issue carries no target the dialog can scroll to.
         std::string targetIdString(const domain::IssueTarget &target) {
@@ -166,6 +175,17 @@ namespace ksv::presentation {
                 projection.tiers.push_back({idString(tier.id), QString::fromStdString(tier.name), toQColor(tier.color),
                                             issueTexts(IssueIndex::lookup(issues.byTier, tier.id.value))});
 
+            // data() indexes row.cells by tier, so an empty-group row carries blank cells too.
+            const auto appendEmptyGroupRow = [&](const BenchmarkTableGroupSpan &category,
+                                                 const BenchmarkTableGroupSpan &subcategory, const QString &groupId) {
+                BenchmarkTableRow row;
+                row.emptyGroupId = groupId;
+                row.category = category;
+                row.subcategory = subcategory;
+                row.cells.resize(draft.tiers.size());
+                projection.rows.push_back(std::move(row));
+            };
+
             const auto appendRow = [&](const domain::ScenarioEntry &entry, const BenchmarkTableGroupSpan &category,
                                        const BenchmarkTableGroupSpan &subcategory) {
                 BenchmarkTableRow row;
@@ -217,14 +237,23 @@ namespace ksv::presentation {
             for (const auto &category: draft.categories) {
                 const auto categoryFirst = projection.rows.size();
                 const auto categorySpan = groupSpan(category, static_cast<int>(categoryFirst), issues);
-                for (const auto &entry: category.scenarios)
+                for (const auto &entry: category.scenarios) {
                     appendRow(entry, categorySpan, noGroupAt(projection.rows.size()));
+                    if (category.subcategories.empty()) continue;
+                    auto &direct = projection.rows.back();
+                    direct.unassigned = true;
+                    direct.subcategory.issues = {
+                        QObject::tr("Move this scenario into a subcategory before the benchmark can be trackable.")};
+                }
                 for (const auto &sub: category.subcategories) {
                     const auto subFirst = projection.rows.size();
                     const auto subSpan = groupSpan(sub, static_cast<int>(subFirst), issues);
                     for (const auto &entry: sub.scenarios) appendRow(entry, categorySpan, subSpan);
+                    if (sub.scenarios.empty()) appendEmptyGroupRow(categorySpan, subSpan, subSpan.id);
                     closeSpan(subFirst, &BenchmarkTableRow::subcategory);
                 }
+                if (projection.rows.size() == categoryFirst)
+                    appendEmptyGroupRow(categorySpan, noGroupAt(categoryFirst), categorySpan.id);
                 closeSpan(categoryFirst, &BenchmarkTableRow::category);
             }
             const auto uncategorizedFirst = projection.rows.size();
@@ -503,8 +532,9 @@ namespace ksv::presentation {
 
     void BenchmarkManagerViewModel::recomputeAfterLocalEdit() {
         // The model still holds the outgoing projection, so it knows where the focused row sat.
-        const int oldRow = m_tableModel->rowForEntry(m_currentCell.value(QStringLiteral("entryId")).toString());
-        restoreSelection(m_selectedEntryIds, m_currentCell, oldRow);
+        const int oldPosition =
+            m_tableModel->scenarioPosition(m_currentCell.value(QStringLiteral("entryId")).toString());
+        restoreSelection(m_selectedEntryIds, m_currentCell, oldPosition);
         pruneCellInputs();
         m_draftCompleteness = domain::validateBenchmark(*m_draft);
         m_draftDirty = !m_baseline || *m_draft != *m_baseline || !m_cellInputs.empty();
@@ -787,7 +817,7 @@ namespace ksv::presentation {
     }
 
     void BenchmarkManagerViewModel::restoreSelection(const QStringList &ids, const QVariantMap &cell,
-                                                     int fallbackRow) {
+                                                     int fallbackPosition) {
         const auto order = visibleEntryOrder(*m_draft);
         const auto exists = [&](const QString &id) {
             return std::ranges::find(order, domain::ScenarioEntryId{id.toStdString()}) != order.end();
@@ -797,15 +827,16 @@ namespace ksv::presentation {
             if (exists(id)) surviving.push_back(id);
         QVariantMap current = cell;
         const auto entryId = cell.value(QStringLiteral("entryId")).toString();
-        if (!entryId.isEmpty() && !exists(entryId)) {
+        const auto emptyGroupId = cell.value(QStringLiteral("emptyGroupId")).toString();
+        if (!emptyGroupId.isEmpty()) {
+            if (!groupExists(*m_draft, emptyGroupId)) current.clear();
+        } else if (order.empty()) {
+            current.clear();
+        } else if (!entryId.isEmpty() && !exists(entryId)) {
             // Fall back to the row now nearest the lost anchor, keeping its column.
-            current.remove(QStringLiteral("entryId"));
-            if (!order.empty()) {
-                const auto row = std::min(static_cast<std::size_t>(std::max(fallbackRow, 0)), order.size() - 1);
-                current.insert(QStringLiteral("entryId"), QString::fromStdString(order[row].value));
-            }
+            const auto position = std::min(static_cast<std::size_t>(std::max(fallbackPosition, 0)), order.size() - 1);
+            current.insert(QStringLiteral("entryId"), QString::fromStdString(order[position].value));
         }
-        if (order.empty()) current.clear();
         const auto tierId = current.value(QStringLiteral("tierId")).toString();
         if (!tierId.isEmpty() && !tierPosition(*m_draft, domain::TierId{tierId.toStdString()})) {
             current.remove(QStringLiteral("tierId"));
@@ -846,7 +877,8 @@ namespace ksv::presentation {
     QVariantMap BenchmarkManagerViewModel::pasteText(const QVariantMap &destination, const QString &text) {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
         const QString kind = destination.value(QStringLiteral("kind")).toString();
-        if (kind == QStringLiteral("category") || kind == QStringLiteral("subcategory"))
+        if (kind == QStringLiteral("category") || kind == QStringLiteral("subcategory") ||
+            kind == QStringLiteral("emptyGroup"))
             return errorMap(tr("Paste into scenario, threshold or rank-name cells. Assign selected rows to a "
                                "group instead of pasting into it."));
         const auto matrix = BenchmarkClipboardMatrix::parse(text);
@@ -970,10 +1002,10 @@ namespace ksv::presentation {
         m_history.pop_back();
         // A step recorded without a focused cell keeps the present focus where it survives.
         const QVariantMap anchor = previous.currentCell.isEmpty() ? m_currentCell : previous.currentCell;
-        const int fallbackRow = m_tableModel->rowForEntry(anchor.value(QStringLiteral("entryId")).toString());
+        const int fallbackPosition = m_tableModel->scenarioPosition(anchor.value(QStringLiteral("entryId")).toString());
         m_draft = std::move(previous.draft);
         m_cellInputs = std::move(previous.cellInputs);
-        restoreSelection(previous.selectedEntryIds, anchor, fallbackRow);
+        restoreSelection(previous.selectedEntryIds, anchor, fallbackPosition);
         recomputeAfterLocalEdit();
         return QVariantMap{{"ok", true}};
     }
