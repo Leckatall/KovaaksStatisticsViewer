@@ -220,7 +220,7 @@ namespace {
             timer.start();
             app = std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>(),
                                                      persistence(), env.statsParser, env.benchmarkStore,
-                                                     env.daySource);
+                                                     env.daySource, env.clipboardWriter, env.pngWriter);
             ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 120000));
             loadMs = static_cast<double>(timer.nsecsElapsed()) / 1e6;
 

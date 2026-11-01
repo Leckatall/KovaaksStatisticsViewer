@@ -28,6 +28,7 @@
 #include "qt_data/graph_configuration_persistence.h"
 #include "settings_service.h"
 #include "fake_day_source.h"
+#include "fake_image_output.h"
 
 namespace ksv::integration {
     // The integration suite shares one QSettings store; tests that commit graph configuration clear
@@ -64,6 +65,10 @@ namespace ksv::integration {
         std::shared_ptr<data::StatsCsvParser> statsParser = std::make_shared<data::StatsCsvParser>();
         // Tests advance this to move the application past a UTC midnight.
         std::shared_ptr<tests_support::FakeDaySource> daySource = std::make_shared<tests_support::FakeDaySource>();
+        std::shared_ptr<tests_support::FakeClipboardImageWriter> clipboardWriter =
+            std::make_shared<tests_support::FakeClipboardImageWriter>();
+        std::shared_ptr<tests_support::FakePngImageWriter> pngWriter =
+            std::make_shared<tests_support::FakePngImageWriter>();
         QTemporaryDir benchmarksDir;
         std::shared_ptr<qt_data::BenchmarkStore> benchmarkStore =
             std::make_shared<qt_data::BenchmarkStore>(benchmarksDir.path().toStdString());

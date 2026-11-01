@@ -102,7 +102,7 @@ namespace {
             if (!env.makePerformancesDir()) return "could not create performances dir";
             app = std::make_unique<application::App>(
                 env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence,
-                env.statsParser, env.benchmarkStore, env.daySource);
+                env.statsParser, env.benchmarkStore, env.daySource, env.clipboardWriter, env.pngWriter);
             if (app->start() != 0) return "Main.qml failed to load";
             root = app->engine()->rootObjects().first();
             uiDriver = std::make_unique<driver::UiDriver>(app->engine(), root);

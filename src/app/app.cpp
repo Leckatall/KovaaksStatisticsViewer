@@ -39,6 +39,9 @@
 #include "usecases/completion_history_use_case.h"
 #include "usecases/playtime_graph_use_case.h"
 #include "usecases/scenario_browser_use_case.h"
+#include "usecases/image_output_use_case.h"
+#include "qt_data/qt_clipboard_image_writer.h"
+#include "qt_data/qt_png_image_writer.h"
 
 
 namespace ksv::application {
@@ -58,6 +61,8 @@ namespace ksv::application {
                   (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/benchmarks")
                       .toStdString()),
               std::make_shared<qt_data::SystemDaySource>(),
+              std::make_shared<qt_data::QtClipboardImageWriter>(),
+              std::make_shared<qt_data::QtPngImageWriter>(),
               parent) {}
 
     App::App(std::shared_ptr<ISettingsService> settingsService,
@@ -66,6 +71,8 @@ namespace ksv::application {
              std::shared_ptr<data::IStatsCsvParser> statsParser,
              std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
              std::shared_ptr<data::IDaySource> daySource,
+             std::shared_ptr<data::IClipboardImageWriter> clipboardWriter,
+             std::shared_ptr<data::IPngImageWriter> pngWriter,
              QObject *parent) : QObject(parent) {
         qDebug() << "App Started. This message should not appear in release builds";
         m_protoDecoder = std::move(decoder);
@@ -134,6 +141,8 @@ namespace ksv::application {
 
         m_benchmarkManagerVm = new presentation::BenchmarkManagerViewModel(m_benchmarkManagerUseCase, this);
         m_benchmarkTrackingVm = new presentation::BenchmarkTrackingViewModel(m_benchmarkTrackingUseCase, this);
+
+        m_imageOutputUseCase = std::make_shared<ImageOutputUseCase>(std::move(clipboardWriter), std::move(pngWriter));
     }
 
     QVariantMap App::initialProperties() const {

@@ -41,7 +41,7 @@ namespace {
 
             app = std::make_unique<application::App>(
                 env->settings, std::make_shared<data::ProtoDecoder>(), env->graphConfigurationPersistence,
-                env->statsParser, env->benchmarkStore, env->daySource);
+                env->statsParser, env->benchmarkStore, env->daySource, env->clipboardWriter, env->pngWriter);
             graphVm = app->graphVm();
             ASSERT_NE(graphVm, nullptr);
         }
