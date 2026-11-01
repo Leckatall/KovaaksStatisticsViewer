@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <memory>
 #include <numeric>
+#include <set>
 
 #include "presentation/benchmarks/tracking/benchmark_tracking_vm.h"
 #include "presentation/benchmarks/tracking/benchmark_progress_grid_model.h"
@@ -166,6 +167,142 @@ TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheF
         EXPECT_LT(rowFor(vm.progressGrid(), id).value("recentPosition").toDouble(), 0.0) << id;
         EXPECT_TRUE(rowFor(vm.progressGrid(), id).value("recentDescription").toString().isEmpty()) << id;
     }
+}
+
+TEST(BenchmarkProgressGridContent, ExposesTypedContent) {
+    auto fake = gridFake();
+    BenchmarkTrackingViewModel vm{fake};
+
+    const BenchmarkProgressGridModel *grid = vm.progressGrid();
+    ASSERT_FALSE(grid->rows().isEmpty());
+    const std::vector<ProgressGridScenarioRow> &rows = grid->content().rows;
+    EXPECT_EQ(static_cast<qsizetype>(rows.size()), grid->rows().size());
+}
+
+TEST(BenchmarkProgressGridContent, MapsAreDerivedFromTheTypedForm) {
+    auto fake = gridFake();
+    auto &definition = fake->snap.selectedLoaded->benchmark;
+    definition.categories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 300.0}, Threshold{TierId{"t2"}, 500.0}, Threshold{TierId{"t3"}, 700.0}};
+    definition.categories[1].subcategories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t3"}, 1200.0}};
+    BenchmarkTrackingViewModel vm{fake};
+    const BenchmarkProgressGridModel *grid = vm.progressGrid();
+    const ProgressGridContent &content = grid->content();
+
+    ASSERT_EQ(static_cast<qsizetype>(content.tiers.size()), grid->tiers().size());
+    ASSERT_EQ(static_cast<qsizetype>(content.rows.size()), grid->rows().size());
+    ASSERT_EQ(static_cast<qsizetype>(content.groups.size()), grid->groups().size());
+    EXPECT_EQ(content.hasSubcategories, grid->hasSubcategories());
+
+    const QVariantMap headers = grid->headers();
+    EXPECT_EQ(headers.value("category").toString(), content.headings.category);
+    EXPECT_EQ(headers.value("subcategory").toString(), content.headings.subcategory);
+    EXPECT_EQ(headers.value("scenario").toString(), content.headings.scenario);
+    EXPECT_EQ(headers.value("progress").toString(), content.headings.progress);
+    EXPECT_EQ(headers.value("pbDate").toString(), content.headings.pbDate);
+    EXPECT_EQ(headers.value("plays").toString(), content.headings.plays);
+    EXPECT_EQ(headers.value("next").toString(), content.headings.next);
+
+    for (qsizetype index = 0; index < grid->tiers().size(); ++index) {
+        const QVariantMap map = grid->tiers().at(index).toMap();
+        const ProgressGridTier &tier = content.tiers[static_cast<std::size_t>(index)];
+        EXPECT_EQ(map.value("id").toString(), tier.id);
+        EXPECT_EQ(map.value("name").toString(), tier.name);
+        EXPECT_EQ(map.value("color").toString(), tier.color);
+        EXPECT_EQ(map.value("barColor").toString(), tier.barColor);
+    }
+
+    std::set<ProgressGridEdgeState> edgeStates;
+    bool sawBlocker = false;
+    bool sawRecent = false;
+    bool sawMissingChunk = false;
+    const auto walkRows = [&] {
+    for (qsizetype index = 0; index < grid->rows().size(); ++index) {
+        const QVariantMap map = grid->rows().at(index).toMap();
+        const ProgressGridScenarioRow &row = content.rows[static_cast<std::size_t>(index)];
+        edgeStates.insert(row.edgeState);
+        sawBlocker |= row.blocker;
+        sawRecent |= row.recentPosition.has_value();
+        sawMissingChunk |= std::ranges::any_of(row.missingChunks, [](const bool missing) { return missing; });
+
+        EXPECT_EQ(map.value("entryId").toString(), row.entryId);
+        EXPECT_EQ(map.value("name").toString(), row.name);
+        EXPECT_EQ(map.value("personalBestText").toString(), row.personalBestText);
+        EXPECT_EQ(map.value("personalBestDateText").toString(), row.personalBestDateText);
+        EXPECT_EQ(map.value("playCountText").toString(), row.playCountText);
+        EXPECT_EQ(map.value("attainedTierText").toString(), row.attainedTierText);
+        EXPECT_EQ(map.value("attainedTierColor").toString(), row.attainedTierColor);
+        EXPECT_EQ(map.value("recentPosition").toDouble(), row.recentPosition.value_or(-1.0));
+        EXPECT_EQ(map.value("recentDescription").toString(), row.recentDescription);
+        EXPECT_EQ(map.value("nextTierText").toString(), row.nextTierText);
+        EXPECT_EQ(map.value("nextTierColor").toString(), row.nextTierColor);
+        EXPECT_EQ(map.value("nextThresholdText").toString(), row.nextThresholdText);
+        EXPECT_EQ(map.value("nextText").toString(), row.nextText);
+        EXPECT_EQ(map.value("matchStateText").toString(), row.matchStateText);
+        EXPECT_EQ(map.value("matchStateHint").toString(), row.matchStateHint);
+        EXPECT_EQ(map.value("barDescription").toString(), row.barDescription);
+        EXPECT_EQ(map.value("statusText").toString(), row.statusText);
+        EXPECT_EQ(map.value("aboveTopText").toString(), row.aboveTopText);
+        EXPECT_EQ(map.value("blocker").toBool(), row.blocker);
+        EXPECT_EQ(map.value("blockerColor").toString(), row.blockerColor);
+        EXPECT_EQ(map.value("blockerText").toString(), row.blockerText);
+
+        const QString edgeKey = map.value("edgeState").toString();
+        switch (row.edgeState) {
+            case ProgressGridEdgeState::None: EXPECT_EQ(edgeKey, QString()); break;
+            case ProgressGridEdgeState::Unplayed: EXPECT_EQ(edgeKey, "unplayed"); break;
+            case ProgressGridEdgeState::Unmatched: EXPECT_EQ(edgeKey, "unmatched"); break;
+            case ProgressGridEdgeState::AboveTop: EXPECT_EQ(edgeKey, "aboveTop"); break;
+        }
+
+        const QVariantList fills = map.value("fills").toList();
+        ASSERT_EQ(static_cast<std::size_t>(fills.size()), row.fills.size());
+        for (qsizetype fill = 0; fill < fills.size(); ++fill)
+            EXPECT_EQ(fills.at(fill).toDouble(), row.fills[static_cast<std::size_t>(fill)]);
+        const QVariantList missing = map.value("missingChunks").toList();
+        ASSERT_EQ(static_cast<std::size_t>(missing.size()), row.missingChunks.size());
+        for (qsizetype chunk = 0; chunk < missing.size(); ++chunk)
+            EXPECT_EQ(missing.at(chunk).toBool(), static_cast<bool>(row.missingChunks[static_cast<std::size_t>(chunk)]));
+        const QVariantList thresholds = map.value("thresholdTexts").toList();
+        ASSERT_EQ(static_cast<std::size_t>(thresholds.size()), row.thresholdTexts.size());
+        for (qsizetype text = 0; text < thresholds.size(); ++text)
+            EXPECT_EQ(thresholds.at(text).toString(), row.thresholdTexts[static_cast<std::size_t>(text)]);
+    }
+    };
+    walkRows();
+    // e1 back within its ladder gives a row with no edge state.
+    definition.categories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 900.0}, Threshold{TierId{"t3"}, 1200.0}};
+    fake->publish();
+    walkRows();
+
+    std::set<ProgressGridGroupColumn> columns;
+    for (qsizetype index = 0; index < grid->groups().size(); ++index) {
+        const QVariantMap map = grid->groups().at(index).toMap();
+        const ProgressGridGroup &group = content.groups[static_cast<std::size_t>(index)];
+        columns.insert(group.column);
+        EXPECT_EQ(map.value("column").toString(),
+                  group.column == ProgressGridGroupColumn::Category ? QString("category") : QString("subcategory"));
+        EXPECT_EQ(map.value("id").toString(), group.id);
+        EXPECT_EQ(map.value("name").toString(), group.name);
+        EXPECT_EQ(map.value("color").toString(), group.color);
+        EXPECT_EQ(map.value("start").toInt(), group.start);
+        EXPECT_EQ(map.value("span").toInt(), group.span);
+        EXPECT_EQ(map.value("spansSubcategory").toBool(), group.spansSubcategory);
+        EXPECT_EQ(map.value("rankText").toString(), group.rankText);
+        EXPECT_EQ(map.value("rankColor").toString(), group.rankColor);
+        EXPECT_EQ(map.value("rankBarColor").toString(), group.rankBarColor);
+    }
+
+    EXPECT_TRUE(edgeStates.contains(ProgressGridEdgeState::None));
+    EXPECT_TRUE(edgeStates.contains(ProgressGridEdgeState::Unplayed));
+    EXPECT_TRUE(edgeStates.contains(ProgressGridEdgeState::Unmatched));
+    EXPECT_TRUE(edgeStates.contains(ProgressGridEdgeState::AboveTop));
+    EXPECT_TRUE(sawBlocker);
+    EXPECT_TRUE(sawRecent);
+    EXPECT_TRUE(sawMissingChunk);
+    EXPECT_EQ(columns.size(), 2u) << "the fixture must have a subcategory group";
 }
 
 // --- the grid ------------------------------------------------------------------------------------
@@ -532,4 +669,31 @@ TEST(BenchmarkProgressGridModel, EmptiesOutsideTheReadyStatesAndNotifiesOncePerR
     EXPECT_TRUE(grid->groups().isEmpty());
     EXPECT_TRUE(grid->tiers().isEmpty());
     EXPECT_FALSE(grid->hasSubcategories());
+}
+
+TEST(BenchmarkProgressGridModelTexts, NextTextJoinsTheTierAndItsThreshold) {
+    auto fake = gridFake();
+    auto &definition = fake->snap.selectedLoaded->benchmark;
+    definition.categories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 1000.0}, Threshold{TierId{"t2"}, 2000.0}, Threshold{TierId{"t3"}, 3000.0}};
+    definition.categories[1].subcategories[0].scenarios[0].thresholds = {
+        Threshold{TierId{"t1"}, 100.0}, Threshold{TierId{"t2"}, 200.0}, Threshold{TierId{"t3"}, 300.0}};
+    fake->snap.projection->scenarios[4].nextThreshold.reset();
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *grid = vm.progressGrid();
+
+    const QVariantMap e1 = rowFor(grid, "e1");
+    ASSERT_FALSE(e1.value("nextTierText").toString().isEmpty());
+    EXPECT_EQ(e1.value("nextText").toString(),
+              e1.value("nextTierText").toString() + " " + e1.value("nextThresholdText").toString());
+    EXPECT_EQ(rowFor(grid, "e3").value("nextText").toString(), "Highest tier attained");
+}
+
+TEST(BenchmarkProgressGridModelTexts, PublishesEveryColumnHeading) {
+    BenchmarkProgressGridModel grid;
+
+    const QVariantMap headers = grid.property("headers").toMap();
+    EXPECT_EQ(headers.size(), 7);
+    for (const char *key: {"category", "subcategory", "scenario", "progress", "pbDate", "plays", "next"})
+        EXPECT_FALSE(headers.value(key).toString().isEmpty()) << key;
 }

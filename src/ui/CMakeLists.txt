@@ -169,6 +169,7 @@ qt_add_qml_module(ksv_ui
             presentation/benchmarks/tracking/benchmark_history_vm.h
             presentation/benchmarks/tracking/benchmark_history_vm.cpp
             presentation/benchmarks/tracking/benchmark_progress_grid_model.h
+            presentation/benchmarks/tracking/progress_grid_content.h
             presentation/benchmarks/tracking/benchmark_progress_grid_model.cpp
             presentation/benchmarks/tracking/benchmark_tracking_vm.h
             presentation/benchmarks/tracking/benchmark_tracking_vm.cpp

@@ -99,14 +99,8 @@ Item {
     implicitHeight: rows.length > 0 ? tableHeight + (overflowing ? horizontalBar.implicitHeight : 0) : 0
     visible: rows.length > 0
 
-    readonly property var headers: ({
-        category: qsTr("Category"),
-        subcategory: qsTr("Subcategory"),
-        scenario: qsTr("Scenario"),
-        progress: qsTr("Progress"),
-        pbDate: qsTr("PB date"),
-        plays: qsTr("Plays"),
-        next: qsTr("Next tier")
+    readonly property var headers: grid && grid.headers ? grid.headers : ({
+        category: "", subcategory: "", scenario: "", progress: "", pbDate: "", plays: "", next: ""
     })
 
     // A category group whose rows have no subcategory group (scenarios straight under
@@ -114,12 +108,6 @@ Item {
     // leaving an empty cell beside it. Only meaningful while the grid shows that column.
     function spansSubcategory(group) {
         return hasSubcategories && group.spansSubcategory === true
-    }
-
-    function nextText(row) {
-        if (!row) return ""
-        const tier = String(row.nextTierText || "")
-        return tier.length > 0 ? tier + " " + row.nextThresholdText : String(row.nextThresholdText)
     }
 
     function readableOn(color, background, fallback) {
@@ -200,7 +188,7 @@ Item {
             widths.scenario = Math.max(widths.scenario, markerSpace + metrics.advanceWidth(String(row.name)))
             widths.pbDate = Math.max(widths.pbDate, metrics.advanceWidth(String(row.personalBestDateText)))
             widths.plays = Math.max(widths.plays, metrics.advanceWidth(String(row.playCountText)))
-            widths.next = Math.max(widths.next, metrics.advanceWidth(nextText(row)))
+            widths.next = Math.max(widths.next, metrics.advanceWidth(String(row.nextText)))
         }
         for (const key in widths) widths[key] = Math.ceil(widths[key] + 2 * cellPadding)
         if (spanning > 0)

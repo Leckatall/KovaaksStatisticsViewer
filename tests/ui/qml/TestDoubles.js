@@ -125,12 +125,16 @@ function makeFakeProgressGrid(overrides) {
         tiers: [],
         rows: [],
         groups: [],
-        hasSubcategories: false
+        hasSubcategories: false,
+        headers: {
+            category: "Category", subcategory: "Subcategory", scenario: "Scenario", progress: "Progress",
+            pbDate: "PB date", plays: "Plays", next: "Next tier"
+        }
     }, overrides)
 }
 
 function makeFakeProgressRow(overrides) {
-    return Object.assign({
+    const row = Object.assign({
         entryId: "n",
         name: "Scenario",
         personalBestText: "—",
@@ -149,6 +153,10 @@ function makeFakeProgressRow(overrides) {
         blockerColor: "",
         blockerText: ""
     }, overrides)
+    if (row.nextText === undefined)
+        row.nextText = row.nextTierText.length > 0 ? row.nextTierText + " " + row.nextThresholdText
+                                                   : row.nextThresholdText
+    return row
 }
 
 function fakeProgressTiers() {
@@ -190,6 +198,15 @@ function makeFakeTrackingVm(overrides) {
         selectDefaultBenchmarkCalls: 0,
         selectDefaultBenchmark: function () { this.selectDefaultBenchmarkCalls++ }
     }, overrides)
+    if (vm.summaryCaptions === undefined)
+        vm.summaryCaptions = {
+            attainedRank: "Attained rank", completedRank: "Completed rank", averageRank: "Average rank",
+            totalPlaytime: "Total playtime", nextTier: "Next tier"
+        }
+    if (vm.nextTierBlockerText === undefined)
+        vm.nextTierBlockerText = !vm.hasNextTier ? ""
+            : vm.nextTierBlockerCount === 1 ? "(blocked by 1 scenario)"
+            : "(blocked by " + vm.nextTierBlockerCount + " scenarios)"
     return vm
 }
 

@@ -637,6 +637,30 @@ Item {
             compare(find(ws, "nextTierProgress"), null, "the old progress line is gone")
         }
 
+        function test_summaryReadsTheViewModelsStrings() {
+            const captions = {
+                attainedRank: "Model attained caption", completedRank: "Model completed caption",
+                averageRank: "Model average caption", totalPlaytime: "Model playtime caption",
+                nextTier: "Model next caption"
+            }
+            const fixture = TestDoubles.trackingFixtureTrackable()
+            fixture.nextTierBlockerCount = 7
+            fixture.nextTierBlockerText = "(model blockers text)"
+            fixture.summaryCaptions = captions
+            const ws = makeWorkspace(fixture)
+            wait(0)
+
+            compare(find(ws, "summaryNextTierBlockers").text, "(model blockers text)")
+            const shown = []
+            const collect = function (item) {
+                if (item.text !== undefined) shown.push(String(item.text))
+                for (let i = 0; i < item.children.length; ++i) collect(item.children[i])
+            }
+            collect(find(ws, "benchmarkStatusSummary"))
+            for (const key in captions)
+                verify(shown.indexOf(captions[key]) !== -1, key + " caption is shown: " + captions[key])
+        }
+
         // A non-trackable benchmark has no rank to progress from, so no next tier shows. The
         // fixtures carry stale next-tier values on purpose: a summary that read them
         // regardless of the state would render text.
@@ -658,6 +682,38 @@ Item {
             verify(find(ws, "benchmarkStatusSummary") === null, "no status summary when not trackable")
             verify(find(ws, "summaryNextTier") === null, "no next tier when not trackable")
             verify(find(ws, "summaryNextTierBlockers") === null, "no blocker count when not trackable")
+        }
+
+        // -- progress grid: the next-tier cell is one model string -------------
+
+        function test_nextTextComesFromTheModel() {
+            const baseline = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 3000, 800)
+            wait(0)
+            const baselineWidth = find(baseline, "progressHeader_next").width
+
+            const fixture = TestDoubles.trackingFixtureTrackable()
+            const distinctive = "A distinctive next-tier cell that is much wider than any joined pair"
+            fixture.progressGrid.rows[1].nextText = distinctive
+            const ws = makeWorkspace(fixture, 3000, 800)
+            wait(0)
+
+            compare(find(ws, "progressRow_sc-1w4ts_next").text, distinctive)
+            verify(find(ws, "progressHeader_next").width > baselineWidth,
+                   "the next column measures the model string")
+        }
+
+        // -- progress grid: column headings are model strings -----------------
+
+        function test_columnHeadingsComeFromTheModel() {
+            const fixture = TestDoubles.trackingFixtureTrackable()
+            fixture.progressGrid.headers = Object.assign({}, fixture.progressGrid.headers, {
+                scenario: "Model scenario heading", progress: "Model progress heading"
+            })
+            const ws = makeWorkspace(fixture, 1200, 800)
+            wait(0)
+
+            compare(find(ws, "progressHeader_scenario").text, "Model scenario heading")
+            compare(find(ws, "progressHeader_progress").Accessible.name, "Model progress heading")
         }
     }
 

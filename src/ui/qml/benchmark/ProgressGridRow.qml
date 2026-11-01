@@ -153,7 +153,7 @@ Item {
         spacing: 4
         clip: true
         // Read by tests and assistive tech as one value.
-        readonly property string text: rowItem.grid.nextText(rowItem.modelData)
+        readonly property string text: String(rowItem.modelData.nextText)
         Accessible.role: Accessible.StaticText
         Accessible.name: qsTr("Next tier %1").arg(text)
 

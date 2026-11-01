@@ -135,6 +135,17 @@ namespace ksv::presentation {
         }
     }
 
+    QVariantMap BenchmarkTrackingViewModel::summaryCaptions() const {
+        const BenchmarkSummaryCaptions captions;
+        QVariantMap map;
+        map[QStringLiteral("attainedRank")] = captions.attainedRank;
+        map[QStringLiteral("completedRank")] = captions.completedRank;
+        map[QStringLiteral("averageRank")] = captions.averageRank;
+        map[QStringLiteral("totalPlaytime")] = captions.totalPlaytime;
+        map[QStringLiteral("nextTier")] = captions.nextTier;
+        return map;
+    }
+
     BenchmarkTrackingViewModel::BenchmarkTrackingViewModel(
         std::shared_ptr<application::IBenchmarkTrackingUseCase> useCase, QObject *parent)
         : QObject(parent), m_useCase(std::move(useCase)),
@@ -252,6 +263,12 @@ namespace ksv::presentation {
         m_scenariosAtNextTier = projection ? projection->scenariosAtNextTier : 0;
         m_hasNextTier = trackable && projection && projection->nextTier.has_value();
         m_nextTierBlockerCount = m_hasNextTier ? static_cast<int>(projection->nextTierBlockers.size()) : 0;
+        // Ranks are attained per group, so this counts the rows marked as blockers, not the
+        // scenarios already at the next tier.
+        m_nextTierBlockerText = !m_hasNextTier ? QString()
+                                : m_nextTierBlockerCount == 1
+                                    ? QObject::tr("(blocked by 1 scenario)")
+                                    : QObject::tr("(blocked by %1 scenarios)").arg(m_nextTierBlockerCount);
         m_scenarioCount = projection ? static_cast<int>(projection->scenarios.size()) : 0;
 
         m_rankPresent = trackable && projection != nullptr;
