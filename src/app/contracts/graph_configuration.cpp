@@ -18,6 +18,8 @@ namespace ksv::application {
         constexpr std::array<std::string_view, 3> kConnectionModeNames{"smooth", "straight", "pointsOnly"};
 
         constexpr RgbaColor kPlaytimeColor{77, 208, 225, 255};
+        constexpr RgbaColor kPersonalBestRankColor{46, 204, 113, 255};
+        constexpr RgbaColor kRecentRankColor{76, 175, 80, 255};
 
         bool hasAxis(const RunSeriesDocument &document, const AxisId id) {
             return std::ranges::find(document.axes, id, &AxisConfig::id) != document.axes.end();
@@ -43,10 +45,13 @@ namespace ksv::application {
                     },
                     {{"score", FitVisibleData{}}, {"accuracy", FitVisibleData{}}, {"counts", StartAtZero{}}}
                 },
-                {GraphKey::BenchmarkRank, true, false, false, false, {RecentDays{90}, true}, {{"rank", "", std::nullopt}}, {}},
+                {
+                    GraphKey::BenchmarkRank, true, false, false, false, {RecentDays{90}, true},
+                    {{"rank", "", kPersonalBestRankColor}}, {}
+                },
                 {
                     GraphKey::BenchmarkRecentRank, true, false, false, false, {RecentDays{90}, true},
-                    {{"rank", "", std::nullopt}}, {}
+                    {{"rank", "", kRecentRankColor}}, {}
                 },
                 {
                     GraphKey::BenchmarkPlaytime, true, false, true, false, {RecentDays{30}, true},

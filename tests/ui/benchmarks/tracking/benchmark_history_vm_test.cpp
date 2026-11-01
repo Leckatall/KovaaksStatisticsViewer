@@ -330,7 +330,7 @@ TEST(BenchmarkHistoryViewModel, RankAxisAndTierLinesStopOneTierAboveThePeakRank)
     }
 }
 
-TEST(BenchmarkHistoryViewModel, CanvasDrawsTheNeutralRankLineInItsForegroundColour) {
+TEST(BenchmarkHistoryViewModel, CanvasDrawsAColourlessSeriesInItsForegroundColour) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
@@ -343,6 +343,7 @@ TEST(BenchmarkHistoryViewModel, CanvasDrawsTheNeutralRankLineInItsForegroundColo
 
     const auto series = vm.rankHistory()->series({kValueColumn});
     ASSERT_EQ(series.size(), 1);
+    series.front()->setColor(QColor());
     EXPECT_EQ(canvas.colorFor(*series.front()), QColor("#123456"));
 
     const QRectF plot = canvas.property("plotArea").toRectF();
@@ -513,7 +514,6 @@ TEST(BenchmarkHistoryViewModel, ARankRangeWithoutImprovementsDrawsOnlyNonSelecta
     canvas.setGraphVm(history);
     canvas.setVisibleColumns({kValueColumn});
     canvas.setPointMarkers(true);
-    canvas.setForegroundColor(QColor("#123456"));
     const QRectF plot = canvas.property("plotArea").toRectF();
     for (const qreal x: {plot.left() + 1, plot.center().x(), plot.right() - 1})
         EXPECT_FALSE(canvas.valuesAtX(x).value("valid").toBool()) << "tooltip snapped to an out-of-range point";
@@ -529,7 +529,7 @@ TEST(BenchmarkHistoryViewModel, ARankRangeWithoutImprovementsDrawsOnlyNonSelecta
         QPainter painter(&image);
         canvas.paint(&painter);
     }
-    EXPECT_GT(countPixelsNear(image, plot.toAlignedRect(), QColor("#123456")), 0) << "the carried line was not drawn";
+    EXPECT_GT(countPixelsNear(image, plot.toAlignedRect(), rank->color()), 0) << "the carried line was not drawn";
 }
 
 TEST(BenchmarkHistoryViewModel, NoRankIsDrawnBeforeTheFirstImprovement) {
@@ -769,7 +769,8 @@ TEST(BenchmarkRecentRankHistory, IsItsOwnNamedTierGraphOnItsOwnAxis) {
     ASSERT_TRUE(series->yAxis);
     EXPECT_EQ(series->yAxis->formatTick(1.0), "Bronze");
     EXPECT_EQ(series->transform.format(1.2), describeAverageRank(1.2, {"Bronze", "Silver", "Gold"}));
-    EXPECT_FALSE(series->color().isValid()) << "neutral, like the PB rank line";
+    EXPECT_TRUE(series->color().isValid());
+    EXPECT_NE(series->color(), vm.rankHistory()->series({kValueColumn}).front()->color()) << "shares the PB rank line's colour";
 }
 
 TEST(BenchmarkRecentRankHistory, KeepsTheFallsOfTheRecentAverage) {
@@ -1013,7 +1014,7 @@ TEST(BenchmarkHistoryAxisPolicy, TheRankGraphNeverTakesGenericNumericFitting) {
 
 // ---- committed style ----------------------------------------------------------------------
 
-TEST(BenchmarkHistoryStyle, WithNothingSavedBothGraphsLookAsTheyAlwaysDid) {
+TEST(BenchmarkHistoryStyle, WithNothingSavedBothGraphsUseTheirDefaults) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
@@ -1029,7 +1030,9 @@ TEST(BenchmarkHistoryStyle, WithNothingSavedBothGraphsLookAsTheyAlwaysDid) {
               static_cast<int>(playtimeDefaults.appearance.connection));
     EXPECT_EQ(vm.playtimeHistory()->property("pointMarkers").toBool(), playtimeDefaults.appearance.lineModeMarkers);
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->lineWidth, playtimeStyle.width);
-    EXPECT_FALSE(vm.rankHistory()->series({kValueColumn}).front()->color().isValid()) << "neutral rank line";
+    ASSERT_TRUE(rankStyle.color.has_value());
+    EXPECT_EQ(vm.rankHistory()->series({kValueColumn}).front()->color(),
+              QColor(rankStyle.color->red, rankStyle.color->green, rankStyle.color->blue, rankStyle.color->alpha));
     ASSERT_TRUE(playtimeStyle.color.has_value());
     EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->color(),
               QColor(playtimeStyle.color->red, playtimeStyle.color->green, playtimeStyle.color->blue,

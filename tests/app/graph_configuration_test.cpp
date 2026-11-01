@@ -494,7 +494,8 @@ namespace {
         EXPECT_EQ(recent.defaultLineModeMarkers, rank.defaultLineModeMarkers);
         EXPECT_EQ(recent.defaultRange, rank.defaultRange);
         EXPECT_EQ(defaultGraphPreferences(GraphKey::BenchmarkRecentRank), defaultGraphPreferences(GraphKey::BenchmarkRank));
-        EXPECT_EQ(defaultSeriesStyle(GraphKey::BenchmarkRecentRank, "rank"), defaultSeriesStyle(GraphKey::BenchmarkRank, "rank"));
+        EXPECT_DOUBLE_EQ(defaultSeriesStyle(GraphKey::BenchmarkRecentRank, "rank").width,
+                         defaultSeriesStyle(GraphKey::BenchmarkRank, "rank").width);
     }
 
     TEST(GraphConfigurationDiff, TheTwoRankGraphsRangesAreIndependent) {
