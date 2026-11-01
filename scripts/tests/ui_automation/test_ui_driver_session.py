@@ -68,10 +68,10 @@ def test_launch_options_round_trip(tmp_path: Path) -> None:
 
 def test_launch_command_passes_session_and_options(tmp_path: Path) -> None:
     session = Session(tmp_path, "demo")
-    command = launch_command(Path("ksv_driver.exe"), session, LaunchOptions(dataset="empty", compiled_qml=True))
+    command = launch_command(Path("ksv_driver.exe"), session, LaunchOptions(dataset="empty", size="640x480", compiled_qml=True))
 
     assert command[:3] == ["ksv_driver.exe", "--session-dir", str(session.directory)]
-    assert command[3:] == ["--dataset", "empty", "--size", "1280x800", "--compiled-qml"]
+    assert command[3:] == ["--dataset", "empty", "--size", "640x480", "--compiled-qml"]
 
 
 def test_headless_environment_adds_offscreen_qpa_and_runtime_path(tmp_path: Path) -> None:
@@ -123,11 +123,11 @@ def test_old_launch_json_without_new_keys_still_reads(tmp_path: Path) -> None:
 
 def test_launch_command_repeats_overlay_and_setting_flags_in_order(tmp_path: Path) -> None:
     session = Session(tmp_path, "demo")
-    options = LaunchOptions(overlays=("A", "B"), settings=("k=1", "file/kovaaksDirs="), env=("X=1",))
+    options = LaunchOptions(dataset="empty", size="640x480", overlays=("A", "B"), settings=("k=1", "file/kovaaksDirs="), env=("X=1",))
 
     command = launch_command(Path("ksv_driver.exe"), session, options, reapply=True)
 
-    assert command[3:] == ["--dataset", "rich", "--size", "1280x800", "--overlay", "A", "--overlay", "B",
+    assert command[3:] == ["--dataset", "empty", "--size", "640x480", "--overlay", "A", "--overlay", "B",
                            "--setting", "k=1", "--setting", "file/kovaaksDirs=", "--reapply"]
 
 
@@ -160,11 +160,11 @@ def test_data_paths_stay_inside_the_session_data_dir(tmp_path: Path) -> None:
 
 def test_profile_spec_and_injections_reach_the_driver_argv(tmp_path: Path) -> None:
     session = Session(tmp_path, "demo")
-    options = LaunchOptions(dataset="empty", profile_spec="C:/specs/a.json", injections=("csv=fail", "decoder=delay:5"))
+    options = LaunchOptions(dataset="empty", size="640x480", profile_spec="C:/specs/a.json", injections=("csv=fail", "decoder=delay:5"))
 
     command = launch_command(Path("ksv_driver.exe"), session, options)
 
-    assert command[3:] == ["--dataset", "empty", "--size", "1280x800", "--profile-spec", "C:/specs/a.json",
+    assert command[3:] == ["--dataset", "empty", "--size", "640x480", "--profile-spec", "C:/specs/a.json",
                            "--inject", "csv=fail", "--inject", "decoder=delay:5"]
     assert "--profile-spec" not in launch_command(Path("ksv_driver.exe"), session, LaunchOptions())
 

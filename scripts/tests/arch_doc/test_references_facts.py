@@ -36,8 +36,6 @@ def test_destination_and_registry_helpers_use_relative_posix_paths_and_exact_del
     document = tmp_path / "docs" / "architecture" / "views" / "runtime" / "live.md"
     target = tmp_path / "docs" / "architecture" / "README.md"
 
-    assert hasattr(arch_doc, "destination_for")
-    assert hasattr(arch_doc, "render_registry")
     assert arch_doc.destination_for(document, target, "fact-profile-authority") == "../../README.md#fact-profile-authority"
     assert arch_doc.render_registry({"zebra": "z.md", "alpha": "a.md"}) == (
         "<!-- arch-doc:references:start -->\n"

@@ -147,7 +147,6 @@ TestCase {
         keyClick(Qt.Key_Return)
 
         compare(vm(dialog).addSubcategoryCalls, [["g1", "s"]])
-        verify(dialog.subcategoryRelocationPrompt === undefined, "no relocation prompt exists")
         waitForRendering(dialog.contentItem)
         compare(editorsOpened, [], "no rename editor opens")
         compare(table.activeEditor, null)

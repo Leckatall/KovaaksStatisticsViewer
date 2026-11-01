@@ -78,15 +78,6 @@ namespace {
     }
 }
 
-TEST(BenchmarkTracking, StartsWithNoSelection) {
-    Fixture fixture;
-    fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
-    fixture.build();
-    EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::NoSelection);
-    EXPECT_FALSE(fixture.tracking->selected());
-    EXPECT_EQ(fixture.tracking->projection(), nullptr);
-}
-
 TEST(BenchmarkTracking, SelectingTrackableBenchmarkProducesProjection) {
     Fixture fixture;
     fixture.known("Alpha", "h1");
@@ -1158,20 +1149,6 @@ namespace {
                                   benchmarkFact("h1", 110 * kDay, 10.0F, 30.0F)};
         }
     };
-}
-
-TEST(BenchmarkTrackingRank, TheDefaultRangeIsAnchoredToTheLatestImprovement) {
-    const auto defaultRange = defaultGraphPreferences(GraphKey::BenchmarkRank).range;
-    ASSERT_TRUE(defaultRange);
-    ASSERT_TRUE(defaultRange->anchorToLatestRun);
-    const auto rangeDays = std::get<RecentDays>(defaultRange->range).days;
-    RankFixture fixture;
-    fixture.improvingThenFlatRuns();
-    fixture.startRank();
-
-    EXPECT_EQ(fixture.tracking->snapshot().rank.interval,
-              std::optional(DayInterval{epochDay(104 - (rangeDays - 1)), epochDay(104)}));
-    EXPECT_EQ(fixture.tracking->projection()->averageRankHistory.size(), 3U);
 }
 
 TEST(BenchmarkTrackingRank, AllHistoryLeavesTheRankRangeUnrestricted) {

@@ -148,14 +148,6 @@ TestCase {
         compare(String(findMenuItemByText(menuBar.menuAt(0), "&Settings...").action.shortcut), "Ctrl+,")
     }
 
-    // Windows convention: File, View, then the app's own menus, Help last.
-    function test_menusFollowWindowsOrder() {
-        const menuBar = createTemporaryObject(menuBarComponent, testCase)
-        const titles = []
-        for (let i = 0; i < menuBar.count; ++i) titles.push(menuBar.menuAt(i).title)
-        compare(titles, ["&File", "&View", "&Benchmarks", "&Help"])
-    }
-
     function test_unrelatedActions_doNotEmitEitherSignal() {
         const menuBar = createTemporaryObject(menuBarComponent, testCase)
         verify(menuBar !== null, "AppMenuBar failed to instantiate")
@@ -214,20 +206,6 @@ TestCase {
             if (item && item.text === text) return i
         }
         return -1
-    }
-
-    function test_viewGraphsMenuListsEveryGraphGroupedByWorkspace() {
-        const menuBar = createTemporaryObject(wiredMenuBarComponent, testCase)
-        const graphsMenu = findChild(menuBar, "viewGraphsMenu")
-        verify(graphsMenu !== null, "viewGraphsMenu not found")
-        const order = ["Scenarios", "Run graph", "Daily playtime", "Scenario history",
-                       "Benchmarks", "Benchmark rank history", "Benchmark recent rank", "Benchmark playtime"]
-        let previous = -1
-        for (const text of order) {
-            const index = indexOfMenuItem(graphsMenu, text)
-            verify(index > previous, "'" + text + "' at " + index + " should come after index " + previous)
-            previous = index
-        }
     }
 
     function test_viewGraphsEntriesReadAndWriteEachGraphsVisibility_data() {

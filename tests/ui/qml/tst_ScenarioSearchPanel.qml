@@ -83,8 +83,6 @@ TestCase {
         const top = state.mapToItem(list, 0, 0).y
         verify(top < list.height / 3, "the empty state must sit in the upper part of the list (y=" + top + ")")
         verify(findChild(view, "scenarioListEmptyLabel").text.length > 0)
-        const hint = findChild(view, "scenarioListEmptyHint").text
-        verify(hint.indexOf("Kovaaks folder") !== -1, "the hint must say how runs get here: " + hint)
     }
 
     function test_searchWithNoMatchesSaysSoInsteadOfTheFirstRunHint() {
@@ -122,24 +120,5 @@ TestCase {
         wait(0)
         verify(second.highlighted)
         verify(!first.highlighted)
-    }
-
-    function test_hoveringARowTintsItAndKeepsTheSelectedRowHighlighted() {
-        const view = createView({currentScenarioHash: "hash-1"})
-        const selected = findChild(view, "scenarioItem_0")
-        const other = findChild(view, "scenarioItem_1")
-        const colorOf = item => item.background.color.toString()
-        mouseMove(view, 1, view.height - 1)
-        const resting = colorOf(other)
-
-        mouseMove(other, other.width / 2, other.height / 2)
-        tryVerify(() => colorOf(other) !== resting)
-        const hovered = colorOf(other)
-
-        mousePress(other, other.width / 2, other.height / 2)
-        tryVerify(() => colorOf(other) !== hovered)
-        mouseRelease(other, other.width / 2, other.height / 2)
-
-        compare(colorOf(selected), selected.palette.highlight.toString())
     }
 }

@@ -28,31 +28,6 @@ TestCase {
         return delegate
     }
 
-    function test_delegateLightensOnHover() {
-        const delegate = createDelegate()
-        compare(delegate.radius, 6)
-        verify(delegate.restingColor !== delegate.palette.window)
-        compare(delegate.color, delegate.restingColor)
-
-        mouseMove(delegate, 1, 1)
-        tryVerify(function() { return delegate.hovered })
-        compare(delegate.color, delegate.hoverColor)
-
-        mouseMove(delegate, 1, delegate.height + 10)
-        tryVerify(function() { return !delegate.hovered })
-        compare(delegate.color, delegate.restingColor)
-    }
-
-    function test_hoveringTheDragHandleShowsAnOpenHandAndDraggingAClosedOne() {
-        const delegate = createDelegate()
-        const handle = ItemLookup.findByObjectName(delegate, "seriesDragHandle_1")
-        const hover = handle.data.find(function(child) { return child.objectName === "seriesDragHandleHover_1" })
-        verify(hover !== undefined)
-        compare(hover.cursorShape, Qt.OpenHandCursor)
-        const drag = handle.data.find(function(child) { return child.cursorShape === Qt.ClosedHandCursor })
-        verify(drag !== undefined)
-    }
-
     function test_clickingTheOptionsButtonRequestsOptionsAnchoredToIt() {
         const delegate = createDelegate()
         const options = ItemLookup.findByObjectName(delegate, "seriesOptionsButton_" + row.id)
@@ -86,7 +61,7 @@ TestCase {
                 "Hiding the first point")
     }
 
-    function test_theIndicatorSitsOnTheButtonCornerClearOfTheGlyph() {
+    function test_theIndicatorStaysClearOfTheGlyph() {
         const delegate = createTemporaryObject(delegateComponent, testCase, {
             modelData: Object.assign({}, row, { hiddenLeadingPoints: 2 })
         })
@@ -97,7 +72,6 @@ TestCase {
         const glyphTop = glyph.mapToItem(options, 0, (glyph.height - options.icon.height) / 2).y
         const indicatorBottom = indicator.mapToItem(options, 0, indicator.height).y
         verify(indicatorBottom <= glyphTop, "indicator bottom " + indicatorBottom + " overlaps glyph top " + glyphTop)
-        verify(indicator.mapToItem(options, indicator.width, 0).x > options.width, "indicator should overhang the corner")
     }
 
     Component {

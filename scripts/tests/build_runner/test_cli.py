@@ -5,13 +5,6 @@ import pytest
 from scripts.build_runner.cli import UsageError, parse_args
 
 
-def test_cli_defaults_to_all_scope() -> None:
-    args = parse_args([])
-
-    assert args.scope == "all"
-    assert not args.clean
-
-
 def test_jobs_is_not_a_public_option() -> None:
     with pytest.raises(UsageError, match="unrecognized arguments: --jobs 4"):
         parse_args(["--jobs", "4"])

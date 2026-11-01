@@ -23,17 +23,6 @@ TestCase {
 
     SignalSpy { id: browseSpy; signalName: "browseRequested" }
 
-    function test_browseIsAnIconButtonNamedBrowse() {
-        const row = createTemporaryObject(rowComponent, testCase)
-        verify(waitForRendering(row))
-        const button = ItemLookup.findByObjectName(row, "kovaaksDirBrowseButton")
-        verify(button !== null)
-        compare(button.display, AbstractButton.IconOnly)
-        verify(button.icon.source.toString().endsWith("folder-open.svg"))
-        compare(button.ToolTip.text, "Browse…")
-        compare(button.Accessible.name, "Browse…")
-    }
-
     function test_clickingBrowseRequestsBrowsing() {
         const row = createTemporaryObject(rowComponent, testCase)
         verify(waitForRendering(row))

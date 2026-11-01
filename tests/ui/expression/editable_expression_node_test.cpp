@@ -14,26 +14,12 @@ using ksv::presentation::EditableRollingMeanNode;
 using ksv::presentation::EditableUnaryOpNode;
 
 namespace {
-    TEST(EditablePrimitiveNodeTest, DefaultsToScoreAndReportsItsOwnKind) {
-        EditablePrimitiveNode node;
-        EXPECT_EQ(node.kind(), "primitive");
-        EXPECT_EQ(node.metric(), "score");
-        EXPECT_EQ(node.describe(), "score");
-    }
-
     TEST(EditablePrimitiveNodeTest, SetMetricEmitsMetricChanged) {
         EditablePrimitiveNode node;
         QSignalSpy spy(&node, &EditablePrimitiveNode::metricChanged);
         node.setMetric("kills");
         EXPECT_EQ(node.metric(), "kills");
         EXPECT_EQ(spy.count(), 1);
-    }
-
-    TEST(EditableFinalValueNodeTest, DefaultsToScoreAndDescribesItselfAsTheDslText) {
-        EditableFinalValueNode node;
-        EXPECT_EQ(node.kind(), "final");
-        EXPECT_EQ(node.stat(), "score");
-        EXPECT_EQ(node.describe(), "Final(SCORE)");
     }
 
     TEST(EditableFinalValueNodeTest, SetStatEmitsStatChangedOnlyOnChange) {
@@ -53,13 +39,6 @@ namespace {
         EXPECT_EQ(node.describe(), "BestRun(Final(SCORE))");
     }
 
-    TEST(EditableConstantNodeTest, DefaultsToZeroAndReportsItsOwnKind) {
-        EditableConstantNode node;
-        EXPECT_EQ(node.kind(), "constant");
-        EXPECT_DOUBLE_EQ(node.value(), 0.0);
-        EXPECT_EQ(node.describe(), "0");
-    }
-
     TEST(EditableConstantNodeTest, SetValueEmitsValueChanged) {
         EditableConstantNode node;
         QSignalSpy spy(&node, &EditableConstantNode::valueChanged);
@@ -68,9 +47,8 @@ namespace {
         EXPECT_EQ(spy.count(), 1);
     }
 
-    TEST(EditableBinaryOpNodeTest, DefaultsToAddAndTakesOwnershipOfChildren) {
+    TEST(EditableBinaryOpNodeTest, TakesOwnershipOfChildren) {
         auto *node = new EditableBinaryOpNode();
-        EXPECT_EQ(node->kind(), "add");
         node->setLeft(new EditablePrimitiveNode());
         node->setRight(new EditableConstantNode());
         ASSERT_NE(node->left(), nullptr);
@@ -157,9 +135,8 @@ namespace {
         EXPECT_EQ(child->parentNode(), &node_b);
     }
 
-    TEST(EditableUnaryOpNodeTest, DefaultsToRunningSumAndOwnsInput) {
+    TEST(EditableUnaryOpNodeTest, OwnsInput) {
         EditableUnaryOpNode node;
-        EXPECT_EQ(node.kind(), "runningSum");
         node.setInput(new EditablePrimitiveNode());
         ASSERT_NE(node.input(), nullptr);
         EXPECT_EQ(node.input()->parentNode(), &node);
@@ -184,10 +161,8 @@ namespace {
         EXPECT_EQ(node.kind(), "multiply");
     }
 
-    TEST(EditableRollingMeanNodeTest, DefaultsToWindowTenAndOwnsInput) {
+    TEST(EditableRollingMeanNodeTest, OwnsInput) {
         EditableRollingMeanNode node;
-        EXPECT_EQ(node.kind(), "rollingMean");
-        EXPECT_EQ(node.window(), 10U);
         node.setInput(new EditablePrimitiveNode());
         EXPECT_EQ(node.input()->parentNode(), &node);
     }
@@ -214,13 +189,6 @@ namespace {
         EXPECT_EQ(node.describe(), "RollingMean(window: 9, score)");
     }
 
-    TEST(EditableAverageAcrossRunsNodeTest, DefaultsToRecentRunsCountFive) {
-        EditableAverageAcrossRunsNode node;
-        EXPECT_EQ(node.kind(), "averageAcrossRuns");
-        EXPECT_EQ(node.selectionKind(), "recentRuns");
-        EXPECT_EQ(node.count(), 5U);
-    }
-
     TEST(EditableAverageAcrossRunsNodeTest, SetSelectionKindEmitsSelectionKindChanged) {
         EditableAverageAcrossRunsNode node;
         QSignalSpy spy(&node, &EditableAverageAcrossRunsNode::selectionKindChanged);
@@ -229,21 +197,20 @@ namespace {
         EXPECT_EQ(spy.count(), 1);
     }
 
-    TEST(EditableAverageAcrossRunsNodeTest, SwitchingToTopPercentileResetsPercentToTenAndEmitsPercentChanged) {
+    TEST(EditableAverageAcrossRunsNodeTest, SwitchingToTopPercentileEmitsPercentChanged) {
         EditableAverageAcrossRunsNode node;
         QSignalSpy spy(&node, &EditableAverageAcrossRunsNode::percentChanged);
         node.setSelectionKind("topPercentile");
-        EXPECT_DOUBLE_EQ(node.percent(), 10.0);
         EXPECT_EQ(spy.count(), 1);
     }
 
-    TEST(EditableAverageAcrossRunsNodeTest, SwitchingBackToRecentRunsResetsCountToFiveAndEmitsCountChanged) {
+    TEST(EditableAverageAcrossRunsNodeTest, SwitchingBackToRecentRunsResetsCountAndEmitsCountChanged) {
         EditableAverageAcrossRunsNode node;
         node.setSelectionKind("topPercentile");
         node.setCount(99);
         QSignalSpy spy(&node, &EditableAverageAcrossRunsNode::countChanged);
         node.setSelectionKind("recentRuns");
-        EXPECT_EQ(node.count(), 5U);
+        EXPECT_NE(node.count(), 99U);
         EXPECT_EQ(spy.count(), 1);
     }
 

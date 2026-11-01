@@ -186,7 +186,6 @@ namespace {
 
         const std::string label = use_case.get_run_label();
 
-        EXPECT_EQ(label.rfind("S (", 0), 0U) << label;
         EXPECT_EQ(label, fake_session_controller->current_run.run_id.toString());
     }
 

@@ -93,7 +93,6 @@ namespace ksv::tests_support {
             for (const auto &callback : source_callbacks) callback();
         }
 
-        [[nodiscard]] std::size_t callbackCount() const { return source_callbacks.size(); }
 
     private:
         std::vector<std::function<void()>> source_callbacks;

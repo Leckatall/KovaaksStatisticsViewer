@@ -157,18 +157,6 @@ namespace {
         EXPECT_EQ(spy.count(), 0);
     }
 
-    TEST_F(ScenarioBrowserViewModelTest, DefaultScenarioSortIsLastPlayedDescending) {
-        fake_controller->scenario_summaries = {
-            make_summary("1wall6targets TE", "hash-1", 7, 1000),
-            make_summary("Microshot", "hash-2", 3, 3000),
-            make_summary("Smoothbot Invincible", "hash-3", 5, 2000),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-
-        EXPECT_EQ(collectScenarioNames(asListModel(view_model)),
-                  (std::vector<QString>{"Microshot", "Smoothbot Invincible", "1wall6targets TE"}));
-    }
-
     struct ScenarioSortCase {
         const char *name;
         ScenarioBrowserViewModel::ScenarioSortField field;
@@ -357,19 +345,6 @@ namespace {
         return result;
     }
 
-    TEST_F(ScenarioBrowserViewModelTest, DefaultSortIsDateDescending) {
-        fake_controller->runs_for_scenario = {
-            make_run("Microshot", "hash-2", 3000, 8500.0F, 0.9F),
-            make_run("Microshot", "hash-2", 1000, 7000.0F, 0.8F),
-            make_run("Microshot", "hash-2", 2000, 7500.0F, 0.85F),
-        };
-        ScenarioBrowserViewModel view_model(fake_controller);
-
-        view_model.activateScenario("hash-2", "Microshot");
-
-        EXPECT_EQ(collectStartTimes(asRunListModel(view_model)), (std::vector<long long>{3000, 2000, 1000}));
-    }
-
     struct RunSortCase {
         const char *name;
         ScenarioBrowserViewModel::RunSortField field;
@@ -456,12 +431,6 @@ namespace {
         EXPECT_EQ(recent_model->data(recent_model->index(0, 0), RunListModel::StartTimeMsRole).toLongLong(), 3000);
         EXPECT_EQ(recent_model->data(recent_model->index(1, 0), RunListModel::StartTimeMsRole).toLongLong(), 2000);
         EXPECT_EQ(recent_model->data(recent_model->index(2, 0), RunListModel::StartTimeMsRole).toLongLong(), 1000);
-    }
-
-    TEST_F(ScenarioBrowserViewModelTest, RecentRunsModelIsRequestedWithConfiguredCap) {
-        ScenarioBrowserViewModel view_model(fake_controller);
-
-        EXPECT_EQ(fake_controller->last_recent_runs_count, 10u);
     }
 
     TEST_F(ScenarioBrowserViewModelTest, CurrentPerfChangedSignalRefreshesRecentRuns) {

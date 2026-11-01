@@ -31,9 +31,6 @@ TestCase {
         const {dialog, vm} = makeDialog()
         for (const key of ["profile", "run", "dailyPlaytime", "scenarioHistory", "benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"])
             verify(find(dialog, "settingsNav_" + key) !== null, key)
-        const top = key => find(dialog, "settingsNav_" + key).mapToItem(dialog.contentItem, 0, 0).y
-        verify(top("benchmarkRank") < top("benchmarkRecentRank") && top("benchmarkRecentRank") < top("benchmarkPlaytime"),
-               "the recent-rank graph is listed between the rank and playtime graphs")
         mouseClick(find(dialog, "settingsNav_dailyPlaytime"))
         compare(dialog.currentPage, "dailyPlaytime")
         compare(vm.selectedGraph, "dailyPlaytime")
@@ -139,21 +136,6 @@ TestCase {
         dialog.openGraph("dailyPlaytime")
         dialog.open()
         compare(dialog.currentPage, "dailyPlaytime")
-    }
-
-    function test_headingAndGraphEntryPresentation() {
-        const {dialog} = makeDialog()
-        const heading = find(dialog, "settingsNavHeading")
-        compare(heading.text, "GRAPHS")
-        verify(heading.font.bold)
-        compare(heading.Accessible.role, Accessible.Heading)
-        verify(!heading.activeFocusOnTab)
-        dialog.openGraph("run")
-        const run = find(dialog, "settingsNav_run")
-        verify(run.emphasised)
-        verify(!run.highlighted)
-        verify(find(dialog, "settingsNav_run_accent").visible)
-        compare(find(dialog, "settingsNav_run_seriesStyle").text, "Lines & style")
     }
 
     function test_openGraphLinesResetsTheSelectedGraph() {

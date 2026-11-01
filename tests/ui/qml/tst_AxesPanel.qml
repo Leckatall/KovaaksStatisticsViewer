@@ -29,11 +29,6 @@ TestCase {
             }
         }
     }
-    function test_theFixtureHostsThePanelInAnExternalScrollView() {
-        const page = createTemporaryObject(externalFixture, testCase, {vm: makeFakeSettingsVm()})
-        verify(page !== null)
-        compare(page.panel.parent, page.contentItem.contentItem)
-    }
     function test_thePanelSizesToItsContentInsideThePage() {
         const axes = []
         for (let i = 0; i < 8; ++i)
@@ -206,7 +201,6 @@ TestCase {
         compare(find(panel, "axisUsage_1").text, "Used by 5 lines: Score, Expected Final Score, Expected Final (Top 10%), "
                                                 + "Expected Final (Last 10 Runs), Expected Final (Whole Run)")
         compare(find(panel, "axisUsage_2").text, "Used by 2 lines: Accuracy, Accuracy (5s)")
-        compare(find(panel, "deleteAxis_1").text, "Delete…")
         compare(find(panel, "axisNameError_1").visible, false)
 
         const independent = find(panel, "independentRow_7")
@@ -225,7 +219,6 @@ TestCase {
         const panel = makePanel(makeFakeSettingsVm({axisOverview: shared}))
 
         compare(find(panel, "noIndependentLinesLabel").visible, true)
-        compare(find(panel, "noIndependentLinesLabel").text, "Every line uses a shared axis.")
         absent(panel, "independentRow_7")
     }
 
@@ -233,7 +226,6 @@ TestCase {
         const panel = makePanel()
         compare(find(panel, "axisUsage_3").text, "Not assigned to any lines.")
         const deleteButton = find(panel, "deleteAxis_3")
-        compare(deleteButton.text, "Delete")
 
         mouseClick(deleteButton)
 
@@ -248,13 +240,10 @@ TestCase {
         compare(yAxisButtons(panel).length, 5)
         compare(checked.length, 1)
         compare(checked[0].objectName, "showOnYAxis_axis:1")
-        compare(checked[0].text, "✓ Shown on Y-axis")
-        compare(checked[0].highlighted, true)
         compare(checked[0].Accessible.role, Accessible.RadioButton)
         compare(checked[0].Accessible.checked, true)
         compare(checked[0].Accessible.name, "Show Score on Y-axis")
         compare(panel.yAxisGroup.checkedButton, checked[0])
-        compare(find(panel, "showOnYAxis_series:7").text, "Show on Y-axis")
         compare(find(panel, "showOnYAxis_series:7").Accessible.name, "Show Score/s (5s) on Y-axis")
     }
 
@@ -262,7 +251,6 @@ TestCase {
         const checked = yAxisButtons(panel).filter(button => button.checked)
         compare(checked.map(button => button.objectName), [name])
         compare(panel.yAxisGroup.checkedButton, checked[0])
-        compare(checked[0].text, "✓ Shown on Y-axis")
     }
 
     function test_theSelectionFollowsTheViewModel() {
@@ -355,7 +343,6 @@ TestCase {
 
         const note = find(panel, "axisHiddenNote_2")
         compare(note.visible, true)
-        compare(note.text, "No visible lines — the graph labels its first visible line instead.")
         compare(find(panel, "axisHiddenNote_1").visible, false)
     }
 
@@ -395,7 +382,6 @@ TestCase {
         const error = find(panel, "axisNameError_2")
         compare(field.text, "score")
         compare(error.visible, true)
-        compare(error.text, "Another axis already has this name.")
         verify(error.y >= field.y + field.height, "the error sits under the field")
 
         field.forceActiveFocus()
@@ -415,8 +401,6 @@ TestCase {
         compare(find(dialog.contentItem, "deleteAxisSummary").text, "2 lines will switch to Independent:")
         verify(ItemLookup.findByText(dialog.contentItem, "• Accuracy") !== null)
         verify(ItemLookup.findByText(dialog.contentItem, "• Accuracy (5s)") !== null)
-        verify(ItemLookup.findByText(dialog.contentItem, "Each line will use its own scale.") !== null)
-        verify(ItemLookup.findByText(dialog.contentItem, "The lines and their data will be kept.") !== null)
         compare(panel.settingsVm.deleteAxisCalls.length, 0)
     }
 

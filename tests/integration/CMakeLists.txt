@@ -48,10 +48,6 @@ endforeach()
 
 target_compile_definitions(integration_tests PRIVATE
     TEST_FILES_DIR="${CMAKE_CURRENT_BINARY_DIR}/examples"
-    # Real Main.qml on disk: the benchmark-composition and smoke tests assert its
-    # required-property contract against the source, which the compiled QML module
-    # no longer reports once the initial properties satisfy it.
-    KSV_UI_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../src/ui/qml"
 )
 
 # The UI driver core only exists when the dev tools are built (tools/driver).

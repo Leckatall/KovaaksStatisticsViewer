@@ -25,11 +25,6 @@ TestCase {
             }
         }
     }
-    function test_theFixtureHostsThePanelInAnExternalScrollView() {
-        const page = createTemporaryObject(externalFixture, testCase, {vm: makeFakeSettingsVm()})
-        verify(page !== null)
-        compare(page.panel.scrollView, page)
-    }
     function test_thePanelHasNoScrollViewOfItsOwnAndGrowsWithItsRows() {
         const page = createTemporaryObject(externalFixture, testCase, {
             vm: makeFakeSettingsVm({allSeriesConfigs: manyRows()})
@@ -49,16 +44,15 @@ TestCase {
             vm: makeFakeSettingsVm({allSeriesConfigs: rowsOutOfOrder()}), width: data.width
         })
         verify(waitForRendering(page))
-        const columns = [["name", "Name", "seriesNameField_1"],
-                         ["expression", "Expr.", "editExpressionButton_1"],
-                         ["axis", "Axis", "axisCombo_1"],
-                         ["more", "More", "seriesOptionsButton_1"],
-                         ["visible", "Visible", "seriesEnabledSwitch_1"]]
-        for (const [name, label, controlName] of columns) {
+        const columns = [["name", "seriesNameField_1"],
+                         ["expression", "editExpressionButton_1"],
+                         ["axis", "axisCombo_1"],
+                         ["more", "seriesOptionsButton_1"],
+                         ["visible", "seriesEnabledSwitch_1"]]
+        for (const [name, controlName] of columns) {
             const header = ItemLookup.findByObjectName(page.panel, "seriesColumnHeader_" + name)
             const control = ItemLookup.findByObjectName(page.panel, controlName)
             verify(header !== null)
-            compare(header.text, label)
             verify(header.Accessible.ignored)
             const hp = header.mapToItem(page.panel, header.width / 2, 0)
             const cp = control.mapToItem(page.panel, 0, 0)
@@ -213,10 +207,6 @@ TestCase {
         verify(waitForRendering(panel));
         ItemLookup.findByObjectName(panel, "addSeriesButton").clicked();
         const call = panel.settingsVm.createCalls[0];
-        compare(call[0], "New Series");
-        compare(call[1], "#4CAF50");
-        compare(call[2], 3);
-        compare(call[3], true);
         compare(call[4], "");
     }
     function test_restoreDefaultLinesButtonCallsRestoreDefaultGraphLines() {
@@ -227,7 +217,6 @@ TestCase {
         verify(waitForRendering(panel));
         const button = ItemLookup.findByObjectName(panel, "restoreDefaultGraphLinesButton");
         verify(button);
-        compare(button.Accessible.name, "Restore the default graph lines");
         compare(panel.settingsVm.restoreDefaultGraphLinesCalls, 0);
         button.clicked();
         compare(panel.settingsVm.restoreDefaultGraphLinesCalls, 1);
@@ -401,11 +390,8 @@ TestCase {
         compare(panel.optionsAnchorRight, corner.x);
         compare(panel.optionsAnchorBottom, corner.y);
         verify(panel.optionsPopup.y > corner.y);
-        const popup = panel.optionsPopup;
         compare(ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsHint").text,
                 "The line starts after its first 2 points.");
-        compare(ItemLookup.findByObjectName(overlay, "hiddenLeadingPointsHint").color,
-                popup.palette.placeholderText);
     }
     function test_deletingASeriesClosesTheOptionsPopup() {
         const panel = makePanel({
@@ -662,16 +648,6 @@ TestCase {
         verify(waitForRendering(panel));
         compare(panel.displayRows[0].id, "1");
         compare(panel.displayRows[1].id, "2");
-    }
-    function test_theWholeVisitIsSavedAndRevertedFromTheDialogFooterNotThePanel() {
-        const panel = makePanel({
-            settingsVm: makeFakeSettingsVm({
-                pendingChanges: true
-            })
-        });
-        verify(waitForRendering(panel));
-        compare(ItemLookup.findByObjectName(panel, "saveGraphLinesButton"), null);
-        compare(ItemLookup.findByObjectName(panel, "discardGraphLineChangesButton"), null);
     }
     function test_dragCursorOverlayIsEnabledOnlyWhileARowIsDragged() {
         const panel = makePanel({

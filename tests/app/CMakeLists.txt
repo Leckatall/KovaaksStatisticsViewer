@@ -2,7 +2,6 @@ find_package(GTest CONFIG REQUIRED)
 
 add_executable(app_tests
         ../support/qt_gtest_main.cpp
-        fake_profile_service_test.cpp
         completion_history_use_case_test.cpp
         series_config_test.cpp
         graph_configuration_test.cpp

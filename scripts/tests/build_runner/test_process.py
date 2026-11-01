@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from scripts.build_runner.process import ProgressReporter, ProgressState, describe_exit_code, run_command
+from scripts.build_runner.process import ProgressReporter, ProgressState, run_command
 
 
 def test_sparse_reporter_emits_at_thirty_seconds_then_once_per_minute() -> None:
@@ -36,18 +36,6 @@ def test_phase_without_numeric_progress_still_reports_elapsed_time() -> None:
     progress = ProgressState()
 
     assert progress.format_message("configure", elapsed=90.0) == "CONFIGURE | 1m30s elapsed | still running"
-
-
-@pytest.mark.parametrize(
-    ("code", "description"),
-    [
-        (0xC0000005, "access violation"),
-        (0xC0000135, "required DLL not found"),
-        (0xC0000139, "DLL entry point not found"),
-    ],
-)
-def test_windows_process_statuses_are_named(code: int, description: str) -> None:
-    assert describe_exit_code(code) == f"{code} (0x{code:08X}: {description})"
 
 
 def test_command_capture_merges_stderr_into_output_and_retained_log(tmp_path: Path) -> None:

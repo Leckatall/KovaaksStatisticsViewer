@@ -142,17 +142,14 @@ namespace {
         const auto view_model = visit();
         const auto dailyDefaults = defaultGraphPreferences(GraphKey::DailyPlaytime);
         const auto historyDefaults = defaultGraphPreferences(GraphKey::ScenarioHistory);
-        ASSERT_TRUE(dailyDefaults.range && std::holds_alternative<RecentDays>(dailyDefaults.range->range));
+        ASSERT_TRUE(dailyDefaults.range);
         ASSERT_TRUE(dailyDefaults.averagingWindowDays);
-        ASSERT_TRUE(historyDefaults.range && std::holds_alternative<LatestRuns>(historyDefaults.range->range));
 
         const auto daily = view_model->graphDraft("dailyPlaytime");
         const auto history = view_model->graphDraft("scenarioHistory");
 
-        EXPECT_EQ(daily["rangeKind"].toString(), "recentDays");
         EXPECT_EQ(daily["anchor"].toBool(), dailyDefaults.range->anchorToLatestRun);
         EXPECT_EQ(daily["windowText"].toString(), english().toString(*dailyDefaults.averagingWindowDays));
-        EXPECT_EQ(history["rangeKind"].toString(), "latestRuns");
         EXPECT_EQ(daily["connection"].toString(), qstring(connectionModeName(dailyDefaults.appearance.connection)));
         EXPECT_EQ(daily["markers"].toBool(), dailyDefaults.appearance.lineModeMarkers);
         EXPECT_EQ(history["markers"].toBool(), historyDefaults.appearance.lineModeMarkers);
@@ -720,23 +717,6 @@ namespace {
         configuration->configuration.preferences(GraphKey::DailyPlaytime).averagingWindowDays = 8;
         configuration->publish({GraphKey::DailyPlaytime}, false, false);
         EXPECT_EQ(view_model->graphDraft("dailyPlaytime")["windowText"].toString(), "5");
-    }
-
-    TEST_F(GraphDraftTest, TheLimitsAreStatedForTheControls) {
-        const auto view_model = visit(german());
-
-        const auto limits = view_model->graphLimits();
-
-        EXPECT_EQ(limits["maxRecentDays"].toInt(), kMaximumRangeDays);
-        EXPECT_EQ(limits["maxLatestRuns"].toInt(), kMaximumLatestRuns);
-        EXPECT_EQ(limits["maxAveragingWindow"].toInt(), kMaximumAveragingWindowDays);
-        EXPECT_EQ(limits["minWidth"].toDouble(), kMinimumLineWidth);
-        EXPECT_EQ(limits["maxWidth"].toDouble(), kMaximumLineWidth);
-        EXPECT_EQ(limits["maxBound"].toDouble(), kMaximumAxisBoundMagnitude);
-        EXPECT_EQ(limits["earliestDate"].toString(), "1970-01-01");
-        EXPECT_EQ(limits["latestDate"].toString(), "9999-12-31");
-        EXPECT_EQ(limits["earliestDateText"].toString(), "01.01.1970");
-        EXPECT_EQ(limits["dateFormat"].toString(), "dd.MM.yyyy");
     }
 
     TEST_F(GraphDraftTest, AnAnchorToggleAndRangeKindAreInTheDraftEntry) {

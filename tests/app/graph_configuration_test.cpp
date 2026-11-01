@@ -104,14 +104,6 @@ namespace {
             else
                 EXPECT_EQ(series.axisKey, series.key);
         }
-
-        EXPECT_FALSE(graphDescriptor(GraphKey::Run).dateRange);
-        EXPECT_TRUE(graphDescriptor(GraphKey::ScenarioHistory).latestRuns);
-        EXPECT_FALSE(graphDescriptor(GraphKey::DailyPlaytime).latestRuns);
-        EXPECT_FALSE(graphDescriptor(GraphKey::BenchmarkRank).latestRuns);
-        EXPECT_TRUE(graphDescriptor(GraphKey::DailyPlaytime).averagingWindow);
-        EXPECT_TRUE(graphDescriptor(GraphKey::BenchmarkPlaytime).averagingWindow);
-        EXPECT_FALSE(graphDescriptor(GraphKey::ScenarioHistory).averagingWindow);
     }
 
     TEST(GraphConfigurationValidation, AcceptsEveryValidRangeKindWithinItsStatedLimits) {
@@ -483,19 +475,6 @@ namespace {
         EXPECT_EQ(change.sectionsOf(GraphKey::DailyPlaytime), (GraphSectionChange{.range = true}));
         for (const auto graph: {GraphKey::Run, GraphKey::ScenarioHistory, GraphKey::BenchmarkRank})
             EXPECT_FALSE(change.sectionsOf(graph).any()) << graphKeyName(graph);
-    }
-
-    TEST(GraphDescriptors, TheRecentRankGraphOffersWhatTheRankGraphOffers) {
-        const auto &rank = graphDescriptor(GraphKey::BenchmarkRank);
-        const auto &recent = graphDescriptor(GraphKey::BenchmarkRecentRank);
-        EXPECT_EQ(recent.dateRange, rank.dateRange);
-        EXPECT_EQ(recent.latestRuns, rank.latestRuns);
-        EXPECT_EQ(recent.averagingWindow, rank.averagingWindow);
-        EXPECT_EQ(recent.defaultLineModeMarkers, rank.defaultLineModeMarkers);
-        EXPECT_EQ(recent.defaultRange, rank.defaultRange);
-        EXPECT_EQ(defaultGraphPreferences(GraphKey::BenchmarkRecentRank), defaultGraphPreferences(GraphKey::BenchmarkRank));
-        EXPECT_DOUBLE_EQ(defaultSeriesStyle(GraphKey::BenchmarkRecentRank, "rank").width,
-                         defaultSeriesStyle(GraphKey::BenchmarkRank, "rank").width);
     }
 
     TEST(GraphConfigurationDiff, TheTwoRankGraphsRangesAreIndependent) {

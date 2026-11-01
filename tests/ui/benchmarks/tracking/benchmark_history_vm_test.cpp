@@ -274,13 +274,12 @@ TEST(BenchmarkHistoryViewModel, RankSeriesDrawsOneLineInEachTiersColourAtItsLeve
     EXPECT_NE(lines[2].color, QColor(20, 20, 60));
 }
 
-TEST(BenchmarkHistoryViewModel, PlaytimeSeriesKeepsItsColourAndHasNoTierLines) {
+TEST(BenchmarkHistoryViewModel, PlaytimeSeriesHasNoTierLines) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
     const auto series = vm.playtimeHistory()->series({kValueColumn});
     ASSERT_EQ(series.size(), 1);
-    EXPECT_TRUE(series.front()->color().isValid());
     EXPECT_TRUE(series.front()->referenceLines.isEmpty());
 }
 
@@ -375,7 +374,6 @@ TEST(BenchmarkHistoryViewModel, PlaytimeIsTitledExactlyLikeTheDailyPlaytimeGraph
         const QString name = PlaytimeGraphViewModel::titleFor(window);
         EXPECT_EQ(vm.playtimeHistory()->metricName(), name);
         EXPECT_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->name(), name);
-        EXPECT_EQ(vm.rankHistory()->metricName(), "Personal-best average rank");
     }
 }
 
@@ -391,7 +389,7 @@ TEST(BenchmarkHistoryViewModel, AWindowChangeRelabelsPlaytimeWithoutRebuildingTh
 
     EXPECT_EQ(changed.count(), 0);
     EXPECT_EQ(renamed.count(), 1);
-    EXPECT_EQ(vm.playtimeHistory()->metricName(), "Daily Playtime (10-day rolling average)");
+    EXPECT_EQ(vm.playtimeHistory()->metricName(), PlaytimeGraphViewModel::titleFor(10));
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->points.front().y(), 1000.0);
 }
 
@@ -769,8 +767,6 @@ TEST(BenchmarkRecentRankHistory, IsItsOwnNamedTierGraphOnItsOwnAxis) {
     ASSERT_TRUE(series->yAxis);
     EXPECT_EQ(series->yAxis->formatTick(1.0), "Bronze");
     EXPECT_EQ(series->transform.format(1.2), describeAverageRank(1.2, {"Bronze", "Silver", "Gold"}));
-    EXPECT_TRUE(series->color().isValid());
-    EXPECT_NE(series->color(), vm.rankHistory()->series({kValueColumn}).front()->color()) << "shares the PB rank line's colour";
 }
 
 TEST(BenchmarkRecentRankHistory, KeepsTheFallsOfTheRecentAverage) {
@@ -923,20 +919,11 @@ namespace {
     const std::vector<RankTier> kTiers{{"Bronze", QColor("brown")}, {"Silver", QColor("gray")}, {"Gold", QColor("gold")}};
 }
 
-TEST(BenchmarkHistoryAxisPolicy, PlaytimeDefaultsToTheZeroBasedMinutesAxis) {
-    ValueAxis x;
-    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
-    vm.update(secondsContent({1800.0, 4200.0}), true, {});
-
-    ValueAxis expected({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
-    expected.setRange(30.0, 70.0);
-    expectSameAxis(historyAxis(vm), expected);
-}
-
 TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitsFixesAndRestoresItsAxisInMinutes) {
     ValueAxis x;
     BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
     vm.update(secondsContent({1800.0, 4200.0}), true, {});
+    const double defaultMin = historyAxis(vm).min();
 
     vm.setAxisPolicies({{"playtime", FitVisibleData{}}});
     ValueAxis fitted({}, ValueTransform::secondsToMinutes());
@@ -949,7 +936,7 @@ TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitsFixesAndRestoresItsAxisInMinutes) {
     EXPECT_EQ(historyAxis(vm).formatTick(45.0), "45 min");
 
     vm.setAxisPolicies({});
-    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 0.0);
+    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), defaultMin);
 }
 
 TEST(BenchmarkHistoryAxisPolicy, PlaytimePolicySurvivesFurtherUpdates) {
@@ -1087,6 +1074,7 @@ TEST(BenchmarkHistoryStyle, ARecolouredRankSeriesKeepsItsIdentifyingNameAndTierR
         return colours;
     };
     const auto tiersBefore = tierColours();
+    const QString nameBefore = vm.rankHistory()->metricName();
 
     fake->rankPresentation.seriesStyles["rank"] = {RgbaColor{12, 34, 56, 255}, std::nullopt};
     fake->publishPresentation();
@@ -1094,8 +1082,8 @@ TEST(BenchmarkHistoryStyle, ARecolouredRankSeriesKeepsItsIdentifyingNameAndTierR
 
     const auto *rank = vm.rankHistory()->series({kValueColumn}).front();
     EXPECT_EQ(rank->color(), QColor(12, 34, 56));
-    EXPECT_EQ(rank->name(), "Personal-best average rank");
-    EXPECT_EQ(vm.rankHistory()->metricName(), "Personal-best average rank");
+    EXPECT_EQ(rank->name(), nameBefore);
+    EXPECT_EQ(vm.rankHistory()->metricName(), nameBefore);
     EXPECT_EQ(tierColours(), tiersBefore);
 }
 

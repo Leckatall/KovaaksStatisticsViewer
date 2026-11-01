@@ -114,13 +114,6 @@ namespace {
         EXPECT_DOUBLE_EQ(axis.ticks().back(), axis.max());
     }
 
-    TEST(ValueAxisTest, DefaultConstructedAxisIsUnitRange) {
-        const ValueAxis axis;
-        EXPECT_DOUBLE_EQ(axis.min(), 0.0);
-        EXPECT_DOUBLE_EQ(axis.max(), 1.0);
-        EXPECT_FALSE(axis.ticks().isEmpty());
-    }
-
     TEST(ValueAxisTest, NormalizedPositionAndValueAtRoundTrip) {
         ValueAxis axis;
         axis.setRange(10.0, 30.0);

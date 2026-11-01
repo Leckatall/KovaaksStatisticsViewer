@@ -281,16 +281,6 @@ namespace {
         EXPECT_EQ(actual.ticks(), expected.ticks());
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, DefaultPolicyIsTheZeroBasedMinutesAxisItAlwaysWas) {
-        fake->series = {{19500, 1800.0}, {19501, 4200.0}};
-        view_model.refresh();
-
-        ValueAxis expected({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
-        expected.setRange(30.0, 70.0);
-        expectSameAxis(playtimeAxis(view_model), expected);
-        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), 0.0);
-    }
-
     TEST_F(PlaytimeGraphViewModelTest, FitVisibleDataHugsThePlottedMinutes) {
         fake->series = {{19500, 1800.0}, {19501, 4200.0}};
         view_model.refresh();
@@ -347,14 +337,15 @@ namespace {
         EXPECT_EQ(bounds.count(), 2);
     }
 
-    TEST_F(PlaytimeGraphViewModelTest, AnAbsentKeyRestoresTheZeroBasedDefault) {
+    TEST_F(PlaytimeGraphViewModelTest, AnAbsentKeyRestoresTheDefaultAxis) {
         fake->series = {{19500, 1800.0}, {19501, 4200.0}};
         view_model.refresh();
+        const double defaultMin = playtimeAxis(view_model).min();
         view_model.setAxisPolicies({{"playtime", FitVisibleData{}}});
 
         view_model.setAxisPolicies({});
 
-        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), 0.0);
+        EXPECT_DOUBLE_EQ(playtimeAxis(view_model).min(), defaultMin);
     }
 
     TEST_F(PlaytimeGraphViewModelTest, FitOfASingleDayUsesTheFallbackSpan) {

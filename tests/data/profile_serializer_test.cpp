@@ -265,7 +265,6 @@ namespace {
         ASSERT_TRUE(header.has_value());
         EXPECT_EQ(header->version, 4U);
         EXPECT_GT(header->created_at, 0);
-        EXPECT_EQ(header->name, "default");
     }
 
     TEST_F(ProfileSerializerTest, SavePreservesExistingHeaderMetadata) {

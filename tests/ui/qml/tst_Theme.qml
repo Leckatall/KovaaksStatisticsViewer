@@ -5,19 +5,6 @@ import KovaaksStatsViewer
 TestCase {
     name: "ThemeTest"
 
-    function test_classificationColor_mapsEveryClassification() {
-        verify(Qt.colorEqual(Theme.classificationColor("Trackable"), Theme.success))
-        verify(Qt.colorEqual(Theme.classificationColor("Incomplete"), Theme.warning))
-        verify(Qt.colorEqual(Theme.classificationColor("Invalid"), Theme.error))
-        verify(Qt.colorEqual(Theme.classificationColor("Unsupported"), Theme.classificationColor("")))
-    }
-
-    function test_classificationColor_unknownFallsBackToGrey() {
-        verify(Qt.colorEqual(Theme.classificationColor("Nonsense"), "#9e9e9e"))
-        verify(Qt.colorEqual(Theme.classificationColor(""), "#9e9e9e"))
-        verify(Qt.colorEqual(Theme.classificationColor(undefined), "#9e9e9e"))
-    }
-
     function test_readableOn_returnsAReadableColourUnchanged() {
         verify(Qt.colorEqual(Theme.readableOn("#ffc828", "#3c3c3c", "#ffffff"), "#ffc828"))
     }

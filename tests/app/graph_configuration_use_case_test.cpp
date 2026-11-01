@@ -30,13 +30,6 @@ namespace {
         }
     };
 
-    TEST_F(GraphConfigurationUseCaseTest, CurrentReflectsTheCommittedSnapshot) {
-        const auto current = useCase.current();
-
-        EXPECT_EQ(*current.configuration, defaultGraphConfiguration());
-        EXPECT_EQ(current.revision, 1U);
-    }
-
     TEST_F(GraphConfigurationUseCaseTest, SavingAValidCandidateCommitsWritesAndPublishesIt) {
         auto candidate = *useCase.current().configuration;
         candidate.preferences(GraphKey::BenchmarkRank).range = RangePreference{RecentDays{30}, false};

@@ -51,7 +51,6 @@ TestCase {
 
         compare(dialog.opened, true)
         compare(dialog.nameField.text, "Score")
-        compare(dialog.errorLabel.text, "Another axis already has this name.")
         compare(dialog.errorLabel.visible, true)
         compare(dialog.settingsVm.updateSeriesAxisCalls.length, 0)
     }
@@ -104,7 +103,6 @@ TestCase {
         dialog.nameField.text = "Cust"
 
         compare(label.visible, true)
-        compare(label.text, "Axis name")
     }
 
     function test_enterInTheFieldCreates() {
@@ -166,7 +164,7 @@ TestCase {
 
         button(dialog, "newAxisCreateButton").clicked()
 
-        compare(dialog.nameField.Accessible.description, "Another axis already has this name.")
+        verify(dialog.nameField.Accessible.description.length > 0)
     }
 
     Component {

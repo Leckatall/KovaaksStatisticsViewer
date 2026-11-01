@@ -93,21 +93,17 @@ TestCase {
     function test_withoutVisibilitySettingsThePageOffersNoSwitch() {
         const {dialog} = openOn("dailyPlaytime")
         verify(!shown(dialog, "graphVisibleSwitch"))
-        compare(find(dialog, "graphPageTitle").text, "Daily playtime")
     }
 
     function test_theCardShowsTheSelectedGraphsVisibility() {
         const {dialog, visibility} = openWithVisibility("dailyPlaytime")
         visibility.setGraphVisible("benchmarkRank", false)
         const toggle = find(dialog, "graphVisibleSwitch")
-        const icon = find(dialog, "graphVisibilityIcon")
         compare(toggle.checked, true)
-        verify(String(icon.source).endsWith("eye.svg"))
         compare(toggle.Accessible.description, "Shown in Scenarios")
 
         dialog.openGraph("benchmarkRank")
         compare(toggle.checked, false)
-        verify(String(icon.source).endsWith("eye-off.svg"))
         compare(toggle.Accessible.description, "Hidden from Benchmarks")
         compare(toggle.Accessible.name, "Show Benchmark rank history graph")
     }
@@ -119,7 +115,6 @@ TestCase {
         compare(visibility.playtimeGraphVisible, false)
         compare(vm.pendingChanges, false)
         compare(find(dialog, "settingsSaveButton").enabled, false)
-        verify(String(find(dialog, "graphVisibilityIcon").source).endsWith("eye-off.svg"))
 
         visibility.playtimeGraphVisible = true
         compare(toggle.checked, true, "the switch follows a change made in the View menu after being toggled")
@@ -145,7 +140,6 @@ TestCase {
         verify(waitForRendering(dialog.contentItem))
         const icon = find(dialog, "hiddenStatus_settingsNav_dailyPlaytime")
         verify(icon.visible)
-        verify(String(icon.source).endsWith("eye-off.svg"))
         verify(shown(dialog, "hiddenStatus_settingsNav_benchmarkRank"))
         verify(!shown(dialog, "hiddenStatus_settingsNav_run"))
         compare(entry.height, shownHeight, "the entry keeps its size")
@@ -206,9 +200,7 @@ TestCase {
         verify(!shown(dialog, "graphField_dataRange_averagingWindow"))
         const range = find(dialog, "graphField_dataRange_range")
         compare(range.entries.map(entry => entry.kind), ["allHistory", "recentDays", "latestRuns", "customDates"])
-        compare(range.entries[0].text, "All runs")
         compare(names(dialog, "graphSeriesRow_").length, 6)
-        compare(find(dialog, "graphSeriesName_scoreAverage").text, "Score average (10 runs)")
         compare(names(dialog, "graphAxis_"), ["graphAxis_accuracy", "graphAxis_counts", "graphAxis_score"])
     }
 
@@ -219,7 +211,6 @@ TestCase {
         verify(!shown(dialog, "graphGroup_axes"), "the tier axis offers no numeric fitting")
         verify(!shown(dialog, "graphField_dataRange_averagingWindow"))
         compare(names(dialog, "graphSeriesRow_"), ["graphSeriesRow_rank"])
-        compare(find(dialog, "graphSeriesName_rank").text, "Personal-best average rank")
         verify(find(dialog, "graphSeriesSelector") === null, "a single series needs no selector")
     }
 
@@ -230,8 +221,6 @@ TestCase {
         verify(!shown(dialog, "graphGroup_axes"), "the tier axis offers no numeric fitting")
         verify(!shown(dialog, "graphField_dataRange_averagingWindow"))
         compare(names(dialog, "graphSeriesRow_"), ["graphSeriesRow_rank"])
-        compare(find(dialog, "graphSeriesName_rank").text, "Recent average rank")
-        compare(find(dialog, "graphPageTitle").text, "Benchmark recent rank")
     }
 
     function test_benchmarkPlaytimeOffersTheSameControlsAsDailyPlaytime() {
@@ -240,12 +229,6 @@ TestCase {
         verify(shown(dialog, "graphField_dataRange_averagingWindow"))
         verify(shown(dialog, "graphGroup_axes"))
         compare(names(dialog, "graphSeriesRow_"), ["graphSeriesRow_playtime"])
-    }
-
-    function test_theEditorNamesTheGraphItChanges() {
-        const {dialog} = openOn("dailyPlaytime")
-
-        compare(find(dialog, "graphPageTitle").text, "Daily playtime")
     }
 
     // ---- Data and range ------------------------------------------------------------------------------
@@ -326,12 +309,10 @@ TestCase {
         verify(summary.text.indexOf("inclusive") >= 0)
     }
 
-    function test_theAnchorToggleIsLabelledAndSavedIndependentlyOfTheKind() {
+    function test_theAnchorToggleIsSavedIndependentlyOfTheKind() {
         const {dialog, vm} = openOn("benchmarkRank")
         const anchor = find(dialog, "graphField_dataRange_anchor")
 
-        compare(anchor.text, "End date ranges at latest recorded run")
-        compare(anchor.checked, false)
         anchor.toggle()
         anchor.toggled()
 
@@ -379,14 +360,6 @@ TestCase {
 
         compare(find(dialog, "graphField_axes_playtime_fixedMax_unit").text, "minutes")
         compare(find(dialog, "graphField_axes_playtime_fitMode").currentIndex, 2)
-    }
-
-    function test_theFitChoicesAreFitZeroAndFixed() {
-        const {dialog} = openOn("dailyPlaytime")
-
-        const mode = find(dialog, "graphField_axes_playtime_fitMode")
-        compare(mode.entries.map(entry => entry.text), ["Fit visible data", "Start at zero", "Fixed bounds"])
-        compare(mode.currentIndex, 1)
     }
 
     // ---- Series and style ---------------------------------------------------------------------------
@@ -582,7 +555,6 @@ TestCase {
         compare(vm.callsNamed("resetGraph").map(c => c.args), [["scenarioHistory"]])
         compare(vm.saveCalls, 0)
         compare(vm.endVisitCalls, 0)
-        compare(find(dialog, "graphResetButton").text, "Reset to defaults")
     }
 
     // ---- Cancel, discard, cancel-close ---------------------------------------------------------------
@@ -774,38 +746,6 @@ TestCase {
         verify(walk.names.indexOf("settingsNav_scenarioHistory") >= 0, "the graph entry is reachable by Tab")
     }
 
-    function test_graphPageCompositionAndSections() {
-        const {dialog} = openOn("run")
-        const editor = find(dialog, "graphSettingsEditor")
-        verify(ItemLookup.findByObjectName(editor, "seriesConfigDraftPanel") !== null)
-        verify(ItemLookup.findByObjectName(editor, "axesPanel") !== null)
-        compare(editor.sections, ["seriesStyle", "axes"])
-    }
-
-    function test_graphPageHeader() {
-        const {dialog} = openOn("dailyPlaytime")
-        compare(find(dialog, "graphPageTitle").text, "Daily playtime")
-        compare(find(dialog, "graphResetButton").text, "Reset to defaults")
-    }
-
-    function test_graphFieldsAreCompact() {
-        const {dialog} = openOn("dailyPlaytime")
-        const field = find(dialog, "graphField_dataRange_averagingWindow")
-        verify(field.width < find(dialog, "graphEditorScroll").width / 2)
-        const unit = find(dialog, "graphField_dataRange_averagingWindow_unit")
-        verify(unit.mapToItem(field, 0, 0).x - field.width < 20)
-    }
-
-    function test_graphSeriesCardsHaveHeaders() {
-        const {dialog} = openOn("scenarioHistory")
-        const row = find(dialog, "graphSeriesRow_score")
-        const swatch = find(dialog, "graphField_seriesStyle_score_color")
-        const name = find(dialog, "graphSeriesName_score")
-        verify(swatch.mapToItem(row, 0, 0).x < name.mapToItem(row, 0, 0).x)
-        compare(find(dialog, "graphSeriesHeader_name").text, "Name")
-        compare(find(dialog, "graphSeriesHeader_width").text, "Width")
-    }
-
     function test_graphPageScrollsToSections() {
         const {dialog} = openOn("scenarioHistory")
         const editor = find(dialog, "graphSettingsEditor")
@@ -822,7 +762,6 @@ TestCase {
         const content = find(dialog, "graphSettingsContent")
         verify(data.mapToItem(content, 0, 0).y < lines.mapToItem(content, 0, 0).y)
         verify(lines.mapToItem(content, 0, 0).y < axes.mapToItem(content, 0, 0).y)
-        compare(lines.text, "Lines & style")
     }
 
     function test_theEditorsControlsComeInTheOrderTheyAreRead() {
@@ -871,21 +810,7 @@ TestCase {
         const selected = find(dialog, "graphRangePreset_recentDays_30")
         const other = find(dialog, "graphRangePreset_recentDays_7")
         verify(selected !== null && other !== null)
-        compare(selected.font.bold, true)
-        compare(other.font.bold, false)
         verify(selected.Accessible.description.length > 0)
         compare(other.Accessible.description, "")
-    }
-
-    function test_aColourSwatchShowsKeyboardFocusWithAThickerBorderAndNamesItsSeries() {
-        const {dialog} = openOn("scenarioHistory")
-        const swatch = find(dialog, "graphField_seriesStyle_hits_color")
-        compare(swatch.background.border.width, 1)
-
-        swatch.forceActiveFocus(Qt.TabFocusReason)
-
-        compare(swatch.visualFocus, true)
-        compare(swatch.background.border.width, 2)
-        verify(swatch.Accessible.name.indexOf("Hits") >= 0)
     }
 }

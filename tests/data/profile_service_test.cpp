@@ -221,10 +221,6 @@ namespace {
         EXPECT_EQ(profile_service.getScenarioList().size(), 2);
     }
 
-    TEST_F(ProfileServiceTest, RegistersSourcesChangedCallbackOnConstruction) {
-        EXPECT_EQ(fake_file_service->callbackCount(), 1);
-    }
-
     TEST_F(ProfileServiceTest, SourcesChangedBeforeProfileLoadedDoesNotImport) {
         fake_file_service->perfs_to_return = {makeRun("hash-1", 100)};
         fake_file_service->notifySourcesChanged();

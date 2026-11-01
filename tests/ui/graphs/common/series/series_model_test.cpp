@@ -84,10 +84,6 @@ namespace {
         EXPECT_DOUBLE_EQ(sample->y(), 87.0);
     }
 
-    TEST(SeriesModelTest, LineWidthDefaultsToThePainterWidth) {
-        EXPECT_DOUBLE_EQ(SeriesModel{}.lineWidth, ksv::ui::SeriesPainter::Style{}.lineWidth);
-    }
-
     TEST(SeriesModelTest, CarriedVerticesAreNeverSampled) {
         SeriesModel series;
         series.points = {QPointF(10.0, 4.0)};
@@ -117,13 +113,5 @@ namespace {
     TEST(SeriesModelTest, FormattedValueAtXOnEmptySeriesIsEmpty) {
         SeriesModel series;
         EXPECT_TRUE(series.formattedValueAtX(5.0).isEmpty());
-    }
-
-    TEST(SeriesModelTest, PlaytimeFormattedValueAtXShowsMinutes) {
-        SeriesModel series;
-        series.transform = ValueTransform::secondsToMinutes();
-        series.setData({QPointF(0.0, 1800.0)});
-
-        EXPECT_EQ(series.formattedValueAtX(0.0), "30 min");
     }
 }

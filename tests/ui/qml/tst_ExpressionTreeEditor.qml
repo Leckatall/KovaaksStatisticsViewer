@@ -63,14 +63,12 @@ TestCase {
         combo.activated(3);
         compare(node.stat, "misses");
     }
-    function test_bestRunRootRendersNoFieldEditorAndShowsItsLabel() {
+    function test_bestRunRootRendersNoFieldEditor() {
         const node = makeUnary("bestRun");
         const editor = createTemporaryObject(editorComponent, testCase, { model: makeFakeModel({ root: node, selected: node }) });
         verify(waitForRendering(editor));
         verify(ItemLookup.findByObjectName(editor, "finalStatComboBox") === null);
         verify(ItemLookup.findByObjectName(editor, "metricComboBox") === null);
-        compare(editor.kindLabel("bestRun"), "Best run");
-        compare(editor.kindLabel("final"), "Final stat");
     }
     function test_constantRootRendersSpinBoxAndWritesNode() {
         const node = createTemporaryObject(constantNodeComponent, testCase, { value: 1 });
@@ -124,7 +122,6 @@ TestCase {
         combo.currentIndex = 1;
         combo.activated(1);
         compare(node.selectionKind, "topPercentile");
-        compare(spin.value, 10);
         spin.value = 20;
         spin.valueModified();
         compare(node.percent, 20);

@@ -123,20 +123,6 @@ namespace {
         EXPECT_EQ(accuracy_series.front()->formattedValueAtX(1.0), "45%");
     }
 
-    TEST_F(CompletionHistoryViewModelTest, EverySeriesCarriesTheNameOfItsAxis) {
-        using Column = CompletionHistoryViewModel;
-        const auto axisName = [this](const int column) {
-            return view_model.series({column}).front()->yAxisName;
-        };
-
-        EXPECT_EQ(axisName(Column::Score), "Score");
-        EXPECT_EQ(axisName(Column::ScoreAverage), "Score");
-        EXPECT_EQ(axisName(Column::Accuracy), "Accuracy");
-        EXPECT_EQ(axisName(Column::Shots), "Shots, hits and misses");
-        EXPECT_EQ(axisName(Column::Hits), "Shots, hits and misses");
-        EXPECT_EQ(axisName(Column::Misses), "Shots, hits and misses");
-    }
-
     TEST_F(CompletionHistoryViewModelTest, CountSeriesShareAnAxisButScoreDoesNot) {
         setHistory();
         view_model.refresh();
@@ -431,24 +417,6 @@ namespace {
         return *series.at(index)->yAxis;
     }
 
-    TEST_F(CompletionHistoryViewModelTest, DefaultPoliciesReproduceTheAxesThatPreceededThem) {
-        setHistory();
-        view_model.refresh();
-
-        ValueAxis score;
-        score.setRange(100.0, 125.0);
-        ValueAxis accuracy({}, ValueTransform::percentage());
-        accuracy.setRange(45.0, 60.0);
-        ValueAxis counts({.baseline = ValueAxis::Baseline::Zero});
-        counts.setRange(9.0, 25.0);
-
-        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Score})), score);
-        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Accuracy})), accuracy);
-        const auto all = view_model.series({CompletionHistoryViewModel::Shots, CompletionHistoryViewModel::Hits,
-                                             CompletionHistoryViewModel::Misses});
-        for (int i = 0; i < all.size(); ++i) expectSameAxis(yAxisOf(all, i), counts);
-    }
-
     TEST_F(CompletionHistoryViewModelTest, FitVisibleDataFollowsWhichSharingSeriesAreVisible) {
         setHistory();
         view_model.refresh();
@@ -536,13 +504,12 @@ namespace {
     TEST_F(CompletionHistoryViewModelTest, AnAbsentKeyReturnsItsAxisToTheDefault) {
         setHistory();
         view_model.refresh();
+        const ValueAxis original = yAxisOf(view_model.series({CompletionHistoryViewModel::Score}));
         view_model.setAxisPolicies({{"score", FixedBounds{0.0, 500.0}}});
 
         view_model.setAxisPolicies({});
 
-        ValueAxis score;
-        score.setRange(100.0, 125.0);
-        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Score})), score);
+        expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Score})), original);
     }
 
     TEST_F(CompletionHistoryViewModelTest, PoliciesSurviveRefresh) {

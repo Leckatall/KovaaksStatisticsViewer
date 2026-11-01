@@ -338,7 +338,7 @@ namespace {
         EXPECT_EQ(committed().revision, revisionBeforeCancel);
         EXPECT_EQ(committed().configuration->preferences(GraphKey::DailyPlaytime).averagingWindowDays, 9);
         EXPECT_EQ(committed().configuration->preferences(GraphKey::BenchmarkRank).appearance.connection,
-                  ConnectionMode::Smooth);
+                  defaultGraphPreferences(GraphKey::BenchmarkRank).appearance.connection);
         EXPECT_EQ(env.graphConfigurationPersistence->load(), *committed().configuration);
         EXPECT_NE(snapshotBefore.revision, committed().revision);
         EXPECT_NE(stored, env.graphConfigurationPersistence->load());

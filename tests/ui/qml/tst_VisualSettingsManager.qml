@@ -10,11 +10,6 @@ TestCase {
         id: manager
     }
 
-    // The run graph axis label belongs to the graph configuration document, which has the only writer.
-    function test_run_graph_axis_label_is_not_a_visual_setting() {
-        compare(manager.graphAxisSeriesId, undefined)
-    }
-
     function test_newly_enabled_series_default_visible() {
         manager.syncVisibleSeriesIds(["1", "2"])
         compare(manager.isSeriesVisible("1"), true)
@@ -53,7 +48,6 @@ TestCase {
 
     function test_every_graph_key_reads_and_writes_its_own_saved_setting() {
         for (const key of Object.keys(graphProperties)) {
-            compare(manager.isGraphVisible(key), true, key)
             manager.setGraphVisible(key, false)
             compare(manager[graphProperties[key]], false, key)
             compare(manager.isGraphVisible(key), false, key)

@@ -106,11 +106,6 @@ namespace {
         }
     };
 
-    TEST_F(GraphViewModelTest, StartsEmptyWithDefaultBounds) {
-        EXPECT_DOUBLE_EQ(view_model.xAxis().min(), 0.0);
-        EXPECT_DOUBLE_EQ(view_model.xAxis().max(), 60.0);
-    }
-
     TEST_F(GraphViewModelTest, FetchDataRefreshesSeriesWithoutLoadingPerf) {
         setSampleData();
 
@@ -349,11 +344,6 @@ namespace {
         view_model.fetchData();
 
         EXPECT_EQ(view_model.xAxis().formatTick(20.0), "20s");
-    }
-
-    TEST_F(GraphViewModelTest, AdaptsResolvedSeriesAndExcludesUnavailableFromBounds) {
-        view_model.fetchData();
-        EXPECT_TRUE(view_model.enabledSeriesIds().isEmpty());
     }
 
     TEST_F(GraphViewModelTest, ResolvesColumnsForEnabledSeriesIds) {

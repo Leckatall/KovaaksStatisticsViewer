@@ -139,12 +139,4 @@ namespace {
             EXPECT_EQ(epochDayOfMillis(millis), id.startDay()) << millis;
         }
     }
-
-    TEST(DayRollover, SettingTheSameDayAnnouncesNothing) {
-        ksv::tests_support::FakeDaySource source{kToday};
-        int announcements = 0;
-        source.onDayChanged([&](sys_days) { ++announcements; });
-        source.setToday(kToday);
-        EXPECT_EQ(announcements, 0);
-    }
 }

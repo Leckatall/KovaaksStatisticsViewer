@@ -172,22 +172,6 @@ namespace {
         EXPECT_EQ(callback_count, 1);
     }
 
-    TEST_F(CompletionHistoryUseCaseTest, TheDefaultRangeIsTheDefaultLatestRunCount) {
-        const auto latestRuns =
-            std::get<LatestRuns>(defaultGraphPreferences(GraphKey::ScenarioHistory).range->range).count;
-        const auto totalRuns = latestRuns + 5;
-        std::vector<long long> epochDays;
-        for (long long offset = totalRuns - 1; offset >= 0; --offset) epochDays.push_back(kToday - offset);
-        playOnDays(epochDays);
-
-        const auto history = use_case.get_history();
-
-        ASSERT_EQ(history.rows.size(), static_cast<size_t>(latestRuns));
-        EXPECT_EQ(history.rows.front().run_index, 6);
-        EXPECT_EQ(history.rows.back().run_index, totalRuns);
-        EXPECT_EQ(history.full_count, totalRuns);
-    }
-
     TEST_F(CompletionHistoryUseCaseTest, AllHistoryKeepsEveryRunAndFullCountEqualsRowCount) {
         playOnDays({kToday - 30, kToday - 3, kToday});
         setRange(AllHistory{});

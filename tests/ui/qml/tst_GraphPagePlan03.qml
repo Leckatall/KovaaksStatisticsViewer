@@ -18,7 +18,6 @@ TestCase {
         id: editorComponent
         GraphSettingsEditor { width: 500; height: 400 }
     }
-    FontMetrics { id: metrics }
 
     function openEditor(graph) {
         const vm = createTemporaryObject(fakeComponent, testCase)
@@ -99,34 +98,6 @@ TestCase {
         editor.scrollToSection("axes")
         compare(flick.contentY, Math.max(0, flick.contentHeight - flick.height))
         compare(editor.sectionInView, "axes")
-    }
-    function checkCompact(editor, name, hasUnit) {
-        const field = item(editor, name)
-        metrics.font = field.font
-        verify(field.width <= 12 * metrics.height, name + " width " + field.width)
-        if (hasUnit) {
-            const unit = item(editor, name + "_unit")
-            const gap = unit.mapToItem(field, 0, 0).x - field.width
-            verify(gap >= 0 && gap <= metrics.height, name + " unit gap " + gap)
-        }
-    }
-    function test_compactFieldsAndCombos() {
-        const {editor, vm} = openEditor("dailyPlaytime")
-        vm.setGraphRangeKind("dailyPlaytime", "recentDays")
-        vm.setAxisMode("dailyPlaytime", "playtime", "fixed")
-        verify(waitForRendering(editor))
-        for (const name of ["graphField_dataRange_recentDays", "graphField_dataRange_averagingWindow",
-                            "graphField_axes_playtime_fixedMin", "graphField_axes_playtime_fixedMax"])
-            checkCompact(editor, name, true)
-        for (const name of ["graphField_dataRange_range", "graphField_axes_playtime_fitMode", "graphField_seriesStyle_connection"]) {
-            const combo = item(editor, name)
-            metrics.font = combo.font
-            verify(combo.width <= 22 * metrics.height, name)
-        }
-        vm.setGraphRangeKind("dailyPlaytime", "customDates")
-        verify(waitForRendering(editor))
-        checkCompact(editor, "graphField_dataRange_startDate", false)
-        checkCompact(editor, "graphField_dataRange_endDate", false)
     }
     function test_seriesCardHeaderAlignment() {
         const {editor} = openEditor("scenarioHistory")

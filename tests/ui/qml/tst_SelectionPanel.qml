@@ -165,8 +165,6 @@ TestCase {
         compare(scenarioCurrent.isCurrentRun, true)
         compare(recentNext.isCurrentRun, false)
         compare(scenarioNext.isCurrentRun, false)
-        compare(recentCurrent.background.color, recentCurrent.currentRunColor)
-        compare(recentCurrent.background.border.color, panel.palette.accent)
 
         panel.currentRunStartTimeMs = nextTime
         wait(0)

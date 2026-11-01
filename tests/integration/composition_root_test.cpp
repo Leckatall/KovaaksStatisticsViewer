@@ -474,15 +474,16 @@ namespace {
     // never decides the style.
     TEST_F(CompositionRootTest, ARecolouredRankLineKeepsItsNameAcrossBenchmarkSelectionChanges) {
         using application::GraphKey;
+        const auto *rank = app->benchmarkTrackingVm()->rankHistory();
+        const auto name = rank->metricName();
         application::GraphQuickPatch patch;
         patch.seriesStyles["rank"] = {application::RgbaColor{9, 99, 199, 255}, 5.0};
         ASSERT_TRUE(app->graphConfigurationUseCase()->applyQuickPatch(GraphKey::BenchmarkRank, patch).accepted());
 
-        const auto *rank = app->benchmarkTrackingVm()->rankHistory();
-        EXPECT_EQ(rank->metricName(), "Personal-best average rank");
+        EXPECT_EQ(rank->metricName(), name);
         app->benchmarkTrackingVm()->clearSelection();
         app->benchmarkTrackingVm()->selectDefaultBenchmark();
-        EXPECT_EQ(rank->metricName(), "Personal-best average rank");
+        EXPECT_EQ(rank->metricName(), name);
         EXPECT_EQ(app->benchmarkTrackingUseCase()->presentation(GraphKey::BenchmarkRank).seriesStyle("rank").color,
                   (application::RgbaColor{9, 99, 199, 255}));
 

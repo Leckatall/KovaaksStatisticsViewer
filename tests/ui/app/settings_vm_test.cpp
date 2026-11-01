@@ -357,8 +357,6 @@ namespace {
         EXPECT_FALSE(view_model->setSeriesHiddenLeadingPoints(
             id, static_cast<int>(kMaximumHiddenLeadingPoints) + 1)["succeeded"].toBool());
         EXPECT_EQ(row(*view_model, id)["hiddenLeadingPoints"].toInt(), static_cast<int>(kStarting));
-        EXPECT_EQ(view_model->property("maximumHiddenLeadingPoints").toInt(),
-                  static_cast<int>(kMaximumHiddenLeadingPoints));
     }
 
     TEST_F(SettingsViewModelTest, EditsNotifyTheEditorAndTheDirtyState) {
@@ -600,10 +598,9 @@ namespace {
         EXPECT_TRUE(configuration->saves.empty());
     }
 
-    TEST_F(SettingsViewModelTest, SelectedGraphStartsOnTheRunGraphAndIgnoresUnknownKeys) {
+    TEST_F(SettingsViewModelTest, SelectedGraphIgnoresUnknownKeys) {
         const auto view_model = make_view_model();
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::selectedGraphChanged);
-        EXPECT_EQ(view_model->selectedGraph(), "run");
 
         view_model->setSelectedGraph("benchmarkRank");
         view_model->setSelectedGraph("benchmarkRank");

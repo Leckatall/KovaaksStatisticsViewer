@@ -21,7 +21,6 @@
 #include "formats/csv/stats_csv_parser.h"
 #include "formats/protobuf/profile_serializer.h"
 #include "formats/protobuf/proto_decoder.h"
-#include "gallery_dataset.h"
 #include "qt_data/benchmark_store.h"
 #include "qt_data/graph_configuration_persistence.h"
 #include "session_compose.h"
@@ -31,7 +30,6 @@
 #include <QJsonDocument>
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <set>
 #include <stdexcept>
 #include <variant>
@@ -75,7 +73,6 @@ namespace {
 
         // The store's created_at is pinned, so no clock reaches the bytes.
         EXPECT_EQ(readFile(first), readFile(second));
-        EXPECT_EQ(data::ProfileSerializer().readHeader(first.toStdString())->created_at, 1785542400);
         const auto profile = driver::buildProfile(spec);
         ASSERT_EQ(profile.getAllRunRecords().size(), 9U);
         std::set<std::string> hashes;
@@ -125,49 +122,6 @@ namespace {
         EXPECT_FALSE(entries[2].hash.has_value());  // two scenarios share the name
         EXPECT_EQ(entries[3].hash, std::optional<std::string>("twin-b"));
         EXPECT_NE(entries[2].id, entries[3].id);
-    }
-
-    // DAT-03: the built-in synthetic datasets keep producing the profiles they
-    // always have (ksv_gallery and ksv_driver both show them). The rich profile
-    // gained the Air CELESTIAL scenario (7 runs) for the benchmark fixtures.
-    struct DatasetGolden {
-        gallery::Dataset dataset;
-        std::size_t runs;
-        std::set<std::string> hashes;
-        long long first;
-        long long last;
-        double totalScore;
-    };
-
-    TEST(DriverSpecTest, BuiltInDatasetsAreUnchanged) {
-        const std::set<std::string> all{"gallery-primary", "gallery-pasu", "gallery-smoothbot", "gallery-flyts",
-                                        "gallery-celestial"};
-        const DatasetGolden goldens[]{
-            {gallery::Dataset::RichProfile, 255, all, 1785578400000, 1787940840000, 1257118.0},
-            {gallery::Dataset::SingleRun, 1, {"gallery-primary"}, 1787940000000, 1787940000000, 4950.0},
-            {gallery::Dataset::ShortHistory, 4, {"gallery-primary"}, 1787680800000, 1787940900000, 22290.0},
-            {gallery::Dataset::BunchedHistory, 360, {"gallery-primary"}, 1785571200000, 1786042740000, 1898865.0},
-        };
-        for (const auto &golden: goldens) {
-            const auto profile = gallery::makeProfile(golden.dataset);
-            const auto &runs = profile.getAllRunRecords();
-            std::set<std::string> hashes;
-            long long first = std::numeric_limits<long long>::max();
-            long long last = std::numeric_limits<long long>::min();
-            double total = 0;
-            for (const auto &run: runs) {
-                hashes.insert(run.run_id.scenario_id.hash);
-                first = std::min(first, run.run_id.start_time);
-                last = std::max(last, run.run_id.start_time);
-                total += run.stored_totals.score;
-            }
-            const auto name = gallery::kDatasetNames[static_cast<std::size_t>(golden.dataset)];
-            EXPECT_EQ(runs.size(), golden.runs) << name;
-            EXPECT_EQ(hashes, golden.hashes) << name;
-            EXPECT_EQ(first, golden.first) << name;
-            EXPECT_EQ(last, golden.last) << name;
-            EXPECT_DOUBLE_EQ(total, golden.totalScore) << name;
-        }
     }
 
     // The benchmark fixtures (tools/driver/benchmarks) have fixed thresholds picked

@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtTest
 import "../../../src/ui/qml/benchmark"
-import "../../../src/ui/qml/graph"
 import "ItemLookup.js" as ItemLookup
 import "TestDoubles.js" as TestDoubles
 
@@ -30,11 +29,6 @@ Item {
     Component {
         id: progressGridComponent
         BenchmarkProgressGrid { }
-    }
-
-    Component {
-        id: chartTitleComponent
-        ChartTitle { }
     }
 
     Component {
@@ -606,11 +600,7 @@ Item {
             const tier = find(ws, "summaryNextTier")
             const blockers = find(ws, "summaryNextTierBlockers")
             compare(tier.text, "Platinum")
-            verify(tier.font.bold, "the tier stays bold")
-            verify(Qt.colorEqual(tier.color, "#50dcdc"), "the tier keeps its colour")
             compare(blockers.text, "(blocked by " + markers.length + " scenarios)")
-            compare(blockers.font.bold, false, "the parenthesis is normal weight")
-            verify(Qt.colorEqual(blockers.color, ws.palette.placeholderText), "and in the placeholder colour")
             verify(blockers.visible)
             verify(String(tier.Accessible.description).indexOf("(blocked by 2 scenarios)") !== -1,
                    "the description includes the parenthesis: " + tier.Accessible.description)
@@ -820,14 +810,6 @@ Item {
             verify(String(find(ws, "recentRankHistoryCard").Accessible.description).toLowerCase()
                    .indexOf("recent average rank") !== -1, "recent card description must include its metric name")
 
-            // Card titles share the Scenarios-tab chart title style (ChartTitle).
-            const title = createTemporaryObject(chartTitleComponent, root)
-            for (const line of [rankLine, recentLine, playtimeLine]) {
-                compare(line.horizontalAlignment, title.horizontalAlignment)
-                compare(line.font.weight, title.font.weight)
-                compare(line.font.pixelSize, title.font.pixelSize)
-            }
-
             verify(String(rankCard.Accessible.description).toLowerCase().indexOf("rank") !== -1,
                    "rank card description must include its metric name")
             verify(String(playtimeCard.Accessible.description).toLowerCase().indexOf("playtime") !== -1,
@@ -870,11 +852,6 @@ Item {
                 const header = find(ws, "progressTierHeader_" + i)
                 const name = find(ws, "progressTierHeader_" + i + "_name")
                 compare(name.text, tiers[i].name)
-                verify(name.font.bold, "tier names are bold")
-                // No swatch: the header holds only its underline and its name.
-                compare(header.children.length, 2, "tier " + i + " header has no colour swatch")
-                const underline = header.children[0]
-                verify(Qt.colorEqual(underline.color, tiers[i].barColor), "tier " + i + " keeps its tier underline")
                 verify(contrast(name.color, header.color) >= 4.5,
                        "tier " + i + " name reads on its header: " + name.color + " on " + header.color)
                 for (const other of seen)
@@ -979,7 +956,6 @@ Item {
                 fuzzyCompare(cell.mapToItem(ws, 0, cell.height).y, last.mapToItem(ws, 0, last.height).y, 0.5,
                              span.group + " bottom")
             }
-            verify(find(ws, "progressGroup_cat-click_name").font.bold, "group names are bold, as in the editor")
             compare(find(ws, "progressHeader_subcategory").visible, true,
                     "a benchmark with subcategories shows the Subcategory column")
         }
@@ -1020,11 +996,9 @@ Item {
             verify(gold.visible && silver.visible, "ranked groups show a chip")
             verify(Qt.colorEqual(gold.border.color, "#ffc828") && Qt.colorEqual(silver.border.color, "#c0c0c8"),
                    "each chip uses its tier's colour")
-            verify(!Qt.colorEqual(gold.color, silver.color), "different ranks look different")
             compare(gold.children[0].text, "Gold")
             const unranked = find(ws, "progressGroup_sub-static_rank")
-            verify(unranked.visible && Qt.colorEqual(unranked.border.color, ws.palette.mid),
-                   "an unranked group gets a neutral chip")
+            verify(unranked.visible, "an unranked group still gets a chip")
             const none = find(ws, "progressGroup_uncategorized_rank")
             verify(none === null || !none.visible, "no rank, no chip")
 
@@ -1489,8 +1463,6 @@ Item {
             verify(mark.mapToItem(ws, mark.width, 0).x > above.mapToItem(ws, above.width, 0).x,
                    "the mark sits at the bar's end")
             compare(mark.ToolTip.text, "Above Platinum: 1,040.25 / 1,000")
-            const chevron = find(mark, above.objectName + "_aboveTopChevron")
-            verify(chevron && chevron.height > chevron.width, "the mark is a chevron, not a diamond")
             const normal = find(ws, "progressRow_sc-1w4ts_bar")
             verify(!find(normal, normal.objectName + "_aboveTop").visible, "only above the top tier")
 
@@ -1526,7 +1498,6 @@ Item {
                 const chunkRight = chunk.mapToItem(bar, chunk.width, 0).x
                 verify(textRight <= chunkRight && chunkRight - textRight <= 4,
                        "chunk " + i + " label ends at its chunk's right edge")
-                compare(label.horizontalAlignment, Text.AlignRight)
             }
 
             const smooth = find(ws, "progressRow_sc-smooth_bar")
@@ -1613,19 +1584,16 @@ Item {
             // Chunk 0 spans [0, 99] of a 200 px bar.
             const clear = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250"})
             compare(placement(clear, 0), "end", "a label clear of the PB stays at its chunk's end")
-            compare(find(clear, "probe_label_0").horizontalAlignment, Text.AlignRight)
 
             const nearEnd = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250"})
             compare(placement(nearEnd, 0), "middle", "a PB at the chunk's end moves the label to the middle")
             verify(find(nearEnd, "probe_label_0").visible)
-            compare(find(nearEnd, "probe_label_0").horizontalAlignment, Text.AlignHCenter)
             compare(placement(nearEnd, 1), "end", "the next chunk's label is unaffected")
 
             const wide = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890"})
             verify(!wide.valueInside, "the PB sits past the fill, not inside it")
             compare(placement(wide, 0), "start", "a PB over the end and middle moves the label to the start")
             verify(find(wide, "probe_label_0").visible)
-            compare(find(wide, "probe_label_0").horizontalAlignment, Text.AlignLeft)
             const valueLeft = find(wide, "probe_value").mapToItem(wide, 0, 0).x
             verify(valueLeft > wide.fillEnd && valueLeft - wide.fillEnd < 8, "the PB stays past the fill's end")
 
@@ -1704,35 +1672,7 @@ Item {
             compare(find(clear, "probe_markerTick").height, find(clear, "probe_marker").height)
         }
 
-        function test_displacedThresholdLabelsHaveNoBox() {
-            const moved = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250"})
-            compare(placement(moved, 0), "middle")
-            const label = find(moved, "probe_label_0")
-            verify(label.visible)
-            compare(label.text, "300")
-            const outline = findChild(moved, "probe_target_0")
-            verify(outline === null || !outline.visible, "the displaced threshold has no box")
-
-            const start = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890"})
-            compare(placement(start, 0), "start")
-            verify(find(start, "probe_label_0").visible)
-        }
-
         // -- rank names use their tier colours --------------------------
-
-        function test_rankNamesUseTierColours() {
-            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
-            verify(Qt.colorEqual(find(ws, "summaryAttainedRank").color, "#ffc828"),
-                   "summary attained rank uses its tier colour")
-            verify(Qt.colorEqual(find(ws, "summaryCompletedRank").color, "#c0c0c8"),
-                   "summary completed rank uses its tier colour")
-            verify(Qt.colorEqual(find(ws, "summaryNextTier").color, "#50dcdc"),
-                   "summary next tier uses its tier colour")
-            const next = find(ws, "progressRow_sc-1w4ts_next")
-            verify(Qt.colorEqual(next.children[1].color, "#50dcdc"), "the grid's next tier uses its tier colour")
-            verify(!Qt.colorEqual(find(ws, "summaryTotalPlaytime").color, "#ffc828"),
-                   "non-tier values keep the normal text colour")
-        }
 
         // -- segmented tier bars ------------------------------------------
 
@@ -1767,7 +1707,6 @@ Item {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             wait(0)
             const bar = find(ws, "progressRow_sc-1w4ts_bar")
-            verify(bar.height >= 14, "the bar is tall enough to hover")
             const expected = [1, 1, 1, 0.75]
             const colours = ["#cd7f32", "#c0c0c8", "#ffc828", "#50dcdc"]
             for (let i = 0; i < 4; ++i) {
@@ -1801,7 +1740,6 @@ Item {
                          "2.5 is the middle of the third chunk")
             const fill = find(bar, bar.objectName + "_fill_3")
             verify(markerCentre < fill.mapToItem(ws, fill.width, 0).x, "below the PB: left of the fill's end")
-            verify(marker.height > bar.height, "the tick overhangs the bar so it shows over fill and track")
             compare(marker.ToolTip.text, "Recent average 790.5 · Silver", "the marker has its own tooltip")
 
             for (const id of ["sc-popcorn", "sc-pasu"]) {

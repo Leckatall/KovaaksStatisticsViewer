@@ -22,20 +22,6 @@ TestCase {
         return welcome
     }
 
-    function test_choosingTheFolderIsTheOneProminentAction() {
-        const welcome = createWelcome()
-        const button = findChild(welcome, "welcomeChooseKovaaksFolderButton")
-        verify(button !== null && button.visible)
-        verify(button.highlighted, "the folder button is styled as the primary action")
-        verify(button.height >= 36, "a large click target, not a toolbar button")
-        verify(button.text.indexOf("Kovaaks Folder") !== -1)
-
-        // The welcome is centred in the workspace, not a strip along an edge.
-        const centre = button.mapToItem(welcome, button.width / 2, button.height / 2)
-        verify(Math.abs(centre.x - welcome.width / 2) < 2)
-        verify(centre.y > welcome.height * 0.3 && centre.y < welcome.height * 0.7)
-    }
-
     function test_clickingTheButtonRequestsTheFolderDialog() {
         const welcome = createWelcome()
         let requests = 0

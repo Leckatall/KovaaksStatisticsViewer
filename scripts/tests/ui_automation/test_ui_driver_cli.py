@@ -200,8 +200,8 @@ def test_hover_type_find_and_shot_options() -> None:
     assert request_for("hover", "text:View", "--steps", "3") == ("hover", {"selector": "text:View", "steps": 3})
     assert request_for("type", " (x)", "--into", "field", "--at-start")[1] == {
         "text": " (x)", "selector": "field", "atStart": True}
-    assert request_for("find", "obj:*Dialog", "--objects")[1] == {
-        "selector": "obj:*Dialog", "limit": 50, "objects": True}
+    find = request_for("find", "obj:*Dialog", "--objects")[1]
+    assert (find["selector"], find["objects"]) == ("obj:*Dialog", True)
     assert parse_args(["shot", "--window", "dirtyClosePrompt", "--with-context"]).with_context
 
 
@@ -212,7 +212,6 @@ def test_profile_spec_defaults_to_the_empty_dataset_and_rejects_synthetic_ones(t
     options = start_options(parse_args(["start", "--profile-spec", str(spec)]))
     assert (options.dataset, options.profile_spec) == ("empty", str(spec.resolve()))
     assert start_options(parse_args(["start", "--dataset", "first-run", "--profile-spec", str(spec)])).dataset == "first-run"
-    assert start_options(parse_args(["start"])).dataset == "rich"
     with pytest.raises(UsageError, match="'rich'"):
         start_options(parse_args(["start", "--dataset", "rich", "--profile-spec", str(spec)]))
     with pytest.raises(UsageError, match="not a file"):

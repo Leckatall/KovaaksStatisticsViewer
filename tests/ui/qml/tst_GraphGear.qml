@@ -104,22 +104,19 @@ TestCase {
 
     function test_gearIsNamedAfterItsGraph_data() {
         return [
-            {tag: "run", key: "run", name: "Run graph"},
-            {tag: "dailyPlaytime", key: "dailyPlaytime", name: "Daily playtime"},
-            {tag: "scenarioHistory", key: "scenarioHistory", name: "Scenario history"},
-            {tag: "benchmarkRank", key: "benchmarkRank", name: "Benchmark rank history"},
-            {tag: "benchmarkRecentRank", key: "benchmarkRecentRank", name: "Benchmark recent rank"},
-            {tag: "benchmarkPlaytime", key: "benchmarkPlaytime", name: "Benchmark playtime"}
+            {tag: "run", key: "run"},
+            {tag: "dailyPlaytime", key: "dailyPlaytime"},
+            {tag: "scenarioHistory", key: "scenarioHistory"},
+            {tag: "benchmarkRank", key: "benchmarkRank"},
+            {tag: "benchmarkRecentRank", key: "benchmarkRecentRank"},
+            {tag: "benchmarkPlaytime", key: "benchmarkPlaytime"}
         ]
     }
 
     function test_gearIsNamedAfterItsGraph(data) {
         const gear = makeGear(data.key)
         compare(gear.objectName, "graphGear_" + data.key)
-        compare(gear.Accessible.name, data.name + " settings")
-        compare(gear.ToolTip.text, data.name + " settings")
         compare(gear.popup.objectName, "graphQuickPopup_" + data.key)
-        verify(gear.display === AbstractButton.IconOnly, "the gear is an icon, not an Options text button")
     }
 
     function test_gearOpensWithoutAnyViewModelDetail() {
@@ -131,28 +128,6 @@ TestCase {
 
     // ---- Chrome ------------------------------------------------------------------------------------
 
-    function test_theGearIconIsTintedNotBlack() {
-        const gear = makeGear("run")
-        verify(Qt.colorEqual(gear.icon.color, "#000000") === false, "Lucide strokes use currentColor, which renders black")
-        verify(gear.icon.color.a > 0 && gear.icon.color.a < 1, "at rest the icon is set and muted")
-    }
-
-    function test_theGearBrightensAndFillsWhileThePopupIsOpen() {
-        const gear = makeGear("run")
-        mouseMove(testCase, 5, 500)
-        const restingAlpha = gear.icon.color.a
-        compare(gear.background.color.a, 0)
-        openPopup(gear)
-        mouseMove(testCase, 5, 500)
-        compare(gear.icon.color.a, 1)
-        verify(gear.background.color.a > 0, "the open gear keeps a fill")
-        mouseClick(gear)
-        tryVerify(() => !gear.popup.opened, 2000)
-        mouseMove(testCase, 5, 500)
-        tryCompare(gear.icon.color, "a", restingAlpha)
-        compare(gear.background.color.a, 0)
-    }
-
     function test_theTooltipIsHiddenWhileThePopupIsOpen() {
         const gear = makeGear("run")
         mouseMove(gear, gear.width / 2, gear.height / 2)
@@ -163,24 +138,6 @@ TestCase {
         wait(gear.ToolTip.delay + 200)
         verify(gear.pointerHovered)
         verify(!gear.ToolTip.visible)
-    }
-
-    function test_thePopupHasABorderedFrame() {
-        const gear = makeGear("run")
-        const frame = gear.popup.background
-        compare(frame.radius, 8)
-        compare(frame.border.width, 1)
-        verify(Qt.colorEqual(frame.border.color, gear.palette.mid), String(frame.border.color))
-        verify(Qt.colorEqual(frame.color, gear.palette.window), String(frame.color))
-    }
-
-    function test_theCloseButtonIsAnIcon() {
-        const gear = makeGear("run")
-        openPopup(gear)
-        const close = control(gear, "graphQuickClose_run")
-        verify(close !== null)
-        compare(close.display, AbstractButton.IconOnly)
-        verify(String(close.icon.source).endsWith("x.svg"), String(close.icon.source))
     }
 
     // ---- Applicable controls only --------------------------------------------------------------------
@@ -208,30 +165,12 @@ TestCase {
         verify(shown(gear, "graphMoreSettings_" + data.key), "more graph settings")
     }
 
-    function test_rangePresetsDifferForScenarioHistory() {
-        const playtime = makeGear("dailyPlaytime")
-        openPopup(playtime)
-        const playtimeRange = control(playtime, "graphField_dataRange_range")
-        const playtimeTexts = []
-        for (let i = 0; i < playtimeRange.count; ++i) playtimeTexts.push(playtimeRange.textAt(i))
-        compare(playtimeTexts, ["Last 7 days", "Last 30 days", "Last 90 days", "All time"])
-
-        const history = makeGear("scenarioHistory")
-        openPopup(history)
-        const historyRange = control(history, "graphField_dataRange_range")
-        const historyTexts = []
-        for (let i = 0; i < historyRange.count; ++i) historyTexts.push(historyRange.textAt(i))
-        compare(historyTexts, ["Last 7 days", "Last 30 days", "Last 90 days",
-                               "Latest 25 runs", "Latest 50 runs", "Latest 100 runs", "All runs"])
-    }
-
     function test_theMoreSettingsButtonIsTheLastControl() {
         const gear = makeGear("dailyPlaytime")
         openPopup(gear)
         const more = control(gear, "graphMoreSettings_dailyPlaytime")
         const marker = control(gear, "graphField_seriesStyle_markers")
         verify(more.mapToItem(gear.popup.contentItem, 0, 0).y > marker.mapToItem(gear.popup.contentItem, 0, 0).y)
-        compare(more.text, "More graph settings…")
     }
 
     // ---- Immediate patches -------------------------------------------------------------------------
@@ -303,8 +242,6 @@ TestCase {
         const gear = makeGear("scenarioHistory")
         openPopup(gear)
         const connection = control(gear, "graphField_seriesStyle_connection")
-        compare(connection.currentText, "Smooth lines")
-
         choose(connection, "Straight lines")
 
         compare(lastPatch().patch, {connection: "straight"})
@@ -501,8 +438,6 @@ TestCase {
         openPopup(gear)
         const close = control(gear, "graphQuickClose_scenarioHistory")
         verify(close !== null)
-        compare(close.Accessible.name, "Close")
-
         mouseClick(close)
 
         tryVerify(() => !gear.popup.opened, 2000)

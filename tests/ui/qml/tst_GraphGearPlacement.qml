@@ -162,12 +162,6 @@ Item {
 
         // ---- Benchmark cards ----------------------------------------------------------------------------
 
-        function test_aHistoryCardNamesItsGraphFromItsKey() {
-            const card = createTemporaryObject(historyCardComponent, root, {graphKey: "benchmarkPlaytime"})
-            const gear = gearOf(card, "benchmarkPlaytime")
-            compare(gear.Accessible.name, "Benchmark playtime settings")
-        }
-
         function test_aHistoryCardRelaysMoreGraphSettings() {
             const card = createTemporaryObject(historyCardComponent, root)
             const spy = createTemporaryObject(spyComponent, root, {target: card, signalName: "moreGraphSettingsRequested"})

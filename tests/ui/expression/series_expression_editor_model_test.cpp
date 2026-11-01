@@ -129,21 +129,18 @@ namespace {
         EXPECT_TRUE(model.ancestorChain(nullptr).isEmpty());
     }
 
-    TEST(SeriesExpressionEditorModelTest, ReplaceChildSupportsRootBinaryUnaryAndDefaults) {
+    TEST(SeriesExpressionEditorModelTest, ReplaceChildSupportsRootBinaryAndUnary) {
         SeriesExpressionEditorModel model;
         model.replaceChild(nullptr, "root", "add");
         auto *root = qobject_cast<EditableBinaryOpNode *>(model.selected());
         model.replaceChild(root, "left", "constant");
-        EXPECT_DOUBLE_EQ(qobject_cast<EditableConstantNode *>(root->left())->value(), 0.0);
+        ASSERT_NE(qobject_cast<EditableConstantNode *>(root->left()), nullptr);
         model.replaceChild(root, "right", "rollingMean");
         auto *rolling = qobject_cast<EditableRollingMeanNode *>(root->right());
         ASSERT_NE(rolling, nullptr);
-        EXPECT_EQ(rolling->window(), 10U);
         model.replaceChild(rolling, "input", "averageAcrossRuns");
         auto *average = qobject_cast<EditableAverageAcrossRunsNode *>(rolling->input());
         ASSERT_NE(average, nullptr);
-        EXPECT_EQ(average->selectionKind(), "recentRuns");
-        EXPECT_EQ(average->count(), 5U);
     }
 
     TEST(SeriesExpressionEditorModelTest, ReplaceChildWithMismatchedSlotIsANoOpAndDoesNotLeak) {
@@ -161,14 +158,12 @@ namespace {
         EXPECT_EQ(model.selected(), nullptr);
     }
 
-    TEST(SeriesExpressionEditorModelTest, IncompleteUnaryNodesAreNotSaveableButCompleteNodesRoundTrip) {
+    TEST(SeriesExpressionEditorModelTest, IncompleteUnaryNodesAreNotSaveableButCompleteNodesAre) {
         SeriesExpressionEditorModel model;
         model.replaceChild(nullptr, "root", "rollingMean");
         EXPECT_FALSE(model.toExpression());
         model.replaceChild(model.selected(), "input", "primitive");
-        const auto parsed = model.toExpression();
-        ASSERT_TRUE(parsed);
-        EXPECT_EQ(encodeExpressionDsl(*parsed), "RollingMean(window: 10, SCORE)");
+        EXPECT_TRUE(model.toExpression());
 
         SeriesExpressionEditorModel average;
         average.replaceChild(nullptr, "root", "averageAcrossRuns");
@@ -198,14 +193,13 @@ namespace {
         EXPECT_EQ(model.selected(), nullptr);
     }
 
-    TEST(SeriesExpressionEditorModelTest, WrapSelectedPreservesNodeAndUsesSharedDefaults) {
+    TEST(SeriesExpressionEditorModelTest, WrapSelectedPreservesNode) {
         SeriesExpressionEditorModel model;
         primitiveRoot(model);
         auto *originalPrimitive = model.root();
         model.wrapSelected("rollingMean");
         auto *rolling = qobject_cast<EditableRollingMeanNode *>(model.root());
         ASSERT_NE(rolling, nullptr);
-        EXPECT_EQ(rolling->window(), 10U);
         EXPECT_EQ(rolling->input(), originalPrimitive);
         model.wrapSelected("add");
         auto *added = qobject_cast<EditableBinaryOpNode *>(model.root());

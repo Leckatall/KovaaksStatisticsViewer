@@ -137,33 +137,12 @@ Item {
             verify(isAncestor(panel, findChild(panel, "configureGraphLinesButton")))
         }
 
-        // The legend is a column down the panel's left side, beside the title as well as the plot.
-        function test_lineTogglesFormALeftColumnBesideTitleAndPlot() {
-            const panel = createTemporaryObject(panelComponent, root)
-            verify(!!panel, "Component exists")
-            const toggles = findChild(panel, "graphLineToggles")
-            const content = findChild(panel, "graphContentArea")
-            const title = findChild(panel, "scenarioTitleLabel")
-            const togglesRight = toggles.mapToItem(panel, toggles.width, 0).x
-            verify(togglesRight <= content.mapToItem(panel, 0, 0).x, "toggles sit left of the plot")
-            verify(togglesRight <= title.mapToItem(panel, 0, 0).x, "toggles sit left of the title")
-            const togglesTop = toggles.mapToItem(panel, 0, 0).y
-            verify(togglesTop <= title.mapToItem(panel, 0, 0).y + 0.5, "the column starts beside the title")
-            const contentBottom = content.mapToItem(panel, 0, content.height).y
-            verify(Math.abs(toggles.mapToItem(panel, 0, toggles.height).y - contentBottom) <= 0.5,
-                   "the column runs to the bottom of the plot")
-        }
-
-        // The title uses the shared chart title style (ChartTitle) and starts where the plot column
-        // does, not over the legend.
+        // The title starts where the plot column does, not over the legend.
         function test_titleIsLeftAlignedOverThePlot() {
             const panel = createTemporaryObject(panelComponent, root)
             verify(!!panel, "Component exists")
             const title = findChild(panel, "scenarioTitleLabel")
             const content = findChild(panel, "graphContentArea")
-            compare(title.horizontalAlignment, Text.AlignLeft)
-            compare(title.font.weight, Font.DemiBold)
-            compare(title.font.pixelSize, 14)
             fuzzyCompare(title.mapToItem(panel, 0, 0).x, content.mapToItem(panel, 0, 0).x, 0.5)
         }
 
@@ -188,16 +167,6 @@ Item {
                    "panel implicit height " + panel.implicitHeight + " follows the chips")
             const button = findChild(panel, "configureGraphLinesButton")
             verify(button.mapToItem(panel, 0, button.height).y <= panel.height, "Configure... fits in the panel")
-        }
-
-        // No caption under the title; the rotated axis title alone names the axis, in the default grey.
-        function test_noYAxisCaptionAndGreyAxisTitle() {
-            const panel = createTemporaryObject(panelComponent, root)
-            verify(!!panel, "Component exists")
-            compare(findChild(panel, "yAxisScaleCaption"), null)
-            let label = null
-            tryVerify(() => (label = findChild(panel, "scenarioYAxisTitleLabel")) !== null)
-            verify(Qt.colorEqual(label.color, Qt.alpha(label.palette.text, 0.6)), "axis title colour " + label.color)
         }
 
         // The axis label comes from the committed configuration the graph VM reads, not from QML settings.

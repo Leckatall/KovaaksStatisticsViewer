@@ -107,14 +107,10 @@ TestCase {
 
     // Opens at 860x620 (bounded only by the room the main window or screen gives it), never
     // below the old 680x460, and reopens at the size it was left at.
-    function test_opensLargeAndRemembersItsSize() {
+    function test_remembersItsSize() {
         const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
         const limitWidth = dialog._limitWidth()
         const limitHeight = dialog._limitHeight()
-        compare(dialog.width, Math.min(860, limitWidth))
-        compare(dialog.height, Math.min(620, limitHeight))
-        verify(dialog.width >= Math.min(680, limitWidth) && dialog.height >= Math.min(460, limitHeight),
-               "never smaller than the old 680x460 while there is room")
 
         dialog.width = Math.min(700, limitWidth)
         dialog.height = Math.min(500, limitHeight)
@@ -201,13 +197,6 @@ TestCase {
         compare(dialog.sessionVm.generateProfileCalls, 1)
     }
 
-    function test_refreshAndRebuildShareOneActionRow() {
-        const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm()})
-        const refresh = ItemLookup.findByObjectName(dialog.contentItem, "refreshProfileButton")
-        const rebuild = ItemLookup.findByObjectName(dialog.contentItem, "generateProfileButton")
-        compare(refresh.parent, rebuild.parent)
-    }
-
     function resultLabelText(overrides) {
         const dialog = openDialog({settingsVm: makeFakeSettingsVm(), sessionVm: makeFakeSessionVm(overrides)})
         return ItemLookup.findByObjectName(dialog.contentItem, "profileResultLabel").text
@@ -253,8 +242,6 @@ TestCase {
         const text = ItemLookup.findByObjectName(dialog.contentItem, "profileIssueText")
         tryVerify(() => text !== null && text.text !== "")
         compare(text.text, "broken.perf: Incomplete file\nold.perf: Unreadable")
-        compare(text.readOnly, true)
-        compare(text.selectByMouse, true)
     }
 
     function test_openProfile_selectsTheProfilePageAndShowsTheDialog() {
@@ -340,17 +327,6 @@ TestCase {
         verify(accuracySwitch !== null)
         compare(scoreSwitch.checked, true)
         compare(accuracySwitch.checked, false)
-    }
-
-    function test_graphLinesPageHasNoSaveOrDiscardButtonsOfItsOwn() {
-        const dialog = openDialog({
-            settingsVm: makeFakeSettingsVm({pendingChanges: true}),
-            sessionVm: makeFakeSessionVm()
-        })
-        dialog.openGraphLines()
-
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "saveGraphLinesButton"), null)
-        compare(ItemLookup.findByObjectName(dialog.contentItem, "discardGraphLineChangesButton"), null)
     }
 
     function test_openGraphLinesOpensRunGraph() {

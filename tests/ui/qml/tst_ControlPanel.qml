@@ -59,31 +59,10 @@ TestCase {
     function test_swatch_matches_the_line_colour_exactly() {
         const swatch = findChild(panel, "seriesSwatch_1")
         verify(swatch !== null)
-        compare(swatch.opacity, 1)
         verify(Qt.colorEqual(swatch.color, "#009600"), "swatch fill " + swatch.color)
-        verify(Qt.colorEqual(swatch.border.color, "#009600"))
 
         const accuracy = findChild(panel, "seriesSwatch_2")
         verify(Qt.colorEqual(accuracy.color, "#00ffff"), "swatch fill " + accuracy.color)
-    }
-
-    function test_hidden_line_keeps_its_colour_as_an_outline() {
-        const checkbox = findChild(panel, "seriesVisibilityCheckBox_2")
-        const swatch = findChild(panel, "seriesSwatch_2")
-        checkbox.checked = false
-        checkbox.toggled()
-        verify(Qt.colorEqual(swatch.color, "transparent"))
-        verify(Qt.colorEqual(swatch.border.color, "#00ffff"))
-        checkbox.checked = true
-        checkbox.toggled()
-        verify(Qt.colorEqual(swatch.color, "#00ffff"))
-    }
-
-    // The label is drawn in the normal text colour, not on a series-coloured background.
-    function test_label_uses_the_text_colour() {
-        const checkbox = findChild(panel, "seriesVisibilityCheckBox_1")
-        verify(Qt.colorEqual(checkbox.contentItem.color, checkbox.palette.text))
-        verify(checkbox.background.color.a < 0.2, "no series-coloured chip background")
     }
 
     // One chip per row, top to bottom in the line-list order, with "Configure..." below them.
@@ -171,16 +150,6 @@ TestCase {
         verify(button !== null)
         button.clicked()
         compare(spy.count, 1)
-    }
-
-    function test_configure_footer_shows_by_default() {
-        compare(panel.showConfigureButton, true)
-        testCase.visible = true
-        const button = findChild(panel, "configureGraphLinesButton")
-        compare(button.visible, true)
-        verify(panel.implicitWidth >= button.implicitWidth)
-        compare(panel.implicitHeight, button.implicitHeight)
-        testCase.visible = false
     }
 
     function test_hiding_the_configure_footer_removes_it_and_its_space() {

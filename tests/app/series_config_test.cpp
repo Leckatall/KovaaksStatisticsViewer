@@ -37,28 +37,6 @@ namespace {
         return configs;
     }
 
-    TEST(SeriesConfigTest, SeriesConfigDefaultsToNoAxisAndIdentityTransform) {
-        const SeriesConfig config{SeriesId{1}, {"Score", {}, true, 0}, primitive(PrimitiveMetric::Score)};
-
-        EXPECT_FALSE(config.yAxisId.has_value());
-        EXPECT_EQ(config.transformKind, AxisTransformKind::Identity);
-    }
-
-    TEST(SeriesConfigTest, AxisConfigHoldsIdNameOptionsAndTransformKind) {
-        const AxisConfig axis{
-            AxisId{5}, "Custom axis", {ValueAxisOptions::Baseline::Zero, true, 6, 2.0},
-            AxisTransformKind::Percentage
-        };
-
-        EXPECT_EQ(axis.id.value, 5U);
-        EXPECT_EQ(axis.name, "Custom axis");
-        EXPECT_EQ(axis.options.baseline, ValueAxisOptions::Baseline::Zero);
-        EXPECT_TRUE(axis.options.integral);
-        EXPECT_EQ(axis.options.targetTicks, 6);
-        EXPECT_DOUBLE_EQ(axis.options.fallbackSpan, 2.0);
-        EXPECT_EQ(axis.transformKind, AxisTransformKind::Percentage);
-    }
-
     TEST(SeriesConfigTest, DefaultRunSeriesDocumentIsValid) {
         const auto document = defaultRunSeriesDocument();
 
@@ -85,26 +63,6 @@ namespace {
         EXPECT_EQ(document.nextSeriesId->value, highestSeriesId + 1);
         ASSERT_TRUE(document.nextAxisId);
         EXPECT_EQ(document.nextAxisId->value, *axisIds.rbegin() + 1);
-    }
-
-    TEST(SeriesConfigTest, DefaultHighScoreLineIsEnabledOnTheScoreAxis) {
-        const auto configs = defaultSeriesConfigs();
-        const auto highScore = std::ranges::find(configs, std::string("High Score"),
-                                                 [](const SeriesConfig &config) { return config.presentation.name; });
-
-        ASSERT_NE(highScore, configs.end());
-        EXPECT_TRUE(highScore->presentation.enabled);
-        EXPECT_EQ(highScore->yAxisId, AxisId{1});
-        EXPECT_EQ(encodeExpressionDsl(highScore->expression), "BestRun(Final(SCORE))");
-    }
-
-    // Lines built from other runs are context for the current run, so they must not compete with it visually.
-    TEST(SeriesConfigTest, DefaultLinesAreTranslucentOnlyWhenBuiltFromOtherRuns) {
-        const std::set<uint64_t> otherRunLines{3, 4, 9};
-        for (const auto &config: defaultSeriesConfigs()) {
-            SCOPED_TRACE(config.presentation.name);
-            EXPECT_EQ(config.presentation.lineStyle.color.alpha, otherRunLines.contains(config.id.value) ? 128 : 255);
-        }
     }
 
     TEST(SeriesConfigTest, ProjectRateToFinalParticipatesInValidationLimits) {

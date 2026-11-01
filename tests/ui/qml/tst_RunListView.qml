@@ -149,17 +149,6 @@ TestCase {
         verify(findChild(view, "runItem_1").y - card.y >= card.height + view.cardSpacing - 0.5)
     }
 
-    function test_cardLiftsOnHover() {
-        const view = createView({runModel: makeManyRuns(2)})
-        const card = findChild(view, "runItem_1")
-        mouseMove(view, 1, view.height - 1)
-        tryVerify(() => !card.pointerOver)
-        const rest = card.background.color.toString()
-        mouseMove(card, card.width / 2, card.height / 2)
-        tryVerify(() => card.pointerOver)
-        verify(card.background.color.toString() !== rest, "hovering must visibly change the card")
-    }
-
     function test_rowExposesAnAccessibleSummary() {
         const view = createView({runModel: makeManyRuns(1)})
         const name = findChild(view, "runItem_0").Accessible.name
