@@ -467,8 +467,27 @@ function makeFakeBenchmarkManagerVm(overrides) {
             this.clearThresholdCalls.push([entryId, tierId])
             return {ok: true}
         },
-        addCategoryCalls: [],
-        addCategory: function (name) { this.commandLog.push("addCategory"); this.addCategoryCalls.push(name); return {ok: true, createdId: "category-1"} },
+        addCategoriesCalls: [],
+        addCategoriesResult: null,
+        addCategories: function (text) {
+            this.commandLog.push("addCategories")
+            this.addCategoriesCalls.push(text)
+            return this.addCategoriesResult || {ok: true, createdIds: ["category-1"], skipped: []}
+        },
+        groupCommandOptionsCalls: [],
+        groupCommandOptions: function (query, parentCategoryId) {
+            this.groupCommandOptionsCalls.push([query, parentCategoryId])
+            const name = query.trim()
+            return {actions: name === "" ? [] : [{kind: "create", name: name, parentId: parentCategoryId}],
+                    exactMatch: false}
+        },
+        createGroupAndAssignCalls: [],
+        createGroupAndAssignResult: null,
+        createGroupAndAssign: function (entryIds, name, parentCategoryId) {
+            this.commandLog.push("createGroupAndAssign")
+            this.createGroupAndAssignCalls.push([Array.prototype.slice.call(entryIds), name, parentCategoryId])
+            return this.createGroupAndAssignResult || {ok: true, createdId: "category-1"}
+        },
         renameGroupCalls: [],
         renameGroup: function (id, name) { this.renameGroupCalls.push([id, name]); return {ok: true} },
         setGroupColorCalls: [],
@@ -491,7 +510,6 @@ function makeFakeBenchmarkManagerVm(overrides) {
         // BenchmarkTableModelFixture; commandLog records every table-era command in call order.
         tableModel: null,
         groups: [],
-        assignTargets: [{id: "", label: "Uncategorized"}],
         selectedEntryIds: [],
         currentCell: ({}),
         canUndo: false,
@@ -519,12 +537,6 @@ function makeFakeBenchmarkManagerVm(overrides) {
             this.assignScenariosCalls.push(before ? [entryIds, target, before] : [entryIds, target])
             return this.assignResult || {ok: true}
         },
-        addSubcategoryRelocatingCalls: [],
-        addSubcategoryRelocating: function (categoryId, name, relocation) {
-            this.commandLog.push("addSubcategoryRelocating")
-            this.addSubcategoryRelocatingCalls.push([categoryId, name, relocation])
-            return {ok: true, createdId: "subcategory-1"}
-        },
         reorderSubcategoryCalls: [],
         reorderSubcategory: function (id, position) {
             this.commandLog.push("reorderSubcategory")
@@ -547,12 +559,17 @@ function benchmarkManagementDesc() {
     const g1 = {id: "g1", name: "Clicking", color: "#009600"}
     const g2 = {id: "g2", name: "Tracking", color: "#000096"}
     const p = {id: "p", name: "Precise", color: "#960000"}
+    const hollow = {id: "hollow", name: "Hollow", color: "#444444", issues: ["A subcategory has no scenarios."]}
+    const gE = {id: "gE", name: "Empty", color: "#888888",
+                issues: ["A category has neither scenarios nor subcategories."]}
     return {
         tiers: [{id: "t1", name: "Gold", color: "#FFD700"}, {id: "t2", name: ""}],
         rows: [
             {entryId: "a", name: "1w6ts", category: g1, cells: {t1: {displayText: "100"}}},
             {entryId: "b", name: "1w4ts", category: g1, cells: {}},
             {entryId: "c", name: "smoothbot", category: g2, subcategory: p, cells: {}},
+            {emptyGroupId: "hollow", category: g2, subcategory: hollow},
+            {emptyGroupId: "gE", category: gE},
             {entryId: "u-res", name: "resolved one", mappingState: "resolved",
              mappingCandidates: [benchmarkManagerCandidate("hash-a", 5, new Date(2024, 2, 3))], cells: {}},
             {entryId: "u-amb", name: "ambiguous one", mappingState: "ambiguous",
@@ -565,23 +582,13 @@ function benchmarkManagementDesc() {
 
 function benchmarkManagementGroups() {
     return [
-        {id: "g1", kind: "category", parentId: "", name: "Clicking", color: "#009600", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-        {id: "g2", kind: "category", parentId: "", name: "Tracking", color: "#000096", scenarioCount: 1, acceptsScenarios: false, subcategoryNeedsRelocation: false, issues: []},
-        {id: "p", kind: "subcategory", parentId: "g2", name: "Precise", color: "#960000", scenarioCount: 1, acceptsScenarios: true, issues: []},
-        {id: "hollow", kind: "subcategory", parentId: "g2", name: "Hollow", color: "#444444", scenarioCount: 0, acceptsScenarios: true,
+        {id: "g1", kind: "category", parentId: "", name: "Clicking", color: "#009600", scenarioCount: 2, issues: []},
+        {id: "g2", kind: "category", parentId: "", name: "Tracking", color: "#000096", scenarioCount: 1, issues: []},
+        {id: "p", kind: "subcategory", parentId: "g2", name: "Precise", color: "#960000", scenarioCount: 1, issues: []},
+        {id: "hollow", kind: "subcategory", parentId: "g2", name: "Hollow", color: "#444444", scenarioCount: 0,
          issues: ["A subcategory has no scenarios."]},
-        {id: "gE", kind: "category", parentId: "", name: "Empty", color: "#888888", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false,
+        {id: "gE", kind: "category", parentId: "", name: "Empty", color: "#888888", scenarioCount: 0,
          issues: ["A category has neither scenarios nor subcategories."]}
-    ]
-}
-
-function benchmarkManagementAssignTargets() {
-    return [
-        {id: "", label: "Uncategorized"},
-        {id: "g1", label: "Clicking"},
-        {id: "p", label: "Tracking / Precise"},
-        {id: "hollow", label: "Tracking / Hollow"},
-        {id: "gE", label: "Empty"}
     ]
 }
 
@@ -662,8 +669,10 @@ function benchmarkTableProjection(desc) {
                 issues: cell.issues || []
             }
         })
+        const emptyGroupRow = !!row.emptyGroupId
         return {
-            entryId: row.entryId, name: row.name !== undefined ? row.name : "Scenario " + row.entryId,
+            entryId: row.entryId || "", emptyGroupId: row.emptyGroupId || "", unassigned: !!row.unassigned,
+            name: row.name !== undefined ? row.name : (emptyGroupRow ? "" : "Scenario " + row.entryId),
             scenarioIssues: row.scenarioIssues || [],
             category: row.category ? {id: row.category.id, name: row.category.name,
                                       color: row.category.color || "#336699", issues: row.category.issues || []}
@@ -672,7 +681,7 @@ function benchmarkTableProjection(desc) {
                                             color: row.subcategory.color || "#669933",
                                             issues: row.subcategory.issues || []}
                                          : {id: "", name: "", issues: []},
-            mappingState: row.mappingState || "unresolved",
+            mappingState: row.mappingState || (emptyGroupRow ? "" : "unresolved"),
             mappingCandidates: row.mappingCandidates || [],
             mappedHashes: row.mappedHashes || [],
             cells: cells

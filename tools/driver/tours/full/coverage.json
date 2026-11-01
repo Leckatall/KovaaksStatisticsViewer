@@ -91,7 +91,6 @@
   {"area": "Manager", "state": "Multi-row selection", "shot": "multi-row-selection"},
   {"area": "Manager", "state": "Library collapsed toolbar", "shot": "library-collapsed-toolbar"},
   {"area": "Manager", "state": "Toolbar tooltip", "shot": "toolbar-tooltip"},
-  {"area": "Manager", "state": "Subcategory relocation prompt", "shot": "subcategory-relocation-prompt"},
-  {"area": "Manager", "state": "After relocation (dirty)", "shot": "after-relocation-dirty"},
+  {"area": "Manager", "state": "Unassigned scenarios after adding a subcategory", "shot": "unassigned-after-subcategory"},
   {"area": "Manager", "state": "Dirty-close prompt", "shot": "dirty-close-prompt"}
 ]

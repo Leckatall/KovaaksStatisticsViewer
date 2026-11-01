@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <QDateTime>
 #include <QLocale>
+#include <QSet>
 #include <QTimeZone>
 #include <QUuid>
 #include <cstddef>
@@ -17,6 +18,7 @@
 
 #include "presentation/benchmarks/manager/benchmark_cell_input.h"
 #include "presentation/benchmarks/manager/benchmark_clipboard_matrix.h"
+#include "presentation/benchmarks/manager/benchmark_group_command.h"
 #include "presentation/benchmarks/benchmark_format.h"
 
 namespace ksv::presentation {
@@ -44,9 +46,6 @@ namespace ksv::presentation {
                     return QObject::tr("That scenario is already in this benchmark.");
                 case domain::BenchmarkEditError::PositionOutOfRange:
                     return QObject::tr("That position is out of range.");
-                case domain::BenchmarkEditError::MixedContent:
-                    return QObject::tr("A category cannot hold both scenarios and subcategories. Move its "
-                                       "scenarios into a subcategory or to Uncategorized first.");
             }
             return {};
         }
@@ -61,6 +60,15 @@ namespace ksv::presentation {
             const auto found = std::ranges::find_if(draft.tiers, [&](const domain::Tier &t) { return t.id == id; });
             if (found == draft.tiers.end()) return std::nullopt;
             return static_cast<std::size_t>(found - draft.tiers.begin());
+        }
+
+        bool groupExists(const domain::Benchmark &draft, const QString &groupId) {
+            const domain::GroupId id{groupId.toStdString()};
+            return std::ranges::any_of(draft.categories, [&](const domain::Category &category) {
+                return category.id == id || std::ranges::any_of(category.subcategories, [&](const domain::Subcategory &sub) {
+                    return sub.id == id;
+                });
+            });
         }
 
         // Only table elements (tiers, groups, scenarios) are focusable from a validation issue;
@@ -169,6 +177,17 @@ namespace ksv::presentation {
                 projection.tiers.push_back({idString(tier.id), QString::fromStdString(tier.name), toQColor(tier.color),
                                             issueTexts(IssueIndex::lookup(issues.byTier, tier.id.value))});
 
+            // data() indexes row.cells by tier, so an empty-group row carries blank cells too.
+            const auto appendEmptyGroupRow = [&](const BenchmarkTableGroupSpan &category,
+                                                 const BenchmarkTableGroupSpan &subcategory, const QString &groupId) {
+                BenchmarkTableRow row;
+                row.emptyGroupId = groupId;
+                row.category = category;
+                row.subcategory = subcategory;
+                row.cells.resize(draft.tiers.size());
+                projection.rows.push_back(std::move(row));
+            };
+
             const auto appendRow = [&](const domain::ScenarioEntry &entry, const BenchmarkTableGroupSpan &category,
                                        const BenchmarkTableGroupSpan &subcategory) {
                 BenchmarkTableRow row;
@@ -220,14 +239,23 @@ namespace ksv::presentation {
             for (const auto &category: draft.categories) {
                 const auto categoryFirst = projection.rows.size();
                 const auto categorySpan = groupSpan(category, static_cast<int>(categoryFirst), issues);
-                for (const auto &entry: category.scenarios)
+                for (const auto &entry: category.scenarios) {
                     appendRow(entry, categorySpan, noGroupAt(projection.rows.size()));
+                    if (category.subcategories.empty()) continue;
+                    auto &direct = projection.rows.back();
+                    direct.unassigned = true;
+                    direct.subcategory.issues = {
+                        QObject::tr("Move this scenario into a subcategory before the benchmark can be trackable.")};
+                }
                 for (const auto &sub: category.subcategories) {
                     const auto subFirst = projection.rows.size();
                     const auto subSpan = groupSpan(sub, static_cast<int>(subFirst), issues);
                     for (const auto &entry: sub.scenarios) appendRow(entry, categorySpan, subSpan);
+                    if (sub.scenarios.empty()) appendEmptyGroupRow(categorySpan, subSpan, subSpan.id);
                     closeSpan(subFirst, &BenchmarkTableRow::subcategory);
                 }
+                if (projection.rows.size() == categoryFirst)
+                    appendEmptyGroupRow(categorySpan, noGroupAt(categoryFirst), categorySpan.id);
                 closeSpan(categoryFirst, &BenchmarkTableRow::category);
             }
             const auto uncategorizedFirst = projection.rows.size();
@@ -254,35 +282,12 @@ namespace ksv::presentation {
             for (const auto &category: draft.categories) {
                 int count = static_cast<int>(category.scenarios.size());
                 for (const auto &sub: category.subcategories) count += static_cast<int>(sub.scenarios.size());
-                auto described = describe(category, QStringLiteral("category"), QString(), count);
-                described["acceptsScenarios"] = category.subcategories.empty();
-                described["subcategoryNeedsRelocation"] =
-                    category.subcategories.empty() && !category.scenarios.empty();
-                groups.push_back(described);
-                for (const auto &sub: category.subcategories) {
-                    auto subDescribed = describe(sub, QStringLiteral("subcategory"), idString(category.id),
-                                                 static_cast<int>(sub.scenarios.size()));
-                    subDescribed["acceptsScenarios"] = true;
-                    groups.push_back(subDescribed);
-                }
+                groups.push_back(describe(category, QStringLiteral("category"), QString(), count));
+                for (const auto &sub: category.subcategories)
+                    groups.push_back(describe(sub, QStringLiteral("subcategory"), idString(category.id),
+                                              static_cast<int>(sub.scenarios.size())));
             }
             return groups;
-        }
-
-        QVariantList buildAssignTargets(const domain::Benchmark *draft) {
-            QVariantList targets{QVariantMap{{"id", QString()}, {"label", QObject::tr("Uncategorized")}}};
-            if (!draft) return targets;
-            for (const auto &category: draft->categories) {
-                const auto categoryName = QString::fromStdString(category.name);
-                if (category.subcategories.empty())
-                    targets.push_back(QVariantMap{{"id", idString(category.id)}, {"label", categoryName}});
-                for (const auto &sub: category.subcategories)
-                    targets.push_back(QVariantMap{
-                        {"id", idString(sub.id)},
-                        {"label", categoryName + " / " + QString::fromStdString(sub.name)},
-                    });
-            }
-            return targets;
         }
 
         // Scenario entries in the table's row order: categories in order (direct scenarios, then
@@ -438,7 +443,6 @@ namespace ksv::presentation {
         m_validationIssues = std::move(validationIssues);
         m_tiers = std::move(tiers);
         m_groups = std::move(groups);
-        m_assignTargets = buildAssignTargets(m_draft ? &*m_draft : nullptr);
         m_tableModel->setProjection(std::move(projection));
         m_scenarioCatalogue = std::move(scenarioCatalogue);
         m_libraryEntries = std::move(libraryEntries);
@@ -514,8 +518,9 @@ namespace ksv::presentation {
 
     void BenchmarkManagerViewModel::recomputeAfterLocalEdit() {
         // The model still holds the outgoing projection, so it knows where the focused row sat.
-        const int oldRow = m_tableModel->rowForEntry(m_currentCell.value(QStringLiteral("entryId")).toString());
-        restoreSelection(m_selectedEntryIds, m_currentCell, oldRow);
+        const int oldPosition =
+            m_tableModel->scenarioPosition(m_currentCell.value(QStringLiteral("entryId")).toString());
+        restoreSelection(m_selectedEntryIds, m_currentCell, oldPosition);
         pruneCellInputs();
         m_draftCompleteness = domain::validateBenchmark(*m_draft);
         m_draftDirty = !m_baseline || *m_draft != *m_baseline || !m_cellInputs.empty();
@@ -744,10 +749,6 @@ namespace ksv::presentation {
         });
     }
 
-    QVariantMap BenchmarkManagerViewModel::addCategory(const QString &name) {
-        return applyEdit([&](domain::BenchmarkEditor &e) { return e.addCategory(name.toStdString()); });
-    }
-
     QVariantMap BenchmarkManagerViewModel::renameGroup(const QString &id, const QString &name) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
             return e.renameGroup(domain::GroupId{id.toStdString()}, name.toStdString());
@@ -798,7 +799,7 @@ namespace ksv::presentation {
     }
 
     void BenchmarkManagerViewModel::restoreSelection(const QStringList &ids, const QVariantMap &cell,
-                                                     int fallbackRow) {
+                                                     int fallbackPosition) {
         const auto order = visibleEntryOrder(*m_draft);
         const auto exists = [&](const QString &id) {
             return std::ranges::find(order, domain::ScenarioEntryId{id.toStdString()}) != order.end();
@@ -808,15 +809,16 @@ namespace ksv::presentation {
             if (exists(id)) surviving.push_back(id);
         QVariantMap current = cell;
         const auto entryId = cell.value(QStringLiteral("entryId")).toString();
-        if (!entryId.isEmpty() && !exists(entryId)) {
+        const auto emptyGroupId = cell.value(QStringLiteral("emptyGroupId")).toString();
+        if (!emptyGroupId.isEmpty()) {
+            if (!groupExists(*m_draft, emptyGroupId)) current.clear();
+        } else if (order.empty()) {
+            current.clear();
+        } else if (!entryId.isEmpty() && !exists(entryId)) {
             // Fall back to the row now nearest the lost anchor, keeping its column.
-            current.remove(QStringLiteral("entryId"));
-            if (!order.empty()) {
-                const auto row = std::min(static_cast<std::size_t>(std::max(fallbackRow, 0)), order.size() - 1);
-                current.insert(QStringLiteral("entryId"), QString::fromStdString(order[row].value));
-            }
+            const auto position = std::min(static_cast<std::size_t>(std::max(fallbackPosition, 0)), order.size() - 1);
+            current.insert(QStringLiteral("entryId"), QString::fromStdString(order[position].value));
         }
-        if (order.empty()) current.clear();
         const auto tierId = current.value(QStringLiteral("tierId")).toString();
         if (!tierId.isEmpty() && !tierPosition(*m_draft, domain::TierId{tierId.toStdString()})) {
             current.remove(QStringLiteral("tierId"));
@@ -857,7 +859,8 @@ namespace ksv::presentation {
     QVariantMap BenchmarkManagerViewModel::pasteText(const QVariantMap &destination, const QString &text) {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
         const QString kind = destination.value(QStringLiteral("kind")).toString();
-        if (kind == QStringLiteral("category") || kind == QStringLiteral("subcategory"))
+        if (kind == QStringLiteral("category") || kind == QStringLiteral("subcategory") ||
+            kind == QStringLiteral("emptyGroup"))
             return errorMap(tr("Paste into scenario, threshold or rank-name cells. Assign selected rows to a "
                                "group instead of pasting into it."));
         const auto matrix = BenchmarkClipboardMatrix::parse(text);
@@ -945,14 +948,15 @@ namespace ksv::presentation {
                                                            const QString &targetGroupId,
                                                            const QString &beforeEntryId) {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
-        // The generic MixedContent text advises relocating a category's own scenarios, which is the
-        // wrong remedy when the rows being assigned are what would mix it.
-        if (std::ranges::any_of(m_draft->categories, [&](const domain::Category &category) {
-                return category.id.value == targetGroupId.toStdString() && !category.subcategories.empty();
-            }))
-            return errorMap(tr("That category is divided into subcategories. Assign the rows to one of its "
-                               "subcategories instead."));
-        // Selection arrives in click order; the batch keeps the rows' current visible order.
+        const auto ordered = inVisibleOrder(entryIds);
+        std::optional<domain::ScenarioEntryId> before;
+        if (!beforeEntryId.isEmpty()) before = domain::ScenarioEntryId{beforeEntryId.toStdString()};
+        return applyEdit([&](domain::BenchmarkEditor &e) {
+            return e.assignScenarios(ordered, toGroupTarget(targetGroupId), before);
+        });
+    }
+
+    std::vector<domain::ScenarioEntryId> BenchmarkManagerViewModel::inVisibleOrder(const QStringList &entryIds) const {
         std::unordered_map<std::string, std::size_t> visibleIndex;
         for (const auto &id: visibleEntryOrder(*m_draft)) visibleIndex.emplace(id.value, visibleIndex.size());
         std::vector<domain::ScenarioEntryId> ordered;
@@ -961,22 +965,79 @@ namespace ksv::presentation {
             const auto found = visibleIndex.find(id.value);
             return found == visibleIndex.end() ? visibleIndex.size() : found->second;
         });
-        std::optional<domain::ScenarioEntryId> before;
-        if (!beforeEntryId.isEmpty()) before = domain::ScenarioEntryId{beforeEntryId.toStdString()};
-        return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.assignScenarios(ordered, toGroupTarget(targetGroupId), before);
+        return ordered;
+    }
+
+    QVariantMap BenchmarkManagerViewModel::groupCommandOptions(const QString &query,
+                                                               const QString &parentCategoryId) const {
+        QVariantList actions;
+        if (!m_draft) return QVariantMap{{"actions", actions}, {"exactMatch", false}};
+        const auto options = buildGroupCommandOptions(*m_draft, query, parentCategoryId);
+        for (const auto &action: options.actions) {
+            if (action.kind == GroupCommandAction::Kind::Create)
+                actions.push_back(QVariantMap{{"kind", QStringLiteral("create")},
+                                              {"name", action.name},
+                                              {"parentId", action.parentId}});
+            else
+                actions.push_back(QVariantMap{{"kind", QStringLiteral("move")},
+                                              {"targetId", action.targetId},
+                                              {"path", action.path}});
+        }
+        return QVariantMap{{"actions", actions}, {"exactMatch", options.exactMatch}};
+    }
+
+    QVariantMap BenchmarkManagerViewModel::createGroupAndAssign(const QStringList &entryIds, const QString &name,
+                                                                const QString &parentCategoryId) {
+        if (!m_draft) return errorMap(tr("No benchmark is open."));
+        const auto trimmed = name.trimmed();
+        if (trimmed.isEmpty()) return errorMap(tr("Enter a name for the group."));
+        const auto ordered = inVisibleOrder(entryIds);
+        return applyEdit([&](domain::BenchmarkEditor &e) -> domain::BenchmarkEditResult {
+            const auto creation = parentCategoryId.isEmpty()
+                                      ? e.addCategory(trimmed.toStdString())
+                                      : e.addSubcategory(domain::GroupId{parentCategoryId.toStdString()},
+                                                         trimmed.toStdString());
+            if (creation.error) return creation;
+            const auto assignment = e.assignScenarios(ordered, *creation.createdGroup, std::nullopt);
+            return assignment.error ? assignment : creation;
         });
     }
 
-    QVariantMap BenchmarkManagerViewModel::addSubcategoryRelocating(const QString &categoryId, const QString &name,
-                                                                    const QString &relocation) {
-        domain::DirectScenarioRelocation choice{domain::RelocateDirectToUncategorized{}};
-        if (relocation == QStringLiteral("newSubcategory")) choice = domain::RelocateDirectToNewSubcategory{};
-        else if (relocation != QStringLiteral("uncategorized"))
-            return errorMap(tr("Choose where the category's scenarios should go."));
-        return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.addSubcategory(domain::GroupId{categoryId.toStdString()}, name.toStdString(), choice);
-        });
+    QVariantMap BenchmarkManagerViewModel::addCategories(const QString &commaSeparatedNames) {
+        if (!m_draft) return errorMap(tr("No benchmark is open."));
+        QStringList requested;
+        for (const auto &part: commaSeparatedNames.split(QLatin1Char(','))) {
+            const auto trimmed = part.trimmed();
+            if (!trimmed.isEmpty()) requested.push_back(trimmed);
+        }
+        if (requested.isEmpty()) return errorMap(tr("Enter at least one category name."));
+
+        QSet<QString> taken{tr("Uncategorized").toLower()};
+        for (const auto &category: m_draft->categories) taken.insert(QString::fromStdString(category.name).toLower());
+        QStringList toCreate;
+        QStringList skipped;
+        for (const auto &name: requested) {
+            if (taken.contains(name.toLower())) {
+                skipped.push_back(name);
+                continue;
+            }
+            taken.insert(name.toLower());
+            toCreate.push_back(name);
+        }
+
+        QStringList createdIds;
+        if (!toCreate.isEmpty()) {
+            const auto result = applyEdit([&](domain::BenchmarkEditor &e) -> domain::BenchmarkEditResult {
+                for (const auto &name: toCreate) {
+                    const auto created = e.addCategory(name.toStdString());
+                    if (created.error) return created;
+                    createdIds.push_back(idString(*created.createdGroup));
+                }
+                return domain::BenchmarkEditResult{};
+            });
+            if (!result.value("ok").toBool()) return result;
+        }
+        return QVariantMap{{"ok", true}, {"createdIds", createdIds}, {"skipped", skipped}};
     }
 
     QVariantMap BenchmarkManagerViewModel::reorderSubcategory(const QString &id, int position) {
@@ -999,10 +1060,10 @@ namespace ksv::presentation {
         m_history.pop_back();
         // A step recorded without a focused cell keeps the present focus where it survives.
         const QVariantMap anchor = previous.currentCell.isEmpty() ? m_currentCell : previous.currentCell;
-        const int fallbackRow = m_tableModel->rowForEntry(anchor.value(QStringLiteral("entryId")).toString());
+        const int fallbackPosition = m_tableModel->scenarioPosition(anchor.value(QStringLiteral("entryId")).toString());
         m_draft = std::move(previous.draft);
         m_cellInputs = std::move(previous.cellInputs);
-        restoreSelection(previous.selectedEntryIds, anchor, fallbackRow);
+        restoreSelection(previous.selectedEntryIds, anchor, fallbackPosition);
         recomputeAfterLocalEdit();
         return QVariantMap{{"ok", true}};
     }

@@ -8,11 +8,14 @@ namespace ksv::presentation {
         bool sameShape(const BenchmarkTableProjection &a, const BenchmarkTableProjection &b) {
             if (a.rows.size() != b.rows.size() || a.tiers.size() != b.tiers.size()) return false;
             for (std::size_t i = 0; i < a.rows.size(); ++i)
-                if (a.rows[i].entryId != b.rows[i].entryId) return false;
+                if (a.rows[i].entryId != b.rows[i].entryId || a.rows[i].emptyGroupId != b.rows[i].emptyGroupId)
+                    return false;
             for (std::size_t i = 0; i < a.tiers.size(); ++i)
                 if (a.tiers[i].tierId != b.tiers[i].tierId) return false;
             return true;
         }
+
+        bool isScenarioRow(const BenchmarkTableRow &row) { return !row.entryId.isEmpty(); }
 
         // `offset` is the role's distance from the group's Id role; the five group roles are
         // declared contiguously in Id, Name, Color, SpanStart, SpanLength order.
@@ -35,7 +38,8 @@ namespace ksv::presentation {
             m_rowByEntry.clear();
             m_columnByTier.clear();
             for (int row = 0; row < static_cast<int>(m_projection.rows.size()); ++row)
-                m_rowByEntry.insert(m_projection.rows[static_cast<std::size_t>(row)].entryId, row);
+                if (const auto &entryId = m_projection.rows[static_cast<std::size_t>(row)].entryId; !entryId.isEmpty())
+                    m_rowByEntry.insert(entryId, row);
             for (int tier = 0; tier < static_cast<int>(m_projection.tiers.size()); ++tier)
                 m_columnByTier.insert(m_projection.tiers[static_cast<std::size_t>(tier)].tierId, FixedColumnCount + tier);
             endResetModel();
@@ -103,6 +107,8 @@ namespace ksv::presentation {
             case SubcategorySpanLengthRole: return groupRole(row.subcategory, role - SubcategoryIdRole);
             case MappingStateRole: return row.mappingState;
             case MappingCandidatesRole: return row.mappingCandidates;
+            case EmptyGroupIdRole: return row.emptyGroupId;
+            case UnassignedRole: return row.unassigned;
             default: return {};
         }
     }
@@ -147,18 +153,22 @@ namespace ksv::presentation {
                                      {QStringLiteral("category"), row.category.name},
                                      {QStringLiteral("subcategoryId"), row.subcategory.id},
                                      {QStringLiteral("subcategory"), row.subcategory.name},
-                                     {QStringLiteral("scenario"), row.name}});
+                                     {QStringLiteral("scenario"), row.name},
+                                     {QStringLiteral("emptyGroup"), !row.emptyGroupId.isEmpty()},
+                                     {QStringLiteral("unassigned"), row.unassigned}});
         return texts;
     }
 
     Qt::ItemFlags BenchmarkTableModel::flags(const QModelIndex &index) const {
         if (!checkIndex(index, CheckIndexOption::IndexIsValid)) return Qt::NoItemFlags;
         const auto &row = m_projection.rows[static_cast<std::size_t>(index.row())];
+        const bool emptyGroupRow = !row.emptyGroupId.isEmpty();
         // Uncategorized and "no subcategory" have no user name to edit.
-        const bool editable = index.column() >= static_cast<int>(BenchmarkColumnKind::Scenario) ||
+        const bool editable = (index.column() >= static_cast<int>(BenchmarkColumnKind::Scenario) && !emptyGroupRow) ||
                               (index.column() == static_cast<int>(BenchmarkColumnKind::Category) && !row.category.id.isEmpty()) ||
                               (index.column() == static_cast<int>(BenchmarkColumnKind::Subcategory) && !row.subcategory.id.isEmpty());
-        return Qt::ItemIsEnabled | Qt::ItemIsSelectable | (editable ? Qt::ItemIsEditable : Qt::NoItemFlags);
+        return Qt::ItemIsEnabled | (emptyGroupRow ? Qt::NoItemFlags : Qt::ItemIsSelectable) |
+               (editable ? Qt::ItemIsEditable : Qt::NoItemFlags);
     }
 
     int BenchmarkTableModel::firstRowOfGroup(const QString &groupId) const {
@@ -173,9 +183,12 @@ namespace ksv::presentation {
     QVariantMap BenchmarkTableModel::anchorAt(int row, int column) const {
         const auto cell = index(row, column);
         if (!cell.isValid()) return {};
-        return {{"entryId", data(cell, EntryIdRole)},
-                {"tierId", data(cell, TierIdRole)},
-                {"columnKind", data(cell, ColumnKindRole)}};
+        QVariantMap anchor{{"entryId", data(cell, EntryIdRole)},
+                           {"tierId", data(cell, TierIdRole)},
+                           {"columnKind", data(cell, ColumnKindRole)}};
+        if (const auto &groupId = m_projection.rows[static_cast<std::size_t>(row)].emptyGroupId; !groupId.isEmpty())
+            anchor.insert(QStringLiteral("emptyGroupId"), groupId);
+        return anchor;
     }
 
     QVariantMap BenchmarkTableModel::rowInfo(int row) const {
@@ -183,7 +196,10 @@ namespace ksv::presentation {
         const auto &projected = m_projection.rows[static_cast<std::size_t>(row)];
         int positionInContainer = row - projected.subcategory.spanStart;
         int containerSize = projected.subcategory.spanLength;
-        if (projected.subcategory.id.isEmpty()) {
+        if (!projected.emptyGroupId.isEmpty()) {
+            positionInContainer = -1;
+            containerSize = 0;
+        } else if (projected.subcategory.id.isEmpty()) {
             // A category's direct scenarios precede its subcategories, and a loaded category can
             // hold both, so its own collection ends at its first subcategory row, not its span end.
             const int start = projected.category.spanStart;
@@ -196,6 +212,8 @@ namespace ksv::presentation {
         }
         return {{"row", row},
                 {"entryId", projected.entryId},
+                {"emptyGroupId", projected.emptyGroupId},
+                {"unassigned", projected.unassigned},
                 {"name", projected.name},
                 {"categoryId", projected.category.id},
                 {"categorySpanStart", projected.category.spanStart},
@@ -211,6 +229,17 @@ namespace ksv::presentation {
     }
 
     int BenchmarkTableModel::rowForEntry(const QString &entryId) const { return m_rowByEntry.value(entryId, -1); }
+
+    int BenchmarkTableModel::scenarioRowCount() const {
+        return static_cast<int>(std::ranges::count_if(m_projection.rows, isScenarioRow));
+    }
+
+    int BenchmarkTableModel::scenarioPosition(const QString &entryId) const {
+        const int row = rowForEntry(entryId);
+        if (row < 0) return -1;
+        return static_cast<int>(
+            std::ranges::count_if(m_projection.rows.begin(), m_projection.rows.begin() + row, isScenarioRow));
+    }
 
     int BenchmarkTableModel::columnForTier(const QString &tierId) const { return m_columnByTier.value(tierId, -1); }
 
@@ -238,6 +267,8 @@ namespace ksv::presentation {
             {MappingStateRole, "mappingState"},
             {MappingCandidatesRole, "mappingCandidates"},
             {HeaderColorRole, "headerColor"},
+            {EmptyGroupIdRole, "emptyGroupId"},
+            {UnassignedRole, "unassigned"},
         };
     }
 }

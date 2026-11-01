@@ -44,6 +44,8 @@ public:
             const auto map = row.toMap();
             BenchmarkTableRow built;
             built.entryId = map.value("entryId").toString();
+            built.emptyGroupId = map.value("emptyGroupId").toString();
+            built.unassigned = map.value("unassigned").toBool();
             built.name = map.value("name").toString();
             built.scenarioIssues = map.value("scenarioIssues").toStringList();
             built.category = group(map.value("category"));

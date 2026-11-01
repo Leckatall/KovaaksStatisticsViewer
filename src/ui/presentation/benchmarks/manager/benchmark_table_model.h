@@ -35,7 +35,9 @@ namespace ksv::presentation {
     };
 
     struct BenchmarkTableRow {
-        QString entryId;
+        QString entryId; // empty on an empty-group row
+        QString emptyGroupId; // the category or subcategory an empty-group row stands for
+        bool unassigned = false; // direct scenario in a category that also has subcategories
         QString name;
         QStringList scenarioIssues;
         BenchmarkTableGroupSpan category;
@@ -60,9 +62,11 @@ namespace ksv::presentation {
         std::vector<BenchmarkTableRow> rows;
     };
 
-    // Flat projection of the manager's working copy: one row per scenario entry in hierarchy
-    // order (Uncategorized last), Category/Subcategory/Scenario columns then one per tier. It is
-    // derived from session state and owns none of it.
+    // Flat projection of the manager's working copy, in hierarchy order (Uncategorized last): one
+    // row per scenario entry, plus one empty-group row per scenario-less subcategory and per
+    // category with neither scenarios nor subcategories, so every group has a row. Columns are
+    // Category/Subcategory/Scenario then one per tier. It is derived from session state and owns
+    // none of it.
     class BenchmarkTableModel : public QAbstractTableModel {
         Q_OBJECT
 
@@ -91,6 +95,8 @@ namespace ksv::presentation {
             MappingStateRole,
             MappingCandidatesRole,
             HeaderColorRole,
+            EmptyGroupIdRole,
+            UnassignedRole,
         };
         Q_ENUM(Role)
 
@@ -109,20 +115,25 @@ namespace ksv::presentation {
 
         Q_INVOKABLE int rowForEntry(const QString &entryId) const;
         Q_INVOKABLE int columnForTier(const QString &tierId) const;
-        // -1 for an empty group, which occupies no row.
+        // Every group has a row, so -1 means no such group.
         Q_INVOKABLE int firstRowOfGroup(const QString &groupId) const;
-        // The stable {entryId, tierId, columnKind} address of a cell; empty when out of range.
+        // Rows that hold a scenario, which is every row except the empty-group ones.
+        Q_INVOKABLE int scenarioRowCount() const;
+        // The entry's index among scenario rows, or -1.
+        [[nodiscard]] int scenarioPosition(const QString &entryId) const;
+        // The stable {entryId, tierId, columnKind} address of a cell, plus emptyGroupId on an
+        // empty-group row; empty when out of range.
         Q_INVOKABLE QVariantMap anchorAt(int row, int column) const;
         // Row-level roles (entry, group spans, mapping) for contextual controls, plus the row's
         // positionInContainer / containerSize within the subcategory, category's direct scenarios or
-        // Uncategorized that holds it; empty when out of range.
+        // Uncategorized that holds it (-1 / 0 on an empty-group row); empty when out of range.
         Q_INVOKABLE QVariantMap rowInfo(int row) const;
         // Every tier header in column order as {name, hasIssues}, so the view can size all rank
         // columns, including ones it has not loaded a delegate for.
         Q_INVOKABLE QVariantList tierHeaders() const;
         // Every row's identifying texts in row order as {categoryId, category, subcategoryId,
-        // subcategory, scenario}, so the view can size the identifying columns to their content,
-        // including rows it has not loaded a delegate for.
+        // subcategory, scenario, emptyGroup, unassigned}, so the view can size the identifying
+        // columns to their content, including rows it has not loaded a delegate for.
         Q_INVOKABLE QVariantList identityTexts() const;
 
     private:

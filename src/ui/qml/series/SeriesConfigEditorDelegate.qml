@@ -73,23 +73,9 @@ Rectangle {
         Layout.preferredWidth: 12
         Layout.preferredHeight: 24
 
-        Repeater {
-            model: 6
-
-            Rectangle {
-                id: dot
-
-                required property int index
-
-                objectName: "seriesDragHandleDot_" + root.row.id + "_" + dot.index
-                width: 3
-                height: 3
-                x: 1.5 + (dot.index % 2) * 6
-                y: 4.5 + Math.floor(dot.index / 2) * 6
-                color: root.dragHandleDotColor
-                radius: width / 2
-                Accessible.ignored: true
-            }
+        DragHandleDots {
+            dotColor: root.dragHandleDotColor
+            dotObjectNamePrefix: "seriesDragHandleDot_" + root.row.id + "_"
         }
 
         HoverHandler {

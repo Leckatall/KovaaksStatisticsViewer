@@ -32,7 +32,6 @@ TestCase {
         fixture.setProjection(TestDoubles.benchmarkTableProjection(TestDoubles.benchmarkManagementDesc()))
         const vm = TestDoubles.makeFakeBenchmarkManagerVm(Object.assign({
             hasDraft: true, tableModel: fixture.model, groups: TestDoubles.benchmarkManagementGroups(),
-            assignTargets: TestDoubles.benchmarkManagementAssignTargets(),
             tiers: [{id: "t1", name: "Gold", color: "#FFD700"}, {id: "t2", name: "", color: "#808080"}]
         }, overrides || {}))
         const dialog = createTemporaryObject(dialogComponent, testCase, {benchmarkManagerVm: vm})
@@ -94,14 +93,11 @@ TestCase {
         const categoryName = find(dialog, "categoryCreationName")
         categoryName.text = "Aim"
         keyClick(Qt.Key_Return)
-        compare(vm(dialog).addCategoryCalls, ["Aim"])
+        compare(vm(dialog).addCategoriesCalls, ["Aim"])
 
         vm(dialog).selectedEntryIds = ["c", "a"]
-        dialog.assignSelection("g1")
+        dialog.moveToGroup("g1")
         compare(vm(dialog).assignScenariosCalls, [[["c", "a"], "g1"]])
-        verify(dialog.assignTargets().some(target => target.id === "p"))
-        verify(!dialog.assignTargets().some(target => target.id === "g2"),
-               "a category with subcategories cannot receive scenarios")
 
         verify(dialog.editorTable.focusCell({entryId: "b"}))
         dialog.moveCurrentRow(-1)
@@ -129,80 +125,68 @@ TestCase {
         tryVerify(() => subcategoryName !== null && subcategoryName.visible)
         subcategoryName.text = "Static"
         keyClick(Qt.Key_Return)
-        tryCompare(dialog.subcategoryRelocationPrompt, "visible", true)
-        compare(vm(dialog).addSubcategoryCalls.length, 0)
-        dialog.subcategoryRelocationPrompt.relocate("newSubcategory")
-        compare(vm(dialog).addSubcategoryRelocatingCalls, [["g1", "Static", "newSubcategory"]])
+        compare(vm(dialog).addSubcategoryCalls, [["g1", "Static"]])
     }
-    // Return in the add-subcategory field opens only the "already holds scenarios" prompt, never a
-    // rename editor on the category behind it; every way out of the prompt leaves the table
-    // focused, with no editor open, on the new subcategory or else on the category.
-    function test_subcategoryPromptOpensNoEditorAndReturnsFocusToTheTable() {
-        const ref = {}
-        const dialog = openTableDialog({
-            addSubcategoryRelocating: function (categoryId, name, relocation) {
-                this.addSubcategoryRelocatingCalls.push([categoryId, name, relocation])
-                const desc = TestDoubles.benchmarkManagementDesc()
-                const created = {id: "subcategory-1", name: name, color: "#123456"}
-                for (const row of desc.rows)
-                    if (row.category && row.category.id === categoryId) row.subcategory = created
-                const parent = this.groups.find(g => g.id === categoryId)
-                this.groups = this.groups.map(g => g.id === categoryId
-                    ? Object.assign({}, g, {acceptsScenarios: false, subcategoryNeedsRelocation: false}) : g)
-                    .concat([{id: "subcategory-1", kind: "subcategory", parentId: categoryId, name: name,
-                              color: "#123456", scenarioCount: 2, acceptsScenarios: true, issues: []}])
-                this.assignTargets = this.assignTargets.filter(t => t.id !== categoryId)
-                    .concat([{id: "subcategory-1", label: parent.name + " / " + name}])
-                ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(desc))
-                return {ok: true, createdId: "subcategory-1"}
-            }
-        }, ref)
+    // Return in the add-subcategory field creates the subcategory directly: no prompt, and no
+    // rename editor on the category behind the field.
+    function test_creatingASubcategoryOpensNoPromptAndNoRenameEditor() {
+        const dialog = openTableDialog()
         const table = dialog.editorTable
-        const prompt = dialog.subcategoryRelocationPrompt
         const categoryCell = () => ItemLookup.findByObjectName(table.identityView.contentItem, "cell_a_category")
         tryVerify(() => categoryCell() !== null)
         // The table settles (and rebuilds its cells) once more after it first renders.
         waitForRendering(dialog.contentItem)
-        // An editor opened behind the prompt is closed again when the prompt takes focus, so every
-        // editor that opens is recorded.
         const editorsOpened = []
         table.activeEditorChanged.connect(() => { if (table.activeEditor) editorsOpened.push(table.activeEditor.text) })
 
-        function typeSubcategoryName() {
-            verify(table.focusCell({groupId: "g1"}))
-            tryCompare(table.selectionModel.currentIndex, "column", 0)
-            mouseClick(find(dialog, "addSubcategoryPlus_g1"))
-            tryVerify(() => categoryCell().subcategoryField.visible && categoryCell().subcategoryField.activeFocus)
-            keyClick(Qt.Key_S)
-            keyClick(Qt.Key_Return)
-            tryCompare(prompt, "opened", true)
-            waitForRendering(dialog.contentItem)
-            compare(editorsOpened, [], "no rename editor opens behind the prompt")
-        }
-        function verifyTableFocusedOn(row, column) {
-            // The table itself, not the hidden add-subcategory field inside it.
-            tryVerify(() => dialog.activeFocusItem === table.identityView)
-            tryCompare(table.selectionModel.currentIndex, "column", column)
-            compare(table.selectionModel.currentIndex.row, row)
-            compare(table.activeEditor, null)
-        }
-
-        typeSubcategoryName()
-        keyClick(Qt.Key_Escape)
-        tryCompare(prompt, "visible", false)
-        verifyTableFocusedOn(0, 0)
-
-        typeSubcategoryName()
-        mouseClick(ItemLookup.findByObjectName(prompt.contentItem, "relocateToNewSubcategory"))
-        tryCompare(prompt, "visible", false)
-        compare(vm(dialog).addSubcategoryRelocatingCalls, [["g1", "s", "newSubcategory"]])
-        verifyTableFocusedOn(0, 1)
-
-        // The focused cell still takes Return as its own rename.
+        verify(table.focusCell({groupId: "g1"}))
+        tryCompare(table.selectionModel.currentIndex, "column", 0)
+        mouseClick(find(dialog, "addSubcategoryPlus_g1"))
+        tryVerify(() => categoryCell().subcategoryField.visible && categoryCell().subcategoryField.activeFocus)
+        keyClick(Qt.Key_S)
         keyClick(Qt.Key_Return)
-        tryVerify(() => table.activeEditor !== null)
-        compare(table.activeEditor.text, "s")
-        keyClick(Qt.Key_Escape)
+
+        compare(vm(dialog).addSubcategoryCalls, [["g1", "s"]])
+        verify(dialog.subcategoryRelocationPrompt === undefined, "no relocation prompt exists")
+        waitForRendering(dialog.contentItem)
+        compare(editorsOpened, [], "no rename editor opens")
+        compare(table.activeEditor, null)
+    }
+
+    function test_creatingASubcategoryLeavesFocusOnItsNewRow() {
+        const ref = {}
+        const dialog = openTableDialog({
+            addSubcategory: function (categoryId, name) {
+                this.addSubcategoryCalls.push([categoryId, name])
+                this.groups = this.groups.concat([{id: "fresh", kind: "subcategory", parentId: categoryId,
+                                                   name: name, color: "#123456", scenarioCount: 0, issues: []}])
+                const desc = TestDoubles.benchmarkManagementDesc()
+                const tracking = desc.rows[2].category
+                desc.rows.splice(4, 0, {emptyGroupId: "fresh", category: tracking,
+                                        subcategory: {id: "fresh", name: name}})
+                ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(desc))
+                return {ok: true, createdId: "fresh"}
+            }
+        }, ref)
+        const table = dialog.editorTable
+        tryVerify(() => find(dialog, "addSubcategoryPlus_g2") !== null)
+        waitForRendering(dialog.contentItem)
+
+        verify(table.focusCell({groupId: "g2"}))
+        mouseClick(find(dialog, "addSubcategoryPlus_g2"))
+        tryVerify(() => {
+            const cell = ItemLookup.findByObjectName(table.identityView.contentItem, "cell_c_category")
+            return cell !== null && cell.subcategoryField.activeFocus
+        })
+        keyClick(Qt.Key_S)
+        keyClick(Qt.Key_Return)
+
+        compare(vm(dialog).addSubcategoryCalls, [["g2", "s"]])
+        tryVerify(() => table.selectionModel.currentIndex.row === 4
+                  && table.selectionModel.currentIndex.column === 1)
+        tryCompare(dialog, "currentGroupId", "fresh")
+        tryVerify(() => table.identityView.activeFocus, 2000, "focus stays on the table")
+        compare(table.manager.currentCell.emptyGroupId, "fresh")
     }
 
     // One Remove over several selected rows is one session command, hence one Undo step.
@@ -217,20 +201,24 @@ TestCase {
         compare(vm(dialog).commandLog, ["removeScenarios"])
     }
 
-    function test_emptyGroupCanBeRenamedFromItsChip() {
+    function test_emptyGroupIsRenamedInItsTableCell() {
         const dialog = openTableDialog()
-        verify(dialog.editorTable.beginGroupRename("gE"))
-        const field = find(dialog, "emptyGroupRenameField_gE")
-        verify(field !== null && field.visible)
-        field.text = "New group"
+        const table = dialog.editorTable
+        tryVerify(() => find(dialog, "cell_empty-gE_category") !== null)
+        waitForRendering(dialog.contentItem)
+        verify(table.beginGroupRename("gE"))
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.text, "Empty", "the editor starts from the bare name")
+        table.activeEditor.text = "New group"
         keyClick(Qt.Key_Return)
         compare(vm(dialog).renameGroupCalls, [["gE", "New group"]])
     }
 
     function test_groupAndRankHeadersOpenContextMenus() {
         const dialog = openTableDialog()
-        const group = find(dialog, "groupListItem_gE")
-        verify(group !== null)
+        tryVerify(() => find(dialog, "cell_empty-gE_scenario") !== null)
+        waitForRendering(dialog.contentItem)
+        const group = find(dialog, "cell_empty-gE_scenario")
         mouseClick(group, group.width / 2, group.height / 2, Qt.RightButton)
         tryVerify(() => dialog.groupContextMenu.opened)
         compare(dialog.currentGroupId, "gE")

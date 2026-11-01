@@ -77,15 +77,16 @@ TestCase {
 
     function test_compactRowsHeadersAndScrolledSpans() {
         const desc = TestDoubles.benchmarkTableLargeDesc(200, 151, 170)
+        desc.rows.push({emptyGroupId: "gEmpty", category: {id: "gEmpty", name: "Empty"}})
         const table = makeTable(desc, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Category g1", scenarioCount: 151, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-            {id: "g2", kind: "category", parentId: "", name: "Category g2", scenarioCount: 49, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-            {id: "gEmpty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false,
+            {id: "g1", kind: "category", parentId: "", name: "Category g1", scenarioCount: 151, issues: []},
+            {id: "g2", kind: "category", parentId: "", name: "Category g2", scenarioCount: 49, issues: []},
+            {id: "gEmpty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0,
              issues: ["A category has neither scenarios nor subcategories."]}
         ]})
         verify(table.identityView, "the table must expose its identifying-column view")
         verify(table.thresholdView, "the table must expose its threshold view")
-        compare(table.thresholdView.rows, 200, "one body row per scenario")
+        compare(table.thresholdView.rows, 201, "one body row per scenario, and one for the empty group")
 
         // One shared rank header across all rows, carrying the tier names.
         for (const tier of ["t1", "t2", "t3"]) {
@@ -94,9 +95,9 @@ TestCase {
         }
         compare(ItemLookup.findByObjectName(table, "rankHeader_t2").headerName, "Silver")
 
-        // The empty group has no row but stays reachable in the group list.
-        verify(ItemLookup.findByObjectName(table, "groupListItem_gEmpty") !== null,
-               "empty groups must remain listed")
+        table.thresholdView.positionViewAtRow(200, TableView.AlignBottom)
+        tryVerify(() => cellFor(table, "empty-gEmpty", "category") !== null,
+                  2000, "an empty group has a row of its own")
 
         // Scroll into the middle of the long g1 span: its name is still readable exactly once.
         table.thresholdView.positionViewAtRow(100, TableView.AlignTop)
@@ -140,10 +141,11 @@ TestCase {
         const group = {id: "g1", name: "Clicking", color: "#009600"}
         const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
             {entryId: "a", category: group, name: "Alpha", cells: {t1: {displayText: "1"}}},
-            {entryId: "b", category: group, name: "Beta", cells: {t1: {displayText: "2"}}}
+            {entryId: "b", category: group, name: "Beta", cells: {t1: {displayText: "2"}}},
+            {emptyGroupId: "empty", category: {id: "empty", name: "Empty"}}
         ]}, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-            {id: "empty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false, issues: []},
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, issues: []},
+            {id: "empty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, issues: []},
             {id: "uncategorized", kind: "uncategorized", parentId: "", name: "Uncategorized", scenarioCount: 0, issues: []}
         ]})
 
@@ -155,9 +157,9 @@ TestCase {
         verify(ItemLookup.findByObjectName(table, "addScenarioPlus") !== null)
         verify(ItemLookup.findByObjectName(table, "addRankPlus") !== null)
         verify(ItemLookup.findByObjectName(table, "addSubcategoryPlus_g1") !== null)
-        verify(ItemLookup.findByObjectName(table, "groupListItem_empty") !== null)
-        verify(ItemLookup.findByObjectName(table, "groupListItem_g1") === null)
-        verify(ItemLookup.findByObjectName(table, "groupListItem_uncategorized") === null)
+        verify(cellFor(table, "empty-empty", "scenario") !== null)
+        verify(cellFor(table, "empty-g1", "scenario") === null)
+        verify(cellFor(table, "empty-uncategorized", "scenario") === null)
     }
 
     // A category whose scenarios sit straight under it (and Uncategorized) spans the Subcategory
@@ -172,9 +174,9 @@ TestCase {
             {entryId: "c", category: tracking, name: "Gamma", cells: {}},
             {entryId: "d", name: "Delta", cells: {}}
         ]}, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 1, acceptsScenarios: false, subcategoryNeedsRelocation: false, issues: []},
-            {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 1, acceptsScenarios: true, issues: []},
-            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []}
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 1, issues: []},
+            {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 1, issues: []},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, issues: []}
         ]})
         const spanWidth = table.identityWidths[0] + table.identityWidths[1]
 
@@ -229,7 +231,7 @@ TestCase {
             {entryId: "b", category: tracking, name: "Beta", cells: {}},
             {entryId: "c", category: tracking, name: "Gamma", cells: {}}
         ]}, {groups: [
-            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []}
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2, issues: []}
         ]})
         const requests = []
         table.creationHandler = request => {
@@ -273,17 +275,17 @@ TestCase {
         tryVerify(() => table.activeEditor === null)
     }
 
-    function test_dragSelectionMovesRowsOnlyToValidGroupOrUncategorized() {
+    function test_dragSelectionMovesRowsToAnyExistingGroupOrUncategorized() {
         const group = {id: "g1", name: "Clicking"}
         const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
             {entryId: "a", category: group, name: "Alpha", cells: {}},
             {entryId: "b", category: group, name: "Beta", cells: {}},
             {entryId: "c", name: "Gamma", cells: {}}
         ]}, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true},
-            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false},
-            {id: "g3", kind: "category", parentId: "", name: "Divided", scenarioCount: 1, acceptsScenarios: false, subcategoryNeedsRelocation: false},
-            {id: "sub", kind: "subcategory", parentId: "g3", name: "Precise", scenarioCount: 1, acceptsScenarios: true}
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0},
+            {id: "g3", kind: "category", parentId: "", name: "Divided", scenarioCount: 1},
+            {id: "sub", kind: "subcategory", parentId: "g3", name: "Precise", scenarioCount: 1}
         ]})
         const moves = []
         table.moveSelectionRequested.connect((ids, target) => moves.push([ids, target]))
@@ -292,8 +294,12 @@ TestCase {
                                     ItemSelectionModel.Select)
         table.beginRowDrag("a")
         verify(ItemLookup.findByObjectName(table, "uncategorizedDropZone").visible)
+        table.dropRows("nowhere")
+        compare(moves.length, 0, "a group that does not exist must reject the drop")
         table.dropRows("g3")
-        compare(moves.length, 0, "a divided category must reject the drop")
+        compare(moves, [[["a", "b"], "g3"]], "a divided category accepts the drop")
+        moves.length = 0
+        table.beginRowDrag("a")
         const categoryCell = cellFor(table, "a", "category")
         const categoryPoint = categoryCell.mapToItem(null, categoryCell.width / 2, categoryCell.height / 2)
         compare(table.targetAtScene(categoryPoint), "g1", "the spanning category cell is a drop target")
@@ -311,10 +317,11 @@ TestCase {
         const group = {id: "g1", name: "Clicking"}
         const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
             {entryId: "a", category: group, name: "Alpha", cells: {}},
-            {entryId: "b", category: group, name: "Beta", cells: {}}
+            {entryId: "b", category: group, name: "Beta", cells: {}},
+            {emptyGroupId: "g2", category: {id: "g2", name: "Tracking"}}
         ]}, {groups: [
-            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true},
-            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false}
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2},
+            {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 0}
         ]})
         const moves = []
         const dragStates = []
@@ -325,14 +332,14 @@ TestCase {
         verify(table.focusCell({entryId: "a", columnKind: 2}))
         table.selectionModel.select(table.tableModel.index(table.tableModel.rowForEntry("b"), 2),
                                     ItemSelectionModel.Select)
-        const source = cellFor(table, "a", "scenario")
-        const target = ItemLookup.findByObjectName(table, "groupListItem_g2")
+        const source = rowHandle(table, "a")
+        const target = cellFor(table, "empty-g2", "scenario")
         verify(source !== null && target !== null)
         const start = source.mapToItem(table, source.width / 2, source.height / 2)
         const end = target.mapToItem(table, target.width / 2, target.height / 2)
         mouseDrag(source, source.width / 2, source.height / 2,
                   end.x - start.x, end.y - start.y, Qt.LeftButton)
-        verify(dragStates.indexOf(true) !== -1, "the scenario drag handler must activate")
+        verify(dragStates.indexOf(true) !== -1, "the handle's drag handler must activate")
         verify(hoverTargets.indexOf("g2") !== -1, "the empty group's drop area must receive the drag")
         tryCompare(moves, "length", 1)
         compare(moves[0], [["a", "b"], "g2"])
@@ -342,13 +349,304 @@ TestCase {
         return cell.mapToItem(null, cell.width / 2, cell.height * fraction)
     }
 
+    // ---------------------------------------------------------------------------
+    // Empty groups and Unassigned rows.
+    // ---------------------------------------------------------------------------
+
+    // Rows 0-2 are Clicking: a direct scenario beside its subcategories, Static with a scenario and
+    // Hollow with none. Row 3 is the empty category Speed; row 4 is Uncategorized.
+    function groupedDesc() {
+        const clicking = {id: "g1", name: "Clicking", color: "#009600"}
+        return {tiers: [{id: "t1", name: "Gold"}, {id: "t2", name: "Silver"}], rows: [
+            {entryId: "d", category: clicking, name: "Direct", unassigned: true, cells: {},
+             subcategory: {id: "", name: "", issues: [unassignedIssue]}},
+            {entryId: "a", category: clicking, subcategory: {id: "s1", name: "Static"}, name: "Alpha",
+             cells: {t1: {displayText: "1"}}},
+            {emptyGroupId: "hollow", category: clicking,
+             subcategory: {id: "hollow", name: "Hollow", issues: ["A subcategory has no scenarios."]}},
+            {emptyGroupId: "gE", category: {id: "gE", name: "Speed",
+                                            issues: ["A category has neither scenarios nor subcategories."]}},
+            {entryId: "u", name: "Loose", cells: {}}
+        ]}
+    }
+
+    readonly property string unassignedIssue: "Move this scenario into a subcategory before the benchmark can be trackable."
+
+    function groupedManager() {
+        return {groups: [
+            {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, issues: []},
+            {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 1, issues: []},
+            {id: "hollow", kind: "subcategory", parentId: "g1", name: "Hollow", scenarioCount: 0, issues: []},
+            {id: "gE", kind: "category", parentId: "", name: "Speed", scenarioCount: 0, issues: []}
+        ]}
+    }
+
+    function currentCellIs(table, row, column) {
+        const current = table.selectionModel.currentIndex
+        return current.row === row && current.column === column
+    }
+
+    function test_emptyCategorySpansAndEmptySubcategoryKeepsBothCells() {
+        const table = makeTable(groupedDesc(), groupedManager())
+
+        const category = cellFor(table, "empty-gE", "category")
+        verify(category.spansBoth)
+        compare(category.face.width, table.identityWidths[0] + table.identityWidths[1])
+        compare(category.cellText, "Speed (empty)")
+        compare(category.groupLabelText, "Speed", "the cell editor starts from the bare name")
+        verify(cellFor(table, "empty-gE", "subcategory").coveredBySpan)
+
+        const subcategory = cellFor(table, "empty-hollow", "subcategory")
+        verify(!subcategory.coveredBySpan)
+        compare(subcategory.cellText, "Hollow (empty)")
+        compare(subcategory.groupLabelText, "Hollow")
+        verify(!cellFor(table, "empty-hollow", "category").spansBoth)
+    }
+
+    function test_emptyRowShowsADropHintAndNoScenarioOrThresholdState() {
+        const table = makeTable(groupedDesc(), groupedManager())
+
+        const scenario = cellFor(table, "empty-gE", "scenario")
+        verify(!scenario.unnamedScenario)
+        const hint = ItemLookup.findByObjectName(scenario, "cellLabel")
+        compare(hint.text, "+ Drop scenarios here")
+        verify(hint.font.italic)
+
+        const rank = cellFor(table, "empty-gE", "t1")
+        compare(rank.valueState, "")
+        compare(ItemLookup.findByObjectName(rank, "cellLabel").text, "",
+                "a rank cell on an empty row has no value to be missing")
+
+        for (const cell of [scenario, rank, cellFor(table, "empty-gE", "category")]) {
+            verify(cell.Accessible.name.indexOf("Speed") !== -1, "names the group: " + cell.Accessible.name)
+            verify(cell.Accessible.name.indexOf("rop") !== -1, "says what the row does: " + cell.Accessible.name)
+        }
+    }
+
+    function test_unassignedRowKeepsBothCellsAndExplainsItself() {
+        const table = makeTable(groupedDesc(), groupedManager())
+
+        const category = cellFor(table, "d", "category")
+        verify(!category.spansBoth)
+        compare(category.face.width, table.identityWidths[0])
+
+        const cell = cellFor(table, "d", "subcategory")
+        verify(!cell.coveredBySpan)
+        compare(cell.opacity, 1)
+        verify(cell.enabled)
+        compare(ItemLookup.findByObjectName(cell, "cellLabel").text, "⚠ Unassigned")
+        verify(cell.Accessible.name.indexOf("Unassigned") !== -1)
+        compare(cell.Accessible.description, unassignedIssue)
+        compare(cell.ToolTip.text, unassignedIssue)
+        verify(ItemLookup.findByObjectName(cell, "unassignedBorder").visible)
+        verify(!ItemLookup.findByObjectName(cell, "issueMarker").visible,
+               "the corner marker would only repeat the warning")
+
+        mouseMove(cell, cell.width / 2, cell.height / 2)
+        tryVerify(() => cell.ToolTip.visible)
+
+        const ordinary = cellFor(table, "a", "subcategory")
+        verify(!ItemLookup.findByObjectName(ordinary, "unassignedBorder").visible)
+        const flagged = cellFor(table, "empty-hollow", "subcategory")
+        verify(ItemLookup.findByObjectName(flagged, "issueMarker").visible)
+    }
+
+    function test_keyboardMovesThroughEmptyRowsAndStepsOverTheCoveredCell() {
+        const table = makeTable(groupedDesc(), groupedManager())
+
+        verify(table.focusCell({entryId: "a", columnKind: 1}))
+        keyClick(Qt.Key_Down)
+        verify(currentCellIs(table, 2, 1))
+        compare(table.focusedGroupId, "hollow")
+
+        keyClick(Qt.Key_Down)
+        verify(currentCellIs(table, 3, 0), "the covered Subcategory cell redirects to the span")
+        compare(table.focusedGroupId, "gE")
+        compare(table.manager.currentCell.emptyGroupId, "gE")
+
+        keyClick(Qt.Key_Right)
+        verify(currentCellIs(table, 3, 2))
+        compare(table.focusedGroupId, "gE")
+        keyClick(Qt.Key_Right)
+        verify(currentCellIs(table, 3, 3))
+        compare(table.focusedGroupId, "gE", "a rank cell on an empty row belongs to that group")
+        compare(table.focusedTierId, "t1")
+        keyClick(Qt.Key_Left)
+        verify(currentCellIs(table, 3, 2))
+        keyClick(Qt.Key_Left)
+        verify(currentCellIs(table, 3, 0))
+
+        // An Unassigned row has no span to step over.
+        verify(table.focusCell({entryId: "d", columnKind: 0}))
+        keyClick(Qt.Key_Right)
+        verify(currentCellIs(table, 0, 1))
+        keyClick(Qt.Key_Right)
+        verify(currentCellIs(table, 0, 2))
+        keyClick(Qt.Key_Left)
+        verify(currentCellIs(table, 0, 1))
+    }
+
+    function test_emptyRowFocusRenameAndAddSubcategory() {
+        const table = makeTable(groupedDesc(), groupedManager())
+
+        verify(table.focusCell({groupId: "gE"}))
+        verify(currentCellIs(table, 3, 0))
+        verify(table.focusCell({groupId: "hollow"}))
+        verify(currentCellIs(table, 2, 1))
+
+        verify(table.beginGroupRename("hollow"))
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.text, "Hollow")
+        table.activeEditor.selectAll()
+        keyClick(Qt.Key_X)
+        keyClick(Qt.Key_Return)
+        tryVerify(() => table.activeEditor === null)
+        compare(table.manager.renameGroupCalls, [["hollow", "x"]])
+
+        verify(table.beginSubcategoryCreation("gE"))
+        const field = cellFor(table, "empty-gE", "category").subcategoryField
+        tryVerify(() => field.visible && field.activeFocus)
+        keyClick(Qt.Key_Escape)
+        verify(!field.visible)
+    }
+
+    function test_rightClickOnEmptyRowRequestsTheGroupMenu() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        const groups = []
+        const rows = []
+        table.groupContextRequested.connect(id => groups.push(id))
+        table.rowContextRequested.connect(id => rows.push(id))
+
+        for (const column of ["subcategory", "scenario", "t1"]) {
+            const cell = cellFor(table, "empty-hollow", column)
+            mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+        }
+        compare(groups, ["hollow", "hollow", "hollow"])
+        compare(table.focusedGroupId, "hollow")
+
+        const category = cellFor(table, "empty-hollow", "category")
+        mouseClick(category, category.width / 2, category.height / 2, Qt.RightButton)
+        compare(groups[3], "g1", "the Category cell stays the category's own")
+        compare(rows, [])
+    }
+
+    // Qt Quick Test spaces its mouse events beyond the double-click interval, so TapHandler never
+    // sees a double tap from mouseDoubleClickSequence(); this calls what the double tap runs.
+    function test_doubleTapOnEmptyRowOnlyEditsTheGroupCell() {
+        failOnWarning(/cannot edit/)
+        const table = makeTable(groupedDesc(), groupedManager())
+
+        cellFor(table, "empty-gE", "scenario").openEditor()
+        compare(table.activeEditor, null)
+        cellFor(table, "empty-gE", "t1").openEditor()
+        compare(table.activeEditor, null)
+
+        cellFor(table, "empty-gE", "category").openEditor()
+        tryVerify(() => table.activeEditor !== null)
+        compare(table.activeEditor.text, "Speed")
+        keyClick(Qt.Key_Escape)
+    }
+
+    function test_dropOnAnyCellOfAnEmptyRowTargetsItsGroup_data() {
+        return [
+            {tag: "category cell of an empty subcategory", groupId: "hollow", column: "category"},
+            {tag: "subcategory cell", groupId: "hollow", column: "subcategory"},
+            {tag: "scenario cell", groupId: "hollow", column: "scenario"},
+            {tag: "rank cell", groupId: "hollow", column: "t2"},
+            {tag: "spanning category cell", groupId: "gE", column: "category"},
+            {tag: "scenario cell of an empty category", groupId: "gE", column: "scenario"},
+            {tag: "rank cell of an empty category", groupId: "gE", column: "t1"}
+        ]
+    }
+
+    function test_dropOnAnyCellOfAnEmptyRowTargetsItsGroup(data) {
+        const table = makeTable(groupedDesc(), groupedManager())
+        const moves = []
+        table.moveSelectionRequested.connect((ids, target) => moves.push([ids, target]))
+        const point = scenePointIn(cellFor(table, "empty-" + data.groupId, data.column), 0.5)
+
+        table.beginRowDrag("a")
+        table.hoverAtScene(point)
+        compare(table.hoverDropGroupId, data.groupId)
+        compare(table.dropInsertion, null, "a whole-group target draws no insertion line")
+        for (const column of ["category", "subcategory", "scenario", "t1", "t2"]) {
+            const cell = cellFor(table, "empty-" + data.groupId, column)
+            verify(cell.dropHovered, column + " shows the row is the target")
+        }
+        verify(!cellFor(table, "a", "scenario").dropHovered)
+
+        table.dropAtScene(point)
+        compare(moves, [[["a"], data.groupId]])
+    }
+
+    function test_emptyCellsStayOutOfTheSelection() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        const model = table.tableModel
+
+        table.selectionModel.select(model.index(3, 2), ItemSelectionModel.Select)
+        compare(table.selectionModel.selectedIndexes.length, 0)
+        compare(table.selectedIds(), [])
+
+        const first = cellFor(table, "a", "scenario")
+        const last = cellFor(table, "u", "scenario")
+        mouseClick(first)
+        mouseClick(last, last.width / 2, last.height / 2, Qt.LeftButton, Qt.ShiftModifier)
+        tryCompare(table.manager, "selectedEntryIds", ["a", "u"])
+        compare(table.selectionModel.selectedIndexes.length, 2, "the rectangle skips both empty rows")
+        compare(table.selectedIds(), ["a", "u"])
+    }
+
+    function test_pasteDestinationOnEmptyRows() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        for (const column of [0, 2, 3]) {
+            verify(table.moveCurrent(3, column))
+            compare(table.pasteDestination(), {kind: "emptyGroup"})
+        }
+        verify(table.focusCell({entryId: "a"}))
+        compare(table.pasteDestination().kind, "scenario")
+
+        const allEmpty = makeTable({tiers: [{id: "t1", name: "Gold"}],
+                                    rows: [{emptyGroupId: "gE", category: {id: "gE", name: "Speed"}}]},
+                                   groupedManager())
+        compare(allEmpty.pasteDestination(), {kind: "append"})
+        verify(allEmpty.focusCell({groupId: "gE"}))
+        compare(allEmpty.pasteDestination(), {kind: "append"})
+    }
+
+    // The session keeps an empty row's anchor unchanged when its group gains scenarios, so the
+    // anchor has to keep addressing that group's first row.
+    function test_emptyRowAnchorFollowsItsGroup() {
+        const ref = {}
+        const table = makeTable(groupedDesc(), groupedManager(), ref)
+        const rankAnchor = table.tableModel.anchorAt(3, 3)
+        const groupAnchor = table.tableModel.anchorAt(3, 0)
+        compare(rankAnchor.emptyGroupId, "gE")
+        compare(table.anchorIndex(rankAnchor).row, 3)
+        compare(table.anchorIndex(rankAnchor).column, 3)
+
+        const filled = groupedDesc()
+        const speed = filled.rows[3].category
+        filled.rows[3] = {entryId: "n", category: speed, name: "New", cells: {}}
+        filled.rows.unshift({entryId: "n0", category: speed, name: "First", cells: {}})
+        ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(filled))
+        compare(table.anchorIndex(rankAnchor).row, 0)
+        compare(table.anchorIndex(rankAnchor).column, 3)
+        compare(table.anchorIndex(groupAnchor).row, 0)
+        compare(table.anchorIndex(groupAnchor).column, 0)
+
+        const removed = groupedDesc()
+        removed.rows.splice(3, 1)
+        ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(removed))
+        verify(!table.anchorIndex(rankAnchor).valid)
+    }
+
     function test_rowInsertionTargetsTheGapAboveOrBelowTheHoveredRow() {
         const group = {id: "g1", name: "Clicking"}
         const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
             {entryId: "a", category: group, name: "Alpha", cells: {}},
             {entryId: "b", category: group, name: "Beta", cells: {}},
             {entryId: "c", name: "Gamma", cells: {}}
-        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true}]})
+        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2}]})
         const insertion = (entryId, column, fraction) => {
             const found = table.rowInsertionAtScene(scenePointIn(cellFor(table, entryId, column), fraction))
             return found ? [found.groupId, found.beforeEntryId] : null
@@ -367,14 +665,14 @@ TestCase {
             {entryId: "a", category: group, name: "Alpha", cells: {}},
             {entryId: "b", category: group, name: "Beta", cells: {}},
             {entryId: "c", name: "Gamma", cells: {}}
-        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true}]})
+        ]}, {groups: [{id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2}]})
         const moves = []
         const indicators = []
         table.moveSelectionRequested.connect((ids, target, before) => moves.push([ids, target, before]))
         table.dropInsertionChanged.connect(() => {
             if (table.dropInsertion) indicators.push([table.dropInsertion.row, table.dropInsertion.above])
         })
-        const source = cellFor(table, "c", "scenario")
+        const source = rowHandle(table, "c")
         const target = cellFor(table, "a", "scenario")
         const start = source.mapToItem(table, source.width / 2, source.height / 2)
         const end = target.mapToItem(table, target.width / 2, target.height * 0.25)
@@ -384,6 +682,374 @@ TestCase {
         compare(moves[0], [["c"], "g1", "a"])
         verify(indicators.some(i => i[0] === 0 && i[1]), "the line must mark the gap above row a")
         compare(table.dropInsertion, null, "the line is gone once the drop lands")
+    }
+
+    // ---------------------------------------------------------------------------
+    // Drag selection, the row move handle and the row highlight.
+    // ---------------------------------------------------------------------------
+
+    function rowHandle(table, entryId) {
+        return ItemLookup.findByObjectName(table.identityView.contentItem, "rowHandle_" + entryId)
+    }
+
+    function centreOf(table, item) {
+        return item.mapToItem(table, item.width / 2, item.height / 2)
+    }
+
+    function pressOn(table, item) {
+        const point = centreOf(table, item)
+        mousePress(table, point.x, point.y)
+        return point
+    }
+
+    function dragPointer(table, from, to) {
+        for (const fraction of [0.25, 0.5, 1]) {
+            mouseMove(table, from.x + (to.x - from.x) * fraction, from.y + (to.y - from.y) * fraction,
+                      -1, Qt.LeftButton)
+        }
+        return to
+    }
+
+    function dragAcross(table, fromItem, toItem) {
+        const to = dragPointer(table, pressOn(table, fromItem), centreOf(table, toItem))
+        mouseRelease(table, to.x, to.y)
+    }
+
+    // Row a and b sit in Clicking / Static, c and d directly under Tracking, e in Uncategorized.
+    function fiveRowDesc() {
+        const clicking = {id: "g1", name: "Clicking"}
+        const tracking = {id: "g2", name: "Tracking"}
+        const row = (id, category, subcategory) => ({
+            entryId: id, category: category, subcategory: subcategory, name: "Scenario " + id,
+            cells: {t1: {displayText: "1"}, t2: {displayText: "2"}}
+        })
+        return {tiers: [{id: "t1", name: "Gold"}, {id: "t2", name: "Silver"}], rows: [
+            row("a", clicking, {id: "s1", name: "Static"}),
+            row("b", clicking, {id: "s1", name: "Static"}),
+            row("c", tracking),
+            row("d", tracking),
+            row("e")
+        ]}
+    }
+
+    readonly property var fiveRowGroups: ({groups: [
+        {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2},
+        {id: "s1", kind: "subcategory", parentId: "g1", name: "Static", scenarioCount: 2},
+        {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 2}
+    ]})
+
+    // Taller than its viewport, with room left in the test window below the view.
+    function scrollingTable() {
+        const rows = []
+        for (let i = 0; i < 24; ++i)
+            rows.push({entryId: "r" + i, name: "Row " + i, cells: {t1: {displayText: String(i)}}})
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: rows})
+        table.height = 320
+        tryVerify(() => table.thresholdView.height < table.thresholdView.contentHeight)
+        tryVerify(() => cellFor(table, "r1", "scenario") !== null)
+        return table
+    }
+
+    function viewportBottom(table) {
+        return table.thresholdView.mapToItem(table, 0, table.thresholdView.height).y
+    }
+
+    function viewportTop(table) {
+        return table.thresholdView.mapToItem(table, 0, 0).y
+    }
+
+    // Upward, because a flick dragging down from the top has nowhere to go and would pass unseen.
+    // The Control drag, which the range handler refuses, shows the view really does flick.
+    function test_rangeDragBeatsTheViewsOwnFlick() {
+        const table = scrollingTable()
+        const view = table.thresholdView
+        const from = pressOn(table, cellFor(table, "r5", "scenario"))
+        const to = dragPointer(table, from, centreOf(table, cellFor(table, "r3", "scenario")))
+        compare(selectedIdsOf(table), ["r3", "r4", "r5"])
+        compare(view.contentY, 0, "the drag must select, not flick the view")
+        mouseRelease(table, to.x, to.y)
+        compare(view.contentY, 0)
+
+        mousePress(table, from.x, from.y, Qt.LeftButton, Qt.ControlModifier)
+        for (const fraction of [0.25, 0.5, 1]) {
+            mouseMove(table, from.x, from.y + (to.y - from.y) * fraction, -1, Qt.LeftButton, Qt.ControlModifier)
+        }
+        mouseRelease(table, to.x, to.y, Qt.LeftButton, Qt.ControlModifier)
+        tryVerify(() => view.contentY > 0, 2000, "an unclaimed drag flicks the view")
+    }
+
+    function test_rangeDragSurvivesItsPressedRowScrollingAway() {
+        const table = scrollingTable()
+        const view = table.thresholdView
+        const from = pressOn(table, cellFor(table, "r1", "scenario"))
+        const below = dragPointer(table, from, {x: from.x, y: viewportBottom(table) + 10})
+        tryVerify(() => view.contentY >= table.rowHeight * 6, 5000)
+        tryVerify(() => cellFor(table, "r1", "scenario") === null, 2000, "the pressed row's delegate is gone")
+
+        const inside = dragPointer(table, below, {x: from.x, y: (viewportTop(table) + viewportBottom(table)) / 2})
+        tryVerify(() => {
+            const stopped = view.contentY
+            wait(100)
+            return view.contentY === stopped
+        }, 3000, "scrolling stops once the pointer leaves the edge")
+        const endRow = table.selectionModel.currentIndex.row
+        const endCell = cellFor(table, "r" + endRow, "scenario")
+        verify(endCell !== null)
+        verify(Math.abs(centreOf(table, endCell).y - inside.y) <= table.rowHeight, "the drag still tracks the pointer")
+        mouseRelease(table, inside.x, inside.y)
+
+        const expected = []
+        for (let row = 1; row <= endRow; ++row) expected.push("r" + row)
+        compare(selectedIdsOf(table), expected.sort())
+        const settled = view.contentY
+        wait(120)
+        compare(view.contentY, settled, "release ends the auto-scroll")
+    }
+
+    function test_rangeDragKeepsTrackingFromOneViewToTheOther() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const from = pressOn(table, cellFor(table, "a", "scenario"))
+        let at = dragPointer(table, from, centreOf(table, cellFor(table, "b", "t1")))
+        compare(selectedIdsOf(table), ["a", "b"])
+        at = dragPointer(table, at, centreOf(table, cellFor(table, "d", "t2")))
+        compare(selectedIdsOf(table), ["a", "b", "c", "d"])
+        verify(isCurrent(table, "d", 4), "the current cell follows the pointer into the ranks")
+        mouseRelease(table, at.x, at.y)
+        compare(table.manager.selectedEntryIds.slice().sort(), ["a", "b", "c", "d"])
+        compare(currentAnchorOf(table).tierId, "t2", "paste lands at the drag's end cell")
+
+        const back = pressOn(table, cellFor(table, "e", "t2"))
+        at = dragPointer(table, back, centreOf(table, cellFor(table, "c", "scenario")))
+        compare(selectedIdsOf(table), ["c", "d", "e"])
+        mouseRelease(table, at.x, at.y)
+    }
+
+    function test_dragLeftOfScenarioStaysOnTheScenarioColumn() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "c", "category"))
+        compare(selectedIdsOf(table), ["a", "b", "c"])
+        verify(isCurrent(table, "c", 2))
+    }
+
+    function test_dragPastTheScenarioColumnOfARanklessTableKeepsTrackingRows() {
+        const table = makeTable({tiers: [], rows: [
+            {entryId: "a", name: "Alpha", cells: {}},
+            {entryId: "b", name: "Beta", cells: {}}
+        ]})
+        const from = pressOn(table, cellFor(table, "a", "scenario"))
+        const row = centreOf(table, cellFor(table, "b", "scenario"))
+        const to = dragPointer(table, from, {x: table.identityTotalWidth + 40, y: row.y})
+        compare(selectedIdsOf(table), ["a", "b"])
+        mouseRelease(table, to.x, to.y)
+    }
+
+    function test_dragAcrossRowsSelectsThemAndHighlightsScenarioThroughTheLastRank() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "b", "scenario"))
+        compare(selectedIdsOf(table), ["a", "b"])
+        compare(table.selectionModel.selectedIndexes.length, 2, "one Scenario index per row")
+
+        for (const column of ["scenario", "t1", "t2"]) {
+            const cell = cellFor(table, "a", column)
+            verify(cell.rowHighlighted, column + " is part of the highlighted row")
+            verify(ItemLookup.findByObjectName(cell, "rowHighlightOutline").visible, column + " has the outline")
+        }
+        for (const column of ["category", "subcategory"]) {
+            const cell = cellFor(table, "a", column)
+            verify(!cell.rowHighlighted, column + " is not tinted by the row")
+            verify(!ItemLookup.findByObjectName(cell, "rowHighlightOutline").visible)
+        }
+        verify(Qt.colorEqual(cellFor(table, "a", "t2").face.color, cellFor(table, "a", "scenario").face.color),
+               "a rank of a selected row is as strong as the selected cell")
+        verify(!cellFor(table, "c", "scenario").rowHighlighted)
+    }
+
+    function test_directlySelectedGroupCellKeepsItsOwnTint() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const group = cellFor(table, "a", "category")
+        const other = cellFor(table, "c", "category")
+        mouseClick(group)
+        mouseClick(other, other.width / 2, other.height / 2, Qt.LeftButton, Qt.ControlModifier)
+        tryVerify(() => group.selected && !group.current)
+        verify(!group.rowHighlighted)
+        verify(Qt.colorEqual(group.face.color, Qt.alpha(table.palette.highlight, 0.3)))
+    }
+
+    function test_longRangePublishesOnce() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const from = pressOn(table, cellFor(table, "a", "scenario"))
+        const to = centreOf(table, cellFor(table, "e", "scenario"))
+        let publishes = 0
+        table.selectedCellAnchorsChanged.connect(() => ++publishes)
+        mouseMove(table, to.x, to.y, -1, Qt.LeftButton)
+        compare(selectedIdsOf(table), ["a", "b", "c", "d", "e"])
+        compare(publishes, 1)
+        mouseRelease(table, to.x, to.y)
+    }
+
+    function test_dragAcrossAnEmptyRowLeavesItOut() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "u", "scenario"))
+        compare(selectedIdsOf(table), ["a", "u"])
+        compare(table.selectionModel.selectedIndexes.length, 2)
+        verify(!cellFor(table, "empty-hollow", "scenario").rowHighlighted)
+        verify(!cellFor(table, "empty-gE", "t1").rowHighlighted)
+    }
+
+    function test_dragPastTheBottomEdgeScrollsAndExtendsTheSelection() {
+        const table = scrollingTable()
+        const view = table.thresholdView
+        const from = pressOn(table, cellFor(table, "r1", "t1"))
+        const below = dragPointer(table, from, {x: from.x, y: viewportBottom(table) + 10})
+        const lastTop = view.originY + view.contentHeight - view.height
+        tryCompare(view, "contentY", lastTop, 5000, "the view scrolls to its end and no further")
+        tryVerify(() => selectedIdsOf(table).indexOf("r23") !== -1, 2000, "the selection reaches the last row")
+        compare(selectedIdsOf(table).length, 23)
+
+        const above = dragPointer(table, below, {x: from.x, y: viewportTop(table) - 10})
+        tryCompare(view, "contentY", view.originY, 5000, "and back up to its start")
+        tryCompare(table.selectionModel.currentIndex, "row", 0, 2000)
+        mouseRelease(table, above.x, above.y)
+        compare(selectedIdsOf(table), ["r0", "r1"])
+    }
+
+    function test_draggingAScenarioRowsRankCellSelectsRowsAndMovesNone() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const moves = []
+        table.moveSelectionRequested.connect(ids => moves.push(ids))
+        dragAcross(table, cellFor(table, "b", "t1"), cellFor(table, "c", "t1"))
+        compare(selectedIdsOf(table), ["b", "c"])
+        verify(!table.draggingRows)
+        compare(moves, [])
+    }
+
+    function test_draggingAnEmptyRowsRankCellSelectsAndMovesNothing() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        const moves = []
+        table.moveSelectionRequested.connect(ids => moves.push(ids))
+        dragAcross(table, cellFor(table, "empty-gE", "t1"), cellFor(table, "u", "t1"))
+        compare(selectedIdsOf(table), [])
+        compare(moves, [])
+    }
+
+    function test_draggingACategoryCellStartsNoSelection() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        dragAcross(table, cellFor(table, "c", "category"), cellFor(table, "e", "t1"))
+        compare(selectedIdsOf(table), [])
+        verify(!table.selectionModel.currentIndex.valid)
+    }
+
+    function test_noRangeDragWhileAnEditorIsOpen() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        verify(table.focusCell({entryId: "a", tierId: "t1"}))
+        keyClick(Qt.Key_Return)
+        tryVerify(() => table.activeEditor !== null)
+        dragAcross(table, cellFor(table, "c", "t1"), cellFor(table, "e", "t1"))
+        compare(selectedIdsOf(table), ["a"])
+    }
+
+    function test_plainDragReplacesTheSelectionAndModifiedDragLeavesIt() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        mouseClick(cellFor(table, "e", "scenario"))
+        compare(selectedIdsOf(table), ["e"])
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "b", "scenario"))
+        compare(selectedIdsOf(table), ["a", "b"])
+
+        const from = centreOf(table, cellFor(table, "c", "scenario"))
+        const to = centreOf(table, cellFor(table, "d", "scenario"))
+        mousePress(table, from.x, from.y, Qt.LeftButton, Qt.ControlModifier)
+        mouseMove(table, to.x, to.y, -1, Qt.LeftButton, Qt.ControlModifier)
+        mouseRelease(table, to.x, to.y, Qt.LeftButton, Qt.ControlModifier)
+        compare(selectedIdsOf(table), ["a", "b"])
+    }
+
+    function test_modelResetAfterADragRestoresTheSelection() {
+        const ref = {}
+        const table = makeTable(fiveRowDesc(), fiveRowGroups, ref)
+        dragAcross(table, cellFor(table, "b", "scenario"), cellFor(table, "d", "t1"))
+        compare(selectedIdsOf(table), ["b", "c", "d"])
+
+        const reordered = fiveRowDesc()
+        reordered.rows.reverse()
+        ref.fixture.setProjection(TestDoubles.benchmarkTableProjection(reordered))
+        tryCompare(table.selectionModel.selectedIndexes, "length", 3)
+        compare(selectedIdsOf(table), ["b", "c", "d"])
+        verify(isCurrent(table, "d", 3))
+        tryVerify(() => cellFor(table, "c", "t2") !== null && cellFor(table, "c", "t2").rowHighlighted)
+        verify(!cellFor(table, "a", "t2").rowHighlighted)
+    }
+
+    function test_handleMovesTheWholeSelectionWhenItsRowIsSelected() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const moves = []
+        table.moveSelectionRequested.connect((ids, target) => moves.push([ids.slice().sort(), target]))
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "b", "scenario"))
+        dragAcross(table, rowHandle(table, "a"), cellFor(table, "c", "category"))
+        compare(moves, [[["a", "b"], "g2"]])
+        compare(selectedIdsOf(table), ["a", "b"], "the handle drag leaves the selection alone")
+    }
+
+    function test_handleMovesJustItsOwnRowOutsideTheSelection() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const moves = []
+        table.moveSelectionRequested.connect((ids, target) => moves.push([ids, target]))
+        dragAcross(table, cellFor(table, "a", "scenario"), cellFor(table, "b", "scenario"))
+        dragAcross(table, rowHandle(table, "e"), cellFor(table, "c", "category"))
+        compare(moves, [[["e"], "g2"]])
+    }
+
+    // With the series handle's zero threshold a click would count as a drag and drop the row.
+    function test_clickingTheHandleSelectsTheRowWithoutMovingIt() {
+        const table = makeTable(fiveRowDesc(), fiveRowGroups)
+        const moves = []
+        table.moveSelectionRequested.connect(ids => moves.push(ids))
+        mouseClick(rowHandle(table, "b"))
+        compare(selectedIdsOf(table), ["b"])
+        verify(!table.draggingRows)
+        compare(moves, [])
+    }
+
+    function test_handleBeatsTheRangeDragAndTheFlick() {
+        const table = scrollingTable()
+        const moves = []
+        table.moveSelectionRequested.connect(ids => moves.push(ids))
+        const from = pressOn(table, rowHandle(table, "r5"))
+        const to = dragPointer(table, from, centreOf(table, cellFor(table, "r3", "scenario")))
+        verify(table.draggingRows)
+        compare(table.thresholdView.contentY, 0)
+        compare(selectedIdsOf(table), [])
+        mouseRelease(table, to.x, to.y)
+        compare(moves, [["r5"]])
+    }
+
+    function test_handleSitsOnlyOnScenarioRowsAndPushesTheLabelRight() {
+        const table = makeTable(groupedDesc(), groupedManager())
+        const handles = ItemLookup.findByObjectNamePrefix(table.identityView.contentItem, "rowHandle_", [])
+                        .map(item => item.objectName).sort()
+        compare(handles, ["rowHandle_a", "rowHandle_d", "rowHandle_u"])
+
+        const scenario = cellFor(table, "a", "scenario")
+        const handle = rowHandle(table, "a")
+        const label = ItemLookup.findByObjectName(scenario, "cellLabel")
+        verify(handle.mapToItem(scenario, 0, 0).x >= 0)
+        verify(label.mapToItem(scenario, 0, 0).x >= handle.mapToItem(scenario, handle.width, 0).x,
+               "the label clears the handle")
+        const dropHint = ItemLookup.findByObjectName(cellFor(table, "empty-gE", "scenario"), "cellLabel")
+        verify(dropHint.mapToItem(dropHint.parent, 0, 0).x < label.mapToItem(scenario, 0, 0).x)
+
+        const hover = handle.data.find(child => child.cursorShape === Qt.OpenHandCursor)
+        verify(hover !== undefined, "the handle offers an open hand at rest")
+    }
+
+    // The label sits past the handle, so the width that fits a name has to count it.
+    function test_scenarioContentWidthCountsTheHandle() {
+        const table = makeTable({tiers: [{id: "t1", name: "Gold"}], rows: [
+            {entryId: "a", name: "A somewhat longer scenario", cells: {}}
+        ]})
+        const label = ItemLookup.findByObjectName(cellFor(table, "a", "scenario"), "cellLabel")
+        const fits = Math.min(table.identityPreferredWidths[2], label.implicitWidth + 12 + table.rowHandleWidth)
+        verify(table.identityContentWidths[2] >= fits - 1,
+               table.identityContentWidths[2] + " is under " + fits)
     }
 
     function test_controlClickSelectsSeparateCellsAndHighlightsBothRows() {
@@ -444,10 +1110,11 @@ TestCase {
         rows.push({entryId: "c", cells: {t1: {displayText: "1"},
                                          t2: {displayText: "oops", inputState: "invalid",
                                               issues: ["Not a number. Saving stores this threshold as missing."]}}})
+        rows.unshift({emptyGroupId: "gEmpty", category: {id: "gEmpty", name: "Empty"}})
         const table = makeTable({
             tiers: [{id: "t1", name: "Bronze"}, {id: "t2", name: "Silver", issues: ["Two tiers share the same name."]}],
             rows: rows
-        }, {groups: [{id: "gEmpty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0, acceptsScenarios: true, subcategoryNeedsRelocation: false,
+        }, {groups: [{id: "gEmpty", kind: "category", parentId: "", name: "Empty", scenarioCount: 0,
                       issues: ["A category has neither scenarios nor subcategories."]}]})
 
         verify(table.focusCell({entryId: "a", tierId: "t1"}), "focusCell must accept a stable cell anchor")
@@ -492,7 +1159,8 @@ TestCase {
         verify(table.focusCell({tierId: "t2"}))
         tryVerify(() => ItemLookup.findByObjectName(table, "rankHeader_t2").activeFocus)
         verify(table.focusCell({groupId: "gEmpty"}))
-        tryVerify(() => ItemLookup.findByObjectName(table, "groupListItem_gEmpty").activeFocus)
+        tryVerify(() => table.identityView.activeFocus && table.selectionModel.currentIndex.row === 0)
+        compare(table.focusedGroupId, "gEmpty")
     }
 
     function pasteRows() {
@@ -1056,7 +1724,7 @@ TestCase {
 
         // A visible label, not a bare glyph, and a tooltip that says what the control does.
         verify(String(category.text).length > 1 && String(scenario.text).length > 1)
-        verify(String(category.text).toLowerCase().indexOf("category") !== -1, category.text)
+        verify(String(category.text).toLowerCase().indexOf("categor") !== -1, category.text)
         verify(String(scenario.text).toLowerCase().indexOf("scenario") !== -1, scenario.text)
         verify(String(category.ToolTip.text).length > 0 && String(scenario.ToolTip.text).length > 0)
         verify(String(scenario.ToolTip.text).toLowerCase().indexOf("uncategorized") !== -1)
@@ -1346,5 +2014,67 @@ TestCase {
 
         table.width = 1100
         tryCompare(table, "identityTotalWidth", preferredTotal)
+    }
+
+    // ---- Comma-separated category entry and the table hint --------------------------------------
+
+    function test_categoryFieldSpansTheIdentityColumnsAndEscapeCancels() {
+        const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const requests = []
+        table.creationHandler = request => { requests.push(request); return true }
+        const plus = ItemLookup.findByObjectName(table, "addCategoryPlus")
+        const addScenario = ItemLookup.findByObjectName(table, "addScenarioPlus")
+        const field = ItemLookup.findByObjectName(table, "categoryCreationName")
+        compare(plus.text, "+ Add categories")
+        compare(plus.Accessible.name, "Add categories")
+
+        mouseClick(plus)
+        tryVerify(() => field.visible && field.activeFocus)
+        compare(field.placeholderText, "Category names, separated by commas")
+        compare(field.width, table.identityWidths[0] + table.identityWidths[1] + table.identityWidths[2])
+        verify(!addScenario.visible, "the add-scenario button yields its space to the field")
+
+        field.text = "Speed"
+        keyClick(Qt.Key_Escape)
+        tryVerify(() => !field.visible)
+        verify(addScenario.visible)
+        compare(requests.length, 0)
+    }
+
+    function test_categoryFieldSendsTheRawTextAndStaysOpenOnlyWhenRejected() {
+        const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const requests = []
+        let accept = false
+        table.creationHandler = request => { requests.push(request); return accept }
+        const field = ItemLookup.findByObjectName(table, "categoryCreationName")
+
+        mouseClick(ItemLookup.findByObjectName(table, "addCategoryPlus"))
+        tryVerify(() => field.visible && field.activeFocus)
+        field.text = "Speed, Precision"
+        keyClick(Qt.Key_Return)
+        compare(requests, [{kind: "categories", text: "Speed, Precision"}])
+        verify(field.visible, "a rejected entry stays for correction")
+        compare(field.text, "Speed, Precision")
+
+        accept = true
+        keyClick(Qt.Key_Return)
+        tryVerify(() => !field.visible)
+        compare(requests.length, 2)
+    }
+
+    function test_tableHintChangesWhileAddingCategories() {
+        const table = makeTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]})
+        const hint = ItemLookup.findByObjectName(table, "tableHint")
+        verify(hint !== null && hint.visible)
+        verify(hint.text.indexOf("Drag across cells to select scenarios.") === 0, hint.text)
+        verify(hint.text.indexOf("Ctrl+G") !== -1)
+        verify(hint.text.indexOf("Tip: Add categories accepts comma-separated names.") !== -1)
+
+        mouseClick(ItemLookup.findByObjectName(table, "addCategoryPlus"))
+        tryCompare(hint, "text", "Separate category names with commas. Press Enter to add each as an empty, "
+                   + "visible row; Esc cancels. Example: Speed, Precision, Control.")
+
+        keyClick(Qt.Key_Escape)
+        tryVerify(() => hint.text.indexOf("Drag across cells") === 0)
     }
 }

@@ -56,8 +56,6 @@ namespace ksv::presentation {
         Q_PROPERTY(QAbstractItemModel *tableModel READ tableModel CONSTANT)
         // Every category and subcategory, including empty ones that occupy no table row.
         Q_PROPERTY(QVariantList groups READ groups NOTIFY draftChanged)
-        // {id, label} of every group a scenario can be assigned to, Uncategorized (empty id) first.
-        Q_PROPERTY(QVariantList assignTargets READ assignTargets NOTIFY draftChanged)
         Q_PROPERTY(bool canUndo READ canUndo NOTIFY draftChanged)
         // Stable scenario IDs, never row numbers: rows move when groups change.
         Q_PROPERTY(QStringList selectedEntryIds READ selectedEntryIds WRITE setSelectedEntryIds
@@ -93,7 +91,6 @@ namespace ksv::presentation {
 
         [[nodiscard]] QAbstractItemModel *tableModel() const { return m_tableModel; }
         [[nodiscard]] const QVariantList &groups() const { return m_groups; }
-        [[nodiscard]] const QVariantList &assignTargets() const { return m_assignTargets; }
         [[nodiscard]] bool canUndo() const { return !m_history.empty(); }
         [[nodiscard]] const QStringList &selectedEntryIds() const { return m_selectedEntryIds; }
         void setSelectedEntryIds(const QStringList &ids);
@@ -127,7 +124,6 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap removeScenarios(const QStringList &entryIds);
         Q_INVOKABLE QVariantMap setThreshold(const QString &entryId, const QString &tierId, double score);
         Q_INVOKABLE QVariantMap clearThreshold(const QString &entryId, const QString &tierId);
-        Q_INVOKABLE QVariantMap addCategory(const QString &name);
         Q_INVOKABLE QVariantMap renameGroup(const QString &id, const QString &name);
         Q_INVOKABLE QVariantMap setGroupColor(const QString &id, const QColor &color);
         Q_INVOKABLE QVariantMap reorderCategory(const QString &id, int position);
@@ -138,16 +134,24 @@ namespace ksv::presentation {
         Q_INVOKABLE QVariantMap editThresholdText(const QString &entryId, const QString &tierId,
                                                   const QString &text);
         // `destination.kind` is "scenario" / "threshold" (with entryId, and tierId for a threshold),
-        // "rankHeader" (with tierId) or "append" for an empty table.
+        // "rankHeader" (with tierId) or "append" for a table with no scenario rows. "category",
+        // "subcategory" and "emptyGroup" are refused because a group is not a paste target.
         Q_INVOKABLE QVariantMap pasteText(const QVariantMap &destination, const QString &text);
         // An empty `targetGroupId` targets Uncategorized.
         // An empty `beforeEntryId` appends to the target group.
         Q_INVOKABLE QVariantMap assignScenarios(const QStringList &entryIds, const QString &targetGroupId,
                                                 const QString &beforeEntryId = QString());
-        // `relocation` says where a populated category's direct scenarios go: "uncategorized" or
-        // "newSubcategory" (the subcategory being created).
-        Q_INVOKABLE QVariantMap addSubcategoryRelocating(const QString &categoryId, const QString &name,
-                                                         const QString &relocation);
+        // Splits on commas and creates the new categories as one edit and one Undo step. Names that
+        // repeat within the list, match an existing category or equal Uncategorized
+        // (case-insensitively) are returned in `skipped` instead. Returns `createdIds` and `skipped`.
+        Q_INVOKABLE QVariantMap addCategories(const QString &commaSeparatedNames);
+        // `actions` is a list of {kind: "create", name, parentId} or {kind: "move", targetId, path};
+        // an empty `targetId` is Uncategorized.
+        Q_INVOKABLE QVariantMap groupCommandOptions(const QString &query, const QString &parentCategoryId) const;
+        // Creates a category (or a subcategory of a non-empty `parentCategoryId`) and moves the
+        // scenarios into it as one Undo step. `createdId` names the new group.
+        Q_INVOKABLE QVariantMap createGroupAndAssign(const QStringList &entryIds, const QString &name,
+                                                     const QString &parentCategoryId);
         Q_INVOKABLE QVariantMap reorderSubcategory(const QString &id, int position);
         Q_INVOKABLE QVariantMap reorderScenario(const QString &entryId, int position);
         Q_INVOKABLE QVariantMap undo();
@@ -186,10 +190,13 @@ namespace ksv::presentation {
             QVariantMap currentCell;
         };
         // Reconciles the anchors against m_draft, announcing both in one selectionChanged. A lost
-        // row falls back to the row now at `fallbackRow` (where it sat before the table changed),
-        // a lost tier to the Scenario column; a fallback row never joins the selection.
-        void restoreSelection(const QStringList &ids, const QVariantMap &cell, int fallbackRow);
+        // row falls back to the scenario now at `fallbackPosition` (its index among scenario rows
+        // before the table changed), a lost tier to the Scenario column; a fallback row never
+        // joins the selection. A current cell on an empty-group row lives and dies with the group.
+        void restoreSelection(const QStringList &ids, const QVariantMap &cell, int fallbackPosition);
         void pruneCellInputs();
+        // Selection arrives in click order; a batch keeps the rows' current visible order. Requires a draft.
+        [[nodiscard]] std::vector<domain::ScenarioEntryId> inVisibleOrder(const QStringList &entryIds) const;
 
         std::shared_ptr<application::IBenchmarkManagerUseCase> m_useCase;
 
@@ -217,7 +224,6 @@ namespace ksv::presentation {
         QVariantList m_validationIssues;
         QVariantList m_tiers;
         QVariantList m_groups;
-        QVariantList m_assignTargets;
         QVariantList m_scenarioCatalogue;
         BenchmarkTableModel *m_tableModel = nullptr;
         BenchmarkClipboardAdapter *m_clipboard = nullptr;

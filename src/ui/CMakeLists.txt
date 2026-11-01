@@ -58,6 +58,7 @@ qt_add_qml_module(ksv_ui
             qml/common/ActionButton.qml
             qml/common/CommitOnFinishField.qml
             qml/common/CreationField.qml
+            qml/common/DragHandleDots.qml
             qml/common/GridCellBorders.qml
             qml/common/GridHeaderCell.qml
             qml/common/ListScrollBar.qml
@@ -77,7 +78,7 @@ qt_add_qml_module(ksv_ui
             qml/benchmark/BenchmarkCellEditor.qml
             qml/benchmark/TableSwatch.qml
             qml/benchmark/BenchmarkRankHeaderCell.qml
-            qml/benchmark/BenchmarkEmptyGroupList.qml
+            qml/benchmark/BenchmarkGroupCommand.qml
             qml/benchmark/ProgressGridRow.qml
             qml/benchmark/ProgressGridGroupCell.qml
             qml/series/SeriesConfigDraftPanel.qml
@@ -150,6 +151,8 @@ qt_add_qml_module(ksv_ui
             presentation/benchmarks/manager/benchmark_issue_text.cpp
             presentation/benchmarks/benchmark_format.h
             presentation/benchmarks/benchmark_format.cpp
+            presentation/benchmarks/manager/benchmark_group_command.h
+            presentation/benchmarks/manager/benchmark_group_command.cpp
             presentation/benchmarks/manager/benchmark_manager_vm.h
             presentation/benchmarks/manager/benchmark_manager_vm.cpp
             presentation/benchmarks/manager/benchmark_table_model.h

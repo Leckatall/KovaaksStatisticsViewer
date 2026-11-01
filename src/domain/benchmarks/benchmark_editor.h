@@ -15,7 +15,7 @@
 namespace ksv::domain {
     enum class BenchmarkEditError {
         UnknownTier, UnknownGroup, UnknownEntry,
-        DuplicateScenarioName, PositionOutOfRange, MixedContent
+        DuplicateScenarioName, PositionOutOfRange
     };
 
     struct BenchmarkEditResult {
@@ -30,13 +30,6 @@ namespace ksv::domain {
     // monostate targets the fixed Uncategorized collection; a GroupId targets a
     // category or subcategory.
     using EditorGroupTarget = std::variant<std::monostate, GroupId>;
-
-    // Where a category's direct scenarios go when its first subcategory is created, so the
-    // category never becomes mixed without the caller having chosen the outcome. The "new"
-    // subcategory is the one being created, not an extra one.
-    struct RelocateDirectToUncategorized {};
-    struct RelocateDirectToNewSubcategory {};
-    using DirectScenarioRelocation = std::variant<RelocateDirectToUncategorized, RelocateDirectToNewSubcategory>;
 
     // Structural editing over a caller-owned Benchmark, mutated in place. Carries no
     // working-copy, dirty, persistence, or profile state: the caller recomputes dirty
@@ -76,8 +69,6 @@ namespace ksv::domain {
         BenchmarkEditResult assignScenarios(const std::vector<ScenarioEntryId> &orderedIds,
                                             const EditorGroupTarget &to,
                                             const std::optional<ScenarioEntryId> &before = std::nullopt);
-        BenchmarkEditResult addSubcategory(const GroupId &categoryId, const std::string &name,
-                                           const DirectScenarioRelocation &relocation);
         BenchmarkEditResult reorderSubcategory(const GroupId &id, std::size_t position);
         // Moves an entry within the collection that already holds it.
         BenchmarkEditResult reorderScenario(const ScenarioEntryId &id, std::size_t position);

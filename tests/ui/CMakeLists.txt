@@ -20,6 +20,7 @@ add_executable(ui_tests
     scenarios/scenario_browser_vm_test.cpp
     benchmarks/manager/benchmark_issue_text_test.cpp
     benchmarks/manager/benchmark_manager_vm_test.cpp
+    benchmarks/manager/benchmark_group_command_test.cpp
     benchmarks/tracking/benchmark_tracking_vm_test.cpp
     benchmarks/tracking/benchmark_history_vm_test.cpp
     benchmarks/tracking/benchmark_progress_grid_model_test.cpp

@@ -335,7 +335,7 @@ TestCase {
         verify(categoryName && categoryName.visible)
         categoryName.text = "Clicking"
         keyClick(Qt.Key_Return)
-        tryCompare(vm(dialog), "addCategoryCalls", ["Clicking"])
+        tryCompare(vm(dialog), "addCategoriesCalls", ["Clicking"])
     }
 
     function test_newScenarioPlusFocusesBlankUncategorizedName() {
@@ -371,35 +371,65 @@ TestCase {
         mouseClick(find(dialog, "addCategoryPlus"))
         find(dialog, "categoryCreationName").text = "Clicking"
         keyClick(Qt.Key_Escape)
-        compare(vm(dialog).addCategoryCalls.length, 0)
+        compare(vm(dialog).addCategoriesCalls.length, 0)
+    }
+
+    function openRowMenu(dialog, entryId) {
+        const cell = tableCell(dialog, entryId, "scenario")
+        mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+        tryVerify(() => dialog.rowContextMenu.opened)
+    }
+
+    function rowMenuItem(dialog, objectName) {
+        const menu = dialog.rowContextMenu
+        for (let i = 0; i < menu.count; ++i) {
+            if (menu.itemAt(i).objectName === objectName) return menu.itemAt(i)
+        }
+        return null
+    }
+
+    function shownTexts(item) {
+        let texts = []
+        for (const child of item.children) {
+            if (child.text !== undefined) texts.push(child.text)
+            texts = texts.concat(shownTexts(child))
+        }
+        return texts
+    }
+
+    function test_rowMenuOffersGroupScenariosWithItsHotkey() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+
+        openRowMenu(dialog, "a")
+
+        const item = rowMenuItem(dialog, "groupScenariosItem")
+        compare(dialog.rowContextMenu.itemAt(0), item, "the grouping command leads the menu")
+        compare(item.text, "Group Scenarios")
+        verify(item.enabled)
+        verify(shownTexts(item.contentItem).indexOf("Ctrl+G") !== -1, shownTexts(item.contentItem).join("|"))
+        for (let i = 0; i < dialog.rowContextMenu.count; ++i)
+            verify(!dialog.rowContextMenu.itemAt(i).subMenu, "no submenu of groups remains")
+        const remove = rowMenuItem(dialog, "removeScenariosItem")
+        verify(shownTexts(remove.contentItem).indexOf("Del") !== -1, shownTexts(remove.contentItem).join("|"))
     }
 
     function test_selectedRowContextMenuMovesAllSelectedScenarios() {
-        const desc = TestDoubles.benchmarkManagementDesc()
-        const dialog = openWithTable(desc, {
-            groups: [
-                {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []},
-                {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 1, acceptsScenarios: true, subcategoryNeedsRelocation: true, issues: []}
-            ],
-            assignTargets: [{id: "", label: "Uncategorized"}, {id: "g1", label: "Clicking"}, {id: "g2", label: "Tracking"}]
+        const dialog = openGrouping({
+            groupCommandOptions: () => ({actions: [{kind: "move", targetId: "g2", path: "Tracking"}], exactMatch: true})
         })
-        verify(dialog.editorTable.focusCell({entryId: "a", columnKind: 2}))
-        const model = vm(dialog).tableModel
-        dialog.editorTable.selectionModel.select(model.index(model.rowForEntry("b"), 2),
-                                                 ItemSelectionModel.Select)
-        tryCompare(vm(dialog), "selectedEntryIds", ["a", "b"])
+        selectRows(dialog, ["a", "b"])
 
-        const cell = tableCell(dialog, "a", "scenario")
-        mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
-        tryVerify(() => dialog.rowContextMenu.opened)
+        openRowMenu(dialog, "a")
         compare(vm(dialog).selectedEntryIds.slice().sort(), ["a", "b"])
-        let target = null
-        for (let i = 0; i < dialog.assignMenu.count; ++i) {
-            if (dialog.assignMenu.itemAt(i).objectName === "assignTarget_g2")
-                target = dialog.assignMenu.itemAt(i)
-        }
-        verify(target !== null, "Move to group must list the available category")
-        target.triggered()
+        mouseClick(rowMenuItem(dialog, "groupScenariosItem"))
+
+        tryCompare(dialog.groupCommand, "opened", true)
+        tryVerify(() => !dialog.rowContextMenu.visible)
+        compare(dialog.groupCommand.scenarioNames, ["1w6ts", "1w4ts"])
+        tryVerify(() => dialog.groupCommand.queryField.activeFocus, 2000, "the menu must not take focus back")
+        keyClick(Qt.Key_T)
+        keyClick(Qt.Key_Return)
         tryCompare(vm(dialog), "assignScenariosCalls", [[["a", "b"], "g2"]])
         verify(find(dialog, "rowActions") === null)
 
@@ -701,7 +731,7 @@ TestCase {
                 field.text = "Silver"
                 keyClick(Qt.Key_Return)
             }},
-            {name: "addCategory", run: (dialog) => {
+            {name: "addCategories", run: (dialog) => {
                 clickWhileEditing(dialog, "addCategoryPlus")
                 const field = find(dialog, "categoryCreationName")
                 field.text = "Flicking"
@@ -711,7 +741,7 @@ TestCase {
         const commands = [
             {name: "assignScenarios", run: (dialog) => {
                 vm(dialog).selectedEntryIds = ["s-res"]
-                dialog.assignSelection("")
+                dialog.moveToGroup("")
             }},
             {name: "reorderScenario", run: (dialog) => dialog.moveCurrentRow(1)},
             {name: "reorderTier", run: (dialog) => {
@@ -727,7 +757,7 @@ TestCase {
             desc.tiers.push({id: "t2", name: "Platinum"})
             const ref = {}
             const overrides = {canUndo: true, tiers: desc.tiers}
-            if (command.name === "addTier" || command.name === "addCategory"
+            if (command.name === "addTier" || command.name === "addCategories"
                     || command.name === "addUnplayedScenario")
                 overrides[command.name] = resettingAddition(command.name, ref)
             const dialog = openWithTable(desc, Object.assign(overrides, recordingInputOverrides()), ref)
@@ -1181,5 +1211,294 @@ TestCase {
         dialog.libraryCollapsed = false
         dialog.libraryCollapsed = true
         tryCompare(pane, "visible", true)
+    }
+
+    // ---- Comma category entry, Ctrl+G and the status line --------------------------------------
+
+    function openGrouping(overrides) {
+        return openWithTable(TestDoubles.benchmarkManagementDesc(), Object.assign({
+            groups: TestDoubles.benchmarkManagementGroups()
+        }, overrides || {}))
+    }
+
+    function selectRows(dialog, entryIds) {
+        verify(dialog.editorTable.focusCell({entryId: entryIds[0], columnKind: 2}))
+        const model = vm(dialog).tableModel
+        for (const id of entryIds.slice(1))
+            dialog.editorTable.selectionModel.select(model.index(model.rowForEntry(id), 2), ItemSelectionModel.Select)
+        tryCompare(vm(dialog), "selectedEntryIds", entryIds)
+    }
+
+    function addCategories(dialog, text) {
+        mouseClick(find(dialog, "addCategoryPlus"))
+        const field = find(dialog, "categoryCreationName")
+        field.text = text
+        keyClick(Qt.Key_Return)
+    }
+
+    function statusLabel(dialog) { return find(dialog, "tableStatusLabel") }
+
+    function test_commaEntryReportsWhatWasAddedInTheNeutralColour() {
+        const dialog = openGrouping({
+            addCategoriesResult: {ok: true, createdIds: ["n1", "n2", "n3"], skipped: []},
+            groups: TestDoubles.benchmarkManagementGroups().concat([
+                {id: "n1", kind: "category", parentId: "", name: "Speed", scenarioCount: 0, issues: []},
+                {id: "n2", kind: "category", parentId: "", name: "Precision", scenarioCount: 0, issues: []},
+                {id: "n3", kind: "category", parentId: "", name: "Control", scenarioCount: 0, issues: []}
+            ])
+        })
+
+        addCategories(dialog, "Speed, Precision, Control")
+
+        compare(vm(dialog).addCategoriesCalls, ["Speed, Precision, Control"])
+        const label = statusLabel(dialog)
+        tryCompare(label, "text", "Added 3 empty categories: Speed, Precision, Control.")
+        verify(Qt.colorEqual(label.color, dialog.palette.windowText), "a notice is not an error: " + label.color)
+        verify(!find(dialog, "categoryCreationName").visible)
+    }
+
+    function test_commaEntryUsesTheSingularAndNamesWhatItSkipped() {
+        const dialog = openGrouping({
+            addCategoriesResult: {ok: true, createdIds: ["n1"], skipped: ["clicking", "Tracking"]},
+            groups: TestDoubles.benchmarkManagementGroups().concat([
+                {id: "n1", kind: "category", parentId: "", name: "Speed", scenarioCount: 0, issues: []}
+            ])
+        })
+
+        addCategories(dialog, "Speed, clicking, Tracking")
+
+        tryCompare(statusLabel(dialog), "text", "Added 1 empty category: Speed. Skipped: clicking, Tracking.")
+        verify(Qt.colorEqual(statusLabel(dialog).color, dialog.palette.windowText))
+    }
+
+    function test_commaEntryErrorsStayInTheErrorColour() {
+        const dialog = openGrouping({addCategoriesResult: {ok: false, error: "Enter at least one category name."}})
+
+        addCategories(dialog, ", ,")
+
+        tryCompare(statusLabel(dialog), "text", "Enter at least one category name.")
+        verify(!Qt.colorEqual(statusLabel(dialog).color, dialog.palette.windowText))
+        verify(find(dialog, "categoryCreationName").visible, "a rejected entry stays open")
+    }
+
+    function test_ctrlGOpensTheCommandForTheSelection() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+
+        keyClick(Qt.Key_G, Qt.ControlModifier)
+
+        tryCompare(dialog.groupCommand, "visible", true)
+        compare(dialog.groupCommand.scenarioNames, ["1w6ts", "1w4ts"])
+        compare(dialog.groupCommand.parentCategories.map(c => c.id), ["g1", "g2", "gE"])
+        compare(dialog.groupCommand.parentCategories[0], {id: "g1", name: "Clicking"})
+    }
+
+    function test_ctrlGFallsBackToTheCurrentRow() {
+        const dialog = openGrouping()
+        verify(dialog.editorTable.focusCell({entryId: "c", columnKind: 2}))
+
+        keyClick(Qt.Key_G, Qt.ControlModifier)
+
+        tryCompare(dialog.groupCommand, "visible", true)
+        compare(dialog.groupCommand.scenarioNames, ["smoothbot"])
+    }
+
+    function test_ctrlGWithNothingSelectedExplainsAndOpensNothing() {
+        const dialog = openGrouping()
+
+        keyClick(Qt.Key_G, Qt.ControlModifier)
+
+        tryCompare(statusLabel(dialog), "text", "Select one or more scenarios first.")
+        compare(dialog.groupCommand.visible, false)
+    }
+
+    function test_groupScenariosFromAnUnselectedRowUsesThatRow() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+
+        openRowMenu(dialog, "c")
+        mouseClick(rowMenuItem(dialog, "groupScenariosItem"))
+
+        tryCompare(dialog.groupCommand, "opened", true)
+        compare(dialog.groupCommand.scenarioNames, ["smoothbot"])
+    }
+
+    function test_ctrlGWhileTheRowMenuIsOpenStillOpensTheCommand() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a"])
+        openRowMenu(dialog, "a")
+
+        keyClick(Qt.Key_G, Qt.ControlModifier)
+
+        tryCompare(dialog.groupCommand, "opened", true)
+        tryVerify(() => !dialog.rowContextMenu.visible)
+        tryVerify(() => dialog.groupCommand.queryField.activeFocus)
+    }
+
+    function test_deleteRemovesTheSelectedScenariosInOneCommand() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [["a", "b"]])
+        compare(vm(dialog).commandLog.filter(c => c === "removeScenarios").length, 1)
+        tryVerify(() => dialog.editorTable.identityView.activeFocus, 2000, "focus stays on the table")
+    }
+
+    function test_deleteRemovesTheCurrentScenario() {
+        const dialog = openGrouping()
+        verify(dialog.editorTable.focusCell({entryId: "c", columnKind: 2}))
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [["c"]])
+    }
+
+    // A drag can start on a rank cell, which leaves the current cell there while whole rows are selected.
+    function test_deleteRemovesARangeWhoseCurrentCellIsARank() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+        const model = vm(dialog).tableModel
+        dialog.editorTable.selectionModel.setCurrentIndex(model.index(model.rowForEntry("b"), 3),
+                                                          ItemSelectionModel.NoUpdate)
+        dialog.editorTable.thresholdView.forceActiveFocus()
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [["a", "b"]])
+    }
+
+    function test_deleteOnAGroupOrRankCellRemovesNothing_data() {
+        return [
+            {tag: "category", anchor: {entryId: "a", columnKind: 0}},
+            {tag: "subcategory", anchor: {entryId: "c", columnKind: 1}},
+            {tag: "rank", anchor: {entryId: "a", tierId: "t1"}}
+        ]
+    }
+
+    function test_deleteOnAGroupOrRankCellRemovesNothing(data) {
+        const dialog = openGrouping()
+        verify(dialog.editorTable.focusCell(data.anchor))
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [])
+    }
+
+    function test_deleteOnTheEmptyRankHeaderRemovesNothing() {
+        const dialog = openWithTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]}, {groups: []})
+        verify(dialog.editorTable.focusCell({entryId: "a", columnKind: 2}))
+        find(dialog, "emptyRankHeader").forceActiveFocus()
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [])
+    }
+
+    function test_deleteInACellEditorStaysInTheEditor() {
+        const dialog = openGrouping()
+        verify(dialog.editorTable.beginScenarioEdit("a"))
+        tryVerify(() => dialog.editorTable.activeEditor !== null)
+        const editor = dialog.editorTable.activeEditor
+        tryVerify(() => editor.activeFocus)
+        editor.text = "Alpha"
+        editor.deselect()
+        editor.cursorPosition = 0
+
+        keyClick(Qt.Key_Delete)
+
+        compare(editor.text, "lpha", "Delete edits the text")
+        compare(vm(dialog).removeScenariosCalls, [])
+    }
+
+    function test_deleteWhileTheRowMenuIsOpenRemovesOnce() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+        openRowMenu(dialog, "a")
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [["a", "b"]])
+        tryVerify(() => !dialog.rowContextMenu.visible)
+    }
+
+    function test_ctrlGCommitsAnOpenCellEditFirst() {
+        const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), Object.assign({
+            groups: []
+        }, recordingInputOverrides()))
+        typeIntoCell(dialog, "s-res", "t1", "oops")
+        verify(dialog.editorTable.activeEditor !== null)
+
+        keyClick(Qt.Key_G, Qt.ControlModifier)
+
+        compare(vm(dialog).commandLog[0], "editThresholdText")
+        tryCompare(dialog.groupCommand, "visible", true)
+    }
+
+    function test_creatingAGroupFromTheCommandIsOneViewModelCall() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+        dialog.openGroupCommand()
+        tryCompare(dialog.groupCommand, "visible", true)
+
+        dialog.groupCommand.queryField.text = "Speed"
+        keyClick(Qt.Key_Return)
+
+        tryCompare(vm(dialog), "createGroupAndAssignCalls", [[["a", "b"], "Speed", ""]])
+        compare(vm(dialog).commandLog.filter(c => c === "createGroupAndAssign").length, 1)
+        tryCompare(statusLabel(dialog), "text", "Created “Speed” and moved 2 scenarios.")
+        verify(Qt.colorEqual(statusLabel(dialog).color, dialog.palette.windowText))
+        compare(vm(dialog).selectedEntryIds, ["a", "b"])
+        compare(dialog.editorTable.selectionModel.selectedIndexes.length, 2)
+        tryVerify(() => dialog.editorTable.identityView.activeFocus || dialog.editorTable.thresholdView.activeFocus)
+    }
+
+    function test_creatingASubcategoryNamesItsParentAndCountsOneScenario() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a"])
+        dialog.openGroupCommand()
+        tryCompare(dialog.groupCommand, "visible", true)
+
+        dialog.groupCommand.createRequested("Fast", "g2")
+
+        tryCompare(vm(dialog), "createGroupAndAssignCalls", [[["a"], "Fast", "g2"]])
+        tryCompare(statusLabel(dialog), "text", "Created “Fast” under Tracking and moved 1 scenario.")
+    }
+
+    function test_movingFromTheCommandAssignsOnceAndNamesTheDestination() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+        dialog.openGroupCommand()
+        tryCompare(dialog.groupCommand, "visible", true)
+
+        dialog.groupCommand.moveRequested("g2")
+
+        compare(vm(dialog).assignScenariosCalls, [[["a", "b"], "g2"]])
+        tryCompare(statusLabel(dialog), "text", "Moved 2 scenarios to Tracking.")
+        compare(vm(dialog).selectedEntryIds, ["a", "b"])
+        tryVerify(() => dialog.editorTable.identityView.activeFocus || dialog.editorTable.thresholdView.activeFocus)
+    }
+
+    function test_movingOneScenarioToUncategorizedOrASubcategoryReadsNaturally() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a"])
+        dialog.openGroupCommand()
+        dialog.groupCommand.moveRequested("")
+        tryCompare(statusLabel(dialog), "text", "Moved 1 scenario to Uncategorized.")
+
+        dialog.groupCommand.moveRequested("p")
+        tryCompare(statusLabel(dialog), "text", "Moved 1 scenario to Tracking › Precise.")
+    }
+
+    function test_aRejectedGroupCommandReportsTheErrorColour() {
+        const dialog = openGrouping({assignResult: {ok: false, error: "Nothing to move."}})
+        selectRows(dialog, ["a"])
+        dialog.openGroupCommand()
+
+        dialog.groupCommand.moveRequested("g2")
+
+        tryCompare(statusLabel(dialog), "text", "Nothing to move.")
+        verify(!Qt.colorEqual(statusLabel(dialog).color, dialog.palette.windowText))
     }
 }

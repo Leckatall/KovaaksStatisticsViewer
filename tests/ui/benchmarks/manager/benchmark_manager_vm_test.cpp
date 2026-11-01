@@ -4,6 +4,7 @@
 #include <QClipboard>
 #include <QColor>
 #include <QGuiApplication>
+#include <QItemSelectionModel>
 #include <QLocale>
 #include <QDateTime>
 #include <QSet>
@@ -11,6 +12,7 @@
 #include <QStringList>
 #include <QUrl>
 #include <QVariantMap>
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -104,8 +106,11 @@ namespace {
     QStringList scenarioNames(const BenchmarkManagerViewModel &vm) {
         const auto &model = tableOf(vm);
         QStringList names;
-        for (int row = 0; row < model.rowCount(); ++row)
-            names.push_back(model.data(model.index(row, ScenarioColumn), TM::DisplayTextRole).toString());
+        for (int row = 0; row < model.rowCount(); ++row) {
+            const auto cell = model.index(row, ScenarioColumn);
+            if (model.data(cell, TM::EmptyGroupIdRole).toString().isEmpty())
+                names.push_back(model.data(cell, TM::DisplayTextRole).toString());
+        }
         return names;
     }
 
@@ -366,10 +371,10 @@ TEST(BenchmarkManagerVm, EditorCommandsMutateLocallyThroughBenchmarkEditor) {
 
     EXPECT_TRUE(f.vm->addUnplayedScenario("S2")["ok"].toBool());
     EXPECT_TRUE(f.vm->setThreshold("e1", "gold", 250.0)["ok"].toBool());
-    EXPECT_TRUE(f.vm->addCategory("Clicking")["ok"].toBool());
+    EXPECT_TRUE(f.vm->addCategories("Clicking")["ok"].toBool());
 
     // Local benchmark and its projections changed, driven by domain::BenchmarkEditor.
-    EXPECT_EQ(scenarioNames(*f.vm), (QStringList{"S", "S2"}));  // the empty Clicking category has no row
+    EXPECT_EQ(scenarioNames(*f.vm), (QStringList{"S", "S2"}));
     ASSERT_EQ(f.vm->groups().size(), 1);
     EXPECT_EQ(groupAt(*f.vm, 0)["name"].toString(), "Clicking");
     EXPECT_EQ(thresholdData(*f.vm, "e1", "gold", TM::EditTextRole).toString(),
@@ -817,8 +822,21 @@ namespace {
 
         [[nodiscard]] QStringList rowIds() const {
             QStringList ids;
-            for (int row = 0; row < model->rowCount(); ++row) ids.push_back(cell(row, 2, TM::EntryIdRole).toString());
+            for (int row = 0; row < model->rowCount(); ++row)
+                if (cell(row, 2, TM::EmptyGroupIdRole).toString().isEmpty())
+                    ids.push_back(cell(row, 2, TM::EntryIdRole).toString());
             return ids;
+        }
+
+        // Every row in table order, with an empty-group row written as [groupId].
+        [[nodiscard]] QStringList tableOrder() const {
+            QStringList order;
+            for (int row = 0; row < model->rowCount(); ++row) {
+                const auto emptyGroup = cell(row, 2, TM::EmptyGroupIdRole).toString();
+                order.push_back(emptyGroup.isEmpty() ? cell(row, 2, TM::EntryIdRole).toString()
+                                                     : QStringLiteral("[%1]").arg(emptyGroup));
+            }
+            return order;
         }
 
         [[nodiscard]] int rowOf(const QString &entryId) const {
@@ -934,8 +952,12 @@ TEST(BenchmarkTableProjection, EmptyAndMixedGroupsRemainRepairable) {
 }
 
 namespace {
+    constexpr int HollowRow = 6;
+    constexpr int EmptyCategoryRow = 7;
+
     // projectionBench() plus g1 loaded mixed (direct a,b and m-sub holding m), g2 gaining an empty
-    // "hollow" subcategory, and a trailing empty category. Rows: a,b,m,c,d,e,u.
+    // "hollow" subcategory, an empty category and a category holding x.
+    // Rows: a,b,m,c,d,e,[hollow],[empty],x,u.
     Benchmark mixedBench() {
         auto bench = projectionBench();
         bench.categories.at(0).subcategories.push_back(tableSub("m-sub", {tableEntry("m")}));
@@ -952,58 +974,44 @@ namespace {
     }
 }
 
-TEST(BenchmarkTableProjection, GroupsSayWhetherTheyAcceptScenariosAndNeedRelocation) {
+TEST(BenchmarkTableProjection, GroupsNoLongerAdvertiseRelocationFlags) {
     TableFixture f;
     f.open(mixedBench());
 
-    struct Expected {
-        QString id;
-        bool accepts;
-        bool needsRelocation;
-    };
-    const std::vector<Expected> categories{
-        {"g1", false, false},
-        {"g2", false, false},
-        {"empty", true, false},
-        {"direct", true, true},
-    };
-    for (const auto &[id, accepts, needsRelocation]: categories) {
-        const auto group = groupById(*f.vm, id);
-        ASSERT_FALSE(group.isEmpty()) << id.toStdString();
-        EXPECT_EQ(group["acceptsScenarios"].toBool(), accepts) << id.toStdString();
-        EXPECT_TRUE(group.contains("subcategoryNeedsRelocation")) << id.toStdString();
-        EXPECT_EQ(group["subcategoryNeedsRelocation"].toBool(), needsRelocation) << id.toStdString();
+    for (const auto &entry: f.vm->groups()) {
+        const auto group = entry.toMap();
+        EXPECT_FALSE(group.contains("acceptsScenarios")) << group["id"].toString().toStdString();
+        EXPECT_FALSE(group.contains("subcategoryNeedsRelocation")) << group["id"].toString().toStdString();
     }
-    for (const QString id: {"m-sub", "p", "q", "hollow"}) {
-        const auto group = groupById(*f.vm, id);
-        ASSERT_FALSE(group.isEmpty()) << id.toStdString();
-        EXPECT_TRUE(group.contains("acceptsScenarios")) << id.toStdString();
-        EXPECT_TRUE(group["acceptsScenarios"].toBool()) << id.toStdString();
-    }
-
-    ASSERT_TRUE(f.vm->addSubcategoryRelocating("direct", "New", "newSubcategory")["ok"].toBool());
-    EXPECT_FALSE(groupById(*f.vm, "direct")["acceptsScenarios"].toBool());
-    EXPECT_FALSE(groupById(*f.vm, "direct")["subcategoryNeedsRelocation"].toBool());
 }
 
-TEST(BenchmarkTableProjection, AssignTargetsListUncategorizedThenEveryGroupThatAcceptsScenarios) {
+TEST(BenchmarkTableProjection, AssigningToADividedCategoryKeepsTheDraftIncomplete) {
     TableFixture f;
+    f.open(projectionBench());
+    ASSERT_TRUE(f.vm->addSubcategory("g1", "Static")["ok"].toBool());
+
+    const auto result = f.vm->assignScenarios({"u"}, "g1");
+
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+    EXPECT_FALSE(f.vm->draftTrackable());
+    const auto mixedIssue = std::ranges::any_of(f.vm->validationIssues(), [](const QVariant &issue) {
+        return issue.toMap()["targetId"].toString() == QStringLiteral("g1");
+    });
+    EXPECT_TRUE(mixedIssue);
+}
+
+TEST(BenchmarkTableProjection, MixedDraftSavesAsIs) {
+    TableFixture f;
+    f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"}, std::nullopt};
     f.open(mixedBench());
 
-    QStringList ids, labels;
-    for (const auto &target: f.vm->property("assignTargets").toList()) {
-        ids << target.toMap()["id"].toString();
-        labels << target.toMap()["label"].toString();
-    }
-    EXPECT_EQ(ids, (QStringList{"", "m-sub", "p", "q", "hollow", "empty", "direct"}));
-    EXPECT_EQ(labels, (QStringList{"Uncategorized", "Category g1 / Sub m-sub", "Category g2 / Sub p",
-                                   "Category g2 / Sub q", "Category g2 / Sub hollow", "Category empty",
-                                   "Category direct"}));
+    ASSERT_FALSE(f.vm->draftTrackable());
+    ASSERT_TRUE(f.vm->save()["ok"].toBool());
 
-    f.vm->discard();
-    QStringList closed;
-    for (const auto &target: f.vm->property("assignTargets").toList()) closed << target.toMap()["id"].toString();
-    EXPECT_EQ(closed, QStringList{""});
+    ASSERT_EQ(f.uc->saveCalls.size(), 1U);
+    const auto &saved = f.uc->saveCalls.back().first.categories.at(0);
+    EXPECT_FALSE(saved.scenarios.empty());
+    EXPECT_FALSE(saved.subcategories.empty());
 }
 
 TEST(BenchmarkTableProjection, RowInfoPlacesEachRowWithinTheCollectionThatHoldsIt) {
@@ -1025,8 +1033,225 @@ TEST(BenchmarkTableProjection, RowInfoPlacesEachRowWithinTheCollectionThatHoldsI
     EXPECT_EQ(placement(3), std::pair(0, 2));
     EXPECT_EQ(placement(4), std::pair(1, 2));
     EXPECT_EQ(placement(5), std::pair(0, 1));
-    EXPECT_EQ(placement(6), std::pair(0, 1));
-    EXPECT_EQ(placement(7), std::pair(0, 1));
+    EXPECT_EQ(placement(HollowRow), std::pair(-1, 0));
+    EXPECT_EQ(placement(EmptyCategoryRow), std::pair(-1, 0));
+    EXPECT_EQ(placement(8), std::pair(0, 1));
+    EXPECT_EQ(placement(9), std::pair(0, 1));
+}
+
+TEST(BenchmarkTableProjection, EmptyGroupsTakeOneRowEachInHierarchyOrder) {
+    TableFixture f;
+    f.open(mixedBench());
+
+    ASSERT_EQ(f.tableOrder(), (QStringList{"a", "b", "m", "c", "d", "e", "[hollow]", "[empty]", "x", "u"}));
+    const auto span = [&](int row, int startRole, int lengthRole) {
+        return std::pair{f.cell(row, 0, startRole).toInt(), f.cell(row, 0, lengthRole).toInt()};
+    };
+
+    // hollow stays inside g2's span, rows 3-6.
+    EXPECT_EQ(f.cell(HollowRow, 0, TM::CategoryIdRole).toString(), "g2");
+    EXPECT_EQ(span(3, TM::CategorySpanStartRole, TM::CategorySpanLengthRole), std::pair(3, 4));
+    EXPECT_EQ(span(HollowRow, TM::CategorySpanStartRole, TM::CategorySpanLengthRole), std::pair(3, 4));
+    EXPECT_EQ(f.cell(HollowRow, 1, TM::SubcategoryIdRole).toString(), "hollow");
+    EXPECT_EQ(f.cell(HollowRow, 1, TM::SubcategoryNameRole).toString(), "Sub hollow");
+    EXPECT_EQ(span(HollowRow, TM::SubcategorySpanStartRole, TM::SubcategorySpanLengthRole), std::pair(HollowRow, 1));
+
+    EXPECT_EQ(f.cell(EmptyCategoryRow, 0, TM::CategoryIdRole).toString(), "empty");
+    EXPECT_EQ(span(EmptyCategoryRow, TM::CategorySpanStartRole, TM::CategorySpanLengthRole),
+              std::pair(EmptyCategoryRow, 1));
+    EXPECT_EQ(f.cell(EmptyCategoryRow, 1, TM::SubcategoryIdRole).toString(), QString());
+    EXPECT_EQ(f.cell(EmptyCategoryRow, 1, TM::SubcategorySpanLengthRole).toInt(), 0);
+
+    for (const int row: {HollowRow, EmptyCategoryRow}) {
+        EXPECT_EQ(f.cell(row, 2, TM::EntryIdRole).toString(), QString());
+        EXPECT_EQ(f.cell(row, 2, TM::DisplayTextRole).toString(), QString());
+        EXPECT_FALSE(f.cell(row, 2, TM::HasValueRole).toBool());
+        for (const int rank: {3, 4}) {
+            EXPECT_EQ(f.cell(row, rank, TM::DisplayTextRole).toString(), QString());
+            EXPECT_FALSE(f.cell(row, rank, TM::HasValueRole).toBool());
+            EXPECT_TRUE(f.cell(row, rank, TM::IssuesRole).toStringList().isEmpty());
+        }
+    }
+}
+
+TEST(BenchmarkTableProjection, RolesExposeEmptyGroupAndUnassigned) {
+    TableFixture f;
+    f.open(mixedBench());
+
+    const auto roles = f.model->roleNames();
+    EXPECT_EQ(roles.value(TM::EmptyGroupIdRole), QByteArray("emptyGroupId"));
+    EXPECT_EQ(roles.value(TM::UnassignedRole), QByteArray("unassigned"));
+    EXPECT_GT(TM::EmptyGroupIdRole, TM::HeaderColorRole);
+    EXPECT_GT(TM::UnassignedRole, TM::HeaderColorRole);
+}
+
+TEST(BenchmarkTableProjection, CategoryOfOnlyEmptySubcategoriesHasNoRowOfItsOwn) {
+    TableFixture f;
+    auto bench = draftWith("Bench", {tier("t1", "One")}, {});
+    bench.categories = {tableCategory("g", {}, {tableSub("s1", {}), tableSub("s2", {})})};
+    f.open(bench);
+
+    ASSERT_EQ(f.tableOrder(), (QStringList{"[s1]", "[s2]"}));
+    EXPECT_EQ(f.cell(0, 0, TM::CategoryIdRole).toString(), "g");
+    EXPECT_EQ(f.cell(1, 0, TM::CategoryIdRole).toString(), "g");
+    EXPECT_EQ(f.cell(0, 0, TM::CategorySpanLengthRole).toInt(), 2);
+    EXPECT_EQ(tableOf(*f.vm).firstRowOfGroup("g"), 0);
+}
+
+TEST(BenchmarkTableProjection, UncategorizedNeverTakesAnEmptyGroupRow) {
+    TableFixture f;
+    auto bench = projectionBench();
+    bench.uncategorized.clear();
+    f.open(bench);
+
+    EXPECT_EQ(f.tableOrder(), (QStringList{"a", "b", "c", "d", "e"}));
+}
+
+TEST(BenchmarkTableProjection, EveryGroupHasAFirstRow) {
+    TableFixture f;
+    f.open(mixedBench());
+    const auto &table = tableOf(*f.vm);
+
+    EXPECT_EQ(table.firstRowOfGroup("hollow"), HollowRow);
+    EXPECT_EQ(table.firstRowOfGroup("empty"), EmptyCategoryRow);
+    EXPECT_EQ(table.firstRowOfGroup("g2"), 3);
+    EXPECT_EQ(table.firstRowOfGroup("missing"), -1);
+    EXPECT_EQ(table.firstRowOfGroup(""), -1);
+}
+
+TEST(BenchmarkTableProjection, EmptyGroupRowAddressesItsGroup) {
+    TableFixture f;
+    f.open(mixedBench());
+    const auto &table = tableOf(*f.vm);
+
+    const auto info = table.rowInfo(HollowRow);
+    EXPECT_EQ(info["emptyGroupId"].toString(), "hollow");
+    EXPECT_EQ(info["entryId"].toString(), QString());
+    EXPECT_FALSE(info["unassigned"].toBool());
+    EXPECT_EQ(table.rowInfo(0)["emptyGroupId"].toString(), QString());
+
+    EXPECT_EQ(table.anchorAt(HollowRow, 2), (QVariantMap{{"entryId", QString()}, {"tierId", QString()},
+                                                         {"columnKind", ScenarioColumn}, {"emptyGroupId", "hollow"}}));
+    EXPECT_EQ(table.anchorAt(EmptyCategoryRow, 3)["emptyGroupId"].toString(), "empty");
+    EXPECT_EQ(table.anchorAt(EmptyCategoryRow, 3)["tierId"].toString(), "t2");
+    EXPECT_FALSE(table.anchorAt(0, 2).contains("emptyGroupId")) << "scenario anchors keep their shape";
+
+    const auto texts = table.identityTexts();
+    ASSERT_EQ(texts.size(), f.model->rowCount());
+    EXPECT_TRUE(texts[HollowRow].toMap()["emptyGroup"].toBool());
+    EXPECT_FALSE(texts[HollowRow].toMap()["unassigned"].toBool());
+    EXPECT_EQ(texts[HollowRow].toMap()["subcategory"].toString(), "Sub hollow");
+    EXPECT_FALSE(texts[0].toMap()["emptyGroup"].toBool());
+}
+
+TEST(BenchmarkTableProjection, EmptyGroupRowEditsOnlyTheGroupItNames) {
+    TableFixture f;
+    f.open(mixedBench());
+    const auto flags = [&](int row, int column) { return f.model->flags(f.model->index(row, column)); };
+    const Qt::ItemFlags editableGroup = Qt::ItemIsEnabled | Qt::ItemIsEditable;
+    const Qt::ItemFlags inert = Qt::ItemIsEnabled;
+
+    EXPECT_EQ(flags(HollowRow, 0), editableGroup);
+    EXPECT_EQ(flags(HollowRow, 1), editableGroup);
+    EXPECT_EQ(flags(HollowRow, 2), inert);
+    EXPECT_EQ(flags(HollowRow, 3), inert);
+
+    EXPECT_EQ(flags(EmptyCategoryRow, 0), editableGroup);
+    EXPECT_EQ(flags(EmptyCategoryRow, 1), inert);
+    EXPECT_EQ(flags(EmptyCategoryRow, 2), inert);
+    EXPECT_EQ(flags(EmptyCategoryRow, 4), inert);
+
+    EXPECT_EQ(flags(0, 2), Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable);
+    EXPECT_EQ(flags(0, 3), Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable);
+}
+
+TEST(BenchmarkTableProjection, ScenarioCountAndPositionSkipEmptyGroupRows) {
+    TableFixture f;
+    f.open(mixedBench());
+    const auto &table = tableOf(*f.vm);
+
+    EXPECT_EQ(table.rowForEntry(""), -1);
+    EXPECT_EQ(table.rowCount(), 10);
+    EXPECT_EQ(table.scenarioRowCount(), 8);
+    EXPECT_EQ(table.scenarioPosition("a"), 0);
+    EXPECT_EQ(table.scenarioPosition("e"), 5);
+    EXPECT_EQ(table.scenarioPosition("x"), 6);
+    EXPECT_EQ(table.scenarioPosition("u"), 7);
+    EXPECT_EQ(table.scenarioPosition(""), -1);
+    EXPECT_EQ(table.scenarioPosition("missing"), -1);
+}
+
+TEST(BenchmarkTableProjection, UnassignedMarksOnlyDirectRowsOfADividedCategory) {
+    TableFixture f;
+    f.open(mixedBench());
+    const auto unassigned = [&](const QString &id) { return f.cell(f.rowOf(id), 1, TM::UnassignedRole).toBool(); };
+
+    EXPECT_TRUE(unassigned("a"));
+    EXPECT_TRUE(unassigned("b"));
+    EXPECT_FALSE(unassigned("m")) << "already inside a subcategory";
+    EXPECT_FALSE(unassigned("c"));
+    EXPECT_FALSE(unassigned("x")) << "its category has no subcategories";
+    EXPECT_FALSE(unassigned("u")) << "Uncategorized is never mixed";
+    EXPECT_FALSE(f.cell(HollowRow, 1, TM::UnassignedRole).toBool());
+
+    const auto issues = f.cell(f.rowOf("a"), 1, TM::IssuesRole).toStringList();
+    EXPECT_EQ(issues, QStringList{"Move this scenario into a subcategory before the benchmark can be trackable."});
+    EXPECT_TRUE(f.cell(f.rowOf("x"), 1, TM::IssuesRole).toStringList().isEmpty());
+
+    const auto &table = tableOf(*f.vm);
+    EXPECT_TRUE(table.rowInfo(f.rowOf("a"))["unassigned"].toBool());
+    EXPECT_FALSE(table.rowInfo(f.rowOf("x"))["unassigned"].toBool());
+    EXPECT_TRUE(table.identityTexts()[f.rowOf("a")].toMap()["unassigned"].toBool());
+}
+
+TEST(BenchmarkTableProjection, UnassignedClearsWhenTheLastSubcategoryIsRemoved) {
+    TableFixture f;
+    f.open(mixedBench());
+    const auto unassigned = [&](const QString &id) { return f.cell(f.rowOf(id), 1, TM::UnassignedRole).toBool(); };
+    ASSERT_TRUE(unassigned("a"));
+
+    ASSERT_TRUE(f.vm->removeCategory("m-sub")["ok"].toBool());
+
+    EXPECT_FALSE(unassigned("a"));
+    EXPECT_FALSE(unassigned("b"));
+    EXPECT_FALSE(unassigned("m")) << "m returned to Uncategorized";
+    EXPECT_TRUE(f.cell(f.rowOf("a"), 1, TM::IssuesRole).toStringList().isEmpty());
+}
+
+TEST(BenchmarkTableProjection, FillingOrEmptyingAGroupResetsButRenamingDoesNot) {
+    TableFixture f;
+    auto bench = projectionBench();
+    bench.categories.push_back(tableCategory("empty", {}));
+    f.open(bench);
+    ASSERT_EQ(f.tableOrder(), (QStringList{"a", "b", "c", "d", "e", "[empty]", "u"}));
+    QSignalSpy resets(f.model, &QAbstractItemModel::modelReset);
+    QSignalSpy changes(f.model, &QAbstractItemModel::dataChanged);
+
+    ASSERT_TRUE(f.vm->renameGroup("empty", "Renamed")["ok"].toBool());
+    EXPECT_EQ(resets.count(), 0);
+    EXPECT_EQ(changes.count(), 1);
+    EXPECT_EQ(f.cell(5, 0, TM::CategoryNameRole).toString(), "Renamed");
+
+    ASSERT_TRUE(f.vm->moveScenario("u", "empty")["ok"].toBool());
+    EXPECT_EQ(resets.count(), 1);
+
+    ASSERT_TRUE(f.vm->moveScenario("u", "")["ok"].toBool());
+    EXPECT_EQ(resets.count(), 2);
+}
+
+// Two empty categories trading places leave the entry-ID sequence untouched, so only the group IDs
+// tell the old and new row shapes apart.
+TEST(BenchmarkTableProjection, ReorderingEmptyGroupsResets) {
+    TableFixture f;
+    auto bench = draftWith("Bench", {tier("t1", "One")}, {});
+    bench.categories = {tableCategory("e1", {}), tableCategory("e2", {})};
+    f.open(bench);
+    QSignalSpy resets(f.model, &QAbstractItemModel::modelReset);
+
+    ASSERT_TRUE(f.vm->reorderCategory("e2", 0)["ok"].toBool());
+
+    EXPECT_EQ(resets.count(), 1);
+    EXPECT_EQ(f.tableOrder(), (QStringList{"[e2]", "[e1]"}));
 }
 
 // ── Threshold input ─────────────────────────────────────────────────────────────────────────────
@@ -1348,6 +1573,54 @@ TEST(BenchmarkTablePaste, PlacementAndStructureRejectAtomically) {
     EXPECT_EQ(scoreOf(working(f), "a", "t2"), 2.0);
     EXPECT_EQ(scoreOf(working(f), "b", "t1"), 3.0);
     EXPECT_EQ(scoreOf(working(f), "b", "t2"), 21.0);
+}
+
+TEST(BenchmarkTablePaste, EmptyGroupRowRejectsPasteLikeAGroupCell) {
+    TableFixture f;
+    auto bench = pasteBench();
+    bench.categories.push_back(tableCategory("empty", {}));
+    f.open(bench);
+    const Benchmark before = working(f);
+    const auto resolves = f.uc->resolveCalls.size();
+
+    const auto result = f.vm->pasteText(QVariantMap{{"kind", "emptyGroup"}}, "1\t2");
+
+    EXPECT_FALSE(result["ok"].toBool());
+    EXPECT_EQ(result["error"].toString(), f.vm->pasteText(QVariantMap{{"kind", "category"}}, "1")["error"].toString());
+    EXPECT_EQ(f.uc->resolveCalls.size(), resolves);
+    EXPECT_EQ(working(f), before);
+}
+
+TEST(BenchmarkTablePaste, AppendLandsInUncategorizedWhenOnlyEmptyGroupsExist) {
+    TableFixture f;
+    auto bench = draftWith("Bench", {tier("t1", "One")}, {});
+    bench.categories = {tableCategory("empty", {}), tableCategory("g2", {}, {tableSub("hollow", {})})};
+    f.open(bench);
+    ASSERT_EQ(f.model->rowCount(), 2);
+
+    ASSERT_TRUE(f.vm->pasteText(at("append"), "S1\t1\nS2\t2")["ok"].toBool());
+
+    const auto &result = working(f);
+    ASSERT_EQ(result.uncategorized.size(), 2U);
+    EXPECT_EQ(result.uncategorized.at(0).name, "S1");
+    EXPECT_EQ(result.uncategorized.at(1).name, "S2");
+    EXPECT_TRUE(result.categories.at(0).scenarios.empty());
+    EXPECT_TRUE(result.categories.at(1).subcategories.at(0).scenarios.empty());
+}
+
+TEST(BenchmarkTablePaste, MultiRowPasteSkipsEmptyGroupRows) {
+    const DefaultLocaleGuard guard{QLocale{QLocale::English, QLocale::UnitedKingdom}};
+    TableFixture f;
+    auto bench = pasteBench();
+    bench.categories.push_back(tableCategory("empty", {}));
+    f.open(bench);
+    ASSERT_EQ(f.tableOrder(), (QStringList{"a", "b", "[empty]", "u"}));
+
+    ASSERT_TRUE(f.vm->pasteText(at("threshold", "b", "t1"), "1\n2")["ok"].toBool());
+
+    EXPECT_EQ(scoreOf(working(f), "b", "t1"), 1.0);
+    EXPECT_EQ(scoreOf(working(f), "u", "t1"), 2.0);
+    EXPECT_EQ(f.rowIds(), (QStringList{"a", "b", "u"})) << "the rows already there took the paste";
 }
 
 // ── Undo ────────────────────────────────────────────────────────────────────────────────────────
@@ -1779,6 +2052,91 @@ TEST(BenchmarkTableSelection, RemovingEveryRowClearsBothAnchors) {
     EXPECT_TRUE(f.vm->currentCell().isEmpty());
 }
 
+// The table's selection logic relies on this and Qt's docs don't state it: a non-selectable index
+// stays out of selectedIndexes() even when it was selected directly.
+TEST(BenchmarkTableSelection, SelectionModelLeavesEmptyGroupCellsOut) {
+    TableFixture f;
+    f.open(mixedBench());
+    QItemSelectionModel selection(f.model);
+
+    for (int column = 0; column < f.model->columnCount(); ++column) {
+        selection.select(f.model->index(HollowRow, column), QItemSelectionModel::Select);
+        EXPECT_TRUE(selection.selectedIndexes().isEmpty()) << column;
+    }
+    selection.select(f.model->index(EmptyCategoryRow, 2), QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    EXPECT_TRUE(selection.selectedIndexes().isEmpty());
+
+    selection.clear();
+    selection.select(QItemSelection(f.model->index(5, 2), f.model->index(8, 2)), QItemSelectionModel::Select);
+    QList<int> rows;
+    for (const auto &index: selection.selectedIndexes()) rows.push_back(index.row());
+    std::ranges::sort(rows);
+    EXPECT_EQ(rows, (QList<int>{5, 8})) << "a range across empty rows keeps only its scenario rows";
+}
+
+TEST(BenchmarkTableSelection, RemovedCurrentRowFallsBackByScenarioPositionPastAnEmptyGroup) {
+    TableFixture f;
+    auto bench = projectionBench();
+    bench.categories.insert(bench.categories.begin(), tableCategory("empty", {}));
+    f.open(bench);
+    ASSERT_EQ(f.tableOrder(), (QStringList{"[empty]", "a", "b", "c", "d", "e", "u"}));
+    f.vm->setCurrentCell(cellAnchor("a", "t1"));
+
+    ASSERT_TRUE(f.vm->removeScenario("a")["ok"].toBool());
+
+    EXPECT_EQ(f.vm->currentCell(), cellAnchor("b", "t1"));
+}
+
+TEST(BenchmarkTableSelection, CurrentCellOnAnEmptyGroupSurvivesWhileTheGroupExists) {
+    TableFixture f;
+    f.open(mixedBench());
+    const auto anchor = tableOf(*f.vm).anchorAt(HollowRow, 2);
+    ASSERT_EQ(anchor["emptyGroupId"].toString(), "hollow");
+    f.vm->setCurrentCell(anchor);
+
+    ASSERT_TRUE(f.vm->renameScenario("a", "Renamed")["ok"].toBool());
+    EXPECT_EQ(f.vm->currentCell(), anchor);
+
+    ASSERT_TRUE(f.vm->moveScenario("u", "hollow")["ok"].toBool());
+    EXPECT_EQ(f.vm->currentCell(), anchor) << "the group keeps it even once it has scenarios";
+}
+
+TEST(BenchmarkTableSelection, CurrentCellOnAnEmptyGroupClearsWithTheGroup) {
+    TableFixture f;
+    f.open(mixedBench());
+    f.vm->setSelectedEntryIds({"a"});
+    f.vm->setCurrentCell(tableOf(*f.vm).anchorAt(HollowRow, 2));
+
+    ASSERT_TRUE(f.vm->removeCategory("hollow")["ok"].toBool());
+
+    EXPECT_TRUE(f.vm->currentCell().isEmpty());
+    EXPECT_EQ(f.vm->selectedEntryIds(), QStringList{"a"});
+}
+
+TEST(BenchmarkTableSelection, CurrentCellOnAnEmptyGroupSurvivesWithNoScenariosLeft) {
+    TableFixture f;
+    auto bench = draftWith("Bench", {tier("t1", "One")}, {benchmarkEntry("u", "U", std::nullopt, {{"t1", 1}})});
+    bench.categories = {tableCategory("empty", {})};
+    f.open(bench);
+    const auto anchor = tableOf(*f.vm).anchorAt(0, 0);
+    f.vm->setCurrentCell(anchor);
+
+    ASSERT_TRUE(f.vm->removeScenario("u")["ok"].toBool());
+
+    EXPECT_EQ(f.vm->currentCell(), anchor);
+}
+
+TEST(BenchmarkTableSelection, CurrentRankCellOnAnEmptyGroupFallsBackToScenarioColumn) {
+    TableFixture f;
+    f.open(mixedBench());
+    f.vm->setCurrentCell(tableOf(*f.vm).anchorAt(HollowRow, 3));
+
+    ASSERT_TRUE(f.vm->removeTier("t2")["ok"].toBool());
+
+    EXPECT_EQ(f.vm->currentCell(), (QVariantMap{{"entryId", QString()}, {"columnKind", ScenarioColumn},
+                                                {"emptyGroupId", "hollow"}}));
+}
+
 TEST(BenchmarkTableSelection, SessionBoundariesClearAnchors) {
     TableFixture f;
     f.open(projectionBench());
@@ -1924,7 +2282,7 @@ TEST(BenchmarkTableRemoval, EveryRowAcrossGroupsKeepsGroupsAndLease) {
     // Direct category rows, two subcategories and Uncategorized in one command.
     ASSERT_TRUE(f.vm->removeScenarios({"e", "a", "u", "c", "b", "d"})["ok"].toBool());
 
-    EXPECT_EQ(f.model->rowCount(), 0);
+    EXPECT_EQ(f.tableOrder(), (QStringList{"[g1]", "[p]", "[q]"}));
     EXPECT_EQ(working(f).categories.size(), 2U);
     EXPECT_EQ(working(f).categories.at(1).subcategories.size(), 2U);
     EXPECT_TRUE(working(f).uncategorized.empty());
@@ -2101,4 +2459,199 @@ TEST(BenchmarkManagerResolution, ClearingLinkedMappingsCanBeUndoneAndUnknownEntr
     EXPECT_TRUE(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList().empty());
     ASSERT_TRUE(f.vm->undo().value("ok").toBool());
     EXPECT_EQ(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList(), (QStringList{"old", "new"}));
+}
+
+// ── Group commands ──────────────────────────────────────────────────────────────────────────────
+
+namespace {
+    QStringList groupNames(const BenchmarkManagerViewModel &vm) {
+        QStringList names;
+        for (const auto &group: vm.groups()) names << group.toMap()["name"].toString();
+        return names;
+    }
+
+    QStringList idsOf(const std::vector<ScenarioEntry> &entries) {
+        QStringList ids;
+        for (const auto &entry: entries) ids << QString::fromStdString(entry.id.value);
+        return ids;
+    }
+}
+
+TEST(BenchmarkGroupCommands, OptionsAreEmptyWithoutADraft) {
+    Fixture f;
+    f.build();
+
+    const auto options = f.vm->groupCommandOptions("anything", QString());
+
+    EXPECT_TRUE(options["actions"].toList().isEmpty());
+    EXPECT_FALSE(options["exactMatch"].toBool());
+}
+
+TEST(BenchmarkGroupCommands, OptionsDescribeCreateAndMoveActions) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto options = f.vm->groupCommandOptions("Category g3", QString());
+
+    EXPECT_FALSE(options["exactMatch"].toBool());
+    const auto actions = options["actions"].toList();
+    ASSERT_GE(actions.size(), 1);
+    const auto create = actions.front().toMap();
+    EXPECT_EQ(create["kind"].toString(), "create");
+    EXPECT_EQ(create["name"].toString(), "Category g3");
+    EXPECT_EQ(create["parentId"].toString(), "");
+
+    const auto exact = f.vm->groupCommandOptions("category g2", QString());
+    EXPECT_TRUE(exact["exactMatch"].toBool());
+    const auto move = exact["actions"].toList().front().toMap();
+    EXPECT_EQ(move["kind"].toString(), "move");
+    EXPECT_EQ(move["targetId"].toString(), "g2");
+    EXPECT_EQ(move["path"].toString(), "Category g2");
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignIsOneUndoStepThatRestoresGroupsMembershipAndSelection) {
+    TableFixture f;
+    f.open(projectionBench());
+    const auto groupsBefore = groupNames(*f.vm);
+    f.vm->setSelectedEntryIds({"u", "a"});
+
+    const auto result = f.vm->createGroupAndAssign({"u", "a"}, "Fresh", QString());
+
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+    const auto createdId = result["createdId"].toString();
+    ASSERT_FALSE(createdId.isEmpty());
+    const auto &draft = working(f);
+    ASSERT_EQ(draft.categories.size(), 3U);
+    EXPECT_EQ(QString::fromStdString(draft.categories.back().id.value), createdId);
+    EXPECT_EQ(draft.categories.back().name, "Fresh");
+    EXPECT_EQ(idsOf(draft.categories.back().scenarios), (QStringList{"a", "u"}));
+
+    ASSERT_TRUE(f.vm->undo()["ok"].toBool());
+    EXPECT_EQ(groupNames(*f.vm), groupsBefore);
+    EXPECT_EQ(working(f), projectionBench());
+    EXPECT_EQ(f.vm->selectedEntryIds(), (QStringList{"u", "a"}));
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignPlacesScenariosInVisibleOrderNotClickOrder) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    ASSERT_TRUE(f.vm->createGroupAndAssign({"u", "e", "a"}, "Fresh", QString())["ok"].toBool());
+
+    EXPECT_EQ(idsOf(working(f).categories.back().scenarios), (QStringList{"a", "e", "u"}));
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignUnderAParentMakesASubcategory) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->createGroupAndAssign({"u"}, "Deep", "g2");
+
+    ASSERT_TRUE(result["ok"].toBool());
+    const auto &g2 = working(f).categories.at(1);
+    ASSERT_EQ(g2.subcategories.size(), 3U);
+    EXPECT_EQ(QString::fromStdString(g2.subcategories.back().id.value), result["createdId"].toString());
+    EXPECT_EQ(idsOf(g2.subcategories.back().scenarios), QStringList{"u"});
+}
+
+TEST(BenchmarkGroupCommands, CreatingASubcategoryUnderAPopulatedCategoryLeavesItsDirectScenarios) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    ASSERT_TRUE(f.vm->createGroupAndAssign({"u"}, "Deep", "g1")["ok"].toBool());
+
+    const auto &g1 = working(f).categories.at(0);
+    EXPECT_EQ(idsOf(g1.scenarios), (QStringList{"a", "b"}));
+    ASSERT_EQ(g1.subcategories.size(), 1U);
+    EXPECT_EQ(idsOf(g1.subcategories.front().scenarios), QStringList{"u"});
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignWithAnUnknownEntryChangesNothing) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->createGroupAndAssign({"u", "missing"}, "Fresh", QString());
+
+    EXPECT_FALSE(result["ok"].toBool());
+    EXPECT_EQ(working(f), projectionBench());
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CreateAndAssignRejectsABlankNameAndAnUnknownParent) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    EXPECT_FALSE(f.vm->createGroupAndAssign({"u"}, "   ", QString())["ok"].toBool());
+    EXPECT_FALSE(f.vm->createGroupAndAssign({"u"}, "Fresh", "missing")["ok"].toBool());
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CommaEntryCreatesTrimmedNamesInOneUndoStep) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->addCategories(" Alpha ,Beta,  , Gamma ,");
+
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+    EXPECT_TRUE(result["skipped"].toStringList().isEmpty());
+    const auto &categories = working(f).categories;
+    ASSERT_EQ(categories.size(), 5U);
+    EXPECT_EQ(categories.at(2).name, "Alpha");
+    EXPECT_EQ(categories.at(3).name, "Beta");
+    EXPECT_EQ(categories.at(4).name, "Gamma");
+    EXPECT_EQ(result["createdIds"].toStringList(),
+              (QStringList{QString::fromStdString(categories.at(2).id.value),
+                           QString::fromStdString(categories.at(3).id.value),
+                           QString::fromStdString(categories.at(4).id.value)}));
+
+    ASSERT_TRUE(f.vm->undo()["ok"].toBool());
+    EXPECT_EQ(working(f), projectionBench());
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CommaEntrySkipsDuplicatesCaseInsensitivelyAndNamesThem) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->addCategories("Alpha, alpha, category G1, uncategorized, Beta");
+
+    ASSERT_TRUE(result["ok"].toBool());
+    EXPECT_EQ(result["createdIds"].toStringList().size(), 2);
+    EXPECT_EQ(result["skipped"].toStringList(), (QStringList{"alpha", "category G1", "uncategorized"}));
+    const auto &categories = working(f).categories;
+    ASSERT_EQ(categories.size(), 4U);
+    EXPECT_EQ(categories.at(2).name, "Alpha");
+    EXPECT_EQ(categories.at(3).name, "Beta");
+}
+
+TEST(BenchmarkGroupCommands, CommaEntryWhereEverythingIsSkippedLeavesNoUndoStep) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    const auto result = f.vm->addCategories("Category g1, CATEGORY G2");
+
+    ASSERT_TRUE(result["ok"].toBool());
+    EXPECT_TRUE(result["createdIds"].toStringList().isEmpty());
+    EXPECT_EQ(result["skipped"].toStringList(), (QStringList{"Category g1", "CATEGORY G2"}));
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CommaEntryWithNoNamesIsAnError) {
+    TableFixture f;
+    f.open(projectionBench());
+
+    for (const QString &input: {QString(), QStringLiteral("  "), QStringLiteral(" , ,")}) {
+        const auto result = f.vm->addCategories(input);
+        EXPECT_FALSE(result["ok"].toBool()) << input.toStdString();
+        EXPECT_FALSE(result["error"].toString().isEmpty());
+    }
+    EXPECT_FALSE(canUndo(*f.vm));
+}
+
+TEST(BenchmarkGroupCommands, CommaEntryNeedsAnOpenDraft) {
+    Fixture f;
+    f.build();
+
+    EXPECT_FALSE(f.vm->addCategories("Alpha")["ok"].toBool());
 }

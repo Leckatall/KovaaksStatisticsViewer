@@ -278,8 +278,7 @@ click "${M}/libraryToggleButton" --shot=library-collapsed-toolbar
 hover "${M}/saveButton" --settle 1200 --shot=toolbar-tooltip
 click "${M}/libraryToggleButton"
 click "${M}/addSubcategoryPlus_tracking"
-type Smooth --into "${M}/subcategoryCreationField" --enter --shot=subcategory-relocation-prompt
-click "${M}/relocateToNewSubcategory" --shot=after-relocation-dirty
+type Smooth --into "${M}/subcategoryCreationField" --enter --shot=unassigned-after-subcategory
 click "${M}/text:Close"
 shot --window dirtyClosePrompt --with-context --name dirty-close-prompt
 click "win:dirtyClosePrompt/text:Discard"
