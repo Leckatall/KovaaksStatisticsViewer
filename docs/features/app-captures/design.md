@@ -1,13 +1,13 @@
 ---
-status: proposed
+status: approved
 ---
 # App captures — software design
 
 ## Purpose and design scope
 
-This proposal designs the capture capability governed by [App captures requirements](requirements.md). It covers all six graph targets and the benchmark tracking table: taking a snapshot of selected values, rendering a clean image, reviewing its size, copying it, saving PNG, and reporting outcomes. It defines responsibilities, contracts, lifecycle, and completion criteria for implementing the feature as a whole. It does not implement the feature or prescribe a file-by-file implementation plan.
+This document designs the capture capability governed by [App captures requirements](requirements.md). It covers all six graph targets and the benchmark tracking table: taking a snapshot of selected values, rendering a clean image, reviewing its size, copying it, saving PNG, and reporting outcomes. It defines responsibilities, contracts, lifecycle, and completion criteria for implementing the feature as a whole. It does not implement the feature or prescribe a file-by-file implementation plan.
 
-The owner confirmed the design direction before synthesis. Copy from the preview keeps that preview open and uses its reviewed image; Export closes it when a PNG destination is confirmed and reports the background outcome in the main status bar. The requirements have been reconciled to those decisions. A later review against the code settled the implementation approach recorded under [Architectural decisions](#architectural-decisions). This document remains a proposal pending review.
+The owner confirmed the design direction before synthesis. Copy from the preview keeps that preview open and uses its reviewed image; Export closes it when a PNG destination is confirmed and reports the background outcome in the main status bar. The requirements have been reconciled to those decisions. A later review against the code settled the implementation approach recorded under [Architectural decisions](#architectural-decisions). The design was approved on 2026-11-01; the numeric limits and standard graph reference size stay open until the validation gate.
 
 ## Design basis
 
