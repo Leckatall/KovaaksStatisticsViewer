@@ -32,8 +32,9 @@ Popup {
     property alias parentPicker: parentCombo
     property alias actionList: actionsView
 
-    readonly property int rowHeight: 36
-    readonly property int maxVisibleRows: 6
+    readonly property int cardHeight: 36
+    readonly property int cardSpacing: 6
+    readonly property int maxVisibleCards: 6
     readonly property color mutedText: Qt.alpha(palette.text, 0.7)
 
     signal createRequested(string name, string parentCategoryId)
@@ -61,6 +62,10 @@ Popup {
             return qsTr("+ Create category “%1” and move %2").arg(action.name).arg(countText)
         }
         return qsTr("→ Move %1 to %2").arg(countText).arg(action.path)
+    }
+
+    function heightForCards(cards) {
+        return cards > 0 ? cards * (cardHeight + cardSpacing) - cardSpacing : 0
     }
 
     function refresh() {
@@ -99,7 +104,8 @@ Popup {
 
     background: Rectangle {
         radius: 6
-        color: root.palette.base
+        // On the panel, not the popup: the popup's own opacity would fade the text and field with it.
+        color: Qt.alpha(root.palette.base, 0.95)
         border.color: root.palette.midlight
     }
 
@@ -181,23 +187,47 @@ Popup {
             objectName: "groupCommandActions"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredHeight: Math.min(count, root.maxVisibleRows) * root.rowHeight
-            Layout.minimumHeight: Math.min(count, 2) * root.rowHeight
+            Layout.preferredHeight: root.heightForCards(Math.min(count, root.maxVisibleCards))
+            Layout.minimumHeight: root.heightForCards(Math.min(count, 2))
             clip: true
+            spacing: root.cardSpacing
             model: root.actions
             boundsBehavior: Flickable.StopAtBounds
             delegate: ItemDelegate {
-                id: actionRow
+                id: actionCard
                 required property var modelData
                 required property int index
-                objectName: "groupCommandAction_" + actionRow.index
+                objectName: "groupCommandAction_" + actionCard.index
                 width: actionsView.width
-                height: root.rowHeight
-                text: root.labelFor(actionRow.modelData)
-                highlighted: actionRow.index === root.highlightedIndex
+                height: root.cardHeight
+                horizontalPadding: 10
+                verticalPadding: 0
+                text: root.labelFor(actionCard.modelData)
+                highlighted: actionCard.index === root.highlightedIndex
                 focusPolicy: Qt.NoFocus
-                Accessible.name: actionRow.text
-                onClicked: root.apply(actionRow.index)
+                Accessible.name: actionCard.text
+                onClicked: root.apply(actionCard.index)
+
+                HoverHandler {
+                    id: cardHover
+                    cursorShape: Qt.PointingHandCursor
+                }
+
+                background: Rectangle {
+                    readonly property color restColor: actionCard.highlighted
+                        ? Qt.tint(root.palette.base, Qt.alpha(root.palette.accent, 0.08)) : root.palette.base
+
+                    color: Qt.tint(restColor, Qt.alpha(root.palette.text, actionCard.down ? 0.12 : cardHover.hovered ? 0.07 : 0.0))
+                    border.color: actionCard.highlighted ? root.palette.accent
+                        : cardHover.hovered ? Qt.lighter(root.palette.mid, 1.6) : root.palette.mid
+                    radius: 6
+                }
+                // Fusion's own label turns highlightedText when highlighted, unreadable on the light tint.
+                contentItem: Label {
+                    text: actionCard.text
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
         Label {

@@ -207,8 +207,8 @@ TestCase {
     function test_eightActionsScrollAndStaySelectable() {
         typeQuery("many")
         compare(popup.actions.length, 8)
-        const rowHeight = popup.actionList.itemAtIndex(0).height
-        verify(popup.actionList.height <= rowHeight * 6 + 1)
+        const cardStep = popup.actionList.itemAtIndex(0).height + popup.actionList.spacing
+        verify(popup.actionList.height <= cardStep * 6)
         for (let i = 0; i < 9; ++i)
             keyClick(Qt.Key_Down)
         compare(popup.highlightedIndex, 7)
