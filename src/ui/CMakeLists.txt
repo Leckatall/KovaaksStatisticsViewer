@@ -142,6 +142,9 @@ qt_add_qml_module(ksv_ui
         components/axis_painter.cpp
         components/series_painter.h
         components/series_painter.cpp
+        components/graph_scene.h
+        components/graph_scene_painter.h
+        components/graph_scene_painter.cpp
             presentation/graphs/common/series/monotone_spline.h
             presentation/app/session_vm.h
             presentation/app/session_vm.cpp

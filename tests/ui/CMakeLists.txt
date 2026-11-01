@@ -17,6 +17,8 @@ add_executable(ui_tests
     expression/series_expression_editor_model_test.cpp
     graphs/common/series/monotone_spline_test.cpp
     series_painter_test.cpp
+    graph_scene_test.cpp
+    graph_scene_cost_test.cpp
     scenarios/scenario_browser_vm_test.cpp
     benchmarks/manager/benchmark_issue_text_test.cpp
     benchmarks/manager/benchmark_manager_vm_test.cpp
