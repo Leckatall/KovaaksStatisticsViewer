@@ -34,6 +34,7 @@ target_sources(tests_support INTERFACE
         fake_benchmark_resolution_use_case.h
         fake_benchmark_manager_use_case.h
         fake_playlist_reader.h
+        fake_image_output.h
         counting_ids.h
         kovaaks_dir.h
 )

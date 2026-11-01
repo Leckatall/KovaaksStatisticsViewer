@@ -38,6 +38,8 @@ add_library(ksv_data STATIC
         interfaces/benchmark_library_snapshot.h
         interfaces/i_benchmark_store.h
         interfaces/i_benchmarks_service.h
+        interfaces/i_clipboard_image_writer.h
+        interfaces/i_png_image_writer.h
 )
 
 set(PROTO_FILES

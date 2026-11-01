@@ -19,6 +19,9 @@ add_executable(app_tests
     benchmark_tracking_use_case_test.cpp
     benchmark_manager_use_case_test.cpp
     recent_benchmarks_test.cpp
+    image_output_contract_test.cpp
+    image_output_use_case_test.cpp
+    raster_image_test.cpp
 )
 
 target_link_libraries(app_tests PRIVATE

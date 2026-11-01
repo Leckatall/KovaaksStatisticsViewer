@@ -6,6 +6,7 @@ add_library(ksv_contracts STATIC
         range_projection.cpp
         playtime_view.cpp
         expression_dsl.cpp
+        raster_image.cpp
 )
 
 target_sources(ksv_contracts PUBLIC
@@ -39,6 +40,9 @@ target_sources(ksv_contracts PUBLIC
         i_benchmark_tracking_use_case.h
         i_benchmark_manager_use_case.h
         i_recent_benchmarks.h
+        raster_image.h
+        image_output.h
+        i_image_output_use_case.h
 )
 
 target_include_directories(ksv_contracts PUBLIC
