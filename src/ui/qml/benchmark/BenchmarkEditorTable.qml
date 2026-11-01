@@ -279,6 +279,7 @@ FocusScope {
     signal addScenarioRequested()
     // An empty `beforeEntryId` appends to the group.
     signal moveSelectionRequested(var entryIds, string targetGroupId, string beforeEntryId)
+    signal removeScenariosRequested()
     signal rowContextRequested(string entryId, real x, real y)
     signal groupContextRequested(string groupId, real x, real y)
     signal rankContextRequested(string tierId, real x, real y)
@@ -425,6 +426,9 @@ FocusScope {
             event.accepted = true
         } else if (event.matches(StandardKey.Undo)) {
             root.undo()
+            event.accepted = true
+        } else if (event.matches(StandardKey.Delete) && root.scenarioCellChosen()) {
+            root.removeScenariosRequested()
             event.accepted = true
         } else {
             event.accepted = false
@@ -602,6 +606,14 @@ FocusScope {
 
     function selectionHasEntry(entryId) {
         return root.selectedIds().indexOf(entryId) !== -1
+    }
+
+    // selectedIds() maps every selected cell to its row's scenario, but Delete on a group or rank
+    // cell is no request to lose that scenario.
+    function scenarioCellChosen() {
+        if (root.headerFocused || root.activeEditor !== null) return false
+        const current = selection.currentIndex
+        return (current.valid && current.column === 2) || selection.selectedIndexes.some(index => index.column === 2)
     }
 
     function rebuildSelectedEntryLookup() {

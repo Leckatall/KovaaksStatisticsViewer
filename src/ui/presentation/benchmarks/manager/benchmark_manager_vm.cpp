@@ -290,21 +290,6 @@ namespace ksv::presentation {
             return groups;
         }
 
-        QVariantList buildAssignTargets(const domain::Benchmark *draft) {
-            QVariantList targets{QVariantMap{{"id", QString()}, {"label", QObject::tr("Uncategorized")}}};
-            if (!draft) return targets;
-            for (const auto &category: draft->categories) {
-                const auto categoryName = QString::fromStdString(category.name);
-                targets.push_back(QVariantMap{{"id", idString(category.id)}, {"label", categoryName}});
-                for (const auto &sub: category.subcategories)
-                    targets.push_back(QVariantMap{
-                        {"id", idString(sub.id)},
-                        {"label", categoryName + QStringLiteral(" › ") + QString::fromStdString(sub.name)},
-                    });
-            }
-            return targets;
-        }
-
         // Scenario entries in the table's row order: categories in order (direct scenarios, then
         // each subcategory), Uncategorized last.
         std::vector<domain::ScenarioEntryId> visibleEntryOrder(const domain::Benchmark &draft) {
@@ -458,7 +443,6 @@ namespace ksv::presentation {
         m_validationIssues = std::move(validationIssues);
         m_tiers = std::move(tiers);
         m_groups = std::move(groups);
-        m_assignTargets = buildAssignTargets(m_draft ? &*m_draft : nullptr);
         m_tableModel->setProjection(std::move(projection));
         m_scenarioCatalogue = std::move(scenarioCatalogue);
         m_libraryEntries = std::move(libraryEntries);

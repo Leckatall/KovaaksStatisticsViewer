@@ -32,7 +32,6 @@ TestCase {
         fixture.setProjection(TestDoubles.benchmarkTableProjection(TestDoubles.benchmarkManagementDesc()))
         const vm = TestDoubles.makeFakeBenchmarkManagerVm(Object.assign({
             hasDraft: true, tableModel: fixture.model, groups: TestDoubles.benchmarkManagementGroups(),
-            assignTargets: TestDoubles.benchmarkManagementAssignTargets(),
             tiers: [{id: "t1", name: "Gold", color: "#FFD700"}, {id: "t2", name: "", color: "#808080"}]
         }, overrides || {}))
         const dialog = createTemporaryObject(dialogComponent, testCase, {benchmarkManagerVm: vm})
@@ -97,11 +96,8 @@ TestCase {
         compare(vm(dialog).addCategoriesCalls, ["Aim"])
 
         vm(dialog).selectedEntryIds = ["c", "a"]
-        dialog.assignSelection("g1")
+        dialog.moveToGroup("g1")
         compare(vm(dialog).assignScenariosCalls, [[["c", "a"], "g1"]])
-        verify(dialog.assignTargets().some(target => target.id === "p"))
-        verify(dialog.assignTargets().some(target => target.id === "g2"),
-               "a category with subcategories can receive scenarios")
 
         verify(dialog.editorTable.focusCell({entryId: "b"}))
         dialog.moveCurrentRow(-1)

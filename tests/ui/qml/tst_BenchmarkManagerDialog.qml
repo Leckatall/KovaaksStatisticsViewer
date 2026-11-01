@@ -374,32 +374,62 @@ TestCase {
         compare(vm(dialog).addCategoriesCalls.length, 0)
     }
 
-    function test_selectedRowContextMenuMovesAllSelectedScenarios() {
-        const desc = TestDoubles.benchmarkManagementDesc()
-        const dialog = openWithTable(desc, {
-            groups: [
-                {id: "g1", kind: "category", parentId: "", name: "Clicking", scenarioCount: 2, issues: []},
-                {id: "g2", kind: "category", parentId: "", name: "Tracking", scenarioCount: 1, issues: []}
-            ],
-            assignTargets: [{id: "", label: "Uncategorized"}, {id: "g1", label: "Clicking"}, {id: "g2", label: "Tracking"}]
-        })
-        verify(dialog.editorTable.focusCell({entryId: "a", columnKind: 2}))
-        const model = vm(dialog).tableModel
-        dialog.editorTable.selectionModel.select(model.index(model.rowForEntry("b"), 2),
-                                                 ItemSelectionModel.Select)
-        tryCompare(vm(dialog), "selectedEntryIds", ["a", "b"])
-
-        const cell = tableCell(dialog, "a", "scenario")
+    function openRowMenu(dialog, entryId) {
+        const cell = tableCell(dialog, entryId, "scenario")
         mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
         tryVerify(() => dialog.rowContextMenu.opened)
-        compare(vm(dialog).selectedEntryIds.slice().sort(), ["a", "b"])
-        let target = null
-        for (let i = 0; i < dialog.assignMenu.count; ++i) {
-            if (dialog.assignMenu.itemAt(i).objectName === "assignTarget_g2")
-                target = dialog.assignMenu.itemAt(i)
+    }
+
+    function rowMenuItem(dialog, objectName) {
+        const menu = dialog.rowContextMenu
+        for (let i = 0; i < menu.count; ++i) {
+            if (menu.itemAt(i).objectName === objectName) return menu.itemAt(i)
         }
-        verify(target !== null, "Move to group must list the available category")
-        target.triggered()
+        return null
+    }
+
+    function shownTexts(item) {
+        let texts = []
+        for (const child of item.children) {
+            if (child.text !== undefined) texts.push(child.text)
+            texts = texts.concat(shownTexts(child))
+        }
+        return texts
+    }
+
+    function test_rowMenuOffersGroupScenariosWithItsHotkey() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+
+        openRowMenu(dialog, "a")
+
+        const item = rowMenuItem(dialog, "groupScenariosItem")
+        compare(dialog.rowContextMenu.itemAt(0), item, "the grouping command leads the menu")
+        compare(item.text, "Group Scenarios")
+        verify(item.enabled)
+        verify(shownTexts(item.contentItem).indexOf("Ctrl+G") !== -1, shownTexts(item.contentItem).join("|"))
+        for (let i = 0; i < dialog.rowContextMenu.count; ++i)
+            verify(!dialog.rowContextMenu.itemAt(i).subMenu, "no submenu of groups remains")
+        const remove = rowMenuItem(dialog, "removeScenariosItem")
+        verify(shownTexts(remove.contentItem).indexOf("Del") !== -1, shownTexts(remove.contentItem).join("|"))
+    }
+
+    function test_selectedRowContextMenuMovesAllSelectedScenarios() {
+        const dialog = openGrouping({
+            groupCommandOptions: () => ({actions: [{kind: "move", targetId: "g2", path: "Tracking"}], exactMatch: true})
+        })
+        selectRows(dialog, ["a", "b"])
+
+        openRowMenu(dialog, "a")
+        compare(vm(dialog).selectedEntryIds.slice().sort(), ["a", "b"])
+        mouseClick(rowMenuItem(dialog, "groupScenariosItem"))
+
+        tryCompare(dialog.groupCommand, "opened", true)
+        tryVerify(() => !dialog.rowContextMenu.visible)
+        compare(dialog.groupCommand.scenarioNames, ["1w6ts", "1w4ts"])
+        tryVerify(() => dialog.groupCommand.queryField.activeFocus, 2000, "the menu must not take focus back")
+        keyClick(Qt.Key_T)
+        keyClick(Qt.Key_Return)
         tryCompare(vm(dialog), "assignScenariosCalls", [[["a", "b"], "g2"]])
         verify(find(dialog, "rowActions") === null)
 
@@ -711,7 +741,7 @@ TestCase {
         const commands = [
             {name: "assignScenarios", run: (dialog) => {
                 vm(dialog).selectedEntryIds = ["s-res"]
-                dialog.assignSelection("")
+                dialog.moveToGroup("")
             }},
             {name: "reorderScenario", run: (dialog) => dialog.moveCurrentRow(1)},
             {name: "reorderTier", run: (dialog) => {
@@ -1187,8 +1217,7 @@ TestCase {
 
     function openGrouping(overrides) {
         return openWithTable(TestDoubles.benchmarkManagementDesc(), Object.assign({
-            groups: TestDoubles.benchmarkManagementGroups(),
-            assignTargets: TestDoubles.benchmarkManagementAssignTargets()
+            groups: TestDoubles.benchmarkManagementGroups()
         }, overrides || {}))
     }
 
@@ -1283,9 +1312,120 @@ TestCase {
         compare(dialog.groupCommand.visible, false)
     }
 
+    function test_groupScenariosFromAnUnselectedRowUsesThatRow() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+
+        openRowMenu(dialog, "c")
+        mouseClick(rowMenuItem(dialog, "groupScenariosItem"))
+
+        tryCompare(dialog.groupCommand, "opened", true)
+        compare(dialog.groupCommand.scenarioNames, ["smoothbot"])
+    }
+
+    function test_ctrlGWhileTheRowMenuIsOpenStillOpensTheCommand() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a"])
+        openRowMenu(dialog, "a")
+
+        keyClick(Qt.Key_G, Qt.ControlModifier)
+
+        tryCompare(dialog.groupCommand, "opened", true)
+        tryVerify(() => !dialog.rowContextMenu.visible)
+        tryVerify(() => dialog.groupCommand.queryField.activeFocus)
+    }
+
+    function test_deleteRemovesTheSelectedScenariosInOneCommand() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [["a", "b"]])
+        compare(vm(dialog).commandLog.filter(c => c === "removeScenarios").length, 1)
+        tryVerify(() => dialog.editorTable.identityView.activeFocus, 2000, "focus stays on the table")
+    }
+
+    function test_deleteRemovesTheCurrentScenario() {
+        const dialog = openGrouping()
+        verify(dialog.editorTable.focusCell({entryId: "c", columnKind: 2}))
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [["c"]])
+    }
+
+    // A drag can start on a rank cell, which leaves the current cell there while whole rows are selected.
+    function test_deleteRemovesARangeWhoseCurrentCellIsARank() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+        const model = vm(dialog).tableModel
+        dialog.editorTable.selectionModel.setCurrentIndex(model.index(model.rowForEntry("b"), 3),
+                                                          ItemSelectionModel.NoUpdate)
+        dialog.editorTable.thresholdView.forceActiveFocus()
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [["a", "b"]])
+    }
+
+    function test_deleteOnAGroupOrRankCellRemovesNothing_data() {
+        return [
+            {tag: "category", anchor: {entryId: "a", columnKind: 0}},
+            {tag: "subcategory", anchor: {entryId: "c", columnKind: 1}},
+            {tag: "rank", anchor: {entryId: "a", tierId: "t1"}}
+        ]
+    }
+
+    function test_deleteOnAGroupOrRankCellRemovesNothing(data) {
+        const dialog = openGrouping()
+        verify(dialog.editorTable.focusCell(data.anchor))
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [])
+    }
+
+    function test_deleteOnTheEmptyRankHeaderRemovesNothing() {
+        const dialog = openWithTable({tiers: [], rows: [{entryId: "a", name: "Alpha", cells: {}}]}, {groups: []})
+        verify(dialog.editorTable.focusCell({entryId: "a", columnKind: 2}))
+        find(dialog, "emptyRankHeader").forceActiveFocus()
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [])
+    }
+
+    function test_deleteInACellEditorStaysInTheEditor() {
+        const dialog = openGrouping()
+        verify(dialog.editorTable.beginScenarioEdit("a"))
+        tryVerify(() => dialog.editorTable.activeEditor !== null)
+        const editor = dialog.editorTable.activeEditor
+        tryVerify(() => editor.activeFocus)
+        editor.text = "Alpha"
+        editor.deselect()
+        editor.cursorPosition = 0
+
+        keyClick(Qt.Key_Delete)
+
+        compare(editor.text, "lpha", "Delete edits the text")
+        compare(vm(dialog).removeScenariosCalls, [])
+    }
+
+    function test_deleteWhileTheRowMenuIsOpenRemovesOnce() {
+        const dialog = openGrouping()
+        selectRows(dialog, ["a", "b"])
+        openRowMenu(dialog, "a")
+
+        keyClick(Qt.Key_Delete)
+
+        compare(vm(dialog).removeScenariosCalls, [["a", "b"]])
+        tryVerify(() => !dialog.rowContextMenu.visible)
+    }
+
     function test_ctrlGCommitsAnOpenCellEditFirst() {
         const dialog = openWithTable(TestDoubles.benchmarkResolutionDesc(), Object.assign({
-            groups: [], assignTargets: [{id: "", label: "Uncategorized"}]
+            groups: []
         }, recordingInputOverrides()))
         typeIntoCell(dialog, "s-res", "t1", "oops")
         verify(dialog.editorTable.activeEditor !== null)

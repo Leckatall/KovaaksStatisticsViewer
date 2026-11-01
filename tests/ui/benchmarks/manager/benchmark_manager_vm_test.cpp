@@ -974,26 +974,6 @@ namespace {
     }
 }
 
-TEST(BenchmarkTableProjection, AssignTargetsListUncategorizedThenEveryCategoryAndSubcategory) {
-    TableFixture f;
-    f.open(mixedBench());
-
-    QStringList ids, labels;
-    for (const auto &target: f.vm->property("assignTargets").toList()) {
-        ids << target.toMap()["id"].toString();
-        labels << target.toMap()["label"].toString();
-    }
-    EXPECT_EQ(ids, (QStringList{"", "g1", "m-sub", "g2", "p", "q", "hollow", "empty", "direct"}));
-    EXPECT_EQ(labels, (QStringList{"Uncategorized", "Category g1", "Category g1 › Sub m-sub", "Category g2",
-                                   "Category g2 › Sub p", "Category g2 › Sub q",
-                                   "Category g2 › Sub hollow", "Category empty", "Category direct"}));
-
-    f.vm->discard();
-    QStringList closed;
-    for (const auto &target: f.vm->property("assignTargets").toList()) closed << target.toMap()["id"].toString();
-    EXPECT_EQ(closed, QStringList{""});
-}
-
 TEST(BenchmarkTableProjection, GroupsNoLongerAdvertiseRelocationFlags) {
     TableFixture f;
     f.open(mixedBench());

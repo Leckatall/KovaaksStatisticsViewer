@@ -25,7 +25,6 @@ ApplicationWindow {
     readonly property alias dirtyClosePrompt: dirtyClosePrompt
     readonly property alias deleteConfirmPrompt: deleteConfirmPrompt
     readonly property alias colorDialog: colorDialog
-    readonly property alias assignMenu: assignMenu
     readonly property alias rowContextMenu: rowContextMenu
     readonly property alias groupContextMenu: groupContextMenu
     readonly property alias rankContextMenu: rankContextMenu
@@ -319,17 +318,6 @@ ApplicationWindow {
         return root.currentEntryId !== "" ? [root.currentEntryId] : []
     }
 
-    function assignSelection(targetGroupId) {
-        root.commitActiveEdits()
-        const ids = root.selectedEntryIds()
-        if (ids.length === 0) return
-        root.runTableCommand(() => root.vm().assignScenarios(ids, targetGroupId))
-    }
-
-    function assignTargets() {
-        return root.vm().assignTargets || []
-    }
-
     // Position and size of the current row within the collection that holds it: a subcategory,
     // a category's direct scenarios (which precede its subcategories), or Uncategorized.
     function currentRowPlacement() {
@@ -475,20 +463,17 @@ ApplicationWindow {
     Menu {
         id: rowContextMenu
         objectName: "rowContextMenu"
-        Menu {
-            id: assignMenu
-            objectName: "assignMenu"
-            title: qsTr("Move to group")
-            Instantiator {
-                model: root.assignTargets()
-                delegate: MenuItem {
-                    required property var modelData
-                    objectName: "assignTarget_" + modelData.id
-                    text: modelData.label
-                    onTriggered: root.assignSelection(modelData.id)
+        MenuItem {
+            objectName: "groupScenariosItem"
+            action: Action {
+                text: qsTr("Group Scenarios")
+                shortcut: "Ctrl+G"
+                enabled: root.vm().hasDraft && !groupCommand.visible
+                // The hotkey fires this with the menu still open, and nothing else closes it then.
+                onTriggered: {
+                    rowContextMenu.dismiss()
+                    root.openGroupCommand()
                 }
-                onObjectAdded: (index, object) => assignMenu.insertItem(index, object)
-                onObjectRemoved: (index, object) => assignMenu.removeItem(object)
             }
         }
         MenuItem { text: qsTr("Move up"); enabled: root.currentRowPlacement().position > 0; onTriggered: root.moveCurrentRow(-1) }
@@ -499,7 +484,17 @@ ApplicationWindow {
             onTriggered: root.moveCurrentRow(1)
         }
         MenuSeparator {}
-        MenuItem { text: qsTr("Remove selected scenarios"); onTriggered: root.removeSelectedScenarios() }
+        MenuItem {
+            objectName: "removeScenariosItem"
+            action: Action {
+                text: qsTr("Remove selected scenarios")
+                shortcut: StandardKey.Delete
+                // The shortcut is here so the item shows the key. Enabled with the menu closed, it
+                // would take Delete from the table, which refuses it on group and rank cells.
+                enabled: rowContextMenu.visible
+                onTriggered: root.removeSelectedScenarios()
+            }
+        }
     }
 
     Menu {
@@ -773,6 +768,7 @@ ApplicationWindow {
                         }
                         onMoveSelectionRequested: (entryIds, targetId, beforeId) => root.runTableCommand(
                             () => root.vm().assignScenarios(entryIds, targetId, beforeId))
+                        onRemoveScenariosRequested: root.removeSelectedScenarios()
                         onScenarioIdentityRequested: (entryId, name, hash) => root.requestScenarioIdentity(entryId, name, hash)
                         onRowContextRequested: (entryId, x, y) => {
                             rowContextMenu.popup(editorTable, x, y)
@@ -805,12 +801,5 @@ ApplicationWindow {
         optionsProvider: (query, parentCategoryId) => root.vm().groupCommandOptions(query, parentCategoryId)
         onCreateRequested: (name, parentCategoryId) => root.createGroupAndMove(name, parentCategoryId)
         onMoveRequested: targetGroupId => root.moveToGroup(targetGroupId)
-    }
-
-    Shortcut {
-        objectName: "groupCommandShortcut"
-        sequence: "Ctrl+G"
-        enabled: root.vm().hasDraft && !groupCommand.visible
-        onActivated: root.openGroupCommand()
     }
 }

@@ -510,7 +510,6 @@ function makeFakeBenchmarkManagerVm(overrides) {
         // BenchmarkTableModelFixture; commandLog records every table-era command in call order.
         tableModel: null,
         groups: [],
-        assignTargets: [{id: "", label: "Uncategorized"}],
         selectedEntryIds: [],
         currentCell: ({}),
         canUndo: false,
@@ -590,17 +589,6 @@ function benchmarkManagementGroups() {
          issues: ["A subcategory has no scenarios."]},
         {id: "gE", kind: "category", parentId: "", name: "Empty", color: "#888888", scenarioCount: 0,
          issues: ["A category has neither scenarios nor subcategories."]}
-    ]
-}
-
-function benchmarkManagementAssignTargets() {
-    return [
-        {id: "", label: "Uncategorized"},
-        {id: "g1", label: "Clicking"},
-        {id: "g2", label: "Tracking"},
-        {id: "p", label: "Tracking › Precise"},
-        {id: "hollow", label: "Tracking › Hollow"},
-        {id: "gE", label: "Empty"}
     ]
 }
 
