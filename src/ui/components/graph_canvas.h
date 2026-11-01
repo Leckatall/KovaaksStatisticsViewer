@@ -100,10 +100,6 @@ namespace ksv::ui {
         static constexpr qreal kMinMarkerSpacing = kGraphMinMarkerSpacing;
         [[nodiscard]] static bool markersFit(int pointCount, qreal pixelSpan);
 
-        // Visible columns in the order their lines (and markers) are painted: the VM's list order
-        // reversed, so the first series in the user's line list is painted last, on top.
-        [[nodiscard]] QList<int> paintOrder() const;
-
         void paint(QPainter *painter) override;
 
         [[nodiscard]] GraphScene scene() const;
@@ -131,8 +127,6 @@ namespace ksv::ui {
         [[nodiscard]] SeriesPainter::Connection painterConnection() const;
 
         [[nodiscard]] QList<int> visibleColumnIds() const;
-
-        [[nodiscard]] QList<const presentation::SeriesModel *> seriesInPaintOrder() const;
 
         struct LabelledAxisGroup {
             const presentation::SeriesModel *labelled = nullptr;

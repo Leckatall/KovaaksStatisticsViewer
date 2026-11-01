@@ -410,39 +410,21 @@ namespace {
         EXPECT_EQ(mixed->property("labelledYAxisTitle").toString(), "Shared axis");
     }
 
-    // --- Lines stack in the user's line-list order. ---
+    // --- The hover readout follows the user's line-list order. ---
 
-    // The labelled axis no longer pulls its line to the front: the first series in the list is
-    // painted last (on top) whatever order the columns are made visible in or which line owns the
-    // axis, and the hover readout lists the same series top-of-list first.
-    TEST_F(GraphCanvasGeometryTest, LinesArePaintedBottomOfTheListFirst) {
+    // Whatever order the columns are made visible in or which line owns the axis, the readout lists
+    // the series top-of-list first, matching how the painter stacks them.
+    TEST_F(GraphCanvasGeometryTest, HoverListsTheTopOfTheLineListFirst) {
         SharedAxisVm vm;
         const auto lines = makeCanvas(
             vm, QVariantList{SharedAxisVm::kSecondShared, SharedAxisVm::kFirstShared, SharedAxisVm::kIndependent});
         lines->setYAxisColumn(SharedAxisVm::kFirstShared);
-
-        EXPECT_EQ(lines->paintOrder(),
-                  (QList<int>{SharedAxisVm::kIndependent, SharedAxisVm::kSecondShared, SharedAxisVm::kFirstShared}));
 
         const QRectF rect = lines->property("plotArea").toRectF();
         const QVariantList hovered = lines->valuesAtX(rect.center().x()).value("series").toList();
         QStringList names;
         for (const auto &entry: hovered) names.append(entry.toMap().value("name").toString());
         EXPECT_EQ(names, (QStringList{"First shared", "Second shared", "Independent"}));
-    }
-
-    TEST_F(GraphCanvasGeometryTest, PaintOrderReversesTheEnabledLineList) {
-        const auto columns = plottedColumns(*graphVm);
-        ASSERT_GE(columns.size(), 2);
-        QVariantList visible;
-        QList<int> expected;
-        for (const int column: columns) {
-            visible.append(column);
-            expected.prepend(column);
-        }
-        canvas.setVisibleColumns(visible);
-
-        EXPECT_EQ(canvas.paintOrder(), expected);
     }
 
     // --- Real data points are marked while sparse. ---

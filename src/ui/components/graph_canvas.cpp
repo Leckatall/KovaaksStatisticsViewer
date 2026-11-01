@@ -209,22 +209,6 @@ namespace ksv::ui {
         return names.join(QStringLiteral(", "));
     }
 
-    QList<const presentation::SeriesModel *> GraphCanvas::seriesInPaintOrder() const {
-        QList<const presentation::SeriesModel *> ordered;
-        if (!m_graphVm) return ordered;
-        // series() is in the user's line-list order; painting it back to front leaves the series
-        // highest in the list on top.
-        const auto series = m_graphVm->series(visibleColumnIds());
-        for (auto it = series.crbegin(); it != series.crend(); ++it) ordered.append(*it);
-        return ordered;
-    }
-
-    QList<int> GraphCanvas::paintOrder() const {
-        QList<int> columns;
-        for (const auto *s: seriesInPaintOrder()) columns.append(s->column());
-        return columns;
-    }
-
     QList<int> GraphCanvas::visibleColumnIds() const {
         QList<int> ids;
         ids.reserve(m_visibleColumns.size());
@@ -250,7 +234,8 @@ namespace ksv::ui {
         if (!m_graphVm) return graphPlotRect(bounds, std::nullopt, std::nullopt);
         std::optional<GraphSceneAxis> yAxis;
         if (const auto labelled = labelledYAxis()) yAxis = resolveAxis(*labelled);
-        return graphPlotRect(bounds, yAxis, resolveAxis(m_graphVm->xAxis()));
+        // Runs on every hover move. The bottom margin comes from the font alone, so no x label is formatted.
+        return graphPlotRect(bounds, yAxis, GraphSceneAxis{});
     }
 
     const presentation::Axis &GraphCanvas::xAxisFor(const presentation::SeriesModel &series) const {

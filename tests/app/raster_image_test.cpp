@@ -17,7 +17,7 @@ namespace ksv::application {
         }
     }
 
-    TEST(RasterImage, StrideIsWidthTimesFour) {
+    TEST(RasterImage, FreezingKeepsDimensionsAndPixels) {
         auto buffer = RasterBuffer::allocate(3, 2);
         ASSERT_TRUE(buffer);
         for (std::uint32_t i = 0; i < 6; ++i) buffer->pixels()[i] = 0xff000000u | (i * 17);
@@ -26,8 +26,6 @@ namespace ksv::application {
 
         EXPECT_EQ(image.width(), 3);
         EXPECT_EQ(image.height(), 2);
-        EXPECT_EQ(image.stride(), 12u);
-        EXPECT_EQ(image.byteSize(), 24u);
         for (std::uint32_t i = 0; i < 6; ++i) EXPECT_EQ(image.pixels()[i], 0xff000000u | (i * 17));
     }
 

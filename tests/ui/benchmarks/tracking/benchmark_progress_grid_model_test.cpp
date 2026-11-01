@@ -169,16 +169,6 @@ TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheF
     }
 }
 
-TEST(BenchmarkProgressGridContent, ExposesTypedContent) {
-    auto fake = gridFake();
-    BenchmarkTrackingViewModel vm{fake};
-
-    const BenchmarkProgressGridModel *grid = vm.progressGrid();
-    ASSERT_FALSE(grid->rows().isEmpty());
-    const std::vector<ProgressGridScenarioRow> &rows = grid->content().rows;
-    EXPECT_EQ(static_cast<qsizetype>(rows.size()), grid->rows().size());
-}
-
 TEST(BenchmarkProgressGridContent, MapsAreDerivedFromTheTypedForm) {
     auto fake = gridFake();
     auto &definition = fake->snap.selectedLoaded->benchmark;

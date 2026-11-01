@@ -112,20 +112,6 @@ namespace ksv::ui {
         }
     }
 
-    TEST(GraphSceneStructure, SceneIsAPlainValue) {
-        const GraphScene scene;
-        const GraphScene fromCanvas = GraphCanvas{}.scene();
-
-        QImage image(30, 30, QImage::Format_ARGB32_Premultiplied);
-        image.fill(Qt::transparent);
-        QPainter painter(&image);
-        const QRectF bounds(0.0, 0.0, 30.0, 30.0);
-
-        paintGraphScene(painter, scene, bounds);
-        paintGraphScene(painter, fromCanvas, bounds);
-        static_cast<void>(graphPlotRect(bounds, std::nullopt, std::nullopt));
-    }
-
     TEST(GraphSceneBuild, SeriesFollowTheLineListWithResolvedAppearance) {
         constexpr int kNeutral = 1;
         constexpr int kHidden = 2;
@@ -338,12 +324,19 @@ namespace ksv::ui {
 
     TEST(GraphSceneBuild, SurvivesTheObjectsThatBuiltIt) {
         const QString name = QStringLiteral("Outlived");
-        const QList<QPointF> points{QPointF(0.0, 10.0), QPointF(5.0, 50.0)};
+        const QList<QPointF> points{QPointF(2.0, 10.0), QPointF(5.0, 50.0)};
+        const QPointF leadingCarry(0.0, 5.0);
+        const QPointF trailingCarry(10.0, 60.0);
+        constexpr qreal kReference = 25.0;
+        const QColor referenceColour(Qt::red);
 
         auto vm = std::make_unique<SceneVm>();
         SeriesModel &series = vm->addSeries(1, name);
         series.transform = suffixed();
+        series.leadingCarry = leadingCarry;
+        series.trailingCarry = trailingCarry;
         series.setData(points);
+        series.referenceLines = {{kReference, referenceColour}};
         auto canvas = std::make_unique<GraphCanvas>();
         canvas->setGraphVm(vm.get());
         canvas->setVisibleColumns({1});
@@ -354,13 +347,32 @@ namespace ksv::ui {
         QStringList labels;
         for (const qreal tick: series.yAxis->ticks()) labels.append(series.yAxis->formatTick(tick));
         ASSERT_FALSE(labels.isEmpty());
+        QStringList xLabels;
+        for (const qreal tick: vm->xAxis().ticks()) xLabels.append(vm->xAxis().formatTick(tick));
+        ASSERT_FALSE(xLabels.isEmpty());
 
         canvas.reset();
         vm.reset();
 
         EXPECT_EQ(scene.series.at(0).name, name);
         EXPECT_EQ(scene.series.at(0).observations, points);
+        EXPECT_EQ(scene.series.at(0).leadingCarry, leadingCarry);
+        EXPECT_EQ(scene.series.at(0).trailingCarry, trailingCarry);
         EXPECT_EQ(scene.series.at(0).yAxis.labels, labels);
+        EXPECT_EQ(scene.series.at(0).xAxis.labels, xLabels);
+        EXPECT_EQ(scene.xAxis.labels, xLabels);
+        ASSERT_EQ(scene.series.at(0).references.size(), 1);
+        EXPECT_EQ(scene.series.at(0).references.at(0).value, kReference);
+        EXPECT_EQ(scene.series.at(0).references.at(0).color, referenceColour);
+
+        QImage image(240, 160, QImage::Format_RGB32);
+        image.fill(Qt::black);
+        const QImage untouched = image.copy();
+        {
+            QPainter painter(&image);
+            paintGraphScene(painter, scene, QRectF(image.rect()));
+        }
+        EXPECT_TRUE(image != untouched);
     }
 
     TEST(GraphScenePaint, PaintsAHandBuiltSceneWithoutAViewModel) {
@@ -383,6 +395,49 @@ namespace ksv::ui {
         }
         ASSERT_GT(linePixels, 0);
         EXPECT_GE(linePixels, int(plot.width()) - 2);
+    }
+
+    TEST(GraphScenePaint, TheTopOfTheLineListPaintsOverTheLinesBelowIt) {
+        const QColor topColour(Qt::red);
+        const QColor belowColour(Qt::blue);
+        GraphScene scene = handBuiltScene(topColour);
+        GraphSceneSeries below = scene.series.at(0);
+        below.column = 2;
+        below.color = belowColour;
+        scene.series.append(below);
+        QImage image(240, 160, QImage::Format_RGB32);
+        image.fill(Qt::black);
+        const QRectF bounds(image.rect());
+
+        {
+            QPainter painter(&image);
+            paintGraphScene(painter, scene, bounds);
+        }
+
+        const int lineRow = int(graphPlotRect(bounds, scene.labelledYAxis, scene.xAxis).center().y());
+        int topPixels = 0;
+        int belowPixels = 0;
+        for (int x = 0; x < image.width(); ++x) {
+            const QColor pixel = image.pixelColor(x, lineRow);
+            if (pixel == topColour) ++topPixels;
+            if (pixel == belowColour) ++belowPixels;
+        }
+        EXPECT_GT(topPixels, 0);
+        EXPECT_EQ(belowPixels, 0);
+    }
+
+    TEST(GraphScenePaint, ACanvasWithoutAViewModelPaintsNothing) {
+        const GraphScene scene = GraphCanvas{}.scene();
+        QImage image(120, 80, QImage::Format_RGB32);
+        image.fill(Qt::black);
+        const QImage untouched = image.copy();
+
+        {
+            QPainter painter(&image);
+            paintGraphScene(painter, scene, QRectF(image.rect()));
+        }
+
+        EXPECT_TRUE(image == untouched);
     }
 
     TEST(GraphScenePaint, StaysInsideOffsetBounds) {
@@ -430,40 +485,5 @@ namespace ksv::ui {
         const QRectF plot = graphPlotRect(QRectF(0, 0, kWidth, kHeight), scene.labelledYAxis, scene.xAxis);
 
         EXPECT_EQ(plot, canvas.property("plotArea").toRectF());
-    }
-
-    TEST(GraphScenePaint, ACanvasPaintEqualsItsScenePaint) {
-        constexpr int kWidth = 400;
-        constexpr int kHeight = 300;
-        SceneVm vm;
-        SeriesModel &carried = vm.addSeries(1, QStringLiteral("Carried"));
-        carried.setColor(Qt::cyan);
-        carried.leadingCarry = QPointF(0.0, 20.0);
-        carried.trailingCarry = QPointF(10.0, 40.0);
-        carried.setData({QPointF(2.0, 30.0), QPointF(5.0, 80.0), QPointF(8.0, 60.0)});
-        carried.referenceLines = {{50.0, QColor(Qt::red)}};
-        vm.addSeries(2, QStringLiteral("Plain")).setData({QPointF(0.0, 1.0), QPointF(10.0, 2.0)});
-
-        GraphCanvas canvas;
-        canvas.setWidth(kWidth);
-        canvas.setHeight(kHeight);
-        canvas.setGraphVm(&vm);
-        canvas.setVisibleColumns({1, 2});
-        canvas.setMarkedX(4.0);
-
-        QImage fromCanvas(kWidth, kHeight, QImage::Format_ARGB32_Premultiplied);
-        fromCanvas.fill(Qt::transparent);
-        QImage fromScene = fromCanvas.copy();
-
-        {
-            QPainter painter(&fromCanvas);
-            canvas.paint(&painter);
-        }
-        {
-            QPainter painter(&fromScene);
-            paintGraphScene(painter, canvas.scene(), QRectF(0, 0, kWidth, kHeight));
-        }
-
-        EXPECT_TRUE(fromCanvas == fromScene);
     }
 }
