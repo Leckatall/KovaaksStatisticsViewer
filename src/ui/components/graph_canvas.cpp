@@ -23,6 +23,17 @@ namespace ksv::ui {
             resolved.ticks = axis.ticks();
             resolved.labels.reserve(resolved.ticks.size());
             for (const qreal tick: resolved.ticks) resolved.labels.append(axis.formatTick(tick));
+            resolved.minLabel = axis.formatTick(resolved.min);
+            resolved.maxLabel = axis.formatTick(resolved.max);
+            return resolved;
+        }
+
+        GraphSceneAxis resolveBounds(const presentation::Axis &axis) {
+            GraphSceneAxis resolved;
+            resolved.min = axis.min();
+            resolved.max = axis.max();
+            resolved.minLabel = axis.formatTick(resolved.min);
+            resolved.maxLabel = axis.formatTick(resolved.max);
             return resolved;
         }
 
@@ -283,8 +294,8 @@ namespace ksv::ui {
             entry.observations = s->displayPoints();
             entry.leadingCarry = displayCarry(*s, s->leadingCarry);
             entry.trailingCarry = displayCarry(*s, s->trailingCarry);
-            entry.xAxis = s->xAxis ? resolveAxis(*s->xAxis) : scene.xAxis;
-            entry.yAxis = resolveAxis(yAxisFor(*s));
+            entry.xAxis = s->xAxis ? resolveBounds(*s->xAxis) : scene.xAxis;
+            entry.yAxis = resolveBounds(yAxisFor(*s));
             entry.yAxisId = s->yAxisId;
             entry.yAxisName = s->yAxisName;
             entry.references.reserve(s->referenceLines.size());

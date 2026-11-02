@@ -245,6 +245,9 @@ namespace ksv::presentation {
                 row.personalBestText = personalBest ? formatBenchmarkNumber(*personalBest) : QStringLiteral("—");
                 row.personalBestDateText = projected ? personalBestDateText(*projected) : QStringLiteral("—");
                 row.playCountText = projected ? playCountText(*projected) : QStringLiteral("—");
+                row.hasPersonalBest = personalBest.has_value();
+                row.hasPersonalBestDate = projected && projected->personalBestTime.has_value();
+                row.hasPlayCount = projected && projected->runCount > 0;
 
                 QString attainedText = QObject::tr("Unranked");
                 QString attainedColor;
@@ -429,6 +432,7 @@ namespace ksv::presentation {
             map[QStringLiteral("personalBestText")] = row.personalBestText;
             map[QStringLiteral("personalBestDateText")] = row.personalBestDateText;
             map[QStringLiteral("playCountText")] = row.playCountText;
+            map[QStringLiteral("hasPersonalBest")] = row.hasPersonalBest;
             map[QStringLiteral("attainedTierText")] = row.attainedTierText;
             map[QStringLiteral("attainedTierColor")] = row.attainedTierColor;
             QVariantList fills;

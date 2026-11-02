@@ -26,6 +26,9 @@ namespace ksv::presentation {
         QString personalBestText;
         QString personalBestDateText;
         QString playCountText;
+        bool hasPersonalBest = false;
+        bool hasPersonalBestDate = false;
+        bool hasPlayCount = false;
         QString attainedTierText;
         QString attainedTierColor;
         std::vector<double> fills;

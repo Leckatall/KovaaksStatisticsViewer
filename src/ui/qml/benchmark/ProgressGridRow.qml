@@ -120,7 +120,7 @@ Item {
         tiers: rowItem.grid.tiers
         fills: rowItem.modelData.fills || []
         labels: rowItem.modelData.thresholdTexts || []
-        valueText: rowItem.modelData.personalBestText !== "—"
+        valueText: rowItem.modelData.hasPersonalBest
                    ? String(rowItem.modelData.personalBestText || "") : ""
         valueColor: String(rowItem.modelData.attainedTierColor || "") || palette.placeholderText
         description: String(rowItem.modelData.barDescription || "")

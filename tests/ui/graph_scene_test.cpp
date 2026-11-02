@@ -203,10 +203,39 @@ namespace ksv::ui {
         expectResolved(*scene.labelledYAxis, *ownAxes.yAxis);
         expectResolved(scene.xAxis, vm.xAxis());
         ASSERT_EQ(scene.series.size(), 2);
-        expectResolved(scene.series.at(0).xAxis, *ownXAxis);
-        expectResolved(scene.series.at(0).yAxis, *ownAxes.yAxis);
+        EXPECT_EQ(scene.series.at(0).xAxis.min, ownXAxis->min());
+        EXPECT_EQ(scene.series.at(0).xAxis.max, ownXAxis->max());
+        EXPECT_EQ(scene.series.at(0).yAxis.min, ownAxes.yAxis->min());
+        EXPECT_EQ(scene.series.at(0).yAxis.max, ownAxes.yAxis->max());
         expectResolved(scene.series.at(1).xAxis, vm.xAxis());
-        expectResolved(scene.series.at(1).yAxis, derived.deriveYAxis());
+        const auto derivedY = derived.deriveYAxis();
+        EXPECT_EQ(scene.series.at(1).yAxis.min, derivedY.min());
+        EXPECT_EQ(scene.series.at(1).yAxis.max, derivedY.max());
+    }
+
+    TEST(GraphSceneBuild, SeriesAxesCarryFormattedBoundsWithoutTickLabels) {
+        SceneVm vm;
+        SeriesModel &only = vm.addSeries(1, QStringLiteral("Only"));
+        only.transform = suffixed();
+        only.setData({QPointF(0.0, 10.0), QPointF(5.0, 50.0)});
+
+        GraphCanvas canvas;
+        canvas.setGraphVm(&vm);
+        canvas.setVisibleColumns({1});
+        canvas.setYAxisColumn(1);
+
+        const GraphScene scene = canvas.scene();
+
+        ASSERT_EQ(scene.series.size(), 1);
+        const GraphSceneAxis &seriesAxis = scene.series.at(0).yAxis;
+        EXPECT_EQ(seriesAxis.minLabel, only.yAxis->formatTick(only.yAxis->min()));
+        EXPECT_EQ(seriesAxis.maxLabel, only.yAxis->formatTick(only.yAxis->max()));
+        EXPECT_TRUE(seriesAxis.minLabel.contains(QStringLiteral(" pts")));
+        EXPECT_TRUE(seriesAxis.maxLabel.contains(QStringLiteral(" pts")));
+        EXPECT_TRUE(seriesAxis.labels.isEmpty());
+        ASSERT_TRUE(scene.labelledYAxis.has_value());
+        EXPECT_EQ(scene.labelledYAxis->labels.size(), scene.labelledYAxis->ticks.size());
+        EXPECT_FALSE(scene.labelledYAxis->labels.isEmpty());
     }
 
     // With nothing visible the live canvas still labels the view model's own column, which is
@@ -344,9 +373,6 @@ namespace ksv::ui {
         const GraphScene scene = canvas->scene();
 
         ASSERT_EQ(scene.series.size(), 1);
-        QStringList labels;
-        for (const qreal tick: series.yAxis->ticks()) labels.append(series.yAxis->formatTick(tick));
-        ASSERT_FALSE(labels.isEmpty());
         QStringList xLabels;
         for (const qreal tick: vm->xAxis().ticks()) xLabels.append(vm->xAxis().formatTick(tick));
         ASSERT_FALSE(xLabels.isEmpty());
@@ -358,7 +384,6 @@ namespace ksv::ui {
         EXPECT_EQ(scene.series.at(0).observations, points);
         EXPECT_EQ(scene.series.at(0).leadingCarry, leadingCarry);
         EXPECT_EQ(scene.series.at(0).trailingCarry, trailingCarry);
-        EXPECT_EQ(scene.series.at(0).yAxis.labels, labels);
         EXPECT_EQ(scene.series.at(0).xAxis.labels, xLabels);
         EXPECT_EQ(scene.xAxis.labels, xLabels);
         ASSERT_EQ(scene.series.at(0).references.size(), 1);

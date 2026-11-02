@@ -153,6 +153,8 @@ function makeFakeProgressRow(overrides) {
         blockerColor: "",
         blockerText: ""
     }, overrides)
+    if (row.hasPersonalBest === undefined)
+        row.hasPersonalBest = row.personalBestText !== "—"
     if (row.nextText === undefined)
         row.nextText = row.nextTierText.length > 0 ? row.nextTierText + " " + row.nextThresholdText
                                                    : row.nextThresholdText

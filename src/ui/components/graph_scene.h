@@ -23,6 +23,8 @@ namespace ksv::ui {
         qreal max = 1.0;
         QList<qreal> ticks;
         QStringList labels;
+        QString minLabel;
+        QString maxLabel;
 
         // Maps value to [0,1] position on axis span; zero span maps to 0.5
         [[nodiscard]] qreal normalizedPosition(const qreal value) const {

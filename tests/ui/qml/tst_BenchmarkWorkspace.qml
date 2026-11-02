@@ -1537,10 +1537,10 @@ Item {
             rows[0].edgeState = "unplayed"
             rows[0].statusText = "Unplayed"
             rows[1].thresholdTexts = scores                    // sc-1w4ts: every chunk
-            rows[1].personalBestText = "—"                     // (no PB label in the way)
+            rows[1].hasPersonalBest = false                    // (no PB label in the way)
             rows[3].thresholdTexts = scores                   // sc-smooth: Platinum hatched
             rows[3].missingChunks = [false, false, false, true]
-            rows[3].personalBestText = "—"
+            rows[3].hasPersonalBest = false
             const ws = makeWorkspace(fx)
             wait(0)
 
@@ -1576,6 +1576,7 @@ Item {
             const fx = TestDoubles.trackingFixtureTrackable()
             const rows = fx.progressGrid.rows
             rows[0].personalBestText = "250"                   // sc-popcorn: unplayed
+            rows[0].hasPersonalBest = true
             rows[0].edgeState = "unplayed"
             rows[0].statusText = "Unplayed"
             rows[3].thresholdTexts = ["300", "3,000", "3,400", "4,000"]  // sc-smooth: PB 20% into chunk 2

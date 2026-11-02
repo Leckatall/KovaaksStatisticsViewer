@@ -30,6 +30,10 @@ add_executable(ui_tests
     benchmarks/manager/benchmark_cell_input_test.cpp
     benchmarks/manager/benchmark_clipboard_matrix_test.cpp
     benchmarks/manager/benchmark_table_workload_test.cpp
+    capture/capture_appearance_test.cpp
+    capture/capture_graph_source_test.cpp
+    capture/capture_context_test.cpp
+    capture/capture_table_source_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE
@@ -45,7 +49,7 @@ target_link_libraries(ui_tests PRIVATE
     GTest::gtest
 )
 
-target_compile_definitions(ui_tests PRIVATE KSV_GTEST_GUI_APP)
+target_compile_definitions(ui_tests PRIVATE KSV_GTEST_GUI_APP KSV_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_precompile_headers(ui_tests PRIVATE
     <gtest/gtest.h>
     <QColor>

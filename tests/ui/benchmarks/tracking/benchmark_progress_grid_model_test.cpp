@@ -462,6 +462,35 @@ TEST(BenchmarkProgressGridModel, RowsCarryThePersonalBestDateAndPlayCount) {
     EXPECT_EQ(row.value("playCountText").toString(), QLocale().toString(1234));
 }
 
+TEST(BenchmarkProgressGridContent, PresenceFlagsFollowTheProjection) {
+    auto fake = gridFake();
+    auto &played = fake->snap.projection->scenarios[2];
+    ASSERT_EQ(played.entryId.value, "e1");
+    played.runCount = 12;
+    const QDateTime set(QDate(2026, 8, 14), QTime(21, 30));
+    played.personalBestTime = std::chrono::sys_seconds{std::chrono::seconds{set.toSecsSinceEpoch()}};
+    BenchmarkTrackingViewModel vm{fake};
+
+    const ProgressGridContent content = vm.progressGrid()->content();
+    const auto find = [&](const QString &entryId) -> const ProgressGridScenarioRow & {
+        const auto it = std::ranges::find(content.rows, entryId, &ProgressGridScenarioRow::entryId);
+        EXPECT_NE(it, content.rows.end());
+        return *it;
+    };
+
+    const ProgressGridScenarioRow &playedRow = find("e1");
+    EXPECT_TRUE(playedRow.hasPersonalBest);
+    EXPECT_TRUE(playedRow.hasPersonalBestDate);
+    EXPECT_TRUE(playedRow.hasPlayCount);
+
+    const ProgressGridScenarioRow &unplayedRow = find("e2");
+    EXPECT_FALSE(unplayedRow.hasPersonalBest);
+    EXPECT_FALSE(unplayedRow.hasPersonalBestDate);
+    EXPECT_FALSE(unplayedRow.hasPlayCount);
+
+    EXPECT_TRUE(rowFor(vm.progressGrid(), "e1").value("hasPersonalBest").toBool());
+}
+
 TEST(BenchmarkProgressGridModel, BarFillsAndDescriptionPlaceThePersonalBestOnTheLadder) {
     auto fake = gridFake();
     // e1 (PB 800): Bronze 600, Silver 900, Gold 1200 -> Bronze, two thirds of the way to Silver.

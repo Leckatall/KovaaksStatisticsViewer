@@ -128,6 +128,13 @@ namespace ksv::presentation {
         m_run_count = history.full_count;
         m_visible_runs.clear();
         m_visible_runs.reserve(history.rows.size());
+        if (history.rows.empty()) {
+            m_visible_start_times_ms.reset();
+            m_visible_run_span.reset();
+        } else {
+            m_visible_start_times_ms = std::pair{history.rows.front().start_time_ms, history.rows.back().start_time_ms};
+            m_visible_run_span = std::pair{history.rows.front().run_index, history.rows.back().run_index};
+        }
         for (auto &points: m_points) points.clear();
         for (const auto &row: history.rows) {
             m_visible_runs.push_back(row.run_index);

@@ -6,6 +6,8 @@
 #include <QtGlobal>
 
 #include <chrono>
+#include <optional>
+#include <utility>
 
 #include "presentation/graphs/common/axes/axis.h"
 
@@ -33,6 +35,7 @@ namespace ksv::presentation {
         [[nodiscard]] bool setEpochMillisecondsRange(qint64 dataLoMs, qint64 dataHiMs);
         [[nodiscard]] bool setOptions(Options options);
         [[nodiscard]] const Options &options() const { return m_options; }
+        [[nodiscard]] std::optional<std::pair<qint64, qint64>> calendarRangeMs() const override;
 
     private:
         [[nodiscard]] bool recompute();
@@ -40,6 +43,7 @@ namespace ksv::presentation {
         Options m_options;
         QDateTime m_dataLo;
         QDateTime m_dataHi;
+        bool m_hasRange = false;
     };
 
     // Days since the Unix epoch -> UTC-midnight QDateTime, the X unit every calendar-day graph plots in.

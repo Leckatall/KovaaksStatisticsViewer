@@ -8,6 +8,7 @@
 #include <QTimeZone>
 
 #include "presentation/graphs/common/axes/date_time_axis.h"
+#include "presentation/graphs/common/axes/value_axis.h"
 
 using ksv::presentation::DateTimeAxis;
 using ksv::presentation::utcDateTimeForEpochDay;
@@ -31,6 +32,23 @@ namespace {
         EXPECT_EQ(typed.min(), epoch.min());
         EXPECT_EQ(typed.max(), epoch.max());
         EXPECT_EQ(typed.ticks(), epoch.ticks());
+    }
+
+    TEST(DateTimeAxisCalendarRange, ReportsTheGivenRangeNotTheResolvedBounds) {
+        const qint64 day = QDateTime(QDate(2026, 8, 3), QTime(0, 0), QTimeZone::utc()).toMSecsSinceEpoch();
+        DateTimeAxis dateAxis;
+        ASSERT_TRUE(dateAxis.setEpochMillisecondsRange(day, day));
+        ASSERT_NE(dateAxis.min(), dateAxis.max());
+
+        const ksv::presentation::Axis &axis = dateAxis;
+        const auto range = axis.calendarRangeMs();
+        ASSERT_TRUE(range.has_value());
+        EXPECT_EQ(range->first, day);
+        EXPECT_EQ(range->second, day);
+
+        const ksv::presentation::ValueAxis valueAxis;
+        const ksv::presentation::Axis &plain = valueAxis;
+        EXPECT_FALSE(plain.calendarRangeMs().has_value());
     }
 
     TEST(DateTimeAxisTest, RepeatedRangeUpdatesKeepTimezoneAndTargetTicks) {
