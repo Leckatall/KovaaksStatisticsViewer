@@ -2,12 +2,10 @@
 
 #include <QColor>
 #include <QFont>
-#include <QFontMetricsF>
 #include <QList>
 #include <QRectF>
 #include <QString>
 #include <QStringList>
-#include <QTextLayout>
 #include <QTextOption>
 
 #include <algorithm>
@@ -21,6 +19,7 @@
 #include <vector>
 
 #include "capture/capture_fonts.h"
+#include "capture/capture_text.h"
 #include "components/axis_painter.h"
 #include "components/graph_scene_painter.h"
 
@@ -36,6 +35,8 @@ namespace ksv::ui {
         constexpr qreal kLineSampleGap = 6.0;
         constexpr int kMaximumHeightDoublings = 8;
 
+        constexpr QTextOption::WrapMode kWrapMode = QTextOption::WrapAtWordBoundaryOrAnywhere;
+
         const Qt::Alignment kLeftAligned = Qt::AlignLeft | Qt::AlignVCenter;
         const Qt::Alignment kCentred = Qt::AlignHCenter | Qt::AlignVCenter;
 
@@ -46,33 +47,6 @@ namespace ksv::ui {
             QString maxLabel;
             QList<GraphSceneSeries> series;
         };
-
-        qreal lineHeight(const QFont &font) {
-            return QFontMetricsF(font).height();
-        }
-
-        qreal measuredWidth(const QFont &font, const QString &text) {
-            return std::ceil(QFontMetricsF(font).horizontalAdvance(text));
-        }
-
-        QStringList wrappedLines(const QString &text, const QFont &font, const qreal width) {
-            // QTextLayout yields one blank line for empty text, which would reserve room for nothing.
-            if (text.isEmpty()) return {};
-
-            QTextOption option;
-            option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-            QTextLayout layout(text, font);
-            layout.setTextOption(option);
-
-            QStringList lines;
-            layout.beginLayout();
-            for (QTextLine line = layout.createLine(); line.isValid(); line = layout.createLine()) {
-                line.setLineWidth(width);
-                lines.append(text.mid(line.textStart(), line.textLength()).trimmed());
-            }
-            layout.endLayout();
-            return lines;
-        }
 
         std::vector<Scale> distinctScales(const GraphScene &scene) {
             std::vector<Scale> scales;
@@ -130,7 +104,7 @@ namespace ksv::ui {
             void placeEntry(const QString &text, const CaptureTextRole role, const GraphSceneSeries *series) {
                 const QFont font = captureFont(m_font, role);
                 const qreal indent = series ? kLineSampleLength + kLineSampleGap : 0.0;
-                const QStringList lines = wrappedLines(text, font, m_width - indent);
+                const QStringList lines = wrappedLines(text, font, m_width - indent, kWrapMode);
                 for (qsizetype i = 0; i < lines.size(); ++i) {
                     const qreal textWidth = measuredWidth(font, lines.at(i));
                     if (i > 0 || (m_x > m_left && m_x + indent + textWidth > m_left + m_width)) newRow();
@@ -188,7 +162,7 @@ namespace ksv::ui {
         const auto appendHeading = [&](const QString &text, const CaptureTextRole role, const QColor &color) {
             const QFont font = captureFont(appearance.font, role);
             const qreal height = lineHeight(font);
-            for (const QString &line : wrappedLines(text, font, contentWidth)) {
+            for (const QString &line : wrappedLines(text, font, contentWidth, kWrapMode)) {
                 layout.items.emplace_back(CaptureTextItem{QRectF(kPageMargin, y, contentWidth, height), line, role,
                                                           color, kLeftAligned, false});
                 y += height + kHeadingLineGap;
@@ -207,7 +181,7 @@ namespace ksv::ui {
 
         const QFont axisTitleFont = captureFont(appearance.font, CaptureTextRole::Body);
         const qreal axisTitleHeight = lineHeight(axisTitleFont);
-        const QStringList xTitleLines = wrappedLines(context.xTitle, axisTitleFont, contentWidth);
+        const QStringList xTitleLines = wrappedLines(context.xTitle, axisTitleFont, contentWidth, kWrapMode);
         const qreal xTitleBlock = static_cast<qreal>(xTitleLines.size()) * axisTitleHeight;
 
         const qreal graphHeight = logical.height() - kPageMargin - legend.height() - kSectionGap - xTitleBlock
@@ -215,7 +189,8 @@ namespace ksv::ui {
         if (graphHeight <= 0.0) return tooLittleRoom();
 
         qreal graphLeft = kPageMargin;
-        for (const QString &line : wrappedLines(snapshot.scene.labelledYAxisTitle, axisTitleFont, graphHeight)) {
+        for (const QString &line :
+             wrappedLines(snapshot.scene.labelledYAxisTitle, axisTitleFont, graphHeight, kWrapMode)) {
             layout.items.emplace_back(CaptureTextItem{QRectF(graphLeft, y, axisTitleHeight, graphHeight), line,
                                                       CaptureTextRole::Body, appearance.text, kCentred, true});
             graphLeft += axisTitleHeight;

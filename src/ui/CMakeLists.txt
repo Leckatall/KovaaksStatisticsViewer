@@ -154,6 +154,8 @@ qt_add_qml_module(ksv_ui
         capture/capture_font_description.h
         capture/capture_fonts.h
         capture/capture_fonts.cpp
+        capture/capture_text.h
+        capture/capture_text.cpp
         capture/capture_sizing.h
         capture/capture_sizing.cpp
         capture/capture_limits.h
@@ -164,6 +166,8 @@ qt_add_qml_module(ksv_ui
         capture/capture_renderer.cpp
         capture/graph_capture_layout.h
         capture/graph_capture_layout.cpp
+        capture/table_capture_layout.h
+        capture/table_capture_layout.cpp
             presentation/graphs/common/series/monotone_spline.h
             presentation/app/session_vm.h
             presentation/app/session_vm.cpp
