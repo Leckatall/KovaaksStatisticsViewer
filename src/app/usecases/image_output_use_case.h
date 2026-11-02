@@ -23,6 +23,7 @@ namespace ksv::application {
         ImageOutputAdmission savePng(RasterImage image, std::filesystem::path destination,
                                      std::string targetLabel) override;
         void onCompleted(std::function<void(const ImageOutputResult &)> handler) override;
+        [[nodiscard]] std::optional<ImageOutputKind> activeOutput() const override;
 
     private:
         void postCompletion(ImageOutputResult result);
@@ -31,7 +32,7 @@ namespace ksv::application {
         std::shared_ptr<data::IClipboardImageWriter> m_clipboard;
         std::shared_ptr<data::IPngImageWriter> m_png;
         std::vector<std::function<void(const ImageOutputResult &)>> m_handlers;
-        bool m_busy = false;
+        std::optional<ImageOutputKind> m_active;
         std::uint64_t m_nextOperationId = 1;
         // Completions are posted to this object, so one still queued dies with the use case unreported.
         QObject m_completionContext;

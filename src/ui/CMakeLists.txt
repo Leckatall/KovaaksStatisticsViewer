@@ -162,6 +162,10 @@ qt_add_qml_module(ksv_ui
         capture/capture_limits.cpp
         capture/capture_layout.h
         capture/capture_layout.cpp
+        capture/capture_render.h
+        capture/capture_render.cpp
+        capture/capture_render_queue.h
+        capture/capture_render_queue.cpp
         capture/capture_renderer.h
         capture/capture_renderer.cpp
         capture/graph_capture_layout.h

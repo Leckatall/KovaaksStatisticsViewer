@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 
 #include "app/contracts/image_output.h"
@@ -17,5 +18,8 @@ namespace ksv::application {
                                              std::string targetLabel) = 0;
 
         virtual void onCompleted(std::function<void(const ImageOutputResult &)> handler) = 0;
+
+        // The admitted operation that has not yet delivered its result. Admission rejects while set.
+        [[nodiscard]] virtual std::optional<ImageOutputKind> activeOutput() const = 0;
     };
 }

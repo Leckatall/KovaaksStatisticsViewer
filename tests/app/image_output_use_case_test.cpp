@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -156,6 +157,38 @@ namespace ksv::application {
         ASSERT_EQ(harness.results.size(), 1u);
         EXPECT_EQ(harness.results[0].status, ImageOutputStatus::Unexpected);
         EXPECT_TRUE(harness.useCase.copyImage(makeImage(), "Following copy").accepted);
+    }
+
+    TEST(ImageOutputUseCase, ActiveOutputIsEmptyWhenIdle) {
+        Harness harness;
+
+        EXPECT_EQ(harness.useCase.activeOutput(), std::nullopt);
+    }
+
+    TEST(ImageOutputUseCase, ACopyStaysActiveUntilItsCompletionIsDelivered) {
+        Harness harness;
+
+        ASSERT_TRUE(harness.useCase.copyImage(makeImage(), "Run graph").accepted);
+
+        EXPECT_EQ(harness.useCase.activeOutput(), ImageOutputKind::Copy);
+        EXPECT_FALSE(harness.useCase.copyImage(makeImage(), "Duplicate").accepted);
+
+        ASSERT_TRUE(harness.waitForResults(1));
+        EXPECT_EQ(harness.useCase.activeOutput(), std::nullopt);
+    }
+
+    TEST(ImageOutputUseCase, ASaveStaysActiveUntilItsCompletionIsDelivered) {
+        Harness harness;
+        harness.png->closeGate();
+
+        ASSERT_TRUE(harness.useCase.savePng(makeImage(), kDestination, "Run graph").accepted);
+        ASSERT_TRUE(harness.waitForWriteToStart());
+
+        EXPECT_EQ(harness.useCase.activeOutput(), ImageOutputKind::SavePng);
+
+        harness.png->openGate();
+        ASSERT_TRUE(harness.waitForResults(1));
+        EXPECT_EQ(harness.useCase.activeOutput(), std::nullopt);
     }
 
     TEST(ImageOutputSave, WriteRunsOffTheCallingThreadAndReportsOnIt) {
