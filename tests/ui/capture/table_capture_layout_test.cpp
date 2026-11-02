@@ -1012,6 +1012,29 @@ namespace ksv::ui {
         EXPECT_TRUE(sameItems(asked.items, notAsked.items));
     }
 
+    TEST(TableCaptureRegions, ALargeFontStaysInsideTheLayout) {
+        TableCaptureSnapshot snapshot = summarisedTable();
+        snapshot.appearance.font.pixelSize = 28;
+        ASSERT_FALSE(snapshot.summary->nextTierBlockerText.isEmpty());
+
+        const CaptureLayout layout = layoutTableCapture(snapshot, true);
+
+        const QRectF canvas(QPointF(0.0, 0.0), layout.size);
+        const std::optional<qreal> top = tableTop(snapshot, layout);
+        ASSERT_TRUE(top);
+        for (const CaptureItem &item : layout.items) {
+            EXPECT_TRUE(canvas.contains(std::visit([](const auto &held) { return held.rect; }, item)));
+            const auto *text = std::get_if<CaptureTextItem>(&item);
+            if (text == nullptr) continue;
+
+            const QFontMetricsF metrics(captureFont(snapshot.appearance.font, text->role));
+            EXPECT_GE(text->rect.height(), metrics.height()) << text->text.toStdString();
+            if (text->rect.top() == *top) {
+                EXPECT_GE(text->rect.width(), metrics.horizontalAdvance(text->text)) << text->text.toStdString();
+            }
+        }
+    }
+
     TEST(TableCaptureRegions, ANarrowTableStillHoldsItsTitleAndSummary) {
         TableCaptureSnapshot snapshot = plainTable(1, 1);
         const TableCaptureSnapshot measuredAlone = snapshot;

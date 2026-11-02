@@ -178,8 +178,16 @@ namespace ksv::ui {
             return lineHeight(fonts.tick);
         }
 
+        qreal barHeight(const Fonts &fonts) {
+            return std::max(kBarHeight, lineHeight(fonts.small));
+        }
+
+        qreal headerHeight(const Fonts &fonts) {
+            return std::max(kHeaderHeight, lineHeight(fonts.bold) + 2.0 * kCellVerticalPadding);
+        }
+
         qreal barBlockHeight(const Fonts &fonts) {
-            return kBarHeight + kMarkerOverhang + laneHeight(fonts);
+            return barHeight(fonts) + kMarkerOverhang + laneHeight(fonts);
         }
 
         qreal baseRowHeight(const Fonts &fonts) {
@@ -341,7 +349,7 @@ namespace ksv::ui {
                 metrics.groupTexts.push_back(std::move(text));
             }
 
-            metrics.rowTops = {kHeaderHeight};
+            metrics.rowTops = {headerHeight(fonts)};
             for (const qreal height : heights) metrics.rowTops.push_back(metrics.rowTops.back() + height);
         }
 
@@ -366,10 +374,11 @@ namespace ksv::ui {
         }
 
         void appendHeaderCell(std::vector<CaptureItem> &items, const CaptureAppearance &appearance,
-                              const Column &column, const QString &text, const Qt::Alignment alignment) {
+                              const qreal headerHeight, const Column &column, const QString &text,
+                              const Qt::Alignment alignment) {
             if (column.width <= 0.0) return;
-            appendRect(items, QRectF(column.x, 0.0, column.width, kHeaderHeight), appearance.button, appearance.mid);
-            appendText(items, QRectF(column.innerLeft(), 0.0, column.innerWidth(), kHeaderHeight), text,
+            appendRect(items, QRectF(column.x, 0.0, column.width, headerHeight), appearance.button, appearance.mid);
+            appendText(items, QRectF(column.innerLeft(), 0.0, column.innerWidth(), headerHeight), text,
                        CaptureTextRole::BodyBold, appearance.text, alignment);
         }
 
@@ -384,10 +393,11 @@ namespace ksv::ui {
                                                                : chunk.right() + kChunkGap / 2.0;
 
                 const QColor barColor(tier.barColor);
-                appendRect(items, QRectF(left, 0.0, right - left, kHeaderHeight), appearance.button, appearance.mid);
-                appendRect(items, QRectF(left, kHeaderHeight - kTierUnderlineHeight, right - left, kTierUnderlineHeight),
+                const qreal height = headerHeight(metrics.fonts);
+                appendRect(items, QRectF(left, 0.0, right - left, height), appearance.button, appearance.mid);
+                appendRect(items, QRectF(left, height - kTierUnderlineHeight, right - left, kTierUnderlineHeight),
                            barColor);
-                appendText(items, QRectF(chunk.x, 0.0, chunk.width, kHeaderHeight), tier.name,
+                appendText(items, QRectF(chunk.x, 0.0, chunk.width, height), tier.name,
                            CaptureTextRole::BodyBold,
                            presentation::readableColorOn(barColor, appearance.button, appearance.buttonText), kCentred);
             }
@@ -397,14 +407,15 @@ namespace ksv::ui {
                           const TableMetrics &metrics) {
             const CaptureAppearance &appearance = snapshot.appearance;
             const presentation::ProgressGridHeadings &headings = snapshot.grid.headings;
-            appendHeaderCell(items, appearance, metrics.category, headings.category, kLeftAligned);
-            appendHeaderCell(items, appearance, metrics.subcategory, headings.subcategory, kLeftAligned);
-            appendHeaderCell(items, appearance, metrics.scenario, headings.scenario, kLeftAligned);
-            appendHeaderCell(items, appearance, metrics.pbDate, headings.pbDate, kRightAligned);
-            appendHeaderCell(items, appearance, metrics.plays, headings.plays, kRightAligned);
-            appendRect(items, QRectF(metrics.progress.x, 0.0, metrics.progress.width, kHeaderHeight),
-                       appearance.button, appearance.mid);
-            appendHeaderCell(items, appearance, metrics.next, headings.next, kRightAligned);
+            const qreal height = headerHeight(metrics.fonts);
+            appendHeaderCell(items, appearance, height, metrics.category, headings.category, kLeftAligned);
+            appendHeaderCell(items, appearance, height, metrics.subcategory, headings.subcategory, kLeftAligned);
+            appendHeaderCell(items, appearance, height, metrics.scenario, headings.scenario, kLeftAligned);
+            appendHeaderCell(items, appearance, height, metrics.pbDate, headings.pbDate, kRightAligned);
+            appendHeaderCell(items, appearance, height, metrics.plays, headings.plays, kRightAligned);
+            appendRect(items, QRectF(metrics.progress.x, 0.0, metrics.progress.width, height), appearance.button,
+                       appearance.mid);
+            appendHeaderCell(items, appearance, height, metrics.next, headings.next, kRightAligned);
             appendTierHeaders(items, snapshot.grid, appearance, metrics);
         }
 
@@ -559,7 +570,7 @@ namespace ksv::ui {
                        const ProgressGridContent &grid, const CaptureAppearance &appearance,
                        const TableMetrics &metrics, const QRectF &band) {
             const qreal top = band.top() + (band.height() - barBlockHeight(metrics.fonts)) / 2.0;
-            const QRectF bar(metrics.bar.x, top, metrics.bar.width, kBarHeight);
+            const QRectF bar(metrics.bar.x, top, metrics.bar.width, barHeight(metrics.fonts));
             appendChunks(items, row, grid, appearance, metrics, bar);
 
             std::optional<QRectF> valueRect;
@@ -871,11 +882,13 @@ namespace ksv::ui {
             appendCell(summary.captions.nextTier, summary.nextTier, summary.nextTierColor,
                        summary.nextTierBlockerText);
 
-            const QRectF bar(average.x, detailTop + kCompletedTickOverhang, average.width, kBarHeight);
+            const QRectF bar(average.x, detailTop + kCompletedTickOverhang, average.width, barHeight(fonts));
             appendAverageRankBar(region.items, summary, snapshot.grid, appearance, bar);
 
-            const qreal bottom = snapshot.grid.tiers.empty() ? detailTop + captionHeight
-                                                             : bar.bottom() + kCompletedTickOverhang;
+            const qreal detailBottom = detailTop + captionHeight;
+            const qreal bottom = snapshot.grid.tiers.empty()
+                                     ? detailBottom
+                                     : std::max(detailBottom, bar.bottom() + kCompletedTickOverhang);
             region.size = QSizeF(x - kSummaryCellGap, bottom);
             return region;
         }
