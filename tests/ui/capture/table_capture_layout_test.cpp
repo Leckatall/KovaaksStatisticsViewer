@@ -732,6 +732,34 @@ namespace ksv::ui {
         EXPECT_GT(onDark.front().color.lightnessF(), 0.5);
     }
 
+    // The widths of the two faces only differ on the real platform: CaptureSamples.TheBoldValueIsMeasuredInItsOwnFace
+    // proves the value's placement follows the bold width.
+    TEST(TableCaptureBars, TheValueIsBoldAtTheSizeOfThePlainStatus) {
+        TableCaptureSnapshot snapshot = plainTable(2);
+        presentation::ProgressGridScenarioRow &unplayed = snapshot.grid.rows.at(1);
+        unplayed.edgeState = presentation::ProgressGridEdgeState::Unplayed;
+        unplayed.statusText = QStringLiteral("Unplayed");
+
+        const CaptureLayout layout = layoutTableCapture(snapshot, false);
+
+        const std::optional<QRectF> valueBand = bandOfRow(snapshot, layout, 0);
+        const std::optional<QRectF> statusBand = bandOfRow(snapshot, layout, 1);
+        ASSERT_TRUE(valueBand && statusBand);
+        const std::vector<CaptureTextItem> value =
+            cellsInBand(layout, *valueBand, snapshot.grid.rows.at(0).personalBestText);
+        const std::vector<CaptureTextItem> status = cellsInBand(layout, *statusBand, unplayed.statusText);
+        ASSERT_EQ(value.size(), 1u);
+        ASSERT_EQ(status.size(), 1u);
+
+        const QFont valueFont = captureFont(snapshot.appearance.font, value.front().role);
+        const QFont statusFont = captureFont(snapshot.appearance.font, status.front().role);
+        EXPECT_TRUE(valueFont.bold());
+        EXPECT_FALSE(statusFont.bold());
+        EXPECT_FALSE(statusFont.italic());
+        EXPECT_EQ(valueFont.pixelSize(), statusFont.pixelSize());
+        EXPECT_GE(value.front().rect.width(), advanceOf(snapshot, value.front()));
+    }
+
     TEST(TableCaptureBars, TheMarkerUsesTheChunkScaleAcrossUnequalChunks) {
         const auto unequalTable = [] {
             TableCaptureSnapshot snapshot = plainTable(2);
@@ -843,6 +871,42 @@ namespace ksv::ui {
         ASSERT_TRUE(plainLast);
         const KeyEntries noKind = keyBelow(plain, plainLayout, *plainLast);
         EXPECT_EQ(noKind.explanations, 0u);
+    }
+
+    // Rows of one real snapshot share a colour, the next tier's, so the first blocking row speaks for them all.
+    TEST(TableCaptureBars, TheKeysBlockerSampleTakesTheColourOfTheFirstBlockingRow) {
+        const auto keyDiamond = [](const TableCaptureSnapshot &snapshot) -> std::optional<CaptureGlyphItem> {
+            const CaptureLayout layout = layoutTableCapture(snapshot, false);
+            const std::optional<QRectF> lastBand = bandOfRow(snapshot, layout, 3);
+            if (!lastBand) return std::nullopt;
+            const QRectF below(0.0, lastBand->bottom(), layout.size.width(), layout.size.height() - lastBand->bottom());
+            const std::vector<CaptureGlyphItem> diamonds = glyphsIn(layout, below, CaptureGlyphItem::Kind::Diamond);
+            return diamonds.size() == 1u ? std::optional(diamonds.front()) : std::nullopt;
+        };
+
+        TableCaptureSnapshot coloured = plainTable(4);
+        const QColor rowColor(coloured.grid.tiers.at(1).barColor);
+        ASSERT_NE(rowColor, coloured.appearance.highlight);
+        coloured.grid.rows.at(1).blocker = true;
+        coloured.grid.rows.at(1).blockerColor = rowColor.name();
+        coloured.grid.rows.at(2).blocker = true;
+        coloured.grid.rows.at(2).blockerColor = coloured.grid.tiers.at(2).barColor;
+
+        const std::optional<CaptureGlyphItem> sample = keyDiamond(coloured);
+        ASSERT_TRUE(sample);
+        EXPECT_EQ(sample->color, rowColor);
+
+        TableCaptureSnapshot uncoloured = plainTable(4);
+        uncoloured.grid.rows.at(0).blocker = true;
+        const CaptureLayout uncolouredLayout = layoutTableCapture(uncoloured, false);
+        const std::optional<QRectF> band = bandOfRow(uncoloured, uncolouredLayout, 0);
+        ASSERT_TRUE(band);
+        const std::vector<CaptureGlyphItem> rowDiamonds =
+            glyphsIn(uncolouredLayout, *band, CaptureGlyphItem::Kind::Diamond);
+        ASSERT_EQ(rowDiamonds.size(), 1u);
+        const std::optional<CaptureGlyphItem> fallback = keyDiamond(uncoloured);
+        ASSERT_TRUE(fallback);
+        EXPECT_EQ(fallback->color, rowDiamonds.front().color);
     }
 
     TEST(TableCaptureBars, StatusTextNeverOverflowsItsBar) {

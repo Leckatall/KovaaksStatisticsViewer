@@ -1,6 +1,6 @@
-// Writes the sample PNGs for review. Nothing here runs in the routine suite: without
-// KSV_CAPTURE_SAMPLES_DIR the case skips before touching the disk, and it refuses to run on any platform other
-// than the real "windows" one, whose system font is what the app resolves.
+// Writes the sample PNGs for review, and checks what only the real fonts can show. Nothing here runs in the routine
+// suite: without KSV_CAPTURE_SAMPLES_DIR each case skips before touching the disk, and each refuses to run on any
+// platform other than the real "windows" one, whose system font is what the app resolves.
 
 #include <gtest/gtest.h>
 
@@ -34,6 +34,7 @@
 #include "presentation/graphs/common/axes/value_axis.h"
 #include "presentation/graphs/common/graph_vm_base.h"
 #include "presentation/graphs/common/series/series_model.h"
+#include "table_capture_fixtures.h"
 
 #include "../benchmarks/tracking/fake_benchmark_tracking_use_case.h"
 
@@ -338,7 +339,7 @@ namespace ksv::ui {
         const QString expectedFamily = QFontInfo(labelFont).family();
         for (const CaptureTextRole role: {CaptureTextRole::Title, CaptureTextRole::Context, CaptureTextRole::Body,
                                           CaptureTextRole::BodyBold, CaptureTextRole::Small,
-                                          CaptureTextRole::Tick}) {
+                                          CaptureTextRole::SmallBold, CaptureTextRole::Tick}) {
             EXPECT_EQ(QFontInfo(captureFont(appearance.font, role)).family(), expectedFamily);
         }
         const QString boldSample = QStringLiteral("The quick brown fox jumps over the lazy dog 0123456789");
@@ -382,5 +383,63 @@ namespace ksv::ui {
             ASSERT_TRUE(table.has_value()) << name;
             ASSERT_NO_FATAL_FAILURE(writeSamples(dir, QString::fromLatin1(name), layoutTableCapture(*table, true)));
         }
+    }
+
+    // The room past this fill holds the value at its plain width but not at its bold one, so a layout that measured
+    // the wrong face would send the value past the fill and off the end of the bar.
+    TEST(CaptureSamples, TheBoldValueIsMeasuredInItsOwnFace) {
+        if (qEnvironmentVariable("KSV_CAPTURE_SAMPLES_DIR").isEmpty()) {
+            GTEST_SKIP() << "KSV_CAPTURE_SAMPLES_DIR is not set";
+        }
+        ASSERT_EQ(QGuiApplication::platformName(), QStringLiteral("windows"))
+            << "the offscreen stack has no bold face";
+
+        TableCaptureSnapshot snapshot = tableFixtureSnapshot(
+            {QStringLiteral("Drill")}, {tableFixtureGroup(QStringLiteral("Everything"), 0, 1, tableFixtureTint(0))}, 1);
+        presentation::ProgressGridScenarioRow &row = snapshot.grid.rows.at(0);
+        row.personalBestText = QStringLiteral("8,888,888,888,888,888");
+
+        const auto advance = [&](const CaptureTextRole role) {
+            return QFontMetricsF(captureFont(snapshot.appearance.font, role)).horizontalAdvance(row.personalBestText);
+        };
+        const qreal plainWidth = advance(CaptureTextRole::Small);
+        const qreal boldWidth = advance(CaptureTextRole::SmallBold);
+        ASSERT_GT(boldWidth, plainWidth + 2.0);
+
+        struct Bar {
+            QRectF value;
+            QRectF fill;
+            QRectF track;
+        };
+        const auto measure = [&](const double fill) {
+            row.fills = {fill};
+            const CaptureLayout layout = layoutTableCapture(snapshot, false);
+            const QColor barColor(snapshot.grid.tiers.at(0).barColor);
+            const QRgb textColor = snapshot.appearance.text.rgb();
+            Bar bar;
+            for (const CaptureItem &item : layout.items) {
+                if (const auto *text = std::get_if<CaptureTextItem>(&item); text && text->text == row.personalBestText) {
+                    bar.value = text->rect;
+                }
+                if (const auto *rect = std::get_if<CaptureRectItem>(&item)) {
+                    if (rect->fill == barColor && rect->radius > 0.0) bar.fill = rect->rect;
+                    if (rect->fill.rgb() == textColor && rect->fill.alpha() < 255) bar.track = rect->rect;
+                }
+            }
+            return bar;
+        };
+
+        const Bar probe = measure(0.1);
+        ASSERT_FALSE(probe.value.isEmpty());
+        ASSERT_FALSE(probe.fill.isEmpty());
+        ASSERT_FALSE(probe.track.isEmpty());
+        const qreal gap = probe.value.left() - probe.fill.right();
+        const qreal roomPastFill = gap + (plainWidth + boldWidth) / 2.0;
+
+        const Bar bar = measure((probe.track.width() - roomPastFill) / probe.track.width());
+
+        EXPECT_GE(bar.value.width(), boldWidth);
+        EXPECT_LE(bar.value.right(), bar.fill.right());
+        EXPECT_GE(bar.value.left(), bar.track.left());
     }
 }

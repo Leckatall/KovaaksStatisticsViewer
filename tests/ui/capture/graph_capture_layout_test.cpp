@@ -88,6 +88,12 @@ namespace ksv::ui {
             return result;
         }
 
+        GraphSceneSeries onSharedScale(GraphSceneSeries line) {
+            line.yAxisId = 7;
+            line.yAxisName = QStringLiteral("Damage");
+            return line;
+        }
+
         GraphCaptureSnapshot snapshotOf(const QList<GraphSceneSeries> &seriesList) {
             GraphCaptureSnapshot snapshot;
             snapshot.target = CaptureTarget::Run;
@@ -222,9 +228,9 @@ namespace ksv::ui {
     TEST(GraphCaptureLayout, LegendListsEachSeriesInLineOrderWithItsStyle) {
         const GraphSceneAxis yAxis = axis(0.0, 100.0, QStringLiteral("0"), QStringLiteral("100"));
         const GraphCaptureSnapshot snapshot = snapshotOf({
-            series(1, QStringLiteral("Zulu line"), Qt::red, 1.5, yAxis),
-            series(2, QStringLiteral("Alpha line"), Qt::green, 3.0, yAxis),
-            series(3, QStringLiteral("Mike line"), Qt::blue, 4.5, yAxis),
+            onSharedScale(series(1, QStringLiteral("Zulu line"), Qt::red, 1.5, yAxis)),
+            onSharedScale(series(2, QStringLiteral("Alpha line"), Qt::green, 3.0, yAxis)),
+            onSharedScale(series(3, QStringLiteral("Mike line"), Qt::blue, 4.5, yAxis)),
         });
 
         const CaptureLayout layout = layoutOf(snapshot, kLogical);
@@ -297,9 +303,64 @@ namespace ksv::ui {
         EXPECT_GT(indexOfText(texts, averageName), scoreEntry);
         EXPECT_LT(indexOfText(texts, scoreName), accuracyEntry);
         EXPECT_LT(indexOfText(texts, averageName), accuracyEntry);
-        EXPECT_GT(indexOfText(texts, accuracyName), accuracyEntry);
-        EXPECT_LT(indexOfText(texts, accuracyName), killsEntry);
-        EXPECT_GT(indexOfText(texts, killsName), killsEntry);
+        EXPECT_LT(accuracyEntry, killsEntry);
+    }
+
+    TEST(GraphCaptureLayout, ALoneSeriesCarriesItsScaleOnOneLegendLine) {
+        const GraphSceneAxis scoreAxis = axis(1240.0, 9870.0, QStringLiteral("1,240"), QStringLiteral("9,870"));
+        const GraphSceneAxis accuracyAxis = axis(61.5, 98.2, QStringLiteral("61.5%"), QStringLiteral("98.2%"));
+        const GraphSceneAxis killsAxis = axis(3.5, 12.0, QStringLiteral("3.5/s"), QStringLiteral("12.0/s"));
+        const QString scoreName = QStringLiteral("Score");
+        const QString averageName = QStringLiteral("Score average");
+        const QString accuracyName = QStringLiteral("Accuracy");
+        const QString killsName = QStringLiteral("Kills");
+        const GraphCaptureSnapshot snapshot = snapshotOf({
+            scaledSeries(1, scoreName, Qt::red, scoreAxis, 7, scoreName),
+            scaledSeries(2, averageName, Qt::yellow, scoreAxis, 7, scoreName),
+            scaledSeries(3, accuracyName, Qt::green, accuracyAxis, 8, accuracyName),
+            series(4, killsName, Qt::blue, 2.0, killsAxis),
+        });
+
+        const CaptureLayout layout = layoutOf(snapshot, kLogical);
+
+        const std::vector<CaptureTextItem> texts = captureTextItems(layout.items);
+        const std::vector<CaptureGlyphItem> glyphs = glyphItems(layout);
+        ASSERT_EQ(glyphs.size(), static_cast<std::size_t>(snapshot.scene.series.size()));
+
+        const auto expectOneLine = [&](const QString &name, const GraphSceneAxis &scale, const QColor &color) {
+            EXPECT_EQ(textsContaining(texts, name), 1) << name.toStdString();
+            const int entry = indexOfScaleEntry(texts, name, scale);
+            ASSERT_GE(entry, 0) << name.toStdString();
+            const auto sample = std::ranges::find(glyphs, color, &CaptureGlyphItem::color);
+            ASSERT_NE(sample, glyphs.end()) << name.toStdString();
+            EXPECT_LE(sample->rect.right(), texts[entry].rect.left());
+            EXPECT_GE(sample->rect.center().y(), texts[entry].rect.top());
+            EXPECT_LE(sample->rect.center().y(), texts[entry].rect.bottom());
+        };
+        expectOneLine(accuracyName, accuracyAxis, Qt::green);
+        expectOneLine(killsName, killsAxis, Qt::blue);
+
+        const int heading = indexOfScaleEntry(texts, scoreName, scoreAxis);
+        ASSERT_GE(heading, 0);
+        EXPECT_GT(indexOfText(texts, scoreName), heading);
+        EXPECT_GT(indexOfText(texts, averageName), heading);
+    }
+
+    // A user-named axis can hold one series of another name, and neither name can stand in for the other.
+    TEST(GraphCaptureLayout, ALoneSeriesKeepsAnAxisNameThatDiffersFromItsOwn) {
+        const GraphSceneAxis yAxis = axis(61.5, 98.2, QStringLiteral("61.5%"), QStringLiteral("98.2%"));
+        const QString seriesName = QStringLiteral("Accuracy");
+        const QString axisName = QStringLiteral("Percentages");
+        const GraphCaptureSnapshot snapshot = snapshotOf({scaledSeries(1, seriesName, Qt::green, yAxis, 8, axisName)});
+
+        const CaptureLayout layout = layoutOf(snapshot, kLogical);
+
+        const std::vector<CaptureTextItem> texts = captureTextItems(layout.items);
+        EXPECT_EQ(textsContaining(texts, seriesName), 1);
+        EXPECT_EQ(textsContaining(texts, axisName), 1);
+        const int entry = indexOfScaleEntry(texts, seriesName, yAxis);
+        ASSERT_GE(entry, 0);
+        EXPECT_TRUE(texts[entry].text.contains(axisName));
     }
 
     TEST(GraphCaptureLayout, LongContextWrapsIntoStoredLines) {

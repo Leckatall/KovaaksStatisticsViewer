@@ -73,14 +73,23 @@ namespace ksv::ui {
                   m_rowHeight(std::max(lineHeight(captureFont(font, CaptureTextRole::Body)),
                                        lineHeight(captureFont(font, CaptureTextRole::BodyBold)))) {}
 
-            void startScale(const Scale &scale) {
+            void placeScale(const Scale &scale) {
                 if (!m_items.empty()) newRow();
-                placeEntry(QStringLiteral("%1: %2 to %3").arg(scale.title, scale.minLabel, scale.maxLabel),
-                           CaptureTextRole::BodyBold, nullptr);
-            }
-
-            void placeSeries(const GraphSceneSeries &series) {
-                placeEntry(series.name, CaptureTextRole::Body, &series);
+                const auto boundedBy = [&scale](const QString &name) {
+                    return QStringLiteral("%1: %2 to %3").arg(name, scale.minLabel, scale.maxLabel);
+                };
+                if (scale.series.size() == 1) {
+                    const GraphSceneSeries &series = scale.series.first();
+                    const QString name = series.name == scale.title
+                                             ? series.name
+                                             : QStringLiteral("%1 (%2)").arg(series.name, scale.title);
+                    placeEntry(boundedBy(name), CaptureTextRole::BodyBold, &series);
+                    return;
+                }
+                placeEntry(boundedBy(scale.title), CaptureTextRole::BodyBold, nullptr);
+                for (const GraphSceneSeries &series : scale.series) {
+                    placeEntry(series.name, CaptureTextRole::Body, &series);
+                }
             }
 
             [[nodiscard]] qreal height() const {
@@ -175,10 +184,7 @@ namespace ksv::ui {
         y += kSectionGap;
 
         LegendFlow legend(appearance.font, appearance.text, kPageMargin, contentWidth);
-        for (const Scale &scale : distinctScales(snapshot.scene)) {
-            legend.startScale(scale);
-            for (const GraphSceneSeries &series : scale.series) legend.placeSeries(series);
-        }
+        for (const Scale &scale : distinctScales(snapshot.scene)) legend.placeScale(scale);
 
         const QFont axisTitleFont = captureFont(appearance.font, CaptureTextRole::Body);
         const qreal axisTitleHeight = lineHeight(axisTitleFont);

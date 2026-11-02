@@ -102,6 +102,7 @@ namespace ksv::ui {
             QFont body;
             QFont bold;
             QFont small;
+            QFont smallBold;
             QFont tick;
         };
 
@@ -180,7 +181,7 @@ namespace ksv::ui {
         }
 
         qreal barHeight(const Fonts &fonts) {
-            return std::max(kBarHeight, lineHeight(fonts.small));
+            return std::max({kBarHeight, lineHeight(fonts.small), lineHeight(fonts.smallBold)});
         }
 
         qreal headerHeight(const Fonts &fonts) {
@@ -201,7 +202,7 @@ namespace ksv::ui {
             qreal required = 0.0;
             for (const ProgressGridScenarioRow &row : grid.rows) {
                 if (showsValue(row)) {
-                    const qreal room = measuredWidth(fonts.small, row.personalBestText) + kValueGap + aboveTopRoom(row);
+                    const qreal room = measuredWidth(fonts.smallBold, row.personalBestText) + kValueGap + aboveTopRoom(row);
                     required = std::max(required, 2.0 * room);
                 }
                 if (showsStatus(row)) {
@@ -358,7 +359,8 @@ namespace ksv::ui {
             const CaptureFontDescription &font = snapshot.appearance.font;
             TableMetrics metrics;
             metrics.fonts = {captureFont(font, CaptureTextRole::Body), captureFont(font, CaptureTextRole::BodyBold),
-                             captureFont(font, CaptureTextRole::Small), captureFont(font, CaptureTextRole::Tick)};
+                             captureFont(font, CaptureTextRole::Small), captureFont(font, CaptureTextRole::SmallBold),
+                             captureFont(font, CaptureTextRole::Tick)};
             measureColumns(snapshot.grid, metrics);
             measureRows(snapshot.grid, metrics);
             return metrics;
@@ -468,7 +470,7 @@ namespace ksv::ui {
         };
 
         ValuePlacement placeValue(const ProgressGridScenarioRow &row, const TableMetrics &metrics, const QRectF &bar) {
-            const qreal width = measuredWidth(metrics.fonts.small, row.personalBestText);
+            const qreal width = measuredWidth(metrics.fonts.smallBold, row.personalBestText);
             const qreal end = fillEnd(row, metrics);
             const qreal room = aboveTopRoom(row);
             const bool inside = end + kValueGap + width > bar.right() - room;
@@ -521,7 +523,7 @@ namespace ksv::ui {
                 appendMarkerTick(items, appearance, x, top, fullHeight);
                 return;
             }
-            const qreal digitMargin = (bar.height() - QFontMetricsF(metrics.fonts.small).capHeight()) / 2.0;
+            const qreal digitMargin = (bar.height() - QFontMetricsF(metrics.fonts.smallBold).capHeight()) / 2.0;
             const qreal endLength = kMarkerOverhang + std::max(0.0, digitMargin - kMarkerDigitClearance);
             appendMarkerTick(items, appearance, x, top, endLength);
             appendMarkerTick(items, appearance, x, top + fullHeight - endLength, endLength);
@@ -577,7 +579,7 @@ namespace ksv::ui {
             std::optional<QRectF> valueRect;
             if (showsValue(row)) {
                 const auto [rect, inside] = placeValue(row, metrics, bar);
-                appendText(items, rect, row.personalBestText, CaptureTextRole::Small,
+                appendText(items, rect, row.personalBestText, CaptureTextRole::SmallBold,
                            valueColor(row, grid, appearance, inside), kLeftAligned);
                 valueRect = rect;
             }
@@ -601,14 +603,16 @@ namespace ksv::ui {
             }
         }
 
+        QColor blockerColor(const ProgressGridScenarioRow &row, const CaptureAppearance &appearance) {
+            return row.blockerColor.isEmpty() ? appearance.highlight : QColor(row.blockerColor);
+        }
+
         void appendBlocker(std::vector<CaptureItem> &items, const ProgressGridScenarioRow &row,
                            const CaptureAppearance &appearance, const TableMetrics &metrics, const QRectF &band) {
             const qreal centreX = metrics.scenario.innerLeft() - kDiamondCentreInset + kMarkerSpace / 2.0;
             const QRectF rect(centreX - kDiamondSize / 2.0, band.center().y() - kDiamondSize / 2.0, kDiamondSize,
                               kDiamondSize);
-            items.emplace_back(CaptureGlyphItem{CaptureGlyphItem::Kind::Diamond, rect,
-                                                row.blockerColor.isEmpty() ? appearance.highlight
-                                                                           : QColor(row.blockerColor),
+            items.emplace_back(CaptureGlyphItem{CaptureGlyphItem::Kind::Diamond, rect, blockerColor(row, appearance),
                                                 QColor(), 0.0});
         }
 
@@ -755,8 +759,12 @@ namespace ksv::ui {
                     appendMarkerTick(items, appearance, centre.x(), slot.top(), slot.height());
                     break;
                 case KeyMark::Blocker:
-                    items.emplace_back(CaptureGlyphItem{CaptureGlyphItem::Kind::Diamond, slot, appearance.highlight,
-                                                        QColor(), 0.0});
+                    // keyEntries adds this mark only when a row blocks.
+                    items.emplace_back(CaptureGlyphItem{
+                        CaptureGlyphItem::Kind::Diamond, slot,
+                        blockerColor(*std::ranges::find_if(snapshot.grid.rows, &ProgressGridScenarioRow::blocker),
+                                     appearance),
+                        QColor(), 0.0});
                     break;
                 case KeyMark::AboveTop: {
                     const QRectF rect(centre.x() - kChevronWidth / 2.0, centre.y() - kChevronHeight / 2.0,

@@ -12,7 +12,8 @@ namespace ksv::ui {
                 case CaptureTextRole::Context: return 1.15;
                 case CaptureTextRole::Body:
                 case CaptureTextRole::BodyBold: return 1.0;
-                case CaptureTextRole::Small: return 0.85;
+                case CaptureTextRole::Small:
+                case CaptureTextRole::SmallBold: return 0.85;
                 case CaptureTextRole::Tick: return 0.8;
             }
             return 1.0;
@@ -25,7 +26,7 @@ namespace ksv::ui {
         font.setPixelSize(std::max(1, static_cast<int>(std::lround(description.pixelSize * roleRatio(role)))));
         font.setHintingPreference(QFont::PreferNoHinting);
         font.setStyleStrategy(QFont::NoSubpixelAntialias);
-        if (role == CaptureTextRole::BodyBold || role == CaptureTextRole::Title) {
+        if (role == CaptureTextRole::BodyBold || role == CaptureTextRole::SmallBold || role == CaptureTextRole::Title) {
             font.setWeight(QFont::Bold);
         }
         return font;
