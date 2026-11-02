@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "axis_painter.h"
 #include "graph_scene.h"
 
 class QPainter;
@@ -21,8 +22,14 @@ namespace ksv::ui {
 
     void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds);
 
+    void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds,
+                         const AxisPainter::Style &style);
+
     [[nodiscard]] QRectF graphPlotRect(const QRectF &bounds, const std::optional<GraphSceneAxis> &yAxis,
                                        const std::optional<GraphSceneAxis> &xAxis);
+
+    [[nodiscard]] QRectF graphPlotRect(const QRectF &bounds, const std::optional<GraphSceneAxis> &yAxis,
+                                       const std::optional<GraphSceneAxis> &xAxis, const AxisPainter::Style &style);
 }
 
 #endif //KOVAAKSSTATSVIEWER_GRAPH_SCENE_PAINTER_H

@@ -12,6 +12,7 @@
 #include <QString>
 #include <QtGlobal>
 #include <functional>
+#include <optional>
 
 class QPainter;
 
@@ -24,6 +25,7 @@ namespace ksv::ui {
             QColor gridColor{"#3D3D3D"};
             QColor textColor = QColor(255, 255, 255, 255*0.6);
             int fontPointSize = 8;
+            std::optional<QFont> font;
             qreal labelGap = 3;
             // Minimum free space between two neighbouring labels.
             qreal labelSpacing = 6;

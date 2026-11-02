@@ -6,12 +6,14 @@
 #include <type_traits>
 #include <utility>
 
+#include <QFont>
 #include <QImage>
 #include <QPainter>
 #include <QRectF>
 #include <QStringList>
 #include <QVariantList>
 
+#include "components/axis_painter.h"
 #include "components/graph_canvas.h"
 #include "components/graph_scene.h"
 #include "components/graph_scene_painter.h"
@@ -510,5 +512,55 @@ namespace ksv::ui {
         const QRectF plot = graphPlotRect(QRectF(0, 0, kWidth, kHeight), scene.labelledYAxis, scene.xAxis);
 
         EXPECT_EQ(plot, canvas.property("plotArea").toRectF());
+    }
+
+    namespace {
+        AxisPainter::Style largeFontStyle() {
+            AxisPainter::Style style;
+            QFont font;
+            font.setPixelSize(36);
+            style.font = font;
+            return style;
+        }
+    }
+
+    TEST(GraphScenePaint, AnExplicitFontWidensThePlotMarginWithItsLabels) {
+        const GraphScene scene = handBuiltScene(QColor(Qt::red));
+        const QRectF bounds(0, 0, 400, 300);
+
+        const QRectF plain = graphPlotRect(bounds, scene.labelledYAxis, scene.xAxis, AxisPainter::Style{});
+        const QRectF styled = graphPlotRect(bounds, scene.labelledYAxis, scene.xAxis, largeFontStyle());
+
+        EXPECT_GT(styled.left(), plain.left());
+        EXPECT_LT(styled.bottom(), plain.bottom());
+    }
+
+    TEST(GraphScenePaint, AnExplicitFontChangesThePaintedLabels) {
+        const GraphScene scene = handBuiltScene(QColor(Qt::red));
+        const QRectF bounds(0, 0, 400, 300);
+        const AxisPainter::Style large = largeFontStyle();
+        QImage plain(400, 300, QImage::Format_RGB32);
+        QImage styled(400, 300, QImage::Format_RGB32);
+        plain.fill(Qt::black);
+        styled.fill(Qt::black);
+
+        {
+            QPainter painter(&plain);
+            paintGraphScene(painter, scene, bounds, AxisPainter::Style{});
+        }
+        {
+            QPainter painter(&styled);
+            paintGraphScene(painter, scene, bounds, large);
+        }
+
+        const QRectF margin(0, 0, graphPlotRect(bounds, scene.labelledYAxis, scene.xAxis, AxisPainter::Style{}).left(),
+                            bounds.height());
+        int differing = 0;
+        for (int y = 0; y < plain.height(); ++y) {
+            for (int x = 0; x < int(margin.width()); ++x) {
+                if (plain.pixel(x, y) != styled.pixel(x, y)) ++differing;
+            }
+        }
+        EXPECT_GT(differing, 0);
     }
 }

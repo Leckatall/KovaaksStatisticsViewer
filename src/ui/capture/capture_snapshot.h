@@ -9,6 +9,7 @@
 #include <optional>
 #include <vector>
 
+#include "capture/capture_font_description.h"
 #include "components/graph_scene.h"
 #include "presentation/benchmarks/tracking/benchmark_tracking_vm.h"
 #include "presentation/benchmarks/tracking/progress_grid_content.h"
@@ -28,11 +29,6 @@ namespace ksv::ui {
     };
 
     [[nodiscard]] QString captureTargetName(CaptureTarget target);
-
-    struct CaptureFontDescription {
-        QStringList families;
-        int pixelSize = 0;
-    };
 
     struct CaptureAppearance {
         QColor window, base, text, button, buttonText, mid, placeholderText, highlight, attention;

@@ -15,8 +15,6 @@ namespace ksv::ui {
         constexpr qreal kMinBottomMargin = 16;
         constexpr qreal kTopMargin = 10;
         constexpr qreal kRightMargin = 20;
-        // Matches the fudge AxisPainter::paint already bakes into its label rects.
-        const qreal kLabelExtentPadding = AxisPainter::Style{}.labelGap + 2;
 
         std::function<QString(qreal)> labelsOf(const GraphSceneAxis &axis) {
             return [&axis](const qreal tick) { return axis.labelFor(tick); };
@@ -31,14 +29,15 @@ namespace ksv::ui {
 
         // A canvas with no view model builds a scene whose x axis has no ticks, no labelled axis, no
         // series and no band, so every draw below is empty for it, as the live canvas requires.
-        void drawAxes(QPainter &painter, const GraphScene &scene, const QRectF &rect, const QRectF &bounds) {
+        void drawAxes(QPainter &painter, const GraphScene &scene, const QRectF &rect, const QRectF &bounds,
+                      const AxisPainter::Style &style) {
             // Only one series' Y axis gets labels; all project against their own axis.
             if (const auto &yAxis = scene.labelledYAxis) {
                 AxisPainter::paint(painter, rect, bounds, AxisPainter::Orientation::Vertical,
-                                   yAxis->min, yAxis->max, yAxis->ticks, labelsOf(*yAxis));
+                                   yAxis->min, yAxis->max, yAxis->ticks, labelsOf(*yAxis), style);
             }
             AxisPainter::paint(painter, rect, bounds, AxisPainter::Orientation::Horizontal,
-                               scene.xAxis.min, scene.xAxis.max, scene.xAxis.ticks, labelsOf(scene.xAxis));
+                               scene.xAxis.min, scene.xAxis.max, scene.xAxis.ticks, labelsOf(scene.xAxis), style);
         }
 
         void drawReferenceLines(QPainter &painter, const GraphScene &scene, const QRectF &rect) {
@@ -109,9 +108,14 @@ namespace ksv::ui {
     }
 
     void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds) {
+        paintGraphScene(painter, scene, bounds, AxisPainter::Style{});
+    }
+
+    void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds,
+                         const AxisPainter::Style &style) {
         painter.setRenderHint(QPainter::Antialiasing, true);
-        const QRectF rect = graphPlotRect(bounds, scene.labelledYAxis, scene.xAxis);
-        drawAxes(painter, scene, rect, bounds);
+        const QRectF rect = graphPlotRect(bounds, scene.labelledYAxis, scene.xAxis, style);
+        drawAxes(painter, scene, rect, bounds, style);
         drawReferenceLines(painter, scene, rect);
         drawSelectedBand(painter, scene, rect);
         drawSeries(painter, scene, rect);
@@ -119,18 +123,24 @@ namespace ksv::ui {
 
     QRectF graphPlotRect(const QRectF &bounds, const std::optional<GraphSceneAxis> &yAxis,
                          const std::optional<GraphSceneAxis> &xAxis) {
+        return graphPlotRect(bounds, yAxis, xAxis, AxisPainter::Style{});
+    }
+
+    QRectF graphPlotRect(const QRectF &bounds, const std::optional<GraphSceneAxis> &yAxis,
+                         const std::optional<GraphSceneAxis> &xAxis, const AxisPainter::Style &style) {
+        const qreal labelExtentPadding = style.labelGap + 2;
         qreal leftMargin = kMinLeftMargin;
         qreal bottomMargin = kMinBottomMargin;
 
         if (yAxis) {
             leftMargin = std::max(kMinLeftMargin,
                                   AxisPainter::measureLabelExtent(AxisPainter::Orientation::Vertical, yAxis->ticks,
-                                                                  labelsOf(*yAxis)) + kLabelExtentPadding);
+                                                                  labelsOf(*yAxis), style) + labelExtentPadding);
         }
         if (xAxis) {
             bottomMargin = std::max(kMinBottomMargin,
                                     AxisPainter::measureLabelExtent(AxisPainter::Orientation::Horizontal, xAxis->ticks,
-                                                                    labelsOf(*xAxis)) + kLabelExtentPadding);
+                                                                    labelsOf(*xAxis), style) + labelExtentPadding);
         }
 
         return {
