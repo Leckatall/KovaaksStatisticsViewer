@@ -204,6 +204,8 @@ qt_add_qml_module(ksv_ui
             presentation/benchmarks/tracking/benchmark_progress_grid_model.cpp
             presentation/benchmarks/tracking/benchmark_tracking_vm.h
             presentation/benchmarks/tracking/benchmark_tracking_vm.cpp
+            presentation/capture/capture_vm.h
+            presentation/capture/capture_vm.cpp
             presentation/scenarios/scenario_list_model.h
             presentation/scenarios/scenario_list_model.cpp
             presentation/scenarios/run_list_model.h
@@ -226,6 +228,7 @@ target_include_directories(ksv_ui PUBLIC
 target_include_directories(ksv_ui PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/benchmarks/manager
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/benchmarks/tracking
+        ${CMAKE_CURRENT_SOURCE_DIR}/presentation/capture
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/expression
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/graphs
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/graphs/common

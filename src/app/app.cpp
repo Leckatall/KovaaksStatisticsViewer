@@ -42,6 +42,9 @@
 #include "usecases/image_output_use_case.h"
 #include "qt_data/qt_clipboard_image_writer.h"
 #include "qt_data/qt_png_image_writer.h"
+#include "capture/capture_limits.h"
+#include "capture/capture_render.h"
+#include "capture/graph_capture_layout.h"
 
 
 namespace ksv::application {
@@ -143,6 +146,10 @@ namespace ksv::application {
         m_benchmarkTrackingVm = new presentation::BenchmarkTrackingViewModel(m_benchmarkTrackingUseCase, this);
 
         m_imageOutputUseCase = std::make_shared<ImageOutputUseCase>(std::move(clipboardWriter), std::move(pngWriter));
+        m_captureVm = new presentation::CaptureViewModel(
+            m_imageOutputUseCase,
+            {m_graphVm, m_playtimeVm, m_completionHistoryVm, m_benchmarkTrackingVm},
+            ui::makeCaptureRenderFunction(ui::provisionalCaptureLimits(), ui::provisionalCaptureComposition()), this);
     }
 
     QVariantMap App::initialProperties() const {
@@ -154,7 +161,8 @@ namespace ksv::application {
             {"settingsVm", QVariant::fromValue(m_settingsVm)},
             {"scenarioBrowserVm", QVariant::fromValue(m_scenarioBrowserVm)},
             {"benchmarkManagerVm", QVariant::fromValue(m_benchmarkManagerVm)},
-            {"benchmarkTrackingVm", QVariant::fromValue(m_benchmarkTrackingVm)}
+            {"benchmarkTrackingVm", QVariant::fromValue(m_benchmarkTrackingVm)},
+            {"captureVm", QVariant::fromValue(m_captureVm)}
         };
     }
 

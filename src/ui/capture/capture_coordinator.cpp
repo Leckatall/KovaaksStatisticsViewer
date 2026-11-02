@@ -1,6 +1,7 @@
 #include "capture/capture_coordinator.h"
 
 #include <QPointer>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <utility>
@@ -362,7 +363,17 @@ namespace ksv::ui {
     }
 
     QString CaptureCoordinator::suggestedFileName() const {
-        return {};
+        if (!m_session) return {};
+        const CaptureContent &content = *m_session->content;
+        QString name = std::holds_alternative<GraphCaptureSnapshot>(content)
+                           ? std::get<GraphCaptureSnapshot>(content).context.title
+                           : std::get<TableCaptureSnapshot>(content).benchmarkName;
+        static const QRegularExpression unsafe(QStringLiteral(R"([\\/:*?"<>|\x00-\x1f])"));
+        name.replace(unsafe, QStringLiteral("-"));
+        name = name.trimmed();
+        while (name.endsWith(QLatin1Char('.'))) name.chop(1);
+        if (name.isEmpty()) name = captureTargetName(m_session->target);
+        return name + QStringLiteral(".png");
     }
 
     void CaptureCoordinator::handleOutputCompleted(const application::ImageOutputResult &result) {

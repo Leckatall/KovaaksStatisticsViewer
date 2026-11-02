@@ -16,6 +16,7 @@
 #include "presentation/app/settings_vm.h"
 #include "presentation/benchmarks/manager/benchmark_manager_vm.h"
 #include "presentation/benchmarks/tracking/benchmark_tracking_vm.h"
+#include "presentation/capture/capture_vm.h"
 #include "interfaces/i_proto_decoder.h"
 #include "../data/interfaces/i_file_service.h"
 #include "../data/interfaces/i_run_ingestor.h"
@@ -79,6 +80,7 @@ namespace ksv::application {
         [[nodiscard]] presentation::BenchmarkTrackingViewModel* benchmarkTrackingVm() const {
             return m_benchmarkTrackingVm;
         }
+        [[nodiscard]] presentation::CaptureViewModel* captureVm() const { return m_captureVm; }
         [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
         [[nodiscard]] std::shared_ptr<data::IDaySource> daySource() const { return m_daySource; }
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
@@ -115,6 +117,7 @@ namespace ksv::application {
         presentation::ScenarioBrowserViewModel* m_scenarioBrowserVm;
         presentation::BenchmarkManagerViewModel* m_benchmarkManagerVm = nullptr;
         presentation::BenchmarkTrackingViewModel* m_benchmarkTrackingVm = nullptr;
+        presentation::CaptureViewModel* m_captureVm = nullptr;
 
         std::shared_ptr<ISettingsService> m_settingsService;
         std::shared_ptr<data::IDaySource> m_daySource;

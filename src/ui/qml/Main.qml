@@ -52,6 +52,7 @@ ApplicationWindow {
     required property var scenarioBrowserVm
     required property var benchmarkManagerVm
     required property var benchmarkTrackingVm
+    required property var captureVm
 
     FolderDialog {
         id: folderDialog
@@ -266,6 +267,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         visualSettingsManager.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
+        root.captureVm.useTheme(Theme, root.font)
         root.restorePosition()
         root.visible = true
     }

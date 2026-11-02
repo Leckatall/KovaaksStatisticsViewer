@@ -56,6 +56,17 @@ TestCase {
 
     QtObject { id: fakePlaytimeVm }
     QtObject {
+        id: fakeCaptureVm
+        property int themeCalls: 0
+        property var lastTheme: null
+        property var lastFont: null
+        function useTheme(theme, font) {
+            themeCalls++
+            lastTheme = theme
+            lastFont = font
+        }
+    }
+    QtObject {
         id: fakeSessionVm
         property int refreshCalls: 0
         property bool profileImportBusy: false
@@ -74,6 +85,7 @@ TestCase {
     }
 
     function cleanup() {
+        fakeCaptureVm.themeCalls = 0
         fakeSessionVm.refreshCalls = 0
         fakeSettingsVm.kovaaksDirValid = true
         fakeScenarioBrowserVm.hasScenarios = true
@@ -90,6 +102,14 @@ TestCase {
         verify(refresh !== null)
         refresh.trigger()
         compare(fakeSessionVm.refreshCalls, 1)
+    }
+
+    function test_theThemeReachesTheCaptureViewModel() {
+        const win = createMain()
+        compare(fakeCaptureVm.themeCalls, 1)
+        verify(fakeCaptureVm.lastTheme !== null)
+        compare(fakeCaptureVm.lastFont.family, win.font.family)
+        compare(fakeCaptureVm.lastFont.pixelSize, win.font.pixelSize)
     }
 
     function test_profileStatusBarIsTheHiddenWindowFooterWhileIdle() {
@@ -109,7 +129,8 @@ TestCase {
             settingsVm: fakeSettingsVm,
             scenarioBrowserVm: fakeScenarioBrowserVm,
             benchmarkManagerVm: managerVm || fakeManagerVm,
-            benchmarkTrackingVm: fakeTrackingVm
+            benchmarkTrackingVm: fakeTrackingVm,
+            captureVm: fakeCaptureVm
         })
         verify(win !== null, "Main.qml failed to instantiate")
         tryVerify(() => win.contentItem !== null && win.contentItem.width > 0,

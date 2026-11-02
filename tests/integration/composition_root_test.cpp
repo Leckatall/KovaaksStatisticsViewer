@@ -198,6 +198,12 @@ namespace {
         EXPECT_FALSE(app->profileService()->getScenarioList().empty());
     }
 
+    TEST_F(CompositionRootTest, SuppliesTheCaptureViewModel) {
+        const auto supplied = app->initialProperties().value("captureVm").value<QObject *>();
+        ASSERT_NE(supplied, nullptr);
+        EXPECT_EQ(supplied, app->captureVm());
+    }
+
     TEST_F(CompositionRootTest, SessionControllerReadsThroughToTheRealProfile) {
         // SessionController::getScenarioList delegates to the same wired ProfileService.
         EXPECT_EQ(app->sessionController()->getScenarioList().size(),
