@@ -26,6 +26,8 @@ Item {
         TierBar { objectName: "probe"; height: 16 }
     }
 
+    Component { id: captureStubComponent; CaptureVmStub {} }
+
     Component {
         id: progressGridComponent
         BenchmarkProgressGrid { }
@@ -80,6 +82,42 @@ Item {
         }
         function find(ws, name) { return ItemLookup.findByObjectName(ws, name) }
         function findAllPrefixed(ws, prefix) { return ItemLookup.findByObjectNamePrefix(ws, prefix, []) }
+
+        function test_acceptsACaptureViewModel() {
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const component = Qt.createComponent("../../../src/ui/qml/benchmark/BenchmarkWorkspace.qml")
+            const ws = component.createObject(root, {captureVm: capture})
+            verify(ws.captureVm === capture, "captureVm was not accepted")
+            ws.destroy()
+        }
+
+        function test_historyCardsCarryCaptureActions() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            const capture = createTemporaryObject(captureStubComponent, root)
+            ws.captureVm = capture
+            for (const key of ["benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"])
+                verify(find(ws, "captureCopy_" + key) !== null, "no camera for " + key)
+        }
+
+        function test_theHeaderCarriesTheTableAction() {
+            const states = [
+                {tag: "trackable", fx: TestDoubles.trackingFixtureTrackable()},
+                {tag: "incomplete", fx: TestDoubles.trackingFixtureIncomplete()}
+            ]
+            for (const state of states) {
+                const ws = makeWorkspace(state.fx)
+                const capture = createTemporaryObject(captureStubComponent, root)
+                ws.captureVm = capture
+                const camera = find(find(ws, "benchmarkHeader"), "captureCopy_benchmarkTable")
+                verify(camera !== null, "no table camera in " + state.tag)
+                mouseClick(camera)
+                const copies = capture.callsNamed("quickCopy")
+                compare(copies.length, 1, state.tag)
+                compare(copies[0].args[0], "benchmarkTable")
+                verify(copies[0].args[1] === null, state.tag)
+                ws.destroy()
+            }
+        }
 
         function pickerOf(ws) { return find(ws, "benchmarkSelector").parent }
 

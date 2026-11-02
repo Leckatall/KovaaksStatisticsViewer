@@ -28,6 +28,7 @@ TestCase {
         }
     }
     Component { id: barComponent; ProfileStatusBar { width: 650; noticeDuration: 100 } }
+    Component { id: captureStubComponent; CaptureVmStub {} }
     SignalSpy { id: detailsSpy; signalName: "detailsRequested" }
 
     function makeBar(vmProps) {
@@ -46,15 +47,63 @@ TestCase {
         finishImport(vm, props)
     }
 
-    function test_hiddenWhenIdleStaleOrUpToDate() {
+    function test_acceptsACaptureViewModel() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase)
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        verify(bar.captureVm === capture, "captureVm was not accepted")
+    }
+
+    function test_captureFeedbackCoexistsWithAnUnresolvedWarning() {
+        const vm = createTemporaryObject(vmComponent, testCase, {
+            profileImportOutcome: "partial",
+            profileImportIssues: [{path: "a.perf", message: "x", retryable: true}]
+        })
+        const capture = createTemporaryObject(captureStubComponent, testCase,
+            {feedbackKind: "success", feedbackText: "Copied a graph with a deliberately long descriptive name"})
+        const idle = createTemporaryObject(barComponent, testCase,
+            {sessionVm: createTemporaryObject(vmComponent, testCase), width: 400})
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture, width: 400})
+        compare(bar.mode, "warning")
+        const warning = find(bar, "profileStatusText")
+        const capText = find(bar, "captureStatusText")
+        verify(capText !== null, "the bar has no capture status text")
+        compare(warning.visible, true)
+        compare(find(bar, "profileStatusDetailsButton").visible, true)
+        compare(find(bar, "profileStatusDismissButton").visible, true)
+        compare(capText.visible, true)
+        compare(warning.elide, Text.ElideRight)
+        compare(capText.elide, Text.ElideRight)
+        compare(warning.lineCount, 1)
+        compare(capText.lineCount, 1)
+        compare(bar.height, idle.height)
+    }
+
+    function test_captureFeedbackAppearsDuringImport() {
+        const vm = createTemporaryObject(vmComponent, testCase, {profileImportBusy: true, profileImportPhase: "scanning"})
+        const capture = createTemporaryObject(captureStubComponent, testCase,
+            {feedbackKind: "failure", feedbackText: "Could not copy a graph"})
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        compare(bar.mode, "busy")
+        compare(find(bar, "profileStatusProgressBar").visible, true)
+        const capText = find(bar, "captureStatusText")
+        verify(capText !== null, "the bar has no capture status text")
+        compare(capText.visible, true)
+    }
+
+    function test_idleKeepsTheFooterVisible() {
         const {vm, bar} = makeBar()
-        compare(bar.mode, "hidden")
-        compare(bar.visible, false)
+        const height = bar.height
+        compare(bar.mode, "idle")
+        compare(bar.visible, true)
+        compare(find(bar, "profileStatusText").text, "")
         vm.profileImportOutcome = "stale"
-        compare(bar.mode, "hidden")
+        compare(bar.mode, "idle")
         runImport(vm, {profileImportOutcome: "succeeded"})
-        compare(bar.mode, "hidden")
-        compare(bar.visible, false)
+        compare(bar.mode, "idle")
+        compare(bar.visible, true)
+        compare(bar.height, height)
+        compare(find(bar, "profileStatusText").text, "")
     }
 
     function test_busyShowsProgressText() {
@@ -82,7 +131,7 @@ TestCase {
         runImport(vm, {profileImportOutcome: "succeeded", profileImportAdded: 2})
         compare(bar.mode, "notice")
         compare(find(bar, "profileStatusText").text, "Added 2 runs")
-        tryCompare(bar, "mode", "hidden")
+        tryCompare(bar, "mode", "idle")
     }
 
     function test_noticeCopyForEnrichedAndMixedCounts() {
@@ -120,7 +169,7 @@ TestCase {
         const issues = [{path: "a.perf", message: "x", retryable: false, previouslyFailed: true}]
         let made = makeBar()
         runImport(made.vm, {profileImportOutcome: "partial", profileImportIssues: issues})
-        compare(made.bar.mode, "hidden")
+        compare(made.bar.mode, "idle")
         made = makeBar()
         runImport(made.vm, {profileImportOutcome: "partial", profileImportAdded: 1, profileImportIssues: issues})
         compare(made.bar.mode, "notice")
@@ -131,7 +180,7 @@ TestCase {
         const issues = [{path: "a.perf", message: "x", retryable: true}]
         runImport(vm, {profileImportOutcome: "partial", profileImportIssues: issues})
         mouseClick(find(bar, "profileStatusDismissButton"))
-        compare(bar.mode, "hidden")
+        compare(bar.mode, "idle")
         runImport(vm, {profileImportOutcome: "partial", profileImportIssues: issues})
         compare(bar.mode, "warning")
     }

@@ -19,6 +19,7 @@ Item {
     property real markedX: NaN
     // Whether a left click inside the plot reports the nearest data point's x through pointClicked.
     property bool clickable: false
+    readonly property alias graphCanvas: canvas
     readonly property rect plotArea: canvas.plotArea
 
     signal pointClicked(real dataX)

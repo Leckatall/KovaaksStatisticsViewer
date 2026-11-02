@@ -11,6 +11,7 @@ OverflowScrollView {
 
     property var trackingVm
     property var settingsVm: null
+    property var captureVm: null
     property var visualSettings: null
     property real bodyWidth
     property bool wide
@@ -78,6 +79,7 @@ OverflowScrollView {
             namePrefix: "rankHistory"
             graphKey: "benchmarkRank"
             settingsVm: benchmarkWorkspaceScroll.settingsVm
+            captureVm: benchmarkWorkspaceScroll.captureVm
             onMoreGraphSettingsRequested: key => benchmarkWorkspaceScroll.moreGraphSettingsRequested(key)
             onHideGraphRequested: key => trackableScrollColumn.settings.quickHideGraph(key)
             historyModel: benchmarkWorkspaceScroll.trackingVm ? benchmarkWorkspaceScroll.trackingVm.rankHistory : null
@@ -96,6 +98,7 @@ OverflowScrollView {
             namePrefix: "recentRankHistory"
             graphKey: "benchmarkRecentRank"
             settingsVm: benchmarkWorkspaceScroll.settingsVm
+            captureVm: benchmarkWorkspaceScroll.captureVm
             onMoreGraphSettingsRequested: key => benchmarkWorkspaceScroll.moreGraphSettingsRequested(key)
             onHideGraphRequested: key => trackableScrollColumn.settings.quickHideGraph(key)
             historyModel: benchmarkWorkspaceScroll.trackingVm ? benchmarkWorkspaceScroll.trackingVm.recentRankHistory : null
@@ -114,6 +117,7 @@ OverflowScrollView {
             namePrefix: "playtimeHistory"
             graphKey: "benchmarkPlaytime"
             settingsVm: benchmarkWorkspaceScroll.settingsVm
+            captureVm: benchmarkWorkspaceScroll.captureVm
             onMoreGraphSettingsRequested: key => benchmarkWorkspaceScroll.moreGraphSettingsRequested(key)
             onHideGraphRequested: key => trackableScrollColumn.settings.quickHideGraph(key)
             historyModel: benchmarkWorkspaceScroll.trackingVm ? benchmarkWorkspaceScroll.trackingVm.playtimeHistory : null

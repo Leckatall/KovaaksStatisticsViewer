@@ -10,6 +10,7 @@ Frame {
     required property var columnVisibility
     required property var historyAxisSettings
     property var settingsVm: null
+    property var captureVm: null
 
     signal moreGraphSettingsRequested(string graphKey)
     signal hideGraphRequested(string graphKey)
@@ -112,6 +113,11 @@ Frame {
                 objectName: "historyTitleLabel"
                 text: root.historyVm.scenarioTitle
             }
+            CaptureActions {
+                captureVm: root.captureVm
+                targetKey: "scenarioHistory"
+                canvas: canvasLoader.item ? canvasLoader.item.graphCanvas : null
+            }
             GraphGear {
                 graphKey: "scenarioHistory"
                 settingsVm: root.settingsVm
@@ -121,11 +127,13 @@ Frame {
         }
 
         Loader {
+            id: canvasLoader
             Layout.fillHeight: true
             Layout.fillWidth: true
             active: root.historyVm.visibleRunCount >= 1
             sourceComponent: Component {
                 RowLayout {
+                    readonly property alias graphCanvas: historyCanvas.graphCanvas
                     anchors.fill: parent
                     spacing: 0
 

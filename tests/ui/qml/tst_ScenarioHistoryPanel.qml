@@ -53,6 +53,8 @@ Item {
         }
     }
 
+    Component { id: captureStubComponent; CaptureVmStub {} }
+
     TestCase {
         name: "ScenarioHistoryPanelTest"
         when: windowShown
@@ -60,6 +62,25 @@ Item {
         function init() {
             historyVisibilitySettings.value = {"1": true, "2": false, "3": false, "4": false, "5": false, "6": false}
             axisSettings.yAxisColumnKey = "1"
+        }
+
+        function test_acceptsACaptureViewModel() {
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const panel = createTemporaryObject(panelComponent, root, {captureVm: capture})
+            verify(panel.captureVm === capture, "captureVm was not accepted")
+        }
+
+        function test_captureActionsReachTheLoadedCanvas() {
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const panel = createTemporaryObject(fewRunsPanelComponent, root, {captureVm: capture})
+            tryVerify(() => findChild(panel, "historyGraphCanvas") !== null, 2000)
+            const camera = findChild(panel, "captureCopy_scenarioHistory")
+            verify(camera !== null, "the history panel has no camera")
+            mouseClick(camera)
+            const copies = capture.callsNamed("quickCopy")
+            compare(copies.length, 1)
+            compare(copies[0].args[0], "scenarioHistory")
+            verify(copies[0].args[1] !== null && copies[0].args[1] !== undefined)
         }
 
         function test_legendListsAllSixLinesIncludingHiddenOnes() {

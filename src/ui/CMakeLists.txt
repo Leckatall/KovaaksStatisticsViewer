@@ -70,6 +70,9 @@ qt_add_qml_module(ksv_ui
             qml/shell/AppMenuBar.qml
             qml/shell/SettingsDialog.qml
             qml/shell/ProfileStatusBar.qml
+            qml/shell/CaptureStatusStrip.qml
+            qml/shell/CapturePreviewDialog.qml
+            qml/graph/CaptureActions.qml
             qml/benchmark/BenchmarkManagerDialog.qml
             qml/benchmark/BenchmarkEditorTable.qml
             qml/benchmark/BenchmarkMappingPanel.qml
@@ -111,6 +114,11 @@ qt_add_qml_module(ksv_ui
             qml/icons/square-pen.svg
             qml/icons/settings.svg
             qml/icons/x.svg
+            qml/icons/check.svg
+            qml/icons/camera.svg
+            qml/icons/chevron-down.svg
+            qml/icons/circle-alert.svg
+            qml/icons/info.svg
             qml/icons/eye.svg
             qml/icons/eye-off.svg
         SOURCES
@@ -138,6 +146,8 @@ qt_add_qml_module(ksv_ui
             presentation/graphs/completion_history_vm.cpp
         components/graph_canvas.h
         components/graph_canvas.cpp
+        components/capture_preview_item.h
+        components/capture_preview_item.cpp
         components/axis_painter.h
         components/axis_painter.cpp
         components/series_painter.h

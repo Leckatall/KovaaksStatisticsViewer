@@ -40,6 +40,7 @@ add_executable(ui_tests
     capture/capture_sizing_test.cpp
     capture/capture_vm_test.cpp
     capture/capture_limits_test.cpp
+    capture/capture_preview_item_test.cpp
     capture/capture_render_test.cpp
     capture/capture_render_queue_test.cpp
     capture/capture_renderer_test.cpp

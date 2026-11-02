@@ -6,6 +6,7 @@ import KovaaksStatsViewer
 Rectangle {
     id: root
     required property var sessionVm
+    property var captureVm: null
     property int noticeDuration: 4000
     signal detailsRequested()
 
@@ -27,9 +28,8 @@ Rectangle {
     readonly property string mode: root.busy ? "busy"
         : root.warningActive ? "warning"
         : root.noticeActive ? "notice"
-        : "hidden"
+        : "idle"
 
-    visible: root.mode !== "hidden"
     implicitHeight: 26
     color: Qt.darker(palette.window, 1.3)
 
@@ -137,6 +137,14 @@ Rectangle {
             font.pixelSize: 11
             Accessible.name: qsTr("Dismiss")
             onClicked: root.dismissed = true
+        }
+
+        CaptureStatusStrip {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 60
+            Layout.maximumWidth: implicitWidth
+            Layout.fillHeight: true
+            captureVm: root.captureVm
         }
     }
 }

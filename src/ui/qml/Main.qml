@@ -75,6 +75,25 @@ ApplicationWindow {
         visualSettings: visualSettingsManager
     }
 
+    CapturePreviewDialog {
+        captureVm: root.captureVm
+        transientParent: root
+    }
+
+    // Runs after a CaptureActions origin has had its chance to take focus back; if none did, the
+    // owning workspace gets it instead of focus being lost with the closed window.
+    function restoreWorkspaceFocus() {
+        const workspace = workspaceStack.children[workspaceStack.currentIndex]
+        for (let item = root.activeFocusItem; item; item = item.parent)
+            if (item === workspace) return
+        workspace.forceActiveFocus()
+    }
+
+    Connections {
+        target: root.captureVm
+        function onPreviewClosed() { Qt.callLater(root.restoreWorkspaceFocus) }
+    }
+
     AboutDialog {
         id: aboutDialog
     }
@@ -108,6 +127,7 @@ ApplicationWindow {
     footer: ProfileStatusBar {
         objectName: "profileStatusBar"
         sessionVm: root.sessionVm
+        captureVm: root.captureVm
         onDetailsRequested: settingsDialog.openProfile()
     }
 
@@ -230,6 +250,7 @@ ApplicationWindow {
                 scenarioBrowserVm: root.scenarioBrowserVm
                 visualSettings: visualSettingsManager
                 settingsVm: root.settingsVm
+                captureVm: root.captureVm
                 onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
                 onMoreGraphSettingsRequested: graphKey => settingsDialog.openGraph(graphKey)
             }
@@ -238,6 +259,7 @@ ApplicationWindow {
                 objectName: "benchmarkWorkspace"
                 trackingVm: root.benchmarkTrackingVm
                 settingsVm: root.settingsVm
+                captureVm: root.captureVm
                 visualSettings: visualSettingsManager
                 onManageBenchmarksRequested: benchmarkManagerDialog.open()
                 onMoreGraphSettingsRequested: graphKey => settingsDialog.openGraph(graphKey)

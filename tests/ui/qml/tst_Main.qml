@@ -57,6 +57,7 @@ TestCase {
     QtObject { id: fakePlaytimeVm }
     QtObject {
         id: fakeCaptureVm
+        signal previewClosed()
         property int themeCalls: 0
         property var lastTheme: null
         property var lastFont: null
@@ -112,12 +113,24 @@ TestCase {
         compare(fakeCaptureVm.lastFont.pixelSize, win.font.pixelSize)
     }
 
-    function test_profileStatusBarIsTheHiddenWindowFooterWhileIdle() {
+    function test_profileStatusBarIsTheVisibleWindowFooterWhileIdle() {
         const win = createMain()
         const bar = win.footer
         verify(bar !== null, "Main.qml has no footer")
         compare(bar.objectName, "profileStatusBar")
-        compare(bar.visible, false)
+        compare(bar.visible, true)
+    }
+
+    function test_previewCloseFallsBackToTheWorkspace() {
+        const win = createMain()
+        win.requestActivate()
+        tryVerify(() => win.active, 2000, "the Main window never became the active window")
+        tabBar(win).forceActiveFocus()
+        const workspaces = stack(win)
+        const inside = item => { for (let p = item; p; p = p.parent) if (p === workspaces) return true; return false }
+        verify(!inside(win.activeFocusItem), "focus must start outside the workspaces")
+        fakeCaptureVm.previewClosed()
+        tryVerify(() => inside(win.activeFocusItem), 2000, "focus did not fall back into the workspace")
     }
 
     function createMain(managerVm) {

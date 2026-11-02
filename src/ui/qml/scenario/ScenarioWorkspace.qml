@@ -12,6 +12,7 @@ Item {
     required property var scenarioBrowserVm
     required property var visualSettings
     property var settingsVm: null
+    property var captureVm: null
     // Whether every configured Kovaaks folder is usable (SettingsViewModel.kovaaksDirValid).
     property bool kovaaksFolderValid: true
 
@@ -67,6 +68,7 @@ Item {
                 graphVm: root.graphVm
                 visualSettings: root.visualSettings
                 settingsVm: root.settingsVm
+                captureVm: root.captureVm
                 onConfigureLinesRequested: root.configureGraphLinesRequested()
                 onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
                 onHideGraphRequested: key => root.visualSettings.quickHideGraph(key)
@@ -86,6 +88,7 @@ Item {
                 columnVisibility: root.visualSettings.historyColumnVisibility
                 historyAxisSettings: root.visualSettings
                 settingsVm: root.settingsVm
+                captureVm: root.captureVm
                 onSeriesVisibilityRequested: (seriesId, shown) =>
                     root.visualSettings.setHistorySeriesVisible(seriesId, shown)
                 onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
@@ -104,6 +107,7 @@ Item {
                 visible: root.visualSettings.playtimeGraphVisible
                 playtimeVm: root.playtimeVm
                 settingsVm: root.settingsVm
+                captureVm: root.captureVm
                 onMoreGraphSettingsRequested: key => root.moreGraphSettingsRequested(key)
                 onHideGraphRequested: key => root.visualSettings.quickHideGraph(key)
             }

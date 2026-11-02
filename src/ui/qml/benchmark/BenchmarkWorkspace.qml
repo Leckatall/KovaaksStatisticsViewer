@@ -9,6 +9,7 @@ Item {
 
     property var trackingVm
     property var settingsVm: null
+    property var captureVm: null
     property var visualSettings: null
 
     signal manageBenchmarksRequested()
@@ -131,6 +132,13 @@ Item {
                     visible: root._bodyState === "trackable"
                     color: root.palette.placeholderText
                     text: root.trackingVm ? String(root.trackingVm.stateMessage || "") : ""
+                }
+
+                CaptureActions {
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    captureVm: root.captureVm
+                    targetKey: "benchmarkTable"
+                    visible: root.captureVm !== null && (root._bodyState === "trackable" || root._bodyState === "incomplete")
                 }
             }
 
@@ -277,6 +285,7 @@ Item {
         BenchmarkIncompleteBody {
             trackingVm: root.trackingVm
             settingsVm: root.settingsVm
+            captureVm: root.captureVm
             visualSettings: root.visualSettings
             bodyWidth: root._contentWidth
             wide: root._wide
@@ -290,6 +299,7 @@ Item {
         BenchmarkTrackableBody {
             trackingVm: root.trackingVm
             settingsVm: root.settingsVm
+            captureVm: root.captureVm
             visualSettings: root.visualSettings
             bodyWidth: root._contentWidth
             wide: root._wide

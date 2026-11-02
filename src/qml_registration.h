@@ -3,6 +3,7 @@
 
 #include <QtQml>
 
+#include <ui/components/capture_preview_item.h>
 #include <ui/components/graph_canvas.h>
 #include <presentation/graphs/graph_vm.h>
 #include <presentation/graphs/completion_history_vm.h>
@@ -45,6 +46,8 @@ namespace ksv {
             "KovaaksStatsViewer", 1, 0, "BenchmarkManagerViewModel", "Created in C++");
         qmlRegisterType<ui::GraphCanvas>(
             "KovaaksStatsViewer", 1, 0, "GraphCanvas");
+        qmlRegisterType<ui::CapturePreviewItem>(
+            "KovaaksStatsViewer", 1, 0, "CapturePreviewItem");
         qmlRegisterUncreatableType<presentation::BenchmarkTrackingViewModel>(
             "KovaaksStatsViewer", 1, 0, "BenchmarkTrackingViewModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::BenchmarkHistoryViewModel>(

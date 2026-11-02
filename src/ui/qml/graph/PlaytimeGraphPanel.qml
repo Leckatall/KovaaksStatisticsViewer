@@ -9,6 +9,7 @@ Frame {
 
     required property var playtimeVm
     property var settingsVm: null
+    property var captureVm: null
 
     signal moreGraphSettingsRequested(string graphKey)
     signal hideGraphRequested(string graphKey)
@@ -36,6 +37,11 @@ Frame {
                 objectName: "playtimeTitleLabel"
                 text: root.playtimeVm.title
             }
+            CaptureActions {
+                captureVm: root.captureVm
+                targetKey: "dailyPlaytime"
+                canvas: canvasLoader.item ? canvasLoader.item.graphCanvas : null
+            }
             GraphGear {
                 graphKey: "dailyPlaytime"
                 settingsVm: root.settingsVm
@@ -50,6 +56,7 @@ Frame {
             objectName: "playtimeContentArea"
 
             Loader {
+                id: canvasLoader
                 anchors.fill: parent
                 active: root.playtimeVm.hasData
                 sourceComponent: Component {

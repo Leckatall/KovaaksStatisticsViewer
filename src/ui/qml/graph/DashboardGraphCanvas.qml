@@ -10,6 +10,7 @@ Frame {
     required property var graphVm
     required property var visualSettings
     property var settingsVm: null
+    property var captureVm: null
     readonly property var visibleColumns: {
         const result = [];
         for (const id of root.graphVm.enabledSeriesIds) {
@@ -79,6 +80,11 @@ Frame {
                     // The VM's title is empty while no run is selected; the panel keeps a neutral name.
                     text: root.graphVm.scenarioTitle !== "" ? root.graphVm.scenarioTitle : qsTr("Run graph")
                 }
+                CaptureActions {
+                    captureVm: root.captureVm
+                    targetKey: "run"
+                    canvas: canvasLoader.item ? canvasLoader.item.graphCanvas : null
+                }
                 GraphGear {
                     graphKey: "run"
                     settingsVm: root.settingsVm
@@ -94,10 +100,12 @@ Frame {
                 objectName: "graphContentArea"
 
                 Loader {
+                    id: canvasLoader
                     anchors.fill: parent
                     active: root.graphVm.contentState === GraphViewModel.HasData
                     sourceComponent: Component {
                         RowLayout {
+                            readonly property alias graphCanvas: canvasWithTooltip.graphCanvas
                             anchors.fill: parent
                             spacing: 0
 
