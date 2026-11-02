@@ -93,6 +93,11 @@ if(KSV_BUILD_GALLERY AND NOT CMAKE_BUILD_TYPE STREQUAL "Release")
     add_subdirectory(tools/driver)
 endif()
 
+option(KSV_BUILD_CAPTURE_MEASURE "Build ksv_capture_measure, the capture cost measuring tool" OFF)
+if(KSV_BUILD_CAPTURE_MEASURE)
+    add_subdirectory(tools/capture_measure)
+endif()
+
 include(CTest)
 
 if(BUILD_TESTING)

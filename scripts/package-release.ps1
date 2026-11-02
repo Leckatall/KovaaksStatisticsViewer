@@ -61,7 +61,8 @@ param(
     [switch]$SkipBuild,
     [switch]$Incremental,
     [switch]$ValidateOnly,
-    [switch]$SkipSmokeTest
+    [switch]$SkipSmokeTest,
+    [switch]$CaptureMeasure
 )
 
 $ErrorActionPreference = "Stop"
@@ -90,7 +91,10 @@ if ($SkipBuild -and $Incremental) {
 # defaults before $PSScriptRoot is populated: "$PSScriptRoot/.." would quietly resolve to the root of
 # the current drive, and the whole build and package would land in C:\build-release and C:\dist.
 if (-not $RepoRoot) { $RepoRoot = (Resolve-Path "$PSScriptRoot/..").Path }
-if (-not $BuildDir) { $BuildDir = Join-Path $RepoRoot "build-release" }
+if (-not $BuildDir) {
+    # Never build-release: -Incremental there would leave the measure option cached ON for a later package.
+    $BuildDir = Join-Path $RepoRoot $(if ($CaptureMeasure) { "build-measure" } else { "build-release" })
+}
 
 . (Join-Path $PSScriptRoot "toolchain-config.ps1")
 $toolchainOverrides = @{}
@@ -163,8 +167,11 @@ if (-not $SkipBuild) {
         Remove-Item -LiteralPath $BuildDir -Recurse -Force
     }
 
+    $MeasureArgs = @()
+    if ($CaptureMeasure) { $MeasureArgs += "-DKSV_BUILD_CAPTURE_MEASURE=ON" }
+
     Write-Host "`n-- Configuring (Release) --" -ForegroundColor Cyan
-    & $CMakeExe -B $BuildDir -S $RepoRoot -G Ninja `
+    & $CMakeExe -B $BuildDir -S $RepoRoot -G Ninja @MeasureArgs `
         -DCMAKE_BUILD_TYPE=Release `
         -DCMAKE_MAKE_PROGRAM="$NinjaExe" `
         -DCMAKE_CXX_COMPILER="$CxxCompiler" `
@@ -207,6 +214,27 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "CMake build failed" }
 } else {
     Write-Host "`n-- Skipping build (using existing $BuildDir) --" -ForegroundColor Yellow
+}
+
+if ($CaptureMeasure) {
+    $MeasureExe = Get-ChildItem -LiteralPath $BuildDir -Recurse -Filter "ksv_capture_measure.exe" |
+        Select-Object -First 1 -ExpandProperty FullName
+    if (-not $MeasureExe) { throw "ksv_capture_measure.exe not found under $BuildDir" }
+    $MeasureDir = Split-Path -Parent $MeasureExe
+
+    Write-Host "`n-- Deploying ksv_capture_measure beside $MeasureExe --" -ForegroundColor Cyan
+    & (Join-Path $QtBinDir "windeployqt.exe") `
+        --release `
+        --no-compiler-runtime `
+        --qmldir "$RepoRoot/src/ui/qml" `
+        $MeasureExe
+    if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
+    Copy-Item "$VcpkgBinDir/*.dll" -Destination $MeasureDir -Force
+    foreach ($dll in @(Get-ChildItem -LiteralPath $CrtDir -Filter "*.dll")) {
+        Copy-Item $dll.FullName -Destination $MeasureDir -Force
+    }
+    Write-Host "`n== Measure tool ready: $MeasureExe ==" -ForegroundColor Green
+    exit 0
 }
 
 $ExeSource = Join-Path $BuildDir "ksv.exe"
