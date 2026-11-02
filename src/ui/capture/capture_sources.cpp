@@ -101,10 +101,12 @@ namespace ksv::ui {
         const auto span = vm.visibleRunSpan();
         const auto times = vm.visibleStartTimesMs();
         if (span && times) {
-            range = QObject::tr("Runs #%1 to #%2 (%3 to %4)")
-                    .arg(span->first).arg(span->second)
-                    .arg(QDateTime::fromMSecsSinceEpoch(times->first).date().toString(Qt::ISODate),
-                         QDateTime::fromMSecsSinceEpoch(times->second).date().toString(Qt::ISODate));
+            const QString firstDay = QDateTime::fromMSecsSinceEpoch(times->first).date().toString(Qt::ISODate);
+            const QString lastDay = QDateTime::fromMSecsSinceEpoch(times->second).date().toString(Qt::ISODate);
+            const QString days = firstDay == lastDay ? firstDay : QObject::tr("%1 to %2").arg(firstDay, lastDay);
+            range = span->first == span->second
+                        ? QObject::tr("Run #%1 (%2)").arg(span->first).arg(days)
+                        : QObject::tr("Runs #%1 to #%2 (%3)").arg(span->first).arg(span->second).arg(days);
         }
         return {.title = vm.scenarioTitle(),
                 .graphType = QObject::tr("Scenario history"),

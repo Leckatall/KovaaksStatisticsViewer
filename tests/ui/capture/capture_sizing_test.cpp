@@ -9,23 +9,27 @@
 
 namespace ksv::ui {
     TEST(CaptureSizing, TwoHundredPercentDoublesOneHundred) {
-        for (const QSizeF logical : {QSizeF(600, 300), QSizeF(333.5, 187.25), QSizeF(1000.4, 77.5), QSizeF(1, 1)}) {
-            const auto at100 = captureOutputPixels(logical, 100);
-            const auto at200 = captureOutputPixels(logical, 200);
-            ASSERT_TRUE(at100.has_value());
-            ASSERT_TRUE(at200.has_value());
-            EXPECT_EQ(at100->width(), static_cast<int>(std::lround(logical.width())));
-            EXPECT_EQ(at100->height(), static_cast<int>(std::lround(logical.height())));
-            EXPECT_EQ(at200->width(), static_cast<int>(std::lround(logical.width() * 2.0)));
-            EXPECT_EQ(at200->height(), static_cast<int>(std::lround(logical.height() * 2.0)));
-        }
-        for (const QSizeF logical : {QSizeF(600, 300), QSizeF(801, 123)}) {
+        for (const QSizeF logical : {QSizeF(600, 300), QSizeF(801, 123), QSizeF(1, 1)}) {
             const auto at100 = captureOutputPixels(logical, 100);
             const auto at200 = captureOutputPixels(logical, 200);
             ASSERT_TRUE(at100.has_value());
             ASSERT_TRUE(at200.has_value());
             EXPECT_EQ(at200->width(), 2 * at100->width());
             EXPECT_EQ(at200->height(), 2 * at100->height());
+        }
+    }
+
+    TEST(CaptureSizing, AWholeReferenceSizeDoublesExactly) {
+        for (const QSizeF fractional : {QSizeF(333.5, 187.25), QSizeF(1000.4, 77.5), QSizeF(600.0, 300.0)}) {
+            const QSizeF whole = wholeReferenceSize(fractional);
+
+            EXPECT_GE(whole.width(), fractional.width());
+            EXPECT_GE(whole.height(), fractional.height());
+            const auto at100 = captureOutputPixels(whole, 100);
+            const auto at200 = captureOutputPixels(whole, 200);
+            ASSERT_TRUE(at100.has_value());
+            ASSERT_TRUE(at200.has_value());
+            EXPECT_EQ(*at200, *at100 * 2) << fractional.width() << "x" << fractional.height();
         }
     }
 

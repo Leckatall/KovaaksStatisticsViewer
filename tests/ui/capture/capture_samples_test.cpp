@@ -6,6 +6,7 @@
 
 #include <QDir>
 #include <QFontInfo>
+#include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QImage>
 #include <QList>
@@ -340,6 +341,9 @@ namespace ksv::ui {
                                           CaptureTextRole::Tick}) {
             EXPECT_EQ(QFontInfo(captureFont(appearance.font, role)).family(), expectedFamily);
         }
+        const QString boldSample = QStringLiteral("The quick brown fox jumps over the lazy dog 0123456789");
+        EXPECT_GT(QFontMetricsF(captureFont(appearance.font, CaptureTextRole::BodyBold)).horizontalAdvance(boldSample),
+                  QFontMetricsF(captureFont(appearance.font, CaptureTextRole::Body)).horizontalAdvance(boldSample));
         RecordProperty("fontFamily", expectedFamily.toStdString());
         RecordProperty("fontPixelSize", appearance.font.pixelSize);
         RecordProperty("platform", QGuiApplication::platformName().toStdString());

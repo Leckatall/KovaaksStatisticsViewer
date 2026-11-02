@@ -34,6 +34,11 @@ namespace ksv::ui {
         return QSize(*width, *height);
     }
 
+    // Rounding each pixel edge independently breaks exact doubling for a fractional edge, so the reference is whole.
+    QSizeF wholeReferenceSize(QSizeF logical) {
+        return {std::ceil(logical.width()), std::ceil(logical.height())};
+    }
+
     QSizeF applyCustomDimension(QSizeF logical, Qt::Orientation edited, int pixels, int percent, bool keepAspect) {
         if (percent <= 0 || pixels <= 0 || !usable(logical)) {
             return logical;

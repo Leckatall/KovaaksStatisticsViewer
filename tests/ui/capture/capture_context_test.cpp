@@ -151,6 +151,36 @@ namespace ksv::ui {
         EXPECT_TRUE(context.graphType.contains(QStringLiteral("history"), Qt::CaseInsensitive));
     }
 
+    TEST(CaptureContext, ScenarioHistoryNamesASingleRunAndDateOnce) {
+        constexpr qint64 kStartMs = 1'772'000'000'000;
+        auto useCase = std::make_shared<FakeCompletionHistoryUseCase>();
+        useCase->history = {.scenario_name = "Air Angelic", .full_count = 10};
+        useCase->history.rows.push_back({.run_index = 5, .start_time_ms = kStartMs, .score = 100.0});
+        CompletionHistoryViewModel vm{useCase};
+        vm.refresh();
+
+        const GraphCaptureContext context = scenarioHistoryCaptureContext(vm);
+
+        EXPECT_EQ(context.rangeText.count(QStringLiteral("#5")), 1);
+        EXPECT_EQ(context.rangeText.count(localDay(kStartMs)), 1);
+    }
+
+    TEST(CaptureContext, ScenarioHistoryNamesADateSharedByTheEndsOnce) {
+        constexpr qint64 kStartMs = 1'772'000'000'000;
+        auto useCase = std::make_shared<FakeCompletionHistoryUseCase>();
+        useCase->history = {.scenario_name = "Air Angelic", .full_count = 10};
+        for (const int run: {4, 5})
+            useCase->history.rows.push_back({.run_index = run, .start_time_ms = kStartMs, .score = 100.0});
+        CompletionHistoryViewModel vm{useCase};
+        vm.refresh();
+
+        const GraphCaptureContext context = scenarioHistoryCaptureContext(vm);
+
+        EXPECT_TRUE(context.rangeText.contains(QStringLiteral("#4")));
+        EXPECT_TRUE(context.rangeText.contains(QStringLiteral("#5")));
+        EXPECT_EQ(context.rangeText.count(localDay(kStartMs)), 1);
+    }
+
     TEST(CaptureContext, BenchmarkHistoryCarriesTheBenchmarkAndMetric) {
         const qint64 firstMs = utcMidnightOfEpochDay(19480);
         const qint64 lastMs = utcMidnightOfEpochDay(19520);

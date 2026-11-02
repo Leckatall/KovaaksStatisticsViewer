@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <QPointF>
 #include <variant>
 #include <vector>
 
@@ -345,7 +346,18 @@ namespace {
                                    fraction * (flickable->property("contentHeight").toReal()
                                                - flickable->property("height").toReal()));
             QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+
+            const QPointF offsets(innerFlick->property("contentX").toReal(), flickable->property("contentY").toReal());
+            if (fraction > 0.0) {
+                EXPECT_GT(offsets.x() + offsets.y(), 0.0) << "the live table did not scroll at " << fraction;
+            }
+            if (previousScroll) {
+                EXPECT_NE(offsets, *previousScroll) << "the scroll did not move between iterations at " << fraction;
+            }
+            previousScroll = offsets;
         }
+
+        std::optional<QPointF> previousScroll;
     };
 
     TEST_F(CaptureTableParity, EveryVisibleLiveTextIsInTheItemList) {

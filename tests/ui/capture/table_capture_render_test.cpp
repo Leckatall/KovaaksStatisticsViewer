@@ -111,6 +111,22 @@ namespace ksv::ui {
         }
     }
 
+    TEST(TableCaptureRender, EveryResolutionIsAnExactMultipleOfTheLogicalSizeAtAnyFontSize) {
+        for (int pixelSize = 9; pixelSize <= 30; ++pixelSize) {
+            TableCaptureSnapshot snapshot = wrappedNameTable();
+            snapshot.appearance.font.pixelSize = pixelSize;
+            snapshot.summary = tableFixtureSummary(snapshot.grid.tiers);
+            const CaptureLayout layout = layoutTableCapture(snapshot, true);
+
+            const auto at100 = captureOutputPixels(layout.size, 100);
+            const auto at200 = captureOutputPixels(layout.size, 200);
+            ASSERT_TRUE(at100.has_value()) << "pixel size " << pixelSize;
+            ASSERT_TRUE(at200.has_value()) << "pixel size " << pixelSize;
+            EXPECT_EQ(*at200, *at100 * 2) << "pixel size " << pixelSize << ", logical " << layout.size.width() << "x"
+                                          << layout.size.height();
+        }
+    }
+
     TEST(TableCaptureRender, AnOversizedTableAsksForALowerResolution) {
         const CaptureLayout layout = layoutTableCapture(wrappedNameTable(), false);
         const CaptureLimits limits = limitsWithArea(areaAt(layout.size, 100));

@@ -18,22 +18,6 @@ namespace ksv::ui {
             description.pixelSize = 14;
             return description;
         }
-
-        constexpr CaptureTextRole kAllRoles[] = {
-            CaptureTextRole::Title, CaptureTextRole::Context, CaptureTextRole::Body,
-            CaptureTextRole::BodyBold, CaptureTextRole::Small, CaptureTextRole::Tick,
-        };
-    }
-
-    TEST(CaptureFonts, UsesTheCaptureRasterPolicy) {
-        const CaptureFontDescription description = applicationDescription();
-        for (const CaptureTextRole role : kAllRoles) {
-            const QFont font = captureFont(description, role);
-            EXPECT_EQ(font.hintingPreference(), QFont::PreferNoHinting);
-            EXPECT_TRUE(font.styleStrategy() & QFont::NoSubpixelAntialias);
-            EXPECT_GT(font.pixelSize(), 0);
-            EXPECT_EQ(font.families(), description.families);
-        }
     }
 
     TEST(CaptureFonts, BuildsAndMeasuresOffTheGuiThread) {

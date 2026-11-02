@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "capture/capture_fonts.h"
+#include "capture/capture_sizing.h"
 #include "capture/capture_text.h"
 #include "components/axis_painter.h"
 #include "components/graph_scene_painter.h"
@@ -250,7 +251,7 @@ namespace ksv::ui {
             const qreal middle = (tooShort + enough) / 2.0;
             (fits(middle) ? enough : tooShort) = middle;
         }
-        return {standard.width(), std::ceil(enough)};
+        return wholeReferenceSize({standard.width(), enough});
     }
 
     qint64 captureSourcePoints(const GraphCaptureSnapshot &snapshot) {

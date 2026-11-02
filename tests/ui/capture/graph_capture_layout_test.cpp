@@ -14,6 +14,7 @@
 #include <QStringList>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <iterator>
 #include <optional>
@@ -358,7 +359,7 @@ namespace ksv::ui {
         }
     }
 
-    TEST(GraphCaptureLayout, TheItemListIgnoresEverythingButSnapshotAndSize) {
+    TEST(GraphCaptureLayout, LayoutIsDeterministicAndRenderingLeavesItsInputUntouched) {
         const GraphCaptureSnapshot snapshot = ordinarySnapshot();
 
         const CaptureLayout first = layoutOf(snapshot, kLogical);
@@ -606,6 +607,22 @@ namespace ksv::ui {
         ASSERT_GT(reference.height(), composition.standardGraph.height());
         EXPECT_EQ(reference.width(), composition.standardGraph.width());
         EXPECT_EQ(placedYLabels(layoutOf(snapshot, reference), snapshot), tierCount);
+    }
+
+    TEST(GraphCaptureReference, AnEnlargedSizeIsWholePixelsSoResolutionDoublesExactly) {
+        const CaptureComposition composition = testComposition();
+        const GraphCaptureSnapshot snapshot = rankSnapshot(true, 40);
+
+        const QSizeF reference = graphReferenceSize(snapshot, composition);
+
+        ASSERT_GT(reference.height(), composition.standardGraph.height());
+        EXPECT_EQ(reference.width(), std::round(reference.width()));
+        EXPECT_EQ(reference.height(), std::round(reference.height()));
+        const auto at100 = captureOutputPixels(reference, 100);
+        const auto at200 = captureOutputPixels(reference, 200);
+        ASSERT_TRUE(at100.has_value());
+        ASSERT_TRUE(at200.has_value());
+        EXPECT_EQ(*at200, *at100 * 2);
     }
 
     TEST(GraphCaptureReference, LongHeadingsAndLegendsEnlargeIt) {

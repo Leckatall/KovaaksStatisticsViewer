@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "capture/capture_fonts.h"
+#include "capture/capture_sizing.h"
 #include "capture/capture_text.h"
 #include "presentation/benchmarks/benchmark_format.h"
 
@@ -935,7 +936,7 @@ namespace ksv::ui {
             width = std::max(width, region.size.width());
             y += region.size.height();
         }
-        layout.size = QSizeF(width + 2.0 * kPageMargin, y + kPageMargin);
+        layout.size = wholeReferenceSize(QSizeF(width + 2.0 * kPageMargin, y + kPageMargin));
         return layout;
     }
 }

@@ -2,11 +2,16 @@
 
 #include <memory>
 #include <optional>
+#include <variant>
 
+#include <QFont>
+#include <QGuiApplication>
 #include <QList>
 #include <QPointF>
+#include <QStringList>
 
 #include "capture/capture_sources.h"
+#include "capture/graph_capture_layout.h"
 #include "components/graph_canvas.h"
 #include "presentation/graphs/common/axes/value_axis.h"
 #include "presentation/graphs/common/graph_vm_base.h"
@@ -158,22 +163,36 @@ namespace ksv::ui {
         EXPECT_FALSE(capture(CaptureTarget::Run, pointsCanvas).has_value());
     }
 
-    TEST(CaptureGraphSource, RankTargetsKeepEveryYLabel) {
+    TEST(CaptureGraphSource, ManyTiersAreRefusedForRankTargetsButThinnedForOthers) {
+        constexpr int kTiers = 60;
         SourceVm vm;
-        fillThreeSeries(vm);
+        SeriesModel &series = vm.addSeries(1, QStringLiteral("Tiers"));
+        series.setData({QPointF(0.0, 1.0), QPointF(5.0, kTiers - 1.0)});
+        ValueAxis::Options options;
+        options.baseline = ValueAxis::Baseline::Zero;
+        options.integral = true;
+        options.targetTicks = 2 * kTiers;
+        series.yAxis = ValueAxis(options);
+        series.yAxis->setRange(0.0, kTiers - 1.0);
         GraphCanvas canvas;
         canvas.setGraphVm(&vm);
         canvas.setVisibleColumns({1});
 
-        const auto rank = capture(CaptureTarget::BenchmarkRank, canvas);
-        const auto recent = capture(CaptureTarget::BenchmarkRecentRank, canvas);
-        const auto run = capture(CaptureTarget::Run, canvas);
+        const CaptureComposition composition = provisionalCaptureComposition();
+        CaptureAppearance appearance;
+        const QFont applicationFont = QGuiApplication::font();
+        appearance.font.families = applicationFont.families().isEmpty() ? QStringList{applicationFont.family()}
+                                                                        : applicationFont.families();
+        appearance.font.pixelSize = 14;
+        const auto layoutAtStandard = [&](const CaptureTarget target) {
+            const auto snapshot = captureGraph(target, canvas, GraphCaptureContext{.title = QStringLiteral("Title")},
+                                               appearance);
+            EXPECT_TRUE(snapshot.has_value());
+            return layoutGraphCapture(*snapshot, composition.standardGraph, composition);
+        };
 
-        ASSERT_TRUE(rank.has_value());
-        ASSERT_TRUE(recent.has_value());
-        ASSERT_TRUE(run.has_value());
-        EXPECT_TRUE(rank->keepEveryYLabel);
-        EXPECT_TRUE(recent->keepEveryYLabel);
-        EXPECT_FALSE(run->keepEveryYLabel);
+        EXPECT_TRUE(std::holds_alternative<CaptureRejection>(layoutAtStandard(CaptureTarget::BenchmarkRank)));
+        EXPECT_TRUE(std::holds_alternative<CaptureRejection>(layoutAtStandard(CaptureTarget::BenchmarkRecentRank)));
+        EXPECT_TRUE(std::holds_alternative<CaptureLayout>(layoutAtStandard(CaptureTarget::Run)));
     }
 }

@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <memory>
+#include <optional>
 #include <variant>
 
 #include "app/app.h"
@@ -134,6 +136,42 @@ namespace {
         return {};
     }
 
+    class ScopedTimeZone {
+    public:
+        explicit ScopedTimeZone(const char *spec)
+            : m_hadValue(qEnvironmentVariableIsSet("TZ")), m_previous(qgetenv("TZ")) {
+            apply(QByteArray(spec));
+        }
+
+        ~ScopedTimeZone() {
+            if (m_hadValue) apply(m_previous);
+            else {
+                qunsetenv("TZ");
+                reload();
+            }
+        }
+
+        ScopedTimeZone(const ScopedTimeZone &) = delete;
+        ScopedTimeZone &operator=(const ScopedTimeZone &) = delete;
+
+    private:
+        static void reload() {
+#ifdef _WIN32
+            _tzset();
+#else
+            tzset();
+#endif
+        }
+
+        static void apply(const QByteArray &value) {
+            qputenv("TZ", value);
+            reload();
+        }
+
+        bool m_hadValue;
+        QByteArray m_previous;
+    };
+
     QString utcDay(const qint64 ms) {
         return QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::utc()).date().toString(Qt::ISODate);
     }
@@ -172,8 +210,10 @@ namespace {
         }
 
         // Runs of the fixture scenario on consecutive days; the last gains `lastRunBonus` score.
-        void seedRuns(const int count, const float lastRunBonus = 0.0F) {
+        void seedRuns(const int count, const float lastRunBonus = 0.0F,
+                      const std::optional<long long> firstStartMs = std::nullopt) {
             auto base = app->profileService()->getLatestRun();
+            if (firstStartMs) base.run_id.start_time = *firstStartMs;
             domain::UserProfile profile;
             const auto source = profile.ensureSource(env.rootPath().toStdString(), "FPSAimTrainer/performances");
             base.sources.perf = {{source, "1wall6targets TE.perf"}};
@@ -188,8 +228,78 @@ namespace {
             m_firstStartMs = base.run_id.start_time;
         }
 
+        presentation::BenchmarkTrackingViewModel *trackAutoBenchmark() {
+            writeBenchmark();
+            startApp();
+            seedRuns(2, 50.0F);
+            auto *tracking = app->benchmarkTrackingVm();
+            tracking->selectBenchmark("auto-1");
+            EXPECT_TRUE(QTest::qWaitFor([&] { return tracking->state() == "trackable"; }, 3000));
+            return tracking;
+        }
+
+        void expectLegendNamesTheScale(const ui::GraphCaptureSnapshot &snapshot, const ui::CaptureLayout &layout) {
+            const auto &series = snapshot.scene.series.front();
+            const QString title = series.yAxisName.isEmpty() ? series.name : series.yAxisName;
+            const QStringList scaleEntries = itemTexts(layout).filter(title).filter(series.yAxis.minLabel)
+                                                 .filter(series.yAxis.maxLabel);
+            EXPECT_FALSE(series.yAxis.minLabel.isEmpty());
+            EXPECT_FALSE(series.yAxis.maxLabel.isEmpty());
+            EXPECT_FALSE(scaleEntries.isEmpty());
+        }
+
         long long m_firstStartMs = 0;
     };
+
+    TEST_F(CaptureGraphFidelity, RecentAverageRankCarriesItsContextScaleAndTierLabels) {
+        ASSERT_NO_FATAL_FAILURE(trackAutoBenchmark());
+        auto *tracking = app->benchmarkTrackingVm();
+        auto *recent = tracking->recentRankHistory();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return recent->hasData(); }, 3000));
+
+        auto canvas = makeCanvas(*recent, QVariantList{presentation::BenchmarkHistoryViewModel::Value});
+        const auto snapshot = ui::captureGraph(ui::CaptureTarget::BenchmarkRecentRank, *canvas,
+                                               ui::benchmarkHistoryCaptureContext(tracking->selectedName(), *recent),
+                                               testAppearance());
+        ASSERT_TRUE(snapshot.has_value());
+        EXPECT_TRUE(snapshot->keepEveryYLabel);
+        ASSERT_FALSE(snapshot->scene.series.isEmpty());
+
+        const ui::CaptureLayout layout = layoutAtReference(*snapshot);
+        const QStringList texts = itemTexts(layout);
+        EXPECT_TRUE(texts.contains(tracking->selectedName()));
+        EXPECT_TRUE(texts.contains(recent->metricName()));
+        expectLegendNamesTheScale(*snapshot, layout);
+
+        ASSERT_TRUE(snapshot->scene.labelledYAxis.has_value());
+        EXPECT_TRUE(snapshot->scene.labelledYAxis->labels.contains(QStringLiteral("Bronze")));
+    }
+
+    TEST_F(CaptureGraphFidelity, RollingPlaytimeCarriesItsContextScaleAndMinuteUnits) {
+        ASSERT_NO_FATAL_FAILURE(trackAutoBenchmark());
+        auto *tracking = app->benchmarkTrackingVm();
+        auto *playtime = tracking->playtimeHistory();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return playtime->hasData(); }, 3000));
+
+        auto canvas = makeCanvas(*playtime, QVariantList{presentation::BenchmarkHistoryViewModel::Value});
+        const auto snapshot = ui::captureGraph(ui::CaptureTarget::BenchmarkPlaytime, *canvas,
+                                               ui::benchmarkHistoryCaptureContext(tracking->selectedName(), *playtime),
+                                               testAppearance());
+        ASSERT_TRUE(snapshot.has_value());
+        EXPECT_FALSE(snapshot->keepEveryYLabel);
+        ASSERT_FALSE(snapshot->scene.series.isEmpty());
+
+        const ui::CaptureLayout layout = layoutAtReference(*snapshot);
+        const QStringList texts = itemTexts(layout);
+        EXPECT_TRUE(texts.contains(tracking->selectedName()));
+        EXPECT_TRUE(texts.contains(playtime->metricName()));
+        expectLegendNamesTheScale(*snapshot, layout);
+
+        ASSERT_TRUE(snapshot->scene.labelledYAxis.has_value());
+        const QStringList labels = snapshot->scene.labelledYAxis->labels;
+        ASSERT_FALSE(labels.isEmpty());
+        for (const QString &label: labels) EXPECT_TRUE(label.endsWith(QStringLiteral("min"))) << label.toStdString();
+    }
 
     TEST_F(CaptureGraphFidelity, RunGraph) {
         ASSERT_NO_FATAL_FAILURE(startApp());
@@ -237,8 +347,10 @@ namespace {
     }
 
     TEST_F(CaptureGraphFidelity, ScenarioHistoryExcludesTheSelectedRunBand) {
+        constexpr long long kMarch4Noon2026Utc = 1'772'625'600'000;
+        const ScopedTimeZone utc("UTC0");
         ASSERT_NO_FATAL_FAILURE(startApp());
-        ASSERT_NO_FATAL_FAILURE(seedRuns(5));
+        ASSERT_NO_FATAL_FAILURE(seedRuns(5, 0.0F, kMarch4Noon2026Utc));
         auto *vm = app->completionHistoryVm();
         ASSERT_TRUE(QTest::qWaitFor([&] { return vm->runCount() == 5; }, 5000));
 
@@ -277,14 +389,12 @@ namespace {
 
         const QStringList texts = itemTexts(layoutAtReference(*snapshot));
         const auto span = vm->visibleRunSpan();
-        const auto times = vm->visibleStartTimesMs();
         ASSERT_TRUE(span.has_value());
-        ASSERT_TRUE(times.has_value());
         const QString range = texts.filter("Run").join(" ");
         EXPECT_TRUE(range.contains(QString::number(span->first)));
         EXPECT_TRUE(range.contains(QString::number(span->second)));
-        EXPECT_TRUE(range.contains(QDateTime::fromMSecsSinceEpoch(times->first).date().toString(Qt::ISODate)));
-        EXPECT_TRUE(range.contains(QDateTime::fromMSecsSinceEpoch(times->second).date().toString(Qt::ISODate)));
+        EXPECT_TRUE(range.contains(QStringLiteral("2026-03-04")));
+        EXPECT_TRUE(range.contains(QStringLiteral("2026-03-08")));
     }
 
     TEST_F(CaptureGraphFidelity, DailyPlaytime) {

@@ -1,5 +1,7 @@
 #include "capture/capture_limits.h"
 
+#include <QObject>
+
 #include <algorithm>
 #include <limits>
 
@@ -92,28 +94,50 @@ namespace ksv::ui {
         return rejection;
     }
 
-    QString captureRejectionText(const CaptureRejection &rejection) {
-        switch (rejection.correction) {
-            case CaptureCorrection::LargerDimensions:
-                return QStringLiteral("There is not enough room for the required content. Use larger dimensions.");
-            case CaptureCorrection::LowerResolution:
-                return QStringLiteral("There is not enough room for the required content at this resolution. "
-                                      "Choose a lower resolution.");
-            case CaptureCorrection::ReduceDimensionsOrResolution:
-                return QStringLiteral("The image is too large to create. Reduce the dimensions or the resolution.");
-            case CaptureCorrection::ReduceResolution:
-                if (rejection.suggestedPercent) {
-                    return QStringLiteral("The image is too large at this resolution. Choose %1% or lower.")
-                            .arg(*rejection.suggestedPercent);
-                }
-                return QStringLiteral("The image is too large at this resolution. Choose a lower resolution.");
-            case CaptureCorrection::UnsupportedAtMinimum:
-                return QStringLiteral("This capture cannot be produced even at the minimum resolution of %1%.")
-                        .arg(kMinimumCapturePercent);
-            case CaptureCorrection::TooMuchData:
-                return QStringLiteral("There is too much data for the graph to capture. "
-                                      "Narrow the displayed range or show fewer series.");
+    namespace {
+        QString limitText(const CaptureRejectionReason reason) {
+            switch (reason) {
+                case CaptureRejectionReason::TooLittleRoom:
+                    return QObject::tr("The required content does not fit the available space.");
+                case CaptureRejectionReason::EdgeLimit:
+                    return QObject::tr("An edge of the image is longer than the maximum allowed.");
+                case CaptureRejectionReason::AreaLimit:
+                    return QObject::tr("The image has more pixels than the maximum allowed.");
+                case CaptureRejectionReason::MemoryLimit:
+                    return QObject::tr("The image needs more memory than is allowed.");
+                case CaptureRejectionReason::SourceGeometry:
+                    return QObject::tr("The graph holds more points than can be captured.");
+                case CaptureRejectionReason::ArithmeticOverflow:
+                    return QObject::tr("The image size is beyond what can be represented.");
+            }
+            return {};
         }
-        return {};
+
+        QString correctionText(const CaptureRejection &rejection) {
+            switch (rejection.correction) {
+                case CaptureCorrection::LargerDimensions:
+                    return QObject::tr("Use larger dimensions.");
+                case CaptureCorrection::LowerResolution:
+                    return QObject::tr("Choose a lower resolution.");
+                case CaptureCorrection::ReduceDimensionsOrResolution:
+                    return QObject::tr("Reduce the dimensions or the resolution.");
+                case CaptureCorrection::ReduceResolution:
+                    if (rejection.suggestedPercent) {
+                        return QObject::tr("Choose %1% or lower.").arg(*rejection.suggestedPercent);
+                    }
+                    return QObject::tr("Choose a lower resolution.");
+                case CaptureCorrection::UnsupportedAtMinimum:
+                    return QObject::tr("This capture cannot be produced even at the minimum resolution of %1%.")
+                            .arg(kMinimumCapturePercent);
+                case CaptureCorrection::TooMuchData:
+                    return QObject::tr("There is too much data for the graph to capture. "
+                                       "Narrow the displayed range or show fewer series.");
+            }
+            return {};
+        }
+    }
+
+    QString captureRejectionText(const CaptureRejection &rejection) {
+        return QObject::tr("%1 %2").arg(limitText(rejection.reason), correctionText(rejection));
     }
 }

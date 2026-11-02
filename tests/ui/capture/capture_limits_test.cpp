@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <QSize>
+#include <QSet>
 #include <QSizeF>
 #include <QString>
+
+#include <iterator>
 
 #include "capture/capture_limits.h"
 #include "capture/capture_sizing.h"
@@ -111,6 +114,28 @@ namespace ksv::ui {
         const auto graph = validateCaptureOutput(CaptureSubject::Graph, logical, 200, 0, limits);
         ASSERT_TRUE(graph.has_value());
         EXPECT_EQ(graph->correction, CaptureCorrection::ReduceDimensionsOrResolution);
+    }
+
+    TEST(CaptureLimits, TheRejectionTextCarriesTheViolatedConstraint) {
+        constexpr CaptureRejectionReason kReasons[] = {
+            CaptureRejectionReason::TooLittleRoom, CaptureRejectionReason::EdgeLimit,
+            CaptureRejectionReason::AreaLimit,     CaptureRejectionReason::MemoryLimit,
+            CaptureRejectionReason::SourceGeometry, CaptureRejectionReason::ArithmeticOverflow};
+        constexpr CaptureCorrection kCorrections[] = {
+            CaptureCorrection::LargerDimensions,   CaptureCorrection::LowerResolution,
+            CaptureCorrection::ReduceDimensionsOrResolution, CaptureCorrection::ReduceResolution,
+            CaptureCorrection::UnsupportedAtMinimum, CaptureCorrection::TooMuchData};
+
+        for (const CaptureCorrection correction: kCorrections) {
+            QSet<QString> texts;
+            for (const CaptureRejectionReason reason: kReasons) {
+                CaptureRejection rejection;
+                rejection.reason = reason;
+                rejection.correction = correction;
+                texts.insert(captureRejectionText(rejection));
+            }
+            EXPECT_EQ(texts.size(), qsizetype{std::size(kReasons)}) << "correction " << static_cast<int>(correction);
+        }
     }
 
     TEST(CaptureLimits, ATableLowerResolutionIsNamedOnlyWhenItPasses) {
