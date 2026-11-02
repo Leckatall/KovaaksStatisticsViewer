@@ -363,6 +363,37 @@ namespace ksv::ui {
         EXPECT_TRUE(texts[entry].text.contains(axisName));
     }
 
+    TEST(GraphCaptureLayout, ALongLoneSeriesWrapsWholeUnderOneSample) {
+        const GraphSceneAxis yAxis = axis(0.0, 100.0, QStringLiteral("0"), QStringLiteral("100"));
+        const QFontMetricsF metrics(captureFont(applicationDescription(), CaptureTextRole::BodyBold));
+        QStringList words;
+        while (metrics.horizontalAdvance(words.join(QLatin1Char(' '))) <= kLogical.width() * 1.5) {
+            words.append(QStringLiteral("Marathon%1").arg(words.size()));
+        }
+        const QString name = words.join(QLatin1Char(' '));
+        const GraphCaptureSnapshot snapshot = snapshotOf({series(1, name, Qt::red, 2.0, yAxis)});
+
+        const CaptureLayout layout = layoutOf(snapshot, kLogical);
+
+        const std::vector<CaptureGlyphItem> glyphs = glyphItems(layout);
+        ASSERT_EQ(glyphs.size(), 1u);
+        QStringList lines;
+        qreal firstLineTop = layout.size.height();
+        for (const CaptureTextItem &text : captureTextItems(layout.items)) {
+            if (text.rect.left() < glyphs.front().rect.right()) continue;
+            lines.append(text.text);
+            firstLineTop = std::min(firstLineTop, text.rect.top());
+        }
+        ASSERT_GT(lines.size(), 1);
+
+        const QString joined = lines.join(QLatin1Char('\n')).simplified();
+        EXPECT_TRUE(joined.startsWith(name)) << joined.toStdString();
+        EXPECT_TRUE(joined.contains(yAxis.minLabel));
+        EXPECT_TRUE(joined.endsWith(yAxis.maxLabel)) << joined.toStdString();
+        EXPECT_GE(glyphs.front().rect.center().y(), firstLineTop);
+        EXPECT_LE(glyphs.front().rect.center().y(), firstLineTop + metrics.height());
+    }
+
     TEST(GraphCaptureLayout, LongContextWrapsIntoStoredLines) {
         const GraphSceneAxis yAxis = axis(0.0, 100.0, QStringLiteral("0"), QStringLiteral("100"));
         QList<GraphSceneSeries> lines;

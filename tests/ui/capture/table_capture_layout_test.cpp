@@ -732,34 +732,6 @@ namespace ksv::ui {
         EXPECT_GT(onDark.front().color.lightnessF(), 0.5);
     }
 
-    // The widths of the two faces only differ on the real platform: CaptureSamples.TheBoldValueIsMeasuredInItsOwnFace
-    // proves the value's placement follows the bold width.
-    TEST(TableCaptureBars, TheValueIsBoldAtTheSizeOfThePlainStatus) {
-        TableCaptureSnapshot snapshot = plainTable(2);
-        presentation::ProgressGridScenarioRow &unplayed = snapshot.grid.rows.at(1);
-        unplayed.edgeState = presentation::ProgressGridEdgeState::Unplayed;
-        unplayed.statusText = QStringLiteral("Unplayed");
-
-        const CaptureLayout layout = layoutTableCapture(snapshot, false);
-
-        const std::optional<QRectF> valueBand = bandOfRow(snapshot, layout, 0);
-        const std::optional<QRectF> statusBand = bandOfRow(snapshot, layout, 1);
-        ASSERT_TRUE(valueBand && statusBand);
-        const std::vector<CaptureTextItem> value =
-            cellsInBand(layout, *valueBand, snapshot.grid.rows.at(0).personalBestText);
-        const std::vector<CaptureTextItem> status = cellsInBand(layout, *statusBand, unplayed.statusText);
-        ASSERT_EQ(value.size(), 1u);
-        ASSERT_EQ(status.size(), 1u);
-
-        const QFont valueFont = captureFont(snapshot.appearance.font, value.front().role);
-        const QFont statusFont = captureFont(snapshot.appearance.font, status.front().role);
-        EXPECT_TRUE(valueFont.bold());
-        EXPECT_FALSE(statusFont.bold());
-        EXPECT_FALSE(statusFont.italic());
-        EXPECT_EQ(valueFont.pixelSize(), statusFont.pixelSize());
-        EXPECT_GE(value.front().rect.width(), advanceOf(snapshot, value.front()));
-    }
-
     TEST(TableCaptureBars, TheMarkerUsesTheChunkScaleAcrossUnequalChunks) {
         const auto unequalTable = [] {
             TableCaptureSnapshot snapshot = plainTable(2);

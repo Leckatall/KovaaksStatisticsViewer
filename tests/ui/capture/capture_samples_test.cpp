@@ -408,6 +408,7 @@ namespace ksv::ui {
 
         struct Bar {
             QRectF value;
+            CaptureTextRole valueRole = CaptureTextRole::Small;
             QRectF fill;
             QRectF track;
         };
@@ -420,6 +421,7 @@ namespace ksv::ui {
             for (const CaptureItem &item : layout.items) {
                 if (const auto *text = std::get_if<CaptureTextItem>(&item); text && text->text == row.personalBestText) {
                     bar.value = text->rect;
+                    bar.valueRole = text->role;
                 }
                 if (const auto *rect = std::get_if<CaptureRectItem>(&item)) {
                     if (rect->fill == barColor && rect->radius > 0.0) bar.fill = rect->rect;
@@ -439,6 +441,7 @@ namespace ksv::ui {
         const Bar bar = measure((probe.track.width() - roomPastFill) / probe.track.width());
 
         EXPECT_GE(bar.value.width(), boldWidth);
+        EXPECT_DOUBLE_EQ(advance(bar.valueRole), boldWidth);
         EXPECT_LE(bar.value.right(), bar.fill.right());
         EXPECT_GE(bar.value.left(), bar.track.left());
     }

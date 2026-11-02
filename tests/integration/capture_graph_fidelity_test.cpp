@@ -127,6 +127,28 @@ namespace {
         return {};
     }
 
+    // The text beside the series' own sample, so that a name elsewhere on the page cannot stand in for its entry.
+    std::optional<QString> legendLineOf(const ui::CaptureLayout &layout, const ui::GraphSceneSeries &series) {
+        for (const ui::CaptureItem &item: layout.items) {
+            const auto *sample = std::get_if<ui::CaptureGlyphItem>(&item);
+            if (!sample || sample->kind != ui::CaptureGlyphItem::Kind::LineSample || sample->color != series.color) {
+                continue;
+            }
+            const qreal rowY = sample->rect.center().y();
+            std::optional<ui::CaptureTextItem> nearest;
+            for (const ui::CaptureItem &candidate: layout.items) {
+                const auto *text = std::get_if<ui::CaptureTextItem>(&candidate);
+                if (!text || text->rect.left() < sample->rect.right() || rowY < text->rect.top() ||
+                    rowY > text->rect.bottom()) {
+                    continue;
+                }
+                if (!nearest || text->rect.left() < nearest->rect.left()) nearest = *text;
+            }
+            if (nearest) return nearest->text;
+        }
+        return std::nullopt;
+    }
+
     ui::CaptureLayout layoutAtReference(const ui::GraphCaptureSnapshot &snapshot) {
         const auto composition = ui::provisionalCaptureComposition();
         const QSizeF size = ui::graphReferenceSize(snapshot, composition);
@@ -248,6 +270,25 @@ namespace {
             EXPECT_FALSE(scaleEntries.isEmpty());
         }
 
+        void expectLegendLine(const ui::GraphScene &scene, const ui::CaptureLayout &layout,
+                              const ui::GraphSceneSeries &series) {
+            const std::optional<QString> line = legendLineOf(layout, series);
+            ASSERT_TRUE(line.has_value()) << series.name.toStdString();
+
+            const auto sharesScale = [&series](const ui::GraphSceneSeries &other) {
+                return series.yAxisId && other.yAxisId == series.yAxisId;
+            };
+            if (std::ranges::count_if(scene.series, sharesScale) > 1) {
+                EXPECT_EQ(*line, series.name);
+                EXPECT_FALSE(itemTexts(layout).filter(series.yAxisName).filter(series.yAxis.minLabel)
+                                 .filter(series.yAxis.maxLabel).isEmpty()) << series.name.toStdString();
+                return;
+            }
+            EXPECT_TRUE(line->startsWith(series.name)) << line->toStdString();
+            EXPECT_TRUE(line->contains(series.yAxis.minLabel)) << line->toStdString();
+            EXPECT_TRUE(line->contains(series.yAxis.maxLabel)) << line->toStdString();
+        }
+
         long long m_firstStartMs = 0;
     };
 
@@ -323,9 +364,7 @@ namespace {
         ASSERT_FALSE(vm->scenarioTitle().isEmpty());
         EXPECT_TRUE(texts.contains(vm->scenarioTitle()));
         EXPECT_TRUE(texts.contains(snapshot->context.xTitle));
-        for (const auto &series: live.series) {
-            EXPECT_FALSE(texts.filter(series.name).isEmpty()) << series.name.toStdString();
-        }
+        for (const auto &series: live.series) expectLegendLine(live, layout, series);
 
         const auto pixels = ui::captureOutputPixels(layout.size, 200);
         ASSERT_TRUE(pixels.has_value());
