@@ -31,6 +31,8 @@ add_executable(ui_tests
     benchmarks/manager/benchmark_clipboard_matrix_test.cpp
     benchmarks/manager/benchmark_table_workload_test.cpp
     capture/capture_appearance_test.cpp
+    capture/capture_coordinator_test.cpp
+    capture/capture_feedback_test.cpp
     capture/capture_graph_source_test.cpp
     capture/capture_context_test.cpp
     capture/capture_table_source_test.cpp

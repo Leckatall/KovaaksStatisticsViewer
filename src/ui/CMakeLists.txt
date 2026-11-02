@@ -149,6 +149,10 @@ qt_add_qml_module(ksv_ui
         capture/capture_snapshot.cpp
         capture/capture_appearance.h
         capture/capture_appearance.cpp
+        capture/capture_coordinator.h
+        capture/capture_coordinator.cpp
+        capture/capture_feedback.h
+        capture/capture_feedback.cpp
         capture/capture_sources.h
         capture/capture_sources.cpp
         capture/capture_font_description.h
