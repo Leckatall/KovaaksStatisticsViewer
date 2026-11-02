@@ -15,6 +15,7 @@ add_executable(integration_tests
     benchmark_composition_test.cpp
     graph_configuration_flow_test.cpp
     image_output_composition_test.cpp
+    capture_graph_fidelity_test.cpp
 )
 
 target_link_libraries(integration_tests PRIVATE
