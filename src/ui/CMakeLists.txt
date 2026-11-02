@@ -162,6 +162,8 @@ qt_add_qml_module(ksv_ui
         capture/capture_layout.cpp
         capture/capture_renderer.h
         capture/capture_renderer.cpp
+        capture/graph_capture_layout.h
+        capture/graph_capture_layout.cpp
             presentation/graphs/common/series/monotone_spline.h
             presentation/app/session_vm.h
             presentation/app/session_vm.cpp

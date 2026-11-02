@@ -38,6 +38,7 @@ add_executable(ui_tests
     capture/capture_sizing_test.cpp
     capture/capture_limits_test.cpp
     capture/capture_renderer_test.cpp
+    capture/graph_capture_layout_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE
