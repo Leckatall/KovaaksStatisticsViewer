@@ -323,7 +323,9 @@ namespace {
         ASSERT_FALSE(vm->scenarioTitle().isEmpty());
         EXPECT_TRUE(texts.contains(vm->scenarioTitle()));
         EXPECT_TRUE(texts.contains(snapshot->context.xTitle));
-        for (const auto &series: live.series) EXPECT_TRUE(texts.contains(series.name)) << series.name.toStdString();
+        for (const auto &series: live.series) {
+            EXPECT_FALSE(texts.filter(series.name).isEmpty()) << series.name.toStdString();
+        }
 
         const auto pixels = ui::captureOutputPixels(layout.size, 200);
         ASSERT_TRUE(pixels.has_value());
