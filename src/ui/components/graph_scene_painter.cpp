@@ -40,12 +40,8 @@ namespace ksv::ui {
                                scene.xAxis.min, scene.xAxis.max, scene.xAxis.ticks, labelsOf(scene.xAxis), style);
         }
 
-        bool isCancelled(const std::atomic_bool *cancelled) {
-            return cancelled && cancelled->load();
-        }
-
         void drawReferenceLines(QPainter &painter, const GraphScene &scene, const QRectF &rect,
-                                const std::atomic_bool *cancelled) {
+                                const CancellationCheck &cancelled) {
             painter.save();
             for (auto s = scene.series.crbegin(); s != scene.series.crend() && !isCancelled(cancelled); ++s) {
                 for (const auto &line: s->references) {
@@ -77,7 +73,7 @@ namespace ksv::ui {
         }
 
         void drawSeries(QPainter &painter, const GraphScene &scene, const QRectF &rect,
-                        const std::atomic_bool *cancelled) {
+                        const CancellationCheck &cancelled) {
             // Painted back to front, so the series highest in the line list ends up on top, with its
             // markers stacked the same way as its line.
             for (auto s = scene.series.crbegin(); s != scene.series.crend() && !isCancelled(cancelled); ++s) {
@@ -118,7 +114,7 @@ namespace ksv::ui {
     }
 
     void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds,
-                         const AxisPainter::Style &style, const std::atomic_bool *cancelled) {
+                         const AxisPainter::Style &style, const CancellationCheck &cancelled) {
         painter.setRenderHint(QPainter::Antialiasing, true);
         const QRectF rect = graphPlotRect(bounds, scene.labelledYAxis, scene.xAxis, style);
         drawAxes(painter, scene, rect, bounds, style);

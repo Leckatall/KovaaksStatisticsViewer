@@ -72,7 +72,7 @@ namespace ksv::ui {
             const std::optional<QSize> pixels = captureOutputPixels(logical, options.percent);
             if (!pixels) return CaptureRenderFailed{};
 
-            std::optional<application::RasterImage> raster = renderCapture(ready.layout, *pixels, request.cancelled.get());
+            std::optional<application::RasterImage> raster = renderCapture(ready.layout, *pixels, [&request] { return request.isCancelled(); });
             if (!raster) return CaptureRenderFailed{};
             QImage thumbnail = makeThumbnail(*raster, limits.thumbnailBytes);
             if (thumbnail.isNull()) return CaptureRenderFailed{};

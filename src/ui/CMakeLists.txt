@@ -154,6 +154,7 @@ qt_add_qml_module(ksv_ui
         components/series_painter.h
         components/series_painter.cpp
         components/graph_scene.h
+        components/cancellation_check.h
         components/graph_scene_painter.h
         components/graph_scene_painter.cpp
         capture/capture_snapshot.h

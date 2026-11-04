@@ -91,12 +91,8 @@ namespace ksv::ui {
             }
         }
 
-        bool isCancelled(const std::atomic_bool *cancelled) {
-            return cancelled && cancelled->load();
-        }
-
         void paintGraph(QPainter &painter, const CaptureLayout &layout, const CaptureGraphItem &item,
-                        const std::atomic_bool *cancelled) {
+                        const CancellationCheck &cancelled) {
             if (!layout.scene) return;
             AxisPainter::Style style;
             style.font = captureFont(layout.font, CaptureTextRole::Tick);
@@ -107,7 +103,7 @@ namespace ksv::ui {
     }
 
     std::optional<application::RasterImage> renderCapture(const CaptureLayout &layout, const QSize pixels,
-                                                         const std::atomic_bool *cancelled) {
+                                                         const CancellationCheck &cancelled) {
         if (isCancelled(cancelled)) return std::nullopt;
         std::optional<application::RasterBuffer> buffer =
                 application::RasterBuffer::allocate(pixels.width(), pixels.height());

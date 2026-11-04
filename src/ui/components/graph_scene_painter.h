@@ -4,10 +4,10 @@
 #include <QRectF>
 #include <QtGlobal>
 
-#include <atomic>
 #include <optional>
 
 #include "axis_painter.h"
+#include "cancellation_check.h"
 #include "graph_scene.h"
 
 class QPainter;
@@ -25,7 +25,7 @@ namespace ksv::ui {
 
     // Once `cancelled` is set, painting stops before the next series and the picture is incomplete.
     void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds,
-                         const AxisPainter::Style &style, const std::atomic_bool *cancelled = nullptr);
+                         const AxisPainter::Style &style, const CancellationCheck &cancelled = {});
 
     [[nodiscard]] QRectF graphPlotRect(const QRectF &bounds, const std::optional<GraphSceneAxis> &yAxis,
                                        const std::optional<GraphSceneAxis> &xAxis);

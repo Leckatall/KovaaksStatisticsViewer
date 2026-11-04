@@ -8,6 +8,7 @@ Resource limits adopted at checkpoint C3 live in `standardCaptureLimits()` (edge
 `CaptureRejection::limit` carries the violated figure, so rejection text states it in the current locale.
 The clipboard publisher is still the Qt candidate; choosing between it and the documented fallbacks waits on interactive Windows clipboard runs.
 Renders cancel cooperatively: each `CaptureRenderRequest` carries a shared atomic flag, checked between painted items and between series in `paintGraphScene`; `CaptureRenderQueue::cancel(session)` (called from `closePreview`) and the queue's destructor set it, and a cancelled render is never delivered. Exit therefore does not wait for a dense render, while an accepted save still finishes.
+`renderCapture` and `paintGraphScene` take the flag as a `CancellationCheck` (`components/cancellation_check.h`, a `std::function<bool()>`), so tests can cancel partway through a paint.
 `CaptureFeedback` keeps a failure until it is dismissed or replaced by a new failure; a success or notice shows over it for its usual lifetime and the failure then returns.
 An empty or non-local export destination, or a refused save admission, keeps the preview and its image.
 `CaptureViewModel` exposes `previewImageWidth`/`previewImageHeight`, because QML cannot read a `QImage`'s size and the preview would otherwise never appear.

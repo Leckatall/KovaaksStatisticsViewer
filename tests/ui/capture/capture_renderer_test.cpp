@@ -9,6 +9,7 @@
 #include <climits>
 #include <cstddef>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -189,6 +190,67 @@ namespace ksv::ui {
 
             EXPECT_FALSE(raster.has_value());
         }
+    }
+
+    // Series are painted back to front, so the last series in the list is the first to reach the image.
+    TEST(CaptureRenderer, CancellingMidGraphStopsBeforeTheRemainingSeries) {
+        const QColor first(Qt::blue);
+        const QColor later[] = {QColor(Qt::red), QColor(Qt::green)};
+        GraphScene scene = oneSeriesScene();
+        GraphSceneSeries series = scene.series.front();
+        scene.series.clear();
+        qreal level = 20.0;
+        for (const QColor &colour : {later[0], later[1], first}) {
+            series.color = colour;
+            series.observations = {QPointF(0.0, level), QPointF(10.0, level)};
+            scene.series.append(series);
+            level += 30.0;
+        }
+        const QRectF bounds(0.0, 0.0, 300.0, 160.0);
+        const auto paint = [&](const std::function<bool(const QImage &)> &cancelOnImage) {
+            QImage image(bounds.size().toSize(), QImage::Format_RGB32);
+            image.fill(kBackground);
+            QPainter painter(&image);
+            paintGraphScene(painter, scene, bounds, AxisPainter::Style{}, [&] { return cancelOnImage(image); });
+            painter.end();
+            return image;
+        };
+
+        const QImage whole = paint([](const QImage &) { return false; });
+        const QImage cancelled = paint([&](const QImage &soFar) { return countPixelsAtColor(soFar, first) > 0; });
+
+        ASSERT_GT(countPixelsAtColor(whole, first), 0);
+        EXPECT_GT(countPixelsAtColor(cancelled, first), 0);
+        for (const QColor &colour : later) {
+            ASSERT_GT(countPixelsAtColor(whole, colour), 0) << colour.name().toStdString();
+            EXPECT_EQ(countPixelsAtColor(cancelled, colour), 0) << colour.name().toStdString();
+        }
+    }
+
+    TEST(CaptureRenderer, CancellingBetweenItemsStopsThereAndReturnsNoImage) {
+        CaptureLayout layout = emptyLayout(QSizeF(300.0, 120.0));
+        for (int row = 0; row < 5; ++row) {
+            CaptureRectItem rect;
+            rect.rect = QRectF(10.0, 10.0 + 20.0 * row, 280.0, 16.0);
+            rect.fill = kForeground;
+            layout.items.emplace_back(rect);
+        }
+        const QSize pixels = captureOutputPixels(layout.size, 100).value();
+        const auto readsOf = [&](const int cancelOnRead) {
+            int reads = 0;
+            const std::optional<application::RasterImage> raster =
+                    renderCapture(layout, pixels, [&] { return ++reads >= cancelOnRead; });
+            return std::pair{reads, raster.has_value()};
+        };
+
+        const auto [wholeReads, wholeDelivered] = readsOf(INT_MAX);
+        // Read 1 is before anything is painted and read 2 before the first item, so read 3 follows one item.
+        const auto [cancelledReads, cancelledDelivered] = readsOf(3);
+
+        ASSERT_TRUE(wholeDelivered);
+        EXPECT_FALSE(cancelledDelivered);
+        EXPECT_EQ(cancelledReads, 3);
+        EXPECT_LT(cancelledReads, wholeReads);
     }
 
     TEST(CaptureLayoutItems, EqualityFollowsEveryItemField) {
