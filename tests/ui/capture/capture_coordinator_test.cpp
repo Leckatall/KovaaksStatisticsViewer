@@ -48,7 +48,7 @@ namespace ksv::ui {
 
         TEST(CaptureCoordinator, QuickCopyPublishesTheDoubledReference) {
             const GraphCaptureSnapshot snapshot = graphSnapshot();
-            const QSizeF reference = graphReferenceSize(snapshot, provisionalCaptureComposition());
+            const QSizeF reference = graphReferenceSize(snapshot, standardCaptureComposition());
             Harness harness(realRender());
             int sourceCalls = 0;
 
@@ -247,7 +247,7 @@ namespace ksv::ui {
 
         TEST(CaptureCoordinator, OpeningRendersAtDefaults) {
             const GraphCaptureSnapshot snapshot = graphSnapshot();
-            const QSizeF reference = graphReferenceSize(snapshot, provisionalCaptureComposition());
+            const QSizeF reference = graphReferenceSize(snapshot, standardCaptureComposition());
             Harness harness(realRender());
             int sourceCalls = 0;
 
@@ -356,7 +356,7 @@ namespace ksv::ui {
 
         TEST(CaptureCoordinator, AChangeHoldsTheOldImageButNotTheOutput) {
             const GraphCaptureSnapshot snapshot = graphSnapshot();
-            const QSizeF reference = graphReferenceSize(snapshot, provisionalCaptureComposition());
+            const QSizeF reference = graphReferenceSize(snapshot, standardCaptureComposition());
             GatedRender render(realRender());
             Harness harness(render.function());
             const auto openGate = qScopeGuard([&] { render.open(); });
@@ -380,7 +380,7 @@ namespace ksv::ui {
 
         TEST(CaptureCoordinator, OnlyTheLatestChoiceInstalls) {
             const GraphCaptureSnapshot snapshot = graphSnapshot();
-            const QSizeF reference = graphReferenceSize(snapshot, provisionalCaptureComposition());
+            const QSizeF reference = graphReferenceSize(snapshot, standardCaptureComposition());
             GatedRender render(realRender());
             Harness harness(render.function());
             const auto openGate = qScopeGuard([&] { render.open(); });
@@ -495,7 +495,7 @@ namespace ksv::ui {
 
         TEST(CaptureCoordinator, AValidCorrectionRestoresThePreview) {
             const GraphCaptureSnapshot snapshot = graphSnapshot();
-            const QSizeF reference = graphReferenceSize(snapshot, provisionalCaptureComposition());
+            const QSizeF reference = graphReferenceSize(snapshot, standardCaptureComposition());
             SteppedRender render(realRender());
             render.release(8);
             Harness harness(render.function());

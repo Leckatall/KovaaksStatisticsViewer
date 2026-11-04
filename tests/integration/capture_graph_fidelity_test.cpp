@@ -150,7 +150,7 @@ namespace {
     }
 
     ui::CaptureLayout layoutAtReference(const ui::GraphCaptureSnapshot &snapshot) {
-        const auto composition = ui::provisionalCaptureComposition();
+        const auto composition = ui::standardCaptureComposition();
         const QSizeF size = ui::graphReferenceSize(snapshot, composition);
         auto result = ui::layoutGraphCapture(snapshot, size, composition);
         if (auto *layout = std::get_if<ui::CaptureLayout>(&result)) return std::move(*layout);

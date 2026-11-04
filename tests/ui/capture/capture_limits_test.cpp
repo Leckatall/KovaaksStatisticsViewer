@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <QLocale>
 #include <QSize>
 #include <QSet>
 #include <QSizeF>
@@ -136,6 +137,31 @@ namespace ksv::ui {
             }
             EXPECT_EQ(texts.size(), qsizetype{std::size(kReasons)}) << "correction " << static_cast<int>(correction);
         }
+    }
+
+    TEST(CaptureLimits, TheRejectionTextStatesTheAdoptedLimit) {
+        const CaptureLimits limits = standardCaptureLimits();
+        const QLocale locale;
+
+        const auto edge = validateCaptureOutput(CaptureSubject::Graph, QSizeF(limits.maxEdgePixels + 1, 100), 100,
+                                                0, limits);
+        ASSERT_TRUE(edge.has_value());
+        ASSERT_EQ(edge->reason, CaptureRejectionReason::EdgeLimit);
+        EXPECT_TRUE(captureRejectionText(*edge).contains(locale.toString(limits.maxEdgePixels)))
+                << captureRejectionText(*edge).toStdString();
+
+        const auto area = validateCaptureOutput(CaptureSubject::Graph, QSizeF(12'000, 12'000), 100, 0, limits);
+        ASSERT_TRUE(area.has_value());
+        ASSERT_EQ(area->reason, CaptureRejectionReason::AreaLimit);
+        EXPECT_TRUE(captureRejectionText(*area).contains(locale.toString(limits.maxPixelArea)))
+                << captureRejectionText(*area).toStdString();
+
+        const auto source = validateCaptureOutput(CaptureSubject::Graph, QSizeF(960, 600), 100,
+                                                  limits.maxSourcePoints + 1, limits);
+        ASSERT_TRUE(source.has_value());
+        ASSERT_EQ(source->reason, CaptureRejectionReason::SourceGeometry);
+        EXPECT_TRUE(captureRejectionText(*source).contains(locale.toString(limits.maxSourcePoints)))
+                << captureRejectionText(*source).toStdString();
     }
 
     TEST(CaptureLimits, ATableLowerResolutionIsNamedOnlyWhenItPasses) {

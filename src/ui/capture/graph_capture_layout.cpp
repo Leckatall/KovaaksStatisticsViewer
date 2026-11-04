@@ -149,7 +149,7 @@ namespace ksv::ui {
         }
     }
 
-    CaptureComposition provisionalCaptureComposition() {
+    CaptureComposition standardCaptureComposition() {
         return {QSizeF(960.0, 600.0), QSizeF(240.0, 140.0)};
     }
 

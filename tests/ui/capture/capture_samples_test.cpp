@@ -308,7 +308,7 @@ namespace ksv::ui {
         }
 
         CaptureLayout layoutGraph(const GraphCaptureSnapshot &snapshot) {
-            const CaptureComposition composition = provisionalCaptureComposition();
+            const CaptureComposition composition = standardCaptureComposition();
             const QSizeF size = graphReferenceSize(snapshot, composition);
             auto result = layoutGraphCapture(snapshot, size, composition);
             if (auto *layout = std::get_if<CaptureLayout>(&result)) return std::move(*layout);

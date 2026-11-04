@@ -17,7 +17,7 @@ namespace ksv::ui {
         QSizeF minimumPlot;
     };
 
-    [[nodiscard]] CaptureComposition provisionalCaptureComposition();
+    [[nodiscard]] CaptureComposition standardCaptureComposition();
 
     [[nodiscard]] QSizeF graphReferenceSize(const GraphCaptureSnapshot &snapshot,
                                             const CaptureComposition &composition);

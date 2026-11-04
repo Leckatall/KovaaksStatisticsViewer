@@ -178,7 +178,7 @@ namespace ksv::ui {
         canvas.setGraphVm(&vm);
         canvas.setVisibleColumns({1});
 
-        const CaptureComposition composition = provisionalCaptureComposition();
+        const CaptureComposition composition = standardCaptureComposition();
         CaptureAppearance appearance;
         const QFont applicationFont = QGuiApplication::font();
         appearance.font.families = applicationFont.families().isEmpty() ? QStringList{applicationFont.family()}

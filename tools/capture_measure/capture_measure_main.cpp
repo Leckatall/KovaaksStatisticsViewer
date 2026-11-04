@@ -69,7 +69,7 @@ namespace ksv::ui {
         struct Env {
             CaptureAppearance appearance;
             CaptureLimits active;
-            CaptureLimits provisional;
+            CaptureLimits standard;
             CaptureComposition composition;
             QString outDir;
         };
@@ -309,7 +309,7 @@ namespace ksv::ui {
         }
 
         // Height is linear in the row count (checked at 40 and 80 rows), so the largest table under a
-        // fraction of one provisional limit is found by search over the model rather than by laying out each.
+        // fraction of one limit is found by search over the model rather than by laying out each.
         ContentPtr nearLimitTable(const Env &env, const Metric metric, const int percent, const double fraction) {
             const QSizeF small = layoutTableCapture(buildTable(env, 40, kTableTiers), true).size;
             const QSizeF large = layoutTableCapture(buildTable(env, 80, kTableTiers), true).size;
@@ -317,7 +317,7 @@ namespace ksv::ui {
             if (slope <= 0.0) return nullptr;
             const auto fits = [&](const int rows) {
                 const QSizeF logical(large.width(), small.height() + slope * (rows - 40));
-                return withinFraction(metric, logical, percent, fraction, env.provisional);
+                return withinFraction(metric, logical, percent, fraction, env.standard);
             };
             int lo = 1, hi = 1'000'000;
             while (lo < hi) {
@@ -600,9 +600,9 @@ int main(int argc, char *argv[]) {
     }
     Env env;
     env.appearance = *appearance;
-    env.provisional = provisionalCaptureLimits();
-    env.active = noLimits ? unlimited(env.provisional) : env.provisional;
-    env.composition = provisionalCaptureComposition();
+    env.standard = standardCaptureLimits();
+    env.active = noLimits ? unlimited(env.standard) : env.standard;
+    env.composition = standardCaptureComposition();
     env.outDir = outDir;
 
     if (clipboard) return runInteractiveClipboard(env);

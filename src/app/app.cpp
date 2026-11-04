@@ -149,7 +149,7 @@ namespace ksv::application {
         m_captureVm = new presentation::CaptureViewModel(
             m_imageOutputUseCase,
             {m_graphVm, m_playtimeVm, m_completionHistoryVm, m_benchmarkTrackingVm},
-            ui::makeCaptureRenderFunction(ui::provisionalCaptureLimits(), ui::provisionalCaptureComposition()), this);
+            ui::makeCaptureRenderFunction(ui::standardCaptureLimits(), ui::standardCaptureComposition()), this);
     }
 
     QVariantMap App::initialProperties() const {

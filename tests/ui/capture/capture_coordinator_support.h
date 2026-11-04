@@ -42,7 +42,7 @@ namespace ksv::ui::capture_coordinator_tests {
     }
 
     inline CaptureRenderFunction realRender() {
-        return makeCaptureRenderFunction(provisionalCaptureLimits(), provisionalCaptureComposition());
+        return makeCaptureRenderFunction(standardCaptureLimits(), standardCaptureComposition());
     }
 
     // Holds a render on its worker. Destroying a coordinator joins that worker, so a test must open

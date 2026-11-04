@@ -1,5 +1,6 @@
 #include "capture/capture_limits.h"
 
+#include <QLocale>
 #include <QObject>
 
 #include <algorithm>
@@ -10,8 +11,8 @@
 
 namespace ksv::ui {
     namespace {
-        // Provisional: scene copy plus geometry built for painting, per observation or carry.
-        constexpr qint64 kBytesPerSourcePoint = 48;
+        // Scene copy plus geometry built for painting, per observation or carry. Measured peak growth was 53 to 67.
+        constexpr qint64 kBytesPerSourcePoint = 72;
         // The current raster, an in-flight replacement, and the clipboard pixels retained after output.
         constexpr qint64 kRetainedRasters = 3;
 
@@ -42,9 +43,26 @@ namespace ksv::ui {
             if (!bytes || *bytes > limits.maxEstimatedBytes) return CaptureRejectionReason::MemoryLimit;
             return std::nullopt;
         }
+
+        std::optional<qint64> violatedLimit(const CaptureRejectionReason reason, const CaptureLimits &limits) {
+            switch (reason) {
+                case CaptureRejectionReason::EdgeLimit:
+                    return limits.maxEdgePixels;
+                case CaptureRejectionReason::AreaLimit:
+                    return limits.maxPixelArea;
+                case CaptureRejectionReason::MemoryLimit:
+                    return limits.maxEstimatedBytes;
+                case CaptureRejectionReason::SourceGeometry:
+                    return limits.maxSourcePoints;
+                case CaptureRejectionReason::TooLittleRoom:
+                case CaptureRejectionReason::ArithmeticOverflow:
+                    return std::nullopt;
+            }
+            return std::nullopt;
+        }
     }
 
-    CaptureLimits provisionalCaptureLimits() {
+    CaptureLimits standardCaptureLimits() {
         CaptureLimits limits;
         limits.maxEdgePixels = 16'384;
         limits.maxPixelArea = 100'000'000;
@@ -77,6 +95,7 @@ namespace ksv::ui {
 
         CaptureRejection rejection;
         rejection.reason = *reason;
+        rejection.limit = violatedLimit(*reason, limits);
         if (*reason == CaptureRejectionReason::SourceGeometry) {
             rejection.correction = CaptureCorrection::TooMuchData;
         } else if (subject == CaptureSubject::Graph) {
@@ -95,17 +114,34 @@ namespace ksv::ui {
     }
 
     namespace {
-        QString limitText(const CaptureRejectionReason reason) {
-            switch (reason) {
+        QString limitText(const CaptureRejection &rejection) {
+            const QLocale locale;
+            switch (rejection.reason) {
                 case CaptureRejectionReason::TooLittleRoom:
                     return QObject::tr("The required content does not fit the available space.");
                 case CaptureRejectionReason::EdgeLimit:
+                    if (rejection.limit) {
+                        return QObject::tr("An edge of the image is longer than the maximum of %1 pixels.")
+                                .arg(locale.toString(*rejection.limit));
+                    }
                     return QObject::tr("An edge of the image is longer than the maximum allowed.");
                 case CaptureRejectionReason::AreaLimit:
+                    if (rejection.limit) {
+                        return QObject::tr("The image has more than the maximum of %1 pixels.")
+                                .arg(locale.toString(*rejection.limit));
+                    }
                     return QObject::tr("The image has more pixels than the maximum allowed.");
                 case CaptureRejectionReason::MemoryLimit:
+                    if (rejection.limit) {
+                        return QObject::tr("The image needs more than the %1 of memory allowed.")
+                                .arg(locale.formattedDataSize(*rejection.limit));
+                    }
                     return QObject::tr("The image needs more memory than is allowed.");
                 case CaptureRejectionReason::SourceGeometry:
+                    if (rejection.limit) {
+                        return QObject::tr("The graph holds more than the %1 points that can be captured.")
+                                .arg(locale.toString(*rejection.limit));
+                    }
                     return QObject::tr("The graph holds more points than can be captured.");
                 case CaptureRejectionReason::ArithmeticOverflow:
                     return QObject::tr("The image size is beyond what can be represented.");
@@ -138,6 +174,6 @@ namespace ksv::ui {
     }
 
     QString captureRejectionText(const CaptureRejection &rejection) {
-        return QObject::tr("%1 %2").arg(limitText(rejection.reason), correctionText(rejection));
+        return QObject::tr("%1 %2").arg(limitText(rejection), correctionText(rejection));
     }
 }

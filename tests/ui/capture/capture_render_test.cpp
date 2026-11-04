@@ -104,7 +104,7 @@ namespace ksv::ui {
 
     TEST(CaptureRender, TheRenderFunctionCanBeMade) {
         const CaptureRenderFunction render =
-                makeCaptureRenderFunction(provisionalCaptureLimits(), provisionalCaptureComposition());
+                makeCaptureRenderFunction(standardCaptureLimits(), standardCaptureComposition());
 
         const CaptureRenderOutcome outcome = render(requestFor(graphSnapshot()));
 
@@ -113,8 +113,8 @@ namespace ksv::ui {
     }
 
     TEST(CaptureRender, AGraphRendersAtItsReferenceTimesTheResolution) {
-        const CaptureComposition composition = provisionalCaptureComposition();
-        const CaptureRenderFunction render = makeCaptureRenderFunction(provisionalCaptureLimits(), composition);
+        const CaptureComposition composition = standardCaptureComposition();
+        const CaptureRenderFunction render = makeCaptureRenderFunction(standardCaptureLimits(), composition);
         const GraphCaptureSnapshot snapshot = graphSnapshot();
 
         const CaptureRenderOutcome single = render(requestFor(snapshot, {.percent = 100}));
@@ -131,7 +131,7 @@ namespace ksv::ui {
 
     TEST(CaptureRender, ATableFollowsItsSummaryChoice) {
         const CaptureRenderFunction render =
-                makeCaptureRenderFunction(provisionalCaptureLimits(), provisionalCaptureComposition());
+                makeCaptureRenderFunction(standardCaptureLimits(), standardCaptureComposition());
         const TableCaptureSnapshot snapshot = tableSnapshotWithSummary();
 
         const CaptureRenderOutcome with = render(requestFor(snapshot, {.includeSummary = true}));
@@ -147,7 +147,7 @@ namespace ksv::ui {
 
     TEST(CaptureRender, ACustomLogicalSizeIsHonoured) {
         const CaptureRenderFunction render =
-                makeCaptureRenderFunction(provisionalCaptureLimits(), provisionalCaptureComposition());
+                makeCaptureRenderFunction(standardCaptureLimits(), standardCaptureComposition());
 
         const CaptureRenderOutcome outcome =
                 render(requestFor(graphSnapshot(), {.percent = 200, .logical = QSizeF(900.0, 500.0)}));
@@ -158,9 +158,9 @@ namespace ksv::ui {
     }
 
     TEST(CaptureRender, AnOversizedOutputIsRejectedBeforePainting) {
-        CaptureLimits limits = provisionalCaptureLimits();
+        CaptureLimits limits = standardCaptureLimits();
         limits.maxEdgePixels = 500;
-        const CaptureComposition composition = provisionalCaptureComposition();
+        const CaptureComposition composition = standardCaptureComposition();
         const CaptureRenderFunction render = makeCaptureRenderFunction(limits, composition);
         const GraphCaptureSnapshot snapshot = graphSnapshot();
 
@@ -173,8 +173,8 @@ namespace ksv::ui {
     }
 
     TEST(CaptureRender, TooLittleRoomNamesAValidatedResolution) {
-        const CaptureLimits limits = provisionalCaptureLimits();
-        CaptureComposition composition = provisionalCaptureComposition();
+        const CaptureLimits limits = standardCaptureLimits();
+        CaptureComposition composition = standardCaptureComposition();
         composition.minimumPlot = QSizeF(100.0, 20.0);
         const CaptureRenderFunction render = makeCaptureRenderFunction(limits, composition);
         const GraphCaptureSnapshot snapshot = rankedSnapshot();
@@ -194,9 +194,9 @@ namespace ksv::ui {
     }
 
     TEST(CaptureRender, TheThumbnailStaysWithinItsAllowance) {
-        CaptureLimits limits = provisionalCaptureLimits();
+        CaptureLimits limits = standardCaptureLimits();
         limits.thumbnailBytes = 64 * 1024;
-        const CaptureRenderFunction render = makeCaptureRenderFunction(limits, provisionalCaptureComposition());
+        const CaptureRenderFunction render = makeCaptureRenderFunction(limits, standardCaptureComposition());
 
         const CaptureRenderOutcome outcome = render(requestFor(graphSnapshot()));
 

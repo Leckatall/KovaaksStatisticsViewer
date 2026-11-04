@@ -192,7 +192,23 @@ Validate logical layout, final dimensions, per-axis limits, pixel area, buffer a
 
 The policy is a named, injectable set of limits shared by quick copy and preview. Report the violated constraint and useful correction: reduce graph dimensions or resolution; reduce table resolution; or explain when complete table content exceeds support even at 50%. Do not clamp, silently lower density, omit content, or split images. Allocation or painting failures after preflight follow the same recoverable render-failure state.
 
-**Unresolved before feature acceptance:** numerical dimension/area/memory limits, representative render/copy/paste/save latency, and the concrete standard graph reference size. Validate these as part of implementing the complete feature using supported Windows/Qt settings and representative dense graphs, long labels, large tables, and many-tier benchmarks. Record hardware/runtime, input scale, actual dimensions, peak memory, responsiveness, and the readability/detail result. Publish the resulting limits through validation and documentation. These checks form the completion gate for the whole feature. This proposal does not claim measurements or validated limits. Normal target content failing complete-content or fresh-rendering requirements requires revisiting the design/scope, not weakening those requirements in implementation.
+**Adopted limits.** These were adopted at checkpoint C3, from Release measurements recorded in the stage's validation evidence (Ryzen 7 5800X, Qt 6.12, MSVC); they are the shipped values, not placeholders:
+
+| Value | Adopted | Basis |
+| --- | --- | --- |
+| Standard graph reference | 960 × 600 logical, minimum plot 240 × 140 | Reads well with two-line titles, three-line axis titles and eight legend rows |
+| `maxEdgePixels` | 16,384 | A 15,525-pixel table rendered, saved and read well; it stops a 500% table at about 73 rows, and the rejection names a lower resolution that passes |
+| `maxPixelArea` | 100,000,000 | About 466 MB peak and 5 s to render and save at 101 Mpx, with the GUI thread responsive |
+| `maxEstimatedBytes` | 1.5 GiB | A backstop: under the other limits the estimate reaches at most about 1.31 GB, so it does not fire today |
+| `maxSourcePoints` | 2,000,000 | Memory is no concern at that size; it has no user correction, so it is not lowered |
+| Bytes per source point | 72 | Measured peak growth was 53 to 67 bytes per point |
+| Thumbnail allowance | 16 MiB | Included in every measured peak without issue; not a rejection limit |
+
+Rejection messages state the violated figure, formatted for the current locale. Dense graph paint cost is accepted as measured: painting is linear in points and grows with resolution, so 8 × 100,000 noisy points take about 37 s at 200% and 3.6 minutes at 500%. The paint cannot be cancelled and occupies the single render slot, but the UI stays responsive. There is no decimation and no lower point limit. Whether real graphs approach that size has not been measured.
+
+**Still open: the clipboard adapter.** The Qt candidate described above stays in place. The choice between it and the `OleFlushClipboard` or Win32 worker fallbacks waits on the explicitly authorized interactive clipboard runs (clipboard history off, on, and under contention), which have not yet been made. Clipboard publish and paste latency are therefore unmeasured, and the three-raster memory assumption that includes clipboard pixels is untested.
+
+Normal target content failing complete-content or fresh-rendering requirements requires revisiting the design/scope, not weakening those requirements in implementation.
 
 ### Feedback, accessibility, and recovery
 

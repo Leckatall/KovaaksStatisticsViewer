@@ -20,7 +20,8 @@ namespace ksv::ui {
         qint64 thumbnailBytes = 0;
     };
 
-    CaptureLimits provisionalCaptureLimits();
+    // Adopted at checkpoint C3 from Release measurements; see the design's resource policy section.
+    CaptureLimits standardCaptureLimits();
 
     enum class CaptureRejectionReason { TooLittleRoom, EdgeLimit, AreaLimit, MemoryLimit, SourceGeometry, ArithmeticOverflow };
 
@@ -37,6 +38,8 @@ namespace ksv::ui {
         CaptureRejectionReason reason = CaptureRejectionReason::TooLittleRoom;
         CaptureCorrection correction = CaptureCorrection::LargerDimensions;
         std::optional<int> suggestedPercent;
+        // The figure of the violated limit, in its own unit; absent for reasons that are not a limit.
+        std::optional<qint64> limit;
     };
 
     enum class CaptureSubject { Graph, Table };

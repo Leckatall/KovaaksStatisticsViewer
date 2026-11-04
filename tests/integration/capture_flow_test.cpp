@@ -372,7 +372,7 @@ namespace {
             if (!canvas) return std::nullopt;
             const auto snapshot = ui::captureGraph(entry.target, *canvas, contextFor(entry.target), appearance);
             if (!snapshot) return std::nullopt;
-            return ui::captureOutputPixels(ui::graphReferenceSize(*snapshot, ui::provisionalCaptureComposition()),
+            return ui::captureOutputPixels(ui::graphReferenceSize(*snapshot, ui::standardCaptureComposition()),
                                            percent);
         }
     };
@@ -439,8 +439,8 @@ namespace {
 
         std::mutex logMutex;
         std::vector<ui::CaptureRenderRequest> requests;
-        const auto inner = ui::makeCaptureRenderFunction(ui::provisionalCaptureLimits(),
-                                                         ui::provisionalCaptureComposition());
+        const auto inner = ui::makeCaptureRenderFunction(ui::standardCaptureLimits(),
+                                                         ui::standardCaptureComposition());
         presentation::CaptureViewModel second(
             app->imageOutputUseCase(),
             {app->graphVm(), app->playtimeVm(), app->completionHistoryVm(), app->benchmarkTrackingVm()},
@@ -517,7 +517,7 @@ namespace {
         const auto reviewed = ui::captureGraph(ui::CaptureTarget::DailyPlaytime, *canvas,
                                                ui::dailyPlaytimeCaptureContext(*app->playtimeVm()), appearance);
         ASSERT_TRUE(reviewed.has_value());
-        const QSizeF reference = ui::graphReferenceSize(*reviewed, ui::provisionalCaptureComposition());
+        const QSizeF reference = ui::graphReferenceSize(*reviewed, ui::standardCaptureComposition());
 
         captureVm()->openPreview("dailyPlaytime", canvas);
         ASSERT_TRUE(awaitReadyPreview());
