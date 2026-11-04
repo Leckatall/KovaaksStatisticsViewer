@@ -47,7 +47,7 @@ Frame {
             CaptureActions {
                 captureVm: root.captureVm
                 targetKey: root.graphKey
-                canvas: canvasLoader.item ? canvasLoader.item.graphCanvas : null
+                canvas: (canvasLoader.item as GraphCanvasWithTooltip)?.graphCanvas ?? null
             }
             GraphGear {
                 graphKey: root.graphKey

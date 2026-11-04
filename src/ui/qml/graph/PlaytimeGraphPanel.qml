@@ -40,7 +40,7 @@ Frame {
             CaptureActions {
                 captureVm: root.captureVm
                 targetKey: "dailyPlaytime"
-                canvas: canvasLoader.item ? canvasLoader.item.graphCanvas : null
+                canvas: (canvasLoader.item as GraphCanvasWithTooltip)?.graphCanvas ?? null
             }
             GraphGear {
                 graphKey: "dailyPlaytime"

@@ -81,9 +81,9 @@ Frame {
                     text: root.graphVm.scenarioTitle !== "" ? root.graphVm.scenarioTitle : qsTr("Run graph")
                 }
                 CaptureActions {
+                    id: captureActions
                     captureVm: root.captureVm
                     targetKey: "run"
-                    canvas: canvasLoader.item ? canvasLoader.item.graphCanvas : null
                 }
                 GraphGear {
                     graphKey: "run"
@@ -105,9 +105,14 @@ Frame {
                     active: root.graphVm.contentState === GraphViewModel.HasData
                     sourceComponent: Component {
                         RowLayout {
-                            readonly property alias graphCanvas: canvasWithTooltip.graphCanvas
                             anchors.fill: parent
                             spacing: 0
+
+                            // The loaded row is an anonymous type, so the canvas is pushed out rather than read
+                            // through Loader.item; unloading restores the actions' null canvas.
+                            Binding {
+                                captureActions.canvas: canvasWithTooltip.graphCanvas
+                            }
 
                             YAxisTitle {
                                 labelObjectName: "scenarioYAxisTitleLabel"
