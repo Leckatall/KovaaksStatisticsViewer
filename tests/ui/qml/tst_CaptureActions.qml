@@ -104,8 +104,9 @@ TestCase {
         elsewhere.forceActiveFocus()
         verify(elsewhere.activeFocus)
         vm.previewClosed()
-        tryVerify(() => required(actions, "captureCopy_run").activeFocus, 2000,
-                  "the camera did not take focus back")
+        tryVerify(() => required(actions, "captureMenu_run").activeFocus, 2000,
+                  "the dropdown that opened the preview did not take focus back")
+        compare(required(actions, "captureCopy_run").activeFocus, false)
     }
 
     function test_anotherInstanceDoesNotTakeFocus() {

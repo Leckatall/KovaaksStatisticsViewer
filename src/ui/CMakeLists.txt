@@ -117,6 +117,7 @@ qt_add_qml_module(ksv_ui
             qml/icons/check.svg
             qml/icons/camera.svg
             qml/icons/chevron-down.svg
+            qml/icons/chevron-right.svg
             qml/icons/circle-alert.svg
             qml/icons/info.svg
             qml/icons/eye.svg

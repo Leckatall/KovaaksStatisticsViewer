@@ -4,7 +4,10 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    objectName: "captureStatusStrip"
     property var captureVm: null
+    // Two strips are alive while the preview is open; only one may announce or a screen reader says it twice.
+    property bool announces: true
 
     readonly property string kind: root.captureVm ? root.captureVm.feedbackKind : "none"
     readonly property string message: root.captureVm ? root.captureVm.feedbackText : ""
@@ -14,7 +17,7 @@ Item {
     implicitHeight: row.implicitHeight
 
     onMessageChanged: {
-        if (root.message !== "")
+        if (root.announces && root.message !== "")
             root.Accessible.announce(root.message,
                                      root.kind === "failure" ? Accessible.Assertive : Accessible.Polite)
     }

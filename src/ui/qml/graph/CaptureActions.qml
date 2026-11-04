@@ -74,7 +74,7 @@ RowLayout {
         function onPreviewClosed() {
             if (!root.openedPreview) return
             root.openedPreview = false
-            camera.forceActiveFocus(Qt.TabFocusReason)
+            dropdown.forceActiveFocus(Qt.TabFocusReason)
         }
     }
 }

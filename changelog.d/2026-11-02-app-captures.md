@@ -13,4 +13,8 @@ An empty or non-local export destination, or a refused save admission, keeps the
 `CaptureViewModel` exposes `previewImageWidth`/`previewImageHeight`, because QML cannot read a `QImage`'s size and the preview would otherwise never appear.
 Escape is a window-level `Shortcut`, so it closes the preview from the footer buttons and after Copy.
 The options area scrolls and the image keeps a minimum height, so the footer, image and options stay reachable at the minimum window size and larger text.
+While the preview is open only its own status strip announces results to screen readers (`CaptureStatusStrip.announces`), and the preview's unavailable message has an alert role.
+The preview's image scroller shows a focus ring when it has keyboard focus.
+Closing the preview returns focus to the export dropdown that opened it, not the quick-copy camera.
+The resolution marks line up with the slider handle at every value, and the collapsed Advanced options button shows a right-pointing chevron.
 The width and height fields stay disabled until `CaptureViewModel::hasReference` (the first render outcome) so an early entry is not dropped silently.

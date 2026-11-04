@@ -99,6 +99,23 @@ Item {
                 verify(find(ws, "captureCopy_" + key) !== null, "no camera for " + key)
         }
 
+        function test_historyCardsHandTheLoadedCanvasToQuickCopy() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            const capture = createTemporaryObject(captureStubComponent, root)
+            ws.captureVm = capture
+            for (const key of ["benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"]) {
+                const camera = find(ws, "captureCopy_" + key)
+                verify(camera !== null, "no camera for " + key)
+                capture.calls = []
+                mouseClick(camera)
+                const copies = capture.callsNamed("quickCopy")
+                compare(copies.length, 1, key)
+                verify(copies[0].args[1] !== null && copies[0].args[1] !== undefined,
+                       "no canvas handed over for " + key)
+            }
+            ws.destroy()
+        }
+
         function test_theHeaderCarriesTheTableAction() {
             const states = [
                 {tag: "trackable", fx: TestDoubles.trackingFixtureTrackable()},

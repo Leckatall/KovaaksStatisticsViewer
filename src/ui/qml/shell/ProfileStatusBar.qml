@@ -145,6 +145,7 @@ Rectangle {
             Layout.maximumWidth: implicitWidth
             Layout.fillHeight: true
             captureVm: root.captureVm
+            announces: !(root.captureVm && root.captureVm.previewOpen === true)
         }
     }
 }

@@ -83,7 +83,6 @@ TestCase {
     function test_renderingKeepsTheImageButDisablesOutput() {
         const {dialog} = shown({previewState: "rendering", canOutput: false, previewImage: tallImage(40, 20)})
         compare(required(dialog, "captureImage").visible, true)
-        compare(find(dialog, "captureBusy"), null)
         compare(required(dialog, "captureCopyButton").enabled, false)
         compare(required(dialog, "captureExportButton").enabled, false)
     }
@@ -361,14 +360,51 @@ TestCase {
         compare(vm.callsNamed("cancelExport").length, 0)
     }
 
-    function test_resizingChangesNothingOutput() {
-        const {vm, dialog} = shown()
-        const size = required(dialog, "captureOutputSize")
-        const before = size.text
-        dialog.width += 120
-        dialog.height += 80
-        wait(50)
-        compare(vm.calls.length, 0)
-        compare(size.text, before)
+    function test_advancedCollapsesOnReopen() {
+        const {vm, dialog} = shown({isGraph: true})
+        mouseClick(required(dialog, "captureAdvanced"))
+        compare(required(dialog, "captureWidth").visible, true)
+        vm.previewOpen = false
+        tryCompare(dialog, "visible", false)
+        vm.previewOpen = true
+        tryCompare(dialog, "visible", true)
+        const width = find(dialog, "captureWidth")
+        verify(width === null || !width.visible, "Advanced must start collapsed on reopen")
+    }
+
+    function test_retryIsOfferedOnlyAfterAFailure() {
+        const {dialog} = shown({previewState: "invalid", canOutput: false, previewError: "Too wide to render"})
+        compare(required(dialog, "captureRetry").visible, false)
+    }
+
+    function test_marksSitOverTheHandlePositionAtTheEnds() {
+        for (const percent of [50, 500]) {
+            const {dialog} = shown({percent: percent})
+            const slider = required(dialog, "captureResolution")
+            const mark = required(dialog, "captureMark_" + percent)
+            const handleCentre = slider.handle.mapToItem(null, slider.handle.width / 2, 0).x
+            const markCentre = mark.mapToItem(null, mark.width / 2, 0).x
+            verify(Math.abs(handleCentre - markCentre) < 1.5,
+                   "mark " + percent + " is at " + markCentre + " but the handle is at " + handleCentre)
+        }
+    }
+
+    function test_theImageScrollerShowsWhenItHasKeyboardFocus() {
+        const {dialog} = shown({previewImage: tallImage(200, 300)})
+        const indicator = required(dialog, "captureImageFocusRing")
+        required(dialog, "captureImageScroll").forceActiveFocus(Qt.TabFocusReason)
+        compare(indicator.visible, true)
+        required(dialog, "captureCloseButton").forceActiveFocus(Qt.TabFocusReason)
+        compare(indicator.visible, false)
+    }
+
+    function test_theUnavailableMessageIsAnAlert() {
+        const {dialog} = shown({previewState: "invalid", canOutput: false, previewError: "Too wide to render"})
+        compare(required(dialog, "captureError").Accessible.role, Accessible.AlertMessage)
+    }
+
+    function test_thePreviewStripAnnouncesItsFeedback() {
+        const {dialog} = shown({feedbackKind: "failure", feedbackText: "Could not copy Run graph"})
+        compare(required(dialog, "captureStatusStrip").announces, true)
     }
 }

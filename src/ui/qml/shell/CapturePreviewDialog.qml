@@ -141,8 +141,10 @@ ApplicationWindow {
                                     objectName: "captureMark_" + modelData
                                     text: qsTr("%1%").arg(modelData)
                                     font.pixelSize: 11
-                                    x: resolution.leftPadding + resolution.availableWidth * (modelData - resolution.from)
-                                       / (resolution.to - resolution.from) - width / 2
+                                    // The handle's centre travels the track minus one handle width.
+                                    x: resolution.leftPadding + resolution.handle.width / 2
+                                       + (resolution.availableWidth - resolution.handle.width)
+                                       * (modelData - resolution.from) / (resolution.to - resolution.from) - width / 2
                                 }
                             }
                         }
@@ -171,7 +173,7 @@ ApplicationWindow {
                         checkable: true
                         checked: root.advancedExpanded
                         text: qsTr("Advanced options")
-                        icon.source: checked ? "../icons/chevron-down.svg" : ""
+                        icon.source: checked ? "../icons/chevron-down.svg" : "../icons/chevron-right.svg"
                         onToggled: root.advancedExpanded = checked
                     }
                 }
@@ -257,6 +259,7 @@ ApplicationWindow {
             }
             Label {
                 objectName: "captureError"
+                Accessible.role: Accessible.AlertMessage
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: root.captureVm ? root.captureVm.previewError : ""
@@ -270,12 +273,25 @@ ApplicationWindow {
         }
 
         // Fits the width and scrolls vertically so the whole of a tall table is reachable by keyboard.
-        Flickable {
-            id: scroller
-            objectName: "captureImageScroll"
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 100
+
+        Rectangle {
+            objectName: "captureImageFocusRing"
+            anchors.fill: parent
+            z: 1
+            color: "transparent"
+            border.width: 2
+            border.color: root.palette.highlight
+            visible: scroller.activeFocus
+        }
+
+        Flickable {
+            id: scroller
+            objectName: "captureImageScroll"
+            anchors.fill: parent
             clip: true
             focus: true
             activeFocusOnTab: true
@@ -313,6 +329,7 @@ ApplicationWindow {
                 value: root.image
                 when: root.hasImage
             }
+        }
         }
     }
 

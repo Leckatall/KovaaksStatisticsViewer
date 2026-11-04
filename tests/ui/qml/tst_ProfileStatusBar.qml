@@ -61,8 +61,6 @@ TestCase {
         })
         const capture = createTemporaryObject(captureStubComponent, testCase,
             {feedbackKind: "success", feedbackText: "Copied a graph with a deliberately long descriptive name"})
-        const idle = createTemporaryObject(barComponent, testCase,
-            {sessionVm: createTemporaryObject(vmComponent, testCase), width: 400})
         const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture, width: 400})
         compare(bar.mode, "warning")
         const warning = find(bar, "profileStatusText")
@@ -72,11 +70,27 @@ TestCase {
         compare(find(bar, "profileStatusDetailsButton").visible, true)
         compare(find(bar, "profileStatusDismissButton").visible, true)
         compare(capText.visible, true)
-        compare(warning.elide, Text.ElideRight)
-        compare(capText.elide, Text.ElideRight)
-        compare(warning.lineCount, 1)
-        compare(capText.lineCount, 1)
-        compare(bar.height, idle.height)
+        const warningBox = warning.mapToItem(bar, 0, 0)
+        const capBox = capText.mapToItem(bar, 0, 0)
+        verify(capBox.x >= warningBox.x + warning.width, "capture status must sit beside the warning, not overlap it")
+        verify(Math.abs((capBox.y + capText.height / 2) - (warningBox.y + warning.height / 2)) < 2,
+               "capture status must share the warning's row, not stack")
+        verify(warning.truncated, "the warning should elide rather than push the capture status out")
+        verify(capText.truncated, "the capture status should elide rather than overflow")
+        verify(capBox.x + capText.width <= bar.width, "capture status lies outside the bar")
+    }
+
+    function test_theBarStaysSilentWhileThePreviewAnnouncesInstead() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase,
+            {feedbackKind: "success", feedbackText: "Copied a graph"})
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        const strip = find(bar, "captureStatusStrip")
+        compare(strip.announces, true)
+        capture.previewOpen = true
+        compare(strip.announces, false)
+        capture.previewOpen = false
+        compare(strip.announces, true)
     }
 
     function test_captureFeedbackAppearsDuringImport() {
