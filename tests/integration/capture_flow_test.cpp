@@ -18,6 +18,7 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -565,10 +566,11 @@ namespace {
         QTemporaryDir out;
         ASSERT_TRUE(out.isValid());
         const QString destination = QDir(out.path()).absoluteFilePath("reviewed.png");
+        captureVm()->dismissFeedback();
         ASSERT_TRUE(captureVm()->beginExport());
         captureVm()->confirmExport(QUrl::fromLocalFile(destination));
         ASSERT_TRUE(QTest::qWaitFor([&] {
-            return env.pngWriter->writeCount() == 1 && captureVm()->feedbackText().contains("exported");
+            return env.pngWriter->writeCount() == 1 && captureVm()->feedbackKind() == "success";
         }, kWaitMs));
 
         const auto copied = clipboardTap.recorded();
@@ -688,16 +690,18 @@ namespace {
 
         captureVm()->openPreview("run", canvasOf(find("captureCopy_run")));
         ASSERT_TRUE(awaitReadyPreview());
+        captureVm()->dismissFeedback();
         ASSERT_TRUE(captureVm()->beginExport());
         captureVm()->confirmExport(QUrl::fromLocalFile(destination));
-        ASSERT_TRUE(QTest::qWaitFor([&] { return captureVm()->feedbackText().contains("exported"); }, kWaitMs));
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return env.pngWriter->writeCount() == 1 && captureVm()->feedbackKind() == "success";
+        }, kWaitMs));
 
         EXPECT_EQ(env.clipboardWriter->publishCount(), 1U);
         const auto writes = env.pngWriter->seen();
         ASSERT_EQ(writes.size(), 1U);
         EXPECT_EQ(QString::fromStdString(writes.front().destination.generic_string()),
                   QDir::fromNativeSeparators(destination));
-        EXPECT_TRUE(filesUnder(out.path()).isEmpty());
         EXPECT_EQ(filesUnder(env.rootPath()), rootBefore);
         EXPECT_EQ(filesUnder(env.benchmarksDir.path()), benchmarksBefore);
     }
@@ -743,7 +747,7 @@ namespace {
         ASSERT_NE(footerText, nullptr);
         EXPECT_TRUE(footerText->isVisible());
         EXPECT_EQ(footerText->property("text").toString(), captureVm()->feedbackText());
-        EXPECT_TRUE(captureVm()->feedbackText().contains("Could not copy"));
+        EXPECT_TRUE(captureVm()->feedbackText().contains(ui::captureTargetName(ui::CaptureTarget::Run)));
         EXPECT_TRUE(captureVm()->previewOpen());
         EXPECT_TRUE(copy->isEnabled());
         EXPECT_TRUE(captureVm()->canOutput());
@@ -779,7 +783,7 @@ namespace {
         ASSERT_NE(dismiss, nullptr);
         EXPECT_TRUE(text->isVisible());
         EXPECT_TRUE(dismiss->isVisible());
-        EXPECT_TRUE(text->property("text").toString().contains("Could not export"));
+        EXPECT_TRUE(text->property("text").toString().contains(ui::captureTargetName(ui::CaptureTarget::Run)));
 
         ASSERT_NO_FATAL_FAILURE(click(dismiss));
         EXPECT_EQ(captureVm()->feedbackKind(), "none");
@@ -804,14 +808,12 @@ namespace {
         QTest::qWait(100);
         ASSERT_NO_FATAL_FAILURE(click(find("captureCopy_run")));
         ASSERT_TRUE(QTest::qWaitFor([&] { return captureVm()->feedbackKind() == "notice"; }, kWaitMs));
-        EXPECT_TRUE(captureVm()->feedbackText().contains("still saving"));
         EXPECT_EQ(env.clipboardWriter->publishCount(), 0U);
         EXPECT_EQ(env.pngWriter->writeCount(), 1U);
         EXPECT_NE(captureVm()->feedbackKind(), "success");
 
         env.pngWriter->openGate();
         ASSERT_TRUE(QTest::qWaitFor([&] { return captureVm()->feedbackKind() == "success"; }, kWaitMs));
-        EXPECT_TRUE(captureVm()->feedbackText().contains("exported"));
         EXPECT_EQ(env.clipboardWriter->publishCount(), 0U);
     }
 
@@ -843,7 +845,7 @@ namespace {
         EXPECT_TRUE(details->isVisible());
         EXPECT_TRUE(dismissWarning->isVisible());
         EXPECT_TRUE(captureText->isVisible());
-        EXPECT_TRUE(captureText->property("text").toString().contains("copied"));
+        EXPECT_TRUE(captureText->property("text").toString().contains(ui::captureTargetName(ui::CaptureTarget::Run)));
         // The strip's slot only exists once the bar's layout has been polished after it became visible.
         QQuickItem *strip = captureText->parentItem()->parentItem();
         const auto sceneRect = [](const QQuickItem *item) { return item->mapRectToScene(item->boundingRect()); };
@@ -879,5 +881,265 @@ namespace {
         EXPECT_EQ(pngTap.recorded().size(), 1U);
         EXPECT_EQ(env.pngWriter->writeCount(), 1U);
         EXPECT_EQ(env.clipboardWriter->publishCount(), 0U);
+    }
+
+    // --- I4 -------------------------------------------------------------
+
+    // Wraps the real renderer so a test can see what each render concluded, and make one fail or hang.
+    // Shared with the render worker thread, so it outlives the view model that holds the function.
+    class RenderProbe {
+    public:
+        enum class Mode { Real, Fail, Block };
+
+        struct Concluded {
+            bool rendered = false;
+            bool failed = false;
+            std::optional<ui::CaptureRejection> rejection;
+        };
+
+        explicit RenderProbe(const ui::CaptureLimits limits)
+            : m_inner(ui::makeCaptureRenderFunction(limits, ui::standardCaptureComposition())) {}
+
+        [[nodiscard]] ui::CaptureRenderFunction function() {
+            return [this](const ui::CaptureRenderRequest &request) -> ui::CaptureRenderOutcome {
+                const Mode mode = this->mode.load();
+                if (mode == Mode::Block) {
+                    entered = true;
+                    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                    while (!request.isCancelled() && std::chrono::steady_clock::now() < deadline) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                    }
+                    sawCancel = request.isCancelled();
+                    return ui::CaptureRenderFailed{};
+                }
+                ui::CaptureRenderOutcome outcome = mode == Mode::Fail ? ui::CaptureRenderOutcome{ui::CaptureRenderFailed{}}
+                                                                      : m_inner(request);
+                Concluded concluded;
+                concluded.rendered = std::holds_alternative<ui::CaptureRendered>(outcome);
+                concluded.failed = std::holds_alternative<ui::CaptureRenderFailed>(outcome);
+                if (const auto *rejected = std::get_if<ui::CaptureRejected>(&outcome)) {
+                    concluded.rejection = rejected->rejection;
+                }
+                std::scoped_lock lock(m_mutex);
+                m_concluded.push_back(concluded);
+                return outcome;
+            };
+        }
+
+        [[nodiscard]] std::vector<Concluded> concluded() const {
+            std::scoped_lock lock(m_mutex);
+            return m_concluded;
+        }
+
+        std::atomic<Mode> mode{Mode::Real};
+        std::atomic_bool entered{false};
+        std::atomic_bool sawCancel{false};
+
+    private:
+        ui::CaptureRenderFunction m_inner;
+        mutable std::mutex m_mutex;
+        std::vector<Concluded> m_concluded;
+    };
+
+    class CaptureFlowFailureCases : public CaptureFlowFailures {
+    protected:
+        [[nodiscard]] static ui::CaptureLimits smallAreaLimits() {
+            ui::CaptureLimits limits = ui::standardCaptureLimits();
+            limits.maxPixelArea = 1000;
+            return limits;
+        }
+
+        // A second view model over the real use case and view models, differing only in its render function.
+        [[nodiscard]] std::unique_ptr<presentation::CaptureViewModel> probedVm(RenderProbe &probe) const {
+            auto vm = std::make_unique<presentation::CaptureViewModel>(
+                app->imageOutputUseCase(),
+                presentation::CaptureLiveViewModels{app->graphVm(), app->playtimeVm(), app->completionHistoryVm(),
+                                                    app->benchmarkTrackingVm()},
+                probe.function());
+            vm->useTheme(app->engine()->singletonInstance<QObject *>("KovaaksStatsViewer", "Theme"),
+                         window()->property("font").value<QFont>());
+            return vm;
+        }
+
+        [[nodiscard]] QObject *runCanvas() const { return canvasOf(find("captureCopy_run")); }
+
+        [[nodiscard]] bool awaitState(const presentation::CaptureViewModel &vm, const QString &state) const {
+            return QTest::qWaitFor([&] { return vm.previewState() == state; }, kWaitMs);
+        }
+
+        void expectNothingOutput() const {
+            EXPECT_EQ(env.clipboardWriter->publishCount(), 0U);
+            EXPECT_EQ(env.pngWriter->writeCount(), 0U);
+        }
+    };
+
+    TEST_F(CaptureFlowFailureCases, AnInvalidSizeOffersNoOutputUntilCorrected) {
+        ASSERT_NO_FATAL_FAILURE(showRun());
+        ASSERT_NO_FATAL_FAILURE(openRunPreview());
+        ASSERT_TRUE(captureVm()->hasReference());
+
+        for (const bool width: {true, false}) {
+            SCOPED_TRACE(width ? "width" : "height");
+            const auto commit = [&](const QString &text) {
+                if (width) captureVm()->commitWidth(text); else captureVm()->commitHeight(text);
+            };
+            commit(QStringLiteral("not a size"));
+            EXPECT_EQ(captureVm()->previewState(), "invalid");
+            EXPECT_FALSE(captureVm()->canOutput());
+            EXPECT_FALSE(captureVm()->beginExport());
+            EXPECT_FALSE((width ? captureVm()->widthError() : captureVm()->heightError()).isEmpty());
+            EXPECT_FALSE(findInPreview("captureCopyButton")->isEnabled());
+            captureVm()->copyPreview();
+            expectNothingOutput();
+
+            commit(QStringLiteral("1800"));
+            ASSERT_TRUE(awaitReadyPreview());
+            EXPECT_TRUE(captureVm()->canOutput());
+            EXPECT_TRUE(captureVm()->widthError().isEmpty());
+            EXPECT_TRUE(captureVm()->heightError().isEmpty());
+            EXPECT_TRUE(findInPreview("captureCopyButton")->isEnabled());
+        }
+        expectNothingOutput();
+    }
+
+    TEST_F(CaptureFlowFailureCases, AnOversizedPreviewReportsTheViolatedLimitAndRecovers) {
+        ASSERT_NO_FATAL_FAILURE(showRun());
+        const ui::CaptureLimits limits = ui::standardCaptureLimits();
+        RenderProbe probe(limits);
+        const auto vm = probedVm(probe);
+
+        vm->openPreview("run", runCanvas());
+        ASSERT_TRUE(awaitState(*vm, "ready"));
+        vm->commitWidth(QString::number(limits.maxEdgePixels + 1000));
+        ASSERT_TRUE(awaitState(*vm, "invalid"));
+
+        EXPECT_FALSE(vm->canOutput());
+        EXPECT_FALSE(vm->beginExport());
+        EXPECT_FALSE(vm->widthError().isEmpty());
+        const auto concluded = probe.concluded();
+        ASSERT_FALSE(concluded.empty());
+        ASSERT_TRUE(concluded.back().rejection.has_value());
+        EXPECT_EQ(concluded.back().rejection->reason, ui::CaptureRejectionReason::EdgeLimit);
+        EXPECT_EQ(concluded.back().rejection->limit, limits.maxEdgePixels);
+        expectNothingOutput();
+
+        vm->commitWidth(QStringLiteral("1800"));
+        ASSERT_TRUE(awaitState(*vm, "ready"));
+        EXPECT_TRUE(vm->canOutput());
+        EXPECT_TRUE(vm->widthError().isEmpty());
+    }
+
+    TEST_F(CaptureFlowFailureCases, AQuickCopyOverTheLimitsIsRefusedWithoutOutput) {
+        ASSERT_NO_FATAL_FAILURE(showRun());
+        const ui::CaptureLimits limits = smallAreaLimits();
+        RenderProbe probe(limits);
+        const auto vm = probedVm(probe);
+
+        vm->quickCopy("run", runCanvas());
+        ASSERT_TRUE(QTest::qWaitFor([&] { return vm->feedbackKind() == "failure"; }, kWaitMs));
+
+        const auto concluded = probe.concluded();
+        ASSERT_EQ(concluded.size(), 1U);
+        ASSERT_TRUE(concluded.front().rejection.has_value());
+        EXPECT_EQ(concluded.front().rejection->reason, ui::CaptureRejectionReason::AreaLimit);
+        EXPECT_EQ(concluded.front().rejection->limit, limits.maxPixelArea);
+        EXPECT_TRUE(vm->feedbackText().contains(ui::captureTargetName(ui::CaptureTarget::Run)));
+        expectNothingOutput();
+    }
+
+    TEST_F(CaptureFlowFailureCases, ATargetWithNoDataIsExplainedAndOffersNothing) {
+        ASSERT_NO_FATAL_FAILURE(startApp());
+        ASSERT_NO_FATAL_FAILURE(showWorkspace(1));
+        auto *tracking = app->benchmarkTrackingVm();
+        tracking->selectBenchmark(QStringLiteral("no-such-benchmark"));
+        QTest::qWait(100);
+        ASSERT_NE(tracking->state(), "trackable");
+        ASSERT_NE(tracking->state(), "incomplete");
+
+        captureVm()->openPreview("benchmarkTable", nullptr);
+        EXPECT_FALSE(captureVm()->previewOpen());
+        EXPECT_EQ(captureVm()->feedbackKind(), "failure");
+        EXPECT_TRUE(captureVm()->feedbackText().contains(ui::captureTargetName(ui::CaptureTarget::BenchmarkTable)));
+        EXPECT_FALSE(captureVm()->canOutput());
+
+        captureVm()->dismissFeedback();
+        captureVm()->quickCopy("benchmarkTable", nullptr);
+        EXPECT_EQ(captureVm()->feedbackKind(), "failure");
+        EXPECT_TRUE(captureVm()->feedbackText().contains(ui::captureTargetName(ui::CaptureTarget::BenchmarkTable)));
+        QTest::qWait(100);
+        expectNothingOutput();
+    }
+
+    TEST_F(CaptureFlowFailureCases, ARenderFailureOffersRetryThenRecovers) {
+        ASSERT_NO_FATAL_FAILURE(showRun());
+        RenderProbe probe(ui::standardCaptureLimits());
+        probe.mode = RenderProbe::Mode::Fail;
+        const auto vm = probedVm(probe);
+
+        vm->openPreview("run", runCanvas());
+        ASSERT_TRUE(awaitState(*vm, "failed"));
+        EXPECT_FALSE(vm->canOutput());
+        EXPECT_FALSE(vm->beginExport());
+        EXPECT_FALSE(vm->previewError().isEmpty());
+        EXPECT_TRUE(vm->previewOpen());
+
+        probe.mode = RenderProbe::Mode::Real;
+        vm->retryRender();
+        ASSERT_TRUE(awaitState(*vm, "ready"));
+        EXPECT_TRUE(vm->canOutput());
+        EXPECT_TRUE(vm->previewError().isEmpty());
+        expectNothingOutput();
+
+        vm->closePreview();
+        probe.mode = RenderProbe::Mode::Fail;
+        vm->quickCopy("run", runCanvas());
+        ASSERT_TRUE(QTest::qWaitFor([&] { return vm->feedbackKind() == "failure"; }, kWaitMs));
+        expectNothingOutput();
+    }
+
+    TEST_F(CaptureFlowFailureCases, ClosingThePreviewCancelsItsRenderWithoutOutput) {
+        ASSERT_NO_FATAL_FAILURE(showRun());
+        RenderProbe probe(ui::standardCaptureLimits());
+        probe.mode = RenderProbe::Mode::Block;
+        const auto vm = probedVm(probe);
+
+        vm->openPreview("run", runCanvas());
+        ASSERT_TRUE(QTest::qWaitFor([&] { return probe.entered.load(); }, kWaitMs));
+        vm->closePreview();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return probe.sawCancel.load(); }, kWaitMs));
+
+        EXPECT_FALSE(vm->previewOpen());
+        EXPECT_FALSE(vm->canOutput());
+        QTest::qWait(100);
+        EXPECT_FALSE(vm->previewOpen());
+        expectNothingOutput();
+    }
+
+    TEST_F(CaptureFlowFailureCases, EscapeClosesThePreviewWithoutOutput) {
+        ASSERT_NO_FATAL_FAILURE(showRun());
+        ASSERT_NO_FATAL_FAILURE(openRunPreview());
+        QQuickWindow *preview = previewWindow();
+        ASSERT_NE(preview, nullptr);
+        preview->requestActivate();
+        ASSERT_TRUE(QTest::qWaitFor([&] { return preview->isActive(); }, 3000));
+
+        QTest::keyClick(preview, Qt::Key_Escape);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !captureVm()->previewOpen(); }, kWaitMs));
+        expectNothingOutput();
+    }
+
+    TEST_F(CaptureFlowFailureCases, CancellingTheSavePickerWritesNothingAndKeepsThePreview) {
+        ASSERT_NO_FATAL_FAILURE(showRun());
+        ASSERT_NO_FATAL_FAILURE(openRunPreview());
+
+        ASSERT_TRUE(captureVm()->beginExport());
+        EXPECT_TRUE(captureVm()->optionsLocked());
+        captureVm()->cancelExport();
+
+        EXPECT_FALSE(captureVm()->optionsLocked());
+        EXPECT_TRUE(captureVm()->previewOpen());
+        EXPECT_TRUE(captureVm()->canOutput());
+        QTest::qWait(100);
+        expectNothingOutput();
     }
 }

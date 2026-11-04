@@ -368,14 +368,16 @@ namespace ksv::ui {
                 const char *name;
                 Metric metric;
                 double fraction;
-            } limitCases[] = {{"table-near-edge-500", Metric::Edge, 0.95},
-                        {"table-near-area-500", Metric::Area, 0.95},
-                        {"table-near-bytes-500", Metric::Bytes, 0.95},
-                        {"save-largest-500", Metric::Area, 0.995}};
+                const char *label;
+            } limitCases[] = {{"table-near-edge-500", Metric::Edge, 0.95, "95pct-of-limit"},
+                        {"table-near-area-500", Metric::Area, 0.95, "95pct-of-limit"},
+                        {"table-near-bytes-500", Metric::Bytes, 0.95, "95pct-of-limit"},
+                        // The request is 99.5% but the geometry rounds up: measured at 100.9% of the area limit.
+                        {"save-largest-500", Metric::Area, 0.995, "about-101pct-of-limit"}};
             for (const auto &entry: limitCases) {
                 const Metric metric = entry.metric;
                 const double fraction = entry.fraction;
-                add(QString::fromLatin1(entry.name), QStringLiteral("%1pct-of-limit").arg(fraction * 100.0), 500,
+                add(QString::fromLatin1(entry.name), QString::fromLatin1(entry.label), 500,
                     [=](const Env &env) { return nearLimitTable(env, metric, 500, fraction); });
             }
             return cases;
