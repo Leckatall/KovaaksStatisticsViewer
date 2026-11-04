@@ -153,6 +153,31 @@ TestCase {
         assertUsableWhenConstrained(vm, dialog, 100)
     }
 
+    function test_tabbingToAClippedOptionScrollsItIntoView() {
+        const {dialog} = shown({isGraph: true, hasReference: true})
+        dialog.width = dialog.minimumWidth
+        dialog.height = dialog.minimumHeight
+        mouseClick(required(dialog, "captureAdvanced"))
+        wait(50)
+        const options = required(dialog, "captureOptionsScroll")
+        verify(options.contentHeight > options.height, "the options must overflow for this test to mean anything")
+
+        required(dialog, "captureResolution").forceActiveFocus(Qt.TabFocusReason)
+        const pending = ["captureKeepAspect", "captureWidth", "captureHeight"]
+        for (let i = 0; i < 12 && pending.length > 0; ++i) {
+            keyClick(Qt.Key_Tab)
+            const focused = dialog.activeFocusItem
+            const index = focused ? pending.indexOf(focused.objectName) : -1
+            if (index < 0) continue
+            const top = focused.mapToItem(options, 0, 0).y
+            verify(top >= 0 && top + focused.height <= options.height,
+                   focused.objectName + " is focused but outside the visible options (y=" + top
+                   + ", height=" + focused.height + ", viewport=" + options.height + ")")
+            pending.splice(index, 1)
+        }
+        compare(pending, [], "Tab never reached these options")
+    }
+
     function test_largerFontKeepsImageFooterAndOptionsUsable() {
         const {vm, dialog} = shown(constrainedProps(),
                                    {font: Qt.font({pixelSize: 2 * Qt.application.font.pixelSize})})

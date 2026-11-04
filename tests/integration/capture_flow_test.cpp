@@ -1052,9 +1052,8 @@ namespace {
         ASSERT_NO_FATAL_FAILURE(showWorkspace(1));
         auto *tracking = app->benchmarkTrackingVm();
         tracking->selectBenchmark(QStringLiteral("no-such-benchmark"));
-        QTest::qWait(100);
-        ASSERT_NE(tracking->state(), "trackable");
-        ASSERT_NE(tracking->state(), "incomplete");
+        ASSERT_TRUE(QTest::qWaitFor([&] { return tracking->state() == QLatin1String("unavailable"); }, 5000))
+            << "state settled on " << tracking->state().toStdString();
 
         captureVm()->openPreview("benchmarkTable", nullptr);
         EXPECT_FALSE(captureVm()->previewOpen());

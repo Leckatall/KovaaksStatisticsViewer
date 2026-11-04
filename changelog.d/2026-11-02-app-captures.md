@@ -17,5 +17,6 @@ The options area scrolls and the image keeps a minimum height, so the footer, im
 While the preview is open only its own status strip announces results to screen readers (`CaptureStatusStrip.announces`), and the preview's unavailable message has an alert role.
 The preview's image scroller shows a focus ring when it has keyboard focus.
 Closing the preview returns focus to the export dropdown that opened it, not the quick-copy camera.
+Tabbing to a clipped option (Keep aspect ratio, Width, Height) scrolls it into view in the options area.
 The resolution marks line up with the slider handle at every value, and the collapsed Advanced options button shows a right-pointing chevron.
 The width and height fields stay disabled until `CaptureViewModel::hasReference` (the first render outcome) so an early entry is not dropped silently.

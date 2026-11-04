@@ -90,6 +90,22 @@ ApplicationWindow {
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
 
+            // Flickable does not follow keyboard focus, so Tab can land on a control clipped out of view.
+            Connections {
+                target: root
+                function onActiveFocusItemChanged() {
+                    const item = root.activeFocusItem
+                    if (!item || !options.contains(options.mapFromItem(item, 0, 0))) return
+                    const top = item.mapToItem(optionsScroll.contentItem, 0, 0).y
+                    const bottom = top + item.height
+                    if (top < optionsScroll.contentY)
+                        optionsScroll.contentY = Math.max(0, top)
+                    else if (bottom > optionsScroll.contentY + optionsScroll.height)
+                        optionsScroll.contentY = Math.min(bottom - optionsScroll.height,
+                                                          optionsScroll.contentHeight - optionsScroll.height)
+                }
+            }
+
             ColumnLayout {
                 id: options
                 width: optionsScroll.width - optionsScroll.ScrollBar.vertical.implicitWidth
@@ -278,58 +294,58 @@ ApplicationWindow {
             Layout.fillHeight: true
             Layout.minimumHeight: 100
 
-        Rectangle {
-            objectName: "captureImageFocusRing"
-            anchors.fill: parent
-            z: 1
-            color: "transparent"
-            border.width: 2
-            border.color: root.palette.highlight
-            visible: scroller.activeFocus
-        }
-
-        Flickable {
-            id: scroller
-            objectName: "captureImageScroll"
-            anchors.fill: parent
-            clip: true
-            focus: true
-            activeFocusOnTab: true
-            contentWidth: width
-            contentHeight: preview.height
-            boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar {}
-
-            function scrollBy(delta) {
-                contentY = Math.max(0, Math.min(contentHeight - height, contentY + delta))
+            Rectangle {
+                objectName: "captureImageFocusRing"
+                anchors.fill: parent
+                z: 1
+                color: "transparent"
+                border.width: 2
+                border.color: root.palette.highlight
+                visible: scroller.activeFocus
             }
-            Keys.onPressed: event => {
-                const step = 40
-                switch (event.key) {
-                case Qt.Key_Down: scrollBy(step); break
-                case Qt.Key_Up: scrollBy(-step); break
-                case Qt.Key_PageDown: scrollBy(height * 0.9); break
-                case Qt.Key_PageUp: scrollBy(-height * 0.9); break
-                default: return
+
+            Flickable {
+                id: scroller
+                objectName: "captureImageScroll"
+                anchors.fill: parent
+                clip: true
+                focus: true
+                activeFocusOnTab: true
+                contentWidth: width
+                contentHeight: preview.height
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+
+                function scrollBy(delta) {
+                    contentY = Math.max(0, Math.min(contentHeight - height, contentY + delta))
                 }
-                event.accepted = true
-            }
+                Keys.onPressed: event => {
+                    const step = 40
+                    switch (event.key) {
+                    case Qt.Key_Down: scrollBy(step); break
+                    case Qt.Key_Up: scrollBy(-step); break
+                    case Qt.Key_PageDown: scrollBy(height * 0.9); break
+                    case Qt.Key_PageUp: scrollBy(-height * 0.9); break
+                    default: return
+                    }
+                    event.accepted = true
+                }
 
-            CapturePreviewItem {
-                id: preview
-                objectName: "captureImage"
-                width: scroller.width
-                height: root.hasImage ? Math.ceil(width * root.captureVm.previewImageHeight / root.captureVm.previewImageWidth) : 0
-                visible: root.hasImage && !root.unavailable
+                CapturePreviewItem {
+                    id: preview
+                    objectName: "captureImage"
+                    width: scroller.width
+                    height: root.hasImage ? Math.ceil(width * root.captureVm.previewImageHeight / root.captureVm.previewImageWidth) : 0
+                    visible: root.hasImage && !root.unavailable
+                }
+                // Kept off the item while there is none, because a null variant cannot be assigned to a QImage.
+                Binding {
+                    target: preview
+                    property: "image"
+                    value: root.image
+                    when: root.hasImage
+                }
             }
-            // Kept off the item while there is none, because a null variant cannot be assigned to a QImage.
-            Binding {
-                target: preview
-                property: "image"
-                value: root.image
-                when: root.hasImage
-            }
-        }
         }
     }
 
