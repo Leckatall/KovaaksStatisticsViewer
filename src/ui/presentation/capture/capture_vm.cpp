@@ -86,6 +86,7 @@ namespace ksv::presentation {
             emit previewStateChanged();
             emit previewTargetNameChanged();
             emit previewImageChanged();
+            emit hasReferenceChanged();
             emit outputWidthChanged();
             emit outputHeightChanged();
             emit percentChanged();
@@ -143,6 +144,9 @@ namespace ksv::presentation {
 
     QString CaptureViewModel::previewTargetName() const { return m_coordinator->previewTargetName(); }
     QImage CaptureViewModel::previewImage() const { return m_coordinator->previewImage(); }
+    int CaptureViewModel::previewImageWidth() const { return m_coordinator->previewImage().width(); }
+    int CaptureViewModel::previewImageHeight() const { return m_coordinator->previewImage().height(); }
+    bool CaptureViewModel::hasReference() const { return m_coordinator->hasReference(); }
     int CaptureViewModel::outputWidth() const { return m_coordinator->outputSize().width(); }
     int CaptureViewModel::outputHeight() const { return m_coordinator->outputSize().height(); }
     int CaptureViewModel::percent() const { return m_coordinator->percent(); }

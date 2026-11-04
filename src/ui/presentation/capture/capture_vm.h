@@ -36,6 +36,10 @@ namespace ksv::presentation {
         Q_PROPERTY(QString previewState READ previewState NOTIFY previewStateChanged)
         Q_PROPERTY(QString previewTargetName READ previewTargetName NOTIFY previewTargetNameChanged)
         Q_PROPERTY(QImage previewImage READ previewImage NOTIFY previewImageChanged)
+        // QML cannot read a QImage's size, so the preview's pixel size is exposed beside it.
+        Q_PROPERTY(int previewImageWidth READ previewImageWidth NOTIFY previewImageChanged)
+        Q_PROPERTY(int previewImageHeight READ previewImageHeight NOTIFY previewImageChanged)
+        Q_PROPERTY(bool hasReference READ hasReference NOTIFY hasReferenceChanged)
         Q_PROPERTY(int outputWidth READ outputWidth NOTIFY outputWidthChanged)
         Q_PROPERTY(int outputHeight READ outputHeight NOTIFY outputHeightChanged)
         Q_PROPERTY(int percent READ percent NOTIFY percentChanged)
@@ -62,6 +66,9 @@ namespace ksv::presentation {
         [[nodiscard]] QString previewState() const;
         [[nodiscard]] QString previewTargetName() const;
         [[nodiscard]] QImage previewImage() const;
+        [[nodiscard]] int previewImageWidth() const;
+        [[nodiscard]] int previewImageHeight() const;
+        [[nodiscard]] bool hasReference() const;
         [[nodiscard]] int outputWidth() const;
         [[nodiscard]] int outputHeight() const;
         [[nodiscard]] int percent() const;
@@ -101,6 +108,7 @@ namespace ksv::presentation {
         void previewStateChanged();
         void previewTargetNameChanged();
         void previewImageChanged();
+        void hasReferenceChanged();
         void outputWidthChanged();
         void outputHeightChanged();
         void percentChanged();

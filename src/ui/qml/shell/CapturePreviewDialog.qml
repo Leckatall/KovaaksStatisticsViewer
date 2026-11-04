@@ -17,7 +17,7 @@ ApplicationWindow {
     readonly property var image: root.captureVm ? root.captureVm.previewImage : null
     readonly property bool locked: root.captureVm === null || root.captureVm.optionsLocked === true
     property bool advancedExpanded: false
-    readonly property bool hasImage: !!root.image && root.image.width > 0
+    readonly property bool hasImage: root.captureVm !== null && root.captureVm.previewImageWidth > 0
 
     title: qsTr("Export image: %1").arg(root.captureVm ? root.captureVm.previewTargetName : "")
     flags: Qt.Dialog
@@ -47,6 +47,13 @@ ApplicationWindow {
         saveDialog.open()
     }
 
+    // Window-wide so Escape works from the footer buttons, which keep focus after Copy.
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.visible && !root.savePickerOpen
+        onActivated: root.captureVm.closePreview()
+    }
+
     FileDialog {
         id: saveDialog
         objectName: "captureSaveDialog"
@@ -66,158 +73,171 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        Keys.onEscapePressed: root.captureVm.closePreview()
         anchors.margins: 12
         spacing: 8
 
         // The options stay editable in every state so an unrenderable choice can be corrected; only
         // optionsLocked pins them, control by control, so the advanced section can still be expanded.
-        ColumnLayout {
-            objectName: "captureOptions"
+        Flickable {
+            id: optionsScroll
+            objectName: "captureOptionsScroll"
             Layout.fillWidth: true
-            spacing: 6
+            Layout.minimumHeight: 60
+            Layout.preferredHeight: Math.min(options.implicitHeight, Math.max(60, root.height * 0.3))
+            clip: true
+            contentWidth: width
+            contentHeight: options.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
 
-            Label {
-                objectName: "captureOutputSize"
-                text: root.captureVm && root.captureVm.outputWidth > 0
-                    ? qsTr("%1 × %2 px").arg(root.captureVm.outputWidth).arg(root.captureVm.outputHeight)
-                    : ""
-            }
+            ColumnLayout {
+                id: options
+                width: optionsScroll.width - optionsScroll.ScrollBar.vertical.implicitWidth
+                objectName: "captureOptions"
+                spacing: 6
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 12
+                Label {
+                    objectName: "captureOutputSize"
+                    text: root.captureVm && root.captureVm.outputWidth > 0
+                        ? qsTr("%1 × %2 px").arg(root.captureVm.outputWidth).arg(root.captureVm.outputHeight)
+                        : ""
+                }
 
-                Label { text: qsTr("Resolution") }
-                ColumnLayout {
+                RowLayout {
                     Layout.fillWidth: true
-                    spacing: 0
+                    spacing: 12
 
-                    Slider {
-                        id: resolution
-                        objectName: "captureResolution"
+                    Label { text: qsTr("Resolution") }
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        from: 50
-                        to: 500
-                        stepSize: 10
-                        snapMode: Slider.SnapAlways
-                        enabled: !root.locked
-                        value: root.captureVm ? root.captureVm.percent : 200
-                        Accessible.name: qsTr("Resolution")
-                        onMoved: root.captureVm.setPercent(Math.round(value))
-                    }
-                    Item {
-                        Layout.fillWidth: true
-                        implicitHeight: markMetrics.height
+                        spacing: 0
 
-                        FontMetrics {
-                            id: markMetrics
-                            font.pixelSize: 11
+                        Slider {
+                            id: resolution
+                            objectName: "captureResolution"
+                            Layout.fillWidth: true
+                            from: 50
+                            to: 500
+                            stepSize: 10
+                            snapMode: Slider.SnapAlways
+                            enabled: !root.locked
+                            value: root.captureVm ? root.captureVm.percent : 200
+                            Accessible.name: qsTr("Resolution")
+                            onMoved: root.captureVm.setPercent(Math.round(value))
                         }
-                        Repeater {
-                            model: [50, 100, 200, 300, 400, 500]
+                        Item {
+                            Layout.fillWidth: true
+                            implicitHeight: markMetrics.height
 
-                            Label {
-                                required property int modelData
-                                objectName: "captureMark_" + modelData
-                                text: qsTr("%1%").arg(modelData)
+                            FontMetrics {
+                                id: markMetrics
                                 font.pixelSize: 11
-                                x: resolution.leftPadding + resolution.availableWidth * (modelData - resolution.from)
-                                   / (resolution.to - resolution.from) - width / 2
+                            }
+                            Repeater {
+                                model: [50, 100, 200, 300, 400, 500]
+
+                                Label {
+                                    required property int modelData
+                                    objectName: "captureMark_" + modelData
+                                    text: qsTr("%1%").arg(modelData)
+                                    font.pixelSize: 11
+                                    x: resolution.leftPadding + resolution.availableWidth * (modelData - resolution.from)
+                                       / (resolution.to - resolution.from) - width / 2
+                                }
                             }
                         }
                     }
-                }
-                Label {
-                    objectName: "captureResolutionValue"
-                    text: qsTr("%1%").arg(root.captureVm ? root.captureVm.percent : 200)
-                }
-            }
-
-            CheckBox {
-                objectName: "captureSummary"
-                visible: root.captureVm !== null && root.captureVm.isGraph !== true
-                enabled: !root.locked && root.captureVm !== null && root.captureVm.summaryAvailable === true
-                checked: root.captureVm !== null && root.captureVm.includeSummary === true
-                text: qsTr("Include summary")
-                onToggled: root.captureVm.setIncludeSummary(checked)
-            }
-
-            Loader {
-                active: root.captureVm !== null && root.captureVm.isGraph === true
-                visible: active
-                sourceComponent: Button {
-                    objectName: "captureAdvanced"
-                    flat: true
-                    checkable: true
-                    checked: root.advancedExpanded
-                    text: qsTr("Advanced options")
-                    icon.source: checked ? "../icons/chevron-down.svg" : ""
-                    onToggled: root.advancedExpanded = checked
-                }
-            }
-
-            Loader {
-                Layout.fillWidth: true
-                active: root.advancedExpanded && root.captureVm !== null && root.captureVm.isGraph === true
-                visible: active
-                sourceComponent: GridLayout {
-                    columns: 3
-                    columnSpacing: 8
-                    rowSpacing: 4
-
                     Label {
-                        Layout.columnSpan: 3
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: qsTr("Width and height set the final image size in pixels at the current resolution.")
+                        objectName: "captureResolutionValue"
+                        text: qsTr("%1%").arg(root.captureVm ? root.captureVm.percent : 200)
                     }
+                }
 
-                    CheckBox {
-                        objectName: "captureKeepAspect"
-                        Layout.columnSpan: 3
-                        enabled: !root.locked
-                        checked: root.captureVm.keepAspect === true
-                        text: qsTr("Keep aspect ratio")
-                        onToggled: root.captureVm.setKeepAspect(checked)
-                    }
+                CheckBox {
+                    objectName: "captureSummary"
+                    visible: root.captureVm !== null && root.captureVm.isGraph !== true
+                    enabled: !root.locked && root.captureVm !== null && root.captureVm.summaryAvailable === true
+                    checked: root.captureVm !== null && root.captureVm.includeSummary === true
+                    text: qsTr("Include summary")
+                    onToggled: root.captureVm.setIncludeSummary(checked)
+                }
 
-                    Label { text: qsTr("Width (px)") }
-                    TextField {
-                        objectName: "captureWidth"
-                        enabled: !root.locked
-                        text: root.captureVm.widthText
-                        inputMethodHints: Qt.ImhDigitsOnly
-                        Accessible.name: qsTr("Width in pixels")
-                        Accessible.description: root.captureVm.widthError
-                        onEditingFinished: root.captureVm.commitWidth(text)
+                Loader {
+                    active: root.captureVm !== null && root.captureVm.isGraph === true
+                    visible: active
+                    sourceComponent: Button {
+                        objectName: "captureAdvanced"
+                        flat: true
+                        checkable: true
+                        checked: root.advancedExpanded
+                        text: qsTr("Advanced options")
+                        icon.source: checked ? "../icons/chevron-down.svg" : ""
+                        onToggled: root.advancedExpanded = checked
                     }
-                    Label {
-                        objectName: "captureWidthError"
-                        Layout.fillWidth: true
-                        visible: text !== ""
-                        wrapMode: Text.WordWrap
-                        color: Theme.errorText
-                        text: root.captureVm.widthError
-                    }
+                }
 
-                    Label { text: qsTr("Height (px)") }
-                    TextField {
-                        objectName: "captureHeight"
-                        enabled: !root.locked
-                        text: root.captureVm.heightText
-                        inputMethodHints: Qt.ImhDigitsOnly
-                        Accessible.name: qsTr("Height in pixels")
-                        Accessible.description: root.captureVm.heightError
-                        onEditingFinished: root.captureVm.commitHeight(text)
-                    }
-                    Label {
-                        objectName: "captureHeightError"
-                        Layout.fillWidth: true
-                        visible: text !== ""
-                        wrapMode: Text.WordWrap
-                        color: Theme.errorText
-                        text: root.captureVm.heightError
+                Loader {
+                    Layout.fillWidth: true
+                    active: root.advancedExpanded && root.captureVm !== null && root.captureVm.isGraph === true
+                    visible: active
+                    sourceComponent: GridLayout {
+                        columns: 3
+                        columnSpacing: 8
+                        rowSpacing: 4
+
+                        Label {
+                            Layout.columnSpan: 3
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Width and height set the final image size in pixels at the current resolution.")
+                        }
+
+                        CheckBox {
+                            objectName: "captureKeepAspect"
+                            Layout.columnSpan: 3
+                            enabled: !root.locked
+                            checked: root.captureVm.keepAspect === true
+                            text: qsTr("Keep aspect ratio")
+                            onToggled: root.captureVm.setKeepAspect(checked)
+                        }
+
+                        Label { text: qsTr("Width (px)") }
+                        TextField {
+                            objectName: "captureWidth"
+                            enabled: !root.locked && root.captureVm.hasReference
+                            text: root.captureVm.widthText
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            Accessible.name: qsTr("Width in pixels")
+                            Accessible.description: root.captureVm.widthError
+                            onEditingFinished: root.captureVm.commitWidth(text)
+                        }
+                        Label {
+                            objectName: "captureWidthError"
+                            Layout.fillWidth: true
+                            visible: text !== ""
+                            wrapMode: Text.WordWrap
+                            color: Theme.errorText
+                            text: root.captureVm.widthError
+                        }
+
+                        Label { text: qsTr("Height (px)") }
+                        TextField {
+                            objectName: "captureHeight"
+                            enabled: !root.locked && root.captureVm.hasReference
+                            text: root.captureVm.heightText
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            Accessible.name: qsTr("Height in pixels")
+                            Accessible.description: root.captureVm.heightError
+                            onEditingFinished: root.captureVm.commitHeight(text)
+                        }
+                        Label {
+                            objectName: "captureHeightError"
+                            Layout.fillWidth: true
+                            visible: text !== ""
+                            wrapMode: Text.WordWrap
+                            color: Theme.errorText
+                            text: root.captureVm.heightError
+                        }
                     }
                 }
             }
@@ -255,6 +275,7 @@ ApplicationWindow {
             objectName: "captureImageScroll"
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.minimumHeight: 100
             clip: true
             focus: true
             activeFocusOnTab: true
@@ -282,7 +303,7 @@ ApplicationWindow {
                 id: preview
                 objectName: "captureImage"
                 width: scroller.width
-                height: root.hasImage ? Math.ceil(width * root.image.height / root.image.width) : 0
+                height: root.hasImage ? Math.ceil(width * root.captureVm.previewImageHeight / root.captureVm.previewImageWidth) : 0
                 visible: root.hasImage && !root.unavailable
             }
             // Kept off the item while there is none, because a null variant cannot be assigned to a QImage.

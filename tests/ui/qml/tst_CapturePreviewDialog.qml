@@ -114,12 +114,13 @@ TestCase {
         compare(vm.callsNamed("dismissFeedback").length, 1)
     }
 
-    function test_theFooterStaysReachableAtConstrainedSizes() {
-        const {dialog} = shown({previewImage: tallImage(200, 3000)},
-                               {font: Qt.font({pixelSize: 2 * Qt.application.font.pixelSize})})
+    function assertUsableWhenConstrained(vm, dialog, minImageHeight) {
         dialog.width = dialog.minimumWidth
         dialog.height = dialog.minimumHeight
         wait(50)
+        mouseClick(required(dialog, "captureAdvanced"))
+        wait(50)
+
         for (const name of ["captureCloseButton", "captureCopyButton", "captureExportButton"]) {
             const button = required(dialog, name)
             const origin = button.mapToItem(null, 0, 0)
@@ -128,6 +129,43 @@ TestCase {
                    && origin.y + button.height <= dialog.height,
                    name + " lies outside the window")
         }
+        const scroller = required(dialog, "captureImageScroll")
+        verify(scroller.height >= minImageHeight, "the image area shrank to " + scroller.height)
+
+        const options = required(dialog, "captureOptionsScroll")
+        options.contentY = Math.max(0, options.contentHeight - options.height)
+        const field = required(dialog, "captureHeight")
+        const top = field.mapToItem(options, 0, 0).y
+        verify(top >= 0 && top + field.height <= options.height + 1,
+               "the last option is unreachable (y=" + top + ", viewport=" + options.height + ")")
+
+        mouseClick(required(dialog, "captureCloseButton"))
+        compare(vm.callsNamed("closePreview").length, 1)
+    }
+
+    function constrainedProps() {
+        return {previewImage: tallImage(200, 3000), previewState: "invalid", canOutput: false,
+                previewError: "Too wide to render at this resolution, so choose a smaller resolution or size",
+                widthError: "Too wide to render", heightError: "Too tall to render", isGraph: true}
+    }
+
+    function test_minimumSizeWithAdvancedKeepsImageFooterAndOptionsUsable() {
+        const {vm, dialog} = shown(constrainedProps())
+        assertUsableWhenConstrained(vm, dialog, 100)
+    }
+
+    function test_largerFontKeepsImageFooterAndOptionsUsable() {
+        const {vm, dialog} = shown(constrainedProps(),
+                                   {font: Qt.font({pixelSize: 2 * Qt.application.font.pixelSize})})
+        assertUsableWhenConstrained(vm, dialog, 100)
+    }
+
+    function test_footerStaysReachableAndTheImageScrollsAtConstrainedSizes() {
+        const {dialog} = shown({previewImage: tallImage(200, 3000)},
+                               {font: Qt.font({pixelSize: 2 * Qt.application.font.pixelSize})})
+        dialog.width = dialog.minimumWidth
+        dialog.height = dialog.minimumHeight
+        wait(50)
         const scroller = required(dialog, "captureImageScroll")
         scroller.forceActiveFocus()
         compare(scroller.contentY, 0)
@@ -245,6 +283,39 @@ TestCase {
         compare(vm.callsNamed("closePreview").length, 3)
         compare(outputCalls(vm), 0)
         compare(vm.callsNamed("beginExport").length, 0)
+    }
+
+    function test_escapeClosesAfterCopyWithoutForcingFocus() {
+        const {vm, dialog} = shown()
+        mouseClick(required(dialog, "captureCopyButton"))
+        compare(vm.callsNamed("copyPreview").length, 1)
+        keyClick(Qt.Key_Escape)
+        compare(vm.callsNamed("closePreview").length, 1)
+    }
+
+    function test_escapeClosesFromEachFooterButtonReachedByTab() {
+        const {vm, dialog} = shown()
+        let reached = []
+        for (let i = 0; i < 30 && reached.length < 3; ++i) {
+            keyClick(Qt.Key_Tab)
+            const name = dialog.activeFocusItem ? dialog.activeFocusItem.objectName : ""
+            if (/^capture(Close|Copy|Export)Button$/.test(name) && !reached.includes(name)) {
+                reached.push(name)
+                keyClick(Qt.Key_Escape)
+            }
+        }
+        compare(reached.length, 3)
+        compare(vm.callsNamed("closePreview").length, 3)
+    }
+
+    function test_sizeFieldsWaitForAReferenceSize() {
+        const {vm, dialog} = shown({isGraph: true, hasReference: false})
+        mouseClick(required(dialog, "captureAdvanced"))
+        compare(required(dialog, "captureWidth").enabled, false)
+        compare(required(dialog, "captureHeight").enabled, false)
+        vm.hasReference = true
+        compare(required(dialog, "captureWidth").enabled, true)
+        compare(required(dialog, "captureHeight").enabled, true)
     }
 
     function test_exportOpensThePickerOnlyWhenAdmitted() {

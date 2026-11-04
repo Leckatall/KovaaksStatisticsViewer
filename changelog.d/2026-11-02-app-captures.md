@@ -10,3 +10,7 @@ The clipboard publisher is still the Qt candidate; choosing between it and the d
 Renders cancel cooperatively: each `CaptureRenderRequest` carries a shared atomic flag, checked between painted items and between series in `paintGraphScene`; `CaptureRenderQueue::cancel(session)` (called from `closePreview`) and the queue's destructor set it, and a cancelled render is never delivered. Exit therefore does not wait for a dense render, while an accepted save still finishes.
 `CaptureFeedback` keeps a failure until it is dismissed or replaced by a new failure; a success or notice shows over it for its usual lifetime and the failure then returns.
 An empty or non-local export destination, or a refused save admission, keeps the preview and its image.
+`CaptureViewModel` exposes `previewImageWidth`/`previewImageHeight`, because QML cannot read a `QImage`'s size and the preview would otherwise never appear.
+Escape is a window-level `Shortcut`, so it closes the preview from the footer buttons and after Copy.
+The options area scrolls and the image keeps a minimum height, so the footer, image and options stay reachable at the minimum window size and larger text.
+The width and height fields stay disabled until `CaptureViewModel::hasReference` (the first render outcome) so an early entry is not dropped silently.

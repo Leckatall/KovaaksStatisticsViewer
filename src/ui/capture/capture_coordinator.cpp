@@ -301,6 +301,8 @@ namespace ksv::ui {
         return m_session && m_session->rendered ? m_session->rendered->pixels : QSize();
     }
 
+    bool CaptureCoordinator::hasReference() const { return m_session && m_session->reference.has_value(); }
+
     int CaptureCoordinator::percent() const {
         return m_session ? m_session->options.percent : CaptureOptions{}.percent;
     }

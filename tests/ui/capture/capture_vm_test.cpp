@@ -3,6 +3,9 @@
 #include <QFont>
 #include <QObject>
 #include <QRegularExpression>
+#include <QQmlComponent>
+#include <QQmlContext>
+#include <QQmlEngine>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -273,6 +276,38 @@ namespace ksv::ui {
         EXPECT_FALSE(fixture.vm.previewImage().isNull());
         EXPECT_TRUE(fixture.vm.canOutput());
         EXPECT_FALSE(fixture.vm.isGraph());
+    }
+
+    TEST(CaptureViewModel, ThePreviewImageSizeIsReadableFromQml) {
+        BenchmarkTrackingViewModel tracking{trackableUseCase()};
+        VmFixture fixture({.tracking = &tracking}, realRender());
+        fixture.vm.openPreview(QStringLiteral("benchmarkTable"), nullptr);
+        ASSERT_TRUE(drainUntil([&] { return fixture.vm.canOutput(); }));
+        ASSERT_FALSE(fixture.vm.previewImage().isNull());
+
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\nQtObject { property var vm: null\n"
+                          "readonly property var w: vm.previewImageWidth\n"
+                          "readonly property var h: vm.previewImageHeight }",
+                          QUrl());
+        std::unique_ptr<QObject> probe(component.beginCreate(engine.rootContext()));
+        ASSERT_TRUE(probe) << component.errorString().toStdString();
+        probe->setProperty("vm", QVariant::fromValue(static_cast<QObject *>(&fixture.vm)));
+        component.completeCreate();
+
+        EXPECT_EQ(probe->property("w").toInt(), fixture.vm.previewImage().width());
+        EXPECT_EQ(probe->property("h").toInt(), fixture.vm.previewImage().height());
+    }
+
+    TEST(CaptureViewModel, AReferenceSizeExistsOnlyOnceAnOutcomeHasArrived) {
+        BenchmarkTrackingViewModel tracking{trackableUseCase()};
+        VmFixture fixture({.tracking = &tracking}, realRender());
+        EXPECT_FALSE(fixture.vm.hasReference());
+        fixture.vm.openPreview(QStringLiteral("benchmarkTable"), nullptr);
+        EXPECT_FALSE(fixture.vm.hasReference());
+        ASSERT_TRUE(drainUntil([&] { return fixture.vm.canOutput(); }));
+        EXPECT_TRUE(fixture.vm.hasReference());
     }
 
     TEST(CaptureViewModel, SummaryAvailabilityFollowsTheSnapshot) {

@@ -52,6 +52,7 @@ namespace ksv::ui {
         [[nodiscard]] QString previewTargetName() const;
         [[nodiscard]] QImage previewImage() const;
         [[nodiscard]] QSize outputSize() const;
+        [[nodiscard]] bool hasReference() const;
         [[nodiscard]] int percent() const;
         [[nodiscard]] bool includeSummary() const;
         [[nodiscard]] bool summaryAvailable() const;

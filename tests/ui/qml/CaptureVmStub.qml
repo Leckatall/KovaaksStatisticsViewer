@@ -5,6 +5,9 @@ QtObject {
     property string previewState: "ready"
     property string previewTargetName: ""
     property var previewImage: null
+    property int previewImageWidth: previewImage ? previewImage.width : 0
+    property int previewImageHeight: previewImage ? previewImage.height : 0
+    property bool hasReference: true
     property int outputWidth: 0
     property int outputHeight: 0
     property int percent: 200
