@@ -7,3 +7,6 @@ App captures, end to end: `CaptureViewModel` over `CaptureCoordinator` and `Capt
 Resource limits adopted at checkpoint C3 live in `standardCaptureLimits()` (edge 16,384 px, area 100 Mpx, estimate 1.5 GiB as a backstop, 2,000,000 source points at 72 bytes each, 16 MiB thumbnail) with the 960 × 600 standard graph reference in `standardCaptureComposition()`.
 `CaptureRejection::limit` carries the violated figure, so rejection text states it in the current locale.
 The clipboard publisher is still the Qt candidate; choosing between it and the documented fallbacks waits on interactive Windows clipboard runs.
+Renders cancel cooperatively: each `CaptureRenderRequest` carries a shared atomic flag, checked between painted items and between series in `paintGraphScene`; `CaptureRenderQueue::cancel(session)` (called from `closePreview`) and the queue's destructor set it, and a cancelled render is never delivered. Exit therefore does not wait for a dense render, while an accepted save still finishes.
+`CaptureFeedback` keeps a failure until it is dismissed or replaced by a new failure; a success or notice shows over it for its usual lifetime and the failure then returns.
+An empty or non-local export destination, or a refused save admission, keeps the preview and its image.

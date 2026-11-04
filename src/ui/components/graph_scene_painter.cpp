@@ -40,9 +40,14 @@ namespace ksv::ui {
                                scene.xAxis.min, scene.xAxis.max, scene.xAxis.ticks, labelsOf(scene.xAxis), style);
         }
 
-        void drawReferenceLines(QPainter &painter, const GraphScene &scene, const QRectF &rect) {
+        bool isCancelled(const std::atomic_bool *cancelled) {
+            return cancelled && cancelled->load();
+        }
+
+        void drawReferenceLines(QPainter &painter, const GraphScene &scene, const QRectF &rect,
+                                const std::atomic_bool *cancelled) {
             painter.save();
-            for (auto s = scene.series.crbegin(); s != scene.series.crend(); ++s) {
+            for (auto s = scene.series.crbegin(); s != scene.series.crend() && !isCancelled(cancelled); ++s) {
                 for (const auto &line: s->references) {
                     const qreal t = s->yAxis.normalizedPosition(line.value);
                     if (t < 0.0 || t > 1.0) continue;
@@ -71,10 +76,11 @@ namespace ksv::ui {
             painter.restore();
         }
 
-        void drawSeries(QPainter &painter, const GraphScene &scene, const QRectF &rect) {
+        void drawSeries(QPainter &painter, const GraphScene &scene, const QRectF &rect,
+                        const std::atomic_bool *cancelled) {
             // Painted back to front, so the series highest in the line list ends up on top, with its
             // markers stacked the same way as its line.
-            for (auto s = scene.series.crbegin(); s != scene.series.crend(); ++s) {
+            for (auto s = scene.series.crbegin(); s != scene.series.crend() && !isCancelled(cancelled); ++s) {
                 if (s->observations.isEmpty() && !s->leadingCarry && !s->trailingCarry) continue;
 
                 const auto carryPixel = [&](const std::optional<QPointF> &carry) -> std::optional<QPointF> {
@@ -112,13 +118,13 @@ namespace ksv::ui {
     }
 
     void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds,
-                         const AxisPainter::Style &style) {
+                         const AxisPainter::Style &style, const std::atomic_bool *cancelled) {
         painter.setRenderHint(QPainter::Antialiasing, true);
         const QRectF rect = graphPlotRect(bounds, scene.labelledYAxis, scene.xAxis, style);
         drawAxes(painter, scene, rect, bounds, style);
-        drawReferenceLines(painter, scene, rect);
+        drawReferenceLines(painter, scene, rect, cancelled);
         drawSelectedBand(painter, scene, rect);
-        drawSeries(painter, scene, rect);
+        drawSeries(painter, scene, rect, cancelled);
     }
 
     QRectF graphPlotRect(const QRectF &bounds, const std::optional<GraphSceneAxis> &yAxis,

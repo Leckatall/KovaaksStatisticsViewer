@@ -5,6 +5,7 @@
 #include <QSizeF>
 #include <QtGlobal>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -30,6 +31,10 @@ namespace ksv::ui {
         quint64 generation = 0;
         std::shared_ptr<const CaptureContent> content;
         CaptureOptions options;
+        // Set by CaptureRenderQueue once the result is unwanted; a render stops at its next check.
+        std::shared_ptr<const std::atomic_bool> cancelled;
+
+        [[nodiscard]] bool isCancelled() const { return cancelled && cancelled->load(); }
     };
 
     struct CaptureRendered {

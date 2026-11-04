@@ -4,7 +4,7 @@ namespace ksv::ui {
     CaptureFeedback::CaptureFeedback(int expiryMs, QObject *parent) : QObject(parent) {
         m_expiry.setSingleShot(true);
         m_expiry.setInterval(expiryMs);
-        connect(&m_expiry, &QTimer::timeout, this, &CaptureFeedback::dismiss);
+        connect(&m_expiry, &QTimer::timeout, this, &CaptureFeedback::endTemporary);
     }
 
     CaptureFeedback::Kind CaptureFeedback::kind() const {
@@ -16,22 +16,34 @@ namespace ksv::ui {
     }
 
     void CaptureFeedback::showSuccess(const QString &text) {
-        show(Kind::Success, text);
-        m_expiry.start();
+        showTemporary(Kind::Success, text);
     }
 
     void CaptureFeedback::showNotice(const QString &text) {
-        if (m_kind == Kind::Failure) return;
-        show(Kind::Notice, text);
-        m_expiry.start();
+        showTemporary(Kind::Notice, text);
     }
 
     void CaptureFeedback::showFailure(const QString &text) {
+        m_failure = text;
         show(Kind::Failure, text);
     }
 
     void CaptureFeedback::dismiss() {
-        show(Kind::None, {});
+        if (m_kind == Kind::Failure) m_failure.reset();
+        endTemporary();
+    }
+
+    void CaptureFeedback::showTemporary(Kind kind, const QString &text) {
+        show(kind, text);
+        m_expiry.start();
+    }
+
+    void CaptureFeedback::endTemporary() {
+        if (m_failure) {
+            show(Kind::Failure, *m_failure);
+        } else {
+            show(Kind::None, {});
+        }
     }
 
     void CaptureFeedback::show(Kind kind, const QString &text) {

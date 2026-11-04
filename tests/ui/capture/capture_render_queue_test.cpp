@@ -9,7 +9,10 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <stdexcept>
 #include <thread>
+#include <variant>
 #include <vector>
 
 #include "capture/capture_render.h"
@@ -77,9 +80,40 @@ namespace ksv::ui {
             }
         };
 
-        CaptureRenderRequest requestWith(const quint64 generation) {
-            return {1, generation, nullptr, {}};
+        CaptureRenderRequest requestWith(const quint64 generation, const quint64 session = 1) {
+            return {session, generation, nullptr, {}};
         }
+
+        // Far longer than any deadline below, so only a cancellation can end a render in time.
+        constexpr auto kUncancelledRender = std::chrono::seconds(30);
+        constexpr quint64 kSlowSession = 1;
+
+        struct CancellableRender {
+            std::mutex mutex;
+            std::vector<quint64> ran;
+            std::atomic<int> started = 0;
+
+            CaptureRenderFunction function() {
+                return [this](const CaptureRenderRequest &request) -> CaptureRenderOutcome {
+                    {
+                        const std::lock_guard lock(mutex);
+                        ran.push_back(request.generation);
+                    }
+                    ++started;
+                    if (request.session != kSlowSession) return CaptureRenderFailed{};
+                    const auto giveUp = std::chrono::steady_clock::now() + kUncancelledRender;
+                    while (!request.isCancelled() && std::chrono::steady_clock::now() < giveUp) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    return CaptureRenderFailed{};
+                };
+            }
+
+            std::vector<quint64> ranGenerations() {
+                const std::lock_guard lock(mutex);
+                return ran;
+            }
+        };
     }
 
     TEST(CaptureRenderQueue, RunsOffTheGuiThreadAndDeliversOnIt) {
@@ -167,5 +201,70 @@ namespace ksv::ui {
         opener.join();
 
         EXPECT_EQ(recorder.ranGenerations(), std::vector<quint64>{1});
+    }
+
+    // A dense render can paint for minutes, and exit must not wait for a picture nobody will see.
+    TEST(CaptureRenderQueue, DestructionStopsARunningRenderPromptly) {
+        CancellableRender render;
+        auto queue = std::make_unique<CaptureRenderQueue>(render.function());
+        QObject context;
+        queue->submit(requestWith(1), &context, [](const CaptureRenderRequest &, CaptureRenderOutcome) {});
+        ASSERT_TRUE(QTest::qWaitFor([&] { return render.started.load() >= 1; }, kDeadlineMs));
+
+        const auto before = std::chrono::steady_clock::now();
+        queue.reset();
+
+        EXPECT_LT(std::chrono::steady_clock::now() - before, std::chrono::milliseconds(kDeadlineMs));
+    }
+
+    TEST(CaptureRenderQueue, CancellingASessionStopsItsRenderAndDropsItsPendingOne) {
+        CancellableRender render;
+        CaptureRenderQueue queue(render.function());
+        QObject context;
+        std::vector<quint64> delivered;
+        const auto done = [&](const CaptureRenderRequest &request, CaptureRenderOutcome) {
+            delivered.push_back(request.generation);
+        };
+        queue.submit(requestWith(1, kSlowSession), &context, done);
+        ASSERT_TRUE(QTest::qWaitFor([&] { return render.started.load() >= 1; }, kDeadlineMs));
+        queue.submit(requestWith(2, kSlowSession), &context, done);
+
+        queue.cancel(kSlowSession);
+        queue.submit(requestWith(3, kSlowSession + 1), &context, done);
+
+        EXPECT_TRUE(QTest::qWaitFor([&] { return !delivered.empty(); }, kDeadlineMs));
+        EXPECT_EQ(delivered, std::vector<quint64>{3});
+        EXPECT_EQ(render.ranGenerations(), (std::vector<quint64>{1, 3}));
+    }
+
+    TEST(CaptureRenderQueue, CancellingAnotherSessionLeavesARenderAlone) {
+        Recorder recorder;
+        recorder.gate.close();
+        CaptureRenderQueue queue(recorder.function());
+        const auto openOnFailure = qScopeGuard([&] { recorder.gate.open(); });
+        QObject context;
+        bool delivered = false;
+        queue.submit(requestWith(1, 1), &context,
+                     [&](const CaptureRenderRequest &, CaptureRenderOutcome) { delivered = true; });
+        ASSERT_TRUE(recorder.waitForStart(1));
+
+        queue.cancel(2);
+        recorder.gate.open();
+
+        EXPECT_TRUE(QTest::qWaitFor([&] { return delivered; }, kDeadlineMs));
+    }
+
+    TEST(CaptureRenderQueue, AThrowingRenderIsDeliveredAsAFailure) {
+        CaptureRenderQueue queue([](const CaptureRenderRequest &) -> CaptureRenderOutcome {
+            throw std::runtime_error("paint failed");
+        });
+        QObject context;
+        std::optional<CaptureRenderOutcome> outcome;
+
+        queue.submit(requestWith(1), &context,
+                     [&](const CaptureRenderRequest &, CaptureRenderOutcome delivered) { outcome = std::move(delivered); });
+
+        ASSERT_TRUE(QTest::qWaitFor([&] { return outcome.has_value(); }, kDeadlineMs));
+        EXPECT_TRUE(std::holds_alternative<CaptureRenderFailed>(*outcome));
     }
 }

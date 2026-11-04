@@ -37,24 +37,56 @@ namespace ksv::ui {
             EXPECT_EQ(feedback.kind(), CaptureFeedback::Kind::None);
         }
 
-        TEST(CaptureFeedback, ANoticeLeavesAnUnresolvedFailure) {
+        bool returnsToFailure(const CaptureFeedback &feedback, const QString &text) {
+            return QTest::qWaitFor(
+                    [&] { return feedback.kind() == CaptureFeedback::Kind::Failure && feedback.text() == text; },
+                    kDeadlineMs);
+        }
+
+        // A rejected action must still say why nothing happened, without costing the user an unread failure.
+        TEST(CaptureFeedback, ANoticeShowsOverAFailureWhichThenReturns) {
             CaptureFeedback feedback(kExpiryMs);
             feedback.showFailure(QStringLiteral("x"));
 
             feedback.showNotice(QStringLiteral("y"));
 
-            EXPECT_EQ(feedback.kind(), CaptureFeedback::Kind::Failure);
-            EXPECT_EQ(feedback.text(), QStringLiteral("x"));
+            EXPECT_EQ(feedback.kind(), CaptureFeedback::Kind::Notice);
+            EXPECT_EQ(feedback.text(), QStringLiteral("y"));
+            EXPECT_TRUE(returnsToFailure(feedback, QStringLiteral("x")));
         }
 
-        TEST(CaptureFeedback, ANewOutcomeReplacesAFailure) {
+        // A copy succeeding seconds after a background save failed must not hide that failure.
+        TEST(CaptureFeedback, ASuccessShowsOverAFailureWhichThenReturns) {
             CaptureFeedback feedback(kExpiryMs);
             feedback.showFailure(QStringLiteral("x"));
 
             feedback.showSuccess(QStringLiteral("y"));
 
             EXPECT_EQ(feedback.kind(), CaptureFeedback::Kind::Success);
-            EXPECT_TRUE(expires(feedback));
+            EXPECT_TRUE(returnsToFailure(feedback, QStringLiteral("x")));
+        }
+
+        TEST(CaptureFeedback, ANewFailureReplacesAFailure) {
+            CaptureFeedback feedback(kExpiryMs);
+            feedback.showFailure(QStringLiteral("x"));
+            feedback.showNotice(QStringLiteral("y"));
+
+            feedback.showFailure(QStringLiteral("z"));
+            EXPECT_EQ(feedback.text(), QStringLiteral("z"));
+            feedback.dismiss();
+
+            EXPECT_EQ(feedback.kind(), CaptureFeedback::Kind::None);
+        }
+
+        TEST(CaptureFeedback, DismissingANoticeOverAFailureRevealsTheFailure) {
+            CaptureFeedback feedback(kExpiryMs);
+            feedback.showFailure(QStringLiteral("x"));
+            feedback.showNotice(QStringLiteral("y"));
+
+            feedback.dismiss();
+
+            EXPECT_EQ(feedback.kind(), CaptureFeedback::Kind::Failure);
+            EXPECT_EQ(feedback.text(), QStringLiteral("x"));
         }
 
         // Measured as a lower bound on the second success's life, so a slow machine can only miss

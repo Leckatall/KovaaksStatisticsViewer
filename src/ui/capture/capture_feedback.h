@@ -4,7 +4,11 @@
 #include <QString>
 #include <QTimer>
 
+#include <optional>
+
 namespace ksv::ui {
+    // A failure stays until dismissed or replaced by another failure. A success or notice shown meanwhile
+    // covers it for its usual lifetime, and then the failure shows again.
     class CaptureFeedback : public QObject {
         Q_OBJECT
 
@@ -25,10 +29,13 @@ namespace ksv::ui {
         void changed();
 
     private:
+        void showTemporary(Kind kind, const QString &text);
+        void endTemporary();
         void show(Kind kind, const QString &text);
 
         Kind m_kind = Kind::None;
         QString m_text;
+        std::optional<QString> m_failure;
         QTimer m_expiry;
     };
 }

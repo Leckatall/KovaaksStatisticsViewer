@@ -9,6 +9,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -102,14 +103,17 @@ namespace ksv::ui {
         }
     }
 
-    TEST(CaptureRender, TheRenderFunctionCanBeMade) {
+    TEST(CaptureRender, ACancelledRenderIsNeverASuccess) {
         const CaptureRenderFunction render =
                 makeCaptureRenderFunction(standardCaptureLimits(), standardCaptureComposition());
+        const auto cancelled = std::make_shared<std::atomic_bool>(true);
+        CaptureRenderRequest graph = requestFor(graphSnapshot());
+        graph.cancelled = cancelled;
+        CaptureRenderRequest table = requestFor(tableSnapshotWithSummary());
+        table.cancelled = cancelled;
 
-        const CaptureRenderOutcome outcome = render(requestFor(graphSnapshot()));
-
-        EXPECT_TRUE(render);
-        EXPECT_LT(outcome.index(), std::variant_size_v<CaptureRenderOutcome>);
+        EXPECT_TRUE(std::holds_alternative<CaptureRenderFailed>(render(graph)));
+        EXPECT_TRUE(std::holds_alternative<CaptureRenderFailed>(render(table)));
     }
 
     TEST(CaptureRender, AGraphRendersAtItsReferenceTimesTheResolution) {

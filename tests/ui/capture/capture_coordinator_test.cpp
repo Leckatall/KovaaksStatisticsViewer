@@ -7,8 +7,11 @@
 #include <QTest>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 #include "capture_coordinator_support.h"
@@ -158,6 +161,23 @@ namespace ksv::ui {
 
             EXPECT_EQ(playtimeCalls, 0);
             EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Notice);
+        }
+
+        // Nothing reaches the clipboard until the first copy finishes rendering.
+        TEST(CaptureCoordinator, ARejectionWhileACopyRendersDoesNotSayCopying) {
+            GatedRender render(realRender());
+            render.close();
+            Harness harness(render.function());
+            const auto openGate = qScopeGuard([&] { render.open(); });
+            int runCalls = 0;
+            int playtimeCalls = 0;
+
+            harness.coordinator.quickCopy(CaptureTarget::Run, countedSource(runCalls, graphSnapshot()));
+            harness.coordinator.quickCopy(CaptureTarget::DailyPlaytime, countedSource(playtimeCalls, graphSnapshot()));
+
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Notice);
+            EXPECT_FALSE(harness.feedback.text().contains(QStringLiteral("copied"), Qt::CaseInsensitive));
+            EXPECT_FALSE(saysSaving(harness.feedback));
         }
 
         // A copy is admitted and published in one call but delivers its result a turn later, so the
@@ -318,6 +338,85 @@ namespace ksv::ui {
             EXPECT_EQ(closed.count(), 1);
         }
 
+        // A preview render paints until cancelled, far beyond any deadline, as a dense graph can.
+        // Quick copies, which carry no session, render normally.
+        class EndlessPreviewRender {
+        public:
+            [[nodiscard]] std::vector<quint64> previewGenerations() {
+                const std::lock_guard lock(m_mutex);
+                return m_previewGenerations;
+            }
+
+            [[nodiscard]] int previewsStarted() {
+                const std::lock_guard lock(m_mutex);
+                return static_cast<int>(m_previewGenerations.size());
+            }
+
+            CaptureRenderFunction function() {
+                return [this, inner = realRender()](const CaptureRenderRequest &request) -> CaptureRenderOutcome {
+                    if (request.session == 0) return inner(request);
+                    {
+                        const std::lock_guard lock(m_mutex);
+                        m_previewGenerations.push_back(request.generation);
+                    }
+                    const auto giveUp = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+                    while (!request.isCancelled() && std::chrono::steady_clock::now() < giveUp) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    return CaptureRenderFailed{};
+                };
+            }
+
+        private:
+            std::mutex m_mutex;
+            std::vector<quint64> m_previewGenerations;
+        };
+
+        TEST(CaptureCoordinator, ClosingStopsTheRunningRenderAndDropsThePendingOne) {
+            EndlessPreviewRender render;
+            Harness harness(render.function());
+            int previewCalls = 0;
+            int copyCalls = 0;
+            harness.coordinator.openPreview(CaptureTarget::Run, countedSource(previewCalls, graphSnapshot()));
+            ASSERT_TRUE(drainUntil([&] { return render.previewsStarted() == 1; }));
+            harness.coordinator.setPercent(300);
+
+            harness.coordinator.closePreview();
+            harness.coordinator.quickCopy(CaptureTarget::Run, countedSource(copyCalls, graphSnapshot()));
+
+            EXPECT_TRUE(drainUntil([&] { return harness.feedback.kind() == CaptureFeedback::Kind::Success; }));
+            EXPECT_EQ(render.previewGenerations(), std::vector<quint64>{1});
+        }
+
+        TEST(CaptureCoordinator, DestructionStopsARunningRenderPromptly) {
+            EndlessPreviewRender render;
+            auto harness = std::make_unique<Harness>(render.function());
+            int calls = 0;
+            harness->coordinator.openPreview(CaptureTarget::Run, countedSource(calls, graphSnapshot()));
+            ASSERT_TRUE(drainUntil([&] { return render.previewsStarted() == 1; }));
+
+            const auto before = std::chrono::steady_clock::now();
+            harness.reset();
+
+            EXPECT_LT(std::chrono::steady_clock::now() - before, std::chrono::milliseconds(kDeadlineMs));
+        }
+
+        TEST(CaptureCoordinator, AResolutionOutsideTheOfferedRangeIsClamped) {
+            RecordingRender render;
+            Harness harness(render.function());
+            int sourceCalls = 0;
+            harness.coordinator.openPreview(CaptureTarget::Run, countedSource(sourceCalls, graphSnapshot()));
+
+            harness.coordinator.setPercent(kMinimumCapturePercent - 40);
+            ASSERT_TRUE(drainUntil([&] { return render.requests().size() >= 2; }));
+            EXPECT_EQ(render.requests().back().options.percent, kMinimumCapturePercent);
+            EXPECT_EQ(harness.coordinator.percent(), kMinimumCapturePercent);
+
+            harness.coordinator.setPercent(kCaptureResolutionMarks.back() * 2);
+            ASSERT_TRUE(drainUntil([&] { return render.requests().size() >= 3; }));
+            EXPECT_EQ(render.requests().back().options.percent, kCaptureResolutionMarks.back());
+        }
+
         TEST(CaptureCoordinator, ReopeningTakesANewSnapshot) {
             Harness harness(realRender());
             int sourceCalls = 0;
@@ -459,6 +558,26 @@ namespace ksv::ui {
             EXPECT_EQ(harness.coordinator.outputSize(), QSize(2700, 1500));
             EXPECT_EQ(harness.coordinator.widthText(), QStringLiteral("2700"));
             EXPECT_EQ(harness.coordinator.heightText(), QStringLiteral("1500"));
+        }
+
+        // A size that fits at one resolution can pass what an int holds at a higher one; the fields
+        // must still show the choice the user is asked to correct.
+        TEST(CaptureCoordinator, AnUnrepresentableSizeStaysInItsFields) {
+            Harness harness(realRender());
+            int sourceCalls = 0;
+            harness.coordinator.openPreview(CaptureTarget::Run, countedSource(sourceCalls, graphSnapshot()));
+            ASSERT_TRUE(isReadySoon(harness));
+            harness.coordinator.setKeepAspect(false);
+            harness.coordinator.commitDimension(Qt::Horizontal, QStringLiteral("2000000000"));
+            harness.coordinator.commitDimension(Qt::Vertical, QStringLiteral("1000"));
+            drainUntilSettled(harness);
+
+            harness.coordinator.setPercent(500);
+            drainUntilSettled(harness);
+
+            EXPECT_EQ(harness.coordinator.widthText().toLongLong(), 5'000'000'000LL);
+            EXPECT_EQ(harness.coordinator.heightText().toLongLong(), 2'500LL);
+            EXPECT_FALSE(harness.coordinator.previewError().isEmpty());
         }
 
         TEST(CaptureCoordinator, KeepAspectUpdatesTheOtherDimension) {
@@ -792,6 +911,46 @@ namespace ksv::ui {
 
             EXPECT_EQ(sourceCalls, 2);
             EXPECT_EQ(harness.coordinator.percent(), 200);
+        }
+
+        // The picker can hand back a location that is not a local file; the reviewed image must survive it.
+        TEST(CaptureCoordinator, AnUnusableDestinationKeepsThePreview) {
+            Harness harness(realRender());
+            int sourceCalls = 0;
+            harness.coordinator.openPreview(CaptureTarget::Run, countedSource(sourceCalls, graphSnapshot()));
+            ASSERT_TRUE(isReadySoon(harness));
+            const qint64 image = harness.coordinator.previewImage().cacheKey();
+
+            ASSERT_TRUE(harness.coordinator.beginExport());
+            harness.coordinator.confirmExport({});
+
+            EXPECT_TRUE(harness.coordinator.previewOpen());
+            EXPECT_EQ(harness.coordinator.previewImage().cacheKey(), image);
+            EXPECT_FALSE(harness.coordinator.optionsLocked());
+            EXPECT_TRUE(harness.coordinator.canOutput());
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Failure);
+            EXPECT_FALSE(harness.output->activeOutput().has_value());
+            EXPECT_EQ(harness.png->writeCount(), 0u);
+        }
+
+        TEST(CaptureCoordinator, ARefusedSaveKeepsThePreview) {
+            Harness harness(realRender());
+            int sourceCalls = 0;
+            harness.coordinator.openPreview(CaptureTarget::Run, countedSource(sourceCalls, graphSnapshot()));
+            ASSERT_TRUE(isReadySoon(harness));
+            const qint64 image = harness.coordinator.previewImage().cacheKey();
+            ASSERT_TRUE(harness.coordinator.beginExport());
+            ASSERT_TRUE(harness.output->copyImage(smallRaster(), "someone else").accepted);
+
+            harness.coordinator.confirmExport("capture.png");
+
+            EXPECT_TRUE(harness.coordinator.previewOpen());
+            EXPECT_EQ(harness.coordinator.previewImage().cacheKey(), image);
+            EXPECT_FALSE(harness.coordinator.optionsLocked());
+            EXPECT_NE(harness.feedback.kind(), CaptureFeedback::Kind::None);
+            ASSERT_TRUE(drainUntil([&] { return !harness.output->activeOutput().has_value(); }));
+            EXPECT_TRUE(harness.coordinator.canOutput());
+            EXPECT_EQ(harness.png->writeCount(), 0u);
         }
 
         TEST(CaptureCoordinator, ClosingStartsNoOutput) {

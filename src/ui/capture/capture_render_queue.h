@@ -4,7 +4,9 @@
 #include <QPointer>
 #include <QThreadPool>
 
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 
@@ -21,12 +23,16 @@ namespace ksv::ui {
         ~CaptureRenderQueue();
 
         void submit(CaptureRenderRequest request, QObject *context, Done done);
+        // Drops that session's pending request and asks its running render to stop; neither is delivered.
+        void cancel(quint64 session);
 
     private:
         struct Job {
             CaptureRenderRequest request;
             QPointer<QObject> context;
             Done done;
+            // The same flag as request.cancelled, writable.
+            std::shared_ptr<std::atomic_bool> cancelled;
         };
 
         void runFrom(Job job);
@@ -35,6 +41,8 @@ namespace ksv::ui {
         std::mutex m_mutex;
         std::optional<Job> m_pending;
         bool m_running = false;
+        quint64 m_runningSession = 0;
+        std::shared_ptr<std::atomic_bool> m_runningCancelled;
         // Results go through this object and not `context`, which a worker cannot safely touch while
         // the GUI thread may be destroying it. One still queued dies with the queue.
         QObject m_deliveryContext;

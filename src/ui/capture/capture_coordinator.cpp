@@ -2,6 +2,7 @@
 
 #include <QPointer>
 #include <QRegularExpression>
+#include <QtMath>
 
 #include <algorithm>
 #include <utility>
@@ -96,6 +97,8 @@ namespace ksv::ui {
             m_feedback->showNotice(tr("Another image is still saving"));
         } else if (m_session && !active) {
             m_feedback->showNotice(tr("Close the image preview first"));
+        } else if (m_preparing && !active) {
+            m_feedback->showNotice(tr("Another image is still being prepared"));
         } else {
             m_feedback->showNotice(tr("Another image is still being copied"));
         }
@@ -162,6 +165,7 @@ namespace ksv::ui {
 
     void CaptureCoordinator::closePreview() {
         if (!m_session) return;
+        m_queue.cancel(m_session->id);
         m_session.reset();
         emit previewClosed();
         emit previewChanged();
@@ -188,7 +192,7 @@ namespace ksv::ui {
 
     void CaptureCoordinator::setPercent(int percent) {
         if (!optionsEditable()) return;
-        m_session->options.percent = percent;
+        m_session->options.percent = std::clamp(percent, kMinimumCapturePercent, kCaptureResolutionMarks.back());
         renderCurrentChoices();
     }
 
@@ -259,14 +263,22 @@ namespace ksv::ui {
     void CaptureCoordinator::confirmExport(std::filesystem::path destination) {
         if (!optionsLocked()) return;
         const QString target = captureTargetName(m_session->target);
-        const application::ImageOutputAdmission admission =
-                m_output->savePng(std::move(*m_session->pinned), std::move(destination), target.toStdString());
-        closePreview();
-        if (admission.accepted) {
-            m_admittedOperation = admission.operationId;
-        } else {
-            m_feedback->showFailure(tr("Could not export %1: another image is still in progress").arg(target));
+        if (destination.empty()) {
+            m_session->pinned.reset();
+            m_feedback->showFailure(tr("Could not export %1: the chosen location is not a usable file").arg(target));
+            emit previewChanged();
+            return;
         }
+        const application::ImageOutputAdmission admission =
+                m_output->savePng(*m_session->pinned, std::move(destination), target.toStdString());
+        if (!admission.accepted) {
+            m_session->pinned.reset();
+            showBusyNotice();
+            emit previewChanged();
+            return;
+        }
+        m_admittedOperation = admission.operationId;
+        closePreview();
     }
 
     bool CaptureCoordinator::previewOpen() const {
@@ -320,8 +332,10 @@ namespace ksv::ui {
         const std::optional<QSizeF> logical = m_session->logical();
         if (!logical) return {};
         const std::optional<QSize> pixels = captureOutputPixels(*logical, m_session->options.percent);
-        if (!pixels) return {};
-        return QString::number(horizontal ? pixels->width() : pixels->height());
+        if (pixels) return QString::number(horizontal ? pixels->width() : pixels->height());
+        // Beyond an int, but still the choice the user has to correct, so it is shown rather than blanked.
+        const qreal edge = (horizontal ? logical->width() : logical->height()) * m_session->options.percent / 100.0;
+        return qIsFinite(edge) ? QString::number(edge, 'f', 0) : QString();
     }
 
     QString CaptureCoordinator::widthText() const {

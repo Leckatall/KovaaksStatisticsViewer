@@ -91,17 +91,24 @@ namespace ksv::ui {
             }
         }
 
-        void paintGraph(QPainter &painter, const CaptureLayout &layout, const CaptureGraphItem &item) {
+        bool isCancelled(const std::atomic_bool *cancelled) {
+            return cancelled && cancelled->load();
+        }
+
+        void paintGraph(QPainter &painter, const CaptureLayout &layout, const CaptureGraphItem &item,
+                        const std::atomic_bool *cancelled) {
             if (!layout.scene) return;
             AxisPainter::Style style;
             style.font = captureFont(layout.font, CaptureTextRole::Tick);
             painter.save();
-            paintGraphScene(painter, *layout.scene, item.rect, style);
+            paintGraphScene(painter, *layout.scene, item.rect, style, cancelled);
             painter.restore();
         }
     }
 
-    std::optional<application::RasterImage> renderCapture(const CaptureLayout &layout, const QSize pixels) {
+    std::optional<application::RasterImage> renderCapture(const CaptureLayout &layout, const QSize pixels,
+                                                         const std::atomic_bool *cancelled) {
+        if (isCancelled(cancelled)) return std::nullopt;
         std::optional<application::RasterBuffer> buffer =
                 application::RasterBuffer::allocate(pixels.width(), pixels.height());
         if (!buffer) return std::nullopt;
@@ -118,16 +125,18 @@ namespace ksv::ui {
             painter.scale(pixels.width() / layout.size.width(), pixels.height() / layout.size.height());
 
             for (const CaptureItem &item : layout.items) {
+                if (isCancelled(cancelled)) return std::nullopt;
                 std::visit([&]<typename T>(const T &value) {
                     if constexpr (std::is_same_v<T, CaptureRectItem>) paintRect(painter, value);
                     else if constexpr (std::is_same_v<T, CaptureTextItem>) paintText(painter, layout, value);
                     else if constexpr (std::is_same_v<T, CaptureHatchItem>) paintHatch(painter, value);
                     else if constexpr (std::is_same_v<T, CaptureGlyphItem>) paintGlyph(painter, value);
-                    else paintGraph(painter, layout, value);
+                    else paintGraph(painter, layout, value, cancelled);
                 }, item);
             }
         }
 
+        if (isCancelled(cancelled)) return std::nullopt;
         return std::move(*buffer).freeze();
     }
 }

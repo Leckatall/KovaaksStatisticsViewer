@@ -321,4 +321,21 @@ namespace ksv::ui {
         EXPECT_EQ(fixture.png->seen().front().destination, std::filesystem::path(path.toStdWString()));
         EXPECT_EQ(closed.count(), 1);
     }
+
+    TEST(CaptureViewModel, ConfirmingANonLocalUrlKeepsThePreview) {
+        BenchmarkTrackingViewModel tracking{trackableUseCase()};
+        VmFixture fixture({.tracking = &tracking}, realRender());
+        QSignalSpy closed(&fixture.vm, &CaptureViewModel::previewClosed);
+
+        fixture.vm.openPreview(QStringLiteral("benchmarkTable"), nullptr);
+        ASSERT_TRUE(drainUntil([&] { return fixture.vm.canOutput(); }));
+        ASSERT_TRUE(fixture.vm.beginExport());
+        fixture.vm.confirmExport(QUrl(QStringLiteral("https://example.com/capture.png")));
+
+        EXPECT_TRUE(fixture.vm.previewOpen());
+        EXPECT_TRUE(fixture.vm.canOutput());
+        EXPECT_EQ(closed.count(), 0);
+        EXPECT_EQ(fixture.vm.feedbackKind(), QStringLiteral("failure"));
+        EXPECT_EQ(fixture.png->writeCount(), 0u);
+    }
 }

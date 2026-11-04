@@ -4,6 +4,7 @@
 #include <QRectF>
 #include <QtGlobal>
 
+#include <atomic>
 #include <optional>
 
 #include "axis_painter.h"
@@ -22,8 +23,9 @@ namespace ksv::ui {
 
     void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds);
 
+    // Once `cancelled` is set, painting stops before the next series and the picture is incomplete.
     void paintGraphScene(QPainter &painter, const GraphScene &scene, const QRectF &bounds,
-                         const AxisPainter::Style &style);
+                         const AxisPainter::Style &style, const std::atomic_bool *cancelled = nullptr);
 
     [[nodiscard]] QRectF graphPlotRect(const QRectF &bounds, const std::optional<GraphSceneAxis> &yAxis,
                                        const std::optional<GraphSceneAxis> &xAxis);
