@@ -124,13 +124,6 @@ ApplicationWindow {
         onAboutRequested: aboutDialog.open()
     }
 
-    footer: ProfileStatusBar {
-        objectName: "profileStatusBar"
-        sessionVm: root.sessionVm
-        captureVm: root.captureVm
-        onDetailsRequested: settingsDialog.openProfile()
-    }
-
     // A workspace switcher styled as the app's primary navigation: tall tabs,
     // the active one raised to the content colour with an accent underline, the
     // inactive one dimmed. Sized by content (not stretched across the window) so
@@ -267,6 +260,19 @@ ApplicationWindow {
                     benchmarkManagerDialog.openOnEntry(filename, benchmarkId)
             }
         }
+    }
+
+    // Drawn over the bottom of the content rather than in the window footer so that showing
+    // and clearing a message never moves the workspaces.
+    ProfileStatusBar {
+        objectName: "profileStatusBar"
+        z: 1
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        sessionVm: root.sessionVm
+        captureVm: root.captureVm
+        onDetailsRequested: settingsDialog.openProfile()
     }
 
     // Ctrl+F searches scenarios from either workspace. A window shortcut: Settings and the

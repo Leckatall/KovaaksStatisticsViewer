@@ -88,6 +88,7 @@ TestCase {
     function cleanup() {
         fakeCaptureVm.themeCalls = 0
         fakeSessionVm.refreshCalls = 0
+        fakeSessionVm.profileImportSaveFailed = false
         fakeSettingsVm.kovaaksDirValid = true
         fakeScenarioBrowserVm.hasScenarios = true
     }
@@ -113,12 +114,27 @@ TestCase {
         compare(fakeCaptureVm.lastFont.pixelSize, win.font.pixelSize)
     }
 
-    function test_profileStatusBarIsTheVisibleWindowFooterWhileIdle() {
+    function test_profileStatusBarIsHiddenWhileIdle() {
         const win = createMain()
-        const bar = win.footer
-        verify(bar !== null, "Main.qml has no footer")
-        compare(bar.objectName, "profileStatusBar")
+        const bar = ItemLookup.findByObjectName(win.contentItem, "profileStatusBar")
+        verify(bar !== null, "Main.qml has no profile status bar")
+        compare(bar.visible, false)
+    }
+
+    function test_theStatusBarOverlaysTheContentWithoutMovingIt() {
+        const win = createMain()
+        const bar = ItemLookup.findByObjectName(win.contentItem, "profileStatusBar")
+        const workspaces = stack(win)
+        const before = workspaces.mapToItem(null, 0, 0)
+        const heightBefore = workspaces.height
+        fakeSessionVm.profileImportSaveFailed = true
         compare(bar.visible, true)
+        const after = workspaces.mapToItem(null, 0, 0)
+        compare(workspaces.height, heightBefore)
+        compare(after.y, before.y)
+        const barBottom = bar.mapToItem(win.contentItem, 0, bar.height).y
+        verify(Math.abs(barBottom - win.contentItem.height) < 1, "the bar sits at the bottom of the window")
+        verify(bar.z > workspaces.z, "the bar draws over the content")
     }
 
     function test_previewCloseFallsBackToTheWorkspace() {

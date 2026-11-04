@@ -105,19 +105,44 @@ TestCase {
         compare(capText.visible, true)
     }
 
-    function test_idleKeepsTheFooterVisible() {
+    function test_idleHidesTheFooter() {
         const {vm, bar} = makeBar()
-        const height = bar.height
         compare(bar.mode, "idle")
-        compare(bar.visible, true)
-        compare(find(bar, "profileStatusText").text, "")
+        compare(bar.visible, false)
         vm.profileImportOutcome = "stale"
-        compare(bar.mode, "idle")
+        compare(bar.visible, false)
         runImport(vm, {profileImportOutcome: "succeeded"})
         compare(bar.mode, "idle")
+        compare(bar.visible, false)
+    }
+
+    function test_captureFeedbackShowsTheFooterUntilItClears() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase)
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        compare(bar.visible, false)
+        capture.feedbackKind = "success"
+        capture.feedbackText = "Copied a graph"
         compare(bar.visible, true)
-        compare(bar.height, height)
-        compare(find(bar, "profileStatusText").text, "")
+        capture.feedbackKind = "none"
+        compare(bar.visible, false)
+    }
+
+    function test_importStatusShowsTheFooterAndExpiryHidesIt() {
+        const {vm, bar} = makeBar()
+        compare(bar.visible, false)
+        vm.profileImportBusy = true
+        compare(bar.visible, true)
+        finishImport(vm, {profileImportOutcome: "succeeded", profileImportAdded: 1})
+        compare(bar.visible, true)
+        tryCompare(bar, "visible", false)
+    }
+
+    function test_dismissingTheLastWarningHidesTheFooter() {
+        const {bar} = makeBar({profileImportOutcome: "partial", profileImportIssues: [{path: "a", message: "x"}]})
+        compare(bar.visible, true)
+        mouseClick(find(bar, "profileStatusDismissButton"))
+        compare(bar.visible, false)
     }
 
     function test_busyShowsProgressText() {

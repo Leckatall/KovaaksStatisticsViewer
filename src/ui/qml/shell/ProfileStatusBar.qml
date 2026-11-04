@@ -30,6 +30,10 @@ Rectangle {
         : root.noticeActive ? "notice"
         : "idle"
 
+    readonly property bool captureFeedbackShown: root.captureVm !== null
+        && (root.captureVm.feedbackKind || "none") !== "none"
+
+    visible: root.mode !== "idle" || root.captureFeedbackShown
     implicitHeight: 26
     color: Qt.darker(palette.window, 1.3)
 
