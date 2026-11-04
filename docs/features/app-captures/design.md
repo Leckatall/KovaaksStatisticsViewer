@@ -35,7 +35,7 @@ The [Architecture Description](../../architecture/README.md) supplies the logica
 
 Discovery used Tier 2 graph verification for project `C-Users-Lecka-CLionProjects-KovaaksStatisticsViewer`, generation `2026-11-01T06:32:01Z`, followed by direct source reads. Coverage reported changed filesystem metadata and partial parsing in QObject/property declarations; the relevant declarations and material implementation ranges were read directly. The GraphCanvas trace included heuristic same-name matches in unrelated files, so those edges were not treated as verified dependencies. This is task-directed evidence, not an exhaustive audit.
 
-The [visual design](../../../.designs/2026-11-01/widget-image-export/final/design-report.md) and its [foundation](../../../.designs/2026-11-01/widget-image-export/resources/foundation/foundation-report.md) demonstrate presentation and viewport overflow, not image-export feasibility. No capture renderer, clipboard compatibility trial, representative latency measurement, or resource-limit measurement is claimed here. Implementation validation must produce that evidence before the completed feature can be accepted. Numeric output limits remain explicitly unresolved.
+The [visual design](../../../.designs/2026-11-01/widget-image-export/final/design-report.md) and its [foundation](../../../.designs/2026-11-01/widget-image-export/resources/foundation/foundation-report.md) demonstrate presentation and viewport overflow, not image-export feasibility. Those designs claim no renderer, clipboard trial, latency or resource measurement. That evidence came from implementation validation: the numeric output limits and the standard graph reference were adopted from it at checkpoint C3 (see the resource policy section). The clipboard adapter choice still waits on interactive clipboard runs.
 
 ## Technical drivers
 
@@ -186,7 +186,7 @@ The app closes normally through both window Close and menu Quit. After the event
 
 PNG encoding/file work runs off the GUI thread. Qt clipboard publication occurs on the GUI thread, and on-demand conversion is expected to be served there too. Qt limits publication to three attempts with 100 ms sleeps, which does not bound the operating-system calls themselves. The platform gate must measure UI responsiveness during contention, ordinary copies, and pasting a large image with Windows clipboard history enabled: background rasterization alone does not prove clipboard responsiveness. If the Qt candidate fails that gate, first try `OleFlushClipboard` straight after the ownership check, which moves conversion to copy time, then a Win32 publisher on a worker thread. No private Qt hook or console-log scraping is part of the contract.
 
-### Practical resource policy and unresolved evidence gate
+### Practical resource policy and adopted limits
 
 Validate logical layout, final dimensions, per-axis limits, pixel area, buffer arithmetic, source geometry cost, and a conservative memory estimate before committing to expensive work. Arithmetic uses checked wide intermediates. The estimate is an admission check, not a prediction of process peak memory. It includes source snapshot/geometry, current raster, any in-flight replacement, display thumbnail, encoder/conversion storage, and clipboard pixels retained after output completes; a width/height cap alone is insufficient. PNG may stream to the temporary destination rather than build another full encoded buffer.
 
@@ -197,9 +197,9 @@ The policy is a named, injectable set of limits shared by quick copy and preview
 | Value | Adopted | Basis |
 | --- | --- | --- |
 | Standard graph reference | 960 × 600 logical, minimum plot 240 × 140 | Reads well with two-line titles, three-line axis titles and eight legend rows |
-| `maxEdgePixels` | 16,384 | A 15,525-pixel table rendered, saved and read well; it stops a 500% table at about 73 rows, and the rejection names a lower resolution that passes |
+| `maxEdgePixels` | 16,384 | A 15,525-pixel table rendered and saved (its readability was not viewed; a 9,225-pixel table viewed at full size was sharp and complete); it stops a 500% table at about 73 rows, and the rejection names a lower resolution that passes |
 | `maxPixelArea` | 100,000,000 | About 466 MB peak and 5 s to render and save at 101 Mpx, with the GUI thread responsive |
-| `maxEstimatedBytes` | 1.5 GiB | A backstop: under the other limits the estimate reaches at most about 1.31 GB, so it does not fire today |
+| `maxEstimatedBytes` | 1.5 GiB | A backstop: under the other limits the estimate reaches at most about 1.36 GB (three 400 MB rasters, 144 MB of source at 72 bytes per point, a 16 MiB thumbnail), so it does not fire today |
 | `maxSourcePoints` | 2,000,000 | Memory is no concern at that size; it has no user correction, so it is not lowered |
 | Bytes per source point | 72 | Measured peak growth was 53 to 67 bytes per point |
 | Thumbnail allowance | 16 MiB | Included in every measured peak without issue; not a rejection limit |
@@ -285,6 +285,6 @@ ADR 0001 and ADR 0004 govern contract placement and application behavior. Presen
 - Safe PNG replacement intentionally rejects destinations where its temporary-write/commit strategy cannot succeed. It does not fall back to destructive direct overwrite merely to finish.
 - Save failure no longer preserves a preview visit. This is an explicit product trade-off for immediate dismissal; a new attempt captures current content with defaults. Copy retains its visit.
 - Removing the in-progress state means a long save shows nothing until its result, and closing the app during a save leaves the process running without a window until the write finishes. A failure at that point goes unreported.
-- Concrete reference dimensions, measured resource caps, and latency evidence remain open until implementation validation. They are completion criteria for the whole feature, not permission to silently choose limits that exclude normal target content.
+- Reference dimensions and resource caps were settled at checkpoint C3 from measured evidence; they do not exclude normal target content. Clipboard publish and paste latency, and with it the clipboard adapter choice, remain open until the interactive clipboard runs.
 
 Implementation may choose helper names, pixel conversion details, graph legend placement, readable table wrapping rules, image-provider/thumbnail mechanics, PNG filename suggestions, initial save directory, exact date wording, and the arrangement of shared feedback. These choices must preserve the stated ownership, output lifecycle, sizing model, complete-content guarantees, accessible feedback, and resource policy. Altering those material decisions returns for design review.
