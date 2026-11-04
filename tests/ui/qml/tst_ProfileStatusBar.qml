@@ -224,6 +224,78 @@ TestCase {
         compare(bar.mode, "warning")
     }
 
+    Component {
+        id: underlayComponent
+        Item {
+            width: 650
+            height: 200
+            property alias under: underArea
+            property var bar: null
+            MouseArea { id: underArea; anchors.fill: parent; hoverEnabled: true; property int clicks: 0; onClicked: clicks++ }
+        }
+    }
+
+    function makeOverlaid(vmProps) {
+        const vm = createTemporaryObject(vmComponent, testCase, vmProps || {})
+        const host = createTemporaryObject(underlayComponent, testCase)
+        const bar = barComponent.createObject(host, {sessionVm: vm})
+        bar.anchors.left = host.left
+        bar.anchors.right = host.right
+        bar.anchors.bottom = host.bottom
+        bar.z = 1
+        return {vm, host, bar}
+    }
+
+    function test_theShownBarAbsorbsClicksAndHoverOverItsBlankArea() {
+        const {host, bar} = makeOverlaid({profileImportOutcome: "partial", profileImportIssues: [{path: "a", message: "x"}]})
+        compare(bar.visible, true)
+        mouseMove(host, 600, host.height - 4)
+        mouseClick(host, 600, host.height - 4)
+        compare(host.under.clicks, 0)
+        compare(host.under.containsMouse, false)
+        mouseClick(host, 600, 20)
+        compare(host.under.clicks, 1)
+    }
+
+    function test_theBarsOwnButtonsStillWorkWhenAbsorbingPointerInput() {
+        const {host, bar} = makeOverlaid({profileImportOutcome: "partial", profileImportIssues: [{path: "a", message: "x"}]})
+        detailsSpy.target = bar
+        detailsSpy.clear()
+        mouseClick(find(bar, "profileStatusDetailsButton"))
+        compare(detailsSpy.count, 1)
+        mouseClick(find(bar, "profileStatusDismissButton"))
+        compare(bar.mode, "idle")
+        compare(host.under.clicks, 0)
+    }
+
+    function test_announcementWaitsForTheVisibleFinalTextAndFiresOnce() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase)
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        const strip = find(bar, "captureStatusStrip")
+        const heard = []
+        strip.announcementMade.connect(text => heard.push({text, visible: bar.visible}))
+        capture.feedbackText = "Copied a graph"
+        capture.feedbackKind = "success"
+        tryCompare(heard, "length", 1)
+        wait(50)
+        compare(heard.length, 1)
+        compare(heard[0].text, capture.feedbackText)
+        compare(heard[0].visible, true)
+    }
+
+    function test_noAnnouncementWhileTheBarIsHidden() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase)
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        const strip = find(bar, "captureStatusStrip")
+        const heard = []
+        strip.announcementMade.connect(text => heard.push(text))
+        capture.feedbackText = "Copied a graph"
+        wait(50)
+        compare(heard.length, 0)
+    }
+
     function test_detailsButtonRequestsDetails() {
         const {vm, bar} = makeBar({profileImportOutcome: "partial", profileImportIssues: [{path: "a", message: "x"}]})
         detailsSpy.target = bar

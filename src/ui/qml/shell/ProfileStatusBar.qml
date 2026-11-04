@@ -71,6 +71,13 @@ Rectangle {
         color: root.palette.mid
     }
 
+    // The bar overlays the content, so it must swallow clicks and hover over its blank area.
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.AllButtons
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 12

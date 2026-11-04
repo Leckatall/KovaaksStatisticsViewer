@@ -16,10 +16,18 @@ Item {
     implicitWidth: row.implicitWidth
     implicitHeight: row.implicitHeight
 
-    onMessageChanged: {
-        if (root.announces && root.message !== "")
-            root.Accessible.announce(root.message,
-                                     root.kind === "failure" ? Accessible.Assertive : Accessible.Polite)
+    signal announcementMade(string text)
+
+    // Text and kind change in separate signals, so announcing immediately could precede the strip becoming
+    // visible; deferring coalesces them and reads the settled state.
+    onMessageChanged: Qt.callLater(root.announce)
+
+    function announce() {
+        if (!root.announces || !root.visible || root.message === "")
+            return
+        root.announcementMade(root.message)
+        root.Accessible.announce(root.message,
+                                 root.kind === "failure" ? Accessible.Assertive : Accessible.Polite)
     }
 
     RowLayout {
