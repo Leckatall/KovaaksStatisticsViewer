@@ -245,6 +245,16 @@ TestCase {
         compare(find(table.dialog, "captureHeight"), null)
     }
 
+    function test_advancedFieldsStackInOneColumnWhenThereAreNoErrors() {
+        const {dialog} = shown({isGraph: true})
+        mouseClick(required(dialog, "captureAdvanced"))
+        const width = required(dialog, "captureWidth")
+        const height = required(dialog, "captureHeight")
+        const at = item => item.mapToItem(null, 0, 0)
+        compare(at(height).x, at(width).x)
+        verify(at(height).y > at(width).y, "the height field must sit below the width field")
+    }
+
     function test_committingAFieldKeepsItsErrorBesideIt() {
         const {vm, dialog} = shown({isGraph: true, widthText: "99999", widthError: "Too wide to render"})
         mouseClick(required(dialog, "captureAdvanced"))

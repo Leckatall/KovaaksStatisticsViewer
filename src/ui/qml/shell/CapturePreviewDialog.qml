@@ -201,6 +201,8 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     active: root.advancedExpanded && root.captureVm !== null && root.captureVm.isGraph === true
                     visible: active
+                    // The error labels stay visible even when empty: GridLayout drops a hidden item from
+                    // its cells, which would shift every later cell one place left.
                     sourceComponent: GridLayout {
                         columns: 3
                         columnSpacing: 8
@@ -235,7 +237,6 @@ ApplicationWindow {
                         Label {
                             objectName: "captureWidthError"
                             Layout.fillWidth: true
-                            visible: text !== ""
                             wrapMode: Text.WordWrap
                             color: Theme.errorText
                             text: root.captureVm.widthError
@@ -254,7 +255,6 @@ ApplicationWindow {
                         Label {
                             objectName: "captureHeightError"
                             Layout.fillWidth: true
-                            visible: text !== ""
                             wrapMode: Text.WordWrap
                             color: Theme.errorText
                             text: root.captureVm.heightError
