@@ -34,8 +34,11 @@ ApplicationWindow {
     // FileDialog.visible behaves under every platform.
     property bool savePickerOpen: false
 
-    // Dismissal is the view model's call: the window stays until previewOpen goes false.
+    // Dismissal is the view model's call: the window stays until previewOpen goes false. A hidden
+    // preview must still accept: quitting closes every window the app has shown, and one refusal
+    // cancels the quit, leaving the process running with no window.
     onClosing: close => {
+        if (root.captureVm === null || root.captureVm.previewOpen !== true) return
         close.accepted = false
         root.captureVm.closePreview()
     }

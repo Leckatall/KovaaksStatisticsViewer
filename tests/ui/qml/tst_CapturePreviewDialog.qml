@@ -309,6 +309,22 @@ TestCase {
         compare(vm.callsNamed("beginExport").length, 0)
     }
 
+    // Quitting sends a close to every window the app has shown, hidden ones too; refusing it
+    // cancels the quit and leaves the process running with no window.
+    function test_aHiddenPreviewDoesNotRefuseClosing() {
+        const {vm, dialog} = shown()
+        vm.previewOpen = false
+        tryCompare(dialog, "visible", false)
+
+        let accepted = null
+        const record = close => { accepted = close.accepted }
+        dialog.closing.connect(record)
+        dialog.close()
+        dialog.closing.disconnect(record)
+        compare(accepted, true)
+        compare(vm.callsNamed("closePreview").length, 0)
+    }
+
     function test_escapeClosesAfterCopyWithoutForcingFocus() {
         const {vm, dialog} = shown()
         mouseClick(required(dialog, "captureCopyButton"))
