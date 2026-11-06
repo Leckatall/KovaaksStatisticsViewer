@@ -72,6 +72,7 @@ qt_add_qml_module(ksv_ui
             qml/shell/ProfileStatusBar.qml
             qml/shell/CaptureStatusStrip.qml
             qml/shell/CapturePreviewDialog.qml
+            qml/shell/CaptureActionButton.qml
             qml/graph/CaptureActions.qml
             qml/benchmark/BenchmarkManagerDialog.qml
             qml/benchmark/BenchmarkEditorTable.qml

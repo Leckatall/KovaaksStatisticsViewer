@@ -133,7 +133,7 @@ TestCase {
 
         const options = required(dialog, "captureOptionsScroll")
         options.contentY = Math.max(0, options.contentHeight - options.height)
-        const field = required(dialog, "captureHeight")
+        const field = required(dialog, "captureKeepAspect")
         const top = field.mapToItem(options, 0, 0).y
         verify(top >= 0 && top + field.height <= options.height + 1,
                "the last option is unreachable (y=" + top + ", viewport=" + options.height + ")")
@@ -245,17 +245,17 @@ TestCase {
         compare(find(table.dialog, "captureHeight"), null)
     }
 
-    function test_advancedFieldsStackInOneColumnWhenThereAreNoErrors() {
-        const {dialog} = shown({isGraph: true})
+    function test_advancedFieldsShareOneRowEvenWithErrors() {
+        const {dialog} = shown({isGraph: true, widthError: "Too wide to render", heightError: "Too tall to render"})
         mouseClick(required(dialog, "captureAdvanced"))
         const width = required(dialog, "captureWidth")
         const height = required(dialog, "captureHeight")
         const at = item => item.mapToItem(null, 0, 0)
-        compare(at(height).x, at(width).x)
-        verify(at(height).y > at(width).y, "the height field must sit below the width field")
+        compare(at(height).y, at(width).y)
+        verify(at(height).x > at(width).x + width.width, "the height field must sit right of the width field")
     }
 
-    function test_committingAFieldKeepsItsErrorBesideIt() {
+    function test_committingAFieldKeepsItsErrorShown() {
         const {vm, dialog} = shown({isGraph: true, widthText: "99999", widthError: "Too wide to render"})
         mouseClick(required(dialog, "captureAdvanced"))
         const field = required(dialog, "captureWidth")

@@ -113,64 +113,113 @@ ApplicationWindow {
                 id: options
                 width: optionsScroll.width - optionsScroll.ScrollBar.vertical.implicitWidth
                 objectName: "captureOptions"
-                spacing: 6
-
-                Label {
-                    objectName: "captureOutputSize"
-                    text: root.captureVm && root.captureVm.outputWidth > 0
-                        ? qsTr("%1 × %2 px").arg(root.captureVm.outputWidth).arg(root.captureVm.outputHeight)
-                        : ""
-                }
+                spacing: 4
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: 8
 
-                    Label { text: qsTr("Resolution") }
-                    ColumnLayout {
+                    Label { text: qsTr("Render resolution") }
+                    Label {
+                        objectName: "captureResolutionValue"
+                        font.bold: true
+                        color: root.palette.accent
+                        text: qsTr("%1%").arg(root.captureVm ? root.captureVm.percent : 200)
+                    }
+                    Item { Layout.fillWidth: true }
+                    Label {
+                        objectName: "captureOutputSize"
+                        color: root.palette.placeholderText
+                        text: root.captureVm && root.captureVm.outputWidth > 0
+                            ? qsTr("%1 × %2 px").arg(root.captureVm.outputWidth).arg(root.captureVm.outputHeight)
+                            : ""
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Slider {
+                        id: resolution
+                        objectName: "captureResolution"
                         Layout.fillWidth: true
-                        spacing: 0
+                        implicitHeight: 24
+                        leftPadding: 8
+                        rightPadding: 8
+                        from: 50
+                        to: 500
+                        stepSize: 10
+                        snapMode: Slider.SnapAlways
+                        enabled: !root.locked
+                        value: root.captureVm ? root.captureVm.percent : 200
+                        Accessible.name: qsTr("Resolution")
+                        onMoved: root.captureVm.setPercent(Math.round(value))
 
-                        Slider {
-                            id: resolution
-                            objectName: "captureResolution"
-                            Layout.fillWidth: true
-                            from: 50
-                            to: 500
-                            stepSize: 10
-                            snapMode: Slider.SnapAlways
-                            enabled: !root.locked
-                            value: root.captureVm ? root.captureVm.percent : 200
-                            Accessible.name: qsTr("Resolution")
-                            onMoved: root.captureVm.setPercent(Math.round(value))
-                        }
-                        Item {
-                            Layout.fillWidth: true
-                            implicitHeight: markMetrics.height
+                        // The track runs between the handle's extreme centres, so the fill ends under it.
+                        background: Rectangle {
+                            x: resolution.leftPadding + resolution.handle.width / 2
+                            y: (resolution.height - height) / 2
+                            width: resolution.availableWidth - resolution.handle.width
+                            height: 4
+                            radius: 2
+                            color: resolution.palette.midlight
 
-                            FontMetrics {
-                                id: markMetrics
-                                font.pixelSize: 11
+                            Rectangle {
+                                width: resolution.visualPosition * parent.width
+                                height: parent.height
+                                radius: 2
+                                color: resolution.enabled ? resolution.palette.highlight : resolution.palette.light
                             }
-                            Repeater {
-                                model: [50, 100, 200, 300, 400, 500]
+                        }
+                        handle: Rectangle {
+                            x: resolution.leftPadding + resolution.visualPosition * (resolution.availableWidth - width)
+                            y: (resolution.height - height) / 2
+                            width: 14
+                            height: 14
+                            radius: 7
+                            color: resolution.palette.windowText
+                            border.width: resolution.visualFocus ? 3 : 2
+                            border.color: !resolution.enabled ? resolution.palette.light
+                                        : resolution.visualFocus ? resolution.palette.accent
+                                        : resolution.palette.highlight
+                        }
+                    }
+                    Item {
+                        Layout.fillWidth: true
+                        implicitHeight: 7 + markMetrics.height
 
+                        FontMetrics {
+                            id: markMetrics
+                            font.pixelSize: 11
+                        }
+                        Repeater {
+                            model: [50, 100, 200, 300, 400, 500]
+
+                            Item {
+                                id: mark
+                                required property int modelData
+                                x: resolution.leftPadding + resolution.handle.width / 2
+                                   + (resolution.availableWidth - resolution.handle.width)
+                                   * (modelData - resolution.from) / (resolution.to - resolution.from)
+
+                                Rectangle {
+                                    x: -0.5
+                                    width: 1
+                                    height: 5
+                                    color: resolution.palette.light
+                                }
                                 Label {
-                                    required property int modelData
-                                    objectName: "captureMark_" + modelData
-                                    text: qsTr("%1%").arg(modelData)
+                                    objectName: "captureMark_" + mark.modelData
+                                    x: -width / 2
+                                    y: 7
+                                    text: qsTr("%1%").arg(mark.modelData)
                                     font.pixelSize: 11
-                                    // The handle's centre travels the track minus one handle width.
-                                    x: resolution.leftPadding + resolution.handle.width / 2
-                                       + (resolution.availableWidth - resolution.handle.width)
-                                       * (modelData - resolution.from) / (resolution.to - resolution.from) - width / 2
+                                    color: root.captureVm && root.captureVm.percent === mark.modelData
+                                        ? root.palette.windowText : root.palette.placeholderText
                                 }
                             }
                         }
-                    }
-                    Label {
-                        objectName: "captureResolutionValue"
-                        text: qsTr("%1%").arg(root.captureVm ? root.captureVm.percent : 200)
                     }
                 }
 
@@ -201,63 +250,82 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     active: root.advancedExpanded && root.captureVm !== null && root.captureVm.isGraph === true
                     visible: active
-                    // The error labels stay visible even when empty: GridLayout drops a hidden item from
-                    // its cells, which would shift every later cell one place left.
-                    sourceComponent: GridLayout {
-                        columns: 3
-                        columnSpacing: 8
-                        rowSpacing: 4
+                    sourceComponent: ColumnLayout {
+                        spacing: 2
 
                         Label {
-                            Layout.columnSpan: 3
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: qsTr("Width and height set the final image size in pixels at the current resolution.")
                         }
 
+                        RowLayout {
+                            spacing: 8
+
+                            Label { text: qsTr("Width") }
+                            TextField {
+                                objectName: "captureWidth"
+                                Layout.preferredWidth: 96
+                                enabled: !root.locked && root.captureVm.hasReference
+                                text: root.captureVm.widthText
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                Accessible.name: qsTr("Width in pixels")
+                                Accessible.description: root.captureVm.widthError
+                                onEditingFinished: root.captureVm.commitWidth(text)
+                            }
+                            Label {
+                                text: qsTr("×")
+                                color: root.palette.placeholderText
+                                Accessible.ignored: true
+                            }
+                            Label { text: qsTr("Height") }
+                            TextField {
+                                objectName: "captureHeight"
+                                Layout.preferredWidth: 96
+                                enabled: !root.locked && root.captureVm.hasReference
+                                text: root.captureVm.heightText
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                Accessible.name: qsTr("Height in pixels")
+                                Accessible.description: root.captureVm.heightError
+                                onEditingFinished: root.captureVm.commitHeight(text)
+                            }
+                            Label {
+                                text: qsTr("px")
+                                color: root.palette.placeholderText
+                                Accessible.ignored: true
+                            }
+                        }
+
+                        // Always visible, so an empty error still reserves its line and Keep aspect ratio
+                        // does not jump as errors come and go.
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Label {
+                                objectName: "captureWidthError"
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                wrapMode: Text.WordWrap
+                                color: Theme.errorText
+                                text: root.captureVm.widthError
+                            }
+                            Label {
+                                objectName: "captureHeightError"
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                wrapMode: Text.WordWrap
+                                color: Theme.errorText
+                                text: root.captureVm.heightError
+                            }
+                        }
+
                         CheckBox {
                             objectName: "captureKeepAspect"
-                            Layout.columnSpan: 3
                             enabled: !root.locked
                             checked: root.captureVm.keepAspect === true
                             text: qsTr("Keep aspect ratio")
                             onToggled: root.captureVm.setKeepAspect(checked)
-                        }
-
-                        Label { text: qsTr("Width (px)") }
-                        TextField {
-                            objectName: "captureWidth"
-                            enabled: !root.locked && root.captureVm.hasReference
-                            text: root.captureVm.widthText
-                            inputMethodHints: Qt.ImhDigitsOnly
-                            Accessible.name: qsTr("Width in pixels")
-                            Accessible.description: root.captureVm.widthError
-                            onEditingFinished: root.captureVm.commitWidth(text)
-                        }
-                        Label {
-                            objectName: "captureWidthError"
-                            Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            color: Theme.errorText
-                            text: root.captureVm.widthError
-                        }
-
-                        Label { text: qsTr("Height (px)") }
-                        TextField {
-                            objectName: "captureHeight"
-                            enabled: !root.locked && root.captureVm.hasReference
-                            text: root.captureVm.heightText
-                            inputMethodHints: Qt.ImhDigitsOnly
-                            Accessible.name: qsTr("Height in pixels")
-                            Accessible.description: root.captureVm.heightError
-                            onEditingFinished: root.captureVm.commitHeight(text)
-                        }
-                        Label {
-                            objectName: "captureHeightError"
-                            Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            color: Theme.errorText
-                            text: root.captureVm.heightError
                         }
                     }
                 }
@@ -292,15 +360,19 @@ ApplicationWindow {
         }
 
         // Fits the width and scrolls vertically so the whole of a tall table is reachable by keyboard.
-        Item {
+        Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.minimumHeight: 100
+            Layout.minimumHeight: 100 + 2 * scroller.anchors.margins
+            radius: 6
+            color: Qt.darker(root.palette.window, 1.3)
+            border.color: root.palette.button
 
             Rectangle {
                 objectName: "captureImageFocusRing"
                 anchors.fill: parent
                 z: 1
+                radius: parent.radius
                 color: "transparent"
                 border.width: 2
                 border.color: root.palette.highlight
@@ -311,6 +383,7 @@ ApplicationWindow {
                 id: scroller
                 objectName: "captureImageScroll"
                 anchors.fill: parent
+                anchors.margins: 8
                 clip: true
                 focus: true
                 activeFocusOnTab: true
@@ -352,37 +425,62 @@ ApplicationWindow {
         }
     }
 
-    footer: RowLayout {
-        spacing: 8
+    footer: ColumnLayout {
+        spacing: 0
 
-        CaptureStatusStrip {
+        Rectangle {
             Layout.fillWidth: true
-            Layout.minimumWidth: 0
             Layout.leftMargin: 12
-            captureVm: root.captureVm
-        }
-        Button {
-            objectName: "captureCloseButton"
-            text: qsTr("Close")
-            onClicked: root.captureVm.closePreview()
-        }
-        ChromeIconButton {
-            objectName: "captureCopyButton"
-            icon.source: "../icons/copy.svg"
-            text: qsTr("Copy image to clipboard")
-            Accessible.name: text
-            ToolTip.text: text
-            ToolTip.visible: pointerHovered
-            enabled: root.captureVm !== null && root.captureVm.canOutput === true
-            onClicked: root.captureVm.copyPreview()
-        }
-        Button {
-            objectName: "captureExportButton"
             Layout.rightMargin: 12
-            highlighted: true
-            text: qsTr("Export…")
-            enabled: root.captureVm !== null && root.captureVm.canOutput === true
-            onClicked: root.startExport()
+            implicitHeight: 1
+            color: root.palette.button
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.margins: 12
+            spacing: 12
+
+            CaptureActionButton {
+                objectName: "captureCloseButton"
+                Layout.preferredWidth: Math.max(76, implicitWidth)
+                text: qsTr("Close")
+                onClicked: root.captureVm.closePreview()
+            }
+            // Wraps the strip because it hides when idle, and a hidden layout item would stop pushing
+            // Copy and Export to the right.
+            Item {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                implicitHeight: status.implicitHeight
+
+                CaptureStatusStrip {
+                    id: status
+                    width: parent.width
+                    anchors.verticalCenter: parent.verticalCenter
+                    captureVm: root.captureVm
+                }
+            }
+            CaptureActionButton {
+                objectName: "captureCopyButton"
+                Layout.preferredWidth: 34
+                leftPadding: 0
+                rightPadding: 0
+                display: AbstractButton.IconOnly
+                icon.source: "../icons/copy.svg"
+                text: qsTr("Copy image to clipboard")
+                Accessible.name: text
+                ToolTip.text: text
+                enabled: root.captureVm !== null && root.captureVm.canOutput === true
+                onClicked: root.captureVm.copyPreview()
+            }
+            CaptureActionButton {
+                objectName: "captureExportButton"
+                Layout.preferredWidth: Math.max(122, implicitWidth)
+                highlighted: true
+                text: qsTr("Export…")
+                enabled: root.captureVm !== null && root.captureVm.canOutput === true
+                onClicked: root.startExport()
+            }
         }
     }
 }
