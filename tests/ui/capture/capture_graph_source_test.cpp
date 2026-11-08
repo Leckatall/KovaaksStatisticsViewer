@@ -188,7 +188,7 @@ namespace ksv::ui {
             const auto snapshot = captureGraph(target, canvas, GraphCaptureContext{.title = QStringLiteral("Title")},
                                                appearance);
             EXPECT_TRUE(snapshot.has_value());
-            return layoutGraphCapture(*snapshot, composition.standardGraph, composition);
+            return layoutGraphCapture(*snapshot, QSizeF(composition.standardWidth, 600.0), composition);
         };
 
         EXPECT_TRUE(std::holds_alternative<CaptureRejection>(layoutAtStandard(CaptureTarget::BenchmarkRank)));

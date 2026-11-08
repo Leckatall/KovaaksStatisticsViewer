@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QRectF>
 #include <QSize>
 #include <QSizeF>
 #include <QtGlobal>
@@ -13,7 +14,9 @@
 
 namespace ksv::ui {
     struct CaptureComposition {
-        QSizeF standardGraph;
+        qreal standardWidth = 0.0;
+        // Plot width over plot height: the shape of the plot itself, whatever the headings and legend around it take.
+        qreal plotAspect = 0.0;
         QSizeF minimumPlot;
     };
 
@@ -24,6 +27,9 @@ namespace ksv::ui {
 
     [[nodiscard]] std::variant<CaptureLayout, CaptureRejection> layoutGraphCapture(
             const GraphCaptureSnapshot &snapshot, QSizeF logical, const CaptureComposition &composition);
+
+    // The plot as the renderer paints it, or nothing for a layout without exactly one graph.
+    [[nodiscard]] std::optional<QRectF> graphCapturePlot(const CaptureLayout &layout);
 
     [[nodiscard]] qint64 captureSourcePoints(const GraphCaptureSnapshot &snapshot);
 

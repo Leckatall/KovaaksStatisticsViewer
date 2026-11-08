@@ -43,7 +43,8 @@ namespace ksv::ui {
 
         CaptureComposition testComposition() {
             CaptureComposition composition;
-            composition.standardGraph = QSizeF(880.0, 540.0);
+            composition.standardWidth = 880.0;
+            composition.plotAspect = 2.0;
             composition.minimumPlot = QSizeF(220.0, 120.0);
             return composition;
         }
@@ -160,15 +161,10 @@ namespace ksv::ui {
                    && rect.bottom() <= bounds.bottom();
         }
 
-        QRectF plotRect(const CaptureLayout &layout, const GraphCaptureSnapshot &snapshot) {
-            const std::vector<CaptureGraphItem> graphs = graphItems(layout);
-            if (graphs.size() != 1) {
-                ADD_FAILURE() << "expected exactly one graph item, found " << graphs.size();
-                return {};
-            }
-            AxisPainter::Style style;
-            style.font = captureFont(layout.font, CaptureTextRole::Tick);
-            return graphPlotRect(graphs.front().rect, snapshot.scene.labelledYAxis, snapshot.scene.xAxis, style);
+        QRectF plotRect(const CaptureLayout &layout) {
+            const std::optional<QRectF> plot = graphCapturePlot(layout);
+            if (!plot) ADD_FAILURE() << "expected exactly one graph item";
+            return plot.value_or(QRectF());
         }
 
         int indexOfText(const std::vector<CaptureTextItem> &texts, const QString &text) {
@@ -428,7 +424,7 @@ namespace ksv::ui {
             EXPECT_GE(indexOfText(texts, line.name), 0) << line.name.toStdString();
         }
 
-        const QRectF plot = plotRect(layout, snapshot);
+        const QRectF plot = plotRect(layout);
         EXPECT_GE(plot.width(), testComposition().minimumPlot.width());
         EXPECT_GE(plot.height(), testComposition().minimumPlot.height());
     }
@@ -522,7 +518,7 @@ namespace ksv::ui {
             AxisPainter::Style style;
             style.font = captureFont(layout.font, CaptureTextRole::Tick);
             const GraphSceneAxis &yAxis = *snapshot.scene.labelledYAxis;
-            return AxisPainter::layoutLabels(plotRect(layout, snapshot), graphs.front().rect,
+            return AxisPainter::layoutLabels(plotRect(layout), graphs.front().rect,
                                              AxisPainter::Orientation::Vertical, yAxis.min, yAxis.max, yAxis.ticks,
                                              [&yAxis](const qreal tick) { return yAxis.labelFor(tick); }, style)
                     .size();
@@ -670,7 +666,20 @@ namespace ksv::ui {
         }
     }
 
-    TEST(GraphCaptureReference, IsTheStandardSizeForOrdinaryContent) {
+    namespace {
+        void expectPlotAspect(const CaptureLayout &layout, const qreal aspect) {
+            const QRectF plot = plotRect(layout);
+            EXPECT_LE(plot.width(), plot.height() * aspect);
+            // The search stops within a pixel, and the size is then rounded up to whole pixels.
+            EXPECT_GT(plot.width(), (plot.height() - 2.0) * aspect);
+        }
+
+        qreal ordinaryReferenceHeight(const CaptureComposition &composition) {
+            return graphReferenceSize(ordinarySnapshot(), composition).height();
+        }
+    }
+
+    TEST(GraphCaptureReference, OrdinaryContentGetsThePlotAspectWhateverTheCanvasSize) {
         const CaptureComposition composition = testComposition();
         ReferenceVm vm;
 
@@ -682,22 +691,42 @@ namespace ksv::ui {
         const QSizeF fromSmall = graphReferenceSize(*small, composition);
         const QSizeF fromLarge = graphReferenceSize(*large, composition);
 
-        ASSERT_EQ(fromSmall, composition.standardGraph);
-        EXPECT_EQ(fromLarge, composition.standardGraph);
-        EXPECT_TRUE(std::holds_alternative<CaptureLayout>(layoutGraphCapture(*small, fromSmall, composition)));
+        EXPECT_EQ(fromSmall, fromLarge);
+        EXPECT_EQ(fromSmall.width(), composition.standardWidth);
+        expectPlotAspect(layoutOf(*small, fromSmall, composition), composition.plotAspect);
+    }
+
+    TEST(GraphCaptureReference, MoreLegendRowsMakeItTallerWithoutChangingThePlotShape) {
+        const CaptureComposition composition = testComposition();
+        const GraphSceneAxis yAxis = axis(0.0, 100.0, QStringLiteral("0"), QStringLiteral("100"));
+        QList<GraphSceneSeries> scales;
+        for (int column = 1; column <= 4; ++column) {
+            scales.append(scaledSeries(column, QStringLiteral("Series %1").arg(column), QColor::fromHsv(column * 60, 200, 220),
+                                       yAxis, static_cast<uint64_t>(column), QStringLiteral("Scale %1").arg(column)));
+        }
+        const GraphCaptureSnapshot ordinary = ordinarySnapshot();
+        const GraphCaptureSnapshot manyRows = snapshotOf(scales);
+
+        const QSizeF ordinaryReference = graphReferenceSize(ordinary, composition);
+        const QSizeF manyRowsReference = graphReferenceSize(manyRows, composition);
+
+        EXPECT_GT(manyRowsReference.height(), ordinaryReference.height());
+        expectPlotAspect(layoutOf(ordinary, ordinaryReference, composition), composition.plotAspect);
+        expectPlotAspect(layoutOf(manyRows, manyRowsReference, composition), composition.plotAspect);
     }
 
     TEST(GraphCaptureReference, ManyTiersEnlargeItUntilEveryLabelFits) {
         constexpr qsizetype tierCount = 40;
         const GraphCaptureSnapshot snapshot = rankSnapshot(true, tierCount);
         const CaptureComposition composition = testComposition();
+        const qreal ordinaryHeight = ordinaryReferenceHeight(composition);
         ASSERT_TRUE(std::holds_alternative<CaptureRejection>(
-                layoutGraphCapture(snapshot, composition.standardGraph, composition)));
+                layoutGraphCapture(snapshot, QSizeF(composition.standardWidth, ordinaryHeight), composition)));
 
         const QSizeF reference = graphReferenceSize(snapshot, composition);
 
-        ASSERT_GT(reference.height(), composition.standardGraph.height());
-        EXPECT_EQ(reference.width(), composition.standardGraph.width());
+        ASSERT_GT(reference.height(), ordinaryHeight);
+        EXPECT_EQ(reference.width(), composition.standardWidth);
         EXPECT_EQ(placedYLabels(layoutOf(snapshot, reference), snapshot), tierCount);
     }
 
@@ -707,7 +736,7 @@ namespace ksv::ui {
 
         const QSizeF reference = graphReferenceSize(snapshot, composition);
 
-        ASSERT_GT(reference.height(), composition.standardGraph.height());
+        ASSERT_GT(reference.height(), ordinaryReferenceHeight(composition));
         EXPECT_EQ(reference.width(), std::round(reference.width()));
         EXPECT_EQ(reference.height(), std::round(reference.height()));
         const auto at100 = captureOutputPixels(reference, 100);
@@ -719,14 +748,15 @@ namespace ksv::ui {
 
     TEST(GraphCaptureReference, LongHeadingsAndLegendsEnlargeIt) {
         const CaptureComposition composition = testComposition();
-        const GraphCaptureSnapshot snapshot = crowdedSnapshot(composition.standardGraph.width());
+        const GraphCaptureSnapshot snapshot = crowdedSnapshot(composition.standardWidth);
+        const qreal ordinaryHeight = ordinaryReferenceHeight(composition);
         ASSERT_TRUE(std::holds_alternative<CaptureRejection>(
-                layoutGraphCapture(snapshot, composition.standardGraph, composition)));
+                layoutGraphCapture(snapshot, QSizeF(composition.standardWidth, ordinaryHeight), composition)));
 
         const QSizeF reference = graphReferenceSize(snapshot, composition);
 
-        ASSERT_GT(reference.height(), composition.standardGraph.height());
-        const QRectF plot = plotRect(layoutOf(snapshot, reference), snapshot);
+        ASSERT_GT(reference.height(), ordinaryHeight);
+        const QRectF plot = plotRect(layoutOf(snapshot, reference));
         EXPECT_GE(plot.width(), composition.minimumPlot.width());
         EXPECT_GE(plot.height(), composition.minimumPlot.height());
     }

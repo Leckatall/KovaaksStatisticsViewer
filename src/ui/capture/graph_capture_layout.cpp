@@ -147,10 +147,16 @@ namespace ksv::ui {
         CaptureRejection tooLittleRoom() {
             return {CaptureRejectionReason::TooLittleRoom, CaptureCorrection::LargerDimensions, std::nullopt};
         }
+
+        AxisPainter::Style tickStyleFor(const CaptureFontDescription &font) {
+            AxisPainter::Style style;
+            style.font = captureFont(font, CaptureTextRole::Tick);
+            return style;
+        }
     }
 
     CaptureComposition standardCaptureComposition() {
-        return {QSizeF(960.0, 600.0), QSizeF(240.0, 140.0)};
+        return {.standardWidth = 960.0, .plotAspect = 3.0, .minimumPlot = QSizeF(240.0, 140.0)};
     }
 
     std::variant<CaptureLayout, CaptureRejection> layoutGraphCapture(const GraphCaptureSnapshot &snapshot,
@@ -205,8 +211,7 @@ namespace ksv::ui {
         if (graphLeft > kPageMargin) graphLeft += kAxisTitleGap;
 
         const QRectF graph(graphLeft, y, logical.width() - kPageMargin - graphLeft, graphHeight);
-        AxisPainter::Style tickStyle;
-        tickStyle.font = captureFont(appearance.font, CaptureTextRole::Tick);
+        const AxisPainter::Style tickStyle = tickStyleFor(appearance.font);
         const QRectF plot = graph.width() > 0.0
                                 ? graphPlotRect(graph, snapshot.scene.labelledYAxis, snapshot.scene.xAxis, tickStyle)
                                 : QRectF();
@@ -235,29 +240,47 @@ namespace ksv::ui {
         return layout;
     }
 
-    // Searches with layoutGraphCapture itself: tier spacing has no closed form under layoutLabels' stride rule, and
-    // the answer cannot drift from what validation accepts. Past the probe range, or for content that height cannot
-    // help, it stays at the standard size and the layout's own rejection reports it.
-    QSizeF graphReferenceSize(const GraphCaptureSnapshot &snapshot, const CaptureComposition &composition) {
-        const QSizeF standard = composition.standardGraph;
-        const auto fits = [&](const qreal height) {
-            return std::holds_alternative<CaptureLayout>(
-                    layoutGraphCapture(snapshot, QSizeF(standard.width(), height), composition));
-        };
-        if (fits(standard.height())) return standard;
+    std::optional<QRectF> graphCapturePlot(const CaptureLayout &layout) {
+        if (!layout.scene) return std::nullopt;
+        const CaptureGraphItem *graph = nullptr;
+        for (const CaptureItem &item : layout.items) {
+            if (const auto *candidate = std::get_if<CaptureGraphItem>(&item)) {
+                if (graph) return std::nullopt;
+                graph = candidate;
+            }
+        }
+        if (!graph) return std::nullopt;
+        return graphPlotRect(graph->rect, layout.scene->labelledYAxis, layout.scene->xAxis, tickStyleFor(layout.font));
+    }
 
-        qreal tooShort = standard.height();
-        qreal enough = tooShort * 2.0;
-        for (int doubling = 0; !fits(enough); ++doubling) {
-            if (doubling == kMaximumHeightDoublings) return standard;
+    // The width is fixed and the height is whatever gives the plot the composition's shape, so a long title or a
+    // many-row legend makes the image taller rather than the plot flatter. Searches with layoutGraphCapture itself:
+    // tier spacing has no closed form under layoutLabels' stride rule, and the answer cannot drift from what
+    // validation accepts. Past the probe range, it stays at the nominal size and the layout's own rejection reports it.
+    QSizeF graphReferenceSize(const GraphCaptureSnapshot &snapshot, const CaptureComposition &composition) {
+        const qreal width = composition.standardWidth;
+        const auto settles = [&](const qreal height) {
+            const auto result = layoutGraphCapture(snapshot, QSizeF(width, height), composition);
+            const auto *layout = std::get_if<CaptureLayout>(&result);
+            if (!layout) return false;
+            const std::optional<QRectF> plot = graphCapturePlot(*layout);
+            return plot && plot->width() <= plot->height() * composition.plotAspect;
+        };
+
+        // Never settles: the plot alone must be at least this tall, and the page margins come on top.
+        qreal tooShort = composition.minimumPlot.height();
+        const qreal nominal = width / composition.plotAspect;
+        qreal enough = nominal;
+        for (int doubling = 0; !settles(enough); ++doubling) {
+            if (doubling == kMaximumHeightDoublings) return wholeReferenceSize({width, nominal});
             tooShort = enough;
             enough *= 2.0;
         }
         while (enough - tooShort > 1.0) {
             const qreal middle = (tooShort + enough) / 2.0;
-            (fits(middle) ? enough : tooShort) = middle;
+            (settles(middle) ? enough : tooShort) = middle;
         }
-        return wholeReferenceSize({standard.width(), enough});
+        return wholeReferenceSize({width, enough});
     }
 
     qint64 captureSourcePoints(const GraphCaptureSnapshot &snapshot) {

@@ -285,6 +285,10 @@ namespace ksv::ui {
         }
 
         void writeSamples(const QString &dir, const QString &name, const CaptureLayout &layout) {
+            if (const std::optional<QRectF> plot = graphCapturePlot(layout)) {
+                ::testing::Test::RecordProperty(QStringLiteral("%1-plotAspect").arg(name).toStdString(),
+                                                QString::number(plot->width() / plot->height(), 'f', 3).toStdString());
+            }
             for (const int percent: kResolutions) {
                 const std::optional<QSize> pixels = captureOutputPixels(layout.size, percent);
                 ASSERT_TRUE(pixels.has_value()) << name.toStdString();

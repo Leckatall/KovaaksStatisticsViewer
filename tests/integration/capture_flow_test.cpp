@@ -552,7 +552,7 @@ namespace {
         ASSERT_TRUE(QTest::qWaitFor([&] {
             return captureVm()->previewState() == "ready" && captureVm()->percent() == 300;
         }, kWaitMs));
-        constexpr int kCustomWidth = 1800;
+        constexpr int kCustomWidth = 2400;
         captureVm()->commitWidth(QString::number(kCustomWidth));
         ASSERT_TRUE(QTest::qWaitFor([&] {
             return captureVm()->previewState() == "ready" && captureVm()->outputWidth() == kCustomWidth;
