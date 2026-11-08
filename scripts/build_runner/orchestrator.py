@@ -46,7 +46,11 @@ def _command_environment(
     additions: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     environment = dict(base)
-    path_entries = [
+    path_entries = []
+    if toolchain.flavour == "mingw":
+        # First, so the compiler-matched runtime DLLs win over any other MinGW install on PATH.
+        path_entries.append(str(toolchain.cxx_compiler.parent))
+    path_entries += [
         str(toolchain.vcpkg_bin_dir),
         str(toolchain.qt_bin_dir),
     ]

@@ -15,7 +15,11 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # Qt Configuration
 if(NOT Qt6_DIR)
-    set(Qt6_DIR C:/Qt/6.12.0/msvc2022_64/lib/cmake/Qt6 CACHE PATH "Qt6 package directory")
+    if(MINGW)
+        set(Qt6_DIR C:/Qt/6.12.0/mingw_64/lib/cmake/Qt6 CACHE PATH "Qt6 package directory")
+    else()
+        set(Qt6_DIR C:/Qt/6.12.0/msvc2022_64/lib/cmake/Qt6 CACHE PATH "Qt6 package directory")
+    endif()
 endif()
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -84,6 +88,35 @@ target_link_libraries(ksv PRIVATE
         ksv_qt_data
         ksv_domain
 )
+
+# The MinGW toolchain's runtime DLLs (libwinpthread-1, libgcc_s_seh-1,
+# libstdc++-6) are required at process startup by anything that transitively
+# links vcpkg's libabseil_dll.dll (protobuf), but only the compiler's own
+# copy exports the ABI these were built against. Several MinGW toolchains
+# can be installed side by side (Git, Qt, CLion's bundled one), and Windows'
+# DLL search order can silently pick up an incompatible one from PATH
+# instead, producing STATUS_ENTRY_POINT_NOT_FOUND / STATUS_DLL_NOT_FOUND at
+# startup even though linking succeeded. Copy the exact DLLs from the
+# compiler actually used for this build next to any target that needs them,
+# so binaries run standalone regardless of what else is on PATH.
+# A no-op under MSVC, whose runtime has no such collisions.
+function(ksv_copy_mingw_runtime_dlls target)
+    if(NOT MINGW)
+        return()
+    endif()
+    get_filename_component(_mingw_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    foreach(_mingw_runtime_dll libwinpthread-1.dll libgcc_s_seh-1.dll libstdc++-6.dll)
+        if (EXISTS "${_mingw_bin_dir}/${_mingw_runtime_dll}")
+            add_custom_command(TARGET ${target} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_mingw_bin_dir}/${_mingw_runtime_dll}"
+                    "$<TARGET_FILE_DIR:${target}>"
+            )
+        endif()
+    endforeach()
+endfunction()
+
+ksv_copy_mingw_runtime_dlls(ksv)
 
 # Dev-only tools: the component gallery (qmlpreview target) and the UI automation driver
 # (screenshots + scripted input for agents). Excluded from Release and packaged builds.

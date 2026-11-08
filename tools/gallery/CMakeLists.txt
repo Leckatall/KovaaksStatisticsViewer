@@ -40,3 +40,4 @@ target_compile_definitions(ksv_gallery PRIVATE
         QT_QML_DEBUG
 )
 
+ksv_copy_mingw_runtime_dlls(ksv_gallery)

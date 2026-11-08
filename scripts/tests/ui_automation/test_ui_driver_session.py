@@ -19,13 +19,14 @@ from ui_automation.session import (
 
 def make_toolchain(root: Path) -> Toolchain:
     return Toolchain(
+        flavour="mingw",
         cmake_exe=root / "cmake.exe",
         ninja_exe=root / "ninja.exe",
-        c_compiler=root / "msvc" / "cl.exe",
-        cxx_compiler=root / "msvc" / "cl.exe",
-        vcvars_bat=root / "msvc" / "vcvars64.bat",
+        c_compiler=root / "mingw" / "gcc.exe",
+        cxx_compiler=root / "mingw" / "c++.exe",
+        vcvars_bat=None,
         vcpkg_toolchain=root / "vcpkg.cmake",
-        vcpkg_triplet="x64-windows",
+        vcpkg_triplet="x64-mingw-dynamic",
         vcpkg_bin_dir=root / "vcpkg" / "bin",
         protoc_exe=root / "protoc.exe",
         qt_bin_dir=root / "qt" / "bin",
@@ -82,7 +83,8 @@ def test_headless_environment_adds_offscreen_qpa_and_runtime_path(tmp_path: Path
 
     assert headless["QT_QPA_PLATFORM"] == "offscreen"
     assert headless["QT_QUICK_BACKEND"] == "software"
-    assert headless["PATH"].split(os.pathsep)[:3] == [
+    assert headless["PATH"].split(os.pathsep)[:4] == [
+        str(tmp_path / "mingw"),
         str(tmp_path / "vcpkg" / "bin"),
         str(tmp_path / "qt" / "bin"),
         "base",

@@ -73,6 +73,7 @@ target_precompile_headers(integration_tests PRIVATE
 
 # Same offscreen/software/Fusion env the ui_qml_tests use: these tests build a
 # QGuiApplication and instantiate QtQuick items (GraphCanvas) / load Main.qml.
+ksv_copy_mingw_runtime_dlls(integration_tests)
 ksv_add_gtest_test(integration_tests)
 set_tests_properties(integration_tests PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Fusion"

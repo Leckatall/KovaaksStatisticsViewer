@@ -50,4 +50,5 @@ target_precompile_headers(qt_data_tests PRIVATE
     <QTemporaryDir>
 )
 
+ksv_copy_mingw_runtime_dlls(qt_data_tests)
 ksv_add_gtest_test(qt_data_tests)

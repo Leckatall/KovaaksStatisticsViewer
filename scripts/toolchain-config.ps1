@@ -113,7 +113,7 @@ function Get-KsvToolchainConfig {
     )
 
     # Build runner settings share the env files; packaging does not use them.
-    $allowedKeys = $keys + @("KSV_BUILD_JOBS", "KSV_BUILD_PRIORITY")
+    $allowedKeys = @("KSV_TOOLCHAIN") + $keys + @("KSV_BUILD_JOBS", "KSV_BUILD_PRIORITY")
 
     $defaultsPath = Join-Path $script:KsvToolchainConfigRoot "toolchain.defaults.env"
     $resolved = Read-KsvToolchainEnvFile -Path $defaultsPath -AllowedKeys $allowedKeys
@@ -123,12 +123,28 @@ function Get-KsvToolchainConfig {
         $local = Read-KsvToolchainEnvFile -Path $localPath -AllowedKeys $allowedKeys
     }
 
+    # Resolved first, since it picks the toolchain.<flavour>.env layered between the defaults and the local file.
+    # Mirrors resolve_flavour in scripts/build_runner/config.py.
+    $flavour = $resolved["KSV_TOOLCHAIN"]
+    if ($local.ContainsKey("KSV_TOOLCHAIN")) { $flavour = $local["KSV_TOOLCHAIN"] }
+    $processFlavour = [Environment]::GetEnvironmentVariable("KSV_TOOLCHAIN", "Process")
+    if ($processFlavour) { $flavour = $processFlavour }
+    if ($Overrides.ContainsKey("KSV_TOOLCHAIN") -and $Overrides["KSV_TOOLCHAIN"]) { $flavour = $Overrides["KSV_TOOLCHAIN"] }
+    if (-not $flavour) { throw "Missing required toolchain key: KSV_TOOLCHAIN" }
+    $flavour = $flavour.Trim().ToLowerInvariant()
+    if (@("mingw", "msvc") -notcontains $flavour) { throw "KSV_TOOLCHAIN must be one of mingw, msvc, not '$flavour'" }
+
+    $profilePath = Join-Path $script:KsvToolchainConfigRoot "toolchain.$flavour.env"
+    $profileValues = Read-KsvToolchainEnvFile -Path $profilePath -AllowedKeys $allowedKeys
+    foreach ($key in $profileValues.Keys) { $resolved[$key] = $profileValues[$key] }
+
     foreach ($key in $keys) {
         if ($local.ContainsKey($key)) { $resolved[$key] = $local[$key] }
         $processValue = [Environment]::GetEnvironmentVariable($key, "Process")
         if ($processValue) { $resolved[$key] = $processValue }
         if ($Overrides.ContainsKey($key) -and $Overrides[$key]) { $resolved[$key] = $Overrides[$key] }
-        if (-not $resolved.ContainsKey($key)) { throw "Missing required toolchain key: $key" }
+        $required = ($flavour -eq "msvc") -or ($key -ne "KSV_VCVARS_BAT")
+        if ($required -and -not $resolved.ContainsKey($key)) { throw "Missing required toolchain key for ${flavour}: $key" }
     }
 
     if (-not $resolved["KSV_VCPKG_TRIPLET"].Trim()) {
@@ -136,11 +152,12 @@ function Get-KsvToolchainConfig {
     }
 
     $config = [ordered]@{
+        Toolchain = $flavour
         CMakeExe = Resolve-KsvToolchainPath $resolved["KSV_CMAKE_EXE"] "CMake executable"
         NinjaExe = Resolve-KsvToolchainPath $resolved["KSV_NINJA_EXE"] "Ninja executable"
         CCompiler = Resolve-KsvToolchainPath $resolved["KSV_C_COMPILER"] "C compiler"
         CxxCompiler = Resolve-KsvToolchainPath $resolved["KSV_CXX_COMPILER"] "C++ compiler"
-        VcVarsBat = Resolve-KsvToolchainPath $resolved["KSV_VCVARS_BAT"] "MSVC vcvars script"
+        VcVarsBat = $(if ($flavour -eq "msvc") { Resolve-KsvToolchainPath $resolved["KSV_VCVARS_BAT"] "MSVC vcvars script" } else { $null })
         VcpkgToolchain = Resolve-KsvToolchainPath $resolved["KSV_VCPKG_TOOLCHAIN"] "vcpkg toolchain file"
         VcpkgTriplet = $resolved["KSV_VCPKG_TRIPLET"].Trim()
         VcpkgBinDir = Resolve-KsvToolchainPath $resolved["KSV_VCPKG_BIN_DIR"] "vcpkg triplet bin directory" "Container"

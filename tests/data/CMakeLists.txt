@@ -40,6 +40,7 @@ target_compile_definitions(proto_decoder_tests PRIVATE
     TEST_FILES_DIR="${CMAKE_CURRENT_BINARY_DIR}/examples"
 )
 
+ksv_copy_mingw_runtime_dlls(proto_decoder_tests)
 ksv_add_gtest_test(proto_decoder_tests)
 
 add_executable(stats_csv_parser_tests
@@ -55,6 +56,7 @@ target_compile_definitions(stats_csv_parser_tests PRIVATE
     TEST_FILES_DIR="${CMAKE_CURRENT_BINARY_DIR}/examples"
 )
 
+ksv_copy_mingw_runtime_dlls(stats_csv_parser_tests)
 ksv_add_gtest_test(stats_csv_parser_tests)
 
 add_executable(run_filename_tests
@@ -66,6 +68,7 @@ target_link_libraries(run_filename_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(run_filename_tests)
 ksv_add_gtest_test(run_filename_tests)
 
 add_executable(run_ingestor_tests
@@ -78,6 +81,7 @@ target_link_libraries(run_ingestor_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(run_ingestor_tests)
 ksv_add_gtest_test(run_ingestor_tests)
 
 add_executable(benchmarks_service_tests
@@ -90,6 +94,7 @@ target_link_libraries(benchmarks_service_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(benchmarks_service_tests)
 ksv_add_gtest_test(benchmarks_service_tests)
 
 add_executable(profile_service_tests
@@ -102,6 +107,7 @@ target_link_libraries(profile_service_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(profile_service_tests)
 ksv_add_gtest_test(profile_service_tests)
 
 add_executable(profile_importer_tests
@@ -114,6 +120,7 @@ target_link_libraries(profile_importer_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(profile_importer_tests)
 ksv_add_gtest_test(profile_importer_tests)
 
 add_executable(profile_serializer_tests
@@ -126,6 +133,7 @@ target_link_libraries(profile_serializer_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(profile_serializer_tests)
 ksv_add_gtest_test(profile_serializer_tests)
 
 add_executable(profile_v3_migrator_tests
@@ -142,6 +150,7 @@ target_compile_definitions(profile_v3_migrator_tests PRIVATE
     TEST_FILES_DIR="${CMAKE_CURRENT_BINARY_DIR}/examples"
 )
 
+ksv_copy_mingw_runtime_dlls(profile_v3_migrator_tests)
 ksv_add_gtest_test(profile_v3_migrator_tests)
 
 add_executable(graph_configuration_service_tests
@@ -154,4 +163,5 @@ target_link_libraries(graph_configuration_service_tests PRIVATE
     GTest::gtest_main
 )
 
+ksv_copy_mingw_runtime_dlls(graph_configuration_service_tests)
 ksv_add_gtest_test(graph_configuration_service_tests)

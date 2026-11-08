@@ -11,6 +11,13 @@ import subprocess
 from typing import Callable, Mapping
 
 
+# Selects toolchain.<flavour>.env, which is layered between the defaults and the local file.
+FLAVOUR_KEY = "KSV_TOOLCHAIN"
+FLAVOURS = ("mingw", "msvc")
+MSVC_ONLY_KEYS = ("KSV_VCVARS_BAT",)
+# The compiler's own copies are the only ones guaranteed to export the ABI the vcpkg
+# x64-mingw-dynamic libraries were built against; see ksv_copy_mingw_runtime_dlls in CMakeLists.txt.
+MINGW_RUNTIME_DLLS = ("libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll")
 TOOLCHAIN_KEYS = (
     "KSV_CMAKE_EXE",
     "KSV_NINJA_EXE",
@@ -30,7 +37,7 @@ RUNNER_KEYS = (
     "KSV_BUILD_JOBS",
     "KSV_BUILD_PRIORITY",
 )
-KNOWN_KEYS = TOOLCHAIN_KEYS + RUNNER_KEYS
+KNOWN_KEYS = (FLAVOUR_KEY,) + TOOLCHAIN_KEYS + RUNNER_KEYS
 LOCAL_ENV_NAME = "toolchain.local.env"
 # Windows priority classes; children of a below-normal or idle process inherit its class,
 # so this also covers the compilers and test runners that cmake/ninja/ctest start.
@@ -47,11 +54,13 @@ class ToolchainError(RuntimeError):
 
 @dataclass(frozen=True)
 class Toolchain:
+    flavour: str
     cmake_exe: Path
     ninja_exe: Path
     c_compiler: Path
     cxx_compiler: Path
-    vcvars_bat: Path
+    # Set exactly when flavour is "msvc".
+    vcvars_bat: Path | None
     vcpkg_toolchain: Path
     vcpkg_triplet: str
     vcpkg_bin_dir: Path
@@ -151,8 +160,12 @@ def _layered_values(
     scripts_dir: Path,
     keys: tuple[str, ...],
     process_environment: Mapping[str, str] | None,
+    *,
+    flavour: str | None = None,
 ) -> dict[str, str]:
     resolved = read_toolchain_env(scripts_dir / "toolchain.defaults.env")
+    if flavour is not None:
+        resolved.update(read_toolchain_env(scripts_dir / f"toolchain.{flavour}.env"))
     local_env = find_local_env(scripts_dir)
     if local_env is not None:
         resolved.update(read_toolchain_env(local_env))
@@ -184,31 +197,58 @@ def resolve_runner_settings(
     return RunnerSettings(jobs=jobs, priority=priority)
 
 
+def _checked_flavour(value: str) -> str:
+    flavour = value.strip().lower()
+    if flavour not in FLAVOURS:
+        raise ToolchainError(f"{FLAVOUR_KEY} must be one of {', '.join(FLAVOURS)}, not '{value}'")
+    return flavour
+
+
+def resolve_flavour(
+    scripts_dir: Path,
+    *,
+    process_environment: Mapping[str, str] | None = None,
+) -> str:
+    resolved = _layered_values(scripts_dir, (FLAVOUR_KEY,), process_environment)
+    if FLAVOUR_KEY not in resolved:
+        raise ToolchainError(f"Missing required toolchain key: {FLAVOUR_KEY}")
+    return _checked_flavour(resolved[FLAVOUR_KEY])
+
+
 def resolve_toolchain(
     scripts_dir: Path,
     *,
     process_environment: Mapping[str, str] | None = None,
     overrides: Mapping[str, str] | None = None,
 ) -> Toolchain:
-    resolved = _layered_values(scripts_dir, TOOLCHAIN_KEYS, process_environment)
-    for key, value in (overrides or {}).items():
-        if key not in TOOLCHAIN_KEYS:
+    overrides = overrides or {}
+    for key in overrides:
+        if key not in (FLAVOUR_KEY,) + TOOLCHAIN_KEYS:
             raise ToolchainError(f"Unknown toolchain override: {key}")
-        if value:
+    flavour = overrides.get(FLAVOUR_KEY) or resolve_flavour(scripts_dir, process_environment=process_environment)
+    flavour = _checked_flavour(flavour)
+
+    resolved = _layered_values(scripts_dir, TOOLCHAIN_KEYS, process_environment, flavour=flavour)
+    for key, value in overrides.items():
+        if value and key != FLAVOUR_KEY:
             resolved[key] = value
-    for key in TOOLCHAIN_KEYS:
+    required = [key for key in TOOLCHAIN_KEYS if flavour == "msvc" or key not in MSVC_ONLY_KEYS]
+    for key in required:
         if key not in resolved:
-            raise ToolchainError(f"Missing required toolchain key: {key}")
+            raise ToolchainError(f"Missing required toolchain key for {flavour}: {key}")
 
     triplet = resolved["KSV_VCPKG_TRIPLET"].strip()
     if not triplet:
         raise ToolchainError("KSV_VCPKG_TRIPLET must not be empty")
     return Toolchain(
+        flavour=flavour,
         cmake_exe=_resolve_path(resolved["KSV_CMAKE_EXE"], "CMake executable"),
         ninja_exe=_resolve_path(resolved["KSV_NINJA_EXE"], "Ninja executable"),
         c_compiler=_resolve_path(resolved["KSV_C_COMPILER"], "C compiler"),
         cxx_compiler=_resolve_path(resolved["KSV_CXX_COMPILER"], "C++ compiler"),
-        vcvars_bat=_resolve_path(resolved["KSV_VCVARS_BAT"], "MSVC vcvars script"),
+        vcvars_bat=(
+            _resolve_path(resolved["KSV_VCVARS_BAT"], "MSVC vcvars script") if flavour == "msvc" else None
+        ),
         vcpkg_toolchain=_resolve_path(resolved["KSV_VCPKG_TOOLCHAIN"], "vcpkg toolchain file"),
         vcpkg_triplet=triplet,
         vcpkg_bin_dir=_resolve_path(
@@ -246,6 +286,17 @@ def developer_environment(
     if not environment.get("INCLUDE"):
         raise ToolchainError(f"{vcvars_bat} did not set up an MSVC environment (INCLUDE is empty).")
     return environment
+
+
+def process_environment_for(
+    toolchain: Toolchain,
+    base: Mapping[str, str],
+    *,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> dict[str, str]:
+    if toolchain.vcvars_bat is None:
+        return dict(base)
+    return developer_environment(toolchain.vcvars_bat, base, run=run)
 
 
 def normalized_path(path: Path | str) -> str:
@@ -309,7 +360,12 @@ def build_fingerprint(toolchain: Toolchain) -> dict[str, object]:
         toolchain.ninja_exe,
         toolchain.c_compiler,
         toolchain.cxx_compiler,
-        toolchain.vcvars_bat,
+        *([toolchain.vcvars_bat] if toolchain.vcvars_bat is not None else []),
+        *(
+            [toolchain.cxx_compiler.parent / dll for dll in MINGW_RUNTIME_DLLS]
+            if toolchain.flavour == "mingw"
+            else []
+        ),
         toolchain.vcpkg_toolchain,
         toolchain.protoc_exe,
         *sorted(toolchain.vcpkg_bin_dir.glob("*.dll")),
@@ -321,7 +377,8 @@ def build_fingerprint(toolchain: Toolchain) -> dict[str, object]:
             raise ToolchainError(f"Fingerprint input is missing: {path}")
         hashes[normalized_path(path)] = _sha256(path)
     return {
-        "schema": 2,
+        "schema": 3,
+        "toolchain": toolchain.flavour,
         "generator": "Ninja",
         "buildType": "Debug",
         "buildTesting": "ON",
@@ -330,7 +387,7 @@ def build_fingerprint(toolchain: Toolchain) -> dict[str, object]:
         "ninja": normalized_path(toolchain.ninja_exe),
         "cCompiler": normalized_path(toolchain.c_compiler),
         "cxxCompiler": normalized_path(toolchain.cxx_compiler),
-        "vcvars": normalized_path(toolchain.vcvars_bat),
+        "vcvars": normalized_path(toolchain.vcvars_bat) if toolchain.vcvars_bat is not None else None,
         "vcpkgToolchain": normalized_path(toolchain.vcpkg_toolchain),
         "vcpkgTriplet": toolchain.vcpkg_triplet,
         "vcpkgBin": normalized_path(toolchain.vcpkg_bin_dir),

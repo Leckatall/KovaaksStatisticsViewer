@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections import deque
+import os
 from pathlib import Path
 from typing import Callable
 
 from scripts.build_runner.catalog import all_runners
 from scripts.build_runner.cli import main, parse_args
-from scripts.build_runner.config import BUILD_PRIORITIES, RunnerSettings, Toolchain
-from scripts.build_runner.orchestrator import run_pipeline
+from scripts.build_runner.config import BUILD_PRIORITIES, RunnerSettings, Toolchain, read_toolchain_env
+from scripts.build_runner.orchestrator import _command_environment, run_pipeline
 from scripts.build_runner.process import CommandResult
 
 
@@ -37,11 +38,12 @@ def make_toolchain(values: dict[str, str], tmp_path: Path) -> Toolchain:
     ctest = Path(values["KSV_CMAKE_EXE"]).with_name("ctest.exe")
     ctest.write_bytes(b"ctest")
     return Toolchain(
+        flavour=values["KSV_TOOLCHAIN"],
         cmake_exe=Path(values["KSV_CMAKE_EXE"]),
         ninja_exe=Path(values["KSV_NINJA_EXE"]),
         c_compiler=Path(values["KSV_C_COMPILER"]),
         cxx_compiler=Path(values["KSV_CXX_COMPILER"]),
-        vcvars_bat=Path(values["KSV_VCVARS_BAT"]),
+        vcvars_bat=Path(values["KSV_VCVARS_BAT"]) if "KSV_VCVARS_BAT" in values else None,
         vcpkg_toolchain=Path(values["KSV_VCPKG_TOOLCHAIN"]),
         vcpkg_triplet=values["KSV_VCPKG_TRIPLET"],
         vcpkg_bin_dir=Path(values["KSV_VCPKG_BIN_DIR"]),
@@ -49,6 +51,22 @@ def make_toolchain(values: dict[str, str], tmp_path: Path) -> Toolchain:
         qt_bin_dir=Path(values["KSV_QT_BIN_DIR"]),
         qt6_dir=Path(values["KSV_QT6_DIR"]),
     )
+
+
+def test_only_a_mingw_build_puts_the_compiler_directory_first_on_path(
+    toolchain_tree: tuple[Path, dict[str, str]], tmp_path: Path
+) -> None:
+    scripts_dir, values = toolchain_tree
+    mingw = make_toolchain(values, tmp_path)
+    msvc = make_toolchain(
+        {**values, **read_toolchain_env(scripts_dir / "toolchain.msvc.env"), "KSV_TOOLCHAIN": "msvc"}, tmp_path
+    )
+
+    mingw_path = _command_environment({"PATH": "base"}, mingw)["PATH"].split(os.pathsep)
+    msvc_path = _command_environment({"PATH": "base"}, msvc)["PATH"].split(os.pathsep)
+
+    assert mingw_path == [str(mingw.cxx_compiler.parent), str(mingw.vcpkg_bin_dir), str(mingw.qt_bin_dir), "base"]
+    assert msvc_path == [str(msvc.vcpkg_bin_dir), str(msvc.qt_bin_dir), "base"]
 
 
 class FakeExecutor:

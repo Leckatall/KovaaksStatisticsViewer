@@ -12,15 +12,111 @@ from scripts.build_runner.config import (
     RunnerSettings,
     ToolchainError,
     assert_cache,
+    build_fingerprint,
     developer_environment,
     find_local_env,
     fingerprint_matches,
     main_worktree_root,
+    process_environment_for,
     read_toolchain_env,
     resolve_runner_settings,
     resolve_toolchain,
     safe_remove_build_tree,
 )
+
+
+def test_the_default_flavour_resolves_the_mingw_profile(toolchain_tree: tuple[Path, dict[str, str]]) -> None:
+    scripts_dir, values = toolchain_tree
+
+    config = resolve_toolchain(scripts_dir, process_environment={})
+
+    assert config.flavour == "mingw"
+    assert config.cxx_compiler == Path(values["KSV_CXX_COMPILER"]).resolve()
+    assert config.vcpkg_triplet == "x64-mingw-dynamic"
+    assert config.vcvars_bat is None
+
+
+@pytest.mark.parametrize("source", ["local", "process", "override"])
+def test_ksv_toolchain_switches_to_the_msvc_profile_from_any_layer(
+    toolchain_tree: tuple[Path, dict[str, str]], source: str
+) -> None:
+    scripts_dir, _ = toolchain_tree
+    msvc = read_toolchain_env(scripts_dir / "toolchain.msvc.env")
+    environment: dict[str, str] = {}
+    overrides: dict[str, str] = {}
+    if source == "local":
+        (scripts_dir / "toolchain.local.env").write_text("KSV_TOOLCHAIN=msvc\n", encoding="utf-8")
+    elif source == "process":
+        environment["KSV_TOOLCHAIN"] = "MSVC"
+    else:
+        overrides["KSV_TOOLCHAIN"] = "msvc"
+
+    config = resolve_toolchain(scripts_dir, process_environment=environment, overrides=overrides)
+
+    assert config.flavour == "msvc"
+    assert config.cxx_compiler == Path(msvc["KSV_CXX_COMPILER"]).resolve()
+    assert config.vcvars_bat == Path(msvc["KSV_VCVARS_BAT"]).resolve()
+    assert config.vcpkg_triplet == "x64-windows"
+
+
+def test_the_local_file_overrides_the_selected_profile(toolchain_tree: tuple[Path, dict[str, str]]) -> None:
+    scripts_dir, _ = toolchain_tree
+    (scripts_dir / "toolchain.local.env").write_text("KSV_VCPKG_TRIPLET=custom\n", encoding="utf-8")
+
+    assert resolve_toolchain(scripts_dir, process_environment={}).vcpkg_triplet == "custom"
+
+
+def test_an_unknown_flavour_is_actionable(toolchain_tree: tuple[Path, dict[str, str]]) -> None:
+    scripts_dir, _ = toolchain_tree
+
+    with pytest.raises(ToolchainError, match="KSV_TOOLCHAIN must be one of mingw, msvc, not 'clang'"):
+        resolve_toolchain(scripts_dir, process_environment={"KSV_TOOLCHAIN": "clang"})
+
+
+def test_msvc_requires_a_vcvars_script(toolchain_tree: tuple[Path, dict[str, str]]) -> None:
+    scripts_dir, _ = toolchain_tree
+    msvc_env = scripts_dir / "toolchain.msvc.env"
+    msvc_env.write_text(
+        "".join(line + "\n" for line in msvc_env.read_text(encoding="utf-8").splitlines() if "VCVARS" not in line),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ToolchainError, match="Missing required toolchain key for msvc: KSV_VCVARS_BAT"):
+        resolve_toolchain(scripts_dir, process_environment={"KSV_TOOLCHAIN": "msvc"})
+
+
+def test_a_mingw_build_never_runs_vcvars(toolchain_tree: tuple[Path, dict[str, str]]) -> None:
+    scripts_dir, _ = toolchain_tree
+    config = resolve_toolchain(scripts_dir, process_environment={})
+
+    def run(*_, **__):
+        raise AssertionError("vcvars must not run for a mingw toolchain")
+
+    assert process_environment_for(config, {"PATH": "base"}, run=run) == {"PATH": "base"}
+
+
+def test_an_msvc_build_loads_the_vcvars_environment(toolchain_tree: tuple[Path, dict[str, str]]) -> None:
+    scripts_dir, _ = toolchain_tree
+    config = resolve_toolchain(scripts_dir, process_environment={"KSV_TOOLCHAIN": "msvc"})
+    run, calls = _fake_cmd("INCLUDE=C:/msvc/include\r\n")
+
+    environment = process_environment_for(config, {"PATH": "base"}, run=run)
+
+    assert environment["INCLUDE"] == "C:/msvc/include"
+    assert str(config.vcvars_bat) in calls[0]["command"]
+
+
+def test_the_fingerprint_tells_the_flavours_apart_and_tracks_the_mingw_runtime(
+    toolchain_tree: tuple[Path, dict[str, str]], tmp_path: Path
+) -> None:
+    scripts_dir, _ = toolchain_tree
+    mingw = resolve_toolchain(scripts_dir, process_environment={})
+    msvc = resolve_toolchain(scripts_dir, process_environment={"KSV_TOOLCHAIN": "msvc"})
+    before = build_fingerprint(mingw)
+
+    assert before != build_fingerprint(msvc)
+    (tmp_path / "mingw" / "libwinpthread-1.dll").write_bytes(b"another runtime")
+    assert build_fingerprint(mingw) != before
 
 
 def test_environment_overrides_local_and_defaults(toolchain_tree: tuple[Path, dict[str, str]], tmp_path: Path) -> None:
