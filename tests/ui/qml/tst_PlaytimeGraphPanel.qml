@@ -30,6 +30,8 @@ Item {
         }
     }
 
+    Component { id: captureStubComponent; CaptureVmStub {} }
+
     TestCase {
         name: "PlaytimeGraphPanelTest"
         when: windowShown
@@ -39,6 +41,26 @@ Item {
             fakePlaytimeVm.pointMarkers = false
             fakePlaytimeVm.connectionMode = 0
             fakePlaytimeVm.title = "Daily Playtime (3-day rolling average)"
+        }
+
+        function test_acceptsACaptureViewModel() {
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const panel = createTemporaryObject(panelComponent, root, {captureVm: capture})
+            verify(panel.captureVm === capture, "captureVm was not accepted")
+        }
+
+        function test_captureActionsReachTheLoadedCanvas() {
+            fakePlaytimeVm.hasData = true
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const panel = createTemporaryObject(panelComponent, root, {captureVm: capture})
+            tryVerify(() => findChild(panel, "playtimeGraphCanvas") !== null, 2000)
+            const camera = findChild(panel, "captureCopy_dailyPlaytime")
+            verify(camera !== null, "the playtime panel has no camera")
+            mouseClick(camera)
+            const copies = capture.callsNamed("quickCopy")
+            compare(copies.length, 1)
+            compare(copies[0].args[0], "dailyPlaytime")
+            verify(copies[0].args[1] !== null && copies[0].args[1] !== undefined)
         }
 
         function test_titleFollowsTheViewModelsEffectiveWindow() {

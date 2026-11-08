@@ -53,13 +53,9 @@ Item {
         return value === undefined || value === null ? "" : String(value)
     }
 
-    // Ranks are attained per group, so this counts the rows marked as blockers, not the
-    // scenarios already at the next tier.
-    function _blockerSuffix() {
-        const vm = root.trackingVm
-        if (!vm || !vm.hasNextTier) return ""
-        const count = vm.nextTierBlockerCount
-        return count === 1 ? qsTr("(blocked by 1 scenario)") : qsTr("(blocked by %1 scenarios)").arg(count)
+    function _caption(key) {
+        const captions = root.trackingVm ? root.trackingVm.summaryCaptions : null
+        return captions && captions[key] !== undefined ? String(captions[key]) : ""
     }
 
     GridLayout {
@@ -75,13 +71,13 @@ Item {
         uniformCellWidths: true
 
         Field {
-            caption: qsTr("Attained rank")
+            caption: root._caption("attainedRank")
             value: root.trackingVm ? root.trackingVm.attainedRank : ""
             valueColor: root._color("attainedRankColor")
             valueObjectName: "summaryAttainedRank"
         }
         Field {
-            caption: qsTr("Completed rank")
+            caption: root._caption("completedRank")
             value: root.trackingVm ? root.trackingVm.completedRank : ""
             valueColor: root._color("completedRankColor")
             valueObjectName: "summaryCompletedRank"
@@ -94,7 +90,7 @@ Item {
             spacing: 8
 
             Label {
-                text: qsTr("Average rank")
+                text: root._caption("averageRank")
                 color: root.palette.placeholderText
                 Layout.preferredWidth: 120
             }
@@ -130,16 +126,16 @@ Item {
             }
         }
         Field {
-            caption: qsTr("Total playtime")
+            caption: root._caption("totalPlaytime")
             value: root.trackingVm ? root.trackingVm.totalPlaytime : ""
             valueObjectName: "summaryTotalPlaytime"
         }
         Field {
-            caption: qsTr("Next tier")
+            caption: root._caption("nextTier")
             value: root.trackingVm ? root.trackingVm.nextTier : ""
             valueColor: root._color("nextTierColor")
             valueObjectName: "summaryNextTier"
-            suffix: root._blockerSuffix()
+            suffix: root.trackingVm ? String(root.trackingVm.nextTierBlockerText || "") : ""
             suffixObjectName: "summaryNextTierBlockers"
         }
     }

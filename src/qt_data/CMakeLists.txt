@@ -23,6 +23,12 @@ add_library(ksv_qt_data STATIC
         playlist_reader.cpp
         playlist_reader.h
         ../data/interfaces/i_playlist_reader.h
+        raster_qimage.cpp
+        raster_qimage.h
+        qt_png_image_writer.cpp
+        qt_png_image_writer.h
+        qt_clipboard_image_writer.cpp
+        qt_clipboard_image_writer.h
 )
 
 target_link_libraries(ksv_qt_data PUBLIC

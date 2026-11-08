@@ -33,6 +33,9 @@ namespace ksv::ui {
     }
 
     QFont AxisPainter::tickFont(const Style &style) {
+        if (style.font) {
+            return *style.font;
+        }
         QFont font;
         font.setPointSize(style.fontPointSize);
         return font;

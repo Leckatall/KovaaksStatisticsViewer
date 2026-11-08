@@ -28,6 +28,7 @@ TestCase {
         }
     }
     Component { id: barComponent; ProfileStatusBar { width: 650; noticeDuration: 100 } }
+    Component { id: captureStubComponent; CaptureVmStub {} }
     SignalSpy { id: detailsSpy; signalName: "detailsRequested" }
 
     function makeBar(vmProps) {
@@ -46,14 +47,101 @@ TestCase {
         finishImport(vm, props)
     }
 
-    function test_hiddenWhenIdleStaleOrUpToDate() {
+    function test_acceptsACaptureViewModel() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase)
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        verify(bar.captureVm === capture, "captureVm was not accepted")
+    }
+
+    function test_captureFeedbackCoexistsWithAnUnresolvedWarning() {
+        const vm = createTemporaryObject(vmComponent, testCase, {
+            profileImportOutcome: "partial",
+            profileImportIssues: [{path: "a.perf", message: "x", retryable: true}]
+        })
+        const capture = createTemporaryObject(captureStubComponent, testCase,
+            {feedbackKind: "success", feedbackText: "Copied a graph with a deliberately long descriptive name"})
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture, width: 400})
+        compare(bar.mode, "warning")
+        const warning = find(bar, "profileStatusText")
+        const capText = find(bar, "captureStatusText")
+        verify(capText !== null, "the bar has no capture status text")
+        compare(warning.visible, true)
+        compare(find(bar, "profileStatusDetailsButton").visible, true)
+        compare(find(bar, "profileStatusDismissButton").visible, true)
+        compare(capText.visible, true)
+        const warningBox = warning.mapToItem(bar, 0, 0)
+        const capBox = capText.mapToItem(bar, 0, 0)
+        verify(capBox.x >= warningBox.x + warning.width, "capture status must sit beside the warning, not overlap it")
+        verify(Math.abs((capBox.y + capText.height / 2) - (warningBox.y + warning.height / 2)) < 2,
+               "capture status must share the warning's row, not stack")
+        verify(warning.truncated, "the warning should elide rather than push the capture status out")
+        verify(capText.truncated, "the capture status should elide rather than overflow")
+        verify(capBox.x + capText.width <= bar.width, "capture status lies outside the bar")
+    }
+
+    function test_theBarStaysSilentWhileThePreviewAnnouncesInstead() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase,
+            {feedbackKind: "success", feedbackText: "Copied a graph"})
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        const strip = find(bar, "captureStatusStrip")
+        compare(strip.announces, true)
+        capture.previewOpen = true
+        compare(strip.announces, false)
+        capture.previewOpen = false
+        compare(strip.announces, true)
+    }
+
+    function test_captureFeedbackAppearsDuringImport() {
+        const vm = createTemporaryObject(vmComponent, testCase, {profileImportBusy: true, profileImportPhase: "scanning"})
+        const capture = createTemporaryObject(captureStubComponent, testCase,
+            {feedbackKind: "failure", feedbackText: "Could not copy a graph"})
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        compare(bar.mode, "busy")
+        compare(find(bar, "profileStatusProgressBar").visible, true)
+        const capText = find(bar, "captureStatusText")
+        verify(capText !== null, "the bar has no capture status text")
+        compare(capText.visible, true)
+    }
+
+    function test_idleHidesTheFooter() {
         const {vm, bar} = makeBar()
-        compare(bar.mode, "hidden")
+        compare(bar.mode, "idle")
         compare(bar.visible, false)
         vm.profileImportOutcome = "stale"
-        compare(bar.mode, "hidden")
+        compare(bar.visible, false)
         runImport(vm, {profileImportOutcome: "succeeded"})
-        compare(bar.mode, "hidden")
+        compare(bar.mode, "idle")
+        compare(bar.visible, false)
+    }
+
+    function test_captureFeedbackShowsTheFooterUntilItClears() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase)
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        compare(bar.visible, false)
+        capture.feedbackKind = "success"
+        capture.feedbackText = "Copied a graph"
+        compare(bar.visible, true)
+        capture.feedbackKind = "none"
+        compare(bar.visible, false)
+    }
+
+    function test_importStatusShowsTheFooterAndExpiryHidesIt() {
+        const {vm, bar} = makeBar()
+        compare(bar.visible, false)
+        vm.profileImportBusy = true
+        compare(bar.visible, true)
+        finishImport(vm, {profileImportOutcome: "succeeded", profileImportAdded: 1})
+        compare(bar.visible, true)
+        tryCompare(bar, "visible", false)
+    }
+
+    function test_dismissingTheLastWarningHidesTheFooter() {
+        const {bar} = makeBar({profileImportOutcome: "partial", profileImportIssues: [{path: "a", message: "x"}]})
+        compare(bar.visible, true)
+        mouseClick(find(bar, "profileStatusDismissButton"))
         compare(bar.visible, false)
     }
 
@@ -82,7 +170,7 @@ TestCase {
         runImport(vm, {profileImportOutcome: "succeeded", profileImportAdded: 2})
         compare(bar.mode, "notice")
         compare(find(bar, "profileStatusText").text, "Added 2 runs")
-        tryCompare(bar, "mode", "hidden")
+        tryCompare(bar, "mode", "idle")
     }
 
     function test_noticeCopyForEnrichedAndMixedCounts() {
@@ -120,7 +208,7 @@ TestCase {
         const issues = [{path: "a.perf", message: "x", retryable: false, previouslyFailed: true}]
         let made = makeBar()
         runImport(made.vm, {profileImportOutcome: "partial", profileImportIssues: issues})
-        compare(made.bar.mode, "hidden")
+        compare(made.bar.mode, "idle")
         made = makeBar()
         runImport(made.vm, {profileImportOutcome: "partial", profileImportAdded: 1, profileImportIssues: issues})
         compare(made.bar.mode, "notice")
@@ -131,9 +219,81 @@ TestCase {
         const issues = [{path: "a.perf", message: "x", retryable: true}]
         runImport(vm, {profileImportOutcome: "partial", profileImportIssues: issues})
         mouseClick(find(bar, "profileStatusDismissButton"))
-        compare(bar.mode, "hidden")
+        compare(bar.mode, "idle")
         runImport(vm, {profileImportOutcome: "partial", profileImportIssues: issues})
         compare(bar.mode, "warning")
+    }
+
+    Component {
+        id: underlayComponent
+        Item {
+            width: 650
+            height: 200
+            property alias under: underArea
+            property var bar: null
+            MouseArea { id: underArea; anchors.fill: parent; hoverEnabled: true; property int clicks: 0; onClicked: clicks++ }
+        }
+    }
+
+    function makeOverlaid(vmProps) {
+        const vm = createTemporaryObject(vmComponent, testCase, vmProps || {})
+        const host = createTemporaryObject(underlayComponent, testCase)
+        const bar = barComponent.createObject(host, {sessionVm: vm})
+        bar.anchors.left = host.left
+        bar.anchors.right = host.right
+        bar.anchors.bottom = host.bottom
+        bar.z = 1
+        return {vm, host, bar}
+    }
+
+    function test_theShownBarAbsorbsClicksAndHoverOverItsBlankArea() {
+        const {host, bar} = makeOverlaid({profileImportOutcome: "partial", profileImportIssues: [{path: "a", message: "x"}]})
+        compare(bar.visible, true)
+        mouseMove(host, 600, host.height - 4)
+        mouseClick(host, 600, host.height - 4)
+        compare(host.under.clicks, 0)
+        compare(host.under.containsMouse, false)
+        mouseClick(host, 600, 20)
+        compare(host.under.clicks, 1)
+    }
+
+    function test_theBarsOwnButtonsStillWorkWhenAbsorbingPointerInput() {
+        const {host, bar} = makeOverlaid({profileImportOutcome: "partial", profileImportIssues: [{path: "a", message: "x"}]})
+        detailsSpy.target = bar
+        detailsSpy.clear()
+        mouseClick(find(bar, "profileStatusDetailsButton"))
+        compare(detailsSpy.count, 1)
+        mouseClick(find(bar, "profileStatusDismissButton"))
+        compare(bar.mode, "idle")
+        compare(host.under.clicks, 0)
+    }
+
+    function test_announcementWaitsForTheVisibleFinalTextAndFiresOnce() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase)
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        const strip = find(bar, "captureStatusStrip")
+        const heard = []
+        strip.announcementMade.connect(text => heard.push({text, visible: bar.visible}))
+        capture.feedbackText = "Copied a graph"
+        capture.feedbackKind = "success"
+        tryCompare(heard, "length", 1)
+        wait(50)
+        compare(heard.length, 1)
+        compare(heard[0].text, capture.feedbackText)
+        compare(heard[0].visible, true)
+    }
+
+    function test_noAnnouncementWhileTheBarIsHidden() {
+        const vm = createTemporaryObject(vmComponent, testCase)
+        const capture = createTemporaryObject(captureStubComponent, testCase)
+        const bar = createTemporaryObject(barComponent, testCase, {sessionVm: vm, captureVm: capture})
+        const strip = find(bar, "captureStatusStrip")
+        const heard = []
+        strip.announcementMade.connect(text => heard.push(text))
+        capture.feedbackText = "Copied a graph"
+        wait(50)
+        compare(heard.length, 0)
     }
 
     function test_detailsButtonRequestsDetails() {

@@ -52,6 +52,7 @@ ApplicationWindow {
     required property var scenarioBrowserVm
     required property var benchmarkManagerVm
     required property var benchmarkTrackingVm
+    required property var captureVm
 
     FolderDialog {
         id: folderDialog
@@ -72,6 +73,25 @@ ApplicationWindow {
         settingsVm: root.settingsVm
         sessionVm: root.sessionVm
         visualSettings: visualSettingsManager
+    }
+
+    CapturePreviewDialog {
+        captureVm: root.captureVm
+        transientParent: root
+    }
+
+    // Runs after a CaptureActions origin has had its chance to take focus back; if none did, the
+    // owning workspace gets it instead of focus being lost with the closed window.
+    function restoreWorkspaceFocus() {
+        const workspace = workspaceStack.children[workspaceStack.currentIndex]
+        for (let item = root.activeFocusItem; item; item = item.parent)
+            if (item === workspace) return
+        workspace.forceActiveFocus()
+    }
+
+    Connections {
+        target: root.captureVm
+        function onPreviewClosed() { Qt.callLater(root.restoreWorkspaceFocus) }
     }
 
     AboutDialog {
@@ -102,12 +122,6 @@ ApplicationWindow {
         onManageBenchmarksRequested: benchmarkManagerDialog.open()
         onQuitRequested: Qt.quit()
         onAboutRequested: aboutDialog.open()
-    }
-
-    footer: ProfileStatusBar {
-        objectName: "profileStatusBar"
-        sessionVm: root.sessionVm
-        onDetailsRequested: settingsDialog.openProfile()
     }
 
     // A workspace switcher styled as the app's primary navigation: tall tabs,
@@ -229,6 +243,7 @@ ApplicationWindow {
                 scenarioBrowserVm: root.scenarioBrowserVm
                 visualSettings: visualSettingsManager
                 settingsVm: root.settingsVm
+                captureVm: root.captureVm
                 onConfigureGraphLinesRequested: settingsDialog.openGraphLines()
                 onMoreGraphSettingsRequested: graphKey => settingsDialog.openGraph(graphKey)
             }
@@ -237,6 +252,7 @@ ApplicationWindow {
                 objectName: "benchmarkWorkspace"
                 trackingVm: root.benchmarkTrackingVm
                 settingsVm: root.settingsVm
+                captureVm: root.captureVm
                 visualSettings: visualSettingsManager
                 onManageBenchmarksRequested: benchmarkManagerDialog.open()
                 onMoreGraphSettingsRequested: graphKey => settingsDialog.openGraph(graphKey)
@@ -244,6 +260,19 @@ ApplicationWindow {
                     benchmarkManagerDialog.openOnEntry(filename, benchmarkId)
             }
         }
+    }
+
+    // Drawn over the bottom of the content rather than in the window footer so that showing
+    // and clearing a message never moves the workspaces.
+    ProfileStatusBar {
+        objectName: "profileStatusBar"
+        z: 1
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        sessionVm: root.sessionVm
+        captureVm: root.captureVm
+        onDetailsRequested: settingsDialog.openProfile()
     }
 
     // Ctrl+F searches scenarios from either workspace. A window shortcut: Settings and the
@@ -266,6 +295,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         visualSettingsManager.syncVisibleSeriesIds(root.graphVm.enabledSeriesIds)
+        root.captureVm.useTheme(Theme, root.font)
         root.restorePosition()
         root.visible = true
     }

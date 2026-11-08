@@ -7,6 +7,31 @@
 #include <cstddef>
 
 namespace ksv::presentation {
+    QColor readableColorOn(const QColor &color, const QColor &background, const QColor &fallback) {
+        if (!color.isValid()) return fallback;
+        const auto linear = [](const double c) { return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); };
+        const auto luminance = [&](const QColor &c) {
+            return 0.2126 * linear(c.redF()) + 0.7152 * linear(c.greenF()) + 0.0722 * linear(c.blueF());
+        };
+        const auto contrast = [&](const QColor &a, const QColor &b) {
+            const double la = luminance(a);
+            const double lb = luminance(b);
+            return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+        };
+        for (int step = 0; step <= 20; ++step) {
+            const double t = step / 20.0;
+            const QColor mixed = QColor::fromRgbF(color.redF() + (fallback.redF() - color.redF()) * t,
+                                                  color.greenF() + (fallback.greenF() - color.greenF()) * t,
+                                                  color.blueF() + (fallback.blueF() - color.blueF()) * t, 1.0);
+            if (contrast(mixed, background) >= 4.5) return mixed;
+        }
+        return fallback;
+    }
+
+    bool isLightFill(const QColor &color) {
+        return 0.299 * color.redF() + 0.587 * color.greenF() + 0.114 * color.blueF() > 0.55;
+    }
+
     namespace {
         double linearChannel(const double channel) {
             return channel <= 0.04045 ? channel / 12.92 : std::pow((channel + 0.055) / 1.055, 2.4);

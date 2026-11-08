@@ -40,7 +40,7 @@ namespace {
         ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
         const auto makeApp = [&] {
             return std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>(),
-                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource);
+                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource, env.clipboardWriter, env.pngWriter);
         };
         {
             auto first = makeApp();
@@ -78,7 +78,7 @@ namespace {
         ASSERT_TRUE(QFile::resize(corrupt, 16));
         const auto makeApp = [&] {
             return std::make_unique<application::App>(env.settings, std::make_shared<data::ProtoDecoder>(),
-                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource);
+                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource, env.clipboardWriter, env.pngWriter);
         };
         const auto corruptIssue = [](const application::ISessionController &controller)
             -> std::optional<application::ProfileImportIssue> {
@@ -123,7 +123,7 @@ namespace {
             QDir(env.performancesDir()).filePath(stem + " Performance.perf")));
         {
             application::App app(env.settings, std::make_shared<data::ProtoDecoder>(),
-                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource);
+                env.graphConfigurationPersistence, env.statsParser, env.benchmarkStore, env.daySource, env.clipboardWriter, env.pngWriter);
             ASSERT_TRUE(QTest::qWaitFor([&] { return !app.sessionController()->profileImportState().busy; }, 5000));
             ASSERT_EQ(app.profileService()->getRecentRuns(10).size(), 1U);
             const auto run = app.profileService()->getLatestRun();
@@ -165,7 +165,7 @@ namespace {
 
             app = std::make_unique<application::App>(
                 env->settings, std::make_shared<data::ProtoDecoder>(), env->graphConfigurationPersistence,
-                env->statsParser, env->benchmarkStore, env->daySource);
+                env->statsParser, env->benchmarkStore, env->daySource, env->clipboardWriter, env->pngWriter);
             ASSERT_TRUE(waitForProfile());
         }
 
@@ -196,6 +196,12 @@ namespace {
     TEST_F(CompositionRootTest, ConstructionBuildsProfileFromTheKovaaksDirectory) {
         EXPECT_TRUE(app->profileService()->isProfileLoaded());
         EXPECT_FALSE(app->profileService()->getScenarioList().empty());
+    }
+
+    TEST_F(CompositionRootTest, SuppliesTheCaptureViewModel) {
+        const auto supplied = app->initialProperties().value("captureVm").value<QObject *>();
+        ASSERT_NE(supplied, nullptr);
+        EXPECT_EQ(supplied, app->captureVm());
     }
 
     TEST_F(CompositionRootTest, SessionControllerReadsThroughToTheRealProfile) {
@@ -512,7 +518,7 @@ namespace {
         {
             application::App restored(startupEnv.settings, std::make_shared<data::ProtoDecoder>(),
                                       startupEnv.graphConfigurationPersistence, startupEnv.statsParser,
-                                      startupEnv.benchmarkStore, startupEnv.daySource);
+                                      startupEnv.benchmarkStore, startupEnv.daySource, startupEnv.clipboardWriter, startupEnv.pngWriter);
 
             EXPECT_EQ(probe(restored.graphVm()), (StyleProbe{1, true}));
             EXPECT_EQ(probe(restored.playtimeVm()), (StyleProbe{2, false}));

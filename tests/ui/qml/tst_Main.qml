@@ -56,6 +56,18 @@ TestCase {
 
     QtObject { id: fakePlaytimeVm }
     QtObject {
+        id: fakeCaptureVm
+        signal previewClosed()
+        property int themeCalls: 0
+        property var lastTheme: null
+        property var lastFont: null
+        function useTheme(theme, font) {
+            themeCalls++
+            lastTheme = theme
+            lastFont = font
+        }
+    }
+    QtObject {
         id: fakeSessionVm
         property int refreshCalls: 0
         property bool profileImportBusy: false
@@ -74,7 +86,9 @@ TestCase {
     }
 
     function cleanup() {
+        fakeCaptureVm.themeCalls = 0
         fakeSessionVm.refreshCalls = 0
+        fakeSessionVm.profileImportSaveFailed = false
         fakeSettingsVm.kovaaksDirValid = true
         fakeScenarioBrowserVm.hasScenarios = true
     }
@@ -92,12 +106,47 @@ TestCase {
         compare(fakeSessionVm.refreshCalls, 1)
     }
 
-    function test_profileStatusBarIsTheHiddenWindowFooterWhileIdle() {
+    function test_theThemeReachesTheCaptureViewModel() {
         const win = createMain()
-        const bar = win.footer
-        verify(bar !== null, "Main.qml has no footer")
-        compare(bar.objectName, "profileStatusBar")
+        compare(fakeCaptureVm.themeCalls, 1)
+        verify(fakeCaptureVm.lastTheme !== null)
+        compare(fakeCaptureVm.lastFont.family, win.font.family)
+        compare(fakeCaptureVm.lastFont.pixelSize, win.font.pixelSize)
+    }
+
+    function test_profileStatusBarIsHiddenWhileIdle() {
+        const win = createMain()
+        const bar = ItemLookup.findByObjectName(win.contentItem, "profileStatusBar")
+        verify(bar !== null, "Main.qml has no profile status bar")
         compare(bar.visible, false)
+    }
+
+    function test_theStatusBarOverlaysTheContentWithoutMovingIt() {
+        const win = createMain()
+        const bar = ItemLookup.findByObjectName(win.contentItem, "profileStatusBar")
+        const workspaces = stack(win)
+        const before = workspaces.mapToItem(null, 0, 0)
+        const heightBefore = workspaces.height
+        fakeSessionVm.profileImportSaveFailed = true
+        compare(bar.visible, true)
+        const after = workspaces.mapToItem(null, 0, 0)
+        compare(workspaces.height, heightBefore)
+        compare(after.y, before.y)
+        const barBottom = bar.mapToItem(win.contentItem, 0, bar.height).y
+        verify(Math.abs(barBottom - win.contentItem.height) < 1, "the bar sits at the bottom of the window")
+        verify(bar.z > workspaces.z, "the bar draws over the content")
+    }
+
+    function test_previewCloseFallsBackToTheWorkspace() {
+        const win = createMain()
+        win.requestActivate()
+        tryVerify(() => win.active, 2000, "the Main window never became the active window")
+        tabBar(win).forceActiveFocus()
+        const workspaces = stack(win)
+        const inside = item => { for (let p = item; p; p = p.parent) if (p === workspaces) return true; return false }
+        verify(!inside(win.activeFocusItem), "focus must start outside the workspaces")
+        fakeCaptureVm.previewClosed()
+        tryVerify(() => inside(win.activeFocusItem), 2000, "focus did not fall back into the workspace")
     }
 
     function createMain(managerVm) {
@@ -109,7 +158,8 @@ TestCase {
             settingsVm: fakeSettingsVm,
             scenarioBrowserVm: fakeScenarioBrowserVm,
             benchmarkManagerVm: managerVm || fakeManagerVm,
-            benchmarkTrackingVm: fakeTrackingVm
+            benchmarkTrackingVm: fakeTrackingVm,
+            captureVm: fakeCaptureVm
         })
         verify(win !== null, "Main.qml failed to instantiate")
         tryVerify(() => win.contentItem !== null && win.contentItem.width > 0,

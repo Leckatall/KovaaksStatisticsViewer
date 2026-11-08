@@ -12,6 +12,7 @@ Frame {
     // benchmarkRank, benchmarkRecentRank or benchmarkPlaytime.
     required property string graphKey
     property var settingsVm: null
+    property var captureVm: null
 
     signal moreGraphSettingsRequested(string graphKey)
     signal hideGraphRequested(string graphKey)
@@ -42,6 +43,11 @@ Frame {
                 objectName: root.namePrefix + "LineName"
                 Layout.fillWidth: true
                 text: root.metricName
+            }
+            CaptureActions {
+                captureVm: root.captureVm
+                targetKey: root.graphKey
+                canvas: (canvasLoader.item as GraphCanvasWithTooltip)?.graphCanvas ?? null
             }
             GraphGear {
                 graphKey: root.graphKey
@@ -76,6 +82,7 @@ Frame {
         }
 
         Loader {
+            id: canvasLoader
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 160

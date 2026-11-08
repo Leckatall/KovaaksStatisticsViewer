@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QString>
 #include <QVariantList>
+#include <QVariantMap>
 #include <qqmlintegration.h>
 
 #include <optional>
@@ -11,6 +12,7 @@
 
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_projection.h"
+#include "presentation/benchmarks/tracking/progress_grid_content.h"
 
 namespace ksv::presentation {
     // A segmented tier bar has one equal-width chunk per tier in ladder order, and chunk k is the
@@ -57,6 +59,8 @@ namespace ksv::presentation {
         // each spanning `span` rows from row `start`.
         Q_PROPERTY(QVariantList groups READ groups NOTIFY changed)
         Q_PROPERTY(bool hasSubcategories READ hasSubcategories NOTIFY changed)
+        // Column headings, keyed category, subcategory, scenario, progress, pbDate, plays, next.
+        Q_PROPERTY(QVariantMap headers READ headers CONSTANT)
 
     public:
         explicit BenchmarkProgressGridModel(QObject *parent = nullptr);
@@ -66,6 +70,11 @@ namespace ksv::presentation {
         [[nodiscard]] QVariantList groups() const { return m_groups; }
         [[nodiscard]] bool hasSubcategories() const { return m_hasSubcategories; }
 
+        [[nodiscard]] QVariantMap headers() const;
+
+        // The typed form the three lists are derived from.
+        [[nodiscard]] const ProgressGridContent &content() const { return m_content; }
+
         // Rebuilds every list for one coherent revision. Null `definition`/`projection` (outside
         // the Ready states) empties the grid.
         void reset(const domain::Benchmark *definition, const domain::BenchmarkProjection *projection);
@@ -74,6 +83,7 @@ namespace ksv::presentation {
         void changed();
 
     private:
+        ProgressGridContent m_content;
         QVariantList m_tiers;
         QVariantList m_rows;
         QVariantList m_groups;

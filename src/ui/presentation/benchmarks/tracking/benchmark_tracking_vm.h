@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 #include <qqmlintegration.h>
 
 #include <memory>
@@ -20,6 +21,14 @@
 #include "presentation/graphs/common/axes/date_time_axis.h"
 
 namespace ksv::presentation {
+    struct BenchmarkSummaryCaptions {
+        QString attainedRank = QObject::tr("Attained rank");
+        QString completedRank = QObject::tr("Completed rank");
+        QString averageRank = QObject::tr("Average rank");
+        QString totalPlaytime = QObject::tr("Total playtime");
+        QString nextTier = QObject::tr("Next tier");
+    };
+
     // Adapts one IBenchmarkTrackingUseCase revision into the benchmark workspace's QML surface:
     // selector entries, explicit state, status summary, and four owned presentation-only child
     // models (three history graphs and the scenario progress grid). Its only dependency is the
@@ -55,6 +64,10 @@ namespace ksv::presentation {
         // blockers. hasNextTier is false when the top tier is attained (or the benchmark is not trackable).
         Q_PROPERTY(int nextTierBlockerCount READ nextTierBlockerCount NOTIFY changed)
         Q_PROPERTY(bool hasNextTier READ hasNextTier NOTIFY changed)
+        // "(blocked by N scenarios)", or "" without a next tier.
+        Q_PROPERTY(QString nextTierBlockerText READ nextTierBlockerText NOTIFY changed)
+        // Keys attainedRank, completedRank, averageRank, totalPlaytime, nextTier.
+        Q_PROPERTY(QVariantMap summaryCaptions READ summaryCaptions CONSTANT)
         Q_PROPERTY(int scenarioCount READ scenarioCount NOTIFY changed)
         Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *rankHistory READ rankHistory CONSTANT)
         Q_PROPERTY(ksv::presentation::BenchmarkHistoryViewModel *recentRankHistory READ recentRankHistory CONSTANT)
@@ -84,6 +97,8 @@ namespace ksv::presentation {
         [[nodiscard]] int scenariosAtNextTier() const { return m_scenariosAtNextTier; }
         [[nodiscard]] int nextTierBlockerCount() const { return m_nextTierBlockerCount; }
         [[nodiscard]] bool hasNextTier() const { return m_hasNextTier; }
+        [[nodiscard]] QString nextTierBlockerText() const { return m_nextTierBlockerText; }
+        [[nodiscard]] QVariantMap summaryCaptions() const;
         [[nodiscard]] int scenarioCount() const { return m_scenarioCount; }
         [[nodiscard]] BenchmarkHistoryViewModel *rankHistory() const { return m_rankHistory; }
         [[nodiscard]] BenchmarkHistoryViewModel *recentRankHistory() const { return m_recentRankHistory; }
@@ -164,6 +179,7 @@ namespace ksv::presentation {
         QString m_totalPlaytime;
         int m_scenariosAtNextTier = 0;
         int m_nextTierBlockerCount = 0;
+        QString m_nextTierBlockerText;
         bool m_hasNextTier = false;
         int m_scenarioCount = 0;
     };

@@ -133,12 +133,9 @@ namespace ksv::presentation {
                 : m_definition(definition), m_projection(projection) {
                 for (const auto &tier: projection.tiers) {
                     const QString id = q(tier.id.value);
-                    QVariantMap map;
-                    map[QStringLiteral("id")] = id;
-                    map[QStringLiteral("name")] = q(tier.name);
-                    map[QStringLiteral("color")] = readableTextColor(tier.color).name();
-                    map[QStringLiteral("barColor")] = QColor(tier.color.red, tier.color.green, tier.color.blue).name();
-                    tiers.push_back(map);
+                    content.tiers.push_back(ProgressGridTier{
+                        id, q(tier.name), readableTextColor(tier.color).name(),
+                        QColor(tier.color.red, tier.color.green, tier.color.blue).name()});
                     m_tierStyles.insert(id, TierStyle{q(tier.name), readableTextColor(tier.color).name()});
                 }
                 for (const auto &scenario: projection.scenarios) m_scenarios.insert(q(scenario.entryId.value), &scenario);
@@ -155,7 +152,8 @@ namespace ksv::presentation {
                 if (!m_definition.uncategorized.empty()) {
                     const int start = rowCount();
                     for (const auto &entry: m_definition.uncategorized) addScenario(entry);
-                    addGroup(QStringLiteral("category"), QString(), QObject::tr("Uncategorized"), QString(), start);
+                    addGroup(ProgressGridGroupColumn::Category, QString(), QObject::tr("Uncategorized"), QString(),
+                             start);
                 }
                 for (const auto &category: m_definition.categories) {
                     const int start = rowCount();
@@ -164,81 +162,65 @@ namespace ksv::presentation {
                         const int subStart = rowCount();
                         for (const auto &entry: subcategory.scenarios) addScenario(entry);
                         if (rowCount() == subStart) continue;
-                        addGroup(QStringLiteral("subcategory"), q(subcategory.id.value), q(subcategory.name),
+                        addGroup(ProgressGridGroupColumn::Subcategory, q(subcategory.id.value), q(subcategory.name),
                                  toQColor(subcategory.color).name(), subStart);
-                        hasSubcategories = true;
+                        content.hasSubcategories = true;
                     }
                     if (rowCount() == start) continue;
-                    addGroup(QStringLiteral("category"), q(category.id.value), q(category.name),
+                    addGroup(ProgressGridGroupColumn::Category, q(category.id.value), q(category.name),
                              toQColor(category.color).name(), start);
                 }
                 markSubcategorySpans();
             }
 
-            QVariantList tiers;
-            QVariantList rows;
-            QVariantList groups;
-            bool hasSubcategories = false;
+            ProgressGridContent content;
 
         private:
-            [[nodiscard]] int rowCount() const { return static_cast<int>(rows.size()); }
+            [[nodiscard]] int rowCount() const { return static_cast<int>(content.rows.size()); }
 
-            void addGroup(const QString &column, const QString &id, const QString &name, const QString &color,
-                          const int start) {
-                QVariantMap map;
-                map[QStringLiteral("column")] = column;
-                map[QStringLiteral("id")] = id;
-                map[QStringLiteral("name")] = name;
-                map[QStringLiteral("color")] = color;
-                map[QStringLiteral("start")] = start;
-                map[QStringLiteral("span")] = rowCount() - start;
-                addGroupRank(map, id);
-                groups.push_back(map);
+            void addGroup(const ProgressGridGroupColumn column, const QString &id, const QString &name,
+                          const QString &color, const int start) {
+                ProgressGridGroup group;
+                group.column = column;
+                group.id = id;
+                group.name = name;
+                group.color = color;
+                group.start = start;
+                group.span = rowCount() - start;
+                addGroupRank(group);
+                content.groups.push_back(std::move(group));
             }
 
             // A category cell widens across the Subcategory column when none of its rows has a
             // subcategory cell.
             void markSubcategorySpans() {
                 const auto startsInside = [this](const int start, const int end) {
-                    return std::ranges::any_of(std::as_const(groups), [&](const QVariant &other) {
-                        const auto map = other.toMap();
-                        const int otherStart = map.value(QStringLiteral("start")).toInt();
-                        return map.value(QStringLiteral("column")).toString() == QStringLiteral("subcategory") &&
-                               otherStart >= start && otherStart < end;
+                    return std::ranges::any_of(content.groups, [&](const ProgressGridGroup &other) {
+                        return other.column == ProgressGridGroupColumn::Subcategory && other.start >= start &&
+                               other.start < end;
                     });
                 };
-                for (auto &group: groups) {
-                    auto map = group.toMap();
-                    const int start = map.value(QStringLiteral("start")).toInt();
-                    map[QStringLiteral("spansSubcategory")] =
-                        map.value(QStringLiteral("column")).toString() == QStringLiteral("category") &&
-                        !startsInside(start, start + map.value(QStringLiteral("span")).toInt());
-                    group = map;
-                }
+                for (auto &group: content.groups)
+                    group.spansSubcategory = group.column == ProgressGridGroupColumn::Category &&
+                                             !startsInside(group.start, group.start + group.span);
             }
 
             // The group's rank chip: the highest tier the group satisfies (the old breakdown's
             // "highest Silver"), or Unranked. Only a trackable benchmark ranks groups, and
             // Uncategorized is never ranked as a group, so both get no chip (empty rankText).
-            void addGroupRank(QVariantMap &map, const QString &id) const {
-                QString text;
-                QString color;
-                QString barColor;
-                const domain::GroupProjection *group = findGroup(m_projection.categories, id);
+            void addGroupRank(ProgressGridGroup &cell) const {
+                const domain::GroupProjection *group = findGroup(m_projection.categories, cell.id);
                 if (m_projection.completeness == domain::Completeness::Trackable && group) {
-                    text = QObject::tr("Unranked");
+                    cell.rankText = QObject::tr("Unranked");
                     if (group->satisfiedTier) {
                         for (const auto &tier: m_projection.tiers) {
                             if (tier.id != *group->satisfiedTier) continue;
-                            text = q(tier.name);
-                            color = readableTextColor(tier.color).name();
-                            barColor = QColor(tier.color.red, tier.color.green, tier.color.blue).name();
+                            cell.rankText = q(tier.name);
+                            cell.rankColor = readableTextColor(tier.color).name();
+                            cell.rankBarColor = QColor(tier.color.red, tier.color.green, tier.color.blue).name();
                         }
                     }
                 }
-                map[QStringLiteral("rankText")] = text;
-                map[QStringLiteral("rankColor")] = color;
-                map[QStringLiteral("rankBarColor")] = barColor;
             }
 
             static const domain::GroupProjection *findGroup(const std::vector<domain::GroupProjection> &groups,
@@ -257,14 +239,15 @@ namespace ksv::presentation {
                 const std::optional<double> personalBest = projected ? projected->personalBest : std::nullopt;
                 const auto matchState = projected ? projected->matchState : domain::ScenarioMatchState::Unresolved;
 
-                QVariantMap map;
-                map[QStringLiteral("entryId")] = entryId;
-                map[QStringLiteral("name")] = projected ? q(projected->name) : q(entry.name);
-                map[QStringLiteral("personalBestText")] =
-                    personalBest ? formatBenchmarkNumber(*personalBest) : QStringLiteral("—");
-                map[QStringLiteral("personalBestDateText")] =
-                    projected ? personalBestDateText(*projected) : QStringLiteral("—");
-                map[QStringLiteral("playCountText")] = projected ? playCountText(*projected) : QStringLiteral("—");
+                ProgressGridScenarioRow row;
+                row.entryId = entryId;
+                row.name = projected ? q(projected->name) : q(entry.name);
+                row.personalBestText = personalBest ? formatBenchmarkNumber(*personalBest) : QStringLiteral("—");
+                row.personalBestDateText = projected ? personalBestDateText(*projected) : QStringLiteral("—");
+                row.playCountText = projected ? playCountText(*projected) : QStringLiteral("—");
+                row.hasPersonalBest = personalBest.has_value();
+                row.hasPersonalBestDate = projected && projected->personalBestTime.has_value();
+                row.hasPlayCount = projected && projected->runCount > 0;
 
                 QString attainedText = QObject::tr("Unranked");
                 QString attainedColor;
@@ -275,18 +258,15 @@ namespace ksv::presentation {
                         attainedColor = found->textColor;
                     }
                 }
-                map[QStringLiteral("attainedTierText")] = attainedText;
-                map[QStringLiteral("attainedTierColor")] = attainedColor;
+                row.attainedTierText = attainedText;
+                row.attainedTierColor = attainedColor;
 
                 const std::vector<double> fills = scenarioChunkFills(m_projection.tiers, entry.thresholds, personalBest);
-                QVariantList fillList;
-                for (const double fill: fills) fillList.push_back(fill);
-                map[QStringLiteral("fills")] = fillList;
+                row.fills = fills;
 
-                // The recent average on the same chunk scale as the PB fill (-1: no marker).
                 const auto recent = projected ? projected->recentAverage : std::nullopt;
                 const auto recentPosition = tierScalePosition(m_projection.tiers, entry.thresholds, recent);
-                map[QStringLiteral("recentPosition")] = recentPosition ? *recentPosition : -1.0;
+                row.recentPosition = recentPosition;
                 QString recentTier = QObject::tr("Unranked");
                 if (recentPosition) {
                     const auto reached = std::min(
@@ -295,7 +275,7 @@ namespace ksv::presentation {
                         m_projection.tiers.size());
                     if (reached >= 1) recentTier = q(m_projection.tiers[reached - 1].name);
                 }
-                map[QStringLiteral("recentDescription")] =
+                row.recentDescription =
                     recentPosition ? QObject::tr("Recent average %1 · %2").arg(formatBenchmarkNumber(*recent), recentTier)
                                    : QString();
 
@@ -313,72 +293,67 @@ namespace ksv::presentation {
                 } else if (personalBest && !fills.empty() && fills.back() >= 1.0) {
                     nextThresholdText = QObject::tr("Highest tier attained");
                 }
-                map[QStringLiteral("nextTierText")] = nextTierText;
-                map[QStringLiteral("nextTierColor")] = nextTierColor;
-                map[QStringLiteral("nextThresholdText")] = nextThresholdText;
+                row.nextTierText = nextTierText;
+                row.nextTierColor = nextTierColor;
+                row.nextThresholdText = nextThresholdText;
+                row.nextText = nextTierText.isEmpty() ? nextThresholdText : nextTierText + QLatin1Char(' ') + nextThresholdText;
 
                 const QString matchText = matchStateLabel(matchState);
                 const QString matchHint = matchStateHint(matchState);
-                map[QStringLiteral("matchStateText")] = matchText;
-                map[QStringLiteral("matchStateHint")] = matchHint;
+                row.matchStateText = matchText;
+                row.matchStateHint = matchHint;
 
                 QString description = progressDescription(m_projection.tiers, entry.thresholds, personalBest);
                 if (!matchText.isEmpty()) description += QStringLiteral("\n") + matchText + QStringLiteral(": ") + matchHint;
-                map[QStringLiteral("barDescription")] = description;
+                row.barDescription = description;
 
                 // Edge states, each with its own look: an unplayed scenario, a mapping the user
                 // has to fix (with its status), a PB above the top tier, and chunks whose
                 // thresholds are unusable.
-                QVariantList missingList;
-                for (const bool missing: missingThresholdChunks(m_projection.tiers, entry.thresholds))
-                    missingList.push_back(missing);
-                map[QStringLiteral("missingChunks")] = missingList;
+                row.missingChunks = missingThresholdChunks(m_projection.tiers, entry.thresholds);
                 // The score that reaches each tier, at the end of its chunk ("" when this
                 // entry has no usable threshold for the tier).
-                QVariantList thresholdList;
                 for (const auto &tier: m_projection.tiers) {
                     const auto threshold = thresholdFor(entry.thresholds, tier.id);
-                    thresholdList.push_back(threshold ? formatBenchmarkNumber(*threshold) : QString());
+                    row.thresholdTexts.push_back(threshold ? formatBenchmarkNumber(*threshold) : QString());
                 }
-                map[QStringLiteral("thresholdTexts")] = thresholdList;
-                QString edgeState;
+                ProgressGridEdgeState edgeState = ProgressGridEdgeState::None;
                 QString statusText;
                 QString aboveTopText;
                 const bool mappingNeedsAction = matchState == domain::ScenarioMatchState::Unresolved ||
                                                 matchState == domain::ScenarioMatchState::Ambiguous ||
                                                 matchState == domain::ScenarioMatchState::AutoMappable;
                 if (mappingNeedsAction) {
-                    edgeState = QStringLiteral("unmatched");
+                    edgeState = ProgressGridEdgeState::Unmatched;
                     statusText = matchText;
                 } else if (!personalBest) {
                     // A linked scenario without runs is unplayed too; it keeps its reason.
-                    edgeState = QStringLiteral("unplayed");
+                    edgeState = ProgressGridEdgeState::Unplayed;
                     statusText = matchState == domain::ScenarioMatchState::MappedUnavailable
                                      ? QObject::tr("Unplayed · no runs of the linked scenario")
                                      : QObject::tr("Unplayed");
                 } else if (!m_projection.tiers.empty()) {
                     const auto top = thresholdFor(entry.thresholds, m_projection.tiers.back().id);
                     if (top && !fills.empty() && fills.back() >= 1.0 && *personalBest > *top) {
-                        edgeState = QStringLiteral("aboveTop");
+                        edgeState = ProgressGridEdgeState::AboveTop;
                         aboveTopText = QObject::tr("Above %1: %2 / %3")
                                            .arg(q(m_projection.tiers.back().name), formatBenchmarkNumber(*personalBest),
                                                 formatBenchmarkNumber(*top));
                     }
                 }
-                map[QStringLiteral("edgeState")] = edgeState;
-                map[QStringLiteral("statusText")] = statusText;
-                map[QStringLiteral("aboveTopText")] = aboveTopText;
+                row.edgeState = edgeState;
+                row.statusText = statusText;
+                row.aboveTopText = aboveTopText;
 
                 // A row whose scenario keeps the benchmark from the next tier.
                 const auto required = m_blockerRequired.constFind(entryId);
-                const bool blocker = required != m_blockerRequired.constEnd() && !m_nextTierName.isEmpty();
-                map[QStringLiteral("blocker")] = blocker;
-                map[QStringLiteral("blockerColor")] = blocker ? m_nextTierColor : QString();
-                map[QStringLiteral("blockerText")] =
-                    blocker ? QObject::tr("Blocks %1 (needs %2)").arg(m_nextTierName, formatBenchmarkNumber(*required))
-                            : QString();
+                row.blocker = required != m_blockerRequired.constEnd() && !m_nextTierName.isEmpty();
+                row.blockerColor = row.blocker ? m_nextTierColor : QString();
+                row.blockerText =
+                    row.blocker ? QObject::tr("Blocks %1 (needs %2)").arg(m_nextTierName, formatBenchmarkNumber(*required))
+                                : QString();
 
-                rows.push_back(map);
+                content.rows.push_back(std::move(row));
             }
 
             const domain::Benchmark &m_definition;
@@ -426,22 +401,121 @@ namespace ksv::presentation {
         return domain::normalizedTierValue(tiers, thresholds, score);
     }
 
+    namespace {
+        QVariantMap toMap(const ProgressGridTier &tier) {
+            QVariantMap map;
+            map[QStringLiteral("id")] = tier.id;
+            map[QStringLiteral("name")] = tier.name;
+            map[QStringLiteral("color")] = tier.color;
+            map[QStringLiteral("barColor")] = tier.barColor;
+            return map;
+        }
+
+        QString edgeStateKey(const ProgressGridEdgeState state) {
+            switch (state) {
+                case ProgressGridEdgeState::None:
+                    return {};
+                case ProgressGridEdgeState::Unplayed:
+                    return QStringLiteral("unplayed");
+                case ProgressGridEdgeState::Unmatched:
+                    return QStringLiteral("unmatched");
+                case ProgressGridEdgeState::AboveTop:
+                    return QStringLiteral("aboveTop");
+            }
+            return {};
+        }
+
+        QVariantMap toMap(const ProgressGridScenarioRow &row) {
+            QVariantMap map;
+            map[QStringLiteral("entryId")] = row.entryId;
+            map[QStringLiteral("name")] = row.name;
+            map[QStringLiteral("personalBestText")] = row.personalBestText;
+            map[QStringLiteral("personalBestDateText")] = row.personalBestDateText;
+            map[QStringLiteral("playCountText")] = row.playCountText;
+            map[QStringLiteral("hasPersonalBest")] = row.hasPersonalBest;
+            map[QStringLiteral("attainedTierText")] = row.attainedTierText;
+            map[QStringLiteral("attainedTierColor")] = row.attainedTierColor;
+            QVariantList fills;
+            for (const double fill: row.fills) fills.push_back(fill);
+            map[QStringLiteral("fills")] = fills;
+            // -1 tells QML there is no recent-average marker.
+            map[QStringLiteral("recentPosition")] = row.recentPosition ? *row.recentPosition : -1.0;
+            map[QStringLiteral("recentDescription")] = row.recentDescription;
+            map[QStringLiteral("nextTierText")] = row.nextTierText;
+            map[QStringLiteral("nextTierColor")] = row.nextTierColor;
+            map[QStringLiteral("nextThresholdText")] = row.nextThresholdText;
+            map[QStringLiteral("nextText")] = row.nextText;
+            map[QStringLiteral("matchStateText")] = row.matchStateText;
+            map[QStringLiteral("matchStateHint")] = row.matchStateHint;
+            map[QStringLiteral("barDescription")] = row.barDescription;
+            QVariantList missing;
+            for (const bool chunk: row.missingChunks) missing.push_back(chunk);
+            map[QStringLiteral("missingChunks")] = missing;
+            QVariantList thresholds;
+            for (const QString &text: row.thresholdTexts) thresholds.push_back(text);
+            map[QStringLiteral("thresholdTexts")] = thresholds;
+            map[QStringLiteral("edgeState")] = edgeStateKey(row.edgeState);
+            map[QStringLiteral("statusText")] = row.statusText;
+            map[QStringLiteral("aboveTopText")] = row.aboveTopText;
+            map[QStringLiteral("blocker")] = row.blocker;
+            map[QStringLiteral("blockerColor")] = row.blockerColor;
+            map[QStringLiteral("blockerText")] = row.blockerText;
+            return map;
+        }
+
+        QVariantMap toMap(const ProgressGridGroup &group) {
+            QVariantMap map;
+            map[QStringLiteral("column")] = group.column == ProgressGridGroupColumn::Category
+                                                ? QStringLiteral("category")
+                                                : QStringLiteral("subcategory");
+            map[QStringLiteral("id")] = group.id;
+            map[QStringLiteral("name")] = group.name;
+            map[QStringLiteral("color")] = group.color;
+            map[QStringLiteral("start")] = group.start;
+            map[QStringLiteral("span")] = group.span;
+            map[QStringLiteral("spansSubcategory")] = group.spansSubcategory;
+            map[QStringLiteral("rankText")] = group.rankText;
+            map[QStringLiteral("rankColor")] = group.rankColor;
+            map[QStringLiteral("rankBarColor")] = group.rankBarColor;
+            return map;
+        }
+
+        template<typename T>
+        QVariantList toList(const std::vector<T> &items) {
+            QVariantList list;
+            list.reserve(static_cast<qsizetype>(items.size()));
+            for (const T &item: items) list.push_back(toMap(item));
+            return list;
+        }
+    }
+
     BenchmarkProgressGridModel::BenchmarkProgressGridModel(QObject *parent) : QObject(parent) {}
+
+    QVariantMap BenchmarkProgressGridModel::headers() const {
+        const ProgressGridHeadings &headings = m_content.headings;
+        QVariantMap map;
+        map[QStringLiteral("category")] = headings.category;
+        map[QStringLiteral("subcategory")] = headings.subcategory;
+        map[QStringLiteral("scenario")] = headings.scenario;
+        map[QStringLiteral("progress")] = headings.progress;
+        map[QStringLiteral("pbDate")] = headings.pbDate;
+        map[QStringLiteral("plays")] = headings.plays;
+        map[QStringLiteral("next")] = headings.next;
+        return map;
+    }
 
     void BenchmarkProgressGridModel::reset(const domain::Benchmark *definition,
                                       const domain::BenchmarkProjection *projection) {
-        m_tiers.clear();
-        m_rows.clear();
-        m_groups.clear();
-        m_hasSubcategories = false;
+        m_content = {};
         if (definition && projection) {
             GridBuilder builder(*definition, *projection);
             builder.build();
-            m_tiers = builder.tiers;
-            m_rows = builder.rows;
-            m_groups = builder.groups;
-            m_hasSubcategories = builder.hasSubcategories;
+            m_content = std::move(builder.content);
         }
+        m_tiers = toList(m_content.tiers);
+        m_rows = toList(m_content.rows);
+        m_groups = toList(m_content.groups);
+        m_hasSubcategories = m_content.hasSubcategories;
         emit changed();
     }
 

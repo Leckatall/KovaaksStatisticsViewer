@@ -21,6 +21,10 @@ namespace ksv::presentation {
     // The lightest dark surface benchmark text is drawn on (the summary/card panels).
     [[nodiscard]] QColor darkPanelColor();
 
+    // C++ ports of `Theme.readableOn` and `Theme.isLightFill`; they must keep giving Theme.qml's answers.
+    [[nodiscard]] QColor readableColorOn(const QColor &color, const QColor &background, const QColor &fallback);
+    [[nodiscard]] bool isLightFill(const QColor &color);
+
     // Locale-formatted, rounded to two decimals - the shared presentation form for
     // benchmark scores, thresholds and averages.
     [[nodiscard]] QString formatBenchmarkNumber(double value);

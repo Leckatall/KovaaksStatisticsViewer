@@ -31,6 +31,8 @@ Item {
         property var setSeriesVisible: function (id, visible) {}
     }
 
+    Component { id: captureStubComponent; CaptureVmStub {} }
+
     SignalSpy {
         id: configureSpy
         signalName: "configureLinesRequested"
@@ -98,6 +100,37 @@ Item {
                 if (p === ancestor) return true
             }
             return false
+        }
+
+        function test_acceptsACaptureViewModel() {
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const panel = createTemporaryObject(panelComponent, root, {captureVm: capture})
+            verify(panel.captureVm === capture, "captureVm was not accepted")
+        }
+
+        function test_captureActionsReachTheLoadedCanvas() {
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const panel = createTemporaryObject(panelComponent, root, {captureVm: capture})
+            tryVerify(() => findChild(panel, "scenarioGraphCanvas") !== null, 2000)
+            const camera = findChild(panel, "captureCopy_run")
+            verify(camera !== null, "the run panel has no camera")
+            mouseClick(camera)
+            const copies = capture.callsNamed("quickCopy")
+            compare(copies.length, 1)
+            compare(copies[0].args[0], "run")
+            verify(copies[0].args[1] !== null && copies[0].args[1] !== undefined)
+        }
+
+        function test_withoutACanvasTheActionStaysReachable() {
+            fakeGraphVm.contentState = GraphViewModel.NoRunSelected
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const panel = createTemporaryObject(panelComponent, root, {captureVm: capture})
+            const camera = findChild(panel, "captureCopy_run")
+            verify(camera !== null, "the run panel has no camera")
+            mouseClick(camera)
+            const copies = capture.callsNamed("quickCopy")
+            compare(copies.length, 1)
+            verify(copies[0].args[1] === null)
         }
 
         // The run graph draws with its own committed connection mode and marker preference.

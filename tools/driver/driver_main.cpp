@@ -35,6 +35,7 @@
 #include "logging_setup.h"
 #include "message_log.h"
 #include "qml_registration.h"
+#include "inert_image_output.h"
 #include "qml_source_interceptor.h"
 #include "settings_service.h"
 #include "qt_data/graph_configuration_persistence.h"
@@ -199,7 +200,9 @@ int main(int argc, char *argv[]) {
         driver::injectCsvParser(std::make_shared<data::StatsCsvParser>(), faults),
         driver::injectBenchmarkStore(std::make_shared<qt_data::BenchmarkStore>(data.benchmarksDir().toStdString()),
                                      faults),
-        std::make_shared<qt_data::SystemDaySource>());
+        std::make_shared<qt_data::SystemDaySource>(),
+        std::make_shared<gallery::InertClipboardImageWriter>(),
+        std::make_shared<gallery::InertPngImageWriter>());
     QQmlApplicationEngine *engine = app.engine();
 
     const bool compiledQml = parser.isSet(compiledOption);

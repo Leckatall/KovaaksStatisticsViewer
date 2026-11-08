@@ -8,6 +8,7 @@ OverflowScrollView {
 
     property var trackingVm
     property var settingsVm: null
+    property var captureVm: null
     property var visualSettings: null
     property real bodyWidth
     property bool wide
@@ -78,6 +79,7 @@ OverflowScrollView {
             namePrefix: "playtimeHistory"
             graphKey: "benchmarkPlaytime"
             settingsVm: incompleteScroll.settingsVm
+            captureVm: incompleteScroll.captureVm
             onMoreGraphSettingsRequested: key => incompleteScroll.moreGraphSettingsRequested(key)
             onHideGraphRequested: key => incompleteScroll.visualSettings.quickHideGraph(key)
             historyModel: incompleteScroll.trackingVm ? incompleteScroll.trackingVm.playtimeHistory : null

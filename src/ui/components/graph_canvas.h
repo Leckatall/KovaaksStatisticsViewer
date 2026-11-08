@@ -14,6 +14,8 @@
 #include <optional>
 #include <qqmlintegration.h>
 
+#include "graph_scene.h"
+#include "graph_scene_painter.h"
 #include "presentation/graphs/common/graph_vm_base.h"
 #include "series_painter.h"
 #include "presentation/graphs/common/series/series_model.h"
@@ -90,23 +92,17 @@ namespace ksv::ui {
         // The colour `series` is drawn in: its own, or foregroundColor when it has none.
         [[nodiscard]] QColor colorFor(const presentation::SeriesModel &series) const;
 
-        // Pen width of a series' reference lines; a little heavier than the 1px gridlines.
-        static constexpr qreal kReferenceLineWidth = 2.0;
-
         [[nodiscard]] qreal markedX() const { return m_markedX; }
         void setMarkedX(qreal markedX);
         [[nodiscard]] QColor markerColor() const { return m_markerColor; }
         void setMarkerColor(const QColor &markerColor);
 
-        // Markers are drawn when consecutive points are at least this many pixels apart on average.
-        static constexpr qreal kMinMarkerSpacing = 10.0;
+        static constexpr qreal kMinMarkerSpacing = kGraphMinMarkerSpacing;
         [[nodiscard]] static bool markersFit(int pointCount, qreal pixelSpan);
 
-        // Visible columns in the order their lines (and markers) are painted: the VM's list order
-        // reversed, so the first series in the user's line list is painted last, on top.
-        [[nodiscard]] QList<int> paintOrder() const;
-
         void paint(QPainter *painter) override;
+
+        [[nodiscard]] GraphScene scene() const;
 
         Q_INVOKABLE [[nodiscard]] QVariantMap nearestPoint(qreal x, qreal y) const;
 
@@ -132,8 +128,6 @@ namespace ksv::ui {
 
         [[nodiscard]] QList<int> visibleColumnIds() const;
 
-        [[nodiscard]] QList<const presentation::SeriesModel *> seriesInPaintOrder() const;
-
         struct LabelledAxisGroup {
             const presentation::SeriesModel *labelled = nullptr;
             QList<const presentation::SeriesModel *> members;
@@ -149,14 +143,6 @@ namespace ksv::ui {
 
         [[nodiscard]] static QPointF toPixel(const QPointF &displayPoint, const QRectF &rect,
                                              const presentation::Axis &xAxis, const presentation::Axis &yAxis);
-
-        void drawAxes(QPainter *painter, const QRectF &rect) const;
-
-        void drawSeries(QPainter *painter, const QRectF &rect) const;
-
-        void drawReferenceLines(QPainter *painter, const QRectF &rect) const;
-
-        void drawMarkedX(QPainter *painter, const QRectF &rect) const;
 
         presentation::GraphViewModelBase *m_graphVm = nullptr;
         QVariantList m_visibleColumns;

@@ -159,7 +159,7 @@ namespace {
                 persistence = std::make_shared<qt_data::GraphConfigurationPersistence>(settings);
             }
             app = std::make_unique<application::App>(settings, std::make_shared<data::ProtoDecoder>(), persistence,
-                                                     env.statsParser, env.benchmarkStore, env.daySource);
+                                                     env.statsParser, env.benchmarkStore, env.daySource, env.clipboardWriter, env.pngWriter);
             ASSERT_TRUE(QTest::qWaitFor([&] { return app->profileService()->isProfileLoaded(); }, 5000));
         }
 

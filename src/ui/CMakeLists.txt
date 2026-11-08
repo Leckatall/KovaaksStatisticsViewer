@@ -70,6 +70,10 @@ qt_add_qml_module(ksv_ui
             qml/shell/AppMenuBar.qml
             qml/shell/SettingsDialog.qml
             qml/shell/ProfileStatusBar.qml
+            qml/shell/CaptureStatusStrip.qml
+            qml/shell/CapturePreviewDialog.qml
+            qml/shell/CaptureActionButton.qml
+            qml/graph/CaptureActions.qml
             qml/benchmark/BenchmarkManagerDialog.qml
             qml/benchmark/BenchmarkEditorTable.qml
             qml/benchmark/BenchmarkMappingPanel.qml
@@ -111,6 +115,12 @@ qt_add_qml_module(ksv_ui
             qml/icons/square-pen.svg
             qml/icons/settings.svg
             qml/icons/x.svg
+            qml/icons/check.svg
+            qml/icons/camera.svg
+            qml/icons/chevron-down.svg
+            qml/icons/chevron-right.svg
+            qml/icons/circle-alert.svg
+            qml/icons/info.svg
             qml/icons/eye.svg
             qml/icons/eye-off.svg
         SOURCES
@@ -138,10 +148,47 @@ qt_add_qml_module(ksv_ui
             presentation/graphs/completion_history_vm.cpp
         components/graph_canvas.h
         components/graph_canvas.cpp
+        components/capture_preview_item.h
+        components/capture_preview_item.cpp
         components/axis_painter.h
         components/axis_painter.cpp
         components/series_painter.h
         components/series_painter.cpp
+        components/graph_scene.h
+        components/cancellation_check.h
+        components/graph_scene_painter.h
+        components/graph_scene_painter.cpp
+        capture/capture_snapshot.h
+        capture/capture_snapshot.cpp
+        capture/capture_appearance.h
+        capture/capture_appearance.cpp
+        capture/capture_coordinator.h
+        capture/capture_coordinator.cpp
+        capture/capture_feedback.h
+        capture/capture_feedback.cpp
+        capture/capture_sources.h
+        capture/capture_sources.cpp
+        capture/capture_font_description.h
+        capture/capture_fonts.h
+        capture/capture_fonts.cpp
+        capture/capture_text.h
+        capture/capture_text.cpp
+        capture/capture_sizing.h
+        capture/capture_sizing.cpp
+        capture/capture_limits.h
+        capture/capture_limits.cpp
+        capture/capture_layout.h
+        capture/capture_layout.cpp
+        capture/capture_render.h
+        capture/capture_render.cpp
+        capture/capture_render_queue.h
+        capture/capture_render_queue.cpp
+        capture/capture_renderer.h
+        capture/capture_renderer.cpp
+        capture/graph_capture_layout.h
+        capture/graph_capture_layout.cpp
+        capture/table_capture_layout.h
+        capture/table_capture_layout.cpp
             presentation/graphs/common/series/monotone_spline.h
             presentation/app/session_vm.h
             presentation/app/session_vm.cpp
@@ -166,9 +213,12 @@ qt_add_qml_module(ksv_ui
             presentation/benchmarks/tracking/benchmark_history_vm.h
             presentation/benchmarks/tracking/benchmark_history_vm.cpp
             presentation/benchmarks/tracking/benchmark_progress_grid_model.h
+            presentation/benchmarks/tracking/progress_grid_content.h
             presentation/benchmarks/tracking/benchmark_progress_grid_model.cpp
             presentation/benchmarks/tracking/benchmark_tracking_vm.h
             presentation/benchmarks/tracking/benchmark_tracking_vm.cpp
+            presentation/capture/capture_vm.h
+            presentation/capture/capture_vm.cpp
             presentation/scenarios/scenario_list_model.h
             presentation/scenarios/scenario_list_model.cpp
             presentation/scenarios/run_list_model.h
@@ -191,6 +241,7 @@ target_include_directories(ksv_ui PUBLIC
 target_include_directories(ksv_ui PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/benchmarks/manager
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/benchmarks/tracking
+        ${CMAKE_CURRENT_SOURCE_DIR}/presentation/capture
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/expression
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/graphs
         ${CMAKE_CURRENT_SOURCE_DIR}/presentation/graphs/common

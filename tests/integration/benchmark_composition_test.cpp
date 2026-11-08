@@ -73,7 +73,7 @@ TEST(BenchmarkComposition, RealGraphAutoResolvesAScenarioNameAtStartup) {
     file.close();
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource, env.clipboardWriter, env.pngWriter);
     QElapsedTimer timer;
     timer.start();
     while (!app.profileService()->isProfileLoaded()) {
@@ -110,7 +110,7 @@ TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
     file.close();
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource, env.clipboardWriter, env.pngWriter);
     QElapsedTimer timer;
     timer.start();
     while (!app.profileService()->isProfileLoaded()) {
@@ -154,7 +154,9 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
+            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>(),
+            std::make_shared<tests_support::FakeClipboardImageWriter>(),
+            std::make_shared<tests_support::FakePngImageWriter>());
 
     auto manager = app.benchmarkManagerUseCase();
     ASSERT_NE(manager, nullptr);
@@ -249,7 +251,9 @@ TEST(BenchmarkComposition, RefreshLoadsACopiedFileAndClearsAFixedProblemWithoutR
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
+            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>(),
+            std::make_shared<tests_support::FakeClipboardImageWriter>(),
+            std::make_shared<tests_support::FakePngImageWriter>());
     const auto service = app.benchmarksService();
     ASSERT_TRUE(service->snapshot().has_value());
     ASSERT_EQ(service->snapshot()->entries.size(), 1U);
@@ -299,7 +303,7 @@ TEST(BenchmarkComposition, UnsupportedFileIsReportedAndNeverRewrittenByAutomatic
     }
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource, env.clipboardWriter, env.pngWriter);
     QElapsedTimer timer;
     timer.start();
     while (!app.profileService()->isProfileLoaded()) {
@@ -335,7 +339,9 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
     auto repo = std::make_shared<qt_data::BenchmarkStore>(dir.path().toStdString());
     App app(settings, std::make_shared<data::ProtoDecoder>(),
             std::make_shared<qt_data::GraphConfigurationPersistence>(settings),
-            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>());
+            std::make_shared<StatsCsvParser>(), repo, std::make_shared<tests_support::FakeDaySource>(),
+            std::make_shared<tests_support::FakeClipboardImageWriter>(),
+            std::make_shared<tests_support::FakePngImageWriter>());
 
     auto *vm = app.benchmarkManagerVm();
     ASSERT_NE(vm, nullptr);
@@ -394,7 +400,7 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
     }
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
-    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource);
+    App app(env.settings, std::make_shared<data::ProtoDecoder>(), env.graphConfigurationPersistence, env.statsParser, repo, env.daySource, env.clipboardWriter, env.pngWriter);
 
     QElapsedTimer timer;
     timer.start();
@@ -518,7 +524,7 @@ namespace {
 
         w->repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
         w->app = std::make_unique<App>(w->env.settings, std::make_shared<data::ProtoDecoder>(),
-                                       w->env.graphConfigurationPersistence, w->env.statsParser, w->repo, w->env.daySource);
+                                       w->env.graphConfigurationPersistence, w->env.statsParser, w->repo, w->env.daySource, w->env.clipboardWriter, w->env.pngWriter);
         QElapsedTimer timer;
         timer.start();
         while (!w->app->profileService()->isProfileLoaded()) {

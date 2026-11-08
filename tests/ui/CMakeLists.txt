@@ -17,6 +17,8 @@ add_executable(ui_tests
     expression/series_expression_editor_model_test.cpp
     graphs/common/series/monotone_spline_test.cpp
     series_painter_test.cpp
+    graph_scene_test.cpp
+    graph_scene_cost_test.cpp
     scenarios/scenario_browser_vm_test.cpp
     benchmarks/manager/benchmark_issue_text_test.cpp
     benchmarks/manager/benchmark_manager_vm_test.cpp
@@ -28,6 +30,24 @@ add_executable(ui_tests
     benchmarks/manager/benchmark_cell_input_test.cpp
     benchmarks/manager/benchmark_clipboard_matrix_test.cpp
     benchmarks/manager/benchmark_table_workload_test.cpp
+    capture/capture_appearance_test.cpp
+    capture/capture_coordinator_test.cpp
+    capture/capture_feedback_test.cpp
+    capture/capture_graph_source_test.cpp
+    capture/capture_context_test.cpp
+    capture/capture_table_source_test.cpp
+    capture/capture_fonts_test.cpp
+    capture/capture_sizing_test.cpp
+    capture/capture_vm_test.cpp
+    capture/capture_limits_test.cpp
+    capture/capture_preview_item_test.cpp
+    capture/capture_render_test.cpp
+    capture/capture_render_queue_test.cpp
+    capture/capture_renderer_test.cpp
+    capture/graph_capture_layout_test.cpp
+    capture/table_capture_layout_test.cpp
+    capture/table_capture_render_test.cpp
+    capture/capture_samples_test.cpp
 )
 
 target_link_libraries(ui_tests PRIVATE
@@ -43,7 +63,7 @@ target_link_libraries(ui_tests PRIVATE
     GTest::gtest
 )
 
-target_compile_definitions(ui_tests PRIVATE KSV_GTEST_GUI_APP)
+target_compile_definitions(ui_tests PRIVATE KSV_GTEST_GUI_APP KSV_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_precompile_headers(ui_tests PRIVATE
     <gtest/gtest.h>
     <QColor>

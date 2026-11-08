@@ -26,6 +26,8 @@ Item {
         TierBar { objectName: "probe"; height: 16 }
     }
 
+    Component { id: captureStubComponent; CaptureVmStub {} }
+
     Component {
         id: progressGridComponent
         BenchmarkProgressGrid { }
@@ -80,6 +82,59 @@ Item {
         }
         function find(ws, name) { return ItemLookup.findByObjectName(ws, name) }
         function findAllPrefixed(ws, prefix) { return ItemLookup.findByObjectNamePrefix(ws, prefix, []) }
+
+        function test_acceptsACaptureViewModel() {
+            const capture = createTemporaryObject(captureStubComponent, root)
+            const component = Qt.createComponent("../../../src/ui/qml/benchmark/BenchmarkWorkspace.qml")
+            const ws = component.createObject(root, {captureVm: capture})
+            verify(ws.captureVm === capture, "captureVm was not accepted")
+            ws.destroy()
+        }
+
+        function test_historyCardsCarryCaptureActions() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            const capture = createTemporaryObject(captureStubComponent, root)
+            ws.captureVm = capture
+            for (const key of ["benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"])
+                verify(find(ws, "captureCopy_" + key) !== null, "no camera for " + key)
+        }
+
+        function test_historyCardsHandTheLoadedCanvasToQuickCopy() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            const capture = createTemporaryObject(captureStubComponent, root)
+            ws.captureVm = capture
+            for (const key of ["benchmarkRank", "benchmarkRecentRank", "benchmarkPlaytime"]) {
+                const camera = find(ws, "captureCopy_" + key)
+                verify(camera !== null, "no camera for " + key)
+                capture.calls = []
+                mouseClick(camera)
+                const copies = capture.callsNamed("quickCopy")
+                compare(copies.length, 1, key)
+                verify(copies[0].args[1] !== null && copies[0].args[1] !== undefined,
+                       "no canvas handed over for " + key)
+            }
+            ws.destroy()
+        }
+
+        function test_theHeaderCarriesTheTableAction() {
+            const states = [
+                {tag: "trackable", fx: TestDoubles.trackingFixtureTrackable()},
+                {tag: "incomplete", fx: TestDoubles.trackingFixtureIncomplete()}
+            ]
+            for (const state of states) {
+                const ws = makeWorkspace(state.fx)
+                const capture = createTemporaryObject(captureStubComponent, root)
+                ws.captureVm = capture
+                const camera = find(find(ws, "benchmarkHeader"), "captureCopy_benchmarkTable")
+                verify(camera !== null, "no table camera in " + state.tag)
+                mouseClick(camera)
+                const copies = capture.callsNamed("quickCopy")
+                compare(copies.length, 1, state.tag)
+                compare(copies[0].args[0], "benchmarkTable")
+                verify(copies[0].args[1] === null, state.tag)
+                ws.destroy()
+            }
+        }
 
         function pickerOf(ws) { return find(ws, "benchmarkSelector").parent }
 
@@ -637,6 +692,30 @@ Item {
             compare(find(ws, "nextTierProgress"), null, "the old progress line is gone")
         }
 
+        function test_summaryReadsTheViewModelsStrings() {
+            const captions = {
+                attainedRank: "Model attained caption", completedRank: "Model completed caption",
+                averageRank: "Model average caption", totalPlaytime: "Model playtime caption",
+                nextTier: "Model next caption"
+            }
+            const fixture = TestDoubles.trackingFixtureTrackable()
+            fixture.nextTierBlockerCount = 7
+            fixture.nextTierBlockerText = "(model blockers text)"
+            fixture.summaryCaptions = captions
+            const ws = makeWorkspace(fixture)
+            wait(0)
+
+            compare(find(ws, "summaryNextTierBlockers").text, "(model blockers text)")
+            const shown = []
+            const collect = function (item) {
+                if (item.text !== undefined) shown.push(String(item.text))
+                for (let i = 0; i < item.children.length; ++i) collect(item.children[i])
+            }
+            collect(find(ws, "benchmarkStatusSummary"))
+            for (const key in captions)
+                verify(shown.indexOf(captions[key]) !== -1, key + " caption is shown: " + captions[key])
+        }
+
         // A non-trackable benchmark has no rank to progress from, so no next tier shows. The
         // fixtures carry stale next-tier values on purpose: a summary that read them
         // regardless of the state would render text.
@@ -658,6 +737,38 @@ Item {
             verify(find(ws, "benchmarkStatusSummary") === null, "no status summary when not trackable")
             verify(find(ws, "summaryNextTier") === null, "no next tier when not trackable")
             verify(find(ws, "summaryNextTierBlockers") === null, "no blocker count when not trackable")
+        }
+
+        // -- progress grid: the next-tier cell is one model string -------------
+
+        function test_nextTextComesFromTheModel() {
+            const baseline = makeWorkspace(TestDoubles.trackingFixtureTrackable(), 3000, 800)
+            wait(0)
+            const baselineWidth = find(baseline, "progressHeader_next").width
+
+            const fixture = TestDoubles.trackingFixtureTrackable()
+            const distinctive = "A distinctive next-tier cell that is much wider than any joined pair"
+            fixture.progressGrid.rows[1].nextText = distinctive
+            const ws = makeWorkspace(fixture, 3000, 800)
+            wait(0)
+
+            compare(find(ws, "progressRow_sc-1w4ts_next").text, distinctive)
+            verify(find(ws, "progressHeader_next").width > baselineWidth,
+                   "the next column measures the model string")
+        }
+
+        // -- progress grid: column headings are model strings -----------------
+
+        function test_columnHeadingsComeFromTheModel() {
+            const fixture = TestDoubles.trackingFixtureTrackable()
+            fixture.progressGrid.headers = Object.assign({}, fixture.progressGrid.headers, {
+                scenario: "Model scenario heading", progress: "Model progress heading"
+            })
+            const ws = makeWorkspace(fixture, 1200, 800)
+            wait(0)
+
+            compare(find(ws, "progressHeader_scenario").text, "Model scenario heading")
+            compare(find(ws, "progressHeader_progress").Accessible.name, "Model progress heading")
         }
     }
 
@@ -1481,10 +1592,10 @@ Item {
             rows[0].edgeState = "unplayed"
             rows[0].statusText = "Unplayed"
             rows[1].thresholdTexts = scores                    // sc-1w4ts: every chunk
-            rows[1].personalBestText = "—"                     // (no PB label in the way)
+            rows[1].hasPersonalBest = false                    // (no PB label in the way)
             rows[3].thresholdTexts = scores                   // sc-smooth: Platinum hatched
             rows[3].missingChunks = [false, false, false, true]
-            rows[3].personalBestText = "—"
+            rows[3].hasPersonalBest = false
             const ws = makeWorkspace(fx)
             wait(0)
 
@@ -1520,6 +1631,7 @@ Item {
             const fx = TestDoubles.trackingFixtureTrackable()
             const rows = fx.progressGrid.rows
             rows[0].personalBestText = "250"                   // sc-popcorn: unplayed
+            rows[0].hasPersonalBest = true
             rows[0].edgeState = "unplayed"
             rows[0].statusText = "Unplayed"
             rows[3].thresholdTexts = ["300", "3,000", "3,400", "4,000"]  // sc-smooth: PB 20% into chunk 2

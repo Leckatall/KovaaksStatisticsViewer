@@ -431,3 +431,27 @@ TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
     EXPECT_TRUE(vm.averageRankFills().isEmpty());
     EXPECT_EQ(vm.completedRankPosition(), -1.0);
 }
+
+TEST(BenchmarkTrackingSummaryTexts, BlockerTextCountsTheBlockers) {
+    const auto textFor = [](const std::size_t blockers, const bool hasNextTier) {
+        auto snapshot = makeTrackableSnapshot();
+        snapshot.projection->nextTierBlockers.resize(
+            blockers, RankBlocker{ScenarioEntryId{"extra"}, std::nullopt, 900.0, std::nullopt});
+        if (!hasNextTier) snapshot.projection->nextTier.reset();
+        BenchmarkTrackingViewModel vm{fakeWith(snapshot)};
+        return vm.property("nextTierBlockerText").toString();
+    };
+
+    EXPECT_EQ(textFor(1, true), "(blocked by 1 scenario)");
+    EXPECT_EQ(textFor(3, true), "(blocked by 3 scenarios)");
+    EXPECT_TRUE(textFor(2, false).isEmpty());
+}
+
+TEST(BenchmarkTrackingSummaryTexts, PublishesEveryCaption) {
+    BenchmarkTrackingViewModel vm{fakeWith(makeTrackableSnapshot())};
+
+    const QVariantMap captions = vm.property("summaryCaptions").toMap();
+    EXPECT_EQ(captions.size(), 5);
+    for (const char *key: {"attainedRank", "completedRank", "averageRank", "totalPlaytime", "nextTier"})
+        EXPECT_FALSE(captions.value(key).toString().isEmpty()) << key;
+}

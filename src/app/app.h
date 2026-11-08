@@ -16,6 +16,7 @@
 #include "presentation/app/settings_vm.h"
 #include "presentation/benchmarks/manager/benchmark_manager_vm.h"
 #include "presentation/benchmarks/tracking/benchmark_tracking_vm.h"
+#include "presentation/capture/capture_vm.h"
 #include "interfaces/i_proto_decoder.h"
 #include "../data/interfaces/i_file_service.h"
 #include "../data/interfaces/i_run_ingestor.h"
@@ -35,6 +36,9 @@
 #include "contracts/i_completion_history_use_case.h"
 #include "contracts/i_scenario_browser_use_case.h"
 #include "contracts/i_graph_configuration_use_case.h"
+#include "contracts/i_image_output_use_case.h"
+#include "data/interfaces/i_clipboard_image_writer.h"
+#include "data/interfaces/i_png_image_writer.h"
 
 
 namespace ksv::application {
@@ -53,6 +57,8 @@ namespace ksv::application {
             std::shared_ptr<data::IStatsCsvParser> statsParser,
             std::shared_ptr<data::IBenchmarkStore> benchmarkStore,
             std::shared_ptr<data::IDaySource> daySource,
+            std::shared_ptr<data::IClipboardImageWriter> clipboardWriter,
+            std::shared_ptr<data::IPngImageWriter> pngWriter,
             QObject* parent = nullptr);
         int start();
         // The view models Main.qml declares as required properties. start() hands
@@ -74,6 +80,7 @@ namespace ksv::application {
         [[nodiscard]] presentation::BenchmarkTrackingViewModel* benchmarkTrackingVm() const {
             return m_benchmarkTrackingVm;
         }
+        [[nodiscard]] presentation::CaptureViewModel* captureVm() const { return m_captureVm; }
         [[nodiscard]] std::shared_ptr<ISettingsService> settingsService() const { return m_settingsService; }
         [[nodiscard]] std::shared_ptr<data::IDaySource> daySource() const { return m_daySource; }
         [[nodiscard]] std::shared_ptr<IProfileService> profileService() const { return m_profileService; }
@@ -96,6 +103,9 @@ namespace ksv::application {
         [[nodiscard]] std::shared_ptr<IBenchmarkManagerUseCase> benchmarkManagerUseCase() const {
             return m_benchmarkManagerUseCase;
         }
+        [[nodiscard]] std::shared_ptr<IImageOutputUseCase> imageOutputUseCase() const {
+            return m_imageOutputUseCase;
+        }
 
     private:
         QQmlApplicationEngine m_engine;
@@ -107,6 +117,7 @@ namespace ksv::application {
         presentation::ScenarioBrowserViewModel* m_scenarioBrowserVm;
         presentation::BenchmarkManagerViewModel* m_benchmarkManagerVm = nullptr;
         presentation::BenchmarkTrackingViewModel* m_benchmarkTrackingVm = nullptr;
+        presentation::CaptureViewModel* m_captureVm = nullptr;
 
         std::shared_ptr<ISettingsService> m_settingsService;
         std::shared_ptr<data::IDaySource> m_daySource;
@@ -128,6 +139,7 @@ namespace ksv::application {
         std::shared_ptr<IBenchmarkResolutionUseCase> m_benchmarkResolutionUseCase;
         std::shared_ptr<IBenchmarkTrackingUseCase> m_benchmarkTrackingUseCase;
         std::shared_ptr<IBenchmarkManagerUseCase> m_benchmarkManagerUseCase;
+        std::shared_ptr<IImageOutputUseCase> m_imageOutputUseCase;
     };
 }
 

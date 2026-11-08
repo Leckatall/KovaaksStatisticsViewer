@@ -6,6 +6,7 @@ import KovaaksStatsViewer
 Rectangle {
     id: root
     required property var sessionVm
+    property var captureVm: null
     property int noticeDuration: 4000
     signal detailsRequested()
 
@@ -27,9 +28,12 @@ Rectangle {
     readonly property string mode: root.busy ? "busy"
         : root.warningActive ? "warning"
         : root.noticeActive ? "notice"
-        : "hidden"
+        : "idle"
 
-    visible: root.mode !== "hidden"
+    readonly property bool captureFeedbackShown: root.captureVm !== null
+        && (root.captureVm.feedbackKind || "none") !== "none"
+
+    visible: root.mode !== "idle" || root.captureFeedbackShown
     implicitHeight: 26
     color: Qt.darker(palette.window, 1.3)
 
@@ -65,6 +69,13 @@ Rectangle {
         anchors.top: parent.top
         height: 1
         color: root.palette.mid
+    }
+
+    // The bar overlays the content, so it must swallow clicks and hover over its blank area.
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.AllButtons
     }
 
     RowLayout {
@@ -137,6 +148,15 @@ Rectangle {
             font.pixelSize: 11
             Accessible.name: qsTr("Dismiss")
             onClicked: root.dismissed = true
+        }
+
+        CaptureStatusStrip {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 60
+            Layout.maximumWidth: implicitWidth
+            Layout.fillHeight: true
+            captureVm: root.captureVm
+            announces: !(root.captureVm && root.captureVm.previewOpen === true)
         }
     }
 }

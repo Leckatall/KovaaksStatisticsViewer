@@ -5,23 +5,43 @@
 #include "graph_canvas.h"
 
 #include <QColor>
-#include <QPainter>
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
-#include "axis_painter.h"
+#include "graph_scene_painter.h"
 #include "series_painter.h"
 
 namespace ksv::ui {
     namespace {
-        constexpr qreal kMinLeftMargin = 20;
-        constexpr qreal kMinBottomMargin = 16;
-        constexpr qreal kTopMargin = 10;
-        constexpr qreal kRightMargin = 20;
         constexpr qreal kHoverRadius = 10;
-        // Matches the fudge AxisPainter::paint already bakes into its label rects.
-        const qreal kLabelExtentPadding = AxisPainter::Style{}.labelGap + 2;
+
+        GraphSceneAxis resolveAxis(const presentation::Axis &axis) {
+            GraphSceneAxis resolved;
+            resolved.min = axis.min();
+            resolved.max = axis.max();
+            resolved.ticks = axis.ticks();
+            resolved.labels.reserve(resolved.ticks.size());
+            for (const qreal tick: resolved.ticks) resolved.labels.append(axis.formatTick(tick));
+            resolved.minLabel = axis.formatTick(resolved.min);
+            resolved.maxLabel = axis.formatTick(resolved.max);
+            return resolved;
+        }
+
+        GraphSceneAxis resolveBounds(const presentation::Axis &axis) {
+            GraphSceneAxis resolved;
+            resolved.min = axis.min();
+            resolved.max = axis.max();
+            resolved.minLabel = axis.formatTick(resolved.min);
+            resolved.maxLabel = axis.formatTick(resolved.max);
+            return resolved;
+        }
+
+        std::optional<QPointF> displayCarry(const presentation::SeriesModel &series,
+                                            const std::optional<QPointF> &raw) {
+            if (!raw) return std::nullopt;
+            return QPointF(raw->x(), series.transform.display(raw->y()));
+        }
     }
 
     GraphCanvas::GraphCanvas(QQuickItem *parent) : QQuickPaintedItem(parent) {
@@ -143,8 +163,7 @@ namespace ksv::ui {
     }
 
     bool GraphCanvas::markersFit(const int pointCount, const qreal pixelSpan) {
-        if (pointCount < 2) return pointCount == 1;
-        return pixelSpan / (pointCount - 1) >= kMinMarkerSpacing;
+        return graphMarkersFit(pointCount, pixelSpan);
     }
 
     bool GraphCanvas::pointMarkersShown() const {
@@ -201,22 +220,6 @@ namespace ksv::ui {
         return names.join(QStringLiteral(", "));
     }
 
-    QList<const presentation::SeriesModel *> GraphCanvas::seriesInPaintOrder() const {
-        QList<const presentation::SeriesModel *> ordered;
-        if (!m_graphVm) return ordered;
-        // series() is in the user's line-list order; painting it back to front leaves the series
-        // highest in the list on top.
-        const auto series = m_graphVm->series(visibleColumnIds());
-        for (auto it = series.crbegin(); it != series.crend(); ++it) ordered.append(*it);
-        return ordered;
-    }
-
-    QList<int> GraphCanvas::paintOrder() const {
-        QList<int> columns;
-        for (const auto *s: seriesInPaintOrder()) columns.append(s->column());
-        return columns;
-    }
-
     QList<int> GraphCanvas::visibleColumnIds() const {
         QList<int> ids;
         ids.reserve(m_visibleColumns.size());
@@ -238,31 +241,12 @@ namespace ksv::ui {
     }
 
     QRectF GraphCanvas::plotRect() const {
-        qreal leftMargin = kMinLeftMargin;
-        qreal bottomMargin = kMinBottomMargin;
-
-        if (m_graphVm) {
-            if (const auto yAxis = labelledYAxis()) {
-                leftMargin = std::max(kMinLeftMargin,
-                                      AxisPainter::measureLabelExtent(AxisPainter::Orientation::Vertical,
-                                                                      yAxis->ticks(),
-                                                                      [&yAxis](const qreal v) {
-                                                                          return yAxis->formatTick(v);
-                                                                      }) + kLabelExtentPadding);
-            }
-            const presentation::Axis &xAxis = m_graphVm->xAxis();
-            bottomMargin = std::max(kMinBottomMargin,
-                                    AxisPainter::measureLabelExtent(AxisPainter::Orientation::Horizontal, xAxis.ticks(),
-                                                                    [&xAxis](const qreal v) {
-                                                                        return xAxis.formatTick(v);
-                                                                    }) + kLabelExtentPadding);
-        }
-
-        return {
-            leftMargin, kTopMargin,
-            qMax(0.0, width() - leftMargin - kRightMargin),
-            qMax(0.0, height() - kTopMargin - bottomMargin)
-        };
+        const QRectF bounds(0, 0, width(), height());
+        if (!m_graphVm) return graphPlotRect(bounds, std::nullopt, std::nullopt);
+        std::optional<GraphSceneAxis> yAxis;
+        if (const auto labelled = labelledYAxis()) yAxis = resolveAxis(*labelled);
+        // Runs on every hover move. The bottom margin comes from the font alone, so no x label is formatted.
+        return graphPlotRect(bounds, yAxis, GraphSceneAxis{});
     }
 
     const presentation::Axis &GraphCanvas::xAxisFor(const presentation::SeriesModel &series) const {
@@ -280,98 +264,45 @@ namespace ksv::ui {
         return {rect.left() + xt * rect.width(), rect.bottom() - yt * rect.height()};
     }
 
-    void GraphCanvas::drawAxes(QPainter *painter, const QRectF &rect) const {
-        if (!m_graphVm) return;
-        const presentation::Axis &xAxis = m_graphVm->xAxis();
-
-        const QRectF bounds(0, 0, width(), height());
-
-        // Only one series' Y axis gets labels; all project against their own axis.
-        if (const auto yAxis = labelledYAxis()) {
-            AxisPainter::paint(*painter, rect, bounds, AxisPainter::Orientation::Vertical,
-                               yAxis->min(), yAxis->max(), yAxis->ticks(),
-                               [&yAxis](const qreal v) { return yAxis->formatTick(v); });
-        }
-        AxisPainter::paint(*painter, rect, bounds, AxisPainter::Orientation::Horizontal,
-                           xAxis.min(), xAxis.max(), xAxis.ticks(),
-                           [&xAxis](const qreal v) { return xAxis.formatTick(v); });
-    }
-
-    void GraphCanvas::drawSeries(QPainter *painter, const QRectF &rect) const {
-        if (!m_graphVm) return;
-
-        // Each line's markers are painted with it, so they stack the same way as the lines.
-        for (const auto *s: seriesInPaintOrder()) {
-            const QList<QPointF> displayPoints = s->displayPoints();
-            if (displayPoints.isEmpty() && !s->leadingCarry && !s->trailingCarry) continue;
-
-            const presentation::Axis &xAxis = xAxisFor(*s);
-            const presentation::ValueAxis yAxis = yAxisFor(*s);
-            const auto carryPixel = [&](const std::optional<QPointF> &raw) -> std::optional<QPointF> {
-                if (!raw) return std::nullopt;
-                return toPixel(QPointF(raw->x(), s->transform.display(raw->y())), rect, xAxis, yAxis);
-            };
-
-            QVector<QPointF> pixelPoints;
-            pixelPoints.reserve(displayPoints.size());
-            for (const auto &p: displayPoints) pixelPoints.append(toPixel(p, rect, xAxis, yAxis));
-
-            SeriesPainter::Style style;
-            style.lineWidth = s->lineWidth;
-            style.connection = painterConnection();
-            // A line centred on the plot edge keeps its full stroke; anything further out is cut.
-            const qreal edgeAllowance = s->lineWidth / 2;
-            style.clip = rect.adjusted(-edgeAllowance, -edgeAllowance, edgeAllowance, edgeAllowance);
-            style.markerOutlineColor = m_backgroundColor;
-            style.showMarkers = m_pointMarkers && !pixelPoints.isEmpty() &&
-                                markersFit(int(pixelPoints.size()), pixelPoints.back().x() - pixelPoints.front().x());
-            SeriesPainter::paint(*painter, pixelPoints, {carryPixel(s->leadingCarry), carryPixel(s->trailingCarry)},
-                                 colorFor(*s), style);
-        }
-    }
-
-    void GraphCanvas::drawReferenceLines(QPainter *painter, const QRectF &rect) const {
-        if (!m_graphVm) return;
-        painter->save();
-        for (const auto *s: seriesInPaintOrder()) {
-            if (s->referenceLines.isEmpty()) continue;
-            const presentation::ValueAxis yAxis = yAxisFor(*s);
-            for (const auto &line: s->referenceLines) {
-                const qreal t = yAxis.normalizedPosition(line.value);
-                if (t < 0.0 || t > 1.0) continue;
-                const qreal y = rect.bottom() - t * rect.height();
-                QPen pen(line.color, kReferenceLineWidth);
-                pen.setCapStyle(Qt::FlatCap);
-                painter->setPen(pen);
-                painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
-            }
-        }
-        painter->restore();
-    }
-
-    void GraphCanvas::drawMarkedX(QPainter *painter, const QRectF &rect) const {
-        if (!m_graphVm || !std::isfinite(m_markedX)) return;
-        const presentation::Axis &sharedXAxis = m_graphVm->xAxis();
-        const qreal t = sharedXAxis.normalizedPosition(m_markedX);
-        if (t < 0.0 || t > 1.0) return;
-        const qreal pixelX = rect.left() + t * rect.width();
-
-        painter->save();
-        painter->setClipRect(rect, Qt::IntersectClip);
-        QColor bandColor = m_markerColor;
-        bandColor.setAlphaF(bandColor.alphaF() * 0.25);
-        painter->fillRect(QRectF(pixelX - 4.0, rect.top(), 8.0, rect.height()), bandColor);
-        painter->fillRect(QRectF(pixelX - 1.0, rect.bottom() - 4.0, 2.0, 4.0), m_markerColor);
-        painter->restore();
-    }
-
     void GraphCanvas::paint(QPainter *painter) {
-        painter->setRenderHint(QPainter::Antialiasing, true);
-        const QRectF rect = plotRect();
-        drawAxes(painter, rect);
-        drawReferenceLines(painter, rect);
-        drawMarkedX(painter, rect);
-        drawSeries(painter, rect);
+        paintGraphScene(*painter, scene(), QRectF(0, 0, width(), height()));
+    }
+
+    GraphScene GraphCanvas::scene() const {
+        GraphScene scene;
+        scene.connection = painterConnection();
+        scene.pointMarkers = m_pointMarkers;
+        scene.background = m_backgroundColor;
+        if (!m_graphVm) return scene;
+
+        scene.xAxis = resolveAxis(m_graphVm->xAxis());
+        if (const auto yAxis = labelledYAxis()) scene.labelledYAxis = resolveAxis(*yAxis);
+        scene.labelledColumn = labelledYAxisColumn();
+        for (const auto *s: labelledAxisGroup().members) scene.labelledColumns.append(s->column());
+        scene.labelledYAxisTitle = labelledYAxisTitle();
+        if (std::isfinite(m_markedX)) scene.selectedBand = GraphSceneBand{m_markedX, m_markerColor};
+
+        const auto series = m_graphVm->series(visibleColumnIds());
+        scene.series.reserve(series.size());
+        for (const auto *s: series) {
+            GraphSceneSeries entry;
+            entry.column = s->column();
+            entry.id = s->id();
+            entry.name = s->name();
+            entry.color = colorFor(*s);
+            entry.lineWidth = s->lineWidth;
+            entry.observations = s->displayPoints();
+            entry.leadingCarry = displayCarry(*s, s->leadingCarry);
+            entry.trailingCarry = displayCarry(*s, s->trailingCarry);
+            entry.xAxis = s->xAxis ? resolveBounds(*s->xAxis) : scene.xAxis;
+            entry.yAxis = resolveBounds(yAxisFor(*s));
+            entry.yAxisId = s->yAxisId;
+            entry.yAxisName = s->yAxisName;
+            entry.references.reserve(s->referenceLines.size());
+            for (const auto &line: s->referenceLines) entry.references.append({line.value, line.color});
+            scene.series.append(std::move(entry));
+        }
+        return scene;
     }
 
     QVariantMap GraphCanvas::valuesAtX(const qreal x) const {

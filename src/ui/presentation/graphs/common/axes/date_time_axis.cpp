@@ -129,7 +129,13 @@ namespace ksv::presentation {
         }
         m_dataLo = dataLo < dataHi ? dataLo : dataHi;
         m_dataHi = dataLo < dataHi ? dataHi : dataLo;
+        m_hasRange = true;
         return recompute();
+    }
+
+    std::optional<std::pair<qint64, qint64>> DateTimeAxis::calendarRangeMs() const {
+        if (!m_hasRange) return std::nullopt;
+        return std::pair{m_dataLo.toMSecsSinceEpoch(), m_dataHi.toMSecsSinceEpoch()};
     }
 
     bool DateTimeAxis::setEpochMillisecondsRange(const qint64 dataLoMs, const qint64 dataHiMs) {

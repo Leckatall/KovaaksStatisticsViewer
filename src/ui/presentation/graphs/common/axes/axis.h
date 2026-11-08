@@ -4,6 +4,7 @@
 #include <QList>
 #include <QString>
 #include <QtGlobal>
+#include <optional>
 #include <utility>
 
 #include "presentation/graphs/common/axes/value_transform.h"
@@ -27,6 +28,8 @@ namespace ksv::presentation {
         }
 
         [[nodiscard]] qreal valueAt(const qreal position) const { return m_min + position * (m_max - m_min); }
+
+        [[nodiscard]] virtual std::optional<std::pair<qint64, qint64>> calendarRangeMs() const { return std::nullopt; }
 
     protected:
         Axis() = default;

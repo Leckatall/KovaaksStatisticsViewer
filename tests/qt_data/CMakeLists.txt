@@ -8,6 +8,9 @@ add_executable(qt_data_tests
     system_day_source_test.cpp
     benchmark_store_test.cpp
     playlist_reader_test.cpp
+    raster_qimage_test.cpp
+    qt_png_image_writer_test.cpp
+    qt_clipboard_image_writer_test.cpp
 )
 
 target_link_libraries(qt_data_tests PRIVATE

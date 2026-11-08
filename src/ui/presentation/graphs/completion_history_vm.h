@@ -8,6 +8,8 @@
 
 #include <array>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include "app/contracts/i_completion_history_use_case.h"
@@ -46,6 +48,10 @@ namespace ksv::presentation {
         [[nodiscard]] int visibleRunCount() const { return static_cast<int>(m_visible_runs.size()); }
         [[nodiscard]] int selectedRunIndex() const { return m_selected_run_index; }
         [[nodiscard]] bool selectedRunVisible() const { return m_selected_run_visible; }
+        [[nodiscard]] std::optional<std::pair<qint64, qint64>> visibleStartTimesMs() const {
+            return m_visible_start_times_ms;
+        }
+        [[nodiscard]] std::optional<std::pair<int, int>> visibleRunSpan() const { return m_visible_run_span; }
 
         // Selects the run with this 1-based run number (the history graph's x); a run the range
         // hides is ignored.
@@ -84,6 +90,8 @@ namespace ksv::presentation {
         int m_run_count = 0;
         // Ascending original run numbers of the visible rows.
         std::vector<int> m_visible_runs;
+        std::optional<std::pair<qint64, qint64>> m_visible_start_times_ms;
+        std::optional<std::pair<int, int>> m_visible_run_span;
         int m_selected_run_index = -1;
         bool m_selected_run_visible = false;
     };

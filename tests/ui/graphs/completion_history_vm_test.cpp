@@ -93,6 +93,35 @@ namespace {
         EXPECT_EQ(view_model.runCount(), 2);
     }
 
+    TEST_F(CompletionHistoryViewModelTest, RetainsTheFirstAndLastVisibleStartTimes) {
+        project(10, {4, 5, 6});
+        fake->history.rows[0].start_time_ms = 1'000'000;
+        fake->history.rows[1].start_time_ms = 2'000'000;
+        fake->history.rows[2].start_time_ms = 3'000'000;
+
+        view_model.refresh();
+
+        const auto span = view_model.visibleRunSpan();
+        ASSERT_TRUE(span.has_value());
+        EXPECT_EQ(*span, std::make_pair(4, 6));
+        const auto times = view_model.visibleStartTimesMs();
+        ASSERT_TRUE(times.has_value());
+        EXPECT_EQ(times->first, 1'000'000);
+        EXPECT_EQ(times->second, 3'000'000);
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, AnEmptyRangeHasNoVisibleSpan) {
+        project(10, {4, 5, 6});
+        view_model.refresh();
+        ASSERT_TRUE(view_model.visibleRunSpan().has_value());
+
+        project(10, {});
+        view_model.refresh();
+
+        EXPECT_FALSE(view_model.visibleRunSpan().has_value());
+        EXPECT_FALSE(view_model.visibleStartTimesMs().has_value());
+    }
+
     TEST_F(CompletionHistoryViewModelTest, XAxisIdentityIsStableAcrossRefresh) {
         setHistory();
         const Axis *const before = &view_model.xAxis();
