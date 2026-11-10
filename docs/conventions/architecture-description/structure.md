@@ -59,7 +59,7 @@ Reachability is calculated from actual managed reference uses starting at the ro
 
 The integrated state has every managed view reachable from the root, every managed view and root fact consumed outside its own document, every registry entry used, and every registration accompanied by a link and adequate summary. Unreachable views, unconsumed identities, unused entries, and inadequate summaries are integration gaps. They remain visible warnings and do not become structural failures because temporary incomplete integration is deliberate.
 
-Structural failures are conditions that prevent reliable interpretation or safe scoped mutation: malformed managed frontmatter, duplicate identities, malformed or ambiguous registry delimiters, missing managed definitions or targets, incorrect generated destinations, invalid fact anchors, or invalid ADR structure when ADR validation is selected.
+Structural failures are conditions that prevent reliable interpretation or safe scoped mutation: malformed managed frontmatter, duplicate identities, malformed or ambiguous registry delimiters, missing managed definitions or targets, incorrect generated destinations, invalid fact anchors, a missing, malformed, or repeated root `Documented version` line (see [root style](style/root.md#content-and-depth)), or invalid ADR structure when ADR validation is selected.
 
 ## Maintenance and validation
 

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.arch_doc import RepositorySnapshot, load_snapshot
+
+
+VERSIONED_ROOT = "# Architecture\n\nDocumented version: v1.0.0\n"
 
 
 def write_root(repo: Path, text: str) -> Path:
@@ -94,7 +99,7 @@ def test_validate_document_blocks_missing_local_managed_definition(run_cli) -> N
 
 
 def test_validate_document_reports_integration_gaps_without_blocking(run_cli) -> None:
-    write_root(run_cli.repo, "# Architecture\n")
+    write_root(run_cli.repo, VERSIONED_ROOT)
     write_view(run_cli.repo, "orphan")
 
     result = run_cli("validate", "document")
@@ -109,7 +114,7 @@ def test_validate_document_reports_integration_gaps_without_blocking(run_cli) ->
 
 
 def test_validate_document_allows_a_registered_but_unsummarised_view_as_a_warning(run_cli) -> None:
-    write_root(run_cli.repo, "# Architecture\n" + registry(("pending", "views/pending.md")))
+    write_root(run_cli.repo, VERSIONED_ROOT + registry(("pending", "views/pending.md")))
     write_view(run_cli.repo, "pending")
 
     result = run_cli("validate", "document")
@@ -197,6 +202,48 @@ def test_validation_diagnostics_locate_heading_and_root_fact_registry_problems(r
     assert "README.md:7: Fact registry definition 'fact-orphan' has no matching anchor." in result.stderr
 
 
+def test_validate_document_requires_the_root_documented_version_line(run_cli) -> None:
+    """Catches a root losing the baseline that the next full reconciliation starts from."""
+    write_root(run_cli.repo, "# Architecture\n\n```\nDocumented version: v1.0.0\n```\n")
+
+    result = run_cli("validate", "document")
+
+    assert result.returncode == 3
+    assert "README.md:1: Root has no 'Documented version: v<version>' line." in result.stderr
+
+
+@pytest.mark.parametrize("version", ("v1.0.0", "v0.6.0-beta", "v1.0.0-rc.1"))
+def test_validate_document_accepts_release_versions_as_the_documented_version(run_cli, version) -> None:
+    """Catches rejecting the pre-release tag shapes the project releases under."""
+    write_root(run_cli.repo, f"# Architecture\n\nDocumented version: {version}\n")
+
+    result = run_cli("validate", "document")
+
+    assert result.returncode == 0
+    assert result.stdout == "Valid.\n"
+
+
+@pytest.mark.parametrize("line", ("Documented version: 1.0.0", "Documented version:", "Documented version: v1.0"))
+def test_validate_document_rejects_a_malformed_documented_version(run_cli, line) -> None:
+    """Catches accepting a baseline that does not name a release tag."""
+    write_root(run_cli.repo, f"# Architecture\n\n{line}\n")
+
+    result = run_cli("validate", "document")
+
+    assert result.returncode == 3
+    assert "README.md:3: Invalid documented version: expected 'Documented version: v<version>'." in result.stderr
+
+
+def test_validate_document_rejects_a_repeated_documented_version(run_cli) -> None:
+    """Catches an ambiguous baseline that git history lookup could resolve either way."""
+    write_root(run_cli.repo, VERSIONED_ROOT + "\nDocumented version: v0.6.0-beta\n")
+
+    result = run_cli("validate", "document")
+
+    assert result.returncode == 3
+    assert "README.md:5: Duplicate documented version line." in result.stderr
+
+
 def test_validate_adr_marks_duplicate_filename_identifiers_at_the_filename_location(run_cli) -> None:
     decisions = run_cli.repo / "docs" / "architecture" / "decisions"
     decisions.mkdir(parents=True)
@@ -212,7 +259,7 @@ def test_validate_adr_marks_duplicate_filename_identifiers_at_the_filename_locat
 
 
 def test_view_links_reachability_and_external_consumption_ignore_cycles_and_self_links(run_cli) -> None:
-    write_root(run_cli.repo, "# Architecture\n\n[A][a]" + registry(("a", "views/a.md")))
+    write_root(run_cli.repo, VERSIONED_ROOT + "\n[A][a]" + registry(("a", "views/a.md")))
     write_view(run_cli.repo, "a", body="\n[B][b]" + registry(("b", "b.md")))
     write_view(run_cli.repo, "b", body="\n[A][a]" + registry(("a", "a.md")))
     write_view(run_cli.repo, "cycle-one", body="\n[Two][cycle-two]" + registry(("cycle-two", "cycle-two.md")))

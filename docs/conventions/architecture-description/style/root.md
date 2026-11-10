@@ -6,6 +6,8 @@ The root is an orientation map for a maintainer deciding where to look next. Rea
 
 The root must communicate the system's identity, purpose, audience, and as-built scope; external actors, systems, interfaces, dependencies, and owned data; significant drivers, constraints, and observed solution strategy; top-level responsibilities, boundaries, and relationships; genuinely shared facts; summaries of top-level concerns with managed links; and corpus-wide risks or evidence limitations.
 
+The root also states, in one line near its top, the release version it was last completely reconciled against: `Documented version: v<version>`. Changes made since that version are the starting point for the next reconciliation.
+
 Use whatever headings and order communicate this most clearly. Explain the system before presenting its navigation. A list of links alone cannot establish orientation, and a full copy of every view obscures it.
 
 A context diagram and a top-level building-block diagram are normally useful. Omit or combine them only when they add no distinct architectural meaning. Context distinguishes the application boundary and its environment; building blocks explain responsibilities within that boundary. Avoid placing method-level interaction or an exhaustive evidence inventory in either overview.

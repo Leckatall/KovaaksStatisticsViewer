@@ -96,6 +96,10 @@ _REFERENCE_DEFINITION = re.compile(
 )
 _REGISTRY_DELIMITER = re.compile(r"(?m)^<!-- arch-doc:references:(start|end) -->\r?$")
 _FACT_ANCHOR = re.compile(r'^<a id="(fact-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)"></a>\r?$')
+# Required by docs/conventions/architecture-description/style/root.md; the architecture skill's refresh mode reads
+# it as the baseline for its next reconciliation, so a missing or ambiguous line is a structural failure.
+_DOCUMENTED_VERSION_PREFIX = "Documented version:"
+_DOCUMENTED_VERSION = re.compile(r"Documented version: v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?")
 _ADR_FILENAME = re.compile(r"^(\d{4})-[a-z][a-z0-9]*(?:-[a-z0-9]+)*\.md$")
 _ADR_NUMERIC_PREFIX = re.compile(r"^\d{4}")
 _ADR_NUMBERED_FILE = re.compile(r"^(\d{4})-.*\.md$")
@@ -372,17 +376,40 @@ def _problem(path: Path, line: int, message: str) -> StructuralProblem:
     return StructuralProblem(path.resolve(), line, message)
 
 
+def _fenced_line_indexes(text: str) -> set[int]:
+    return {
+        line
+        for token in MarkdownIt("commonmark").parse(text)
+        if token.type in {"fence", "code_block"} and token.map is not None
+        for line in range(token.map[0], token.map[1])
+    }
+
+
+def _root_version_problems(document: ArchitectureDocument) -> tuple[StructuralProblem, ...]:
+    fenced_lines = _fenced_line_indexes(document.text)
+    candidates = [
+        (index, line)
+        for index, line in enumerate(document.text.splitlines())
+        if index not in fenced_lines and line.startswith(_DOCUMENTED_VERSION_PREFIX)
+    ]
+    if not candidates:
+        return (_problem(document.path, 1, "Root has no 'Documented version: v<version>' line."),)
+    problems = [
+        _problem(document.path, index + 1, "Invalid documented version: expected 'Documented version: v<version>'.")
+        for index, line in candidates
+        if not _DOCUMENTED_VERSION.fullmatch(line)
+    ]
+    for index, _line in candidates[1:]:
+        problems.append(_problem(document.path, index + 1, "Duplicate documented version line."))
+    return tuple(problems)
+
+
 def _parse_root_facts(document: ArchitectureDocument) -> tuple[Mapping[str, str], tuple[StructuralProblem, ...]]:
     facts: dict[str, str] = {}
     fact_lines: dict[str, int] = {}
     problems: list[StructuralProblem] = []
     lines = document.text.splitlines()
-    fenced_lines = {
-        line
-        for token in MarkdownIt("commonmark").parse(document.text)
-        if token.type in {"fence", "code_block"} and token.map is not None
-        for line in range(token.map[0], token.map[1])
-    }
+    fenced_lines = _fenced_line_indexes(document.text)
     for index, line in enumerate(lines):
         if index in fenced_lines:
             continue
@@ -593,6 +620,7 @@ def load_snapshot(repo: Path) -> RepositorySnapshot:
     if root is not None:
         facts, fact_problems = _parse_root_facts(root)
         problems.extend(fact_problems)
+        problems.extend(_root_version_problems(root))
 
     adrs: dict[str, AdrRecord] = {}
     decisions_directory = resolved_repo / "docs" / "architecture" / "decisions"
