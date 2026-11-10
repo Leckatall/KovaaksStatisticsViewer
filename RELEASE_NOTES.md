@@ -2,6 +2,52 @@
 
 What's new for people using the app. For the technical record, see [CHANGELOG.md](CHANGELOG.md).
 
+## v1.0.0
+
+### Features & changes
+
+#### Scenario & run selection
+- Scenarios in the browser highlight under the pointer and show a pointing-hand cursor.
+
+#### Graphing
+- Series expressions can now use a run's final stats (`Final(SCORE)`) and your best run (`BestRun(...)`), e.g. to draw your high score or PB pace.
+- Settings > Graph Lines now has a "Y-axis" picker that lists your axes (plus any line that has no axis of its own) instead of every line, and the run graph labels the first visible line on the axis you pick. The picker's list also highlights the entry under the pointer.
+- The default run graph now has a High Score line, draws lines based on your other runs at 50% opacity, and uses shorter Exp. Score names that show which ones are projected from the last 5 seconds. Existing setups keep their lines until you restore the default graph lines.
+- A camera button beside each graph and the benchmark table copies a clean, freshly rendered image of it to the clipboard. Its menu also offers Export image…, where you can change the resolution or size, preview the result, copy it, or save it as a PNG.
+
+#### Benchmarks
+- Rank threshold scores moved to avoid the current score now appear without a box.
+- Group scenarios faster in the Benchmark Manager: drag across cells to select them, press Ctrl+G to create or choose a group, add several categories at once with commas, and keep empty groups and unsorted scenarios visible in the table while you organise.
+- New recent-average rank graph on the Benchmarks page, showing how your latest five runs per scenario rank over time, next to your personal-best rank.
+- In the Benchmark Manager, right-click a scenario and choose Group Scenarios (Ctrl+G) to group it, and press Delete to remove the selected scenarios.
+- The personal-best and recent average rank graphs now draw their lines in two shades of green by default instead of white.
+
+#### Settings
+- Settings > Graph Lines no longer shows its own Save and Discard buttons; the dialog footer buttons do the same job.
+- The Browse buttons in Settings > Profile are now folder icons with a tooltip.
+- Graph Lines now has an Axes tab: rename, create and delete shared axes, and pick the scale shown on the run graph's Y-axis right beside it. Deleting an axis keeps its lines and gives each its own scale.
+- Settings lists each graph in the sidebar, with all of its settings on one page.
+
+#### User Interface
+- Graph line drag handles show an open hand on hover and a closed hand while dragging.
+- Any graph can now be shown or hidden, from its Settings page, the new View → Graphs menu or its gear menu, with Undo straight after hiding one from the gear. Benchmark graphs can be hidden too.
+- The main window now reopens where you last left it.
+- The bottom status bar now appears over the bottom of the window instead of pushing the content up, so messages no longer make the window content jump.
+- The export image window now frames its preview, shows width and height on one line, and has a clearer resolution slider and rounded action buttons.
+- Graph and benchmark captures now have separate Copy, Save and Preview buttons. Save goes straight to the file picker at the default size; Preview opens the adjustable export window.
+
+#### Under the hood
+- The list of source files that couldn't be imported can now be selected and copied.
+
+### Bug fixes
+- Opening a benchmark with wider ranks while scrolled through the editor no longer lands part-way into a rank.
+- The prompt to choose your Kovaaks folder no longer appears when the default Steam folder is already correct, and a banner now warns when the configured folder doesn't contain any Kovaaks data.
+- The expression editor opens again instead of failing with an "Unknown method return type" error.
+- Closing Settings, or pressing Save, while still typing a line name now keeps that name instead of silently dropping it.
+- Changing a line or the Y-axis choice now clears a settings error it fixes, instead of leaving it marked until another edit.
+- Stats files from KovaaK's versions before 3.1 (mid-2022 and earlier) now import instead of failing.
+- Settings and the Benchmark Manager now use the app's own colours instead of your Windows accent colour, and toggles stay readable while the window is focused.
+
 ## v1.0.0-rc.1
 
 ### Features & changes

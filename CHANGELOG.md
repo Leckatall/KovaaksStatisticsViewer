@@ -4,6 +4,102 @@ The technical record — every change, user-visible or not. For the user-facing 
 [RELEASE_NOTES.md](RELEASE_NOTES.md). Pending entries live as fragments in `changelog.d/` and are
 assembled into both files at version bump.
 
+## v1.0.0
+
+### Added
+
+#### Graphing
+- Series expressions gain `Final(<STAT>)` (a run's final score, shots, hits, misses, kills or damage) and `BestRun(...)` (evaluates its input on the scenario's highest-scoring other run). Evaluation threads the current run's graph length through, so constants and `Final(...)` work against CSV-only best runs; `RunTotals` gains an optional `damage`, persisted without a store-version bump.
+- App captures: every graph can be copied to the clipboard, saved as a PNG or opened in an export preview with adjustable resolution and size. `CaptureViewModel` sits over `CaptureCoordinator` and `CaptureFeedback`; a value snapshot of the graph is laid out and rendered on a single-thread queue, away from the live objects, with cooperative cancellation so exit never waits on a dense render. Output is validated against `standardCaptureLimits()` and a rejection names the violated figure. A graph capture is sized by a 3:1 plot aspect at 960 px wide, so headings and legend add height instead of flattening the plot.
+
+#### Benchmarks
+- Faster grouping in the Benchmark Manager: drag across cells to select, Ctrl+G opens the new `BenchmarkGroupCommand` popup to create or choose a group, and several categories can be added at once. Empty groups and unassigned scenarios now have table rows, and a mixed draft is allowed but stays incomplete. The popup is translucent, with its actions drawn as cards.
+- New recent-average rank graph (`GraphKey::BenchmarkRecentRank`): one point per play day from each scenario's latest five scores, shown beside the personal-best rank graph. The key is additive, so no graph-configuration schema bump.
+- Benchmark Manager row menu gains Group Scenarios (Ctrl+G), replacing the Move to group submenu, and Delete removes the selected scenarios.
+- The benchmark table can be captured: `BenchmarkProgressGridModel` now builds typed rows, tiers, groups and headings that both QML and the exporter read, and `layoutTableCapture` measures the capture from that content, so it includes every row and column regardless of scroll position.
+
+#### Settings
+- Graph Lines is split into Lines and Axes tabs: shared axes can be renamed, created and deleted, and the run graph's Y-axis choice is a per-row "Show on Y-axis" action. Deleting an axis keeps its lines and hands the Y-axis choice to one of them. The axis-name rule lives in presentation, so configurations that already hold blank or duplicate names still load.
+- UI-driver snapshot fixture (saved settings, the stored profile and four benchmark definitions) with SHA-256 verification, for preparing disposable driver sessions.
+
+#### Build & packaging
+- `scripts/build_and_test.py --scope qmllint` builds `all_qmllint_json` and reports its findings in the keyed format from qmllint's JSON reports; anything above info level fails. Opt-in, not part of the no-scope run.
+- `ksv_capture_measure`, a developer tool behind `KSV_BUILD_CAPTURE_MEASURE` (default OFF) that records render, save, memory and GUI-thread figures to CSV for the capture limits.
+
+#### Architecture
+- `GraphScene`, an owned display-space value of a graph's state, with `GraphCanvas::scene()` and the free `paintGraphScene`, so a graph can be painted without a view model. The painter now owns line stacking.
+- Image output: the Qt-free `RasterBuffer`/`RasterImage` transport and `ImageOutputUseCase`, which admits one output at a time and saves on its own thread through `QSaveFile`, so a failed save leaves the destination intact. `App`'s injected constructor now requires `IClipboardImageWriter` and `IPngImageWriter`.
+- ADR 0007 records the captures boundary: presentation owns the snapshot, preview session and rendering; the application layer owns output operations behind Qt-free interfaces.
+
+#### User Interface
+- Any graph can be shown or hidden from its Settings page, the new View → Graphs menu or its gear menu, with Undo after hiding from the gear. Visibility lives in `VisualSettingsManager`, so it applies immediately and Save, Cancel and Reset never touch it.
+- The main window reopens at its last position, restored only when enough of its top edge is on a current screen. Geometry is recorded only while windowed, so maximising no longer overwrites the saved size.
+- Capture controls: a Copy, Save and Preview toolbar (`CaptureActions`) on all six graph panels and the benchmark header, the window-modal `CapturePreviewDialog`, and a `CaptureStatusStrip` in the status bar and the preview footer. Save goes straight to the file picker at the default options; closing the preview returns focus to the button that opened it.
+
+### Changed
+
+#### Scenario & run selection
+- Scenario rows in the browser highlight under the pointer and show a pointing-hand cursor.
+
+#### Graphing
+- The run graph's labelled Y axis is now an axis or an axis-less line (`GraphConfiguration::runAxisLabel`) rather than a single series, and the graph labels the first visible line on it. Configuration schema 6 stores it; older choices of a line on a shared axis migrate to that axis on load.
+- Default run graph lines: new High Score line (`BestRun(Final(SCORE))`), lines based on other runs draw at 50% opacity, and the Exp. Score lines have shorter names. Ids and expressions are unchanged, so stored documents need no migration.
+
+#### Benchmarks
+- Rank threshold labels moved off the current score no longer draw an outline box.
+- The personal-best and recent-average rank graphs default to two shades of green instead of the foreground colour; a saved series colour still wins.
+
+#### Settings
+- The Browse buttons in Settings > Profile are folder icon buttons with a tooltip.
+- Settings navigation is graph-first: each graph is a sidebar entry with all its sections on one scrolling page, and per-graph change and issue markers.
+
+#### Data & Profile
+- The list of source files that could not be imported is selectable and copyable.
+
+#### Build & packaging
+- Qt upgraded from 6.11.1 to 6.12.0. MSVC is now supported beside MinGW, selected by the new `KSV_TOOLCHAIN` key (`mingw` default, or `msvc`, which needs `KSV_VCVARS_BAT`); the build runner, UI driver and `package-release.ps1` resolve it the same way, and switching flavour rebuilds `build-agent/` from cold. Each flavour packages its own compiler runtime, and the smoke test requires it to load from `dist/`.
+
+#### Architecture
+- `src/ui/presentation/` is split into `graphs/`, `expression/`, `benchmarks/`, `scenarios/` and `app/`, mirrored by `tests/ui/`; includes are now `presentation/<dir>/…`.
+
+#### User Interface
+- Graph line drag handles show an open hand on hover and a closed hand for the whole drag.
+- The status bar is hidden when idle and overlays the bottom of the window instead of being its footer, so the workspaces keep their geometry as messages show and clear.
+- `src/ui/qml/` is clean under qmllint at warning level (453 → 0): files with delegates use `pragma ComponentBehavior: Bound` with `required` model roles, and the graph view models are registered so qmllint can resolve their types.
+
+#### Documentation
+- The app captures design records the clipboard decision: the Qt clipboard adapter is adopted after interactive runs, with the `OleFlushClipboard` and Win32-worker fallbacks kept as the route if field reports show trouble.
+
+### Fixed
+
+#### Benchmarks
+- Opening a benchmark with wider ranks while scrolled through the editor no longer lands part-way into a rank.
+
+#### Settings
+- The Kovaaks folder prompt no longer appears when the default Steam folder is already correct, and a banner now warns when the configured folder holds no Kovaaks data. Validity is `IFileService::hasValidSourceRoots()`, and Refresh Profile is gated on it.
+- The expression editor opens again instead of failing with "Unknown method return type". A new `ui_metatype_tests` executable checks that every QML-facing property and method type resolves.
+- Closing Settings or pressing Save while still typing a line name now keeps the name instead of dropping it; Save is enabled while the focused field holds an uncommitted edit.
+- A Graph Lines edit or Y-axis change that resolves a settings error now clears it at once, rather than leaving it marked until another edit.
+- The Save button no longer logs a binding-loop warning when it is disabled while focused.
+
+#### Data & Profile
+- Stats CSVs from KovaaK's versions before 3.1 now import instead of being rejected. Fallbacks are gated on `Game Version`; runs with no usable start time take the filename's end time, so they get zero length and add no playtime.
+
+#### Architecture
+- Two dangling references that crashed under MSVC's debug heap (in `PlaylistReader::read` and `SettingsViewModel`'s run-axis-label accessors) now hold their values; previously they only happened to work under MinGW.
+
+#### User Interface
+- Settings and the Benchmark Manager use the app's own palette instead of the Windows accent colour, and switches stay distinguishable on from off while the window is focused. Each top-level window now sets `Theme.palette`.
+- The UI-driver tours match the current UI again (View → Graphs menu, split benchmark tables, direct benchmark save); the full tour covers all six graph settings pages and fails on app warnings.
+
+### Removed
+
+#### Settings
+- Settings > Graph Lines no longer has its own Save and Discard buttons; the dialog footer does the same job.
+
+#### Architecture
+- Tests that pinned defaults, restated the code or asserted colours and styling are removed, so a non-breaking tweak no longer forces a test edit.
+
 ## v1.0.0-rc.1
 
 ### Added
