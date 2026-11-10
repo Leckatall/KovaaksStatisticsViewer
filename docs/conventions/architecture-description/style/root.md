@@ -12,9 +12,13 @@ A context diagram and a top-level building-block diagram are normally useful. Om
 
 ## When detail belongs in a view
 
-Extract a coherent account when it answers an independent reader question, needs a substantial local flow, has a distinct evidence boundary, or needs a separate maintenance context. Do not split merely because a section has become long or crosses a repository layer.
+The root holds two kinds of content at different depths. Orientation content — the items listed under [content and depth](#content-and-depth) — is root-owned at whatever depth orientation needs. Every other concern appears in the root only at **summary depth**: what the concern establishes, why a maintainer would follow it, and at most one consequence to keep in mind. Detail beyond summary depth belongs in a view, or is removed under the [significance test](../README.md#architectural-significance).
 
-The root directly summarises top-level concerns. A narrower concern can be introduced by the relevant parent view, provided the reader can reach it through managed links and understands its relevance. A root summary should identify what the concern establishes and why a maintainer would follow it; it need not replay the child's steps.
+A concern needs a view when a plausible change could break a non-obvious invariant, and stating that invariant with the mechanism that upholds it takes more than summary depth. Ask it as a maintainer's task: *before changing this, what must I understand?* If the honest answer fits in a summary, the root summary is the whole account. If it needs participants, ordering, ownership, failure behavior, or data lifecycle, it needs a view. Supporting signals are an independent reader question, a distinct evidence boundary, and a separate maintenance context.
+
+Apply this when authoring, not only when reviewing. Write a new view-sized concern as a view from the start rather than drafting it in the root for later extraction. Length is not a reason to split, and it is not a reason to keep detail in the root either; depth beyond the summary limit is the reason. Crossing a repository layer is likewise no reason on its own.
+
+The root directly summarises top-level concerns. A narrower concern can be introduced by the relevant parent view, provided the reader can reach it through managed links and understands its relevance. A root summary should identify what the concern establishes and why a maintainer would follow it; it need not replay the child's steps. These summary rules apply to any document that summarises and links its children, not only the root.
 
 Keep brief context where needed, following [ownership rules](../README.md#consistency-and-ownership). For example, a summary may mention a background worker to explain responsiveness, while a view owns worker completion, cancellation, and failure semantics.
 
@@ -45,6 +49,6 @@ The summary provides a reason to navigate and a consequence to keep in mind. It 
 
 ## Local review
 
-**Must:** The root establishes orientation, communicates applicable content above, identifies top-level concerns through meaningful managed summaries, and keeps detailed concern ownership clear. Global facts must not become a dumping ground for locally significant detail.
+**Must:** The root establishes orientation, communicates applicable content above, identifies top-level concerns through meaningful managed summaries, and keeps detailed concern ownership clear. No concern outside orientation content and root facts exceeds summary depth in the root. Global facts must not become a dumping ground for locally significant detail.
 
 **Should:** Prefer a short responsibility table to an inventory; keep context and internal decomposition distinct; make the next useful view easy to find. Preserve a readable narrative rather than requiring a fixed section template.

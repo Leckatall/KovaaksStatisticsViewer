@@ -17,7 +17,7 @@ def write_view(repo: Path, view_id: str, *, path: str | None = None, body: str =
     target.parent.mkdir(parents=True, exist_ok=True)
     name = view_id.replace("-", " ").title()
     target.write_text(
-        f"---\nid: {view_id}\nname: {name}\n---\n# {name}\n{body}", encoding="utf-8", newline=""
+        f"---\nid: {view_id}\nname: {name}\nviewpoints: [runtime]\n---\n# {name}\n{body}", encoding="utf-8", newline=""
     )
     return target
 
@@ -118,7 +118,7 @@ def test_references_update_all_documents_rebases_recursively_and_preflights_ever
     assert refused.returncode == 5
     assert tree_bytes(run_cli.repo) == before
 
-    second.write_text("---\nid: two\nname: Two\n---\n# Two\n", encoding="utf-8")
+    second.write_text("---\nid: two\nname: Two\nviewpoints: [runtime]\n---\n# Two\n", encoding="utf-8")
     updated = run_cli("references", "update")
 
     assert updated.returncode == 0

@@ -1,6 +1,7 @@
 ---
 id: profile-lifecycle
 name: Profile lifecycle
+viewpoints: [runtime, information]
 ---
 
 # Profile lifecycle

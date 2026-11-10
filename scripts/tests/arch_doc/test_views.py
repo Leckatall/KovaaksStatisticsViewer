@@ -18,7 +18,7 @@ def write_view(repo: Path, view_id: str, *, path: str | None = None, body: str =
     target = repo / "docs" / "architecture" / "views" / (path or f"{view_id}.md")
     target.parent.mkdir(parents=True, exist_ok=True)
     name = view_id.replace("-", " ").title()
-    target.write_text(f"---\nid: {view_id}\nname: {name}\n---\n# {name}\n{body}", encoding="utf-8")
+    target.write_text(f"---\nid: {view_id}\nname: {name}\nviewpoints: [runtime]\n---\n# {name}\n{body}", encoding="utf-8")
     return target
 
 
@@ -103,14 +103,16 @@ def test_view_add_prefixes_a_draft_without_reformatting_its_body_and_registers_i
     draft = write_draft(run_cli.repo, "runtime/live-ingestion.md", "# Live ingestion\n\nBody with  two spaces.\n")
 
     result = run_cli(
-        "view", "add", "runtime/live-ingestion.md", "--id", "live-ingestion", "--name", "Live ingestion", "--register-in", "document"
+        "view", "add", "runtime/live-ingestion.md", "--id", "live-ingestion", "--name", "Live ingestion",
+        "--viewpoint", "runtime", "--register-in", "document"
     )
 
     assert result.returncode == 0
     assert result.stdout == "Added view 'live-ingestion' at docs/architecture/views/runtime/live-ingestion.md.\n"
     assert result.stderr == ""
     assert draft.read_text(encoding="utf-8") == (
-        "---\nid: live-ingestion\nname: Live ingestion\n---\n\n# Live ingestion\n\nBody with  two spaces.\n"
+        "---\nid: live-ingestion\nname: Live ingestion\nviewpoints: [runtime]\n---\n\n"
+        "# Live ingestion\n\nBody with  two spaces.\n"
     )
     assert root.read_text(encoding="utf-8") == (
         "# Architecture\n\n<!-- arch-doc:references:start -->\n"
@@ -118,14 +120,20 @@ def test_view_add_prefixes_a_draft_without_reformatting_its_body_and_registers_i
     )
 
 
-@pytest.mark.parametrize("contents", ["---\nid: managed\nname: Managed\n---\n# Managed\n", "---\nname: Bad\nid: bad\n---\n# Bad\n"])
+@pytest.mark.parametrize(
+    "contents",
+    ["---\nid: managed\nname: Managed\nviewpoints: [runtime]\n---\n# Managed\n", "---\nname: Bad\nid: bad\n---\n# Bad\n"],
+)
 def test_view_add_refuses_to_replace_a_managed_or_malformed_target_without_writing(run_cli, contents: str) -> None:
     """Catches add overwriting a document that is not the explicit frontmatter-free draft operand."""
     write_root(run_cli.repo)
     target = write_draft(run_cli.repo, "candidate.md", contents)
     before = tree_bytes(run_cli.repo)
 
-    result = run_cli("view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", "--register-in", "document")
+    result = run_cli(
+        "view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", "--viewpoint", "runtime",
+        "--register-in", "document",
+    )
 
     assert target.exists()
     assert result.returncode == 5
@@ -138,7 +146,10 @@ def test_view_add_requires_an_explicit_managed_registration_target_without_writi
     write_draft(run_cli.repo, "candidate.md")
     before = tree_bytes(run_cli.repo)
 
-    result = run_cli("view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", "--register-in", "missing")
+    result = run_cli(
+        "view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", "--viewpoint", "runtime",
+        "--register-in", "missing",
+    )
 
     assert result.returncode == 4
     assert tree_bytes(run_cli.repo) == before
@@ -149,11 +160,54 @@ def test_view_add_registers_in_an_existing_view_without_a_root_document(run_cli)
     registration = write_view(run_cli.repo, "parent")
     draft = write_draft(run_cli.repo, "candidate.md")
 
-    result = run_cli("view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", "--register-in", "parent")
+    result = run_cli(
+        "view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", "--viewpoint", "structural",
+        "--register-in", "parent",
+    )
 
     assert result.returncode == 0
-    assert draft.read_text(encoding="utf-8").startswith("---\nid: candidate\nname: Candidate\n---\n\n")
+    assert draft.read_text(encoding="utf-8").startswith(
+        "---\nid: candidate\nname: Candidate\nviewpoints: [structural]\n---\n\n"
+    )
     assert "[candidate]: candidate.md" in registration.read_text(encoding="utf-8")
+
+
+def test_view_add_records_every_declared_viewpoint_in_order(run_cli) -> None:
+    """Catches a combined view losing all but one of its declared viewpoints."""
+    write_root(run_cli.repo)
+    draft = write_draft(run_cli.repo, "candidate.md")
+
+    result = run_cli(
+        "view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate",
+        "--viewpoint", "runtime", "--viewpoint", "information", "--register-in", "document",
+    )
+
+    assert result.returncode == 0
+    assert draft.read_text(encoding="utf-8").startswith(
+        "---\nid: candidate\nname: Candidate\nviewpoints: [runtime, information]\n---\n\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("viewpoint_arguments", "expected_code"),
+    [((), 2), (("--viewpoint", "process"), 2), (("--viewpoint", "runtime", "--viewpoint", "runtime"), 5)],
+    ids=("missing", "unknown", "duplicate"),
+)
+def test_view_add_refuses_an_absent_unknown_or_repeated_viewpoint_without_writing(
+    run_cli, viewpoint_arguments: tuple[str, ...], expected_code: int
+) -> None:
+    """Catches promoting a draft into a view whose frontmatter would then fail validation."""
+    write_root(run_cli.repo)
+    write_draft(run_cli.repo, "candidate.md")
+    before = tree_bytes(run_cli.repo)
+
+    result = run_cli(
+        "view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", *viewpoint_arguments,
+        "--register-in", "document",
+    )
+
+    assert result.returncode == expected_code
+    assert tree_bytes(run_cli.repo) == before
 
 
 def test_view_add_refuses_a_malformed_document_registration_target_without_writing(run_cli) -> None:
@@ -162,7 +216,10 @@ def test_view_add_refuses_a_malformed_document_registration_target_without_writi
     write_draft(run_cli.repo, "candidate.md")
     before = tree_bytes(run_cli.repo)
 
-    result = run_cli("view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", "--register-in", "document")
+    result = run_cli(
+        "view", "add", "candidate.md", "--id", "candidate", "--name", "Candidate", "--viewpoint", "runtime",
+        "--register-in", "document",
+    )
 
     assert result.returncode == 5
     assert "Refused:" in result.stderr

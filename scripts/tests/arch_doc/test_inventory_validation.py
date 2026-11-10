@@ -17,7 +17,7 @@ def write_view(repo: Path, view_id: str, *, path: str | None = None, body: str =
     target.parent.mkdir(parents=True, exist_ok=True)
     name = view_id.replace("-", " ").title()
     target.write_text(
-        f"---\nid: {view_id}\nname: {name}\n---\n# {name}\n{body}", encoding="utf-8"
+        f"---\nid: {view_id}\nname: {name}\nviewpoints: [runtime]\n---\n# {name}\n{body}", encoding="utf-8"
     )
     return target
 
@@ -171,7 +171,7 @@ def test_validation_diagnostics_identify_the_source_line_of_parse_registry_and_a
     adr = run_cli("validate", "adr")
 
     assert document.returncode == 3
-    assert "views/broken.md:2: Invalid view frontmatter key order: expected id then name." in document.stderr
+    assert "views/broken.md:2: Invalid view frontmatter key order: expected id, name, then viewpoints." in document.stderr
     assert "README.md:5: Registry destination for 'existing' does not target its managed artifact." in document.stderr
     assert adr.returncode == 3
     assert "decisions/0001-decide.md:2: Invalid ADR metadata." in adr.stderr
@@ -186,13 +186,13 @@ def test_validation_diagnostics_locate_heading_and_root_fact_registry_problems(r
     path = run_cli.repo / "docs" / "architecture" / "views" / "heading.md"
     path.parent.mkdir(parents=True)
     path.write_text(
-        "---\nid: heading\nname: Expected heading\n---\n# Different heading\n", encoding="utf-8"
+        "---\nid: heading\nname: Expected heading\nviewpoints: [runtime]\n---\n# Different heading\n", encoding="utf-8"
     )
 
     result = run_cli("validate", "document")
 
     assert result.returncode == 3
-    assert "views/heading.md:5: View name and first level-one heading must match." in result.stderr
+    assert "views/heading.md:6: View name and first level-one heading must match." in result.stderr
     assert "README.md:3: Fact anchor 'fact-missing' has no matching root registry definition." in result.stderr
     assert "README.md:7: Fact registry definition 'fact-orphan' has no matching anchor." in result.stderr
 
@@ -239,7 +239,7 @@ def test_validate_document_rejects_duplicate_fact_anchors_and_fact_namespace_vie
     )
     path = run_cli.repo / "docs" / "architecture" / "views" / "bad.md"
     path.parent.mkdir(parents=True)
-    path.write_text("---\nid: fact-bad\nname: Bad\n---\n# Bad\n", encoding="utf-8")
+    path.write_text("---\nid: fact-bad\nname: Bad\nviewpoints: [runtime]\n---\n# Bad\n", encoding="utf-8")
 
     result = run_cli("validate", "document")
 

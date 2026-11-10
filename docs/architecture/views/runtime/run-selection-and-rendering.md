@@ -1,6 +1,7 @@
 ---
 id: run-selection-and-rendering
 name: Run selection and rendering
+viewpoints: [runtime]
 ---
 
 # Run selection and rendering

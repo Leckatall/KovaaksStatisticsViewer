@@ -27,9 +27,9 @@ def test_malformed_command_prints_a_direct_usage_diagnostic(run_cli) -> None:
 def test_inventory_uses_the_script_repository_instead_of_the_caller_directory(run_cli) -> None:
     first_view = run_cli.repo / "docs" / "architecture" / "views" / "first.md"
     first_view.parent.mkdir(parents=True)
-    first_view.write_text("---\nid: first\nname: First\n---\n# First\n", encoding="utf-8")
+    first_view.write_text("---\nid: first\nname: First\nviewpoints: [runtime]\n---\n# First\n", encoding="utf-8")
     second_view = run_cli.repo / "docs" / "architecture" / "views" / "second.md"
-    second_view.write_text("---\nid: second\nname: Second\n---\n# Second\n", encoding="utf-8")
+    second_view.write_text("---\nid: second\nname: Second\nviewpoints: [runtime]\n---\n# Second\n", encoding="utf-8")
 
     result = run_cli("inventory")
 
@@ -65,7 +65,7 @@ def test_inventory_ignores_frontmatter_free_view_drafts(run_cli) -> None:
         ("validate", "view", "view-id"),
         ("validate", "adr"),
         ("view", "resolve", "view-id"),
-        ("view", "add", "draft.md", "--id", "view-id", "--name", "View", "--register-in", "document"),
+        ("view", "add", "draft.md", "--id", "view-id", "--name", "View", "--viewpoint", "runtime", "--register-in", "document"),
         ("view", "migrate-id", "view-id", "new-id"),
         ("view", "retire", "view-id"),
         ("references", "add", "document", "view-id"),

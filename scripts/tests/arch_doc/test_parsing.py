@@ -27,12 +27,22 @@ def write_view(repo: Path, text: str, name: str = "candidate.md") -> Path:
     [
         ("", None, None),
         (
-            "---\nid: live-ingestion\nname: Live ingestion\n---\n",
+            "---\nid: live-ingestion\nname: Live ingestion\nviewpoints: [runtime]\n---\n",
+            "live-ingestion",
+            "Live ingestion",
+        ),
+        (
+            "---\nid: live-ingestion\nname: Live ingestion\nviewpoints: [runtime, information]\n---\n",
+            "live-ingestion",
+            "Live ingestion",
+        ),
+        (
+            "---\nid: live-ingestion\nname: Live ingestion\nviewpoints:\n  - structural\n  - runtime\n---\n",
             "live-ingestion",
             "Live ingestion",
         ),
     ],
-    ids=("frontmatter-free-draft", "canonical-managed-view"),
+    ids=("frontmatter-free-draft", "canonical-managed-view", "combined-view", "block-style-viewpoints"),
 )
 def test_parse_document_classifies_only_canonical_frontmatter_as_a_view(
     tmp_path: Path,
@@ -53,27 +63,37 @@ def test_parse_document_classifies_only_canonical_frontmatter_as_a_view(
 @pytest.mark.parametrize(
     ("frontmatter", "heading", "reason"),
     [
-        ("name: Live ingestion\nid: live-ingestion", "Live ingestion", "key order"),
-        ("id: live-ingestion\nname: Live ingestion\nsummary: Extra", "Live ingestion", "key order"),
-        ("id: live-ingestion\nid: second\nname: Live ingestion", "Live ingestion", "key order"),
-        ("id:\nname: Live ingestion", "Live ingestion", "id"),
-        ("id: live-ingestion\nname:", "Live ingestion", "name"),
-        ("id: 42\nname: Live ingestion", "Live ingestion", "id"),
-        ("id: live-ingestion\nname: true", "Live ingestion", "name"),
-        ("id: live_ingestion\nname: Live ingestion", "Live ingestion", "ID"),
-        ("id: fact-profile-authority\nname: Profile authority", "Profile authority", "ID"),
-        ("id: live-ingestion\nname: Live ingestion", "Different heading", "heading"),
+        ("name: Live ingestion\nid: live-ingestion\nviewpoints: [runtime]", "Live ingestion", "key order"),
+        ("id: live-ingestion\nname: Live ingestion\nviewpoints: [runtime]\nsummary: Extra", "Live ingestion", "key order"),
+        ("id: live-ingestion\nid: second\nname: Live ingestion\nviewpoints: [runtime]", "Live ingestion", "key order"),
+        ("id: live-ingestion\nname: Live ingestion", "Live ingestion", "key order"),
+        ("id:\nname: Live ingestion\nviewpoints: [runtime]", "Live ingestion", "id"),
+        ("id: live-ingestion\nname:\nviewpoints: [runtime]", "Live ingestion", "name"),
+        ("id: 42\nname: Live ingestion\nviewpoints: [runtime]", "Live ingestion", "id"),
+        ("id: live-ingestion\nname: true\nviewpoints: [runtime]", "Live ingestion", "name"),
+        ("id: live_ingestion\nname: Live ingestion\nviewpoints: [runtime]", "Live ingestion", "ID"),
+        ("id: fact-profile-authority\nname: Profile authority\nviewpoints: [runtime]", "Profile authority", "ID"),
+        ("id: live-ingestion\nname: Live ingestion\nviewpoints: []", "Live ingestion", "viewpoints"),
+        ("id: live-ingestion\nname: Live ingestion\nviewpoints: runtime", "Live ingestion", "viewpoints"),
+        ("id: live-ingestion\nname: Live ingestion\nviewpoints: [process]", "Live ingestion", "viewpoints"),
+        ("id: live-ingestion\nname: Live ingestion\nviewpoints: [runtime, runtime]", "Live ingestion", "viewpoints"),
+        ("id: live-ingestion\nname: Live ingestion\nviewpoints: [runtime]", "Different heading", "heading"),
     ],
     ids=(
         "reordered",
         "extra",
         "duplicate",
+        "missing-viewpoints",
         "empty-id",
         "empty-name",
         "non-string-id",
         "non-string-name",
         "non-kebab-id",
         "reserved-fact-id",
+        "empty-viewpoints",
+        "scalar-viewpoints",
+        "unknown-viewpoint",
+        "duplicate-viewpoint",
         "heading-mismatch",
     ),
 )
@@ -135,6 +155,7 @@ def test_parse_document_preserves_crlf_source_and_registry_byte_bounds(tmp_path:
         "---\r\n"
         "id: live-ingestion\r\n"
         "name: Live ingestion\r\n"
+        "viewpoints: [runtime]\r\n"
         "---\r\n"
         "# Live ingestion\r\n\r\n"
         "<!-- arch-doc:references:start -->\r\n"
@@ -211,7 +232,7 @@ def test_parse_document_does_not_count_a_managed_view_as_its_own_consumer(tmp_pa
     """Catches a self-reference making an otherwise unconsumed view look integrated."""
     path = write_view(
         tmp_path,
-        "---\nid: live-ingestion\nname: Live ingestion\n---\n"
+        "---\nid: live-ingestion\nname: Live ingestion\nviewpoints: [runtime]\n---\n"
         "# Live ingestion\n\n"
         "[This view][live-ingestion]\n\n"
         "<!-- arch-doc:references:start -->\n"

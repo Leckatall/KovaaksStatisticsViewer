@@ -9,8 +9,8 @@ The corpus helps maintainers locate a concern, understand the significant struct
 | Guide | Owns |
 |---|---|
 | [Structural rules](structure.md) | Identities, drafts, reference syntax, registries, root facts, reachability, integration, and deterministic validation. |
-| [Root style](style/root.md) | Orientation, summaries, depth, and placement of detail. |
-| [View style](style/views.md) | Bounded accounts, interfaces, runtime scenarios, consequences, and local evidence presentation. |
+| [Root style](style/root.md) | Orientation, summaries, the root's depth limit, and when a concern needs a view. |
+| [View style](style/views.md) | Viewpoints, combined and parent views, bounded accounts, interfaces, runtime scenarios, consequences, and local evidence presentation. |
 | [Diagram style](style/diagrams.md) | Model selection, abstraction, notation, layout, and explanatory context. |
 
 Read this page and structural rules for every AD operation. Diagram guidance applies to both root and views. Document operations also read both document styles; view operations read view style and additionally root style before assessing or changing root content. Operation-specific scope and write authority remain in the architecture-description skill.
@@ -23,7 +23,7 @@ Include a detail when it materially explains structure, responsibility, dependen
 
 This test applies equally to prose, tables, and diagrams. Classes, functions, signals, settings, and files belong when they reveal a significant mechanism or invariant, not merely because they exist. Apply the test most strictly in the root. Avoid class catalogues, directory tours, exhaustive call traces, and inventories without architectural consequences.
 
-Choose views by reader questions. A coherent concern may cross layers and directories; neither the file tree nor a diagram type requires a separate view.
+Choose views by reader questions. A coherent concern may cross layers and directories; neither the file tree nor a diagram type requires a separate view. [Viewpoints](style/views.md#viewpoints) guide how a view models its concern, not whether the view exists.
 
 ## Evidence and accuracy
 
@@ -85,8 +85,10 @@ These are influences on local rules, not a claim of formal conformance. The IEEE
 
 | Source | Adopted guidance and local adaptation |
 |---|---|
-| [ISO/IEC/IEEE 42010-2022 overview](https://standards.ieee.org/ieee/42010/6846/) | Distinguish architecture from its description; the standard overview does not prescribe a recording format. Our Markdown organisation and managed identities are local choices. |
-| [SEI Views and Beyond](https://www.sei.cmu.edu/library/views-and-beyond-collection/) | Select useful views for readers and maintain information that applies across views. Our root and managed-view model tailors this principle. |
+| [ISO/IEC/IEEE 42010-2022 overview](https://standards.ieee.org/ieee/42010/6846/) | Distinguish architecture from its description; a viewpoint frames stakeholder concerns and the kinds of model that address them. The standard overview does not prescribe a recording format. Our Markdown organisation and managed identities are local choices, and a view lists the viewpoints it claims rather than adhering to exactly one. |
+| [SEI Views and Beyond](https://www.sei.cmu.edu/library/views-and-beyond-collection/) | Select useful views for readers, combine views whose concerns are tightly coupled, and keep navigation and cross-view information outside the views themselves. Our root and managed-view model tailors this principle. |
+| Rozanski and Woods, [*Software Systems Architecture*](https://btabok.iasaglobal.org/views-and-viewpoints-2/ssa-views-viewpoints-and-perspectives/) | A catalogue of viewpoints defining each one's concerns and models, with cross-cutting qualities handled as perspectives across views. We define three viewpoints rather than six and leave perspectives to the root's quality section. |
+| Kruchten, [“The 4+1 View Model of Architecture”](https://en.wikipedia.org/wiki/4%2B1_architectural_view_model) | Scenarios illustrate and validate the other views rather than forming a separate subject. Locally, runtime scenarios are chosen for the mechanism they expose. |
 | C4 [notation](https://c4model.com/diagrams/notation), [system context](https://c4model.com/diagrams/system-context), [review checklist](https://c4model.com/diagrams/checklist), and [scaling guidance](https://c4model.com/faq#does-the-c4-model-scale) | Make abstractions, responsibilities, and relationships understandable; keep context black-box and split large diagrams around a specific focus. C4 generally favours explicit relationship descriptions. Locally, relationships that differ remain explicit, while repeated visually identical edges may declare their shared meaning once to avoid redundant visual noise. This is an intentional adaptation, not a claim of C4 conformance. |
 | arc42 [building blocks](https://docs.arc42.org/section-5/), [runtime scenarios](https://docs.arc42.org/section-6/), and [quality](https://docs.arc42.org/section-10/) | Use selective refinement, useful responsibility descriptions, representative scenarios, and concrete quality responses. We do not mandate arc42's headings or present unmeasured quality goals as implemented guarantees. |
 | [Google technical-writing illustration guidance](https://developers.google.com/tech-writing/two/illustrations) | Write the takeaway before drawing, keep one diagram explainable in roughly one paragraph or no more than about five short bullets, reveal complexity progressively, and iterate after rendering. The paragraph-or-five-bullets measure is a review warning, not a universal limit. |

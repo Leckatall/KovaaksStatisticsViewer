@@ -14,10 +14,11 @@ A managed view starts with exactly:
 ---
 id: live-ingestion
 name: Live ingestion
+viewpoints: [runtime, information]
 ---
 ```
 
-`id` precedes `name`, and no other fields are allowed. The ID is stable lowercase kebab-case, cannot begin with `fact-`, and does not change when the filename, path, title, or display name changes. The first level-one heading equals `name`. An ID change is an explicit migration. Views may be nested anywhere below the views directory and carry no stored parent, child, ownership, or inclusion metadata.
+The fields are `id`, `name`, and `viewpoints`, in that order, and no other fields are allowed. The ID is stable lowercase kebab-case, cannot begin with `fact-`, and does not change when the filename, path, title, or display name changes. The first level-one heading equals `name`. An ID change is an explicit migration. `viewpoints` is a non-empty list of distinct values from `structural`, `runtime`, and `information`, defined in [view style](style/views.md#viewpoints); validation checks the values, while whether the view answers those viewpoints remains review judgement. Views may be nested anywhere below the views directory, and their paths carry no meaning: views carry no stored parent, child, ownership, or inclusion metadata, and their directories do not classify them.
 
 ## Managed references
 

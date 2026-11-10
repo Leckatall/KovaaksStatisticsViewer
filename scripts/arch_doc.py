@@ -87,6 +87,10 @@ class RepositorySnapshot:
 
 
 _VIEW_ID = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")
+_VIEW_FRONTMATTER_KEYS = ("id", "name", "viewpoints")
+# The closed set defined by docs/conventions/architecture-description/style/views.md; change both together.
+VIEWPOINTS = ("structural", "runtime", "information")
+_VIEW_KEY_ORDER_MESSAGE = "Invalid view frontmatter key order: expected id, name, then viewpoints."
 _REFERENCE_DEFINITION = re.compile(
     r"\[([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\]:[ \t]+(\S(?:.*\S)?)\Z"
 )
@@ -142,20 +146,24 @@ def _parse_view_frontmatter(text: str) -> tuple[str, str, str] | None:
     raw, body = extracted
 
     raw_keys = re.findall(r"(?m)^([A-Za-z][A-Za-z0-9_-]*):", raw)
-    if raw_keys != ["id", "name"]:
-        expected_keys = ("id", "name")
-        for index, line in enumerate(raw.splitlines(), start=2):
+    if raw_keys != list(_VIEW_FRONTMATTER_KEYS):
+        key_index = 0
+        for line_number, line in enumerate(raw.splitlines(), start=2):
+            # Indented and `-` lines continue a block-style value, such as a viewpoints list.
+            if line[:1] in (" ", "\t", "-"):
+                continue
             key = re.match(r"([A-Za-z][A-Za-z0-9_-]*):", line)
-            if key is None or index - 2 >= len(expected_keys) or key.group(1) != expected_keys[index - 2]:
-                raise _validation_error("Invalid view frontmatter key order: expected id then name.", index)
-        raise _validation_error("Invalid view frontmatter key order: expected id then name.", 1)
+            if key is None or key_index >= len(_VIEW_FRONTMATTER_KEYS) or key.group(1) != _VIEW_FRONTMATTER_KEYS[key_index]:
+                raise _validation_error(_VIEW_KEY_ORDER_MESSAGE, line_number)
+            key_index += 1
+        raise _validation_error(_VIEW_KEY_ORDER_MESSAGE, 1)
     try:
         values = yaml.safe_load(raw)
     except yaml.YAMLError as error:
         mark = getattr(error, "problem_mark", None)
         raise _validation_error(f"Invalid view frontmatter: {error}", getattr(mark, "line", -1) + 2) from error
-    if not isinstance(values, dict) or list(values) != ["id", "name"]:
-        raise _validation_error("Invalid view frontmatter key order: expected id then name.", 1)
+    if not isinstance(values, dict) or list(values) != list(_VIEW_FRONTMATTER_KEYS):
+        raise _validation_error(_VIEW_KEY_ORDER_MESSAGE, 1)
 
     view_id = values["id"]
     name = values["name"]
@@ -165,7 +173,22 @@ def _parse_view_frontmatter(text: str) -> tuple[str, str, str] | None:
         raise _validation_error("Invalid view name.", _frontmatter_value_line(raw, "name"))
     if not _VIEW_ID.fullmatch(view_id) or view_id.startswith("fact-"):
         raise _validation_error("Invalid view ID.", _frontmatter_value_line(raw, "id"))
+    if not _valid_viewpoints(values["viewpoints"]):
+        raise _validation_error(_invalid_viewpoints_message(), _frontmatter_value_line(raw, "viewpoints"))
     return view_id, name, body
+
+
+def _valid_viewpoints(viewpoints: object) -> bool:
+    return (
+        isinstance(viewpoints, list)
+        and bool(viewpoints)
+        and all(isinstance(viewpoint, str) and viewpoint in VIEWPOINTS for viewpoint in viewpoints)
+        and len(set(viewpoints)) == len(viewpoints)
+    )
+
+
+def _invalid_viewpoints_message() -> str:
+    return f"Invalid view viewpoints: expected a non-empty list of distinct values from {', '.join(VIEWPOINTS)}."
 
 
 def _first_level_one_heading(text: str) -> str | None:
@@ -1052,6 +1075,8 @@ def handle_view_add(args: argparse.Namespace, root: Path) -> int:
         raise _mutation_refused(f"invalid view ID: {args.id}")
     if not args.name.strip() or "\n" in args.name or "\r" in args.name:
         raise _mutation_refused("invalid view name")
+    if not _valid_viewpoints(args.viewpoint):
+        raise _mutation_refused(_invalid_viewpoints_message())
     if args.id in snapshot.views_by_id or any(
         problem.message == f"Duplicate managed view ID '{args.id}'." for problem in snapshot.problems
     ):
@@ -1067,7 +1092,7 @@ def handle_view_add(args: argparse.Namespace, root: Path) -> int:
         registration = _resolve_view(snapshot, args.register_in)
     assert registration is not None
 
-    frontmatter = f"---\nid: {args.id}\nname: {args.name}\n---\n\n"
+    frontmatter = f"---\nid: {args.id}\nname: {args.name}\nviewpoints: [{', '.join(args.viewpoint)}]\n---\n\n"
     draft_payload = f"{frontmatter}{draft.text}"
     definitions = dict(registration.registry.definitions) if registration.registry is not None else {}
     definitions[args.id] = Path(os.path.relpath(draft_path, registration.path.parent)).as_posix()
@@ -1475,6 +1500,7 @@ def build_parser() -> ArgumentParser:
     add.add_argument("draft_path")
     add.add_argument("--id", required=True)
     add.add_argument("--name", required=True)
+    add.add_argument("--viewpoint", action="append", required=True, choices=VIEWPOINTS)
     add.add_argument("--register-in", required=True)
     migrate = add_handler(view_commands.add_parser("migrate-id"), handle_view_migrate_id)
     migrate.add_argument("target")
