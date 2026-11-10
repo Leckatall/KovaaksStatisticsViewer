@@ -1,12 +1,12 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import KovaaksStatsViewer
 import "GraphCatalog.js" as GraphCatalog
 
-// A graph's camera and its export dropdown. The camera copies at the default resolution; the dropdown
-// opens the preview. `canvas` is null for targets drawn without one (the benchmark table).
-RowLayout {
+// A graph's capture actions: Copy and Save use the default capture options, Preview opens the
+// adjustable export preview. `canvas` is null for targets drawn without one (the benchmark table).
+Control {
     id: root
 
     property var captureVm: null
@@ -16,55 +16,63 @@ RowLayout {
                                                                      : GraphCatalog.nameOf(root.targetKey)
     property var canvas: null
 
-    readonly property alias menu: exportMenu
-
     visible: root.captureVm !== null
-    spacing: 0
+    padding: 3
+    Accessible.role: Accessible.ToolBar
+    Accessible.name: qsTr("%1 image capture").arg(root.targetName)
 
-    ChromeIconButton {
-        id: camera
-        objectName: "captureCopy_" + root.targetKey
-        icon.source: "../icons/camera.svg"
-        padding: 4
-        focusPolicy: Qt.StrongFocus
-        text: qsTr("Copy %1 image to clipboard").arg(root.targetName)
-        Accessible.name: text
-        ToolTip.text: text
-        ToolTip.visible: pointerHovered && ToolTip.text !== ""
-        onClicked: root.captureVm.quickCopy(root.targetKey, root.canvas)
+    background: Rectangle {
+        radius: 4
+        color: "transparent"
+        border.color: Qt.alpha(root.palette.buttonText, 0.2)
     }
 
-    ChromeIconButton {
-        id: dropdown
-        objectName: "captureMenu_" + root.targetKey
-        icon.source: "../icons/chevron-down.svg"
-        icon.width: 12
-        icon.height: 12
+    component CaptureButton: ChromeIconButton {
+        id: button
+
         padding: 2
-        active: exportMenu.opened
         focusPolicy: Qt.StrongFocus
-        text: qsTr("%1 export options").arg(root.targetName)
-        Accessible.name: text
-        ToolTip.text: text
-        ToolTip.visible: pointerHovered && ToolTip.text !== "" && !exportMenu.opened
-        onClicked: exportMenu.opened ? exportMenu.close() : exportMenu.open()
+        Accessible.name: button.text
+        ToolTip.text: button.text
+    }
 
-        Menu {
-            id: exportMenu
-            y: dropdown.height
+    component Divider: Rectangle {
+        anchors.verticalCenter: parent.verticalCenter
+        width: 1
+        height: 14
+        color: Qt.alpha(root.palette.buttonText, 0.2)
+    }
 
-            MenuItem {
-                objectName: "captureExport_" + root.targetKey
-                text: qsTr("Export image…")
-                onTriggered: {
-                    root.openedPreview = true
-                    root.captureVm.openPreview(root.targetKey, root.canvas)
-                }
+    contentItem: Row {
+        spacing: 2
+
+        CaptureButton {
+            objectName: "captureCopy_" + root.targetKey
+            icon.source: "../icons/copy.svg"
+            text: qsTr("Copy %1 image to clipboard").arg(root.targetName)
+            onClicked: root.captureVm.quickCopy(root.targetKey, root.canvas)
+        }
+        Divider {}
+        CaptureButton {
+            objectName: "captureSave_" + root.targetKey
+            icon.source: "../icons/save.svg"
+            text: qsTr("Save %1 image…").arg(root.targetName)
+            onClicked: root.captureVm.quickSave(root.targetKey, root.canvas)
+        }
+        Divider {}
+        CaptureButton {
+            id: preview
+            objectName: "capturePreview_" + root.targetKey
+            icon.source: "../icons/eye.svg"
+            text: qsTr("Preview %1 image…").arg(root.targetName)
+            onClicked: {
+                root.openedPreview = true
+                root.captureVm.openPreview(root.targetKey, root.canvas)
             }
         }
     }
 
-    // Only the instance that opened the preview takes focus back; other graphs' cameras stay put.
+    // Only the instance that opened the preview takes focus back; other graphs' buttons stay put.
     property bool openedPreview: false
 
     Connections {
@@ -74,7 +82,7 @@ RowLayout {
         function onPreviewClosed() {
             if (!root.openedPreview) return
             root.openedPreview = false
-            dropdown.forceActiveFocus(Qt.TabFocusReason)
+            preview.forceActiveFocus(Qt.TabFocusReason)
         }
     }
 }

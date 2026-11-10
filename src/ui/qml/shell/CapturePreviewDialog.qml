@@ -2,8 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs
-import QtCore
 import KovaaksStatsViewer
 
 ApplicationWindow {
@@ -45,9 +43,8 @@ ApplicationWindow {
 
     function startExport() {
         if (!root.captureVm.beginExport()) return
-        saveDialog.currentFile = saveDialog.currentFolder + "/" + root.captureVm.suggestedFileName
         root.savePickerOpen = true
-        saveDialog.open()
+        saveDialog.openFor(root.captureVm.suggestedFileName)
     }
 
     // Window-wide so Escape works from the footer buttons, which keep focus after Copy.
@@ -57,13 +54,9 @@ ApplicationWindow {
         onActivated: root.captureVm.closePreview()
     }
 
-    FileDialog {
+    CaptureFileDialog {
         id: saveDialog
         objectName: "captureSaveDialog"
-        fileMode: FileDialog.SaveFile
-        nameFilters: [qsTr("PNG image (*.png)")]
-        defaultSuffix: "png"
-        currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
         onAccepted: {
             root.savePickerOpen = false
             root.captureVm.confirmExport(saveDialog.selectedFile)

@@ -33,6 +33,10 @@ namespace ksv::ui {
                            CaptureFeedback *feedback, QObject *parent = nullptr);
 
         void quickCopy(CaptureTarget target, const CaptureSource &source);
+        // Snapshots now and asks for a destination; renders at the defaults only once one is confirmed.
+        void quickSave(CaptureTarget target, const CaptureSource &source);
+        void confirmQuickSave(std::filesystem::path destination);
+        void cancelQuickSave();
         void openPreview(CaptureTarget target, const CaptureSource &source);
         void closePreview();
 
@@ -66,12 +70,19 @@ namespace ksv::ui {
         [[nodiscard]] bool canOutput() const;
         [[nodiscard]] bool optionsLocked() const;
         [[nodiscard]] QString suggestedFileName() const;
+        [[nodiscard]] bool quickSavePending() const;
 
     signals:
         void previewChanged();
         void previewClosed();
+        void saveDestinationRequested(const QString &suggestedFileName);
 
     private:
+        struct PendingSave {
+            CaptureTarget target = CaptureTarget::Run;
+            std::shared_ptr<const CaptureContent> content;
+        };
+
         struct PreviewSession {
             quint64 id = 0;
             CaptureTarget target = CaptureTarget::Run;
@@ -121,6 +132,7 @@ namespace ksv::ui {
         // Held here and not on a session, because a save outlives its session.
         std::optional<std::uint64_t> m_admittedOperation;
         std::optional<PreviewSession> m_session;
+        std::optional<PendingSave> m_pendingSave;
         quint64 m_lastSessionId = 0;
     };
 }

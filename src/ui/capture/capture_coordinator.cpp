@@ -42,6 +42,22 @@ namespace ksv::ui {
         QString malformedDimensionText() {
             return CaptureCoordinator::tr("Enter a positive whole number of pixels");
         }
+
+        QString unusableDestinationText(const QString &target) {
+            return CaptureCoordinator::tr("Could not export %1: the chosen location is not a usable file").arg(target);
+        }
+
+        QString fileNameFor(const CaptureContent &content, CaptureTarget target) {
+            QString name = std::holds_alternative<GraphCaptureSnapshot>(content)
+                               ? std::get<GraphCaptureSnapshot>(content).context.title
+                               : std::get<TableCaptureSnapshot>(content).benchmarkName;
+            static const QRegularExpression unsafe(QStringLiteral(R"([\\/:*?"<>|\x00-\x1f])"));
+            name.replace(unsafe, QStringLiteral("-"));
+            name = name.trimmed();
+            while (name.endsWith(QLatin1Char('.'))) name.chop(1);
+            if (name.isEmpty()) name = captureTargetName(target);
+            return name + QStringLiteral(".png");
+        }
     }
 
     CaptureCoordinator::CaptureCoordinator(std::shared_ptr<application::IImageOutputUseCase> output,
@@ -55,7 +71,7 @@ namespace ksv::ui {
 
     void CaptureCoordinator::quickCopy(CaptureTarget target, const CaptureSource &source) {
         if (m_preparing == target) return;
-        if (m_preparing || m_session || m_output->activeOutput()) {
+        if (m_preparing || m_session || m_pendingSave || m_output->activeOutput()) {
             showBusyNotice();
             return;
         }
@@ -91,9 +107,69 @@ namespace ksv::ui {
         });
     }
 
+    void CaptureCoordinator::quickSave(CaptureTarget target, const CaptureSource &source) {
+        if (m_preparing || m_session || m_pendingSave || m_output->activeOutput()) {
+            showBusyNotice();
+            return;
+        }
+
+        std::optional<CaptureContent> content = source();
+        if (!content) {
+            showNoContent(target);
+            return;
+        }
+
+        m_pendingSave = PendingSave{target, std::make_shared<const CaptureContent>(std::move(*content))};
+        emit saveDestinationRequested(fileNameFor(*m_pendingSave->content, target));
+    }
+
+    void CaptureCoordinator::confirmQuickSave(std::filesystem::path destination) {
+        if (!m_pendingSave) return;
+        const PendingSave pending = std::move(*m_pendingSave);
+        m_pendingSave.reset();
+        if (destination.empty()) {
+            m_feedback->showFailure(unusableDestinationText(captureTargetName(pending.target)));
+            return;
+        }
+
+        m_preparing = pending.target;
+        CaptureRenderRequest request;
+        request.content = pending.content;
+        m_queue.submit(std::move(request), this,
+                       [this, target = pending.target, destination = std::move(destination)](
+                               CaptureRenderRequest, CaptureRenderOutcome outcome) mutable {
+                           auto *rendered = std::get_if<CaptureRendered>(&outcome);
+                           if (!rendered) {
+                               m_preparing.reset();
+                               const auto *rejected = std::get_if<CaptureRejected>(&outcome);
+                               m_feedback->showFailure(
+                                       tr("Could not export %1: %2")
+                                               .arg(captureTargetName(target),
+                                                    rejected ? captureRejectionText(rejected->rejection)
+                                                             : tr("the image could not be rendered")));
+                               return;
+                           }
+                           const application::ImageOutputAdmission admission =
+                                   m_output->savePng(std::move(rendered->raster), std::move(destination),
+                                                     captureTargetName(target).toStdString());
+                           if (admission.accepted) {
+                               m_admittedOperation = admission.operationId;
+                           } else {
+                               m_preparing.reset();
+                               showBusyNotice();
+                           }
+                       });
+    }
+
+    void CaptureCoordinator::cancelQuickSave() {
+        m_pendingSave.reset();
+    }
+
     void CaptureCoordinator::showBusyNotice() {
         const std::optional<application::ImageOutputKind> active = m_output->activeOutput();
-        if (active == application::ImageOutputKind::SavePng) {
+        if (m_pendingSave) {
+            m_feedback->showNotice(tr("Choose where to save the other image first"));
+        } else if (active == application::ImageOutputKind::SavePng) {
             m_feedback->showNotice(tr("Another image is still saving"));
         } else if (m_session && !active) {
             m_feedback->showNotice(tr("Close the image preview first"));
@@ -109,7 +185,7 @@ namespace ksv::ui {
     }
 
     void CaptureCoordinator::openPreview(CaptureTarget target, const CaptureSource &source) {
-        if (m_preparing) {
+        if (m_preparing || m_pendingSave) {
             showBusyNotice();
             return;
         }
@@ -265,7 +341,7 @@ namespace ksv::ui {
         const QString target = captureTargetName(m_session->target);
         if (destination.empty()) {
             m_session->pinned.reset();
-            m_feedback->showFailure(tr("Could not export %1: the chosen location is not a usable file").arg(target));
+            m_feedback->showFailure(unusableDestinationText(target));
             emit previewChanged();
             return;
         }
@@ -379,18 +455,10 @@ namespace ksv::ui {
     }
 
     QString CaptureCoordinator::suggestedFileName() const {
-        if (!m_session) return {};
-        const CaptureContent &content = *m_session->content;
-        QString name = std::holds_alternative<GraphCaptureSnapshot>(content)
-                           ? std::get<GraphCaptureSnapshot>(content).context.title
-                           : std::get<TableCaptureSnapshot>(content).benchmarkName;
-        static const QRegularExpression unsafe(QStringLiteral(R"([\\/:*?"<>|\x00-\x1f])"));
-        name.replace(unsafe, QStringLiteral("-"));
-        name = name.trimmed();
-        while (name.endsWith(QLatin1Char('.'))) name.chop(1);
-        if (name.isEmpty()) name = captureTargetName(m_session->target);
-        return name + QStringLiteral(".png");
+        return m_session ? fileNameFor(*m_session->content, m_session->target) : QString();
     }
+
+    bool CaptureCoordinator::quickSavePending() const { return m_pendingSave.has_value(); }
 
     void CaptureCoordinator::handleOutputCompleted(const application::ImageOutputResult &result) {
         if (result.operationId != m_admittedOperation) return;

@@ -13,6 +13,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -337,8 +338,10 @@ namespace {
             }, kWaitMs);
         }
 
-        [[nodiscard]] static ui::GraphCanvas *canvasOf(const QQuickItem *camera) {
-            return qobject_cast<ui::GraphCanvas *>(camera->parentItem()->property("canvas").value<QObject *>());
+        [[nodiscard]] static ui::GraphCanvas *canvasOf(const QQuickItem *button) {
+            const QQuickItem *actions = button->parentItem();
+            while (actions && actions->metaObject()->indexOfProperty("canvas") < 0) actions = actions->parentItem();
+            return actions ? qobject_cast<ui::GraphCanvas *>(actions->property("canvas").value<QObject *>()) : nullptr;
         }
 
         [[nodiscard]] ui::GraphCaptureContext contextFor(const ui::CaptureTarget target) const {
@@ -580,6 +583,35 @@ namespace {
         EXPECT_EQ(QSize(copied.front().width, copied.front().height), reported);
         EXPECT_EQ(QSize(saved.front().width, saved.front().height), reported);
         EXPECT_TRUE(copied.front() == saved.front());
+    }
+
+    TEST_F(CaptureFlow, TheToolbarSaveWritesTheDefaultImageWithoutAPreview) {
+        ASSERT_NO_FATAL_FAILURE(prepareAllTargets());
+        ASSERT_NO_FATAL_FAILURE(showWorkspace(0));
+        QQuickItem *save = find("captureSave_run");
+        ASSERT_NE(save, nullptr);
+        const auto expected = expectedPixels(kKeys[0], save, 200);
+        ASSERT_TRUE(expected.has_value());
+        QSignalSpy requested(captureVm(), &presentation::CaptureViewModel::saveDestinationRequested);
+
+        ASSERT_NO_FATAL_FAILURE(click(save));
+        ASSERT_EQ(requested.count(), 1);
+        EXPECT_FALSE(captureVm()->previewOpen());
+
+        QTemporaryDir out;
+        ASSERT_TRUE(out.isValid());
+        captureVm()->confirmQuickSave(QUrl::fromLocalFile(QDir(out.path()).absoluteFilePath("quick.png")));
+        if (QObject *picker = window()->findChild<QObject *>("captureQuickSaveDialog"))
+            QMetaObject::invokeMethod(picker, "close");
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            return env.pngWriter->writeCount() == 1 && captureVm()->feedbackKind() == "success";
+        }, kWaitMs));
+
+        const auto saved = pngTap.recorded();
+        ASSERT_EQ(saved.size(), 1U);
+        EXPECT_EQ(QSize(saved.front().width, saved.front().height), *expected);
+        EXPECT_EQ(env.clipboardWriter->publishCount(), 0U);
+        EXPECT_TRUE(previewWindow() == nullptr || !previewWindow()->isVisible());
     }
 
     TEST_F(CaptureFlow, TheSummaryOptionKeepsTheTitleAndHeadings) {

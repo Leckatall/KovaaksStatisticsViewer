@@ -15,6 +15,7 @@ TestCase {
     Component { id: stubComponent; CaptureVmStub {} }
     Component { id: canvasComponent; Item {} }
     Component { id: actionsComponent; CaptureActions {} }
+    Component { id: fieldComponent; TextField {} }
 
     function find(root, name) { return ItemLookup.findByObjectName(root, name) }
 
@@ -34,12 +35,16 @@ TestCase {
         return item
     }
 
+    function buttons(actions) {
+        return ["captureCopy_run", "captureSave_run", "capturePreview_run"].map(name => required(actions, name))
+    }
+
     function test_loads() {
         const {actions} = makeActions()
         verify(actions !== null)
     }
 
-    function test_clickingTheCameraCopiesWithoutTheMenu() {
+    function test_clickingCopyCopiesWithoutThePreview() {
         const {vm, canvas, actions} = makeActions()
         mouseClick(required(actions, "captureCopy_run"))
         const copies = vm.callsNamed("quickCopy")
@@ -47,65 +52,84 @@ TestCase {
         compare(copies[0].args[0], "run")
         verify(copies[0].args[1] === canvas)
         compare(vm.callsNamed("openPreview").length, 0)
-        compare(actions.menu.opened, false)
+        compare(vm.callsNamed("quickSave").length, 0)
     }
 
-    function test_theMenuOpensThePreview() {
+    function test_clickingSaveSavesWithoutThePreview() {
         const {vm, canvas, actions} = makeActions()
-        const dropdown = required(actions, "captureMenu_run")
-        dropdown.forceActiveFocus(Qt.TabFocusReason)
-        keyClick(Qt.Key_Space)
-        tryVerify(() => actions.menu.opened, 2000, "the dropdown never opened")
-        compare(actions.menu.itemAt(0).objectName, "captureExport_run")
-        keyClick(Qt.Key_Down)
-        keyClick(Qt.Key_Return)
+        mouseClick(required(actions, "captureSave_run"))
+        const saves = vm.callsNamed("quickSave")
+        compare(saves.length, 1)
+        compare(saves[0].args[0], "run")
+        verify(saves[0].args[1] === canvas)
+        compare(vm.callsNamed("openPreview").length, 0)
+        compare(vm.callsNamed("quickCopy").length, 0)
+    }
+
+    function test_clickingPreviewOpensThePreview() {
+        const {vm, canvas, actions} = makeActions()
+        mouseClick(required(actions, "capturePreview_run"))
         const opened = vm.callsNamed("openPreview")
         compare(opened.length, 1)
         compare(opened[0].args[0], "run")
         verify(opened[0].args[1] === canvas)
         compare(vm.callsNamed("quickCopy").length, 0)
+        compare(vm.callsNamed("quickSave").length, 0)
     }
 
-    function test_namesIdentifyCopyingAndTheTarget() {
+    function test_namesIdentifyTheActionAndTheTarget() {
         const {actions} = makeActions()
-        const camera = required(actions, "captureCopy_run")
-        const dropdown = required(actions, "captureMenu_run")
-        for (const text of [camera.Accessible.name, camera.ToolTip.text]) {
-            verify(/copy/i.test(text), "no copy verb in: " + text)
-            verify(text.indexOf("Run graph") >= 0, "no target in: " + text)
+        const [copy, save, preview] = buttons(actions)
+        const verbs = [[copy, /copy/i], [save, /save/i], [preview, /preview/i]]
+        for (const [button, verb] of verbs) {
+            for (const text of [button.Accessible.name, button.ToolTip.text]) {
+                verify(verb.test(text), "no " + verb + " in: " + text)
+                verify(text.indexOf("Run graph") >= 0, "no target in: " + text)
+            }
         }
-        verify(dropdown.Accessible.name.indexOf("Run graph") >= 0)
+        verify(actions.Accessible.name.indexOf("Run graph") >= 0,
+               "toolbar name does not identify the target: " + actions.Accessible.name)
     }
 
-    function test_keyboardActivatesTheCamera() {
+    function test_theActionsAreEquallySized() {
+        const {actions} = makeActions()
+        const [copy, save, preview] = buttons(actions)
+        for (const button of [save, preview]) {
+            compare(button.width, copy.width)
+            compare(button.height, copy.height)
+        }
+        compare(copy.width, copy.height)
+    }
+
+    function test_keyboardReachesEachActionInOrderAndActivatesIt() {
         const {vm, actions} = makeActions()
-        const camera = required(actions, "captureCopy_run")
-        camera.forceActiveFocus(Qt.TabFocusReason)
-        compare(camera.visualFocus, true)
+        const [copy, save, preview] = buttons(actions)
+        copy.forceActiveFocus(Qt.TabFocusReason)
+        compare(copy.visualFocus, true)
         keyClick(Qt.Key_Space)
         compare(vm.callsNamed("quickCopy").length, 1)
-    }
-
-    Component { id: fieldComponent; TextField {} }
-
-    function openPreviewFrom(actions, key) {
-        required(actions, "captureMenu_" + key).forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Tab)
+        verify(save.activeFocus, "Tab from Copy did not reach Save")
+        compare(save.visualFocus, true)
         keyClick(Qt.Key_Space)
-        tryVerify(() => actions.menu.opened, 2000, "the dropdown never opened")
-        keyClick(Qt.Key_Down)
-        keyClick(Qt.Key_Return)
+        compare(vm.callsNamed("quickSave").length, 1)
+        keyClick(Qt.Key_Tab)
+        verify(preview.activeFocus, "Tab from Save did not reach Preview")
+        keyClick(Qt.Key_Space)
+        compare(vm.callsNamed("openPreview").length, 1)
     }
 
-    function test_focusReturnsToTheOriginOnClose() {
+    function test_focusReturnsToPreviewOnClose() {
         const {vm, actions} = makeActions()
         const elsewhere = createTemporaryObject(fieldComponent, testCase, {y: 100})
-        openPreviewFrom(actions, "run")
+        const preview = required(actions, "capturePreview_run")
+        preview.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Space)
         compare(vm.callsNamed("openPreview").length, 1)
         elsewhere.forceActiveFocus()
         verify(elsewhere.activeFocus)
         vm.previewClosed()
-        tryVerify(() => required(actions, "captureMenu_run").activeFocus, 2000,
-                  "the dropdown that opened the preview did not take focus back")
+        tryVerify(() => preview.activeFocus, 2000, "the Preview button that opened the preview did not take focus back")
         compare(required(actions, "captureCopy_run").activeFocus, false)
     }
 
@@ -114,14 +138,14 @@ TestCase {
         const first = createTemporaryObject(actionsComponent, testCase,
             {captureVm: vm, targetKey: "run", targetName: "Run graph"})
         const second = createTemporaryObject(actionsComponent, testCase,
-            {captureVm: vm, targetKey: "dailyPlaytime", targetName: "Daily playtime", y: 50})
-        const elsewhere = createTemporaryObject(fieldComponent, testCase, {y: 100})
-        openPreviewFrom(first, "run")
+            {captureVm: vm, targetKey: "dailyPlaytime", targetName: "Daily playtime", y: 60})
+        const elsewhere = createTemporaryObject(fieldComponent, testCase, {y: 120})
+        mouseClick(required(first, "capturePreview_run"))
         elsewhere.forceActiveFocus()
         vm.previewClosed()
         wait(100)
-        compare(required(second, "captureCopy_dailyPlaytime").activeFocus, false)
-        compare(required(second, "captureMenu_dailyPlaytime").activeFocus, false)
+        for (const name of ["captureCopy_dailyPlaytime", "captureSave_dailyPlaytime", "capturePreview_dailyPlaytime"])
+            compare(required(second, name).activeFocus, false)
     }
 
     function test_hiddenWithoutAViewModel() {

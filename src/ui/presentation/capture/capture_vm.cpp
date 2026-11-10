@@ -81,6 +81,8 @@ namespace ksv::presentation {
             emit feedbackTextChanged();
         });
         connect(m_coordinator, &ui::CaptureCoordinator::previewClosed, this, &CaptureViewModel::previewClosed);
+        connect(m_coordinator, &ui::CaptureCoordinator::saveDestinationRequested, this,
+                &CaptureViewModel::saveDestinationRequested);
         connect(m_coordinator, &ui::CaptureCoordinator::previewChanged, this, [this] {
             emit previewOpenChanged();
             emit previewStateChanged();
@@ -187,6 +189,21 @@ namespace ksv::presentation {
         }
         m_coordinator->quickCopy(resolved->target, resolved->source);
     }
+
+    void CaptureViewModel::quickSave(const QString &key, QObject *canvas) {
+        const auto resolved = resolve(key, canvas);
+        if (!resolved) {
+            qWarning() << "Unknown capture key" << key;
+            return;
+        }
+        m_coordinator->quickSave(resolved->target, resolved->source);
+    }
+
+    void CaptureViewModel::confirmQuickSave(const QUrl &destination) {
+        m_coordinator->confirmQuickSave(std::filesystem::path(destination.toLocalFile().toStdU16String()));
+    }
+
+    void CaptureViewModel::cancelQuickSave() { m_coordinator->cancelQuickSave(); }
 
     void CaptureViewModel::openPreview(const QString &key, QObject *canvas) {
         const auto resolved = resolve(key, canvas);

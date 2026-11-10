@@ -89,9 +89,17 @@ ApplicationWindow {
         workspace.forceActiveFocus()
     }
 
+    CaptureFileDialog {
+        id: quickSaveDialog
+        objectName: "captureQuickSaveDialog"
+        onAccepted: root.captureVm.confirmQuickSave(quickSaveDialog.selectedFile)
+        onRejected: root.captureVm.cancelQuickSave()
+    }
+
     Connections {
         target: root.captureVm
         function onPreviewClosed() { Qt.callLater(root.restoreWorkspaceFocus) }
+        function onSaveDestinationRequested(suggestedFileName: string) { quickSaveDialog.openFor(suggestedFileName) }
     }
 
     AboutDialog {

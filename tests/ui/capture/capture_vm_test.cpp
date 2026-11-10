@@ -373,4 +373,38 @@ namespace ksv::ui {
         EXPECT_EQ(fixture.vm.feedbackKind(), QStringLiteral("failure"));
         EXPECT_EQ(fixture.png->writeCount(), 0u);
     }
+
+    TEST(CaptureViewModel, AQuickSaveAsksQmlForADestinationAndSavesToItsLocalPath) {
+        QTemporaryDir directory;
+        ASSERT_TRUE(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("my capture.png"));
+        BenchmarkTrackingViewModel tracking{trackableUseCase()};
+        VmFixture fixture({.tracking = &tracking}, realRender());
+        QSignalSpy requested(&fixture.vm, &CaptureViewModel::saveDestinationRequested);
+
+        fixture.vm.quickSave(QStringLiteral("benchmarkTable"), nullptr);
+
+        ASSERT_EQ(requested.count(), 1);
+        const QString name = requested.front().front().toString();
+        EXPECT_TRUE(name.endsWith(QStringLiteral(".png")));
+        EXPECT_FALSE(fixture.vm.previewOpen());
+
+        fixture.vm.confirmQuickSave(QUrl::fromLocalFile(path));
+
+        ASSERT_TRUE(drainUntil([&] { return fixture.png->writeCount() == 1; }));
+        EXPECT_EQ(fixture.png->seen().front().destination, std::filesystem::path(path.toStdWString()));
+    }
+
+    TEST(CaptureViewModel, AQuickSaveWithAnUnknownKeyAsksForNothing) {
+        RecordingRender render;
+        VmFixture fixture({}, render.function());
+        const WarningCapture warnings;
+        QSignalSpy requested(&fixture.vm, &CaptureViewModel::saveDestinationRequested);
+
+        fixture.vm.quickSave(QStringLiteral("nonsense"), nullptr);
+
+        EXPECT_GE(warnings.count(), 1);
+        EXPECT_EQ(requested.count(), 0);
+        EXPECT_EQ(fixture.vm.feedbackKind(), QStringLiteral("none"));
+    }
 }

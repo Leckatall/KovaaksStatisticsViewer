@@ -72,6 +72,7 @@ qt_add_qml_module(ksv_ui
             qml/shell/ProfileStatusBar.qml
             qml/shell/CaptureStatusStrip.qml
             qml/shell/CapturePreviewDialog.qml
+            qml/shell/CaptureFileDialog.qml
             qml/shell/CaptureActionButton.qml
             qml/graph/CaptureActions.qml
             qml/benchmark/BenchmarkManagerDialog.qml
@@ -116,7 +117,6 @@ qt_add_qml_module(ksv_ui
             qml/icons/settings.svg
             qml/icons/x.svg
             qml/icons/check.svg
-            qml/icons/camera.svg
             qml/icons/chevron-down.svg
             qml/icons/chevron-right.svg
             qml/icons/circle-alert.svg

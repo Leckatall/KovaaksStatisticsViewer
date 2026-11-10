@@ -974,5 +974,139 @@ namespace ksv::ui {
             EXPECT_EQ(harness.png->writeCount(), 0u);
             EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::None);
         }
+
+        // ── Quick save ──────────────────────────────────────────────────────
+
+        TEST(CaptureCoordinator, QuickSaveAsksForADestinationBeforeRendering) {
+            RecordingRender render;
+            Harness harness(render.function());
+            QSignalSpy requested(&harness.coordinator, &CaptureCoordinator::saveDestinationRequested);
+            int sourceCalls = 0;
+
+            harness.coordinator.quickSave(CaptureTarget::Run, countedSource(sourceCalls, graphSnapshot()));
+            QTest::qWait(kQuietWindowMs);
+
+            ASSERT_EQ(requested.count(), 1);
+            EXPECT_EQ(requested.front().front().toString(), QStringLiteral("Pasu Track Invincible.png"));
+            EXPECT_EQ(sourceCalls, 1);
+            EXPECT_TRUE(render.requests().empty());
+            EXPECT_TRUE(harness.coordinator.quickSavePending());
+            EXPECT_FALSE(harness.coordinator.previewOpen());
+        }
+
+        TEST(CaptureCoordinator, ConfirmingAQuickSaveWritesTheDefaultImage) {
+            const GraphCaptureSnapshot snapshot = graphSnapshot();
+            const QSizeF reference = graphReferenceSize(snapshot, standardCaptureComposition());
+            const std::filesystem::path destination = "capture.png";
+            Harness harness(realRender());
+            int sourceCalls = 0;
+
+            harness.coordinator.quickSave(CaptureTarget::Run, countedSource(sourceCalls, snapshot));
+            harness.coordinator.confirmQuickSave(destination);
+            drainUntil([&] { return harness.feedback.kind() != CaptureFeedback::Kind::None; });
+
+            ASSERT_EQ(harness.png->writeCount(), 1u);
+            EXPECT_EQ(harness.png->seen().front().destination, destination);
+            EXPECT_EQ(harness.png->seen().front().image.width, qRound(reference.width() * 2.0));
+            EXPECT_EQ(harness.png->seen().front().image.height, qRound(reference.height() * 2.0));
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Success);
+            EXPECT_TRUE(harness.feedback.text().contains(QStringLiteral("export"), Qt::CaseInsensitive));
+            EXPECT_FALSE(harness.coordinator.quickSavePending());
+            EXPECT_EQ(harness.clipboard->publishCount(), 0u);
+        }
+
+        TEST(CaptureCoordinator, CancellingAQuickSaveRendersNothingAndReopensAdmission) {
+            RecordingRender render;
+            Harness harness(render.function());
+            int sourceCalls = 0;
+            const CaptureSource source = countedSource(sourceCalls, graphSnapshot());
+
+            harness.coordinator.quickSave(CaptureTarget::Run, source);
+            harness.coordinator.cancelQuickSave();
+            QTest::qWait(kQuietWindowMs);
+
+            EXPECT_TRUE(render.requests().empty());
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::None);
+            EXPECT_FALSE(harness.coordinator.quickSavePending());
+
+            harness.coordinator.openPreview(CaptureTarget::Run, source);
+            EXPECT_TRUE(harness.coordinator.previewOpen());
+        }
+
+        TEST(CaptureCoordinator, AnUnusableQuickSaveDestinationIsReported) {
+            RecordingRender render;
+            Harness harness(render.function());
+            int sourceCalls = 0;
+
+            harness.coordinator.quickSave(CaptureTarget::Run, countedSource(sourceCalls, graphSnapshot()));
+            harness.coordinator.confirmQuickSave({});
+            QTest::qWait(kQuietWindowMs);
+
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Failure);
+            EXPECT_TRUE(harness.feedback.text().contains(captureTargetName(CaptureTarget::Run)));
+            EXPECT_TRUE(render.requests().empty());
+            EXPECT_FALSE(harness.coordinator.quickSavePending());
+        }
+
+        TEST(CaptureCoordinator, OtherCapturesWaitForTheChosenDestination) {
+            Harness harness(failRender);
+            QSignalSpy requested(&harness.coordinator, &CaptureCoordinator::saveDestinationRequested);
+            int sourceCalls = 0;
+            const CaptureSource source = countedSource(sourceCalls, graphSnapshot());
+            harness.coordinator.quickSave(CaptureTarget::Run, source);
+
+            harness.coordinator.quickCopy(CaptureTarget::DailyPlaytime, source);
+            harness.coordinator.openPreview(CaptureTarget::Run, source);
+            harness.coordinator.quickSave(CaptureTarget::Run, source);
+
+            EXPECT_EQ(sourceCalls, 1);
+            EXPECT_EQ(requested.count(), 1);
+            EXPECT_FALSE(harness.coordinator.previewOpen());
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Notice);
+        }
+
+        TEST(CaptureCoordinator, QuickSaveIsRejectedWhileAPreviewIsOpen) {
+            RecordingRender render;
+            Harness harness(render.function());
+            QSignalSpy requested(&harness.coordinator, &CaptureCoordinator::saveDestinationRequested);
+            int sourceCalls = 0;
+            const CaptureSource source = countedSource(sourceCalls, graphSnapshot());
+            harness.coordinator.openPreview(CaptureTarget::Run, source);
+
+            harness.coordinator.quickSave(CaptureTarget::Run, source);
+
+            EXPECT_EQ(requested.count(), 0);
+            EXPECT_EQ(sourceCalls, 1);
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Notice);
+        }
+
+        TEST(CaptureCoordinator, QuickSaveIsRejectedWhileACopyPrepares) {
+            GatedRender render(realRender());
+            render.close();
+            Harness harness(render.function());
+            const auto openGate = qScopeGuard([&] { render.open(); });
+            QSignalSpy requested(&harness.coordinator, &CaptureCoordinator::saveDestinationRequested);
+            int sourceCalls = 0;
+            const CaptureSource source = countedSource(sourceCalls, graphSnapshot());
+            harness.coordinator.quickCopy(CaptureTarget::Run, source);
+
+            harness.coordinator.quickSave(CaptureTarget::Run, source);
+
+            EXPECT_EQ(requested.count(), 0);
+            EXPECT_EQ(sourceCalls, 1);
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Notice);
+        }
+
+        TEST(CaptureCoordinator, QuickSaveWithNothingToCaptureAsksForNoDestination) {
+            Harness harness(failRender);
+            QSignalSpy requested(&harness.coordinator, &CaptureCoordinator::saveDestinationRequested);
+            int sourceCalls = 0;
+
+            harness.coordinator.quickSave(CaptureTarget::Run, countedSource(sourceCalls, std::nullopt));
+
+            EXPECT_EQ(requested.count(), 0);
+            EXPECT_EQ(harness.feedback.kind(), CaptureFeedback::Kind::Failure);
+            EXPECT_FALSE(harness.coordinator.quickSavePending());
+        }
     }
 }

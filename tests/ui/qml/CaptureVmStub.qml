@@ -30,12 +30,16 @@ QtObject {
     property var calls: []
 
     signal previewClosed()
+    signal saveDestinationRequested(string suggestedFileName)
 
     function record(name, args) { calls = calls.concat([{name: name, args: args}]) }
     function callsNamed(name) { return calls.filter(c => c.name === name) }
 
     function useTheme(theme, font) { record("useTheme", [theme, font]) }
     function quickCopy(key, canvas) { record("quickCopy", [key, canvas]) }
+    function quickSave(key, canvas) { record("quickSave", [key, canvas]) }
+    function confirmQuickSave(url) { record("confirmQuickSave", [url]) }
+    function cancelQuickSave() { record("cancelQuickSave", []) }
     function openPreview(key, canvas) { record("openPreview", [key, canvas]) }
     function closePreview() { record("closePreview", []) }
     function setPercent(value) { record("setPercent", [value]) }

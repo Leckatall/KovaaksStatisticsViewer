@@ -89,6 +89,9 @@ namespace ksv::presentation {
 
         Q_INVOKABLE void useTheme(QObject *theme, const QFont &font);
         Q_INVOKABLE void quickCopy(const QString &key, QObject *canvas);
+        Q_INVOKABLE void quickSave(const QString &key, QObject *canvas);
+        Q_INVOKABLE void confirmQuickSave(const QUrl &destination);
+        Q_INVOKABLE void cancelQuickSave();
         Q_INVOKABLE void openPreview(const QString &key, QObject *canvas);
         Q_INVOKABLE void closePreview();
         Q_INVOKABLE void setPercent(int percent);
@@ -127,6 +130,7 @@ namespace ksv::presentation {
         void feedbackKindChanged();
         void feedbackTextChanged();
         void previewClosed();
+        void saveDestinationRequested(const QString &suggestedFileName);
 
     private:
         struct Resolved {
