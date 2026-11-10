@@ -39,6 +39,16 @@ RUNNER_KEYS = (
 )
 KNOWN_KEYS = (FLAVOUR_KEY,) + TOOLCHAIN_KEYS + RUNNER_KEYS
 LOCAL_ENV_NAME = "toolchain.local.env"
+
+
+def local_flavour_env_name(flavour: str) -> str:
+    return f"toolchain.local.{flavour}.env"
+
+
+# The tracked env files hold `<...>` placeholders for every machine-specific path. Neither
+# character is legal in a Windows path, so any occurrence means the value was never set.
+def is_placeholder(value: str) -> bool:
+    return "<" in value or ">" in value
 # Windows priority classes; children of a below-normal or idle process inherit its class,
 # so this also covers the compilers and test runners that cmake/ninja/ctest start.
 BUILD_PRIORITIES = {
@@ -142,17 +152,18 @@ def main_worktree_root(repo_root: Path) -> Path | None:
 def find_local_env(
     scripts_dir: Path,
     *,
+    name: str = LOCAL_ENV_NAME,
     main_root_of: Callable[[Path], Path | None] = main_worktree_root,
 ) -> Path | None:
-    """This checkout's local env file, else the main worktree's, so linked worktrees share one copy."""
-    own = scripts_dir / LOCAL_ENV_NAME
+    """This checkout's local env file `name`, else the main worktree's, so linked worktrees share one copy."""
+    own = scripts_dir / name
     if own.is_file():
         return own
     repo_root = scripts_dir.parent
     main_root = main_root_of(repo_root)
     if main_root is None or normalized_path(main_root) == normalized_path(repo_root):
         return None
-    shared = main_root / scripts_dir.name / LOCAL_ENV_NAME
+    shared = main_root / scripts_dir.name / name
     return shared if shared.is_file() else None
 
 
@@ -169,6 +180,10 @@ def _layered_values(
     local_env = find_local_env(scripts_dir)
     if local_env is not None:
         resolved.update(read_toolchain_env(local_env))
+    if flavour is not None:
+        local_flavour_env = find_local_env(scripts_dir, name=local_flavour_env_name(flavour))
+        if local_flavour_env is not None:
+            resolved.update(read_toolchain_env(local_flavour_env))
     environment = os.environ if process_environment is None else process_environment
     for key in keys:
         if environment.get(key):
@@ -236,6 +251,11 @@ def resolve_toolchain(
     for key in required:
         if key not in resolved:
             raise ToolchainError(f"Missing required toolchain key for {flavour}: {key}")
+        if is_placeholder(resolved[key]):
+            raise ToolchainError(
+                f"{key} is still the placeholder '{resolved[key]}'. Set it for this machine in "
+                f"scripts/{LOCAL_ENV_NAME} or scripts/{local_flavour_env_name(flavour)} (see BUILDING.md)."
+            )
 
     triplet = resolved["KSV_VCPKG_TRIPLET"].strip()
     if not triplet:

@@ -71,6 +71,7 @@ compile_commands.json
 # vcpkg
 vcpkg_installed/
 scripts/toolchain.local.env
+scripts/toolchain.local.*.env
 
 # debug information files
 *.dwo

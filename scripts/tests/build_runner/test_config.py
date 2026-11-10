@@ -66,6 +66,30 @@ def test_the_local_file_overrides_the_selected_profile(toolchain_tree: tuple[Pat
     assert resolve_toolchain(scripts_dir, process_environment={}).vcpkg_triplet == "custom"
 
 
+def test_the_local_flavour_file_overrides_the_local_file_for_its_flavour_only(
+    toolchain_tree: tuple[Path, dict[str, str]],
+) -> None:
+    scripts_dir, _ = toolchain_tree
+    (scripts_dir / "toolchain.local.env").write_text("KSV_VCPKG_TRIPLET=shared\n", encoding="utf-8")
+    (scripts_dir / "toolchain.local.msvc.env").write_text("KSV_VCPKG_TRIPLET=msvc-only\n", encoding="utf-8")
+
+    assert resolve_toolchain(scripts_dir, process_environment={}).vcpkg_triplet == "shared"
+    msvc = resolve_toolchain(scripts_dir, process_environment={"KSV_TOOLCHAIN": "msvc"})
+    assert msvc.vcpkg_triplet == "msvc-only"
+
+
+def test_an_unset_placeholder_names_the_key_and_where_to_set_it(
+    toolchain_tree: tuple[Path, dict[str, str]],
+) -> None:
+    scripts_dir, _ = toolchain_tree
+    profile = scripts_dir / "toolchain.mingw.env"
+    values = read_toolchain_env(profile) | {"KSV_QT6_DIR": "<Qt root>/6.12.0/mingw_64/lib/cmake/Qt6"}
+    profile.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
+
+    with pytest.raises(ToolchainError, match=r"KSV_QT6_DIR .*placeholder.*toolchain\.local\.mingw\.env"):
+        resolve_toolchain(scripts_dir, process_environment={})
+
+
 def test_an_unknown_flavour_is_actionable(toolchain_tree: tuple[Path, dict[str, str]]) -> None:
     scripts_dir, _ = toolchain_tree
 

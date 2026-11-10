@@ -23,10 +23,11 @@
     passed, so a release is always built from scratch - see the comment above
     the build section for why.
 
-    Tool paths come from toolchain.defaults.env, toolchain.local.env, and
-    process environment variables, in that order. Explicit parameters remain
-    the highest-precedence overrides for compatibility with existing callers.
-    A linked git worktree without its own toolchain.local.env uses the main
+    Tool paths come from toolchain.defaults.env, toolchain.<flavour>.env,
+    toolchain.local.env, toolchain.local.<flavour>.env, and process
+    environment variables, in that order. Explicit parameters remain the
+    highest-precedence overrides for compatibility with existing callers.
+    A linked git worktree without its own local files uses the main
     worktree's.
 
 .EXAMPLE

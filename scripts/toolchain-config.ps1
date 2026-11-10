@@ -68,10 +68,12 @@ function Resolve-KsvToolchainPath {
     return (Resolve-Path -LiteralPath $Path).Path
 }
 
-# This checkout's toolchain.local.env, else the main worktree's, so linked worktrees share one copy.
+# This checkout's local env file $Name, else the main worktree's, so linked worktrees share one copy.
 # Mirrors find_local_env in scripts/build_runner/config.py.
 function Find-KsvToolchainLocalEnv {
-    $own = Join-Path $script:KsvToolchainConfigRoot "toolchain.local.env"
+    param([string]$Name = "toolchain.local.env")
+
+    $own = Join-Path $script:KsvToolchainConfigRoot $Name
     if (Test-Path -LiteralPath $own -PathType Leaf) { return $own }
 
     $repoRoot = Split-Path -Parent $script:KsvToolchainConfigRoot
@@ -90,7 +92,7 @@ function Find-KsvToolchainLocalEnv {
         return $null
     }
     $scriptsName = Split-Path -Leaf $script:KsvToolchainConfigRoot
-    $shared = Join-Path (Join-Path $mainRoot $scriptsName) "toolchain.local.env"
+    $shared = Join-Path (Join-Path $mainRoot $scriptsName) $Name
     if (Test-Path -LiteralPath $shared -PathType Leaf) { return $shared }
     return $null
 }
@@ -138,13 +140,25 @@ function Get-KsvToolchainConfig {
     $profileValues = Read-KsvToolchainEnvFile -Path $profilePath -AllowedKeys $allowedKeys
     foreach ($key in $profileValues.Keys) { $resolved[$key] = $profileValues[$key] }
 
+    $localFlavour = @{}
+    $localFlavourPath = Find-KsvToolchainLocalEnv -Name "toolchain.local.$flavour.env"
+    if ($localFlavourPath) {
+        $localFlavour = Read-KsvToolchainEnvFile -Path $localFlavourPath -AllowedKeys $allowedKeys
+    }
+
     foreach ($key in $keys) {
         if ($local.ContainsKey($key)) { $resolved[$key] = $local[$key] }
+        if ($localFlavour.ContainsKey($key)) { $resolved[$key] = $localFlavour[$key] }
         $processValue = [Environment]::GetEnvironmentVariable($key, "Process")
         if ($processValue) { $resolved[$key] = $processValue }
         if ($Overrides.ContainsKey($key) -and $Overrides[$key]) { $resolved[$key] = $Overrides[$key] }
         $required = ($flavour -eq "msvc") -or ($key -ne "KSV_VCVARS_BAT")
         if ($required -and -not $resolved.ContainsKey($key)) { throw "Missing required toolchain key for ${flavour}: $key" }
+        # Mirrors is_placeholder in scripts/build_runner/config.py.
+        $value = "$($resolved[$key])".Trim()
+        if ($required -and ($value.Contains("<") -or $value.Contains(">"))) {
+            throw "$key is still the placeholder '$value'. Set it for this machine in scripts/toolchain.local.env or scripts/toolchain.local.$flavour.env (see BUILDING.md)."
+        }
     }
 
     if (-not $resolved["KSV_VCPKG_TRIPLET"].Trim()) {
