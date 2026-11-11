@@ -4,6 +4,8 @@ add_library(ksv_gallery_support STATIC
         gallery_dataset.cpp
         gallery_dataset.h
         inert_image_output.h
+        modelled_run.cpp
+        modelled_run.h
         qml_source_interceptor.h
 )
 target_include_directories(ksv_gallery_support PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

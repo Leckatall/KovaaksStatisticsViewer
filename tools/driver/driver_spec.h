@@ -10,6 +10,7 @@
 
 #include "benchmarks/benchmark.h"
 #include "gallery_dataset.h"
+#include "modelled_run.h"
 
 namespace ksv::driver {
     // A generated benchmark: tiers placed at `factor` x each scenario's personal
@@ -73,6 +74,11 @@ namespace ksv::driver {
     // Returns an empty string on success, otherwise an error naming the field path.
     [[nodiscard]] QString parseProfileSpec(const QJsonObject &json, const QString &specPath, ProfileSpec &out);
     [[nodiscard]] domain::UserProfile buildProfile(const ProfileSpec &spec);
+
+    // A scenario-spec and a performance-spec file's contents (schemas in
+    // tools/driver/README.md). Each returns an empty string or an error naming the field path.
+    [[nodiscard]] QString parseScenarioModel(const QJsonObject &json, gallery::ScenarioModel &out);
+    [[nodiscard]] QString parsePerformanceShape(const QJsonObject &json, gallery::PerformanceShape &out);
 
     // Reads, parses and builds `specPath` into the session's data directory:
     // profile.pb plus the spec's benchmark, if any. Returns an empty string on success.

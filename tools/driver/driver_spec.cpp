@@ -70,6 +70,29 @@ namespace ksv::driver {
             return value.toDouble();
         }
 
+        // A finite number in [minimum, maximum] (or (minimum, maximum] when exclusive);
+        // without a fallback the field is required.
+        double boundedNumber(const QJsonObject &object, const QString &parent, const QString &key,
+                             const std::optional<double> fallback, const double minimum,
+                             const double maximum = std::numeric_limits<double>::infinity(),
+                             const bool exclusiveMinimum = false) {
+            if (!object.contains(key)) {
+                if (!fallback) reject(fieldPath(parent, key), QStringLiteral("is required"));
+                return *fallback;
+            }
+            const QJsonValue value = object.value(key);
+            const double number = value.toDouble();
+            const bool below = exclusiveMinimum ? number <= minimum : number < minimum;
+            if (!value.isDouble() || !std::isfinite(number) || below || number > maximum) {
+                const QString lower = QStringLiteral("%1 %2").arg(exclusiveMinimum ? ">" : ">=").arg(minimum);
+                QString expected = QStringLiteral("expected a number");
+                if (std::isfinite(minimum) && std::isfinite(maximum)) expected += QStringLiteral(" %1 and <= %2").arg(lower).arg(maximum);
+                else if (std::isfinite(minimum)) expected += u' ' + lower;
+                reject(fieldPath(parent, key), expected);
+            }
+            return number;
+        }
+
         QString stringField(const QJsonObject &object, const QString &parent, const QString &key, const QString &fallback,
                             const bool required = false) {
             if (!object.contains(key)) {
@@ -138,6 +161,85 @@ namespace ksv::driver {
             shape.damage_per_hit = static_cast<float>(numberField(object, path, "damagePerHit", shape.damage_per_hit, 0.0));
             shape.score_per_hit = static_cast<float>(numberField(object, path, "scorePerHit", shape.score_per_hit, 0.0));
             shape.score_per_kill = static_cast<float>(numberField(object, path, "scorePerKill", shape.score_per_kill, 0.0));
+            return shape;
+        }
+
+        // ---- scenario-specs and performance-specs ----
+
+        QJsonObject optionalObject(const QJsonObject &object, const QString &parent, const QString &key) {
+            return object.contains(key) ? objectAt(object.value(key), fieldPath(parent, key)) : QJsonObject{};
+        }
+
+        gallery::ScenarioModel parseModelObject(const QJsonObject &object) {
+            constexpr double kInfinity = std::numeric_limits<double>::infinity();
+            requireKnownKeys(object, {}, {"name", "hash", "description", "durationSeconds", "firstSampleSeconds",
+                                          "scoring", "ideal", "skill"});
+            gallery::ScenarioModel model;
+            const QString name = stringField(object, {}, "name", {}, true);
+            model.name = name.toStdString();
+            model.hash = stringField(object, {}, "hash", QString::fromStdString("spec-" + slug(name))).toStdString();
+            if (object.contains("description")) stringField(object, {}, "description", {});
+            model.durationSeconds = boundedNumber(object, {}, "durationSeconds", model.durationSeconds, 1.0);
+            model.firstSampleSeconds = boundedNumber(object, {}, "firstSampleSeconds", model.firstSampleSeconds, 0.0,
+                                                     kInfinity, true);
+
+            const QString scoringPath = QStringLiteral("scoring");
+            const QJsonObject scoring = optionalObject(object, {}, scoringPath);
+            requireKnownKeys(scoring, scoringPath, {"perHit", "perKill", "perMiss", "perDamage", "hitsPerKill",
+                                                    "damagePerHit"});
+            gallery::ScoringRules &rules = model.scoring;
+            rules.perHit = boundedNumber(scoring, scoringPath, "perHit", rules.perHit, -kInfinity);
+            rules.perKill = boundedNumber(scoring, scoringPath, "perKill", rules.perKill, -kInfinity);
+            rules.perMiss = boundedNumber(scoring, scoringPath, "perMiss", rules.perMiss, -kInfinity);
+            rules.perDamage = boundedNumber(scoring, scoringPath, "perDamage", rules.perDamage, -kInfinity);
+            rules.hitsPerKill = intField(scoring, scoringPath, "hitsPerKill", rules.hitsPerKill, 1);
+            rules.damagePerHit = boundedNumber(scoring, scoringPath, "damagePerHit", rules.damagePerHit, 0.0);
+
+            const QString idealPath = QStringLiteral("ideal");
+            if (!object.contains(idealPath)) reject(idealPath, QStringLiteral("is required"));
+            const QJsonObject ideal = optionalObject(object, {}, idealPath);
+            requireKnownKeys(ideal, idealPath, {"shotsPerSecond", "accuracy"});
+            model.idealShotsPerSecond = boundedNumber(ideal, idealPath, "shotsPerSecond", std::nullopt, 0.0, kInfinity, true);
+            model.idealAccuracy = boundedNumber(ideal, idealPath, "accuracy", std::nullopt, 0.0, 1.0, true);
+
+            const QString skillPath = QStringLiteral("skill");
+            const QJsonObject skill = optionalObject(object, {}, skillPath);
+            requireKnownKeys(skill, skillPath, {"accuracy", "shotRate", "maxShotsPerSecond"});
+            model.accuracyWeight = boundedNumber(skill, skillPath, "accuracy", model.accuracyWeight, 0.0);
+            model.shotRateWeight = boundedNumber(skill, skillPath, "shotRate", model.shotRateWeight, 0.0);
+            if (model.accuracyWeight + model.shotRateWeight <= 0.0) {
+                reject(skillPath, QStringLiteral("accuracy and shotRate cannot both be 0"));
+            }
+            if (skill.contains("maxShotsPerSecond")) {
+                model.maxShotsPerSecond = boundedNumber(skill, skillPath, "maxShotsPerSecond", std::nullopt, 0.0,
+                                                        kInfinity, true);
+            }
+            return model;
+        }
+
+        gallery::PerformanceShape parseShapeObject(const QJsonObject &object) {
+            requireKnownKeys(object, {}, {"description", "windows", "noise"});
+            gallery::PerformanceShape shape;
+            if (object.contains("description")) stringField(object, {}, "description", {});
+            const QJsonArray windows = arrayField(object, {}, "windows");
+            for (qsizetype i = 0; i < windows.size(); ++i) {
+                const QString path = QStringLiteral("windows[%1]").arg(i);
+                const QJsonObject window = objectAt(windows[i], path);
+                requireKnownKeys(window, path, {"from", "to", "accuracy", "shotRate", "ramp"});
+                gallery::PerformanceWindow parsed;
+                parsed.from = boundedNumber(window, path, "from", std::nullopt, 0.0);
+                parsed.to = boundedNumber(window, path, "to", std::nullopt, parsed.from,
+                                          std::numeric_limits<double>::infinity(), true);
+                parsed.accuracy = boundedNumber(window, path, "accuracy", parsed.accuracy, 0.0);
+                parsed.shotRate = boundedNumber(window, path, "shotRate", parsed.shotRate, 0.0);
+                parsed.ramp = boolField(window, path, "ramp", parsed.ramp);
+                shape.windows.push_back(parsed);
+            }
+            const QString noisePath = QStringLiteral("noise");
+            const QJsonObject noise = optionalObject(object, {}, noisePath);
+            requireKnownKeys(noise, noisePath, {"accuracy", "shotRate"});
+            shape.accuracyNoise = boundedNumber(noise, noisePath, "accuracy", shape.accuracyNoise, 0.0);
+            shape.shotRateNoise = boundedNumber(noise, noisePath, "shotRate", shape.shotRateNoise, 0.0);
             return shape;
         }
 
@@ -311,6 +413,24 @@ namespace ksv::driver {
             return {};
         } catch (const SpecError &error) {
             return QStringLiteral("profile spec %1: %2").arg(specPath, error.message);
+        }
+    }
+
+    QString parseScenarioModel(const QJsonObject &json, gallery::ScenarioModel &out) {
+        try {
+            out = parseModelObject(json);
+            return {};
+        } catch (const SpecError &error) {
+            return error.message;
+        }
+    }
+
+    QString parsePerformanceShape(const QJsonObject &json, gallery::PerformanceShape &out) {
+        try {
+            out = parseShapeObject(json);
+            return {};
+        } catch (const SpecError &error) {
+            return error.message;
         }
     }
 

@@ -124,6 +124,161 @@ namespace {
         EXPECT_NE(entries[2].id, entries[3].id);
     }
 
+    // ---- Modelled runs: scenario-specs and performance-specs ----
+
+    // 1w3ts Reload's numbers from the showcase analysis: kill-paced clicking, where
+    // better players mostly fire faster.
+    gallery::ScenarioModel clickModel() {
+        gallery::ScenarioModel model;
+        model.name = "Click";
+        model.hash = "click";
+        model.idealShotsPerSecond = 2.31;
+        model.idealAccuracy = 0.97;
+        model.accuracyWeight = 0.22;
+        model.shotRateWeight = 0.78;
+        return model;
+    }
+
+    // VT Controlsphere's: constant fire, so skill moves accuracy only.
+    gallery::ScenarioModel constantFireModel() {
+        gallery::ScenarioModel model;
+        model.name = "Fire";
+        model.hash = "fire";
+        model.firstSampleSeconds = 0.97;
+        model.idealShotsPerSecond = 100.0;
+        model.idealAccuracy = 0.73;
+        return model;
+    }
+
+    gallery::PerformanceShape noisyShape() {
+        gallery::PerformanceShape shape;
+        shape.accuracyNoise = 0.3;
+        shape.shotRateNoise = 0.2;
+        return shape;
+    }
+
+    domain::Run modelled(const gallery::ScenarioModel &model, const double skill, const std::uint64_t seed,
+                         const gallery::PerformanceShape &shape = {}) {
+        return gallery::makeModelledRun({.name = model.name, .hash = model.hash}, 0, 18 * 60, model, shape, skill, 1.0,
+                                        seed);
+    }
+
+    const std::vector<domain::ScenarioDataPoint> &samples(const domain::Run &run) {
+        static const std::vector<domain::ScenarioDataPoint> kNone;
+        return run.performance ? run.performance->samples : kNone;
+    }
+
+    TEST(DriverScenarioSpecTest, ParseErrorsNameTheField) {
+        const auto error = [](const char *text) {
+            gallery::ScenarioModel model;
+            return driver::parseScenarioModel(json(text), model);
+        };
+        EXPECT_TRUE(error(R"({"name": "A", "ideal": {"shotsPerSecond": 2}})").contains("ideal.accuracy: is required"));
+        EXPECT_TRUE(error(R"({"name": "A", "ideal": {"shotsPerSecond": 2, "accuracy": 1.5}})").contains("ideal.accuracy"));
+        EXPECT_TRUE(error(R"({"name": "A", "ideal": {"shotsPerSecond": 2, "accuracy": 0.9}, "scoring": {"perHits": 1}})")
+                        .contains("scoring.perHits"));
+        EXPECT_TRUE(error(R"({"name": "A", "ideal": {"shotsPerSecond": 2, "accuracy": 0.9},
+                              "skill": {"accuracy": 0, "shotRate": 0}})").contains("skill"));
+        EXPECT_TRUE(error(R"({"ideal": {"shotsPerSecond": 2, "accuracy": 0.9}})").contains("name: is required"));
+        EXPECT_TRUE(error(R"({"name": "A", "ideal": {"shotsPerSecond": 0, "accuracy": 0.9}})").contains("ideal.shotsPerSecond"));
+
+        // A penalty per miss (1w3ts Pasu Micro scores 10 per hit, -2 per miss) is a valid rule.
+        gallery::ScenarioModel model;
+        ASSERT_EQ(driver::parseScenarioModel(json(R"({"name": "Micro", "hash": "micro", "durationSeconds": 54,
+            "scoring": {"perHit": 10, "perMiss": -2}, "ideal": {"shotsPerSecond": 1.5, "accuracy": 0.9},
+            "skill": {"accuracy": 0.36, "shotRate": 0.64, "maxShotsPerSecond": 2}})"), model), QString());
+        EXPECT_EQ(model.hash, "micro");
+        EXPECT_LT(model.scoring.perMiss, 0.0);
+        EXPECT_GT(model.shotRateWeight, model.accuracyWeight);
+        EXPECT_TRUE(model.maxShotsPerSecond.has_value());
+    }
+
+    TEST(DriverScenarioSpecTest, SkillOneScoresAboutWhatTheIdealRunScores) {
+        for (const auto &model: {clickModel(), constantFireModel()}) {
+            const double ideal = gallery::idealScore(model);
+            ASSERT_GT(ideal, 0.0) << model.name;
+            for (std::uint64_t seed = 0; seed < 5; ++seed) {
+                EXPECT_NEAR(modelled(model, 1.0, seed, noisyShape()).totals().score, ideal, 0.03 * ideal)
+                    << model.name << " seed " << seed;
+                EXPECT_NEAR(modelled(model, 0.7, seed, noisyShape()).totals().score, 0.7 * ideal, 0.03 * ideal)
+                    << model.name << " seed " << seed;
+            }
+        }
+    }
+
+    TEST(DriverScenarioSpecTest, TotalsAreTheSumOfTheSamples) {
+        gallery::ScenarioModel model = clickModel();
+        model.idealShotsPerSecond = 15.5;
+        model.scoring.hitsPerKill = 6;
+        model.scoring.perKill = 2.0;
+        model.scoring.perMiss = -0.5;
+        const domain::Run run = modelled(model, 0.9, 3, noisyShape());
+        ASSERT_FALSE(samples(run).empty());
+        domain::RunTotals summed;
+        double score = 0.0;
+        for (const auto &sample: samples(run)) {
+            summed.shots += sample.shots;
+            summed.hits += sample.hits;
+            summed.misses += sample.misses;
+            summed.kills += sample.kills;
+            score += sample.score;
+        }
+        EXPECT_EQ(run.totals().shots, summed.shots);
+        EXPECT_EQ(run.totals().hits, summed.hits);
+        EXPECT_EQ(run.totals().misses, summed.misses);
+        EXPECT_EQ(run.totals().kills, summed.kills);
+        EXPECT_GT(summed.kills, 0);
+        EXPECT_NEAR(run.totals().score, score, 1e-3 * std::abs(score));
+    }
+
+    TEST(DriverScenarioSpecTest, ConstantFireKeepsTheShotsAndMovesOnlyAccuracy) {
+        const auto low = modelled(constantFireModel(), 0.6, 7, noisyShape());
+        const auto high = modelled(constantFireModel(), 1.2, 7, noisyShape());
+        ASSERT_EQ(samples(low).size(), samples(high).size());
+        for (std::size_t i = 0; i < samples(low).size(); ++i) {
+            EXPECT_EQ(samples(low)[i].shots, samples(high)[i].shots) << "sample " << i;
+        }
+        EXPECT_GT(high.totals().accuracy(), low.totals().accuracy());
+
+        // Where skill is mostly shot rate, a better run fires more.
+        EXPECT_GT(modelled(clickModel(), 1.2, 7).totals().shots, modelled(clickModel(), 0.6, 7).totals().shots);
+    }
+
+    TEST(DriverScenarioSpecTest, HighSkillIsNotClampedBelowNinetyFivePercent) {
+        gallery::ScenarioModel model = constantFireModel();
+        model.idealAccuracy = 0.9;
+        EXPECT_GT(modelled(model, 1.1, 1).totals().accuracy(), 0.95);
+    }
+
+    TEST(DriverScenarioSpecTest, HitsNeverExceedShots) {
+        for (const auto &model: {clickModel(), constantFireModel()}) {
+            for (const double skill: {0.0, 0.4, 1.0, 1.6, 4.0}) {
+                for (std::uint64_t seed = 0; seed < 5; ++seed) {
+                    for (const auto &sample: samples(modelled(model, skill, seed, noisyShape()))) {
+                        EXPECT_GE(sample.hits, 0);
+                        EXPECT_LE(sample.hits, sample.shots) << model.name << " skill " << skill << " t " << sample.time;
+                        EXPECT_EQ(sample.misses, sample.shots - sample.hits);
+                    }
+                }
+            }
+        }
+    }
+
+    // Real runs start with a partial first second, and Polarized Hell's 62.4 s
+    // length ends on a 0.4 s sample. Here: 0.6 s first, then whole seconds, then 0.4 s.
+    TEST(DriverScenarioSpecTest, PartialSecondsCarryProportionallyFewerShots) {
+        gallery::ScenarioModel model = constantFireModel();
+        model.durationSeconds = 62.0;
+        model.firstSampleSeconds = 0.6;
+        const auto run = modelled(model, 1.0, 2);
+        ASSERT_GE(samples(run).size(), 3U);
+        const int fullSecond = samples(run)[1].shots;
+        EXPECT_LT(samples(run).front().shots, fullSecond * 3 / 4);
+        EXPECT_LT(samples(run).back().shots, fullSecond * 3 / 4);
+        EXPECT_FLOAT_EQ(samples(run).back().time, static_cast<float>(model.durationSeconds));
+        EXPECT_FLOAT_EQ(run.scenario_length, static_cast<float>(model.durationSeconds));
+    }
+
     // The benchmark fixtures (tools/driver/benchmarks) have fixed thresholds picked
     // against the rich profile's scores so that each row shows a different state.
     // These tests fail when the run generator or the rich profile drifts from them;
