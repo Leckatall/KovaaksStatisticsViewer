@@ -232,3 +232,121 @@ def test_validate_adr_rejects_nonreciprocal_relationships_and_unknown_metadata(r
     assert "Invalid ADR metadata key: owner." in result.stderr
 
 
+AMENDMENTS = "\n## Amendments\n\n- 2026-10-01: `Foo` is now `Bar`.\n"
+
+
+def append_to_adr(path: Path, text: str) -> None:
+    path.write_text(path.read_text(encoding="utf-8") + text, encoding="utf-8", newline="")
+
+
+def test_validate_adr_accepts_amendments_section_and_deprecated_status(run_cli) -> None:
+    """Catches the validator lagging the convention's post-acceptance section and withdrawn status."""
+    append_to_adr(write_adr(run_cli.repo, "0001", "amended"), AMENDMENTS)
+    append_to_adr(write_adr(run_cli.repo, "0002", "withdrawn", status="deprecated"), AMENDMENTS)
+
+    result = run_cli("validate", "adr")
+
+    assert result.stderr == ""
+    assert result.returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("status", "extra", "suffix", "diagnostic"),
+    (
+        ("deprecated", "", "", "Deprecated ADR must state why in an Amendments section."),
+        ("deprecated", "superseded-by: '0002'\n", AMENDMENTS, "Deprecated ADR cannot declare superseded-by."),
+        ("accepted", "", "\n## Amendments\n\nRenamed at some point.\n", "ADR Amendments entries must be list items beginning 'YYYY-MM-DD: '."),
+        ("accepted", "", "\n## Amendments\n\n- 2026-02-30: Renamed.\n", "ADR Amendments entries must be list items beginning 'YYYY-MM-DD: '."),
+        ("accepted", "", "\n## Amendments\n", "ADR Amendments section has no entries."),
+        ("accepted", "", AMENDMENTS + "\n## Links\n\n- none\n", "Invalid ADR body section order."),
+        ("accepted", "amends:\n  - '0001'\n", "", "ADR cannot amend itself."),
+    ),
+)
+def test_validate_adr_rejects_malformed_amendments_and_deprecation(run_cli, status, extra, suffix, diagnostic) -> None:
+    """Catches undated or misplaced post-acceptance notes and a withdrawn ADR that never says why."""
+    append_to_adr(write_adr(run_cli.repo, "0001", "subject", status=status, extra=extra), suffix)
+
+    result = run_cli("validate", "adr")
+
+    assert result.returncode == 3
+    assert diagnostic in result.stderr
+
+
+def test_validate_adr_rejects_amendment_the_amended_record_does_not_name(run_cli) -> None:
+    """Catches a one-sided amendment, which a reader of the earlier ADR could not discover."""
+    append_to_adr(write_adr(run_cli.repo, "0001", "rule"), AMENDMENTS)
+    write_adr(run_cli.repo, "0002", "exception", extra="amends:\n  - '0001'\n  - '0009'\n")
+
+    result = run_cli("validate", "adr")
+
+    assert result.returncode == 3
+    assert "ADR '0002' amends '0001', whose Amendments section does not name '0002'." in result.stderr
+    assert "ADR '0002' amends missing ADR '0009'." in result.stderr
+
+
+def test_adr_record_amends_reciprocally_and_preserves_existing_text(run_cli) -> None:
+    """Catches an amending ADR that leaves no trace on the amended record, or that rewrites it."""
+    fresh = write_adr(run_cli.repo, "0001", "fresh", newline="\r\n")
+    noted = write_adr(run_cli.repo, "0002", "noted")
+    append_to_adr(noted, AMENDMENTS)
+    fresh_before = fresh.read_bytes()
+    noted_before = noted.read_bytes()
+    proposal = write_body(run_cli.repo)
+
+    result = run_cli(
+        "adr", "record", str(proposal), "--title", "Exception", "--slug", "exception", "--date", "2026-11-11",
+        "--amends", "0001:Exempts the capture view model.", "--amends", "0002:Narrows the rule to one layer."
+    )
+
+    assert result.stderr == ""
+    assert result.returncode == 0
+    created = run_cli.repo / "docs" / "architecture" / "decisions" / "0003-exception.md"
+    assert created.read_bytes().startswith(
+        b"---\nstatus: accepted\ndate: 2026-11-11\namends:\n  - '0001'\n  - '0002'\n---\n"
+    )
+    assert fresh.read_bytes() == (
+        fresh_before
+        + b"\r\n## Amendments\r\n\r\n"
+        + b"- 2026-11-11: Amended by [ADR-0003](0003-exception.md). Exempts the capture view model.\r\n"
+    )
+    assert noted.read_bytes() == (
+        noted_before + b"- 2026-11-11: Amended by [ADR-0003](0003-exception.md). Narrows the rule to one layer.\n"
+    )
+    assert run_cli("validate", "adr").returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("arguments", "returncode", "diagnostic"),
+    (
+        (("--amends", "0001"), 5, "Refused: --amends takes 'NNNN:one sentence stating what this ADR changes'\n"),
+        (("--amends", "0001:Note.", "--supersedes", "0001"), 5, "Refused: ADR '0001' cannot be both superseded and amended\n"),
+        (("--amends", "0002:Note."), 5, "Refused: ADR '0002' is deprecated and cannot be amended\n"),
+        (("--supersedes", "0002"), 5, "Refused: ADR '0002' is deprecated\n"),
+        (("--amends", "0009:Note."), 4, "ADR target not found: 0009\n"),
+    ),
+)
+def test_adr_record_refuses_ineligible_amendments_without_writing(run_cli, arguments, returncode, diagnostic) -> None:
+    """Catches partial writes when an amendment target is malformed, missing, or no longer in force."""
+    write_adr(run_cli.repo, "0001", "rule")
+    append_to_adr(write_adr(run_cli.repo, "0002", "withdrawn", status="deprecated"), AMENDMENTS)
+    body = write_body(run_cli.repo)
+    before = tree_bytes(run_cli.repo)
+
+    result = run_cli(
+        "adr", "record", str(body), "--title", "New", "--slug", "new", "--date", "2026-11-11", *arguments
+    )
+
+    assert result.returncode == returncode
+    assert result.stdout == ""
+    assert result.stderr == diagnostic
+    assert tree_bytes(run_cli.repo) == before
+
+
+def test_adr_record_refuses_a_body_that_already_has_amendments(run_cli) -> None:
+    """Catches a new ADR being born with a section that only exists after acceptance."""
+    body = write_body(run_cli.repo, adr_body() + AMENDMENTS)
+
+    result = run_cli("adr", "record", str(body), "--title", "New", "--slug", "new", "--date", "2026-11-11")
+
+    assert result.returncode == 5
+    assert not (run_cli.repo / "docs").exists()

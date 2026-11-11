@@ -63,6 +63,9 @@ class AdrRecord:
     retrospective: bool
     supersedes: tuple[str, ...]
     superseded_by: str | None
+    amends: tuple[str, ...]
+    # Text of the `## Amendments` section, or None when the ADR has none.
+    amendments: str | None
     body: bytes
     newline: bytes
 
@@ -105,6 +108,9 @@ _ADR_NUMERIC_PREFIX = re.compile(r"^\d{4}")
 _ADR_NUMBERED_FILE = re.compile(r"^(\d{4})-.*\.md$")
 _ADR_ID = re.compile(r"\d{4}\Z")
 _ADR_SECTIONS = ("Context", "Decision", "Consequences", "Alternatives considered")
+_ADR_STATUSES = ("accepted", "superseded", "deprecated")
+_ADR_AMENDMENTS = "Amendments"
+_ADR_AMENDMENT_ENTRY = re.compile(r"- (\d{4}-\d{2}-\d{2}): \S")
 
 
 def _validation_error(message: str, line: int | None = None) -> ArchDocError:
@@ -472,9 +478,50 @@ def _adr_section_headings(text: str) -> tuple[str, ...]:
     )
 
 
-def _valid_adr_sections(text: str) -> bool:
+def _valid_adr_sections(text: str, *, amendments_allowed: bool) -> bool:
     headings = _adr_section_headings(text)
-    return headings == _ADR_SECTIONS or headings == (*_ADR_SECTIONS, "Links")
+    if headings[: len(_ADR_SECTIONS)] != _ADR_SECTIONS:
+        return False
+    tail = headings[len(_ADR_SECTIONS) :]
+    if amendments_allowed and tail[-1:] == (_ADR_AMENDMENTS,):
+        tail = tail[:-1]
+    return tail in ((), ("Links",))
+
+
+def _adr_amendments(body: str, first_body_line: int) -> str | None:
+    """Returns the Amendments section's text, which `_valid_adr_sections` guarantees is the last section."""
+    lines = body.splitlines()
+    tokens = MarkdownIt("commonmark").parse(body)
+    start = next(
+        (
+            token.map[1]
+            for index, token in enumerate(tokens)
+            if token.type == "heading_open"
+            and token.tag == "h2"
+            and token.map is not None
+            and tokens[index + 1].content == _ADR_AMENDMENTS
+        ),
+        None,
+    )
+    if start is None:
+        return None
+    entries = 0
+    for offset, line in enumerate(lines[start:], start=start):
+        if not line.strip() or line[:1] in (" ", "\t"):
+            continue
+        match = _ADR_AMENDMENT_ENTRY.match(line)
+        try:
+            if match is None:
+                raise ValueError
+            calendar_date.fromisoformat(match.group(1))
+        except ValueError as error:
+            raise _validation_error(
+                "ADR Amendments entries must be list items beginning 'YYYY-MM-DD: '.", first_body_line + offset
+            ) from error
+        entries += 1
+    if entries == 0:
+        raise _validation_error("ADR Amendments section has no entries.", first_body_line + start - 1)
+    return "\n".join(lines[start:])
 
 
 def _parse_adr_payload(path: Path, payload: bytes) -> AdrRecord:
@@ -496,14 +543,14 @@ def _parse_adr_payload(path: Path, payload: bytes) -> AdrRecord:
         raise _validation_error(f"Invalid ADR frontmatter: {error}", getattr(mark, "line", -1) + 2) from error
     if not isinstance(values, dict):
         raise _validation_error("Invalid ADR frontmatter.", 1)
-    allowed_keys = {"status", "date", "retrospective", "supersedes", "superseded-by"}
+    allowed_keys = {"status", "date", "retrospective", "supersedes", "superseded-by", "amends"}
     for key in values:
         if key not in allowed_keys:
             raise _validation_error(f"Invalid ADR metadata key: {key}.", _frontmatter_value_line(raw, str(key)))
     status = values.get("status")
     recorded_date = str(values.get("date", ""))
-    if status not in {"accepted", "superseded"} or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", recorded_date):
-        invalid_key = "status" if status not in {"accepted", "superseded"} else "date"
+    if status not in _ADR_STATUSES or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", recorded_date):
+        invalid_key = "status" if status not in _ADR_STATUSES else "date"
         raise _validation_error("Invalid ADR metadata.", _frontmatter_value_line(raw, invalid_key))
     try:
         calendar_date.fromisoformat(recorded_date)
@@ -521,16 +568,27 @@ def _parse_adr_payload(path: Path, payload: bytes) -> AdrRecord:
     superseded_by = values.get("superseded-by")
     if superseded_by is not None and (not isinstance(superseded_by, str) or not _ADR_ID.fullmatch(superseded_by)):
         raise _validation_error("Invalid ADR relationship identifier.", _frontmatter_value_line(raw, "superseded-by"))
-    if status == "accepted" and superseded_by is not None:
-        raise _validation_error("Accepted ADR cannot declare superseded-by.", _frontmatter_value_line(raw, "superseded-by"))
+    if status != "superseded" and superseded_by is not None:
+        raise _validation_error(
+            f"{status.capitalize()} ADR cannot declare superseded-by.", _frontmatter_value_line(raw, "superseded-by")
+        )
     if status == "superseded" and superseded_by is None:
         raise _validation_error("Superseded ADR must declare superseded-by.", _frontmatter_value_line(raw, "status"))
     identifier = filename.group(1)
+    amends = _adr_relationship_ids(values["amends"], "amends", raw) if "amends" in values else ()
+    if identifier in amends:
+        raise _validation_error("ADR cannot amend itself.", _frontmatter_value_line(raw, "amends"))
+    first_body_line = (_frontmatter_end_line(text) or 0) + 2
     heading = _first_level_one_heading(body)
     if heading is None or not heading.startswith(f"{identifier}: ") or not heading.removeprefix(f"{identifier}: ").strip():
-        raise _validation_error("ADR heading must match its filename identifier.", (_frontmatter_end_line(text) or 0) + 2)
-    if not _valid_adr_sections(body):
-        raise _validation_error("Invalid ADR body section order.", (_frontmatter_end_line(text) or 0) + 2)
+        raise _validation_error("ADR heading must match its filename identifier.", first_body_line)
+    if not _valid_adr_sections(body, amendments_allowed=True):
+        raise _validation_error("Invalid ADR body section order.", first_body_line)
+    amendments = _adr_amendments(body, first_body_line)
+    if status == "deprecated" and amendments is None:
+        raise _validation_error(
+            "Deprecated ADR must state why in an Amendments section.", _frontmatter_value_line(raw, "status")
+        )
     newline = b"\r\n" if b"\r\n" in payload[: payload.find(b"---", 3) + 3] else b"\n"
     return AdrRecord(
         identifier,
@@ -540,6 +598,8 @@ def _parse_adr_payload(path: Path, payload: bytes) -> AdrRecord:
         bool(retrospective),
         supersedes,
         superseded_by,
+        amends,
+        amendments,
         body.encode("utf-8"),
         newline,
     )
@@ -560,6 +620,18 @@ def _adr_relationship_problems(
                 problems.append(_problem(record.path, 1, f"ADR '{identifier}' supersedes missing ADR '{replaced_id}'."))
             elif replaced.status != "superseded" or replaced.superseded_by != identifier:
                 problems.append(_problem(record.path, 1, f"ADR '{identifier}' has a nonreciprocal supersedes relationship with '{replaced_id}'."))
+        for amended_id in record.amends:
+            amended = adrs.get(amended_id)
+            if amended is None:
+                problems.append(_problem(record.path, 1, f"ADR '{identifier}' amends missing ADR '{amended_id}'."))
+            elif amended.amendments is None or not re.search(rf"(?<!\d){identifier}(?!\d)", amended.amendments):
+                problems.append(
+                    _problem(
+                        record.path,
+                        1,
+                        f"ADR '{identifier}' amends '{amended_id}', whose Amendments section does not name '{identifier}'.",
+                    )
+                )
         if record.superseded_by is None:
             continue
         replacement = adrs.get(record.superseded_by)
@@ -1375,6 +1447,7 @@ def _render_adr_frontmatter(
     retrospective: bool,
     supersedes: Sequence[str],
     superseded_by: str | None,
+    amends: Sequence[str],
     newline: bytes,
 ) -> bytes:
     lines = [b"---", f"status: {status}".encode(), f"date: {recorded_date}".encode()]
@@ -1385,6 +1458,9 @@ def _render_adr_frontmatter(
         lines.extend(f"  - '{identifier}'".encode() for identifier in supersedes)
     if superseded_by is not None:
         lines.append(f"superseded-by: '{superseded_by}'".encode())
+    if amends:
+        lines.append(b"amends:")
+        lines.extend(f"  - '{identifier}'".encode() for identifier in amends)
     lines.append(b"---")
     return newline.join(lines) + newline
 
@@ -1407,7 +1483,7 @@ def _validate_adr_body_input(payload: bytes) -> str:
     if text.splitlines()[:1] == ["---"]:
         raise _mutation_refused("ADR body must be frontmatter-free")
     tokens = MarkdownIt("commonmark").parse(text)
-    if any(token.type == "heading_open" and token.tag == "h1" for token in tokens) or not _valid_adr_sections(text):
+    if any(token.type == "heading_open" and token.tag == "h1" for token in tokens) or not _valid_adr_sections(text, amendments_allowed=False):
         raise _mutation_refused(
             "ADR body must contain Context, Decision, Consequences, Alternatives considered, and optional final Links headings in order"
         )
@@ -1425,6 +1501,17 @@ def handle_adr_record(args: argparse.Namespace, root: Path) -> int:
         raise _mutation_refused("duplicate supersedes identifier")
     if any(not _ADR_ID.fullmatch(identifier) for identifier in args.supersedes):
         raise _mutation_refused("invalid supersedes identifier")
+    amendment_notes: dict[str, str] = {}
+    for value in args.amends:
+        amended_id, separator, note = value.partition(":")
+        note = note.strip()
+        if not separator or not _ADR_ID.fullmatch(amended_id) or not note or "\n" in note or "\r" in note:
+            raise _mutation_refused("--amends takes 'NNNN:one sentence stating what this ADR changes'")
+        if amended_id in amendment_notes:
+            raise _mutation_refused("duplicate amends identifier")
+        if amended_id in args.supersedes:
+            raise _mutation_refused(f"ADR '{amended_id}' cannot be both superseded and amended")
+        amendment_notes[amended_id] = note
 
     body_payload = body_path.read_bytes()
     _validate_adr_body_input(body_payload)
@@ -1452,7 +1539,17 @@ def handle_adr_record(args: argparse.Namespace, root: Path) -> int:
             raise ArchDocError(f"ADR target not found: {replaced_id}", ExitCode.UNRESOLVED)
         if record.status == "superseded":
             raise _mutation_refused(f"ADR '{replaced_id}' is already superseded")
+        if record.status == "deprecated":
+            raise _mutation_refused(f"ADR '{replaced_id}' is deprecated")
         selected.append(record)
+    amended: list[AdrRecord] = []
+    for amended_id in amendment_notes:
+        record = snapshot.adrs.get(amended_id)
+        if record is None:
+            raise ArchDocError(f"ADR target not found: {amended_id}", ExitCode.UNRESOLVED)
+        if record.status != "accepted":
+            raise _mutation_refused(f"ADR '{amended_id}' is {record.status} and cannot be amended")
+        amended.append(record)
 
     newline = b"\r\n" if b"\r\n" in body_payload else b"\n"
     created_path = decisions / f"{identifier}-{args.slug}.md"
@@ -1463,6 +1560,7 @@ def handle_adr_record(args: argparse.Namespace, root: Path) -> int:
             retrospective=args.retrospective,
             supersedes=args.supersedes,
             superseded_by=None,
+            amends=tuple(amendment_notes),
             newline=newline,
         )
         + newline
@@ -1479,9 +1577,31 @@ def handle_adr_record(args: argparse.Namespace, root: Path) -> int:
                 retrospective=record.retrospective,
                 supersedes=record.supersedes,
                 superseded_by=identifier,
+                amends=record.amends,
                 newline=record.newline,
             )
             + record.body
+        )
+    for record in amended:
+        entry = (
+            f"- {recorded_date}: Amended by [ADR-{identifier}]({created_path.name}). {amendment_notes[record.identifier]}"
+        ).encode("utf-8")
+        heading = b"" if record.amendments is not None else record.newline + b"## Amendments" + record.newline * 2
+        payloads[record.path] = (
+            _render_adr_frontmatter(
+                status=record.status,
+                recorded_date=record.date,
+                retrospective=record.retrospective,
+                supersedes=record.supersedes,
+                superseded_by=record.superseded_by,
+                amends=record.amends,
+                newline=record.newline,
+            )
+            + record.body.rstrip(b"\r\n")
+            + record.newline
+            + heading
+            + entry
+            + record.newline
         )
 
     preflight = dict(snapshot.adrs)
@@ -1559,6 +1679,7 @@ def build_parser() -> ArgumentParser:
     record.add_argument("--date", required=True)
     record.add_argument("--retrospective", action="store_true")
     record.add_argument("--supersedes", action="append", default=[])
+    record.add_argument("--amends", action="append", default=[], metavar="NNNN:NOTE")
 
     return parser
 
