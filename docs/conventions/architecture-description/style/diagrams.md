@@ -20,12 +20,14 @@ The introduction immediately before the diagram must state its type, scope, and 
 
 > **Type:** sequence. **Scope:** one background import from request to publication. **Concern:** only the coordinator can commit a worker result.
 
+When a diagram shows a subset, the scope states the rule that selects it; a bare "selected" leaves two authors to choose differently.
+
 ### 2. Semantic integrity
 
 Every admitted diagram must:
 
 - Communicate one principal architectural message at one primary abstraction level.
-- Give elements meaningful names, types or roles, and understandable responsibilities. Use adjacent prose or a compact participant key rather than overloading boxes.
+- Give elements meaningful names, types or roles, and understandable responsibilities. Use adjacent prose rather than overloading boxes.
 - Show relationship direction consistently with its declared meaning.
 - Identify a protocol, mechanism, or technology only when it explains an architectural boundary or constraint.
 - Mark people and external systems as boundary context and preserve canonical element names and relationship meanings.
@@ -46,6 +48,19 @@ Render every diagram and inspect it at the normal documentation width without zo
 - a takeaway that does not require decoding every element.
 
 Changing Mermaid's layout direction or layout algorithm can improve placement, but it cannot repair an over-scoped model. If no renderer is available, disclose that limitation and do not claim that rendered readability was verified.
+
+## Title and key
+
+Set the title with Mermaid's frontmatter `title:` as the first lines of the diagram code block, so it renders as part of the image, and give the Mermaid `accTitle` the same text. The type, scope, and concern line stays immediately before the diagram. The title is a noun phrase naming what the diagram models: its subject, the relationship its edges show, and its boundary, as far as the enclosing heading and the drawing leave these unclear. It distinguishes the diagram from others in the same document and from diagrams of the same subject elsewhere in the description, and promises no more than the scope states. A title that restates its heading fails.
+
+Explain notation in a key after the diagram, one list item per visual format, each starting with the format:
+
+> **Key**
+>
+> - Solid arrow, filled head: direct call
+> - Dashed arrow: returned value
+
+The key explains notation and nothing else. Omissions belong in the scope; takeaways, behaviour, and element responsibilities belong in adjacent prose or the conclusion.
 
 ## Selecting an abstraction
 
@@ -78,7 +93,7 @@ Raise the abstraction or split the diagram when:
 
 ## Relationship grammar
 
-A diagram may declare the meaning of a repeated relationship once in its introduction, caption, or key. Within that diagram, every edge with the same visual format must then have that same meaning. For example, a build view can declare that every unlabelled solid arrow points from a linking target to its dependency.
+A diagram may declare the meaning of a repeated relationship once in its key. Within that diagram, every edge with the same visual format must then have that same meaning. For example, a build view can declare that every unlabelled solid arrow points from a linking target to its dependency.
 
 Use this order of preference:
 
@@ -119,7 +134,7 @@ Follow each diagram with its significant conclusion. Explain surprising arrows, 
 
 ## Accessibility
 
-Every Mermaid diagram must provide a concise `accTitle` and `accDescr`. The title identifies the model; the description states its purpose and essential relationship rather than transcribing every node. Adjacent prose must preserve the architectural takeaway when the image or Mermaid rendering is unavailable.
+Every Mermaid diagram must provide a frontmatter `title:` and an `accTitle` with the same text, and a concise `accDescr`. The description states its purpose and essential relationship rather than transcribing every node. Adjacent prose must preserve the architectural takeaway when the image or Mermaid rendering is unavailable.
 
 Colour may reinforce meaning but cannot be its sole carrier. Pair it with a label, line style, border, shape, or other non-colour cue and explain the cue. Avoid decorative variation that suggests distinctions the model does not define.
 
@@ -127,17 +142,20 @@ Colour may reinforce meaning but cannot be its sole carrier. Pair it with a labe
 
 Record Desk is fictional. The intended reader is a maintainer orienting to the product. The question is who uses Record Desk and which software system supplies its input. The takeaway is that a reviewer uses Record Desk as one system, which imports records produced by an external exporter.
 
-**Type:** system context. **Scope:** Record Desk and its environment. **Concern:** people and external software systems that interact with the product.
+**Type:** system context. **Scope:** Record Desk and its environment, excluding its internal storage, framework, and import components. **Concern:** people and external software systems that interact with the product.
 
 ```mermaid
+---
+title: Record Desk's users and external record sources
+---
 flowchart TB
-    accTitle: Record Desk system context
+    accTitle: Record Desk's users and external record sources
     accDescr: A record reviewer uses Record Desk, which imports records from an external export producer.
     Reviewer["Person<br/>record reviewer"] -->|reviews history| RecordDesk["Record Desk<br/>software system<br/>imports and presents accepted records"]
     Exporter["External system<br/>export producer"] -->|supplies exported records| RecordDesk
 ```
 
-**Key:** each box states whether it represents a person or software system. Labels are retained because the two edges describe different interactions. The internal storage, framework, and import components are deliberately absent.
+This diagram needs no key: each box names its type, and the two edges keep their labels because they describe different interactions.
 
 Record Desk is the system under description and remains a black box here. Its accepted-history authority is important but answers a lower-level question, so it belongs in a focused refinement.
 
@@ -148,34 +166,45 @@ The intended reader is a maintainer changing persistence behavior. The question 
 **Type:** focused data-flow refinement. **Scope:** record data from import to display. **Concern:** authority over accepted history.
 
 ```mermaid
+---
+title: Record data flow from external exports to history views
+---
 flowchart LR
-    accTitle: Record Desk history authority
+    accTitle: Record data flow from external exports to history views
     accDescr: Record data moves from replaceable external exports through the import boundary into the authoritative history store and then to history views.
     Exports["External exports<br/>replaceable input"] --> Import["Import boundary<br/>validates records"]
     Import --> History[("Authoritative history")]
     History --> Views["History views<br/>read-only projection"]
 ```
 
-**Key:** every unlabelled solid arrow means “supplies record data to”; the cylinder marks the authoritative persistent store. The element labels distinguish replaceable input, authority, and projection without changing the edge meaning.
+**Key**
 
-This view has only one more element than the context example, but it is separate because it answers a different reader question at a lower abstraction level. External exports are not a recovery source after the history store accepts a record.
+- Unlabelled solid arrow: supplies record data to
+- Cylinder: authoritative persistent store
+
+The element labels distinguish replaceable input, authority, and projection without changing the edge meaning. This view has only one more element than the context example, but it is separate because it answers a different reader question at a lower abstraction level. External exports are not a recovery source after the history store accepts a record.
 
 ## Build-dependency example
 
-The intended reader is a maintainer changing target boundaries. The question is which selected targets link which others. The takeaway is that the host links both presentation and contracts, while presentation links contracts directly.
+The intended reader is a maintainer changing target boundaries. The question is which targets the host target depends on, and through which links. The takeaway is that the host links both presentation and contracts, while presentation links contracts directly.
 
-**Type:** build dependency diagram. **Scope:** selected fictional application targets. **Concern:** link dependencies.
+**Type:** build dependency diagram. **Scope:** the fictional application's host target and every target it links, directly or transitively. **Concern:** link dependencies.
 
 ```mermaid
+---
+title: Link dependencies reachable from the host target
+---
 flowchart LR
-    accTitle: Selected build target dependencies
+    accTitle: Link dependencies reachable from the host target
     accDescr: The host target links presentation and contracts, and the presentation target also links contracts.
     Host["Host target<br/>assembles the application"] --> Presentation["Presentation target<br/>interface adapters"]
     Host --> Contracts["Contracts target<br/>port declarations"]
     Presentation --> Contracts
 ```
 
-**Key:** boxes are build targets. Every unlabelled solid arrow means “links to” and points from the linking target to its dependency. This is not an execution sequence.
+**Key**
+
+- Unlabelled solid arrow: links to, from the linking target to its dependency
 
 Repeating “links to” three times would add ink without adding meaning. If generated-code production or another relationship became important, it would need a distinct keyed style or, when not central to this question, a separate diagram.
 
@@ -186,8 +215,11 @@ The intended reader is a maintainer changing background import. The question is 
 **Type:** sequence. **Scope:** one import request through publication outcome. **Concern:** commit authority across an asynchronous worker handoff.
 
 ```mermaid
+---
+title: One background import from submission to published outcome
+---
 sequenceDiagram
-    accTitle: Background import publication authority
+    accTitle: One background import from submission to published outcome
     accDescr: The interface submits an import, a worker computes the result, and only the coordinator asks the history store to commit it before reporting the outcome.
     participant UI as Interface
     participant C as Import coordinator
@@ -201,9 +233,13 @@ sequenceDiagram
     C-->>UI: Publish completion or failure
 ```
 
-**Participant key:** the interface collects requests and displays status; the coordinator owns the request and publication decision; the worker computes a result away from the interface thread; the store persists accepted history. Solid arrows with filled heads are direct calls; solid arrows with open heads are asynchronous worker handoffs; dashed arrows with filled heads return outcomes. Each visual format has one meaning in this sequence.
+**Key**
 
-The sequence stops at the architecturally significant publication outcome. Retry policy, validation branches, cancellation, and power-loss recovery are omitted because they do not answer this view's question. If one of those paths has distinct architectural consequences, give it a separate scenario.
+- Solid arrow, filled head: direct call
+- Solid arrow, open head: asynchronous worker handoff
+- Dashed arrow, filled head: returned outcome
+
+The interface collects requests and displays status; the coordinator owns the request and publication decision; the worker computes a result away from the interface thread; the store persists accepted history. The sequence stops at the architecturally significant publication outcome. Retry policy, validation branches, cancellation, and power-loss recovery are omitted because they do not answer this view's question. If one of those paths has distinct architectural consequences, give it a separate scenario.
 
 ## Weak mixed-concern example
 
@@ -211,7 +247,7 @@ An “application overview” that puts the user, UI classes, build targets, a w
 
 ## Local review
 
-**Must:** The diagram passes admission, semantic-integrity, and rendered-comprehension gates. Its intended reader, architectural question, takeaway, type, scope, abstraction, notation, and relationship directions are unambiguous. A repeated edge style has one declared meaning; distinct meanings are labelled or keyed without relying on colour alone. Refinements preserve their mappings. Mermaid includes `accTitle` and `accDescr`, and adjacent prose preserves the takeaway. A deliberately weak teaching example is labelled and immediately explained.
+**Must:** The diagram passes admission, semantic-integrity, and rendered-comprehension gates. Its intended reader, architectural question, takeaway, type, scope, abstraction, notation, and relationship directions are unambiguous. Two authors given its title, enclosing heading, and the code would draw similar diagrams. A repeated edge style has one declared meaning; distinct meanings are labelled or keyed without relying on colour alone. The key explains only notation. Refinements preserve their mappings. Mermaid includes a frontmatter `title:` and, with the same text, `accTitle`, plus `accDescr`; adjacent prose preserves the takeaway. A deliberately weak teaching example is labelled and immediately explained.
 
 **Should:** Typography, spacing, and minor aesthetic choices support the reading order. Prefer a compact key and restrained visual styling.
 
