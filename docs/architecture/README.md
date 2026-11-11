@@ -1,236 +1,203 @@
 # KovaaksStatisticsViewer Architecture
 
-This is the as-built Architecture Description for KovaaksStatisticsViewer (KSV). It describes the implemented system, not planned features or the historical rationale behind its design.
+Documented version: v1.0.0
 
 ## Purpose, audience, and scope
 
-KSV is a local desktop application that reads run data produced by KovaaK’s FPS Aim Trainer and presents scenario history, performance series, playtime, and configurable graph views.
+KovaaksStatisticsViewer (KSV) is a Windows desktop application that imports local exports from KovaaK's FPS Aim Trainer. It presents scenario history, per-run performance series, playtime, and benchmark progress. Players can configure graphs and export any graph or the benchmark table as an image.
 
-This document is primarily for maintainers and contributors evaluating changes to runtime behavior, layer boundaries, persistence, data compatibility, UI integration, packaging, or testability.
+This description is for maintainers and contributors deciding where a change belongs and what it must preserve: layer boundaries, the import and persistence model, data compatibility, the QML/C++ boundary, threading, packaging, and testability.
 
-The scope is the shipped `ksv` process and its local files. Development-only tests and the component gallery are included only where they explain architectural quality controls.
+The scope is the shipped `ksv` process, its local files, and the build that produces it. Development-only tools and tests appear only where they explain a quality control or a build constraint.
 
 ## System context
 
-This view is for a maintainer orienting to the product. It answers: **who uses KSV, and which external software system supplies its data?** The takeaway is that the player uses both applications, while KovaaK's produces the local run exports that KSV imports.
+For maintainers orienting to KSV, this system-context diagram shows the aim-training player, KovaaK's FPS Aim Trainer, and KSV. The player uses both applications, and KSV reads the local files KovaaK's writes.
 
-**Type:** system context. **Scope:** the shipped KSV software system and its direct environment. **Concern:** people and external software-system interactions only.
+**Type:** system context. **Scope:** the shipped KSV software system as one box, with the person and the external software system that interact with it directly. **Concern:** people and external software-system interactions only.
 
 ```mermaid
+---
+title: Player interactions with KSV and KovaaK's FPS Aim Trainer
+---
 flowchart TB
-    accTitle: KovaaksStatisticsViewer system context
-    accDescr: An aim-training player uses KovaaK's FPS Aim Trainer and KovaaksStatisticsViewer; KovaaK's produces local run exports that KSV imports.
+    accTitle: Player interactions with KSV and KovaaK's FPS Aim Trainer
+    accDescr: A player uses both KovaaK's FPS Aim Trainer and KSV; KSV imports the local files KovaaK's writes.
     User["Person<br/>aim-training player"]
     Trainer["External software system<br/>KovaaK's FPS Aim Trainer"]
     KSV["Software system<br/>KovaaksStatisticsViewer"]
 
     User -->|"plays scenarios"| Trainer
-    User -->|"explores run history"| KSV
-    Trainer -->|"produces local run exports for"| KSV
+    User -->|"reviews history and exports images"| KSV
+    Trainer -->|"supplies local run exports and playlist files"| KSV
 ```
 
-**Key:** every box identifies its architectural type in the label. Each arrow names a distinct interaction; no internal KSV component, store, or technology is shown.
+No key is needed: the boxes identify their types and the labelled arrows name distinct interactions.
 
-Evidence: [`src/main.cpp`](../../src/main.cpp), [`src/qt_data/file_service.cpp`](../../src/qt_data/file_service.cpp), [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/qt_data/settings_service.cpp`](../../src/qt_data/settings_service.cpp), and [`src/ui/qml/graph/VisualSettingsManager.qml`](../../src/ui/qml/graph/VisualSettingsManager.qml).
+KSV reads local exports from the configured KovaaK's installations (`.perf` run files and stats `.csv` files under each install root's `FPSAimTrainer/performances` and `FPSAimTrainer/stats` folders) and a playlist file the player selects when seeding a benchmark. Image export writes to the operating-system clipboard through Qt or to a PNG path the player selects. KSV uses no network service. KovaaK's is the only external software system. Evidence: [`FileService`](../../src/qt_data/file_service.cpp), [`PlaylistReader`](../../src/qt_data/playlist_reader.cpp), [`QtClipboardImageWriter`](../../src/qt_data/qt_clipboard_image_writer.cpp).
 
-KovaaK's produces `.perf` and optional stats `.csv` exports in configured local roots; KSV reads them as import inputs. KSV owns accepted run history in `profile.pb` and configuration in local settings. Qt, Protocol Buffers, files, and owned stores are internal or subordinate details rather than external software systems, so they are omitted from this context view. The verified production composition uses only local interactions; no remote service is present in this model.
+KSV owns everything it derives from the exports in local stores; [Owned data](#owned-data) lists them, [Run history data][run-history-data] covers the source-based Rebuild and migration enrichment that still read the exports, and [Benchmark definitions][benchmark-definitions] covers the definition files, which are their own recovery source and accept external edits on refresh. Evidence: [`FileService`](../../src/qt_data/file_service.cpp), [`PlaylistReader`](../../src/qt_data/playlist_reader.cpp), [`QtClipboardImageWriter`](../../src/qt_data/qt_clipboard_image_writer.cpp), [`App::App`](../../src/app/app.cpp).
 
 ## Architectural strategy and constraints
 
-The logical request direction is:
+QML requests usually pass through presentation view models and application use cases or `SessionController` to data services and Qt adapters. The domain (`src/domain`) provides run identity, the `UserProfile` index and aggregates, and benchmark modelling and evaluation in plain C++. It has no Qt or persistence I/O; `UserProfile::addRun` does write duplicate-run diagnostics to `std::cerr` ([`user_profile.cpp`](../../src/domain/user_profile.cpp)). [Building blocks](#building-blocks) shows the direct dependencies that cross these boundaries. Application rules that several layers share — graph configuration and its validation, the expression domain-specific language (DSL), Graph Lines editing, range resolution — live in the Qt-free `ksv_contracts` library alongside the use-case interfaces ([ADR 0001](decisions/0001-application-interface-and-implementation-placement.md)).
 
-`QML/UI → application use cases and controller → data services and Qt adapters → domain`
+There is no dependency-injection framework. [`App::App()`](../../src/app/app.cpp) is the single production composition root. It assembles services, use cases and view models, primarily through `shared_ptr<I…>` interfaces. Its injected constructor accepts eight dependencies, and it supplies nine view models to QML. [Composition root][composition-root] explains which subscribers must exist before the first profile load.
 
-The implementation uses constructor injection and application-facing `I*` interfaces rather than a dependency-injection framework. [`App::App()`](../../src/app/app.cpp) is the single production composition root. It constructs concrete leaf services once, connects callbacks, and injects shared interface references into use cases and presentation view models.
+Change propagation uses two mechanisms, chosen by interface rather than by whether the implementation is a `QObject`. Service and use-case interfaces register `std::function` callbacks (profile, graph configuration, benchmark library, settings, file arrivals, day rollover), even where the implementation, such as `FileService` or `SettingsService`, is a `QObject`; `ISessionController` and the view-model layer use Qt signals. The two channels fire in different orders during a profile import, which is a constraint for anyone adding a subscriber; [Composition root][composition-root] owns the registrations and their order.
 
-The domain is ordinary C++ and owns run identity, profile indexing, and profile-level aggregates. Application use cases own graph-specific bucketing, expression evaluation, and series assembly. The domain has no Qt or I/O dependency.
+Work leaves the GUI thread in exactly three places: profile imports run on the profile import thread (`SessionController`'s `m_build_thread` with a `ProfileBuildWorker`), capture rendering on a one-thread render pool, and PNG writing on a one-thread save pool. Each worker receives an owned value payload and returns its result to the GUI thread through a queued call. The GUI thread decides whether to accept an import candidate or a render result; PNG completion only reports a write that has already been attempted ([`ImageOutputUseCase::savePng`](../../src/app/usecases/image_output_use_case.cpp)). [Profile lifecycle][profile-lifecycle] owns the import hand-off and its acceptance gate; [Image capture][image-capture] owns capture's guarded contexts, cancellation, session and generation matching, and single-flight output; [Composition root][composition-root] owns what the process waits for at exit and the teardown of all three workers, imports included.
 
-Presentation code communicates with application behavior through interfaces and transport types. The `ksv_contracts` target contains the UI-facing use-case contracts and their data structures. Additional application-facing storage and service ports live under [`src/data/interfaces/`](../../src/data/interfaces/).
-
-Observer mechanisms follow the component type boundaries. QObject-facing session and presentation paths use Qt signals, while non-QObject service and store interfaces register `std::function` callbacks for profile, settings, file, and series-configuration changes. The implementation establishes this split without recording a broader design rationale for it.
-
-Because the composition root resides in `ksv_app`, that target physically links the UI and the concrete lower-layer libraries it assembles. The conceptual dependency rule is therefore enforced at injected component boundaries rather than by a strictly descending CMake graph.
-
-The QML module is a static `NO_PLUGIN` module. Types that might otherwise be removed by the linker are explicitly referenced and registered by [`declare_metatypes()`](../../src/qml_registration.h) before any executable loads the module.
+The layer rule is a convention enforced at injected interface boundaries, not by the build. Every target sees the whole `src/` tree through a global include path, `ksv_contracts` and `src/data/interfaces` include each other's headers, and the composition root's library links the UI library. [Build and deployment][build-and-deployment] owns the physical picture and what does and does not catch a violation.
 
 ## Building blocks
 
-### Responsibility model
+For maintainers deciding where a change belongs, this dependency diagram shows how presentation reaches application behavior and how application and data code use the domain and shared contracts.
 
-This view is for a maintainer deciding where a change belongs. It answers: **which top-level responsibilities use which other capabilities?** The takeaway is that presentation delegates behavior to application and data capabilities, while application and data code operate over the domain model.
-
-**Type:** top-level building-block dependency. **Scope:** major responsibilities inside the shipped process. **Concern:** principal capability dependencies, not target links, object ownership, or individual calls.
+**Type:** top-level building-block dependency. **Scope:** the five responsibility groups that together make up the shipped process, each grouping classes and targets by responsibility, and every direct use between them. **Concern:** principal "uses" relationships, not target links, ownership, or individual calls.
 
 ```mermaid
+---
+title: Direct dependencies among KSV responsibility groups
+---
 flowchart TB
-    accTitle: KSV top-level responsibility dependencies
-    accDescr: Presentation uses application behavior and data-service ports; application and data capabilities use the domain model.
-    Presentation["Presentation<br/>QML, view models, graph rendering"]
-    Application["Application<br/>composition, use cases, session coordination"]
-    Data["Data and platform capabilities<br/>ingestion, persistence, filesystem, settings"]
-    Domain["Domain<br/>run identity, profile model, calculations"]
+    accTitle: Direct dependencies among KSV responsibility groups
+    accDescr: Presentation uses Application, which uses Data and platform. Presentation, Application and Data and platform also use Shared contracts and Domain; Shared contracts uses Domain. SettingsViewModel additionally uses data-layer ports directly.
+    Presentation["Presentation"]
+    Application["Application"]
+    Data["Data and platform"]
+    Contracts["Shared contracts"]
+    Domain["Domain"]
 
     Presentation --> Application
-    Presentation --> Data
+    Presentation -.->|"settings, file and profile ports<br/>(SettingsViewModel only)"| Data
     Application --> Data
+    Presentation --> Contracts
+    Presentation --> Domain
+    Application --> Contracts
+    Data --> Contracts
     Application --> Domain
     Data --> Domain
+    Contracts --> Domain
 ```
 
-**Key:** boxes group responsibilities rather than enumerate classes or build targets. Every solid arrow points from a consumer to capabilities it uses; an unlabelled arrow always has that one meaning.
+**Key**
 
-Evidence: [`src/app/app.cpp`](../../src/app/app.cpp), [`src/ui/qml/Main.qml`](../../src/ui/qml/Main.qml), [`src/ui/presentation/scenarios/scenario_browser_vm.cpp`](../../src/ui/presentation/scenarios/scenario_browser_vm.cpp), [`src/app/usecases/scenario_browser_use_case.h`](../../src/app/usecases/scenario_browser_use_case.h), [`src/app/session_controller.cpp`](../../src/app/session_controller.cpp), and [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp).
+- Unlabelled solid arrow: uses, from the consumer to the capability it uses
+- Dashed arrow: direct use of a data-layer port that bypasses the application group
 
-Runtime requests move from QML through presentation adapters into application use cases, session coordination, and service/store ports. Reverse refresh paths use the observer mechanisms described under Architectural strategy and constraints. `App` constructs the production service, use-case, controller, and presentation graph and owns the QML engine; `SessionController` has the narrower responsibility for profile-build thread and worker lifetime. These implementation details remain in prose because they do not require separate root-level diagrams.
-
-### Build target mapping
-
-The build maps those responsibilities to static libraries. This inventory is a table because maintainers usually need an exact target-to-responsibility lookup, not a second dependency graph:
-
-| Target | Responsibility and principal dependencies |
+| Responsibility group | Responsibility |
 |---|---|
-| `ksv_domain` | Qt-free run, source, and profile model. |
-| `ksv_contracts` | Application-facing contracts and transport types over the domain. |
-| `ksv_data` | Ingestion and authoritative profile persistence; uses Protocol Buffers, contracts, and domain. |
-| `ksv_qt_data` | Qt-backed filesystem, settings, and series-configuration adapters. |
-| `ksv_ui` | QML module, presentation models, axes, and custom graph rendering; consumes contracts. |
-| `ksv_app` | Use cases, session coordination, background profile building, and production composition. |
-| `ksv` | Process entry point and Qt event loop. |
+| Presentation | QML, view models, graph canvas and capture. |
+| Application | Composition root, use cases and `SessionController`. |
+| Data and platform | Import, persistence, benchmark and graph-configuration services, and Qt adapters. |
+| Shared contracts | Use-case interfaces, graph configuration and the expression DSL. |
+| Domain | Run identity, profile, benchmark model and evaluation. |
 
-See the root [`CMakeLists.txt`](../../CMakeLists.txt) and each target’s `CMakeLists.txt` under [`src/`](../../src/).
+The presentation-to-domain arrow is direct use of value types such as scenario and run identifiers and benchmark rank points. `SettingsViewModel` takes `ISettingsService`, `IFileService`, and `IProfileService` directly, the remaining bypass recorded as debt in [ADR 0004](decisions/0004-route-view-model-interactions-through-use-cases.md). [Composition root][composition-root] compares the direct dependencies of the settings, session and capture view models. Evidence: [`settings_vm.h`](../../src/ui/presentation/app/settings_vm.h), [`App::App`](../../src/app/app.cpp).
 
-Six view models cross the C++/QML boundary as required initial properties: scenario graph, playtime, completion history, session/build state, settings, and scenario browser. [`Main.qml`](../../src/ui/qml/Main.qml) delegates interaction to them and composes the application’s panels.
+The build links the static libraries below into the `ksv` executable. [Build and deployment][build-and-deployment] describes their build dependencies.
 
-The physical target graph is not identical to the logical dependency direction. In particular, `ksv_app` links `ksv_ui` because the `App` composition root constructs presentation objects; UI code still invokes application behavior through contracts.
+| Target | Responsibility |
+|---|---|
+| `ksv_domain` | Qt-free run, profile, and benchmark model and calculations. |
+| `ksv_contracts` | Qt-free use-case interfaces, transport types, and shared application rules (graph configuration, expression DSL, series editing, range projection, raster images). |
+| `ksv_data` | Profile import and persistence, benchmark library service, graph-configuration service, `.perf` and CSV decoding; uses Protocol Buffers. |
+| `ksv_qt_data` | Qt adapters: file watching and scanning, `QSettings`, graph-configuration persistence, benchmark JSON store, playlist reader, day source, clipboard and PNG writers. |
+| `ksv_ui` | Static QML module, view models, graph canvas and painters, capture pipeline. |
+| `ksv_app` | Use cases, `SessionController` and its import worker, and the `App` composition root (which is why it links `ksv_ui`). |
+| `ksv` | Entry point: process-wide Qt settings, QML type registration, and the event loop. |
 
-### Accepted run-data authority
+## Owned data
 
-This view is for a maintainer changing ingestion or persistence. It answers: **where do external exports become accepted history, and what state drives persistence and presentation?** The takeaway is that imports are reconciled into the accepted in-memory profile, which is both persisted as the authoritative store and queried for presentation.
-
-**Type:** data-flow diagram. **Scope:** external run exports through accepted history to persistence and presentation. **Concern:** run-data authority, not call direction or object ownership.
-
-```mermaid
-flowchart TB
-    accTitle: Accepted run-data flow
-    accDescr: External run exports pass through KSV's import pipeline into the accepted profile, which is persisted to profile.pb and supplies presentation data.
-    Exports["External run exports<br/>.perf and optional stats .csv"]
-    Import["Import pipeline<br/>decode, reconcile, validate"]
-    Profile["Accepted UserProfile<br/>in-memory history"]
-    Store[("profile.pb<br/>authoritative persistent history")]
-    Presentation["Application and presentation<br/>queries and projections"]
-
-    Exports --> Import
-    Import --> Profile
-    Profile --> Store
-    Profile --> Presentation
-```
-
-**Key:** the cylinder is KSV-owned persistent storage; the other boxes are data or processing roles. Every solid arrow means that run-history data is supplied to the next role or store. It does not identify the caller that initiates the transfer.
-
-Evidence: [`src/qt_data/file_service.cpp`](../../src/qt_data/file_service.cpp), [`src/data/run_ingestor.cpp`](../../src/data/run_ingestor.cpp), [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/app/usecases/scenario_browser_use_case.h`](../../src/app/usecases/scenario_browser_use_case.h), and [`src/ui/presentation/graphs/graph_vm.cpp`](../../src/ui/presentation/graphs/graph_vm.cpp).
-
-The original exports remain external inputs and are not a recovery source after acceptance. `profile.pb` is the persistent authority, while the accepted in-memory profile supplies current application queries and presentation projections. [Profile lifecycle][profile-lifecycle] owns the detailed migration, quarantine, worker, and live-ingestion paths.
-
-## Runtime behavior
-
-### Profile establishment and ingestion
-
-The authoritative run history is the profile store, `profile.pb`; the imported `.perf` and stats `.csv` files are inputs, not the history. At startup the composition root installs the build requester before the first load, so a missing or rejected store defers the first full build to the worker thread; a build request arriving while one is in flight is coalesced into a follow-up. Completed builds cross an acceptance boundary that discards candidates scanned under stale source roots and replays file arrivals that landed mid-build. Live ingestion watches the configured `FPSAimTrainer/performances` directories only and adds newly seen files, opportunistically enriched from already-present stats CSVs. Profile-path and source-directory settings follow two separate callback families: a path change reloads (or rebuilds into) the selected store, a directory change repoints only the watcher.
-
-[Profile lifecycle][profile-lifecycle] owns the detailed account — load, migration, and quarantine outcomes; the worker handoff; the acceptance boundary; live ingestion; reconfiguration; shutdown; and recovery. Consult it before changing anything about how runs are built, accepted, saved, or switched.
-
-Implementation anchors: [`src/app/session_controller.cpp`](../../src/app/session_controller.cpp), [`src/data/profile_service.cpp`](../../src/data/profile_service.cpp), and [`src/qt_data/file_service.cpp`](../../src/qt_data/file_service.cpp).
-
-### Run selection and rendered graph
-
-[Run selection and rendering details][run-selection-and-rendering] explains how a signal-only
-`SelectionPanel.qml` carries primitive `(hash, startTimeMs)` values to `Main.qml`, where
-`ScenarioBrowserViewModel` constructs the domain run identity and delegates selection to the session
-controller. A successfully changed current run then fans out independently to the graph, scenario
-browser, and—when the scenario hash changes—completion-history consumers; it is not returned through
-the original QML call.
-
-Consult this view before changing the QML/C++ transport, run identity, current-run notifications, or
-graph refresh behavior. It also records that graph columns address stable `SeriesId::value` values and
-that `GraphCanvas` is the presentation boundary rather than the owner of graph state.
-
-## Data and persistence
-
-### Identity and in-memory ownership
-
-A `ScenarioId` is identified by its hash; its name is a display label and does not participate in equality or ordering. A run is identified by the combination of scenario hash and start time in `ScenarioRunId`.
-
-`UserProfile` owns an append-only run vector and stable indexes by run ID and scenario ID. It also maintains per-scenario aggregates, total playtime, the latest run, and a registry that resolves compact source-file references back to configured roots and subdirectories.
-
-Implementation anchors: [`src/domain/run.h`](../../src/domain/run.h), [`src/domain/user_profile.h`](../../src/domain/user_profile.h), and [`src/domain/source_directory.h`](../../src/domain/source_directory.h).
-
-### Persistent stores
-
-| Store | Owner | Content and behavior |
+| Store | Owner | Authority and form |
 |---|---|---|
-| `profile.pb` | `ProfileService` through `ProfileSerializer` | Authoritative run history, sources, totals, optional performance samples, and optional CSV-derived settings. The default path is `profile.pb` under Qt’s application-data location, and the user may configure another path. |
-| Qt user settings | `SettingsService` | KovaaK’s source roots, profile path, serialized series configuration, and quarantined invalid series documents. |
-| QML `Settings` | `VisualSettingsManager.qml` | Window dimensions, panel visibility, selected axes, and per-series visibility preferences. |
-| KovaaK’s `.perf` and stats `.csv` files | External input, read by `FileService` and `RunIngestor` | Import sources. Once a run is in `profile.pb`, the serialized profile—not continued presence of the original files—is authoritative. |
+| `profile.pb` (default under the application-data location; path configurable) | `ProfileService` via `ProfileSerializer` | The authoritative run history and failed-source ledger, as a versioned Protocol Buffers file. Once a run is accepted, `profile.pb` rather than its source exports is authoritative ([Run history data][run-history-data]). |
+| `benchmarks/` directory under the application-data location | `BenchmarksService` via `BenchmarkStore` | One versioned JSON definition per benchmark; the accepted library. |
+| `QSettings` (INI) | `SettingsService`, `GraphConfigurationPersistence` | Configured KovaaK's source roots, profile path, recent benchmark IDs, and the versioned graph-configuration JSON document with its quarantined copies. |
+| QML-owned `Settings` groups in the same production INI file | `VisualSettingsManager.qml`, `SettingsDialog.qml` | Window geometry, panel and graph visibility, per-series visibility, history-graph choices, settings-dialog placement; unversioned, with key groups disjoint from the C++ ones. |
 
-`ProfileService` persists the accepted profile through `ProfileSerializer` after every accepted change, writing a temporary file and renaming it into place. Stores failing the header, version, or parse checks are quarantined beside the store rather than overwritten; the supported migration path is version 3 to 4. Switching the configured profile path reloads from that location — or rebuilds into it — and never copies the in-memory profile. [Profile lifecycle][profile-lifecycle] owns these mechanics in detail.
+[Run history data][run-history-data], [Benchmark definitions][benchmark-definitions], [Graph configuration][graph-configuration], and [QML boundary][qml-boundary] own the identity, versioning, and recovery rules of these stores. Evidence: [`App::App`](../../src/app/app.cpp), [`main.cpp`](../../src/main.cpp) (INI format), [`SettingsService`](../../src/qt_data/settings_service.cpp).
 
-Series and axis configuration is a versioned JSON document stored through `QSettings`. `SeriesConfigStore` validates changes, migrates supported older document shapes, quarantines invalid content, and seeds defaults when recovery is required. Its draft mode keeps edits in memory until commit and can restore the pre-edit baseline on discard.
+## Concerns
 
-Implementation anchors: [`src/data/formats/protobuf/schema/profile.proto`](../../src/data/formats/protobuf/schema/profile.proto), [`src/data/formats/protobuf/profile_serializer.cpp`](../../src/data/formats/protobuf/profile_serializer.cpp), [`src/data/formats/protobuf/migration/profile_v3_migrator.cpp`](../../src/data/formats/protobuf/migration/profile_v3_migrator.cpp), [`src/qt_data/series_config_store.cpp`](../../src/qt_data/series_config_store.cpp), and [`src/ui/qml/graph/VisualSettingsManager.qml`](../../src/ui/qml/graph/VisualSettingsManager.qml).
+### Composition and the QML boundary
 
-## Build, deployment, and development topology
+[Composition root][composition-root] explains how `App::App()` assembles the object graph, which leaves are injectable, and which ordering rules the assembly depends on — most importantly that `SessionController` must exist before the first profile load, and that anything constructed later must read initial state itself rather than wait for a notification. Consult it before adding a service, a subscriber, or a shutdown-sensitive worker.
 
-The application uses C++20, CMake, Ninja, Qt 6.12.0, and vcpkg-provided Protocol Buffers, built with one of two compiler toolchains: MinGW (the default; Qt `mingw_64`, `x64-mingw-dynamic` vcpkg triplet) or MSVC (Visual Studio 2022 toolset, Qt `msvc2022_64`, `x64-windows` triplet). Qt's MinGW package is release-only, so a MinGW Debug build links optimized Qt, whereas an MSVC Debug build links Qt's debug libraries, debug CRT and checked iterators and runs markedly slower. `scripts/toolchain.defaults.env` records `KSV_TOOLCHAIN`, which selects the tracked compiler profile `scripts/toolchain.mingw.env` or `scripts/toolchain.msvc.env`; the MSVC profile names the `vcvars64.bat` from which the build runner and the packaging script load the compiler environment themselves. The tracked files hold only machine-independent values (the flavour, each profile's vcpkg triplet, the runner settings) and `<...>` placeholders for every tool path. The ignored `scripts/toolchain.local.env` supplies the paths both profiles share and the ignored `scripts/toolchain.local.<flavour>.env` the paths of one profile, so switching flavour never applies one compiler's paths to the other; process environment values override all of them. Resolution fails, naming the key and the local files, while any required value still contains a placeholder. A linked git worktree without its own local files reads the main worktree's, so one set of machine-local files serves every checkout.
+[QML boundary][qml-boundary] explains how the nine view models reach QML and its panels, what the static QML module requires for a type to register, which QML components are signal-only, and which UI state QML persists for itself. Consult this view before adding a QML type: registration depends on the generated registrar and on the static linker retaining the type.
 
-The sanctioned Debug path is `uv run python scripts/build_and_test.py`. It configures and validates a repository-local `build-agent/` tree, fingerprints the resolved tools and runtime dependencies before incremental reuse, and retains full phase logs under `.temp/build-and-test/`. The runner consumes native stdout itself: success is summarized, while compiler, linker, GoogleTest, and QML failures are selected and printed without a separate log-read step. Focused logical scopes run the corresponding GoogleTest or Qt Quick Test executable with low-noise framework settings; the default path builds every target and runs the complete CTest suite. Parallel compiler jobs (`KSV_BUILD_JOBS`, default eight) and the process priority of everything the runner starts (`KSV_BUILD_PRIORITY`) are machine settings resolved from the same layered files and environment; they are deliberately not command-line options and not part of the toolchain fingerprint. The fingerprint records the toolchain flavour, so switching between MinGW and MSVC rebuilds `build-agent/` from cold. Under MSVC, Protocol Buffer generation runs vcpkg's `protoc` in place, since the `x64-windows` port installs its runtime DLLs beside it; under MinGW it uses a build-local `protoc` runtime assembled from the resolved vcpkg and compiler installations, so configuring does not mutate the dependency installation.
+### Run history
 
-The Release packaging script:
+[Profile lifecycle][profile-lifecycle] explains how stored-profile loads and background imports become accepted history. Consult it before changing import or profile switching: a changed import result must be saved before it is published.
 
-1. performs a clean Release configure and build by default;
-2. runs `windeployqt` for Qt and QML dependencies;
-3. copies the vcpkg runtime DLLs and the compiler runtime DLLs: under MinGW the ones beside the compiler that built the app, under MSVC the ones in the toolset's redistributable directory;
-4. smoke-tests the packaged executable with toolchain paths removed from `PATH`, requiring the compiler runtime to load from the package itself; and
-5. produces a self-contained `win64` ZIP.
+[Run history data][run-history-data] explains what makes two runs the same, how a `.perf` and its stats `.csv` pair into one run, what `profile.pb` stores, and what happens to a store that cannot be read. Consult it before changing identity, pairing, or the stored schema: a Rebuild starts from nothing, so runs whose files have been removed are lost.
 
-The compiler-matched MinGW DLL copies are part of the deployment architecture: multiple installed MinGW runtimes can otherwise satisfy DLL lookup with ABI-incompatible files. For the same reason every MinGW-built executable gets those DLLs copied beside it at build time. The MSVC runtime ships app-locally rather than through `vc_redist.x64.exe`, so the extracted ZIP runs on a machine without the Visual C++ Redistributable.
+[Run selection and rendering][run-selection-and-rendering] explains how the current run is chosen from three entry points and fanned out to the graph, scenario browser, and completion history. Consult it before changing selection transport or current-run notifications: `SessionController::setCurrentRun` is the guarded path for explicit selections, and an accepted import publishes through a second path.
 
-Tests mirror the production layers, with integration tests constructing the real object graph against fixture files. Qt Quick Tests cover QML behavior. The development-only gallery loads the real application wiring against disposable data and supports QML preview. The development-only UI driver (`ksv_driver`, driven by `scripts/ui_driver.py`) also runs the real wiring against a disposable session. It serves screenshots, item-tree inspection and synthesized input over a localhost socket, so agents can see and exercise the UI. Both tools are excluded from Release builds.
+### Graphs
 
-Implementation anchors: [`CMakeLists.txt`](../../CMakeLists.txt), [`scripts/build_and_test.py`](../../scripts/build_and_test.py), [`scripts/toolchain.defaults.env`](../../scripts/toolchain.defaults.env), [`scripts/package-release.ps1`](../../scripts/package-release.ps1), [`tests/`](../../tests/), [`tools/gallery/`](../../tools/gallery/), and [`tools/driver/`](../../tools/driver/).
+[Graph presentation][graph-presentation] explains the graph view-model family, its axis and series model, and the plain-value scene that both the on-screen canvas and image capture paint. Consult it before changing how a graph is modelled or drawn: the scene must stay free of live objects because capture paints it off the GUI thread.
+
+[Graph configuration][graph-configuration] explains the single validated configuration every graph reads, how it is persisted and migrated, and how quick edits and cancellable settings visits change it. Consult it before adding a graph setting: the persisted document is strictly versioned, and dashboard graphs must never see draft edits.
+
+### Benchmarks
+
+[Benchmarks][benchmarks] explains the benchmark subsystem: definitions owned by a data-layer service over a JSON store, joined to run history by an application use case, edited in presentation, and tracked against the profile. Consult it, and its children, before changing anything that crosses those parts; the accepted library and the editor's working copy are deliberately different objects.
+
+### Image capture
+
+[Image capture][image-capture] explains how a graph or the benchmark table becomes a PNG or clipboard image: a snapshot taken on the GUI thread and rendered on the capture render pool, after which the application use case dispatches the rendered image to the clipboard or PNG writer, both Qt adapters. Consult it before touching capture: the render input must be an owned snapshot, and stale renders are dropped by session and generation.
+
+### Build and deployment
+
+[Build and deployment][build-and-deployment] explains target boundaries, toolchain configuration and what ships. Consult it before changing targets, toolchain keys or packaging: toolchain resolution is implemented twice and the two must change together. KSV builds for Windows with C++20, CMake and Ninja against Qt and vcpkg-provided Protocol Buffers, using MinGW (default) or MSVC; GoogleTest is test-only. Release packaging produces a self-contained win64 ZIP.
 
 ## Cross-cutting quality responses
 
-- **Responsiveness:** full profile reconstruction runs on a worker thread; progress is reduced to whole-percent changes before crossing threads.
-- **Consistency during reconfiguration:** stale-root build results are rejected, concurrent file arrivals are queued, and repeated build requests are coalesced.
-- **Persistence recoverability:** profile writes use temporary-file replacement; invalid profile and series stores are quarantined rather than silently reused.
-- **Testability:** production leaves are injectable, use cases depend on interfaces, and integration tests can construct the real graph with deterministic paths.
-- **UI decoupling:** QML interaction is signal-driven, while C++ view models expose Qt properties, models, and notifications.
-- **Rendering performance and control:** graph lines and axes are painted by a custom C++ `QQuickPaintedItem` path while QML owns composition and interaction overlays.
-- **Local data ownership:** run history and configuration remain in local profile and settings stores.
+- **Responsiveness:** imports run on the profile import thread and capture rendering and PNG writing on their own one-thread pools ([Profile lifecycle][profile-lifecycle], [Image capture][image-capture]). Substantial work remains on the GUI thread: file listing scans on directory change, capture snapshots, accepting and saving import results, loading the stored profile at startup and on a profile-path change (including migrating and rewriting a version-3 file, see [Run history data][run-history-data]), and decoding a file opened directly. No latency target is established.
+- **Consistency:** a single gate accepts import results by token and generation, so results computed against replaced state are discarded ([Profile lifecycle][profile-lifecycle]); capture results are matched by session and generation in the same way ([Image capture][image-capture]).
+- **Persistence recoverability:** `profile.pb` and benchmark files are written atomically (temporary file then rename, or `QSaveFile`); unreadable profile and graph-configuration stores are quarantined (the profile rename is best effort; see [Run history data][run-history-data] and [Graph configuration][graph-configuration]), and unreadable or newer benchmark files are left untouched and reported ([Benchmark definitions][benchmark-definitions]).
+- **Testability:** `App` takes selected I/O dependencies through an injected constructor so integration tests and the gallery can drive the real object graph with deterministic paths. Use cases depend on interfaces, and per-layer tests use fakes from `tests/support`. [Composition root][composition-root] lists what is injected.
+- **Local data ownership:** all history, definitions, and configuration live in local files; nothing is sent anywhere.
 
 ## Known risks and debt
 
-- The KovaaK’s `.perf` schema contains fields whose meanings remain unknown or inferred. A producer-format change may require decoder and schema investigation.
-- Live ingestion watches the performance directories, not the stats directories. CSV enrichment is opportunistic when the matching file exists at performance-file arrival; a later CSV-only arrival is incorporated on a subsequent full rebuild rather than through its own live notification.
-- The supported profile migration path is specifically version 3 to version 4. Other incompatible versions are quarantined and rebuilt from configured sources where possible.
-- Tools are not discovered or provisioned: every environment must supply each tool path through the ignored local files or process environment values, and dependency versions are detected and fingerprinted rather than pinned.
-- Static QML type availability depends on maintaining the manual registration list in `declare_metatypes()`.
-- Shutdown during an active full build waits for that build because the worker operation is not interruptible.
+- The `.perf` schema has fields whose meaning is unknown; a format change by KovaaK's needs decoder investigation. Stats CSV parsing encodes several game-version-specific layouts.
+- KovaaK's folder layout and filename conventions constrain discovery, pairing, and migration enrichment. A layout change can silently hide exports or prevent matching files from pairing. [Run history data][run-history-data] describes the assumptions.
+- A Rebuild starts from an empty profile and is always treated as a change, so runs whose source files have been moved or deleted are dropped, and a Rebuild while a configured source root is unavailable saves a history that omits that root's runs (empty if no other input contributes) over `profile.pb` ([Run history data][run-history-data]). The UI warns before a manual Rebuild.
+- Shutdown waits for an in-flight import and an in-flight PNG save; neither is cancellable ([Composition root][composition-root]).
+- The build does not enforce layer rules: global include visibility permits cross-layer includes, and the current dependencies include mutual headers between `ksv_contracts` and `src/data/interfaces` and a header-only `ksv_ui` dependency on `ISessionController`.
+- QML type registration depends on include directories for the generated registrar and, for types nothing else references, on the manual list; omissions fail silently at runtime.
+- QML-owned UI settings are unversioned, and the set of graph keys is duplicated between C++ and `GraphCatalog.js`.
+- Graph-configuration persistence reports no failure, so the in-memory configuration can move ahead of the stored one.
+- Tools are not provisioned and dependency versions are machine-provided and unpinned (there is no vcpkg manifest); [Build and deployment][build-and-deployment] states what the Debug build fingerprint covers.
 
 ## Decision and design context
 
-Architecture Decision Records under [`decisions/`](decisions/) record the rationale for
-architecturally significant choices; this description states the as-built structure and defers
-rationale to them. The benchmark subsystem's ownership model is
-[ADR 0005](decisions/0005-data-owned-benchmark-service-and-presentation-drafts.md) (superseding
-[ADR 0003](decisions/0003-profile-independent-benchmark-repository-and-application-owned-state.md)):
-a Qt-free data-layer `BenchmarksService` owns the accepted benchmark library over an injected
-`IBenchmarkStore`, `BenchmarkResolutionUseCase` owns the profile join, and presentation owns the
-editable working copy. `App::App()` constructs store → accepted service → resolution → manager and
-tracking before the initial profile load.
+[Decision records](decisions/) hold the rationale for architecturally significant choices; this description states the as-built structure and links them where relevant. Where the implementation and a record disagree, the views say so.
+
+- [Application interface and implementation placement](decisions/0001-application-interface-and-implementation-placement.md): contracts versus use cases.
+- [Embedded stable identity for benchmark elements](decisions/0002-embedded-stable-identity-for-benchmark-elements.md): benchmark element identity.
+- [Data-owned benchmark service and presentation drafts](decisions/0005-data-owned-benchmark-service-and-presentation-drafts.md): benchmark ownership, superseding [ADR 0003](decisions/0003-profile-independent-benchmark-repository-and-application-owned-state.md).
+- [Route view-model interactions through use cases](decisions/0004-route-view-model-interactions-through-use-cases.md): view models through use cases.
+- [Unified graph configuration and presentation drafts](decisions/0006-unified-graph-configuration-and-presentation-drafts.md): graph configuration.
+- [Presentation-owned capture snapshots and application-owned output](decisions/0007-presentation-owned-capture-snapshots-and-application-owned-output.md): captures.
+
+## Evidence and limitations
+
+The views were rebuilt on 2026-11-10 from a survey of `src/`, the build files and the scripts, not from earlier versions of this description. Each view's Evidence and limitations section identifies the files inspected and any gaps in its coverage. Claims cite source paths and symbols; thread affinity and destruction order on shutdown are partly inferred from C++ and Qt rules rather than observed at runtime. Test source was used mainly to establish topology, and in some views to confirm behavioural contracts or the substitute-object mechanics of QML tests; it was not run. Several ADRs link files that no longer exist, and ADR 0004's and ADR 0006's statements of current state are out of date; the views note this where it matters.
 
 <!-- arch-doc:references:start -->
-[profile-lifecycle]: views/runtime/profile-lifecycle.md
-[run-selection-and-rendering]: views/runtime/run-selection-and-rendering.md
+[benchmark-definitions]: views/benchmark-definitions.md
+[benchmarks]: views/benchmarks.md
+[build-and-deployment]: views/build-and-deployment.md
+[composition-root]: views/composition-root.md
+[graph-configuration]: views/graph-configuration.md
+[graph-presentation]: views/graph-presentation.md
+[image-capture]: views/image-capture.md
+[profile-lifecycle]: views/profile-lifecycle.md
+[qml-boundary]: views/qml-boundary.md
+[run-history-data]: views/run-history-data.md
+[run-selection-and-rendering]: views/run-selection-and-rendering.md
 <!-- arch-doc:references:end -->
