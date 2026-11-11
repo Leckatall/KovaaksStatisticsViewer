@@ -264,6 +264,53 @@ namespace {
         }
     }
 
+    TEST(DriverPerformanceSpecTest, ParseErrorsNameTheField) {
+        const auto error = [](const char *text) {
+            gallery::PerformanceShape shape;
+            return driver::parsePerformanceShape(json(text), shape);
+        };
+        EXPECT_TRUE(error(R"({"windows": [{"from": 20, "to": 20}]})").contains("windows[0].to"));
+        EXPECT_TRUE(error(R"({"windows": [{"from": 0, "to": 5}, {"to": 5}]})").contains("windows[1].from: is required"));
+        EXPECT_TRUE(error(R"({"windows": [{"from": 0, "to": 5, "acuracy": 0.5}]})").contains("windows[0].acuracy"));
+        EXPECT_TRUE(error(R"({"noise": {"accuracy": -0.1}})").contains("noise.accuracy"));
+        EXPECT_TRUE(error(R"({"windows": [{"from": 0, "to": 5, "ramp": "yes"}]})").contains("windows[0].ramp"));
+
+        gallery::PerformanceShape shape;
+        ASSERT_EQ(driver::parsePerformanceShape(json(R"({"windows": [{"from": 50, "to": 60, "accuracy": 0.8, "ramp": true},
+            {"from": 20, "to": 25, "shotRate": 0.9}], "noise": {"accuracy": 0.2}})"), shape), QString());
+        ASSERT_EQ(shape.windows.size(), 2U);
+        EXPECT_TRUE(shape.windows[0].ramp);
+        EXPECT_GT(shape.accuracyNoise, 0.0);
+    }
+
+    double meanScoreBetween(const domain::Run &run, const double from, const double to) {
+        double sum = 0.0;
+        int count = 0;
+        for (const auto &sample: samples(run)) {
+            if (sample.time > from && sample.time <= to) {
+                sum += sample.score;
+                ++count;
+            }
+        }
+        return count == 0 ? 0.0 : sum / count;
+    }
+
+    // A shape redistributes a run's score over time; the skill alone sets the total.
+    TEST(DriverPerformanceSpecTest, AWindowMovesScoreOutOfItWithoutChangingTheRunsScore) {
+        for (const auto &model: {constantFireModel(), clickModel()}) {
+            gallery::PerformanceShape plain;
+            plain.accuracyNoise = 0.1;
+            gallery::PerformanceShape choke = plain;
+            choke.windows.push_back({.from = 40.0, .to = 50.0, .accuracy = 0.5});
+            const auto flat = modelled(model, 1.0, 11, plain);
+            const auto shaped = modelled(model, 1.0, 11, choke);
+
+            EXPECT_LT(meanScoreBetween(shaped, 40.0, 50.0), 0.8 * meanScoreBetween(flat, 40.0, 50.0)) << model.name;
+            EXPECT_GT(meanScoreBetween(shaped, 0.0, 40.0), meanScoreBetween(flat, 0.0, 40.0)) << model.name;
+            EXPECT_NEAR(shaped.totals().score, flat.totals().score, 0.03 * flat.totals().score) << model.name;
+        }
+    }
+
     // Real runs start with a partial first second, and Polarized Hell's 62.4 s
     // length ends on a 0.4 s sample. Here: 0.6 s first, then whole seconds, then 0.4 s.
     TEST(DriverScenarioSpecTest, PartialSecondsCarryProportionallyFewerShots) {
