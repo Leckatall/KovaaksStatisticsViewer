@@ -2,7 +2,8 @@
   {"area": "Scenarios", "state": "Run-graph scenario selected: run, history and playtime graphs", "shot": "scenarios-overview"},
   {"area": "Scenarios", "state": "Run graph alone, Top 10% and Last 10 only: the recent runs fall away late", "shot": "run-graph-story"},
   {"area": "Scenarios", "state": "Run graph hover near the end of the run", "shot": "run-graph-hover"},
-  {"area": "Benchmarks", "state": "Viscose Intermediate S1 summary and Control Tracking rows, lower tiers", "shot": "benchmark-rows"},
+  {"area": "Benchmarks", "state": "Viscose Intermediate S1 summary, Control and Reactive Tracking rows", "shot": "benchmark-rows"},
   {"area": "Benchmarks", "state": "Flick Tech rows across tiers", "shot": "benchmark-rows-flick-tech"},
-  {"area": "Benchmarks", "state": "Rank history card climbing", "shot": "rank-history"}
+  {"area": "Benchmarks", "state": "Rank history climbing, recent rank and benchmark playtime", "shot": "benchmark-history"},
+  {"area": "Settings", "state": "Run graph lines and style", "shot": "settings-run-graph"}
 ]

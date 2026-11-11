@@ -280,7 +280,7 @@ A failing step stops the batch unless `--keep-going`. Either way the batch ends 
 | `full` | main screens and menus, all six graph gear popups and settings pages, settings sections, axis creation, series options, validation, save/discard/reset flows and the Benchmark Manager; fails on app warnings |
 | `unreachable` | data states, injected faults, held gestures and dialog prompts, including direct benchmark save failure |
 | `composing-example` | the worked example below |
-| `showcase` | README and portfolio images: [`specs/showcase/profile.json`](specs/showcase/profile.json), every Viscose Intermediate S1 row played over three months, in a visible window at 2x scale sized for a 1920x1080 screen |
+| `showcase` | README and portfolio images: [`specs/showcase/profile.json`](specs/showcase/profile.json), every Viscose Intermediate S1 row played over three months, headless at 1440x900 |
 
 `report` builds a self-contained page (images embedded; `--link` links them instead): a summary with failed steps, the coverage table, then the shots grouped by subdirectory with their labels, the command that took them and any app warnings. Click a shot to enlarge it. Without an `index.jsonl` it lists the numbered PNGs.
 
