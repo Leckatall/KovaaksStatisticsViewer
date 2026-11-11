@@ -52,6 +52,7 @@ The synthetic datasets copy every file in [`benchmarks/`](benchmarks) into the s
 |---|---|
 | `driver-demo.json` (5 tiers) | Clicking split into Static and Dynamic subcategories, Tracking flat. Rows: above Platinum (recent average back in the Platinum chunk), just into Bronze with the recent average still in Iron (the only Silver blocker), Gold nine tenths of the way to Platinum, Iron with the recent average below it, and played but below Iron. Summary: attained Bronze, none completed, next Silver; the rank history climbs in steps. |
 | `driver-many-tiers.json` (12 tiers, Iron…Celestial) | Every row ranked, Iron to Nova: attained Grandmaster, completed Iron (the average-rank tick shows), next Nova with two blockers. The ladder overflows the grid at 960x700. |
+| `Viscose Benchmarks Intermediate S1.json` (8 tiers, Cinnabar…Fuchsia) | The real benchmark, unchanged: 36 scenarios in Control Tracking, Reactive Tracking, Flick Tech and Click Timing, each split into subcategories. Its scenarios carry their real hashes, so every row is unplayed against the synthetic profiles; a profile spec that uses those hashes fills it. |
 
 Under `single`, `short` and `bunched` only the 1wall6targets row has runs; the others show as unplayed.
 
