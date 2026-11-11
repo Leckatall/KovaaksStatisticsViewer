@@ -22,6 +22,8 @@ or accepted together. Proposed, unresolved, and merely recommended choices are n
 
 Two choices are one decision only when neither could sensibly be reversed without the other. If one could be undone while the other stands, they are separate ADRs. Two signs that a record bundles more than one decision: its title needs "and" to join separate choices, or one of its alternatives applies to only part of what was decided.
 
+Applying an accepted decision to a new case is not a new decision and gets no ADR. Departing from one is a decision, recorded as an amending or superseding ADR.
+
 An ADR records what was chosen and why. The Architecture Description in `docs/architecture/` records what exists. Component inventories, per-class responsibilities, signatures, and wiring belong in the Architecture Description, which is kept current; an ADR that carries them goes stale, because its body is not revised.
 
 An ADR body is a historical record. After acceptance, do not rewrite its decision text to describe a
@@ -41,6 +43,8 @@ Store ADRs in `docs/architecture/decisions/` with filenames of the form
 ```markdown
 # NNNN: Decision title
 ```
+
+A title names the one choice in a short phrase, about ten words at most, that reads naturally when the ADR is cited in a sentence. It does not list components or say who owns what; that is the Decision's job. A title that needs "and" or a comma-separated list is a sign that the record bundles more than one decision (see [Scope](#scope)).
 
 The next identifier is one greater than the highest numeric filename prefix already present in that
 directory. Never reuse an identifier. Resolve the next identifier again immediately before writing so
@@ -86,7 +90,7 @@ amends:
 - `retrospective: true` means the ADR documents a choice that predates the record. It does not claim
   that the original decision date is known.
 - `supersedes` lists every earlier ADR fully replaced by this ADR.
-- `superseded-by` names the accepted ADR that fully replaced this ADR. When the record was split, it names the primary replacement (see [Supersession](#supersession)).
+- `superseded-by` names the accepted ADR that fully replaced this ADR. When the record was split, it names the primary replacement (see [Supersession](#supersession)). It does not change if that ADR is later superseded itself; follow the chain to reach the decision in force.
 - `amends` lists every earlier ADR whose decision this ADR changes in part. Each listed ADR stays `accepted` and carries a matching entry in its `## Amendments` section.
 
 Use zero-padded, four-digit identifiers in relationship fields.

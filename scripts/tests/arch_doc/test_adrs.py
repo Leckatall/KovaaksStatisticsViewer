@@ -232,6 +232,23 @@ def test_validate_adr_rejects_nonreciprocal_relationships_and_unknown_metadata(r
     assert "Invalid ADR metadata key: owner." in result.stderr
 
 
+def test_validate_adr_accepts_a_replacement_that_was_itself_superseded(run_cli) -> None:
+    """Catches a supersession chain invalidating its oldest link once the middle record is replaced."""
+    write_adr(run_cli.repo, "0001", "first", status="superseded", extra="superseded-by: '0002'\n")
+    write_adr(
+        run_cli.repo,
+        "0002",
+        "second",
+        status="superseded",
+        extra="superseded-by: '0003'\nsupersedes:\n  - '0001'\n",
+    )
+    write_adr(run_cli.repo, "0003", "third", extra="supersedes:\n  - '0002'\n")
+
+    result = run_cli("validate", "adr")
+
+    assert result.returncode == 0, result.stderr
+
+
 AMENDMENTS = "\n## Amendments\n\n- 2026-10-01: `Foo` is now `Bar`.\n"
 
 

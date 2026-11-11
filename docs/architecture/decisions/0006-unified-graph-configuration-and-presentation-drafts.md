@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 date: 2026-10-17
+superseded-by: '0010'
 retrospective: true
 ---
 
