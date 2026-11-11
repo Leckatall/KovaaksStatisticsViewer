@@ -1,0 +1,11 @@
+---
+type: internal
+area: Architecture
+---
+ADR 0005 and ADR 0006 are superseded by three ADRs that state the same choices as rules. Both earlier records bundled several choices and were written as a list of components and their responsibilities.
+ADR 0010, the primary, states the ownership rule once for all persisted state: one authority per body of state in the data layers, reached from above only through a Qt-free interface; deciding what is accepted is kept apart from storing it behind an injected persistence port; working copies live above the authority; joins between authorities live in the application layer. Its scope is deliberately wider than either earlier record, which decided the same thing for benchmarks and for graph configuration separately. An authority that only reads and writes stored values may be the storage adapter itself, which is how the application-settings service complies; authorities are forbidden from combining state, not from every dependency, which is how the profile service reading its store path from settings complies.
+ADR 0008 carries ADR 0005's remaining choice: the application makes no background write to an entity that is open for editing.
+ADR 0009 carries ADR 0006's remaining choice: all graph configuration is one snapshot and one versioned document, replaced only as a whole after the complete candidate validates.
+No ADR records that unsaved input is held in presentation; that follows from the layering and is a consequence of ADR 0010. Which use case stores the edit lease, which presentation element prompts on unsaved changes, and the construction order in `App::App()` are design detail that no ADR now states, so the three differences the benchmarks view lists against ADR 0005 no longer exist as ADR differences. The views still cite ADR 0005 and ADR 0006 and have not been reconciled.
+ADR 0003 keeps `superseded-by: 0005`; the convention now says a `superseded-by` is not rewritten when its target is later superseded, so the chain 0003, 0005, 0010 is followed to the decision in force.
+`docs/conventions/architecture-decision-records.md` also gains two rules. Scope: applying an accepted decision to a new case gets no ADR, and departing from one does. Titles: one choice in a short phrase of about ten words, with no component list.

@@ -101,9 +101,6 @@ namespace ksv::application {
             m_settingsService, m_profileService, m_fileService, m_profileImporter);
         m_profileService->loadProfile();
 
-        // Built before the initial profile load: the resolution use case subscribes to the profile
-        // change stream in its constructor, so either the synchronously loaded profile or a later
-        // asynchronous build triggers reconciliation.
         m_benchmarkStore = std::move(benchmarkStore);
         m_benchmarksService = std::make_shared<data::BenchmarksService>(m_benchmarkStore);
         m_benchmarkResolutionUseCase = std::make_shared<BenchmarkResolutionUseCase>(

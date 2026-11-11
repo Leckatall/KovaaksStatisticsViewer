@@ -639,7 +639,8 @@ def _adr_relationship_problems(
             problems.append(
                 _problem(record.path, 1, f"ADR '{identifier}' names missing replacement '{record.superseded_by}'.")
             )
-        elif replacement.status != "accepted" or identifier not in replacement.supersedes:
+        # The replacement may since have been superseded or deprecated itself; it is still what replaced this one.
+        elif identifier not in replacement.supersedes:
             problems.append(
                 _problem(
                     record.path,
