@@ -1,0 +1,11 @@
+{
+  "description": "VT Controlsphere's measured late fade through forty-five seconds, then accuracy sliding to half by the end: a strong start thrown away in the last fifteen seconds.",
+  "windows": [
+    {"from": 0, "to": 10, "accuracy": 1.2},
+    {"from": 20, "to": 30, "accuracy": 0.98},
+    {"from": 30, "to": 40, "accuracy": 0.96},
+    {"from": 40, "to": 45, "accuracy": 0.95},
+    {"from": 45, "to": 60, "accuracy": 0.5, "ramp": true}
+  ],
+  "noise": {"accuracy": 0.45}
+}

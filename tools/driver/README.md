@@ -197,7 +197,7 @@ Noise comes from a seeded splitmix64 generator (`gallery::SpecRandom`, with its 
 
 ### Scenario specs
 
-`tools/driver/specs/scenarios/<slug>.json`: a scenario's rules and its ideal run. Representative numbers are in the showcase analysis; the checked-in specs are VT Controlsphere (constant fire) and 1w3ts Reload (kill-paced clicking).
+`tools/driver/specs/scenarios/<slug>.json`: a scenario's rules and its ideal run. Representative numbers are in the showcase analysis; the checked-in specs are VT Controlsphere and Polarized Hell (constant fire), 1w3ts Reload and Pasu Angelic (kill-paced clicking) and devTS (burst clicking with a capped shot rate).
 
 ```json
 {"name": "VT Controlsphere Novice S5 Hard", "hash": "de629646958f54755fa9f2fadbcebe80",
@@ -233,7 +233,7 @@ Noise comes from a seeded splitmix64 generator (`gallery::SpecRandom`, with its 
 | `noise` | `{"accuracy", "shotRate"}`: per-second relative standard deviation (default 0). Real per-second score varies a lot: VT Controlsphere's coefficient of variation is about 0.45 |
 | `description` | free text, ignored |
 
-The checked-in shapes are `late-fade.json` (VT Controlsphere's measured accuracy by sixth of the run) and `choke.json` (accuracy halves over the last ten seconds).
+The checked-in shapes are `late-fade.json` (VT Controlsphere's measured accuracy by sixth of the run), `choke.json` (accuracy halves over the last ten seconds) and `fading-finish.json` (the late fade, then accuracy halving over the last fifteen seconds).
 
 ## Fault injection
 
@@ -280,6 +280,7 @@ A failing step stops the batch unless `--keep-going`. Either way the batch ends 
 | `full` | main screens and menus, all six graph gear popups and settings pages, settings sections, axis creation, series options, validation, save/discard/reset flows and the Benchmark Manager; fails on app warnings |
 | `unreachable` | data states, injected faults, held gestures and dialog prompts, including direct benchmark save failure |
 | `composing-example` | the worked example below |
+| `showcase` | README and portfolio images: [`specs/showcase/profile.json`](specs/showcase/profile.json), every Viscose Intermediate S1 row played over three months, in a visible window at 2x scale sized for a 1920x1080 screen |
 
 `report` builds a self-contained page (images embedded; `--link` links them instead): a summary with failed steps, the coverage table, then the shots grouped by subdirectory with their labels, the command that took them and any app warnings. Click a shot to enlarge it. Without an `index.jsonl` it lists the numbered PNGs.
 

@@ -1,0 +1,9 @@
+{
+  "description": "Constant fire at about 103.5 shots/s scored 1 per hit over 62.4 s, so skill moves accuracy only. Skill 1.0 is the top Viscose Intermediate tier (3350, 54% accuracy).",
+  "name": "Polarized Hell Easy 20% Slower",
+  "hash": "3e2bdea571f64cc14bd34096021810c8",
+  "durationSeconds": 62.4,
+  "scoring": {"perHit": 1},
+  "ideal": {"shotsPerSecond": 103.5, "accuracy": 0.54},
+  "skill": {"accuracy": 1, "shotRate": 0}
+}

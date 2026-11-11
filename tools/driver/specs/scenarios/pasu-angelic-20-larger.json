@@ -1,0 +1,9 @@
+{
+  "description": "Kill-paced clicking, one hit per kill, scored 1 per hit. Better players fire faster and a little more accurately. Skill 1.0 is the top Viscose Intermediate tier (115: 2.26 shots/s at 85%).",
+  "name": "Pasu Angelic 20% Larger",
+  "hash": "63b4e8bedaf6cbc146cab02bb5d29b7a",
+  "durationSeconds": 60,
+  "scoring": {"perHit": 1, "hitsPerKill": 1},
+  "ideal": {"shotsPerSecond": 2.26, "accuracy": 0.85},
+  "skill": {"accuracy": 0.36, "shotRate": 0.64}
+}

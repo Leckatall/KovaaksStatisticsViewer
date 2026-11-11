@@ -1,0 +1,7 @@
+[
+  {"area": "Scenarios", "state": "Run-graph scenario selected: run, history and playtime graphs", "shot": "scenarios-overview"},
+  {"area": "Scenarios", "state": "Run graph alone: recent runs choking late against the Top 10% line", "shot": "run-graph-story"},
+  {"area": "Scenarios", "state": "Run graph hover near the end of the run", "shot": "run-graph-hover"},
+  {"area": "Benchmarks", "state": "Viscose Intermediate S1 rows across tiers", "shot": "benchmark-rows"},
+  {"area": "Benchmarks", "state": "Rank history climbing", "shot": "rank-history"}
+]
