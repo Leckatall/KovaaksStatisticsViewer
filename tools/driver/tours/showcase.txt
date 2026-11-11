@@ -9,6 +9,12 @@ start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --settin
 
 section scenarios
 wait "scenarioGraphPanel > text:VT Controlsphere Novice S5 Hard (*"
+# The menu bar holds focus at startup, which highlights File.
+eval "forceActiveFocus()" --on scenarioGraphPanel
+click "scenarioGraphPanel > seriesVisibilityCheckBox_1"
+click "scenarioGraphPanel > seriesVisibilityCheckBox_5"
+wait "scenarioGraphPanel > seriesVisibilityCheckBox_5" --prop checked --equals false
+mouse move --at 540 280
 shot --name scenarios-overview
 click "type:MenuBarItem & text:View"
 click "text:Graphs"
@@ -17,10 +23,8 @@ click "type:MenuBarItem & text:View"
 click "text:Graphs"
 click graphVisibility_dailyPlaytime
 wait --expr "!visualSettingsManager.playtimeGraphVisible && !visualSettingsManager.scenarioHistoryGraphVisible"
-# The story is the two run averages: hide the single run, accuracy and high score.
-click seriesVisibilityCheckBox_1
+# The story is the two run averages: hide the single run's Exp. Score and the high score.
 click seriesVisibilityCheckBox_2
-click seriesVisibilityCheckBox_5
 click seriesVisibilityCheckBox_9
 wait seriesVisibilityCheckBox_9 --prop checked --equals false
 mouse move --at 700 880
