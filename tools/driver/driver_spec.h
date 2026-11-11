@@ -50,6 +50,38 @@ namespace ksv::driver {
     // tools/driver/README.md). Scenarios are generated in the order listed, each
     // run seeded from its scenario and run index, so a spec always produces the
     // same profile.
+    struct SkillKeyframe {
+        double at = 0.0;  // a run index, or a spec day when Progression::byDay
+        double skill = 1.0;
+    };
+
+    // Player skill over a scenario's runs: the keyframes' linear trend (held flat
+    // outside them), times a per-day and a per-run relative fluctuation.
+    struct Progression {
+        bool byDay = false;
+        std::vector<SkillKeyframe> keyframes;
+        double fluctuation = 0.0;
+        double dayFluctuation = 0.0;
+    };
+
+    // Replaces the generated run at schedule index `run`. Fluctuation never applies;
+    // without its own skill it takes the progression's trend at its position.
+    struct HandRun {
+        int run = 0;
+        std::optional<double> skill;
+        std::optional<gallery::PerformanceShape> shape;
+    };
+
+    // A scenario entry generated from a scenario-spec rather than a gallery shape.
+    struct ModelledScenario {
+        gallery::ScenarioModel model;
+        gallery::PerformanceShape shape;
+        double scoreScale = 1.0;
+        double skill = 1.0;
+        std::optional<Progression> progression;
+        std::vector<HandRun> handRuns;
+    };
+
     struct ScenarioSpec {
         std::string name;
         std::string hash;
@@ -61,7 +93,8 @@ namespace ksv::driver {
         int minuteSpacing = 2;
         double durationSeconds = 60.0;
         bool performance = true;
-        gallery::RunShape shape = gallery::shapeForHash("gallery-primary");
+        gallery::RunShape shape = gallery::shapeForHash("gallery-primary");  // unused when modelled
+        std::optional<ModelledScenario> modelled;
     };
 
     struct ProfileSpec {

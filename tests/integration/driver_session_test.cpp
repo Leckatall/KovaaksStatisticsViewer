@@ -311,6 +311,208 @@ namespace {
         }
     }
 
+    // ---- Profile specs that reference scenario-specs and performance-specs ----
+
+    constexpr const char *kFireSpec = R"({"name": "Fire Spec", "hash": "fire-spec",
+        "ideal": {"shotsPerSecond": 100, "accuracy": 0.73}})";
+    constexpr const char *kChokeSpec = R"({"windows": [{"from": 20, "to": 30, "accuracy": 0.3}]})";
+
+    // A temporary tree of spec files; profile specs are parsed from their real path
+    // so references resolve as the driver resolves them.
+    struct SpecTree {
+        QTemporaryDir dir;
+
+        [[nodiscard]] QString path(const QString &relative) const { return QDir(dir.path()).filePath(relative); }
+
+        void write(const QString &relative, const QByteArray &content) const {
+            ASSERT_TRUE(writeFile(path(relative), content)) << relative.toStdString();
+        }
+
+        QString parse(const QString &relative, const QByteArray &content, driver::ProfileSpec &out) const {
+            write(relative, content);
+            return driver::parseProfileSpec(QJsonDocument::fromJson(content).object(), path(relative), out);
+        }
+
+        QString error(const QByteArray &content) const {
+            driver::ProfileSpec spec;
+            return parse("profile.json", content, spec);
+        }
+    };
+
+    std::vector<domain::Run> runsInOrder(const domain::UserProfile &profile, const std::string &hash) {
+        std::vector<domain::Run> runs;
+        for (const auto &run: profile.getAllRunRecords())
+            if (run.run_id.scenario_id.hash == hash) runs.push_back(run);
+        std::ranges::sort(runs, {}, [](const domain::Run &run) { return run.run_id.start_time; });
+        return runs;
+    }
+
+    double meanScore(const std::vector<domain::Run> &runs, const std::size_t from, const std::size_t to) {
+        double sum = 0.0;
+        for (std::size_t i = from; i < to; ++i) sum += runs[i].totals().score;
+        return sum / static_cast<double>(to - from);
+    }
+
+    TEST(DriverSpecTest, ReferencedSpecsResolveRelativeToTheReferringSpec) {
+        SpecTree tree;
+        tree.write("scenarios/fire.json", kFireSpec);
+        driver::ProfileSpec spec;
+        ASSERT_EQ(tree.parse("profiles/profile.json", R"({"scenarios": [
+            {"scenarioSpec": "../scenarios/fire.json", "runs": 2},
+            {"scenarioSpec": "../scenarios/fire.json", "name": "Other Scenario", "runs": 1}]})", spec), QString());
+        const auto profile = driver::buildProfile(spec);
+        ASSERT_EQ(runsInOrder(profile, "fire-spec").size(), 2U);
+        EXPECT_EQ(runsInOrder(profile, "fire-spec").front().run_id.scenario_id.name, "Fire Spec");
+        // Renaming a shared scenario-spec without a hash makes a scenario of its own.
+        EXPECT_EQ(runsInOrder(profile, "spec-other-scenario").size(), 1U);
+    }
+
+    TEST(DriverSpecTest, ReferenceErrorsNameTheReferringField) {
+        SpecTree tree;
+        tree.write("fire.json", kFireSpec);
+        tree.write("choke.json", kChokeSpec);
+        tree.write("bad-scenario.json", R"({"name": "Bad", "ideal": {"shotsPerSecond": 1}})");
+        tree.write("bad-shape.json", R"({"windows": [{"from": 5, "to": 1}]})");
+        tree.write("not-json.json", "{");
+
+        const auto expectError = [&](const QByteArray &content, const QStringList &fragments) {
+            const QString error = tree.error(content);
+            for (const auto &fragment: fragments)
+                EXPECT_TRUE(error.contains(fragment)) << error.toStdString() << " lacks " << fragment.toStdString();
+        };
+        expectError(R"({"scenarios": [{"scenarioSpec": "nope.json"}]})", {"scenarios[0].scenarioSpec", "no such file"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "bad-scenario.json"}]})",
+                    {"scenarios[0].scenarioSpec", "ideal.accuracy: is required"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "not-json.json"}]})", {"scenarios[0].scenarioSpec", "JSON"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "performanceSpec": "bad-shape.json"}]})",
+                    {"scenarios[0].performanceSpec", "windows[0].to"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "handRuns": [{"run": 0, "performanceSpec": "x.json"}]}]})",
+                    {"scenarios[0].handRuns[0].performanceSpec", "no such file"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "runs": 3, "handRuns": [{"run": 3}]}]})",
+                    {"scenarios[0].handRuns[0].run"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "handRuns": [{"run": 1}, {"run": 1}]}]})",
+                    {"scenarios[0].handRuns[1].run"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "shape": "gallery-pasu"}]})", {"scenarios[0].shape"});
+        expectError(R"({"scenarios": [{"name": "Legacy", "idealScore": 100}]})", {"scenarios[0].idealScore"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "skill": 1,
+                                       "progression": {"keyframes": [{"at": 0, "skill": 1}]}}]})", {"scenarios[0]"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "progression": {"keyframes": []}}]})",
+                    {"scenarios[0].progression.keyframes"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "progression": {"by": "week",
+                                       "keyframes": [{"at": 0, "skill": 1}]}}]})", {"scenarios[0].progression.by"});
+        expectError(R"({"scenarios": [{"scenarioSpec": "fire.json", "progression":
+                                       {"keyframes": [{"at": 5, "skill": 1}, {"at": 5, "skill": 2}]}}]})",
+                    {"scenarios[0].progression.keyframes[1].at"});
+    }
+
+    TEST(DriverSpecTest, IdealScoreRescalesTheScenarioSpecSoSkillOneLandsOnIt) {
+        SpecTree tree;
+        tree.write("fire.json", kFireSpec);
+        driver::ProfileSpec spec;
+        ASSERT_EQ(tree.parse("profile.json", R"({"scenarios": [
+            {"scenarioSpec": "fire.json", "hash": "at-ideal", "runs": 3, "idealScore": 500},
+            {"scenarioSpec": "fire.json", "hash": "below-ideal", "runs": 3, "idealScore": 500, "skill": 0.8}]})", spec),
+                  QString());
+        const auto profile = driver::buildProfile(spec);
+        for (const auto &run: runsInOrder(profile, "at-ideal")) EXPECT_NEAR(run.totals().score, 500.0, 15.0);
+        for (const auto &run: runsInOrder(profile, "below-ideal")) EXPECT_NEAR(run.totals().score, 400.0, 15.0);
+    }
+
+    TEST(DriverSpecTest, RisingKeyframesLiftLaterRunsAndRunsStillFluctuate) {
+        SpecTree tree;
+        tree.write("fire.json", kFireSpec);
+        driver::ProfileSpec spec;
+        ASSERT_EQ(tree.parse("profile.json", R"({"scenarios": [
+            {"scenarioSpec": "fire.json", "hash": "by-run", "runs": 40, "runsPerDay": 2,
+             "progression": {"keyframes": [{"at": 0, "skill": 0.5}, {"at": 39, "skill": 1.0}],
+                             "fluctuation": 0.08, "dayFluctuation": 0.04}},
+            {"scenarioSpec": "fire.json", "hash": "by-day", "runs": 40, "runsPerDay": 2, "firstDay": 3,
+             "progression": {"by": "day", "keyframes": [{"at": 3, "skill": 0.5}, {"at": 22, "skill": 1.0}],
+                             "fluctuation": 0.08}}]})", spec), QString());
+        const auto profile = driver::buildProfile(spec);
+        for (const std::string hash: {"by-run", "by-day"}) {
+            const auto runs = runsInOrder(profile, hash);
+            ASSERT_EQ(runs.size(), 40U);
+            EXPECT_GT(meanScore(runs, 30, 40), 1.5 * meanScore(runs, 0, 10)) << hash;
+            int drops = 0;
+            for (std::size_t i = 1; i < runs.size(); ++i) drops += runs[i].totals().score < runs[i - 1].totals().score;
+            EXPECT_GT(drops, 3) << hash;
+        }
+    }
+
+    TEST(DriverSpecTest, HandRunsKeepTheirOwnSkillAndShape) {
+        SpecTree tree;
+        tree.write("fire.json", kFireSpec);
+        tree.write("choke.json", kChokeSpec);
+        driver::ProfileSpec spec;
+        ASSERT_EQ(tree.parse("profile.json", R"({"scenarios": [
+            {"scenarioSpec": "fire.json", "runs": 10, "idealScore": 1000,
+             "progression": {"keyframes": [{"at": 0, "skill": 0.6}], "fluctuation": 0.2},
+             "handRuns": [{"run": 4, "skill": 1.2, "performanceSpec": "choke.json"},
+                          {"run": 6, "performanceSpec": "choke.json"}]}]})", spec), QString());
+        const auto runs = runsInOrder(driver::buildProfile(spec), "fire-spec");
+        ASSERT_EQ(runs.size(), 10U);
+
+        EXPECT_NEAR(runs[4].totals().score, 1200.0, 30.0);
+        EXPECT_NEAR(runs[6].totals().score, 600.0, 20.0);  // the trend, without fluctuation
+        for (const std::size_t hand: {4U, 6U}) {
+            EXPECT_LT(meanScoreBetween(runs[hand], 20.0, 30.0), 0.6 * meanScoreBetween(runs[hand], 0.0, 20.0)) << hand;
+        }
+        EXPECT_GT(meanScoreBetween(runs[5], 20.0, 30.0), 0.8 * meanScoreBetween(runs[5], 0.0, 20.0));
+    }
+
+    TEST(DriverSpecTest, PerformanceFreeModelledRunsKeepOnlyTheirTotals) {
+        SpecTree tree;
+        tree.write("fire.json", kFireSpec);
+        driver::ProfileSpec spec;
+        ASSERT_EQ(tree.parse("profile.json", R"({"scenarios": [{"scenarioSpec": "fire.json", "runs": 2,
+                                                                "performance": false}]})", spec), QString());
+        for (const auto &run: driver::buildProfile(spec).getAllRunRecords()) {
+            EXPECT_FALSE(run.performance.has_value());
+            EXPECT_GT(run.stored_totals.score, 0.0F);
+        }
+    }
+
+    TEST(DriverSpecTest, ModelledSpecsWriteTheSameBytesEveryTime) {
+        SpecTree tree;
+        tree.write("scenarios/fire.json", kFireSpec);
+        tree.write("performances/choke.json", kChokeSpec);
+        tree.write("profile.json", R"({"scenarios": [{"scenarioSpec": "scenarios/fire.json",
+            "performanceSpec": "performances/choke.json", "runs": 12, "runsPerDay": 3,
+            "progression": {"by": "day", "keyframes": [{"at": 0, "skill": 0.7}, {"at": 3, "skill": 0.9}],
+                            "fluctuation": 0.1, "dayFluctuation": 0.05},
+            "handRuns": [{"run": 11, "skill": 1.1}]}]})");
+        const QString benchmarks = tree.path("benchmarks");
+        ASSERT_EQ(driver::writeProfileSpec(tree.path("profile.json"), tree.path("first.pb"), benchmarks), QString());
+        ASSERT_EQ(driver::writeProfileSpec(tree.path("profile.json"), tree.path("second.pb"), benchmarks), QString());
+        EXPECT_FALSE(readFile(tree.path("first.pb")).isEmpty());
+        EXPECT_EQ(readFile(tree.path("first.pb")), readFile(tree.path("second.pb")));
+    }
+
+    TEST(DriverSpecTest, CheckedInSpecsBuild) {
+        const QDir driverDir(QStringLiteral(KSV_DRIVER_BENCHMARKS_DIR "/.."));
+        QStringList profileSpecs{driverDir.filePath("tours/composing-example/twins.json")};
+        const QDir specs(driverDir.filePath("specs"));
+        for (const auto &file: specs.entryList({"*.json"}, QDir::Files, QDir::Name)) profileSpecs << specs.filePath(file);
+        ASSERT_GE(profileSpecs.size(), 2);
+        for (const auto &specPath: profileSpecs) {
+            QTemporaryDir out;
+            EXPECT_EQ(driver::writeProfileSpec(specPath, QDir(out.path()).filePath("profile.pb"),
+                                               QDir(out.path()).filePath("benchmarks")), QString());
+        }
+        for (const auto &file: QDir(specs.filePath("scenarios")).entryList({"*.json"}, QDir::Files)) {
+            gallery::ScenarioModel model;
+            EXPECT_EQ(driver::parseScenarioModel(QJsonDocument::fromJson(readFile(specs.filePath("scenarios/" + file))).object(),
+                                                 model), QString()) << file.toStdString();
+        }
+        for (const auto &file: QDir(specs.filePath("performances")).entryList({"*.json"}, QDir::Files)) {
+            gallery::PerformanceShape shape;
+            EXPECT_EQ(driver::parsePerformanceShape(
+                          QJsonDocument::fromJson(readFile(specs.filePath("performances/" + file))).object(), shape),
+                      QString()) << file.toStdString();
+        }
+    }
+
     // Real runs start with a partial first second, and Polarized Hell's 62.4 s
     // length ends on a 0.4 s sample. Here: 0.6 s first, then whole seconds, then 0.4 s.
     TEST(DriverScenarioSpecTest, PartialSecondsCarryProportionallyFewerShots) {

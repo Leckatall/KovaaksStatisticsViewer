@@ -9,6 +9,8 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <algorithm>
+#include <cstdint>
+#include <iterator>
 #include <set>
 #include <cmath>
 #include <fstream>
@@ -243,21 +245,152 @@ namespace ksv::driver {
             return shape;
         }
 
-        ScenarioSpec parseScenario(const QJsonObject &object, const QString &path) {
+        // Reads the JSON object a field refers to, by a path relative to the referring spec.
+        QJsonObject loadReferencedObject(const QJsonObject &object, const QString &parent, const QString &key,
+                                         const QString &specPath) {
+            const QString path = fieldPath(parent, key);
+            const QString file = QFileInfo(specPath).dir().absoluteFilePath(stringField(object, parent, key, {}, true));
+            QFile input(file);
+            if (!QFileInfo(file).isFile() || !input.open(QIODevice::ReadOnly)) {
+                reject(path, QStringLiteral("no such file %1").arg(file));
+            }
+            QJsonParseError error{};
+            const QJsonDocument document = QJsonDocument::fromJson(input.readAll(), &error);
+            if (error.error != QJsonParseError::NoError || !document.isObject()) {
+                reject(path, QStringLiteral("%1 is not a JSON object (%2 at offset %3)")
+                                 .arg(file, error.errorString()).arg(error.offset));
+            }
+            return document.object();
+        }
+
+        // Errors inside the referenced file are reported under the referring field's path.
+        template<typename Parse>
+        auto parseReferenced(const QJsonObject &object, const QString &parent, const QString &key,
+                             const QString &specPath, Parse parse) {
+            const QJsonObject referenced = loadReferencedObject(object, parent, key, specPath);
+            try {
+                return parse(referenced);
+            } catch (const SpecError &error) {
+                reject(fieldPath(parent, key), error.message);
+            }
+        }
+
+        Progression parseProgression(const QJsonObject &object, const QString &path) {
+            requireKnownKeys(object, path, {"by", "keyframes", "fluctuation", "dayFluctuation"});
+            Progression progression;
+            const QString by = stringField(object, path, "by", QStringLiteral("run"));
+            if (by != u"run" && by != u"day") reject(fieldPath(path, "by"), QStringLiteral("expected \"run\" or \"day\""));
+            progression.byDay = by == u"day";
+            const QJsonArray keyframes = arrayField(object, path, "keyframes");
+            if (keyframes.isEmpty()) reject(fieldPath(path, "keyframes"), QStringLiteral("expected at least one keyframe"));
+            for (qsizetype i = 0; i < keyframes.size(); ++i) {
+                const QString keyframePath = QStringLiteral("%1.keyframes[%2]").arg(path).arg(i);
+                const QJsonObject keyframe = objectAt(keyframes[i], keyframePath);
+                requireKnownKeys(keyframe, keyframePath, {"at", "skill"});
+                if (!keyframe.contains("at")) reject(fieldPath(keyframePath, "at"), QStringLiteral("is required"));
+                const int at = intField(keyframe, keyframePath, "at", 0,
+                                        progression.byDay ? std::numeric_limits<int>::min() : 0);
+                if (i > 0 && at <= progression.keyframes.back().at) {
+                    reject(fieldPath(keyframePath, "at"), QStringLiteral("expected a value after the previous keyframe's"));
+                }
+                progression.keyframes.push_back({static_cast<double>(at),
+                                                 boundedNumber(keyframe, keyframePath, "skill", std::nullopt, 0.0)});
+            }
+            progression.fluctuation = boundedNumber(object, path, "fluctuation", 0.0, 0.0);
+            progression.dayFluctuation = boundedNumber(object, path, "dayFluctuation", 0.0, 0.0);
+            return progression;
+        }
+
+        void parseModelledFields(const QJsonObject &object, const QString &path, const QString &specPath,
+                                 ScenarioSpec &scenario) {
+            if (object.contains("shape")) {
+                reject(fieldPath(path, "shape"), QStringLiteral("not with scenarioSpec (use performanceSpec)"));
+            }
+            ModelledScenario modelled;
+            modelled.model = parseReferenced(object, path, "scenarioSpec", specPath, parseModelObject);
+            // Renaming a shared scenario-spec without a hash makes a scenario of its own.
+            if (object.contains("name")) {
+                const QString name = stringField(object, path, "name", {});
+                modelled.model.name = name.toStdString();
+                modelled.model.hash = "spec-" + slug(name);
+            }
+            modelled.model.hash = stringField(object, path, "hash", QString::fromStdString(modelled.model.hash)).toStdString();
+            modelled.model.durationSeconds = boundedNumber(object, path, "durationSeconds",
+                                                           modelled.model.durationSeconds, 1.0);
+            scenario.name = modelled.model.name;
+            scenario.hash = modelled.model.hash;
+            scenario.durationSeconds = modelled.model.durationSeconds;
+
+            if (object.contains("performanceSpec")) {
+                modelled.shape = parseReferenced(object, path, "performanceSpec", specPath, parseShapeObject);
+            }
+            if (object.contains("skill") && object.contains("progression")) {
+                reject(path, QStringLiteral("give either skill or progression, not both"));
+            }
+            modelled.skill = boundedNumber(object, path, "skill", modelled.skill, 0.0);
+            if (object.contains("progression")) {
+                const QString progressionPath = fieldPath(path, "progression");
+                modelled.progression = parseProgression(objectAt(object.value("progression"), progressionPath),
+                                                        progressionPath);
+            }
+            if (object.contains("idealScore")) {
+                const double target = boundedNumber(object, path, "idealScore", std::nullopt, 0.0,
+                                                    std::numeric_limits<double>::infinity(), true);
+                const double natural = gallery::idealScore(modelled.model);
+                if (natural <= 0.0) {
+                    reject(fieldPath(path, "idealScore"), QStringLiteral("the scenario-spec's ideal run scores %1, "
+                                                                         "so it cannot be rescaled").arg(natural));
+                }
+                modelled.scoreScale = target / natural;
+            }
+
+            const QJsonArray handRuns = arrayField(object, path, "handRuns");
+            for (qsizetype i = 0; i < handRuns.size(); ++i) {
+                const QString handPath = QStringLiteral("%1.handRuns[%2]").arg(path).arg(i);
+                const QJsonObject hand = objectAt(handRuns[i], handPath);
+                requireKnownKeys(hand, handPath, {"run", "skill", "performanceSpec"});
+                if (!hand.contains("run")) reject(fieldPath(handPath, "run"), QStringLiteral("is required"));
+                HandRun parsed;
+                parsed.run = intField(hand, handPath, "run", 0, 0, std::max(0, scenario.runs - 1));
+                if (parsed.run >= scenario.runs) {
+                    reject(fieldPath(handPath, "run"), QStringLiteral("the scenario has %1 runs").arg(scenario.runs));
+                }
+                if (std::ranges::any_of(modelled.handRuns, [&](const HandRun &other) { return other.run == parsed.run; })) {
+                    reject(fieldPath(handPath, "run"), QStringLiteral("run %1 is already hand-specified").arg(parsed.run));
+                }
+                if (hand.contains("skill")) parsed.skill = boundedNumber(hand, handPath, "skill", std::nullopt, 0.0);
+                if (hand.contains("performanceSpec")) {
+                    parsed.shape = parseReferenced(hand, handPath, "performanceSpec", specPath, parseShapeObject);
+                }
+                modelled.handRuns.push_back(std::move(parsed));
+            }
+            scenario.modelled = std::move(modelled);
+        }
+
+        ScenarioSpec parseScenario(const QJsonObject &object, const QString &path, const QString &specPath) {
             requireKnownKeys(object, path, {"name", "hash", "runs", "firstDay", "daySpacing", "runsPerDay",
-                                            "startMinute", "minuteSpacing", "durationSeconds", "performance", "shape"});
+                                            "startMinute", "minuteSpacing", "durationSeconds", "performance", "shape",
+                                            "scenarioSpec", "performanceSpec", "idealScore", "skill", "progression",
+                                            "handRuns"});
             ScenarioSpec scenario;
-            const QString name = stringField(object, path, "name", {}, true);
-            scenario.name = name.toStdString();
-            scenario.hash = stringField(object, path, "hash", QString::fromStdString("spec-" + slug(name))).toStdString();
             scenario.runs = intField(object, path, "runs", scenario.runs, 0);
             scenario.firstDay = intField(object, path, "firstDay", scenario.firstDay, std::numeric_limits<int>::min());
             scenario.daySpacing = intField(object, path, "daySpacing", scenario.daySpacing, 0);
             scenario.runsPerDay = intField(object, path, "runsPerDay", scenario.runsPerDay, 1);
             scenario.startMinute = intField(object, path, "startMinute", scenario.startMinute, 0, 24 * 60 - 1);
             scenario.minuteSpacing = intField(object, path, "minuteSpacing", scenario.minuteSpacing, 0);
-            scenario.durationSeconds = numberField(object, path, "durationSeconds", scenario.durationSeconds, 1.0);
             scenario.performance = boolField(object, path, "performance", scenario.performance);
+            if (object.contains("scenarioSpec")) {
+                parseModelledFields(object, path, specPath, scenario);
+                return scenario;
+            }
+            for (const char *key: {"performanceSpec", "idealScore", "skill", "progression", "handRuns"}) {
+                if (object.contains(key)) reject(fieldPath(path, key), QStringLiteral("needs scenarioSpec"));
+            }
+            const QString name = stringField(object, path, "name", {}, true);
+            scenario.name = name.toStdString();
+            scenario.hash = stringField(object, path, "hash", QString::fromStdString("spec-" + slug(name))).toStdString();
+            scenario.durationSeconds = numberField(object, path, "durationSeconds", scenario.durationSeconds, 1.0);
             if (object.contains("shape")) scenario.shape = parseShape(object.value("shape"), fieldPath(path, "shape"));
             return scenario;
         }
@@ -340,6 +473,44 @@ namespace ksv::driver {
             }
             return spec;
         }
+
+        double trendAt(const Progression &progression, const double at) {
+            const auto &keyframes = progression.keyframes;
+            if (at <= keyframes.front().at) return keyframes.front().skill;
+            if (at >= keyframes.back().at) return keyframes.back().skill;
+            const auto next = std::ranges::find_if(keyframes, [&](const SkillKeyframe &keyframe) { return keyframe.at > at; });
+            const auto previous = std::prev(next);
+            return previous->skill + (next->skill - previous->skill) * (at - previous->at) / (next->at - previous->at);
+        }
+
+        // Distinct streams per purpose, so adding fluctuation never changes a run's shape noise.
+        enum class Stream : std::uint64_t { Run = 1, DayForm = 2, RunForm = 3 };
+
+        domain::Run makeModelledSpecRun(const ModelledScenario &modelled, const domain::ScenarioId &id,
+                                        const std::size_t scenarioIndex, const int runIndex, const int day,
+                                        const int minute) {
+            const auto stream = [&](const Stream kind, const long long value) {
+                return gallery::mixSeed({scenarioIndex, static_cast<std::uint64_t>(kind), static_cast<std::uint64_t>(value)});
+            };
+            const auto hand = std::ranges::find_if(modelled.handRuns, [&](const HandRun &candidate) {
+                return candidate.run == runIndex;
+            });
+            const bool handSpecified = hand != modelled.handRuns.end();
+            const auto &progression = modelled.progression;
+
+            double skill = progression ? trendAt(*progression, progression->byDay ? day : runIndex) : modelled.skill;
+            if (handSpecified) {
+                skill = hand->skill.value_or(skill);
+            } else if (progression) {
+                skill *= std::max(0.0, 1.0 + progression->dayFluctuation *
+                                                 gallery::SpecRandom(stream(Stream::DayForm, day)).normal());
+                skill *= std::max(0.0, 1.0 + progression->fluctuation *
+                                                 gallery::SpecRandom(stream(Stream::RunForm, runIndex)).normal());
+            }
+            const gallery::PerformanceShape &shape = handSpecified && hand->shape ? *hand->shape : modelled.shape;
+            return gallery::makeModelledRun(id, day, minute, modelled.model, shape, skill, modelled.scoreScale,
+                                            stream(Stream::Run, runIndex));
+        }
     }
 
     domain::Benchmark generateBenchmark(const domain::UserProfile &profile, const BenchmarkSpec &spec) {
@@ -397,7 +568,7 @@ namespace ksv::driver {
             const QJsonArray scenarios = arrayField(json, {}, "scenarios");
             for (qsizetype i = 0; i < scenarios.size(); ++i) {
                 const QString path = QStringLiteral("scenarios[%1]").arg(i);
-                spec.scenarios.push_back(parseScenario(objectAt(scenarios[i], path), path));
+                spec.scenarios.push_back(parseScenario(objectAt(scenarios[i], path), path, specPath));
             }
             if (json.contains("benchmark")) {
                 const QJsonValue benchmark = json.value("benchmark");
@@ -442,9 +613,14 @@ namespace ksv::driver {
             for (int runIndex = 0; runIndex < scenario.runs; ++runIndex) {
                 const int day = scenario.firstDay + (runIndex / scenario.runsPerDay) * scenario.daySpacing;
                 const int minute = scenario.startMinute + (runIndex % scenario.runsPerDay) * scenario.minuteSpacing;
-                const int seed = static_cast<int>(scenarioIndex) * 1000 + runIndex;
-                domain::Run run = gallery::makeRun(id, day, minute, static_cast<float>(scenario.durationSeconds), seed,
-                                                   scenario.shape);
+                domain::Run run;
+                if (scenario.modelled) {
+                    run = makeModelledSpecRun(*scenario.modelled, id, scenarioIndex, runIndex, day, minute);
+                } else {
+                    const int seed = static_cast<int>(scenarioIndex) * 1000 + runIndex;
+                    run = gallery::makeRun(id, day, minute, static_cast<float>(scenario.durationSeconds), seed,
+                                           scenario.shape);
+                }
                 // A run without a performance block keeps only its totals, as a
                 // stats-CSV-only import does.
                 if (!scenario.performance) run.performance.reset();
