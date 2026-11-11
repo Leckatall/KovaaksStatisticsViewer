@@ -17,14 +17,28 @@ click "type:MenuBarItem & text:View"
 click "text:Graphs"
 click graphVisibility_dailyPlaytime
 wait --expr "!visualSettingsManager.playtimeGraphVisible && !visualSettingsManager.scenarioHistoryGraphVisible"
+# The story is the two run averages: hide the single run, accuracy and high score.
+click seriesVisibilityCheckBox_1
+click seriesVisibilityCheckBox_2
+click seriesVisibilityCheckBox_5
+click seriesVisibilityCheckBox_9
+wait seriesVisibilityCheckBox_9 --prop checked --equals false
+mouse move --at 475 470
 shot --name run-graph-story
-hover scenarioGraphPanel --offset 560 150 --settle 600 --shot=run-graph-hover
+hover scenarioGraphPanel --offset 600 150 --settle 600 --shot=run-graph-hover
 
 section benchmarks
 click benchmarksTab
 wait summaryAttainedRank --prop text --equals Saffron
+# The grid opens scrolled to its right end; the left edge shows PB date, plays and the lower tiers.
+eval "contentX = 0" --on progressGridFlick
+wait progressGridFlick --prop contentX --equals 0
 shot --name benchmark-rows
-# A wheel over the grid scrolls the grid, not the page; this brings the rank history card to the top. (`set` is the batch variable command.)
+# A wheel over the grid scrolls the grid, not the page, so the page is positioned directly
+# (`set` is the batch variable command): Flick Tech's first row, then the rank history card.
+eval "contentY = 575" --on "benchmarkWorkspaceScroll > type:Flickable@0"
+wait "text:Flick Tech"
+shot --name benchmark-rows-flick-tech
 eval "contentY = 1126" --on "benchmarkWorkspaceScroll > type:Flickable@0"
 wait rankHistoryCard
-shot --name rank-history
+shot --item rankHistoryCard --name rank-history
