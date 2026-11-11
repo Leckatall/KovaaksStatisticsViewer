@@ -52,7 +52,7 @@ The synthetic datasets copy every file in [`benchmarks/`](benchmarks) into the s
 |---|---|
 | `driver-demo.json` (5 tiers) | Clicking split into Static and Dynamic subcategories, Tracking flat. Rows: above Platinum (recent average back in the Platinum chunk), just into Bronze with the recent average still in Iron (the only Silver blocker), Gold nine tenths of the way to Platinum, Iron with the recent average below it, and played but below Iron. Summary: attained Bronze, none completed, next Silver; the rank history climbs in steps. |
 | `driver-many-tiers.json` (12 tiers, Iron…Celestial) | Every row ranked, Iron to Nova: attained Grandmaster, completed Iron (the average-rank tick shows), next Nova with two blockers. The ladder overflows the grid at 960x700. |
-| `Viscose Benchmarks Intermediate S1.json` (8 tiers, Cinnabar…Fuchsia) | The real benchmark, unchanged: 36 scenarios in Control Tracking, Reactive Tracking, Flick Tech and Click Timing, each split into subcategories. Its scenarios carry their real hashes, so every row is unplayed against the synthetic profiles; a profile spec that uses those hashes fills it. |
+| `Viscose Benchmarks Intermediate S1.json` (8 tiers, Cinnabar…Fuchsia) | The real benchmark, unchanged: 36 scenarios in Control Tracking, Reactive Tracking, Flick Tech and Click Timing, each split into subcategories. Its scenarios carry their real hashes, so every row is unplayed against the synthetic profiles; a profile spec that uses those hashes fills it ([`specs/progression-example.json`](specs/progression-example.json) copies it and plays two of its rows). |
 
 Under `single`, `short` and `bunched` only the 1wall6targets row has runs; the others show as unplayed.
 
@@ -138,7 +138,7 @@ Prefer `objectName`s. `Main.qml` and the workspaces have many: `scenariosTab`, `
 
 ## Profile specs
 
-`--profile-spec FILE.json` builds the session's profile from a declarative spec instead of a dataset (`tools/driver/driver_spec.*`; example: `tools/driver/specs/many-scenarios.json`). Every field but a scenario's `name` has a default; unknown fields and bad values fail before the app starts, naming the field (`scenarios[3].runsPerDay: expected an integer >= 1`).
+`--profile-spec FILE.json` builds the session's profile from a declarative spec instead of a dataset (`tools/driver/driver_spec.*`; examples: `tools/driver/specs/many-scenarios.json`, and [`specs/progression-example.json`](specs/progression-example.json) for [modelled scenarios](#modelled-scenarios)). Every field but a scenario's `name` has a default; unknown fields and bad values fail before the app starts, naming the field (`scenarios[3].runsPerDay: expected an integer >= 1`).
 
 ```json
 {
@@ -166,6 +166,74 @@ Prefer `objectName`s. `Main.qml` and the workspaces have many: `scenariosTab`, `
 `benchmark` is either a path to a benchmark JSON file to copy (relative to the spec) or an object: `id`, `name`, `file`, then `tiers` (`[{"name", "id", "factor", "color"}]`) or `tierFactors` (up to five factors for Iron…Platinum; default `[0.6, 0.8, 0.95, 1.05, 1.2]`), and `categories` (`[{"name", "id", "color", "scenarios"}]`; default one category with every scenario). A category names scenarios by name or by `{"name", "hash"}`. Thresholds are each tier's factor times the scenario's personal best; a name that matches no scenario, or several, is written without a hash (unresolved or ambiguous) around a nominal 1000.
 
 Generation is deterministic: runs are seeded from their scenario and run index, scenarios are generated in order, and the store's creation time is pinned, so a spec always writes the same bytes. The four synthetic datasets use the same run generator (`gallery::makeRun`).
+
+### Modelled scenarios
+
+A scenario entry with a `scenarioSpec` is generated from a scenario model instead of a gallery shape (`gallery::makeModelledRun`, `tools/gallery/modelled_run.*`), with believable numbers: real scoring rules, skill that moves accuracy and/or shot rate, a shape within the run, and progression across runs. Referenced files are paths relative to the file that refers to them; a missing or invalid one fails under the referring field (`scenarios[0].scenarioSpec: ideal.accuracy: is required`).
+
+```json
+{"scenarioSpec": "scenarios/vt-controlsphere-novice-s5-hard.json", "performanceSpec": "performances/late-fade.json",
+ "runs": 60, "runsPerDay": 3,
+ "progression": {"by": "day", "keyframes": [{"at": 0, "skill": 0.42}, {"at": 19, "skill": 0.58}],
+                 "fluctuation": 0.06, "dayFluctuation": 0.08},
+ "handRuns": [{"run": 59, "skill": 0.7, "performanceSpec": "performances/choke.json"}]}
+```
+
+The schedule fields (`runs`, `firstDay`, `daySpacing`, `runsPerDay`, `startMinute`, `minuteSpacing`) and `performance` mean what they do above; `shape` is not allowed.
+
+| Entry field | Default | Meaning |
+|---|---|---|
+| `scenarioSpec` | | the [scenario-spec](#scenario-specs) to generate from |
+| `name`, `hash`, `durationSeconds` | the scenario-spec's | overrides, so one representative spec serves many scenarios; a `name` without a `hash` gets `spec-<slug of name>`, a scenario of its own |
+| `performanceSpec` | flat, no noise | the [performance-spec](#performance-specs) every generated run uses |
+| `idealScore` | the ideal run's score | rescales every score so skill 1.0 lands here; set it to the scenario's top benchmark threshold to reuse a spec across a score band |
+| `skill` | 1.0 | constant skill for every run (1.0 scores what the ideal run scores) |
+| `progression` | | instead of `skill`: `{"by": "run" \| "day", "keyframes": [{"at", "skill"}], "fluctuation", "dayFluctuation"}`. Skill follows the keyframes' linear trend (held flat before the first and after the last; `at` is a run index from 0, or a spec day), times `1 + dayFluctuation·N` shared by a day's runs and `1 + fluctuation·N` per run (relative standard deviations, both default 0) |
+| `handRuns` | | `[{"run", "skill", "performanceSpec"}]`: replaces the run at schedule index `run` (its time is kept). It uses its own `skill` (without one, the progression's trend at its position) and its own performance-spec (without one, the entry's). Fluctuation never applies to it |
+
+How a run is made, in order: the ideal run's per-second shots and accuracy, multiplied by the performance-spec's windows and noise; then one level is fitted so the run scores `skill × ideal score` under the scenario's rules, moving shot rate and accuracy by the skill weights. So a shape redistributes score within a run but does not raise or lower it, and targets are approximate (within a few percent). Counts are rounded with the remainder carried to the next second; hits never exceed shots, which is the only clamp: high skill can exceed 95% accuracy.
+
+Noise comes from a seeded splitmix64 generator (`gallery::SpecRandom`, with its own normal distribution so MinGW and MSVC builds agree), seeded from the scenario's position in the spec, the run index or day, and the purpose, never from the run's clock.
+
+### Scenario specs
+
+`tools/driver/specs/scenarios/<slug>.json`: a scenario's rules and its ideal run. Representative numbers are in the showcase analysis; the checked-in specs are VT Controlsphere (constant fire) and 1w3ts Reload (kill-paced clicking).
+
+```json
+{"name": "VT Controlsphere Novice S5 Hard", "hash": "de629646958f54755fa9f2fadbcebe80",
+ "durationSeconds": 60, "firstSampleSeconds": 0.97,
+ "scoring": {"perHit": 1, "perKill": 0, "perMiss": 0, "perDamage": 0, "hitsPerKill": 1, "damagePerHit": 1},
+ "ideal": {"shotsPerSecond": 100, "accuracy": 0.73},
+ "skill": {"accuracy": 1, "shotRate": 0}}
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `name` | required | display name |
+| `hash` | `spec-<slug of name>` | scenario identity |
+| `description` | | free text, ignored |
+| `durationSeconds` | 60 | run length; a fractional length ends on a partial sample (Polarized Hell's 62.4 s) |
+| `firstSampleSeconds` | 1 | time of the first sample; later samples follow every second, and the first carries proportionally fewer shots |
+| `scoring` | `perHit` 1, others 0; `hitsPerKill` 1, `damagePerHit` 1 | per-second score = `perHit·hits + perKill·kills + perMiss·misses + perDamage·damage` (any sign; Pasu Micro is `perHit` 10, `perMiss` -2). A kill every `hitsPerKill` hits; damage is `damagePerHit` per hit, possible damage the same per shot |
+| `ideal` | required | `shotsPerSecond` (> 0) and `accuracy` (0 to 1) of the run that skill 1.0 reproduces |
+| `skill` | `accuracy` 1, `shotRate` 0 | how a change in skill splits between accuracy and shot rate (relative weights, in log space). `shotRate: 0` is constant fire: shots never change with skill. `maxShotsPerSecond` caps the shot rate; past it, skill goes into accuracy (devTS) |
+
+### Performance specs
+
+`tools/driver/specs/performances/<slug>.json`: the shape within a run.
+
+```json
+{"windows": [{"from": 50, "to": 60, "accuracy": 0.5, "ramp": true}, {"from": 20, "to": 25, "shotRate": 0.9}],
+ "noise": {"accuracy": 0.3, "shotRate": 0.05}}
+```
+
+| Field | Meaning |
+|---|---|
+| `windows` | `[{"from", "to", "accuracy", "shotRate", "ramp"}]`: over `[from, to)` seconds, multiply accuracy and shot rate (default 1). With `"ramp": true` the multiplier moves linearly from 1 at `from` to its value at `to`. Overlapping windows multiply |
+| `noise` | `{"accuracy", "shotRate"}`: per-second relative standard deviation (default 0). Real per-second score varies a lot: VT Controlsphere's coefficient of variation is about 0.45 |
+| `description` | free text, ignored |
+
+The checked-in shapes are `late-fade.json` (VT Controlsphere's measured accuracy by sixth of the run) and `choke.json` (accuracy halves over the last ten seconds).
 
 ## Fault injection
 
@@ -269,5 +337,5 @@ The commands are the CLI's, under their protocol names: `ping`, `windows`, `tree
 - `driver_dataset.{h,cpp}`: session seeding. It reuses `tools/gallery/gallery_dataset.*`.
 - `driver_spec.{h,cpp}`: profile specs and the benchmark generator; `driver_ports.{h,cpp}`: the `--inject` decorators; `session_compose.{h,cpp}`: overlays and `--setting` (tested in `tests/integration/driver_session_test.cpp`).
 - `driver_main.cpp`: the host. It redirects settings, composes the session, applies the headless look, loads Main through `gallery::QmlSourceInterceptor`, and writes `session.json`.
-- `benchmarks/`: the benchmark fixtures the synthetic datasets ship with. `specs/`: example profile specs. `tours/`: checked-in tours and their data.
+- `benchmarks/`: the benchmark fixtures the synthetic datasets ship with. `specs/`: example profile specs, with the [scenario-specs](#scenario-specs) and [performance-specs](#performance-specs) they use in `specs/scenarios/` and `specs/performances/`. `tours/`: checked-in tours and their data.
 - `scripts/ui_automation/`: the CLI (`cli.py`), sessions (`session.py`), the client, result formatting and the contact sheet (`report.py`).

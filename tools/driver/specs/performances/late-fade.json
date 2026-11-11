@@ -1,0 +1,11 @@
+{
+  "description": "VT Controlsphere's measured accuracy by sixth of the run (1.20, 1.00, 0.98, 0.96, 0.95, 0.93) with its noisy seconds.",
+  "windows": [
+    {"from": 0, "to": 10, "accuracy": 1.2},
+    {"from": 20, "to": 30, "accuracy": 0.98},
+    {"from": 30, "to": 40, "accuracy": 0.96},
+    {"from": 40, "to": 50, "accuracy": 0.95},
+    {"from": 50, "to": 60, "accuracy": 0.93}
+  ],
+  "noise": {"accuracy": 0.45}
+}

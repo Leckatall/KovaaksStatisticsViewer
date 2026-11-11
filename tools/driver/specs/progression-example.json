@@ -1,0 +1,13 @@
+{
+  "scenarios": [
+    {"scenarioSpec": "scenarios/vt-controlsphere-novice-s5-hard.json", "performanceSpec": "performances/late-fade.json",
+     "runs": 60, "runsPerDay": 3, "startMinute": 1140, "minuteSpacing": 3,
+     "progression": {"by": "day", "keyframes": [{"at": 0, "skill": 0.42}, {"at": 19, "skill": 0.58}],
+                     "fluctuation": 0.06, "dayFluctuation": 0.08},
+     "handRuns": [{"run": 59, "skill": 0.7, "performanceSpec": "performances/choke.json"}]},
+    {"scenarioSpec": "scenarios/1w3ts-reload.json", "name": "Pasu Angelic 20% Larger", "hash": "63b4e8bedaf6cbc146cab02bb5d29b7a",
+     "idealScore": 115, "runs": 40, "runsPerDay": 2, "startMinute": 1200,
+     "progression": {"keyframes": [{"at": 0, "skill": 0.6}, {"at": 39, "skill": 0.66}], "fluctuation": 0.075}}
+  ],
+  "benchmark": "../benchmarks/Viscose Benchmarks Intermediate S1.json"
+}

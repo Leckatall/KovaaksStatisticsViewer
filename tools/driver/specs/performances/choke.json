@@ -1,0 +1,5 @@
+{
+  "description": "A choke: accuracy slides to half over the last ten seconds.",
+  "windows": [{"from": 50, "to": 60, "accuracy": 0.5, "ramp": true}],
+  "noise": {"accuracy": 0.3}
+}
