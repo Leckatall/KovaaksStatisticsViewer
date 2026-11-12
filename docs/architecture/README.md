@@ -117,6 +117,8 @@ The build links the static libraries below into the `ksv` executable. [Build and
 | `QSettings` (INI) | `SettingsService`, `GraphConfigurationPersistence` | Configured KovaaK's source roots, profile path, recent benchmark IDs, and the versioned graph-configuration JSON document with its quarantined copies. |
 | QML-owned `Settings` groups in the same production INI file | `VisualSettingsManager.qml`, `SettingsDialog.qml` | Window geometry, panel and graph visibility, per-series visibility, history-graph choices, settings-dialog placement; unversioned, with key groups disjoint from the C++ ones. |
 
+Each C++ store has one data-layer authority that alone decides what is accepted; where it holds state in memory it reaches storage through an injected port, and `SettingsService` is both authority and adapter ([ADR 0010](decisions/0010-one-data-layer-authority-for-each-body-of-persisted-state.md)). The QML-owned groups have no such authority (see [Known risks and debt](#known-risks-and-debt)).
+
 [Run history data][run-history-data], [Benchmark definitions][benchmark-definitions], [Graph configuration][graph-configuration], and [QML boundary][qml-boundary] own the identity, versioning, and recovery rules of these stores. Evidence: [`App::App`](../../src/app/app.cpp), [`main.cpp`](../../src/main.cpp) (INI format), [`SettingsService`](../../src/qt_data/settings_service.cpp).
 
 ## Concerns
@@ -170,7 +172,8 @@ The build links the static libraries below into the `ksv` executable. [Build and
 - The build does not enforce layer rules: global include visibility permits cross-layer includes, and the current dependencies include mutual headers between `ksv_contracts` and `src/data/interfaces` and a header-only `ksv_ui` dependency on `ISessionController`.
 - QML type registration depends on include directories for the generated registrar and, for types nothing else references, on the manual list; omissions fail silently at runtime.
 - QML-owned UI settings are unversioned, and the set of graph keys is duplicated between C++ and `GraphCatalog.js`.
-- Graph-configuration persistence reports no failure, so the in-memory configuration can move ahead of the stored one.
+- Graph-configuration persistence reports no failure, so the in-memory configuration can move ahead of the stored one, contrary to ADR 0010.
+- QML-owned `Settings` groups are persisted state with no data-layer authority, a departure from ADR 0010 ([QML boundary][qml-boundary]).
 - Tools are not provisioned and dependency versions are machine-provided and unpinned (there is no vcpkg manifest); [Build and deployment][build-and-deployment] states what the Debug build fingerprint covers.
 
 ## Decision and design context
@@ -179,14 +182,15 @@ The build links the static libraries below into the `ksv` executable. [Build and
 
 - [Application interface and implementation placement](decisions/0001-application-interface-and-implementation-placement.md): contracts versus use cases.
 - [Embedded stable identity for benchmark elements](decisions/0002-embedded-stable-identity-for-benchmark-elements.md): benchmark element identity.
-- [Data-owned benchmark service and presentation drafts](decisions/0005-data-owned-benchmark-service-and-presentation-drafts.md): benchmark ownership, superseding [ADR 0003](decisions/0003-profile-independent-benchmark-repository-and-application-owned-state.md).
 - [Route view-model interactions through use cases](decisions/0004-route-view-model-interactions-through-use-cases.md): view models through use cases.
-- [Unified graph configuration and presentation drafts](decisions/0006-unified-graph-configuration-and-presentation-drafts.md): graph configuration.
 - [Presentation-owned capture snapshots and application-owned output](decisions/0007-presentation-owned-capture-snapshots-and-application-owned-output.md): captures.
+- [No background writes to an entity under edit](decisions/0008-no-background-writes-to-an-entity-under-edit.md): background writes while the benchmark editor is open.
+- [Graph configuration is one snapshot](decisions/0009-graph-configuration-is-one-snapshot.md): the unit of graph configuration.
+- [One data-layer authority for each body of persisted state](decisions/0010-one-data-layer-authority-for-each-body-of-persisted-state.md): ownership of persisted state, superseding [ADR 0005](decisions/0005-data-owned-benchmark-service-and-presentation-drafts.md) and [ADR 0006](decisions/0006-unified-graph-configuration-and-presentation-drafts.md) (ADR 0005 had superseded [ADR 0003](decisions/0003-profile-independent-benchmark-repository-and-application-owned-state.md)).
 
 ## Evidence and limitations
 
-The views were rebuilt on 2026-11-10 from a survey of `src/`, the build files and the scripts, not from earlier versions of this description. Each view's Evidence and limitations section identifies the files inspected and any gaps in its coverage. Claims cite source paths and symbols; thread affinity and destruction order on shutdown are partly inferred from C++ and Qt rules rather than observed at runtime. Test source was used mainly to establish topology, and in some views to confirm behavioural contracts or the substitute-object mechanics of QML tests; it was not run. Several ADRs link files that no longer exist, and ADR 0004's and ADR 0006's statements of current state are out of date; the views note this where it matters.
+The views were rebuilt on 2026-11-10 from a survey of `src/`, the build files and the scripts, not from earlier versions of this description. Each view's Evidence and limitations section identifies the files inspected and any gaps in its coverage. Claims cite source paths and symbols; thread affinity and destruction order on shutdown are partly inferred from C++ and Qt rules rather than observed at runtime. Test source was used mainly to establish topology, and in some views to confirm behavioural contracts or the substitute-object mechanics of QML tests; it was not run. Several ADRs link files that no longer exist, and ADR 0004's statement of current state is out of date; the views note this where it matters.
 
 <!-- arch-doc:references:start -->
 [benchmark-definitions]: views/benchmark-definitions.md
