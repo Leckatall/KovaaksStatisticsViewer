@@ -1,6 +1,6 @@
 {
   "scenarios": [
-    {"scenarioSpec": "scenarios/vt-controlsphere-novice-s5-hard.json", "performanceSpec": "performances/late-fade.json",
+    {"scenarioSpec": "scenarios/vt-controlsphere-novice-s5-hard.json", "performanceSpec": "performances/vt-controlsphere-novice-s5-hard.json",
      "runs": 60, "runsPerDay": 3, "startMinute": 1140, "minuteSpacing": 3,
      "progression": {"by": "day", "keyframes": [{"at": 0, "skill": 0.42}, {"at": 19, "skill": 0.58}],
                      "fluctuation": 0.06, "dayFluctuation": 0.08},

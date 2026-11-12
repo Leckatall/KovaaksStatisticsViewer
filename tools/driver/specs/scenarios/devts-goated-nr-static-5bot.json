@@ -1,9 +1,10 @@
 {
-  "description": "Rapid clicking at about 15 shots/s, six hits per kill, scored 1 per hit. The shot rate is capped at the fastest observed 15.5/s, so the top tier (900) is reached through accuracy.",
+  "description": "Rapid clicking at about 15 shots/s, six hits per kill, scored 1 per hit. Near the user's level the shot rate barely moves and skill goes into accuracy (0.9 / 0.1). Skill 1.0 is the top Viscose Intermediate tier (900).",
   "name": "devTS Goated NR Static 5Bot",
   "hash": "45e6e7c2a285f5c31889264bafdf5b8b",
-  "durationSeconds": 60,
+  "durationSeconds": 59.96,
+  "firstSampleSeconds": 0.96,
   "scoring": {"perHit": 1, "hitsPerKill": 6},
-  "ideal": {"shotsPerSecond": 15.5, "accuracy": 0.97},
-  "skill": {"accuracy": 0.36, "shotRate": 0.64, "maxShotsPerSecond": 15.5}
+  "ideal": {"shotsPerSecond": 15.12, "accuracy": 0.9928},
+  "skill": {"accuracy": 0.9, "shotRate": 0.1}
 }

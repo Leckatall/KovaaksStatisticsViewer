@@ -1,0 +1,16 @@
+{
+  "description": "Pasu Angelic 20% Larger, measured: fewer shots in the first two seconds, accuracy high at the start and easing to 0.98 of the run mean by the second half.",
+  "windows": [
+    {"from": 0, "to": 1, "shotRate": 0.62, "accuracy": 1.41},
+    {"from": 1, "to": 2, "shotRate": 0.86, "accuracy": 1.24},
+    {"from": 2, "to": 3, "shotRate": 1.03, "accuracy": 1.13},
+    {"from": 3, "to": 4, "shotRate": 1.03, "accuracy": 1.10},
+    {"from": 4, "to": 10, "shotRate": 1.03, "accuracy": 1.04},
+    {"from": 10, "to": 20, "shotRate": 1.025, "accuracy": 1.024},
+    {"from": 20, "to": 30, "shotRate": 1.014, "accuracy": 1.021},
+    {"from": 30, "to": 40, "shotRate": 1.007, "accuracy": 0.984},
+    {"from": 40, "to": 50, "shotRate": 0.99, "accuracy": 0.985},
+    {"from": 50, "to": 60, "shotRate": 1.009, "accuracy": 0.984}
+  ],
+  "noise": {"accuracy": 0.4, "shotRate": 0.1}
+}

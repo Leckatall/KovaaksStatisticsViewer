@@ -1,10 +1,10 @@
 {
-  "description": "Constant fire at 100 shots/s scored 1 per hit, so skill moves accuracy only. Skill 1.0 is the top Viscose Intermediate tier (4400, 73% accuracy).",
+  "description": "Constant fire at 100 shots/s scored 1 per hit; samples at 0.97 s and every second to 59.97 s. Skill moves accuracy only. Skill 1.0 is the top Viscose Intermediate tier (4400, 73% accuracy).",
   "name": "VT Controlsphere Novice S5 Hard",
   "hash": "de629646958f54755fa9f2fadbcebe80",
-  "durationSeconds": 60,
+  "durationSeconds": 59.97,
   "firstSampleSeconds": 0.97,
-  "scoring": {"perHit": 1},
-  "ideal": {"shotsPerSecond": 100, "accuracy": 0.73},
+  "scoring": {"perHit": 1, "hitsPerKill": 1000000},
+  "ideal": {"shotsPerSecond": 100, "accuracy": 0.7337},
   "skill": {"accuracy": 1, "shotRate": 0}
 }

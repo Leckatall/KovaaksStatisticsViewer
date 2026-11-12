@@ -1,11 +1,14 @@
 {
-  "description": "VT Controlsphere's measured late fade through forty-five seconds, then accuracy sliding to half by the end: a strong start thrown away in the last fifteen seconds.",
+  "description": "VT Controlsphere Novice S5 Hard's measured shape, with accuracy then sliding to half over the last fifteen seconds: a strong start thrown away at the end.",
   "windows": [
-    {"from": 0, "to": 10, "accuracy": 1.2},
-    {"from": 20, "to": 30, "accuracy": 0.98},
-    {"from": 30, "to": 40, "accuracy": 0.96},
-    {"from": 40, "to": 45, "accuracy": 0.95},
+    {"from": 0, "to": 1, "shotRate": 0.866, "accuracy": 1.95},
+    {"from": 1, "to": 4, "accuracy": 1.19},
+    {"from": 4, "to": 10, "accuracy": 1.09},
+    {"from": 20, "to": 30, "accuracy": 0.978},
+    {"from": 30, "to": 40, "accuracy": 0.956},
+    {"from": 40, "to": 50, "accuracy": 0.951},
+    {"from": 50, "to": 60, "accuracy": 0.937},
     {"from": 45, "to": 60, "accuracy": 0.5, "ramp": true}
   ],
-  "noise": {"accuracy": 0.45}
+  "noise": {"accuracy": 0.46}
 }

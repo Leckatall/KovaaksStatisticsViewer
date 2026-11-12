@@ -172,7 +172,7 @@ Generation is deterministic: runs are seeded from their scenario and run index, 
 A scenario entry with a `scenarioSpec` is generated from a scenario model instead of a gallery shape (`gallery::makeModelledRun`, `tools/gallery/modelled_run.*`), with believable numbers: real scoring rules, skill that moves accuracy and/or shot rate, a shape within the run, and progression across runs. Referenced files are paths relative to the file that refers to them; a missing or invalid one fails under the referring field (`scenarios[0].scenarioSpec: ideal.accuracy: is required`).
 
 ```json
-{"scenarioSpec": "scenarios/vt-controlsphere-novice-s5-hard.json", "performanceSpec": "performances/late-fade.json",
+{"scenarioSpec": "scenarios/vt-controlsphere-novice-s5-hard.json", "performanceSpec": "performances/vt-controlsphere-novice-s5-hard.json",
  "runs": 60, "runsPerDay": 3,
  "progression": {"by": "day", "keyframes": [{"at": 0, "skill": 0.42}, {"at": 19, "skill": 0.58}],
                  "fluctuation": 0.06, "dayFluctuation": 0.08},
@@ -197,13 +197,13 @@ Noise comes from a seeded splitmix64 generator (`gallery::SpecRandom`, with its 
 
 ### Scenario specs
 
-`tools/driver/specs/scenarios/<slug>.json`: a scenario's rules and its ideal run. Representative numbers are in the showcase analysis; the checked-in specs are VT Controlsphere and Polarized Hell (constant fire), 1w3ts Reload and Pasu Angelic (kill-paced clicking) and devTS (burst clicking with a capped shot rate).
+`tools/driver/specs/scenarios/<slug>.json`: a scenario's rules and its ideal run. The checked-in specs are the showcase's five representatives, each measured from real runs and a leaderboard sample: VT Controlsphere and Polarized Hell (constant fire, no kills), 1w3ts Reload and Pasu Angelic (kill-paced clicking) and devTS (rapid clicking whose shot rate barely moves with skill).
 
 ```json
 {"name": "VT Controlsphere Novice S5 Hard", "hash": "de629646958f54755fa9f2fadbcebe80",
- "durationSeconds": 60, "firstSampleSeconds": 0.97,
- "scoring": {"perHit": 1, "perKill": 0, "perMiss": 0, "perDamage": 0, "hitsPerKill": 1, "damagePerHit": 1},
- "ideal": {"shotsPerSecond": 100, "accuracy": 0.73},
+ "durationSeconds": 59.97, "firstSampleSeconds": 0.97,
+ "scoring": {"perHit": 1, "perKill": 0, "perMiss": 0, "perDamage": 0, "hitsPerKill": 1000000, "damagePerHit": 1},
+ "ideal": {"shotsPerSecond": 100, "accuracy": 0.7337},
  "skill": {"accuracy": 1, "shotRate": 0}}
 ```
 
@@ -212,9 +212,9 @@ Noise comes from a seeded splitmix64 generator (`gallery::SpecRandom`, with its 
 | `name` | required | display name |
 | `hash` | `spec-<slug of name>` | scenario identity |
 | `description` | | free text, ignored |
-| `durationSeconds` | 60 | run length; a fractional length ends on a partial sample (Polarized Hell's 62.4 s) |
+| `durationSeconds` | 60 | run length, which is also the last sample's time; a length that is not a whole number of seconds after the first sample ends on a partial sample |
 | `firstSampleSeconds` | 1 | time of the first sample; later samples follow every second, and the first carries proportionally fewer shots |
-| `scoring` | `perHit` 1, others 0; `hitsPerKill` 1, `damagePerHit` 1 | per-second score = `perHit·hits + perKill·kills + perMiss·misses + perDamage·damage` (any sign; Pasu Micro is `perHit` 10, `perMiss` -2). A kill every `hitsPerKill` hits; damage is `damagePerHit` per hit, possible damage the same per shot |
+| `scoring` | `perHit` 1, others 0; `hitsPerKill` 1, `damagePerHit` 1 | per-second score = `perHit·hits + perKill·kills + perMiss·misses + perDamage·damage` (any sign; Pasu Micro is `perHit` 10, `perMiss` -2). A kill every `hitsPerKill` hits; damage is `damagePerHit` per hit, possible damage the same per shot. A tracking scenario with no kill events takes a `hitsPerKill` above any run's hits |
 | `ideal` | required | `shotsPerSecond` (> 0) and `accuracy` (0 to 1) of the run that skill 1.0 reproduces |
 | `skill` | `accuracy` 1, `shotRate` 0 | how a change in skill splits between accuracy and shot rate (relative weights, in log space). `shotRate: 0` is constant fire: shots never change with skill. `maxShotsPerSecond` caps the shot rate; past it, skill goes into accuracy (devTS) |
 
@@ -233,7 +233,7 @@ Noise comes from a seeded splitmix64 generator (`gallery::SpecRandom`, with its 
 | `noise` | `{"accuracy", "shotRate"}`: per-second relative standard deviation (default 0). Real per-second score varies a lot: VT Controlsphere's coefficient of variation is about 0.45 |
 | `description` | free text, ignored |
 
-The checked-in shapes are `late-fade.json` (VT Controlsphere's measured accuracy by sixth of the run), `choke.json` (accuracy halves over the last ten seconds) and `fading-finish.json` (the late fade, then accuracy halving over the last fifteen seconds).
+The checked-in shapes are one per representative, named after its scenario-spec and measured from real runs (the first second's shots and accuracy, accuracy over the run, and per-second noise), plus two designed ones: `choke.json` (accuracy halves over the last ten seconds) and `fading-finish.json` (VT Controlsphere's measured shape, then accuracy halving over the last fifteen seconds).
 
 ## Fault injection
 

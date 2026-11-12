@@ -1,9 +1,10 @@
 {
-  "description": "Kill-paced clicking, one hit per kill, scored 1 per hit. Better players mostly fire faster. Skill 1.0 is the top Viscose Intermediate tier (135: 2.31 shots/s at 97%).",
+  "description": "Kill-paced clicking, one hit per kill, scored 1 per hit. A better run is mostly a faster one (the user's run-to-run split, 0.18 accuracy / 0.82 shot rate). Skill 1.0 is the top Viscose Intermediate tier (135).",
   "name": "1w3ts Reload",
   "hash": "4ddf9fbf0aef15b0904244b308e8768d",
-  "durationSeconds": 60,
+  "durationSeconds": 59.95,
+  "firstSampleSeconds": 0.95,
   "scoring": {"perHit": 1, "hitsPerKill": 1},
-  "ideal": {"shotsPerSecond": 2.31, "accuracy": 0.97},
-  "skill": {"accuracy": 0.22, "shotRate": 0.78}
+  "ideal": {"shotsPerSecond": 2.2816, "accuracy": 0.987},
+  "skill": {"accuracy": 0.18, "shotRate": 0.82}
 }

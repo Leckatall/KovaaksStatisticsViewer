@@ -1,0 +1,13 @@
+{
+  "description": "VT Controlsphere Novice S5 Hard, measured: a short first second, accuracy high over the first ten seconds and then fading to 0.94 of the run mean, with noisy seconds.",
+  "windows": [
+    {"from": 0, "to": 1, "shotRate": 0.866, "accuracy": 1.95},
+    {"from": 1, "to": 4, "accuracy": 1.19},
+    {"from": 4, "to": 10, "accuracy": 1.09},
+    {"from": 20, "to": 30, "accuracy": 0.978},
+    {"from": 30, "to": 40, "accuracy": 0.956},
+    {"from": 40, "to": 50, "accuracy": 0.951},
+    {"from": 50, "to": 60, "accuracy": 0.937}
+  ],
+  "noise": {"accuracy": 0.46}
+}
