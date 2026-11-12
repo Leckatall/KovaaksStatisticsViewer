@@ -10,6 +10,10 @@ See every KovaaK's run in detail: how your score built up second by second, how 
 
 KovaaK's saves a performance file for every run you play, but only shows you a fraction of it. KovaaK's Statistics Viewer reads those files, keeps a profile of all your runs, and turns them into graphs you can configure, export, and share.
 
+## Disclaimer
+
+This project is not affiliated with or endorsed by KovaaK's or The Meta.
+
 ## Features
 
 - **Run graphs**: your score and accuracy second by second through a run (kills, hits, and, damage too, if you add them), with your projected final score compared with your high score and recent runs.
@@ -88,7 +92,3 @@ See [RELEASE_NOTES.md](RELEASE_NOTES.md) for what's new in each version, or [CHA
 ## License
 
 [MIT](LICENSE). Release packages also include Qt, licensed under the LGPL v3, and Protocol Buffers, licensed under the BSD 3-Clause License.
-
-## Disclaimer
-
-This is an unofficial fan project. It is not affiliated with or endorsed by KovaaK's or The Meta.
