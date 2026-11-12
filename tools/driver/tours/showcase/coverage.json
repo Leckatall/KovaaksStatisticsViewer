@@ -1,5 +1,9 @@
 [
   {"area": "Scenarios", "state": "Run-graph scenario selected: run, history and playtime graphs", "shot": "scenarios-overview"},
+  {"area": "Scenarios", "state": "Polarized Hell Easy 20% Slower selected", "shot": "spec-polarized-hell-easy-20-slower"},
+  {"area": "Scenarios", "state": "1w3ts Reload selected", "shot": "spec-1w3ts-reload"},
+  {"area": "Scenarios", "state": "devTS Goated NR Static 5Bot selected", "shot": "spec-devts-goated-nr-static-5bot"},
+  {"area": "Scenarios", "state": "Pasu Angelic 20% Larger selected", "shot": "spec-pasu-angelic-20-larger"},
   {"area": "Scenarios", "state": "Run graph alone, Top 10% and Last 10 only: the recent runs fall away late", "shot": "run-graph-story"},
   {"area": "Scenarios", "state": "Run graph hover near the end of the run", "shot": "run-graph-hover"},
   {"area": "Benchmarks", "state": "Viscose Intermediate S1 summary, Control and Reactive Tracking rows", "shot": "benchmark-rows"},

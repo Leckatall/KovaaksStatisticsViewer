@@ -14,8 +14,42 @@ eval "forceActiveFocus()" --on scenarioGraphPanel
 click "scenarioGraphPanel > seriesVisibilityCheckBox_1"
 click "scenarioGraphPanel > seriesVisibilityCheckBox_5"
 wait "scenarioGraphPanel > seriesVisibilityCheckBox_5" --prop checked --equals false
+click "scenarioHistoryPanel > type:CheckBox & text:Accuracy"
+wait "scenarioHistoryPanel > type:CheckBox & text:Accuracy" --prop checked --equals true
 mouse move --at 540 280
 shot --name scenarios-overview
+
+section scenario-specs
+# One shot per scenario-spec's own scenario. The search is set in one edit because typing it
+# a key at a time refilters the list per key and the app warns "DelegateModel::cancel: index out
+# range". The search field's own text is the first `text:` match, so the row is @1.
+eval "text = 'Polarized Hell Easy 20% Slower'; textEdited()" --on scenarioSearchField
+click "scenarioSearchPanel > text:Polarized Hell Easy 20% Slower@1"
+wait "scenarioGraphPanel > text:Polarized Hell Easy 20% Slower (*"
+mouse move --at 540 280
+shot --name spec-polarized-hell-easy-20-slower
+eval "text = '1w3ts Reload'; textEdited()" --on scenarioSearchField
+click "scenarioSearchPanel > text:1w3ts Reload@1"
+wait "scenarioGraphPanel > text:1w3ts Reload (*"
+mouse move --at 540 280
+shot --name spec-1w3ts-reload
+eval "text = 'devTS Goated NR Static 5Bot'; textEdited()" --on scenarioSearchField
+click "scenarioSearchPanel > text:devTS Goated NR Static 5Bot@1"
+wait "scenarioGraphPanel > text:devTS Goated NR Static 5Bot (*"
+mouse move --at 540 280
+shot --name spec-devts-goated-nr-static-5bot
+eval "text = 'Pasu Angelic 20% Larger'; textEdited()" --on scenarioSearchField
+click "scenarioSearchPanel > text:Pasu Angelic 20% Larger@1"
+wait "scenarioGraphPanel > text:Pasu Angelic 20% Larger (*"
+mouse move --at 540 280
+shot --name spec-pasu-angelic-20-larger
+eval "text = 'VT Controlsphere Novice S5 Hard'; textEdited()" --on scenarioSearchField
+click "scenarioSearchPanel > text:VT Controlsphere Novice S5 Hard@1"
+wait "scenarioGraphPanel > text:VT Controlsphere Novice S5 Hard (2026-10-27, 18:49:00)"
+eval "text = ''; textEdited()" --on scenarioSearchField
+wait "scenarioSearchPanel > text:Floating Heads Timing 400% Larger"
+
+section run-graph
 click "type:MenuBarItem & text:View"
 click "text:Graphs"
 click graphVisibility_scenarioHistory
