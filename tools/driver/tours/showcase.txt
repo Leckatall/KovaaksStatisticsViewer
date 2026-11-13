@@ -106,6 +106,8 @@ click "scenarioSearchPanel > text:1w3ts Reload@1"
 wait "scenarioGraphPanel > text:1w3ts Reload (*"
 eval "text = ''; textEdited()" --on scenarioSearchField
 wait "scenarioSearchPanel > text:Floating Heads Timing 400% Larger"
+click "scenarioGraphPanel > seriesVisibilityCheckBox_1"
+wait "scenarioGraphPanel > seriesVisibilityCheckBox_1" --prop checked --equals false
 click "scenarioGraphPanel > seriesVisibilityCheckBox_2"
 click "scenarioGraphPanel > seriesVisibilityCheckBox_5"
 wait "scenarioGraphPanel > seriesVisibilityCheckBox_5" --prop checked --equals false
@@ -114,7 +116,7 @@ mouse move --at 0 70
 shot --name reload-overview
 eval "visualSettingsManager.selectionPanelVisible = false; visualSettingsManager.scenarioHistoryGraphVisible = false; visualSettingsManager.playtimeGraphVisible = false"
 resize 1000x550
-click "scenarioGraphPanel > seriesVisibilityCheckBox_1"
+wait "scenarioGraphPanel > seriesVisibilityCheckBox_1" --prop checked --equals false
 click "scenarioGraphPanel > seriesVisibilityCheckBox_9"
 wait "scenarioGraphPanel > seriesVisibilityCheckBox_9" --prop checked --equals false
 eval "forceActiveFocus()" --on scenarioGraphPanel
@@ -143,6 +145,8 @@ click "scenarioSearchPanel > text:VT Controlsphere Novice S5 Hard@1"
 wait "scenarioGraphPanel > text:VT Controlsphere Novice S5 Hard (*"
 eval "text = ''; textEdited()" --on scenarioSearchField
 wait "scenarioSearchPanel > text:Floating Heads Timing 400% Larger"
+click "scenarioGraphPanel > seriesVisibilityCheckBox_1"
+wait "scenarioGraphPanel > seriesVisibilityCheckBox_1" --prop checked --equals false
 click "scenarioGraphPanel > seriesVisibilityCheckBox_2"
 click "scenarioGraphPanel > seriesVisibilityCheckBox_5"
 wait "scenarioGraphPanel > seriesVisibilityCheckBox_5" --prop checked --equals false
@@ -151,7 +155,7 @@ mouse move --at 0 70
 shot --name controlsphere-overview
 eval "visualSettingsManager.selectionPanelVisible = false; visualSettingsManager.scenarioHistoryGraphVisible = false; visualSettingsManager.playtimeGraphVisible = false"
 resize 1000x550
-click "scenarioGraphPanel > seriesVisibilityCheckBox_1"
+wait "scenarioGraphPanel > seriesVisibilityCheckBox_1" --prop checked --equals false
 click "scenarioGraphPanel > seriesVisibilityCheckBox_9"
 wait "scenarioGraphPanel > seriesVisibilityCheckBox_9" --prop checked --equals false
 eval "forceActiveFocus()" --on scenarioGraphPanel
@@ -180,6 +184,8 @@ click "scenarioSearchPanel > text:devTS Goated NR Static 5Bot@1"
 wait "scenarioGraphPanel > text:devTS Goated NR Static 5Bot (*"
 eval "text = ''; textEdited()" --on scenarioSearchField
 wait "scenarioSearchPanel > text:Floating Heads Timing 400% Larger"
+click "scenarioGraphPanel > seriesVisibilityCheckBox_1"
+wait "scenarioGraphPanel > seriesVisibilityCheckBox_1" --prop checked --equals false
 click "scenarioGraphPanel > seriesVisibilityCheckBox_2"
 click "scenarioGraphPanel > seriesVisibilityCheckBox_5"
 wait "scenarioGraphPanel > seriesVisibilityCheckBox_5" --prop checked --equals false
@@ -188,7 +194,7 @@ mouse move --at 0 70
 shot --name devts-overview
 eval "visualSettingsManager.selectionPanelVisible = false; visualSettingsManager.scenarioHistoryGraphVisible = false; visualSettingsManager.playtimeGraphVisible = false"
 resize 1000x550
-click "scenarioGraphPanel > seriesVisibilityCheckBox_1"
+wait "scenarioGraphPanel > seriesVisibilityCheckBox_1" --prop checked --equals false
 click "scenarioGraphPanel > seriesVisibilityCheckBox_9"
 wait "scenarioGraphPanel > seriesVisibilityCheckBox_9" --prop checked --equals false
 eval "forceActiveFocus()" --on scenarioGraphPanel
