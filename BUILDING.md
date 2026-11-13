@@ -84,3 +84,19 @@ This builds a Release from scratch, bundles Qt, vcpkg and compiler runtime DLLs 
 ## Developer tools
 
 `tools/gallery` builds `ksv_gallery`, which runs the real app against a throwaway KovaaK's folder and hot-reloads edits to `src/ui/qml/`. It's on by default in Debug builds (`KSV_BUILD_GALLERY`) and never shipped.
+
+## Project structure
+
+```
+src/
+  domain/    Core model (runs, scenarios, benchmarks). No Qt, no I/O.
+  data/      Reading .perf and stats files, the profile store
+  qt_data/   Qt-backed services: settings, files, playlists, images
+  app/       Use cases, and App, which wires everything together
+  ui/        View models and the QML interface
+tests/       Tests for each layer, plus integration tests against real .perf files
+tools/       Developer tools, e.g. a component gallery with QML hot reload
+docs/        Architecture description, decision records and feature designs
+```
+
+Each layer only depends on the layers below it, through interfaces. See [docs/architecture/](docs/architecture/README.md) for the full description and the decisions behind it.
