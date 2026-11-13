@@ -1,0 +1,36 @@
+{
+  "description": "1w3ts Reload, measured: fewer shots in the first two seconds and slightly higher accuracy over the first ten, then flat. Showcase variant: shot rate fades to half over the final fifteen seconds in the ten most recent runs.",
+  "windows": [
+    {
+      "from": 0,
+      "to": 1,
+      "shotRate": 0.68,
+      "accuracy": 1.11
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "shotRate": 0.79,
+      "accuracy": 1.1
+    },
+    {
+      "from": 2,
+      "to": 3,
+      "accuracy": 1.08
+    },
+    {
+      "from": 3,
+      "to": 10,
+      "accuracy": 1.04
+    },
+    {
+      "from": 45,
+      "to": 60,
+      "shotRate": 0.5,
+      "ramp": true
+    }
+  ],
+  "noise": {
+    "accuracy": 0.2
+  }
+}

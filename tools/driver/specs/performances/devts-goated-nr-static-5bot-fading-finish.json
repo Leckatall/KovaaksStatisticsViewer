@@ -1,0 +1,31 @@
+{
+  "description": "devTS Goated NR Static 5Bot, measured: a short first second, accuracy a little high in seconds two to ten, then flat; shot rate and accuracy both vary second to second. Showcase variant: shot rate fades to half over the final fifteen seconds in the ten most recent runs.",
+  "windows": [
+    {
+      "from": 0,
+      "to": 1,
+      "shotRate": 0.72,
+      "accuracy": 0.94
+    },
+    {
+      "from": 1,
+      "to": 3,
+      "accuracy": 1.1
+    },
+    {
+      "from": 3,
+      "to": 10,
+      "accuracy": 1.03
+    },
+    {
+      "from": 45,
+      "to": 60,
+      "shotRate": 0.5,
+      "ramp": true
+    }
+  ],
+  "noise": {
+    "accuracy": 0.24,
+    "shotRate": 0.12
+  }
+}
