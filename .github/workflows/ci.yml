@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: 6.12.0
+  # Keep in step with the vcpkg used for local and release builds: protobuf 6.33.4, abseil 20260107.1, gtest 1.17.0.
+  VCPKG_COMMIT: 39344dff01c5a5a0134caf2624cdd492f05d30ea
+  VCPKG_TRIPLET: x64-mingw-dynamic
+
+jobs:
+  build-and-test:
+    name: Build and test (MinGW)
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # tools_mingw1510 is the compiler Qt's mingw_64 kit is built with. The runner image's own GCCs
+      # (Strawberry Perl, C:/mingw64) must never be picked up instead: vcpkg's x64-mingw-dynamic
+      # libraries only load against the runtime DLLs of the compiler that built them.
+      - name: Install Qt, MinGW, CMake and Ninja
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          tools: tools_mingw1510,qt.tools.win64_mingw1510 tools_cmake,qt.tools.cmake.win64 tools_ninja,qt.tools.ninja
+          aqtversion: '>=3.3.0'
+          cache: true
+
+      - name: Resolve toolchain paths
+        shell: pwsh
+        run: |
+          $tools = $env:IQTA_TOOLS.Replace('\', '/')
+          $qt = $env:QT_ROOT_DIR.Replace('\', '/')
+          $mingw = "$tools/mingw1510_64/bin"
+          $vcpkg = "$($env:RUNNER_TEMP.Replace('\', '/'))/vcpkg"
+          $installed = "$vcpkg/installed/$env:VCPKG_TRIPLET"
+          foreach ($required in "$mingw/gcc.exe", "$tools/CMake_64/bin/cmake.exe", "$tools/Ninja/ninja.exe", "$qt/lib/cmake/Qt6") {
+            if (-not (Test-Path $required)) {
+              Get-ChildItem $tools | Format-Table -AutoSize | Out-String | Write-Host
+              throw "Expected install path is missing: $required"
+            }
+          }
+          # GITHUB_PATH entries are prepended, so this MinGW wins over every other gcc on the image.
+          $mingw >> $env:GITHUB_PATH
+          @(
+            "VCPKG_ROOT=$vcpkg"
+            "VCPKG_BINARY_CACHE=$($env:RUNNER_TEMP.Replace('\', '/'))/vcpkg-binary-cache"
+            "KSV_TOOLCHAIN=mingw"
+            "KSV_CMAKE_EXE=$tools/CMake_64/bin/cmake.exe"
+            "KSV_NINJA_EXE=$tools/Ninja/ninja.exe"
+            "KSV_C_COMPILER=$mingw/gcc.exe"
+            "KSV_CXX_COMPILER=$mingw/c++.exe"
+            "KSV_VCPKG_TOOLCHAIN=$vcpkg/scripts/buildsystems/vcpkg.cmake"
+            "KSV_VCPKG_BIN_DIR=$installed/bin"
+            "KSV_PROTOC_EXE=$installed/tools/protobuf/protoc.exe"
+            "KSV_QT_BIN_DIR=$qt/bin"
+            "KSV_QT6_DIR=$qt/lib/cmake/Qt6"
+          ) >> $env:GITHUB_ENV
+
+      - name: Check compiler
+        shell: pwsh
+        run: |
+          (Get-Command gcc).Source
+          gcc --version
+
+      - name: Fetch vcpkg
+        shell: pwsh
+        run: |
+          git init --quiet $env:VCPKG_ROOT
+          git -C $env:VCPKG_ROOT fetch --quiet --depth 1 https://github.com/microsoft/vcpkg $env:VCPKG_COMMIT
+          git -C $env:VCPKG_ROOT checkout --quiet FETCH_HEAD
+          & "$env:VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # vcpkg hashes the compiler into each package's ABI, so a changed MinGW misses the cache
+      # entries and rebuilds rather than reusing incompatible binaries.
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_BINARY_CACHE }}
+          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ env.VCPKG_TRIPLET }}-mingw1510
+
+      - name: Install protobuf and gtest
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_BINARY_CACHE | Out-Null
+          $env:VCPKG_BINARY_SOURCES = "clear;files,$env:VCPKG_BINARY_CACHE,readwrite"
+          & "$env:VCPKG_ROOT/vcpkg.exe" install protobuf gtest `
+            --triplet $env:VCPKG_TRIPLET --host-triplet $env:VCPKG_TRIPLET --clean-after-build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Build and run tests
+        run: uv run python scripts/build_and_test.py
+
+      - name: qmllint
+        run: uv run python scripts/build_and_test.py --scope qmllint
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-and-test-logs
+          path: .temp/build-and-test/
+          if-no-files-found: ignore
+
+  script-tests:
+    name: Script tests (pytest)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: pytest
+        run: uv run pytest
