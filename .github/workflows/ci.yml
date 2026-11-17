@@ -18,6 +18,12 @@ env:
   # Keep in step with the vcpkg used for local and release builds: protobuf 6.33.4, abseil 20260107.1, gtest 1.17.0.
   VCPKG_COMMIT: 39344dff01c5a5a0134caf2624cdd492f05d30ea
   VCPKG_TRIPLET: x64-mingw-dynamic
+  # GCC 15.2, mingw-w64 v14, msvcrt, posix threads: the same toolchain shape as local builds, and an
+  # msvcrt runtime like Qt's mingw_64 kit. Qt's own tools_mingw1510 cannot be used: its mingw-w64 v12
+  # libmingw32.a carries UCRT-only _Exit/quick_exit wrappers, so gtest fails to link against msvcrt.
+  WINLIBS_RELEASE: 15.2.0posix-14.0.0-msvcrt-r7
+  WINLIBS_ASSET: winlibs-x86_64-posix-seh-gcc-15.2.0-mingw-w64msvcrt-14.0.0-r7.zip
+  WINLIBS_SHA256: 9cd587d91ee7910dd8f9087e4bf9ac6b59a7ee594e1360601ba8a05355b9cefa
 
 jobs:
   build-and-test:
@@ -27,29 +33,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # tools_mingw1510 is the compiler Qt's mingw_64 kit is built with. The runner image's own GCCs
-      # (Strawberry Perl, C:/mingw64) must never be picked up instead: vcpkg's x64-mingw-dynamic
-      # libraries only load against the runtime DLLs of the compiler that built them.
-      - name: Install Qt, MinGW, CMake and Ninja
+      - name: Install Qt, CMake and Ninja
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           host: windows
           target: desktop
           arch: win64_mingw
-          tools: tools_mingw1510,qt.tools.win64_mingw1510 tools_cmake,qt.tools.cmake tools_ninja,qt.tools.ninja
+          tools: tools_cmake,qt.tools.cmake tools_ninja,qt.tools.ninja
           # TODO(2026-11-17): Switch back to aqtversion once an aqtinstall release after 3.3.0 ships.
           # 3.3.0 looks for qt6_6120/qt6_6120/Updates.xml; Qt 6.11+ publishes Windows kits in
           # per-arch folders (qt6_6120/qt6_6120_mingw/), which only aqtinstall master understands.
           aqtsource: git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7
           cache: true
 
+      - name: Cache MinGW
+        id: winlibs-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/winlibs
+          key: winlibs-${{ env.WINLIBS_RELEASE }}
+
+      - name: Download MinGW
+        if: steps.winlibs-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP/$env:WINLIBS_ASSET"
+          Invoke-WebRequest -Uri "https://github.com/brechtsanders/winlibs_mingw/releases/download/$env:WINLIBS_RELEASE/$env:WINLIBS_ASSET" -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
+          if ($actual -ne $env:WINLIBS_SHA256) { throw "SHA-256 mismatch for ${zip}: $actual" }
+          7z x -y -bd "-o$env:RUNNER_TEMP/winlibs" $zip | Out-Null
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # The runner image's own GCCs (Strawberry Perl, C:/mingw64) must never be picked up instead:
+      # vcpkg's x64-mingw-dynamic libraries only load against the runtime DLLs of the compiler that built them.
       - name: Resolve toolchain paths
         shell: pwsh
         run: |
           $tools = $env:IQTA_TOOLS.Replace('\', '/')
           $qt = $env:QT_ROOT_DIR.Replace('\', '/')
-          $mingw = "$tools/mingw1510_64/bin"
+          $mingw = "$($env:RUNNER_TEMP.Replace('\', '/'))/winlibs/mingw64/bin"
           $vcpkg = "$($env:RUNNER_TEMP.Replace('\', '/'))/vcpkg"
           $installed = "$vcpkg/installed/$env:VCPKG_TRIPLET"
           foreach ($required in "$mingw/gcc.exe", "$tools/CMake_64/bin/cmake.exe", "$tools/Ninja/ninja.exe", "$qt/lib/cmake/Qt6") {
@@ -96,7 +119,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_BINARY_CACHE }}
-          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ env.VCPKG_TRIPLET }}-mingw1510
+          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ env.VCPKG_TRIPLET }}-${{ env.WINLIBS_RELEASE }}
 
       - name: Install protobuf and gtest
         shell: pwsh
