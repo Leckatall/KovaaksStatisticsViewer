@@ -38,7 +38,10 @@ jobs:
           target: desktop
           arch: win64_mingw
           tools: tools_mingw1510,qt.tools.win64_mingw1510 tools_cmake,qt.tools.cmake.win64 tools_ninja,qt.tools.ninja
-          aqtversion: '>=3.3.0'
+          # TODO(2026-11-17): Switch back to aqtversion once an aqtinstall release after 3.3.0 ships.
+          # 3.3.0 looks for qt6_6120/qt6_6120/Updates.xml; Qt 6.11+ publishes Windows kits in
+          # per-arch folders (qt6_6120/qt6_6120_mingw/), which only aqtinstall master understands.
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7
           cache: true
 
       - name: Resolve toolchain paths
