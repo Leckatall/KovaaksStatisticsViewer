@@ -82,6 +82,7 @@ Testing/
 
 # Jetbrains IDE
 .*/
+!.github/
 
 
 .qmlls.ini
