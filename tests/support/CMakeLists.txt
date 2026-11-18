@@ -30,6 +30,7 @@ target_sources(tests_support INTERFACE
         fake_graph_configuration_persistence.h
         fake_day_source.h
         fake_graph_configuration_use_case.h
+        fake_profile_locations_use_case.h
         fake_benchmark_store.h
         fake_benchmarks_service.h
         fake_benchmark_resolution_use_case.h

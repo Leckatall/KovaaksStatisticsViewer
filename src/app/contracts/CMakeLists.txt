@@ -43,6 +43,7 @@ target_sources(ksv_contracts PUBLIC
         raster_image.h
         image_output.h
         i_image_output_use_case.h
+        i_profile_locations_use_case.h
 )
 
 target_include_directories(ksv_contracts PUBLIC

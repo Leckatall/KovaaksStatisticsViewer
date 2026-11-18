@@ -238,21 +238,15 @@ namespace ksv::presentation {
     }
 
     SettingsViewModel::SettingsViewModel(
-        std::shared_ptr<application::ISettingsService> settings_service,
-        std::shared_ptr<application::IFileService> file_service,
-        std::shared_ptr<application::IProfileService> profile_service,
+        std::shared_ptr<application::IProfileLocationsUseCase> locations,
         std::shared_ptr<application::IGraphConfigurationUseCase> configuration,
         QObject *parent) : QObject(parent),
-                           m_settings_service(std::move(settings_service)),
-                           m_file_service(std::move(file_service)),
-                           m_profile_service(std::move(profile_service)),
-                           m_configuration(std::move(configuration)),
-                           m_kovaaks_dir([&] {
-                               const auto dirs = m_settings_service->getKovaaksDirs();
-                               return dirs.empty() ? QUrl{} : QUrl::fromLocalFile(QString::fromStdString(dirs.front()));
-                           }()) {
+                           m_locations(std::move(locations)),
+                           m_configuration(std::move(configuration)) {
         const QPointer<SettingsViewModel> self(this);
-        m_profile_service->onProfileChanged([self] { if (self) emit self->profileLoadedChanged(); });
+        m_locations->onKovaaksDirChanged([self] { if (self) emit self->kovaaksDirChanged(); });
+        m_locations->onProfilePathChanged([self] { if (self) emit self->profilePathChanged(); });
+        m_locations->onProfileChanged([self] { if (self) emit self->profileLoadedChanged(); });
         m_configuration->onChanged([self](const application::GraphConfigurationChange &change) {
             if (!self) return;
             if (change.anyGraph()) {
@@ -267,22 +261,19 @@ namespace ksv::presentation {
         });
     }
 
+    QUrl SettingsViewModel::getKovaaksDir() const {
+        const auto dir = m_locations->kovaaksDir();
+        return dir.empty() ? QUrl{} : QUrl::fromLocalFile(QString::fromStdString(dir));
+    }
+
     void SettingsViewModel::setKovaaksDir(const QUrl &dir) {
-        if (dir == m_kovaaks_dir) return;
-        auto dirs = m_settings_service->getKovaaksDirs();
-        const auto path = dir.toLocalFile().toStdString();
-        if (dirs.empty()) dirs.push_back(path);
-        else dirs.front() = path;
-        m_settings_service->setKovaaksDirs(dirs);
-        m_kovaaks_dir = dir;
-        emit kovaaksDirChanged();
+        if (dir == getKovaaksDir()) return;
+        m_locations->setKovaaksDir(dir.toLocalFile().toStdString());
     }
 
     void SettingsViewModel::setProfilePath(const QUrl &path) {
         if (path == getProfilePath()) return;
-        // Setting path triggers ProfileService to repoint the store and reload.
-        m_settings_service->setProfilePath(path.toLocalFile().toStdString());
-        emit profilePathChanged();
+        m_locations->setProfilePath(path.toLocalFile().toStdString());
     }
 
     // ---- Visit lifecycle ----------------------------------------------------------------------------

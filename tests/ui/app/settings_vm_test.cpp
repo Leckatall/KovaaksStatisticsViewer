@@ -1,5 +1,5 @@
 //
-// SettingsViewModel tests using hand-written fakes of its settings, profile and configuration ports.
+// SettingsViewModel tests using hand-written fakes of its profile-locations and graph-configuration use cases.
 //
 
 #include <gtest/gtest.h>
@@ -12,32 +12,22 @@
 #include "app/contracts/expression_dsl.h"
 #include "presentation/app/settings_vm.h"
 #include "presentation/expression/series_expression_editor_model.h"
-#include "fake_file_service.h"
 #include "fake_graph_configuration_use_case.h"
-#include "fake_profile_service.h"
-#include "fake_settings_service.h"
+#include "fake_profile_locations_use_case.h"
 
 using namespace ksv::presentation;
 using namespace ksv::application;
-using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
     class SettingsViewModelTest : public testing::Test {
     protected:
-        std::shared_ptr<FakeSettingsService> fake_service = [] {
-            auto settings = std::make_shared<FakeSettingsService>();
-            settings->dirs = {"C:/Kovaaks"};
-            settings->profile_path = "C:/Profile/profile.pb";
-            return settings;
-        }();
-        std::shared_ptr<FakeFileService> fake_file_service = std::make_shared<FakeFileService>();
-        std::shared_ptr<FakeProfileService> fake_profile_service = std::make_shared<FakeProfileService>();
+        std::shared_ptr<FakeProfileLocationsUseCase> locations = std::make_shared<FakeProfileLocationsUseCase>();
         std::shared_ptr<FakeGraphConfigurationUseCase> configuration =
             std::make_shared<FakeGraphConfigurationUseCase>();
 
         std::unique_ptr<SettingsViewModel> make_view_model() {
-            return std::make_unique<SettingsViewModel>(fake_service, fake_file_service, fake_profile_service, configuration);
+            return std::make_unique<SettingsViewModel>(locations, configuration);
         }
 
         static QVariantMap row(const SettingsViewModel &viewModel, const QString &id) {
@@ -154,14 +144,21 @@ namespace {
         EXPECT_FALSE(vm->hasPendingChanges());
     }
 
-    TEST_F(SettingsViewModelTest, KovaaksDirReflectsServiceValueAtConstruction) {
-        fake_service->dirs = {"D:/CustomDir"};
+    TEST_F(SettingsViewModelTest, KovaaksDirReflectsTheUseCase) {
+        locations->kovaaks_dir = "D:/CustomDir";
         const auto view_model = make_view_model();
 
         EXPECT_EQ(view_model->getKovaaksDir(), QUrl::fromLocalFile("D:/CustomDir"));
     }
 
-    TEST_F(SettingsViewModelTest, SetKovaaksDirUpdatesServiceAndEmitsOnChange) {
+    TEST_F(SettingsViewModelTest, NoConfiguredKovaaksDirIsAnEmptyUrl) {
+        locations->kovaaks_dir.clear();
+        const auto view_model = make_view_model();
+
+        EXPECT_TRUE(view_model->getKovaaksDir().isEmpty());
+    }
+
+    TEST_F(SettingsViewModelTest, SetKovaaksDirHandsThePathToTheUseCaseAndEmitsOnce) {
         const auto view_model = make_view_model();
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::kovaaksDirChanged);
@@ -169,48 +166,40 @@ namespace {
 
         EXPECT_EQ(spy.count(), 1);
         EXPECT_EQ(view_model->getKovaaksDir(), QUrl::fromLocalFile("D:/NewDir"));
-        EXPECT_EQ(fake_service->dirs, (std::vector<std::string>{"D:/NewDir"}));
+        EXPECT_EQ(locations->kovaaks_dir_writes, (std::vector<std::string>{"D:/NewDir"}));
     }
 
-    TEST_F(SettingsViewModelTest, SetKovaaksDirDoesNotEmitWhenUnchanged) {
-        fake_service->dirs = {"C:/Kovaaks"};
+    TEST_F(SettingsViewModelTest, SetKovaaksDirDoesNothingWhenUnchanged) {
         const auto view_model = make_view_model();
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::kovaaksDirChanged);
-        view_model->setKovaaksDir(QUrl::fromLocalFile("C:/Kovaaks"));
+        view_model->setKovaaksDir(QUrl::fromLocalFile(QString::fromStdString(locations->kovaaks_dir)));
 
         EXPECT_EQ(spy.count(), 0);
+        EXPECT_TRUE(locations->kovaaks_dir_writes.empty());
     }
 
-    TEST_F(SettingsViewModelTest, KovaaksDirValidReflectsTheFileService) {
-        fake_file_service->source_roots_valid = false;
+    TEST_F(SettingsViewModelTest, KovaaksDirValidReflectsTheUseCase) {
+        locations->kovaaks_dir_valid = false;
         const auto view_model = make_view_model();
 
         EXPECT_FALSE(view_model->isKovaaksDirValid());
     }
 
-    TEST_F(SettingsViewModelTest, SetKovaaksDirPreservesAdditionalDirectories) {
-        fake_service->dirs = {"C:/Primary", "D:/Secondary"};
-        const auto view_model = make_view_model();
-
-        view_model->setKovaaksDir(QUrl::fromLocalFile("E:/Replacement"));
-
-        EXPECT_EQ(fake_service->dirs, (std::vector<std::string>{"E:/Replacement", "D:/Secondary"}));
-    }
-
-    TEST_F(SettingsViewModelTest, SettingAValidKovaaksDirNotifiesThatValidityChanged) {
-        fake_file_service->source_roots_valid = false;
+    // The directory can become valid without being set again, once KovaaK's writes its first run there.
+    TEST_F(SettingsViewModelTest, ValidityChangedByTheUseCaseNotifiesWithoutASet) {
+        locations->kovaaks_dir_valid = false;
         const auto view_model = make_view_model();
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::kovaaksDirChanged);
 
-        fake_file_service->source_roots_valid = true;
-        view_model->setKovaaksDir(QUrl::fromLocalFile("D:/NewDir"));
+        locations->kovaaks_dir_valid = true;
+        locations->notifyKovaaksDirChanged();
 
         EXPECT_EQ(spy.count(), 1);
         EXPECT_TRUE(view_model->isKovaaksDirValid());
     }
 
-    TEST_F(SettingsViewModelTest, SetProfilePathUpdatesSettingsServiceAndEmitsOnChange) {
+    TEST_F(SettingsViewModelTest, SetProfilePathHandsThePathToTheUseCaseAndEmitsOnce) {
         const auto view_model = make_view_model();
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::profilePathChanged);
@@ -218,26 +207,25 @@ namespace {
 
         EXPECT_EQ(spy.count(), 1);
         EXPECT_EQ(view_model->getProfilePath(), QUrl::fromLocalFile("D:/NewProfile/profile.pb"));
-        EXPECT_EQ(fake_service->profile_path, "D:/NewProfile/profile.pb");
+        EXPECT_EQ(locations->profile_path_writes, (std::vector<std::string>{"D:/NewProfile/profile.pb"}));
     }
 
-    TEST_F(SettingsViewModelTest, SetProfilePathDoesNotEmitWhenUnchanged) {
-        fake_service->profile_path = "C:/Profile/profile.pb";
+    TEST_F(SettingsViewModelTest, SetProfilePathDoesNothingWhenUnchanged) {
         const auto view_model = make_view_model();
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::profilePathChanged);
-        view_model->setProfilePath(QUrl::fromLocalFile("C:/Profile/profile.pb"));
+        view_model->setProfilePath(QUrl::fromLocalFile(QString::fromStdString(locations->profile_path)));
 
         EXPECT_EQ(spy.count(), 0);
+        EXPECT_TRUE(locations->profile_path_writes.empty());
     }
 
-    TEST_F(SettingsViewModelTest, ProfileLoadedEmitsWhenProfileServiceNotifiesChange) {
+    TEST_F(SettingsViewModelTest, ProfileLoadedEmitsWhenTheUseCaseNotifiesChange) {
         const auto view_model = make_view_model();
-        ASSERT_FALSE(fake_profile_service->stored_callbacks.empty());
 
         const QSignalSpy spy(view_model.get(), &SettingsViewModel::profileLoadedChanged);
-        fake_profile_service->profile_loaded = true;
-        fake_profile_service->notifyProfileChanged();
+        locations->profile_loaded = true;
+        locations->notifyProfileChanged();
 
         EXPECT_EQ(spy.count(), 1);
         EXPECT_TRUE(view_model->isProfileLoaded());

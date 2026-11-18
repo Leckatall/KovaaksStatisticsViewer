@@ -12,10 +12,8 @@
 #include <QSignalSpy>
 
 #include "presentation/app/settings_vm.h"
-#include "fake_file_service.h"
 #include "fake_graph_configuration_use_case.h"
-#include "fake_profile_service.h"
-#include "fake_settings_service.h"
+#include "fake_profile_locations_use_case.h"
 
 using namespace ksv::presentation;
 using namespace ksv::application;
@@ -24,14 +22,7 @@ using namespace ksv::tests_support;
 namespace {
     class GraphDraftTest : public testing::Test {
     protected:
-        std::shared_ptr<FakeSettingsService> settings = [] {
-            auto service = std::make_shared<FakeSettingsService>();
-            service->dirs = {"C:/Kovaaks"};
-            service->profile_path = "C:/Profile/profile.pb";
-            return service;
-        }();
-        std::shared_ptr<FakeFileService> files = std::make_shared<FakeFileService>();
-        std::shared_ptr<FakeProfileService> profile = std::make_shared<FakeProfileService>();
+        std::shared_ptr<FakeProfileLocationsUseCase> locations = std::make_shared<FakeProfileLocationsUseCase>();
         std::shared_ptr<FakeGraphConfigurationUseCase> configuration =
             std::make_shared<FakeGraphConfigurationUseCase>();
 
@@ -46,7 +37,7 @@ namespace {
         }
 
         std::unique_ptr<SettingsViewModel> make(const QLocale &locale = english()) {
-            auto view_model = std::make_unique<SettingsViewModel>(settings, files, profile, configuration);
+            auto view_model = std::make_unique<SettingsViewModel>(locations, configuration);
             view_model->setLocale(locale);
             return view_model;
         }

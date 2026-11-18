@@ -28,6 +28,8 @@ add_library(ksv_app STATIC
         usecases/recent_benchmarks.cpp
         usecases/image_output_use_case.h
         usecases/image_output_use_case.cpp
+        usecases/profile_locations_use_case.h
+        usecases/profile_locations_use_case.cpp
 )
 
 target_link_libraries(ksv_app PUBLIC

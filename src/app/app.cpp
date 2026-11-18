@@ -40,6 +40,7 @@
 #include "usecases/playtime_graph_use_case.h"
 #include "usecases/scenario_browser_use_case.h"
 #include "usecases/image_output_use_case.h"
+#include "usecases/profile_locations_use_case.h"
 #include "qt_data/qt_clipboard_image_writer.h"
 #include "qt_data/qt_png_image_writer.h"
 #include "capture/capture_limits.h"
@@ -134,8 +135,9 @@ namespace ksv::application {
         m_completionHistoryUseCase->onSelectedRunChanged([this] { m_completionHistoryVm->refreshSelection(); });
 
         m_sessionVm = new presentation::SessionViewModel(m_sessionController, this);
-        m_settingsVm = new presentation::SettingsViewModel(
-            m_settingsService, m_fileService, m_profileService, m_graphConfigurationUseCase, this);
+        m_profileLocationsUseCase = std::make_shared<ProfileLocationsUseCase>(
+            m_settingsService, m_fileService, m_profileService);
+        m_settingsVm = new presentation::SettingsViewModel(m_profileLocationsUseCase, m_graphConfigurationUseCase, this);
         m_scenarioBrowserUseCase = std::make_shared<ScenarioBrowserUseCase>(m_sessionController, m_profileService);
         m_scenarioBrowserVm = new presentation::ScenarioBrowserViewModel(m_scenarioBrowserUseCase, this);
 

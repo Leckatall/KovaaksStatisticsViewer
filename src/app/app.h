@@ -37,6 +37,7 @@
 #include "contracts/i_scenario_browser_use_case.h"
 #include "contracts/i_graph_configuration_use_case.h"
 #include "contracts/i_image_output_use_case.h"
+#include "contracts/i_profile_locations_use_case.h"
 #include "data/interfaces/i_clipboard_image_writer.h"
 #include "data/interfaces/i_png_image_writer.h"
 
@@ -128,6 +129,7 @@ namespace ksv::application {
         std::shared_ptr<data::IRunIngestor> m_runIngestor;
         std::shared_ptr<data::IProfileImporter> m_profileImporter;
         std::shared_ptr<IProfileService> m_profileService;
+        std::shared_ptr<IProfileLocationsUseCase> m_profileLocationsUseCase;
         std::shared_ptr<ISessionController> m_sessionController;
         std::shared_ptr<IGraphUseCase> m_graphUseCase;
         std::shared_ptr<IPlaytimeGraphUseCase> m_playtimeUseCase;

@@ -16,10 +16,8 @@
 #include <QtCore>
 #include <QColor>
 
-#include "data/interfaces/i_file_service.h"
-#include "data/interfaces/i_profile_service.h"
-#include "data/interfaces/i_settings_service.h"
 #include "app/contracts/i_graph_configuration_use_case.h"
+#include "app/contracts/i_profile_locations_use_case.h"
 #include "app/contracts/run_series_editing.h"
 
 namespace ksv::presentation {
@@ -36,7 +34,6 @@ namespace ksv::presentation {
     class SettingsViewModel : public QObject {
         Q_OBJECT
         Q_PROPERTY(QUrl kovaaksDir READ getKovaaksDir WRITE setKovaaksDir NOTIFY kovaaksDirChanged)
-        // Re-checked only when the directory is set here, not when the filesystem changes underneath it.
         Q_PROPERTY(bool kovaaksDirValid READ isKovaaksDirValid NOTIFY kovaaksDirChanged)
         Q_PROPERTY(QUrl profilePath READ getProfilePath WRITE setProfilePath NOTIFY profilePathChanged)
         Q_PROPERTY(bool profileLoaded READ isProfileLoaded NOTIFY profileLoadedChanged)
@@ -56,24 +53,22 @@ namespace ksv::presentation {
         Q_PROPERTY(int maximumHiddenLeadingPoints READ maximumHiddenLeadingPoints CONSTANT)
 
     public:
-        explicit SettingsViewModel(std::shared_ptr<application::ISettingsService> settings_service,
-                                   std::shared_ptr<application::IFileService> file_service,
-                                   std::shared_ptr<application::IProfileService> profile_service,
+        explicit SettingsViewModel(std::shared_ptr<application::IProfileLocationsUseCase> locations,
                                    std::shared_ptr<application::IGraphConfigurationUseCase> configuration,
                                    QObject *parent = nullptr);
 
-        Q_INVOKABLE [[nodiscard]] QUrl getKovaaksDir() const { return m_kovaaks_dir; }
-        [[nodiscard]] bool isKovaaksDirValid() const { return m_file_service->hasValidSourceRoots(); }
+        Q_INVOKABLE [[nodiscard]] QUrl getKovaaksDir() const;
+        [[nodiscard]] bool isKovaaksDirValid() const { return m_locations->isKovaaksDirValid(); }
 
         Q_INVOKABLE void setKovaaksDir(const QUrl &dir);
 
         Q_INVOKABLE [[nodiscard]] QUrl getProfilePath() const {
-            return QUrl::fromLocalFile(m_settings_service->getProfilePath().data());
+            return QUrl::fromLocalFile(QString::fromStdString(m_locations->profilePath()));
         }
 
         Q_INVOKABLE void setProfilePath(const QUrl &path);
 
-        [[nodiscard]] bool isProfileLoaded() const { return m_profile_service->isProfileLoaded(); }
+        [[nodiscard]] bool isProfileLoaded() const { return m_locations->isProfileLoaded(); }
 
         // ---- Visit lifecycle ----------------------------------------------------------------------
         // Seeds the working copy; does nothing while a visit is already open.
@@ -275,11 +270,8 @@ namespace ksv::presentation {
         bool finishFieldEdit(const FieldKey &key, const QString &text, bool parsed, bool changed);
         void revalidateDraft();
 
-        std::shared_ptr<application::ISettingsService> m_settings_service;
-        std::shared_ptr<application::IFileService> m_file_service;
-        std::shared_ptr<application::IProfileService> m_profile_service;
+        std::shared_ptr<application::IProfileLocationsUseCase> m_locations;
         std::shared_ptr<application::IGraphConfigurationUseCase> m_configuration;
-        QUrl m_kovaaks_dir;
 
         std::optional<application::GraphConfiguration> m_working;
         application::GraphConfiguration m_baseline;
