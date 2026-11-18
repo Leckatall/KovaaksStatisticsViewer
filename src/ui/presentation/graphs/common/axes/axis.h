@@ -7,10 +7,10 @@
 #include <optional>
 #include <utility>
 
-#include "presentation/graphs/common/axes/value_transform.h"
+#include "presentation/graphs/common/axes/value_delegate.h"
 
 namespace ksv::presentation {
-    // Read-only rendering surface shared by every axis kind. Bounds, ticks, and formatter are only
+    // Read-only rendering surface shared by every axis kind. Bounds, ticks, and delegate are only
     // ever replaced together via replaceResolvedState() so they can never diverge from each other.
     class Axis {
     public:
@@ -19,7 +19,8 @@ namespace ksv::presentation {
         [[nodiscard]] qreal min() const { return m_min; }
         [[nodiscard]] qreal max() const { return m_max; }
         [[nodiscard]] const QList<qreal> &ticks() const { return m_ticks; }
-        [[nodiscard]] QString formatTick(const qreal value) const { return m_transform.format(value); }
+        [[nodiscard]] QString formatTick(const qreal value) const { return m_delegate.axisLabel(value); }
+        [[nodiscard]] QString formatHover(const qreal value) const { return m_delegate.hoverLabel(value); }
 
         // Maps value to [0,1] position on axis span; zero span maps to 0.5
         [[nodiscard]] qreal normalizedPosition(const qreal value) const {
@@ -34,16 +35,16 @@ namespace ksv::presentation {
     protected:
         Axis() = default;
 
-        // Commits bounds, ticks, and formatter as one operation and reports whether the resolved
-        // geometry (bounds or ticks) changed. The ValueTransform held is a std::function and is
-        // never compared for that determination.
+        // Commits bounds, ticks, and delegate as one operation and reports whether the resolved
+        // geometry (bounds or ticks) changed. The delegate holds std::functions and is never
+        // compared for that determination.
         [[nodiscard]] bool replaceResolvedState(const qreal min, const qreal max, QList<qreal> ticks,
-                                                ValueTransform transform) {
+                                                ValueDelegate delegate) {
             const bool boundsChanged = min != m_min || max != m_max || ticks != m_ticks;
             m_min = min;
             m_max = max;
             m_ticks = std::move(ticks);
-            m_transform = std::move(transform);
+            m_delegate = std::move(delegate);
             return boundsChanged;
         }
 
@@ -51,7 +52,7 @@ namespace ksv::presentation {
         qreal m_min = 0.0;
         qreal m_max = 1.0;
         QList<qreal> m_ticks{0.0, 1.0};
-        ValueTransform m_transform = ValueTransform::identity();
+        ValueDelegate m_delegate = ValueDelegate::identity();
     };
 }
 

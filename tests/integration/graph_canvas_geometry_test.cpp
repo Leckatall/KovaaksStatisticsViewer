@@ -539,7 +539,7 @@ namespace {
 
         [[nodiscard]] QPointF pixelOf(const GraphCanvas &canvas, const QPointF &raw) const {
             const QRectF plot = canvas.property("plotArea").toRectF();
-            return toPixel(QPointF(raw.x(), m_series->transform.display(raw.y())), plot, m_xAxis,
+            return toPixel(QPointF(raw.x(), m_series->delegate.display(raw.y())), plot, m_xAxis,
                            m_series->yAxis.value_or(m_series->deriveYAxis()));
         }
 

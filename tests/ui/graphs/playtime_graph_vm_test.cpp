@@ -287,7 +287,7 @@ namespace {
 
         view_model.setAxisPolicies({{"playtime", FitVisibleData{}}});
 
-        ValueAxis expected({}, ValueTransform::secondsToMinutes());
+        ValueAxis expected({}, ValueDelegate::secondsToMinutes());
         expected.setRange(30.0, 70.0);
         expectSameAxis(playtimeAxis(view_model), expected);
         EXPECT_GT(playtimeAxis(view_model).min(), 0.0);
@@ -305,7 +305,7 @@ namespace {
         EXPECT_EQ(axis.formatTick(45.0), "45 min");
         const auto series = view_model.series({PlaytimeGraphViewModel::Playtime});
         EXPECT_DOUBLE_EQ(series.front()->points[1].y(), 4200.0);
-        EXPECT_GT(axis.normalizedPosition(series.front()->transform.display(4200.0)), 1.0)
+        EXPECT_GT(axis.normalizedPosition(series.front()->delegate.display(4200.0)), 1.0)
             << "70 min lies above the 45 min ceiling, outside the plot";
     }
 
@@ -354,7 +354,7 @@ namespace {
 
         view_model.setAxisPolicies({{"playtime", FitVisibleData{}}});
 
-        ValueAxis expected({}, ValueTransform::secondsToMinutes());
+        ValueAxis expected({}, ValueDelegate::secondsToMinutes());
         expected.setRange(30.0, 30.0);
         expectSameAxis(playtimeAxis(view_model), expected);
         EXPECT_LT(playtimeAxis(view_model).min(), 30.0);

@@ -15,13 +15,13 @@
 
 using ksv::presentation::SeriesModel;
 using ksv::presentation::ValueAxis;
-using ksv::presentation::ValueTransform;
+using ksv::presentation::ValueDelegate;
 
 namespace {
-    TEST(SeriesModelTest, DisplayPointsAppliesTransformToYOnly) {
+    TEST(SeriesModelTest, DisplayPointsAppliesTheDelegateToYOnly) {
         SeriesModel series;
         series.points = {QPointF(0.0, 0.5), QPointF(1.0, 0.75)};
-        series.transform = ValueTransform::percentage();
+        series.delegate = ValueDelegate::percentage();
 
         const auto display = series.displayPoints();
         ASSERT_EQ(display.size(), 2);
@@ -33,7 +33,7 @@ namespace {
 
     TEST(SeriesModelTest, SetDataBuildsYAxisOverDisplayRangeSharingTheDelegate) {
         SeriesModel series;
-        series.transform = ValueTransform::percentage();
+        series.delegate = ValueDelegate::percentage();
 
         series.setData({QPointF(0.0, 0.12), QPointF(1.0, 0.87)});
 
@@ -48,7 +48,7 @@ namespace {
         EXPECT_FALSE(empty.displayRange().has_value());
 
         SeriesModel series;
-        series.transform = ValueTransform::percentage();
+        series.delegate = ValueDelegate::percentage();
         series.points = {QPointF(0.0, 0.12), QPointF(1.0, 0.87)};
 
         const auto range = series.displayRange();
@@ -64,18 +64,18 @@ namespace {
         second.points = {QPointF(0.0, 100.0), QPointF(1.0, 200.0)};
         const std::array<const SeriesModel *, 2> members{&first, &second};
 
-        const ValueAxis axis = ksv::presentation::axisForSeries(members, {}, ValueTransform::identity());
+        const ValueAxis axis = ksv::presentation::axisForSeries(members, {}, ValueDelegate::identity());
         EXPECT_LE(axis.min(), 10.0);
         EXPECT_GE(axis.max(), 200.0);
 
-        const ValueAxis empty = ksv::presentation::axisForSeries({}, {}, ValueTransform::identity());
+        const ValueAxis empty = ksv::presentation::axisForSeries({}, {}, ValueDelegate::identity());
         EXPECT_DOUBLE_EQ(empty.min(), 0.0);
         EXPECT_DOUBLE_EQ(empty.max(), 1.0);
     }
 
     TEST(SeriesModelTest, SampleAtXReturnsNearestSampleByRawX) {
         SeriesModel series;
-        series.transform = ValueTransform::percentage();
+        series.delegate = ValueDelegate::percentage();
         series.setData({QPointF(0.0, 0.5), QPointF(1.0, 0.6), QPointF(2.0, 0.87)});
 
         const auto sample = series.sampleAtX(1.9);
@@ -104,7 +104,7 @@ namespace {
 
     TEST(SeriesModelTest, FormattedValueAtXUsesTheDelegate) {
         SeriesModel series;
-        series.transform = ValueTransform::percentage();
+        series.delegate = ValueDelegate::percentage();
         series.setData({QPointF(0.0, 0.5), QPointF(1.0, 0.87)});
 
         EXPECT_EQ(series.formattedValueAtX(1.0), "87%");

@@ -20,6 +20,6 @@ namespace ksv::presentation {
             }
         }
         if (bestIndex < 0) return std::nullopt;
-        return QPointF(points[bestIndex].x(), transform.display(points[bestIndex].y()));
+        return QPointF(points[bestIndex].x(), delegate.display(points[bestIndex].y()));
     }
 }

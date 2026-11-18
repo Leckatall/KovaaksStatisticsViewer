@@ -56,7 +56,7 @@ namespace ksv::application {
         auto operator<=>(const AxisId &) const = default;
     };
 
-    // This keeps the app contract independent from ui::ValueTransform, whose formatter is a std::function.
+    // This keeps the app contract independent from ui::ValueDelegate, whose formatters are std::functions.
     enum class AxisTransformKind {
         Identity,
         Percentage

@@ -19,7 +19,7 @@
 #include "app/contracts/graph_configuration.h"
 #include "presentation/graphs/common/axes/axis.h"
 #include "presentation/graphs/common/axes/value_axis.h"
-#include "presentation/graphs/common/axes/value_transform.h"
+#include "presentation/graphs/common/axes/value_delegate.h"
 
 namespace ksv::presentation {
     // A horizontal line drawn across the plot at `value` (display units, on the owning series' Y
@@ -52,7 +52,7 @@ namespace ksv::presentation {
         [[nodiscard]] int column() const { return m_column; }
         void setColumn(const int column) { if (m_column == column) return; m_column = column; emit columnChanged(); }
 
-        ValueTransform transform;
+        ValueDelegate delegate;
         // Pen width in pixels.
         qreal lineWidth = application::kDefaultSeriesWidth;
         ValueAxis::Options yAxisOptions;
@@ -73,7 +73,7 @@ namespace ksv::presentation {
         [[nodiscard]] std::optional<std::pair<qreal, qreal>> displayRange() const {
             std::optional<std::pair<qreal, qreal>> range;
             const auto widen = [&](const QPointF &p) {
-                const qreal value = transform.display(p.y());
+                const qreal value = delegate.display(p.y());
                 if (!range) range = std::pair{value, value};
                 else range = std::pair{std::min(range->first, value), std::max(range->second, value)};
             };
@@ -84,7 +84,7 @@ namespace ksv::presentation {
         }
 
         [[nodiscard]] ValueAxis deriveYAxis() const {
-            ValueAxis axis(yAxisOptions, transform);
+            ValueAxis axis(yAxisOptions, delegate);
             if (const auto range = displayRange()) axis.setRange(range->first, range->second);
             else axis.setRange(0.0, 1.0);
             return axis;
@@ -98,7 +98,7 @@ namespace ksv::presentation {
         [[nodiscard]] QList<QPointF> displayPoints() const {
             QList<QPointF> out;
             out.reserve(points.size());
-            for (const auto &p: points) out.append(QPointF(p.x(), transform.display(p.y())));
+            for (const auto &p: points) out.append(QPointF(p.x(), delegate.display(p.y())));
             return out;
         }
 
@@ -106,7 +106,7 @@ namespace ksv::presentation {
 
         [[nodiscard]] QString formattedValueAtX(qreal xValue) const {
             const auto sample = sampleAtX(xValue);
-            return sample ? transform.format(sample->y()) : QString();
+            return sample ? delegate.hoverLabel(sample->y()) : QString();
         }
 
     signals:
@@ -124,7 +124,7 @@ namespace ksv::presentation {
 
     [[nodiscard]] inline ValueAxis axisForSeries(const std::span<const SeriesModel *const> members,
                                                   const ValueAxis::Options &options,
-                                                  const ValueTransform &delegate) {
+                                                  const ValueDelegate &delegate) {
         std::optional<std::pair<qreal, qreal>> range;
         for (const SeriesModel *series: members) {
             if (!series) continue;

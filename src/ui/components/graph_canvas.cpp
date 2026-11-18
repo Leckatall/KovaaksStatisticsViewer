@@ -40,7 +40,7 @@ namespace ksv::ui {
         std::optional<QPointF> displayCarry(const presentation::SeriesModel &series,
                                             const std::optional<QPointF> &raw) {
             if (!raw) return std::nullopt;
-            return QPointF(raw->x(), series.transform.display(raw->y()));
+            return QPointF(raw->x(), series.delegate.display(raw->y()));
         }
     }
 
@@ -324,7 +324,7 @@ namespace ksv::ui {
         if (!refSample) return result;
 
         result["valid"] = true;
-        result["x"] = refXAxis.formatTick(refSample->x());
+        result["x"] = refXAxis.formatHover(refSample->x());
         result["xRaw"] = refSample->x();
         result["pixelX"] = rect.left() + refXAxis.normalizedPosition(refSample->x()) * rect.width();
 
@@ -367,8 +367,8 @@ namespace ksv::ui {
                     best["valid"] = true;
                     best["name"] = s->name();
                     best["color"] = colorFor(*s).name();
-                    best["x"] = xAxis.formatTick(p.x());
-                    best["value"] = yAxis.formatTick(p.y());
+                    best["x"] = xAxis.formatHover(p.x());
+                    best["value"] = s->delegate.hoverLabel(p.y());
                 }
             }
         }

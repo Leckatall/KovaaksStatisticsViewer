@@ -12,7 +12,7 @@
 
 using ksv::presentation::Axis;
 using ksv::presentation::ValueAxis;
-using ksv::presentation::ValueTransform;
+using ksv::presentation::ValueDelegate;
 
 namespace {
     // Every tick is an (integer) multiple of the spacing between the first two.
@@ -128,9 +128,19 @@ namespace {
     }
 
     TEST(ValueAxisTest, FormatTickUsesTheAttachedDelegate) {
-        ValueAxis axis({}, ValueTransform::percentage());
+        ValueAxis axis({}, ValueDelegate::percentage());
         axis.setRange(0.0, 100.0);
         EXPECT_EQ(axis.formatTick(40.0), "40%");
+    }
+
+    TEST(ValueAxisTest, FormatHoverUsesTheDelegatesHoverLabel) {
+        ValueDelegate delegate;
+        delegate.axisFormatter = [](const qreal value) { return "axis " + QString::number(value); };
+        delegate.hoverFormatter = [](const qreal value) { return "hover " + QString::number(value); };
+        ValueAxis axis({}, delegate);
+        axis.setRange(0.0, 10.0);
+        EXPECT_EQ(axis.formatHover(4.0), "hover 4");
+        EXPECT_EQ(axis.formatTick(4.0), "axis 4");
     }
 
     TEST(ValueAxisTest, SetRangePreservesConfiguredPolicy) {
@@ -138,7 +148,7 @@ namespace {
                         .integral = true,
                         .targetTicks = 5,
                         .fallbackSpan = 2.0},
-                       ValueTransform::percentage());
+                       ValueDelegate::percentage());
 
         axis.setRange(12.0, 87.0);
         EXPECT_DOUBLE_EQ(axis.min(), 0.0);
@@ -172,7 +182,7 @@ namespace {
     TEST(ValueAxisTest, ZeroSpanMinuteAxisNeverRepeatsALabel) {
         // The empty playtime graph: no data, zero baseline, whole-minute labels. Sub-minute ticks
         // used to read "1 min" six times, then "0 min" five times.
-        ValueAxis axis({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
+        ValueAxis axis({.baseline = ValueAxis::Baseline::Zero}, ValueDelegate::secondsToMinutes());
         axis.setRange(0.0, 0.0);
         expectAdjacentLabelsDistinct(axis);
         EXPECT_DOUBLE_EQ(axis.min(), 0.0);
@@ -181,7 +191,7 @@ namespace {
 
     TEST(ValueAxisTest, SubUnitSpanWithWholeUnitLabelsCoarsensTheStep) {
         // Under one minute of playtime: the step grows to a whole minute instead of repeating labels.
-        ValueAxis axis({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
+        ValueAxis axis({.baseline = ValueAxis::Baseline::Zero}, ValueDelegate::secondsToMinutes());
         axis.setRange(0.2, 0.6);
         expectAdjacentLabelsDistinct(axis);
         EXPECT_GE(axis.max(), 0.6);
@@ -189,7 +199,7 @@ namespace {
     }
 
     TEST(ValueAxisTest, SubPercentSpanNeverRepeatsAPercentageLabel) {
-        ValueAxis axis({.baseline = ValueAxis::Baseline::HugData}, ValueTransform::percentage());
+        ValueAxis axis({.baseline = ValueAxis::Baseline::HugData}, ValueDelegate::percentage());
         axis.setRange(63.4, 63.9);
         expectAdjacentLabelsDistinct(axis);
         EXPECT_LE(axis.min(), 63.4);
@@ -203,7 +213,7 @@ namespace {
             expectAdjacentLabelsDistinct(hug);
             EXPECT_LT(hug.min(), hug.max());
 
-            ValueAxis zero({.baseline = ValueAxis::Baseline::Zero}, ValueTransform::secondsToMinutes());
+            ValueAxis zero({.baseline = ValueAxis::Baseline::Zero}, ValueDelegate::secondsToMinutes());
             zero.setRange(value, value);
             expectAdjacentLabelsDistinct(zero);
         }
@@ -220,13 +230,13 @@ namespace {
         const std::vector<std::pair<qreal, qreal>> ranges{
             {0.0, 0.0}, {0.0, 0.01}, {0.1, 0.15}, {0.99, 1.01}, {1.0, 1.0}, {3.0, 4.0},
             {60.0, 105.0}, {63.0, 63.5}, {4900.0, 5700.0}, {0.0, 300.0}, {12.0, 12.25}};
-        const std::vector<ValueTransform> transforms{
-            ValueTransform::identity(), ValueTransform::percentage(), ValueTransform::secondsToMinutes()};
+        const std::vector<ValueDelegate> delegates{
+            ValueDelegate::identity(), ValueDelegate::percentage(), ValueDelegate::secondsToMinutes()};
         for (const auto &[lo, hi]: ranges) {
-            for (const auto &transform: transforms) {
+            for (const auto &delegate: delegates) {
                 for (const auto baseline: {ValueAxis::Baseline::Zero, ValueAxis::Baseline::HugData}) {
                     for (const bool niceBounds: {true, false}) {
-                        ValueAxis axis({.baseline = baseline, .niceBounds = niceBounds}, transform);
+                        ValueAxis axis({.baseline = baseline, .niceBounds = niceBounds}, delegate);
                         axis.setRange(lo, hi);
                         SCOPED_TRACE(testing::Message() << "range " << lo << ".." << hi);
                         expectAdjacentLabelsDistinct(axis);
@@ -236,7 +246,7 @@ namespace {
         }
     }
 
-    // --- Exact bounds: no tick outside the data (run-history "#0"). ---
+    // --- Exact bounds: no tick outside the data (run-history run 0). ---
 
     TEST(ValueAxisTest, ExactBoundsTickEveryRunForFewRuns) {
         ValueAxis axis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .niceBounds = false});
@@ -260,6 +270,18 @@ namespace {
             }
             expectAdjacentLabelsDistinct(axis);
         }
+    }
+
+    TEST(ValueAxisTest, RepeatedLabelsKeepTheirTicksWhenDistinctLabelsIsOff) {
+        ValueAxis numbered({.integral = true, .niceBounds = false}, ValueDelegate::identity());
+        numbered.setRange(1.0, 8.0);
+
+        ValueDelegate sameLabel;
+        sameLabel.axisFormatter = [](qreal) { return QStringLiteral("Mar 4"); };
+        ValueAxis repeating({.integral = true, .niceBounds = false, .distinctLabels = false}, sameLabel);
+        repeating.setRange(1.0, 8.0);
+
+        EXPECT_EQ(repeating.ticks(), numbered.ticks());
     }
 
     TEST(ValueAxisTest, ChangingOptionsRecomputesTheCurrentRange) {

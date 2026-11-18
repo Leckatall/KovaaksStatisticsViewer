@@ -8,7 +8,7 @@
 #include "presentation/benchmarks/benchmark_format.h"
 #include "presentation/graphs/playtime_graph_vm.h"
 #include "presentation/graphs/common/series/series_style.h"
-#include "presentation/graphs/common/axes/value_transform.h"
+#include "presentation/graphs/common/axes/value_delegate.h"
 
 namespace ksv::presentation {
     BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, const Axis &xAxis, QObject *parent)
@@ -74,8 +74,8 @@ namespace ksv::presentation {
         std::vector<QString> tierNames;
         tierNames.reserve(tiers.size());
         for (const auto &tier: tiers) tierNames.push_back(tier.name);
-        ValueTransform transform;
-        transform.formatter = [tierNames](const qreal value) -> QString {
+        ValueDelegate delegate;
+        delegate.axisFormatter = [tierNames](const qreal value) -> QString {
             const qreal rounded = std::round(value);
             if (std::abs(value - rounded) < 1e-6 && rounded >= 0.0 &&
                 rounded <= static_cast<qreal>(tierNames.size())) {
@@ -83,7 +83,7 @@ namespace ksv::presentation {
                 if (index == 0) return QObject::tr("Unranked");
                 return tierNames[static_cast<std::size_t>(index - 1)];
             }
-            return ValueTransform().format(value);
+            return ValueDelegate().axisLabel(value);
         };
         ValueAxis::Options options;
         options.baseline = ValueAxis::Baseline::Zero;
@@ -93,7 +93,7 @@ namespace ksv::presentation {
         // makes the nice step at most 1 (12 intervals over 12 tiers would round up to a step of 2),
         // and `integral` then lifts it to exactly 1.
         options.targetTicks = std::max(1, 2 * static_cast<int>(tierNames.size()));
-        ValueAxis axis(options, transform);
+        ValueAxis axis(options, delegate);
         axis.setRange(0.0, static_cast<qreal>(tierNames.size()));
         return axis;
     }
@@ -124,11 +124,11 @@ namespace ksv::presentation {
         if (isRank()) {
             m_series->setName(metricName());
             // The hover tooltip reads the rank as a tier and progress, not as a bare number.
-            m_series->transform = ValueTransform::identity();
+            m_series->delegate = ValueDelegate::identity();
             std::vector<QString> tierNames;
             tierNames.reserve(rankTiers.size());
             for (const auto &tier: rankTiers) tierNames.push_back(tier.name);
-            m_series->transform.formatter = [tierNames](const qreal value) {
+            m_series->delegate.axisFormatter = [tierNames](const qreal value) {
                 return describeAverageRank(value, tierNames);
             };
             m_series->points = content.observations;
@@ -144,7 +144,7 @@ namespace ksv::presentation {
                 m_series->referenceLines.append({static_cast<qreal>(index + 1), shownTiers[index].color});
         } else {
             m_series->setName(metricName());
-            m_series->transform = ValueTransform::secondsToMinutes();
+            m_series->delegate = ValueDelegate::secondsToMinutes();
             m_series->points = content.observations;
             applyAxisPolicy(*m_series, m_playtimeAxisPolicy);
         }

@@ -18,7 +18,7 @@
 #include "components/graph_scene.h"
 #include "components/graph_scene_painter.h"
 #include "presentation/graphs/common/axes/value_axis.h"
-#include "presentation/graphs/common/axes/value_transform.h"
+#include "presentation/graphs/common/axes/value_delegate.h"
 #include "presentation/graphs/common/graph_vm_base.h"
 #include "presentation/graphs/common/series/series_model.h"
 
@@ -29,7 +29,7 @@ namespace ksv::ui {
     namespace {
         using presentation::SeriesModel;
         using presentation::ValueAxis;
-        using presentation::ValueTransform;
+        using presentation::ValueDelegate;
 
         // series() answers in the order lines were added, whatever order the columns are asked for.
         class SceneVm : public presentation::GraphViewModelBase {
@@ -65,12 +65,20 @@ namespace ksv::ui {
             int m_yAxisColumn = 0;
         };
 
-        ValueTransform suffixed() {
-            ValueTransform transform;
-            transform.formatter = [](const qreal value) {
+        ValueDelegate suffixed() {
+            ValueDelegate delegate;
+            delegate.axisFormatter = [](const qreal value) {
                 return QString::number(value, 'f', 2) + QStringLiteral(" pts");
             };
-            return transform;
+            return delegate;
+        }
+
+        ValueDelegate hoverSuffixed() {
+            ValueDelegate delegate = suffixed();
+            delegate.hoverFormatter = [](const qreal value) {
+                return QString::number(value, 'f', 2) + QStringLiteral(" pts (hover)");
+            };
+            return delegate;
         }
 
         void expectResolved(const GraphSceneAxis &actual, const presentation::Axis &expected) {
@@ -154,8 +162,8 @@ namespace ksv::ui {
     TEST(GraphSceneBuild, KeepsObservationsAndCarriesApart) {
         SceneVm vm;
         SeriesModel &series = vm.addSeries(1, QStringLiteral("Carried"));
-        series.transform.scale = 2.0;
-        series.transform.offset = 1.0;
+        series.delegate.scale = 2.0;
+        series.delegate.offset = 1.0;
         series.points = {QPointF(0.0, 1.0), QPointF(1.0, 2.0), QPointF(2.0, 3.0)};
         series.leadingCarry = QPointF(-1.0, 5.0);
         series.trailingCarry = QPointF(3.0, 7.0);
@@ -180,18 +188,18 @@ namespace ksv::ui {
 
     TEST(GraphSceneBuild, ResolvesEveryTickToItsLabel) {
         SceneVm vm;
-        vm.sharedXAxis().setTransform(suffixed());
+        vm.sharedXAxis().setDelegate(suffixed());
         vm.sharedXAxis().setRange(0.0, 10.0);
 
         SeriesModel &ownAxes = vm.addSeries(1, QStringLiteral("Own axes"));
-        ownAxes.transform = suffixed();
+        ownAxes.delegate = suffixed();
         ownAxes.setData({QPointF(0.0, 10.0), QPointF(5.0, 50.0)});
         auto ownXAxis = std::make_shared<ValueAxis>(ValueAxis::Options{}, suffixed());
         ownXAxis->setRange(100.0, 200.0);
         ownAxes.xAxis = ownXAxis;
 
         SeriesModel &derived = vm.addSeries(2, QStringLiteral("Derived axes"));
-        derived.transform = suffixed();
+        derived.delegate = suffixed();
         derived.points = {QPointF(0.0, 300.0), QPointF(5.0, 700.0)};
 
         GraphCanvas canvas;
@@ -218,7 +226,7 @@ namespace ksv::ui {
     TEST(GraphSceneBuild, SeriesAxesCarryFormattedBoundsWithoutTickLabels) {
         SceneVm vm;
         SeriesModel &only = vm.addSeries(1, QStringLiteral("Only"));
-        only.transform = suffixed();
+        only.delegate = suffixed();
         only.setData({QPointF(0.0, 10.0), QPointF(5.0, 50.0)});
 
         GraphCanvas canvas;
@@ -246,7 +254,7 @@ namespace ksv::ui {
         constexpr int kHidden = 4;
         SceneVm vm;
         SeriesModel &series = vm.addSeries(kHidden, QStringLiteral("Hidden"));
-        series.transform = suffixed();
+        series.delegate = suffixed();
         series.setData({QPointF(0.0, 10.0), QPointF(5.0, 50.0)});
         vm.setYAxisColumn(kHidden);
 
@@ -363,7 +371,7 @@ namespace ksv::ui {
 
         auto vm = std::make_unique<SceneVm>();
         SeriesModel &series = vm->addSeries(1, name);
-        series.transform = suffixed();
+        series.delegate = suffixed();
         series.leadingCarry = leadingCarry;
         series.trailingCarry = trailingCarry;
         series.setData(points);
@@ -497,7 +505,7 @@ namespace ksv::ui {
         constexpr int kHeight = 600;
         SceneVm vm;
         SeriesModel &series = vm.addSeries(1, QStringLiteral("Wide labels"));
-        series.transform.formatter = [](const qreal value) {
+        series.delegate.axisFormatter = [](const qreal value) {
             return QString::number(value, 'f', 2) + QStringLiteral(" points per second");
         };
         series.setData({QPointF(0.0, 10.0), QPointF(5.0, 50.0)});
@@ -512,6 +520,79 @@ namespace ksv::ui {
         const QRectF plot = graphPlotRect(QRectF(0, 0, kWidth, kHeight), scene.labelledYAxis, scene.xAxis);
 
         EXPECT_EQ(plot, canvas.property("plotArea").toRectF());
+    }
+
+    TEST(GraphCanvasHover, HoverReadsTheXAxisHoverLabelWhileTicksKeepTheAxisLabel) {
+        SceneVm vm;
+        vm.sharedXAxis().setDelegate(hoverSuffixed());
+        vm.sharedXAxis().setRange(0.0, 10.0);
+        SeriesModel &series = vm.addSeries(1, QStringLiteral("Line"));
+        series.setData({QPointF(0.0, 10.0), QPointF(5.0, 30.0), QPointF(10.0, 50.0)});
+
+        GraphCanvas canvas;
+        canvas.setWidth(800);
+        canvas.setHeight(600);
+        canvas.setGraphVm(&vm);
+        canvas.setVisibleColumns({1});
+
+        const QRectF plot = canvas.property("plotArea").toRectF();
+        const QVariantMap values = canvas.valuesAtX(plot.center().x());
+
+        ASSERT_TRUE(values.value("valid").toBool());
+        EXPECT_EQ(values.value("x").toString(), vm.xAxis().formatHover(5.0));
+        EXPECT_NE(values.value("x").toString(), vm.xAxis().formatTick(5.0));
+        const GraphScene scene = canvas.scene();
+        ASSERT_FALSE(scene.xAxis.ticks.isEmpty());
+        for (qsizetype i = 0; i < scene.xAxis.ticks.size(); ++i)
+            EXPECT_EQ(scene.xAxis.labels.at(i), vm.xAxis().formatTick(scene.xAxis.ticks.at(i)));
+    }
+
+    TEST(GraphCanvasHover, HoverReadsEachSeriesHoverLabel) {
+        SceneVm vm;
+        SeriesModel &series = vm.addSeries(1, QStringLiteral("Line"));
+        series.delegate = hoverSuffixed();
+        series.setData({QPointF(0.0, 10.0), QPointF(5.0, 30.0), QPointF(10.0, 50.0)});
+
+        GraphCanvas canvas;
+        canvas.setWidth(800);
+        canvas.setHeight(600);
+        canvas.setGraphVm(&vm);
+        canvas.setVisibleColumns({1});
+
+        const QRectF plot = canvas.property("plotArea").toRectF();
+        const QVariantMap values = canvas.valuesAtX(plot.center().x());
+
+        ASSERT_TRUE(values.value("valid").toBool());
+        const QVariantList rows = values.value("series").toList();
+        ASSERT_EQ(rows.size(), 1);
+        EXPECT_EQ(rows.front().toMap().value("value").toString(), series.delegate.hoverLabel(30.0));
+        EXPECT_NE(rows.front().toMap().value("value").toString(), series.delegate.axisLabel(30.0));
+    }
+
+    // The nearest-point readout must format a point the same way the snapped readout does, so y
+    // comes from the series' own delegate rather than whichever Y axis the series is drawn against.
+    TEST(GraphCanvasHover, NearestPointReadsTheHoverLabels) {
+        SceneVm vm;
+        vm.sharedXAxis().setDelegate(hoverSuffixed());
+        vm.sharedXAxis().setRange(0.0, 10.0);
+        SeriesModel &series = vm.addSeries(1, QStringLiteral("Line"));
+        series.delegate = hoverSuffixed();
+        series.setData({QPointF(0.0, 10.0), QPointF(5.0, 30.0), QPointF(10.0, 50.0)});
+
+        GraphCanvas canvas;
+        canvas.setWidth(800);
+        canvas.setHeight(600);
+        canvas.setGraphVm(&vm);
+        canvas.setVisibleColumns({1});
+
+        const QRectF plot = canvas.property("plotArea").toRectF();
+        const qreal pixelX = plot.left() + vm.xAxis().normalizedPosition(5.0) * plot.width();
+        const qreal pixelY = plot.bottom() - series.yAxis->normalizedPosition(30.0) * plot.height();
+        const QVariantMap nearest = canvas.nearestPoint(pixelX, pixelY);
+
+        ASSERT_TRUE(nearest.value("valid").toBool());
+        EXPECT_EQ(nearest.value("x").toString(), vm.xAxis().formatHover(5.0));
+        EXPECT_EQ(nearest.value("value").toString(), series.delegate.hoverLabel(30.0));
     }
 
     namespace {

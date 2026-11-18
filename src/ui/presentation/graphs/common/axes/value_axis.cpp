@@ -44,12 +44,12 @@ namespace ksv::presentation {
         constexpr qreal kEps = 1e-9;
     }
 
-    ValueAxis::ValueAxis() : ValueAxis(Options{}, ValueTransform::identity()) {}
+    ValueAxis::ValueAxis() : ValueAxis(Options{}, ValueDelegate::identity()) {}
 
-    ValueAxis::ValueAxis(const Options options) : ValueAxis(options, ValueTransform::identity()) {}
+    ValueAxis::ValueAxis(const Options options) : ValueAxis(options, ValueDelegate::identity()) {}
 
-    ValueAxis::ValueAxis(const Options options, ValueTransform transform)
-        : m_options(options), m_transform(std::move(transform)) {}
+    ValueAxis::ValueAxis(const Options options, ValueDelegate delegate)
+        : m_options(options), m_delegate(std::move(delegate)) {}
 
     bool ValueAxis::setRange(const qreal dataLo, const qreal dataHi) {
         m_dataLo = dataLo;
@@ -62,8 +62,8 @@ namespace ksv::presentation {
         return recompute();
     }
 
-    void ValueAxis::setTransform(ValueTransform transform) {
-        m_transform = std::move(transform);
+    void ValueAxis::setDelegate(ValueDelegate delegate) {
+        m_delegate = std::move(delegate);
         recompute();
     }
 
@@ -87,12 +87,13 @@ namespace ksv::presentation {
         if (m_options.integral) step = std::max(1.0, std::round(step));
 
         Resolved resolved = resolve(lo, hi, step);
-        for (int round = 0; round < kMaxCoarsening && !adjacentLabelsDistinct(resolved.ticks); ++round) {
+        for (int round = 0; m_options.distinctLabels && round < kMaxCoarsening && !adjacentLabelsDistinct(resolved.ticks);
+             ++round) {
             step = nextNiceStep(step);
             resolved = resolve(lo, hi, step);
         }
 
-        return replaceResolvedState(resolved.min, resolved.max, std::move(resolved.ticks), m_transform);
+        return replaceResolvedState(resolved.min, resolved.max, std::move(resolved.ticks), m_delegate);
     }
 
     ValueAxis::Resolved ValueAxis::resolve(const qreal lo, const qreal hi, const qreal step) const {
@@ -126,7 +127,7 @@ namespace ksv::presentation {
     bool ValueAxis::adjacentLabelsDistinct(const QList<qreal> &ticks) const {
         QString previous;
         for (int i = 0; i < ticks.size(); ++i) {
-            QString label = m_transform.format(ticks[i]);
+            QString label = m_delegate.axisLabel(ticks[i]);
             if (i > 0 && label == previous) return false;
             previous = std::move(label);
         }

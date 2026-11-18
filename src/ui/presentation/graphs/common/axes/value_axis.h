@@ -4,14 +4,14 @@
 #include <QtGlobal>
 
 #include "presentation/graphs/common/axes/axis.h"
-#include "presentation/graphs/common/axes/value_transform.h"
+#include "presentation/graphs/common/axes/value_delegate.h"
 
 namespace ksv::presentation {
-    // Persistent Heckbert-style numeric axis. Options and formatter are configured once; setRange()
+    // Persistent Heckbert-style numeric axis. Options and delegate are configured once; setRange()
     // recomputes and commits the resolved bounds/ticks in place, preserving the configured policy.
-    // Tick spacing is never finer than the formatter can tell apart: when two adjacent ticks would
-    // format to the same label (e.g. "1 min" twice for sub-minute steps), the step is coarsened to
-    // the next nice number until every adjacent pair of labels differs.
+    // By default tick spacing is never finer than the delegate's axis labels can tell apart: when two
+    // adjacent ticks would label the same (e.g. "1 min" twice for sub-minute steps), the step is
+    // coarsened to the next nice number until every adjacent pair of labels differs.
     class ValueAxis final : public Axis {
     public:
         enum class Baseline {
@@ -26,20 +26,24 @@ namespace ksv::presentation {
             qreal fallbackSpan = 1.0; // Range padding for degenerate/empty data
             // true: bounds widen outwards to the enclosing nice multiples (a tick at each end).
             // false: bounds are exactly the data range and ticks are only the nice multiples inside
-            // it, so no tick labels a value the data does not reach (e.g. run "#0").
+            // it, so no tick labels a value the data does not reach (e.g. run 0).
             bool niceBounds = true;
+            // false: ticks stay where the step puts them even when neighbours share a label, giving up
+            // the coarsening described above. Must stay the last member: graph_vm.cpp builds Options
+            // positionally.
+            bool distinctLabels = true;
         };
 
         // GCC and Clang reject a default argument that needs Options' default member initializers
         // before this class is complete (`Options options = {}`, CWG 1397); these overloads delegate instead.
         ValueAxis();
         explicit ValueAxis(Options options);
-        ValueAxis(Options options, ValueTransform transform);
+        ValueAxis(Options options, ValueDelegate delegate);
 
         // Returns true if the resolved range changed; callers that don't care may ignore it.
         bool setRange(qreal dataLo, qreal dataHi);
         [[nodiscard]] bool setOptions(Options options);
-        void setTransform(ValueTransform transform);
+        void setDelegate(ValueDelegate delegate);
         [[nodiscard]] const Options &options() const { return m_options; }
 
     private:
@@ -54,7 +58,7 @@ namespace ksv::presentation {
         [[nodiscard]] bool adjacentLabelsDistinct(const QList<qreal> &ticks) const;
 
         Options m_options;
-        ValueTransform m_transform;
+        ValueDelegate m_delegate;
         qreal m_dataLo = 0.0;
         qreal m_dataHi = 1.0;
     };

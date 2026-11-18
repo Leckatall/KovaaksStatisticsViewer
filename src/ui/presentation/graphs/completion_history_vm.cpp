@@ -21,7 +21,7 @@ namespace ksv::presentation {
         };
 
         struct AxisDescriptor {
-            ValueTransform transform;
+            ValueDelegate delegate;
             ValueAxis::Options options;
             const char *name;
         };
@@ -30,20 +30,20 @@ namespace ksv::presentation {
             ScoreAxis, AccuracyAxis, CountAxis, YAxisCount
         };
 
-        ValueTransform runIndexTransform() {
-            ValueTransform transform;
-            transform.formatter = [](const qreal value) {
+        ValueDelegate runIndexDelegate() {
+            ValueDelegate delegate;
+            delegate.axisFormatter = [](const qreal value) {
                 return "#" + QString::number(qRound(value));
             };
-            return transform;
+            return delegate;
         }
 
         constexpr std::array<std::string_view, YAxisCount> kAxisKeys{"score", "accuracy", "counts"};
 
         const std::array<AxisDescriptor, YAxisCount> kYAxisMeta{{
-            {ValueTransform::identity(), {}, "Score"},
-            {ValueTransform::percentage(), {}, "Accuracy"},
-            {ValueTransform::identity(), {}, "Shots, hits and misses"},
+            {ValueDelegate::identity(), {}, "Score"},
+            {ValueDelegate::percentage(), {}, "Accuracy"},
+            {ValueDelegate::identity(), {}, "Shots, hits and misses"},
         }};
 
         const std::array<ColumnMeta, CompletionHistoryViewModel::ColumnCount> kColumnMeta{{
@@ -66,7 +66,7 @@ namespace ksv::presentation {
           // run on each side, which keeps its own tick and no neighbour's.
           m_xAxis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .targetTicks = 10,
                    .fallbackSpan = 0.5, .niceBounds = false},
-                  runIndexTransform()) {
+                  runIndexDelegate()) {
         for (int axis = 0; axis < YAxisCount; ++axis)
             m_axisPolicies[axis] = axisPolicyFor({}, application::GraphKey::ScenarioHistory, kAxisKeys[axis]);
         for (int column = Score; column < ColumnCount; ++column) {
@@ -74,7 +74,7 @@ namespace ksv::presentation {
             series_model->setId(QString::number(column));
             series_model->setName(QString::fromLatin1(kColumnMeta[column].name));
             series_model->setColumn(column);
-            series_model->transform = kYAxisMeta[kColumnMeta[column].yAxis].transform;
+            series_model->delegate = kYAxisMeta[kColumnMeta[column].yAxis].delegate;
             // Lets the canvas tell which lines share the labelled axis (e.g. Shots/Hits/Misses).
             series_model->yAxisId = static_cast<uint64_t>(kColumnMeta[column].yAxis);
             series_model->yAxisName = QString::fromLatin1(kYAxisMeta[kColumnMeta[column].yAxis].name);
@@ -111,7 +111,7 @@ namespace ksv::presentation {
             members.reserve(indices.size());
             for (const int index: indices) members.push_back(result[index]);
             const auto &descriptor = kYAxisMeta[axis];
-            const ValueAxis yAxis = axisForPolicy(members, m_axisPolicies[axis], descriptor.options, descriptor.transform);
+            const ValueAxis yAxis = axisForPolicy(members, m_axisPolicies[axis], descriptor.options, descriptor.delegate);
             for (const int index: indices) result[index]->yAxis = yAxis;
         }
         return result;

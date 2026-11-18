@@ -11,7 +11,7 @@ namespace ksv::presentation {
     void applyAxisPolicy(SeriesModel &series, const application::AxisPolicy &policy) {
         const std::array<const SeriesModel *, 1> members{&series};
         series.yAxisOptions = optionsForPolicy(policy, {});
-        series.yAxis = axisForPolicy(members, policy, {}, series.transform);
+        series.yAxis = axisForPolicy(members, policy, {}, series.delegate);
     }
 
     namespace {
@@ -41,11 +41,11 @@ namespace ksv::presentation {
     }
 
     ValueAxis axisForPolicy(const std::span<const SeriesModel *const> members, const application::AxisPolicy &policy,
-                            const ValueAxis::Options base, const ValueTransform &transform) {
+                            const ValueAxis::Options base, const ValueDelegate &delegate) {
         const ValueAxis::Options options = optionsForPolicy(policy, base);
         const auto bounds = usableBounds(policy);
-        if (!bounds) return axisForSeries(members, options, transform);
-        ValueAxis axis(options, transform);
+        if (!bounds) return axisForSeries(members, options, delegate);
+        ValueAxis axis(options, delegate);
         std::ignore = axis.setRange(bounds->minimum, bounds->maximum);
         return axis;
     }

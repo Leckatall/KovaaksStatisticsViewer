@@ -168,16 +168,16 @@ namespace ksv::presentation {
             ticks.append(static_cast<qreal>(tick.toMSecsSinceEpoch()));
         if (ticks.isEmpty()) ticks.append(static_cast<qreal>(lo.toMSecsSinceEpoch()));
 
-        ValueTransform transform;
+        ValueDelegate delegate;
         const CalendarUnit unit = interval.unit;
         const qint64 firstTickMs = qint64(ticks.front());
-        transform.formatter = [unit, zone, firstTickMs](const qreal value) {
+        delegate.axisFormatter = [unit, zone, firstTickMs](const qreal value) {
             return formatForInterval(unit, value, zone, firstTickMs);
         };
 
         return replaceResolvedState(static_cast<qreal>(lo.toMSecsSinceEpoch()),
                                     static_cast<qreal>(hi.toMSecsSinceEpoch()), std::move(ticks),
-                                    std::move(transform));
+                                    std::move(delegate));
     }
 
     QDateTime utcDateTimeForEpochDay(const long long epochDay) {

@@ -54,11 +54,11 @@ The run-graph mapping is exact only for ids that fit a positive `int`: `fetchMet
 
 ### Axes and series
 
-`SeriesModel` ([series_model.h](../../../src/ui/presentation/graphs/common/series/series_model.h)) is a `QObject` carrying identity (`id`, `column`), display name and colour (an invalid colour means neutral), line width, a `ValueTransform` (raw to display value and its formatter), raw `points`, optional `leadingCarry`/`trailingCarry` boundary geometry, optional reference lines, an optional resolved `yAxis`, and `yAxisId`/`yAxisName`.
+`SeriesModel` ([series_model.h](../../../src/ui/presentation/graphs/common/series/series_model.h)) is a `QObject` carrying identity (`id`, `column`), display name and colour (an invalid colour means neutral), line width, a `ValueDelegate` (raw to display value and its axis label), raw `points`, optional `leadingCarry`/`trailingCarry` boundary geometry, optional reference lines, an optional resolved `yAxis`, and `yAxisId`/`yAxisName`.
 
 Only `points` are actual observations: tooltips, hit tests and selection address them; carries extend the drawn line at its boundaries and are excluded from sampling.
 
-Axes derive from `Axis` ([axis.h](../../../src/ui/presentation/graphs/common/axes/axis.h)), a read-only surface (bounds, ticks, formatter) whose resolved state is replaced as one unit. `ValueAxis` computes nice bounds and ticks from a data range under `Options` (baseline, integral ticks, target ticks, `niceBounds`); `DateTimeAxis` is the calendar variant. `axis_policy` ([axis_policy.h](../../../src/ui/presentation/graphs/common/axes/axis_policy.h)) maps a committed `AxisPolicy` (fit visible data, start at zero, fixed bounds) to `ValueAxis` options, falling back to fitting the data when fixed bounds are unusable.
+Axes derive from `Axis` ([axis.h](../../../src/ui/presentation/graphs/common/axes/axis.h)), a read-only surface (bounds, ticks, delegate) whose resolved state is replaced as one unit. `ValueAxis` computes nice bounds and ticks from a data range under `Options` (baseline, integral ticks, target ticks, `niceBounds`); `DateTimeAxis` is the calendar variant. `axis_policy` ([axis_policy.h](../../../src/ui/presentation/graphs/common/axes/axis_policy.h)) maps a committed `AxisPolicy` (fit visible data, start at zero, fixed bounds) to `ValueAxis` options, falling back to fitting the data when fixed bounds are unusable.
 
 Completion history uses the first and last visible run as X bounds when two or more runs are visible. With none visible it uses `1..runCount`; with one visible run, `ValueAxis::recompute` widens the span (`CompletionHistoryViewModel` in [completion_history_vm.cpp](../../../src/ui/presentation/graphs/completion_history_vm.cpp)).
 
@@ -66,7 +66,7 @@ Completion history uses the first and last visible run as X bounds when two or m
 
 | Graph | Grouping | How the axis is set |
 |---|---|---|
-| Run | Series with the same `yAxisId` (series config's axis); a series with no axis id keeps its own derived axis | `GraphViewModel::series`: options and transform from the configured `AxisConfig` |
+| Run | Series with the same `yAxisId` (series config's axis); a series with no axis id keeps its own derived axis | `GraphViewModel::series`: options and delegate from the configured `AxisConfig` |
 | Completion history | Fixed three groups: score (Score, ScoreAverage), accuracy, counts (Shots, Hits, Misses) | `CompletionHistoryViewModel::series`: `axisForPolicy` with the committed per-group `AxisPolicy` |
 | Playtime, benchmark playtime | One series | `applyAxisPolicy` on refresh and on policy change |
 | Benchmark ranks | One series | `rankYAxis`: zero to the shown tier count, one tick per tier, tier names as labels, tier reference lines |
@@ -119,7 +119,7 @@ The history panel also supplies `markedX` (the selected run) and enables click s
 - **Y axis depends on visibility.** The shared axis is computed from the columns passed to `series()`. Hiding a line rescales its group whenever the axis bounds are data-derived and the hidden line changes the extent; a fixed completion-history policy with usable bounds overrides the data-derived range (`axisForPolicy`, `usableBounds`), so there hiding a line leaves the axis alone. Computing the axis outside `series()` (or caching it across a visibility change) would leave the painted range inconsistent with the visible lines.
 - **Pointer lifetime and freshness.** Models are deleted only by the run graph's `fetchMetadata` (`qDeleteAll(m_seriesById)`); `fetchData` reuses existing models and the other graphs mutate theirs in place. A held `SeriesModel *` can dangle after a metadata refresh. While the model remains alive, its points and `yAxis` can still change. Consumers re-ask `series()` for each use, as `GraphCanvas` does, which is what yields current geometry.
 - **Column semantics are per graph.** A column number means nothing without its view model. In particular the run graph's columns are series ids, so inserting or reordering lines must not renumber them (the mapping holds while ids stay within `int` range, which nothing enforces); using a position would break the id mapping the QML legend and visibility settings use.
-- **Painter purity.** `paintGraphScene` and `graphPlotRect` must depend only on `GraphScene` and styles. Giving the scene a pointer to a model or a callable (the `ValueTransform` formatter is one, which is why labels are resolved into strings in `resolveAxis`) would break off-thread replay and let capture diverge from the live item.
+- **Painter purity.** `paintGraphScene` and `graphPlotRect` must depend only on `GraphScene` and styles. Giving the scene a pointer to a model or a callable (the `ValueDelegate` axis label is one, which is why labels are resolved into strings in `resolveAxis`) would break off-thread replay and let capture diverge from the live item.
 - **Selection is live-only.** The live canvas sets the selected-run band in the scene; [Image capture][image-capture] owns removing it from exported copies.
 - **Shared date axes (benchmark).** The benchmark metrics draw against an axis the parent owns; a child must not outlive or replace it. The rebuild protocol is owned by [Benchmark tracking][benchmark-tracking].
 

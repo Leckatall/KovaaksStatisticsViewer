@@ -15,7 +15,7 @@
 #include "presentation/graphs/common/axes/date_time_axis.h"
 #include "presentation/benchmarks/benchmark_format.h"
 #include "presentation/benchmarks/manager/benchmark_issue_text.h"
-#include "presentation/graphs/common/axes/value_transform.h"
+#include "presentation/graphs/common/axes/value_delegate.h"
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_projection.h"
 #include "benchmarks/benchmark_validation.h"

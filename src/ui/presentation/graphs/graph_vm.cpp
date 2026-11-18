@@ -14,12 +14,12 @@
 
 namespace ksv::presentation {
     namespace {
-        ValueTransform transformFor(const application::AxisTransformKind kind) {
+        ValueDelegate delegateFor(const application::AxisTransformKind kind) {
             switch (kind) {
-                case application::AxisTransformKind::Identity: return ValueTransform::identity();
-                case application::AxisTransformKind::Percentage: return ValueTransform::percentage();
+                case application::AxisTransformKind::Identity: return ValueDelegate::identity();
+                case application::AxisTransformKind::Percentage: return ValueDelegate::percentage();
             }
-            return ValueTransform::identity();
+            return ValueDelegate::identity();
         }
 
         ValueAxis::Options valueAxisOptionsFor(const application::ValueAxisOptions &options) {
@@ -31,9 +31,9 @@ namespace ksv::presentation {
             };
         }
 
-        ValueTransform secondsDelegate() {
-            ValueTransform t;
-            t.formatter = [](const qreal v) { return QString::number(qRound(v)) + "s"; };
+        ValueDelegate secondsDelegate() {
+            ValueDelegate t;
+            t.axisFormatter = [](const qreal v) { return QString::number(qRound(v)) + "s"; };
             return t;
         }
     }
@@ -87,7 +87,7 @@ namespace ksv::presentation {
             members.reserve(it.value().size());
             for (const int index: it.value()) members.push_back(result[index]);
             const ValueAxis yAxis = axisForSeries(members, valueAxisOptionsFor(axisIt->options),
-                                                  transformFor(axisIt->transformKind));
+                                                  delegateFor(axisIt->transformKind));
             for (const int index: it.value()) result[index]->yAxis = yAxis;
         }
         return result;
@@ -122,7 +122,7 @@ namespace ksv::presentation {
                                      config.presentation.lineStyle.color.green,
                                      config.presentation.lineStyle.color.blue,
                                      config.presentation.lineStyle.color.alpha));
-            series->transform = transformFor(config.transformKind);
+            series->delegate = delegateFor(config.transformKind);
             series->yAxisId = config.yAxisId
                                   ? std::optional<uint64_t>{config.yAxisId->value}
                                   : std::nullopt;

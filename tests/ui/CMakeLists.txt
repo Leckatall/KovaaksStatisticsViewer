@@ -5,7 +5,7 @@ add_executable(ui_tests
     graphs/common/axes/value_axis_test.cpp
     graphs/common/axes/axis_policy_test.cpp
     graphs/common/axes/date_time_axis_test.cpp
-    graphs/common/axes/value_transform_test.cpp
+    graphs/common/axes/value_delegate_test.cpp
     graphs/common/series/series_model_test.cpp
     graphs/graph_vm_test.cpp
     graphs/playtime_graph_vm_test.cpp

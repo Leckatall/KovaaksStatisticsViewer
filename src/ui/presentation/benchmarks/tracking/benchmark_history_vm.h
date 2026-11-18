@@ -19,7 +19,7 @@ namespace ksv::presentation {
     // One drawn metric of the benchmark tracking workspace - personal-best average rank, recent
     // average rank, or averaged playtime. BenchmarkTrackingViewModel owns one instance per metric and
     // hands each its own UTC-day X axis (the same extent unless a range narrows one) while each keeps
-    // its own series name, transform, and Y axis.
+    // its own series name, delegate, and Y axis.
     // series() is empty whenever the metric is suppressed or has nothing to draw, so an incomplete
     // definition or an empty history never renders a line that resembles data.
     // One tier of the rank axis, bottom (lowest) first; tier k (1-based) sits at y = k.

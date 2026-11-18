@@ -9,7 +9,7 @@
 #include "app/contracts/graph_configuration.h"
 #include "presentation/graphs/common/series/series_model.h"
 #include "presentation/graphs/common/axes/value_axis.h"
-#include "presentation/graphs/common/axes/value_transform.h"
+#include "presentation/graphs/common/axes/value_delegate.h"
 
 namespace ksv::presentation {
     // Shape of GraphPreferences::axisPolicies: stable axis key -> policy, in displayed units.
@@ -28,7 +28,7 @@ namespace ksv::presentation {
     // Fixed bounds that are not finite or not strictly increasing fit the data instead.
     [[nodiscard]] ValueAxis axisForPolicy(std::span<const SeriesModel *const> members,
                                           const application::AxisPolicy &policy, ValueAxis::Options base,
-                                          const ValueTransform &transform);
+                                          const ValueDelegate &delegate);
 
     // Sets the Y axis of a series that has its axis to itself.
     void applyAxisPolicy(SeriesModel &series, const application::AxisPolicy &policy);

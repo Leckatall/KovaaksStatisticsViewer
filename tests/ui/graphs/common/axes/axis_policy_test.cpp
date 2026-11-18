@@ -18,15 +18,15 @@ using namespace ksv::presentation;
 using namespace ksv::application;
 
 namespace {
-    SeriesModel &seriesOf(SeriesModel &series, QList<QPointF> points, const ValueTransform &transform = {}) {
-        series.transform = transform;
+    SeriesModel &seriesOf(SeriesModel &series, QList<QPointF> points, const ValueDelegate &delegate = {}) {
+        series.delegate = delegate;
         series.points = std::move(points);
         return series;
     }
 
     ValueAxis axisOver(const std::vector<const SeriesModel *> &members, const AxisPolicy &policy,
-                       const ValueAxis::Options &base = {}, const ValueTransform &transform = {}) {
-        return axisForPolicy(members, policy, base, transform);
+                       const ValueAxis::Options &base = {}, const ValueDelegate &delegate = {}) {
+        return axisForPolicy(members, policy, base, delegate);
     }
 
     void expectSameAxis(const Axis &actual, const Axis &expected) {
@@ -105,27 +105,27 @@ namespace {
 
     TEST(AxisPolicyTest, FixedAccuracyBoundsArePercentagesOfTheFractionPlotted) {
         SeriesModel accuracy;
-        seriesOf(accuracy, {QPointF(1, 0.20), QPointF(2, 0.90)}, ValueTransform::percentage());
+        seriesOf(accuracy, {QPointF(1, 0.20), QPointF(2, 0.90)}, ValueDelegate::percentage());
 
-        const ValueAxis axis = axisOver({&accuracy}, FixedBounds{25.0, 75.0}, {}, ValueTransform::percentage());
+        const ValueAxis axis = axisOver({&accuracy}, FixedBounds{25.0, 75.0}, {}, ValueDelegate::percentage());
 
         EXPECT_DOUBLE_EQ(axis.min(), 25.0);
         EXPECT_DOUBLE_EQ(axis.max(), 75.0);
         EXPECT_EQ(axis.formatTick(axis.max()), "75%");
-        EXPECT_DOUBLE_EQ(axis.normalizedPosition(accuracy.transform.display(0.50)), 0.5)
+        EXPECT_DOUBLE_EQ(axis.normalizedPosition(accuracy.delegate.display(0.50)), 0.5)
             << "the fraction 0.5 is the displayed 50%, midway through 25..75";
     }
 
     TEST(AxisPolicyTest, FixedPlaytimeBoundsAreMinutesOfTheSecondsPlotted) {
         SeriesModel playtime;
-        seriesOf(playtime, {QPointF(1, 600.0), QPointF(2, 7200.0)}, ValueTransform::secondsToMinutes());
+        seriesOf(playtime, {QPointF(1, 600.0), QPointF(2, 7200.0)}, ValueDelegate::secondsToMinutes());
 
-        const ValueAxis axis = axisOver({&playtime}, FixedBounds{0.0, 30.0}, {}, ValueTransform::secondsToMinutes());
+        const ValueAxis axis = axisOver({&playtime}, FixedBounds{0.0, 30.0}, {}, ValueDelegate::secondsToMinutes());
 
         EXPECT_DOUBLE_EQ(axis.min(), 0.0);
         EXPECT_DOUBLE_EQ(axis.max(), 30.0);
         EXPECT_EQ(axis.formatTick(30.0), "30 min");
-        EXPECT_DOUBLE_EQ(axis.normalizedPosition(playtime.transform.display(900.0)), 0.5) << "15 min of 0..30";
+        EXPECT_DOUBLE_EQ(axis.normalizedPosition(playtime.delegate.display(900.0)), 0.5) << "15 min of 0..30";
     }
 
     TEST(AxisPolicyTest, FixedBoundsHoldWithNoMembersAtAll) {

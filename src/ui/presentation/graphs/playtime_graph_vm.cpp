@@ -84,7 +84,7 @@ namespace ksv::presentation {
         m_series->setId(QString::number(Playtime));
         m_series->setName(m_windowDays == 1 ? tr("Playtime (daily total)") : tr("Playtime (%1-day avg)").arg(m_windowDays));
         m_series->setColumn(Playtime);
-        m_series->transform = ValueTransform::secondsToMinutes(); // Plots raw seconds, presents minutes
+        m_series->delegate = ValueDelegate::secondsToMinutes();
         m_series->points = rawSecondsPoints;
         applyAxisPolicy(*m_series, m_axisPolicy);
         if (windowMoved) emit windowChanged();

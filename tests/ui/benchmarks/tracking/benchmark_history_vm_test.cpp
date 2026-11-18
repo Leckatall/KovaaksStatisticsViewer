@@ -1,6 +1,6 @@
 // BenchmarkHistoryViewModel is a GraphViewModelBase adapter. BenchmarkTrackingViewModel owns three
 // of them - personal-best average rank, recent average rank and averaged playtime - and by default
-// feeds all of them the same UTC-day X range while keeping metric-specific series names, transforms,
+// feeds all of them the same UTC-day X range while keeping metric-specific series names, delegates,
 // and Y axes. These tests reach the child models through the tracking VM's rankHistory()/
 // recentRankHistory()/playtimeHistory() accessors.
 
@@ -766,7 +766,7 @@ TEST(BenchmarkRecentRankHistory, IsItsOwnNamedTierGraphOnItsOwnAxis) {
     EXPECT_EQ(series->name(), "Recent average rank");
     ASSERT_TRUE(series->yAxis);
     EXPECT_EQ(series->yAxis->formatTick(1.0), "Bronze");
-    EXPECT_EQ(series->transform.format(1.2), describeAverageRank(1.2, {"Bronze", "Silver", "Gold"}));
+    EXPECT_EQ(series->delegate.axisLabel(1.2), describeAverageRank(1.2, {"Bronze", "Silver", "Gold"}));
 }
 
 TEST(BenchmarkRecentRankHistory, KeepsTheFallsOfTheRecentAverage) {
@@ -926,7 +926,7 @@ TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitsFixesAndRestoresItsAxisInMinutes) {
     const double defaultMin = historyAxis(vm).min();
 
     vm.setAxisPolicies({{"playtime", FitVisibleData{}}});
-    ValueAxis fitted({}, ValueTransform::secondsToMinutes());
+    ValueAxis fitted({}, ValueDelegate::secondsToMinutes());
     fitted.setRange(30.0, 70.0);
     expectSameAxis(historyAxis(vm), fitted);
 
@@ -959,7 +959,7 @@ TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitOfASingleDayUsesTheFallbackSpan) {
 
     vm.update(secondsContent({1800.0}), true, {});
 
-    ValueAxis expected({}, ValueTransform::secondsToMinutes());
+    ValueAxis expected({}, ValueDelegate::secondsToMinutes());
     expected.setRange(30.0, 30.0);
     expectSameAxis(historyAxis(vm), expected);
 }

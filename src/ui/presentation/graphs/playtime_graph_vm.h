@@ -78,7 +78,7 @@ namespace ksv::presentation {
         application::AxisPolicy m_axisPolicy;
         DateTimeAxis m_xAxis;
         bool m_historyAvailable = false;
-        SeriesModel *m_series; // raw seconds + a seconds->minutes transform
+        SeriesModel *m_series; // raw seconds, shown as minutes
     };
 }
 

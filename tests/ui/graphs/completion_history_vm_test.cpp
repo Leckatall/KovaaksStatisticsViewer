@@ -501,9 +501,9 @@ namespace {
         EXPECT_DOUBLE_EQ(accuracy.min(), 50.0);
         EXPECT_DOUBLE_EQ(accuracy.max(), 70.0);
         EXPECT_EQ(accuracy.formatTick(70.0), "70%");
-        EXPECT_LT(accuracy.normalizedPosition(series.front()->transform.display(0.45)), 0.0)
+        EXPECT_LT(accuracy.normalizedPosition(series.front()->delegate.display(0.45)), 0.0)
             << "45% is below the 50% floor, outside the plot";
-        EXPECT_NEAR(accuracy.normalizedPosition(series.front()->transform.display(0.60)), 0.5, 1e-12);
+        EXPECT_NEAR(accuracy.normalizedPosition(series.front()->delegate.display(0.60)), 0.5, 1e-12);
     }
 
     TEST_F(CompletionHistoryViewModelTest, FixedCountBoundsApplyToEveryCountSeries) {
@@ -525,7 +525,7 @@ namespace {
         view_model.refresh();
         view_model.setAxisPolicies({{"score", FixedBounds{0.0, 500.0}}});
 
-        ValueAxis accuracy({}, ValueTransform::percentage());
+        ValueAxis accuracy({}, ValueDelegate::percentage());
         accuracy.setRange(45.0, 60.0);
         expectSameAxis(yAxisOf(view_model.series({CompletionHistoryViewModel::Accuracy})), accuracy);
     }
