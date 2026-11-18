@@ -205,6 +205,14 @@ Item {
             tryCompare(canvas, "markedX", 2)
         }
 
+        function test_historyTooltipNamesTheDateAndTheRun() {
+            const panel = createTemporaryObject(fewRunsPanelComponent, root)
+            let canvas = null
+            tryVerify(() => (canvas = findChild(panel, "historyGraphCanvas")) !== null, 2000)
+            compare(canvas.xLabel, "Date")
+            compare(canvas.hoverDetail(7), "Run: #7")
+        }
+
         function panelWith(vmOverrides) {
             const panel = createTemporaryObject(panelComponent, root)
             verify(!!panel, "Component exists")

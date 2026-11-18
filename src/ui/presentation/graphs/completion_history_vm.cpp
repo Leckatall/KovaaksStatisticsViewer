@@ -3,10 +3,12 @@
 #include "presentation/graphs/common/series/series_style.h"
 
 #include <QColor>
+#include <QDateTime>
 #include <QtMath>
 
 #include <algorithm>
 #include <array>
+#include <iterator>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -30,10 +32,41 @@ namespace ksv::presentation {
             ScoreAxis, AccuracyAxis, CountAxis, YAxisCount
         };
 
-        ValueDelegate runIndexDelegate() {
+        struct RunStart {
+            int run;
+            qint64 startMs;
+        };
+
+        // `runs` is ascending by run number. A value between runs (the padded ends of a lone run's
+        // axis) takes the nearest visible run's date.
+        ValueDelegate runDateDelegate(std::vector<RunStart> runs) {
             ValueDelegate delegate;
-            delegate.axisFormatter = [](const qreal value) {
-                return "#" + QString::number(qRound(value));
+            if (runs.empty()) {
+                delegate.axisFormatter = [](qreal) { return QString(); };
+                return delegate;
+            }
+            const bool spansYears = QDateTime::fromMSecsSinceEpoch(runs.front().startMs).date().year() !=
+                                    QDateTime::fromMSecsSinceEpoch(runs.back().startMs).date().year();
+            const QString dateFormat = spansYears ? QStringLiteral("MMM d yyyy") : QStringLiteral("MMM d");
+            const QString hoverFormat = dateFormat + QStringLiteral(", HH:mm");
+
+            const auto shared = std::make_shared<const std::vector<RunStart>>(std::move(runs));
+            const auto nearestStart = [shared](const qreal value) {
+                const int run = qRound(value);
+                auto it = std::ranges::lower_bound(*shared, run, {}, &RunStart::run);
+                if (it == shared->end()) {
+                    it = std::prev(it);
+                } else if (it != shared->begin() && it->run != run) {
+                    const auto previous = std::prev(it);
+                    if (run - previous->run <= it->run - run) it = previous;
+                }
+                return QDateTime::fromMSecsSinceEpoch(it->startMs);
+            };
+            delegate.axisFormatter = [nearestStart, dateFormat](const qreal value) {
+                return nearestStart(value).toString(dateFormat);
+            };
+            delegate.hoverFormatter = [nearestStart, hoverFormat](const qreal value) {
+                return nearestStart(value).toString(hoverFormat);
             };
             return delegate;
         }
@@ -62,11 +95,10 @@ namespace ksv::presentation {
         std::shared_ptr<application::ICompletionHistoryUseCase> use_case, QObject *parent)
         : GraphViewModelBase(parent), m_use_case(std::move(use_case)),
           // The axis spans exactly the first to the last visible run, so it never labels a run that
-          // does not exist (no "#0", nothing past the last shown run). A lone run is padded by half a
+          // does not exist (no run 0, nothing past the last shown run). A lone run is padded by half a
           // run on each side, which keeps its own tick and no neighbour's.
           m_xAxis({.baseline = ValueAxis::Baseline::HugData, .integral = true, .targetTicks = 10,
-                   .fallbackSpan = 0.5, .niceBounds = false},
-                  runIndexDelegate()) {
+                   .fallbackSpan = 0.5, .niceBounds = false, .distinctLabels = false}) {
         for (int axis = 0; axis < YAxisCount; ++axis)
             m_axisPolicies[axis] = axisPolicyFor({}, application::GraphKey::ScenarioHistory, kAxisKeys[axis]);
         for (int column = Score; column < ColumnCount; ++column) {
@@ -136,8 +168,11 @@ namespace ksv::presentation {
             m_visible_run_span = std::pair{history.rows.front().run_index, history.rows.back().run_index};
         }
         for (auto &points: m_points) points.clear();
+        std::vector<RunStart> runStarts;
+        runStarts.reserve(history.rows.size());
         for (const auto &row: history.rows) {
             m_visible_runs.push_back(row.run_index);
+            runStarts.push_back({row.run_index, row.start_time_ms});
             const qreal x = row.run_index;
             m_points[Score].append(QPointF(x, row.score));
             m_points[Accuracy].append(QPointF(x, row.accuracy));
@@ -152,6 +187,7 @@ namespace ksv::presentation {
             series->yAxis.reset();
         }
 
+        m_xAxis.setDelegate(runDateDelegate(std::move(runStarts)));
         if (history.rows.empty()) std::ignore = m_xAxis.setRange(1.0, std::max(1, m_run_count));
         else std::ignore = m_xAxis.setRange(history.rows.front().run_index, history.rows.back().run_index);
 

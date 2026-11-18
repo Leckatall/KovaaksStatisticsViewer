@@ -11,6 +11,8 @@ Item {
     property int yAxisColumn: -1
     property bool showSeriesNames: true
     property string xLabel: qsTr("Time")
+    // Maps hoverInfo.xRaw to one extra line of text, shown under the header with no swatch.
+    property var hoverDetail: null
     // Dot each real data point while the points are sparse enough to tell apart.
     property bool pointMarkers: false
     // GraphCanvas.ConnectionMode: 0 smooth, 1 straight, 2 points only.
@@ -136,6 +138,7 @@ Item {
             spacing: 3
 
             Text {
+                objectName: "graphHoverHeader"
                 color: Qt.alpha(root.palette.toolTipText, 0.8)
                 font.pixelSize: 11
                 font.bold: true
@@ -144,6 +147,13 @@ Item {
                          ? qsTr("%1: %2").arg(root.xLabel).arg(hoverArea.hoverInfo.x)
                          : hoverArea.hoverInfo.x)
                       : ""
+            }
+            Text {
+                objectName: "graphHoverDetail"
+                color: root.palette.toolTipText
+                font.pixelSize: 11
+                visible: !!root.hoverDetail && hoverArea.hoverInfo.valid === true
+                text: visible ? root.hoverDetail(hoverArea.hoverInfo.xRaw) : ""
             }
             Repeater {
                 model: hoverArea.hoverInfo.valid ? hoverArea.hoverInfo.series : []

@@ -150,7 +150,8 @@ Frame {
                         graphVm: root.historyVm
                         visibleColumns: root.visibleColumns
                         yAxisColumn: root.yAxisColumn
-                        xLabel: qsTr("Run")
+                        xLabel: qsTr("Date")
+                        hoverDetail: xRaw => qsTr("Run: #%1").arg(Math.round(xRaw))
                         objectName: "historyGraphCanvas"
                         pointMarkers: root.historyVm.pointMarkers
                         connectionMode: root.historyVm.connectionMode

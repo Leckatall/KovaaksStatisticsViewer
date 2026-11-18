@@ -111,7 +111,7 @@ namespace ksv::ui {
         return {.title = vm.scenarioTitle(),
                 .graphType = QObject::tr("Scenario history"),
                 .rangeText = range,
-                .xTitle = QObject::tr("Run (runs counted in order)")};
+                .xTitle = QObject::tr("Date (runs counted in order)")};
     }
 
     GraphCaptureContext benchmarkHistoryCaptureContext(const QString &benchmarkName,

@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 
+#include <QDate>
+#include <QDateTime>
 #include <QSet>
 #include <QSignalSpy>
+#include <QTime>
 
 #include <array>
 #include <cmath>
@@ -23,6 +26,14 @@ namespace {
     double defaultWidthOf(const std::string_view seriesKey) {
         return defaultSeriesStyle(GraphKey::ScenarioHistory, seriesKey).width;
     }
+
+    // Local wall-clock time, so the expected labels hold in any time zone.
+    qint64 localMs(const QDate date, const QTime time = QTime(9, 0)) {
+        return QDateTime(date, time).toMSecsSinceEpoch();
+    }
+
+    // project() starts run N on local 2026-01-N (Jan 1 onwards), one day per run.
+    qint64 projectedStartMs(const int run) { return localMs(QDate(2026, 1, 1).addDays(run - 1)); }
 
     class FakeCompletionHistoryUseCase final : public ICompletionHistoryUseCase {
     public:
@@ -61,8 +72,19 @@ namespace {
         void project(const int fullCount, const std::vector<int> &visibleRuns) const {
             fake->history = {.scenario_name = "Air Angelic", .full_count = fullCount};
             for (const int run: visibleRuns)
-                fake->history.rows.push_back({.run_index = run, .score = 100.0 + run, .accuracy = 0.5,
+                fake->history.rows.push_back({.run_index = run, .start_time_ms = projectedStartMs(run),
+                                              .score = 100.0 + run, .accuracy = 0.5,
                                               .shots = 10, .hits = 5, .misses = 5});
+        }
+
+        // Runs 1..N started at the given local times.
+        void projectStartedAt(const std::vector<qint64> &startTimesMs) const {
+            fake->history = {.scenario_name = "Air Angelic", .full_count = static_cast<int>(startTimesMs.size())};
+            for (std::size_t i = 0; i < startTimesMs.size(); ++i) {
+                const int run = static_cast<int>(i) + 1;
+                fake->history.rows.push_back({.run_index = run, .start_time_ms = startTimesMs[i],
+                                              .score = 100.0 + run});
+            }
         }
 
         void setHistory() const {
@@ -131,14 +153,60 @@ namespace {
         EXPECT_EQ(&view_model.xAxis(), before);
     }
 
-    TEST_F(CompletionHistoryViewModelTest, RunAxisUsesWholeTicksAndRunLabels) {
-        setHistory();
+    TEST_F(CompletionHistoryViewModelTest, RunAxisUsesWholeTicksAndTheirRunsDates) {
+        projectStartedAt({localMs(QDate(2026, 3, 3)), localMs(QDate(2026, 3, 4))});
         view_model.refresh();
 
         for (const qreal tick: view_model.xAxis().ticks()) {
             EXPECT_DOUBLE_EQ(tick, std::round(tick));
         }
-        EXPECT_EQ(view_model.xAxis().formatTick(2.0), "#2");
+        EXPECT_EQ(view_model.xAxis().formatTick(2.0), "Mar 4");
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, HoverGivesTheRunsDateAndTimeToTheMinute) {
+        projectStartedAt({localMs(QDate(2026, 3, 3)), localMs(QDate(2026, 3, 4), QTime(14, 32, 50))});
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.xAxis().formatHover(2.0), "Mar 4, 14:32");
+    }
+
+    TEST_F(CompletionHistoryViewModelTest, TheYearAppearsWhenVisibleRunsSpanTwoYears) {
+        projectStartedAt({localMs(QDate(2025, 12, 31), QTime(22, 0)), localMs(QDate(2026, 1, 1), QTime(9, 5))});
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.xAxis().formatTick(1.0), "Dec 31 2025");
+        EXPECT_EQ(view_model.xAxis().formatTick(2.0), "Jan 1 2026");
+        EXPECT_EQ(view_model.xAxis().formatHover(2.0), "Jan 1 2026, 09:05");
+
+        projectStartedAt({localMs(QDate(2026, 1, 1), QTime(9, 5)), localMs(QDate(2026, 12, 31), QTime(22, 0))});
+        view_model.refresh();
+
+        EXPECT_EQ(view_model.xAxis().formatTick(1.0), "Jan 1");
+        EXPECT_EQ(view_model.xAxis().formatHover(1.0), "Jan 1, 09:05");
+    }
+
+    // A lone run's axis is padded by half a run on each side; those ends sit between runs.
+    TEST_F(CompletionHistoryViewModelTest, AxisEndsBetweenRunsTakeTheNearestRunsDate) {
+        project(9, {7});
+        view_model.refresh();
+
+        const auto &axis = view_model.xAxis();
+        ASSERT_LT(axis.min(), 7.0);
+        ASSERT_GT(axis.max(), 7.0);
+        EXPECT_EQ(axis.formatTick(axis.min()), "Jan 7");
+        EXPECT_EQ(axis.formatTick(axis.max()), "Jan 7");
+    }
+
+    // Ticks stay one per run even when they all read the same date (deliberate for now; see
+    // TASK_73), rather than coarsening until neighbouring labels differ.
+    TEST_F(CompletionHistoryViewModelTest, NeighbouringRunsOnOneDayRepeatTheDate) {
+        const QDate day(2026, 3, 4);
+        projectStartedAt({localMs(day, QTime(9, 0)), localMs(day, QTime(10, 0)), localMs(day, QTime(11, 0))});
+        view_model.refresh();
+
+        const auto &axis = view_model.xAxis();
+        ASSERT_EQ(axis.ticks(), (QList<qreal>{1, 2, 3}));
+        for (const qreal tick: axis.ticks()) EXPECT_EQ(axis.formatTick(tick), "Mar 4");
     }
 
     TEST_F(CompletionHistoryViewModelTest, AccuracyStaysRawAndFormatsAsPercentage) {
@@ -224,7 +292,7 @@ namespace {
         EXPECT_EQ(ids.size(), CompletionHistoryViewModel::ColumnCount - CompletionHistoryViewModel::Score);
     }
 
-    // The run axis must only label runs that exist: no "#0", nothing past the latest run.
+    // The run axis must only label runs that exist: no run 0, nothing past the latest run.
     TEST_F(CompletionHistoryViewModelTest, RunAxisLabelsOnlyRunsThatExist) {
         for (const int runs: {2, 4, 8, 224, 360}) {
             fake->history.rows.clear();
@@ -245,15 +313,15 @@ namespace {
         }
     }
 
+    // Eight runs on one day label every tick alike; the ticks must still be one per run.
     TEST_F(CompletionHistoryViewModelTest, FewRunsAreEachTickedFromTheFirstRun) {
-        fake->history.rows.clear();
-        fake->history.full_count = 8;
-        for (int i = 1; i <= 8; ++i)
-            fake->history.rows.push_back({.run_index = i, .score = 3100.0 + 40 * i});
+        std::vector<qint64> startTimes;
+        for (int i = 1; i <= 8; ++i) startTimes.push_back(localMs(QDate(2026, 3, 4), QTime(9 + i, 0)));
+        projectStartedAt(startTimes);
         view_model.refresh();
 
         EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{1, 2, 3, 4, 5, 6, 7, 8}));
-        EXPECT_EQ(view_model.xAxis().formatTick(view_model.xAxis().ticks().front()), "#1");
+        EXPECT_EQ(view_model.xAxis().formatTick(view_model.xAxis().ticks().front()), "Mar 4");
     }
 
     // The history graph marks the selected run at its run number; -1 marks nothing.
@@ -316,7 +384,7 @@ namespace {
             EXPECT_GE(tick, 31.0);
             EXPECT_LE(tick, 40.0);
         }
-        EXPECT_EQ(view_model.xAxis().formatTick(31.0), "#31");
+        EXPECT_EQ(view_model.xAxis().formatTick(31.0), "Jan 31");
     }
 
     // A one-run chart still needs an axis that labels the run and no run that does not exist.
@@ -327,7 +395,7 @@ namespace {
 
         EXPECT_EQ(view_model.visibleRunCount(), 1);
         EXPECT_EQ(view_model.xAxis().ticks(), (QList<qreal>{7}));
-        EXPECT_EQ(view_model.xAxis().formatTick(7.0), "#7");
+        EXPECT_EQ(view_model.xAxis().formatTick(7.0), "Jan 7");
         EXPECT_GT(view_model.xAxis().normalizedPosition(7.0), 0.0);
         EXPECT_LT(view_model.xAxis().normalizedPosition(7.0), 1.0);
         ASSERT_EQ(view_model.series({CompletionHistoryViewModel::Score}).front()->points.size(), 1);

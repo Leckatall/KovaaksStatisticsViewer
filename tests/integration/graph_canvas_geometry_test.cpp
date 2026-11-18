@@ -7,9 +7,12 @@
 
 #include <gtest/gtest.h>
 
+#include <QDate>
+#include <QDateTime>
 #include <QImage>
 #include <QPainter>
 #include <QStringList>
+#include <QTime>
 #include <QUrl>
 #include <QVariantList>
 #include <memory>
@@ -474,10 +477,14 @@ namespace {
 
     class OneRunHistory final : public application::ICompletionHistoryUseCase {
     public:
+        // Local wall-clock time, so the expected hover text holds in any time zone.
+        static inline const qint64 kStartMs = QDateTime(QDate(2026, 3, 4), QTime(14, 32)).toMSecsSinceEpoch();
+
         application::CompletionHistory get_history() override {
             return {.scenario_name = "Air Angelic",
                     .full_count = 9,
-                    .rows = {{.run_index = 7, .score = 125.0, .accuracy = 0.6, .shots = 25, .hits = 15, .misses = 10}}};
+                    .rows = {{.run_index = 7, .start_time_ms = kStartMs, .score = 125.0, .accuracy = 0.6,
+                              .shots = 25, .hits = 15, .misses = 10}}};
         }
         void onCurrentScenarioChanged(std::function<void()>) override {}
         void onRangeChanged(std::function<void()>) override {}
@@ -503,7 +510,7 @@ namespace {
         const QVariantMap hover = canvas->valuesAtX(plot.center().x());
         ASSERT_TRUE(hover.value("valid").toBool());
         EXPECT_DOUBLE_EQ(hover.value("xRaw").toReal(), 7.0);
-        EXPECT_EQ(hover.value("x").toString(), "#7");
+        EXPECT_EQ(hover.value("x").toString(), "Mar 4, 14:32");
         const QVariantList series = hover.value("series").toList();
         ASSERT_EQ(series.size(), 1);
         EXPECT_TRUE(series.front().toMap().value("pixelY").isValid());

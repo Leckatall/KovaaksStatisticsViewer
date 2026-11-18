@@ -146,6 +146,7 @@ namespace ksv::ui {
         EXPECT_TRUE(context.rangeText.contains(QStringLiteral("#6")));
         EXPECT_TRUE(context.rangeText.contains(localDay(kFirstStartMs)));
         EXPECT_TRUE(context.rangeText.contains(localDay(kLastStartMs)));
+        EXPECT_TRUE(context.xTitle.contains(QStringLiteral("date"), Qt::CaseInsensitive));
         EXPECT_TRUE(context.xTitle.contains(QStringLiteral("run"), Qt::CaseInsensitive));
         EXPECT_TRUE(context.graphType.contains(QStringLiteral("scenario"), Qt::CaseInsensitive));
         EXPECT_TRUE(context.graphType.contains(QStringLiteral("history"), Qt::CaseInsensitive));
