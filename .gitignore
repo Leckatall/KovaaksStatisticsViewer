@@ -86,6 +86,7 @@ Testing/
 
 
 .qmlls.ini
+.clangd
 
 # AI files
 CLAUDE.md
