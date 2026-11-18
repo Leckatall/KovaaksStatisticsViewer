@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Angular performance chart</title>
+  <g fill="none" stroke="#00A3B4" stroke-width="26" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M36 36V220H220"/>
+    <path d="M80 172L120 120L154 148L212 72"/>
+  </g>
+</svg>

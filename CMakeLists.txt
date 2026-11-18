@@ -64,6 +64,7 @@ add_subdirectory(src/qt_data)
 # Main executable
 qt_add_executable(ksv
         src/main.cpp
+        resources/app-icon/ksv.rc
         #        resources.qrc
 )
 

@@ -1,0 +1,4 @@
+// Qt's Windows platform plugin loads IDI_ICON1 as every window's default icon, so this one resource
+// covers the title bar and taskbar as well as the .exe in Explorer. Regenerate the .ico with
+// scripts/make_app_icon.py.
+IDI_ICON1 ICON "app-icon.ico"
