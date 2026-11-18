@@ -62,7 +62,7 @@ title: Direct dependencies among KSV responsibility groups
 ---
 flowchart TB
     accTitle: Direct dependencies among KSV responsibility groups
-    accDescr: Presentation uses Application, which uses Data and platform. Presentation, Application and Data and platform also use Shared contracts and Domain; Shared contracts uses Domain. SettingsViewModel additionally uses data-layer ports directly.
+    accDescr: Presentation uses Application, which uses Data and platform. Presentation, Application and Data and platform also use Shared contracts and Domain; Shared contracts uses Domain.
     Presentation["Presentation"]
     Application["Application"]
     Data["Data and platform"]
@@ -70,7 +70,6 @@ flowchart TB
     Domain["Domain"]
 
     Presentation --> Application
-    Presentation -.->|"settings, file and profile ports<br/>(SettingsViewModel only)"| Data
     Application --> Data
     Presentation --> Contracts
     Presentation --> Domain
@@ -84,7 +83,6 @@ flowchart TB
 **Key**
 
 - Unlabelled solid arrow: uses, from the consumer to the capability it uses
-- Dashed arrow: direct use of a data-layer port that bypasses the application group
 
 | Responsibility group | Responsibility |
 |---|---|
@@ -94,7 +92,7 @@ flowchart TB
 | Shared contracts | Use-case interfaces, graph configuration and the expression DSL. |
 | Domain | Run identity, profile, benchmark model and evaluation. |
 
-The presentation-to-domain arrow is direct use of value types such as scenario and run identifiers and benchmark rank points. `SettingsViewModel` takes `ISettingsService`, `IFileService`, and `IProfileService` directly, the remaining bypass recorded as debt in [ADR 0004](decisions/0004-route-view-model-interactions-through-use-cases.md). [Composition root][composition-root] compares the direct dependencies of the settings, session and capture view models. Evidence: [`settings_vm.h`](../../src/ui/presentation/app/settings_vm.h), [`App::App`](../../src/app/app.cpp).
+The presentation-to-domain arrow is direct use of value types such as scenario and run identifiers and benchmark rank points. `SettingsViewModel` reaches the configured source root, profile path and profile state through `IProfileLocationsUseCase`, so no view model depends directly on a data-layer port, as [ADR 0004](decisions/0004-route-view-model-interactions-through-use-cases.md) requires; the record itself still lists the two former violations as current. [Composition root][composition-root] compares the direct dependencies of the session and capture view models. Evidence: [`settings_vm.h`](../../src/ui/presentation/app/settings_vm.h), [`ProfileLocationsUseCase`](../../src/app/usecases/profile_locations_use_case.h), [`App::App`](../../src/app/app.cpp).
 
 The build links the static libraries below into the `ksv` executable. [Build and deployment][build-and-deployment] describes their build dependencies.
 

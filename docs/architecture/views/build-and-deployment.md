@@ -40,7 +40,7 @@ The executable reaches the lower libraries through `ksv_app`; the displayed path
 
 The library edges are `PUBLIC`, while every link of the `ksv` executable, drawn or omitted, is `PRIVATE` ([`CMakeLists.txt`](../../../CMakeLists.txt) `target_link_libraries(ksv PRIVATE ...)`). Some direct links are omitted where the diagram already shows a transitive path: `ksv` also links `ksv_ui`, `ksv_data`, `ksv_qt_data` and `ksv_domain` directly; `ksv_app` also links `ksv_contracts` and `ksv_domain`; `ksv_qt_data` also links `ksv_contracts` and `ksv_domain`; `ksv_data` and `ksv_qt_data` link Qt or protobuf as external packages not drawn here. Sources: [`CMakeLists.txt`](../../../CMakeLists.txt), [`src/app/CMakeLists.txt`](../../../src/app/CMakeLists.txt), [`src/ui/CMakeLists.txt`](../../../src/ui/CMakeLists.txt), [`src/qt_data/CMakeLists.txt`](../../../src/qt_data/CMakeLists.txt), [`src/data/CMakeLists.txt`](../../../src/data/CMakeLists.txt), [`src/app/contracts/CMakeLists.txt`](../../../src/app/contracts/CMakeLists.txt) and [`src/domain/CMakeLists.txt`](../../../src/domain/CMakeLists.txt). The layer rules this should be read against are in [`AGENTS.md`](../../../AGENTS.md).
 
-**Type:** header-dependency refinement of the production-target model. **Scope:** the three cross-layer header dependencies with no direct target link: `ksv_ui → ksv_app`, `ksv_ui → ksv_data` and `ksv_contracts → ksv_data`. **Concern:** source dependencies that the target-link model does not expose.
+**Type:** header-dependency refinement of the production-target model. **Scope:** the two cross-layer header dependencies with no direct target link: `ksv_ui → ksv_app` and `ksv_contracts → ksv_data`. **Concern:** source dependencies that the target-link model does not expose.
 
 ```mermaid
 ---
@@ -48,10 +48,9 @@ title: Cross-layer header dependencies without direct target links
 ---
 flowchart LR
     accTitle: Cross-layer header dependencies without direct target links
-    accDescr: UI headers include application and data interfaces, and contracts headers also include data interfaces, without direct target links for those dependencies.
+    accDescr: UI headers include an application interface, and contracts headers include data interfaces, without direct target links for those dependencies.
     UI["ksv_ui"] -->|i_session_controller.h| App["ksv_app<br/>application interface"]
-    UI --> Data["ksv_data<br/>data/interfaces headers"]
-    Contracts["ksv_contracts"] --> Data
+    Contracts["ksv_contracts"] --> Data["ksv_data<br/>data/interfaces headers"]
 ```
 
 **Key**
@@ -59,14 +58,14 @@ flowchart LR
 - Box: production static-library target owning the headers
 - Solid arrow: includes headers owned by, from the including target to the header owner
 
-CMake link dependencies and architectural layer dependencies point in different directions. The layers say `ui → app`, but the CMake link from `ksv_app` to `ksv_ui` exists because `App` constructs the view models. The `ksv_ui → ksv_app` header edge shows UI code including the application interface `i_session_controller.h`; the other two edges concern `data/interfaces` headers. The enforcement table below gives the source evidence. `ksv_contracts` is the Qt-free interface-and-rules library that both sides use, and it links only the domain.
+CMake link dependencies and architectural layer dependencies point in different directions. The layers say `ui → app`, but the CMake link from `ksv_app` to `ksv_ui` exists because `App` constructs the view models. The `ksv_ui → ksv_app` header edge shows UI code including the application interface `i_session_controller.h`; the `ksv_contracts → ksv_data` edge concerns `data/interfaces` headers. The enforcement table below gives the source evidence. `ksv_contracts` is the Qt-free interface-and-rules library that both sides use, and it links only the domain.
 
 ### Layer boundaries enforced by the build
 
 | Rule a reader might assume | What actually holds | Evidence |
 |---|---|---|
 | A layer can include only the layers below its target links | Not enforced. The top-level file calls `include_directories(${PROJECT_SOURCE_DIR}/src)` for every target, so any translation unit can name any header as `app/...`, `data/...`, `ui/...`. | [`CMakeLists.txt`](../../../CMakeLists.txt) |
-| `ksv_ui` depends only on contracts | It links only `ksv_contracts`, yet `session_vm.h` includes `app/usecases/i_session_controller.h`, and `settings_vm.h` and `benchmark_manager_vm.h` include `data/interfaces/` headers. These compile through the global include path and the include roots (`src` and `src/app`) that `ksv_contracts` exports `PUBLIC`, which `ksv_ui` inherits ([`src/app/contracts/CMakeLists.txt`](../../../src/app/contracts/CMakeLists.txt)). | [`session_vm.h`](../../../src/ui/presentation/app/session_vm.h), [`settings_vm.h`](../../../src/ui/presentation/app/settings_vm.h), [`benchmark_manager_vm.h`](../../../src/ui/presentation/benchmarks/manager/benchmark_manager_vm.h) |
+| `ksv_ui` depends only on contracts | It links only `ksv_contracts`, yet `session_vm.h` includes `app/usecases/i_session_controller.h`. This compiles through the global include path and the include roots (`src` and `src/app`) that `ksv_contracts` exports `PUBLIC`, which `ksv_ui` inherits ([`src/app/contracts/CMakeLists.txt`](../../../src/app/contracts/CMakeLists.txt)). Presentation reaches `data/interfaces/` headers only indirectly, through the contracts headers that include them (next row). | [`session_vm.h`](../../../src/ui/presentation/app/session_vm.h) |
 | `contracts` and `data/interfaces` are separate layers | They include each other: contracts headers such as `i_benchmark_manager_use_case.h` and `benchmark_manager_state.h` include `data/interfaces/` headers, while data ports such as `i_profile_service.h`, `i_file_service.h` and the two image writers include contracts headers. The link graph shows only `data → contracts`. | [`i_benchmark_manager_use_case.h`](../../../src/app/contracts/i_benchmark_manager_use_case.h), [`i_profile_service.h`](../../../src/data/interfaces/i_profile_service.h) |
 | Static-library links catch an upward call | Not at library level. Static libraries defer unresolved symbols and CMake permits cycles among them, so an unresolved upward reference may surface only when an executable links. | CMake behaviour; not exercised in this repository |
 | Lower layers are free of Qt | `ksv_domain`, `ksv_contracts` and `ksv_data` declare no Qt link dependency, so they receive no Qt include path through those links. `ksv_qt_data`, `ksv_ui` and `ksv_app` do link Qt. | the `target_link_libraries` calls above |
