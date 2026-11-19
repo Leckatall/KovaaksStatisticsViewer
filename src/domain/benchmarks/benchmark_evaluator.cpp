@@ -4,24 +4,25 @@
 #include <cmath>
 #include <cstddef>
 #include <deque>
-#include <functional>
 #include <numeric>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <utility>
 
 namespace ksv::domain {
     namespace {
-        double normalizedFromLadder(const std::vector<double> &ladder, const std::optional<double> score) {
-            if (!score || !std::isfinite(*score)) return 0.0;
+        double normalizedFromLadder(const std::optional<std::vector<double> > &ladder,
+                                    const std::optional<double> score) {
+            if (!ladder || !score || !std::isfinite(*score)) return 0.0;
             const double value = *score;
-            if (value < ladder.front())
-                return ladder.front() > 0.0 ? std::max(0.0, value / ladder.front()) : 0.0;
-            for (std::size_t index = 1; index < ladder.size(); ++index)
-                if (value < ladder[index])
+            if (value < ladder->front())
+                return ladder->front() > 0.0 ? std::max(0.0, value / ladder->front()) : 0.0;
+            for (std::size_t index = 1; index < ladder->size(); ++index)
+                if (value < (*ladder)[index])
                     return static_cast<double>(index) +
-                           (value - ladder[index - 1]) / (ladder[index] - ladder[index - 1]);
-            return static_cast<double>(ladder.size());
+                           (value - (*ladder)[index - 1]) / ((*ladder)[index] - (*ladder)[index - 1]);
+            return static_cast<double>(ladder->size());
         }
     }
 
@@ -49,8 +50,7 @@ namespace ksv::domain {
     double normalizedTierValue(const std::vector<Tier> &tiers, const std::vector<Threshold> &thresholds,
                                const std::optional<double> score) {
         if (!score || !std::isfinite(*score)) return 0.0;
-        const auto ladder = thresholdLadder(tiers, thresholds);
-        return ladder ? normalizedFromLadder(*ladder, score) : 0.0;
+        return normalizedFromLadder(thresholdLadder(tiers, thresholds), score);
     }
 
     namespace {
@@ -106,7 +106,7 @@ namespace ksv::domain {
                 projection.recentAverage = total / static_cast<double>(sample);
                 projection.recentSampleCount = static_cast<int>(sample);
             }
-            projection.normalizedRank = ladder ? normalizedFromLadder(*ladder, projection.personalBest) : 0.0;
+            projection.normalizedRank = normalizedFromLadder(ladder, projection.personalBest);
             if (!ladder) return projection;
             if (!projection.personalBest) {
                 // Unplayed attains nothing even when the first threshold is 0, which is what keeps
@@ -124,88 +124,252 @@ namespace ksv::domain {
             return projection;
         }
 
-        struct EntryState {
-            std::optional<std::vector<double> > ladder;
-            std::optional<double> personalBest;
+        double sumOf(const std::vector<ScenarioProjection> &scenarios, double ScenarioProjection::*field) {
+            double total = 0.0;
+            for (const auto &scenario: scenarios) total += scenario.*field;
+            return total;
+        }
+
+        // ---- Run indexing ----------------------------------------------------------------------
+
+        struct RunIndex {
+            EntriesByHash entriesByHash; // Resolved entries only
+            std::vector<History> histories;
         };
 
-        // `states` is index-parallel with BenchmarkProjection::scenarios, so the rank rules need no
-        // id lookup on the hot path.
-        struct ProjectionBuilder {
-            const std::vector<Tier> &tiers;
-            const ResolutionByEntry &resolutions;
-            const std::vector<History> &histories;
-            BenchmarkProjection &projection;
-            std::vector<EntryState> states;
+        // Both members index entries in collectEntries order. runFacts is chronological, so each
+        // history is too.
+        RunIndex indexRuns(const Benchmark &definition, const ResolutionByEntry &resolutions,
+                           const std::vector<RunFact> &runFacts) {
+            const auto ordered = collectEntries(definition);
+            RunIndex index{{}, std::vector<History>(ordered.size())};
+            for (std::size_t entry = 0; entry < ordered.size(); ++entry) {
+                const auto *resolution = findResolution(resolutions, ordered[entry]->id);
+                if (!resolution || resolution->state != ScenarioMatchState::Resolved) continue;
+                for (const auto &hash: ordered[entry]->hashes) index.entriesByHash[hash].push_back(entry);
+            }
+            for (const auto &fact: runFacts)
+                if (const auto bucket = index.entriesByHash.find(fact.run_id.scenario_id.hash);
+                    bucket != index.entriesByHash.end())
+                    for (const auto entry: bucket->second) index.histories[entry].push_back(&fact);
+            return index;
+        }
 
-            void append(const std::vector<ScenarioEntry> &entries, std::vector<ScenarioEntryId> &target) {
+        // ---- Scenario tree ---------------------------------------------------------------------
+
+        struct EntryState {
+            ScenarioEntryId id;
+            std::optional<std::vector<double> > ladder;
+            std::optional<double> personalBest;
+
+            [[nodiscard]] bool hasTier(const std::size_t tier) const { return ladder && tier < ladder->size(); }
+
+            [[nodiscard]] double thresholdAt(const std::size_t tier) const {
+                return hasTier(tier) ? (*ladder)[tier] : 0.0;
+            }
+
+            [[nodiscard]] bool attains(const std::size_t tier) const {
+                return personalBest && hasTier(tier) && *personalBest >= (*ladder)[tier];
+            }
+
+            [[nodiscard]] double normalized(const double score) const { return normalizedFromLadder(ladder, score); }
+        };
+
+        struct StateRange {
+            std::size_t begin = 0;
+            std::size_t end = 0;
+        };
+
+        // Met when any one of its scenarios attains the tier.
+        struct Requirement {
+            GroupId group;
+            StateRange scenarios;
+        };
+
+        // A category is satisfied when every requirement is: one per subcategory when it has any,
+        // otherwise its direct scenarios as a single requirement. In the first case the requirements
+        // are index-parallel with the category's GroupProjection::subgroups.
+        struct CategoryLayout {
+            std::vector<Requirement> requirements;
+        };
+
+        // `states` is index-parallel with BenchmarkProjection::scenarios, and every range indexes it,
+        // so the rank rules never look an entry up by id.
+        struct ScenarioTree {
+            std::vector<EntryState> states;
+            StateRange uncategorized;
+            std::vector<CategoryLayout> categories;
+        };
+
+        // Fills the scenario and group outputs of `projection` alongside the tree describing them.
+        ScenarioTree buildScenarioTree(const Benchmark &definition, const ResolutionByEntry &resolutions,
+                                       const std::vector<History> &histories, BenchmarkProjection &projection) {
+            ScenarioTree tree;
+            tree.states.reserve(histories.size());
+            const auto append = [&](const std::vector<ScenarioEntry> &entries, std::vector<ScenarioEntryId> &target) {
+                const auto begin = tree.states.size();
                 for (const auto &entry: entries) {
-                    const auto index = projection.scenarios.size();
-                    auto ladder = thresholdLadder(tiers, entry.thresholds);
-                    projection.scenarios.push_back(projectScenario(
-                        entry, tiers, findResolution(resolutions, entry.id), histories[index], ladder));
-                    states.push_back({std::move(ladder), projection.scenarios.back().personalBest});
+                    auto ladder = thresholdLadder(definition.tiers, entry.thresholds);
+                    projection.scenarios.push_back(projectScenario(entry, definition.tiers,
+                                                                   findResolution(resolutions, entry.id),
+                                                                   histories[tree.states.size()], ladder));
+                    tree.states.push_back({entry.id, std::move(ladder), projection.scenarios.back().personalBest});
                     target.push_back(entry.id);
                 }
+                return StateRange{begin, tree.states.size()};
+            };
+
+            tree.uncategorized = append(definition.uncategorized, projection.uncategorized);
+            for (const auto &category: definition.categories) {
+                GroupProjection group{category.id, category.name, std::nullopt, {}, {}};
+                CategoryLayout layout;
+                const auto direct = append(category.scenarios, group.scenarios);
+                for (const auto &subcategory: category.subcategories) {
+                    GroupProjection subgroup{subcategory.id, subcategory.name, std::nullopt, {}, {}};
+                    layout.requirements.push_back({subcategory.id, append(subcategory.scenarios, subgroup.scenarios)});
+                    group.subgroups.push_back(std::move(subgroup));
+                }
+                if (category.subcategories.empty()) layout.requirements.push_back({category.id, direct});
+                projection.categories.push_back(std::move(group));
+                tree.categories.push_back(std::move(layout));
+            }
+            return tree;
+        }
+
+        // ---- Tier rules ------------------------------------------------------------------------
+
+        struct TierRules {
+            const std::vector<Tier> &tiers;
+            const ScenarioTree &tree;
+
+            [[nodiscard]] std::span<const EntryState> slice(const StateRange range) const {
+                return std::span(tree.states).subspan(range.begin, range.end - range.begin);
+            }
+
+            [[nodiscard]] bool met(const Requirement &requirement, const std::size_t tier) const {
+                return std::ranges::any_of(slice(requirement.scenarios),
+                                           [&](const EntryState &state) { return state.attains(tier); });
+            }
+
+            [[nodiscard]] bool satisfied(const CategoryLayout &category, const std::size_t tier) const {
+                return std::ranges::all_of(category.requirements,
+                                           [&](const Requirement &requirement) { return met(requirement, tier); });
+            }
+
+            [[nodiscard]] bool allAttain(const std::span<const EntryState> states, const std::size_t tier) const {
+                return std::ranges::all_of(states, [&](const EntryState &state) { return state.attains(tier); });
+            }
+
+            [[nodiscard]] bool rankAttained(const std::size_t tier) const {
+                return allAttain(slice(tree.uncategorized), tier) &&
+                       std::ranges::all_of(tree.categories,
+                                           [&](const CategoryLayout &category) { return satisfied(category, tier); });
+            }
+
+            [[nodiscard]] bool completed(const std::size_t tier) const { return allAttain(tree.states, tier); }
+
+            template<typename Predicate>
+            [[nodiscard]] std::optional<std::size_t> highestIndex(const Predicate &predicate) const {
+                for (std::size_t index = tiers.size(); index-- > 0;)
+                    if (predicate(index)) return index;
+                return std::nullopt;
+            }
+
+            template<typename Predicate>
+            [[nodiscard]] std::optional<TierId> highestTier(const Predicate &predicate) const {
+                const auto index = highestIndex(predicate);
+                return index ? std::optional(tiers[*index].id) : std::nullopt;
             }
         };
 
-        bool attains(const EntryState &state, const std::size_t tierIndex) {
-            return state.personalBest && state.ladder && tierIndex < state.ladder->size() &&
-                   *state.personalBest >= (*state.ladder)[tierIndex];
-        }
-
-        using IndexById = std::unordered_map<std::string, std::size_t>;
-
-        bool anyAttains(const std::vector<ScenarioEntry> &entries, const std::vector<EntryState> &states,
-                        const IndexById &indexById, const std::size_t tierIndex) {
-            return std::ranges::any_of(entries, [&](const ScenarioEntry &entry) {
-                return attains(states[indexById.at(entry.id.value)], tierIndex);
-            });
-        }
-
-        bool allAttain(const std::vector<ScenarioEntry> &entries, const std::vector<EntryState> &states,
-                       const IndexById &indexById, const std::size_t tierIndex) {
-            return !entries.empty() && std::ranges::all_of(entries, [&](const ScenarioEntry &entry) {
-                return attains(states[indexById.at(entry.id.value)], tierIndex);
-            });
-        }
-
-        bool categorySatisfied(const Category &category, const std::vector<EntryState> &states,
-                               const IndexById &indexById, const std::size_t tierIndex) {
-            if (!category.subcategories.empty())
-                return std::ranges::all_of(category.subcategories, [&](const Subcategory &subcategory) {
-                    return anyAttains(subcategory.scenarios, states, indexById, tierIndex);
+        void assignGroupTiers(const TierRules &rules, BenchmarkProjection &projection) {
+            for (std::size_t categoryIndex = 0; categoryIndex < projection.categories.size(); ++categoryIndex) {
+                auto &group = projection.categories[categoryIndex];
+                const auto &layout = rules.tree.categories[categoryIndex];
+                group.satisfiedTier = rules.highestTier([&](const std::size_t tier) {
+                    return rules.satisfied(layout, tier);
                 });
-            return anyAttains(category.scenarios, states, indexById, tierIndex);
+                for (std::size_t subgroupIndex = 0; subgroupIndex < group.subgroups.size(); ++subgroupIndex)
+                    group.subgroups[subgroupIndex].satisfiedTier = rules.highestTier([&](const std::size_t tier) {
+                        return rules.met(layout.requirements[subgroupIndex], tier);
+                    });
+            }
         }
 
-        bool attainedAtTier(const Benchmark &definition, const std::vector<EntryState> &states,
-                            const IndexById &indexById, const std::size_t tierIndex) {
-            return (definition.uncategorized.empty() ||
-                    allAttain(definition.uncategorized, states, indexById, tierIndex)) &&
-                   std::ranges::all_of(definition.categories, [&](const Category &category) {
-                       return categorySatisfied(category, states, indexById, tierIndex);
-                   });
+        void collectBlockers(const std::span<const EntryState> states, const std::optional<GroupId> &group,
+                             const std::size_t tier, std::vector<RankBlocker> &blockers) {
+            for (const auto &state: states)
+                if (!state.attains(tier))
+                    blockers.push_back({state.id, group, state.thresholdAt(tier), state.personalBest});
         }
 
-        std::optional<std::size_t> highestSatisfied(const std::size_t tierCount,
-                                                    const std::function<bool(std::size_t)> &satisfied) {
-            for (std::size_t index = tierCount; index-- > 0;)
-                if (satisfied(index)) return index;
-            return std::nullopt;
+        void assignNextTier(const TierRules &rules, const std::size_t tier, BenchmarkProjection &projection) {
+            projection.nextTier = rules.tiers[tier].id;
+            projection.scenariosAtNextTier = static_cast<int>(std::ranges::count_if(
+                rules.tree.states, [&](const EntryState &state) { return state.attains(tier); }));
+            collectBlockers(rules.slice(rules.tree.uncategorized), std::nullopt, tier, projection.nextTierBlockers);
+            for (const auto &category: rules.tree.categories)
+                for (const auto &requirement: category.requirements)
+                    if (!rules.met(requirement, tier))
+                        collectBlockers(rules.slice(requirement.scenarios), requirement.group, tier,
+                                        projection.nextTierBlockers);
         }
 
-        void collectBlockers(const std::vector<ScenarioEntry> &entries, const std::optional<GroupId> &group,
-                             const std::vector<EntryState> &states, const IndexById &indexById,
-                             const std::size_t tierIndex, std::vector<RankBlocker> &blockers) {
-            for (const auto &entry: entries) {
-                const auto &state = states[indexById.at(entry.id.value)];
-                if (attains(state, tierIndex)) continue;
-                blockers.push_back({entry.id, group,
-                                    state.ladder && tierIndex < state.ladder->size()
-                                        ? (*state.ladder)[tierIndex] : 0.0,
-                                    state.personalBest});
+        // ---- Rank history ----------------------------------------------------------------------
+
+        struct EntrySweep {
+            std::optional<double> best;
+            double bestNormalized = 0.0;
+            std::deque<double> recent;
+            double recentNormalized = 0.0;
+
+            /** @return Change in the normalized recent average. */
+            double pushRecent(const double score, const EntryState &state) {
+                recent.push_back(score);
+                if (recent.size() > kRecentRuns) recent.pop_front();
+                // Summed oldest first, as projectScenario does, so the last point equals its average.
+                const double total = std::accumulate(recent.begin(), recent.end(), 0.0);
+                const double updated = state.normalized(total / static_cast<double>(recent.size()));
+                return updated - std::exchange(recentNormalized, updated);
+            }
+
+            /** @return Change in the normalized best, or nothing when `score` is not a new best. */
+            std::optional<double> offerBest(const double score, const EntryState &state) {
+                if (best && score <= *best) return std::nullopt;
+                best = score;
+                const double updated = state.normalized(score);
+                return updated - std::exchange(bestNormalized, updated);
+            }
+        };
+
+        // Running sums of every entry's normalized value rather than re-averaging per point, so the
+        // sweep stays linear in runs plus emitted points. runFacts is chronological by contract
+        // (UserProfile::getRunFacts), so each day is one contiguous block and no day is revisited.
+        void sweepRankHistory(const std::vector<RunFact> &runFacts, const EntriesByHash &entriesByHash,
+                              const std::vector<EntryState> &states, BenchmarkProjection &projection) {
+            std::vector<EntrySweep> sweeps(states.size());
+            double bestRunning = 0.0;
+            double recentRunning = 0.0;
+            const auto entryCount = static_cast<double>(states.size());
+            for (std::size_t index = 0; index < runFacts.size();) {
+                const auto day = runFacts[index].run_id.startDay();
+                bool played = false;
+                bool improved = false;
+                for (; index < runFacts.size() && runFacts[index].run_id.startDay() == day; ++index) {
+                    const auto bucket = entriesByHash.find(runFacts[index].run_id.scenario_id.hash);
+                    if (bucket == entriesByHash.end()) continue;
+                    played = true;
+                    const auto score = static_cast<double>(runFacts[index].score);
+                    for (const auto entry: bucket->second) {
+                        recentRunning += sweeps[entry].pushRecent(score, states[entry]);
+                        if (const auto delta = sweeps[entry].offerBest(score, states[entry])) {
+                            bestRunning += *delta;
+                            improved = true;
+                        }
+                    }
+                }
+                if (improved) projection.averageRankHistory.push_back({day, bestRunning / entryCount});
+                if (played) projection.recentAverageRankHistory.push_back({day, recentRunning / entryCount});
             }
         }
     }
@@ -214,43 +378,19 @@ namespace ksv::domain {
         const Benchmark &definition, const CompletenessResult &completeness,
         const std::vector<ScenarioResolution> &resolutions, const std::vector<RunFact> &runFacts,
         std::vector<std::pair<std::chrono::sys_days, double> > rollingPlaytime) {
-        BenchmarkProjection projection;
-        projection.benchmarkId = definition.id;
-        projection.completeness = completeness.completeness;
-        projection.tiers = definition.tiers;
-        projection.rollingPlaytime = std::move(rollingPlaytime);
+        BenchmarkProjection projection{
+            .benchmarkId = definition.id,
+            .completeness = completeness.completeness,
+            .tiers = definition.tiers,
+            .rollingPlaytime = std::move(rollingPlaytime),
+        };
         ResolutionByEntry byEntry;
         for (const auto &resolution: resolutions) byEntry.emplace(resolution.entryId.value, &resolution);
 
         // Built for Incomplete definitions too: per-entry stats precede the Trackable gate.
-        const auto ordered = collectEntries(definition);
-        EntriesByHash entriesByHash;
-        for (std::size_t index = 0; index < ordered.size(); ++index) {
-            const auto *resolution = findResolution(byEntry, ordered[index]->id);
-            if (!resolution || resolution->state != ScenarioMatchState::Resolved) continue;
-            for (const auto &hash: ordered[index]->hashes) entriesByHash[hash].push_back(index);
-        }
-        // runFacts is chronological, so each history is too.
-        std::vector<History> histories(ordered.size());
-        for (const auto &fact: runFacts)
-            if (const auto bucket = entriesByHash.find(fact.run_id.scenario_id.hash); bucket != entriesByHash.end())
-                for (const auto index: bucket->second) histories[index].push_back(&fact);
-
-        ProjectionBuilder builder{definition.tiers, byEntry, histories, projection, {}};
-        builder.states.reserve(ordered.size());
-        builder.append(definition.uncategorized, projection.uncategorized);
-        for (const auto &category: definition.categories) {
-            GroupProjection group{category.id, category.name, std::nullopt, {}, {}};
-            builder.append(category.scenarios, group.scenarios);
-            for (const auto &subcategory: category.subcategories) {
-                GroupProjection subgroup{subcategory.id, subcategory.name, std::nullopt, {}, {}};
-                builder.append(subcategory.scenarios, subgroup.scenarios);
-                group.subgroups.push_back(std::move(subgroup));
-            }
-            projection.categories.push_back(std::move(group));
-        }
-        for (const auto &scenario: projection.scenarios) projection.totalPlaytimeSeconds += scenario.playtimeSeconds;
-        const auto &states = builder.states;
+        const auto runs = indexRuns(definition, byEntry, runFacts);
+        const auto tree = buildScenarioTree(definition, byEntry, runs.histories, projection);
+        projection.totalPlaytimeSeconds = sumOf(projection.scenarios, &ScenarioProjection::playtimeSeconds);
 
         // Everything below is Trackable-only: official rank, completion, blockers and average-rank
         // outputs stay at their defaults for an Incomplete definition, so partial thresholds can
@@ -259,107 +399,18 @@ namespace ksv::domain {
         if (completeness.completeness != Completeness::Trackable || projection.scenarios.empty())
             return projection;
 
-        IndexById indexById;
-        for (std::size_t index = 0; index < projection.scenarios.size(); ++index)
-            indexById.emplace(projection.scenarios[index].entryId.value, index);
-        const std::size_t tierCount = definition.tiers.size();
-        const auto attainedIndex = highestSatisfied(tierCount, [&](const std::size_t tier) {
-            return attainedAtTier(definition, states, indexById, tier);
-        });
-        if (attainedIndex) projection.attainedRank = definition.tiers[*attainedIndex].id;
+        const TierRules rules{definition.tiers, tree};
+        const auto attained = rules.highestIndex([&](const std::size_t tier) { return rules.rankAttained(tier); });
+        if (attained) projection.attainedRank = definition.tiers[*attained].id;
+        projection.completedRank = rules.highestTier([&](const std::size_t tier) { return rules.completed(tier); });
+        assignGroupTiers(rules, projection);
+        projection.averageRank = sumOf(projection.scenarios, &ScenarioProjection::normalizedRank) /
+                                 static_cast<double>(projection.scenarios.size());
 
-        if (const auto completed = highestSatisfied(tierCount, [&](const std::size_t tier) {
-            return std::ranges::all_of(states, [&](const EntryState &state) { return attains(state, tier); });
-        }))
-            projection.completedRank = definition.tiers[*completed].id;
+        if (const std::size_t next = attained ? *attained + 1 : 0; next < definition.tiers.size())
+            assignNextTier(rules, next, projection);
 
-        for (std::size_t categoryIndex = 0; categoryIndex < projection.categories.size(); ++categoryIndex) {
-            auto &group = projection.categories[categoryIndex];
-            const auto &category = definition.categories[categoryIndex];
-            if (const auto satisfied = highestSatisfied(tierCount, [&](const std::size_t tier) {
-                return categorySatisfied(category, states, indexById, tier);
-            }))
-                group.satisfiedTier = definition.tiers[*satisfied].id;
-            for (std::size_t subgroupIndex = 0; subgroupIndex < group.subgroups.size(); ++subgroupIndex) {
-                const auto &subcategory = category.subcategories[subgroupIndex];
-                if (const auto satisfied = highestSatisfied(tierCount, [&](const std::size_t tier) {
-                    return anyAttains(subcategory.scenarios, states, indexById, tier);
-                }))
-                    group.subgroups[subgroupIndex].satisfiedTier = definition.tiers[*satisfied].id;
-            }
-        }
-
-        double normalizedSum = 0.0;
-        for (const auto &scenario: projection.scenarios) normalizedSum += scenario.normalizedRank;
-        projection.averageRank = normalizedSum / static_cast<double>(projection.scenarios.size());
-
-        const std::size_t nextIndex = attainedIndex ? *attainedIndex + 1 : 0;
-        if (nextIndex < tierCount) {
-            projection.nextTier = definition.tiers[nextIndex].id;
-            for (const auto &state: states)
-                if (attains(state, nextIndex)) ++projection.scenariosAtNextTier;
-            collectBlockers(definition.uncategorized, std::nullopt, states, indexById, nextIndex,
-                            projection.nextTierBlockers);
-            for (const auto &category: definition.categories) {
-                if (categorySatisfied(category, states, indexById, nextIndex)) continue;
-                if (category.subcategories.empty()) {
-                    collectBlockers(category.scenarios, category.id, states, indexById, nextIndex,
-                                    projection.nextTierBlockers);
-                    continue;
-                }
-                for (const auto &subcategory: category.subcategories) {
-                    if (anyAttains(subcategory.scenarios, states, indexById, nextIndex)) continue;
-                    collectBlockers(subcategory.scenarios, subcategory.id, states, indexById, nextIndex,
-                                    projection.nextTierBlockers);
-                }
-            }
-        }
-
-        // Running sums of every entry's normalized value rather than re-averaging per point, so the
-        // sweep stays linear in runs plus emitted points. runFacts is chronological by contract
-        // (UserProfile::getRunFacts), so each day is one contiguous block and no day is revisited.
-        const auto normalizedOf = [&](const std::size_t scenarioIndex, const double score) {
-            return states[scenarioIndex].ladder ? normalizedFromLadder(*states[scenarioIndex].ladder, score) : 0.0;
-        };
-        struct EntrySweep {
-            std::optional<double> best;
-            double bestNormalized = 0.0;
-            std::deque<double> recent;
-            double recentNormalized = 0.0;
-        };
-        std::vector<EntrySweep> sweeps(projection.scenarios.size());
-        double normalizedRunning = 0.0;
-        double recentRunning = 0.0;
-        const auto entryCount = static_cast<double>(projection.scenarios.size());
-        for (std::size_t index = 0; index < runFacts.size();) {
-            const auto day = runFacts[index].run_id.startDay();
-            bool played = false;
-            bool improved = false;
-            for (; index < runFacts.size() && runFacts[index].run_id.startDay() == day; ++index) {
-                const auto bucket = entriesByHash.find(runFacts[index].run_id.scenario_id.hash);
-                if (bucket == entriesByHash.end()) continue;
-                played = true;
-                const auto score = static_cast<double>(runFacts[index].score);
-                for (const auto scenarioIndex: bucket->second) {
-                    auto &sweep = sweeps[scenarioIndex];
-                    sweep.recent.push_back(score);
-                    if (sweep.recent.size() > kRecentRuns) sweep.recent.pop_front();
-                    // Summed oldest first, as projectScenario does, so the last point equals its average.
-                    const double total = std::accumulate(sweep.recent.begin(), sweep.recent.end(), 0.0);
-                    const double recentUpdated =
-                        normalizedOf(scenarioIndex, total / static_cast<double>(sweep.recent.size()));
-                    recentRunning += recentUpdated - std::exchange(sweep.recentNormalized, recentUpdated);
-
-                    if (sweep.best && score <= *sweep.best) continue;
-                    sweep.best = score;
-                    const double updated = normalizedOf(scenarioIndex, score);
-                    normalizedRunning += updated - std::exchange(sweep.bestNormalized, updated);
-                    improved = true;
-                }
-            }
-            if (improved) projection.averageRankHistory.push_back({day, normalizedRunning / entryCount});
-            if (played) projection.recentAverageRankHistory.push_back({day, recentRunning / entryCount});
-        }
+        sweepRankHistory(runFacts, runs.entriesByHash, tree.states, projection);
         return projection;
     }
 }
