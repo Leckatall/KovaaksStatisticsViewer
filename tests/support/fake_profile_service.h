@@ -50,6 +50,7 @@ namespace ksv::tests_support {
         mutable std::vector<domain::ScenarioId> requested_rolling_scenarios;
         mutable int fact_request_count = 0;
         mutable int completion_history_calls = 0;
+        mutable int run_count_calls = 0;
         mutable domain::ScenarioId requested_scenario;
         std::vector<std::function<void()>> stored_callbacks;
         std::function<void()> stored_build_requester;
@@ -140,6 +141,7 @@ namespace ksv::tests_support {
         }
 
         [[nodiscard]] std::optional<std::size_t> getRunCount(const domain::ScenarioId &scenario) const override {
+            ++run_count_calls;
             const auto it = run_counts.find(scenario);
             return it == run_counts.end() ? std::nullopt : std::optional{it->second};
         }

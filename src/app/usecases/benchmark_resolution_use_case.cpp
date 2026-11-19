@@ -100,6 +100,34 @@ namespace ksv::application {
             return benchmark;
         }
 
+        std::vector<domain::ScenarioResolution> resolveAgainst(
+            const domain::Benchmark &benchmark, const ScenarioCatalogue &catalogue) {
+            std::vector<domain::ScenarioResolution> resolutions;
+            forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
+                for (const auto &entry: entries) {
+                    domain::ScenarioResolution resolution{entry.id};
+                    const auto mapped = domain::mappedScenarioHashes(entry.hash, entry.additionalHashes);
+                    if (const auto found = catalogue.byName.find(domain::scenarioNameKey(entry.name));
+                        found != catalogue.byName.end())
+                        resolution.candidates = found->second;
+                    if (!mapped.empty()) {
+                        resolution.hash = entry.hash;
+                        resolution.additionalHashes = entry.additionalHashes;
+                        resolution.state = std::ranges::any_of(mapped, [&](const auto &hash) {
+                            return catalogue.knownHashes.contains(hash);
+                        }) ? domain::ScenarioMatchState::Resolved : domain::ScenarioMatchState::MappedUnavailable;
+                    } else if (!resolution.candidates.empty()) {
+                        resolution.state = resolution.candidates.size() == 1
+                                               ? domain::ScenarioMatchState::AutoMappable
+                                               : domain::ScenarioMatchState::Ambiguous;
+                    }
+                    resolutions.push_back(std::move(resolution));
+                }
+                return false;
+            });
+            return resolutions;
+        }
+
         AutomaticMappingWriteError toWriteError(std::optional<data::BenchmarkSaveError> error) {
             return error == data::BenchmarkSaveError::Conflict ? AutomaticMappingWriteError::Conflict
                                                               : AutomaticMappingWriteError::WriteFailed;
@@ -142,31 +170,7 @@ namespace ksv::application {
 
     std::vector<domain::ScenarioResolution> BenchmarkResolutionUseCase::resolve(
         const domain::Benchmark &benchmark) const {
-        const auto catalogue = buildCatalogue(*m_profile);
-        std::vector<domain::ScenarioResolution> resolutions;
-        forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
-            for (const auto &entry: entries) {
-                domain::ScenarioResolution resolution{entry.id};
-                const auto mapped = domain::mappedScenarioHashes(entry.hash, entry.additionalHashes);
-                if (const auto found = catalogue.byName.find(domain::scenarioNameKey(entry.name));
-                    found != catalogue.byName.end())
-                    resolution.candidates = found->second;
-                if (!mapped.empty()) {
-                    resolution.hash = entry.hash;
-                    resolution.additionalHashes = entry.additionalHashes;
-                    resolution.state = std::ranges::any_of(mapped, [&](const auto &hash) {
-                        return catalogue.knownHashes.contains(hash);
-                    }) ? domain::ScenarioMatchState::Resolved : domain::ScenarioMatchState::MappedUnavailable;
-                } else if (!resolution.candidates.empty()) {
-                    resolution.state = resolution.candidates.size() == 1
-                                           ? domain::ScenarioMatchState::AutoMappable
-                                           : domain::ScenarioMatchState::Ambiguous;
-                }
-                resolutions.push_back(std::move(resolution));
-            }
-            return false;
-        });
-        return resolutions;
+        return resolveAgainst(benchmark, buildCatalogue(*m_profile));
     }
 
     domain::Benchmark BenchmarkResolutionUseCase::withAutomaticMappings(const domain::Benchmark &benchmark) const {
@@ -191,7 +195,7 @@ namespace ksv::application {
             for (const auto &entry: snapshot->entries) {
                 const auto *loaded = std::get_if<data::LoadedBenchmark>(&entry.content);
                 if (!loaded) continue;
-                next.resolutions[loaded->benchmark.id] = resolve(loaded->benchmark);
+                next.resolutions[loaded->benchmark.id] = resolveAgainst(loaded->benchmark, catalogue);
 
                 // A leased benchmark keeps its derived state current but is held back from
                 // application-initiated background persistence until the lease is released.

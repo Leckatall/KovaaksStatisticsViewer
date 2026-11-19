@@ -116,6 +116,19 @@ TEST(BenchmarkResolutionUseCase, DerivesMappedUnavailableUnresolvedAmbiguousAndU
     EXPECT_EQ(snap.scenarioCatalogue.back().hash, "hU");
 }
 
+TEST(BenchmarkResolutionUseCase, ReconcilePassQueriesEachScenarioOnceHoweverManyBenchmarksAreLoaded) {
+    Fixture f;
+    f.played("Alpha", "hA");
+    f.played("Beta", "hB");
+    f.library({benchmarkWith("b1", {benchmarkEntry("e1", "Alpha", std::string{"hA"}, {})}),
+               benchmarkWith("b2", {benchmarkEntry("e2", "Beta", std::string{"hB"}, {})}),
+               benchmarkWith("b3", {benchmarkEntry("e3", "Alpha", std::string{"hA"}, {})})});
+
+    const auto useCase = f.build();
+
+    EXPECT_EQ(f.profile->run_count_calls, 2);
+}
+
 TEST(BenchmarkResolutionUseCase, UniqueMappingsSubmitOneCompleteReplacementBatch) {
     Fixture f;
     f.played("Alpha", "hA");

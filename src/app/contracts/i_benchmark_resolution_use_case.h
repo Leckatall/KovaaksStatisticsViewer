@@ -33,6 +33,8 @@ namespace ksv::application {
         // persistence until the lease is cleared with `std::nullopt`.
         virtual void setEditLease(std::optional<domain::BenchmarkId> benchmark) = 0;
 
+        // Fires after every benchmark-library or profile change, once `snapshot()` reflects that
+        // change, so a subscriber needing both streams can rely on this callback alone.
         virtual void onChanged(std::function<void()> callback) = 0;
     };
 }

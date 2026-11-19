@@ -235,6 +235,28 @@ TEST(BenchmarkTrackingCache, ProfileAndLibraryChangesReevaluateAndRemovalIsUnava
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
 }
 
+// Resolution already reacts to both streams and republishes, so tracking listening to them as
+// well would evaluate the selected benchmark twice per update.
+TEST(BenchmarkTrackingCache, OneProfileChangeEvaluatesTheSelectedBenchmarkOnce) {
+    Fixture fixture;
+    fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
+    fixture.build();
+    fixture.tracking->select(BenchmarkId{"b1"});
+    const int before = fixture.profile->fact_request_count;
+    fixture.profile->notifyProfileChanged();
+    EXPECT_EQ(fixture.profile->fact_request_count, before + 1);
+}
+
+TEST(BenchmarkTrackingCache, OneLibraryChangeEvaluatesTheSelectedBenchmarkOnce) {
+    Fixture fixture;
+    fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
+    fixture.build();
+    fixture.tracking->select(BenchmarkId{"b1"});
+    const int before = fixture.profile->fact_request_count;
+    fixture.benchmarks->refresh();
+    EXPECT_EQ(fixture.profile->fact_request_count, before + 1);
+}
+
 TEST(BenchmarkTrackingCache, DefinitionEditReconstructsTheCachedProjection) {
     Fixture fixture;
     fixture.known("Alpha", "h1");

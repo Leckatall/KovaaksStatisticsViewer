@@ -73,9 +73,7 @@ namespace ksv::application {
                 notifyChanged();
             });
         }
-        m_benchmarks->onChanged(reevaluate);
         m_resolution->onChanged(reevaluate);
-        m_profileService->onProfileChanged(reevaluate);
         m_configuration->onChanged([this](const GraphConfigurationChange &change) {
             const auto &rank = change.sectionsOf(GraphKey::BenchmarkRank);
             const auto &recentRank = change.sectionsOf(GraphKey::BenchmarkRecentRank);
