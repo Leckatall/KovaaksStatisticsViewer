@@ -40,7 +40,7 @@ TEST(BenchmarkProjectionTiming, AFullProjectionOverALargeProfileStaysWellUnderAS
         benchmark.uncategorized.push_back(benchmarkEntry(
             entryId, "Scenario " + hash, hash,
             {{"bronze", 100.0}, {"silver", 200.0}, {"gold", 300.0}}));
-        resolutions.push_back(ksv::tests_support::resolvedEntry(entryId, hash));
+        resolutions.push_back(ksv::tests_support::resolvedEntry(entryId));
         for (int run = 0; run < kRunsPerScenario; ++run) {
             profile.addRun(makeRun(hash, (1000 + run) * kDay + scenario,
                                    static_cast<float>(run) * 0.2F, 0, 0, 60.0F));

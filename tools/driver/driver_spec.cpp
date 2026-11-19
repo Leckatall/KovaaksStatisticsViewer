@@ -531,22 +531,23 @@ namespace ksv::driver {
         const auto entry = [&](const BenchmarkScenarioRef &ref) {
             domain::ScenarioEntry result;
             result.name = ref.name;
-            result.hash = ref.hash;
+            std::optional<std::string> hash = ref.hash;
             // A name maps to its scenario only when exactly one scenario has it; a
             // shared name stays unresolved, as the app would leave it ambiguous.
-            if (!result.hash) {
+            if (!hash) {
                 if (const auto found = hashesByName.find(ref.name); found != hashesByName.end() && found->second.size() == 1) {
-                    result.hash = *found->second.begin();
+                    hash = *found->second.begin();
                 }
             }
-            std::string id = "entry-" + (result.hash ? *result.hash : slug(QString::fromStdString(ref.name)));
+            if (hash) result.hashes.push_back(*hash);
+            std::string id = "entry-" + (hash ? *hash : slug(QString::fromStdString(ref.name)));
             for (int suffix = 2; usedIds.contains(QString::fromStdString(id)); ++suffix) {
-                id = "entry-" + (result.hash ? *result.hash : slug(QString::fromStdString(ref.name))) + "-" +
+                id = "entry-" + (hash ? *hash : slug(QString::fromStdString(ref.name))) + "-" +
                      std::to_string(suffix);
             }
             usedIds.insert(QString::fromStdString(id));
             result.id = domain::ScenarioEntryId{id};
-            const auto found = result.hash ? best.find(*result.hash) : best.end();
+            const auto found = hash ? best.find(*hash) : best.end();
             const double base = found != best.end() && found->second > 0 ? found->second : 1000.0;
             for (const auto &tier: spec.tiers) {
                 result.thresholds.push_back({domain::TierId{tier.id}, std::round(base * tier.factor)});

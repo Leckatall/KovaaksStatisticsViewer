@@ -279,13 +279,19 @@ namespace ksv::application {
         const std::vector<domain::ScenarioResolution> resolutions =
             entry != resolutionSnapshot.resolutions.end() ? entry->second
                                                           : std::vector<domain::ScenarioResolution>{};
-        // Unique resolved hashes only. The name is left empty deliberately: ScenarioId equality,
+        // Unique mapped hashes only. The name is left empty deliberately: ScenarioId equality,
         // ordering and hashing all ignore it, so the profile lookup needs nothing else.
         std::vector<domain::ScenarioId> scenarios;
         std::unordered_set<std::string> hashes;
-        for (const auto &resolution: resolutions) {
-            for (const auto &hash: domain::mappedScenarioHashes(resolution.hash, resolution.additionalHashes))
-                if (hashes.insert(hash).second) scenarios.push_back({{}, hash});
+        const auto collectHashes = [&](const std::vector<domain::ScenarioEntry> &entries) {
+            for (const auto &entry: entries)
+                for (const auto &hash: entry.hashes)
+                    if (hashes.insert(hash).second) scenarios.push_back({{}, hash});
+        };
+        collectHashes(loaded.benchmark.uncategorized);
+        for (const auto &category: loaded.benchmark.categories) {
+            collectHashes(category.scenarios);
+            for (const auto &subcategory: category.subcategories) collectHashes(subcategory.scenarios);
         }
         const auto facts = m_profileService->getRunFacts(scenarios);
         Evaluation evaluation;

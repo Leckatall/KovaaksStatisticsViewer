@@ -116,11 +116,11 @@ namespace {
         ASSERT_EQ(benchmark.categories.size(), 1U);
         const auto &entries = benchmark.categories[0].scenarios;
         ASSERT_EQ(entries.size(), 4U);
-        EXPECT_EQ(entries[0].hash, std::optional<std::string>("spec-known"));
-        EXPECT_FALSE(entries[1].hash.has_value());  // no such scenario
+        EXPECT_EQ(entries[0].hashes, std::vector<std::string>{"spec-known"});
+        EXPECT_TRUE(entries[1].hashes.empty());  // no such scenario
         EXPECT_EQ(entries[1].thresholds[1].score, 1000.0);
-        EXPECT_FALSE(entries[2].hash.has_value());  // two scenarios share the name
-        EXPECT_EQ(entries[3].hash, std::optional<std::string>("twin-b"));
+        EXPECT_TRUE(entries[2].hashes.empty());  // two scenarios share the name
+        EXPECT_EQ(entries[3].hashes, std::vector<std::string>{"twin-b"});
         EXPECT_NE(entries[2].id, entries[3].id);
     }
 
@@ -600,11 +600,11 @@ namespace {
         std::vector<domain::ScenarioResolution> resolutions;
         std::vector<domain::ScenarioId> scenarios;
         const auto resolve = [&](const domain::ScenarioEntry &entry) {
-            const bool found = entry.hash && played.contains(*entry.hash);
+            const bool found = !entry.hashes.empty() && played.contains(entry.hashes.front());
             resolutions.push_back({entry.id, found ? domain::ScenarioMatchState::Resolved
                                                    : domain::ScenarioMatchState::MappedUnavailable,
-                                   entry.hash, {}});
-            if (found) scenarios.push_back({{}, *entry.hash});
+                                   {}});
+            if (found) scenarios.push_back({{}, entry.hashes.front()});
         };
         for (const auto &category: loaded.benchmark.categories) {
             std::ranges::for_each(category.scenarios, resolve);

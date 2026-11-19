@@ -70,14 +70,13 @@ namespace ksv::application {
             std::unordered_set<std::string> taken;
             forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
                 for (const auto &entry: entries)
-                    for (const auto &hash: domain::mappedScenarioHashes(entry.hash, entry.additionalHashes))
-                        taken.insert(hash);
+                    taken.insert(entry.hashes.begin(), entry.hashes.end());
                 return false;
             });
             std::vector<AutoMapping> mappings;
             forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
                 for (const auto &entry: entries) {
-                    if (!domain::mappedScenarioHashes(entry.hash, entry.additionalHashes).empty()) continue;
+                    if (!entry.hashes.empty()) continue;
                     const auto found = byName.find(domain::scenarioNameKey(entry.name));
                     if (found == byName.end() || found->second.size() != 1) continue;
                     const auto &candidate = found->second.front();
@@ -93,7 +92,7 @@ namespace ksv::application {
         domain::Benchmark applyAutoMappings(domain::Benchmark benchmark, const std::vector<AutoMapping> &mappings) {
             for (const auto &mapping: mappings) {
                 if (auto *target = findEntry(benchmark, mapping.entryId)) {
-                    target->hash = mapping.hash;
+                    target->hashes = {mapping.hash};
                     target->name = mapping.name;
                 }
             }
@@ -106,14 +105,11 @@ namespace ksv::application {
             forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
                 for (const auto &entry: entries) {
                     domain::ScenarioResolution resolution{entry.id};
-                    const auto mapped = domain::mappedScenarioHashes(entry.hash, entry.additionalHashes);
                     if (const auto found = catalogue.byName.find(domain::scenarioNameKey(entry.name));
                         found != catalogue.byName.end())
                         resolution.candidates = found->second;
-                    if (!mapped.empty()) {
-                        resolution.hash = entry.hash;
-                        resolution.additionalHashes = entry.additionalHashes;
-                        resolution.state = std::ranges::any_of(mapped, [&](const auto &hash) {
+                    if (!entry.hashes.empty()) {
+                        resolution.state = std::ranges::any_of(entry.hashes, [&](const auto &hash) {
                             return catalogue.knownHashes.contains(hash);
                         }) ? domain::ScenarioMatchState::Resolved : domain::ScenarioMatchState::MappedUnavailable;
                     } else if (!resolution.candidates.empty()) {

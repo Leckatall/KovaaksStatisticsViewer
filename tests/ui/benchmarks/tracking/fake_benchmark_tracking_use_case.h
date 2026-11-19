@@ -153,8 +153,8 @@ namespace ksv::tests_ui {
         definition.name = "Voltaic";
         definition.tiers = {vtTier("t1", "Bronze"), vtTier("t2", "Silver"), vtTier("t3", "Gold")};
 
-        domain::ScenarioEntry s1{domain::ScenarioEntryId{"s1"}, "1w6ts", std::string{"h1"}, {}};
-        domain::ScenarioEntry s2{domain::ScenarioEntryId{"s2"}, "pasu", std::nullopt, {}};
+        domain::ScenarioEntry s1{domain::ScenarioEntryId{"s1"}, "1w6ts", std::vector<std::string>{"h1"}, {}};
+        domain::ScenarioEntry s2{domain::ScenarioEntryId{"s2"}, "pasu", {}, {}};
         domain::Category clicking{domain::GroupId{"c1"}, "Clicking", {}, {s1}, {}};
         definition.categories = {clicking};
         definition.uncategorized = {s2};
@@ -221,11 +221,11 @@ namespace ksv::tests_ui {
         definition.name = "Voltaic";
         definition.tiers = {vtTier("t1", "Bronze"), vtTier("t2", "Silver"), vtTier("t3", "Gold")};
 
-        domain::ScenarioEntry u1{domain::ScenarioEntryId{"u1"}, "PlainOne", std::nullopt, {}};
-        domain::ScenarioEntry u2{domain::ScenarioEntryId{"u2"}, "PlainTwo", std::nullopt, {}};
-        domain::ScenarioEntry e1{domain::ScenarioEntryId{"e1"}, "1w6ts", std::string{"h1"}, {}};
-        domain::ScenarioEntry e2{domain::ScenarioEntryId{"e2"}, "pasu", std::string{"gone"}, {}};
-        domain::ScenarioEntry e3{domain::ScenarioEntryId{"e3"}, "smoothbot", std::string{"h3"}, {}};
+        domain::ScenarioEntry u1{domain::ScenarioEntryId{"u1"}, "PlainOne", {}, {}};
+        domain::ScenarioEntry u2{domain::ScenarioEntryId{"u2"}, "PlainTwo", {}, {}};
+        domain::ScenarioEntry e1{domain::ScenarioEntryId{"e1"}, "1w6ts", std::vector<std::string>{"h1"}, {}};
+        domain::ScenarioEntry e2{domain::ScenarioEntryId{"e2"}, "pasu", std::vector<std::string>{"gone"}, {}};
+        domain::ScenarioEntry e3{domain::ScenarioEntryId{"e3"}, "smoothbot", std::vector<std::string>{"h3"}, {}};
         definition.uncategorized = {u1, u2};
 
         domain::Category clicking{domain::GroupId{"c1"}, "Clicking",

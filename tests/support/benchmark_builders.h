@@ -17,29 +17,28 @@ namespace ksv::tests_support {
     inline domain::ScenarioEntry benchmarkEntry(
         const std::string &id, const std::string &name, std::optional<std::string> hash,
         const std::vector<std::pair<std::string, double> > &thresholds) {
-        domain::ScenarioEntry entry{domain::ScenarioEntryId{id}, name, std::move(hash), {}};
+        domain::ScenarioEntry entry{domain::ScenarioEntryId{id}, name, {}, {}};
+        if (hash && !hash->empty()) entry.hashes.push_back(std::move(*hash));
         for (const auto &[tier, score]: thresholds) entry.thresholds.push_back({domain::TierId{tier}, score});
         return entry;
     }
 
-    inline domain::ScenarioResolution resolvedEntry(const std::string &id, const std::string &hash) {
-        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Resolved, hash, {}};
+    inline domain::ScenarioResolution resolvedEntry(const std::string &id) {
+        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Resolved, {}};
     }
     inline domain::ScenarioResolution unresolvedEntry(const std::string &id) {
-        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Unresolved, std::nullopt, {}};
+        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Unresolved, {}};
     }
-    inline domain::ScenarioResolution mappedUnavailableEntry(const std::string &id, const std::string &hash) {
-        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::MappedUnavailable, hash, {}};
+    inline domain::ScenarioResolution mappedUnavailableEntry(const std::string &id) {
+        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::MappedUnavailable, {}};
     }
     inline domain::ScenarioResolution ambiguousEntry(const std::string &id, const std::vector<std::string> &hashes) {
-        domain::ScenarioResolution value{domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Ambiguous,
-                                         std::nullopt, {}};
+        domain::ScenarioResolution value{domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Ambiguous, {}};
         for (const auto &hash: hashes) value.candidates.push_back({hash, 1, std::nullopt});
         return value;
     }
     inline domain::ScenarioResolution autoMappableEntry(const std::string &id, const std::string &hash) {
-        domain::ScenarioResolution value{domain::ScenarioEntryId{id}, domain::ScenarioMatchState::AutoMappable,
-                                         std::nullopt, {}};
+        domain::ScenarioResolution value{domain::ScenarioEntryId{id}, domain::ScenarioMatchState::AutoMappable, {}};
         value.candidates.push_back({hash, 1, std::nullopt});
         return value;
     }

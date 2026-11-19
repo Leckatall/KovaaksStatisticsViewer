@@ -17,7 +17,8 @@ namespace {
 
     ScenarioEntry entry(std::string id, std::string name, std::vector<Threshold> thresholds,
                         std::optional<std::string> hash = std::nullopt) {
-        return ScenarioEntry{ScenarioEntryId{std::move(id)}, std::move(name), std::move(hash),
+        return ScenarioEntry{ScenarioEntryId{std::move(id)}, std::move(name),
+                             hash ? std::vector<std::string>{std::move(*hash)} : std::vector<std::string>{},
                              std::move(thresholds)};
     }
 
@@ -149,7 +150,7 @@ TEST(BenchmarkValidation, DuplicateMembershipByNameAndByHashAreIncomplete) {
     EXPECT_TRUE(hasCode(validateBenchmark(byName), BenchmarkIssueCode::DuplicateScenarioMembership));
 
     auto byHash = trackable();
-    byHash.uncategorized[0].hash = "HASH";
+    byHash.uncategorized[0].hashes = {"HASH"};
     byHash.uncategorized.push_back(
         entry("s2", "Other", {Threshold{TierId{"t1"}, 50.0}}, std::string{"HASH"}));
     EXPECT_TRUE(hasCode(validateBenchmark(byHash), BenchmarkIssueCode::DuplicateResolvedHash));

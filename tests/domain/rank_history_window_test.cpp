@@ -86,7 +86,7 @@ TEST(RankHistoryWindow, WindowedValuesAreTheFullEvaluationsValues) {
     const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 150.0F), benchmarkFact("two", 101 * kDay, 120.0F),
                                    benchmarkFact("one", 105 * kDay, 260.0F), benchmarkFact("two", 108 * kDay, 300.0F)};
     const auto projection = evaluateBenchmark(definition, {Completeness::Trackable, {}},
-                                              {resolvedEntry("one", "one"), resolvedEntry("two", "two")}, facts, {});
+                                              {resolvedEntry("one"), resolvedEntry("two")}, facts, {});
     ASSERT_EQ(projection.averageRankHistory.size(), 4U);
 
     // A rank already reached before the window keeps the value the whole history gave it.

@@ -99,7 +99,6 @@ TEST(BenchmarkResolutionUseCase, DerivesMappedUnavailableUnresolvedAmbiguousAndU
     EXPECT_EQ(forEntry(rs, "uni").state, ScenarioMatchState::AutoMappable);
     // A persisted hash is never re-decided by name, even with two same-name candidates.
     EXPECT_EQ(forEntry(rs, "pin").state, ScenarioMatchState::Resolved);
-    EXPECT_EQ(forEntry(rs, "pin").hash, std::optional<std::string>{"hP"});
 
     ASSERT_EQ(forEntry(rs, "many").candidates.size(), 2U);
     EXPECT_EQ(forEntry(rs, "many").candidates[0].hash, "hMA");
@@ -152,12 +151,12 @@ TEST(BenchmarkResolutionUseCase, UniqueMappingsSubmitOneCompleteReplacementBatch
     EXPECT_EQ(first->token.filename, "b1.json");
     EXPECT_EQ(first->token.digest, "d-b1");
     ASSERT_EQ(first->benchmark.uncategorized.size(), 1U);
-    EXPECT_EQ(first->benchmark.uncategorized[0].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(first->benchmark.uncategorized[0].hashes, std::vector<std::string>{"hA"});
 
     EXPECT_EQ(second->token.id.value, "b2");
     EXPECT_EQ(second->token.filename, "b2.json");
     EXPECT_EQ(second->token.digest, "d-b2");
-    EXPECT_EQ(second->benchmark.uncategorized[0].hash, std::optional<std::string>{"hB"});
+    EXPECT_EQ(second->benchmark.uncategorized[0].hashes, std::vector<std::string>{"hB"});
 }
 
 TEST(BenchmarkResolutionUseCase, AutoMappingNeverDuplicatesAnAlreadyUsedHash) {
@@ -176,7 +175,7 @@ TEST(BenchmarkResolutionUseCase, AutoMappingNeverDuplicatesAnAlreadyUsedHash) {
     for (const auto &batch: f.benchmarks->batchRequests)
         for (const auto &request: batch)
             for (const auto &entry: request.benchmark.uncategorized)
-                EXPECT_FALSE(entry.id.value == "dupe" && entry.hash == std::optional<std::string>{"h1"});
+                EXPECT_FALSE(entry.id.value == "dupe" && entry.hashes == std::vector<std::string>{"h1"});
 }
 
 TEST(BenchmarkResolutionUseCase, ProfileOnlyChangePublishesDerivedStateWithoutWrite) {
@@ -289,7 +288,7 @@ TEST(BenchmarkResolutionUseCase, ReleasingLeaseReconcilesLatestAcceptedBenchmark
     EXPECT_EQ(released[0].token.filename, "b1.json");
     EXPECT_EQ(released[0].token.digest, "d-b1-v2");  // latest, never the pre-refresh "d-b1"
     ASSERT_EQ(released[0].benchmark.uncategorized.size(), 1U);
-    EXPECT_EQ(released[0].benchmark.uncategorized[0].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(released[0].benchmark.uncategorized[0].hashes, std::vector<std::string>{"hA"});
 
     for (const auto &batch: f.benchmarks->batchRequests)
         for (const auto &request: batch)
@@ -337,9 +336,9 @@ TEST(BenchmarkResolutionUseCase, MatchesNamesIgnoringCaseAndSurroundingWhitespac
     ASSERT_EQ(f.benchmarks->batchRequests.size(), 1U);
     const auto &written = f.benchmarks->batchRequests.front().at(0).benchmark.uncategorized;
     ASSERT_EQ(written.size(), 2U);
-    EXPECT_EQ(written[0].hash, std::optional<std::string>{"hT"});
+    EXPECT_EQ(written[0].hashes, std::vector<std::string>{"hT"});
     EXPECT_EQ(written[0].name, "1wall6targets TE");
-    EXPECT_EQ(written[1].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(written[1].hashes, std::vector<std::string>{"hA"});
     EXPECT_EQ(written[1].name, "Air Angelic 4");
 }
 
@@ -375,10 +374,10 @@ TEST(BenchmarkResolutionUseCase, WithAutomaticMappingsLinksAWorkingCopyEvenWhile
                              benchmarkEntry("none", "Unplayed", std::nullopt, {})}));
 
     ASSERT_EQ(linked.uncategorized.size(), 3U);
-    EXPECT_EQ(linked.uncategorized[0].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(linked.uncategorized[0].hashes, (std::vector<std::string>{"hA"}));
     EXPECT_EQ(linked.uncategorized[0].name, "Alpha");
-    EXPECT_EQ(linked.uncategorized[1].hash, std::nullopt);
-    EXPECT_EQ(linked.uncategorized[2].hash, std::nullopt);
+    EXPECT_TRUE(linked.uncategorized[1].hashes.empty());
+    EXPECT_TRUE(linked.uncategorized[2].hashes.empty());
     EXPECT_EQ(linked.uncategorized[2].name, "Unplayed");
     EXPECT_TRUE(f.benchmarks->batchRequests.empty());
 }
@@ -388,29 +387,26 @@ TEST(BenchmarkResolutionUseCase, LinkedMappingsSurviveUnavailablePrimaryAndNewSa
     f.played("Alpha", "new");
     f.played("Alpha", "future");
     auto entry = benchmarkEntry("entry", "Alpha", "old", {});
-    entry.additionalHashes = {"new"};
+    entry.hashes.push_back("new");
     f.library({benchmarkWith("b1", {entry})});
     const auto useCase = f.build();
     const auto snapshot = useCase->snapshot();
     const auto &resolution = forEntry(resolutionsFor(snapshot, "b1"), "entry");
     EXPECT_EQ(resolution.state, ScenarioMatchState::Resolved);
-    EXPECT_EQ(resolution.hash, std::optional<std::string>{"old"});
-    EXPECT_EQ(resolution.additionalHashes, (std::vector<std::string>{"new"}));
     EXPECT_EQ(resolution.candidates.size(), 2U);
     f.profile->scenarios.clear();
     const auto missing = useCase->resolve(benchmarkWith("b1", {entry}));
     EXPECT_EQ(missing.front().state, ScenarioMatchState::MappedUnavailable);
-    EXPECT_EQ(missing.front().additionalHashes, (std::vector<std::string>{"new"}));
 }
 
 TEST(BenchmarkResolutionUseCase, AutomaticMappingCannotClaimAnExplicitAdditionalHash) {
     Fixture f;
     f.played("Candidate", "new");
     auto entry = benchmarkEntry("entry", "Alpha", "old", {});
-    entry.additionalHashes = {"new"};
+    entry.hashes.push_back("new");
     const auto value = benchmarkWith("b1", {entry, benchmarkEntry("other", "Candidate", std::nullopt, {})});
     const auto useCase = f.build();
     const auto mapped = useCase->withAutomaticMappings(value);
-    EXPECT_FALSE(mapped.uncategorized[1].hash);
-    EXPECT_EQ(mapped.uncategorized[0].additionalHashes, (std::vector<std::string>{"new"}));
+    EXPECT_TRUE(mapped.uncategorized[1].hashes.empty());
+    EXPECT_EQ(mapped.uncategorized[0].hashes, (std::vector<std::string>{"old", "new"}));
 }

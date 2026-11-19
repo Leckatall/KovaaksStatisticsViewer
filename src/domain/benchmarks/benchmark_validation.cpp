@@ -97,7 +97,7 @@ namespace ksv::domain {
                 issues.push_back({BenchmarkIssueCode::MissingScenarioName, entry->id});
             else if (!names.insert(entry->name).second)
                 issues.push_back({BenchmarkIssueCode::DuplicateScenarioMembership, entry->id});
-            for (const auto &hash: mappedScenarioHashes(entry->hash, entry->additionalHashes))
+            for (const auto &hash: entry->hashes)
                 if (!hashes.insert(hash).second)
                     issues.push_back({BenchmarkIssueCode::DuplicateResolvedHash, entry->id});
             if (!def.tiers.empty()) validateEntryThresholds(*entry, def.tiers, issues);

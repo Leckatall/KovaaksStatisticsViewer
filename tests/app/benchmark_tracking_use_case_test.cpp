@@ -112,7 +112,7 @@ TEST(BenchmarkTracking, RequestsUniqueResolvedHashesAndTheDefaultRollingWindow) 
 TEST(BenchmarkTracking, DoesNotRequestUnresolvedEntries) {
     Fixture fixture;
     auto value = benchmark("b1");
-    value.uncategorized[1].hash.reset();
+    value.uncategorized[1].hashes.clear();
     fixture.repo->nextScan = {snapshotFor(value), std::nullopt};
     fixture.build();
     fixture.tracking->select(BenchmarkId{"b1"});
@@ -904,7 +904,7 @@ TEST(BenchmarkTrackingDefaultSelection, WithoutSettingsOnlyTheSoleBenchmarkRuleA
 TEST(BenchmarkTracking, RequestsEveryExplicitLinkedHashOnce) {
     Fixture fixture;
     auto value = benchmark("b1");
-    value.uncategorized[0].additionalHashes = {"new", "h2", "new"};
+    value.uncategorized[0].hashes = {"h1", "new", "h2"};
     fixture.repo->nextScan = {snapshotFor(value), std::nullopt};
     fixture.build();
     fixture.tracking->select(BenchmarkId{"b1"});

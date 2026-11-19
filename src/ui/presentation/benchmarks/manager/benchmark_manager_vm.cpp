@@ -193,7 +193,7 @@ namespace ksv::presentation {
                 BenchmarkTableRow row;
                 row.entryId = idString(entry.id);
                 row.name = QString::fromStdString(entry.name);
-                for (const auto &hash: domain::mappedScenarioHashes(entry.hash, entry.additionalHashes))
+                for (const auto &hash: entry.hashes)
                     row.mappedHashes.push_back(QString::fromStdString(hash));
                 row.scenarioIssues = issueTexts(IssueIndex::lookup(issues.byEntry, entry.id.value));
                 row.category = category;

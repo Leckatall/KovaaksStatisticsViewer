@@ -163,14 +163,14 @@ namespace ksv::domain {
     BenchmarkEditResult BenchmarkEditor::addUnplayedScenario(const std::string &name) {
         if (nameExists(m_target, name)) return {BenchmarkEditError::DuplicateScenarioName};
         const auto id = ScenarioEntryId{newId()};
-        m_target.uncategorized.push_back(ScenarioEntry{id, name, std::nullopt, {}});
+        m_target.uncategorized.push_back(ScenarioEntry{id, name, {}, {}});
         return {std::nullopt, std::nullopt, std::nullopt, id};
     }
 
     BenchmarkEditResult BenchmarkEditor::addKnownScenario(const std::string &name, const std::string &hash) {
         if (nameExists(m_target, name)) return {BenchmarkEditError::DuplicateScenarioName};
         const auto id = ScenarioEntryId{newId()};
-        m_target.uncategorized.push_back(ScenarioEntry{id, name, hash, {}});
+        m_target.uncategorized.push_back(ScenarioEntry{id, name, hash.empty() ? std::vector<std::string>{} : std::vector{hash}, {}});
         return {std::nullopt, std::nullopt, std::nullopt, id};
     }
 
@@ -185,8 +185,8 @@ namespace ksv::domain {
                                                          const std::optional<std::string> &hash) {
         auto *entry = findEntry(m_target, id);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
-        entry->hash = hash;
-        entry->additionalHashes.clear();
+        entry->hashes.clear();
+        if (hash && !hash->empty()) entry->hashes.push_back(*hash);
         return {};
     }
 
@@ -199,9 +199,10 @@ namespace ksv::domain {
                                                            const std::vector<std::string> &hashes) {
         auto *entry = findEntry(m_target, id);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
-        const auto unique = mappedScenarioHashes(std::nullopt, hashes);
-        entry->hash = unique.empty() ? std::nullopt : std::optional{unique.front()};
-        entry->additionalHashes.assign(unique.empty() ? unique.end() : unique.begin() + 1, unique.end());
+        entry->hashes.clear();
+        for (const auto &hash: hashes)
+            if (!hash.empty() && std::ranges::find(entry->hashes, hash) == entry->hashes.end())
+                entry->hashes.push_back(hash);
         return {};
     }
 
@@ -302,7 +303,7 @@ namespace ksv::domain {
         BenchmarkEditResult result;
         for (std::size_t i = 0; i < count; ++i) {
             const auto id = ScenarioEntryId{newId()};
-            m_target.uncategorized.push_back(ScenarioEntry{id, {}, std::nullopt, {}});
+            m_target.uncategorized.push_back(ScenarioEntry{id, {}, {}, {}});
             result.createdEntries.push_back(id);
         }
         return result;

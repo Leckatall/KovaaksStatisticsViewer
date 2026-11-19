@@ -68,7 +68,7 @@ TEST(BenchmarkManagerUseCaseState, ComposesAcceptedAndResolutionStateWithoutAnyD
     fixture.benchmarks->refreshFailed = false;
     fixture.benchmarks->directory = "/managed/benchmarks";
     fixture.resolution->snapshotValue.scenarioCatalogue = {ScenarioId{"Alpha", "h1"}};
-    fixture.resolution->snapshotValue.resolutions[BenchmarkId{"b1"}] = {resolvedEntry("e1", "h1")};
+    fixture.resolution->snapshotValue.resolutions[BenchmarkId{"b1"}] = {resolvedEntry("e1")};
     fixture.resolution->snapshotValue.automaticWriteFailures[BenchmarkId{"b1"}] =
         AutomaticMappingWriteError::WriteFailed;
     fixture.build();
@@ -310,7 +310,7 @@ TEST(BenchmarkManagerUseCase, RefreshAndManagedDirectoryForwardToTheAcceptedServ
 TEST(BenchmarkManagerUseCase, ResolveWorkingCopyIsStateless) {
     Fixture fixture;
     fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
-    fixture.resolution->resolveResultById["draft-a"] = {resolvedEntry("ea", "ha")};
+    fixture.resolution->resolveResultById["draft-a"] = {resolvedEntry("ea")};
     fixture.resolution->resolveResultById["draft-b"] = {ambiguousEntry("eb", {"hb1", "hb2"})};
     fixture.build();
 

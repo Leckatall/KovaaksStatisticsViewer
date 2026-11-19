@@ -86,15 +86,13 @@ TEST(BenchmarkComposition, RealGraphAutoResolvesAScenarioNameAtStartup) {
     const auto &resolutions = resolutionIt->second;
     ASSERT_EQ(resolutions.size(), 1U);
     EXPECT_EQ(resolutions[0].state, domain::ScenarioMatchState::Resolved);
-    ASSERT_TRUE(resolutions[0].hash.has_value());
-    EXPECT_EQ(*resolutions[0].hash, "3e50391f3c3f484c10a4b8fb362ded17");
     const qt_data::BenchmarkStore reread(benchmarks.path().toStdString());
     const auto rescanned = reread.scan();
     ASSERT_TRUE(rescanned.snapshot.has_value());
     const auto *loaded = std::get_if<LoadedBenchmark>(&rescanned.snapshot->entries[0].content);
     ASSERT_NE(loaded, nullptr);
-    EXPECT_EQ(loaded->benchmark.uncategorized[0].hash,
-              std::optional<std::string>{"3e50391f3c3f484c10a4b8fb362ded17"});
+    EXPECT_EQ(loaded->benchmark.uncategorized[0].hashes,
+              std::vector<std::string>{"3e50391f3c3f484c10a4b8fb362ded17"});
 }
 
 TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
@@ -413,7 +411,8 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
     auto manager = app.benchmarkManagerUseCase();
     const auto hashOf = [&](const data::BenchmarkLibrarySnapshot &snapshot) {
         const auto *loaded = std::get_if<LoadedBenchmark>(&snapshot.entries.front().content);
-        return loaded ? loaded->benchmark.uncategorized.front().hash : std::optional<std::string>{};
+        if (!loaded || loaded->benchmark.uncategorized.front().hashes.empty()) return std::optional<std::string>{};
+        return std::optional{loaded->benchmark.uncategorized.front().hashes.front()};
     };
 
     // No matching perf yet, so nothing auto-maps. Open the benchmark for editing (takes the lease).
@@ -458,8 +457,7 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
         std::get_if<LoadedBenchmark>(&finalScan.snapshot->entries.front().content);
     ASSERT_NE(finalLoaded, nullptr);
     EXPECT_EQ(finalLoaded->benchmark.name, "Auto v2");  // reconciled against the refreshed definition
-    ASSERT_TRUE(finalLoaded->benchmark.uncategorized.front().hash.has_value());
-    EXPECT_EQ(*finalLoaded->benchmark.uncategorized.front().hash, "3e50391f3c3f484c10a4b8fb362ded17");
+    EXPECT_EQ(finalLoaded->benchmark.uncategorized.front().hashes, std::vector<std::string>{"3e50391f3c3f484c10a4b8fb362ded17"});
     EXPECT_EQ(hashOf(*service->snapshot()), std::optional<std::string>{std::string{"3e50391f3c3f484c10a4b8fb362ded17"}});
 }
 
@@ -619,7 +617,7 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     ASSERT_TRUE(seed.has_value());
     domain::Benchmark mapped = seed->benchmark;
     ASSERT_EQ(mapped.uncategorized.size(), 1U);
-    mapped.uncategorized[0].hash = std::optional<std::string>{std::string{"3e50391f3c3f484c10a4b8fb362ded17"}};
+    mapped.uncategorized[0].hashes = {"3e50391f3c3f484c10a4b8fb362ded17"};
     ASSERT_TRUE(manager->save(mapped, seed->token).ok());
     manager->closeEditor();
     QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
@@ -1124,8 +1122,8 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
     ASSERT_EQ(reread.snapshot->entries.size(), 1U);
     const auto *loaded = std::get_if<LoadedBenchmark>(&reread.snapshot->entries.front().content);
     ASSERT_NE(loaded, nullptr);
-    EXPECT_EQ(loaded->benchmark.categories.front().subcategories.front().scenarios.front().additionalHashes,
-              (std::vector<std::string>{otherHash.toStdString(), "unavailable"}));
+    EXPECT_EQ(loaded->benchmark.categories.front().subcategories.front().scenarios.front().hashes,
+              (std::vector<std::string>{std::string{kWallSixHash}, otherHash.toStdString(), "unavailable"}));
     ASSERT_TRUE(vm->setScenarioHashes("s1", {kWallSixHash})["ok"].toBool());
     ASSERT_TRUE(vm->save()["ok"].toBool());
     ASSERT_NE(tracking->projection(), nullptr);

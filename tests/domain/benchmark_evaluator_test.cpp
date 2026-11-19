@@ -48,10 +48,10 @@ namespace {
     }
 
     std::vector<ScenarioResolution> hierarchyResolutions() {
-        return {resolvedEntry("u1", "u1"), resolvedEntry("u2", "u2"),
-                resolvedEntry("d1", "d1"), resolvedEntry("d2", "d2"),
-                resolvedEntry("a1", "a1"), resolvedEntry("a2", "a2"),
-                resolvedEntry("b1", "b1")};
+        return {resolvedEntry("u1"), resolvedEntry("u2"),
+                resolvedEntry("d1"), resolvedEntry("d2"),
+                resolvedEntry("a1"), resolvedEntry("a2"),
+                resolvedEntry("b1")};
     }
 
     std::vector<RunFact> hierarchyScores(
@@ -132,7 +132,7 @@ TEST(BenchmarkEvaluator, ProjectsPersonalBestRecentFiveAndTierProgress) {
     for (int score = 10; score <= 60; score += 10)
         facts.push_back(benchmarkFact("hash", kDay * score, static_cast<float>(score), 3.0F));
     const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
-                                              {resolvedEntry("entry", "hash")}, facts, {});
+                                              {resolvedEntry("entry")}, facts, {});
     const auto &scenario = scenarioNamed(projection, "entry");
     EXPECT_DOUBLE_EQ(*scenario.personalBest, 60.0);
     EXPECT_DOUBLE_EQ(*scenario.recentAverage, 40.0);
@@ -150,14 +150,14 @@ TEST(BenchmarkEvaluator, PersonalBestTimeIsTheEarliestRunThatScoredIt) {
     const auto facts = std::vector{benchmarkFact("hash", 9 * kDay, 80.0F), benchmarkFact("hash", 2 * kDay, 50.0F),
                                    benchmarkFact("hash", 5 * kDay, 80.0F), benchmarkFact("hash", 7 * kDay, 70.0F)};
     const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
-                                              {resolvedEntry("entry", "hash")}, facts, {});
+                                              {resolvedEntry("entry")}, facts, {});
     const auto &scenario = scenarioNamed(projection, "entry");
     EXPECT_DOUBLE_EQ(*scenario.personalBest, 80.0);
     ASSERT_TRUE(scenario.personalBestTime);
     EXPECT_EQ(scenario.personalBestTime->time_since_epoch(), std::chrono::seconds{5 * kDay / 1000});
 
     const auto unplayed = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
-                                            {resolvedEntry("entry", "hash")}, {}, {});
+                                            {resolvedEntry("entry")}, {}, {});
     EXPECT_FALSE(scenarioNamed(unplayed, "entry").personalBestTime);
 }
 
@@ -174,16 +174,16 @@ TEST(BenchmarkEvaluator, UnplayedAndAutoMappableDoNotClaimCandidateFacts) {
     EXPECT_DOUBLE_EQ(scenario.normalizedRank, 0.0);
 }
 
-TEST(BenchmarkEvaluator, CountsAResolvedHashOnlyOnceForTotalPlaytime) {
+TEST(BenchmarkEvaluator, TotalPlaytimeSumsEachEntrysPlaytimeWhenIncompleteEntriesShareAHash) {
     auto value = benchmark();
     value.uncategorized.push_back(benchmarkEntry("copy", "Copy", "hash",
         {{"bronze", 100}, {"silver", 200}, {"gold", 300}}));
     const auto facts = std::vector{benchmarkFact("hash", kDay, 250.0F, 60.0F)};
     const auto projection = evaluateBenchmark(value, {Completeness::Incomplete, {}},
-        {resolvedEntry("entry", "hash"), resolvedEntry("copy", "hash")}, facts, {});
+        {resolvedEntry("entry"), resolvedEntry("copy")}, facts, {});
     EXPECT_DOUBLE_EQ(scenarioNamed(projection, "entry").playtimeSeconds, 60.0);
     EXPECT_DOUBLE_EQ(scenarioNamed(projection, "copy").playtimeSeconds, 60.0);
-    EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 60.0);
+    EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 120.0);
 }
 
 TEST(BenchmarkEvaluator, MappedUnavailableAndBrokenLaddersRetainOnlySafeFacts) {
@@ -191,7 +191,7 @@ TEST(BenchmarkEvaluator, MappedUnavailableAndBrokenLaddersRetainOnlySafeFacts) {
     value.uncategorized.push_back(benchmarkEntry("broken", "Broken", "other", {{"bronze", 100.0}}));
     const auto facts = std::vector{benchmarkFact("other", kDay, 250.0F, 30.0F)};
     const auto projection = evaluateBenchmark(value, {Completeness::Incomplete, {}},
-        {mappedUnavailableEntry("entry", "gone"), resolvedEntry("broken", "other")}, facts, {});
+        {mappedUnavailableEntry("entry"), resolvedEntry("broken")}, facts, {});
     const auto &unavailable = scenarioNamed(projection, "entry");
     EXPECT_EQ(unavailable.matchState, ScenarioMatchState::MappedUnavailable);
     EXPECT_FALSE(unavailable.personalBest);
@@ -207,7 +207,7 @@ TEST(BenchmarkEvaluator, MappedUnavailableAndBrokenLaddersRetainOnlySafeFacts) {
 TEST(BenchmarkEvaluator, MappedUnavailableIgnoresInconsistentRunFacts) {
     const auto facts = std::vector{benchmarkFact("gone", kDay, 250.0F, 30.0F)};
     const auto projection = evaluateBenchmark(benchmark(), {Completeness::Incomplete, {}},
-                                              {mappedUnavailableEntry("entry", "gone")}, facts, {});
+                                              {mappedUnavailableEntry("entry")}, facts, {});
     const auto &scenario = scenarioNamed(projection, "entry");
     EXPECT_EQ(scenario.matchState, ScenarioMatchState::MappedUnavailable);
     EXPECT_FALSE(scenario.personalBest);
@@ -313,7 +313,7 @@ TEST(BenchmarkAverageRankHistory, EmitsOnePointPerImprovingDayAndEndsAtTheCurren
                                    benchmarkFact("two", 102 * kDay, 200.0F),
                                    benchmarkFact("one", 103 * kDay, 50.0F)};
     const auto projection = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
-        {resolvedEntry("one", "one"), resolvedEntry("two", "two")}, facts, {});
+        {resolvedEntry("one"), resolvedEntry("two")}, facts, {});
     ASSERT_EQ(projection.averageRankHistory.size(), 2U);
     EXPECT_EQ(projection.averageRankHistory[0].day.time_since_epoch().count(), 100);
     EXPECT_DOUBLE_EQ(projection.averageRankHistory[0].averageRank, 1.25);
@@ -324,7 +324,7 @@ TEST(BenchmarkAverageRankHistory, EmitsOnePointPerImprovingDayAndEndsAtTheCurren
 }
 
 TEST(BenchmarkAverageRankHistory, IsEmptyWithoutRunsAndNeverDecreases) {
-    const auto resolutions = std::vector{resolvedEntry("one", "one"), resolvedEntry("two", "two")};
+    const auto resolutions = std::vector{resolvedEntry("one"), resolvedEntry("two")};
     EXPECT_TRUE(evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
                                   resolutions, {}, {}).averageRankHistory.empty());
 
@@ -345,7 +345,7 @@ TEST(BenchmarkAverageRankHistory, IsEmptyWithoutRunsAndNeverDecreases) {
 // the benchmark reweights every historical point rather than only future ones.
 TEST(BenchmarkAverageRankHistory, IsRebuiltWhenAnUnplayedScenarioJoinsTheBenchmark) {
     const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 100.0F)};
-    const auto resolutions = std::vector{resolvedEntry("one", "one"), resolvedEntry("two", "two")};
+    const auto resolutions = std::vector{resolvedEntry("one"), resolvedEntry("two")};
     const auto before = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
                                           resolutions, facts, {});
 
@@ -366,7 +366,7 @@ TEST(BenchmarkAverageRankHistory, IsRebuiltWhenAnUnplayedScenarioJoinsTheBenchma
 TEST(BenchmarkAverageRankHistory, IgnoresFactsForNonResolvedMappings) {
     const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 300.0F)};
     const auto projection = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
-        {mappedUnavailableEntry("one", "one"), unresolvedEntry("two")}, facts, {});
+        {mappedUnavailableEntry("one"), unresolvedEntry("two")}, facts, {});
     EXPECT_TRUE(projection.averageRankHistory.empty());
 }
 
@@ -374,10 +374,10 @@ TEST(BenchmarkAverageRankHistory, IsAbsentForIncompleteDefinitionsAndUsesZeroFor
     const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 300.0F),
                                    benchmarkFact("two", 101 * kDay, 300.0F)};
     const auto incomplete = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Incomplete, {}},
-        {resolvedEntry("one", "one"), resolvedEntry("two", "two")}, facts, {});
+        {resolvedEntry("one"), resolvedEntry("two")}, facts, {});
     EXPECT_TRUE(incomplete.averageRankHistory.empty());
     const auto unresolved = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
-        {resolvedEntry("one", "one"), unresolvedEntry("two")}, facts, {});
+        {resolvedEntry("one"), unresolvedEntry("two")}, facts, {});
     ASSERT_EQ(unresolved.averageRankHistory.size(), 1U);
     EXPECT_DOUBLE_EQ(unresolved.averageRankHistory.back().averageRank, 1.5);
 }
@@ -386,7 +386,7 @@ TEST(BenchmarkRecentRankHistory, EmitsAPointOnEveryPlayDayEvenWithoutImprovement
     const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 200.0F),
                                    benchmarkFact("one", 101 * kDay, 100.0F)};
     const auto projection = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
-        {resolvedEntry("one", "one"), resolvedEntry("two", "two")}, facts, {});
+        {resolvedEntry("one"), resolvedEntry("two")}, facts, {});
     ASSERT_EQ(projection.averageRankHistory.size(), 1U);
     const auto &history = projection.recentAverageRankHistory;
     ASSERT_EQ(history.size(), 2U);
@@ -401,7 +401,7 @@ TEST(BenchmarkRecentRankHistory, UsesOnlyTheLatestFiveRunsPerEntryAndCanFall) {
     std::vector<RunFact> facts;
     for (int day = 0; day < 6; ++day) facts.push_back(benchmarkFact("hash", (100 + day) * kDay, scores[day]));
     const auto history = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
-                                           {resolvedEntry("entry", "hash")}, facts, {}).recentAverageRankHistory;
+                                           {resolvedEntry("entry")}, facts, {}).recentAverageRankHistory;
     ASSERT_EQ(history.size(), 6U);
     EXPECT_DOUBLE_EQ(history[0].averageRank, 3.0);
     EXPECT_DOUBLE_EQ(history[1].averageRank, 2.0);
@@ -412,20 +412,18 @@ TEST(BenchmarkRecentRankHistory, UsesOnlyTheLatestFiveRunsPerEntryAndCanFall) {
 
 TEST(BenchmarkRecentRankHistory, CountsAnUnplayedEntryAsZero) {
     const auto projection = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
-        {resolvedEntry("one", "one"), unresolvedEntry("two")}, {benchmarkFact("one", 100 * kDay, 250.0F)}, {});
+        {resolvedEntry("one"), unresolvedEntry("two")}, {benchmarkFact("one", 100 * kDay, 250.0F)}, {});
     ASSERT_EQ(projection.recentAverageRankHistory.size(), 1U);
     EXPECT_DOUBLE_EQ(projection.recentAverageRankHistory[0].averageRank, 1.25);
 }
 
 TEST(BenchmarkRecentRankHistory, MergesRunsAcrossAnEntrysLinkedHashes) {
     auto definition = benchmark();
-    definition.uncategorized.front().additionalHashes = {"new"};
-    auto resolution = resolvedEntry("entry", "hash");
-    resolution.additionalHashes = {"new"};
+    definition.uncategorized.front().hashes = {"hash", "new"};
     std::vector<RunFact> facts;
     for (int day = 1; day <= 6; ++day)
         facts.push_back(benchmarkFact(day % 2 ? "hash" : "new", day * kDay, static_cast<float>(day * 50)));
-    const auto history = evaluateBenchmark(definition, validateBenchmark(definition), {resolution}, facts, {})
+    const auto history = evaluateBenchmark(definition, validateBenchmark(definition), {resolvedEntry("entry")}, facts, {})
         .recentAverageRankHistory;
     const double expected[] = {0.5, 0.75, 1.0, 1.25, 1.5, 2.0};
     ASSERT_EQ(history.size(), 6U);
@@ -443,7 +441,7 @@ TEST(BenchmarkRecentRankHistory, EndsAtTheMeanOfTheCurrentRecentAverages) {
         return left.run_id.start_time < right.run_id.start_time;
     });
     const auto projection = evaluateBenchmark(definition, {Completeness::Trackable, {}},
-        {resolvedEntry("one", "one"), resolvedEntry("two", "two")}, facts, {});
+        {resolvedEntry("one"), resolvedEntry("two")}, facts, {});
 
     double expected = 0.0;
     for (const auto &entry: definition.uncategorized)
@@ -456,7 +454,7 @@ TEST(BenchmarkRecentRankHistory, EndsAtTheMeanOfTheCurrentRecentAverages) {
 
 TEST(BenchmarkRecentRankHistory, IsEmptyForAnIncompleteDefinition) {
     const auto projection = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Incomplete, {}},
-        {resolvedEntry("one", "one"), resolvedEntry("two", "two")}, {benchmarkFact("one", 100 * kDay, 300.0F)}, {});
+        {resolvedEntry("one"), resolvedEntry("two")}, {benchmarkFact("one", 100 * kDay, 300.0F)}, {});
     EXPECT_TRUE(projection.recentAverageRankHistory.empty());
 }
 
@@ -465,7 +463,7 @@ TEST(BenchmarkRecentRankHistory, IgnoresDaysWithOnlyRunsOutsideTheBenchmark) {
                                    benchmarkFact("one", 100 * kDay, 300.0F),
                                    benchmarkFact("unrelated", 101 * kDay, 300.0F)};
     const auto history = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
-        {resolvedEntry("one", "one"), resolvedEntry("two", "two")}, facts, {}).recentAverageRankHistory;
+        {resolvedEntry("one"), resolvedEntry("two")}, facts, {}).recentAverageRankHistory;
     ASSERT_EQ(history.size(), 1U);
     EXPECT_EQ(history[0].day.time_since_epoch().count(), 100);
 }
@@ -473,7 +471,7 @@ TEST(BenchmarkRecentRankHistory, IgnoresDaysWithOnlyRunsOutsideTheBenchmark) {
 TEST(BenchmarkAttainment, AScoreEqualToAThresholdAttainsThatTier) {
     const auto at = [](float score) {
         return scenarioNamed(evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
-                                               {resolvedEntry("entry", "hash")},
+                                               {resolvedEntry("entry")},
                                                {benchmarkFact("hash", kDay, score)}, {}),
                              "entry");
     };
@@ -492,7 +490,7 @@ TEST(BenchmarkAttainment, AScoreEqualToAThresholdAttainsThatTier) {
 
 TEST(BenchmarkAverageRank, WeighsEveryScenarioEquallyAndCountsAnUnplayedOneAsZero) {
     const auto projection = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
-        {resolvedEntry("one", "one"), unresolvedEntry("two")},
+        {resolvedEntry("one"), unresolvedEntry("two")},
         {benchmarkFact("one", 100 * kDay, 250.0F)}, {});
     EXPECT_DOUBLE_EQ(scenarioNamed(projection, "one").normalizedRank, 2.5);
     EXPECT_DOUBLE_EQ(scenarioNamed(projection, "two").normalizedRank, 0.0);
@@ -502,7 +500,7 @@ TEST(BenchmarkAverageRank, WeighsEveryScenarioEquallyAndCountsAnUnplayedOneAsZer
 
 TEST(BenchmarkAverageRank, AScoreAboveTheTopTierCountsAsTheTopTierWithoutCappingThePersonalBest) {
     const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
-        {resolvedEntry("entry", "hash")}, {benchmarkFact("hash", 100 * kDay, 450.0F)}, {});
+        {resolvedEntry("entry")}, {benchmarkFact("hash", 100 * kDay, 450.0F)}, {});
     const auto &scenario = scenarioNamed(projection, "entry");
     ASSERT_TRUE(scenario.personalBest);
     EXPECT_DOUBLE_EQ(*scenario.personalBest, 450.0);
@@ -521,7 +519,7 @@ TEST(BenchmarkRecentAverage, UsesExactlyTheLatestFiveRunsAndNeverChangesAttainme
     for (int run = 1; run <= 6; ++run)
         facts.push_back(benchmarkFact("hash", (100 + run) * kDay, static_cast<float>(10 * run)));
     const auto projection = evaluateBenchmark(benchmark(), {Completeness::Trackable, {}},
-                                              {resolvedEntry("entry", "hash")}, facts, {});
+                                              {resolvedEntry("entry")}, facts, {});
     const auto &scenario = scenarioNamed(projection, "entry");
     ASSERT_TRUE(scenario.recentAverage);
     EXPECT_DOUBLE_EQ(*scenario.recentAverage, (20.0 + 30.0 + 40.0 + 50.0 + 60.0) / 5.0);
@@ -543,7 +541,7 @@ TEST(BenchmarkRecentAverage, UsesExactlyTheLatestFiveRunsAndNeverChangesAttainme
 TEST(BenchmarkRank, RecategorizingChangesAttainmentButNotTheAverageRank) {
     const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 300.0F),
                                    benchmarkFact("two", 101 * kDay, 100.0F)};
-    const auto resolutions = std::vector{resolvedEntry("one", "one"), resolvedEntry("two", "two")};
+    const auto resolutions = std::vector{resolvedEntry("one"), resolvedEntry("two")};
     const auto separate = evaluateBenchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
                                             resolutions, facts, {});
 
@@ -575,16 +573,14 @@ TEST(BenchmarkRank, RecategorizingChangesAttainmentButNotTheAverageRank) {
 
 TEST(BenchmarkEvaluator, LinkedHashesCombineChronologicalStatisticsAndHistory) {
     auto definition = benchmark();
-    definition.uncategorized.front().additionalHashes = {"new"};
-    auto resolution = resolvedEntry("entry", "hash");
-    resolution.additionalHashes = {"new", "hash", "new"};
+    definition.uncategorized.front().hashes = {"hash", "new"};
     std::vector<RunFact> facts;
     for (int day = 1; day <= 6; ++day)
         facts.push_back(benchmarkFact(day % 2 ? "hash" : "new", day * kDay,
                                       static_cast<float>(day * 50), 10.0F));
     facts.push_back(benchmarkFact("unrelated", 7 * kDay, 999.0F, 100.0F));
     const auto projection = evaluateBenchmark(definition, validateBenchmark(definition),
-                                               {resolution}, facts, {});
+                                               {resolvedEntry("entry")}, facts, {});
     const auto &scenario = scenarioNamed(projection, "entry");
     EXPECT_EQ(scenario.runCount, 6);
     ASSERT_TRUE(scenario.personalBest);
@@ -601,17 +597,43 @@ TEST(BenchmarkEvaluator, LinkedHashesCombineChronologicalStatisticsAndHistory) {
         EXPECT_DOUBLE_EQ(projection.averageRankHistory[index].averageRank, .5 * (index + 1));
 }
 
-TEST(BenchmarkEvaluator, LinkedHashesDoNotDoubleCountOverlappingEntryPlaytime) {
+TEST(BenchmarkEvaluator, LinkedHashesSharedByIncompleteEntriesSumEachEntrysPlaytime) {
     auto definition = twoScenarioBenchmark();
-    auto first = resolvedEntry("one", "one");
-    first.additionalHashes = {"shared"};
-    auto second = resolvedEntry("two", "two");
-    second.additionalHashes = {"shared"};
+    definition.uncategorized[0].hashes.push_back("shared");
+    definition.uncategorized[1].hashes.push_back("shared");
     const auto projection = evaluateBenchmark(definition, {Completeness::Incomplete, {}},
-        {first, second}, {benchmarkFact("one", kDay, 100.0F, 10.0F),
+        {resolvedEntry("one"), resolvedEntry("two")}, {benchmarkFact("one", kDay, 100.0F, 10.0F),
                           benchmarkFact("shared", 2 * kDay, 200.0F, 20.0F),
                           benchmarkFact("two", 3 * kDay, 300.0F, 30.0F)}, {});
     EXPECT_DOUBLE_EQ(scenarioNamed(projection, "one").playtimeSeconds, 30.0);
     EXPECT_DOUBLE_EQ(scenarioNamed(projection, "two").playtimeSeconds, 50.0);
-    EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 60.0);
+    EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 80.0);
+}
+
+TEST(BenchmarkEvaluator, LinkedHashRunsWithEqualStartTimesKeepRunFactsOrder) {
+    auto definition = benchmark();
+    definition.uncategorized.front().hashes = {"hash", "new"};
+    // The tie sits on the edge of the five-run window: whichever tied run comes second is the one kept.
+    const std::vector facts{benchmarkFact("new", kDay, 100.0F), benchmarkFact("hash", kDay, 200.0F),
+                            benchmarkFact("hash", 2 * kDay, 10.0F), benchmarkFact("hash", 3 * kDay, 10.0F),
+                            benchmarkFact("hash", 4 * kDay, 10.0F), benchmarkFact("hash", 5 * kDay, 10.0F)};
+    const auto projection = evaluateBenchmark(definition, {Completeness::Incomplete, {}},
+                                              {resolvedEntry("entry")}, facts, {});
+    const auto &scenario = scenarioNamed(projection, "entry");
+    EXPECT_EQ(scenario.runCount, 6);
+    EXPECT_EQ(scenario.recentSampleCount, 5);
+    ASSERT_TRUE(scenario.recentAverage);
+    EXPECT_DOUBLE_EQ(*scenario.recentAverage, 48.0);
+}
+
+TEST(BenchmarkEvaluator, EntryWithNoResolutionProjectsAsUnresolvedWithoutStats) {
+    const auto definition = benchmark();
+    const auto projection = evaluateBenchmark(definition, validateBenchmark(definition), {},
+                                              {benchmarkFact("hash", kDay, 250.0F, 30.0F)}, {});
+    const auto &scenario = scenarioNamed(projection, "entry");
+    EXPECT_EQ(scenario.matchState, ScenarioMatchState::Unresolved);
+    EXPECT_EQ(scenario.runCount, 0);
+    EXPECT_FALSE(scenario.personalBest);
+    EXPECT_FALSE(scenario.recentAverage);
+    EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, 0.0);
 }

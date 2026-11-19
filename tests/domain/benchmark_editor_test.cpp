@@ -44,13 +44,23 @@ TEST(BenchmarkEditor, ReplacingOrClearingMappingRemovesAdditionalHashes) {
     Benchmark bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto id = *editor.addKnownScenario("Alpha", "old").createdEntry;
-    bench.uncategorized.front().additionalHashes = {"new"};
+    bench.uncategorized.front().hashes = {"old", "new"};
     ASSERT_TRUE(editor.setScenarioHash(id, "replacement").ok());
-    EXPECT_TRUE(bench.uncategorized.front().additionalHashes.empty());
-    bench.uncategorized.front().additionalHashes = {"new"};
+    EXPECT_EQ(bench.uncategorized.front().hashes, (std::vector<std::string>{"replacement"}));
+    bench.uncategorized.front().hashes = {"old", "new"};
     ASSERT_TRUE(editor.setScenarioHash(id, std::nullopt).ok());
-    EXPECT_TRUE(mappedScenarioHashes(bench.uncategorized.front().hash,
-                                     bench.uncategorized.front().additionalHashes).empty());
+    EXPECT_TRUE(bench.uncategorized.front().hashes.empty());
+    bench.uncategorized.front().hashes = {"old", "new"};
+    ASSERT_TRUE(editor.setScenarioHash(id, "").ok());
+    EXPECT_TRUE(bench.uncategorized.front().hashes.empty());
+}
+
+TEST(BenchmarkEditor, SettingHashesDropsEmptiesAndDuplicatesKeepingFirstOccurrenceOrder) {
+    Benchmark bench;
+    BenchmarkEditor editor{bench, countingIds()};
+    const auto id = *editor.addKnownScenario("Alpha", "old").createdEntry;
+    ASSERT_TRUE(editor.setScenarioHashes(id, {"b", "", "a", "b", "a"}).ok());
+    EXPECT_EQ(bench.uncategorized.front().hashes, (std::vector<std::string>{"b", "a"}));
 }
 
 TEST(BenchmarkEditor, ValidationFindsOverlapInAdditionalMappings) {
@@ -58,9 +68,9 @@ TEST(BenchmarkEditor, ValidationFindsOverlapInAdditionalMappings) {
     BenchmarkEditor editor{bench, countingIds()};
     editor.addKnownScenario("Alpha", "old");
     editor.addKnownScenario("Beta", "other");
-    bench.uncategorized[0].additionalHashes = {"new", "new"};
+    bench.uncategorized[0].hashes = {"old", "new"};
     EXPECT_FALSE(hasIssue(editor.validation(), BenchmarkIssueCode::DuplicateResolvedHash));
-    bench.uncategorized[1].additionalHashes = {"new"};
+    bench.uncategorized[1].hashes = {"other", "new"};
     EXPECT_TRUE(hasIssue(editor.validation(), BenchmarkIssueCode::DuplicateResolvedHash));
 }
 
@@ -146,9 +156,9 @@ TEST(BenchmarkEditor, ManualBenchmarkHoldsKnownAndUnplayedScenariosTogether) {
 
     ASSERT_EQ(bench.uncategorized.size(), 2U);
     EXPECT_EQ(bench.uncategorized.at(0).name, "Played");
-    EXPECT_EQ(bench.uncategorized.at(0).hash, std::optional<std::string>{"C0FFE00D"});
+    EXPECT_EQ(bench.uncategorized.at(0).hashes, (std::vector<std::string>{"C0FFE00D"}));
     EXPECT_EQ(bench.uncategorized.at(1).name, "Never played");
-    EXPECT_FALSE(bench.uncategorized.at(1).hash.has_value());
+    EXPECT_TRUE(bench.uncategorized.at(1).hashes.empty());
     // The unplayed, unmapped entry does not hold the benchmark back from tracking.
     EXPECT_EQ(editor.validation().completeness, Completeness::Trackable);
 }
@@ -290,7 +300,9 @@ namespace {
 
     ScenarioEntry scored(const std::string &id, const std::string &name, std::optional<std::string> hash,
                          double score) {
-        return ScenarioEntry{ScenarioEntryId{id}, name, std::move(hash), {Threshold{TierId{"t1"}, score}}};
+        return ScenarioEntry{ScenarioEntryId{id}, name,
+                             hash ? std::vector<std::string>{std::move(*hash)} : std::vector<std::string>{},
+                             {Threshold{TierId{"t1"}, score}}};
     }
 
     std::vector<std::string> idsOf(const std::vector<ScenarioEntry> &entries) {
@@ -317,7 +329,7 @@ namespace {
 
 TEST(BenchmarkTableRows, RepeatedUnnamedAppend) {
     Benchmark bench;
-    bench.uncategorized = {ScenarioEntry{ScenarioEntryId{"u0"}, "", std::nullopt, {}},
+    bench.uncategorized = {ScenarioEntry{ScenarioEntryId{"u0"}, "", {}, {}},
                            scored("n1", "Named", "h1", 10)};
     const auto before = bench.uncategorized;
     BenchmarkEditor editor{bench, countingIds()};
@@ -334,7 +346,7 @@ TEST(BenchmarkTableRows, RepeatedUnnamedAppend) {
         const auto &created = bench.uncategorized.at(2 + i);
         EXPECT_EQ(created.id, result.createdEntries.at(i));
         EXPECT_TRUE(created.name.empty());
-        EXPECT_FALSE(created.hash.has_value());
+        EXPECT_TRUE(created.hashes.empty());
         EXPECT_TRUE(created.thresholds.empty());
     }
 }

@@ -249,7 +249,7 @@ TEST(BenchmarkManagerVm, SaveLinksMatchedScenariosAndAdoptsTheLinkedCopyAsBaseli
     f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"}, std::nullopt};
     f.uc->mapAutomatically = [](Benchmark benchmark) {
         benchmark.uncategorized[0].name = "Air Angelic";
-        benchmark.uncategorized[0].hash = "hA";
+        benchmark.uncategorized[0].hashes = {"hA"};
         return benchmark;
     };
     f.build();
@@ -258,12 +258,12 @@ TEST(BenchmarkManagerVm, SaveLinksMatchedScenariosAndAdoptsTheLinkedCopyAsBaseli
     ASSERT_TRUE(f.vm->save()["ok"].toBool());
 
     ASSERT_EQ(f.uc->saveCalls.size(), 1U);
-    EXPECT_EQ(f.uc->saveCalls.back().first.uncategorized[0].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(f.uc->saveCalls.back().first.uncategorized[0].hashes, std::vector<std::string>{"hA"});
     EXPECT_EQ(f.uc->saveCalls.back().first.uncategorized[0].name, "Air Angelic");
     EXPECT_FALSE(f.vm->dirty());
     EXPECT_EQ(scenarioNames(*f.vm), QStringList{QStringLiteral("Air Angelic")});
     ASSERT_FALSE(f.uc->resolveCalls.empty());
-    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized[0].hash, std::optional<std::string>{"hA"});
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized[0].hashes, std::vector<std::string>{"hA"});
 }
 
 TEST(BenchmarkManagerVm, FailedSaveLeavesTheWorkingCopyUnlinked) {
@@ -272,7 +272,7 @@ TEST(BenchmarkManagerVm, FailedSaveLeavesTheWorkingCopyUnlinked) {
     f.uc->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::WriteFailed};
     f.uc->mapAutomatically = [](Benchmark benchmark) {
         benchmark.uncategorized[0].name = "Air Angelic";
-        benchmark.uncategorized[0].hash = "hA";
+        benchmark.uncategorized[0].hashes = {"hA"};
         return benchmark;
     };
     f.build();
@@ -479,7 +479,7 @@ TEST(BenchmarkManagerVm, OneNotificationInstallsOneCoherentRevision) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Second", {tier("t1", "Gold"), tier("t2", "Plat")},
                                           {benchmarkEntry("e1", "New", std::string{"h1"}, {})}));
-    f.uc->nextResolveResult = {resolvedEntry("e1", "h1")};
+    f.uc->nextResolveResult = {resolvedEntry("e1")};
     f.uc->stateValue.scenarioCatalogue = {ScenarioId{"Old", "h0"}};
     f.build();
     f.vm->beginNewBenchmark();
@@ -514,8 +514,8 @@ TEST(BenchmarkManagerResolution, ScenarioNodesCarryTheirMatchState) {
                                           {benchmarkEntry("e1", "Alpha", std::string{"h1"}, {}),
                                            benchmarkEntry("e2", "Beta", std::nullopt, {}),
                                            benchmarkEntry("e3", "Gamma", std::string{"gone"}, {})}));
-    f.uc->nextResolveResult = {resolvedEntry("e1", "h1"), unresolvedEntry("e2"),
-                               mappedUnavailableEntry("e3", "gone")};
+    f.uc->nextResolveResult = {resolvedEntry("e1"), unresolvedEntry("e2"),
+                               mappedUnavailableEntry("e3")};
     f.build();
     f.vm->beginNewBenchmark();
 
@@ -527,7 +527,7 @@ TEST(BenchmarkManagerResolution, ScenarioNodesCarryTheirMatchState) {
 TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
-    ScenarioResolution ambiguous{ScenarioEntryId{"e1"}, ScenarioMatchState::Ambiguous, std::nullopt, {}};
+    ScenarioResolution ambiguous{ScenarioEntryId{"e1"}, ScenarioMatchState::Ambiguous, {}};
     ambiguous.candidates.push_back(
         {"ha", 3, std::chrono::sys_seconds{std::chrono::seconds{1'700'000'000}}});
     ambiguous.candidates.push_back({"hb", 7, std::nullopt});
@@ -548,7 +548,7 @@ TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
 TEST(BenchmarkManagerResolution, AnAutoMappableNodeReportsItsSingleCandidate) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
-    ScenarioResolution mappable{ScenarioEntryId{"e1"}, ScenarioMatchState::AutoMappable, std::nullopt, {}};
+    ScenarioResolution mappable{ScenarioEntryId{"e1"}, ScenarioMatchState::AutoMappable, {}};
     mappable.candidates.push_back({"h1", 1, std::nullopt});
     f.uc->nextResolveResult = {mappable};
     f.uc->stateValue.resolutionWriteFailed = true;
@@ -587,7 +587,7 @@ TEST(BenchmarkManagerResolution, SetScenarioHashMutatesLocalWorkingCopy) {
 
     EXPECT_TRUE(result.value("ok").toBool());
     ASSERT_FALSE(f.uc->resolveCalls.empty());
-    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).hash, std::optional<std::string>("hb"));
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).hashes, std::vector<std::string>{"hb"});
     EXPECT_TRUE(f.vm->dirty());
     expectNoMutationForwarded(*f.uc);
 }
@@ -599,11 +599,11 @@ TEST(BenchmarkManagerResolution, SetScenarioHashEmptyClearsLocalMapping) {
     f.build();
     f.vm->beginNewBenchmark();
     ASSERT_FALSE(f.uc->resolveCalls.empty());
-    ASSERT_TRUE(f.uc->resolveCalls.back().uncategorized.at(0).hash.has_value());
+    ASSERT_FALSE(f.uc->resolveCalls.back().uncategorized.at(0).hashes.empty());
 
     EXPECT_TRUE(f.vm->setScenarioHash("e1", "").value("ok").toBool());
 
-    EXPECT_FALSE(f.uc->resolveCalls.back().uncategorized.at(0).hash.has_value());
+    EXPECT_TRUE(f.uc->resolveCalls.back().uncategorized.at(0).hashes.empty());
     expectNoMutationForwarded(*f.uc);
 }
 
@@ -617,11 +617,11 @@ TEST(BenchmarkManagerResolution, ChoosingPlayedScenarioChangesNameAndHashInOneUn
     ASSERT_TRUE(f.vm->setScenarioIdentity("e1", "Played", "h-played").value("ok").toBool());
     ASSERT_FALSE(f.uc->resolveCalls.empty());
     EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).name, "Played");
-    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).hash, std::optional<std::string>("h-played"));
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).hashes, std::vector<std::string>{"h-played"});
 
     ASSERT_TRUE(f.vm->undo().value("ok").toBool());
     EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).name, "Old");
-    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).hash, std::optional<std::string>("h-old"));
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.at(0).hashes, std::vector<std::string>{"h-old"});
     EXPECT_FALSE(f.vm->undo().value("ok").toBool());
 }
 
@@ -855,7 +855,7 @@ namespace {
 
 TEST(BenchmarkTableProjection, HierarchyRowsAndSpans) {
     TableFixture f;
-    f.uc->nextResolveResult = {resolvedEntry("a", "ha"), unresolvedEntry("b")};
+    f.uc->nextResolveResult = {resolvedEntry("a"), unresolvedEntry("b")};
     auto bench = projectionBench();
     bench.categories.at(0).name = " ";
     f.open(bench);
@@ -1400,8 +1400,8 @@ TEST(BenchmarkTablePaste, SeparatePassesAndUntouchedNeighbours) {
         const auto &bench = working(f);
         EXPECT_EQ(entryIn(bench, "a").name, "Alpha");
         EXPECT_EQ(entryIn(bench, "b").name, "Beta");
-        EXPECT_EQ(entryIn(bench, "a").hash, std::optional<std::string>("ha"));
-        EXPECT_EQ(entryIn(bench, "b").hash, std::optional<std::string>("hb"));
+        EXPECT_EQ(entryIn(bench, "a").hashes, std::vector<std::string>{"ha"});
+        EXPECT_EQ(entryIn(bench, "b").hashes, std::vector<std::string>{"hb"});
         EXPECT_EQ(bench.categories.at(0).scenarios.size(), 2U);
         EXPECT_EQ(entryIn(bench, "u"), pasteBench().uncategorized.at(0));
         EXPECT_EQ(scoreOf(bench, "a", "t1"), 10.0);
@@ -1462,7 +1462,7 @@ TEST(BenchmarkTablePaste, ExpansionRetainsCompleteBlock) {
         for (std::size_t i = 1; i < 3; ++i) {
             EXPECT_TRUE(result.tiers.at(i).name.empty());
             EXPECT_TRUE(result.uncategorized.at(i).name.empty());
-            EXPECT_FALSE(result.uncategorized.at(i).hash.has_value());
+            EXPECT_TRUE(result.uncategorized.at(i).hashes.empty());
         }
         const auto tier = [&](std::size_t i) { return result.tiers.at(i).id.value; };
         const auto row = [&](std::size_t i) { return result.uncategorized.at(i).id.value; };
@@ -1721,7 +1721,7 @@ TEST(BenchmarkTableUndo, BoundariesAndPublications) {
         // session and its history stay.
         f.uc->stateValue.library = loadedSnapshot("b1", "Bench");
         f.uc->stateValue.library->entries.front().digest = "changed";
-        f.uc->nextResolveResult = {resolvedEntry("a", "ha")};
+        f.uc->nextResolveResult = {resolvedEntry("a")};
         f.publish();
         EXPECT_TRUE(f.vm->baselineStale());
         EXPECT_EQ(f.cell(f.rowOf("a"), f.columnOf("t1"), TM::DisplayTextRole).toString(), "oops");
@@ -1831,7 +1831,7 @@ TEST(BenchmarkTableSave, SuccessfulNormalizationAndBoundary) {
         for (const auto *tier: {"t1", "t2"}) EXPECT_EQ(scoreOf(submitted, entry, tier), std::nullopt) << entry << tier;
     EXPECT_EQ(scoreOf(submitted, "u", "t1"), 0.0);
     EXPECT_EQ(scoreOf(submitted, "u", "t2"), -3.0);
-    EXPECT_EQ(entryIn(submitted, "a").hash, std::optional<std::string>("ha"));
+    EXPECT_EQ(entryIn(submitted, "a").hashes, std::vector<std::string>{"ha"});
     EXPECT_EQ(entryIn(submitted, createdRow.value).name, "");
     EXPECT_EQ(scoreOf(submitted, createdRow.value, "t1"), 5.0);
 
@@ -2299,7 +2299,7 @@ TEST(BenchmarkTableNotifications, RefreshesDraftResolutionWithoutEdit) {
     const auto mapping = [&](int role) { return f.cell(f.rowOf("a"), 2, role); };
     ASSERT_EQ(mapping(TM::MappingStateRole).toString(), "unresolved");
 
-    f.uc->nextResolveResult = {resolvedEntry("a", "ha")};
+    f.uc->nextResolveResult = {resolvedEntry("a")};
     f.publish();
 
     EXPECT_EQ(f.uc->resolveCalls.size(), resolves + 1);
@@ -2344,7 +2344,7 @@ TEST(BenchmarkTableNotifications, PublicationsInsideSaveKeepRetryState) {
     QString mappingDuringSave;
     QString rawDuringSave;
     f.uc->duringSave = [&] {
-        f.uc->nextResolveResult = {resolvedEntry("a", "ha")};
+        f.uc->nextResolveResult = {resolvedEntry("a")};
         f.publish();
         mappingDuringSave = f.cell(f.rowOf("a"), 2, TM::MappingStateRole).toString();
         rawDuringSave = f.cell(f.rowOf("a"), f.columnOf("t1"), TM::DisplayTextRole).toString();
@@ -2424,8 +2424,8 @@ TEST(BenchmarkManagerResolution, LinkedMappingsAreProjectedAndUndoAsOneEdit) {
     EXPECT_EQ(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList(),
               (QStringList{"old", "new"}));
     ASSERT_FALSE(f.uc->resolveCalls.empty());
-    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.front().additionalHashes,
-              (std::vector<std::string>{"new"}));
+    EXPECT_EQ(f.uc->resolveCalls.back().uncategorized.front().hashes,
+              (std::vector<std::string>{"old", "new"}));
     EXPECT_TRUE(f.vm->dirty());
     ASSERT_TRUE(f.vm->undo().value("ok").toBool());
     EXPECT_EQ(tableOf(*f.vm).rowInfo(0).value("mappedHashes").toStringList(), (QStringList{"old"}));
@@ -2435,7 +2435,7 @@ TEST(BenchmarkManagerResolution, LinkedMappingsAreProjectedAndUndoAsOneEdit) {
 TEST(BenchmarkManagerResolution, ClearingLinkedMappingsCanBeUndoneAndUnknownEntriesChangeNothing) {
     Fixture f;
     auto entry = benchmarkEntry("e1", "Alpha", "old", {});
-    entry.additionalHashes = {"new"};
+    entry.hashes.push_back("new");
     f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {entry}));
     f.build();
     f.vm->beginNewBenchmark();

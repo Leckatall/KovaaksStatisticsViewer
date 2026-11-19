@@ -92,11 +92,7 @@ namespace ksv::qt_data {
                 thresholds.push_back(*threshold);
             }
             ScenarioEntry entry{ScenarioEntryId{*id}, object["name"].toString().toStdString(),
-                                std::nullopt, std::move(thresholds)};
-            if (!hashes.empty()) {
-                entry.hash = hashes.front();
-                entry.additionalHashes.assign(hashes.begin() + 1, hashes.end());
-            }
+                                std::move(hashes), std::move(thresholds)};
             return entry;
         }
 
@@ -241,7 +237,7 @@ namespace ksv::qt_data {
                 thresholds.append(QJsonObject{{"tierId", QString::fromStdString(threshold.tierId.value)},
                                               {"score", threshold.score}});
             QJsonArray hashes;
-            for (const auto &hash: mappedScenarioHashes(entry.hash, entry.additionalHashes))
+            for (const auto &hash: entry.hashes)
                 hashes.append(QString::fromStdString(hash));
             return QJsonObject{{"id", QString::fromStdString(entry.id.value)},
                                {"name", QString::fromStdString(entry.name)},

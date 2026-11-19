@@ -8,7 +8,6 @@
 #include <numeric>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 
 namespace ksv::domain {
@@ -55,31 +54,38 @@ namespace ksv::domain {
     }
 
     namespace {
-        using FactsByHash = std::unordered_map<std::string, std::vector<const RunFact *> >;
         using ResolutionByEntry = std::unordered_map<std::string, const ScenarioResolution *>;
+        using EntriesByHash = std::unordered_map<std::string, std::vector<std::size_t> >;
+        using History = std::vector<const RunFact *>;
         constexpr std::size_t kRecentRuns = 5;
 
+        // A missing resolution is legal: callers may evaluate with no resolutions at all.
+        const ScenarioResolution *findResolution(const ResolutionByEntry &resolutions, const ScenarioEntryId &id) {
+            const auto found = resolutions.find(id.value);
+            return found != resolutions.end() ? found->second : nullptr;
+        }
+
+        // Traversal order shared by projection and every index-parallel structure built from it.
+        std::vector<const ScenarioEntry *> collectEntries(const Benchmark &definition) {
+            std::vector<const ScenarioEntry *> ordered;
+            const auto append = [&](const std::vector<ScenarioEntry> &entries) {
+                for (const auto &entry: entries) ordered.push_back(&entry);
+            };
+            append(definition.uncategorized);
+            for (const auto &category: definition.categories) {
+                append(category.scenarios);
+                for (const auto &subcategory: category.subcategories) append(subcategory.scenarios);
+            }
+            return ordered;
+        }
+
         ScenarioProjection projectScenario(const ScenarioEntry &entry, const std::vector<Tier> &tiers,
-                                           const ResolutionByEntry &resolutions, const FactsByHash &facts) {
+                                           const ScenarioResolution *resolution, const History &history,
+                                           const std::optional<std::vector<double> > &ladder) {
             ScenarioProjection projection;
             projection.entryId = entry.id;
             projection.name = entry.name;
-            std::vector<const RunFact *> history;
-            if (const auto found = resolutions.find(entry.id.value); found != resolutions.end()) {
-                projection.matchState = found->second->state;
-                if (found->second->state == ScenarioMatchState::Resolved) {
-                    const auto hashes = mappedScenarioHashes(found->second->hash, found->second->additionalHashes);
-                    for (const auto &hash: hashes)
-                        if (const auto bucket = facts.find(hash); bucket != facts.end())
-                            history.insert(history.end(), bucket->second.begin(), bucket->second.end());
-                    if (hashes.size() > 1)
-                        std::ranges::sort(history, [](const RunFact *left, const RunFact *right) {
-                            return left->run_id.start_time != right->run_id.start_time
-                                ? left->run_id.start_time < right->run_id.start_time
-                                : left->run_id.scenario_id.hash < right->run_id.scenario_id.hash;
-                        });
-                }
-            }
+            if (resolution) projection.matchState = resolution->state;
             if (!history.empty()) {
                 projection.runCount = static_cast<int>(history.size());
                 const RunFact *bestRun = history.front();
@@ -100,7 +106,6 @@ namespace ksv::domain {
                 projection.recentAverage = total / static_cast<double>(sample);
                 projection.recentSampleCount = static_cast<int>(sample);
             }
-            const auto ladder = thresholdLadder(tiers, entry.thresholds);
             projection.normalizedRank = ladder ? normalizedFromLadder(*ladder, projection.personalBest) : 0.0;
             if (!ladder) return projection;
             if (!projection.personalBest) {
@@ -119,35 +124,31 @@ namespace ksv::domain {
             return projection;
         }
 
-        void appendScenarios(const std::vector<ScenarioEntry> &entries, const std::vector<Tier> &tiers,
-                             const ResolutionByEntry &resolutions, const FactsByHash &facts,
-                             BenchmarkProjection &projection, std::vector<ScenarioEntryId> &target,
-                             std::vector<const ScenarioEntry *> &ordered) {
-            for (const auto &entry: entries) {
-                projection.scenarios.push_back(projectScenario(entry, tiers, resolutions, facts));
-                target.push_back(entry.id);
-                ordered.push_back(&entry);
-            }
-        }
-
         struct EntryState {
-            const ScenarioEntry *entry = nullptr;
             std::optional<std::vector<double> > ladder;
             std::optional<double> personalBest;
         };
 
-        // Index-parallel with BenchmarkProjection::scenarios, so the rank rules need no id lookup
-        // on the hot path.
-        std::vector<EntryState> buildEntryStates(const std::vector<Tier> &tiers,
-                                                 const std::vector<const ScenarioEntry *> &ordered,
-                                                 const std::vector<ScenarioProjection> &scenarios) {
+        // `states` is index-parallel with BenchmarkProjection::scenarios, so the rank rules need no
+        // id lookup on the hot path.
+        struct ProjectionBuilder {
+            const std::vector<Tier> &tiers;
+            const ResolutionByEntry &resolutions;
+            const std::vector<History> &histories;
+            BenchmarkProjection &projection;
             std::vector<EntryState> states;
-            states.reserve(ordered.size());
-            for (std::size_t index = 0; index < ordered.size(); ++index)
-                states.push_back({ordered[index], thresholdLadder(tiers, ordered[index]->thresholds),
-                                  scenarios[index].personalBest});
-            return states;
-        }
+
+            void append(const std::vector<ScenarioEntry> &entries, std::vector<ScenarioEntryId> &target) {
+                for (const auto &entry: entries) {
+                    const auto index = projection.scenarios.size();
+                    auto ladder = thresholdLadder(tiers, entry.thresholds);
+                    projection.scenarios.push_back(projectScenario(
+                        entry, tiers, findResolution(resolutions, entry.id), histories[index], ladder));
+                    states.push_back({std::move(ladder), projection.scenarios.back().personalBest});
+                    target.push_back(entry.id);
+                }
+            }
+        };
 
         bool attains(const EntryState &state, const std::size_t tierIndex) {
             return state.personalBest && state.ladder && tierIndex < state.ladder->size() &&
@@ -220,35 +221,36 @@ namespace ksv::domain {
         projection.rollingPlaytime = std::move(rollingPlaytime);
         ResolutionByEntry byEntry;
         for (const auto &resolution: resolutions) byEntry.emplace(resolution.entryId.value, &resolution);
-        FactsByHash byHash;
-        for (const auto &fact: runFacts) byHash[fact.run_id.scenario_id.hash].push_back(&fact);
-        std::vector<const ScenarioEntry *> ordered;
 
-        appendScenarios(definition.uncategorized, definition.tiers, byEntry, byHash, projection,
-                        projection.uncategorized, ordered);
+        // Built for Incomplete definitions too: per-entry stats precede the Trackable gate.
+        const auto ordered = collectEntries(definition);
+        EntriesByHash entriesByHash;
+        for (std::size_t index = 0; index < ordered.size(); ++index) {
+            const auto *resolution = findResolution(byEntry, ordered[index]->id);
+            if (!resolution || resolution->state != ScenarioMatchState::Resolved) continue;
+            for (const auto &hash: ordered[index]->hashes) entriesByHash[hash].push_back(index);
+        }
+        // runFacts is chronological, so each history is too.
+        std::vector<History> histories(ordered.size());
+        for (const auto &fact: runFacts)
+            if (const auto bucket = entriesByHash.find(fact.run_id.scenario_id.hash); bucket != entriesByHash.end())
+                for (const auto index: bucket->second) histories[index].push_back(&fact);
+
+        ProjectionBuilder builder{definition.tiers, byEntry, histories, projection, {}};
+        builder.states.reserve(ordered.size());
+        builder.append(definition.uncategorized, projection.uncategorized);
         for (const auto &category: definition.categories) {
             GroupProjection group{category.id, category.name, std::nullopt, {}, {}};
-            appendScenarios(category.scenarios, definition.tiers, byEntry, byHash, projection, group.scenarios,
-                            ordered);
+            builder.append(category.scenarios, group.scenarios);
             for (const auto &subcategory: category.subcategories) {
                 GroupProjection subgroup{subcategory.id, subcategory.name, std::nullopt, {}, {}};
-                appendScenarios(subcategory.scenarios, definition.tiers, byEntry, byHash, projection,
-                                subgroup.scenarios, ordered);
+                builder.append(subcategory.scenarios, subgroup.scenarios);
                 group.subgroups.push_back(std::move(subgroup));
             }
             projection.categories.push_back(std::move(group));
         }
-        // Once per unique resolved hash, not once per entry: two entries may map to the same
-        // scenario, and each of them legitimately reports that scenario's full playtime, so summing
-        // the per-scenario figures would double the benchmark total.
-        std::unordered_set<std::string> hashes;
-        for (const auto &resolution: resolutions)
-            if (resolution.state == ScenarioMatchState::Resolved)
-                for (const auto &hash: mappedScenarioHashes(resolution.hash, resolution.additionalHashes))
-                    hashes.insert(hash);
-        for (const auto &hash: hashes)
-            if (const auto facts = byHash.find(hash); facts != byHash.end())
-                for (const auto *fact: facts->second) projection.totalPlaytimeSeconds += fact->duration_seconds;
+        for (const auto &scenario: projection.scenarios) projection.totalPlaytimeSeconds += scenario.playtimeSeconds;
+        const auto &states = builder.states;
 
         // Everything below is Trackable-only: official rank, completion, blockers and average-rank
         // outputs stay at their defaults for an Incomplete definition, so partial thresholds can
@@ -260,7 +262,6 @@ namespace ksv::domain {
         IndexById indexById;
         for (std::size_t index = 0; index < projection.scenarios.size(); ++index)
             indexById.emplace(projection.scenarios[index].entryId.value, index);
-        const auto states = buildEntryStates(definition.tiers, ordered, projection.scenarios);
         const std::size_t tierCount = definition.tiers.size();
         const auto attainedIndex = highestSatisfied(tierCount, [&](const std::size_t tier) {
             return attainedAtTier(definition, states, indexById, tier);
@@ -314,13 +315,6 @@ namespace ksv::domain {
             }
         }
 
-        std::unordered_map<std::string, std::vector<std::size_t> > entriesByHash;
-        for (std::size_t index = 0; index < projection.scenarios.size(); ++index) {
-            const auto found = byEntry.find(projection.scenarios[index].entryId.value);
-            if (found == byEntry.end() || found->second->state != ScenarioMatchState::Resolved) continue;
-            for (const auto &hash: mappedScenarioHashes(found->second->hash, found->second->additionalHashes))
-                entriesByHash[hash].push_back(index);
-        }
         // Running sums of every entry's normalized value rather than re-averaging per point, so the
         // sweep stays linear in runs plus emitted points. runFacts is chronological by contract
         // (UserProfile::getRunFacts), so each day is one contiguous block and no day is revisited.

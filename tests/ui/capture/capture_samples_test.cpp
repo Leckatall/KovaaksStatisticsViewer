@@ -164,7 +164,7 @@ namespace ksv::ui {
                 const double base = 1000.0 + i * 7.0;
 
                 ScenarioEntry entry{ScenarioEntryId{id}, "Sample Drill Number " + std::to_string(i + 1),
-                                    std::string{"hash" + std::to_string(i)}, {}};
+                                    std::vector<std::string>{"hash" + std::to_string(i)}, {}};
                 std::vector<double> scores;
                 for (std::size_t t = 0; t < tierCount; ++t) {
                     scores.push_back(base * (1.0 + 0.25 * static_cast<double>(t)));
