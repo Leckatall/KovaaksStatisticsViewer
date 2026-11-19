@@ -183,7 +183,7 @@ namespace ksv::presentation {
         // One Undo step: the session exactly as it was before a committed edit. Accepted baseline,
         // token, library and profile state are deliberately absent; Undo never rewinds them.
         struct SessionSnapshot {
-            domain::Benchmark draft;
+            domain::BenchmarkDefinition draft;
             CellInputs cellInputs;
             QStringList selectedEntryIds;
             QVariantMap currentCell;
@@ -201,8 +201,8 @@ namespace ksv::presentation {
 
         // Presentation-owned working copy. `m_baseline` is the last accepted content this editor
         // was seeded from or saved to; its absence means a never-saved copy, which is always dirty.
-        std::optional<domain::Benchmark> m_draft;
-        std::optional<domain::Benchmark> m_baseline;
+        std::optional<domain::BenchmarkDefinition> m_draft;
+        std::optional<domain::BenchmarkDefinition> m_baseline;
         std::optional<data::BenchmarkEditToken> m_token;
         // Threshold text that could not become a typed score, keyed by stable IDs so it follows
         // its cell through regrouping. A key here always has no typed threshold in m_draft.

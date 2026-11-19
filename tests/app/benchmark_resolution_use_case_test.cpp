@@ -17,15 +17,15 @@ using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
-    Benchmark benchmarkWith(const std::string &id, std::vector<ScenarioEntry> entries) {
-        Benchmark value;
+    BenchmarkDefinition benchmarkWith(const std::string &id, std::vector<ScenarioEntry> entries) {
+        BenchmarkDefinition value;
         value.id = BenchmarkId{id};
         value.name = "Bench " + id;
         value.uncategorized = std::move(entries);
         return value;
     }
 
-    data::BenchmarkFileEntry loadedFile(const Benchmark &value) {
+    data::BenchmarkFileEntry loadedFile(const BenchmarkDefinition &value) {
         return {value.id.value + ".json", "d-" + value.id.value,
                 data::LoadedBenchmark{value, validateBenchmark(value)}};
     }
@@ -40,7 +40,7 @@ namespace {
             profile->run_counts[scenario] = static_cast<std::size_t>(count);
         }
 
-        void library(const std::vector<Benchmark> &benches) {
+        void library(const std::vector<BenchmarkDefinition> &benches) {
             data::BenchmarkLibrarySnapshot snapshot;
             for (const auto &value: benches) snapshot.entries.push_back(loadedFile(value));
             benchmarks->snapshotValue = snapshot;
@@ -271,7 +271,7 @@ TEST(BenchmarkResolutionUseCase, ReleasingLeaseReconcilesLatestAcceptedBenchmark
 
     // Explicit refresh replaces b1's accepted definition and digest while the lease is held.
     data::BenchmarkLibrarySnapshot refreshed;
-    Benchmark v2 = benchmarkWith("b1", {benchmarkEntry("e1", "Alpha", std::nullopt, {})});
+    BenchmarkDefinition v2 = benchmarkWith("b1", {benchmarkEntry("e1", "Alpha", std::nullopt, {})});
     refreshed.entries.push_back({"b1.json", "d-b1-v2",
                                  data::LoadedBenchmark{v2, validateBenchmark(v2)}});
     f.benchmarks->snapshotValue = refreshed;

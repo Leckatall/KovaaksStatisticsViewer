@@ -19,18 +19,18 @@ namespace {
         for (const auto &[id, score]: values) result.push_back({TierId{id}, score});
         return result;
     }
-    Benchmark benchmark() {
-        Benchmark value{BenchmarkId{"bench"}, "Bench", ladder3(), {}, {}};
+    BenchmarkDefinition benchmark() {
+        BenchmarkDefinition value{BenchmarkId{"bench"}, "Bench", ladder3(), {}, {}};
         value.uncategorized.push_back(benchmarkEntry("entry", "Alpha", "hash",
             {{"bronze", 100.0}, {"silver", 200.0}, {"gold", 300.0}}));
         return value;
     }
     constexpr long long kDay = 86'400'000LL;
 
-    Benchmark hierarchyBenchmark() {
+    BenchmarkDefinition hierarchyBenchmark() {
         const std::initializer_list<std::pair<std::string, double> > rungs{
             {"bronze", 100.0}, {"silver", 200.0}, {"gold", 300.0}};
-        Benchmark value{BenchmarkId{"hierarchy"}, "Hierarchy", ladder3(), {}, {}};
+        BenchmarkDefinition value{BenchmarkId{"hierarchy"}, "Hierarchy", ladder3(), {}, {}};
         value.uncategorized = {benchmarkEntry("u1", "U1", "u1", rungs),
                                benchmarkEntry("u2", "U2", "u2", rungs)};
         Category direct{GroupId{"direct"}, "Direct", {}, {}, {}};
@@ -76,8 +76,8 @@ namespace {
         throw std::out_of_range("unknown group");
     }
 
-    Benchmark twoScenarioBenchmark() {
-        Benchmark value{BenchmarkId{"two"}, "Two", ladder3(), {}, {}};
+    BenchmarkDefinition twoScenarioBenchmark() {
+        BenchmarkDefinition value{BenchmarkId{"two"}, "Two", ladder3(), {}, {}};
         value.uncategorized = {
             benchmarkEntry("one", "One", "one", {{"bronze", 100}, {"silver", 200}, {"gold", 300}}),
             benchmarkEntry("two", "Two", "two", {{"bronze", 100}, {"silver", 200}, {"gold", 300}})};

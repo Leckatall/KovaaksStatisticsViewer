@@ -24,8 +24,8 @@ namespace {
     }
 
     // Clicking{Static, Dynamic}, Tracking{Smooth, Reactive}, Static, Uncategorized last.
-    Benchmark library() {
-        Benchmark bench;
+    BenchmarkDefinition library() {
+        BenchmarkDefinition bench;
         bench.categories = {
             category("clicking", "Clicking", {sub("c-static", "Static"), sub("c-dynamic", "Dynamic")}),
             category("tracking", "Tracking", {sub("t-smooth", "Smooth"), sub("t-reactive", "Reactive")}),
@@ -173,7 +173,7 @@ TEST(BenchmarkGroupCommand, RepeatedNamesStaySeparateActionsWithTheirOwnIds) {
 }
 
 TEST(BenchmarkGroupCommand, ResultsAreNotCapped) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     for (int i = 0; i < 12; ++i)
         bench.categories.push_back(category("c" + std::to_string(i), "Drill " + std::to_string(i)));
 

@@ -533,7 +533,7 @@ namespace {
     // These tests fail when the run generator or the rich profile drifts from them;
     // re-pick the thresholds rather than loosening the expectations.
     struct SeededProjection {
-        domain::Benchmark benchmark;
+        domain::BenchmarkDefinition benchmark;
         domain::BenchmarkProjection projection;
 
         [[nodiscard]] const domain::ScenarioProjection &scenario(const std::string &entryId) const {

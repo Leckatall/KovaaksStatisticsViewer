@@ -23,8 +23,8 @@ namespace {
     }
 
     // A benchmark that is Trackable: one tier, one uncategorized scenario with its threshold.
-    Benchmark trackable() {
-        Benchmark def;
+    BenchmarkDefinition trackable() {
+        BenchmarkDefinition def;
         def.id = BenchmarkId{"b1"};
         def.name = "Bench";
         def.tiers = {tier("t1", "Bronze")};
@@ -172,7 +172,7 @@ namespace {
 }
 
 TEST(BenchmarkTableValidation, MissingElementNames) {
-    Benchmark def;
+    BenchmarkDefinition def;
     def.id = BenchmarkId{"b1"};
     def.name = "Bench";
     def.tiers = {tier("t1", " \t"), tier("t2", "Silver")};
@@ -200,7 +200,7 @@ TEST(BenchmarkTableValidation, MissingElementNames) {
 }
 
 TEST(BenchmarkTableValidation, ThresholdCellLocations) {
-    Benchmark def;
+    BenchmarkDefinition def;
     def.id = BenchmarkId{"b1"};
     def.name = "Bench";
     def.tiers = {tier("t1", "A"), tier("t2", "B"), tier("t3", "C"), tier("t4", "D")};
@@ -224,7 +224,7 @@ TEST(BenchmarkTableValidation, ThresholdCellLocations) {
     EXPECT_EQ(tierIdsOf(issuesWith(validateBenchmark(def), BenchmarkIssueCode::NonIncreasingThreshold)),
               std::vector<std::string>{"t2"});
 
-    Benchmark legacy = trackable();
+    BenchmarkDefinition legacy = trackable();
     legacy.name.clear();
     legacy.uncategorized.front().thresholds.front().score = std::numeric_limits<double>::quiet_NaN();
     legacy.categories.push_back(Category{GroupId{"empty"}, "Empty", {}, {}, {}});

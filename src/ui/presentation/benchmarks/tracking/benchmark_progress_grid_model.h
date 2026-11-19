@@ -77,7 +77,7 @@ namespace ksv::presentation {
 
         // Rebuilds every list for one coherent revision. Null `definition`/`projection` (outside
         // the Ready states) empties the grid.
-        void reset(const domain::Benchmark *definition, const domain::BenchmarkProjection *projection);
+        void reset(const domain::BenchmarkDefinition *definition, const domain::BenchmarkProjection *projection);
 
     signals:
         void changed();

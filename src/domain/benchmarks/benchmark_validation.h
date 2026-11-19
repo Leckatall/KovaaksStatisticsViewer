@@ -49,7 +49,7 @@ namespace ksv::domain {
         friend bool operator==(const CompletenessResult &, const CompletenessResult &) = default;
     };
 
-    [[nodiscard]] CompletenessResult validateBenchmark(const Benchmark &definition);
+    [[nodiscard]] CompletenessResult validateBenchmark(const BenchmarkDefinition &definition);
 }
 
 #endif // KOVAAKSSTATSVIEWER_BENCHMARK_VALIDATION_H

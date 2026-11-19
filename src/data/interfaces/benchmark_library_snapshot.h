@@ -15,7 +15,7 @@ namespace ksv::data {
     enum class BenchmarkFileProblem { Invalid, Unsupported };
 
     struct LoadedBenchmark {
-        domain::Benchmark benchmark;
+        domain::BenchmarkDefinition benchmark;
         domain::CompletenessResult completeness;
     };
 

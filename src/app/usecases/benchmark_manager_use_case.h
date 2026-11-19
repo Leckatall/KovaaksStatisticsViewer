@@ -40,11 +40,11 @@ namespace ksv::application {
         [[nodiscard]] PlaylistSeedImport importPlaylistSeed(const std::string &path) override;
 
         [[nodiscard]] data::BenchmarkSaveOutcome save(
-            const domain::Benchmark &benchmark,
+            const domain::BenchmarkDefinition &benchmark,
             const std::optional<data::BenchmarkEditToken> &token) override;
         [[nodiscard]] std::vector<domain::ScenarioResolution> resolve(
-            const domain::Benchmark &benchmark) const override;
-        [[nodiscard]] domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const override;
+            const domain::BenchmarkDefinition &benchmark) const override;
+        [[nodiscard]] domain::BenchmarkDefinition withAutomaticMappings(const domain::BenchmarkDefinition &benchmark) const override;
         [[nodiscard]] data::BenchmarkRemoveOutcome deleteBenchmark(
             const data::BenchmarkEditToken &token) override;
 

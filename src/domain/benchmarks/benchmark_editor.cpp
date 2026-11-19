@@ -24,13 +24,13 @@ namespace ksv::domain {
             return false;
         }
 
-        Tier *findTier(Benchmark &benchmark, const TierId &id) {
+        Tier *findTier(BenchmarkDefinition &benchmark, const TierId &id) {
             const auto it = std::ranges::find_if(benchmark.tiers,
                                                  [&](const Tier &tier) { return tier.id == id; });
             return it == benchmark.tiers.end() ? nullptr : &*it;
         }
 
-        ScenarioEntry *findEntry(Benchmark &benchmark, const ScenarioEntryId &id) {
+        ScenarioEntry *findEntry(BenchmarkDefinition &benchmark, const ScenarioEntryId &id) {
             ScenarioEntry *found = nullptr;
             forEachScenarioList(benchmark, [&](std::vector<ScenarioEntry> &entries) {
                 const auto it = std::ranges::find_if(entries,
@@ -42,20 +42,20 @@ namespace ksv::domain {
             return found;
         }
 
-        Category *findCategory(Benchmark &benchmark, const GroupId &id) {
+        Category *findCategory(BenchmarkDefinition &benchmark, const GroupId &id) {
             const auto it = std::ranges::find_if(benchmark.categories,
                                                  [&](const Category &category) { return category.id == id; });
             return it == benchmark.categories.end() ? nullptr : &*it;
         }
 
-        Subcategory *findSubcategory(Benchmark &benchmark, const GroupId &id) {
+        Subcategory *findSubcategory(BenchmarkDefinition &benchmark, const GroupId &id) {
             for (auto &category: benchmark.categories)
                 for (auto &sub: category.subcategories)
                     if (sub.id == id) return &sub;
             return nullptr;
         }
 
-        std::optional<ScenarioEntry> detachEntry(Benchmark &benchmark, const ScenarioEntryId &id) {
+        std::optional<ScenarioEntry> detachEntry(BenchmarkDefinition &benchmark, const ScenarioEntryId &id) {
             std::optional<ScenarioEntry> detached;
             forEachScenarioList(benchmark, [&](std::vector<ScenarioEntry> &entries) {
                 const auto it = std::ranges::find_if(entries,
@@ -68,7 +68,7 @@ namespace ksv::domain {
             return detached;
         }
 
-        bool nameExists(const Benchmark &benchmark, const std::string &name) {
+        bool nameExists(const BenchmarkDefinition &benchmark, const std::string &name) {
             return forEachScenarioList(benchmark, [&](const std::vector<ScenarioEntry> &entries) {
                 return std::ranges::any_of(entries,
                                            [&](const ScenarioEntry &entry) { return entry.name == name; });
@@ -86,7 +86,7 @@ namespace ksv::domain {
         }
 
         // Checked before anything is detached, so a rejected move leaves every entry in place.
-        std::optional<BenchmarkEditError> groupTargetError(Benchmark &benchmark, const EditorGroupTarget &to) {
+        std::optional<BenchmarkEditError> groupTargetError(BenchmarkDefinition &benchmark, const EditorGroupTarget &to) {
             const auto *targetGroup = std::get_if<GroupId>(&to);
             if (!targetGroup) return std::nullopt;
             if (!findCategory(benchmark, *targetGroup) && !findSubcategory(benchmark, *targetGroup))
@@ -95,7 +95,7 @@ namespace ksv::domain {
         }
 
         // `to` must already have passed groupTargetError().
-        std::vector<ScenarioEntry> &groupScenarios(Benchmark &benchmark, const EditorGroupTarget &to) {
+        std::vector<ScenarioEntry> &groupScenarios(BenchmarkDefinition &benchmark, const EditorGroupTarget &to) {
             const auto *targetGroup = std::get_if<GroupId>(&to);
             if (!targetGroup) return benchmark.uncategorized;
             if (auto *category = findCategory(benchmark, *targetGroup)) return category->scenarios;

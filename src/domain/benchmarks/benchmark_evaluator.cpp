@@ -66,7 +66,7 @@ namespace ksv::domain {
         }
 
         // Traversal order shared by projection and every index-parallel structure built from it.
-        std::vector<const ScenarioEntry *> collectEntries(const Benchmark &definition) {
+        std::vector<const ScenarioEntry *> collectEntries(const BenchmarkDefinition &definition) {
             std::vector<const ScenarioEntry *> ordered;
             const auto append = [&](const std::vector<ScenarioEntry> &entries) {
                 for (const auto &entry: entries) ordered.push_back(&entry);
@@ -139,7 +139,7 @@ namespace ksv::domain {
 
         // Both members index entries in collectEntries order. runFacts is chronological, so each
         // history is too.
-        RunIndex indexRuns(const Benchmark &definition, const ResolutionByEntry &resolutions,
+        RunIndex indexRuns(const BenchmarkDefinition &definition, const ResolutionByEntry &resolutions,
                            const std::vector<RunFact> &runFacts) {
             const auto ordered = collectEntries(definition);
             RunIndex index{{}, std::vector<History>(ordered.size())};
@@ -202,7 +202,7 @@ namespace ksv::domain {
         };
 
         // Fills the scenario and group outputs of `projection` alongside the tree describing them.
-        ScenarioTree buildScenarioTree(const Benchmark &definition, const ResolutionByEntry &resolutions,
+        ScenarioTree buildScenarioTree(const BenchmarkDefinition &definition, const ResolutionByEntry &resolutions,
                                        const std::vector<History> &histories, BenchmarkProjection &projection) {
             ScenarioTree tree;
             tree.states.reserve(histories.size());
@@ -375,7 +375,7 @@ namespace ksv::domain {
     }
 
     BenchmarkProjection evaluateBenchmark(
-        const Benchmark &definition, const CompletenessResult &completeness,
+        const BenchmarkDefinition &definition, const CompletenessResult &completeness,
         const std::vector<ScenarioResolution> &resolutions, const std::vector<RunFact> &runFacts,
         std::vector<std::pair<std::chrono::sys_days, double> > rollingPlaytime) {
         BenchmarkProjection projection{

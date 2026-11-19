@@ -56,9 +56,9 @@ namespace {
 
     Tier tier(const std::string &id, const std::string &name) { return {TierId{id}, name, {}}; }
 
-    Benchmark draftWith(const std::string &name, const std::vector<Tier> &tiers,
+    BenchmarkDefinition draftWith(const std::string &name, const std::vector<Tier> &tiers,
                         const std::vector<ScenarioEntry> &uncategorized) {
-        Benchmark benchmark;
+        BenchmarkDefinition benchmark;
         benchmark.id = BenchmarkId{"b1"};
         benchmark.name = name;
         benchmark.tiers = tiers;
@@ -66,17 +66,17 @@ namespace {
         return benchmark;
     }
 
-    BenchmarkEditorSeed newSeed(Benchmark benchmark) {
+    BenchmarkEditorSeed newSeed(BenchmarkDefinition benchmark) {
         return {std::move(benchmark), std::nullopt};
     }
 
-    BenchmarkEditorSeed librarySeed(Benchmark benchmark) {
+    BenchmarkEditorSeed librarySeed(BenchmarkDefinition benchmark) {
         auto id = benchmark.id;
         return {std::move(benchmark), BenchmarkEditToken{id, id.value + ".json", "d1"}};
     }
 
     BenchmarkLibrarySnapshot loadedSnapshot(const std::string &id, const std::string &name) {
-        Benchmark benchmark;
+        BenchmarkDefinition benchmark;
         benchmark.id = BenchmarkId{id};
         benchmark.name = name;
         BenchmarkLibrarySnapshot snapshot;
@@ -146,7 +146,7 @@ TEST(BenchmarkManagerVm, BeginNewBenchmarkCreatesLocalDirtyIncompleteWorkingCopy
 }
 
 TEST(BenchmarkManagerVm, LibraryEntriesReflectAcceptedSnapshotClassification) {
-    Benchmark loaded;
+    BenchmarkDefinition loaded;
     loaded.id = BenchmarkId{"bench-A"};
     loaded.name = "Alpha";
     BenchmarkLibrarySnapshot snapshot;
@@ -247,7 +247,7 @@ TEST(BenchmarkManagerVm, SaveLinksMatchedScenariosAndAdoptsTheLinkedCopyAsBaseli
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Alpha", {}, {benchmarkEntry("e1", "air angelic ", std::nullopt, {})}));
     f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"}, std::nullopt};
-    f.uc->mapAutomatically = [](Benchmark benchmark) {
+    f.uc->mapAutomatically = [](BenchmarkDefinition benchmark) {
         benchmark.uncategorized[0].name = "Air Angelic";
         benchmark.uncategorized[0].hashes = {"hA"};
         return benchmark;
@@ -270,7 +270,7 @@ TEST(BenchmarkManagerVm, FailedSaveLeavesTheWorkingCopyUnlinked) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Alpha", {}, {benchmarkEntry("e1", "air angelic", std::nullopt, {})}));
     f.uc->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::WriteFailed};
-    f.uc->mapAutomatically = [](Benchmark benchmark) {
+    f.uc->mapAutomatically = [](BenchmarkDefinition benchmark) {
         benchmark.uncategorized[0].name = "Air Angelic";
         benchmark.uncategorized[0].hashes = {"hA"};
         return benchmark;
@@ -388,7 +388,7 @@ TEST(BenchmarkManagerVm, EditorCommandsMutateLocallyThroughBenchmarkEditor) {
 
 TEST(BenchmarkManagerVm, CategorySubcategoryHierarchyReflectedInTree) {
     Fixture f;
-    Benchmark benchmark;
+    BenchmarkDefinition benchmark;
     benchmark.id = BenchmarkId{"b1"};
     benchmark.name = "B";
     Category category{GroupId{"c1"}, "Clicking", {}, {}, {}};
@@ -422,7 +422,7 @@ TEST(BenchmarkManagerVm, CategorySubcategoryHierarchyReflectedInTree) {
 
 TEST(BenchmarkManagerVm, MoveScenarioMutatesLocalWorkingCopy) {
     Fixture f;
-    Benchmark benchmark = draftWith("B", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+    BenchmarkDefinition benchmark = draftWith("B", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
     benchmark.categories = {Category{GroupId{"c1"}, "Clicking", {}, {}, {}}};
     f.uc->nextNewSeed = newSeed(benchmark);
     f.build();
@@ -641,7 +641,7 @@ TEST(BenchmarkManagerResolution, SetScenarioHashReportsAnUnknownEntry) {
 
 TEST(BenchmarkManagerVm, RefreshWhileEditingPreservesWorkingCopy) {
     Fixture f;
-    Benchmark accepted = draftWith("Alpha", {tier("gold", "Gold")},
+    BenchmarkDefinition accepted = draftWith("Alpha", {tier("gold", "Gold")},
                                    {benchmarkEntry("e1", "S", std::nullopt, {})});
     f.uc->stateValue.library = [&] {
         BenchmarkLibrarySnapshot s;
@@ -656,7 +656,7 @@ TEST(BenchmarkManagerVm, RefreshWhileEditingPreservesWorkingCopy) {
     const auto issuesBefore = f.vm->validationIssues().size();
 
     // A later accepted snapshot with different content is published.
-    Benchmark changed = accepted;
+    BenchmarkDefinition changed = accepted;
     changed.name = "Alpha (renamed on disk)";
     BenchmarkLibrarySnapshot next;
     next.entries.push_back({"b1.json", "d2", LoadedBenchmark{changed, validateBenchmark(changed)}});
@@ -672,7 +672,7 @@ TEST(BenchmarkManagerVm, RefreshWhileEditingPreservesWorkingCopy) {
 
 TEST(BenchmarkManagerVm, ChangedRemovedOrReclassifiedBaselineBecomesStale) {
     Fixture f;
-    Benchmark accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+    BenchmarkDefinition accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
     const auto seedSnapshot = [&](const std::string &digest) {
         BenchmarkLibrarySnapshot s;
         s.entries.push_back({"b1.json", digest,
@@ -711,7 +711,7 @@ TEST(BenchmarkManagerVm, ChangedRemovedOrReclassifiedBaselineBecomesStale) {
 
 TEST(BenchmarkManagerVm, SaveConflictKeepsWorkingCopyAndOriginalBaseline) {
     Fixture f;
-    Benchmark accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+    BenchmarkDefinition accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
     BenchmarkLibrarySnapshot s;
     s.entries.push_back({"b1.json", "d1", LoadedBenchmark{accepted, validateBenchmark(accepted)}});
     f.uc->stateValue.library = s;
@@ -744,7 +744,7 @@ TEST(BenchmarkManagerVm, DeleteDoesNotSilentlyDestroyOpenWorkingCopy) {
                                std::optional<BenchmarkRemoveError>{BenchmarkRemoveError::Conflict},
                                std::optional<BenchmarkRemoveError>{BenchmarkRemoveError::WriteFailed}}) {
         Fixture f;
-        Benchmark accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
+        BenchmarkDefinition accepted = draftWith("Alpha", {}, {benchmarkEntry("e1", "S", std::nullopt, {})});
         BenchmarkLibrarySnapshot s;
         s.entries.push_back({"b1.json", "d1", LoadedBenchmark{accepted, validateBenchmark(accepted)}});
         f.uc->stateValue.library = s;
@@ -791,8 +791,8 @@ namespace {
     }
 
     // Categories g1 (direct a,b) and g2 (p: c,d; q: e); Uncategorized u; ladder t2,t1.
-    Benchmark projectionBench() {
-        Benchmark bench;
+    BenchmarkDefinition projectionBench() {
+        BenchmarkDefinition bench;
         bench.id = BenchmarkId{"b1"};
         bench.name = "Bench";
         bench.tiers = {Tier{TierId{"t2"}, "Second", BenchmarkColor{1, 2, 3, 255}},
@@ -809,7 +809,7 @@ namespace {
     struct TableFixture : Fixture {
         QAbstractItemModel *model = nullptr;
 
-        void open(Benchmark bench) {
+        void open(BenchmarkDefinition bench) {
             uc->nextOpenSeed = librarySeed(std::move(bench));
             build();
             ASSERT_TRUE(vm->openBenchmark(QStringLiteral("b1")));
@@ -958,7 +958,7 @@ namespace {
     // projectionBench() plus g1 loaded mixed (direct a,b and m-sub holding m), g2 gaining an empty
     // "hollow" subcategory, an empty category and a category holding x.
     // Rows: a,b,m,c,d,e,[hollow],[empty],x,u.
-    Benchmark mixedBench() {
+    BenchmarkDefinition mixedBench() {
         auto bench = projectionBench();
         bench.categories.at(0).subcategories.push_back(tableSub("m-sub", {tableEntry("m")}));
         bench.categories.at(1).subcategories.push_back(tableSub("hollow", {}));
@@ -1256,7 +1256,7 @@ namespace {
     };
 
     // a has t2=1 and t1=1234.5678901234567; b has no thresholds.
-    Benchmark inputBench() {
+    BenchmarkDefinition inputBench() {
         auto bench = projectionBench();
         bench.categories.at(0).scenarios.at(0).thresholds = {{TierId{"t2"}, 1.0}, {TierId{"t1"}, 1234.5678901234567}};
         return bench;
@@ -1350,8 +1350,8 @@ TEST(BenchmarkTableInput, MalformedAndNonFiniteRemainExactInSession) {
 
 namespace {
     // g1 holds a (mapped ha) and b (mapped hb); Uncategorized holds u. Ladder t1, t2.
-    Benchmark pasteBench() {
-        Benchmark bench;
+    BenchmarkDefinition pasteBench() {
+        BenchmarkDefinition bench;
         bench.id = BenchmarkId{"b1"};
         bench.name = "Bench";
         bench.tiers = {Tier{TierId{"t1"}, "One", {}}, Tier{TierId{"t2"}, "Two", {}}};
@@ -1366,9 +1366,9 @@ namespace {
     }
 
     // The working copy as the view model last handed it to resolution: every edit re-resolves.
-    const Benchmark &working(const TableFixture &f) { return f.uc->resolveCalls.back(); }
+    const BenchmarkDefinition &working(const TableFixture &f) { return f.uc->resolveCalls.back(); }
 
-    const ScenarioEntry &entryIn(const Benchmark &bench, const std::string &id) {
+    const ScenarioEntry &entryIn(const BenchmarkDefinition &bench, const std::string &id) {
         const auto matches = [&](const ScenarioEntry &e) { return e.id.value == id; };
         for (const auto &e: bench.uncategorized) if (matches(e)) return e;
         for (const auto &category: bench.categories) {
@@ -1378,7 +1378,7 @@ namespace {
         throw std::out_of_range("no entry " + id);
     }
 
-    std::optional<double> scoreOf(const Benchmark &bench, const std::string &entry, const std::string &tier) {
+    std::optional<double> scoreOf(const BenchmarkDefinition &bench, const std::string &entry, const std::string &tier) {
         for (const auto &threshold: entryIn(bench, entry).thresholds)
             if (threshold.tierId.value == tier) return threshold.score;
         return std::nullopt;
@@ -1446,7 +1446,7 @@ TEST(BenchmarkTablePaste, ExpansionRetainsCompleteBlock) {
     const DefaultLocaleGuard guard{QLocale{QLocale::English, QLocale::UnitedKingdom}};
     {
         TableFixture f;
-        Benchmark bench = pasteBench();
+        BenchmarkDefinition bench = pasteBench();
         bench.categories.clear();
         bench.tiers.resize(1);
         bench.uncategorized.at(0).thresholds.resize(1);
@@ -1496,7 +1496,7 @@ TEST(BenchmarkTablePaste, ExpansionRetainsCompleteBlock) {
     }
     {
         TableFixture f;
-        Benchmark bench = pasteBench();
+        BenchmarkDefinition bench = pasteBench();
         bench.tiers.resize(1);
         f.open(bench);
 
@@ -1526,7 +1526,7 @@ TEST(BenchmarkTablePaste, PlacementAndStructureRejectAtomically) {
     TableFixture f;
     f.open(pasteBench());
     ASSERT_TRUE(f.vm->editThresholdText("a", "t1", "oops")["ok"].toBool());
-    const Benchmark before = working(f);
+    const BenchmarkDefinition before = working(f);
     const auto resolves = f.uc->resolveCalls.size();
 
     const std::vector<std::pair<QVariantMap, QString>> rejected{
@@ -1567,7 +1567,7 @@ TEST(BenchmarkTablePaste, EmptyGroupRowRejectsPasteLikeAGroupCell) {
     auto bench = pasteBench();
     bench.categories.push_back(tableCategory("empty", {}));
     f.open(bench);
-    const Benchmark before = working(f);
+    const BenchmarkDefinition before = working(f);
     const auto resolves = f.uc->resolveCalls.size();
 
     const auto result = f.vm->pasteText(QVariantMap{{"kind", "emptyGroup"}}, "1\t2");
@@ -1616,7 +1616,7 @@ namespace {
     bool canUndo(const BenchmarkManagerViewModel &vm) { return vm.property("canUndo").toBool(); }
 
     struct SessionState {
-        Benchmark draft;
+        BenchmarkDefinition draft;
         QString rawAtA;
         QString rawAtU;
         QStringList selection;
@@ -1866,7 +1866,7 @@ TEST(BenchmarkTableSave, EveryFailureRetainsRetryState) {
         ASSERT_TRUE(f.vm->renameScenario("b", "Bee")["ok"].toBool());
         f.vm->setSelectedEntryIds({"b"});
         f.vm->setCurrentCell(QVariantMap{{"entryId", "a"}, {"tierId", "t1"}});
-        const Benchmark before = working(f);
+        const BenchmarkDefinition before = working(f);
         f.uc->nextSaveOutcome = {std::nullopt, error};
         f.uc->duringSave = [&] { f.publish(); };
 
@@ -2182,7 +2182,7 @@ TEST(BenchmarkTableRemoval, SelectedRowsAreOneEditAndOneUndo) {
     ASSERT_TRUE(f.vm->editThresholdText("b", "t2", "keep")["ok"].toBool());
     f.vm->setSelectedEntryIds({"u", "a", "c"});
     f.vm->setCurrentCell(cellAnchor("a", "t1"));
-    const Benchmark before = working(f);
+    const BenchmarkDefinition before = working(f);
     const auto resolves = f.uc->resolveCalls.size();
     QSignalSpy changed(f.vm.get(), &BenchmarkManagerViewModel::draftChanged);
 
@@ -2216,7 +2216,7 @@ TEST(BenchmarkTableRemoval, UnknownIdRejectsTheWholeBatch) {
     ASSERT_TRUE(f.vm->editThresholdText("a", "t1", "oops")["ok"].toBool());
     f.vm->setSelectedEntryIds({"a"});
     f.vm->setCurrentCell(cellAnchor("a", "t1"));
-    const Benchmark before = working(f);
+    const BenchmarkDefinition before = working(f);
     const auto resolves = f.uc->resolveCalls.size();
     QSignalSpy changed(f.vm.get(), &BenchmarkManagerViewModel::draftChanged);
     QSignalSpy selection(f.vm.get(), &BenchmarkManagerViewModel::selectionChanged);
@@ -2294,7 +2294,7 @@ TEST(BenchmarkTableNotifications, RefreshesDraftResolutionWithoutEdit) {
     ASSERT_TRUE(f.vm->editThresholdText("a", "t1", "oops")["ok"].toBool());
     f.vm->setSelectedEntryIds({"a", "b"});
     f.vm->setCurrentCell(cellAnchor("a", "t1"));
-    const Benchmark draftBefore = working(f);
+    const BenchmarkDefinition draftBefore = working(f);
     const auto resolves = f.uc->resolveCalls.size();
     const auto mapping = [&](int role) { return f.cell(f.rowOf("a"), 2, role); };
     ASSERT_EQ(mapping(TM::MappingStateRole).toString(), "unresolved");
@@ -2340,7 +2340,7 @@ TEST(BenchmarkTableNotifications, PublicationsInsideSaveKeepRetryState) {
     f.open(projectionBench());
     const auto originalToken = BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d1"};
     ASSERT_TRUE(f.vm->editThresholdText("a", "t1", "oops")["ok"].toBool());
-    const Benchmark draftBefore = working(f);
+    const BenchmarkDefinition draftBefore = working(f);
     QString mappingDuringSave;
     QString rawDuringSave;
     f.uc->duringSave = [&] {

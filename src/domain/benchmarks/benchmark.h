@@ -50,13 +50,13 @@ namespace ksv::domain {
         auto operator<=>(const Category &) const = default;
     };
 
-    struct Benchmark {
+    struct BenchmarkDefinition {
         BenchmarkId id;
         std::string name;                       // may be empty while incomplete
         std::vector<Tier> tiers;                // ordered ladder
         std::vector<ScenarioEntry> uncategorized;
         std::vector<Category> categories;       // ordered user-created categories
-        auto operator<=>(const Benchmark &) const = default;
+        auto operator<=>(const BenchmarkDefinition &) const = default;
     };
 }
 

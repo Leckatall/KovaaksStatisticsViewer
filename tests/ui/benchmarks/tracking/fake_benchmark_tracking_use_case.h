@@ -148,7 +148,7 @@ namespace ksv::tests_ui {
     // "s1", one uncategorized "s2", attained Silver with Gold next, two blockers, two-day rank and
     // rolling-playtime histories, and a three-day recent-rank history that dips on its last day.
     inline application::BenchmarkWorkspaceSnapshot makeTrackableSnapshot() {
-        domain::Benchmark definition;
+        domain::BenchmarkDefinition definition;
         definition.id = domain::BenchmarkId{"b1"};
         definition.name = "Voltaic";
         definition.tiers = {vtTier("t1", "Bronze"), vtTier("t2", "Silver"), vtTier("t3", "Gold")};
@@ -216,7 +216,7 @@ namespace ksv::tests_ui {
     // scenarios "e1"/"e2", and a "Tracking" category whose only child is the "Smoothness"
     // subcategory holding "e3". Blockers name "e2" (under Clicking) and "e3" (under Smoothness).
     inline application::BenchmarkWorkspaceSnapshot makeBreakdownSnapshot() {
-        domain::Benchmark definition;
+        domain::BenchmarkDefinition definition;
         definition.id = domain::BenchmarkId{"b1"};
         definition.name = "Voltaic";
         definition.tiers = {vtTier("t1", "Bronze"), vtTier("t2", "Silver"), vtTier("t3", "Gold")};

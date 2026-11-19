@@ -28,7 +28,7 @@ namespace {
 }
 
 TEST(BenchmarkEditor, AddTierAppendsWithFreshId) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
 
     const auto result = editor.addTier("Gold");
@@ -41,7 +41,7 @@ TEST(BenchmarkEditor, AddTierAppendsWithFreshId) {
 }
 
 TEST(BenchmarkEditor, ReplacingOrClearingMappingRemovesAdditionalHashes) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto id = *editor.addKnownScenario("Alpha", "old").createdEntry;
     bench.uncategorized.front().hashes = {"old", "new"};
@@ -56,7 +56,7 @@ TEST(BenchmarkEditor, ReplacingOrClearingMappingRemovesAdditionalHashes) {
 }
 
 TEST(BenchmarkEditor, SettingHashesDropsEmptiesAndDuplicatesKeepingFirstOccurrenceOrder) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto id = *editor.addKnownScenario("Alpha", "old").createdEntry;
     ASSERT_TRUE(editor.setScenarioHashes(id, {"b", "", "a", "b", "a"}).ok());
@@ -64,7 +64,7 @@ TEST(BenchmarkEditor, SettingHashesDropsEmptiesAndDuplicatesKeepingFirstOccurren
 }
 
 TEST(BenchmarkEditor, ValidationFindsOverlapInAdditionalMappings) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     editor.addKnownScenario("Alpha", "old");
     editor.addKnownScenario("Beta", "other");
@@ -75,7 +75,7 @@ TEST(BenchmarkEditor, ValidationFindsOverlapInAdditionalMappings) {
 }
 
 TEST(BenchmarkEditor, ReorderTierMovesTheTier) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     editor.addTier("Bronze");
     editor.addTier("Silver");
@@ -91,7 +91,7 @@ TEST(BenchmarkEditor, ReorderTierMovesTheTier) {
 }
 
 TEST(BenchmarkEditor, ReorderTierOutOfRangeReturnsPositionOutOfRange) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto tier = *editor.addTier("Gold").createdTier;
 
@@ -102,7 +102,7 @@ TEST(BenchmarkEditor, ReorderTierOutOfRangeReturnsPositionOutOfRange) {
 }
 
 TEST(BenchmarkEditor, TierCommandOnUnknownTierReturnsUnknownTier) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
 
     EXPECT_EQ(editor.renameTier(TierId{"nope"}, "x").error,
@@ -112,7 +112,7 @@ TEST(BenchmarkEditor, TierCommandOnUnknownTierReturnsUnknownTier) {
 }
 
 TEST(BenchmarkEditor, RemoveTierAlsoRemovesItsThresholdsFromEveryEntry) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto tier = *editor.addTier("Gold").createdTier;
     const auto otherTier = *editor.addTier("Silver").createdTier;
@@ -133,7 +133,7 @@ TEST(BenchmarkEditor, RemoveTierAlsoRemovesItsThresholdsFromEveryEntry) {
 }
 
 TEST(BenchmarkEditor, AddScenarioRejectsDuplicateDisplayName) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     ASSERT_TRUE(editor.addUnplayedScenario("1w6ts").ok());
 
@@ -145,7 +145,7 @@ TEST(BenchmarkEditor, AddScenarioRejectsDuplicateDisplayName) {
 }
 
 TEST(BenchmarkEditor, ManualBenchmarkHoldsKnownAndUnplayedScenariosTogether) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     editor.renameBenchmark("Manual");
     const auto tier = *editor.addTier("Gold").createdTier;
@@ -164,7 +164,7 @@ TEST(BenchmarkEditor, ManualBenchmarkHoldsKnownAndUnplayedScenariosTogether) {
 }
 
 TEST(BenchmarkEditor, SetThresholdUpsertsForTier) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto tier = *editor.addTier("Gold").createdTier;
     const auto entry = *editor.addUnplayedScenario("1w6ts").createdEntry;
@@ -178,7 +178,7 @@ TEST(BenchmarkEditor, SetThresholdUpsertsForTier) {
 }
 
 TEST(BenchmarkEditor, ClearThresholdRemovesOnlyThatTiersThreshold) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto gold = *editor.addTier("Gold").createdTier;
     const auto silver = *editor.addTier("Silver").createdTier;
@@ -193,7 +193,7 @@ TEST(BenchmarkEditor, ClearThresholdRemovesOnlyThatTiersThreshold) {
 }
 
 TEST(BenchmarkEditor, SetThresholdOnUnknownEntryOrTierReturnsError) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto tier = *editor.addTier("Gold").createdTier;
     const auto entry = *editor.addUnplayedScenario("1w6ts").createdEntry;
@@ -207,7 +207,7 @@ TEST(BenchmarkEditor, SetThresholdOnUnknownEntryOrTierReturnsError) {
 }
 
 TEST(BenchmarkEditor, RenameScenarioUpdatesTheRetainedDisplayName) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto entry = *editor.addUnplayedScenario("old name").createdEntry;
 
@@ -217,7 +217,7 @@ TEST(BenchmarkEditor, RenameScenarioUpdatesTheRetainedDisplayName) {
 }
 
 TEST(BenchmarkEditor, RemoveCategoryReturnsScenariosToUncategorized) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto category = *editor.addCategory("Clicking").createdGroup;
     const auto entry = *editor.addUnplayedScenario("s1").createdEntry;
@@ -232,7 +232,7 @@ TEST(BenchmarkEditor, RemoveCategoryReturnsScenariosToUncategorized) {
 }
 
 TEST(BenchmarkEditor, RemoveSubcategoryReturnsItsScenariosToUncategorized) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto category = *editor.addCategory("Clicking").createdGroup;
     const auto subcategory = *editor.addSubcategory(category, "Static").createdGroup;
@@ -250,7 +250,7 @@ TEST(BenchmarkEditor, RemoveSubcategoryReturnsItsScenariosToUncategorized) {
 }
 
 TEST(BenchmarkEditor, MoveScenarioIntoCategoryThatHasSubcategoriesKeepsDraftIncomplete) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto category = *editor.addCategory("Clicking").createdGroup;
     ASSERT_TRUE(editor.addUnplayedScenario("s1").ok());
@@ -265,7 +265,7 @@ TEST(BenchmarkEditor, MoveScenarioIntoCategoryThatHasSubcategoriesKeepsDraftInco
 }
 
 TEST(BenchmarkEditor, MoveScenarioBackToUncategorized) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto category = *editor.addCategory("Clicking").createdGroup;
     const auto entry = *editor.addUnplayedScenario("s1").createdEntry;
@@ -281,7 +281,7 @@ TEST(BenchmarkEditor, MoveScenarioBackToUncategorized) {
 }
 
 TEST(BenchmarkEditor, MoveScenarioToUnknownGroupReturnsUnknownGroup) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
     const auto entry = *editor.addUnplayedScenario("s1").createdEntry;
 
@@ -312,8 +312,8 @@ namespace {
     }
 
     // Visible rows a,b | c,d across two categories; g3 already holds x; g4 has subcategories.
-    Benchmark groupedBench() {
-        Benchmark bench;
+    BenchmarkDefinition groupedBench() {
+        BenchmarkDefinition bench;
         bench.name = "Bench";
         bench.tiers = {Tier{TierId{"t1"}, "T1", {}}};
         bench.categories = {
@@ -328,7 +328,7 @@ namespace {
 }
 
 TEST(BenchmarkTableRows, RepeatedUnnamedAppend) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     bench.uncategorized = {ScenarioEntry{ScenarioEntryId{"u0"}, "", {}, {}},
                            scored("n1", "Named", "h1", 10)};
     const auto before = bench.uncategorized;
@@ -352,8 +352,8 @@ TEST(BenchmarkTableRows, RepeatedUnnamedAppend) {
 }
 
 TEST(BenchmarkTableAssignment, OrderedAssignment) {
-    Benchmark bench = groupedBench();
-    const Benchmark before = bench;
+    BenchmarkDefinition bench = groupedBench();
+    const BenchmarkDefinition before = bench;
     BenchmarkEditor editor{bench, forbiddenIds()};
 
     const auto result = editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g3"});
@@ -367,8 +367,8 @@ TEST(BenchmarkTableAssignment, OrderedAssignment) {
 }
 
 TEST(BenchmarkTableAssignment, PlacedBeforeAnEntryOfAnotherGroup) {
-    Benchmark bench = groupedBench();
-    const Benchmark before = bench;
+    BenchmarkDefinition bench = groupedBench();
+    const BenchmarkDefinition before = bench;
     BenchmarkEditor editor{bench, forbiddenIds()};
 
     const auto result = editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g2"},
@@ -381,7 +381,7 @@ TEST(BenchmarkTableAssignment, PlacedBeforeAnEntryOfAnotherGroup) {
 }
 
 TEST(BenchmarkTableAssignment, PlacedWithinTheSameGroup) {
-    Benchmark bench = groupedBench();
+    BenchmarkDefinition bench = groupedBench();
     BenchmarkEditor editor{bench, forbiddenIds()};
 
     ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"b"}}, GroupId{"g1"}, ScenarioEntryId{"a"}).ok());
@@ -395,7 +395,7 @@ TEST(BenchmarkTableAssignment, PlacedWithinTheSameGroup) {
 // first row after it that is not moving, or the end of the group.
 TEST(BenchmarkTableAssignment, PlacedBeforeAMovingEntryAnchorsToTheNextUnmovedEntry) {
     {
-        Benchmark bench = groupedBench();
+        BenchmarkDefinition bench = groupedBench();
         bench.uncategorized = {scored("u1", "U1", std::nullopt, 7), scored("u2", "U2", std::nullopt, 8),
                                scored("u3", "U3", std::nullopt, 9)};
         BenchmarkEditor editor{bench, forbiddenIds()};
@@ -405,7 +405,7 @@ TEST(BenchmarkTableAssignment, PlacedBeforeAMovingEntryAnchorsToTheNextUnmovedEn
         EXPECT_EQ(idsOf(bench.uncategorized), (std::vector<std::string>{"a", "u1", "u2", "u3"}));
     }
     {
-        Benchmark bench = groupedBench();
+        BenchmarkDefinition bench = groupedBench();
         BenchmarkEditor editor{bench, forbiddenIds()};
 
         ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"d"}, ScenarioEntryId{"a"}}, GroupId{"g2"},
@@ -417,8 +417,8 @@ TEST(BenchmarkTableAssignment, PlacedBeforeAMovingEntryAnchorsToTheNextUnmovedEn
 TEST(BenchmarkTableAssignment, RejectedBatchIsUnchanged) {
     const auto attempt = [](const std::vector<ScenarioEntryId> &ids, const EditorGroupTarget &to,
                             const std::optional<ScenarioEntryId> &placeBefore = std::nullopt) {
-        Benchmark bench = groupedBench();
-        const Benchmark before = bench;
+        BenchmarkDefinition bench = groupedBench();
+        const BenchmarkDefinition before = bench;
         BenchmarkEditor editor{bench, forbiddenIds()};
         const auto result = editor.assignScenarios(ids, to, placeBefore);
         EXPECT_EQ(bench, before);
@@ -433,7 +433,7 @@ TEST(BenchmarkTableAssignment, RejectedBatchIsUnchanged) {
 }
 
 TEST(BenchmarkTableAssignment, DividedCategoryAcceptsDirectScenarios) {
-    Benchmark bench = groupedBench();
+    BenchmarkDefinition bench = groupedBench();
     BenchmarkEditor editor{bench, forbiddenIds()};
 
     ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g4"}).ok());
@@ -442,7 +442,7 @@ TEST(BenchmarkTableAssignment, DividedCategoryAcceptsDirectScenarios) {
 }
 
 TEST(BenchmarkTableHierarchy, AddingSubcategoryKeepsDirectScenariosInPlace) {
-    Benchmark bench = groupedBench();
+    BenchmarkDefinition bench = groupedBench();
     const auto direct = bench.categories.at(0).scenarios;
     BenchmarkEditor editor{bench, countingIds()};
 
@@ -459,13 +459,13 @@ TEST(BenchmarkTableHierarchy, AddingSubcategoryKeepsDirectScenariosInPlace) {
 }
 
 TEST(BenchmarkTableOrdering, ReorderWithinCollections) {
-    Benchmark bench;
+    BenchmarkDefinition bench;
     bench.tiers = {Tier{TierId{"t1"}, "T1", {}}};
     bench.categories = {Category{GroupId{"g"}, "G", {}, {}, {
         Subcategory{GroupId{"p"}, "P", {}, {scored("a", "A", "ha", 1), scored("b", "B", "hb", 2)}},
         Subcategory{GroupId{"q"}, "Q", {}, {scored("c", "C", "hc", 3)}},
     }}};
-    const Benchmark before = bench;
+    const BenchmarkDefinition before = bench;
     BenchmarkEditor editor{bench, forbiddenIds()};
 
     ASSERT_TRUE(editor.reorderSubcategory(GroupId{"q"}, 0).ok());
@@ -478,7 +478,7 @@ TEST(BenchmarkTableOrdering, ReorderWithinCollections) {
     EXPECT_EQ(idsOf(subs.at(1).scenarios), (std::vector<std::string>{"b", "a"}));
     EXPECT_EQ(subs.at(1).scenarios.at(0), before.categories.front().subcategories.at(0).scenarios.at(1));
 
-    const Benchmark reordered = bench;
+    const BenchmarkDefinition reordered = bench;
     EXPECT_EQ(editor.reorderSubcategory(GroupId{"unknown"}, 0).error, BenchmarkEditError::UnknownGroup);
     EXPECT_EQ(editor.reorderSubcategory(GroupId{"p"}, 2).error, BenchmarkEditError::PositionOutOfRange);
     EXPECT_EQ(editor.reorderScenario(ScenarioEntryId{"unknown"}, 0).error, BenchmarkEditError::UnknownEntry);

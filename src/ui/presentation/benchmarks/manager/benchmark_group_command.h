@@ -26,7 +26,7 @@ namespace ksv::presentation {
     // Destinations are every category and subcategory in hierarchy order, then Uncategorized. A
     // destination is exact when its name equals the query and it sits at the level `parentCategoryId`
     // selects (top level when empty); a creation is only offered when nothing is exact.
-    GroupCommandOptions buildGroupCommandOptions(const domain::Benchmark &draft, const QString &query,
+    GroupCommandOptions buildGroupCommandOptions(const domain::BenchmarkDefinition &draft, const QString &query,
                                                  const QString &parentCategoryId);
 }
 

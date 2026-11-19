@@ -27,7 +27,7 @@ namespace {
 TEST(BenchmarkProjectionTiming, AFullProjectionOverALargeProfileStaysWellUnderASecond) {
     UserProfile profile;
     std::vector<ScenarioId> scenarios;
-    Benchmark benchmark;
+    BenchmarkDefinition benchmark;
     benchmark.id = BenchmarkId{"timing"};
     benchmark.name = "Timing";
     benchmark.tiers = {benchmarkTier("bronze"), benchmarkTier("silver"), benchmarkTier("gold")};

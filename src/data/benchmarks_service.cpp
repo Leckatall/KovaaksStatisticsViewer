@@ -63,7 +63,7 @@ namespace ksv::data {
         entries.insert(it, BenchmarkFileEntry{filename, digest, std::move(content)});
     }
 
-    BenchmarkSaveOutcome BenchmarksService::writeAccepted(const domain::Benchmark &benchmark,
+    BenchmarkSaveOutcome BenchmarksService::writeAccepted(const domain::BenchmarkDefinition &benchmark,
                                                          const std::optional<BenchmarkEditToken> &token,
                                                          bool &changed) {
         if (isBlank(benchmark.name)) return {std::nullopt, BenchmarkSaveError::EmptyName};

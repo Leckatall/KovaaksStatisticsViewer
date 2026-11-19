@@ -44,7 +44,7 @@ namespace ksv::driver {
         std::vector<BenchmarkCategorySpec> categories;
     };
 
-    [[nodiscard]] domain::Benchmark generateBenchmark(const domain::UserProfile &profile, const BenchmarkSpec &spec);
+    [[nodiscard]] domain::BenchmarkDefinition generateBenchmark(const domain::UserProfile &profile, const BenchmarkSpec &spec);
 
     // A declarative profile (`ksv_driver --profile-spec FILE`; the schema is in
     // tools/driver/README.md). Scenarios are generated in the order listed, each

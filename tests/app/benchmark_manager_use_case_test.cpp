@@ -43,8 +43,8 @@ namespace {
         }
     };
 
-    Benchmark savedBenchmark(const std::string &id) {
-        Benchmark value;
+    BenchmarkDefinition savedBenchmark(const std::string &id) {
+        BenchmarkDefinition value;
         value.id = BenchmarkId{id};
         value.name = "Saved";
         value.tiers = {benchmarkTier("bronze"), benchmarkTier("silver"), benchmarkTier("gold")};
@@ -53,7 +53,7 @@ namespace {
         return value;
     }
 
-    BenchmarkLibrarySnapshot snapshotOf(const Benchmark &value) {
+    BenchmarkLibrarySnapshot snapshotOf(const BenchmarkDefinition &value) {
         BenchmarkLibrarySnapshot snapshot;
         snapshot.entries.push_back({value.id.value + ".json", "d-" + value.id.value,
                                     LoadedBenchmark{value, validateBenchmark(value)}});
@@ -314,9 +314,9 @@ TEST(BenchmarkManagerUseCase, ResolveWorkingCopyIsStateless) {
     fixture.resolution->resolveResultById["draft-b"] = {ambiguousEntry("eb", {"hb1", "hb2"})};
     fixture.build();
 
-    Benchmark a = savedBenchmark("draft-a");
+    BenchmarkDefinition a = savedBenchmark("draft-a");
     a.name = "Working A";
-    Benchmark b = savedBenchmark("draft-b");
+    BenchmarkDefinition b = savedBenchmark("draft-b");
     b.name = "Working B";
 
     const auto ra = fixture.manager->resolve(a);

@@ -23,11 +23,11 @@ namespace ksv::application {
         // Resolves a supplied working copy against the latest profile catalogue without adopting,
         // persisting, or otherwise retaining it.
         [[nodiscard]] virtual std::vector<domain::ScenarioResolution> resolve(
-            const domain::Benchmark &benchmark) const = 0;
+            const domain::BenchmarkDefinition &benchmark) const = 0;
 
         // The supplied working copy with every uniquely matched, unlinked entry linked exactly as a
         // reconciliation pass would link it, lease or not. Nothing is persisted.
-        [[nodiscard]] virtual domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const = 0;
+        [[nodiscard]] virtual domain::BenchmarkDefinition withAutomaticMappings(const domain::BenchmarkDefinition &benchmark) const = 0;
 
         // A leased benchmark keeps being resolved for presentation but is excluded from automatic
         // persistence until the lease is cleared with `std::nullopt`.

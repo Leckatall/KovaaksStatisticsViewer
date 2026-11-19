@@ -171,7 +171,7 @@ TEST_F(BenchmarkStoreTest, DuplicateStableIdWithinAFileIsInvalid) {
 }
 
 TEST_F(BenchmarkStoreTest, WriteCreatesThenRoundTripsThroughScan) {
-    domain::Benchmark def;
+    domain::BenchmarkDefinition def;
     def.id = domain::BenchmarkId{"b1"};
     def.name = "Written";
     def.tiers = {domain::Tier{domain::TierId{"t1"}, "Bronze", {}}};
@@ -190,7 +190,7 @@ TEST_F(BenchmarkStoreTest, WriteCreatesThenRoundTripsThroughScan) {
 
 TEST_F(BenchmarkStoreTest, IncompleteWorkRoundTripsExactlyAndKeepsItsIssues) {
     using namespace ksv::domain;
-    Benchmark def;
+    BenchmarkDefinition def;
     def.id = BenchmarkId{"b1"};
     def.name = "Half Done";
     def.tiers = {Tier{TierId{"t1"}, "Bronze", {200, 120, 0, 255}},
@@ -232,7 +232,7 @@ TEST_F(BenchmarkStoreTest, UnsupportedFileIsNeverRewritten) {
         ASSERT_NE(problem(entry), nullptr);
         EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Unsupported);
     }
-    domain::Benchmark replacement;
+    domain::BenchmarkDefinition replacement;
     replacement.id = domain::BenchmarkId{"b1"};
     replacement.name = "Replacement";
     EXPECT_EQ(store->write(replacement, "future.json", std::nullopt).failure,
@@ -247,7 +247,7 @@ TEST_F(BenchmarkStoreTest, ReplaceWithStaleDigestIsAConflictAndDoesNotOverwrite)
     write("f.json", trackableJson("b1", "Original"));
     const auto original = store->scan().snapshot->entries.at(0);
 
-    domain::Benchmark edited;
+    domain::BenchmarkDefinition edited;
     edited.id = domain::BenchmarkId{"b1"};
     edited.name = "Edited";
     const auto result = store->write(edited, "f.json", std::string{"deadbeef"});  // wrong digest
@@ -264,7 +264,7 @@ TEST_F(BenchmarkStoreTest, ReplaceWithMatchingDigestSucceeds) {
     write("f.json", trackableJson("b1", "Original"));
     const auto original = store->scan().snapshot->entries.at(0);
 
-    domain::Benchmark edited;
+    domain::BenchmarkDefinition edited;
     edited.id = domain::BenchmarkId{"b1"};
     edited.name = "Edited";
     edited.tiers = {domain::Tier{domain::TierId{"t1"}, "Bronze", {}}};

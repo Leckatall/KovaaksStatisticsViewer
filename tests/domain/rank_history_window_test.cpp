@@ -76,7 +76,7 @@ TEST(RankHistoryWindow, AWindowAfterTheLastImprovementCarriesTheCurrentRank) {
 }
 
 TEST(RankHistoryWindow, WindowedValuesAreTheFullEvaluationsValues) {
-    Benchmark definition{BenchmarkId{"bench"}, "Bench",
+    BenchmarkDefinition definition{BenchmarkId{"bench"}, "Bench",
                          {{TierId{"bronze"}, "bronze", {}}, {TierId{"silver"}, "silver", {}}, {TierId{"gold"}, "gold", {}}},
                          {}, {}};
     const std::initializer_list<std::pair<std::string, double> > rungs{

@@ -129,7 +129,7 @@ namespace ksv::presentation {
         // Builds the grid's lists in one pass over the definition, joined with the projection.
         class GridBuilder {
         public:
-            GridBuilder(const domain::Benchmark &definition, const domain::BenchmarkProjection &projection)
+            GridBuilder(const domain::BenchmarkDefinition &definition, const domain::BenchmarkProjection &projection)
                 : m_definition(definition), m_projection(projection) {
                 for (const auto &tier: projection.tiers) {
                     const QString id = q(tier.id.value);
@@ -356,7 +356,7 @@ namespace ksv::presentation {
                 content.rows.push_back(std::move(row));
             }
 
-            const domain::Benchmark &m_definition;
+            const domain::BenchmarkDefinition &m_definition;
             const domain::BenchmarkProjection &m_projection;
             QHash<QString, TierStyle> m_tierStyles;
             QHash<QString, const domain::ScenarioProjection *> m_scenarios;
@@ -504,7 +504,7 @@ namespace ksv::presentation {
         return map;
     }
 
-    void BenchmarkProgressGridModel::reset(const domain::Benchmark *definition,
+    void BenchmarkProgressGridModel::reset(const domain::BenchmarkDefinition *definition,
                                       const domain::BenchmarkProjection *projection) {
         m_content = {};
         if (definition && projection) {

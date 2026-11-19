@@ -33,14 +33,14 @@ namespace ksv::tests_support {
         data::BenchmarkRemoveOutcome nextRemoveOutcome{};
         mutable std::vector<domain::ScenarioResolution> nextResolveResult;
         // withAutomaticMappings() returns its input unchanged unless this is set.
-        std::function<domain::Benchmark(const domain::Benchmark &)> mapAutomatically;
-        mutable std::vector<domain::Benchmark> mapCalls;
+        std::function<domain::BenchmarkDefinition(const domain::BenchmarkDefinition &)> mapAutomatically;
+        mutable std::vector<domain::BenchmarkDefinition> mapCalls;
 
         std::vector<std::string> openArgs;
         std::vector<std::string> importPaths;
-        std::vector<std::pair<domain::Benchmark, std::optional<data::BenchmarkEditToken>>> saveCalls;
+        std::vector<std::pair<domain::BenchmarkDefinition, std::optional<data::BenchmarkEditToken>>> saveCalls;
         std::vector<data::BenchmarkEditToken> deleteTokens;
-        mutable std::vector<domain::Benchmark> resolveCalls;
+        mutable std::vector<domain::BenchmarkDefinition> resolveCalls;
         int beginNewCount = 0;
         int closeEditorCount = 0;
 
@@ -80,7 +80,7 @@ namespace ksv::tests_support {
         }
 
         [[nodiscard]] data::BenchmarkSaveOutcome save(
-            const domain::Benchmark &benchmark,
+            const domain::BenchmarkDefinition &benchmark,
             const std::optional<data::BenchmarkEditToken> &token) override {
             commandLog.emplace_back("save");
             saveCalls.emplace_back(benchmark, token);
@@ -88,11 +88,11 @@ namespace ksv::tests_support {
             return nextSaveOutcome;
         }
         [[nodiscard]] std::vector<domain::ScenarioResolution> resolve(
-            const domain::Benchmark &benchmark) const override {
+            const domain::BenchmarkDefinition &benchmark) const override {
             resolveCalls.push_back(benchmark);
             return nextResolveResult;
         }
-        [[nodiscard]] domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const override {
+        [[nodiscard]] domain::BenchmarkDefinition withAutomaticMappings(const domain::BenchmarkDefinition &benchmark) const override {
             mapCalls.push_back(benchmark);
             return mapAutomatically ? mapAutomatically(benchmark) : benchmark;
         }

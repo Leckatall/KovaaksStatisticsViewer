@@ -145,14 +145,14 @@ namespace ksv::qt_data {
         }
 
         // Structural decode: shape + types only. Returns nullopt on any representation failure.
-        std::optional<Benchmark> decodeStructure(const QJsonObject &root, int version) {
+        std::optional<BenchmarkDefinition> decodeStructure(const QJsonObject &root, int version) {
             if (!exactKeys(root, {"schemaVersion", "id", "name", "tiers", "uncategorized", "categories"}) ||
                 !root["name"].isString() || !root["tiers"].isArray() || !root["uncategorized"].isArray() ||
                 !root["categories"].isArray())
                 return std::nullopt;
             const auto id = nonEmptyIdString(root["id"]);
             if (!id) return std::nullopt;
-            Benchmark def;
+            BenchmarkDefinition def;
             def.id = BenchmarkId{*id};
             def.name = root["name"].toString().toStdString();
             for (const auto &item: root["tiers"].toArray()) {
@@ -173,7 +173,7 @@ namespace ksv::qt_data {
 
         // Representation integrity that Invalidates a file: duplicate stable ids anywhere, and any
         // threshold referencing a tier the definition does not declare.
-        bool hasStructuralIntegrity(const Benchmark &def) {
+        bool hasStructuralIntegrity(const BenchmarkDefinition &def) {
             std::unordered_set<std::string> ids;
             const auto add = [&](const std::string &value) { return ids.insert(value).second; };
             if (!add(def.id.value)) return false;
@@ -251,7 +251,7 @@ namespace ksv::qt_data {
             return array;
         }
 
-        QByteArray encode(const Benchmark &def) {
+        QByteArray encode(const BenchmarkDefinition &def) {
             QJsonArray tiers;
             for (const auto &tier: def.tiers)
                 tiers.append(QJsonObject{{"id", QString::fromStdString(tier.id.value)},
@@ -320,7 +320,7 @@ namespace ksv::qt_data {
         return {snapshot, std::nullopt};
     }
 
-    data::BenchmarkWriteResult BenchmarkStore::write(const domain::Benchmark &definition,
+    data::BenchmarkWriteResult BenchmarkStore::write(const domain::BenchmarkDefinition &definition,
                                                      const std::string &filename,
                                                      const std::optional<std::string> &expectedDigest) {
         QDir dir(QString::fromStdString(m_directory));

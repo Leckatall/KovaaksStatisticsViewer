@@ -17,8 +17,8 @@ namespace ksv::application {
 
         [[nodiscard]] BenchmarkResolutionSnapshot snapshot() const override { return m_snapshot; }
         [[nodiscard]] std::vector<domain::ScenarioResolution> resolve(
-            const domain::Benchmark &benchmark) const override;
-        [[nodiscard]] domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const override;
+            const domain::BenchmarkDefinition &benchmark) const override;
+        [[nodiscard]] domain::BenchmarkDefinition withAutomaticMappings(const domain::BenchmarkDefinition &benchmark) const override;
         void setEditLease(std::optional<domain::BenchmarkId> benchmark) override;
         void onChanged(std::function<void()> callback) override {
             m_callbacks.push_back(std::move(callback));

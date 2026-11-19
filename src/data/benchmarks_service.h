@@ -39,7 +39,7 @@ namespace ksv::data {
                                  LoadedBenchmark content);
         // Validate, conditionally write, and (on success) install one accepted benchmark without
         // publishing. `changed` is set true on any accepted mutation so the caller publishes once.
-        BenchmarkSaveOutcome writeAccepted(const domain::Benchmark &benchmark,
+        BenchmarkSaveOutcome writeAccepted(const domain::BenchmarkDefinition &benchmark,
                                            const std::optional<BenchmarkEditToken> &token,
                                            bool &changed);
 

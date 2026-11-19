@@ -14,8 +14,8 @@ using namespace ksv::data;
 using ksv::tests_support::FakeBenchmarkStore;
 
 namespace {
-    domain::Benchmark bench(const std::string &id, const std::string &name) {
-        domain::Benchmark b;
+    domain::BenchmarkDefinition bench(const std::string &id, const std::string &name) {
+        domain::BenchmarkDefinition b;
         b.id = domain::BenchmarkId{id};
         b.name = name;
         return b;

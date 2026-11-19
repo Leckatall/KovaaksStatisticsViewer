@@ -13,7 +13,7 @@ namespace ksv::application {
     // Save carries. `token` is std::nullopt for a brand-new or freshly imported seed that has never
     // been persisted.
     struct BenchmarkEditorSeed {
-        domain::Benchmark benchmark;
+        domain::BenchmarkDefinition benchmark;
         std::optional<data::BenchmarkEditToken> token;
     };
 

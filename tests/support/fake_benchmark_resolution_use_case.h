@@ -19,10 +19,10 @@ namespace ksv::tests_support {
         application::BenchmarkResolutionSnapshot snapshotValue;
         std::vector<domain::ScenarioResolution> resolveResult;
         std::map<std::string, std::vector<domain::ScenarioResolution>> resolveResultById;
-        mutable std::vector<domain::Benchmark> resolvedBenchmarks;
+        mutable std::vector<domain::BenchmarkDefinition> resolvedBenchmarks;
         // withAutomaticMappings() returns its input unchanged unless this is set.
-        std::optional<domain::Benchmark> mapResult;
-        mutable std::vector<domain::Benchmark> mappedBenchmarks;
+        std::optional<domain::BenchmarkDefinition> mapResult;
+        mutable std::vector<domain::BenchmarkDefinition> mappedBenchmarks;
         std::optional<domain::BenchmarkId> editLease;
         int setEditLeaseCount = 0;
         std::vector<std::function<void()>> callbacks;
@@ -31,13 +31,13 @@ namespace ksv::tests_support {
             return snapshotValue;
         }
         [[nodiscard]] std::vector<domain::ScenarioResolution> resolve(
-            const domain::Benchmark &benchmark) const override {
+            const domain::BenchmarkDefinition &benchmark) const override {
             resolvedBenchmarks.push_back(benchmark);
             if (const auto it = resolveResultById.find(benchmark.id.value); it != resolveResultById.end())
                 return it->second;
             return resolveResult;
         }
-        [[nodiscard]] domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const override {
+        [[nodiscard]] domain::BenchmarkDefinition withAutomaticMappings(const domain::BenchmarkDefinition &benchmark) const override {
             mappedBenchmarks.push_back(benchmark);
             return mapResult ? *mapResult : benchmark;
         }

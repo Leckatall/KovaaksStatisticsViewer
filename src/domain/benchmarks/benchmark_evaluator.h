@@ -21,7 +21,7 @@ namespace ksv::domain {
                                              std::optional<double> score);
 
     [[nodiscard]] BenchmarkProjection evaluateBenchmark(
-        const Benchmark &definition, const CompletenessResult &completeness,
+        const BenchmarkDefinition &definition, const CompletenessResult &completeness,
         const std::vector<ScenarioResolution> &resolutions, const std::vector<RunFact> &runFacts,
         std::vector<std::pair<std::chrono::sys_days, double> > rollingPlaytime);
 }

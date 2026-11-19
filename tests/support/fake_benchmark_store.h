@@ -20,7 +20,7 @@ namespace ksv::tests_support {
         data::BenchmarkDeleteResult nextRemove{};
         int writeCount = 0;
         int removeCount = 0;
-        domain::Benchmark lastWritten;
+        domain::BenchmarkDefinition lastWritten;
         std::string lastWriteFilename;
         std::optional<std::string> lastWriteDigest;
         std::string lastRemoveFilename;
@@ -31,7 +31,7 @@ namespace ksv::tests_support {
             if (index < static_cast<int>(scriptedScans.size())) return scriptedScans[index];
             return nextScan;
         }
-        data::BenchmarkWriteResult write(const domain::Benchmark &definition,
+        data::BenchmarkWriteResult write(const domain::BenchmarkDefinition &definition,
                                          const std::string &filename,
                                          const std::optional<std::string> &expectedDigest) override {
             const auto index = writeCount++;

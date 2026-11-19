@@ -185,7 +185,7 @@ namespace ksv::presentation {
         const application::BenchmarkWorkspaceSnapshot &snapshot = m_useCase->snapshot();
         const domain::BenchmarkProjection *projection =
             snapshot.projection ? &*snapshot.projection : nullptr;
-        const domain::Benchmark *definition =
+        const domain::BenchmarkDefinition *definition =
             snapshot.selectedLoaded ? &snapshot.selectedLoaded->benchmark : nullptr;
 
         m_selectorEntries = buildSelectorEntries(snapshot.choices);

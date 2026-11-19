@@ -513,7 +513,7 @@ namespace ksv::driver {
         }
     }
 
-    domain::Benchmark generateBenchmark(const domain::UserProfile &profile, const BenchmarkSpec &spec) {
+    domain::BenchmarkDefinition generateBenchmark(const domain::UserProfile &profile, const BenchmarkSpec &spec) {
         std::map<std::string, double> best;
         std::map<std::string, std::set<std::string>> hashesByName;
         for (const auto &run: profile.getAllRunRecords()) {
@@ -522,7 +522,7 @@ namespace ksv::driver {
             hashesByName[run.run_id.scenario_id.name].insert(run.run_id.scenario_id.hash);
         }
 
-        domain::Benchmark benchmark;
+        domain::BenchmarkDefinition benchmark;
         benchmark.id = domain::BenchmarkId{spec.id};
         benchmark.name = spec.name;
         for (const auto &tier: spec.tiers) benchmark.tiers.push_back({domain::TierId{tier.id}, tier.name, tier.color});

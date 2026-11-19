@@ -10,7 +10,7 @@ namespace ksv::qt_data {
         explicit BenchmarkStore(std::string directoryPath);
 
         [[nodiscard]] data::BenchmarkScanResult scan() const override;
-        data::BenchmarkWriteResult write(const domain::Benchmark &definition,
+        data::BenchmarkWriteResult write(const domain::BenchmarkDefinition &definition,
                                          const std::string &filename,
                                          const std::optional<std::string> &expectedDigest) override;
         data::BenchmarkDeleteResult remove(const std::string &filename,

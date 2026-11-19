@@ -11,7 +11,7 @@ namespace ksv::presentation {
             QString parentId;
         };
 
-        std::vector<Destination> destinationsOf(const domain::Benchmark &draft) {
+        std::vector<Destination> destinationsOf(const domain::BenchmarkDefinition &draft) {
             std::vector<Destination> destinations;
             for (const auto &category: draft.categories) {
                 const auto categoryName = QString::fromStdString(category.name);
@@ -41,7 +41,7 @@ namespace ksv::presentation {
         }
     }
 
-    GroupCommandOptions buildGroupCommandOptions(const domain::Benchmark &draft, const QString &query,
+    GroupCommandOptions buildGroupCommandOptions(const domain::BenchmarkDefinition &draft, const QString &query,
                                                  const QString &parentCategoryId) {
         const auto destinations = destinationsOf(draft);
         const auto trimmed = query.trimmed();

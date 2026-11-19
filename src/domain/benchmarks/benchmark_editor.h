@@ -37,7 +37,7 @@ namespace ksv::domain {
     // editor generating them.
     class BenchmarkEditor {
     public:
-        BenchmarkEditor(Benchmark &target, std::function<std::string()> idFactory)
+        BenchmarkEditor(BenchmarkDefinition &target, std::function<std::string()> idFactory)
             : m_target(target), m_idFactory(std::move(idFactory)) {}
 
         BenchmarkEditResult renameBenchmark(const std::string &name);
@@ -78,7 +78,7 @@ namespace ksv::domain {
     private:
         std::string newId() const { return m_idFactory(); }
 
-        Benchmark &m_target;
+        BenchmarkDefinition &m_target;
         std::function<std::string()> m_idFactory;
     };
 }

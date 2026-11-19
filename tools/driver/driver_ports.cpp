@@ -91,7 +91,7 @@ namespace ksv::driver {
                 }
                 return m_inner->scan();
             }
-            data::BenchmarkWriteResult write(const domain::Benchmark &definition, const std::string &filename,
+            data::BenchmarkWriteResult write(const domain::BenchmarkDefinition &definition, const std::string &filename,
                                              const std::optional<std::string> &expectedDigest) override {
                 if (m_plan->beforeCall(kBenchmarkStore, "write")) {
                     return {std::nullopt, data::BenchmarkWriteFailure::WriteFailed};

@@ -16,7 +16,7 @@ namespace ksv::domain {
             return std::ranges::all_of(text, [](unsigned char ch) { return std::isspace(ch) != 0; });
         }
 
-        void collectEntries(const Benchmark &def, std::vector<const ScenarioEntry *> &out) {
+        void collectEntries(const BenchmarkDefinition &def, std::vector<const ScenarioEntry *> &out) {
             for (const auto &e: def.uncategorized) out.push_back(&e);
             for (const auto &category: def.categories) {
                 for (const auto &e: category.scenarios) out.push_back(&e);
@@ -56,7 +56,7 @@ namespace ksv::domain {
         }
     }
 
-    CompletenessResult validateBenchmark(const Benchmark &def) {
+    CompletenessResult validateBenchmark(const BenchmarkDefinition &def) {
         CompletenessResult result;
         auto &issues = result.issues;
 

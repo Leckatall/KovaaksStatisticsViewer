@@ -58,7 +58,7 @@ namespace ksv::application {
     }
 
     BenchmarkEditorSeed BenchmarkManagerUseCase::beginNewBenchmark() {
-        domain::Benchmark fresh;
+        domain::BenchmarkDefinition fresh;
         fresh.id = domain::BenchmarkId{newId()};
         m_resolution->setEditLease(fresh.id);
         return {std::move(fresh), std::nullopt};
@@ -89,7 +89,7 @@ namespace ksv::application {
                                        PlaylistImportFailure::NoUsableScenarioList},
                     std::nullopt, {}};
         }
-        domain::Benchmark imported;
+        domain::BenchmarkDefinition imported;
         imported.id = domain::BenchmarkId{newId()};
         if (read.seed->name) imported.name = *read.seed->name;
         for (const auto &scenarioName: read.seed->scenarioNames)
@@ -101,18 +101,18 @@ namespace ksv::application {
     }
 
     data::BenchmarkSaveOutcome BenchmarkManagerUseCase::save(
-        const domain::Benchmark &benchmark, const std::optional<data::BenchmarkEditToken> &token) {
+        const domain::BenchmarkDefinition &benchmark, const std::optional<data::BenchmarkEditToken> &token) {
         auto outcome = m_benchmarks->save({benchmark, token});
         if (!token && outcome.ok() && m_recent) m_recent->markCreated(benchmark.id.value);
         return outcome;
     }
 
     std::vector<domain::ScenarioResolution> BenchmarkManagerUseCase::resolve(
-        const domain::Benchmark &benchmark) const {
+        const domain::BenchmarkDefinition &benchmark) const {
         return m_resolution->resolve(benchmark);
     }
 
-    domain::Benchmark BenchmarkManagerUseCase::withAutomaticMappings(const domain::Benchmark &benchmark) const {
+    domain::BenchmarkDefinition BenchmarkManagerUseCase::withAutomaticMappings(const domain::BenchmarkDefinition &benchmark) const {
         return m_resolution->withAutomaticMappings(benchmark);
     }
 

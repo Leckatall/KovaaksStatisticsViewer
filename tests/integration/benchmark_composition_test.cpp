@@ -168,7 +168,7 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     EXPECT_TRUE(import.skippedDuplicateIndices.empty());
     ASSERT_TRUE(import.seed.has_value());
     EXPECT_FALSE(import.seed->token.has_value());
-    domain::Benchmark working = import.seed->benchmark;
+    domain::BenchmarkDefinition working = import.seed->benchmark;
     EXPECT_EQ(working.name, "Viscose Benchmarks Beta - Intermediate");
     ASSERT_EQ(working.uncategorized.size(), 36U);
     EXPECT_EQ(working.uncategorized.front().name, "WhisphereRawControl");
@@ -212,7 +212,7 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
         ASSERT_TRUE(file.open(QIODevice::WriteOnly));
         file.write(externallyEditedJson(benchmarkId.value));
     }
-    domain::Benchmark stale = reopened->benchmark;
+    domain::BenchmarkDefinition stale = reopened->benchmark;
     stale.name = "Renamed After External Edit";
     const auto conflicted = manager->save(stale, reopened->token);
     EXPECT_EQ(conflicted.error, std::make_optional(BenchmarkSaveError::Conflict));
@@ -615,7 +615,7 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     auto manager = w->app->benchmarkManagerUseCase();
     const auto seed = manager->openBenchmark(domain::BenchmarkId{"b-cascade"});
     ASSERT_TRUE(seed.has_value());
-    domain::Benchmark mapped = seed->benchmark;
+    domain::BenchmarkDefinition mapped = seed->benchmark;
     ASSERT_EQ(mapped.uncategorized.size(), 1U);
     mapped.uncategorized[0].hashes = {"3e50391f3c3f484c10a4b8fb362ded17"};
     ASSERT_TRUE(manager->save(mapped, seed->token).ok());

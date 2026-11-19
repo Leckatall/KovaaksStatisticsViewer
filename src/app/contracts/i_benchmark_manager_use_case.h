@@ -42,14 +42,14 @@ namespace ksv::application {
         // Submits a complete working value plus its optional admitted token; the data service's
         // classified outcome is returned unchanged.
         [[nodiscard]] virtual data::BenchmarkSaveOutcome save(
-            const domain::Benchmark &benchmark,
+            const domain::BenchmarkDefinition &benchmark,
             const std::optional<data::BenchmarkEditToken> &token) = 0;
         // Resolves a caller-supplied working copy against the latest profile catalogue without
         // adopting or persisting it.
         [[nodiscard]] virtual std::vector<domain::ScenarioResolution> resolve(
-            const domain::Benchmark &benchmark) const = 0;
+            const domain::BenchmarkDefinition &benchmark) const = 0;
         // A caller-supplied working copy with its uniquely matched, unlinked entries linked.
-        [[nodiscard]] virtual domain::Benchmark withAutomaticMappings(const domain::Benchmark &benchmark) const = 0;
+        [[nodiscard]] virtual domain::BenchmarkDefinition withAutomaticMappings(const domain::BenchmarkDefinition &benchmark) const = 0;
         [[nodiscard]] virtual data::BenchmarkRemoveOutcome deleteBenchmark(
             const data::BenchmarkEditToken &token) = 0;
     };

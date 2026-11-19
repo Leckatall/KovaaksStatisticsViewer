@@ -133,7 +133,7 @@ namespace ksv::ui {
             const std::vector<Tier> tiers = sampleTiers(spec.tierCount);
             const std::size_t tierCount = tiers.size();
 
-            Benchmark definition;
+            BenchmarkDefinition definition;
             definition.id = BenchmarkId{"sample"};
             definition.name = spec.incomplete ? "Incomplete Sample Benchmark" : "Overflowing Sample Benchmark";
             definition.tiers = tiers;

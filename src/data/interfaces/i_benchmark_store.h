@@ -40,7 +40,7 @@ namespace ksv::data {
 
         // Atomic temp-file replacement. `expectedDigest` is nullopt for a new file, or the digest of
         // the bytes last admitted for `filename` when replacing; a mismatch is a conflict, not a write.
-        virtual BenchmarkWriteResult write(const domain::Benchmark &definition,
+        virtual BenchmarkWriteResult write(const domain::BenchmarkDefinition &definition,
                                            const std::string &filename,
                                            const std::optional<std::string> &expectedDigest) = 0;
 

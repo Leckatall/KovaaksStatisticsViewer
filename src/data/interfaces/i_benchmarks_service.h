@@ -22,7 +22,7 @@ namespace ksv::data {
     enum class BenchmarkSaveError { EmptyName, UnknownTarget, StaleToken, Conflict, WriteFailed };
 
     struct BenchmarkSaveRequest {
-        domain::Benchmark benchmark;
+        domain::BenchmarkDefinition benchmark;
         std::optional<BenchmarkEditToken> token;  // nullopt requests a create; a token requests a replace
     };
 
@@ -33,7 +33,7 @@ namespace ksv::data {
     };
 
     struct BenchmarkReplacementRequest {
-        domain::Benchmark benchmark;
+        domain::BenchmarkDefinition benchmark;
         BenchmarkEditToken token;
     };
 

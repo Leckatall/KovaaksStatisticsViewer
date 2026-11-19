@@ -27,8 +27,8 @@ namespace {
         return {{"bronze", 100.0}, {"silver", 200.0}, {"gold", 300.0}};
     }
 
-    Benchmark benchmark(const std::string &id) {
-        Benchmark value;
+    BenchmarkDefinition benchmark(const std::string &id) {
+        BenchmarkDefinition value;
         value.id = BenchmarkId{id};
         value.name = "Tracked";
         value.tiers = {benchmarkTier("bronze"), benchmarkTier("silver"), benchmarkTier("gold")};
@@ -37,7 +37,7 @@ namespace {
         return value;
     }
 
-    BenchmarkFileEntry fileFor(const Benchmark &value, const std::string &filename) {
+    BenchmarkFileEntry fileFor(const BenchmarkDefinition &value, const std::string &filename) {
         return {filename, "d-" + filename, LoadedBenchmark{value, validateBenchmark(value)}};
     }
 
@@ -71,7 +71,7 @@ namespace {
         }
     };
 
-    BenchmarkLibrarySnapshot snapshotFor(const Benchmark &value) {
+    BenchmarkLibrarySnapshot snapshotFor(const BenchmarkDefinition &value) {
         BenchmarkLibrarySnapshot snapshot;
         snapshot.entries.push_back(fileFor(value, value.id.value + ".json"));
         return snapshot;
@@ -288,7 +288,7 @@ TEST(BenchmarkTrackingCache, DefinitionEditReconstructsTheCachedProjection) {
 // ---- Task A1: one coherent workspace snapshot ------------------------------------------------
 
 namespace {
-    BenchmarkFileEntry loadedEntry(const Benchmark &value, const std::string &filename) {
+    BenchmarkFileEntry loadedEntry(const BenchmarkDefinition &value, const std::string &filename) {
         return {filename, "d-" + filename, LoadedBenchmark{value, validateBenchmark(value)}};
     }
 
@@ -299,7 +299,7 @@ namespace {
                 ProblemBenchmark{problem, std::move(name), std::move(id), schemaVersion}};
     }
 
-    Benchmark incompleteBenchmark(const std::string &id) {
+    BenchmarkDefinition incompleteBenchmark(const std::string &id) {
         auto value = benchmark(id);
         value.uncategorized[1].thresholds.clear();
         return value;

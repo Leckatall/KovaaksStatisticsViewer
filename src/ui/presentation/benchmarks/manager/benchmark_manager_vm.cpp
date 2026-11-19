@@ -56,13 +56,13 @@ namespace ksv::presentation {
             return domain::GroupId{groupId.toStdString()};
         }
 
-        std::optional<std::size_t> tierPosition(const domain::Benchmark &draft, const domain::TierId &id) {
+        std::optional<std::size_t> tierPosition(const domain::BenchmarkDefinition &draft, const domain::TierId &id) {
             const auto found = std::ranges::find_if(draft.tiers, [&](const domain::Tier &t) { return t.id == id; });
             if (found == draft.tiers.end()) return std::nullopt;
             return static_cast<std::size_t>(found - draft.tiers.begin());
         }
 
-        bool groupExists(const domain::Benchmark &draft, const QString &groupId) {
+        bool groupExists(const domain::BenchmarkDefinition &draft, const QString &groupId) {
             const domain::GroupId id{groupId.toStdString()};
             return std::ranges::any_of(draft.categories, [&](const domain::Category &category) {
                 return category.id == id || std::ranges::any_of(category.subcategories, [&](const domain::Subcategory &sub) {
@@ -165,7 +165,7 @@ namespace ksv::presentation {
         }
 
         BenchmarkTableProjection buildTableProjection(
-            const domain::Benchmark &draft, const IssueIndex &issues,
+            const domain::BenchmarkDefinition &draft, const IssueIndex &issues,
             const std::vector<domain::ScenarioResolution> &resolutions,
             const std::map<BenchmarkCellKey, BenchmarkCellRecord> &inputs) {
             std::unordered_map<std::string, const domain::ScenarioResolution *> byEntry;
@@ -266,7 +266,7 @@ namespace ksv::presentation {
             return projection;
         }
 
-        QVariantList buildGroups(const domain::Benchmark &draft, const IssueIndex &issues) {
+        QVariantList buildGroups(const domain::BenchmarkDefinition &draft, const IssueIndex &issues) {
             QVariantList groups;
             const auto describe = [&](const auto &group, const QString &kind, const QString &parentId, int count) {
                 return QVariantMap{
@@ -292,7 +292,7 @@ namespace ksv::presentation {
 
         // Scenario entries in the table's row order: categories in order (direct scenarios, then
         // each subcategory), Uncategorized last.
-        std::vector<domain::ScenarioEntryId> visibleEntryOrder(const domain::Benchmark &draft) {
+        std::vector<domain::ScenarioEntryId> visibleEntryOrder(const domain::BenchmarkDefinition &draft) {
             std::vector<domain::ScenarioEntryId> order;
             const auto append = [&](const std::vector<domain::ScenarioEntry> &entries) {
                 for (const auto &entry: entries) order.push_back(entry.id);
@@ -453,7 +453,7 @@ namespace ksv::presentation {
         m_draft = std::move(seed.benchmark);
         m_token = std::move(seed.token);
         resetSession();
-        m_baseline = dirty ? std::nullopt : std::optional<domain::Benchmark>(*m_draft);
+        m_baseline = dirty ? std::nullopt : std::optional<domain::BenchmarkDefinition>(*m_draft);
         m_draftFromLibrary = fromLibrary;
         m_draftDirty = dirty;
         m_draftCompleteness = domain::validateBenchmark(*m_draft);
@@ -490,7 +490,7 @@ namespace ksv::presentation {
     QVariantMap BenchmarkManagerViewModel::applySessionEdit(const SessionEdit &op) {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
         // Edited on copies, so a rejected multi-step edit leaves the session exactly as it was.
-        domain::Benchmark candidate = *m_draft;
+        domain::BenchmarkDefinition candidate = *m_draft;
         CellInputs inputs = m_cellInputs;
         domain::BenchmarkEditor editor{candidate, m_idFactory};
         const auto result = op(editor, inputs);
@@ -570,7 +570,7 @@ namespace ksv::presentation {
         // Retained input is saved as a missing threshold. The candidate stays isolated until the
         // outcome is known: a publication may re-enter during save(), and a failure must leave the
         // visible session, its input and its history exactly as they were.
-        domain::Benchmark candidate = *m_draft;
+        domain::BenchmarkDefinition candidate = *m_draft;
         {
             domain::BenchmarkEditor normalizer{candidate, m_idFactory};
             for (const auto &key: m_cellInputs | std::views::keys) normalizer.clearThreshold(key.entryId, key.tierId);

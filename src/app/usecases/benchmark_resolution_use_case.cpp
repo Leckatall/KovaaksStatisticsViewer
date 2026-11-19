@@ -27,7 +27,7 @@ namespace ksv::application {
             return false;
         }
 
-        domain::ScenarioEntry *findEntry(domain::Benchmark &benchmark, const domain::ScenarioEntryId &id) {
+        domain::ScenarioEntry *findEntry(domain::BenchmarkDefinition &benchmark, const domain::ScenarioEntryId &id) {
             domain::ScenarioEntry *found = nullptr;
             forEachScenarioList(benchmark, [&](std::vector<domain::ScenarioEntry> &entries) {
                 const auto it = std::ranges::find_if(
@@ -65,7 +65,7 @@ namespace ksv::application {
         };
 
         std::vector<AutoMapping> computeAutoMappings(
-            const domain::Benchmark &benchmark,
+            const domain::BenchmarkDefinition &benchmark,
             const std::map<std::string, std::vector<domain::ScenarioCandidate>> &byName) {
             std::unordered_set<std::string> taken;
             forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
@@ -89,7 +89,7 @@ namespace ksv::application {
             return mappings;
         }
 
-        domain::Benchmark applyAutoMappings(domain::Benchmark benchmark, const std::vector<AutoMapping> &mappings) {
+        domain::BenchmarkDefinition applyAutoMappings(domain::BenchmarkDefinition benchmark, const std::vector<AutoMapping> &mappings) {
             for (const auto &mapping: mappings) {
                 if (auto *target = findEntry(benchmark, mapping.entryId)) {
                     target->hashes = {mapping.hash};
@@ -100,7 +100,7 @@ namespace ksv::application {
         }
 
         std::vector<domain::ScenarioResolution> resolveAgainst(
-            const domain::Benchmark &benchmark, const ScenarioCatalogue &catalogue) {
+            const domain::BenchmarkDefinition &benchmark, const ScenarioCatalogue &catalogue) {
             std::vector<domain::ScenarioResolution> resolutions;
             forEachScenarioList(benchmark, [&](const std::vector<domain::ScenarioEntry> &entries) {
                 for (const auto &entry: entries) {
@@ -165,11 +165,11 @@ namespace ksv::application {
     }
 
     std::vector<domain::ScenarioResolution> BenchmarkResolutionUseCase::resolve(
-        const domain::Benchmark &benchmark) const {
+        const domain::BenchmarkDefinition &benchmark) const {
         return resolveAgainst(benchmark, buildCatalogue(*m_profile));
     }
 
-    domain::Benchmark BenchmarkResolutionUseCase::withAutomaticMappings(const domain::Benchmark &benchmark) const {
+    domain::BenchmarkDefinition BenchmarkResolutionUseCase::withAutomaticMappings(const domain::BenchmarkDefinition &benchmark) const {
         return applyAutoMappings(benchmark, computeAutoMappings(benchmark, buildCatalogue(*m_profile).byName));
     }
 

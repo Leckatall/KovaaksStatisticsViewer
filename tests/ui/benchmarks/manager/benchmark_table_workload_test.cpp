@@ -176,7 +176,7 @@ Floating Heads Timing 400% Larger
         std::unique_ptr<BenchmarkManagerViewModel> vm;
 
         Session() {
-            Benchmark empty;
+            BenchmarkDefinition empty;
             empty.id = BenchmarkId{"workload"};
             empty.name = "Workload";
             uc->nextNewSeed = {empty, std::nullopt};
