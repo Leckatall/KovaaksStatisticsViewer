@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmark_validation.h"
 
 namespace ksv::domain {

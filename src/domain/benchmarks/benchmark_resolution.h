@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 
 namespace ksv::domain {
     enum class ScenarioMatchState { Resolved, MappedUnavailable, Unresolved, Ambiguous, AutoMappable };

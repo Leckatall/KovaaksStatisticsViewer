@@ -3,7 +3,7 @@
 #include <utility>
 #include <variant>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 
 namespace ksv::application {
     namespace {

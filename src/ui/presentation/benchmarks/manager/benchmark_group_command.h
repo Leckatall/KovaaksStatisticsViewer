@@ -4,7 +4,7 @@
 #include <QString>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 
 namespace ksv::presentation {
     // `targetId` is empty when the destination is Uncategorized.

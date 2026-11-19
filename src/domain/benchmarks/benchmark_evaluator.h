@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_projection.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"

@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "data/interfaces/benchmark_library_snapshot.h"
 
 namespace ksv::data {

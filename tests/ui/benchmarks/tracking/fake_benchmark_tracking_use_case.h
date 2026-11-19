@@ -45,6 +45,7 @@ namespace ksv::tests_ui {
         [[nodiscard]] const domain::BenchmarkProjection *projection() const override {
             return snap.projection ? &*snap.projection : nullptr;
         }
+        [[nodiscard]] const domain::Benchmark *benchmark() const override { return nullptr; }
         void onChanged(std::function<void()> callback) override { m_callbacks.push_back(std::move(callback)); }
         void onPlaytimeChanged(std::function<void()> callback) override {
             m_playtimeCallbacks.push_back(std::move(callback));

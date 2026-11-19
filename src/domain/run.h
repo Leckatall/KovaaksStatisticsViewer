@@ -139,10 +139,27 @@ namespace ksv::domain {
         RunTotals totals;
     };
 
+    struct TimedScore {
+        long long start_time = 0; // milliseconds since epoch
+        float score = 0.0F;
+        float duration_seconds = 0.0F;
+
+        [[nodiscard]] std::chrono::sys_seconds startSecond() const {
+            using namespace std::chrono;
+            return floor<seconds>(sys_time<milliseconds>{milliseconds{start_time}});
+        }
+        [[nodiscard]] std::chrono::sys_days startDay() const {
+            using namespace std::chrono;
+            return floor<days>(sys_time<milliseconds>{milliseconds{start_time}});
+        }
+    };
+
     struct RunFact {
         ScenarioRunId run_id;
         float score = 0.0F;
         float duration_seconds = 0.0F;
+
+        [[nodiscard]] TimedScore timed() const { return {run_id.start_time, score, duration_seconds}; }
     };
 }
 

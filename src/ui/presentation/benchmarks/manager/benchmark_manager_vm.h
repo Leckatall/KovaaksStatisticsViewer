@@ -18,7 +18,7 @@
 #include "app/contracts/benchmark_editor_seed.h"
 #include "app/contracts/benchmark_manager_state.h"
 #include "app/contracts/i_benchmark_manager_use_case.h"
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_editor.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"

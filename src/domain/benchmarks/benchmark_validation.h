@@ -5,7 +5,7 @@
 #include <variant>
 #include <vector>
 
-#include "benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 
 namespace ksv::domain {
     enum class Completeness { Incomplete, Trackable };

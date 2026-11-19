@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "presentation/benchmarks/manager/benchmark_group_command.h"
 
 using namespace ksv::domain;

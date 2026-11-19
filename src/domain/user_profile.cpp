@@ -11,6 +11,8 @@
 #include <unordered_set>
 #include <utility>
 
+#include "rolling_playtime.h"
+
 namespace ksv::domain {
     UserProfile::UserProfile(SourceRegistry sources) : m_sources(std::move(sources)) {
     }
@@ -253,60 +255,13 @@ namespace ksv::domain {
 
     std::vector<std::pair<std::chrono::sys_days, double> >
     UserProfile::rollingTimeAverageFor(const std::vector<std::size_t> &sorted_indices, const int window_days) const {
-        // TODO: Maybe add support for unsorted indices? Why do they need to be sorted?
-        using namespace std::chrono;
-        std::vector<std::pair<sys_days, double> > result;
-        if (window_days <= 0 || sorted_indices.empty()) return result;
-
-        std::vector<std::pair<sys_days, double> > daily_totals;
+        std::vector<TimedScore> samples;
+        samples.reserve(sorted_indices.size());
         for (const auto idx: sorted_indices) {
             const auto &run = m_runs[idx];
-            // Skip pre-epoch timestamps (malformed/test data) to avoid stretching axis back to 1970
-            if (run.run_id.start_time <= 0) continue;
-            const auto day = run.run_id.startDay();
-            if (!daily_totals.empty() && daily_totals.back().first == day) {
-                daily_totals.back().second += run.scenario_length;
-            } else {
-                daily_totals.emplace_back(day, run.scenario_length);
-            }
+            samples.push_back({run.run_id.start_time, run.totals().score, run.scenario_length});
         }
-
-        if (daily_totals.empty()) return result;
-
-        const sys_days first_day = daily_totals.front().first;
-        const sys_days last_day = daily_totals.back().first;
-        const auto window = days{window_days};
-
-        // A sample needs a day with runs inside its window, so output is bounded by both the calendar
-        // span and daily_totals * window; the product alone grows with the window, not the data.
-        result.reserve(std::min(static_cast<std::size_t>((last_day - first_day).count()) + 1,
-                                daily_totals.size() * static_cast<std::size_t>(window_days)));
-        std::size_t lo = 0;
-        std::size_t next = 0;
-        double window_sum = 0.0;
-        for (sys_days day = first_day; day <= last_day;) {
-            if (next < daily_totals.size() && daily_totals[next].first == day) {
-                window_sum += daily_totals[next].second;
-                ++next;
-            }
-            while (lo < next && daily_totals[lo].first <= day - window) {
-                window_sum -= daily_totals[lo].second;
-                ++lo;
-            }
-            if (lo == next) {
-                window_sum = 0.0;
-            }
-            if (window_sum != 0.0) {
-                const auto window_len = std::min(static_cast<std::size_t>((day - first_day).count()) + 1,
-                                                 static_cast<std::size_t>(window_days));
-                result.emplace_back(day, window_sum / static_cast<double>(window_len));
-                day += days{1};
-            } else {
-                day = (next < daily_totals.size()) ? daily_totals[next].first : last_day + days{1};
-            }
-        }
-
-        return result;
+        return rollingPlaytime(samples, window_days);
     }
 
     const std::vector<Run> &UserProfile::getAllRunRecords() const {

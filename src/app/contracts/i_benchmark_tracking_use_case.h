@@ -4,6 +4,7 @@
 #include <functional>
 #include <optional>
 
+#include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_ids.h"
 #include "benchmarks/benchmark_projection.h"
 #include "graph_presentation.h"
@@ -38,6 +39,7 @@ namespace ksv::application {
         [[nodiscard]] virtual BenchmarkTrackingState state() const = 0;
         // nullptr unless state() is Ready.
         [[nodiscard]] virtual const domain::BenchmarkProjection *projection() const = 0;
+        [[nodiscard]] virtual const domain::Benchmark *benchmark() const = 0;
         virtual void onChanged(std::function<void()> callback) = 0;
         // Fired instead of onChanged when only the playtime graph's window or range moved: the
         // snapshot's projection summaries and rank history are the ones the last onChanged delivered.

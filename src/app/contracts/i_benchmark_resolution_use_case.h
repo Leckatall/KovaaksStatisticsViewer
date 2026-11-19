@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "benchmark_resolution_snapshot.h"
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_ids.h"
 #include "benchmarks/benchmark_resolution.h"
 

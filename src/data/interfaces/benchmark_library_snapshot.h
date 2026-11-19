@@ -5,7 +5,7 @@
 #include <variant>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_validation.h"
 
 // Payload shared by IBenchmarkStore::scan() and the accepted-library state IBenchmarksService

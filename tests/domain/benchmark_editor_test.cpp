@@ -8,7 +8,7 @@
 #include <variant>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_editor.h"
 #include "benchmarks/benchmark_validation.h"
 

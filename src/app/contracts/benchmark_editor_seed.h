@@ -3,7 +3,7 @@
 #include <optional>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "data/interfaces/i_benchmarks_service.h"
 #include "playlist_seed.h"
 

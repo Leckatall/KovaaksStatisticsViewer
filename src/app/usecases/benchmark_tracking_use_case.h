@@ -40,6 +40,7 @@ namespace ksv::application {
         [[nodiscard]] const domain::BenchmarkProjection *projection() const override {
             return m_state == BenchmarkTrackingState::Ready ? &m_projection : nullptr;
         }
+        [[nodiscard]] const domain::Benchmark *benchmark() const override { return nullptr; }
         void onChanged(std::function<void()> callback) override { m_callbacks.push_back(std::move(callback)); }
         void onPlaytimeChanged(std::function<void()> callback) override {
             m_playtimeCallbacks.push_back(std::move(callback));

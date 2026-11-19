@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 #include "benchmark_builders.h"
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_evaluator.h"
 
 using namespace ksv::domain;

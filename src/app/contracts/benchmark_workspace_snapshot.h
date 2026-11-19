@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_ids.h"
 #include "benchmarks/benchmark_projection.h"
 #include "data/interfaces/benchmark_library_snapshot.h"
@@ -58,5 +59,7 @@ namespace ksv::application {
         RankRangeView rank;
         // Of recentAverageRankHistory, whose anchor is the last play day.
         RankRangeView recentRank;
+        std::optional<domain::Benchmark> benchmark;
+        PlaytimeSeries visiblePlaytime;
     };
 }

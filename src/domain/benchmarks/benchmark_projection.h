@@ -10,6 +10,7 @@
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"
+#include "benchmarks/rank_history.h"
 
 namespace ksv::domain {
     struct ScenarioProjection {
@@ -35,15 +36,6 @@ namespace ksv::domain {
         std::vector<ScenarioEntryId> scenarios;
         std::vector<GroupProjection> subgroups;
     };
-
-    struct RankBlocker {
-        ScenarioEntryId entryId;
-        std::optional<GroupId> group;
-        double required = 0.0;
-        std::optional<double> current;
-    };
-
-    struct AverageRankPoint { std::chrono::sys_days day; double averageRank = 0.0; };
 
     struct BenchmarkProjection {
         BenchmarkId benchmarkId;
