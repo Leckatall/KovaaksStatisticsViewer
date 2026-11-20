@@ -144,6 +144,25 @@ TEST(BenchmarkEditor, AddScenarioRejectsDuplicateDisplayName) {
     EXPECT_EQ(bench.uncategorized.size(), 1U);
 }
 
+TEST(BenchmarkEditor, AddScenarioRejectsADisplayNameUsedInACategoryOrSubcategory) {
+    BenchmarkDefinition bench;
+    bench.categories = {
+        Category{GroupId{"c1"}, "C1", {}, {ScenarioEntry{ScenarioEntryId{"e1"}, "direct", {}, {}}}, {}},
+        Category{GroupId{"c2"}, "C2", {}, {},
+                 {Subcategory{GroupId{"s2"}, "S2", {}, {ScenarioEntry{ScenarioEntryId{"e2"}, "nested", {}, {}}}}}}
+    };
+    BenchmarkEditor editor{bench, countingIds()};
+    const auto before = bench;
+
+    for (const auto *name: {"direct", "nested"}) {
+        EXPECT_EQ(editor.addUnplayedScenario(name).error,
+                  std::make_optional(BenchmarkEditError::DuplicateScenarioName)) << name;
+        EXPECT_EQ(editor.addKnownScenario(name, "hash").error,
+                  std::make_optional(BenchmarkEditError::DuplicateScenarioName)) << name;
+    }
+    EXPECT_EQ(bench, before);
+}
+
 TEST(BenchmarkEditor, ManualBenchmarkHoldsKnownAndUnplayedScenariosTogether) {
     BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};

@@ -290,18 +290,13 @@ namespace ksv::presentation {
             return groups;
         }
 
-        // Scenario entries in the table's row order: categories in order (direct scenarios, then
-        // each subcategory), Uncategorized last.
         std::vector<domain::ScenarioEntryId> visibleEntryOrder(const domain::BenchmarkDefinition &draft) {
             std::vector<domain::ScenarioEntryId> order;
-            const auto append = [&](const std::vector<domain::ScenarioEntry> &entries) {
-                for (const auto &entry: entries) order.push_back(entry.id);
-            };
-            for (const auto &category: draft.categories) {
-                append(category.scenarios);
-                for (const auto &sub: category.subcategories) append(sub.scenarios);
-            }
-            append(draft.uncategorized);
+            const auto entries = draft.entries();
+            order.reserve(entries.size());
+            for (const auto *entry: entries) order.push_back(entry->id);
+            // The table puts Uncategorized last, while entries() puts it first.
+            std::ranges::rotate(order, order.begin() + static_cast<std::ptrdiff_t>(draft.uncategorized.size()));
             return order;
         }
 

@@ -69,9 +69,8 @@ namespace ksv::domain {
         }
 
         bool nameExists(const BenchmarkDefinition &benchmark, const std::string &name) {
-            return forEachScenarioList(benchmark, [&](const std::vector<ScenarioEntry> &entries) {
-                return std::ranges::any_of(entries,
-                                           [&](const ScenarioEntry &entry) { return entry.name == name; });
+            return std::ranges::any_of(benchmark.entries(), [&](const ScenarioEntry *entry) {
+                return entry->name == name;
             });
         }
 

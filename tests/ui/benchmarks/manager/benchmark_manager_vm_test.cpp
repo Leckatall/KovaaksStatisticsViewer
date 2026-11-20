@@ -1610,6 +1610,25 @@ TEST(BenchmarkTablePaste, MultiRowPasteSkipsEmptyGroupRows) {
     EXPECT_EQ(f.rowIds(), (QStringList{"a", "b", "u"})) << "the rows already there took the paste";
 }
 
+TEST(BenchmarkTablePaste, PasteFromTheLastSubcategoryEntryContinuesIntoUncategorized) {
+    const DefaultLocaleGuard guard{QLocale{QLocale::English, QLocale::UnitedKingdom}};
+    TableFixture f;
+    auto bench = pasteBench();
+    bench.categories = {tableCategory("g1", {}, {tableSub("s1", {
+        benchmarkEntry("a", "A", "ha", {{"t1", 10}, {"t2", 20}}),
+        benchmarkEntry("b", "B", "hb", {{"t1", 11}, {"t2", 21}}),
+    })})};
+    f.open(bench);
+    ASSERT_EQ(f.tableOrder(), (QStringList{"a", "b", "u"}));
+
+    ASSERT_TRUE(f.vm->pasteText(at("threshold", "b", "t1"), "1\n2")["ok"].toBool());
+
+    EXPECT_EQ(scoreOf(working(f), "b", "t1"), 1.0);
+    EXPECT_EQ(scoreOf(working(f), "u", "t1"), 2.0);
+    EXPECT_EQ(scoreOf(working(f), "a", "t1"), 10.0);
+    EXPECT_EQ(f.rowIds(), (QStringList{"a", "b", "u"}));
+}
+
 // ── Undo ────────────────────────────────────────────────────────────────────────────────────────
 
 namespace {

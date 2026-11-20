@@ -182,17 +182,12 @@ namespace ksv::qt_data {
                 if (!add(tier.id.value)) return false;
                 tierIds.insert(tier.id.value);
             }
-            std::vector<const ScenarioEntry *> entries;
-            for (const auto &e: def.uncategorized) entries.push_back(&e);
             for (const auto &category: def.categories) {
                 if (!add(category.id.value)) return false;
-                for (const auto &e: category.scenarios) entries.push_back(&e);
-                for (const auto &sub: category.subcategories) {
+                for (const auto &sub: category.subcategories)
                     if (!add(sub.id.value)) return false;
-                    for (const auto &e: sub.scenarios) entries.push_back(&e);
-                }
             }
-            for (const auto *entry: entries) {
+            for (const auto *entry: def.entries()) {
                 if (!add(entry->id.value)) return false;
                 for (const auto &threshold: entry->thresholds)
                     if (!tierIds.contains(threshold.tierId.value)) return false;  // dangling tier ref

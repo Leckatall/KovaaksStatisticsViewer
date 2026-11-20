@@ -32,6 +32,30 @@ namespace {
         })";
     }
 
+    QByteArray categorizedJson() {
+        return QByteArray(R"({
+            "schemaVersion": 1,
+            "id": "b1",
+            "name": "Bench",
+            "tiers": [ { "id": "t1", "name": "Bronze", "color": [200, 120, 0, 255] } ],
+            "uncategorized": [],
+            "categories": [
+                { "id": "c1", "name": "Category", "color": [10, 20, 30, 255],
+                  "scenarios": [
+                      { "id": "s1", "name": "One", "hash": null,
+                        "thresholds": [ { "tierId": "t1", "score": 1.0 } ] }
+                  ],
+                  "subcategories": [
+                      { "id": "sc1", "name": "Sub", "color": [40, 50, 60, 255],
+                        "scenarios": [
+                            { "id": "s2", "name": "Two", "hash": null,
+                              "thresholds": [ { "tierId": "t1", "score": 2.0 } ] }
+                        ] }
+                  ] }
+            ]
+        })");
+    }
+
     class BenchmarkStoreTest : public testing::Test {
     protected:
         QTemporaryDir dir;
@@ -165,6 +189,39 @@ TEST_F(BenchmarkStoreTest, DuplicateStableIdWithinAFileIsInvalid) {
     auto json = trackableJson();
     json.replace("\"id\": \"s1\"", "\"id\": \"t1\"");  // scenario reuses the tier's id
     write("dupe.json", json);
+    const auto entry = store->scan().snapshot->entries.at(0);
+    ASSERT_NE(problem(entry), nullptr);
+    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
+}
+
+TEST_F(BenchmarkStoreTest, CategorizedFixtureLoads) {
+    write("categorized.json", categorizedJson());
+    const auto entry = store->scan().snapshot->entries.at(0);
+    EXPECT_NE(loaded(entry), nullptr);
+}
+
+TEST_F(BenchmarkStoreTest, DuplicateEntryIdAcrossACategoryAndItsSubcategoryIsInvalid) {
+    auto json = categorizedJson();
+    json.replace("\"id\": \"s2\"", "\"id\": \"s1\"");
+    write("dupe-entry.json", json);
+    const auto entry = store->scan().snapshot->entries.at(0);
+    ASSERT_NE(problem(entry), nullptr);
+    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
+}
+
+TEST_F(BenchmarkStoreTest, DanglingTierReferenceInASubcategoryEntryIsInvalid) {
+    auto json = categorizedJson();
+    json.replace("\"tierId\": \"t1\", \"score\": 2.0", "\"tierId\": \"tX\", \"score\": 2.0");
+    write("dangling-nested.json", json);
+    const auto entry = store->scan().snapshot->entries.at(0);
+    ASSERT_NE(problem(entry), nullptr);
+    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
+}
+
+TEST_F(BenchmarkStoreTest, DuplicateGroupIdBetweenACategoryAndItsSubcategoryIsInvalid) {
+    auto json = categorizedJson();
+    json.replace("\"id\": \"sc1\"", "\"id\": \"c1\"");
+    write("dupe-group.json", json);
     const auto entry = store->scan().snapshot->entries.at(0);
     ASSERT_NE(problem(entry), nullptr);
     EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);

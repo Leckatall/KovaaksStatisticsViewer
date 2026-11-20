@@ -171,6 +171,36 @@ namespace {
     }
 }
 
+TEST(BenchmarkValidation, ScenarioNameIssuesFollowCanonicalEntryOrder) {
+    auto def = trackable();
+    def.uncategorized = {ScenarioEntry{ScenarioEntryId{"u"}, "", {}, {}}};
+    def.categories = {
+        Category{GroupId{"c1"}, "C1", {}, {ScenarioEntry{ScenarioEntryId{"direct"}, "", {}, {}}}, {}},
+        Category{GroupId{"c2"}, "C2", {}, {},
+                 {Subcategory{GroupId{"s2"}, "S2", {}, {ScenarioEntry{ScenarioEntryId{"nested"}, "", {}, {}}}}}}
+    };
+
+    const auto issues = issuesWith(validateBenchmark(def), BenchmarkIssueCode::MissingScenarioName);
+
+    ASSERT_EQ(issues.size(), 3U);
+    EXPECT_EQ(issues[0].target, IssueTarget{ScenarioEntryId{"u"}});
+    EXPECT_EQ(issues[1].target, IssueTarget{ScenarioEntryId{"direct"}});
+    EXPECT_EQ(issues[2].target, IssueTarget{ScenarioEntryId{"nested"}});
+}
+
+TEST(BenchmarkValidation, DuplicateHashIsReportedOnTheLaterEntryInCanonicalOrder) {
+    auto def = trackable();
+    def.uncategorized.front().hashes = {"HASH"};
+    const Subcategory sub{GroupId{"s1"}, "S1", {},
+                          {entry("nested", "Other", {{TierId{"t1"}, 50.0}}, "HASH")}};
+    def.categories = {Category{GroupId{"c1"}, "C1", {}, {}, {sub}}};
+
+    const auto issues = issuesWith(validateBenchmark(def), BenchmarkIssueCode::DuplicateResolvedHash);
+
+    ASSERT_EQ(issues.size(), 1U);
+    EXPECT_EQ(issues.front().target, IssueTarget{ScenarioEntryId{"nested"}});
+}
+
 TEST(BenchmarkTableValidation, MissingElementNames) {
     BenchmarkDefinition def;
     def.id = BenchmarkId{"b1"};
