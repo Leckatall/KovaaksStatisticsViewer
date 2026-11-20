@@ -32,7 +32,8 @@ namespace ksv::domain {
         [[nodiscard]] const BenchmarkScenarioId &entryId() const;
         [[nodiscard]] const std::string &name() const;
         [[nodiscard]] ScenarioMatchState matchState() const;
-        [[nodiscard]] const ScenarioEvaluation &stats() const;
+        /** @return Nothing when the entry has no runs. */
+        [[nodiscard]] const std::optional<ScenarioEvaluation> &stats() const;
         [[nodiscard]] std::optional<TierId> attainedTier() const;
         [[nodiscard]] std::optional<Threshold> nextThreshold() const;
         [[nodiscard]] double normalizedRank() const;
@@ -48,7 +49,7 @@ namespace ksv::domain {
 
         BenchmarkScenario m_entry;
         ScenarioMatchState m_matchState = ScenarioMatchState::Unresolved;
-        ScenarioEvaluation m_stats;
+        std::optional<ScenarioEvaluation> m_stats;
         std::optional<std::vector<double>> m_ladder;
         std::optional<TierId> m_attainedTier;
         std::optional<Threshold> m_nextThreshold;

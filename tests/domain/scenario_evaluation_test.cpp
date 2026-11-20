@@ -32,24 +32,17 @@ TEST(TimedScore, FloorsTimestampsLikeScenarioRunId) {
 
 using namespace std::chrono;
 
-TEST(ScenarioEvaluation, EmptyInputMatchesAnUnplayedScenario) {
-    const ScenarioEvaluation evaluation{std::span<const TimedScore>{}};
-
-    EXPECT_EQ(evaluation, ScenarioEvaluation{});
-    EXPECT_EQ(evaluation.runCount(), 0);
-    EXPECT_EQ(evaluation.personalBest(), std::nullopt);
-    EXPECT_EQ(evaluation.personalBestTime(), std::nullopt);
-    EXPECT_EQ(evaluation.recentAverage(), std::nullopt);
-    EXPECT_EQ(evaluation.recentSampleCount(), 0);
-    EXPECT_DOUBLE_EQ(evaluation.playtimeSeconds(), 0.0);
+TEST(ScenarioEvaluation, NoRunsHaveNoEvaluation) {
+    EXPECT_EQ(ScenarioEvaluation::fromRuns({}), std::nullopt);
 }
 
 TEST(ScenarioEvaluation, BestScoreTieKeepsTheEarliestRun) {
     const std::array runs{TimedScore{2'125, 12}, TimedScore{3'750, 40}, TimedScore{4'500, 40}};
-    const ScenarioEvaluation evaluation{runs};
+    const auto evaluation = ScenarioEvaluation::fromRuns(runs);
 
-    EXPECT_EQ(evaluation.personalBest(), 40.0);
-    EXPECT_EQ(evaluation.personalBestTime(), sys_seconds{seconds{3}});
+    ASSERT_TRUE(evaluation);
+    EXPECT_EQ(evaluation->personalBest(), 40.0);
+    EXPECT_EQ(evaluation->personalBestTime(), sys_seconds{seconds{3}});
 }
 
 TEST(ScenarioEvaluation, RecentWindowKeepsOnlyItsLatestRunsAndPreservesThePersonalBest) {
@@ -63,12 +56,13 @@ TEST(ScenarioEvaluation, RecentWindowKeepsOnlyItsLatestRunsAndPreservesThePerson
         SCOPED_TRACE(count);
         const int sampleCount = std::min(count, window);
         const double sum = 0.5 * (count - 1) * count + (count <= window ? 100.0 : 0.0);
-        const ScenarioEvaluation evaluation{std::span<const TimedScore>{runs}.first(static_cast<std::size_t>(count))};
+        const auto evaluation =
+            ScenarioEvaluation::fromRuns(std::span<const TimedScore>{runs}.first(static_cast<std::size_t>(count)));
 
-        EXPECT_EQ(evaluation.recentSampleCount(), sampleCount);
-        ASSERT_TRUE(evaluation.recentAverage());
-        EXPECT_DOUBLE_EQ(*evaluation.recentAverage(), sum / sampleCount);
-        EXPECT_EQ(evaluation.personalBest(), 100.0);
+        ASSERT_TRUE(evaluation);
+        EXPECT_EQ(evaluation->recentSampleCount(), sampleCount);
+        EXPECT_DOUBLE_EQ(evaluation->recentAverage(), sum / sampleCount);
+        EXPECT_EQ(evaluation->personalBest(), 100.0);
     }
 }
 
@@ -78,28 +72,32 @@ TEST(ScenarioEvaluation, InterleavedHashesContributeToOneEvaluation) {
     const RunFact third{{{"Old version", "old"}, 3'500}, 35, 3.25F};
     const RunFact fourth{{{"New version", "new"}, 4'500}, 60, 4.25F};
     const std::array runs{first.timed(), second.timed(), third.timed(), fourth.timed()};
-    const ScenarioEvaluation evaluation{runs};
+    const auto evaluation = ScenarioEvaluation::fromRuns(runs);
 
-    EXPECT_EQ(evaluation.runCount(), 4);
-    EXPECT_EQ(evaluation.personalBest(), 60.0);
-    EXPECT_EQ(evaluation.personalBestTime(), sys_seconds{seconds{1}});
-    EXPECT_EQ(evaluation.recentSampleCount(), 4);
-    EXPECT_EQ(evaluation.recentAverage(), 41.25);
-    EXPECT_DOUBLE_EQ(evaluation.playtimeSeconds(), 40.0);
+    ASSERT_TRUE(evaluation);
+    EXPECT_EQ(evaluation->runCount(), 4);
+    EXPECT_EQ(evaluation->personalBest(), 60.0);
+    EXPECT_EQ(evaluation->personalBestTime(), sys_seconds{seconds{1}});
+    EXPECT_EQ(evaluation->recentSampleCount(), 4);
+    EXPECT_EQ(evaluation->recentAverage(), 41.25);
+    EXPECT_DOUBLE_EQ(evaluation->playtimeSeconds(), 40.0);
 }
 
 TEST(ScenarioEvaluation, PlaytimeIncludesRunsAtAndBeforeTheEpoch) {
     const std::array runs{TimedScore{-1000, 1, 6.5F}, TimedScore{0, 2, 7.25F}, TimedScore{1, 3, 1.25F}};
-    EXPECT_DOUBLE_EQ(ScenarioEvaluation{runs}.playtimeSeconds(), 15.0);
+    const auto evaluation = ScenarioEvaluation::fromRuns(runs);
+
+    ASSERT_TRUE(evaluation);
+    EXPECT_DOUBLE_EQ(evaluation->playtimeSeconds(), 15.0);
 }
 
 TEST(ScenarioEvaluation, ZeroScoreIsDistinctFromUnplayed) {
     const std::array zeroScore{TimedScore{1}};
     const std::array otherScore{TimedScore{1, 1}};
-    const ScenarioEvaluation played{zeroScore};
+    const auto played = ScenarioEvaluation::fromRuns(zeroScore);
 
-    EXPECT_EQ(played.personalBest(), 0.0);
-    EXPECT_EQ(played, ScenarioEvaluation{zeroScore});
-    EXPECT_NE(played, ScenarioEvaluation{});
-    EXPECT_NE(played, ScenarioEvaluation{otherScore});
+    ASSERT_TRUE(played);
+    EXPECT_EQ(played->personalBest(), 0.0);
+    EXPECT_EQ(played, ScenarioEvaluation::fromRuns(zeroScore));
+    EXPECT_NE(played, ScenarioEvaluation::fromRuns(otherScore));
 }

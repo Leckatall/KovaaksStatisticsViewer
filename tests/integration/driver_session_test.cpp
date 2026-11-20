@@ -612,24 +612,24 @@ namespace {
 
         // Above the top tier, with its recent average back inside the Platinum chunk.
         EXPECT_EQ(seeded.attained("entry-gallery-primary"), "platinum");
-        EXPECT_GT(*seeded.scenario("entry-gallery-primary").stats().personalBest(),
+        EXPECT_GT(seeded.scenario("entry-gallery-primary").stats()->personalBest(),
                   seeded.entry("entry-gallery-primary").thresholds.back().score);
         EXPECT_EQ(seeded.tiersReached("entry-gallery-primary",
-                                     seeded.scenario("entry-gallery-primary").stats().recentAverage()), 4);
+                                     seeded.scenario("entry-gallery-primary").stats()->recentAverage()), 4);
         // Just into Bronze, its recent average still in Iron.
         EXPECT_EQ(seeded.attained("entry-gallery-pasu"), "bronze");
         EXPECT_EQ(seeded.tiersReached("entry-gallery-pasu",
-                                     seeded.scenario("entry-gallery-pasu").stats().recentAverage()), 1);
+                                     seeded.scenario("entry-gallery-pasu").stats()->recentAverage()), 1);
         // Gold, nine tenths of the way to Platinum.
         EXPECT_EQ(seeded.attained("entry-gallery-smoothbot"), "gold");
         EXPECT_NEAR(seeded.scenario("entry-gallery-smoothbot").normalizedRank(), 4.9, 0.001);
         // Iron, its recent average below it.
         EXPECT_EQ(seeded.attained("entry-gallery-flyts"), "iron");
         EXPECT_EQ(seeded.tiersReached("entry-gallery-flyts",
-                                     seeded.scenario("entry-gallery-flyts").stats().recentAverage()), 0);
+                                     seeded.scenario("entry-gallery-flyts").stats()->recentAverage()), 0);
         // Played but below Iron, under the long real scenario name.
         EXPECT_EQ(seeded.attained("entry-gallery-celestial"), std::nullopt);
-        EXPECT_TRUE(seeded.scenario("entry-gallery-celestial").stats().personalBest().has_value());
+        EXPECT_TRUE(seeded.scenario("entry-gallery-celestial").stats().has_value());
         EXPECT_EQ(seeded.scenario("entry-gallery-celestial").name(), "Air CELESTIAL No UFO Easy Slowed");
 
         // Clicking ranks by its weaker subcategory, Tracking by its best scenario.
@@ -657,7 +657,7 @@ namespace {
         double recentMean = 0.0;
         const auto scenarios = benchmark.scenarios();
         for (const auto *row: scenarios)
-            recentMean += row->normalized(row->stats().recentAverage());
+            if (const auto &stats = row->stats()) recentMean += row->normalized(stats->recentAverage());
         recentMean /= static_cast<double>(scenarios.size());
         EXPECT_NEAR(benchmark.recentAverageRankHistory().back().averageRank, recentMean, 1e-9);
     }

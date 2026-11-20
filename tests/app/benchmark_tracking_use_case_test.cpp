@@ -1097,7 +1097,7 @@ namespace {
         const auto rightScenarios = right.scenarios();
         ASSERT_EQ(leftScenarios.size(), rightScenarios.size());
         for (std::size_t index = 0; index < leftScenarios.size(); ++index) {
-            EXPECT_EQ(leftScenarios[index]->stats().personalBest(), rightScenarios[index]->stats().personalBest());
+            EXPECT_EQ(leftScenarios[index]->stats(), rightScenarios[index]->stats());
             EXPECT_EQ(leftScenarios[index]->attainedTier(), rightScenarios[index]->attainedTier());
         }
         const auto &leftHistory = left.averageRankHistory();

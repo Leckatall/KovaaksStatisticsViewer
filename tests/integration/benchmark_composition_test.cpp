@@ -125,8 +125,8 @@ TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
     const auto evaluatedScenarios = benchmark->scenarios();
     ASSERT_EQ(evaluatedScenarios.size(), 1U);
     EXPECT_EQ(evaluatedScenarios.front()->matchState(), domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(evaluatedScenarios.front()->stats().personalBest().has_value());
-    EXPECT_EQ(evaluatedScenarios.front()->stats().runCount(), 1);
+    EXPECT_TRUE(evaluatedScenarios.front()->stats().has_value());
+    EXPECT_EQ(evaluatedScenarios.front()->stats()->runCount(), 1);
     EXPECT_GT(benchmark->totalPlaytimeSeconds(), 0.0);
 }
 
@@ -580,9 +580,9 @@ TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewM
     const auto evaluatedScenarios = benchmark->scenarios();
     ASSERT_EQ(evaluatedScenarios.size(), 1U);
     EXPECT_EQ(evaluatedScenarios.front()->matchState(), domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(evaluatedScenarios.front()->stats().personalBest().has_value());
-    EXPECT_TRUE(evaluatedScenarios.front()->stats().recentAverage().has_value());
-    EXPECT_EQ(evaluatedScenarios.front()->stats().runCount(), 1);
+    EXPECT_TRUE(evaluatedScenarios.front()->stats().has_value());
+    EXPECT_TRUE(evaluatedScenarios.front()->stats().has_value());
+    EXPECT_EQ(evaluatedScenarios.front()->stats()->runCount(), 1);
     EXPECT_GT(benchmark->totalPlaytimeSeconds(), 0.0);
     ASSERT_FALSE(w->app->benchmarkTrackingUseCase()->snapshot().visiblePlaytime.empty());
     EXPECT_FALSE(benchmark->averageRankHistory().empty());
@@ -606,7 +606,7 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
         const auto beforeScenarios = before->scenarios();
         ASSERT_EQ(beforeScenarios.size(), 1U);
         ASSERT_EQ(beforeScenarios.front()->matchState(), domain::ScenarioMatchState::Unresolved);
-        ASSERT_FALSE(beforeScenarios.front()->stats().personalBest().has_value());
+        ASSERT_FALSE(beforeScenarios.front()->stats().has_value());
     }
 
     const QVariantMap unmapped = findGridRow(vm->progressGrid(), QStringLiteral("Needs Mapping"));
@@ -633,8 +633,8 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     const auto afterScenarios = after->scenarios();
     ASSERT_EQ(afterScenarios.size(), 1U);
     EXPECT_EQ(afterScenarios.front()->matchState(), domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(afterScenarios.front()->stats().personalBest().has_value());
-    EXPECT_EQ(afterScenarios.front()->stats().runCount(), 1);
+    EXPECT_TRUE(afterScenarios.front()->stats().has_value());
+    EXPECT_EQ(afterScenarios.front()->stats()->runCount(), 1);
     EXPECT_GT(after->totalPlaytimeSeconds(), 0.0);
 
     EXPECT_EQ(vm->attainedRank(), QStringLiteral("Bronze"));
@@ -809,7 +809,7 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
     const auto *wallSix = benchmark->scenario(domain::BenchmarkScenarioId{"s1"});
     ASSERT_NE(wallSix, nullptr);
     EXPECT_EQ(wallSix->matchState(), domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(wallSix->stats().personalBest().has_value()) << "the mapped scenario keeps its played facts";
+    EXPECT_TRUE(wallSix->stats().has_value()) << "the mapped scenario keeps its played facts";
 }
 
 TEST(BenchmarkTableComposition, ConflictAndFailedWriteKeepSession) {
@@ -1045,7 +1045,7 @@ TEST(BenchmarkTableComposition, PastedNameLinksOnSaveDespiteCaseAndTrailingSpace
     const auto evaluatedScenarios = benchmark->scenarios();
     ASSERT_EQ(evaluatedScenarios.size(), 1U);
     EXPECT_EQ(evaluatedScenarios.front()->matchState(), domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(evaluatedScenarios.front()->stats().personalBest().has_value());
+    EXPECT_TRUE(evaluatedScenarios.front()->stats().has_value());
     const QVariantMap row = findGridRow(tracking->progressGrid(), QStringLiteral("1wall6targets TE"));
     ASSERT_FALSE(row.isEmpty());
     EXPECT_TRUE(row.value(QStringLiteral("matchStateText")).toString().isEmpty());
@@ -1099,7 +1099,7 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
     const auto baseline = [&] {
         const auto *benchmark = tracking->benchmark();
         const auto *row = benchmark ? benchmark->scenario(entryId) : nullptr;
-        return row ? std::optional{row->stats()} : std::nullopt;
+        return row ? row->stats() : std::nullopt;
     }();
     ASSERT_TRUE(baseline);
     const auto baselineRunCount = baseline->runCount();
@@ -1120,11 +1120,10 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
         ASSERT_NE(benchmark, nullptr);
         const auto *combined = benchmark->scenario(entryId);
         ASSERT_NE(combined, nullptr);
-        EXPECT_EQ(combined->stats().runCount(), facts.size());
-        EXPECT_GT(combined->stats().runCount(), baselineRunCount);
-        const auto personalBest = combined->stats().personalBest();
-        ASSERT_TRUE(personalBest);
-        EXPECT_DOUBLE_EQ(*personalBest, expectedBest);
+        EXPECT_EQ(combined->stats()->runCount(), facts.size());
+        EXPECT_GT(combined->stats()->runCount(), baselineRunCount);
+        ASSERT_TRUE(combined->stats());
+        EXPECT_DOUBLE_EQ(combined->stats()->personalBest(), expectedBest);
         EXPECT_DOUBLE_EQ(benchmark->totalPlaytimeSeconds(), expectedPlaytime);
     }
     vm->discard();
@@ -1146,6 +1145,6 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
     ASSERT_NE(benchmark, nullptr);
     const auto *restored = benchmark->scenario(entryId);
     ASSERT_NE(restored, nullptr);
-    EXPECT_EQ(restored->stats().runCount(), baselineRunCount);
+    EXPECT_EQ(restored->stats()->runCount(), baselineRunCount);
     EXPECT_DOUBLE_EQ(benchmark->totalPlaytimeSeconds(), baselinePlaytime);
 }

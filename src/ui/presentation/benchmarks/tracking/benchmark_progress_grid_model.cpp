@@ -56,15 +56,14 @@ namespace ksv::presentation {
         }
 
         // The local day the PB was set, "2026-08-14".
-        QString personalBestDateText(const domain::ScenarioEvaluation &stats) {
-            const auto time = stats.personalBestTime();
-            if (!time) return QStringLiteral("—");
-            return QDateTime::fromSecsSinceEpoch(time->time_since_epoch().count())
+        QString personalBestDateText(const std::optional<domain::ScenarioEvaluation> &stats) {
+            if (!stats) return QStringLiteral("—");
+            return QDateTime::fromSecsSinceEpoch(stats->personalBestTime().time_since_epoch().count())
                 .toString(QStringLiteral("yyyy-MM-dd"));
         }
 
-        QString playCountText(const domain::ScenarioEvaluation &stats) {
-            return stats.runCount() > 0 ? QLocale().toString(stats.runCount()) : QStringLiteral("—");
+        QString playCountText(const std::optional<domain::ScenarioEvaluation> &stats) {
+            return stats ? QLocale().toString(stats->runCount()) : QStringLiteral("—");
         }
 
         // Where the PB sits on the ladder, in words: "Silver · 50% of the way to Gold (5,670 / 5,954)".
@@ -204,7 +203,7 @@ namespace ksv::presentation {
             void addScenario(const domain::ScenarioBenchmarkEvaluation &scenario) {
                 const QString entryId = q(scenario.entryId().value);
                 const auto &stats = scenario.stats();
-                const auto personalBest = stats.personalBest();
+                const auto personalBest = stats ? std::optional(stats->personalBest()) : std::nullopt;
                 const auto matchState = scenario.matchState();
 
                 ProgressGridScenarioRow row;
@@ -214,8 +213,8 @@ namespace ksv::presentation {
                 row.personalBestDateText = personalBestDateText(stats);
                 row.playCountText = playCountText(stats);
                 row.hasPersonalBest = personalBest.has_value();
-                row.hasPersonalBestDate = stats.personalBestTime().has_value();
-                row.hasPlayCount = stats.runCount() > 0;
+                row.hasPersonalBestDate = stats.has_value();
+                row.hasPlayCount = stats.has_value();
 
                 QString attainedText = QObject::tr("Unranked");
                 QString attainedColor;
@@ -232,7 +231,7 @@ namespace ksv::presentation {
                 row.fills = scenarioChunkFills(m_tiers, scenario, personalBest);
                 const bool topChunkFilled = !row.fills.empty() && row.fills.back() >= 1.0;
 
-                const auto recent = stats.recentAverage();
+                const auto recent = stats ? std::optional(stats->recentAverage()) : std::nullopt;
                 const auto recentPosition = tierScalePosition(scenario, recent);
                 row.recentPosition = recentPosition;
                 QString recentTier = QObject::tr("Unranked");

@@ -32,7 +32,7 @@ namespace ksv::domain {
     const BenchmarkScenarioId &ScenarioBenchmarkEvaluation::entryId() const { return m_entry.id; }
     const std::string &ScenarioBenchmarkEvaluation::name() const { return m_entry.name; }
     ScenarioMatchState ScenarioBenchmarkEvaluation::matchState() const { return m_matchState; }
-    const ScenarioEvaluation &ScenarioBenchmarkEvaluation::stats() const { return m_stats; }
+    const std::optional<ScenarioEvaluation> &ScenarioBenchmarkEvaluation::stats() const { return m_stats; }
     std::optional<TierId> ScenarioBenchmarkEvaluation::attainedTier() const { return m_attainedTier; }
     std::optional<Threshold> ScenarioBenchmarkEvaluation::nextThreshold() const { return m_nextThreshold; }
     double ScenarioBenchmarkEvaluation::normalizedRank() const { return m_normalizedRank; }
@@ -44,9 +44,8 @@ namespace ksv::domain {
     const std::optional<std::vector<double>> &ScenarioBenchmarkEvaluation::ladder() const { return m_ladder; }
 
     bool ScenarioBenchmarkEvaluation::attains(const std::size_t tierIndex) const {
-        const auto best = m_stats.personalBest();
         // Keep an unplayed entry distinct from a recorded zero when the first threshold is zero.
-        return best && m_ladder && tierIndex < m_ladder->size() && *best >= (*m_ladder)[tierIndex];
+        return m_stats && m_ladder && tierIndex < m_ladder->size() && m_stats->personalBest() >= (*m_ladder)[tierIndex];
     }
 
     double ScenarioBenchmarkEvaluation::normalized(const std::optional<double> score) const {
@@ -214,7 +213,9 @@ namespace ksv::domain {
                 if (state.attains(tier)) continue;
                 const auto &ladder = state.ladder();
                 const auto required = ladder ? (*ladder)[tier] : 0.0;
-                blockers.push_back({state.entryId(), group, required, state.stats().personalBest()});
+                const auto &stats = state.stats();
+                blockers.push_back({state.entryId(), group, required,
+                                    stats ? std::optional(stats->personalBest()) : std::nullopt});
             }
         }
 
@@ -310,7 +311,7 @@ namespace ksv::domain {
             const auto match = matches.find(entry.id.value);
             states.push_back(evaluateEntry(entry, match == matches.end() ? ScenarioMatchState::Unresolved : match->second,
                                            runs.histories[index]));
-            result.m_totalPlaytimeSeconds += states.back().stats().playtimeSeconds();
+            if (const auto &stats = states.back().stats()) result.m_totalPlaytimeSeconds += stats->playtimeSeconds();
         }
         for (const auto &run: result.m_memberScores) {
             if (run.start_time <= 0) continue;
@@ -354,10 +355,10 @@ namespace ksv::domain {
         ScenarioBenchmarkEvaluation scenario;
         scenario.m_entry = entry;
         scenario.m_matchState = match;
-        scenario.m_stats = ScenarioEvaluation(history);
+        scenario.m_stats = ScenarioEvaluation::fromRuns(history);
         const auto &definition = result.m_definition;
         scenario.m_ladder = definition.ladderFor(entry);
-        scenario.m_normalizedRank = scenario.normalized(scenario.stats().personalBest());
+        if (scenario.m_stats) scenario.m_normalizedRank = scenario.normalized(scenario.m_stats->personalBest());
         if (!scenario.m_ladder) return scenario;
 
         for (std::size_t tier = 0; tier < definition.tiers.size(); ++tier) {

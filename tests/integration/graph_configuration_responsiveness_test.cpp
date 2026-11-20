@@ -281,8 +281,9 @@ namespace {
                 .arg(rank ? rank->value.c_str() : "-");
         for (const auto *scenario: benchmark.scenarios()) {
             const auto &stats = scenario->stats();
-            lines << QString("%1|runs=%2|pb=%3|norm=%4|play=%5").arg(scenario->name().c_str()).arg(stats.runCount())
-                    .arg(stats.personalBest().value_or(-1.0)).arg(scenario->normalizedRank()).arg(stats.playtimeSeconds());
+            lines << QString("%1|runs=%2|pb=%3|norm=%4|play=%5").arg(scenario->name().c_str()).arg(stats ? stats->runCount() : 0)
+                    .arg(stats ? stats->personalBest() : -1.0).arg(scenario->normalizedRank())
+                    .arg(stats ? stats->playtimeSeconds() : 0.0);
         }
         return lines;
     }

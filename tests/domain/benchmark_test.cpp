@@ -148,14 +148,14 @@ TEST(BenchmarkEvaluator, ProjectsPersonalBestRecentFiveAndTierProgress) {
     const auto evaluated = Benchmark(benchmark(), {Completeness::Trackable, {}},
                                      {resolvedEntry("entry")}, facts);
     const auto &scenario = scenarioNamed(evaluated, "entry");
-    EXPECT_DOUBLE_EQ(*scenario.stats().personalBest(), 60.0);
-    EXPECT_DOUBLE_EQ(*scenario.stats().recentAverage(), 40.0);
-    EXPECT_EQ(scenario.stats().recentSampleCount(), 5);
-    EXPECT_EQ(scenario.stats().runCount(), 6);
+    EXPECT_DOUBLE_EQ(scenario.stats()->personalBest(), 60.0);
+    EXPECT_DOUBLE_EQ(scenario.stats()->recentAverage(), 40.0);
+    EXPECT_EQ(scenario.stats()->recentSampleCount(), 5);
+    EXPECT_EQ(scenario.stats()->runCount(), 6);
     EXPECT_FALSE(scenario.attainedTier());
     ASSERT_TRUE(scenario.nextThreshold());
     EXPECT_EQ(scenario.nextThreshold()->tierId.value, "bronze");
-    EXPECT_DOUBLE_EQ(scenario.stats().playtimeSeconds(), 18.0);
+    EXPECT_DOUBLE_EQ(scenario.stats()->playtimeSeconds(), 18.0);
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), 18.0);
 }
 
@@ -165,13 +165,13 @@ TEST(BenchmarkEvaluator, PersonalBestTimeIsTheEarliestRunThatScoredIt) {
     const auto evaluated = Benchmark(benchmark(), {Completeness::Trackable, {}},
                                      {resolvedEntry("entry")}, facts);
     const auto &scenario = scenarioNamed(evaluated, "entry");
-    EXPECT_DOUBLE_EQ(*scenario.stats().personalBest(), 80.0);
-    ASSERT_TRUE(scenario.stats().personalBestTime());
-    EXPECT_EQ(scenario.stats().personalBestTime()->time_since_epoch(), std::chrono::seconds{5 * kDay / 1000});
+    ASSERT_TRUE(scenario.stats());
+    EXPECT_DOUBLE_EQ(scenario.stats()->personalBest(), 80.0);
+    EXPECT_EQ(scenario.stats()->personalBestTime().time_since_epoch(), std::chrono::seconds{5 * kDay / 1000});
 
     const auto unplayed = Benchmark(benchmark(), {Completeness::Trackable, {}},
                                     {resolvedEntry("entry")}, {});
-    EXPECT_FALSE(scenarioNamed(unplayed, "entry").stats().personalBestTime());
+    EXPECT_FALSE(scenarioNamed(unplayed, "entry").stats());
 }
 
 TEST(BenchmarkEvaluator, UnplayedAndAutoMappableDoNotClaimCandidateFacts) {
@@ -180,7 +180,7 @@ TEST(BenchmarkEvaluator, UnplayedAndAutoMappableDoNotClaimCandidateFacts) {
                                      {autoMappableEntry("entry", "hash")}, facts);
     const auto &scenario = scenarioNamed(evaluated, "entry");
     EXPECT_EQ(scenario.matchState(), ScenarioMatchState::AutoMappable);
-    EXPECT_FALSE(scenario.stats().personalBest());
+    EXPECT_FALSE(scenario.stats());
     EXPECT_FALSE(scenario.attainedTier());
     ASSERT_TRUE(scenario.nextThreshold());
     EXPECT_EQ(scenario.nextThreshold()->tierId.value, "bronze");
@@ -194,8 +194,8 @@ TEST(BenchmarkEvaluator, TotalPlaytimeSumsEachEntrysPlaytimeWhenIncompleteEntrie
     const auto facts = std::vector{benchmarkFact("hash", kDay, 250.0F, 60.0F)};
     const auto evaluated = Benchmark(value, {Completeness::Incomplete, {}},
                                      {resolvedEntry("entry"), resolvedEntry("copy")}, facts);
-    EXPECT_DOUBLE_EQ(scenarioNamed(evaluated, "entry").stats().playtimeSeconds(), 60.0);
-    EXPECT_DOUBLE_EQ(scenarioNamed(evaluated, "copy").stats().playtimeSeconds(), 60.0);
+    EXPECT_DOUBLE_EQ(scenarioNamed(evaluated, "entry").stats()->playtimeSeconds(), 60.0);
+    EXPECT_DOUBLE_EQ(scenarioNamed(evaluated, "copy").stats()->playtimeSeconds(), 60.0);
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), 120.0);
 }
 
@@ -207,11 +207,11 @@ TEST(BenchmarkEvaluator, MappedUnavailableAndBrokenLaddersRetainOnlySafeFacts) {
                                      {mappedUnavailableEntry("entry"), resolvedEntry("broken")}, facts);
     const auto &unavailable = scenarioNamed(evaluated, "entry");
     EXPECT_EQ(unavailable.matchState(), ScenarioMatchState::MappedUnavailable);
-    EXPECT_FALSE(unavailable.stats().personalBest());
+    EXPECT_FALSE(unavailable.stats());
     const auto &broken = scenarioNamed(evaluated, "broken");
-    EXPECT_DOUBLE_EQ(*broken.stats().personalBest(), 250.0);
-    EXPECT_EQ(broken.stats().runCount(), 1);
-    EXPECT_DOUBLE_EQ(broken.stats().playtimeSeconds(), 30.0);
+    EXPECT_DOUBLE_EQ(broken.stats()->personalBest(), 250.0);
+    EXPECT_EQ(broken.stats()->runCount(), 1);
+    EXPECT_DOUBLE_EQ(broken.stats()->playtimeSeconds(), 30.0);
     EXPECT_FALSE(broken.attainedTier());
     EXPECT_FALSE(broken.nextThreshold());
     EXPECT_DOUBLE_EQ(broken.normalizedRank(), 0.0);
@@ -223,9 +223,7 @@ TEST(BenchmarkEvaluator, MappedUnavailableIgnoresInconsistentRunFacts) {
                                      {mappedUnavailableEntry("entry")}, facts);
     const auto &scenario = scenarioNamed(evaluated, "entry");
     EXPECT_EQ(scenario.matchState(), ScenarioMatchState::MappedUnavailable);
-    EXPECT_FALSE(scenario.stats().personalBest());
-    EXPECT_EQ(scenario.stats().runCount(), 0);
-    EXPECT_DOUBLE_EQ(scenario.stats().playtimeSeconds(), 0.0);
+    EXPECT_FALSE(scenario.stats());
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), 0.0);
 }
 
@@ -461,7 +459,7 @@ TEST(BenchmarkRecentRankHistory, EndsAtTheMeanOfTheCurrentRecentAverages) {
 
     double expected = 0.0;
     for (const auto *scenario: evaluated.scenarios())
-        expected += scenario->normalized(scenario->stats().recentAverage());
+        expected += scenario->normalized(scenario->stats()->recentAverage());
     expected /= 2.0;
     ASSERT_EQ(evaluated.recentAverageRankHistory().size(), 8U);
     EXPECT_NEAR(evaluated.recentAverageRankHistory().back().averageRank, expected, 1e-12);
@@ -519,10 +517,10 @@ TEST(BenchmarkAverageRank, AScoreAboveTheTopTierCountsAsTheTopTierWithoutCapping
                                      {resolvedEntry("entry")},
                                      std::vector<RunFact>{benchmarkFact("hash", 100 * kDay, 450.0F)});
     const auto &scenario = scenarioNamed(evaluated, "entry");
-    ASSERT_TRUE(scenario.stats().personalBest());
-    EXPECT_DOUBLE_EQ(*scenario.stats().personalBest(), 450.0);
-    ASSERT_TRUE(scenario.stats().recentAverage());
-    EXPECT_DOUBLE_EQ(*scenario.stats().recentAverage(), 450.0);
+    ASSERT_TRUE(scenario.stats());
+    EXPECT_DOUBLE_EQ(scenario.stats()->personalBest(), 450.0);
+    ASSERT_TRUE(scenario.stats());
+    EXPECT_DOUBLE_EQ(scenario.stats()->recentAverage(), 450.0);
     EXPECT_DOUBLE_EQ(scenario.normalizedRank(), 3.0);
     ASSERT_TRUE(evaluated.averageRank());
     EXPECT_DOUBLE_EQ(*evaluated.averageRank(), 3.0);
@@ -538,12 +536,12 @@ TEST(BenchmarkRecentAverage, UsesExactlyTheLatestFiveRunsAndNeverChangesAttainme
     const auto evaluated = Benchmark(benchmark(), {Completeness::Trackable, {}},
                                      {resolvedEntry("entry")}, facts);
     const auto &scenario = scenarioNamed(evaluated, "entry");
-    ASSERT_TRUE(scenario.stats().recentAverage());
-    EXPECT_DOUBLE_EQ(*scenario.stats().recentAverage(), (20.0 + 30.0 + 40.0 + 50.0 + 60.0) / 5.0);
-    EXPECT_EQ(scenario.stats().recentSampleCount(), 5);
-    EXPECT_EQ(scenario.stats().runCount(), 7);
-    ASSERT_TRUE(scenario.stats().personalBest());
-    EXPECT_DOUBLE_EQ(*scenario.stats().personalBest(), 250.0);
+    ASSERT_TRUE(scenario.stats());
+    EXPECT_DOUBLE_EQ(scenario.stats()->recentAverage(), (20.0 + 30.0 + 40.0 + 50.0 + 60.0) / 5.0);
+    EXPECT_EQ(scenario.stats()->recentSampleCount(), 5);
+    EXPECT_EQ(scenario.stats()->runCount(), 7);
+    ASSERT_TRUE(scenario.stats());
+    EXPECT_DOUBLE_EQ(scenario.stats()->personalBest(), 250.0);
     ASSERT_TRUE(scenario.attainedTier());
     EXPECT_EQ(scenario.attainedTier()->value, "silver");
     EXPECT_DOUBLE_EQ(scenario.normalizedRank(), 2.5);
@@ -599,13 +597,13 @@ TEST(BenchmarkEvaluator, LinkedHashesCombineChronologicalStatisticsAndHistory) {
     const auto evaluated = Benchmark(definition, validateBenchmark(definition),
                                      {resolvedEntry("entry")}, facts);
     const auto &scenario = scenarioNamed(evaluated, "entry");
-    EXPECT_EQ(scenario.stats().runCount(), 6);
-    ASSERT_TRUE(scenario.stats().personalBest());
-    EXPECT_DOUBLE_EQ(*scenario.stats().personalBest(), 300.0);
-    ASSERT_TRUE(scenario.stats().recentAverage());
-    EXPECT_DOUBLE_EQ(*scenario.stats().recentAverage(), 200.0);
-    EXPECT_EQ(scenario.stats().recentSampleCount(), 5);
-    EXPECT_DOUBLE_EQ(scenario.stats().playtimeSeconds(), 60.0);
+    EXPECT_EQ(scenario.stats()->runCount(), 6);
+    ASSERT_TRUE(scenario.stats());
+    EXPECT_DOUBLE_EQ(scenario.stats()->personalBest(), 300.0);
+    ASSERT_TRUE(scenario.stats());
+    EXPECT_DOUBLE_EQ(scenario.stats()->recentAverage(), 200.0);
+    EXPECT_EQ(scenario.stats()->recentSampleCount(), 5);
+    EXPECT_DOUBLE_EQ(scenario.stats()->playtimeSeconds(), 60.0);
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), 60.0);
     ASSERT_TRUE(evaluated.attainedRank());
     EXPECT_EQ(evaluated.attainedRank()->value, "gold");
@@ -624,8 +622,8 @@ TEST(BenchmarkEvaluator, LinkedHashesSharedByIncompleteEntriesSumEachEntrysPlayt
                                          benchmarkFact("one", kDay, 100.0F, 10.0F),
                                          benchmarkFact("shared", 2 * kDay, 200.0F, 20.0F),
                                          benchmarkFact("two", 3 * kDay, 300.0F, 30.0F)});
-    EXPECT_DOUBLE_EQ(scenarioNamed(evaluated, "one").stats().playtimeSeconds(), 30.0);
-    EXPECT_DOUBLE_EQ(scenarioNamed(evaluated, "two").stats().playtimeSeconds(), 50.0);
+    EXPECT_DOUBLE_EQ(scenarioNamed(evaluated, "one").stats()->playtimeSeconds(), 30.0);
+    EXPECT_DOUBLE_EQ(scenarioNamed(evaluated, "two").stats()->playtimeSeconds(), 50.0);
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), 80.0);
 }
 
@@ -639,10 +637,10 @@ TEST(BenchmarkEvaluator, LinkedHashRunsWithEqualStartTimesKeepRunFactsOrder) {
     const auto evaluated = Benchmark(definition, {Completeness::Incomplete, {}},
                                      {resolvedEntry("entry")}, facts);
     const auto &scenario = scenarioNamed(evaluated, "entry");
-    EXPECT_EQ(scenario.stats().runCount(), 6);
-    EXPECT_EQ(scenario.stats().recentSampleCount(), 5);
-    ASSERT_TRUE(scenario.stats().recentAverage());
-    EXPECT_DOUBLE_EQ(*scenario.stats().recentAverage(), 48.0);
+    EXPECT_EQ(scenario.stats()->runCount(), 6);
+    EXPECT_EQ(scenario.stats()->recentSampleCount(), 5);
+    ASSERT_TRUE(scenario.stats());
+    EXPECT_DOUBLE_EQ(scenario.stats()->recentAverage(), 48.0);
 }
 
 TEST(BenchmarkEvaluator, EntryWithNoResolutionProjectsAsUnresolvedWithoutStats) {
@@ -651,9 +649,7 @@ TEST(BenchmarkEvaluator, EntryWithNoResolutionProjectsAsUnresolvedWithoutStats) 
                                      std::vector<RunFact>{benchmarkFact("hash", kDay, 250.0F, 30.0F)});
     const auto &scenario = scenarioNamed(evaluated, "entry");
     EXPECT_EQ(scenario.matchState(), ScenarioMatchState::Unresolved);
-    EXPECT_EQ(scenario.stats().runCount(), 0);
-    EXPECT_FALSE(scenario.stats().personalBest());
-    EXPECT_FALSE(scenario.stats().recentAverage());
+    EXPECT_FALSE(scenario.stats());
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), 0.0);
 }
 
@@ -706,7 +702,7 @@ TEST(BenchmarkScenarioEvaluation, AttainsAndNormalizedAgreeWithTheLadder) {
         const auto normalizedBelow = scenario.normalized(score - 1.0F);
         EXPECT_GE(normalizedBelow, previous);
         EXPECT_GT(scenario.normalized(score), normalizedBelow);
-        EXPECT_DOUBLE_EQ(scenario.normalized(scenario.stats().personalBest()), scenario.normalizedRank());
+        EXPECT_DOUBLE_EQ(scenario.normalized(scenario.stats()->personalBest()), scenario.normalizedRank());
         previous = scenario.normalizedRank();
     }
 }
@@ -782,11 +778,11 @@ TEST(BenchmarkRankLevel, IncompleteBuildsTheTreeStatsAndPlaytimeButNoRankResults
     const auto nested = subgroups.back()->scenarios();
     ASSERT_EQ(nested.size(), 1U);
     EXPECT_EQ(evaluated.scenario(BenchmarkScenarioId{"b1"}), nested.front());
-    EXPECT_EQ(nested.front()->stats().runCount(), 2);
+    EXPECT_EQ(nested.front()->stats()->runCount(), 2);
     double playtime = 0.0;
     for (const auto *scenario: evaluated.scenarios()) {
-        EXPECT_GT(scenario->stats().runCount(), 0);
-        playtime += scenario->stats().playtimeSeconds();
+        ASSERT_TRUE(scenario->stats());
+        playtime += scenario->stats()->playtimeSeconds();
     }
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), playtime);
     EXPECT_FALSE(evaluated.rollingPlaytime(3).empty());
@@ -844,12 +840,12 @@ TEST(BenchmarkMembership, TotalRollingAndLatestRunDayCountOnlyResolvedEntriesOnc
     const auto &one = scenarioNamed(evaluated, "one");
     const auto &two = scenarioNamed(evaluated, "two");
     const auto &unavailable = scenarioNamed(evaluated, "unavailable");
-    EXPECT_EQ(one.stats().runCount(), 1);
-    EXPECT_EQ(two.stats().runCount(), 2);
-    EXPECT_EQ(unavailable.stats().runCount(), 0);
+    EXPECT_EQ(one.stats()->runCount(), 1);
+    EXPECT_EQ(two.stats()->runCount(), 2);
+    EXPECT_FALSE(unavailable.stats());
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), facts[0].duration_seconds + 2.0 * facts[1].duration_seconds);
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(),
-                     one.stats().playtimeSeconds() + two.stats().playtimeSeconds() + unavailable.stats().playtimeSeconds());
+                     one.stats()->playtimeSeconds() + two.stats()->playtimeSeconds());
     const auto rolling = evaluated.rollingPlaytime(1);
     EXPECT_DOUBLE_EQ(sumPlaytime(rolling), evaluated.totalPlaytimeSeconds());
     ASSERT_EQ(rolling.size(), 2U);
@@ -866,7 +862,7 @@ TEST(BenchmarkMembership, ARepeatedHashInOneEntryCountsItsRunOnce) {
     const auto evaluated = Benchmark(std::move(definition), {Completeness::Trackable, {}},
                                      {resolvedEntry(entryId)}, facts);
 
-    EXPECT_EQ(scenarioNamed(evaluated, entryId).stats().runCount(), static_cast<int>(facts.size()));
+    EXPECT_EQ(scenarioNamed(evaluated, entryId).stats()->runCount(), static_cast<int>(facts.size()));
     EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), facts.front().duration_seconds);
 }
 
@@ -932,8 +928,8 @@ TEST(BenchmarkCopy, ACopyIsIndependentOfItsSource) {
 
     ASSERT_NE(copy.scenario(nestedId), nullptr);
     EXPECT_EQ(copy.scenario(nestedId)->entryId(), nestedId);
-    ASSERT_TRUE(copy.scenario(nestedId)->stats().personalBest());
-    EXPECT_DOUBLE_EQ(*copy.scenario(nestedId)->stats().personalBest(), facts[4].score);
+    ASSERT_TRUE(copy.scenario(nestedId)->stats());
+    EXPECT_DOUBLE_EQ(copy.scenario(nestedId)->stats()->personalBest(), facts[4].score);
     const auto categories = copy.categories();
     ASSERT_EQ(categories.size(), 2U);
     ASSERT_EQ(categories.front()->scenarios().size(), 2U);

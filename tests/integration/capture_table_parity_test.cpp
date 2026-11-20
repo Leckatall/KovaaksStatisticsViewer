@@ -177,7 +177,8 @@ namespace {
         if (!benchmark) return std::nullopt;
         const auto scenarios = benchmark->scenarios();
         if (scenarios.empty()) return std::nullopt;
-        return scenarios.front()->stats().personalBest();
+        const auto &stats = scenarios.front()->stats();
+        return stats ? std::optional(stats->personalBest()) : std::nullopt;
     }
 
     QString squashed(QString text) {

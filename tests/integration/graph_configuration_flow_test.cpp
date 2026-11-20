@@ -563,8 +563,8 @@ namespace {
                     .arg(benchmark->averageRank().value_or(-1.0)).arg(benchmark->averageRankHistory().size());
             for (const auto *scenario: benchmark->scenarios()) {
                 const auto &stats = scenario->stats();
-                lines << QString("entry|%1|runs=%2|pb=%3|play=%4").arg(scenario->name().c_str()).arg(stats.runCount())
-                        .arg(stats.personalBest().value_or(-1.0)).arg(stats.playtimeSeconds());
+                lines << QString("entry|%1|runs=%2|pb=%3|play=%4").arg(scenario->name().c_str()).arg(stats ? stats->runCount() : 0)
+                        .arg(stats ? stats->personalBest() : -1.0).arg(stats ? stats->playtimeSeconds() : 0.0);
             }
         }
         return {lines};
