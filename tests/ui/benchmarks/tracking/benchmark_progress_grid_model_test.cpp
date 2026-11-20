@@ -556,6 +556,26 @@ TEST(BenchmarkProgressGridModel, BarFillsAndDescriptionPlaceThePersonalBestOnThe
                   .arg(formatBenchmarkNumber(800.0), formatBenchmarkNumber(900.0)));
 }
 
+// An Incomplete benchmark reaches the grid with unusable thresholds. A tier read off the usable part
+// of the ladder would claim a position the benchmark cannot actually confirm.
+TEST(BenchmarkProgressGridModel, BarDescriptionClaimsNoTierWhenTheLadderIsUnusable) {
+    for (const auto &[label, thresholds]: std::vector<std::pair<const char *, std::vector<Threshold>>>{
+             {"missing Gold", {Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 700.0}}},
+             {"Gold below Silver", {Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 700.0},
+                                    Threshold{TierId{"t3"}, 650.0}}}}) {
+        SCOPED_TRACE(label);
+        auto fake = gridFake();
+        fake->fixture.definition.categories[0].scenarios[0].thresholds = thresholds;
+        fake->reevaluate();
+        BenchmarkTrackingViewModel vm{fake};
+
+        const QString description = rowFor(vm.progressGrid(), "e1").value("barDescription").toString();
+        EXPECT_TRUE(description.startsWith(formatBenchmarkNumber(800.0))) << description.toStdString();
+        for (const auto &tier: fake->fixture.definition.tiers)
+            EXPECT_FALSE(description.contains(QString::fromStdString(tier.name))) << description.toStdString();
+    }
+}
+
 TEST(BenchmarkProgressGridModel, BarDescriptionNamesUnrankedUnplayedAndTheTopTier) {
     auto fake = gridFake(breakdownWithTopTier());
     BenchmarkTrackingViewModel vm{fake};

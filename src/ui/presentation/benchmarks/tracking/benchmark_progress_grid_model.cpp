@@ -71,37 +71,26 @@ namespace ksv::presentation {
                                     const domain::ScenarioBenchmarkEvaluation &scenario,
                                     const std::optional<double> score) {
             if (!score) return QObject::tr("Unplayed");
-            // The first tier the score has not reached, climbing only while the ladder is usable.
-            std::size_t index = 0;
-            for (; index < tiers.size(); ++index) {
-                const auto threshold = scenario.thresholdFor(tiers[index].id);
-                if (!threshold || *score < *threshold) break;
-                if (index > 0) {
-                    const auto previous = scenario.thresholdFor(tiers[index - 1].id);
-                    if (previous && *threshold <= *previous) break;
-                }
-            }
-            if (index == tiers.size()) {
-                if (tiers.empty()) return formatBenchmarkNumber(*score);
-                const auto top = scenario.thresholdFor(tiers.back().id);
+            // An Incomplete benchmark still reaches the grid with missing or out-of-order thresholds.
+            // No tier position derived from such a ladder is trustworthy, and the hatched chunks
+            // already show which thresholds are unusable.
+            const auto &ladder = scenario.ladder();
+            if (!ladder) return QObject::tr("%1 · thresholds incomplete").arg(formatBenchmarkNumber(*score));
+
+            const auto reached = static_cast<std::size_t>(std::ranges::upper_bound(*ladder, *score) - ladder->begin());
+            if (reached == ladder->size())
                 return QObject::tr("%1 · top tier reached (%2 / %3)")
-                    .arg(q(tiers.back().name), formatBenchmarkNumber(*score),
-                         top ? formatBenchmarkNumber(*top) : QStringLiteral("—"));
-            }
-            const QString from = index == 0 ? QObject::tr("Unranked") : q(tiers[index - 1].name);
-            const auto target = scenario.thresholdFor(tiers[index].id);
-            if (!target) return QObject::tr("%1 · no threshold set for %2").arg(from, q(tiers[index].name));
-            const auto floor = index == 0 ? std::optional<double>{0.0} : scenario.thresholdFor(tiers[index - 1].id);
-            if (index > 0 && floor && *target <= *floor)
-                return QObject::tr("%1 · the %2 threshold is not above %3's")
-                    .arg(from, q(tiers[index].name), q(tiers[index - 1].name));
-            const double span = floor ? *target - *floor : 0.0;
-            const double fraction = span > 0.0 ? std::clamp((*score - *floor) / span, 0.0, 1.0) : 0.0;
+                    .arg(q(tiers.back().name), formatBenchmarkNumber(*score), formatBenchmarkNumber(ladder->back()));
+            const QString from = reached == 0 ? QObject::tr("Unranked") : q(tiers[reached - 1].name);
+            const double floor = reached == 0 ? 0.0 : (*ladder)[reached - 1];
+            const double target = (*ladder)[reached];
+            const double span = target - floor;
+            const double fraction = span > 0.0 ? std::clamp((*score - floor) / span, 0.0, 1.0) : 0.0;
             const int percent = static_cast<int>(std::floor(fraction * 100.0));
             return QObject::tr("%1 · %2% of the way to %3 (%4 / %5)")
                 .arg(from)
                 .arg(percent)
-                .arg(q(tiers[index].name), formatBenchmarkNumber(*score), formatBenchmarkNumber(*target));
+                .arg(q(tiers[reached].name), formatBenchmarkNumber(*score), formatBenchmarkNumber(target));
         }
 
         struct TierStyle {
