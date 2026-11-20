@@ -20,7 +20,7 @@
 #include "benchmarks/benchmark_ids.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"
-#include "../../../support/benchmark_builders.h"
+#include "benchmark_builders.h"
 
 namespace ksv::tests_ui {
     struct BenchmarkFixture {
@@ -30,13 +30,14 @@ namespace ksv::tests_ui {
         std::optional<domain::CompletenessResult> completeness;
 
         [[nodiscard]] domain::Benchmark evaluate() const {
+            if (!completeness) return tests_support::evaluatedBenchmark(definition, runs, resolutions);
+
             auto matches = resolutions;
             if (matches.empty()) {
                 for (const auto *entry: definition.entries())
                     matches.push_back(tests_support::resolvedEntry(entry->id.value));
             }
-            auto status = completeness ? *completeness : domain::validateBenchmark(definition);
-            return domain::Benchmark(definition, std::move(status), matches, runs);
+            return domain::Benchmark(definition, *completeness, matches, runs);
         }
     };
 

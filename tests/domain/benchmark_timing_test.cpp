@@ -24,7 +24,7 @@ namespace {
     std::string hashOf(const int index) { return "hash-" + std::to_string(index); }
 }
 
-TEST(BenchmarkTiming, AFullProjectionOverALargeProfileStaysWellUnderASecond) {
+TEST(BenchmarkTiming, ABenchmarkOverALargeProfileStaysUnderTheCeiling) {
     UserProfile profile;
     std::vector<ScenarioId> scenarios;
     BenchmarkDefinition definition;

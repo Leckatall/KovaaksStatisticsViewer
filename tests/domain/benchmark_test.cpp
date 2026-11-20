@@ -858,6 +858,19 @@ TEST(BenchmarkMembership, TotalRollingAndLatestRunDayCountOnlyResolvedEntriesOnc
     EXPECT_EQ(evaluated.latestRunDay(), facts[1].run_id.startDay());
 }
 
+TEST(BenchmarkMembership, ARepeatedHashInOneEntryCountsItsRunOnce) {
+    auto definition = benchmark();
+    auto &entry = definition.uncategorized.front();
+    entry.hashes = {"h", "h"};
+    const auto entryId = entry.id.value;
+    const std::vector facts{benchmarkFact(entry.hashes.front(), kDay, 200.0F, 23.0F)};
+    const auto evaluated = Benchmark(std::move(definition), {Completeness::Trackable, {}},
+                                     {resolvedEntry(entryId)}, facts);
+
+    EXPECT_EQ(scenarioNamed(evaluated, entryId).stats().runCount(), static_cast<int>(facts.size()));
+    EXPECT_DOUBLE_EQ(evaluated.totalPlaytimeSeconds(), facts.front().duration_seconds);
+}
+
 TEST(BenchmarkPlaytime, TotalCountsAPreEpochRunButRollingPlaytimeAndLatestRunDaySkipIt) {
     std::vector facts{benchmarkFact("hash", -kDay, 200.0F, 10.0F), benchmarkFact("hash", 0, 250.0F, 20.0F)};
     const double earlyPlaytime = facts[0].duration_seconds + facts[1].duration_seconds;

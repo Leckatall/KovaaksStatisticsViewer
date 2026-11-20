@@ -4,7 +4,7 @@ add_executable(domain_tests
     domain_test.cpp
     benchmark_validation_test.cpp
     benchmark_editor_test.cpp
-    benchmark_evaluator_test.cpp
+    benchmark_test.cpp
     benchmark_definition_test.cpp
     user_profile_benchmark_queries_test.cpp
     benchmark_timing_test.cpp
