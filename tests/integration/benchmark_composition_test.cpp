@@ -179,7 +179,7 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
         QDir(TEST_FILES_DIR).absoluteFilePath("Viscose Benchmarks Beta - Intermediate.json").toStdString());
     ASSERT_TRUE(playlist.seed.has_value());
     std::vector<std::string> importedOrder;
-    for (const auto &entry: working.uncategorized) importedOrder.push_back(entry.name);
+    for (const auto *entry: working.entries()) importedOrder.push_back(entry->name);
     EXPECT_EQ(importedOrder, playlist.seed->scenarioNames);
     EXPECT_TRUE(working.categories.empty());
     EXPECT_TRUE(working.tiers.empty());

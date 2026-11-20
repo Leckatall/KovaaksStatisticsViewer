@@ -174,8 +174,8 @@ TEST(BenchmarkResolutionUseCase, AutoMappingNeverDuplicatesAnAlreadyUsedHash) {
 
     for (const auto &batch: f.benchmarks->batchRequests)
         for (const auto &request: batch)
-            for (const auto &entry: request.benchmark.uncategorized)
-                EXPECT_FALSE(entry.id.value == "dupe" && entry.hashes == std::vector<std::string>{"h1"});
+            for (const auto *entry: request.benchmark.entries())
+                EXPECT_FALSE(entry->id.value == "dupe" && entry->hashes == std::vector<std::string>{"h1"});
 }
 
 TEST(BenchmarkResolutionUseCase, ResolutionsFollowCanonicalEntryOrder) {
@@ -219,8 +219,8 @@ TEST(BenchmarkResolutionUseCase, AutoMappingSkipsAHashAlreadyMappedInASubcategor
     EXPECT_EQ(resolutions.front().state, ScenarioMatchState::AutoMappable);
     for (const auto &batch: f.benchmarks->batchRequests)
         for (const auto &request: batch)
-            for (const auto &entry: request.benchmark.uncategorized)
-                EXPECT_FALSE(entry.id.value == "dupe" && entry.hashes == std::vector<std::string>{"h1"});
+            for (const auto *entry: request.benchmark.entries())
+                EXPECT_FALSE(entry->id.value == "dupe" && entry->hashes == std::vector<std::string>{"h1"});
 }
 
 TEST(BenchmarkResolutionUseCase, ProfileOnlyChangePublishesDerivedStateWithoutWrite) {

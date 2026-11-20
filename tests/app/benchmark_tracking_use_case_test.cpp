@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "benchmark_builders.h"
+#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_validation.h"
 #include "fake_benchmark_store.h"
 #include "fake_day_source.h"
 #include "fake_graph_configuration_use_case.h"
@@ -139,17 +142,9 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ReadySnapshotCarriesTheEvaluatedBenchma
     ASSERT_TRUE(snapshot.benchmark);
     EXPECT_EQ(fixture.tracking->benchmark(), &*snapshot.benchmark);
     expectSameBenchmark(*snapshot.benchmark, expected, snapshot.playtime.windowDays);
-    ASSERT_TRUE(snapshot.selectedLoaded);
-    ASSERT_TRUE(snapshot.projection);
-    ASSERT_NE(fixture.tracking->projection(), nullptr);
-    EXPECT_EQ(snapshot.selectedLoaded->benchmark.id, snapshot.benchmark->id());
-    EXPECT_EQ(snapshot.projection->attainedRank, snapshot.benchmark->attainedRank());
-    EXPECT_DOUBLE_EQ(snapshot.projection->totalPlaytimeSeconds, snapshot.benchmark->totalPlaytimeSeconds());
-    EXPECT_EQ(fixture.tracking->projection()->attainedRank, snapshot.projection->attainedRank);
-    EXPECT_DOUBLE_EQ(fixture.tracking->projection()->totalPlaytimeSeconds, snapshot.projection->totalPlaytimeSeconds);
 }
 
-TEST(BenchmarkTrackingWorkspaceSnapshot, NoSelectionAndUnavailableClearTheBenchmarkAndEveryLegacyField) {
+TEST(BenchmarkTrackingWorkspaceSnapshot, NoSelectionAndUnavailableClearTheBenchmark) {
     Fixture fixture;
     const auto definition = benchmark("b1");
     fixture.known("Alpha", "h1");
@@ -161,11 +156,8 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, NoSelectionAndUnavailableClearTheBenchm
         const auto &snapshot = fixture.tracking->snapshot();
         EXPECT_EQ(snapshot.availability, state);
         EXPECT_FALSE(snapshot.benchmark);
-        EXPECT_FALSE(snapshot.selectedLoaded);
-        EXPECT_FALSE(snapshot.projection);
         EXPECT_TRUE(snapshot.visiblePlaytime.empty());
         EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
-        EXPECT_EQ(fixture.tracking->projection(), nullptr);
     };
     fixture.tracking->select(definition.id);
     ASSERT_NE(fixture.tracking->benchmark(), nullptr);
@@ -229,10 +221,10 @@ TEST(BenchmarkTracking, SelectingTrackableBenchmarkProducesProjection) {
     fixture.tracking->onChanged([&] { ++notifications; });
     fixture.tracking->select(BenchmarkId{"b1"});
     ASSERT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
-    ASSERT_NE(fixture.tracking->projection(), nullptr);
+    ASSERT_NE(fixture.tracking->benchmark(), nullptr);
     EXPECT_EQ(notifications, 1);
-    EXPECT_EQ(fixture.tracking->projection()->attainedRank->value, "silver");
-    EXPECT_DOUBLE_EQ(fixture.tracking->projection()->totalPlaytimeSeconds, 90.0);
+    EXPECT_EQ(fixture.tracking->benchmark()->attainedRank()->value, "silver");
+    EXPECT_DOUBLE_EQ(fixture.tracking->benchmark()->totalPlaytimeSeconds(), 90.0);
 }
 
 TEST(BenchmarkTracking, RequestsUniqueMappedHashesAndTheProfileIsNeverAskedForARollingSeries_R24) {
@@ -272,9 +264,8 @@ TEST(BenchmarkTracking, ShowsTheRollingSeriesOfTheEvaluatedRuns_R24) {
     fixture.build();
     fixture.tracking->select(definition.id);
 
-    ASSERT_NE(fixture.tracking->projection(), nullptr);
+    ASSERT_NE(fixture.tracking->benchmark(), nullptr);
     const auto expected = includeInactiveDays(reference.rollingPlaytime(5));
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime, expected);
     EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime, expected);
 }
 
@@ -287,7 +278,7 @@ TEST(BenchmarkTracking, MissingProblemAndDuplicateDefinitionsAreUnavailable) {
     fixture.build();
     fixture.tracking->select(BenchmarkId{"b1"});
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
-    EXPECT_EQ(fixture.tracking->projection(), nullptr);
+    EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
     fixture.tracking->select(BenchmarkId{"missing"});
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
 }
@@ -301,7 +292,7 @@ TEST(BenchmarkTracking, ProblemDefinitionIsUnavailable) {
     fixture.build();
     fixture.tracking->select(BenchmarkId{"b1"});
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
-    EXPECT_EQ(fixture.tracking->projection(), nullptr);
+    EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
 }
 
 TEST(BenchmarkTracking, ClearAndRepeatSelectionHaveStableNotifications) {
@@ -327,10 +318,10 @@ TEST(BenchmarkTracking, IncompleteBenchmarkStillProjectsSafeFacts) {
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F)};
     fixture.build();
     fixture.tracking->select(BenchmarkId{"b1"});
-    ASSERT_NE(fixture.tracking->projection(), nullptr);
-    EXPECT_EQ(fixture.tracking->projection()->completeness, Completeness::Incomplete);
-    EXPECT_FALSE(fixture.tracking->projection()->attainedRank);
-    EXPECT_DOUBLE_EQ(fixture.tracking->projection()->totalPlaytimeSeconds, 60.0);
+    ASSERT_NE(fixture.tracking->benchmark(), nullptr);
+    EXPECT_EQ(fixture.tracking->benchmark()->completeness().completeness, Completeness::Incomplete);
+    EXPECT_FALSE(fixture.tracking->benchmark()->attainedRank());
+    EXPECT_DOUBLE_EQ(fixture.tracking->benchmark()->totalPlaytimeSeconds(), 60.0);
 }
 
 TEST(BenchmarkTrackingCache, ReusesPriorSelectionUntilRevisionChanges) {
@@ -413,9 +404,9 @@ TEST(BenchmarkTrackingCache, DefinitionEditReconstructsTheCachedProjection) {
                                   benchmarkFact("h2", 101 * kDay, 150.0F, 10.0F)};
     fixture.build();
     fixture.tracking->select(BenchmarkId{"b1"});
-    ASSERT_NE(fixture.tracking->projection(), nullptr);
-    ASSERT_TRUE(fixture.tracking->projection()->averageRank);
-    EXPECT_DOUBLE_EQ(*fixture.tracking->projection()->averageRank, 1.5);
+    ASSERT_NE(fixture.tracking->benchmark(), nullptr);
+    ASSERT_TRUE(fixture.tracking->benchmark()->averageRank());
+    EXPECT_DOUBLE_EQ(*fixture.tracking->benchmark()->averageRank(), 1.5);
 
     auto edited = benchmark("b1");
     const std::vector<std::pair<std::string, double> > halved{
@@ -425,11 +416,11 @@ TEST(BenchmarkTrackingCache, DefinitionEditReconstructsTheCachedProjection) {
     fixture.repo->nextScan = {snapshotFor(edited), std::nullopt};
     fixture.benchmarks->refresh();
 
-    ASSERT_NE(fixture.tracking->projection(), nullptr);
-    ASSERT_TRUE(fixture.tracking->projection()->averageRank);
-    EXPECT_DOUBLE_EQ(*fixture.tracking->projection()->averageRank, 3.0);
-    ASSERT_EQ(fixture.tracking->projection()->averageRankHistory.size(), 2U);
-    EXPECT_DOUBLE_EQ(fixture.tracking->projection()->averageRankHistory.back().averageRank, 3.0);
+    ASSERT_NE(fixture.tracking->benchmark(), nullptr);
+    ASSERT_TRUE(fixture.tracking->benchmark()->averageRank());
+    EXPECT_DOUBLE_EQ(*fixture.tracking->benchmark()->averageRank(), 3.0);
+    ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().size(), 2U);
+    EXPECT_DOUBLE_EQ(fixture.tracking->benchmark()->averageRankHistory().back().averageRank, 3.0);
 }
 
 // ---- Task A1: one coherent workspace snapshot ------------------------------------------------
@@ -466,8 +457,7 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, StartupPublishesNoSelectionWithChoicesI
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::NoSelection);
     EXPECT_FALSE(snap.selectedId.has_value());
-    EXPECT_FALSE(snap.selectedLoaded.has_value());
-    EXPECT_FALSE(snap.projection.has_value());
+    EXPECT_FALSE(snap.benchmark.has_value());
     EXPECT_EQ(snap.libraryRevision, fixture.benchmarks->revision());
     ASSERT_EQ(snap.choices.size(), 3U);
     EXPECT_EQ(snap.choices[0].filename, "b1.json");
@@ -545,14 +535,12 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ReadyTrackableSnapshotCarriesDefinition
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
     ASSERT_TRUE(snap.selectedId.has_value());
     EXPECT_EQ(snap.selectedId->value, "b1");
-    ASSERT_TRUE(snap.selectedLoaded.has_value());
-    EXPECT_EQ(snap.selectedLoaded->benchmark.id.value, "b1");
-    EXPECT_EQ(snap.selectedLoaded->completeness.completeness, Completeness::Trackable);
-    EXPECT_TRUE(snap.selectedLoaded->completeness.issues.empty());
-    ASSERT_TRUE(snap.projection.has_value());
-    EXPECT_EQ(snap.projection->benchmarkId.value, "b1");
-    ASSERT_TRUE(snap.projection->attainedRank.has_value());
-    EXPECT_EQ(snap.projection->attainedRank->value, "silver");
+    ASSERT_TRUE(snap.benchmark.has_value());
+    EXPECT_EQ(snap.benchmark->completeness().completeness, Completeness::Trackable);
+    EXPECT_TRUE(snap.benchmark->completeness().issues.empty());
+    EXPECT_EQ(snap.benchmark->id().value, "b1");
+    ASSERT_TRUE(snap.benchmark->attainedRank().has_value());
+    EXPECT_EQ(snap.benchmark->attainedRank()->value, "silver");
     EXPECT_EQ(snap.libraryRevision, fixture.benchmarks->revision());
 }
 
@@ -568,13 +556,11 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ReadyIncompleteSnapshotCarriesFullCompl
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
-    ASSERT_TRUE(snap.selectedLoaded.has_value());
-    EXPECT_EQ(snap.selectedLoaded->completeness.completeness, Completeness::Incomplete);
+    ASSERT_TRUE(snap.benchmark.has_value());
+    EXPECT_EQ(snap.benchmark->completeness().completeness, Completeness::Incomplete);
     const auto expectedIssues = validateBenchmark(value).issues;
     ASSERT_FALSE(expectedIssues.empty());
-    EXPECT_EQ(snap.selectedLoaded->completeness.issues.size(), expectedIssues.size());
-    ASSERT_TRUE(snap.projection.has_value());
-    EXPECT_EQ(snap.projection->completeness, Completeness::Incomplete);
+    EXPECT_EQ(snap.benchmark->completeness().issues.size(), expectedIssues.size());
 }
 
 // ---- Task A2: selection lifecycle across deletion, conflict, and recovery --------------------
@@ -595,9 +581,8 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, ClearSelectionReturnsToNoSelectionAndD
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::NoSelection);
     EXPECT_FALSE(snap.selectedId.has_value());
-    EXPECT_FALSE(snap.selectedLoaded.has_value());
-    EXPECT_FALSE(snap.projection.has_value());
-    EXPECT_EQ(fixture.tracking->projection(), nullptr);
+    EXPECT_FALSE(snap.benchmark.has_value());
+    EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
 }
 
 TEST(BenchmarkTrackingWorkspaceLifecycle, SelectingUnknownIdPublishesUnavailableWithoutARetainedProjection) {
@@ -609,15 +594,14 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectingUnknownIdPublishesUnavailable
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
     fixture.tracking->select(BenchmarkId{"b1"});
-    ASSERT_TRUE(fixture.tracking->snapshot().projection.has_value());
+    ASSERT_TRUE(fixture.tracking->snapshot().benchmark.has_value());
 
     fixture.tracking->select(BenchmarkId{"ghost"});
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Unavailable);
-    EXPECT_FALSE(snap.projection.has_value());
-    EXPECT_FALSE(snap.selectedLoaded.has_value());
-    EXPECT_EQ(fixture.tracking->projection(), nullptr);
+    EXPECT_FALSE(snap.benchmark.has_value());
+    EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
 }
 
 // The selected file is removed entirely on the next scan. The workspace must keep the selected id
@@ -643,9 +627,8 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDeletionGoesUnavailableRetaini
     ASSERT_TRUE(snap.selectedId.has_value());
     EXPECT_EQ(snap.selectedId->value, "b1");
     EXPECT_EQ(snap.lastKnownSelectedDisplayName, "Tracked");
-    EXPECT_FALSE(snap.selectedLoaded.has_value());
-    EXPECT_FALSE(snap.projection.has_value());
-    EXPECT_EQ(fixture.tracking->projection(), nullptr);
+    EXPECT_FALSE(snap.benchmark.has_value());
+    EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
 }
 
 // The file survives but now fails to parse and exposes no embedded id, so it never appears as a
@@ -673,8 +656,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedBecomingUnparseableProblemReta
     ASSERT_TRUE(snap.selectedId.has_value());
     EXPECT_EQ(snap.selectedId->value, "b1");
     EXPECT_EQ(snap.lastKnownSelectedDisplayName, "Tracked");
-    EXPECT_FALSE(snap.selectedLoaded.has_value());
-    EXPECT_FALSE(snap.projection.has_value());
+    EXPECT_FALSE(snap.benchmark.has_value());
 }
 
 TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDuplicateIdConflictGoesUnavailableAndClearsDerivedState) {
@@ -699,13 +681,12 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDuplicateIdConflictGoesUnavail
     ASSERT_TRUE(snap.selectedId.has_value());
     EXPECT_EQ(snap.selectedId->value, "b1");
     EXPECT_EQ(snap.lastKnownSelectedDisplayName, "Tracked");
-    EXPECT_FALSE(snap.selectedLoaded.has_value());
-    EXPECT_FALSE(snap.projection.has_value());
-    EXPECT_EQ(fixture.tracking->projection(), nullptr);
+    EXPECT_FALSE(snap.benchmark.has_value());
+    EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
 }
 
 // A directory-level scan failure is not a deletion: the library keeps its last accepted snapshot,
-// so the tracking workspace must keep showing its projection rather than dropping to Unavailable.
+// so the tracking workspace must keep showing the selected benchmark rather than dropping to Unavailable.
 TEST(BenchmarkTrackingWorkspaceLifecycle, WholeDirectoryRefreshFailureKeepsAcceptedProjectionVisible) {
     Fixture fixture;
     fixture.known("Alpha", "h1");
@@ -723,10 +704,9 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, WholeDirectoryRefreshFailureKeepsAccep
     ASSERT_TRUE(fixture.benchmarks->lastRefreshFailed());
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
-    ASSERT_TRUE(snap.selectedLoaded.has_value());
-    ASSERT_TRUE(snap.projection.has_value());
-    EXPECT_EQ(snap.projection->benchmarkId.value, "b1");
-    EXPECT_NE(fixture.tracking->projection(), nullptr);
+    ASSERT_TRUE(snap.benchmark.has_value());
+    EXPECT_EQ(snap.benchmark->id().value, "b1");
+    EXPECT_NE(fixture.tracking->benchmark(), nullptr);
 }
 
 TEST(BenchmarkTrackingWorkspaceLifecycle, ProfileChangeInvalidatesProjectionButKeepsChoicesAndSelection) {
@@ -773,8 +753,8 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, UnavailableSelectionAutoRecoversWhenSa
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
     ASSERT_TRUE(snap.selectedId.has_value());
     EXPECT_EQ(snap.selectedId->value, "b1");
-    ASSERT_TRUE(snap.projection.has_value());
-    EXPECT_EQ(snap.projection->benchmarkId.value, "b1");
+    ASSERT_TRUE(snap.benchmark.has_value());
+    EXPECT_EQ(snap.benchmark->id().value, "b1");
 }
 
 // ---- default selection and remembered choice ------------------------------------------
@@ -838,12 +818,8 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ACachedEvaluationIsPublishedAsReadyEven
         ++readyRevisions;
         EXPECT_TRUE(snapshot.choices.empty());
         ASSERT_TRUE(snapshot.benchmark);
-        ASSERT_TRUE(snapshot.selectedLoaded);
-        ASSERT_TRUE(snapshot.projection);
         EXPECT_EQ(fixture.tracking->benchmark(), &*snapshot.benchmark);
-        EXPECT_EQ(snapshot.selectedLoaded->benchmark, definition);
-        EXPECT_EQ(snapshot.projection->benchmarkId, definition.id);
-        EXPECT_EQ(snapshot.projection->rollingPlaytime, snapshot.visiblePlaytime);
+        EXPECT_EQ(snapshot.benchmark->definition(), definition);
         expectSameBenchmark(*snapshot.benchmark, expected, snapshot.playtime.windowDays);
         EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
     });
@@ -1112,20 +1088,24 @@ namespace {
 
     std::chrono::sys_days epochDay(const long long day) { return std::chrono::sys_days{std::chrono::days{day}}; }
 
-    void expectSameSummary(const BenchmarkProjection &left, const BenchmarkProjection &right) {
-        EXPECT_EQ(left.attainedRank, right.attainedRank);
-        EXPECT_EQ(left.nextTier, right.nextTier);
-        EXPECT_EQ(left.averageRank, right.averageRank);
-        EXPECT_DOUBLE_EQ(left.totalPlaytimeSeconds, right.totalPlaytimeSeconds);
-        ASSERT_EQ(left.scenarios.size(), right.scenarios.size());
-        for (std::size_t index = 0; index < left.scenarios.size(); ++index) {
-            EXPECT_EQ(left.scenarios[index].personalBest, right.scenarios[index].personalBest);
-            EXPECT_EQ(left.scenarios[index].attainedTier, right.scenarios[index].attainedTier);
+    void expectSameSummary(const Benchmark &left, const Benchmark &right) {
+        EXPECT_EQ(left.attainedRank(), right.attainedRank());
+        EXPECT_EQ(left.nextTier(), right.nextTier());
+        EXPECT_EQ(left.averageRank(), right.averageRank());
+        EXPECT_DOUBLE_EQ(left.totalPlaytimeSeconds(), right.totalPlaytimeSeconds());
+        const auto leftScenarios = left.scenarios();
+        const auto rightScenarios = right.scenarios();
+        ASSERT_EQ(leftScenarios.size(), rightScenarios.size());
+        for (std::size_t index = 0; index < leftScenarios.size(); ++index) {
+            EXPECT_EQ(leftScenarios[index]->stats().personalBest(), rightScenarios[index]->stats().personalBest());
+            EXPECT_EQ(leftScenarios[index]->attainedTier(), rightScenarios[index]->attainedTier());
         }
-        ASSERT_EQ(left.averageRankHistory.size(), right.averageRankHistory.size());
-        for (std::size_t index = 0; index < left.averageRankHistory.size(); ++index) {
-            EXPECT_EQ(left.averageRankHistory[index].day, right.averageRankHistory[index].day);
-            EXPECT_EQ(left.averageRankHistory[index].averageRank, right.averageRankHistory[index].averageRank);
+        const auto &leftHistory = left.averageRankHistory();
+        const auto &rightHistory = right.averageRankHistory();
+        ASSERT_EQ(leftHistory.size(), rightHistory.size());
+        for (std::size_t index = 0; index < leftHistory.size(); ++index) {
+            EXPECT_EQ(leftHistory[index].day, rightHistory[index].day);
+            EXPECT_EQ(leftHistory[index].averageRank, rightHistory[index].averageRank);
         }
     }
 
@@ -1160,11 +1140,9 @@ TEST(BenchmarkTrackingPlaytime, VisiblePlaytimeIsTheRangeSlicedSeriesOfTheCommit
     fixture.start();
 
     const auto &snapshot = fixture.tracking->snapshot();
-    ASSERT_TRUE(snapshot.projection);
+    ASSERT_TRUE(snapshot.benchmark);
     EXPECT_EQ(snapshot.playtime.windowDays, 5);
     EXPECT_EQ(snapshot.visiblePlaytime, full);
-    EXPECT_EQ(snapshot.projection->rollingPlaytime, snapshot.visiblePlaytime);
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime, snapshot.visiblePlaytime);
 
     const RangePreference narrowed{RecentDays{3}, false};
     fixture.playtimePreferences().range = narrowed;
@@ -1173,8 +1151,6 @@ TEST(BenchmarkTrackingPlaytime, VisiblePlaytimeIsTheRangeSlicedSeriesOfTheCommit
     const auto range = resolveRange(narrowed, fixture.days->today(), reference.latestRunDay());
     EXPECT_EQ(snapshot.visiblePlaytime, visiblePlaytime(full, range));
     EXPECT_EQ(snapshot.playtime.windowDays, 5);
-    EXPECT_EQ(snapshot.projection->rollingPlaytime, snapshot.visiblePlaytime);
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime, snapshot.visiblePlaytime);
 }
 
 TEST(BenchmarkTrackingPlaytime, AWindowOrRangeChangeNeitherRebuildsTheBenchmarkNorReadsProfileFacts) {
@@ -1277,7 +1253,7 @@ TEST(BenchmarkTrackingPlaytime, OneDayWindowIncludesZeroTotalsForDaysWithoutRuns
     fixture.playtimePreferences().averagingWindowDays = 1;
     fixture.start();
 
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime,
+    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime,
               (Series{{epochDay(100), 60.0}, {epochDay(101), 30.0}, {epochDay(102), 0.0},
                       {epochDay(103), 0.0}, {epochDay(104), 90.0}}));
 }
@@ -1288,7 +1264,7 @@ TEST(BenchmarkTrackingPlaytime, RollingWindowIncludesZeroDaysAfterEarlierPlaytim
     fixture.playtimePreferences().averagingWindowDays = 3;
     fixture.start();
 
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime,
+    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime,
               (Series{{epochDay(100), 60.0}, {epochDay(101), 30.0}, {epochDay(102), 20.0},
                       {epochDay(103), 0.0}, {epochDay(104), 0.0}, {epochDay(105), 0.0},
                       {epochDay(106), 30.0}}));
@@ -1299,14 +1275,14 @@ TEST(BenchmarkTrackingPlaytime, CustomRangeRetainsZeroDaysWithinTheHistoryGap) {
     useRealAccounting(fixture, {{100, 60.0F}, {106, 90.0F}});
     fixture.playtimePreferences().averagingWindowDays = 3;
     fixture.start();
-    const auto before = *fixture.tracking->projection();
+    const auto before = *fixture.tracking->benchmark();
     fixture.playtimePreferences().range = RangePreference{CustomDates{epochDay(102), epochDay(105)}, false};
     fixture.commitPlaytime();
 
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime,
+    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime,
               (Series{{epochDay(102), 20.0}, {epochDay(103), 0.0},
                       {epochDay(104), 0.0}, {epochDay(105), 0.0}}));
-    expectSameSummary(before, *fixture.tracking->projection());
+    expectSameSummary(before, *fixture.tracking->benchmark());
 }
 
 TEST(BenchmarkTrackingPlaytime, ChangingTheWindowRecalculatesOnlyPlaytimeAndNeverAsksTheProfileForASeries_R24) {
@@ -1316,7 +1292,8 @@ TEST(BenchmarkTrackingPlaytime, ChangingTheWindowRecalculatesOnlyPlaytimeAndNeve
     ASSERT_NO_FATAL_FAILURE(expectDistinctWindows(reference, 5));
     fixture.playtimePreferences().averagingWindowDays = 3;
     fixture.start();
-    const auto before = *fixture.tracking->projection();
+    const auto before = *fixture.tracking->benchmark();
+    const auto beforePlaytime = fixture.tracking->snapshot().visiblePlaytime;
     const auto factRequests = fixture.profile->fact_request_count;
 
     fixture.playtimePreferences().averagingWindowDays = 5;
@@ -1327,10 +1304,8 @@ TEST(BenchmarkTrackingPlaytime, ChangingTheWindowRecalculatesOnlyPlaytimeAndNeve
     EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
     EXPECT_EQ(fixture.profile->filtered_rolling_request_count, 0);
     EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime, includeInactiveDays(reference.rollingPlaytime(5)));
-    EXPECT_NE(fixture.tracking->projection()->rollingPlaytime, before.rollingPlaytime);
-    expectSameSummary(before, *fixture.tracking->projection());
-    expectSameSummary(before, *fixture.tracking->snapshot().projection);
-    EXPECT_EQ(fixture.tracking->snapshot().projection->rollingPlaytime, fixture.tracking->projection()->rollingPlaytime);
+    EXPECT_NE(fixture.tracking->snapshot().visiblePlaytime, beforePlaytime);
+    expectSameSummary(before, *fixture.tracking->benchmark());
 }
 
 TEST(BenchmarkTrackingPlaytime, ANarrowerRangeKeepsOverlappingValuesAndTheWindow) {
@@ -1338,22 +1313,22 @@ TEST(BenchmarkTrackingPlaytime, ANarrowerRangeKeepsOverlappingValuesAndTheWindow
     useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}, {106, 30.0F}});
     fixture.playtimePreferences().averagingWindowDays = 4;
     fixture.start();
-    const auto before = *fixture.tracking->projection();
+    const auto before = *fixture.tracking->benchmark();
+    const auto beforePlaytime = fixture.tracking->snapshot().visiblePlaytime;
     const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
 
     fixture.days->setToday(epochDay(106));
     fixture.playtimePreferences().range = RangePreference{RecentDays{3}, false};
     fixture.commitPlaytime();
 
-    const auto &narrowed = fixture.tracking->projection()->rollingPlaytime;
+    const auto &narrowed = fixture.tracking->snapshot().visiblePlaytime;
     ASSERT_EQ(narrowed.size(), 3U);
-    EXPECT_EQ(narrowed, Series(before.rollingPlaytime.end() - 3, before.rollingPlaytime.end()));
-    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime, narrowed);
+    EXPECT_EQ(narrowed, Series(beforePlaytime.end() - 3, beforePlaytime.end()));
     EXPECT_EQ(fixture.tracking->snapshot().playtime.windowDays, 4);
     EXPECT_EQ(fixture.tracking->snapshot().playtime.interval,
               std::optional(DayInterval{epochDay(104), epochDay(106)}));
     EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests);
-    expectSameSummary(before, *fixture.tracking->projection());
+    expectSameSummary(before, *fixture.tracking->benchmark());
 }
 
 TEST(BenchmarkTrackingPlaytime, TheFullExtentSurvivesNarrowing) {
@@ -1367,8 +1342,7 @@ TEST(BenchmarkTrackingPlaytime, TheFullExtentSurvivesNarrowing) {
     fixture.commitPlaytime();
 
     EXPECT_EQ(fixture.tracking->snapshot().playtime.fullExtent, fullExtent);
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime.size(), 1U);
-    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime, fixture.tracking->projection()->rollingPlaytime);
+    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime.size(), 1U);
 }
 
 TEST(BenchmarkTrackingPlaytime, TheAnchorIsTheNewestContributingRunEvenWhenItImprovedNothing) {
@@ -1382,7 +1356,6 @@ TEST(BenchmarkTrackingPlaytime, TheAnchorIsTheNewestContributingRunEvenWhenItImp
 
     EXPECT_EQ(fixture.tracking->snapshot().playtime.interval,
               std::optional(DayInterval{epochDay(106), epochDay(110)}));
-    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime, fixture.tracking->projection()->rollingPlaytime);
 }
 
 TEST(BenchmarkTrackingPlaytime, AnchoredRangeWithoutContributingRunsHasNoIntervalAndNoSamples) {
@@ -1392,7 +1365,6 @@ TEST(BenchmarkTrackingPlaytime, AnchoredRangeWithoutContributingRunsHasNoInterva
     fixture.start();
 
     EXPECT_FALSE(fixture.tracking->snapshot().playtime.interval);
-    EXPECT_TRUE(fixture.tracking->projection()->rollingPlaytime.empty());
     EXPECT_TRUE(fixture.tracking->snapshot().visiblePlaytime.empty());
 }
 
@@ -1402,7 +1374,7 @@ TEST(BenchmarkTrackingPlaytime, ADayChangeReprojectsWithoutRecalculatingOrTouchi
     fixture.days->setToday(epochDay(101));
     fixture.playtimePreferences().range = RangePreference{RecentDays{2}, false};
     fixture.start();
-    const auto before = *fixture.tracking->projection();
+    const auto before = *fixture.tracking->benchmark();
     const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
     const auto factRequests = fixture.profile->fact_request_count;
 
@@ -1412,11 +1384,10 @@ TEST(BenchmarkTrackingPlaytime, ADayChangeReprojectsWithoutRecalculatingOrTouchi
     EXPECT_EQ(fixture.tracked, 0);
     EXPECT_EQ(fixture.tracking->snapshot().playtime.interval,
               std::optional(DayInterval{epochDay(101), epochDay(102)}));
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime.size(), 1U);
-    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime, fixture.tracking->projection()->rollingPlaytime);
+    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime.size(), 1U);
     EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests);
     EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
-    expectSameSummary(before, *fixture.tracking->projection());
+    expectSameSummary(before, *fixture.tracking->benchmark());
 }
 
 TEST(BenchmarkTrackingPlaytime, ADayChangeIsIgnoredWhenTheRangeDoesNotFollowToday) {
@@ -1475,14 +1446,14 @@ TEST(BenchmarkTrackingRank, AllHistoryLeavesTheRankRangeUnrestricted) {
     fixture.startRank();
 
     EXPECT_EQ(fixture.tracking->snapshot().rank, RankRangeView{});
-    EXPECT_EQ(fixture.tracking->projection()->averageRankHistory.size(), 3U);
+    EXPECT_EQ(fixture.tracking->benchmark()->averageRankHistory().size(), 3U);
 }
 
 TEST(BenchmarkTrackingRank, ARangeChangeReprojectsWithoutReevaluatingOrTouchingTheSummaries) {
     RankFixture fixture;
     fixture.improvingThenFlatRuns();
     fixture.startRank();
-    const auto before = *fixture.tracking->projection();
+    const auto before = *fixture.tracking->benchmark();
     const auto factRequests = fixture.profile->fact_request_count;
     const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
 
@@ -1498,8 +1469,7 @@ TEST(BenchmarkTrackingRank, ARangeChangeReprojectsWithoutReevaluatingOrTouchingT
     EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
     EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests);
     // The rank history stays whole: what came before the range is the rank carried into it.
-    expectSameSummary(before, *fixture.tracking->projection());
-    expectSameSummary(before, *fixture.tracking->snapshot().projection);
+    expectSameSummary(before, *fixture.tracking->benchmark());
 }
 
 // The rank series has no point after its last improvement, so anchoring at a later run would only
@@ -1511,7 +1481,7 @@ TEST(BenchmarkTrackingRank, TheAnchorIsTheLatestImprovementNotTheNewestContribut
     fixture.rankPreferences().range = RangePreference{RecentDays{3}, true};
     fixture.startRank();
 
-    ASSERT_EQ(fixture.tracking->projection()->averageRankHistory.back().day, epochDay(104));
+    ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day, epochDay(104));
     EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
 }
 
@@ -1525,7 +1495,7 @@ TEST(BenchmarkTrackingRank, ALaterNonImprovingRunLeavesTheAnchor) {
     fixture.profile->run_facts.push_back(benchmarkFact("h2", 120 * kDay, 5.0F, 30.0F));
     fixture.profile->notifyProfileChanged();
 
-    EXPECT_EQ(fixture.tracking->projection()->averageRankHistory.back().day, epochDay(104));
+    EXPECT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day, epochDay(104));
     EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
 }
 
@@ -1539,7 +1509,7 @@ TEST(BenchmarkTrackingRank, ALaterImprovingRunMovesTheAnchor) {
     fixture.profile->run_facts.push_back(benchmarkFact("h2", 120 * kDay, 900.0F, 30.0F));
     fixture.profile->notifyProfileChanged();
 
-    ASSERT_EQ(fixture.tracking->projection()->averageRankHistory.back().day, epochDay(120));
+    ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day, epochDay(120));
     EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(118), epochDay(120)}));
 }
 
@@ -1628,7 +1598,7 @@ TEST(BenchmarkTrackingRank, RankAndPlaytimeRangesNeverWriteEachOther) {
     useRealAccounting(fixture, {{100, 60.0F}, {101, 30.0F}, {104, 90.0F}, {106, 30.0F}});
     fixture.days->setToday(epochDay(106));
     fixture.startRank();
-    const auto playtime = fixture.tracking->projection()->rollingPlaytime;
+    const auto playtime = fixture.tracking->snapshot().visiblePlaytime;
     const auto playtimeInterval = fixture.tracking->snapshot().playtime.interval;
 
     fixture.rankPreferences().range = RangePreference{RecentDays{2}, false};
@@ -1636,7 +1606,7 @@ TEST(BenchmarkTrackingRank, RankAndPlaytimeRangesNeverWriteEachOther) {
     EXPECT_EQ(fixture.rankOnly, 1);
     EXPECT_EQ(fixture.playtimeOnly, 0);
     EXPECT_EQ(fixture.tracking->snapshot().playtime.interval, playtimeInterval);
-    EXPECT_EQ(fixture.tracking->projection()->rollingPlaytime, playtime);
+    EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime, playtime);
 
     fixture.playtimePreferences().range = RangePreference{RecentDays{4}, false};
     fixture.commitPlaytime();
@@ -1714,7 +1684,7 @@ TEST(BenchmarkTrackingRecentRank, TheAnchorIsTheLastPlayDayNotTheLastImprovement
     fixture.recentPreferences().range = RangePreference{RecentDays{3}, true};
     fixture.startRank();
 
-    ASSERT_EQ(fixture.tracking->projection()->recentAverageRankHistory.back().day, epochDay(110));
+    ASSERT_EQ(fixture.tracking->benchmark()->recentAverageRankHistory().back().day, epochDay(110));
     EXPECT_EQ(fixture.tracking->snapshot().recentRank.interval,
               std::optional(DayInterval{epochDay(108), epochDay(110)}));
     EXPECT_EQ(fixture.tracking->snapshot().recentRank.anchoredEnd, std::optional(epochDay(110)));
@@ -1779,7 +1749,7 @@ TEST(BenchmarkTrackingStyle, AStyleOnlyChangeNeverEvaluatesOrReprojectsEitherBen
     fixture.startStyle();
     const auto factRequests = fixture.profile->fact_request_count;
     const auto rollingRequests = fixture.profile->filtered_rolling_request_count;
-    const auto before = *fixture.tracking->projection();
+    const auto before = *fixture.tracking->benchmark();
 
     fixture.playtimePreferences().appearance = {ConnectionMode::PointsOnly, true};
     fixture.playtimePreferences().seriesStyles["playtime"] = {RgbaColor{9, 9, 9, 255}, 8.0};
@@ -1793,7 +1763,7 @@ TEST(BenchmarkTrackingStyle, AStyleOnlyChangeNeverEvaluatesOrReprojectsEitherBen
     EXPECT_EQ(fixture.rankOnly, 0);
     EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
     EXPECT_EQ(fixture.profile->filtered_rolling_request_count, rollingRequests);
-    expectSameSummary(before, *fixture.tracking->projection());
+    expectSameSummary(before, *fixture.tracking->benchmark());
 }
 
 TEST(BenchmarkTrackingStyle, EachGraphReportsItsOwnCommittedStyle) {

@@ -3,7 +3,6 @@
 #include <limits>
 
 #include "benchmarks/benchmark_definition.h"
-#include "benchmarks/benchmark_evaluator.h"
 
 using namespace ksv::domain;
 
@@ -98,15 +97,4 @@ TEST(BenchmarkDefinition, LadderRequiresEveryTierAndStrictlyIncreasingScoresInTi
         EXPECT_EQ(definition.ladderFor(ScenarioEntry{.thresholds = test.thresholds}), test.expected);
     }
     EXPECT_EQ(BenchmarkDefinition{}.ladderFor(ScenarioEntry{.thresholds = ladderCases[0].thresholds}), std::nullopt);
-}
-
-// TODO(2026-11-19): Remove at Cleanup together with thresholdLadder, which this pins ladderFor against.
-TEST(BenchmarkDefinition, LadderAgreesWithTheLegacyAdmissionRule) {
-    for (const auto &definition: {twoTiers(), BenchmarkDefinition{}}) {
-        for (const auto &test: ladderCases) {
-            SCOPED_TRACE(test.name);
-            const ScenarioEntry candidate{.thresholds = test.thresholds};
-            EXPECT_EQ(definition.ladderFor(candidate), thresholdLadder(definition.tiers, candidate.thresholds));
-        }
-    }
 }

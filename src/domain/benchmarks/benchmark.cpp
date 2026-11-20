@@ -1,4 +1,4 @@
-#include "benchmarks/benchmark_evaluator.h"
+#include "benchmarks/benchmark.h"
 
 #include <algorithm>
 #include <cmath>
@@ -27,23 +27,6 @@ namespace ksv::domain {
                            (value - (*ladder)[index - 1]) / ((*ladder)[index] - (*ladder)[index - 1]);
             return static_cast<double>(ladder->size());
         }
-    }
-
-    // TODO(2026-11-19): Remove with Cleanup when the grid and driver tests read Benchmark.
-    std::optional<std::vector<double>> thresholdLadder(const std::vector<Tier> &tiers,
-                                                       const std::vector<Threshold> &thresholds) {
-        BenchmarkDefinition definition;
-        definition.tiers = tiers;
-        ScenarioEntry entry;
-        entry.thresholds = thresholds;
-        return definition.ladderFor(entry);
-    }
-
-    // TODO(2026-11-19): Remove with Cleanup when the grid and driver tests read Benchmark.
-    double normalizedTierValue(const std::vector<Tier> &tiers, const std::vector<Threshold> &thresholds,
-                               const std::optional<double> score) {
-        if (!score || !std::isfinite(*score)) return 0.0;
-        return normalizedFromLadder(thresholdLadder(tiers, thresholds), score);
     }
 
     const ScenarioEntryId &ScenarioBenchmarkEvaluation::entryId() const { return m_entry.id; }

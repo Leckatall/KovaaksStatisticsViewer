@@ -7,7 +7,6 @@
 
 #include "benchmark_builders.h"
 #include "benchmarks/benchmark.h"
-#include "benchmarks/benchmark_evaluator.h"
 #include "run_builders.h"
 #include "user_profile.h"
 
@@ -89,42 +88,27 @@ namespace {
 }
 
 TEST(BenchmarkThresholdLadder, OrdersByTierNotByThresholdPosition) {
-    const std::vector<Tier> tiers{{TierId{"bronze"}, "Bronze", {}}, {TierId{"silver"}, "Silver", {}}};
-    const std::vector<Threshold> thresholds{{TierId{"silver"}, 200.0}, {TierId{"bronze"}, 100.0}};
-    EXPECT_EQ(*thresholdLadder(tiers, thresholds), (std::vector{100.0, 200.0}));
+    const BenchmarkDefinition definition{.tiers = {tier("bronze"), tier("silver")}};
+    const ScenarioEntry entry{.thresholds = steps({{"silver", 200}, {"bronze", 100}})};
+    EXPECT_EQ(definition.ladderFor(entry), (std::vector{100.0, 200.0}));
 }
 
 TEST(BenchmarkThresholdLadder, RejectsMissingDuplicateInvalidAndEmptyLadders) {
-    EXPECT_FALSE(thresholdLadder(ladder3(), steps({{"bronze", 100}, {"gold", 300}})));
-    EXPECT_FALSE(thresholdLadder(ladder3(), steps({{"bronze", 100}, {"bronze", 150}, {"silver", 200}, {"gold", 300}})));
-    EXPECT_FALSE(thresholdLadder(ladder3(), steps({{"bronze", -1}, {"silver", 200}, {"gold", 300}})));
-    EXPECT_FALSE(thresholdLadder(ladder3(), steps({{"bronze", std::numeric_limits<double>::infinity()},
-                                                   {"silver", 200}, {"gold", 300}})));
-    EXPECT_FALSE(thresholdLadder(ladder3(), steps({{"bronze", 100}, {"silver", 100}, {"gold", 300}})));
-    EXPECT_FALSE(thresholdLadder({}, steps({{"bronze", 100}})));
+    const BenchmarkDefinition definition{.tiers = ladder3()};
+    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{.thresholds = steps({{"bronze", 100}, {"gold", 300}})}));
+    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{
+        .thresholds = steps({{"bronze", 100}, {"bronze", 150}, {"silver", 200}, {"gold", 300}})}));
+    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{
+        .thresholds = steps({{"bronze", -1}, {"silver", 200}, {"gold", 300}})}));
+    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{
+        .thresholds = steps({{"bronze", std::numeric_limits<double>::infinity()}, {"silver", 200}, {"gold", 300}})}));
+    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{
+        .thresholds = steps({{"bronze", 100}, {"silver", 100}, {"gold", 300}})}));
+    EXPECT_FALSE(BenchmarkDefinition{}.ladderFor(ScenarioEntry{.thresholds = steps({{"bronze", 100}})}));
 }
 
 TEST(BenchmarkNormalization, HandlesInterpolationBoundsAndUnreadableInput) {
-    const auto thresholds = steps({{"bronze", 100}, {"silver", 200}, {"gold", 300}});
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, std::nullopt), 0.0);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, -10.0), 0.0);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, 25.0), .25);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, 100.0), 1.0);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, 150.0), 1.5);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, 999.0), 3.0);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, std::numeric_limits<double>::quiet_NaN()), 0.0);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, std::numeric_limits<double>::infinity()), 0.0);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), steps({{"bronze", 100}}), 500.0), 0.0);
-
-    // A one-tier ladder has no interval above its only rung, so it tops out at 1.
-    const std::vector<Tier> single{tier("bronze")};
-    const auto onlyRung = steps({{"bronze", 100}});
-    EXPECT_DOUBLE_EQ(normalizedTierValue(single, onlyRung, 50.0), 0.5);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(single, onlyRung, 100.0), 1.0);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(single, onlyRung, 1000.0), 1.0);
-
     auto definition = benchmark();
-    definition.uncategorized.front().thresholds = thresholds;
     const auto evaluated = Benchmark(definition, {Completeness::Trackable, {}}, {resolvedEntry("entry")}, {});
     const auto &scenario = scenarioNamed(evaluated, "entry");
     EXPECT_DOUBLE_EQ(scenario.normalized(std::nullopt), 0.0);
@@ -140,7 +124,7 @@ TEST(BenchmarkNormalization, HandlesInterpolationBoundsAndUnreadableInput) {
     const auto partial = Benchmark(definition, {Completeness::Incomplete, {}}, {resolvedEntry("entry")}, {});
     EXPECT_DOUBLE_EQ(scenarioNamed(partial, "entry").normalized(500.0), 0.0);
 
-    definition.tiers = single;
+    definition.tiers = {tier("bronze")};
     const auto singleTier = Benchmark(definition, {Completeness::Trackable, {}}, {resolvedEntry("entry")}, {});
     const auto &singleTierScenario = scenarioNamed(singleTier, "entry");
     EXPECT_DOUBLE_EQ(singleTierScenario.normalized(50.0), 0.5);
@@ -149,12 +133,8 @@ TEST(BenchmarkNormalization, HandlesInterpolationBoundsAndUnreadableInput) {
 }
 
 TEST(BenchmarkNormalization, ZeroFirstThresholdDistinguishesPlayedFromUnplayed) {
-    const auto thresholds = steps({{"bronze", 0}, {"silver", 200}, {"gold", 300}});
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, 0.0), 1.0);
-    EXPECT_DOUBLE_EQ(normalizedTierValue(ladder3(), thresholds, 100.0), 1.5);
-
     auto definition = benchmark();
-    definition.uncategorized.front().thresholds = thresholds;
+    definition.uncategorized.front().thresholds = steps({{"bronze", 0}, {"silver", 200}, {"gold", 300}});
     const auto evaluated = Benchmark(definition, {Completeness::Trackable, {}}, {resolvedEntry("entry")}, {});
     const auto &scenario = scenarioNamed(evaluated, "entry");
     EXPECT_DOUBLE_EQ(scenario.normalized(0.0), 1.0);
@@ -972,84 +952,4 @@ TEST(BenchmarkCopy, ACopyIsIndependentOfItsSource) {
     expectSameResults(assigned);
     const auto moved = std::move(assigned);
     expectSameResults(moved);
-}
-
-namespace {
-    void expectProjectedGroup(const GroupProjection &projection, const GroupEvaluation &group) {
-        EXPECT_EQ(projection.id, group.id());
-        EXPECT_EQ(projection.name, group.name());
-        EXPECT_EQ(projection.satisfiedTier, group.satisfiedTier());
-        const auto scenarios = group.scenarios();
-        ASSERT_EQ(projection.scenarios.size(), scenarios.size());
-        for (std::size_t i = 0; i < scenarios.size(); ++i) EXPECT_EQ(projection.scenarios[i], scenarios[i]->entryId());
-        const auto subgroups = group.subgroups();
-        ASSERT_EQ(projection.subgroups.size(), subgroups.size());
-        for (std::size_t i = 0; i < subgroups.size(); ++i) expectProjectedGroup(projection.subgroups[i], *subgroups[i]);
-    }
-
-    void expectProjection(const BenchmarkProjection &projection, const Benchmark &evaluated,
-                          const PlaytimeSeries &series) {
-        EXPECT_EQ(projection.benchmarkId, evaluated.id());
-        EXPECT_EQ(projection.completeness, evaluated.completeness().completeness);
-        EXPECT_EQ(projection.tiers, evaluated.tiers());
-        EXPECT_EQ(projection.attainedRank, evaluated.attainedRank());
-        EXPECT_EQ(projection.completedRank, evaluated.completedRank());
-        EXPECT_EQ(projection.nextTier, evaluated.nextTier());
-        EXPECT_EQ(projection.scenariosAtNextTier, evaluated.scenariosAtNextTier());
-        EXPECT_EQ(projection.averageRank, evaluated.averageRank());
-        EXPECT_DOUBLE_EQ(projection.totalPlaytimeSeconds, evaluated.totalPlaytimeSeconds());
-        EXPECT_EQ(projection.rollingPlaytime, series);
-        expectHistory(projection.averageRankHistory, evaluated.averageRankHistory());
-        expectHistory(projection.recentAverageRankHistory, evaluated.recentAverageRankHistory());
-        const auto &blockers = evaluated.nextTierBlockers();
-        ASSERT_EQ(projection.nextTierBlockers.size(), blockers.size());
-        for (std::size_t i = 0; i < blockers.size(); ++i) {
-            const auto &projected = projection.nextTierBlockers[i];
-            EXPECT_EQ(projected.entryId, blockers[i].entryId);
-            EXPECT_EQ(projected.group, blockers[i].group);
-            EXPECT_DOUBLE_EQ(projected.required, blockers[i].required);
-            EXPECT_EQ(projected.current, blockers[i].current);
-        }
-
-        const auto scenarios = evaluated.scenarios();
-        ASSERT_EQ(projection.scenarios.size(), scenarios.size());
-        for (std::size_t i = 0; i < scenarios.size(); ++i) {
-            const auto &projected = projection.scenarios[i];
-            const auto &scenario = *scenarios[i];
-            const auto &stats = scenario.stats();
-            EXPECT_EQ(projected.entryId, scenario.entryId());
-            EXPECT_EQ(projected.name, scenario.name());
-            EXPECT_EQ(projected.matchState, scenario.matchState());
-            EXPECT_EQ(projected.attainedTier, scenario.attainedTier());
-            EXPECT_EQ(projected.nextThreshold, scenario.nextThreshold());
-            EXPECT_DOUBLE_EQ(projected.normalizedRank, scenario.normalizedRank());
-            EXPECT_EQ(projected.personalBest, stats.personalBest());
-            EXPECT_EQ(projected.personalBestTime, stats.personalBestTime());
-            EXPECT_EQ(projected.recentAverage, stats.recentAverage());
-            EXPECT_EQ(projected.recentSampleCount, stats.recentSampleCount());
-            EXPECT_EQ(projected.runCount, stats.runCount());
-            EXPECT_DOUBLE_EQ(projected.playtimeSeconds, stats.playtimeSeconds());
-        }
-        const auto uncategorized = evaluated.uncategorized();
-        ASSERT_EQ(projection.uncategorized.size(), uncategorized.size());
-        for (std::size_t i = 0; i < uncategorized.size(); ++i) EXPECT_EQ(projection.uncategorized[i], uncategorized[i]->entryId());
-        const auto categories = evaluated.categories();
-        ASSERT_EQ(projection.categories.size(), categories.size());
-        for (std::size_t i = 0; i < categories.size(); ++i) expectProjectedGroup(projection.categories[i], *categories[i]);
-    }
-}
-
-// TODO(2026-11-19): Delete with Cleanup when the temporary adapter is removed.
-TEST(EvaluateBenchmarkAdapter, AnswersTheSameAsTheBenchmarkItWraps) {
-    const auto definition = hierarchyBenchmark();
-    const auto resolutions = hierarchyResolutions();
-    const auto completeness = validateBenchmark(definition);
-    auto facts = hierarchyScores({{"b1", 200.0F}});
-    facts.front().duration_seconds = 15.0F;
-    const auto evaluated = evaluatedBenchmark(definition, facts, resolutions);
-    ASSERT_FALSE(evaluated.nextTierBlockers().empty());
-    ASSERT_FALSE(evaluated.averageRankHistory().empty());
-    const PlaytimeSeries series{{facts.front().run_id.startDay() + std::chrono::days{10}, 123.0}};
-    expectProjection(toProjection(evaluated, series), evaluated, series);
-    expectProjection(evaluateBenchmark(definition, completeness, resolutions, facts, series), evaluated, series);
 }

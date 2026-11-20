@@ -5,7 +5,7 @@
 #include <utility>
 #include <variant>
 
-#include "benchmarks/benchmark_evaluator.h"
+#include "benchmarks/benchmark_validation.h"
 
 namespace ksv::application {
     namespace {
@@ -171,8 +171,6 @@ namespace ksv::application {
 
         if (!m_selected) {
             m_state = BenchmarkTrackingState::NoSelection;
-            // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
-            m_projection = {};
             m_snapshot.availability = m_state;
             return;
         }
@@ -195,21 +193,15 @@ namespace ksv::application {
             cached = m_cache.emplace(*m_selected, evaluate(*loaded)).first;
         }
         // Resolution invalidates the cache, but a recents notification can arrive before it
-        // processes a library change. Publish every selected result from the same evaluation.
+        // processes a library change. The cached evaluation can still be Ready in that callback.
         if (cached != m_cache.end()) {
             applyPlaytimeView(cached->second);
             applyRankRange(GraphKey::BenchmarkRank, cached->second);
             applyRankRange(GraphKey::BenchmarkRecentRank, cached->second);
-            const auto &benchmark = m_snapshot.benchmark.emplace(cached->second.benchmark);
-            // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
-            m_projection = domain::toProjection(benchmark, m_snapshot.visiblePlaytime);
-            m_snapshot.projection = m_projection;
-            m_snapshot.selectedLoaded = data::LoadedBenchmark{benchmark.definition(), benchmark.completeness()};
+            m_snapshot.benchmark.emplace(cached->second.benchmark);
             m_state = BenchmarkTrackingState::Ready;
         } else {
             m_state = BenchmarkTrackingState::Unavailable;
-            // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
-            m_projection = {};
         }
 
         m_snapshot.availability = m_state;
@@ -234,9 +226,6 @@ namespace ksv::application {
         const auto cached = m_cache.find(*m_selected);
         if (cached == m_cache.end()) return;
         applyPlaytimeView(cached->second);
-        // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
-        m_projection.rollingPlaytime = m_snapshot.visiblePlaytime;
-        m_snapshot.projection->rollingPlaytime = m_snapshot.visiblePlaytime;
         notifyPlaytimeChanged();
     }
 

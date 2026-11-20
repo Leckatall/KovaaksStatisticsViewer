@@ -16,11 +16,8 @@ add_library(ksv_domain STATIC
         benchmarks/benchmark_definition.cpp
         benchmarks/benchmark_validation.h
         benchmarks/benchmark_validation.cpp
-        benchmarks/benchmark_evaluator.h
-        benchmarks/benchmark_evaluator.cpp
         benchmarks/benchmark_resolution.h
         benchmarks/benchmark_resolution.cpp
-        benchmarks/benchmark_projection.h
         benchmarks/rank_history.h
         benchmarks/rank_history.cpp
         benchmarks/benchmark_editor.h

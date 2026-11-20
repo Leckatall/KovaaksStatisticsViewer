@@ -18,8 +18,6 @@
 #include "contracts/i_benchmark_tracking_use_case.h"
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_ids.h"
-// TODO(2026-11-19): Cleanup deletes this with IBenchmarkTrackingUseCase::projection().
-#include "benchmarks/benchmark_projection.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"
 #include "../../../support/benchmark_builders.h"
@@ -73,8 +71,6 @@ namespace ksv::tests_ui {
         }
         [[nodiscard]] std::optional<domain::BenchmarkId> selected() const override { return snap.selectedId; }
         [[nodiscard]] application::BenchmarkTrackingState state() const override { return snap.availability; }
-        // TODO(2026-11-19): Cleanup deletes this with IBenchmarkTrackingUseCase::projection().
-        [[nodiscard]] const domain::BenchmarkProjection *projection() const override { return nullptr; }
         [[nodiscard]] const domain::Benchmark *benchmark() const override {
             return snap.availability == application::BenchmarkTrackingState::Ready && snap.benchmark
                        ? &*snap.benchmark : nullptr;

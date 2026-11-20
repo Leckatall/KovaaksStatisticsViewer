@@ -9,8 +9,6 @@
 
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_ids.h"
-#include "benchmarks/benchmark_projection.h"
-#include "data/interfaces/benchmark_library_snapshot.h"
 #include "i_benchmark_tracking_use_case.h"
 #include "playtime_view.h"
 
@@ -28,8 +26,7 @@ namespace ksv::application {
         std::optional<std::size_t> recency;
     };
 
-    // What a rank graph's committed range resolved to. The rank history itself stays whole in the
-    // projection, so the rank established before a range can be carried into it.
+    // The evaluated benchmark keeps the full rank history so a range can carry in the preceding rank.
     struct RankRangeView {
         // Set when the range resolved to calendar dates; the X axis spans exactly this.
         std::optional<DayInterval> interval;
@@ -42,24 +39,21 @@ namespace ksv::application {
         bool operator==(const RankRangeView &) const = default;
     };
 
-    // One coherent revision of the tracking workspace: library choices, selection, and the selected
-    // definition/completeness/projection all belong to the same `libraryRevision`. Consumers read it
-    // once after an onChanged notification and never retain the reference.
+    // Library choices, selection and the evaluated benchmark share a library revision. Consumers
+    // read the snapshot once after onChanged and use the reference only for that revision.
     struct BenchmarkWorkspaceSnapshot {
         std::uint64_t libraryRevision = 0;
         std::vector<BenchmarkChoice> choices;
         std::optional<domain::BenchmarkId> selectedId;
         std::string lastKnownSelectedDisplayName;
         BenchmarkTrackingState availability = BenchmarkTrackingState::NoSelection;
-        std::optional<data::LoadedBenchmark> selectedLoaded;
-        // Its `rollingPlaytime` is already the range-visible part of the committed window's series.
-        std::optional<domain::BenchmarkProjection> projection;
         PlaytimeView playtime;
         // Of averageRankHistory, whose anchor is the last improvement.
         RankRangeView rank;
         // Of recentAverageRankHistory, whose anchor is the last play day.
         RankRangeView recentRank;
         std::optional<domain::Benchmark> benchmark;
+        // The range-sliced part of the committed averaging window's playtime series.
         PlaytimeSeries visiblePlaytime;
     };
 }

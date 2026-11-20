@@ -1369,12 +1369,9 @@ namespace {
     const BenchmarkDefinition &working(const TableFixture &f) { return f.uc->resolveCalls.back(); }
 
     const ScenarioEntry &entryIn(const BenchmarkDefinition &bench, const std::string &id) {
-        const auto matches = [&](const ScenarioEntry &e) { return e.id.value == id; };
-        for (const auto &e: bench.uncategorized) if (matches(e)) return e;
-        for (const auto &category: bench.categories) {
-            for (const auto &e: category.scenarios) if (matches(e)) return e;
-            for (const auto &sub: category.subcategories) for (const auto &e: sub.scenarios) if (matches(e)) return e;
-        }
+        const auto entries = bench.entries();
+        const auto found = std::ranges::find_if(entries, [&](const auto *entry) { return entry->id.value == id; });
+        if (found != entries.end()) return **found;
         throw std::out_of_range("no entry " + id);
     }
 

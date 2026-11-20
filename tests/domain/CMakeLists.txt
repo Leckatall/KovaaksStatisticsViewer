@@ -7,7 +7,7 @@ add_executable(domain_tests
     benchmark_evaluator_test.cpp
     benchmark_definition_test.cpp
     user_profile_benchmark_queries_test.cpp
-    benchmark_projection_timing_test.cpp
+    benchmark_timing_test.cpp
     scenario_name_key_test.cpp
     scenario_evaluation_test.cpp
     rolling_playtime_test.cpp

@@ -1,7 +1,6 @@
 #ifndef KOVAAKSSTATSVIEWER_TESTS_BENCHMARK_BUILDERS_H
 #define KOVAAKSSTATSVIEWER_TESTS_BENCHMARK_BUILDERS_H
 
-#include <algorithm>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -9,7 +8,6 @@
 #include <vector>
 
 #include "benchmarks/benchmark.h"
-#include "benchmarks/benchmark_projection.h"
 #include "run.h"
 
 namespace ksv::tests_support {
@@ -47,15 +45,6 @@ namespace ksv::tests_support {
                                          float duration = 0.0F) {
         return {{{"Scenario " + hash, hash}, startTime}, score, duration};
     }
-    inline const domain::ScenarioProjection &scenarioNamed(const domain::BenchmarkProjection &projection,
-                                                           const std::string &id) {
-        const auto found = std::ranges::find_if(projection.scenarios, [&](const auto &scenario) {
-            return scenario.entryId.value == id;
-        });
-        if (found == projection.scenarios.end()) throw std::out_of_range("no scenario projection " + id);
-        return *found;
-    }
-
     inline domain::Benchmark evaluatedBenchmark(domain::BenchmarkDefinition definition,
                                                 const std::vector<domain::RunFact> &runs,
                                                 std::vector<domain::ScenarioResolution> resolutions = {}) {

@@ -15,6 +15,7 @@
 #include "contracts/i_benchmark_tracking_use_case.h"
 #include "contracts/i_graph_configuration_use_case.h"
 #include "contracts/i_recent_benchmarks.h"
+#include "data/interfaces/benchmark_library_snapshot.h"
 #include "data/interfaces/i_benchmarks_service.h"
 #include "data/interfaces/i_day_source.h"
 #include "data/interfaces/i_profile_service.h"
@@ -37,10 +38,6 @@ namespace ksv::application {
         [[nodiscard]] const BenchmarkWorkspaceSnapshot &snapshot() const override { return m_snapshot; }
         [[nodiscard]] std::optional<domain::BenchmarkId> selected() const override { return m_selected; }
         [[nodiscard]] BenchmarkTrackingState state() const override { return m_state; }
-        // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
-        [[nodiscard]] const domain::BenchmarkProjection *projection() const override {
-            return m_state == BenchmarkTrackingState::Ready ? &m_projection : nullptr;
-        }
         [[nodiscard]] const domain::Benchmark *benchmark() const override {
             return m_state == BenchmarkTrackingState::Ready ? &*m_snapshot.benchmark : nullptr;
         }
@@ -99,8 +96,6 @@ namespace ksv::application {
         // so Unavailable can still name what the user picked.
         std::string m_lastKnownSelectedDisplayName;
         BenchmarkTrackingState m_state = BenchmarkTrackingState::NoSelection;
-        // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
-        domain::BenchmarkProjection m_projection;
         std::map<domain::BenchmarkId, Evaluation> m_cache;
         BenchmarkWorkspaceSnapshot m_snapshot;
         std::vector<std::function<void()> > m_callbacks;
