@@ -391,7 +391,7 @@ namespace ksv::domain {
             first = last;
             return scenarios;
         };
-        const auto buildGroup = [&](const auto &definition) {
+        const auto buildGroup = [&](const BenchmarkGroup &definition) {
             GroupEvaluation group;
             group.m_id = definition.id;
             group.m_name = definition.name;

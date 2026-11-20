@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <utility>
+#include <vector>
 
 #include "benchmarks/benchmark_definition.h"
 
@@ -32,16 +34,21 @@ namespace {
     };
 
     BenchmarkDefinition twoTiers() { return {.tiers = {{.id = bronze}, {.id = silver}}}; }
+
+    Subcategory subcategory(std::vector<BenchmarkScenario> scenarios) { return {{.scenarios = std::move(scenarios)}}; }
+
+    Category category(std::vector<BenchmarkScenario> scenarios, std::vector<Subcategory> subcategories = {}) {
+        return {{.scenarios = std::move(scenarios)}, std::move(subcategories)};
+    }
 }
 
 TEST(BenchmarkDefinition, EntriesPointIntoTheDefinitionInCanonicalOrder) {
     const BenchmarkDefinition definition{
         .uncategorized = {entry("u1"), entry("u2")},
         .categories = {
-            {.scenarios = {entry("d1"), entry("d2")}},
-            {.subcategories = {{.scenarios = {entry("a1"), entry("a2")}}, {.scenarios = {entry("b1")}}}},
-            {.scenarios = {entry("mixed-direct")},
-             .subcategories = {{.scenarios = {entry("mixed-first")}}, {.scenarios = {entry("mixed-second")}}}}
+            category({entry("d1"), entry("d2")}),
+            category({}, {subcategory({entry("a1"), entry("a2")}), subcategory({entry("b1")})}),
+            category({entry("mixed-direct")}, {subcategory({entry("mixed-first")}), subcategory({entry("mixed-second")})})
         }
     };
     const auto &categories = definition.categories;
@@ -61,8 +68,7 @@ TEST(BenchmarkDefinition, EntriesPointIntoTheDefinitionInCanonicalOrder) {
 TEST(BenchmarkDefinition, ScenarioHashesKeepFirstOccurrencesAcrossEntries) {
     const BenchmarkDefinition definition{
         .uncategorized = {{.hashes = {"z", "a"}}, {}},
-        .categories = {{.scenarios = {{.hashes = {"a", "m"}}},
-                        .subcategories = {{.scenarios = {{.hashes = {"z", "b"}}}}}}}
+        .categories = {category({{.hashes = {"a", "m"}}}, {subcategory({{.hashes = {"z", "b"}}})})}
     };
 
     EXPECT_EQ(definition.scenarioHashes(), (std::vector<std::string>{"z", "a", "m", "b"}));

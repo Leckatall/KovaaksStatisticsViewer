@@ -107,31 +107,34 @@ namespace ksv::qt_data {
             return entries;
         }
 
+        // The caller checks the object's exact key set, which differs between categories and subcategories.
+        std::optional<BenchmarkGroup> decodeGroup(const QJsonObject &object, int version) {
+            if (!object["name"].isString()) return std::nullopt;
+            const auto id = nonEmptyIdString(object["id"]);
+            const auto color = decodeColor(object["color"]);
+            auto scenarios = decodeEntries(object["scenarios"], version);
+            if (!id || !color || !scenarios) return std::nullopt;
+            return BenchmarkGroup{GroupId{*id}, object["name"].toString().toStdString(), *color, std::move(*scenarios)};
+        }
+
         std::optional<Category> decodeCategory(const QJsonValue &value, int version) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             if (!exactKeys(object, {"id", "name", "color", "scenarios", "subcategories"}) ||
-                !object["name"].isString() || !object["subcategories"].isArray())
+                !object["subcategories"].isArray())
                 return std::nullopt;
-            const auto id = nonEmptyIdString(object["id"]);
-            const auto color = decodeColor(object["color"]);
-            const auto scenarios = decodeEntries(object["scenarios"], version);
-            if (!id || !color || !scenarios) return std::nullopt;
+            auto group = decodeGroup(object, version);
+            if (!group) return std::nullopt;
             std::vector<Subcategory> subcategories;
             for (const auto &item: object["subcategories"].toArray()) {
                 if (!item.isObject()) return std::nullopt;
                 const auto sub = item.toObject();
-                if (!exactKeys(sub, {"id", "name", "color", "scenarios"}) || !sub["name"].isString())
-                    return std::nullopt;
-                const auto subId = nonEmptyIdString(sub["id"]);
-                const auto subColor = decodeColor(sub["color"]);
-                const auto subScenarios = decodeEntries(sub["scenarios"], version);
-                if (!subId || !subColor || !subScenarios) return std::nullopt;
-                subcategories.push_back(Subcategory{GroupId{*subId}, sub["name"].toString().toStdString(),
-                                                    *subColor, std::move(*subScenarios)});
+                if (!exactKeys(sub, {"id", "name", "color", "scenarios"})) return std::nullopt;
+                auto subGroup = decodeGroup(sub, version);
+                if (!subGroup) return std::nullopt;
+                subcategories.push_back(Subcategory{std::move(*subGroup)});
             }
-            return Category{GroupId{*id}, object["name"].toString().toStdString(), *color,
-                            std::move(*scenarios), std::move(subcategories)};
+            return Category{std::move(*group), std::move(subcategories)};
         }
 
         std::optional<Tier> decodeTier(const QJsonValue &value) {
@@ -246,6 +249,13 @@ namespace ksv::qt_data {
             return array;
         }
 
+        QJsonObject encodeGroup(const BenchmarkGroup &group) {
+            return QJsonObject{{"id", QString::fromStdString(group.id.value)},
+                               {"name", QString::fromStdString(group.name)},
+                               {"color", encodeColor(group.color)},
+                               {"scenarios", encodeEntries(group.scenarios)}};
+        }
+
         QByteArray encode(const BenchmarkDefinition &def) {
             QJsonArray tiers;
             for (const auto &tier: def.tiers)
@@ -255,16 +265,10 @@ namespace ksv::qt_data {
             QJsonArray categories;
             for (const auto &category: def.categories) {
                 QJsonArray subcategories;
-                for (const auto &sub: category.subcategories)
-                    subcategories.append(QJsonObject{{"id", QString::fromStdString(sub.id.value)},
-                                                     {"name", QString::fromStdString(sub.name)},
-                                                     {"color", encodeColor(sub.color)},
-                                                     {"scenarios", encodeEntries(sub.scenarios)}});
-                categories.append(QJsonObject{{"id", QString::fromStdString(category.id.value)},
-                                              {"name", QString::fromStdString(category.name)},
-                                              {"color", encodeColor(category.color)},
-                                              {"scenarios", encodeEntries(category.scenarios)},
-                                              {"subcategories", subcategories}});
+                for (const auto &sub: category.subcategories) subcategories.append(encodeGroup(sub));
+                auto object = encodeGroup(category);
+                object["subcategories"] = subcategories;
+                categories.append(object);
             }
             const QJsonObject root{{"schemaVersion", kSchemaVersion},
                                    {"id", QString::fromStdString(def.id.value)},

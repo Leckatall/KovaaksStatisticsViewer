@@ -33,22 +33,22 @@ namespace ksv::domain {
         [[nodiscard]] std::optional<double> thresholdFor(const TierId &tier) const;
     };
 
-    struct Subcategory {
+    struct BenchmarkGroup {
         GroupId id;
         std::string name;
         BenchmarkColor color;
         std::vector<BenchmarkScenario> scenarios;
+        auto operator<=>(const BenchmarkGroup &) const = default;
+    };
+
+    struct Subcategory : BenchmarkGroup {
         auto operator<=>(const Subcategory &) const = default;
     };
 
     // A complete category holds EITHER direct scenarios OR subcategories. Both vectors exist so a
     // decoded or mid-edit definition can represent the incomplete "mixed" and "empty" states that
     // validation reports rather than being unrepresentable.
-    struct Category {
-        GroupId id;
-        std::string name;
-        BenchmarkColor color;
-        std::vector<BenchmarkScenario> scenarios;
+    struct Category : BenchmarkGroup {
         std::vector<Subcategory> subcategories;
         auto operator<=>(const Category &) const = default;
     };

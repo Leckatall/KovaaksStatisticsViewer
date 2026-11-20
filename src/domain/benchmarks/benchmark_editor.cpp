@@ -48,7 +48,8 @@ namespace ksv::domain {
             return it == benchmark.categories.end() ? nullptr : &*it;
         }
 
-        Subcategory *findSubcategory(BenchmarkDefinition &benchmark, const GroupId &id) {
+        BenchmarkGroup *findGroup(BenchmarkDefinition &benchmark, const GroupId &id) {
+            if (auto *category = findCategory(benchmark, id)) return category;
             for (auto &category: benchmark.categories)
                 for (auto &sub: category.subcategories)
                     if (sub.id == id) return &sub;
@@ -88,8 +89,7 @@ namespace ksv::domain {
         std::optional<BenchmarkEditError> groupTargetError(BenchmarkDefinition &benchmark, const EditorGroupTarget &to) {
             const auto *targetGroup = std::get_if<GroupId>(&to);
             if (!targetGroup) return std::nullopt;
-            if (!findCategory(benchmark, *targetGroup) && !findSubcategory(benchmark, *targetGroup))
-                return BenchmarkEditError::UnknownGroup;
+            if (!findGroup(benchmark, *targetGroup)) return BenchmarkEditError::UnknownGroup;
             return std::nullopt;
         }
 
@@ -97,8 +97,7 @@ namespace ksv::domain {
         std::vector<BenchmarkScenario> &groupScenarios(BenchmarkDefinition &benchmark, const EditorGroupTarget &to) {
             const auto *targetGroup = std::get_if<GroupId>(&to);
             if (!targetGroup) return benchmark.uncategorized;
-            if (auto *category = findCategory(benchmark, *targetGroup)) return category->scenarios;
-            return findSubcategory(benchmark, *targetGroup)->scenarios;
+            return findGroup(benchmark, *targetGroup)->scenarios;
         }
 
         // KSV-assigned defaults for new tiers and groups; users may edit any of them.
@@ -236,18 +235,16 @@ namespace ksv::domain {
     }
 
     BenchmarkEditResult BenchmarkEditor::renameGroup(const GroupId &id, const std::string &name) {
-        auto &benchmark = m_target;
-        if (auto *category = findCategory(benchmark, id)) category->name = name;
-        else if (auto *sub = findSubcategory(benchmark, id)) sub->name = name;
-        else return {BenchmarkEditError::UnknownGroup};
+        auto *group = findGroup(m_target, id);
+        if (!group) return {BenchmarkEditError::UnknownGroup};
+        group->name = name;
         return {};
     }
 
     BenchmarkEditResult BenchmarkEditor::setGroupColor(const GroupId &id, BenchmarkColor color) {
-        auto &benchmark = m_target;
-        if (auto *category = findCategory(benchmark, id)) category->color = color;
-        else if (auto *sub = findSubcategory(benchmark, id)) sub->color = color;
-        else return {BenchmarkEditError::UnknownGroup};
+        auto *group = findGroup(m_target, id);
+        if (!group) return {BenchmarkEditError::UnknownGroup};
+        group->color = color;
         return {};
     }
 
