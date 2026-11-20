@@ -63,9 +63,15 @@ namespace ksv::domain {
 
         /**
          * Uncategorized; then per category its direct scenarios, then each subcategory's.
-         * Pointers remain valid while the definition is alive and unmodified.
+         * Pointers here and from entries() and entry() remain valid while the definition is alive and
+         * its structure unmodified.
          */
+        [[nodiscard]] std::vector<std::vector<BenchmarkScenario> *> scenarioLists();
+        [[nodiscard]] std::vector<const std::vector<BenchmarkScenario> *> scenarioLists() const;
+        /** Every scenario, in scenarioLists() order. */
         [[nodiscard]] std::vector<const BenchmarkScenario *> entries() const;
+        [[nodiscard]] BenchmarkScenario *entry(const BenchmarkScenarioId &id);
+        [[nodiscard]] const BenchmarkScenario *entry(const BenchmarkScenarioId &id) const;
         /** Unique, in first-occurrence order over entries(). */
         [[nodiscard]] std::vector<std::string> scenarioHashes() const;
         /** Every tier admitted and strictly increasing, in tier order; otherwise nullopt. */

@@ -40,17 +40,22 @@ namespace {
     Category category(std::vector<BenchmarkScenario> scenarios, std::vector<Subcategory> subcategories = {}) {
         return {{.scenarios = std::move(scenarios)}, std::move(subcategories)};
     }
+
+    // Covers every shape: uncategorized, direct-only, subcategories-only and the incomplete mixed category.
+    BenchmarkDefinition everyShape() {
+        return {
+            .uncategorized = {entry("u1"), entry("u2")},
+            .categories = {
+                category({entry("d1"), entry("d2")}),
+                category({}, {subcategory({entry("a1"), entry("a2")}), subcategory({entry("b1")})}),
+                category({entry("mixed-direct")}, {subcategory({entry("mixed-first")}), subcategory({entry("mixed-second")})})
+            }
+        };
+    }
 }
 
 TEST(BenchmarkDefinition, EntriesPointIntoTheDefinitionInCanonicalOrder) {
-    const BenchmarkDefinition definition{
-        .uncategorized = {entry("u1"), entry("u2")},
-        .categories = {
-            category({entry("d1"), entry("d2")}),
-            category({}, {subcategory({entry("a1"), entry("a2")}), subcategory({entry("b1")})}),
-            category({entry("mixed-direct")}, {subcategory({entry("mixed-first")}), subcategory({entry("mixed-second")})})
-        }
-    };
+    const auto definition = everyShape();
     const auto &categories = definition.categories;
     const std::vector<const BenchmarkScenario *> expected{
         &definition.uncategorized[0], &definition.uncategorized[1],
@@ -63,6 +68,32 @@ TEST(BenchmarkDefinition, EntriesPointIntoTheDefinitionInCanonicalOrder) {
 
     EXPECT_EQ(definition.entries(), expected);
     EXPECT_TRUE(BenchmarkDefinition{}.entries().empty());
+}
+
+TEST(BenchmarkDefinition, ScenarioListsIncludeEveryListInCanonicalOrder) {
+    auto definition = everyShape();
+    auto &categories = definition.categories;
+    const std::vector<std::vector<BenchmarkScenario> *> expected{
+        &definition.uncategorized, &categories[0].scenarios,
+        &categories[1].scenarios, &categories[1].subcategories[0].scenarios, &categories[1].subcategories[1].scenarios,
+        &categories[2].scenarios, &categories[2].subcategories[0].scenarios, &categories[2].subcategories[1].scenarios
+    };
+
+    EXPECT_EQ(definition.scenarioLists(), expected);
+    EXPECT_EQ(std::as_const(definition).scenarioLists(),
+              (std::vector<const std::vector<BenchmarkScenario> *>{expected.begin(), expected.end()}));
+}
+
+TEST(BenchmarkDefinition, EntryFindsAScenarioAtAnyDepthById) {
+    auto definition = everyShape();
+    for (const auto *scenario: definition.entries())
+        EXPECT_EQ(std::as_const(definition).entry(scenario->id), scenario) << scenario->id.value;
+    EXPECT_EQ(definition.entry(BenchmarkScenarioId{"missing"}), nullptr);
+
+    auto *nested = definition.entry(BenchmarkScenarioId{"a2"});
+    ASSERT_NE(nested, nullptr);
+    nested->name = "renamed";
+    EXPECT_EQ(definition.categories[1].subcategories[0].scenarios[1].name, "renamed");
 }
 
 TEST(BenchmarkDefinition, ScenarioHashesKeepFirstOccurrencesAcrossEntries) {

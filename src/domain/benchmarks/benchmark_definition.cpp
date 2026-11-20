@@ -1,5 +1,6 @@
 #include "benchmarks/benchmark_definition.h"
 
+#include <algorithm>
 #include <cmath>
 #include <unordered_set>
 
@@ -15,17 +16,49 @@ namespace ksv::domain {
         return found;
     }
 
+    namespace {
+        // One traversal for both constnesses: List is std::vector<BenchmarkScenario> with matching const.
+        template<class List, class Definition>
+        std::vector<List *> scenarioListsOf(Definition &definition) {
+            std::vector<List *> lists{&definition.uncategorized};
+            for (auto &category: definition.categories) {
+                lists.push_back(&category.scenarios);
+                for (auto &subcategory: category.subcategories) lists.push_back(&subcategory.scenarios);
+            }
+            return lists;
+        }
+
+        template<class Scenario, class Lists>
+        Scenario *findIn(const Lists &lists, const BenchmarkScenarioId &id) {
+            for (auto *list: lists) {
+                const auto found = std::ranges::find(*list, id, &BenchmarkScenario::id);
+                if (found != list->end()) return &*found;
+            }
+            return nullptr;
+        }
+    }
+
+    std::vector<std::vector<BenchmarkScenario> *> BenchmarkDefinition::scenarioLists() {
+        return scenarioListsOf<std::vector<BenchmarkScenario>>(*this);
+    }
+
+    std::vector<const std::vector<BenchmarkScenario> *> BenchmarkDefinition::scenarioLists() const {
+        return scenarioListsOf<const std::vector<BenchmarkScenario>>(*this);
+    }
+
     std::vector<const BenchmarkScenario *> BenchmarkDefinition::entries() const {
         std::vector<const BenchmarkScenario *> ordered;
-        const auto append = [&](const std::vector<BenchmarkScenario> &scenarios) {
-            for (const auto &entry: scenarios) ordered.push_back(&entry);
-        };
-        append(uncategorized);
-        for (const auto &category: categories) {
-            append(category.scenarios);
-            for (const auto &subcategory: category.subcategories) append(subcategory.scenarios);
-        }
+        for (const auto *list: scenarioLists())
+            for (const auto &entry: *list) ordered.push_back(&entry);
         return ordered;
+    }
+
+    BenchmarkScenario *BenchmarkDefinition::entry(const BenchmarkScenarioId &id) {
+        return findIn<BenchmarkScenario>(scenarioLists(), id);
+    }
+
+    const BenchmarkScenario *BenchmarkDefinition::entry(const BenchmarkScenarioId &id) const {
+        return findIn<const BenchmarkScenario>(scenarioLists(), id);
     }
 
     std::vector<std::string> BenchmarkDefinition::scenarioHashes() const {

@@ -10,36 +10,23 @@
 
 namespace ksv::domain {
     namespace {
-        // Visits every scenario list in the hierarchy in editing order: uncategorized, then each
-        // category's direct scenarios and each subcategory's scenarios. `fn` returns true to stop
-        // early (found), false to keep visiting; the return is whether any visit stopped.
-        template <class BenchmarkT, class Fn>
-        bool forEachScenarioList(BenchmarkT &benchmark, Fn &&fn) {
-            if (fn(benchmark.uncategorized)) return true;
-            for (auto &category: benchmark.categories) {
-                if (fn(category.scenarios)) return true;
-                for (auto &sub: category.subcategories)
-                    if (fn(sub.scenarios)) return true;
+        struct EntryLocation {
+            std::vector<BenchmarkScenario> *list = nullptr;
+            std::vector<BenchmarkScenario>::iterator position;
+        };
+
+        EntryLocation locateEntry(BenchmarkDefinition &benchmark, const BenchmarkScenarioId &id) {
+            for (auto *list: benchmark.scenarioLists()) {
+                const auto it = std::ranges::find(*list, id, &BenchmarkScenario::id);
+                if (it != list->end()) return {list, it};
             }
-            return false;
+            return {};
         }
 
         Tier *findTier(BenchmarkDefinition &benchmark, const TierId &id) {
             const auto it = std::ranges::find_if(benchmark.tiers,
                                                  [&](const Tier &tier) { return tier.id == id; });
             return it == benchmark.tiers.end() ? nullptr : &*it;
-        }
-
-        BenchmarkScenario *findEntry(BenchmarkDefinition &benchmark, const BenchmarkScenarioId &id) {
-            BenchmarkScenario *found = nullptr;
-            forEachScenarioList(benchmark, [&](std::vector<BenchmarkScenario> &entries) {
-                const auto it = std::ranges::find_if(entries,
-                                                     [&](const BenchmarkScenario &entry) { return entry.id == id; });
-                if (it == entries.end()) return false;
-                found = &*it;
-                return true;
-            });
-            return found;
         }
 
         Category *findCategory(BenchmarkDefinition &benchmark, const GroupId &id) {
@@ -57,15 +44,10 @@ namespace ksv::domain {
         }
 
         std::optional<BenchmarkScenario> detachEntry(BenchmarkDefinition &benchmark, const BenchmarkScenarioId &id) {
-            std::optional<BenchmarkScenario> detached;
-            forEachScenarioList(benchmark, [&](std::vector<BenchmarkScenario> &entries) {
-                const auto it = std::ranges::find_if(entries,
-                                                     [&](const BenchmarkScenario &entry) { return entry.id == id; });
-                if (it == entries.end()) return false;
-                detached = *it;
-                entries.erase(it);
-                return true;
-            });
+            const auto location = locateEntry(benchmark, id);
+            if (!location.list) return std::nullopt;
+            BenchmarkScenario detached = std::move(*location.position);
+            location.list->erase(location.position);
             return detached;
         }
 
@@ -149,12 +131,9 @@ namespace ksv::domain {
                                                  [&](const Tier &tier) { return tier.id == id; });
         if (tierIt == benchmark.tiers.end()) return {BenchmarkEditError::UnknownTier};
         benchmark.tiers.erase(tierIt);
-        forEachScenarioList(benchmark, [&](std::vector<BenchmarkScenario> &entries) {
-            for (auto &entry: entries)
-                std::erase_if(entry.thresholds,
-                              [&](const Threshold &threshold) { return threshold.tierId == id; });
-            return false;
-        });
+        for (auto *list: benchmark.scenarioLists())
+            for (auto &entry: *list)
+                std::erase_if(entry.thresholds, [&](const Threshold &threshold) { return threshold.tierId == id; });
         return {};
     }
 
@@ -173,7 +152,7 @@ namespace ksv::domain {
     }
 
     BenchmarkEditResult BenchmarkEditor::renameScenario(const BenchmarkScenarioId &id, const std::string &name) {
-        auto *entry = findEntry(m_target, id);
+        auto *entry = m_target.entry(id);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
         entry->name = name;
         return {};
@@ -181,7 +160,7 @@ namespace ksv::domain {
 
     BenchmarkEditResult BenchmarkEditor::setScenarioHash(const BenchmarkScenarioId &id,
                                                          const std::optional<std::string> &hash) {
-        auto *entry = findEntry(m_target, id);
+        auto *entry = m_target.entry(id);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
         entry->hashes.clear();
         if (hash && !hash->empty()) entry->hashes.push_back(*hash);
@@ -195,7 +174,7 @@ namespace ksv::domain {
 
     BenchmarkEditResult BenchmarkEditor::setScenarioHashes(const BenchmarkScenarioId &id,
                                                            const std::vector<std::string> &hashes) {
-        auto *entry = findEntry(m_target, id);
+        auto *entry = m_target.entry(id);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
         entry->hashes.clear();
         for (const auto &hash: hashes)
@@ -208,7 +187,7 @@ namespace ksv::domain {
                                                       const TierId &tierId, double score) {
         auto &benchmark = m_target;
         if (!findTier(benchmark, tierId)) return {BenchmarkEditError::UnknownTier};
-        auto *entry = findEntry(benchmark, entryId);
+        auto *entry = benchmark.entry(entryId);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
         const auto existing = std::ranges::find_if(entry->thresholds,
                                                    [&](const Threshold &threshold) {
@@ -221,7 +200,7 @@ namespace ksv::domain {
 
     BenchmarkEditResult BenchmarkEditor::clearThreshold(const BenchmarkScenarioId &entryId, const TierId &tierId) {
         if (!findTier(m_target, tierId)) return {BenchmarkEditError::UnknownTier};
-        auto *entry = findEntry(m_target, entryId);
+        auto *entry = m_target.entry(entryId);
         if (!entry) return {BenchmarkEditError::UnknownEntry};
         std::erase_if(entry->thresholds,
                       [&](const Threshold &threshold) { return threshold.tierId == tierId; });
@@ -313,7 +292,7 @@ namespace ksv::domain {
         std::vector<BenchmarkScenarioId> unique;
         for (const auto &id: orderedIds) {
             if (std::ranges::find(unique, id) != unique.end()) continue;
-            if (!findEntry(benchmark, id)) return {BenchmarkEditError::UnknownEntry};
+            if (!benchmark.entry(id)) return {BenchmarkEditError::UnknownEntry};
             unique.push_back(id);
         }
         // Detaching only erases entries, never the containing vectors, so this stays valid.
@@ -350,14 +329,9 @@ namespace ksv::domain {
     }
 
     BenchmarkEditResult BenchmarkEditor::reorderScenario(const BenchmarkScenarioId &id, std::size_t position) {
-        std::optional<BenchmarkEditError> error = BenchmarkEditError::UnknownEntry;
-        forEachScenarioList(m_target, [&](std::vector<BenchmarkScenario> &entries) {
-            const auto it = std::ranges::find_if(entries, [&](const BenchmarkScenario &entry) { return entry.id == id; });
-            if (it == entries.end()) return false;
-            if (moveToPosition(entries, it, position)) error.reset();
-            else error = BenchmarkEditError::PositionOutOfRange;
-            return true;
-        });
-        return {error};
+        const auto location = locateEntry(m_target, id);
+        if (!location.list) return {BenchmarkEditError::UnknownEntry};
+        if (!moveToPosition(*location.list, location.position, position)) return {BenchmarkEditError::PositionOutOfRange};
+        return {};
     }
 }

@@ -14,31 +14,6 @@
 
 namespace ksv::application {
     namespace {
-        // Visits every scenario list in draft order: uncategorized, then each category's direct
-        // scenarios and each subcategory's scenarios. `fn` returns true to stop early.
-        template <class BenchmarkT, class Fn>
-        bool forEachScenarioList(BenchmarkT &benchmark, Fn &&fn) {
-            if (fn(benchmark.uncategorized)) return true;
-            for (auto &category: benchmark.categories) {
-                if (fn(category.scenarios)) return true;
-                for (auto &sub: category.subcategories)
-                    if (fn(sub.scenarios)) return true;
-            }
-            return false;
-        }
-
-        domain::BenchmarkScenario *findEntry(domain::BenchmarkDefinition &benchmark, const domain::BenchmarkScenarioId &id) {
-            domain::BenchmarkScenario *found = nullptr;
-            forEachScenarioList(benchmark, [&](std::vector<domain::BenchmarkScenario> &entries) {
-                const auto it = std::ranges::find_if(
-                    entries, [&](const domain::BenchmarkScenario &entry) { return entry.id == id; });
-                if (it == entries.end()) return false;
-                found = &*it;
-                return true;
-            });
-            return found;
-        }
-
         struct ScenarioCatalogue {
             // Keyed by domain::scenarioNameKey, never by the exact name.
             std::map<std::string, std::vector<domain::ScenarioCandidate>> byName;
@@ -84,7 +59,7 @@ namespace ksv::application {
 
         domain::BenchmarkDefinition applyAutoMappings(domain::BenchmarkDefinition benchmark, const std::vector<AutoMapping> &mappings) {
             for (const auto &mapping: mappings) {
-                if (auto *target = findEntry(benchmark, mapping.entryId)) {
+                if (auto *target = benchmark.entry(mapping.entryId)) {
                     target->hashes = {mapping.hash};
                     target->name = mapping.name;
                 }
