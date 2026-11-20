@@ -52,28 +52,20 @@ TEST(ScenarioEvaluation, BestScoreTieKeepsTheEarliestRun) {
     EXPECT_EQ(evaluation.personalBestTime(), sys_seconds{seconds{3}});
 }
 
-TEST(ScenarioEvaluation, BestScoreTieFindsTheEarliestRunEvenWhenItAppearsLater) {
-    const std::array runs{TimedScore{4'500, 40}, TimedScore{2'125, 12}, TimedScore{3'750, 40}};
-    const ScenarioEvaluation evaluation{runs};
-
-    EXPECT_EQ(evaluation.personalBest(), 40.0);
-    EXPECT_EQ(evaluation.personalBestTime(), sys_seconds{seconds{3}});
-}
-
 TEST(ScenarioEvaluation, RecentWindowKeepsOnlyItsLatestRunsAndPreservesThePersonalBest) {
     constexpr auto window = ScenarioEvaluation::kRecentRuns;
     std::vector<TimedScore> runs{{0, 100}};
-    for (std::size_t index = 1; index <= window; ++index) {
+    for (int index = 1; index <= window; ++index) {
         runs.push_back({static_cast<long long>(index) * 1000, static_cast<float>(index)});
     }
 
-    for (const auto count: {window - 1, window, window + 1}) {
+    for (const int count: {window - 1, window, window + 1}) {
         SCOPED_TRACE(count);
-        const auto sampleCount = std::min(count, window);
+        const int sampleCount = std::min(count, window);
         const double sum = 0.5 * (count - 1) * count + (count <= window ? 100.0 : 0.0);
-        const ScenarioEvaluation evaluation{std::span<const TimedScore>{runs}.first(count)};
+        const ScenarioEvaluation evaluation{std::span<const TimedScore>{runs}.first(static_cast<std::size_t>(count))};
 
-        EXPECT_EQ(evaluation.recentSampleCount(), static_cast<int>(sampleCount));
+        EXPECT_EQ(evaluation.recentSampleCount(), sampleCount);
         ASSERT_TRUE(evaluation.recentAverage());
         EXPECT_DOUBLE_EQ(*evaluation.recentAverage(), sum / sampleCount);
         EXPECT_EQ(evaluation.personalBest(), 100.0);

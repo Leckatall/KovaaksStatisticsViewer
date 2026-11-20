@@ -1,6 +1,7 @@
 #include "scenario_evaluation.h"
 
 #include <algorithm>
+#include <cstddef>
 
 namespace ksv::domain {
     ScenarioEvaluation::ScenarioEvaluation(const std::span<const TimedScore> chronological)
@@ -9,18 +10,16 @@ namespace ksv::domain {
 
         const auto *best = &chronological.front();
         for (const auto &run: chronological) {
-            if (run.score > best->score || (run.score == best->score && run.start_time < best->start_time))
-                best = &run;
+            if (run.score > best->score) best = &run;
             m_playtimeSeconds += run.duration_seconds;
         }
         m_personalBest = static_cast<double>(best->score);
         m_personalBestTime = best->startSecond();
 
-        const auto sampleCount = std::min(kRecentRuns, chronological.size());
+        m_recentSampleCount = std::min(kRecentRuns, m_runCount);
         double total = 0.0;
-        for (const auto &run: chronological.last(sampleCount)) total += run.score;
-        m_recentAverage = total / static_cast<double>(sampleCount);
-        m_recentSampleCount = static_cast<int>(sampleCount);
+        for (const auto &run: chronological.last(static_cast<std::size_t>(m_recentSampleCount))) total += run.score;
+        m_recentAverage = total / static_cast<double>(m_recentSampleCount);
     }
 
     int ScenarioEvaluation::runCount() const { return m_runCount; }

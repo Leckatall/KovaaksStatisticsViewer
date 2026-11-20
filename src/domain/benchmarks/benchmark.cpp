@@ -229,7 +229,7 @@ namespace ksv::domain {
             /** @return Change in the normalized recent average. */
             double pushRecent(const double score, const ScenarioBenchmarkEvaluation &state) {
                 recent.push_back(score);
-                if (recent.size() > ScenarioEvaluation::kRecentRuns) recent.pop_front();
+                if (recent.size() > static_cast<std::size_t>(ScenarioEvaluation::kRecentRuns)) recent.pop_front();
                 // Match ScenarioEvaluation::recentAverage's oldest-first sum for the last point.
                 const double total = std::accumulate(recent.begin(), recent.end(), 0.0);
                 const double updated = state.normalized(total / static_cast<double>(recent.size()));

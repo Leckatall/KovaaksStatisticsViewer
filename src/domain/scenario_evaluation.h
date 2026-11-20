@@ -2,7 +2,6 @@
 #define KOVAAKSSTATSVIEWER_SCENARIO_EVALUATION_H
 
 #include <chrono>
-#include <cstddef>
 #include <optional>
 #include <span>
 
@@ -11,7 +10,7 @@
 namespace ksv::domain {
     class ScenarioEvaluation {
     public:
-        static constexpr std::size_t kRecentRuns = 5;
+        static constexpr int kRecentRuns = 5;
 
         ScenarioEvaluation() = default;
         // The recent window uses the input order, which must be oldest first.

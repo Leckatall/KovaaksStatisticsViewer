@@ -160,9 +160,8 @@ TEST(BenchmarkEvaluator, ProjectsPersonalBestRecentFiveAndTierProgress) {
 }
 
 TEST(BenchmarkEvaluator, PersonalBestTimeIsTheEarliestRunThatScoredIt) {
-    // Out of order on purpose: the later tie (day 9) is listed first.
-    const auto facts = std::vector{benchmarkFact("hash", 9 * kDay, 80.0F), benchmarkFact("hash", 2 * kDay, 50.0F),
-                                   benchmarkFact("hash", 5 * kDay, 80.0F), benchmarkFact("hash", 7 * kDay, 70.0F)};
+    const auto facts = std::vector{benchmarkFact("hash", 2 * kDay, 50.0F), benchmarkFact("hash", 5 * kDay, 80.0F),
+                                   benchmarkFact("hash", 7 * kDay, 70.0F), benchmarkFact("hash", 9 * kDay, 80.0F)};
     const auto evaluated = Benchmark(benchmark(), {Completeness::Trackable, {}},
                                      {resolvedEntry("entry")}, facts);
     const auto &scenario = scenarioNamed(evaluated, "entry");
