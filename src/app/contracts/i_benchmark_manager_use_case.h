@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "contracts/benchmark_editor_seed.h"
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_ids.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "data/interfaces/i_benchmarks_service.h"

@@ -5,15 +5,19 @@ add_library(ksv_domain STATIC
         source_directory.h
         user_profile.cpp
         user_profile.h
+        scenario_evaluation.h
+        scenario_evaluation.cpp
+        rolling_playtime.h
+        rolling_playtime.cpp
         benchmarks/benchmark_ids.h
         benchmarks/benchmark.h
+        benchmarks/benchmark.cpp
+        benchmarks/benchmark_definition.h
+        benchmarks/benchmark_definition.cpp
         benchmarks/benchmark_validation.h
         benchmarks/benchmark_validation.cpp
-        benchmarks/benchmark_evaluator.h
-        benchmarks/benchmark_evaluator.cpp
         benchmarks/benchmark_resolution.h
         benchmarks/benchmark_resolution.cpp
-        benchmarks/benchmark_projection.h
         benchmarks/rank_history.h
         benchmarks/rank_history.cpp
         benchmarks/benchmark_editor.h

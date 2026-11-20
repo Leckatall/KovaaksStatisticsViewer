@@ -16,16 +16,7 @@ namespace ksv::domain {
             return std::ranges::all_of(text, [](unsigned char ch) { return std::isspace(ch) != 0; });
         }
 
-        void collectEntries(const BenchmarkDefinition &def, std::vector<const ScenarioEntry *> &out) {
-            for (const auto &e: def.uncategorized) out.push_back(&e);
-            for (const auto &category: def.categories) {
-                for (const auto &e: category.scenarios) out.push_back(&e);
-                for (const auto &sub: category.subcategories)
-                    for (const auto &e: sub.scenarios) out.push_back(&e);
-            }
-        }
-
-        void validateEntryThresholds(const ScenarioEntry &entry, const std::vector<Tier> &tiers,
+        void validateEntryThresholds(const BenchmarkScenario &entry, const std::vector<Tier> &tiers,
                                      std::vector<BenchmarkIssue> &issues) {
             std::unordered_map<std::string, int> perTier;
             for (const auto &threshold: entry.thresholds) {
@@ -70,10 +61,10 @@ namespace ksv::domain {
                 issues.push_back({BenchmarkIssueCode::DuplicateTierName, tier.id});
         }
 
+        for (const auto *group: def.groups())
+            if (isBlank(group->name)) issues.push_back({BenchmarkIssueCode::MissingGroupName, group->id});
+
         for (const auto &category: def.categories) {
-            if (isBlank(category.name)) issues.push_back({BenchmarkIssueCode::MissingGroupName, category.id});
-            for (const auto &sub: category.subcategories)
-                if (isBlank(sub.name)) issues.push_back({BenchmarkIssueCode::MissingGroupName, sub.id});
             const bool hasScenarios = !category.scenarios.empty();
             const bool hasSubcategories = !category.subcategories.empty();
             if (hasScenarios && hasSubcategories)
@@ -85,8 +76,7 @@ namespace ksv::domain {
                     issues.push_back({BenchmarkIssueCode::EmptySubcategory, sub.id});
         }
 
-        std::vector<const ScenarioEntry *> entries;
-        collectEntries(def, entries);
+        const auto entries = def.entries();
         if (entries.empty()) issues.push_back({BenchmarkIssueCode::NoScenarios, def.id});
 
         std::unordered_set<std::string> names;

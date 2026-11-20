@@ -15,6 +15,7 @@
 #include "contracts/i_benchmark_tracking_use_case.h"
 #include "contracts/i_graph_configuration_use_case.h"
 #include "contracts/i_recent_benchmarks.h"
+#include "data/interfaces/benchmark_library_snapshot.h"
 #include "data/interfaces/i_benchmarks_service.h"
 #include "data/interfaces/i_day_source.h"
 #include "data/interfaces/i_profile_service.h"
@@ -37,8 +38,8 @@ namespace ksv::application {
         [[nodiscard]] const BenchmarkWorkspaceSnapshot &snapshot() const override { return m_snapshot; }
         [[nodiscard]] std::optional<domain::BenchmarkId> selected() const override { return m_selected; }
         [[nodiscard]] BenchmarkTrackingState state() const override { return m_state; }
-        [[nodiscard]] const domain::BenchmarkProjection *projection() const override {
-            return m_state == BenchmarkTrackingState::Ready ? &m_projection : nullptr;
+        [[nodiscard]] const domain::Benchmark *benchmark() const override {
+            return m_state == BenchmarkTrackingState::Ready ? &*m_snapshot.benchmark : nullptr;
         }
         void onChanged(std::function<void()> callback) override { m_callbacks.push_back(std::move(callback)); }
         void onPlaytimeChanged(std::function<void()> callback) override {
@@ -56,12 +57,9 @@ namespace ksv::application {
 
     private:
         // Everything derived from one benchmark's definition and the profile's runs. The playtime
-        // series is kept apart from the projection: a window or range change touches only it.
+        // series is kept apart from the benchmark so a window or range change needs no re-evaluation.
         struct Evaluation {
-            domain::BenchmarkProjection projection;
-            std::vector<domain::ScenarioId> scenarios;
-            // Newest contributing run, improving or not.
-            std::optional<std::chrono::sys_days> latestRunDay;
+            domain::Benchmark benchmark;
             std::optional<int> fullPlaytimeWindowDays;
             PlaytimeSeries fullPlaytime;
         };
@@ -70,8 +68,6 @@ namespace ksv::application {
         void notifyChanged() const;
         void notifyPlaytimeChanged() const;
         [[nodiscard]] Evaluation evaluate(const data::LoadedBenchmark &loaded) const;
-        // Fills m_projection.rollingPlaytime and m_snapshot.playtime from the committed window and
-        // range, recomputing the full series only when the window differs from the one it holds.
         void applyPlaytimeView(Evaluation &evaluation);
         void refreshPlaytimeOnly();
         // Resolves a rank graph's range into its snapshot view: BenchmarkRank into `rank`,
@@ -90,7 +86,7 @@ namespace ksv::application {
         bool m_markingViewed = false;
         // Cached whole-library snapshot; the service returns it by value (a deep copy of every
         // definition), so it is re-fetched only when the library revision moves, not on every
-        // profile change that merely invalidates projections.
+        // profile change that merely invalidates evaluations.
         std::optional<data::BenchmarkLibrarySnapshot> m_librarySnapshot;
         std::uint64_t m_librarySnapshotRevision = 0;
         bool m_librarySnapshotValid = false;
@@ -100,7 +96,6 @@ namespace ksv::application {
         // so Unavailable can still name what the user picked.
         std::string m_lastKnownSelectedDisplayName;
         BenchmarkTrackingState m_state = BenchmarkTrackingState::NoSelection;
-        domain::BenchmarkProjection m_projection;
         std::map<domain::BenchmarkId, Evaluation> m_cache;
         BenchmarkWorkspaceSnapshot m_snapshot;
         std::vector<std::function<void()> > m_callbacks;

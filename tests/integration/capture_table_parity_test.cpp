@@ -173,9 +173,12 @@ namespace {
         if (!app) return std::nullopt;
         app->benchmarkTrackingVm()->selectBenchmark(QStringLiteral("probe"));
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-        const auto *projection = app->benchmarkTrackingUseCase()->projection();
-        if (!projection || projection->scenarios.empty()) return std::nullopt;
-        return projection->scenarios.front().personalBest;
+        const auto *benchmark = app->benchmarkTrackingUseCase()->benchmark();
+        if (!benchmark) return std::nullopt;
+        const auto scenarios = benchmark->scenarios();
+        if (scenarios.empty()) return std::nullopt;
+        const auto &stats = scenarios.front()->stats();
+        return stats ? std::optional(stats->personalBest()) : std::nullopt;
     }
 
     QString squashed(QString text) {

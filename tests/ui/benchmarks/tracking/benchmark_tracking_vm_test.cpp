@@ -26,9 +26,7 @@
 using namespace ksv::presentation;
 using namespace ksv::application;
 using namespace ksv::domain;
-using ksv::tests_ui::FakeBenchmarkTrackingUseCase;
-using ksv::tests_ui::makeTrackableSnapshot;
-using ksv::tests_ui::vtChoice;
+using namespace ksv::tests_ui;
 
 namespace {
     // The sole drawn series in each history child; column ids on a GraphViewModelBase carry no
@@ -148,8 +146,8 @@ TEST(BenchmarkTrackingViewModel, UnavailableStateRetainsLastKnownNameAndClearsDe
     auto snapshot = makeTrackableSnapshot();
     snapshot.availability = BenchmarkTrackingState::Unavailable;
     snapshot.lastKnownSelectedDisplayName = "Voltaic S3";
-    snapshot.selectedLoaded.reset();
-    snapshot.projection.reset();
+    snapshot.benchmark.reset();
+    snapshot.visiblePlaytime.clear();
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
@@ -168,36 +166,49 @@ TEST(BenchmarkTrackingViewModel, TrackableSummaryResolvesRanksAndFormatsAverageA
     EXPECT_EQ(vm.state(), "trackable");
     EXPECT_TRUE(vm.summaryAvailable());
     EXPECT_EQ(vm.attainedRank(), "Silver");
-    EXPECT_EQ(vm.completedRank(), "None completed");
+    EXPECT_EQ(vm.completedRank(), "Silver");
     EXPECT_EQ(vm.nextTier(), "Gold");
     EXPECT_EQ(vm.averageRank(), "Silver · 50% to Gold");
     EXPECT_EQ(vm.totalPlaytime(), "1h 1m");
-    EXPECT_EQ(vm.scenariosAtNextTier(), 1);
+    EXPECT_EQ(vm.scenariosAtNextTier(), 0);
     EXPECT_TRUE(vm.hasNextTier());
     EXPECT_EQ(vm.nextTierBlockerCount(), 2);
 }
 
 TEST(BenchmarkTrackingViewModel, SummaryFallsBackWhenNothingAttainedCompletedOrHigher) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->attainedRank.reset();
-    snapshot.projection->completedRank.reset();
-    snapshot.projection->nextTier.reset();
-    auto fake = fakeWith(snapshot);
+    auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
+    auto unplayed = makeTrackableFixture();
+    unplayed.runs.clear();
+    fake->show(std::move(unplayed));
     BenchmarkTrackingViewModel vm{fake};
 
     EXPECT_EQ(vm.attainedRank(), "Unranked");
     EXPECT_EQ(vm.completedRank(), "None completed");
+    EXPECT_EQ(vm.nextTier(), "Bronze");
+    EXPECT_TRUE(vm.hasNextTier());
+    EXPECT_EQ(vm.nextTierBlockerCount(), 2);
+
+    auto top = makeTrackableFixture();
+    top.runs.front().score = 1000;
+    top.runs.back().score = 900;
+    fake->show(std::move(top));
+    fake->publish();
+    EXPECT_EQ(vm.attainedRank(), "Gold");
+    EXPECT_EQ(vm.completedRank(), "Gold");
     EXPECT_EQ(vm.nextTier(), "Highest tier attained");
     EXPECT_FALSE(vm.hasNextTier());
     EXPECT_EQ(vm.nextTierBlockerCount(), 0);
 }
 
 TEST(BenchmarkTrackingViewModel, TotalPlaytimeUsesMinuteAndHourThresholds) {
-    auto fake = fakeWith(makeTrackableSnapshot());
+    auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
+    fake->show(makeTrackableFixture());
     BenchmarkTrackingViewModel vm{fake};
 
-    const auto playtimeFor = [&](const double seconds) {
-        fake->snap.projection->totalPlaytimeSeconds = seconds;
+    const auto playtimeFor = [&](const float seconds) {
+        for (auto &run: fake->fixture.runs) run.duration_seconds = 0;
+        fake->fixture.runs.back().duration_seconds = seconds;
+        fake->reevaluate();
         fake->publish();
         return vm.totalPlaytime();
     };
@@ -213,41 +224,34 @@ TEST(BenchmarkTrackingViewModel, AverageRankReadsAsTheTierAndProgressTowardTheNe
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
-    const auto averageFor = [&](const double rank) {
-        fake->snap.projection->averageRank = rank;
+    const auto averageFor = [&](const float score) {
+        fake->show(makeUniformFixture(3, {{4, score}}, 100));
         fake->publish();
         return vm.averageRank();
     };
     // Mid-tier: the fraction is progress toward the next tier.
-    EXPECT_EQ(averageFor(1.6), "Bronze · 60% to Silver");
-    EXPECT_EQ(averageFor(2.5), "Silver · 50% to Gold");
+    EXPECT_EQ(averageFor(160), "Bronze · 60% to Silver");
+    EXPECT_EQ(averageFor(250), "Silver · 50% to Gold");
     // Below the first tier.
-    EXPECT_EQ(averageFor(0.25), "Unranked · 25% to Bronze");
+    EXPECT_EQ(averageFor(25), "Unranked · 25% to Bronze");
     EXPECT_EQ(averageFor(0.0), "Unranked · 0% to Bronze");
     // An exact tier boundary has attained that tier and no progress yet.
-    EXPECT_EQ(averageFor(2.0), "Silver · 0% to Gold");
+    EXPECT_EQ(averageFor(200), "Silver · 0% to Gold");
     // A mean that lands a rounding error short of a boundary is the boundary, not 99%.
-    EXPECT_EQ(averageFor(2.0 - 1e-12), "Silver · 0% to Gold");
+    EXPECT_EQ(describeAverageRank(2.0 - 1e-12, {"Bronze", "Silver", "Gold"}), "Silver · 0% to Gold");
     // The percentage never reads 100% before the next tier is reached.
-    EXPECT_EQ(averageFor(1.9999), "Bronze · 99% to Silver");
+    EXPECT_EQ(averageFor(199.5), "Bronze · 99% to Silver");
     // The top tier has nothing to progress toward.
-    EXPECT_EQ(averageFor(3.0), "Gold · top tier reached");
+    EXPECT_EQ(averageFor(300), "Gold · top tier reached");
 }
 
 TEST(BenchmarkTrackingViewModel, IncompleteDefinitionShowsIssuesAndSuppressesRankDerivedValues) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.selectedLoaded->completeness = CompletenessResult{
+    auto fixture = makeTrackableFixture();
+    fixture.completeness = CompletenessResult{
         Completeness::Incomplete,
         {BenchmarkIssue{BenchmarkIssueCode::NoTiers, std::monostate{}},
          BenchmarkIssue{BenchmarkIssueCode::MissingThreshold, std::monostate{}}}};
-    snapshot.projection->completeness = Completeness::Incomplete;
-    snapshot.projection->attainedRank.reset();
-    snapshot.projection->completedRank.reset();
-    snapshot.projection->nextTier.reset();
-    snapshot.projection->averageRank.reset();
-    snapshot.projection->nextTierBlockers.clear();
-    snapshot.projection->averageRankHistory.clear();
-    auto fake = fakeWith(snapshot);
+    auto fake = fakeWith(snapshotFor(fixture));
     BenchmarkTrackingViewModel vm{fake};
 
     EXPECT_EQ(vm.state(), "incomplete");
@@ -269,21 +273,17 @@ TEST(BenchmarkTrackingViewModel, IncompleteDefinitionShowsIssuesAndSuppressesRan
     EXPECT_FALSE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }
 
-// The workspace's progress heading reads hasNextTier and nextTierBlockerCount. A benchmark that is
-// not trackable has no next tier and no blockers, even when its projection still carries them (as
-// it does here, so the check fails if the view model forwards them regardless of the state).
 TEST(BenchmarkTrackingViewModel, NonTrackableBenchmarkHasNoNextTierAndNoBlockers) {
-    auto fake = fakeWith(makeTrackableSnapshot());
+    auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
+    fake->show(makeTrackableFixture());
     BenchmarkTrackingViewModel vm{fake};
     ASSERT_EQ(vm.state(), "trackable");
     ASSERT_TRUE(vm.hasNextTier());
     ASSERT_GT(vm.nextTierBlockerCount(), 0);
 
-    fake->snap.selectedLoaded->completeness = CompletenessResult{
+    fake->fixture.completeness = CompletenessResult{
         Completeness::Incomplete, {BenchmarkIssue{BenchmarkIssueCode::MissingThreshold, std::monostate{}}}};
-    fake->snap.projection->completeness = Completeness::Incomplete;
-    ASSERT_TRUE(fake->snap.projection->nextTier.has_value());
-    ASSERT_FALSE(fake->snap.projection->nextTierBlockers.empty());
+    fake->reevaluate();
     fake->publish();
 
     EXPECT_EQ(vm.state(), "incomplete");
@@ -337,8 +337,8 @@ TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryGridAndGraphsBef
     const QSignalSpy spy(&vm, &BenchmarkTrackingViewModel::changed);
 
     fake->snap.availability = BenchmarkTrackingState::Unavailable;
-    fake->snap.selectedLoaded.reset();
-    fake->snap.projection.reset();
+    fake->snap.benchmark.reset();
+    fake->snap.visiblePlaytime.clear();
     fake->publish();
 
     ASSERT_EQ(spy.count(), 1);
@@ -361,28 +361,37 @@ TEST(BenchmarkTrackingViewModel, SelectDefaultBenchmarkForwardsToTheUseCase) {
 
 // the summary's rank names carry their tier's readable colour; non-tier values do not.
 TEST(BenchmarkTrackingViewModel, SummaryRankNamesCarryTheirTierColours) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->tiers[1].color = BenchmarkColor{192, 192, 200}; // Silver (attained)
-    snapshot.projection->tiers[2].color = BenchmarkColor{255, 200, 40};  // Gold (next)
-    auto fake = fakeWith(snapshot);
+    auto fixture = makeTrackableFixture();
+    fixture.definition.tiers[1].color = BenchmarkColor{192, 192, 200}; // Silver (attained)
+    fixture.definition.tiers[2].color = BenchmarkColor{255, 200, 40};  // Gold (next)
+    auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
+    fake->show(std::move(fixture));
     BenchmarkTrackingViewModel vm{fake};
 
-    EXPECT_EQ(vm.attainedRankColor(), QColor(192, 192, 200).name());
+    const QString silverTextColor = readableTextColor(fake->benchmark()->tiers().at(1).color).name();
+    EXPECT_EQ(vm.attainedRankColor(), silverTextColor);
     EXPECT_EQ(vm.nextTierColor(), QColor(255, 200, 40).name());
-    EXPECT_TRUE(vm.completedRankColor().isEmpty()) << "'None completed' is not a tier";
+    EXPECT_EQ(vm.completedRankColor(), silverTextColor);
+
+    fake->fixture.runs.clear();
+    fake->reevaluate();
+    fake->publish();
+    EXPECT_TRUE(vm.completedRankColor().isEmpty());
+    EXPECT_TRUE(vm.attainedRankColor().isEmpty());
 
     fake->snap.availability = BenchmarkTrackingState::Unavailable;
-    fake->snap.selectedLoaded.reset();
-    fake->snap.projection.reset();
+    fake->snap.benchmark.reset();
+    fake->snap.visiblePlaytime.clear();
     fake->publish();
     EXPECT_TRUE(vm.attainedRankColor().isEmpty());
     EXPECT_TRUE(vm.nextTierColor().isEmpty());
 }
 
 TEST(BenchmarkTrackingViewModel, DarkTierColoursAreLightenedForReadability) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->tiers[1].color = BenchmarkColor{10, 10, 10};
-    auto fake = fakeWith(snapshot);
+    auto fixture = makeTrackableFixture();
+    fixture.definition.tiers[1].color = BenchmarkColor{10, 10, 10};
+    auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
+    fake->show(std::move(fixture));
     BenchmarkTrackingViewModel vm{fake};
 
     const QColor shown(vm.attainedRankColor());
@@ -413,38 +422,45 @@ TEST(RankChunkFills, WholeRanksEndAtTheirChunksRightEdgeAndFractionsFillTheNext)
 }
 
 TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
-    auto snapshot = makeTrackableSnapshot(); // Bronze, Silver, Gold; average 2.5; nothing completed
-    auto fake = fakeWith(snapshot);
+    auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
+    auto unplayed = makeTrackableFixture();
+    unplayed.runs.clear();
+    fake->show(std::move(unplayed));
     BenchmarkTrackingViewModel vm{fake};
 
-    EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{1, 1, 0.5}));
+    EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{0, 0, 0}));
     EXPECT_EQ(vm.completedRankPosition(), -1.0);
 
-    fake->snap.projection->completedRank = TierId{"t2"};
+    fake->show(makeTrackableFixture());
     fake->publish();
+    EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{1, 1, 0.5}));
     EXPECT_EQ(vm.completedRankPosition(), 2.0) << "the tick ends Silver's chunk";
 
     fake->snap.availability = BenchmarkTrackingState::Unavailable;
-    fake->snap.selectedLoaded.reset();
-    fake->snap.projection.reset();
+    fake->snap.benchmark.reset();
+    fake->snap.visiblePlaytime.clear();
     fake->publish();
     EXPECT_TRUE(vm.averageRankFills().isEmpty());
     EXPECT_EQ(vm.completedRankPosition(), -1.0);
 }
 
 TEST(BenchmarkTrackingSummaryTexts, BlockerTextCountsTheBlockers) {
-    const auto textFor = [](const std::size_t blockers, const bool hasNextTier) {
-        auto snapshot = makeTrackableSnapshot();
-        snapshot.projection->nextTierBlockers.resize(
-            blockers, RankBlocker{ScenarioEntryId{"extra"}, std::nullopt, 900.0, std::nullopt});
-        if (!hasNextTier) snapshot.projection->nextTier.reset();
-        BenchmarkTrackingViewModel vm{fakeWith(snapshot)};
+    const auto textFor = [](const std::size_t count, const std::size_t played) {
+        auto fixture = makeUniformFixture(3, {});
+        fixture.definition.uncategorized.clear();
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto id = std::to_string(i);
+            fixture.definition.uncategorized.push_back(
+                {BenchmarkScenarioId{id}, "Scenario " + id, {id}, standardThresholds(1, 2, 3)});
+            if (i < played) fixture.runs.push_back(runOn(ymd(2024, 3, 4), id, 3));
+        }
+        BenchmarkTrackingViewModel vm{fakeWith(snapshotFor(fixture))};
         return vm.property("nextTierBlockerText").toString();
     };
 
-    EXPECT_EQ(textFor(1, true), "(blocked by 1 scenario)");
-    EXPECT_EQ(textFor(3, true), "(blocked by 3 scenarios)");
-    EXPECT_TRUE(textFor(2, false).isEmpty());
+    EXPECT_EQ(textFor(1, 0), "(blocked by 1 scenario)");
+    EXPECT_EQ(textFor(3, 0), "(blocked by 3 scenarios)");
+    EXPECT_TRUE(textFor(2, 2).isEmpty());
 }
 
 TEST(BenchmarkTrackingSummaryTexts, PublishesEveryCaption) {
@@ -454,4 +470,19 @@ TEST(BenchmarkTrackingSummaryTexts, PublishesEveryCaption) {
     EXPECT_EQ(captions.size(), 5);
     for (const char *key: {"attainedRank", "completedRank", "averageRank", "totalPlaytime", "nextTier"})
         EXPECT_FALSE(captions.value(key).toString().isEmpty()) << key;
+}
+
+TEST(BenchmarkTrackingViewModel, AnIncompleteBenchmarkStillExposesIssuesAndPlaytime) {
+    auto fixture = makeTrackableFixture();
+    fixture.completeness = CompletenessResult{
+        Completeness::Incomplete, {BenchmarkIssue{BenchmarkIssueCode::MissingThreshold, std::monostate{}}}};
+    BenchmarkTrackingViewModel vm{fakeWith(snapshotFor(fixture))};
+
+    EXPECT_TRUE(vm.completenessIssues().contains(benchmarkIssueText(BenchmarkIssueCode::MissingThreshold)));
+    EXPECT_EQ(vm.attainedRank(), "Unavailable");
+    EXPECT_EQ(vm.completedRank(), "Unavailable");
+    EXPECT_EQ(vm.averageRank(), "Unavailable");
+    EXPECT_FALSE(vm.hasNextTier());
+    EXPECT_EQ(vm.nextTierBlockerCount(), 0);
+    EXPECT_FALSE(vm.playtimeHistory()->series({kValueColumn}).isEmpty());
 }

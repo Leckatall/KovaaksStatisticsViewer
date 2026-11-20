@@ -3,7 +3,7 @@
 #include <utility>
 #include <variant>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 
 namespace ksv::application {
     namespace {
@@ -93,8 +93,8 @@ namespace ksv::application {
         imported.id = domain::BenchmarkId{newId()};
         if (read.seed->name) imported.name = *read.seed->name;
         for (const auto &scenarioName: read.seed->scenarioNames)
-            imported.uncategorized.push_back(domain::ScenarioEntry{
-                domain::ScenarioEntryId{newId()}, scenarioName, {}, {}});
+            imported.uncategorized.push_back(domain::BenchmarkScenario{
+                domain::BenchmarkScenarioId{newId()}, scenarioName, {}, {}});
         m_resolution->setEditLease(imported.id);
         return {std::nullopt, BenchmarkEditorSeed{std::move(imported), std::nullopt},
                 read.seed->skippedDuplicateIndices};

@@ -12,6 +12,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <set>
@@ -19,16 +20,14 @@
 #include "presentation/benchmarks/tracking/benchmark_tracking_vm.h"
 #include "presentation/benchmarks/tracking/benchmark_progress_grid_model.h"
 #include "presentation/benchmarks/benchmark_format.h"
-#include "benchmarks/benchmark_evaluator.h"
 
 #include "fake_benchmark_tracking_use_case.h"
 
 using namespace ksv::presentation;
 using namespace ksv::application;
 using namespace ksv::domain;
-using ksv::tests_ui::FakeBenchmarkTrackingUseCase;
-using ksv::tests_ui::makeBreakdownSnapshot;
-using ksv::tests_ui::vtTier;
+using namespace ksv::tests_ui;
+using namespace ksv::tests_support;
 
 namespace {
     std::vector<Tier> fiveTiers() {
@@ -49,9 +48,55 @@ namespace {
             EXPECT_NEAR(actual[index], expected[index], 1e-9) << "chunk " << index;
     }
 
-    std::shared_ptr<FakeBenchmarkTrackingUseCase> gridFake() {
+    struct ScoredScenario {
+        Benchmark benchmark;
+
+        explicit ScoredScenario(std::vector<Threshold> thresholds = fiveThresholds(),
+                                std::vector<Tier> tiers = fiveTiers())
+            : benchmark(evaluatedBenchmark(
+                  {BenchmarkId{"grid"}, "Grid", std::move(tiers),
+                   {{BenchmarkScenarioId{"entry"}, "Scenario", {"hash"}, std::move(thresholds)}}, {}}, {})) {}
+
+        const ScenarioBenchmarkEvaluation &scenario() const { return scenarioNamed(benchmark, "entry"); }
+        std::vector<double> fills(std::optional<double> score) const {
+            return scenarioChunkFills(benchmark.tiers(), scenario(), score);
+        }
+        std::vector<bool> missing() const { return missingThresholdChunks(benchmark.tiers(), scenario()); }
+        std::optional<double> position(std::optional<double> score) const {
+            return tierScalePosition(scenario(), score);
+        }
+    };
+
+    BenchmarkFixture breakdownWithTopTier() {
+        auto fixture = makeBreakdownFixture();
+        fixture.definition.categories[0].scenarios[0].thresholds = standardThresholds(1000, 2000, 3000);
+        fixture.definition.categories[1].subcategories[0].scenarios[0].thresholds = standardThresholds(100, 200, 300);
+        fixture.resolutions.back() = resolvedEntry("e3");
+        fixture.runs.insert(fixture.runs.begin(), runOn(ymd(2024, 3, 4), "h3", 500, 60));
+        return fixture;
+    }
+
+    BenchmarkFixture breakdownWithRankedGroups() {
+        auto fixture = makeBreakdownFixture();
+        fixture.definition.tiers[0].color = {205, 127, 50};
+        fixture.definition.tiers[1].color = {20, 20, 60};
+        fixture.resolutions.back() = resolvedEntry("e3");
+        fixture.runs.insert(fixture.runs.begin(), runOn(ymd(2024, 3, 4), "h3", 700, 60));
+        return fixture;
+    }
+
+    BenchmarkFixture breakdownWithManyPlays() {
+        auto fixture = makeBreakdownFixture();
+        const QDateTime set(QDate(2026, 8, 14), QTime(21, 30));
+        fixture.runs = {benchmarkFact("h1", set.toMSecsSinceEpoch(), 800, 60)};
+        for (int i = 1; i < 1234; ++i)
+            fixture.runs.push_back(benchmarkFact("h1", set.toMSecsSinceEpoch() + 60000LL * i, 100, 60));
+        return fixture;
+    }
+
+    std::shared_ptr<FakeBenchmarkTrackingUseCase> gridFake(BenchmarkFixture fixture = makeBreakdownFixture()) {
         auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
-        fake->snap = makeBreakdownSnapshot();
+        fake->show(std::move(fixture));
         return fake;
     }
 
@@ -74,35 +119,35 @@ namespace {
 // threshold, each later one from the previous threshold to its own.
 
 TEST(TierChunkFills, BelowTheFirstTierFillsTheIronChunkFromZero) {
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 250.0), {0.25, 0, 0, 0, 0});
+    expectFills(ScoredScenario{}.fills(250.0), {0.25, 0, 0, 0, 0});
 }
 
 TEST(TierChunkFills, ExactlyOnAThresholdCompletesThatTiersChunkAndNothingAfter) {
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 3000.0), {1, 1, 1, 0, 0});
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 1000.0), {1, 0, 0, 0, 0});
+    expectFills(ScoredScenario{}.fills(3000.0), {1, 1, 1, 0, 0});
+    expectFills(ScoredScenario{}.fills(1000.0), {1, 0, 0, 0, 0});
 }
 
 TEST(TierChunkFills, MidTierFillsTheNextTiersChunkByTheInTierFraction) {
     // Halfway from Gold (4000) to Platinum (6000): Platinum's chunk half full.
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 5000.0), {1, 1, 1, 1, 0.5});
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 2250.0), {1, 1, 0.25, 0, 0});
+    expectFills(ScoredScenario{}.fills(5000.0), {1, 1, 1, 1, 0.5});
+    expectFills(ScoredScenario{}.fills(2250.0), {1, 1, 0.25, 0, 0});
 }
 
 TEST(TierChunkFills, ReachingTheTopTierFillsTheWholeBar) {
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 5999.0), {1, 1, 1, 1, 1999.0 / 2000.0});
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 6000.0), {1, 1, 1, 1, 1});
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), 9000.0), {1, 1, 1, 1, 1});
+    expectFills(ScoredScenario{}.fills(5999.0), {1, 1, 1, 1, 1999.0 / 2000.0});
+    expectFills(ScoredScenario{}.fills(6000.0), {1, 1, 1, 1, 1});
+    expectFills(ScoredScenario{}.fills(9000.0), {1, 1, 1, 1, 1});
 }
 
 TEST(TierChunkFills, NoScoreFillsNothing) {
-    expectFills(scenarioChunkFills(fiveTiers(), fiveThresholds(), std::nullopt), {0, 0, 0, 0, 0});
+    expectFills(ScoredScenario{}.fills(std::nullopt), {0, 0, 0, 0, 0});
 }
 
 TEST(TierChunkFills, AChunkWithAMissingBoundStaysEmpty) {
     auto thresholds = fiveThresholds();
     thresholds.erase(thresholds.begin() + 2); // no Silver threshold
     // Silver's own chunk and Gold's (which starts at Silver) have no bounds; the rest fill.
-    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 4500.0), {1, 1, 0, 0, 0.25});
+    expectFills(ScoredScenario{thresholds}.fills(4500.0), {1, 1, 0, 0, 0.25});
 }
 
 // Bronze below Iron: either may be the wrong one, so every chunk either bounds (Iron, Bronze and
@@ -110,47 +155,48 @@ TEST(TierChunkFills, AChunkWithAMissingBoundStaysEmpty) {
 TEST(TierChunkFills, ChunksBoundedByAnOutOfOrderThresholdStayEmpty) {
     auto thresholds = fiveThresholds();
     thresholds[1].score = 900.0; // Bronze below Iron
-    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 2500.0), {0, 0, 0, 0, 0});
-    expectFills(scenarioChunkFills(fiveTiers(), thresholds, 5000.0), {0, 0, 0, 1, 0.5});
+    expectFills(ScoredScenario{thresholds}.fills(2500.0), {0, 0, 0, 0, 0});
+    expectFills(ScoredScenario{thresholds}.fills(5000.0), {0, 0, 0, 1, 0.5});
 }
 
 // The filled length is the domain's normalized rank (6.37 = six full chunks), and the marker
 // scale is the same.
 TEST(TierChunkFills, FilledLengthMatchesTheDomainNormalizedRankAndTheMarkerScale) {
-    const auto tiers = fiveTiers();
-    const auto thresholds = fiveThresholds();
+    const ScoredScenario scored;
     for (const double score: {0.0, 1.0, 999.0, 1000.0, 1500.0, 2999.0, 3000.0, 4100.0, 5999.0, 6000.0, 8000.0}) {
-        const auto fills = scenarioChunkFills(tiers, thresholds, score);
+        const auto fills = scored.fills(score);
         const double length = std::accumulate(fills.begin(), fills.end(), 0.0);
-        EXPECT_NEAR(length, normalizedTierValue(tiers, thresholds, score), 1e-9) << score;
-        EXPECT_NEAR(length, *tierScalePosition(tiers, thresholds, score), 1e-9) << score;
+        EXPECT_NEAR(length, scored.scenario().normalized(score), 1e-9) << score;
+        const auto position = scored.position(score);
+        ASSERT_TRUE(position);
+        EXPECT_NEAR(length, *position, 1e-9) << score;
     }
 }
 
 // --- the recent-average marker's position --------------------------------------------------------
 
 TEST(TierScalePosition, PlacesAScoreOnTheSameChunkScaleAsTheFills) {
-    const auto tiers = fiveTiers();
-    const auto thresholds = fiveThresholds();
-    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 500.0), 0.5, 1e-9);   // below the first tier: inside Iron's chunk
-    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 3000.0), 3.0, 1e-9);  // exactly on Silver: its chunk's end
-    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 5000.0), 4.5, 1e-9);  // mid Gold -> Platinum
-    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 6000.0), 5.0, 1e-9);  // the top tier: bar end
-    EXPECT_NEAR(*tierScalePosition(tiers, thresholds, 9000.0), 5.0, 1e-9);  // above the top tier
+    const ScoredScenario scored;
+    EXPECT_NEAR(scored.position(500.0).value_or(-1.0), 0.5, 1e-9);   // below the first tier: inside Iron's chunk
+    EXPECT_NEAR(scored.position(3000.0).value_or(-1.0), 3.0, 1e-9);  // exactly on Silver: its chunk's end
+    EXPECT_NEAR(scored.position(5000.0).value_or(-1.0), 4.5, 1e-9);  // mid Gold -> Platinum
+    EXPECT_NEAR(scored.position(6000.0).value_or(-1.0), 5.0, 1e-9);  // the top tier: bar end
+    EXPECT_NEAR(scored.position(9000.0).value_or(-1.0), 5.0, 1e-9);  // above the top tier
 }
 
 TEST(TierScalePosition, NoPositionWithoutAScoreOrAValidLadder) {
-    EXPECT_FALSE(tierScalePosition(fiveTiers(), fiveThresholds(), std::nullopt).has_value());
+    EXPECT_FALSE(ScoredScenario{}.position(std::nullopt).has_value());
     auto thresholds = fiveThresholds();
     thresholds.pop_back();
-    EXPECT_FALSE(tierScalePosition(fiveTiers(), thresholds, 2000.0).has_value());
+    EXPECT_FALSE(ScoredScenario{thresholds}.position(2000.0).has_value());
 }
 
 TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheFillEnd) {
     auto fake = gridFake();
     // e1: PB 800, recent 780; Bronze 600, Silver 900, Gold 1200.
-    fake->snap.selectedLoaded->benchmark.categories[0].scenarios[0].thresholds = {
+    fake->fixture.definition.categories[0].scenarios[0].thresholds = {
         Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 900.0}, Threshold{TierId{"t3"}, 1200.0}};
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
 
     const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
@@ -162,7 +208,7 @@ TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheF
     EXPECT_EQ(e1.value("recentDescription").toString(),
               QString("Recent average %1 · Bronze").arg(formatBenchmarkNumber(780.0)));
 
-    // No recent value (e2) or no valid ladder (every other row here): no marker.
+    // Scenarios without runs have no recent marker.
     for (const char *id: {"e2", "u1", "e3"}) {
         EXPECT_LT(rowFor(vm.progressGrid(), id).value("recentPosition").toDouble(), 0.0) << id;
         EXPECT_TRUE(rowFor(vm.progressGrid(), id).value("recentDescription").toString().isEmpty()) << id;
@@ -171,11 +217,13 @@ TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheF
 
 TEST(BenchmarkProgressGridContent, MapsAreDerivedFromTheTypedForm) {
     auto fake = gridFake();
-    auto &definition = fake->snap.selectedLoaded->benchmark;
+    auto &definition = fake->fixture.definition;
     definition.categories[0].scenarios[0].thresholds = {
         Threshold{TierId{"t1"}, 300.0}, Threshold{TierId{"t2"}, 500.0}, Threshold{TierId{"t3"}, 700.0}};
     definition.categories[1].subcategories[0].scenarios[0].thresholds = {
         Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t3"}, 1200.0}};
+    fake->fixture.completeness = CompletenessResult{Completeness::Trackable, {}};
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
     const BenchmarkProgressGridModel *grid = vm.progressGrid();
     const ProgressGridContent &content = grid->content();
@@ -264,6 +312,7 @@ TEST(BenchmarkProgressGridContent, MapsAreDerivedFromTheTypedForm) {
     // e1 back within its ladder gives a row with no edge state.
     definition.categories[0].scenarios[0].thresholds = {
         Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 900.0}, Threshold{TierId{"t3"}, 1200.0}};
+    fake->reevaluate();
     fake->publish();
     walkRows();
 
@@ -334,9 +383,7 @@ TEST(BenchmarkProgressGridModel, RowsFollowDefinitionOrderUnderSpanningGroups) {
 }
 
 TEST(BenchmarkProgressGridModel, GroupsCarryTheirRankInTheTierColour) {
-    auto fake = gridFake();
-    fake->snap.projection->tiers[0].color = BenchmarkColor{205, 127, 50}; // Bronze
-    fake->snap.projection->tiers[1].color = BenchmarkColor{20, 20, 60};   // Silver: dark
+    auto fake = gridFake(breakdownWithRankedGroups());
     BenchmarkTrackingViewModel vm{fake};
     const auto *grid = vm.progressGrid();
 
@@ -348,14 +395,20 @@ TEST(BenchmarkProgressGridModel, GroupsCarryTheirRankInTheTierColour) {
     EXPECT_GE(contrastRatio(QColor(smoothness.value("rankColor").toString()), darkPanelColor()), 4.5);
     EXPECT_NE(clicking.value("rankBarColor"), smoothness.value("rankBarColor"));
 
-    const QVariantMap tracking = groupFor(grid, "c2");
-    EXPECT_EQ(tracking.value("rankText").toString(), "Unranked");
-    EXPECT_TRUE(tracking.value("rankColor").toString().isEmpty()) << "an unranked group gets a neutral chip";
+    EXPECT_EQ(groupFor(grid, "c2").value("rankText").toString(), "Silver");
+    fake->fixture.runs.erase(fake->fixture.runs.begin());
+    fake->reevaluate();
+    fake->publish();
+    for (const char *id: {"c2", "sc1"}) {
+        EXPECT_EQ(groupFor(grid, id).value("rankText").toString(), "Unranked");
+        EXPECT_TRUE(groupFor(grid, id).value("rankColor").toString().isEmpty());
+    }
     EXPECT_TRUE(groupFor(grid, QString()).value("rankText").toString().isEmpty())
         << "Uncategorized is not ranked as a group";
 
     // An incomplete benchmark ranks nothing, so no group shows a chip.
-    fake->snap.projection->completeness = Completeness::Incomplete;
+    fake->fixture.completeness = CompletenessResult{Completeness::Incomplete, {}};
+    fake->reevaluate();
     fake->publish();
     for (const QVariant &group: grid->groups())
         EXPECT_TRUE(group.toMap().value("rankText").toString().isEmpty());
@@ -363,12 +416,13 @@ TEST(BenchmarkProgressGridModel, GroupsCarryTheirRankInTheTierColour) {
 
 TEST(BenchmarkProgressGridModel, GroupsWithoutScenariosAreLeftOut) {
     auto fake = gridFake();
-    auto &definition = fake->snap.selectedLoaded->benchmark;
+    auto &definition = fake->fixture.definition;
     definition.uncategorized.clear();
     definition.categories.push_back(Category{GroupId{"empty"}, "Empty", BenchmarkColor{1, 2, 3}, {}, {}});
     definition.categories.push_back(Category{GroupId{"hollow"}, "Hollow", BenchmarkColor{1, 2, 3}, {},
                                              {Subcategory{GroupId{"hollow-sub"}, "Hollow sub", {}, {}}}});
     definition.categories[0].subcategories.push_back(Subcategory{GroupId{"bare"}, "Bare", {}, {}});
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
     const BenchmarkProgressGridModel *grid = vm.progressGrid();
 
@@ -391,10 +445,11 @@ TEST(BenchmarkProgressGridModel, CategoriesWithoutASubcategoryRowSpanTheSubcateg
     EXPECT_FALSE(groupFor(grid, "sc1").value("spansSubcategory").toBool());
 
     // A mixed category: its direct scenarios come first, so the subcategory starts mid-span.
-    auto &definition = fake->snap.selectedLoaded->benchmark;
+    auto &definition = fake->fixture.definition;
     definition.categories[0].subcategories.push_back(
         Subcategory{GroupId{"sc2"}, "Mixed", {}, {definition.uncategorized.front()}});
     definition.uncategorized.erase(definition.uncategorized.begin());
+    fake->reevaluate();
     fake->publish();
     EXPECT_FALSE(groupFor(grid, "c1").value("spansSubcategory").toBool());
     EXPECT_TRUE(groupFor(grid, QString()).value("spansSubcategory").toBool());
@@ -402,8 +457,9 @@ TEST(BenchmarkProgressGridModel, CategoriesWithoutASubcategoryRowSpanTheSubcateg
 
 TEST(BenchmarkProgressGridModel, NoSubcategoryColumnWithoutSubcategories) {
     auto fake = gridFake();
-    auto &definition = fake->snap.selectedLoaded->benchmark;
+    auto &definition = fake->fixture.definition;
     definition.categories.pop_back(); // Tracking, the only category with a subcategory
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
 
     EXPECT_FALSE(vm.progressGrid()->hasSubcategories());
@@ -411,10 +467,10 @@ TEST(BenchmarkProgressGridModel, NoSubcategoryColumnWithoutSubcategories) {
 
 TEST(BenchmarkProgressGridModel, TiersCarryReadableTextAndOpaqueBarColours) {
     auto fake = gridFake();
-    auto &tiers = fake->snap.projection->tiers;
+    auto &tiers = fake->fixture.definition.tiers;
     tiers[0].color = BenchmarkColor{255, 200, 40};
     tiers[1].color = BenchmarkColor{20, 20, 60, 128}; // dark and translucent
-    fake->snap.selectedLoaded->benchmark.tiers = tiers;
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
 
     const QVariantList gridTiers = vm.progressGrid()->tiers();
@@ -449,12 +505,7 @@ TEST(BenchmarkProgressGridModel, ScenarioValuesShareOneNumberFormat) {
 }
 
 TEST(BenchmarkProgressGridModel, RowsCarryThePersonalBestDateAndPlayCount) {
-    auto fake = gridFake();
-    auto &e1 = fake->snap.projection->scenarios[2];
-    ASSERT_EQ(e1.entryId.value, "e1");
-    e1.runCount = 1234;
-    const QDateTime set(QDate(2026, 8, 14), QTime(21, 30));
-    e1.personalBestTime = std::chrono::sys_seconds{std::chrono::seconds{set.toSecsSinceEpoch()}};
+    auto fake = gridFake(breakdownWithManyPlays());
     BenchmarkTrackingViewModel vm{fake};
 
     const QVariantMap row = rowFor(vm.progressGrid(), "e1");
@@ -462,13 +513,8 @@ TEST(BenchmarkProgressGridModel, RowsCarryThePersonalBestDateAndPlayCount) {
     EXPECT_EQ(row.value("playCountText").toString(), QLocale().toString(1234));
 }
 
-TEST(BenchmarkProgressGridContent, PresenceFlagsFollowTheProjection) {
-    auto fake = gridFake();
-    auto &played = fake->snap.projection->scenarios[2];
-    ASSERT_EQ(played.entryId.value, "e1");
-    played.runCount = 12;
-    const QDateTime set(QDate(2026, 8, 14), QTime(21, 30));
-    played.personalBestTime = std::chrono::sys_seconds{std::chrono::seconds{set.toSecsSinceEpoch()}};
+TEST(BenchmarkProgressGridContent, PresenceFlagsFollowTheEvaluation) {
+    auto fake = gridFake(breakdownWithManyPlays());
     BenchmarkTrackingViewModel vm{fake};
 
     const ProgressGridContent content = vm.progressGrid()->content();
@@ -494,8 +540,9 @@ TEST(BenchmarkProgressGridContent, PresenceFlagsFollowTheProjection) {
 TEST(BenchmarkProgressGridModel, BarFillsAndDescriptionPlaceThePersonalBestOnTheLadder) {
     auto fake = gridFake();
     // e1 (PB 800): Bronze 600, Silver 900, Gold 1200 -> Bronze, two thirds of the way to Silver.
-    fake->snap.selectedLoaded->benchmark.categories[0].scenarios[0].thresholds = {
+    fake->fixture.definition.categories[0].scenarios[0].thresholds = {
         Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 900.0}, Threshold{TierId{"t3"}, 1200.0}};
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
 
     const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
@@ -509,15 +556,28 @@ TEST(BenchmarkProgressGridModel, BarFillsAndDescriptionPlaceThePersonalBestOnThe
                   .arg(formatBenchmarkNumber(800.0), formatBenchmarkNumber(900.0)));
 }
 
+// An Incomplete benchmark reaches the grid with unusable thresholds. A tier read off the usable part
+// of the ladder would claim a position the benchmark cannot actually confirm.
+TEST(BenchmarkProgressGridModel, BarDescriptionClaimsNoTierWhenTheLadderIsUnusable) {
+    for (const auto &[label, thresholds]: std::vector<std::pair<const char *, std::vector<Threshold>>>{
+             {"missing Gold", {Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 700.0}}},
+             {"Gold below Silver", {Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 700.0},
+                                    Threshold{TierId{"t3"}, 650.0}}}}) {
+        SCOPED_TRACE(label);
+        auto fake = gridFake();
+        fake->fixture.definition.categories[0].scenarios[0].thresholds = thresholds;
+        fake->reevaluate();
+        BenchmarkTrackingViewModel vm{fake};
+
+        const QString description = rowFor(vm.progressGrid(), "e1").value("barDescription").toString();
+        EXPECT_TRUE(description.startsWith(formatBenchmarkNumber(800.0))) << description.toStdString();
+        for (const auto &tier: fake->fixture.definition.tiers)
+            EXPECT_FALSE(description.contains(QString::fromStdString(tier.name))) << description.toStdString();
+    }
+}
+
 TEST(BenchmarkProgressGridModel, BarDescriptionNamesUnrankedUnplayedAndTheTopTier) {
-    auto fake = gridFake();
-    auto &definition = fake->snap.selectedLoaded->benchmark;
-    // e1 (PB 800) below Bronze 1000; e3 (PB 500) above every threshold.
-    definition.categories[0].scenarios[0].thresholds = {
-        Threshold{TierId{"t1"}, 1000.0}, Threshold{TierId{"t2"}, 2000.0}, Threshold{TierId{"t3"}, 3000.0}};
-    definition.categories[1].subcategories[0].scenarios[0].thresholds = {
-        Threshold{TierId{"t1"}, 100.0}, Threshold{TierId{"t2"}, 200.0}, Threshold{TierId{"t3"}, 300.0}};
-    fake->snap.projection->scenarios[4].nextThreshold.reset();
+    auto fake = gridFake(breakdownWithTopTier());
     BenchmarkTrackingViewModel vm{fake};
     const auto *grid = vm.progressGrid();
 
@@ -555,12 +615,12 @@ TEST(BenchmarkProgressGridModel, OnlyAbnormalMatchStatesAreReportedInTheUsersTer
     }
 }
 
-TEST(BenchmarkProgressGridModel, AnEntryMissingFromTheProjectionIsReportedNotFound) {
+TEST(BenchmarkProgressGridModel, AnEntryWithoutAResolutionIsReportedNotFound) {
     auto fake = gridFake();
-    auto &scenarios = fake->snap.projection->scenarios;
-    scenarios.erase(std::remove_if(scenarios.begin(), scenarios.end(),
-                                   [](const ScenarioProjection &s) { return s.entryId.value == "e1"; }),
-                    scenarios.end());
+    std::erase_if(fake->fixture.resolutions, [](const ScenarioResolution &resolution) {
+        return resolution.entryId.value == "e1";
+    });
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
 
     const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
@@ -570,12 +630,12 @@ TEST(BenchmarkProgressGridModel, AnEntryMissingFromTheProjectionIsReportedNotFou
 }
 
 TEST(MissingThresholdChunks, FlagsChunksWithAnUnusableBound) {
-    EXPECT_EQ(missingThresholdChunks(fiveTiers(), fiveThresholds()),
+    EXPECT_EQ(ScoredScenario{}.missing(),
               (std::vector<bool>{false, false, false, false, false}));
     auto thresholds = fiveThresholds();
     thresholds.erase(thresholds.begin() + 2);     // no Silver: Silver's and Gold's chunks
     thresholds.back().score = 3500.0;             // Platinum 3500 below Gold 4000: Gold's and Platinum's
-    EXPECT_EQ(missingThresholdChunks(fiveTiers(), thresholds), (std::vector<bool>{false, false, true, true, true}));
+    EXPECT_EQ(ScoredScenario{thresholds}.missing(), (std::vector<bool>{false, false, true, true, true}));
 }
 
 // Iron 1800, Bronze 1200, Silver 2400: either Iron or Bronze is wrong, so no chunk bounded by
@@ -586,18 +646,20 @@ TEST(MissingThresholdChunks, AnOutOfOrderThresholdHatchesEveryChunkItBounds) {
     const std::vector<Threshold> thresholds{Threshold{TierId{"iron"}, 1800.0}, Threshold{TierId{"bronze"}, 1200.0},
                                             Threshold{TierId{"silver"}, 2400.0}, Threshold{TierId{"gold"}, 3000.0}};
 
-    EXPECT_EQ(missingThresholdChunks(tiers, thresholds), (std::vector<bool>{true, true, true, false}))
+    const ScoredScenario scored{thresholds, tiers};
+    EXPECT_EQ(scored.missing(), (std::vector<bool>{true, true, true, false}))
         << "Iron's and Bronze's own chunks, and Silver's, which starts at Bronze";
-    EXPECT_EQ(scenarioChunkFills(tiers, thresholds, 1995.0), (std::vector<double>{0.0, 0.0, 0.0, 0.0}))
+    EXPECT_EQ(scored.fills(1995.0), (std::vector<double>{0.0, 0.0, 0.0, 0.0}))
         << "no chunk shows a fill measured from an out-of-order bound";
 }
 
 TEST(BenchmarkProgressGridModel, EdgeStatesUnplayedUnmatchedAndAboveTheTopTier) {
     auto fake = gridFake();
-    auto &definition = fake->snap.selectedLoaded->benchmark;
+    auto &definition = fake->fixture.definition;
     // e1 (PB 800, Resolved) above Gold 700; e3 is Ambiguous; e2 has no runs of its linked scenario.
     definition.categories[0].scenarios[0].thresholds = {
         Threshold{TierId{"t1"}, 300.0}, Threshold{TierId{"t2"}, 500.0}, Threshold{TierId{"t3"}, 700.0}};
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
     const auto *grid = vm.progressGrid();
 
@@ -618,15 +680,17 @@ TEST(BenchmarkProgressGridModel, EdgeStatesUnplayedUnmatchedAndAboveTheTopTier) 
     }
 
     // Exactly on the top threshold is reached, not exceeded.
-    fake->snap.projection->scenarios[2].personalBest = 700.0;
+    fake->fixture.runs = {runOn(ymd(2024, 3, 4), "h1", 700, 60)};
+    fake->reevaluate();
     fake->publish();
     EXPECT_TRUE(rowFor(grid, "e1").value("edgeState").toString().isEmpty());
 }
 
 TEST(BenchmarkProgressGridModel, MissingThresholdChunksTravelWithTheRow) {
     auto fake = gridFake();
-    fake->snap.selectedLoaded->benchmark.categories[0].scenarios[0].thresholds = {
+    fake->fixture.definition.categories[0].scenarios[0].thresholds = {
         Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t3"}, 1200.0}};
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
 
     const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
@@ -642,8 +706,9 @@ TEST(BenchmarkProgressGridModel, MissingThresholdChunksTravelWithTheRow) {
 TEST(BenchmarkProgressGridModel, RowsCarryTheScoreThatReachesEachTier) {
     auto fake = gridFake();
     // Gold has no threshold for e1: its text is empty, the others use the shared number format.
-    fake->snap.selectedLoaded->benchmark.categories[0].scenarios[0].thresholds = {
+    fake->fixture.definition.categories[0].scenarios[0].thresholds = {
         Threshold{TierId{"t1"}, 600.0}, Threshold{TierId{"t2"}, 1234.5}};
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
 
     const QVariantList texts = rowFor(vm.progressGrid(), "e1").value("thresholdTexts").toList();
@@ -655,16 +720,25 @@ TEST(BenchmarkProgressGridModel, RowsCarryTheScoreThatReachesEachTier) {
 
 TEST(BenchmarkProgressGridModel, BlockingRowsNameTheNextTierInItsColour) {
     auto fake = gridFake();
-    fake->snap.projection->tiers[1].color = BenchmarkColor{192, 192, 200}; // Silver, the next tier
+    fake->fixture.definition.tiers[1].color = BenchmarkColor{192, 192, 200}; // Silver, the next tier
+    auto &fixture = fake->fixture;
+    fixture.definition.uncategorized[0].hashes = {"hu1"};
+    fixture.definition.uncategorized[1].hashes = {"hu2"};
+    fixture.resolutions[0] = resolvedEntry("u1");
+    fixture.resolutions[1] = resolvedEntry("u2");
+    fixture.resolutions.back() = resolvedEntry("e3");
+    const auto day = ymd(2024, 3, 4);
+    fixture.runs = {runOn(day, "hu1", 1000, 60), runOn(day, "hu2", 1000, 60),
+                    runOn(day, "h1", 900, 60), runOn(day, "h3", 400, 60)};
+    fake->reevaluate();
     BenchmarkTrackingViewModel vm{fake};
     const auto *grid = vm.progressGrid();
 
-    const QVariantMap e2 = rowFor(grid, "e2");
-    EXPECT_TRUE(e2.value("blocker").toBool());
-    EXPECT_EQ(e2.value("blockerText").toString(), QString("Blocks Silver (needs %1)").arg(formatBenchmarkNumber(850.0)));
-    EXPECT_EQ(e2.value("blockerColor").toString(), QColor(192, 192, 200).name());
-    EXPECT_TRUE(rowFor(grid, "e3").value("blocker").toBool());
-    for (const char *id: {"u1", "u2", "e1"}) {
+    const QVariantMap e3 = rowFor(grid, "e3");
+    EXPECT_TRUE(e3.value("blocker").toBool());
+    EXPECT_EQ(e3.value("blockerText").toString(), QString("Blocks Silver (needs %1)").arg(formatBenchmarkNumber(600.0)));
+    EXPECT_EQ(e3.value("blockerColor").toString(), QColor(192, 192, 200).name());
+    for (const char *id: {"u1", "u2", "e1", "e2"}) {
         const QVariantMap row = rowFor(grid, id);
         EXPECT_FALSE(row.value("blocker").toBool()) << id;
         EXPECT_TRUE(row.value("blockerText").toString().isEmpty()) << id;
@@ -679,8 +753,8 @@ TEST(BenchmarkProgressGridModel, EmptiesOutsideTheReadyStatesAndNotifiesOncePerR
 
     const QSignalSpy spy(grid, &BenchmarkProgressGridModel::changed);
     fake->snap.availability = BenchmarkTrackingState::Unavailable;
-    fake->snap.selectedLoaded.reset();
-    fake->snap.projection.reset();
+    fake->snap.benchmark.reset();
+    fake->snap.visiblePlaytime.clear();
     fake->publish();
 
     EXPECT_EQ(spy.count(), 1);
@@ -691,13 +765,7 @@ TEST(BenchmarkProgressGridModel, EmptiesOutsideTheReadyStatesAndNotifiesOncePerR
 }
 
 TEST(BenchmarkProgressGridModelTexts, NextTextJoinsTheTierAndItsThreshold) {
-    auto fake = gridFake();
-    auto &definition = fake->snap.selectedLoaded->benchmark;
-    definition.categories[0].scenarios[0].thresholds = {
-        Threshold{TierId{"t1"}, 1000.0}, Threshold{TierId{"t2"}, 2000.0}, Threshold{TierId{"t3"}, 3000.0}};
-    definition.categories[1].subcategories[0].scenarios[0].thresholds = {
-        Threshold{TierId{"t1"}, 100.0}, Threshold{TierId{"t2"}, 200.0}, Threshold{TierId{"t3"}, 300.0}};
-    fake->snap.projection->scenarios[4].nextThreshold.reset();
+    auto fake = gridFake(breakdownWithTopTier());
     BenchmarkTrackingViewModel vm{fake};
     const auto *grid = vm.progressGrid();
 
@@ -715,4 +783,66 @@ TEST(BenchmarkProgressGridModelTexts, PublishesEveryColumnHeading) {
     EXPECT_EQ(headers.size(), 7);
     for (const char *key: {"category", "subcategory", "scenario", "progress", "pbDate", "plays", "next"})
         EXPECT_FALSE(headers.value(key).toString().isEmpty()) << key;
+}
+
+TEST(BenchmarkProgressGridModel, UnadmittedThresholdsLeaveTheRowsTextBlank) {
+    auto fake = gridFake();
+    BenchmarkTrackingViewModel vm{fake};
+    auto &thresholds = fake->fixture.definition.categories[0].scenarios[0].thresholds;
+    const auto valid = thresholds;
+    auto duplicate = valid;
+    auto negative = valid;
+    auto nonFinite = valid;
+    duplicate.push_back({TierId{"t1"}, 510});
+    negative[1].score = -1;
+    nonFinite[2].score = std::numeric_limits<double>::infinity();
+    const std::vector cases{duplicate, negative, nonFinite};
+    for (qsizetype i = 0; i < static_cast<qsizetype>(cases.size()); ++i) {
+        SCOPED_TRACE(i);
+        thresholds = cases[static_cast<std::size_t>(i)];
+        fake->reevaluate();
+        fake->publish();
+
+        const QVariantMap row = rowFor(vm.progressGrid(), "e1");
+        const QVariantList texts = row.value("thresholdTexts").toList();
+        const QVariantList missing = row.value("missingChunks").toList();
+        ASSERT_EQ(texts.size(), 3);
+        ASSERT_EQ(missing.size(), 3);
+        EXPECT_TRUE(texts.at(i).toString().isEmpty());
+        EXPECT_TRUE(missing.at(i).toBool());
+        EXPECT_LT(row.value("recentPosition").toDouble(), 0.0);
+    }
+}
+
+TEST(BenchmarkProgressGridModel, GroupRankChipsComeFromTheGroupEvaluation) {
+    auto fake = gridFake(breakdownWithRankedGroups());
+    BenchmarkTrackingViewModel vm{fake};
+    const auto *grid = vm.progressGrid();
+    const auto check = [&](const GroupEvaluation &group) {
+        const auto &benchmark = *fake->benchmark();
+        const auto tierId = group.satisfiedTier();
+        const auto tier = std::ranges::find_if(benchmark.tiers(), [&](const Tier &candidate) {
+            return tierId == candidate.id;
+        });
+        const QString expected = tier == benchmark.tiers().end()
+                                     ? QStringLiteral("Unranked") : QString::fromStdString(tier->name);
+        EXPECT_EQ(groupFor(grid, QString::fromStdString(group.id().value)).value("rankText").toString(), expected);
+    };
+    for (const bool played: {true, false}) {
+        if (!played) {
+            fake->fixture.runs.erase(fake->fixture.runs.begin());
+            fake->reevaluate();
+            fake->publish();
+        }
+        for (const auto *category: fake->benchmark()->categories()) {
+            check(*category);
+            for (const auto *subcategory: category->subgroups()) check(*subcategory);
+        }
+        EXPECT_TRUE(groupFor(grid, {}).value("rankText").toString().isEmpty());
+    }
+    fake->fixture.completeness = CompletenessResult{Completeness::Incomplete, {}};
+    fake->reevaluate();
+    fake->publish();
+    for (const QVariant &group: grid->groups())
+        EXPECT_TRUE(group.toMap().value("rankText").toString().isEmpty());
 }

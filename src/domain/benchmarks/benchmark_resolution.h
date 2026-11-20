@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 
 namespace ksv::domain {
     enum class ScenarioMatchState { Resolved, MappedUnavailable, Unresolved, Ambiguous, AutoMappable };
@@ -27,7 +27,7 @@ namespace ksv::domain {
     };
 
     struct ScenarioResolution {
-        ScenarioEntryId entryId;
+        BenchmarkScenarioId entryId;
         ScenarioMatchState state = ScenarioMatchState::Unresolved;
         std::vector<ScenarioCandidate> candidates;
         auto operator<=>(const ScenarioResolution &) const = default;

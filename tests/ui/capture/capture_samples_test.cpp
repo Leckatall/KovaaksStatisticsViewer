@@ -1,6 +1,6 @@
 // Writes the sample PNGs for review, and checks what only the real fonts can show. Nothing here runs in the routine
-// suite: without KSV_CAPTURE_SAMPLES_DIR each case skips before touching the disk, and each refuses to run on any
-// platform other than the real "windows" one, whose system font is what the app resolves.
+// suite except the builder checks. Without KSV_CAPTURE_SAMPLES_DIR the sample generators skip before touching the
+// disk. They need the "windows" platform plugin to resolve the app's system font.
 
 #include <gtest/gtest.h>
 
@@ -16,6 +16,7 @@
 #include <QString>
 #include <QUrl>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -31,6 +32,7 @@
 #include "capture/graph_capture_layout.h"
 #include "capture/table_capture_layout.h"
 #include "presentation/benchmarks/tracking/benchmark_tracking_vm.h"
+#include "presentation/benchmarks/tracking/benchmark_history_vm.h"
 #include "presentation/graphs/common/axes/value_axis.h"
 #include "presentation/graphs/common/graph_vm_base.h"
 #include "presentation/graphs/common/series/series_model.h"
@@ -126,36 +128,30 @@ namespace ksv::ui {
             bool incomplete;
         };
 
-        // Every eighth scenario starts a new group: two subcategories of "Tracking", the direct scenarios of
-        // "Clicking", then "Switching" with direct scenarios and a subcategory.
+        // Eight-row slots fill Tracking's Smooth and Reactive subcategories, Clicking's direct entries,
+        // and Switching's Static and Evasive subcategories. Static keeps Switching from mixing direct entries
+        // with subcategories, which validation rejects as MixedCategoryContent.
         BenchmarkWorkspaceSnapshot sampleTableSnapshot(const TableSpec &spec) {
-            BenchmarkWorkspaceSnapshot snapshot = tests_ui::makeBreakdownSnapshot();
-            const std::vector<Tier> tiers = sampleTiers(spec.tierCount);
-            const std::size_t tierCount = tiers.size();
-
-            BenchmarkDefinition definition;
+            tests_ui::BenchmarkFixture fixture;
+            auto &definition = fixture.definition;
             definition.id = BenchmarkId{"sample"};
             definition.name = spec.incomplete ? "Incomplete Sample Benchmark" : "Overflowing Sample Benchmark";
-            definition.tiers = tiers;
-
-            BenchmarkProjection projection;
-            projection.benchmarkId = definition.id;
-            projection.tiers = tiers;
+            definition.tiers = sampleTiers(spec.tierCount);
+            const auto &tiers = definition.tiers;
+            const std::size_t tierCount = tiers.size();
 
             struct Slot {
                 GroupId id;
                 std::string name;
                 BenchmarkColor color;
-                int tier;
-                std::vector<ScenarioEntry> entries;
-                std::vector<ScenarioEntryId> ids;
+                std::vector<BenchmarkScenario> entries;
             };
             std::vector<Slot> groupSlots = {
-                {GroupId{"sc1"}, "Smooth", {0, 200, 0}, 3, {}, {}},
-                {GroupId{"sc2"}, "Reactive", {0, 160, 255}, 2, {}, {}},
-                {GroupId{"c2"}, "Clicking", {255, 80, 80}, 1, {}, {}},
-                {GroupId{"c3"}, "Switching", {200, 160, 0}, 4, {}, {}},
-                {GroupId{"sc3"}, "Evasive", {180, 80, 220}, 5, {}, {}},
+                {GroupId{"sc1"}, "Smooth", {0, 200, 0}, {}},
+                {GroupId{"sc2"}, "Reactive", {0, 160, 255}, {}},
+                {GroupId{"c2"}, "Clicking", {255, 80, 80}, {}},
+                {GroupId{"sc4"}, "Static", {200, 160, 0}, {}},
+                {GroupId{"sc3"}, "Evasive", {180, 80, 220}, {}},
             };
 
             for (int i = 0; i < spec.rows; ++i) {
@@ -163,7 +159,7 @@ namespace ksv::ui {
                 const std::string id = "e" + std::to_string(i);
                 const double base = 1000.0 + i * 7.0;
 
-                ScenarioEntry entry{ScenarioEntryId{id}, "Sample Drill Number " + std::to_string(i + 1),
+                BenchmarkScenario entry{BenchmarkScenarioId{id}, "Sample Drill Number " + std::to_string(i + 1),
                                     std::vector<std::string>{"hash" + std::to_string(i)}, {}};
                 std::vector<double> scores;
                 for (std::size_t t = 0; t < tierCount; ++t) {
@@ -185,102 +181,49 @@ namespace ksv::ui {
                     }
                 }
 
-                ScenarioProjection scenario;
-                scenario.entryId = entry.id;
-                scenario.name = entry.name;
-                scenario.matchState = unmapped ? ScenarioMatchState::Unresolved : ScenarioMatchState::Resolved;
-                scenario.personalBest = personalBest;
+                fixture.resolutions.push_back(unmapped ? tests_support::unresolvedEntry(id)
+                                                       : tests_support::resolvedEntry(id));
                 if (personalBest) {
-                    scenario.recentAverage = *personalBest * (i % 3 == 0 ? 0.85 : 0.97);
-                    scenario.recentSampleCount = 4;
-                    scenario.runCount = 10 + i;
-                    scenario.personalBestTime = std::chrono::sys_seconds{std::chrono::seconds{1'700'000'000 + i * 86'400}};
-                    if (reached >= 1) scenario.attainedTier = tiers[static_cast<std::size_t>(std::min<int>(reached, static_cast<int>(tierCount)) - 1)].id;
-                    if (reached < static_cast<int>(tierCount)) {
-                        const auto r = static_cast<std::size_t>(reached);
-                        scenario.nextThreshold = Threshold{tiers[r].id, scores[r]};
-                    }
+                    const auto day = tests_ui::ymd(2024, 3, 4) + std::chrono::days{i * 3};
+                    const auto pb = static_cast<float>(std::round(*personalBest * 8) / 8);
+                    const auto &hash = entry.hashes.front();
+                    fixture.runs.push_back(tests_ui::runOn(day, hash, pb / 2, 60));
+                    fixture.runs.push_back(tests_ui::runOn(day + std::chrono::days{1}, hash, pb * 0.75F, 60));
+                    fixture.runs.push_back(tests_ui::runOn(day + std::chrono::days{2}, hash, pb, 60));
                 }
-                if (!spec.incomplete && i % 6 == 2 && personalBest) {
-                    projection.nextTierBlockers.push_back(
-                        RankBlocker{entry.id, slot.id, scores[tierCount / 2], personalBest});
-                }
-                projection.scenarios.push_back(scenario);
-                slot.entries.push_back(entry);
-                slot.ids.push_back(entry.id);
+                slot.entries.push_back(std::move(entry));
             }
 
-            const auto groupOf = [&](const Slot &slot) {
-                return GroupProjection{slot.id, slot.name, tiers[static_cast<std::size_t>(slot.tier) % tierCount].id,
-                                       slot.ids, {}};
+            const auto addSubcategory = [](Category &category, Slot &slot) {
+                if (!slot.entries.empty())
+                    category.subcategories.push_back({slot.id, slot.name, slot.color, std::move(slot.entries)});
             };
-            const auto subOf = [](const Slot &slot) {
-                return Subcategory{slot.id, slot.name, slot.color, slot.entries};
-            };
-
             Category tracking{GroupId{"c1"}, "Tracking", {0, 128, 255}, {}, {}};
-            GroupProjection trackingProjection{GroupId{"c1"}, "Tracking", std::nullopt, {}, {}};
-            for (const Slot *slot: {&groupSlots[0], &groupSlots[1]}) {
-                if (slot->entries.empty()) continue;
-                tracking.subcategories.push_back(subOf(*slot));
-                trackingProjection.subgroups.push_back(groupOf(*slot));
-            }
-            if (!tracking.subcategories.empty()) {
-                definition.categories.push_back(tracking);
-                projection.categories.push_back(trackingProjection);
-            }
-            if (!groupSlots[2].entries.empty()) {
-                definition.categories.push_back(
-                    Category{groupSlots[2].id, groupSlots[2].name, groupSlots[2].color, groupSlots[2].entries, {}});
-                projection.categories.push_back(groupOf(groupSlots[2]));
-            }
-            if (!groupSlots[3].entries.empty() || !groupSlots[4].entries.empty()) {
-                Category switching{groupSlots[3].id, groupSlots[3].name, groupSlots[3].color, groupSlots[3].entries, {}};
-                GroupProjection switchingProjection = groupOf(groupSlots[3]);
-                if (!groupSlots[4].entries.empty()) {
-                    switching.subcategories.push_back(subOf(groupSlots[4]));
-                    switchingProjection.subgroups.push_back(groupOf(groupSlots[4]));
-                }
-                definition.categories.push_back(switching);
-                projection.categories.push_back(switchingProjection);
-            }
+            addSubcategory(tracking, groupSlots[0]);
+            addSubcategory(tracking, groupSlots[1]);
+            if (!tracking.subcategories.empty()) definition.categories.push_back(std::move(tracking));
 
-            CompletenessResult completeness{Completeness::Trackable, {}};
-            projection.completeness = Completeness::Trackable;
-            if (spec.incomplete) {
-                completeness = CompletenessResult{
-                    Completeness::Incomplete, {BenchmarkIssue{BenchmarkIssueCode::MissingThreshold, std::monostate{}}}};
-                projection.completeness = Completeness::Incomplete;
-            } else {
-                projection.attainedRank = tiers[tierCount / 2].id;
-                projection.completedRank = tiers[tierCount / 2 - 1].id;
-                projection.nextTier = tiers[tierCount / 2 + 1].id;
-                projection.averageRank = static_cast<double>(tierCount) / 2.0 + 0.4;
-                projection.scenariosAtNextTier = 3;
-            }
-            projection.totalPlaytimeSeconds = 86'400.0;
+            auto &clicking = groupSlots[2];
+            if (!clicking.entries.empty())
+                definition.categories.push_back({clicking.id, clicking.name, clicking.color, std::move(clicking.entries), {}});
 
-            snapshot.selectedLoaded = data::LoadedBenchmark{definition, completeness};
-            snapshot.projection = projection;
-            snapshot.lastKnownSelectedDisplayName = definition.name;
-            snapshot.choices.front().displayName = definition.name;
-            snapshot.choices.front().id = definition.id;
-            snapshot.selectedId = definition.id;
-            return snapshot;
+            Category switching{GroupId{"c3"}, "Switching", {200, 160, 0}, {}, {}};
+            addSubcategory(switching, groupSlots[3]);
+            addSubcategory(switching, groupSlots[4]);
+            if (!switching.subcategories.empty()) definition.categories.push_back(std::move(switching));
+            return tests_ui::snapshotFor(fixture);
         }
 
         BenchmarkWorkspaceSnapshot sampleRankSnapshot() {
-            BenchmarkWorkspaceSnapshot snapshot = tests_ui::makeTrackableSnapshot();
-            const std::vector<Tier> tiers = sampleTiers(8);
-            snapshot.selectedLoaded->benchmark.tiers = tiers;
-            snapshot.projection->tiers = tiers;
-            snapshot.projection->averageRankHistory.clear();
+            auto fixture = tests_ui::makeUniformFixture(8, {});
+            fixture.definition.tiers = sampleTiers(8);
             for (int day = 0; day < 14; ++day) {
-                snapshot.projection->averageRankHistory.push_back(
-                    {tests_ui::ymd(2024, 3, 1) + std::chrono::days{day * 2}, 0.6 + 0.45 * day});
+                fixture.runs.push_back(tests_ui::runOn(
+                    tests_ui::ymd(2024, 3, 1) + std::chrono::days{day * 2}, "u", 0.5F * (day + 1), 60));
             }
-            snapshot.projection->rollingPlaytime = {{tests_ui::ymd(2024, 3, 4), 1800.0},
-                                                    {tests_ui::ymd(2024, 4, 20), 900.0}};
+            auto snapshot = tests_ui::snapshotFor(fixture);
+            snapshot.visiblePlaytime = {{tests_ui::ymd(2024, 3, 4), 1800.0},
+                                        {tests_ui::ymd(2024, 4, 20), 900.0}};
             return snapshot;
         }
 
@@ -448,5 +391,32 @@ namespace ksv::ui {
         EXPECT_DOUBLE_EQ(advance(bar.valueRole), boldWidth);
         EXPECT_LE(bar.value.right(), bar.fill.right());
         EXPECT_GE(bar.value.left(), bar.track.left());
+    }
+
+    TEST(CaptureSamples, SampleBuildersEvaluateToTheIntendedStates) {
+        auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
+        fake->snap = sampleTableSnapshot({40, 10, false});
+        BenchmarkTrackingViewModel vm{fake};
+        EXPECT_EQ(vm.state(), "trackable");
+        EXPECT_EQ(vm.progressGrid()->rows().size(), 40);
+        EXPECT_TRUE(vm.summaryAvailable());
+
+        fake->snap = sampleTableSnapshot({24, 6, true});
+        fake->publish();
+        EXPECT_EQ(vm.state(), "incomplete");
+        EXPECT_EQ(vm.progressGrid()->rows().size(), 24);
+        EXPECT_FALSE(vm.summaryAvailable());
+        EXPECT_EQ(vm.attainedRank(), "Unavailable");
+        EXPECT_EQ(vm.averageRank(), "Unavailable");
+
+        fake->snap = sampleRankSnapshot();
+        fake->publish();
+        EXPECT_EQ(vm.state(), "trackable");
+        const auto rank = vm.rankHistory()->series({1});
+        ASSERT_EQ(rank.size(), 1);
+        EXPECT_EQ(rank.front()->points.size(), 14);
+        const auto playtime = vm.playtimeHistory()->series({1});
+        ASSERT_EQ(playtime.size(), 1);
+        EXPECT_EQ(playtime.front()->points.size(), 2);
     }
 }

@@ -17,7 +17,6 @@
 #include "presentation/benchmarks/manager/benchmark_issue_text.h"
 #include "presentation/graphs/common/axes/value_delegate.h"
 #include "benchmarks/benchmark.h"
-#include "benchmarks/benchmark_projection.h"
 #include "benchmarks/benchmark_validation.h"
 #include "benchmarks/rank_history.h"
 
@@ -109,14 +108,10 @@ namespace ksv::presentation {
                 }
                 case application::BenchmarkTrackingState::Unavailable:
                     return QStringLiteral("unavailable");
-                case application::BenchmarkTrackingState::Ready: {
-                    domain::Completeness completeness = domain::Completeness::Incomplete;
-                    if (snapshot.projection) completeness = snapshot.projection->completeness;
-                    else if (snapshot.selectedLoaded)
-                        completeness = snapshot.selectedLoaded->completeness.completeness;
-                    return completeness == domain::Completeness::Incomplete ? QStringLiteral("incomplete")
-                                                                           : QStringLiteral("trackable");
-                }
+                case application::BenchmarkTrackingState::Ready:
+                    return snapshot.benchmark &&
+                           snapshot.benchmark->completeness().completeness == domain::Completeness::Trackable
+                               ? QStringLiteral("trackable") : QStringLiteral("incomplete");
             }
             return QStringLiteral("emptyLibrary");
         }
@@ -183,10 +178,7 @@ namespace ksv::presentation {
 
     void BenchmarkTrackingViewModel::rebuild() {
         const application::BenchmarkWorkspaceSnapshot &snapshot = m_useCase->snapshot();
-        const domain::BenchmarkProjection *projection =
-            snapshot.projection ? &*snapshot.projection : nullptr;
-        const domain::BenchmarkDefinition *definition =
-            snapshot.selectedLoaded ? &snapshot.selectedLoaded->benchmark : nullptr;
+        const domain::Benchmark *benchmark = snapshot.benchmark ? &*snapshot.benchmark : nullptr;
 
         m_selectorEntries = buildSelectorEntries(snapshot.choices);
 
@@ -195,11 +187,11 @@ namespace ksv::presentation {
         m_summaryAvailable = m_state == QLatin1String("trackable");
         const bool trackable = m_summaryAvailable;
 
-        m_selectedName = definition ? q(definition->name) : q(snapshot.lastKnownSelectedDisplayName);
+        m_selectedName = benchmark ? q(benchmark->definition().name) : q(snapshot.lastKnownSelectedDisplayName);
 
         m_completenessIssues.clear();
-        if (snapshot.selectedLoaded)
-            for (const auto &issue: snapshot.selectedLoaded->completeness.issues)
+        if (benchmark)
+            for (const auto &issue: benchmark->completeness().issues)
                 m_completenessIssues << benchmarkIssueText(issue.code);
 
         std::vector<RankTier> rankTiers;
@@ -213,8 +205,7 @@ namespace ksv::presentation {
                 tierColorById.insert(q(tier.id.value), readable.name());
             }
         };
-        if (projection) indexTiers(projection->tiers);
-        else if (definition) indexTiers(definition->tiers);
+        if (benchmark) indexTiers(benchmark->tiers());
 
         // Sets `name`/`color` to the tier's, or to `fallback` and no colour when the id is absent.
         const auto resolveTier = [&](const std::optional<domain::TierId> &id, const QString &fallback,
@@ -229,15 +220,16 @@ namespace ksv::presentation {
         };
 
         const QString unavailableText = tr("Unavailable");
-        if (trackable && projection) {
-            resolveTier(projection->attainedRank, tr("Unranked"), m_attainedRank, m_attainedRankColor);
-            resolveTier(projection->completedRank, tr("None completed"), m_completedRank, m_completedRankColor);
-            resolveTier(projection->nextTier, tr("Highest tier attained"), m_nextTier, m_nextTierColor);
+        const auto averageRank = benchmark ? benchmark->averageRank() : std::nullopt;
+        const auto completedRank = benchmark ? benchmark->completedRank() : std::nullopt;
+        if (trackable && benchmark) {
+            resolveTier(benchmark->attainedRank(), tr("Unranked"), m_attainedRank, m_attainedRankColor);
+            resolveTier(completedRank, tr("None completed"), m_completedRank, m_completedRankColor);
+            resolveTier(benchmark->nextTier(), tr("Highest tier attained"), m_nextTier, m_nextTierColor);
             std::vector<QString> tierNames;
             tierNames.reserve(rankTiers.size());
             for (const auto &tier: rankTiers) tierNames.push_back(tier.name);
-            m_averageRank = projection->averageRank ? describeAverageRank(*projection->averageRank, tierNames)
-                                                    : unavailableText;
+            m_averageRank = averageRank ? describeAverageRank(*averageRank, tierNames) : unavailableText;
         } else {
             m_attainedRank = unavailableText;
             m_completedRank = unavailableText;
@@ -251,33 +243,33 @@ namespace ksv::presentation {
         // (tier k attained) ends at tier k's chunk's right edge; the completed rank ticks its chunk's end.
         m_averageRankFills.clear();
         m_completedRankPosition = -1.0;
-        if (trackable && projection && projection->averageRank)
-            for (const double fill: rankChunkFills(*projection->averageRank, projection->tiers.size()))
+        if (trackable && benchmark && averageRank)
+            for (const double fill: rankChunkFills(*averageRank, benchmark->tiers().size()))
                 m_averageRankFills.push_back(fill);
-        if (trackable && projection && projection->completedRank)
-            for (std::size_t index = 0; index < projection->tiers.size(); ++index)
-                if (projection->tiers[index].id == *projection->completedRank)
+        if (trackable && benchmark && completedRank)
+            for (std::size_t index = 0; index < benchmark->tiers().size(); ++index)
+                if (benchmark->tiers()[index].id == *completedRank)
                     m_completedRankPosition = static_cast<double>(index + 1);
 
-        m_totalPlaytime = projection ? formatDuration(projection->totalPlaytimeSeconds) : QString();
-        m_scenariosAtNextTier = projection ? projection->scenariosAtNextTier : 0;
-        m_hasNextTier = trackable && projection && projection->nextTier.has_value();
-        m_nextTierBlockerCount = m_hasNextTier ? static_cast<int>(projection->nextTierBlockers.size()) : 0;
+        m_totalPlaytime = benchmark ? formatDuration(benchmark->totalPlaytimeSeconds()) : QString();
+        m_scenariosAtNextTier = benchmark ? benchmark->scenariosAtNextTier() : 0;
+        m_hasNextTier = trackable && benchmark && benchmark->nextTier().has_value();
+        m_nextTierBlockerCount = m_hasNextTier ? static_cast<int>(benchmark->nextTierBlockers().size()) : 0;
         // Ranks are attained per group, so this counts the rows marked as blockers, not the
         // scenarios already at the next tier.
         m_nextTierBlockerText = !m_hasNextTier ? QString()
                                 : m_nextTierBlockerCount == 1
                                     ? QObject::tr("(blocked by 1 scenario)")
                                     : QObject::tr("(blocked by %1 scenarios)").arg(m_nextTierBlockerCount);
-        m_scenarioCount = projection ? static_cast<int>(projection->scenarios.size()) : 0;
+        m_scenarioCount = benchmark ? static_cast<int>(benchmark->scenarios().size()) : 0;
 
-        m_rankPresent = trackable && projection != nullptr;
+        m_rankPresent = trackable && benchmark != nullptr;
         m_rankTiers = std::move(rankTiers);
         m_rankExtentMs.reset();
         m_recentRankExtentMs.reset();
         if (m_rankPresent) {
-            for (const auto &point: projection->averageRankHistory) widenExtent(m_rankExtentMs, utcMidnightMs(point.day));
-            for (const auto &point: projection->recentAverageRankHistory)
+            for (const auto &point: benchmark->averageRankHistory()) widenExtent(m_rankExtentMs, utcMidnightMs(point.day));
+            for (const auto &point: benchmark->recentAverageRankHistory())
                 widenExtent(m_recentRankExtentMs, utcMidnightMs(point.day));
         }
 
@@ -287,9 +279,9 @@ namespace ksv::presentation {
             rebuildRank(graph);
         applyPlaytimeAxis(snapshot);
         m_playtimeHistory->setAveragingWindowDays(snapshot.playtime.windowDays);
-        m_playtimeHistory->update(playtimeContent(snapshot, playtime), projection != nullptr, {});
+        m_playtimeHistory->update(playtimeContent(snapshot, playtime), benchmark != nullptr, {});
 
-        m_progressGrid->reset(definition, projection);
+        m_progressGrid->reset(benchmark);
 
         emit changed();
     }
@@ -297,8 +289,8 @@ namespace ksv::presentation {
     QList<QPointF> BenchmarkTrackingViewModel::playtimePoints(const application::BenchmarkWorkspaceSnapshot &snapshot) {
         QList<QPointF> points;
         m_playtimeExtentMs.reset();
-        if (!snapshot.projection) return points;
-        for (const auto &[day, seconds]: snapshot.projection->rollingPlaytime) {
+        if (!snapshot.benchmark) return points;
+        for (const auto &[day, seconds]: snapshot.visiblePlaytime) {
             const qint64 milliseconds = utcMidnightMs(day);
             points.append(QPointF(static_cast<qreal>(milliseconds), seconds));
             widenExtent(m_playtimeExtentMs, milliseconds);
@@ -360,7 +352,7 @@ namespace ksv::presentation {
                                                        const application::RankRangeView &view) const {
         BenchmarkHistoryViewModel::Content content;
         if (m_rankPresent) {
-            // An anchor with no contributing run is no history at all, whatever the projection still holds.
+            // An anchor with no contributing run is no history at all, even when the benchmark has a full rank history.
             content.historyAvailable = !full.empty() && !view.noRelevantHistory;
             for (const auto &point: full) content.fullHistoryPeak = std::max(content.fullHistoryPeak, point.averageRank);
         }
@@ -405,8 +397,8 @@ namespace ksv::presentation {
         auto &axis = recent ? m_recentRankXAxis : m_rankXAxis;
         const auto &view = recent ? snapshot.recentRank : snapshot.rank;
         std::span<const domain::AverageRankPoint> full;
-        if (snapshot.projection)
-            full = recent ? snapshot.projection->recentAverageRankHistory : snapshot.projection->averageRankHistory;
+        if (snapshot.benchmark)
+            full = recent ? snapshot.benchmark->recentAverageRankHistory() : snapshot.benchmark->averageRankHistory();
         applyRankAxis(axis, view);
         updateRankHistory(recent ? *m_recentRankHistory : *m_rankHistory, axis, full, view);
     }
@@ -421,6 +413,6 @@ namespace ksv::presentation {
         }
         applyPlaytimeAxis(snapshot);
         m_playtimeHistory->setAveragingWindowDays(snapshot.playtime.windowDays);
-        m_playtimeHistory->update(playtimeContent(snapshot, playtime), snapshot.projection.has_value(), {});
+        m_playtimeHistory->update(playtimeContent(snapshot, playtime), snapshot.benchmark.has_value(), {});
     }
 }

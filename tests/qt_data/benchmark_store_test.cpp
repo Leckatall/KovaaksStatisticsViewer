@@ -32,6 +32,30 @@ namespace {
         })";
     }
 
+    QByteArray categorizedJson() {
+        return QByteArray(R"({
+            "schemaVersion": 1,
+            "id": "b1",
+            "name": "Bench",
+            "tiers": [ { "id": "t1", "name": "Bronze", "color": [200, 120, 0, 255] } ],
+            "uncategorized": [],
+            "categories": [
+                { "id": "c1", "name": "Category", "color": [10, 20, 30, 255],
+                  "scenarios": [
+                      { "id": "s1", "name": "One", "hash": null,
+                        "thresholds": [ { "tierId": "t1", "score": 1.0 } ] }
+                  ],
+                  "subcategories": [
+                      { "id": "sc1", "name": "Sub", "color": [40, 50, 60, 255],
+                        "scenarios": [
+                            { "id": "s2", "name": "Two", "hash": null,
+                              "thresholds": [ { "tierId": "t1", "score": 2.0 } ] }
+                        ] }
+                  ] }
+            ]
+        })");
+    }
+
     class BenchmarkStoreTest : public testing::Test {
     protected:
         QTemporaryDir dir;
@@ -170,12 +194,45 @@ TEST_F(BenchmarkStoreTest, DuplicateStableIdWithinAFileIsInvalid) {
     EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
 }
 
+TEST_F(BenchmarkStoreTest, CategorizedFixtureLoads) {
+    write("categorized.json", categorizedJson());
+    const auto entry = store->scan().snapshot->entries.at(0);
+    EXPECT_NE(loaded(entry), nullptr);
+}
+
+TEST_F(BenchmarkStoreTest, DuplicateEntryIdAcrossACategoryAndItsSubcategoryIsInvalid) {
+    auto json = categorizedJson();
+    json.replace("\"id\": \"s2\"", "\"id\": \"s1\"");
+    write("dupe-entry.json", json);
+    const auto entry = store->scan().snapshot->entries.at(0);
+    ASSERT_NE(problem(entry), nullptr);
+    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
+}
+
+TEST_F(BenchmarkStoreTest, DanglingTierReferenceInASubcategoryEntryIsInvalid) {
+    auto json = categorizedJson();
+    json.replace("\"tierId\": \"t1\", \"score\": 2.0", "\"tierId\": \"tX\", \"score\": 2.0");
+    write("dangling-nested.json", json);
+    const auto entry = store->scan().snapshot->entries.at(0);
+    ASSERT_NE(problem(entry), nullptr);
+    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
+}
+
+TEST_F(BenchmarkStoreTest, DuplicateGroupIdBetweenACategoryAndItsSubcategoryIsInvalid) {
+    auto json = categorizedJson();
+    json.replace("\"id\": \"sc1\"", "\"id\": \"c1\"");
+    write("dupe-group.json", json);
+    const auto entry = store->scan().snapshot->entries.at(0);
+    ASSERT_NE(problem(entry), nullptr);
+    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
+}
+
 TEST_F(BenchmarkStoreTest, WriteCreatesThenRoundTripsThroughScan) {
     domain::BenchmarkDefinition def;
     def.id = domain::BenchmarkId{"b1"};
     def.name = "Written";
     def.tiers = {domain::Tier{domain::TierId{"t1"}, "Bronze", {}}};
-    def.uncategorized = {domain::ScenarioEntry{domain::ScenarioEntryId{"s1"}, "One", {},
+    def.uncategorized = {domain::BenchmarkScenario{domain::BenchmarkScenarioId{"s1"}, "One", {},
                                                {domain::Threshold{domain::TierId{"t1"}, 10.0}}}};
 
     const auto write = store->write(def, "written.json", std::nullopt);
@@ -196,11 +253,11 @@ TEST_F(BenchmarkStoreTest, IncompleteWorkRoundTripsExactlyAndKeepsItsIssues) {
     def.tiers = {Tier{TierId{"t1"}, "Bronze", {200, 120, 0, 255}},
                  Tier{TierId{"t2"}, "Silver", {190, 190, 190, 255}}};
     // Partial thresholds: t2 still missing.
-    def.uncategorized = {ScenarioEntry{ScenarioEntryId{"s1"}, "Loose", {},
+    def.uncategorized = {BenchmarkScenario{BenchmarkScenarioId{"s1"}, "Loose", {},
                                        {Threshold{TierId{"t1"}, 10.0}}}};
     Category nested{GroupId{"c1"}, "Tracking", {10, 20, 30, 255}, {}, {}};
     nested.subcategories = {Subcategory{GroupId{"sc1"}, "Smooth", {40, 50, 60, 255},
-                                        {ScenarioEntry{ScenarioEntryId{"s2"}, "Mapped", std::vector<std::string>{"HASH", "OTHER"},
+                                        {BenchmarkScenario{BenchmarkScenarioId{"s2"}, "Mapped", std::vector<std::string>{"HASH", "OTHER"},
                                                        {Threshold{TierId{"t1"}, 1.5},
                                                         Threshold{TierId{"t2"}, 2.5}}}}}};
     def.categories = {nested, Category{GroupId{"c2"}, "Not yet filled", {70, 80, 90, 255}, {}, {}}};
@@ -268,7 +325,7 @@ TEST_F(BenchmarkStoreTest, ReplaceWithMatchingDigestSucceeds) {
     edited.id = domain::BenchmarkId{"b1"};
     edited.name = "Edited";
     edited.tiers = {domain::Tier{domain::TierId{"t1"}, "Bronze", {}}};
-    edited.uncategorized = {domain::ScenarioEntry{domain::ScenarioEntryId{"s1"}, "One", {},
+    edited.uncategorized = {domain::BenchmarkScenario{domain::BenchmarkScenarioId{"s1"}, "One", {},
                                                   {domain::Threshold{domain::TierId{"t1"}, 10.0}}}};
     ASSERT_TRUE(store->write(edited, "f.json", original.digest).succeeded());
     EXPECT_EQ(loaded(store->scan().snapshot->entries.at(0))->benchmark.name, "Edited");

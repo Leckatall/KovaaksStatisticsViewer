@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmark_validation.h"
 
 namespace ksv::domain {
@@ -22,8 +22,8 @@ namespace ksv::domain {
         std::optional<BenchmarkEditError> error;
         std::optional<TierId> createdTier;
         std::optional<GroupId> createdGroup;
-        std::optional<ScenarioEntryId> createdEntry;
-        std::vector<ScenarioEntryId> createdEntries;
+        std::optional<BenchmarkScenarioId> createdEntry;
+        std::vector<BenchmarkScenarioId> createdEntries;
         [[nodiscard]] bool ok() const { return !error.has_value(); }
     };
 
@@ -48,30 +48,30 @@ namespace ksv::domain {
         BenchmarkEditResult removeTier(const TierId &id);
         BenchmarkEditResult addUnplayedScenario(const std::string &name);
         BenchmarkEditResult addKnownScenario(const std::string &name, const std::string &hash);
-        BenchmarkEditResult renameScenario(const ScenarioEntryId &id, const std::string &name);
-        BenchmarkEditResult setScenarioHash(const ScenarioEntryId &id, const std::optional<std::string> &hash);
-        BenchmarkEditResult setScenarioHashes(const ScenarioEntryId &id, const std::vector<std::string> &hashes);
-        BenchmarkEditResult removeScenario(const ScenarioEntryId &id);
-        BenchmarkEditResult setThreshold(const ScenarioEntryId &entryId, const TierId &tierId, double score);
-        BenchmarkEditResult clearThreshold(const ScenarioEntryId &entryId, const TierId &tierId);
+        BenchmarkEditResult renameScenario(const BenchmarkScenarioId &id, const std::string &name);
+        BenchmarkEditResult setScenarioHash(const BenchmarkScenarioId &id, const std::optional<std::string> &hash);
+        BenchmarkEditResult setScenarioHashes(const BenchmarkScenarioId &id, const std::vector<std::string> &hashes);
+        BenchmarkEditResult removeScenario(const BenchmarkScenarioId &id);
+        BenchmarkEditResult setThreshold(const BenchmarkScenarioId &entryId, const TierId &tierId, double score);
+        BenchmarkEditResult clearThreshold(const BenchmarkScenarioId &entryId, const TierId &tierId);
         BenchmarkEditResult addCategory(const std::string &name);
         BenchmarkEditResult renameGroup(const GroupId &id, const std::string &name);
         BenchmarkEditResult setGroupColor(const GroupId &id, BenchmarkColor color);
         BenchmarkEditResult reorderCategory(const GroupId &id, std::size_t position);
         BenchmarkEditResult removeCategory(const GroupId &id);
         BenchmarkEditResult addSubcategory(const GroupId &categoryId, const std::string &name);
-        BenchmarkEditResult moveScenario(const ScenarioEntryId &id, const EditorGroupTarget &to);
+        BenchmarkEditResult moveScenario(const BenchmarkScenarioId &id, const EditorGroupTarget &to);
 
         BenchmarkEditResult appendUnnamedScenarios(std::size_t count);
         // `orderedIds` is already in the caller's visible order and lands in that order: before
         // `before`, which must be in the target (when it is itself moving, before the next entry
         // that is not), or after the target's existing entries when absent.
-        BenchmarkEditResult assignScenarios(const std::vector<ScenarioEntryId> &orderedIds,
+        BenchmarkEditResult assignScenarios(const std::vector<BenchmarkScenarioId> &orderedIds,
                                             const EditorGroupTarget &to,
-                                            const std::optional<ScenarioEntryId> &before = std::nullopt);
+                                            const std::optional<BenchmarkScenarioId> &before = std::nullopt);
         BenchmarkEditResult reorderSubcategory(const GroupId &id, std::size_t position);
         // Moves an entry within the collection that already holds it.
-        BenchmarkEditResult reorderScenario(const ScenarioEntryId &id, std::size_t position);
+        BenchmarkEditResult reorderScenario(const BenchmarkScenarioId &id, std::size_t position);
 
         [[nodiscard]] CompletenessResult validation() const { return validateBenchmark(m_target); }
 

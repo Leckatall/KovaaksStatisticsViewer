@@ -1,0 +1,87 @@
+#ifndef KOVAAKSSTATSVIEWER_BENCHMARK_DEFINITION_H
+#define KOVAAKSSTATSVIEWER_BENCHMARK_DEFINITION_H
+
+#include <compare>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "benchmark_ids.h"
+
+namespace ksv::domain {
+    struct Tier {
+        TierId id;
+        std::string name;
+        BenchmarkColor color;
+        auto operator<=>(const Tier &) const = default;
+    };
+
+    struct Threshold {
+        TierId tierId;
+        double score = 0.0;
+        auto operator<=>(const Threshold &) const = default;
+    };
+
+    struct BenchmarkScenario {
+        BenchmarkScenarioId id;
+        std::string name;                  // retained display label; never replaced by the hash
+        std::vector<std::string> hashes;   // unique, non-empty, in user order; writers enforce this
+        std::vector<Threshold> thresholds; // one per tier when complete; decoded as-is for validation
+        auto operator<=>(const BenchmarkScenario &) const = default;
+
+        /** @return The tier's score when exactly one threshold names it and it is finite and non-negative. */
+        [[nodiscard]] std::optional<double> thresholdFor(const TierId &tier) const;
+    };
+
+    struct BenchmarkGroup {
+        GroupId id;
+        std::string name;
+        BenchmarkColor color;
+        std::vector<BenchmarkScenario> scenarios;
+        auto operator<=>(const BenchmarkGroup &) const = default;
+    };
+
+    struct Subcategory : BenchmarkGroup {
+        auto operator<=>(const Subcategory &) const = default;
+    };
+
+    // A complete category holds EITHER direct scenarios OR subcategories. Both vectors exist so a
+    // decoded or mid-edit definition can represent the incomplete "mixed" and "empty" states that
+    // validation reports rather than being unrepresentable.
+    struct Category : BenchmarkGroup {
+        std::vector<Subcategory> subcategories;
+        auto operator<=>(const Category &) const = default;
+    };
+
+    struct BenchmarkDefinition {
+        BenchmarkId id;
+        std::string name;                       // may be empty while incomplete
+        std::vector<Tier> tiers;                // ordered ladder
+        std::vector<BenchmarkScenario> uncategorized;
+        std::vector<Category> categories;       // ordered user-created categories
+        auto operator<=>(const BenchmarkDefinition &) const = default;
+
+        /**
+         * Uncategorized; then per category its direct scenarios, then each subcategory's.
+         * Pointers here and from entries() and entry() remain valid while the definition is alive and
+         * its structure unmodified.
+         */
+        [[nodiscard]] std::vector<std::vector<BenchmarkScenario> *> scenarioLists();
+        [[nodiscard]] std::vector<const std::vector<BenchmarkScenario> *> scenarioLists() const;
+        /** Every scenario, in scenarioLists() order. */
+        [[nodiscard]] std::vector<const BenchmarkScenario *> entries() const;
+        [[nodiscard]] BenchmarkScenario *entry(const BenchmarkScenarioId &id);
+        [[nodiscard]] const BenchmarkScenario *entry(const BenchmarkScenarioId &id) const;
+        /** Each category followed by its subcategories. Pointers remain valid while the structure is unmodified. */
+        [[nodiscard]] std::vector<BenchmarkGroup *> groups();
+        [[nodiscard]] std::vector<const BenchmarkGroup *> groups() const;
+        [[nodiscard]] BenchmarkGroup *group(const GroupId &id);
+        [[nodiscard]] const BenchmarkGroup *group(const GroupId &id) const;
+        /** Unique, in first-occurrence order over entries(). */
+        [[nodiscard]] std::vector<std::string> scenarioHashes() const;
+        /** Every tier admitted and strictly increasing, in tier order; otherwise nullopt. */
+        [[nodiscard]] std::optional<std::vector<double>> ladderFor(const BenchmarkScenario &entry) const;
+    };
+}
+
+#endif // KOVAAKSSTATSVIEWER_BENCHMARK_DEFINITION_H

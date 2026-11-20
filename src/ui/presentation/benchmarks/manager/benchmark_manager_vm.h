@@ -18,7 +18,7 @@
 #include "app/contracts/benchmark_editor_seed.h"
 #include "app/contracts/benchmark_manager_state.h"
 #include "app/contracts/i_benchmark_manager_use_case.h"
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_editor.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"
@@ -195,7 +195,7 @@ namespace ksv::presentation {
         void restoreSelection(const QStringList &ids, const QVariantMap &cell, int fallbackPosition);
         void pruneCellInputs();
         // Selection arrives in click order; a batch keeps the rows' current visible order. Requires a draft.
-        [[nodiscard]] std::vector<domain::ScenarioEntryId> inVisibleOrder(const QStringList &entryIds) const;
+        [[nodiscard]] std::vector<domain::BenchmarkScenarioId> inVisibleOrder(const QStringList &entryIds) const;
 
         std::shared_ptr<application::IBenchmarkManagerUseCase> m_useCase;
 

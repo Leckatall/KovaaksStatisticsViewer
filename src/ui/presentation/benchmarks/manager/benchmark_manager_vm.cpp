@@ -140,7 +140,7 @@ namespace ksv::presentation {
                     using T = std::decay_t<decltype(target)>;
                     if constexpr (std::is_same_v<T, domain::TierId>) index.byTier[target.value].push_back(issue.code);
                     else if constexpr (std::is_same_v<T, domain::GroupId>) index.byGroup[target.value].push_back(issue.code);
-                    else if constexpr (std::is_same_v<T, domain::ScenarioEntryId>) {
+                    else if constexpr (std::is_same_v<T, domain::BenchmarkScenarioId>) {
                         if (issue.tierId) index.byCell[{target.value, issue.tierId->value}].push_back(issue.code);
                         else index.byEntry[target.value].push_back(issue.code);
                     }
@@ -188,7 +188,7 @@ namespace ksv::presentation {
                 projection.rows.push_back(std::move(row));
             };
 
-            const auto appendRow = [&](const domain::ScenarioEntry &entry, const BenchmarkTableGroupSpan &category,
+            const auto appendRow = [&](const domain::BenchmarkScenario &entry, const BenchmarkTableGroupSpan &category,
                                        const BenchmarkTableGroupSpan &subcategory) {
                 BenchmarkTableRow row;
                 row.entryId = idString(entry.id);
@@ -290,18 +290,13 @@ namespace ksv::presentation {
             return groups;
         }
 
-        // Scenario entries in the table's row order: categories in order (direct scenarios, then
-        // each subcategory), Uncategorized last.
-        std::vector<domain::ScenarioEntryId> visibleEntryOrder(const domain::BenchmarkDefinition &draft) {
-            std::vector<domain::ScenarioEntryId> order;
-            const auto append = [&](const std::vector<domain::ScenarioEntry> &entries) {
-                for (const auto &entry: entries) order.push_back(entry.id);
-            };
-            for (const auto &category: draft.categories) {
-                append(category.scenarios);
-                for (const auto &sub: category.subcategories) append(sub.scenarios);
-            }
-            append(draft.uncategorized);
+        std::vector<domain::BenchmarkScenarioId> visibleEntryOrder(const domain::BenchmarkDefinition &draft) {
+            std::vector<domain::BenchmarkScenarioId> order;
+            const auto entries = draft.entries();
+            order.reserve(entries.size());
+            for (const auto *entry: entries) order.push_back(entry->id);
+            // The table puts Uncategorized last, while entries() puts it first.
+            std::ranges::rotate(order, order.begin() + static_cast<std::ptrdiff_t>(draft.uncategorized.size()));
             return order;
         }
 
@@ -682,14 +677,14 @@ namespace ksv::presentation {
 
     QVariantMap BenchmarkManagerViewModel::renameScenario(const QString &id, const QString &name) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.renameScenario(domain::ScenarioEntryId{id.toStdString()}, name.toStdString());
+            return e.renameScenario(domain::BenchmarkScenarioId{id.toStdString()}, name.toStdString());
         });
     }
 
     QVariantMap BenchmarkManagerViewModel::setScenarioIdentity(const QString &id, const QString &name,
                                                                const QString &hash) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
-            const auto entryId = domain::ScenarioEntryId{id.toStdString()};
+            const auto entryId = domain::BenchmarkScenarioId{id.toStdString()};
             const auto renamed = e.renameScenario(entryId, name.toStdString());
             if (!renamed.ok()) return renamed;
             return e.setScenarioHash(entryId, hash.toStdString());
@@ -699,7 +694,7 @@ namespace ksv::presentation {
     QVariantMap BenchmarkManagerViewModel::setScenarioHash(const QString &entryId, const QString &hash) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
             return e.setScenarioHash(
-                domain::ScenarioEntryId{entryId.toStdString()},
+                domain::BenchmarkScenarioId{entryId.toStdString()},
                 hash.isEmpty() ? std::nullopt : std::optional{hash.toStdString()});
         });
     }
@@ -709,13 +704,13 @@ namespace ksv::presentation {
         values.reserve(static_cast<std::size_t>(hashes.size()));
         for (const auto &hash: hashes) values.push_back(hash.toStdString());
         return applyEdit([&](domain::BenchmarkEditor &editor) {
-            return editor.setScenarioHashes(domain::ScenarioEntryId{entryId.toStdString()}, values);
+            return editor.setScenarioHashes(domain::BenchmarkScenarioId{entryId.toStdString()}, values);
         });
     }
 
     QVariantMap BenchmarkManagerViewModel::removeScenario(const QString &id) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.removeScenario(domain::ScenarioEntryId{id.toStdString()});
+            return e.removeScenario(domain::BenchmarkScenarioId{id.toStdString()});
         });
     }
 
@@ -724,7 +719,7 @@ namespace ksv::presentation {
         unique.removeDuplicates();
         return applyEdit([&](domain::BenchmarkEditor &e) {
             for (const auto &id: unique)
-                if (auto result = e.removeScenario(domain::ScenarioEntryId{id.toStdString()}); result.error)
+                if (auto result = e.removeScenario(domain::BenchmarkScenarioId{id.toStdString()}); result.error)
                     return result;
             return domain::BenchmarkEditResult{};
         });
@@ -732,7 +727,7 @@ namespace ksv::presentation {
 
     QVariantMap BenchmarkManagerViewModel::setThreshold(const QString &entryId, const QString &tierId,
                                                         double score) {
-        const BenchmarkCellKey key{domain::ScenarioEntryId{entryId.toStdString()}, domain::TierId{tierId.toStdString()}};
+        const BenchmarkCellKey key{domain::BenchmarkScenarioId{entryId.toStdString()}, domain::TierId{tierId.toStdString()}};
         return applySessionEdit([&](domain::BenchmarkEditor &e, CellInputs &inputs) {
             const auto result = e.setThreshold(key.entryId, key.tierId, score);
             if (result.ok()) inputs.erase(key);
@@ -741,7 +736,7 @@ namespace ksv::presentation {
     }
 
     QVariantMap BenchmarkManagerViewModel::clearThreshold(const QString &entryId, const QString &tierId) {
-        const BenchmarkCellKey key{domain::ScenarioEntryId{entryId.toStdString()}, domain::TierId{tierId.toStdString()}};
+        const BenchmarkCellKey key{domain::BenchmarkScenarioId{entryId.toStdString()}, domain::TierId{tierId.toStdString()}};
         return applySessionEdit([&](domain::BenchmarkEditor &e, CellInputs &inputs) {
             const auto result = e.clearThreshold(key.entryId, key.tierId);
             if (result.ok()) inputs.erase(key);
@@ -782,7 +777,7 @@ namespace ksv::presentation {
 
     QVariantMap BenchmarkManagerViewModel::moveScenario(const QString &entryId, const QString &targetGroupId) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.moveScenario(domain::ScenarioEntryId{entryId.toStdString()}, toGroupTarget(targetGroupId));
+            return e.moveScenario(domain::BenchmarkScenarioId{entryId.toStdString()}, toGroupTarget(targetGroupId));
         });
     }
 
@@ -802,7 +797,7 @@ namespace ksv::presentation {
                                                      int fallbackPosition) {
         const auto order = visibleEntryOrder(*m_draft);
         const auto exists = [&](const QString &id) {
-            return std::ranges::find(order, domain::ScenarioEntryId{id.toStdString()}) != order.end();
+            return std::ranges::find(order, domain::BenchmarkScenarioId{id.toStdString()}) != order.end();
         };
         QStringList surviving;
         for (const auto &id: ids)
@@ -834,7 +829,7 @@ namespace ksv::presentation {
         QVariantList issues;
         if (!m_draft || m_cellInputs.empty()) return issues;
         const auto order = visibleEntryOrder(*m_draft);
-        const auto rowOf = [&](const domain::ScenarioEntryId &id) { return std::ranges::find(order, id) - order.begin(); };
+        const auto rowOf = [&](const domain::BenchmarkScenarioId &id) { return std::ranges::find(order, id) - order.begin(); };
         std::vector<std::pair<BenchmarkCellKey, BenchmarkCellRecord>> inputs(m_cellInputs.begin(), m_cellInputs.end());
         std::ranges::stable_sort(inputs, {}, [&](const auto &input) { return rowOf(input.first.entryId); });
         for (const auto &[key, record]: inputs)
@@ -849,7 +844,7 @@ namespace ksv::presentation {
 
     QVariantMap BenchmarkManagerViewModel::editThresholdText(const QString &entryId, const QString &tierId,
                                                              const QString &text) {
-        const BenchmarkCellKey key{domain::ScenarioEntryId{entryId.toStdString()},
+        const BenchmarkCellKey key{domain::BenchmarkScenarioId{entryId.toStdString()},
                                    domain::TierId{tierId.toStdString()}};
         return applySessionEdit([&](domain::BenchmarkEditor &e, CellInputs &inputs) {
             return applyThresholdText(e, inputs, key, text);
@@ -869,7 +864,7 @@ namespace ksv::presentation {
         // Placement is resolved against the table as it is now, by position, never by name.
         const auto rows = visibleEntryOrder(*m_draft);
         const auto rowIndex = [&](const QString &id) -> std::optional<std::size_t> {
-            const auto found = std::ranges::find(rows, domain::ScenarioEntryId{id.toStdString()});
+            const auto found = std::ranges::find(rows, domain::BenchmarkScenarioId{id.toStdString()});
             if (found == rows.end()) return std::nullopt;
             return static_cast<std::size_t>(found - rows.begin());
         };
@@ -914,7 +909,7 @@ namespace ksv::presentation {
         const auto width = static_cast<std::size_t>(matrix.width());
         const std::size_t thresholdWidth = header ? width : width - (namesFirst ? 1 : 0);
         return applySessionEdit([&](domain::BenchmarkEditor &editor, CellInputs &inputs) {
-            std::vector<domain::ScenarioEntryId> rowIds = rows;
+            std::vector<domain::BenchmarkScenarioId> rowIds = rows;
             if (!header && startRow + matrix.rows.size() > rows.size()) {
                 const auto created = editor.appendUnnamedScenarios(startRow + matrix.rows.size() - rows.size());
                 rowIds.insert(rowIds.end(), created.createdEntries.begin(), created.createdEntries.end());
@@ -949,19 +944,19 @@ namespace ksv::presentation {
                                                            const QString &beforeEntryId) {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
         const auto ordered = inVisibleOrder(entryIds);
-        std::optional<domain::ScenarioEntryId> before;
-        if (!beforeEntryId.isEmpty()) before = domain::ScenarioEntryId{beforeEntryId.toStdString()};
+        std::optional<domain::BenchmarkScenarioId> before;
+        if (!beforeEntryId.isEmpty()) before = domain::BenchmarkScenarioId{beforeEntryId.toStdString()};
         return applyEdit([&](domain::BenchmarkEditor &e) {
             return e.assignScenarios(ordered, toGroupTarget(targetGroupId), before);
         });
     }
 
-    std::vector<domain::ScenarioEntryId> BenchmarkManagerViewModel::inVisibleOrder(const QStringList &entryIds) const {
+    std::vector<domain::BenchmarkScenarioId> BenchmarkManagerViewModel::inVisibleOrder(const QStringList &entryIds) const {
         std::unordered_map<std::string, std::size_t> visibleIndex;
         for (const auto &id: visibleEntryOrder(*m_draft)) visibleIndex.emplace(id.value, visibleIndex.size());
-        std::vector<domain::ScenarioEntryId> ordered;
-        for (const auto &id: entryIds) ordered.push_back(domain::ScenarioEntryId{id.toStdString()});
-        std::ranges::stable_sort(ordered, {}, [&](const domain::ScenarioEntryId &id) {
+        std::vector<domain::BenchmarkScenarioId> ordered;
+        for (const auto &id: entryIds) ordered.push_back(domain::BenchmarkScenarioId{id.toStdString()});
+        std::ranges::stable_sort(ordered, {}, [&](const domain::BenchmarkScenarioId &id) {
             const auto found = visibleIndex.find(id.value);
             return found == visibleIndex.end() ? visibleIndex.size() : found->second;
         });
@@ -1049,7 +1044,7 @@ namespace ksv::presentation {
 
     QVariantMap BenchmarkManagerViewModel::reorderScenario(const QString &entryId, int position) {
         return applyEdit([&](domain::BenchmarkEditor &e) {
-            return e.reorderScenario(domain::ScenarioEntryId{entryId.toStdString()},
+            return e.reorderScenario(domain::BenchmarkScenarioId{entryId.toStdString()},
                                      static_cast<std::size_t>(std::max(position, 0)));
         });
     }

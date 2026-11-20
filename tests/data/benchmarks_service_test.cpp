@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_validation.h"
 #include "data/benchmarks_service.h"
 #include "fake_benchmark_store.h"

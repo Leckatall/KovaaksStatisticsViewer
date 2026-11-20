@@ -6,9 +6,9 @@
 #include <span>
 #include <vector>
 
-#include "benchmarks/benchmark_projection.h"
-
 namespace ksv::domain {
+    struct AverageRankPoint { std::chrono::sys_days day; double averageRank = 0.0; };
+
     // A date window onto a retrospective rank history that was evaluated in full, so every value in
     // it is the one the whole history gave that day.
     struct RankHistoryWindow {
@@ -18,7 +18,7 @@ namespace ksv::domain {
     };
 
     /**
-     * @param history Oldest first, as BenchmarkProjection::averageRankHistory or recentAverageRankHistory.
+     * @param history Oldest first, as in Benchmark::averageRankHistory() or Benchmark::recentAverageRankHistory().
      * @param first,last Inclusive.
      */
     [[nodiscard]] RankHistoryWindow rankHistoryWindow(std::span<const AverageRankPoint> history,

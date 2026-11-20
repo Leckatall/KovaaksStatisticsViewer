@@ -13,7 +13,7 @@
 #include <QTemporaryDir>
 #include <QUrl>
 
-#include "benchmarks/benchmark_evaluator.h"
+#include "benchmarks/benchmark.h"
 #include "driver_dataset.h"
 #include "driver_ports.h"
 #include "driver_spec.h"
@@ -532,45 +532,40 @@ namespace {
     // against the rich profile's scores so that each row shows a different state.
     // These tests fail when the run generator or the rich profile drifts from them;
     // re-pick the thresholds rather than loosening the expectations.
-    struct SeededProjection {
-        domain::BenchmarkDefinition benchmark;
-        domain::BenchmarkProjection projection;
+    struct SeededBenchmark {
+        domain::Benchmark benchmark;
 
-        [[nodiscard]] const domain::ScenarioProjection &scenario(const std::string &entryId) const {
-            const auto found = std::ranges::find_if(projection.scenarios, [&](const domain::ScenarioProjection &row) {
-                return row.entryId.value == entryId;
-            });
-            if (found == projection.scenarios.end()) throw std::runtime_error("no row " + entryId);
-            return *found;
+        [[nodiscard]] const domain::ScenarioBenchmarkEvaluation &scenario(const std::string &entryId) const {
+            const auto *row = benchmark.scenario(domain::BenchmarkScenarioId{entryId});
+            if (!row) throw std::runtime_error("no row " + entryId);
+            return *row;
         }
 
-        [[nodiscard]] const domain::ScenarioEntry &entry(const std::string &entryId) const {
-            for (const auto &category: benchmark.categories) {
-                for (const auto &candidate: category.scenarios)
-                    if (candidate.id.value == entryId) return candidate;
-                for (const auto &subcategory: category.subcategories)
-                    for (const auto &candidate: subcategory.scenarios)
-                        if (candidate.id.value == entryId) return candidate;
-            }
+        [[nodiscard]] const domain::BenchmarkScenario &entry(const std::string &entryId) const {
+            for (const auto *candidate: benchmark.definition().entries())
+                if (candidate->id.value == entryId) return *candidate;
             throw std::runtime_error("no entry " + entryId);
         }
 
         // How many tiers a score reaches on an entry's ladder (0: below the first).
         [[nodiscard]] int tiersReached(const std::string &entryId, const std::optional<double> score) const {
-            return static_cast<int>(std::floor(domain::normalizedTierValue(benchmark.tiers, entry(entryId).thresholds, score)));
+            return static_cast<int>(std::floor(scenario(entryId).normalized(score)));
         }
 
         [[nodiscard]] std::optional<std::string> attained(const std::string &entryId) const {
-            const auto &tier = scenario(entryId).attainedTier;
+            const auto tier = scenario(entryId).attainedTier();
             return tier ? std::optional(tier->value) : std::nullopt;
         }
 
         [[nodiscard]] std::optional<std::string> groupTier(const std::string &groupId) const {
-            for (const auto &group: projection.categories) {
-                if (group.id.value == groupId) return group.satisfiedTier ? std::optional(group.satisfiedTier->value) : std::nullopt;
-                for (const auto &subgroup: group.subgroups)
-                    if (subgroup.id.value == groupId)
-                        return subgroup.satisfiedTier ? std::optional(subgroup.satisfiedTier->value) : std::nullopt;
+            const auto tierId = [](const domain::GroupEvaluation &group) {
+                const auto tier = group.satisfiedTier();
+                return tier ? std::optional(tier->value) : std::nullopt;
+            };
+            for (const auto *group: benchmark.categories()) {
+                if (group->id().value == groupId) return tierId(*group);
+                for (const auto *subgroup: group->subgroups())
+                    if (subgroup->id().value == groupId) return tierId(*subgroup);
             }
             throw std::runtime_error("no group " + groupId);
         }
@@ -578,7 +573,7 @@ namespace {
 
     // Seeds a `dataset` session as ksv_driver does and evaluates one of its benchmark files
     // against the seeded profile, every hashed entry resolved as the app resolves it.
-    SeededProjection projectSeededBenchmark(const QString &dataset, const std::string &filename) {
+    SeededBenchmark evaluateSeededBenchmark(const QString &dataset, const std::string &filename) {
         QTemporaryDir dir;
         const driver::SessionData data{dir.path()};
         const QString error = driver::seedSessionData(data, dataset, {}, QStringLiteral(KSV_DRIVER_BENCHMARKS_DIR));
@@ -599,81 +594,79 @@ namespace {
         for (const auto &scenario: profile->getScenarioList()) played.insert(scenario.hash);
         std::vector<domain::ScenarioResolution> resolutions;
         std::vector<domain::ScenarioId> scenarios;
-        const auto resolve = [&](const domain::ScenarioEntry &entry) {
-            const bool found = !entry.hashes.empty() && played.contains(entry.hashes.front());
-            resolutions.push_back({entry.id, found ? domain::ScenarioMatchState::Resolved
-                                                   : domain::ScenarioMatchState::MappedUnavailable,
+        for (const auto *entry: loaded.benchmark.entries()) {
+            const bool found = !entry->hashes.empty() && played.contains(entry->hashes.front());
+            resolutions.push_back({entry->id, found ? domain::ScenarioMatchState::Resolved
+                                                    : domain::ScenarioMatchState::MappedUnavailable,
                                    {}});
-            if (found) scenarios.push_back({{}, entry.hashes.front()});
-        };
-        for (const auto &category: loaded.benchmark.categories) {
-            std::ranges::for_each(category.scenarios, resolve);
-            for (const auto &subcategory: category.subcategories) std::ranges::for_each(subcategory.scenarios, resolve);
+            if (found) scenarios.push_back({{}, entry->hashes.front()});
         }
-        return {loaded.benchmark,
-                domain::evaluateBenchmark(loaded.benchmark, loaded.completeness, resolutions,
-                                          profile->getRunFacts(scenarios), {})};
+        return {domain::Benchmark(loaded.benchmark, loaded.completeness, resolutions, profile->getRunFacts(scenarios))};
     }
 
     TEST(DriverBenchmarkFixtureTest, DemoBenchmarkSpreadsTheRichProfileAcrossEveryRowState) {
-        const auto seeded = projectSeededBenchmark("rich", "driver-demo.json");
-        const auto &projection = seeded.projection;
-        ASSERT_EQ(projection.completeness, domain::Completeness::Trackable);
-        EXPECT_EQ(seeded.benchmark.id.value, driver::kDefaultBenchmarkId);
+        const auto seeded = evaluateSeededBenchmark("rich", "driver-demo.json");
+        const auto &benchmark = seeded.benchmark;
+        ASSERT_EQ(benchmark.completeness().completeness, domain::Completeness::Trackable);
+        EXPECT_EQ(benchmark.id().value, driver::kDefaultBenchmarkId);
 
         // Above the top tier, with its recent average back inside the Platinum chunk.
         EXPECT_EQ(seeded.attained("entry-gallery-primary"), "platinum");
-        EXPECT_GT(*seeded.scenario("entry-gallery-primary").personalBest,
+        EXPECT_GT(seeded.scenario("entry-gallery-primary").stats()->personalBest(),
                   seeded.entry("entry-gallery-primary").thresholds.back().score);
-        EXPECT_EQ(seeded.tiersReached("entry-gallery-primary", seeded.scenario("entry-gallery-primary").recentAverage), 4);
+        EXPECT_EQ(seeded.tiersReached("entry-gallery-primary",
+                                     seeded.scenario("entry-gallery-primary").stats()->recentAverage()), 4);
         // Just into Bronze, its recent average still in Iron.
         EXPECT_EQ(seeded.attained("entry-gallery-pasu"), "bronze");
-        EXPECT_EQ(seeded.tiersReached("entry-gallery-pasu", seeded.scenario("entry-gallery-pasu").recentAverage), 1);
+        EXPECT_EQ(seeded.tiersReached("entry-gallery-pasu",
+                                     seeded.scenario("entry-gallery-pasu").stats()->recentAverage()), 1);
         // Gold, nine tenths of the way to Platinum.
         EXPECT_EQ(seeded.attained("entry-gallery-smoothbot"), "gold");
-        EXPECT_NEAR(seeded.scenario("entry-gallery-smoothbot").normalizedRank, 4.9, 0.001);
+        EXPECT_NEAR(seeded.scenario("entry-gallery-smoothbot").normalizedRank(), 4.9, 0.001);
         // Iron, its recent average below it.
         EXPECT_EQ(seeded.attained("entry-gallery-flyts"), "iron");
-        EXPECT_EQ(seeded.tiersReached("entry-gallery-flyts", seeded.scenario("entry-gallery-flyts").recentAverage), 0);
+        EXPECT_EQ(seeded.tiersReached("entry-gallery-flyts",
+                                     seeded.scenario("entry-gallery-flyts").stats()->recentAverage()), 0);
         // Played but below Iron, under the long real scenario name.
         EXPECT_EQ(seeded.attained("entry-gallery-celestial"), std::nullopt);
-        EXPECT_TRUE(seeded.scenario("entry-gallery-celestial").personalBest.has_value());
-        EXPECT_EQ(seeded.scenario("entry-gallery-celestial").name, "Air CELESTIAL No UFO Easy Slowed");
+        EXPECT_TRUE(seeded.scenario("entry-gallery-celestial").stats().has_value());
+        EXPECT_EQ(seeded.scenario("entry-gallery-celestial").name(), "Air CELESTIAL No UFO Easy Slowed");
 
         // Clicking ranks by its weaker subcategory, Tracking by its best scenario.
         EXPECT_EQ(seeded.groupTier("static"), "platinum");
         EXPECT_EQ(seeded.groupTier("dynamic"), "bronze");
         EXPECT_EQ(seeded.groupTier("clicking"), "bronze");
         EXPECT_EQ(seeded.groupTier("tracking"), "gold");
-        ASSERT_TRUE(projection.attainedRank);
-        EXPECT_EQ(projection.attainedRank->value, "bronze");
-        EXPECT_FALSE(projection.completedRank.has_value());
-        ASSERT_TRUE(projection.nextTier);
-        EXPECT_EQ(projection.nextTier->value, "silver");
-        ASSERT_EQ(projection.nextTierBlockers.size(), 1U);
-        EXPECT_EQ(projection.nextTierBlockers[0].entryId.value, "entry-gallery-pasu");
-        EXPECT_EQ(projection.scenariosAtNextTier, 2);
+        ASSERT_TRUE(benchmark.attainedRank());
+        EXPECT_EQ(benchmark.attainedRank()->value, "bronze");
+        EXPECT_FALSE(benchmark.completedRank().has_value());
+        ASSERT_TRUE(benchmark.nextTier());
+        EXPECT_EQ(benchmark.nextTier()->value, "silver");
+        ASSERT_EQ(benchmark.nextTierBlockers().size(), 1U);
+        EXPECT_EQ(benchmark.nextTierBlockers()[0].entryId.value, "entry-gallery-pasu");
+        EXPECT_EQ(benchmark.scenariosAtNextTier(), 2);
 
         // The personal-best average climbs in several steps over the month.
-        ASSERT_GE(projection.averageRankHistory.size(), 5U);
-        EXPECT_GT(projection.averageRankHistory.back().averageRank - projection.averageRankHistory.front().averageRank, 0.5);
+        const auto &averageHistory = benchmark.averageRankHistory();
+        ASSERT_GE(averageHistory.size(), 5U);
+        EXPECT_GT(averageHistory.back().averageRank - averageHistory.front().averageRank, 0.5);
 
         // The recent-average line has a point on every play day, at least as many as the PB line,
         // and ends at the mean of each scenario's current recent average.
-        ASSERT_GE(projection.recentAverageRankHistory.size(), projection.averageRankHistory.size());
+        ASSERT_GE(benchmark.recentAverageRankHistory().size(), averageHistory.size());
         double recentMean = 0.0;
-        for (const auto &row: projection.scenarios)
-            recentMean += domain::normalizedTierValue(seeded.benchmark.tiers, seeded.entry(row.entryId.value).thresholds,
-                                                      row.recentAverage);
-        recentMean /= static_cast<double>(projection.scenarios.size());
-        EXPECT_NEAR(projection.recentAverageRankHistory.back().averageRank, recentMean, 1e-9);
+        const auto scenarios = benchmark.scenarios();
+        for (const auto *row: scenarios)
+            if (const auto &stats = row->stats()) recentMean += row->normalized(stats->recentAverage());
+        recentMean /= static_cast<double>(scenarios.size());
+        EXPECT_NEAR(benchmark.recentAverageRankHistory().back().averageRank, recentMean, 1e-9);
     }
 
     TEST(DriverBenchmarkFixtureTest, ManyTiersBenchmarkRanksEveryRowOnATwelveTierLadder) {
-        const auto seeded = projectSeededBenchmark("rich", "driver-many-tiers.json");
-        const auto &projection = seeded.projection;
-        ASSERT_EQ(projection.completeness, domain::Completeness::Trackable);
-        EXPECT_EQ(seeded.benchmark.tiers.size(), 12U);
+        const auto seeded = evaluateSeededBenchmark("rich", "driver-many-tiers.json");
+        const auto &benchmark = seeded.benchmark;
+        ASSERT_EQ(benchmark.completeness().completeness, domain::Completeness::Trackable);
+        EXPECT_EQ(benchmark.tiers().size(), 12U);
 
         EXPECT_EQ(seeded.attained("entry-gallery-primary"), "grandmaster");
         EXPECT_EQ(seeded.attained("entry-gallery-pasu"), "gold");
@@ -681,25 +674,25 @@ namespace {
         EXPECT_EQ(seeded.attained("entry-gallery-flyts"), "platinum");
         EXPECT_EQ(seeded.attained("entry-gallery-celestial"), "iron");
 
-        ASSERT_TRUE(projection.attainedRank);
-        EXPECT_EQ(projection.attainedRank->value, "grandmaster");
-        ASSERT_TRUE(projection.completedRank);
-        EXPECT_EQ(projection.completedRank->value, "iron");
-        ASSERT_TRUE(projection.nextTier);
-        EXPECT_EQ(projection.nextTier->value, "nova");
+        ASSERT_TRUE(benchmark.attainedRank());
+        EXPECT_EQ(benchmark.attainedRank()->value, "grandmaster");
+        ASSERT_TRUE(benchmark.completedRank());
+        EXPECT_EQ(benchmark.completedRank()->value, "iron");
+        ASSERT_TRUE(benchmark.nextTier());
+        EXPECT_EQ(benchmark.nextTier()->value, "nova");
         std::set<std::string> blockers;
-        for (const auto &blocker: projection.nextTierBlockers) blockers.insert(blocker.entryId.value);
+        for (const auto &blocker: benchmark.nextTierBlockers()) blockers.insert(blocker.entryId.value);
         EXPECT_EQ(blockers, (std::set<std::string>{"entry-gallery-primary", "entry-gallery-pasu"}));
     }
 
     TEST(DriverBenchmarkFixtureTest, SingleScenarioDatasetsLeaveTheOtherRowsUnplayed) {
-        const auto seeded = projectSeededBenchmark("single", "driver-demo.json");
+        const auto seeded = evaluateSeededBenchmark("single", "driver-demo.json");
         EXPECT_EQ(seeded.attained("entry-gallery-primary"), "silver");
         for (const auto *entryId: {"entry-gallery-pasu", "entry-gallery-smoothbot", "entry-gallery-flyts",
                                    "entry-gallery-celestial"}) {
-            EXPECT_EQ(seeded.scenario(entryId).matchState, domain::ScenarioMatchState::MappedUnavailable) << entryId;
+            EXPECT_EQ(seeded.scenario(entryId).matchState(), domain::ScenarioMatchState::MappedUnavailable) << entryId;
         }
-        EXPECT_FALSE(seeded.projection.attainedRank.has_value());
+        EXPECT_FALSE(seeded.benchmark.attainedRank().has_value());
     }
 
     TEST(DriverFaultTest, ParsesPortsOpsAndEffectsAndNamesBadInput) {

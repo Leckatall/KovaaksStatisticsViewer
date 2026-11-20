@@ -8,7 +8,7 @@
 #include <variant>
 #include <vector>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "benchmarks/benchmark_editor.h"
 #include "benchmarks/benchmark_validation.h"
 
@@ -144,6 +144,25 @@ TEST(BenchmarkEditor, AddScenarioRejectsDuplicateDisplayName) {
     EXPECT_EQ(bench.uncategorized.size(), 1U);
 }
 
+TEST(BenchmarkEditor, AddScenarioRejectsADisplayNameUsedInACategoryOrSubcategory) {
+    BenchmarkDefinition bench;
+    bench.categories = {
+        Category{GroupId{"c1"}, "C1", {}, {BenchmarkScenario{BenchmarkScenarioId{"e1"}, "direct", {}, {}}}, {}},
+        Category{GroupId{"c2"}, "C2", {}, {},
+                 {Subcategory{GroupId{"s2"}, "S2", {}, {BenchmarkScenario{BenchmarkScenarioId{"e2"}, "nested", {}, {}}}}}}
+    };
+    BenchmarkEditor editor{bench, countingIds()};
+    const auto before = bench;
+
+    for (const auto *name: {"direct", "nested"}) {
+        EXPECT_EQ(editor.addUnplayedScenario(name).error,
+                  std::make_optional(BenchmarkEditError::DuplicateScenarioName)) << name;
+        EXPECT_EQ(editor.addKnownScenario(name, "hash").error,
+                  std::make_optional(BenchmarkEditError::DuplicateScenarioName)) << name;
+    }
+    EXPECT_EQ(bench, before);
+}
+
 TEST(BenchmarkEditor, ManualBenchmarkHoldsKnownAndUnplayedScenariosTogether) {
     BenchmarkDefinition bench;
     BenchmarkEditor editor{bench, countingIds()};
@@ -200,9 +219,9 @@ TEST(BenchmarkEditor, SetThresholdOnUnknownEntryOrTierReturnsError) {
 
     EXPECT_EQ(editor.setThreshold(entry, TierId{"nope"}, 1.0).error,
               std::make_optional(BenchmarkEditError::UnknownTier));
-    EXPECT_EQ(editor.setThreshold(ScenarioEntryId{"nope"}, tier, 1.0).error,
+    EXPECT_EQ(editor.setThreshold(BenchmarkScenarioId{"nope"}, tier, 1.0).error,
               std::make_optional(BenchmarkEditError::UnknownEntry));
-    EXPECT_EQ(editor.clearThreshold(ScenarioEntryId{"nope"}, tier).error,
+    EXPECT_EQ(editor.clearThreshold(BenchmarkScenarioId{"nope"}, tier).error,
               std::make_optional(BenchmarkEditError::UnknownEntry));
 }
 
@@ -298,14 +317,14 @@ namespace {
         };
     }
 
-    ScenarioEntry scored(const std::string &id, const std::string &name, std::optional<std::string> hash,
+    BenchmarkScenario scored(const std::string &id, const std::string &name, std::optional<std::string> hash,
                          double score) {
-        return ScenarioEntry{ScenarioEntryId{id}, name,
+        return BenchmarkScenario{BenchmarkScenarioId{id}, name,
                              hash ? std::vector<std::string>{std::move(*hash)} : std::vector<std::string>{},
                              {Threshold{TierId{"t1"}, score}}};
     }
 
-    std::vector<std::string> idsOf(const std::vector<ScenarioEntry> &entries) {
+    std::vector<std::string> idsOf(const std::vector<BenchmarkScenario> &entries) {
         std::vector<std::string> ids;
         for (const auto &entry: entries) ids.push_back(entry.id.value);
         return ids;
@@ -329,7 +348,7 @@ namespace {
 
 TEST(BenchmarkTableRows, RepeatedUnnamedAppend) {
     BenchmarkDefinition bench;
-    bench.uncategorized = {ScenarioEntry{ScenarioEntryId{"u0"}, "", {}, {}},
+    bench.uncategorized = {BenchmarkScenario{BenchmarkScenarioId{"u0"}, "", {}, {}},
                            scored("n1", "Named", "h1", 10)};
     const auto before = bench.uncategorized;
     BenchmarkEditor editor{bench, countingIds()};
@@ -356,7 +375,7 @@ TEST(BenchmarkTableAssignment, OrderedAssignment) {
     const BenchmarkDefinition before = bench;
     BenchmarkEditor editor{bench, forbiddenIds()};
 
-    const auto result = editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g3"});
+    const auto result = editor.assignScenarios({BenchmarkScenarioId{"a"}, BenchmarkScenarioId{"c"}}, GroupId{"g3"});
 
     ASSERT_TRUE(result.ok());
     EXPECT_EQ(idsOf(bench.categories.at(2).scenarios), (std::vector<std::string>{"x", "a", "c"}));
@@ -371,8 +390,8 @@ TEST(BenchmarkTableAssignment, PlacedBeforeAnEntryOfAnotherGroup) {
     const BenchmarkDefinition before = bench;
     BenchmarkEditor editor{bench, forbiddenIds()};
 
-    const auto result = editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g2"},
-                                               ScenarioEntryId{"d"});
+    const auto result = editor.assignScenarios({BenchmarkScenarioId{"a"}, BenchmarkScenarioId{"c"}}, GroupId{"g2"},
+                                               BenchmarkScenarioId{"d"});
 
     ASSERT_TRUE(result.ok());
     EXPECT_EQ(idsOf(bench.categories.at(1).scenarios), (std::vector<std::string>{"a", "c", "d"}));
@@ -384,10 +403,10 @@ TEST(BenchmarkTableAssignment, PlacedWithinTheSameGroup) {
     BenchmarkDefinition bench = groupedBench();
     BenchmarkEditor editor{bench, forbiddenIds()};
 
-    ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"b"}}, GroupId{"g1"}, ScenarioEntryId{"a"}).ok());
+    ASSERT_TRUE(editor.assignScenarios({BenchmarkScenarioId{"b"}}, GroupId{"g1"}, BenchmarkScenarioId{"a"}).ok());
     EXPECT_EQ(idsOf(bench.categories.at(0).scenarios), (std::vector<std::string>{"b", "a"}));
 
-    ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"b"}}, GroupId{"g1"}).ok());
+    ASSERT_TRUE(editor.assignScenarios({BenchmarkScenarioId{"b"}}, GroupId{"g1"}).ok());
     EXPECT_EQ(idsOf(bench.categories.at(0).scenarios), (std::vector<std::string>{"a", "b"}));
 }
 
@@ -400,23 +419,23 @@ TEST(BenchmarkTableAssignment, PlacedBeforeAMovingEntryAnchorsToTheNextUnmovedEn
                                scored("u3", "U3", std::nullopt, 9)};
         BenchmarkEditor editor{bench, forbiddenIds()};
 
-        ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"u1"}}, std::monostate{},
-                                           ScenarioEntryId{"u1"}).ok());
+        ASSERT_TRUE(editor.assignScenarios({BenchmarkScenarioId{"a"}, BenchmarkScenarioId{"u1"}}, std::monostate{},
+                                           BenchmarkScenarioId{"u1"}).ok());
         EXPECT_EQ(idsOf(bench.uncategorized), (std::vector<std::string>{"a", "u1", "u2", "u3"}));
     }
     {
         BenchmarkDefinition bench = groupedBench();
         BenchmarkEditor editor{bench, forbiddenIds()};
 
-        ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"d"}, ScenarioEntryId{"a"}}, GroupId{"g2"},
-                                           ScenarioEntryId{"d"}).ok());
+        ASSERT_TRUE(editor.assignScenarios({BenchmarkScenarioId{"d"}, BenchmarkScenarioId{"a"}}, GroupId{"g2"},
+                                           BenchmarkScenarioId{"d"}).ok());
         EXPECT_EQ(idsOf(bench.categories.at(1).scenarios), (std::vector<std::string>{"c", "d", "a"}));
     }
 }
 
 TEST(BenchmarkTableAssignment, RejectedBatchIsUnchanged) {
-    const auto attempt = [](const std::vector<ScenarioEntryId> &ids, const EditorGroupTarget &to,
-                            const std::optional<ScenarioEntryId> &placeBefore = std::nullopt) {
+    const auto attempt = [](const std::vector<BenchmarkScenarioId> &ids, const EditorGroupTarget &to,
+                            const std::optional<BenchmarkScenarioId> &placeBefore = std::nullopt) {
         BenchmarkDefinition bench = groupedBench();
         const BenchmarkDefinition before = bench;
         BenchmarkEditor editor{bench, forbiddenIds()};
@@ -425,10 +444,10 @@ TEST(BenchmarkTableAssignment, RejectedBatchIsUnchanged) {
         return result.error;
     };
 
-    EXPECT_EQ(attempt({ScenarioEntryId{"a"}, ScenarioEntryId{"missing"}}, GroupId{"g3"}),
+    EXPECT_EQ(attempt({BenchmarkScenarioId{"a"}, BenchmarkScenarioId{"missing"}}, GroupId{"g3"}),
               BenchmarkEditError::UnknownEntry);
-    EXPECT_EQ(attempt({ScenarioEntryId{"a"}}, GroupId{"nowhere"}), BenchmarkEditError::UnknownGroup);
-    EXPECT_EQ(attempt({ScenarioEntryId{"a"}}, GroupId{"g3"}, ScenarioEntryId{"c"}),
+    EXPECT_EQ(attempt({BenchmarkScenarioId{"a"}}, GroupId{"nowhere"}), BenchmarkEditError::UnknownGroup);
+    EXPECT_EQ(attempt({BenchmarkScenarioId{"a"}}, GroupId{"g3"}, BenchmarkScenarioId{"c"}),
               BenchmarkEditError::PositionOutOfRange);
 }
 
@@ -436,7 +455,7 @@ TEST(BenchmarkTableAssignment, DividedCategoryAcceptsDirectScenarios) {
     BenchmarkDefinition bench = groupedBench();
     BenchmarkEditor editor{bench, forbiddenIds()};
 
-    ASSERT_TRUE(editor.assignScenarios({ScenarioEntryId{"a"}, ScenarioEntryId{"c"}}, GroupId{"g4"}).ok());
+    ASSERT_TRUE(editor.assignScenarios({BenchmarkScenarioId{"a"}, BenchmarkScenarioId{"c"}}, GroupId{"g4"}).ok());
 
     EXPECT_TRUE(hasIssue(editor.validation(), BenchmarkIssueCode::MixedCategoryContent));
 }
@@ -469,7 +488,7 @@ TEST(BenchmarkTableOrdering, ReorderWithinCollections) {
     BenchmarkEditor editor{bench, forbiddenIds()};
 
     ASSERT_TRUE(editor.reorderSubcategory(GroupId{"q"}, 0).ok());
-    ASSERT_TRUE(editor.reorderScenario(ScenarioEntryId{"b"}, 0).ok());
+    ASSERT_TRUE(editor.reorderScenario(BenchmarkScenarioId{"b"}, 0).ok());
 
     const auto &subs = bench.categories.front().subcategories;
     ASSERT_EQ(subs.size(), 2U);
@@ -481,7 +500,7 @@ TEST(BenchmarkTableOrdering, ReorderWithinCollections) {
     const BenchmarkDefinition reordered = bench;
     EXPECT_EQ(editor.reorderSubcategory(GroupId{"unknown"}, 0).error, BenchmarkEditError::UnknownGroup);
     EXPECT_EQ(editor.reorderSubcategory(GroupId{"p"}, 2).error, BenchmarkEditError::PositionOutOfRange);
-    EXPECT_EQ(editor.reorderScenario(ScenarioEntryId{"unknown"}, 0).error, BenchmarkEditError::UnknownEntry);
-    EXPECT_EQ(editor.reorderScenario(ScenarioEntryId{"a"}, 2).error, BenchmarkEditError::PositionOutOfRange);
+    EXPECT_EQ(editor.reorderScenario(BenchmarkScenarioId{"unknown"}, 0).error, BenchmarkEditError::UnknownEntry);
+    EXPECT_EQ(editor.reorderScenario(BenchmarkScenarioId{"a"}, 2).error, BenchmarkEditError::PositionOutOfRange);
     EXPECT_EQ(bench, reordered);
 }

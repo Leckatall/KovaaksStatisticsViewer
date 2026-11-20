@@ -15,9 +15,9 @@ namespace {
         return Tier{TierId{std::move(id)}, std::move(name), BenchmarkColor{r, 0, 0, 255}};
     }
 
-    ScenarioEntry entry(std::string id, std::string name, std::vector<Threshold> thresholds,
+    BenchmarkScenario entry(std::string id, std::string name, std::vector<Threshold> thresholds,
                         std::optional<std::string> hash = std::nullopt) {
-        return ScenarioEntry{ScenarioEntryId{std::move(id)}, std::move(name),
+        return BenchmarkScenario{BenchmarkScenarioId{std::move(id)}, std::move(name),
                              hash ? std::vector<std::string>{std::move(*hash)} : std::vector<std::string>{},
                              std::move(thresholds)};
     }
@@ -171,6 +171,36 @@ namespace {
     }
 }
 
+TEST(BenchmarkValidation, ScenarioNameIssuesFollowCanonicalEntryOrder) {
+    auto def = trackable();
+    def.uncategorized = {BenchmarkScenario{BenchmarkScenarioId{"u"}, "", {}, {}}};
+    def.categories = {
+        Category{GroupId{"c1"}, "C1", {}, {BenchmarkScenario{BenchmarkScenarioId{"direct"}, "", {}, {}}}, {}},
+        Category{GroupId{"c2"}, "C2", {}, {},
+                 {Subcategory{GroupId{"s2"}, "S2", {}, {BenchmarkScenario{BenchmarkScenarioId{"nested"}, "", {}, {}}}}}}
+    };
+
+    const auto issues = issuesWith(validateBenchmark(def), BenchmarkIssueCode::MissingScenarioName);
+
+    ASSERT_EQ(issues.size(), 3U);
+    EXPECT_EQ(issues[0].target, IssueTarget{BenchmarkScenarioId{"u"}});
+    EXPECT_EQ(issues[1].target, IssueTarget{BenchmarkScenarioId{"direct"}});
+    EXPECT_EQ(issues[2].target, IssueTarget{BenchmarkScenarioId{"nested"}});
+}
+
+TEST(BenchmarkValidation, DuplicateHashIsReportedOnTheLaterEntryInCanonicalOrder) {
+    auto def = trackable();
+    def.uncategorized.front().hashes = {"HASH"};
+    const Subcategory sub{GroupId{"s1"}, "S1", {},
+                          {entry("nested", "Other", {{TierId{"t1"}, 50.0}}, "HASH")}};
+    def.categories = {Category{GroupId{"c1"}, "C1", {}, {}, {sub}}};
+
+    const auto issues = issuesWith(validateBenchmark(def), BenchmarkIssueCode::DuplicateResolvedHash);
+
+    ASSERT_EQ(issues.size(), 1U);
+    EXPECT_EQ(issues.front().target, IssueTarget{BenchmarkScenarioId{"nested"}});
+}
+
 TEST(BenchmarkTableValidation, MissingElementNames) {
     BenchmarkDefinition def;
     def.id = BenchmarkId{"b1"};
@@ -190,7 +220,7 @@ TEST(BenchmarkTableValidation, MissingElementNames) {
     EXPECT_EQ(tierNames.front().target, IssueTarget{TierId{"t1"}});
     const auto scenarioNames = issuesWith(result, BenchmarkIssueCode::MissingScenarioName);
     ASSERT_EQ(scenarioNames.size(), 1U);
-    EXPECT_EQ(scenarioNames.front().target, IssueTarget{ScenarioEntryId{"e1"}});
+    EXPECT_EQ(scenarioNames.front().target, IssueTarget{BenchmarkScenarioId{"e1"}});
     // Uncategorized is neutral and has no user name to be missing; only c1 and s1 qualify.
     const auto groupNames = issuesWith(result, BenchmarkIssueCode::MissingGroupName);
     ASSERT_EQ(groupNames.size(), 2U);
@@ -211,7 +241,7 @@ TEST(BenchmarkTableValidation, ThresholdCellLocations) {
 
     const auto expectCell = [&](BenchmarkIssueCode code, const std::vector<std::string> &tiers) {
         const auto issues = issuesWith(result, code);
-        for (const auto &issue: issues) EXPECT_EQ(issue.target, IssueTarget{ScenarioEntryId{"e"}});
+        for (const auto &issue: issues) EXPECT_EQ(issue.target, IssueTarget{BenchmarkScenarioId{"e"}});
         EXPECT_EQ(tierIdsOf(issues), tiers) << static_cast<int>(code);
     };
     expectCell(BenchmarkIssueCode::MissingThreshold, {"t1"});

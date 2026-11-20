@@ -57,7 +57,7 @@ namespace {
     Tier tier(const std::string &id, const std::string &name) { return {TierId{id}, name, {}}; }
 
     BenchmarkDefinition draftWith(const std::string &name, const std::vector<Tier> &tiers,
-                        const std::vector<ScenarioEntry> &uncategorized) {
+                        const std::vector<BenchmarkScenario> &uncategorized) {
         BenchmarkDefinition benchmark;
         benchmark.id = BenchmarkId{"b1"};
         benchmark.name = name;
@@ -527,7 +527,7 @@ TEST(BenchmarkManagerResolution, ScenarioNodesCarryTheirMatchState) {
 TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
-    ScenarioResolution ambiguous{ScenarioEntryId{"e1"}, ScenarioMatchState::Ambiguous, {}};
+    ScenarioResolution ambiguous{BenchmarkScenarioId{"e1"}, ScenarioMatchState::Ambiguous, {}};
     ambiguous.candidates.push_back(
         {"ha", 3, std::chrono::sys_seconds{std::chrono::seconds{1'700'000'000}}});
     ambiguous.candidates.push_back({"hb", 7, std::nullopt});
@@ -548,7 +548,7 @@ TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
 TEST(BenchmarkManagerResolution, AnAutoMappableNodeReportsItsSingleCandidate) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
-    ScenarioResolution mappable{ScenarioEntryId{"e1"}, ScenarioMatchState::AutoMappable, {}};
+    ScenarioResolution mappable{BenchmarkScenarioId{"e1"}, ScenarioMatchState::AutoMappable, {}};
     mappable.candidates.push_back({"h1", 1, std::nullopt});
     f.uc->nextResolveResult = {mappable};
     f.uc->stateValue.resolutionWriteFailed = true;
@@ -775,18 +775,18 @@ TEST(BenchmarkManagerVm, DeleteDoesNotSilentlyDestroyOpenWorkingCopy) {
 // ── Table projection ────────────────────────────────────────────────────────────────────────────
 
 namespace {
-    ScenarioEntry tableEntry(const std::string &id, std::optional<std::string> hash = std::nullopt,
+    BenchmarkScenario tableEntry(const std::string &id, std::optional<std::string> hash = std::nullopt,
                              const std::vector<std::pair<std::string, double>> &scores = {}) {
         return benchmarkEntry(id, "Scenario " + id, std::move(hash), scores);
     }
 
-    Category tableCategory(const std::string &id, std::vector<ScenarioEntry> direct,
+    Category tableCategory(const std::string &id, std::vector<BenchmarkScenario> direct,
                            std::vector<Subcategory> subs = {}) {
         return Category{GroupId{id}, "Category " + id, BenchmarkColor{10, 20, 30, 255}, std::move(direct),
                         std::move(subs)};
     }
 
-    Subcategory tableSub(const std::string &id, std::vector<ScenarioEntry> entries) {
+    Subcategory tableSub(const std::string &id, std::vector<BenchmarkScenario> entries) {
         return Subcategory{GroupId{id}, "Sub " + id, BenchmarkColor{40, 50, 60, 255}, std::move(entries)};
     }
 
@@ -1368,13 +1368,10 @@ namespace {
     // The working copy as the view model last handed it to resolution: every edit re-resolves.
     const BenchmarkDefinition &working(const TableFixture &f) { return f.uc->resolveCalls.back(); }
 
-    const ScenarioEntry &entryIn(const BenchmarkDefinition &bench, const std::string &id) {
-        const auto matches = [&](const ScenarioEntry &e) { return e.id.value == id; };
-        for (const auto &e: bench.uncategorized) if (matches(e)) return e;
-        for (const auto &category: bench.categories) {
-            for (const auto &e: category.scenarios) if (matches(e)) return e;
-            for (const auto &sub: category.subcategories) for (const auto &e: sub.scenarios) if (matches(e)) return e;
-        }
+    const BenchmarkScenario &entryIn(const BenchmarkDefinition &bench, const std::string &id) {
+        const auto entries = bench.entries();
+        const auto found = std::ranges::find_if(entries, [&](const auto *entry) { return entry->id.value == id; });
+        if (found != entries.end()) return **found;
         throw std::out_of_range("no entry " + id);
     }
 
@@ -1608,6 +1605,25 @@ TEST(BenchmarkTablePaste, MultiRowPasteSkipsEmptyGroupRows) {
     EXPECT_EQ(scoreOf(working(f), "b", "t1"), 1.0);
     EXPECT_EQ(scoreOf(working(f), "u", "t1"), 2.0);
     EXPECT_EQ(f.rowIds(), (QStringList{"a", "b", "u"})) << "the rows already there took the paste";
+}
+
+TEST(BenchmarkTablePaste, PasteFromTheLastSubcategoryEntryContinuesIntoUncategorized) {
+    const DefaultLocaleGuard guard{QLocale{QLocale::English, QLocale::UnitedKingdom}};
+    TableFixture f;
+    auto bench = pasteBench();
+    bench.categories = {tableCategory("g1", {}, {tableSub("s1", {
+        benchmarkEntry("a", "A", "ha", {{"t1", 10}, {"t2", 20}}),
+        benchmarkEntry("b", "B", "hb", {{"t1", 11}, {"t2", 21}}),
+    })})};
+    f.open(bench);
+    ASSERT_EQ(f.tableOrder(), (QStringList{"a", "b", "u"}));
+
+    ASSERT_TRUE(f.vm->pasteText(at("threshold", "b", "t1"), "1\n2")["ok"].toBool());
+
+    EXPECT_EQ(scoreOf(working(f), "b", "t1"), 1.0);
+    EXPECT_EQ(scoreOf(working(f), "u", "t1"), 2.0);
+    EXPECT_EQ(scoreOf(working(f), "a", "t1"), 10.0);
+    EXPECT_EQ(f.rowIds(), (QStringList{"a", "b", "u"}));
 }
 
 // ── Undo ────────────────────────────────────────────────────────────────────────────────────────
@@ -2457,7 +2473,7 @@ namespace {
         return names;
     }
 
-    QStringList idsOf(const std::vector<ScenarioEntry> &entries) {
+    QStringList idsOf(const std::vector<BenchmarkScenario> &entries) {
         QStringList ids;
         for (const auto &entry: entries) ids << QString::fromStdString(entry.id.value);
         return ids;

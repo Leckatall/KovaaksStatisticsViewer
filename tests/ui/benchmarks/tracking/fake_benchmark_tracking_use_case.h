@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <functional>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <utility>
@@ -17,17 +18,46 @@
 #include "contracts/i_benchmark_tracking_use_case.h"
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_ids.h"
-#include "benchmarks/benchmark_projection.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"
+#include "benchmark_builders.h"
 
 namespace ksv::tests_ui {
+    struct BenchmarkFixture {
+        domain::BenchmarkDefinition definition;
+        std::vector<domain::RunFact> runs;
+        std::vector<domain::ScenarioResolution> resolutions;
+        std::optional<domain::CompletenessResult> completeness;
+
+        [[nodiscard]] domain::Benchmark evaluate() const {
+            if (!completeness) return tests_support::evaluatedBenchmark(definition, runs, resolutions);
+
+            auto matches = resolutions;
+            if (matches.empty()) {
+                for (const auto *entry: definition.entries())
+                    matches.push_back(tests_support::resolvedEntry(entry->id.value));
+            }
+            return domain::Benchmark(definition, *completeness, matches, runs);
+        }
+    };
+
+    inline application::BenchmarkWorkspaceSnapshot snapshotFor(const BenchmarkFixture &fixture);
+
     // The only dependency BenchmarkTrackingViewModel and its child models are allowed: a single
     // IBenchmarkTrackingUseCase. `snap` is the mutable revision; assign a new one and call
     // publish() to drive an onChanged notification exactly as the real use case would.
     class FakeBenchmarkTrackingUseCase final : public application::IBenchmarkTrackingUseCase {
     public:
         application::BenchmarkWorkspaceSnapshot snap;
+        BenchmarkFixture fixture;
+
+        void show(BenchmarkFixture next) {
+            fixture = std::move(next);
+            snap = snapshotFor(fixture);
+        }
+
+        void reevaluate() { snap.benchmark = fixture.evaluate(); }
+
         std::vector<domain::BenchmarkId> selectCalls;
         int clearCalls = 0;
         int selectDefaultCalls = 0;
@@ -42,8 +72,9 @@ namespace ksv::tests_ui {
         }
         [[nodiscard]] std::optional<domain::BenchmarkId> selected() const override { return snap.selectedId; }
         [[nodiscard]] application::BenchmarkTrackingState state() const override { return snap.availability; }
-        [[nodiscard]] const domain::BenchmarkProjection *projection() const override {
-            return snap.projection ? &*snap.projection : nullptr;
+        [[nodiscard]] const domain::Benchmark *benchmark() const override {
+            return snap.availability == application::BenchmarkTrackingState::Ready && snap.benchmark
+                       ? &*snap.benchmark : nullptr;
         }
         void onChanged(std::function<void()> callback) override { m_callbacks.push_back(std::move(callback)); }
         void onPlaytimeChanged(std::function<void()> callback) override {
@@ -124,164 +155,105 @@ namespace ksv::tests_ui {
         return choice;
     }
 
-    inline domain::ScenarioProjection vtScenario(const std::string &id, const std::string &name,
-                                                 const std::optional<double> personalBest,
-                                                 const std::optional<double> recentAverage,
-                                                 const int recentSampleCount,
-                                                 const std::optional<std::string> &attainedTier,
-                                                 const std::optional<domain::Threshold> &nextThreshold,
-                                                 const domain::ScenarioMatchState matchState) {
-        domain::ScenarioProjection scenario;
-        scenario.entryId = domain::ScenarioEntryId{id};
-        scenario.name = name;
-        scenario.matchState = matchState;
-        scenario.personalBest = personalBest;
-        scenario.recentAverage = recentAverage;
-        scenario.recentSampleCount = recentSampleCount;
-        scenario.runCount = recentSampleCount;
-        if (attainedTier) scenario.attainedTier = domain::TierId{*attainedTier};
-        scenario.nextThreshold = nextThreshold;
-        return scenario;
+    inline std::vector<domain::Tier> standardTiers() {
+        return {vtTier("t1", "Bronze"), vtTier("t2", "Silver"), vtTier("t3", "Gold")};
     }
 
-    // A Ready + Trackable revision for benchmark "b1": three tiers, one "Clicking" category holding
-    // "s1", one uncategorized "s2", attained Silver with Gold next, two blockers, two-day rank and
-    // rolling-playtime histories, and a three-day recent-rank history that dips on its last day.
+    inline std::vector<domain::Threshold> standardThresholds(double bronze, double silver, double gold) {
+        return {{{"t1"}, bronze}, {{"t2"}, silver}, {{"t3"}, gold}};
+    }
+
+    inline domain::RunFact runOn(std::chrono::sys_days day, const std::string &hash,
+                                 float score, float duration = 0.0F) {
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(day.time_since_epoch()).count();
+        return tests_support::benchmarkFact(hash, ms, score, duration);
+    }
+
+    inline BenchmarkFixture makeTrackableFixture() {
+        using namespace tests_support;
+        BenchmarkFixture fixture;
+        auto &definition = fixture.definition;
+        definition.id = domain::BenchmarkId{"b1"};
+        definition.name = "Voltaic";
+        definition.tiers = standardTiers();
+        definition.uncategorized = {
+            benchmarkEntry("s2", "pasu", "h2", {{"t1", 500}, {"t2", 700}, {"t3", 900}})};
+        definition.categories = {
+            {domain::GroupId{"c1"}, "Clicking", {},
+             {benchmarkEntry("s1", "1w6ts", "h1", {{"t1", 400}, {"t2", 600}, {"t3", 1000}})}, {}}};
+        fixture.runs = {runOn(ymd(2024, 3, 4), "h1", 600, 1800),
+                        runOn(ymd(2024, 3, 5), "h1", 500),
+                        runOn(ymd(2024, 3, 6), "h1", 800, 900),
+                        runOn(ymd(2024, 3, 6), "h2", 800, 961)};
+        return fixture;
+    }
+
+    inline BenchmarkFixture makeBreakdownFixture() {
+        using namespace tests_support;
+        BenchmarkFixture fixture;
+        auto &definition = fixture.definition;
+        definition.id = domain::BenchmarkId{"b1"};
+        definition.name = "Voltaic";
+        definition.tiers = standardTiers();
+        const std::vector<std::pair<std::string, double>> defaultThresholds{
+            {"t1", 600}, {"t2", 900}, {"t3", 1200}};
+        definition.uncategorized = {benchmarkEntry("u1", "PlainOne", std::nullopt, defaultThresholds),
+                                    benchmarkEntry("u2", "PlainTwo", std::nullopt, defaultThresholds)};
+        definition.categories = {
+            {domain::GroupId{"c1"}, "Clicking", {255, 0, 0},
+             {benchmarkEntry("e1", "1w6ts", "h1", {{"t1", 500}, {"t2", 850}, {"t3", 1200}}),
+              benchmarkEntry("e2", "pasu", "gone", defaultThresholds)}, {}},
+            {domain::GroupId{"c2"}, "Tracking", {0, 128, 255}, {},
+             {{domain::GroupId{"sc1"}, "Smoothness", {0, 200, 0},
+               {benchmarkEntry("e3", "smoothbot", "h3", {{"t1", 300}, {"t2", 600}, {"t3", 900}})}}}}};
+        fixture.resolutions = {unresolvedEntry("u1"), autoMappableEntry("u2", "candidate"),
+                               resolvedEntry("e1"), mappedUnavailableEntry("e2"),
+                               ambiguousEntry("e3", {"h3", "candidate"})};
+        fixture.runs = {runOn(ymd(2024, 3, 4), "h1", 760, 60), runOn(ymd(2024, 3, 5), "h1", 800, 60)};
+        return fixture;
+    }
+
+    inline BenchmarkFixture makeUniformFixture(
+        int tierCount, std::initializer_list<std::pair<int, float>> dayScores, double thresholdStep = 1.0) {
+        BenchmarkFixture fixture;
+        auto &definition = fixture.definition;
+        definition.id = domain::BenchmarkId{"b1"};
+        definition.name = "Voltaic";
+        auto entry = tests_support::benchmarkEntry("u", "Uniform", "u", {});
+        if (tierCount == 3) definition.tiers = standardTiers();
+        for (int rank = 1; rank <= tierCount; ++rank) {
+            const auto id = "t" + std::to_string(rank);
+            if (tierCount != 3) definition.tiers.push_back(vtTier(id, "Tier " + std::to_string(rank)));
+            entry.thresholds.push_back({domain::TierId{id}, rank * thresholdStep});
+        }
+        definition.uncategorized.push_back(std::move(entry));
+        for (const auto &[day, score]: dayScores)
+            fixture.runs.push_back(runOn(ymd(2024, 3, 4) + std::chrono::days(day - 4), "u", score, 60));
+        return fixture;
+    }
+
+    inline application::BenchmarkWorkspaceSnapshot snapshotFor(const BenchmarkFixture &fixture) {
+        application::BenchmarkWorkspaceSnapshot snapshot;
+        snapshot.libraryRevision = 1;
+        snapshot.selectedId = fixture.definition.id;
+        snapshot.lastKnownSelectedDisplayName = fixture.definition.name;
+        snapshot.availability = application::BenchmarkTrackingState::Ready;
+        snapshot.benchmark = fixture.evaluate();
+        const auto classification = snapshot.benchmark->completeness().completeness == domain::Completeness::Trackable
+                                        ? application::BenchmarkChoiceClassification::Trackable
+                                        : application::BenchmarkChoiceClassification::Incomplete;
+        snapshot.choices = {vtChoice(fixture.definition.id.value + ".json", fixture.definition.id.value,
+                                     fixture.definition.name, classification, true)};
+        snapshot.visiblePlaytime = {{ymd(2024, 3, 4), 1800.0}, {ymd(2024, 3, 6), 900.0}};
+        return snapshot;
+    }
+
     inline application::BenchmarkWorkspaceSnapshot makeTrackableSnapshot() {
-        domain::BenchmarkDefinition definition;
-        definition.id = domain::BenchmarkId{"b1"};
-        definition.name = "Voltaic";
-        definition.tiers = {vtTier("t1", "Bronze"), vtTier("t2", "Silver"), vtTier("t3", "Gold")};
-
-        domain::ScenarioEntry s1{domain::ScenarioEntryId{"s1"}, "1w6ts", std::vector<std::string>{"h1"}, {}};
-        domain::ScenarioEntry s2{domain::ScenarioEntryId{"s2"}, "pasu", {}, {}};
-        domain::Category clicking{domain::GroupId{"c1"}, "Clicking", {}, {s1}, {}};
-        definition.categories = {clicking};
-        definition.uncategorized = {s2};
-
-        domain::BenchmarkProjection projection;
-        projection.benchmarkId = domain::BenchmarkId{"b1"};
-        projection.completeness = domain::Completeness::Trackable;
-        projection.tiers = definition.tiers;
-        projection.attainedRank = domain::TierId{"t2"};
-        projection.completedRank = std::nullopt;
-        projection.nextTier = domain::TierId{"t3"};
-        projection.averageRank = 2.5;
-        projection.totalPlaytimeSeconds = 3661.0;
-        projection.scenariosAtNextTier = 1;
-        projection.nextTierBlockers = {
-            domain::RankBlocker{domain::ScenarioEntryId{"s1"}, domain::GroupId{"c1"}, 850.0, 800.0},
-            domain::RankBlocker{domain::ScenarioEntryId{"s2"}, std::nullopt, 900.0, std::nullopt},
-        };
-        projection.scenarios = {
-            vtScenario("s1", "1w6ts", 800.0, 790.0, 3, std::string{"t1"},
-                       domain::Threshold{domain::TierId{"t2"}, 850.0}, domain::ScenarioMatchState::Resolved),
-            vtScenario("s2", "pasu", std::nullopt, std::nullopt, 0, std::nullopt, std::nullopt,
-                       domain::ScenarioMatchState::Unresolved),
-        };
-        projection.uncategorized = {domain::ScenarioEntryId{"s2"}};
-        projection.categories = {
-            domain::GroupProjection{domain::GroupId{"c1"}, "Clicking", domain::TierId{"t1"},
-                                    {domain::ScenarioEntryId{"s1"}}, {}},
-        };
-        projection.averageRankHistory = {
-            {ymd(2024, 3, 4), 1.0},
-            {ymd(2024, 3, 6), 2.5},
-        };
-        projection.recentAverageRankHistory = {
-            {ymd(2024, 3, 4), 1.0},
-            {ymd(2024, 3, 5), 1.4},
-            {ymd(2024, 3, 6), 1.2},
-        };
-        projection.rollingPlaytime = {
-            {ymd(2024, 3, 4), 1800.0},
-            {ymd(2024, 3, 6), 900.0},
-        };
-
-        application::BenchmarkWorkspaceSnapshot snapshot;
-        snapshot.libraryRevision = 1;
-        snapshot.choices = {vtChoice("b1.json", std::string{"b1"}, "Voltaic",
-                                     application::BenchmarkChoiceClassification::Trackable, true)};
-        snapshot.selectedId = domain::BenchmarkId{"b1"};
-        snapshot.lastKnownSelectedDisplayName = "Voltaic";
-        snapshot.availability = application::BenchmarkTrackingState::Ready;
-        snapshot.selectedLoaded = data::LoadedBenchmark{
-            definition, domain::CompletenessResult{domain::Completeness::Trackable, {}}};
-        snapshot.projection = projection;
-        return snapshot;
+        return snapshotFor(makeTrackableFixture());
     }
 
-    // A Ready + Trackable revision with a deeper hierarchy for the breakdown model: an
-    // Uncategorized bucket ("u1" Unresolved, "u2" AutoMappable), a "Clicking" category with direct
-    // scenarios "e1"/"e2", and a "Tracking" category whose only child is the "Smoothness"
-    // subcategory holding "e3". Blockers name "e2" (under Clicking) and "e3" (under Smoothness).
     inline application::BenchmarkWorkspaceSnapshot makeBreakdownSnapshot() {
-        domain::BenchmarkDefinition definition;
-        definition.id = domain::BenchmarkId{"b1"};
-        definition.name = "Voltaic";
-        definition.tiers = {vtTier("t1", "Bronze"), vtTier("t2", "Silver"), vtTier("t3", "Gold")};
-
-        domain::ScenarioEntry u1{domain::ScenarioEntryId{"u1"}, "PlainOne", {}, {}};
-        domain::ScenarioEntry u2{domain::ScenarioEntryId{"u2"}, "PlainTwo", {}, {}};
-        domain::ScenarioEntry e1{domain::ScenarioEntryId{"e1"}, "1w6ts", std::vector<std::string>{"h1"}, {}};
-        domain::ScenarioEntry e2{domain::ScenarioEntryId{"e2"}, "pasu", std::vector<std::string>{"gone"}, {}};
-        domain::ScenarioEntry e3{domain::ScenarioEntryId{"e3"}, "smoothbot", std::vector<std::string>{"h3"}, {}};
-        definition.uncategorized = {u1, u2};
-
-        domain::Category clicking{domain::GroupId{"c1"}, "Clicking",
-                                  domain::BenchmarkColor{255, 0, 0}, {e1, e2}, {}};
-        domain::Subcategory smoothness{domain::GroupId{"sc1"}, "Smoothness",
-                                       domain::BenchmarkColor{0, 200, 0}, {e3}};
-        domain::Category tracking{domain::GroupId{"c2"}, "Tracking",
-                                  domain::BenchmarkColor{0, 128, 255}, {}, {smoothness}};
-        definition.categories = {clicking, tracking};
-
-        domain::BenchmarkProjection projection;
-        projection.benchmarkId = domain::BenchmarkId{"b1"};
-        projection.completeness = domain::Completeness::Trackable;
-        projection.tiers = definition.tiers;
-        projection.attainedRank = domain::TierId{"t1"};
-        projection.nextTier = domain::TierId{"t2"};
-        projection.averageRank = 1.5;
-        projection.totalPlaytimeSeconds = 7200.0;
-        projection.uncategorized = {domain::ScenarioEntryId{"u1"}, domain::ScenarioEntryId{"u2"}};
-        projection.categories = {
-            domain::GroupProjection{domain::GroupId{"c1"}, "Clicking", domain::TierId{"t1"},
-                                    {domain::ScenarioEntryId{"e1"}, domain::ScenarioEntryId{"e2"}}, {}},
-            domain::GroupProjection{
-                domain::GroupId{"c2"}, "Tracking", std::nullopt, {},
-                {domain::GroupProjection{domain::GroupId{"sc1"}, "Smoothness", domain::TierId{"t2"},
-                                         {domain::ScenarioEntryId{"e3"}}, {}}}},
-        };
-        projection.scenarios = {
-            vtScenario("u1", "PlainOne", 100.0, 90.0, 2, std::string{"t1"},
-                       domain::Threshold{domain::TierId{"t2"}, 150.0}, domain::ScenarioMatchState::Unresolved),
-            vtScenario("u2", "PlainTwo", std::nullopt, std::nullopt, 0, std::nullopt, std::nullopt,
-                       domain::ScenarioMatchState::AutoMappable),
-            vtScenario("e1", "1w6ts", 800.0, 780.0, 3, std::string{"t1"},
-                       domain::Threshold{domain::TierId{"t2"}, 850.0}, domain::ScenarioMatchState::Resolved),
-            vtScenario("e2", "pasu", std::nullopt, std::nullopt, 0, std::nullopt, std::nullopt,
-                       domain::ScenarioMatchState::MappedUnavailable),
-            vtScenario("e3", "smoothbot", 500.0, 490.0, 5, std::nullopt,
-                       domain::Threshold{domain::TierId{"t1"}, 300.0}, domain::ScenarioMatchState::Ambiguous),
-        };
-        projection.nextTierBlockers = {
-            domain::RankBlocker{domain::ScenarioEntryId{"e2"}, domain::GroupId{"c1"}, 850.0, std::nullopt},
-            domain::RankBlocker{domain::ScenarioEntryId{"e3"}, domain::GroupId{"sc1"}, 300.0, 500.0},
-        };
-        projection.scenariosAtNextTier = 2;
-
-        application::BenchmarkWorkspaceSnapshot snapshot;
-        snapshot.libraryRevision = 1;
-        snapshot.choices = {vtChoice("b1.json", std::string{"b1"}, "Voltaic",
-                                     application::BenchmarkChoiceClassification::Trackable, true)};
-        snapshot.selectedId = domain::BenchmarkId{"b1"};
-        snapshot.lastKnownSelectedDisplayName = "Voltaic";
-        snapshot.availability = application::BenchmarkTrackingState::Ready;
-        snapshot.selectedLoaded = data::LoadedBenchmark{
-            definition, domain::CompletenessResult{domain::Completeness::Trackable, {}}};
-        snapshot.projection = projection;
-        return snapshot;
+        return snapshotFor(makeBreakdownFixture());
     }
 }
 

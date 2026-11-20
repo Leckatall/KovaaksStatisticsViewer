@@ -17,7 +17,7 @@ using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
-    BenchmarkDefinition benchmarkWith(const std::string &id, std::vector<ScenarioEntry> entries) {
+    BenchmarkDefinition benchmarkWith(const std::string &id, std::vector<BenchmarkScenario> entries) {
         BenchmarkDefinition value;
         value.id = BenchmarkId{id};
         value.name = "Bench " + id;
@@ -174,8 +174,53 @@ TEST(BenchmarkResolutionUseCase, AutoMappingNeverDuplicatesAnAlreadyUsedHash) {
 
     for (const auto &batch: f.benchmarks->batchRequests)
         for (const auto &request: batch)
-            for (const auto &entry: request.benchmark.uncategorized)
-                EXPECT_FALSE(entry.id.value == "dupe" && entry.hashes == std::vector<std::string>{"h1"});
+            for (const auto *entry: request.benchmark.entries())
+                EXPECT_FALSE(entry->id.value == "dupe" && entry->hashes == std::vector<std::string>{"h1"});
+}
+
+TEST(BenchmarkResolutionUseCase, ResolutionsFollowCanonicalEntryOrder) {
+    Fixture f;
+    f.played("Alpha", "h1");
+    auto bench = benchmarkWith("b1", {benchmarkEntry("u", "Alpha", std::nullopt, {})});
+    bench.categories = {
+        Category{GroupId{"c1"}, "C1", {}, {benchmarkEntry("c", "Beta", std::nullopt, {})}, {}},
+        Category{GroupId{"c2"}, "C2", {}, {},
+                 {Subcategory{GroupId{"s2"}, "S2", {}, {benchmarkEntry("s", "Gamma", std::nullopt, {})}}}}
+    };
+    f.library({bench});
+    f.benchmarks->nextBatchOutcome = {{admitted("b1")}};
+
+    const auto useCase = f.build();
+    const auto snap = useCase->snapshot();
+
+    ASSERT_TRUE(snap.resolutions.contains(BenchmarkId{"b1"}));
+    std::vector<std::string> ids;
+    for (const auto &resolution: resolutionsFor(snap, "b1")) ids.push_back(resolution.entryId.value);
+    EXPECT_EQ(ids, (std::vector<std::string>{"u", "c", "s"}));
+}
+
+TEST(BenchmarkResolutionUseCase, AutoMappingSkipsAHashAlreadyMappedInASubcategory) {
+    Fixture f;
+    f.played("Alpha", "h1");
+    auto bench = benchmarkWith("b1", {benchmarkEntry("dupe", "Alpha", std::nullopt, {})});
+    const Subcategory sub{GroupId{"s1"}, "S1", {},
+                          {benchmarkEntry("pinned", "Alpha", std::string{"h1"}, {})}};
+    bench.categories = {Category{GroupId{"c1"}, "C1", {}, {}, {sub}}};
+    f.library({bench});
+    f.benchmarks->nextBatchOutcome = {{admitted("b1")}};
+
+    const auto useCase = f.build();
+    const auto snap = useCase->snapshot();
+
+    ASSERT_TRUE(snap.resolutions.contains(BenchmarkId{"b1"}));
+    const auto &resolutions = resolutionsFor(snap, "b1");
+    ASSERT_EQ(resolutions.size(), 2U);
+    ASSERT_EQ(resolutions.front().entryId, BenchmarkScenarioId{"dupe"});
+    EXPECT_EQ(resolutions.front().state, ScenarioMatchState::AutoMappable);
+    for (const auto &batch: f.benchmarks->batchRequests)
+        for (const auto &request: batch)
+            for (const auto *entry: request.benchmark.entries())
+                EXPECT_FALSE(entry->id.value == "dupe" && entry->hashes == std::vector<std::string>{"h1"});
 }
 
 TEST(BenchmarkResolutionUseCase, ProfileOnlyChangePublishesDerivedStateWithoutWrite) {

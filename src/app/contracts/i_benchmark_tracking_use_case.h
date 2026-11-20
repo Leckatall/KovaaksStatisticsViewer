@@ -4,8 +4,8 @@
 #include <functional>
 #include <optional>
 
+#include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_ids.h"
-#include "benchmarks/benchmark_projection.h"
 #include "graph_presentation.h"
 
 namespace ksv::application {
@@ -13,9 +13,8 @@ namespace ksv::application {
 
     struct BenchmarkWorkspaceSnapshot;
 
-    // Asynchronous-ready by construction: no command returns a projection. A consumer selects,
-    // waits for onChanged, then reads snapshot(). Moving evaluation onto a worker later would
-    // change only when the callback fires, not the shape any caller depends on.
+    // A consumer selects, waits for onChanged, then reads snapshot(). Moving evaluation onto a
+    // worker later would change only when the callback fires.
     class IBenchmarkTrackingUseCase {
     public:
         virtual ~IBenchmarkTrackingUseCase() = default;
@@ -37,10 +36,9 @@ namespace ksv::application {
         [[nodiscard]] virtual std::optional<domain::BenchmarkId> selected() const = 0;
         [[nodiscard]] virtual BenchmarkTrackingState state() const = 0;
         // nullptr unless state() is Ready.
-        [[nodiscard]] virtual const domain::BenchmarkProjection *projection() const = 0;
+        [[nodiscard]] virtual const domain::Benchmark *benchmark() const = 0;
         virtual void onChanged(std::function<void()> callback) = 0;
-        // Fired instead of onChanged when only the playtime graph's window or range moved: the
-        // snapshot's projection summaries and rank history are the ones the last onChanged delivered.
+        // Fired instead of onChanged when only the playtime graph's window or range moved.
         virtual void onPlaytimeChanged(std::function<void()> callback) = 0;
         // Likewise for a rank graph's range: only the snapshot view of the named graph moved -
         // `rank` for BenchmarkRank, `recentRank` for BenchmarkRecentRank.
@@ -48,8 +46,7 @@ namespace ksv::application {
         // `graph` is BenchmarkRank, BenchmarkRecentRank or BenchmarkPlaytime; selecting another
         // benchmark never changes it.
         [[nodiscard]] virtual GraphPresentation presentation(GraphKey graph) const = 0;
-        // Fires for a committed style change of any benchmark graph and nothing else: no
-        // evaluation, projection or range moved.
+        // Fires only for a committed style change of a benchmark graph.
         virtual void onPresentationChanged(std::function<void()> callback) = 0;
     };
 }

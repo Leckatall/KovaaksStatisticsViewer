@@ -558,12 +558,14 @@ namespace {
             if (!in.open(QIODevice::ReadOnly)) lines << file + "|unreadable";
             lines << file + "|" + QCryptographicHash::hash(in.readAll(), QCryptographicHash::Sha1).toHex();
         }
-        if (const auto *projection = app.benchmarkTrackingUseCase()->projection()) {
-            lines << QString("benchmark|play=%1|avg=%2|history=%3").arg(projection->totalPlaytimeSeconds)
-                    .arg(projection->averageRank.value_or(-1.0)).arg(projection->averageRankHistory.size());
-            for (const auto &scenario: projection->scenarios)
-                lines << QString("entry|%1|runs=%2|pb=%3|play=%4").arg(scenario.name.c_str()).arg(scenario.runCount)
-                        .arg(scenario.personalBest.value_or(-1.0)).arg(scenario.playtimeSeconds);
+        if (const auto *benchmark = app.benchmarkTrackingUseCase()->benchmark()) {
+            lines << QString("benchmark|play=%1|avg=%2|history=%3").arg(benchmark->totalPlaytimeSeconds())
+                    .arg(benchmark->averageRank().value_or(-1.0)).arg(benchmark->averageRankHistory().size());
+            for (const auto *scenario: benchmark->scenarios()) {
+                const auto &stats = scenario->stats();
+                lines << QString("entry|%1|runs=%2|pb=%3|play=%4").arg(scenario->name().c_str()).arg(stats ? stats->runCount() : 0)
+                        .arg(stats ? stats->personalBest() : -1.0).arg(stats ? stats->playtimeSeconds() : 0.0);
+            }
         }
         return {lines};
     }

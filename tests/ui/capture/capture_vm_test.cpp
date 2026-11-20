@@ -119,16 +119,11 @@ namespace ksv::ui {
         }
 
         std::shared_ptr<FakeBenchmarkTrackingUseCase> incompleteUseCase() {
-            auto snapshot = makeBreakdownSnapshot();
-            snapshot.selectedLoaded->completeness = CompletenessResult{
+            auto fixture = tests_ui::makeBreakdownFixture();
+            fixture.completeness = CompletenessResult{
                 Completeness::Incomplete, {BenchmarkIssue{BenchmarkIssueCode::MissingThreshold, std::monostate{}}}};
-            snapshot.projection->completeness = Completeness::Incomplete;
-            snapshot.projection->attainedRank.reset();
-            snapshot.projection->nextTier.reset();
-            snapshot.projection->averageRank.reset();
-            snapshot.projection->nextTierBlockers.clear();
             auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
-            fake->snap = std::move(snapshot);
+            fake->show(std::move(fixture));
             return fake;
         }
 

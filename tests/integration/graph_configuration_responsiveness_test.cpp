@@ -273,14 +273,18 @@ namespace {
         }
     };
 
-    QStringList benchmarkSummary(const domain::BenchmarkProjection &projection) {
+    QStringList benchmarkSummary(const domain::Benchmark &benchmark) {
         QStringList lines;
-        lines << QString("play=%1|avg=%2|history=%3|rank=%4").arg(projection.totalPlaytimeSeconds)
-                .arg(projection.averageRank.value_or(-1.0)).arg(projection.averageRankHistory.size())
-                .arg(projection.attainedRank ? projection.attainedRank->value.c_str() : "-");
-        for (const auto &scenario: projection.scenarios)
-            lines << QString("%1|runs=%2|pb=%3|norm=%4|play=%5").arg(scenario.name.c_str()).arg(scenario.runCount)
-                    .arg(scenario.personalBest.value_or(-1.0)).arg(scenario.normalizedRank).arg(scenario.playtimeSeconds);
+        const auto rank = benchmark.attainedRank();
+        lines << QString("play=%1|avg=%2|history=%3|rank=%4").arg(benchmark.totalPlaytimeSeconds())
+                .arg(benchmark.averageRank().value_or(-1.0)).arg(benchmark.averageRankHistory().size())
+                .arg(rank ? rank->value.c_str() : "-");
+        for (const auto *scenario: benchmark.scenarios()) {
+            const auto &stats = scenario->stats();
+            lines << QString("%1|runs=%2|pb=%3|norm=%4|play=%5").arg(scenario->name().c_str()).arg(stats ? stats->runCount() : 0)
+                    .arg(stats ? stats->personalBest() : -1.0).arg(scenario->normalizedRank())
+                    .arg(stats ? stats->playtimeSeconds() : 0.0);
+        }
         return lines;
     }
 
@@ -372,15 +376,6 @@ namespace {
         EXPECT_EQ(counting.calls.completionHistory, 1);
         readEverything();
         EXPECT_EQ(counting.calls.rollingByWindow, 1) << "reading again must hit the cache";
-
-        resetCounters();
-        ASSERT_TRUE(quick("benchmarkPlaytime", {{"window", 14}}));
-        readEverything();
-        EXPECT_EQ(counting.calls.rollingForScenarios, 1);
-        EXPECT_EQ(counting.calls.runFacts, 0) << "a benchmark playtime window must not redo the rank evaluation";
-        EXPECT_EQ(counting.calls.rollingByWindow, 0);
-        EXPECT_EQ(trackingChanged, 0);
-        EXPECT_EQ(trackingRank, 0);
 
         // Editing in a settings visit recomputes nothing until Save, and Save only what changed.
         resetCounters();
@@ -498,6 +493,33 @@ namespace {
         EXPECT_FALSE(timings.empty());
     }
 
+    TEST_F(LargeProfileTest, BenchmarkPlaytimeWindowChangeNeverAsksTheProfileForASeries_R24) {
+        ASSERT_TRUE(followToday());
+        CountingProfile counting(app->profileService());
+        const auto profile = std::shared_ptr<IProfileService>(&counting, [](IProfileService *) {});
+        const auto config = app->graphConfigurationUseCase();
+        const auto day = app->daySource();
+        PlaytimeGraphUseCase playtime(profile, config, day);
+        BenchmarkTrackingUseCase tracking(app->benchmarksService(), app->benchmarkResolutionUseCase(), profile,
+                                          config, day);
+        tracking.select(domain::BenchmarkId{kBenchmarkId});
+        ASSERT_EQ(tracking.state(), BenchmarkTrackingState::Ready);
+        (void) playtime.snapshot();
+        int trackingChanged = 0, trackingRank = 0;
+        tracking.onChanged([&] { ++trackingChanged; });
+        tracking.onRankChanged([&](GraphKey) { ++trackingRank; });
+        counting.calls = {};
+
+        ASSERT_TRUE(quick("benchmarkPlaytime", {{"window", 14}}));
+        (void) playtime.snapshot();
+        EXPECT_EQ(tracking.snapshot().playtime.windowDays, 14);
+        EXPECT_EQ(counting.calls.rollingForScenarios, 0);
+        EXPECT_EQ(counting.calls.runFacts, 0) << "a benchmark playtime window must not redo the rank evaluation";
+        EXPECT_EQ(counting.calls.rollingByWindow, 0);
+        EXPECT_EQ(trackingChanged, 0);
+        EXPECT_EQ(trackingRank, 0);
+    }
+
     // As shipped: every accepted change is written to the QSettings document before it returns.
     TEST_F(LargeProfileTest, RecordsHowLongEachConfigurationChangeTakes) { recordTimings("QSettings persistence"); }
 
@@ -522,8 +544,8 @@ namespace {
         auto *tracking = app->benchmarkTrackingVm();
         auto *vm = app->settingsVm();
         const auto *useCase = app->benchmarkTrackingUseCase().get();
-        ASSERT_NE(useCase->projection(), nullptr);
-        const auto summaryBefore = benchmarkSummary(*useCase->projection());
+        ASSERT_NE(useCase->benchmark(), nullptr);
+        const auto summaryBefore = benchmarkSummary(*useCase->benchmark());
         ASSERT_GT(summaryBefore.size(), static_cast<qsizetype>(kBenchmarkScenarios));
 
         ASSERT_TRUE(quick("scenarioHistory", {{"rangeKind", "allHistory"}}));
@@ -557,8 +579,8 @@ namespace {
         EXPECT_EQ(app->sessionController()->getCurrentRun().run_id, selectedRun);
 
         // Summaries are definitions of the full history, whatever windows are drawn.
-        ASSERT_NE(useCase->projection(), nullptr);
-        EXPECT_EQ(benchmarkSummary(*useCase->projection()), summaryBefore);
+        ASSERT_NE(useCase->benchmark(), nullptr);
+        EXPECT_EQ(benchmarkSummary(*useCase->benchmark()), summaryBefore);
         vm->endVisit();
     }
 }

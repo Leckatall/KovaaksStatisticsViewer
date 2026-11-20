@@ -120,13 +120,14 @@ TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
     ASSERT_NE(tracking, nullptr);
     tracking->select(domain::BenchmarkId{"auto-1"});
     ASSERT_EQ(tracking->state(), BenchmarkTrackingState::Ready);
-    const auto *projection = tracking->projection();
-    ASSERT_NE(projection, nullptr);
-    ASSERT_EQ(projection->scenarios.size(), 1U);
-    EXPECT_EQ(projection->scenarios[0].matchState, domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(projection->scenarios[0].personalBest.has_value());
-    EXPECT_EQ(projection->scenarios[0].runCount, 1);
-    EXPECT_GT(projection->totalPlaytimeSeconds, 0.0);
+    const auto *benchmark = tracking->benchmark();
+    ASSERT_NE(benchmark, nullptr);
+    const auto evaluatedScenarios = benchmark->scenarios();
+    ASSERT_EQ(evaluatedScenarios.size(), 1U);
+    EXPECT_EQ(evaluatedScenarios.front()->matchState(), domain::ScenarioMatchState::Resolved);
+    EXPECT_TRUE(evaluatedScenarios.front()->stats().has_value());
+    EXPECT_EQ(evaluatedScenarios.front()->stats()->runCount(), 1);
+    EXPECT_GT(benchmark->totalPlaytimeSeconds(), 0.0);
 }
 
 namespace {
@@ -178,7 +179,7 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
         QDir(TEST_FILES_DIR).absoluteFilePath("Viscose Benchmarks Beta - Intermediate.json").toStdString());
     ASSERT_TRUE(playlist.seed.has_value());
     std::vector<std::string> importedOrder;
-    for (const auto &entry: working.uncategorized) importedOrder.push_back(entry.name);
+    for (const auto *entry: working.entries()) importedOrder.push_back(entry->name);
     EXPECT_EQ(importedOrder, playlist.seed->scenarioNames);
     EXPECT_TRUE(working.categories.empty());
     EXPECT_TRUE(working.tiers.empty());
@@ -574,20 +575,20 @@ TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewM
     EXPECT_TRUE(scenario.value(QStringLiteral("matchStateText")).toString().isEmpty());
     EXPECT_NE(scenario.value(QStringLiteral("personalBestText")).toString(), QStringLiteral("—"));
 
-    // The application projection carries the numeric detail the Qt surface adapts.
-    const auto *projection = w->app->benchmarkTrackingUseCase()->projection();
-    ASSERT_NE(projection, nullptr);
-    ASSERT_EQ(projection->scenarios.size(), 1U);
-    EXPECT_EQ(projection->scenarios[0].matchState, domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(projection->scenarios[0].personalBest.has_value());
-    EXPECT_TRUE(projection->scenarios[0].recentAverage.has_value());
-    EXPECT_EQ(projection->scenarios[0].runCount, 1);
-    EXPECT_GT(projection->totalPlaytimeSeconds, 0.0);
-    EXPECT_FALSE(projection->rollingPlaytime.empty());
-    EXPECT_FALSE(projection->averageRankHistory.empty());
-    EXPECT_FALSE(projection->recentAverageRankHistory.empty());
-    EXPECT_TRUE(projection->attainedRank.has_value());
-    EXPECT_EQ(projection->categories.size(), 1U);
+    const auto *benchmark = w->app->benchmarkTrackingUseCase()->benchmark();
+    ASSERT_NE(benchmark, nullptr);
+    const auto evaluatedScenarios = benchmark->scenarios();
+    ASSERT_EQ(evaluatedScenarios.size(), 1U);
+    EXPECT_EQ(evaluatedScenarios.front()->matchState(), domain::ScenarioMatchState::Resolved);
+    EXPECT_TRUE(evaluatedScenarios.front()->stats().has_value());
+    EXPECT_TRUE(evaluatedScenarios.front()->stats().has_value());
+    EXPECT_EQ(evaluatedScenarios.front()->stats()->runCount(), 1);
+    EXPECT_GT(benchmark->totalPlaytimeSeconds(), 0.0);
+    ASSERT_FALSE(w->app->benchmarkTrackingUseCase()->snapshot().visiblePlaytime.empty());
+    EXPECT_FALSE(benchmark->averageRankHistory().empty());
+    EXPECT_FALSE(benchmark->recentAverageRankHistory().empty());
+    EXPECT_TRUE(benchmark->attainedRank().has_value());
+    EXPECT_EQ(benchmark->categories().size(), 1U);
 }
 
 TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingWorkspaceWithoutReselection) {
@@ -599,11 +600,14 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     vm->selectBenchmark(QStringLiteral("b-cascade"));
     QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
 
-    const auto *before = w->app->benchmarkTrackingUseCase()->projection();
-    ASSERT_NE(before, nullptr);
-    ASSERT_EQ(before->scenarios.size(), 1U);
-    ASSERT_EQ(before->scenarios[0].matchState, domain::ScenarioMatchState::Unresolved);
-    ASSERT_FALSE(before->scenarios[0].personalBest.has_value());
+    {
+        const auto *before = w->app->benchmarkTrackingUseCase()->benchmark();
+        ASSERT_NE(before, nullptr);
+        const auto beforeScenarios = before->scenarios();
+        ASSERT_EQ(beforeScenarios.size(), 1U);
+        ASSERT_EQ(beforeScenarios.front()->matchState(), domain::ScenarioMatchState::Unresolved);
+        ASSERT_FALSE(beforeScenarios.front()->stats().has_value());
+    }
 
     const QVariantMap unmapped = findGridRow(vm->progressGrid(), QStringLiteral("Needs Mapping"));
     ASSERT_FALSE(unmapped.isEmpty());
@@ -624,13 +628,14 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
 
     EXPECT_GE(changed.count(), 1) << "the manager save never republished the tracking workspace";
 
-    const auto *after = w->app->benchmarkTrackingUseCase()->projection();
+    const auto *after = w->app->benchmarkTrackingUseCase()->benchmark();
     ASSERT_NE(after, nullptr);
-    ASSERT_EQ(after->scenarios.size(), 1U);
-    EXPECT_EQ(after->scenarios[0].matchState, domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(after->scenarios[0].personalBest.has_value());
-    EXPECT_EQ(after->scenarios[0].runCount, 1);
-    EXPECT_GT(after->totalPlaytimeSeconds, 0.0);
+    const auto afterScenarios = after->scenarios();
+    ASSERT_EQ(afterScenarios.size(), 1U);
+    EXPECT_EQ(afterScenarios.front()->matchState(), domain::ScenarioMatchState::Resolved);
+    EXPECT_TRUE(afterScenarios.front()->stats().has_value());
+    EXPECT_EQ(afterScenarios.front()->stats()->runCount(), 1);
+    EXPECT_GT(after->totalPlaytimeSeconds(), 0.0);
 
     EXPECT_EQ(vm->attainedRank(), QStringLiteral("Bronze"));
     const QVariantMap remapped = findGridRow(vm->progressGrid(), QStringLiteral("Needs Mapping"));
@@ -798,15 +803,13 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
     QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     EXPECT_EQ(tracking->state(), QStringLiteral("incomplete"));
     EXPECT_EQ(tracking->attainedRank(), QObject::tr("Unavailable"));
-    const auto *projection = w->app->benchmarkTrackingUseCase()->projection();
-    ASSERT_NE(projection, nullptr);
-    EXPECT_FALSE(projection->attainedRank.has_value());
-    const auto wallSix = std::ranges::find_if(projection->scenarios, [](const auto &scenario) {
-        return scenario.entryId.value == "s1";
-    });
-    ASSERT_NE(wallSix, projection->scenarios.end());
-    EXPECT_EQ(wallSix->matchState, domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(wallSix->personalBest.has_value()) << "the mapped scenario keeps its played facts";
+    const auto *benchmark = w->app->benchmarkTrackingUseCase()->benchmark();
+    ASSERT_NE(benchmark, nullptr);
+    EXPECT_FALSE(benchmark->attainedRank().has_value());
+    const auto *wallSix = benchmark->scenario(domain::BenchmarkScenarioId{"s1"});
+    ASSERT_NE(wallSix, nullptr);
+    EXPECT_EQ(wallSix->matchState(), domain::ScenarioMatchState::Resolved);
+    EXPECT_TRUE(wallSix->stats().has_value()) << "the mapped scenario keeps its played facts";
 }
 
 TEST(BenchmarkTableComposition, ConflictAndFailedWriteKeepSession) {
@@ -1037,11 +1040,12 @@ TEST(BenchmarkTableComposition, PastedNameLinksOnSaveDespiteCaseAndTrailingSpace
     const auto stored = jsonEntry(readJson(QDir(benchmarks.path()).absoluteFilePath("bench.json")), "s1");
     EXPECT_EQ(stored.value("hashes").toArray(), (QJsonArray{QString::fromLatin1(kWallSixHash)}));
     EXPECT_EQ(stored.value("name").toString(), "1wall6targets TE");
-    const auto *projection = w->app->benchmarkTrackingUseCase()->projection();
-    ASSERT_NE(projection, nullptr);
-    ASSERT_EQ(projection->scenarios.size(), 1U);
-    EXPECT_EQ(projection->scenarios[0].matchState, domain::ScenarioMatchState::Resolved);
-    EXPECT_TRUE(projection->scenarios[0].personalBest.has_value());
+    const auto *benchmark = w->app->benchmarkTrackingUseCase()->benchmark();
+    ASSERT_NE(benchmark, nullptr);
+    const auto evaluatedScenarios = benchmark->scenarios();
+    ASSERT_EQ(evaluatedScenarios.size(), 1U);
+    EXPECT_EQ(evaluatedScenarios.front()->matchState(), domain::ScenarioMatchState::Resolved);
+    EXPECT_TRUE(evaluatedScenarios.front()->stats().has_value());
     const QVariantMap row = findGridRow(tracking->progressGrid(), QStringLiteral("1wall6targets TE"));
     ASSERT_FALSE(row.isEmpty());
     EXPECT_TRUE(row.value(QStringLiteral("matchStateText")).toString().isEmpty());
@@ -1091,8 +1095,15 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
     const auto otherHash = QString::fromStdString(other->hash);
     const auto tracking = w->app->benchmarkTrackingUseCase();
     tracking->select(domain::BenchmarkId{"b-track"});
-    ASSERT_NE(tracking->projection(), nullptr);
-    const auto baseline = tracking->projection()->scenarios.front();
+    const domain::BenchmarkScenarioId entryId{"s1"};
+    const auto baseline = [&] {
+        const auto *benchmark = tracking->benchmark();
+        const auto *row = benchmark ? benchmark->scenario(entryId) : nullptr;
+        return row ? row->stats() : std::nullopt;
+    }();
+    ASSERT_TRUE(baseline);
+    const auto baselineRunCount = baseline->runCount();
+    const auto baselinePlaytime = baseline->playtimeSeconds();
     auto *vm = w->app->benchmarkManagerVm();
     ASSERT_TRUE(vm->openBenchmark("b-track"));
     ASSERT_TRUE(vm->setScenarioHashes("s1", {kWallSixHash, otherHash, "unavailable"})["ok"].toBool());
@@ -1104,13 +1115,17 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
         expectedPlaytime += fact.duration_seconds;
         expectedBest = std::max(expectedBest, static_cast<double>(fact.score));
     }
-    ASSERT_NE(tracking->projection(), nullptr);
-    const auto &combined = tracking->projection()->scenarios.front();
-    EXPECT_EQ(combined.runCount, facts.size());
-    EXPECT_GT(combined.runCount, baseline.runCount);
-    ASSERT_TRUE(combined.personalBest);
-    EXPECT_DOUBLE_EQ(*combined.personalBest, expectedBest);
-    EXPECT_DOUBLE_EQ(tracking->projection()->totalPlaytimeSeconds, expectedPlaytime);
+    {
+        const auto *benchmark = tracking->benchmark();
+        ASSERT_NE(benchmark, nullptr);
+        const auto *combined = benchmark->scenario(entryId);
+        ASSERT_NE(combined, nullptr);
+        EXPECT_EQ(combined->stats()->runCount(), facts.size());
+        EXPECT_GT(combined->stats()->runCount(), baselineRunCount);
+        ASSERT_TRUE(combined->stats());
+        EXPECT_DOUBLE_EQ(combined->stats()->personalBest(), expectedBest);
+        EXPECT_DOUBLE_EQ(benchmark->totalPlaytimeSeconds(), expectedPlaytime);
+    }
     vm->discard();
     ASSERT_TRUE(vm->openBenchmark("b-track"));
     const auto *table = qobject_cast<presentation::BenchmarkTableModel *>(vm->tableModel());
@@ -1126,7 +1141,10 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
               (std::vector<std::string>{std::string{kWallSixHash}, otherHash.toStdString(), "unavailable"}));
     ASSERT_TRUE(vm->setScenarioHashes("s1", {kWallSixHash})["ok"].toBool());
     ASSERT_TRUE(vm->save()["ok"].toBool());
-    ASSERT_NE(tracking->projection(), nullptr);
-    EXPECT_EQ(tracking->projection()->scenarios.front().runCount, baseline.runCount);
-    EXPECT_DOUBLE_EQ(tracking->projection()->totalPlaytimeSeconds, baseline.playtimeSeconds);
+    const auto *benchmark = tracking->benchmark();
+    ASSERT_NE(benchmark, nullptr);
+    const auto *restored = benchmark->scenario(entryId);
+    ASSERT_NE(restored, nullptr);
+    EXPECT_EQ(restored->stats()->runCount(), baselineRunCount);
+    EXPECT_DOUBLE_EQ(benchmark->totalPlaytimeSeconds(), baselinePlaytime);
 }

@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "benchmark_builders.h"
-#include "benchmarks/benchmark_evaluator.h"
+#include "benchmarks/benchmark.h"
 #include "benchmarks/rank_history.h"
 
 using namespace ksv::domain;
@@ -85,14 +85,14 @@ TEST(RankHistoryWindow, WindowedValuesAreTheFullEvaluationsValues) {
     constexpr long long kDay = 86'400'000LL;
     const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 150.0F), benchmarkFact("two", 101 * kDay, 120.0F),
                                    benchmarkFact("one", 105 * kDay, 260.0F), benchmarkFact("two", 108 * kDay, 300.0F)};
-    const auto projection = evaluateBenchmark(definition, {Completeness::Trackable, {}},
-                                              {resolvedEntry("one"), resolvedEntry("two")}, facts, {});
-    ASSERT_EQ(projection.averageRankHistory.size(), 4U);
+    const auto evaluated = Benchmark(definition, {Completeness::Trackable, {}},
+                                     {resolvedEntry("one"), resolvedEntry("two")}, facts);
+    ASSERT_EQ(evaluated.averageRankHistory().size(), 4U);
 
     // A rank already reached before the window keeps the value the whole history gave it.
-    const auto window = rankHistoryWindow(projection.averageRankHistory, day(104), day(106));
+    const auto window = rankHistoryWindow(evaluated.averageRankHistory(), day(104), day(106));
     ASSERT_TRUE(window.established);
-    EXPECT_DOUBLE_EQ(window.established->averageRank, projection.averageRankHistory[1].averageRank);
+    EXPECT_DOUBLE_EQ(window.established->averageRank, evaluated.averageRankHistory()[1].averageRank);
     ASSERT_EQ(window.points.size(), 1U);
-    EXPECT_DOUBLE_EQ(window.points[0].averageRank, projection.averageRankHistory[2].averageRank);
+    EXPECT_DOUBLE_EQ(window.points[0].averageRank, evaluated.averageRankHistory()[2].averageRank);
 }

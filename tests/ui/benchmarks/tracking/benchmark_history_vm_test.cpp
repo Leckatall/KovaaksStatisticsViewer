@@ -30,10 +30,7 @@
 using namespace ksv::presentation;
 using namespace ksv::application;
 using namespace ksv::domain;
-using ksv::tests_ui::FakeBenchmarkTrackingUseCase;
-using ksv::tests_ui::makeTrackableSnapshot;
-using ksv::tests_ui::expectedMidnightMs;
-using ksv::tests_ui::ymd;
+using namespace ksv::tests_ui;
 
 namespace {
     // Date is the axis-only column; Value is the single drawn series - mirrors
@@ -68,9 +65,8 @@ TEST(BenchmarkHistoryViewModel, CalendarDaysConvertToUtcMidnightEpochMs) {
 
 TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxisWithoutAnObservationThere) {
     auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
     // Playtime runs later than the last rank change, and the axis rounds up to a tick.
-    snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 5), 600.0}, {ymd(2024, 3, 20), 1200.0}};
+    snapshot.visiblePlaytime = {{ymd(2024, 3, 5), 600.0}, {ymd(2024, 3, 20), 1200.0}};
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
@@ -83,13 +79,12 @@ TEST(BenchmarkHistoryViewModel, RankLineIsHeldFlatToTheRightEdgeOfTheAxisWithout
     ASSERT_TRUE(rank.trailingCarry);
     EXPECT_DOUBLE_EQ(rank.trailingCarry->x(), vm.rankHistory()->xAxis().max());
     EXPECT_GT(rank.trailingCarry->x(), rank.points[1].x());
-    EXPECT_DOUBLE_EQ(rank.trailingCarry->y(), 2.0);
+    EXPECT_DOUBLE_EQ(rank.trailingCarry->y(), 2.5);
 }
 
 TEST(BenchmarkHistoryViewModel, AnAnchoredWholeRankHistoryEndsAtItsLastPointNotTheSharedExtent) {
     auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
-    snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 5), 600.0}, {ymd(2024, 3, 20), 1200.0}};
+    snapshot.visiblePlaytime = {{ymd(2024, 3, 5), 600.0}, {ymd(2024, 3, 20), 1200.0}};
     snapshot.rank.anchoredEnd = ymd(2024, 3, 6);
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
@@ -103,8 +98,7 @@ TEST(BenchmarkHistoryViewModel, AnAnchoredWholeRankHistoryEndsAtItsLastPointNotT
 
 TEST(BenchmarkHistoryViewModel, BothHistoriesShareTheUnionOfTheirXRanges) {
     auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
-    snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 5), 600.0}, {ymd(2024, 3, 7), 1200.0}};
+    snapshot.visiblePlaytime = {{ymd(2024, 3, 5), 600.0}, {ymd(2024, 3, 7), 1200.0}};
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
@@ -117,10 +111,8 @@ TEST(BenchmarkHistoryViewModel, BothHistoriesShareTheUnionOfTheirXRanges) {
 }
 
 TEST(BenchmarkHistoryViewModel, SingleHistoryRangeIsUsedForBoth) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 5), 2.0}};
-    snapshot.projection->recentAverageRankHistory.clear();
-    snapshot.projection->rollingPlaytime.clear();
+    auto snapshot = snapshotFor(makeUniformFixture(3, {{4, 100}, {5, 200}}, 100));
+    snapshot.visiblePlaytime.clear();
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
@@ -131,10 +123,10 @@ TEST(BenchmarkHistoryViewModel, SingleHistoryRangeIsUsedForBoth) {
 }
 
 TEST(BenchmarkHistoryViewModel, NoHistoryYieldsDegenerateCurrentDayRangeAndNoLine) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->averageRankHistory.clear();
-    snapshot.projection->recentAverageRankHistory.clear();
-    snapshot.projection->rollingPlaytime.clear();
+    auto fixture = makeTrackableFixture();
+    fixture.runs.clear();
+    auto snapshot = snapshotFor(fixture);
+    snapshot.visiblePlaytime.clear();
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
@@ -174,11 +166,8 @@ TEST(BenchmarkHistoryViewModel, RankSeriesSpansUnrankedZeroThroughTierCountWithT
 }
 
 TEST(BenchmarkHistoryViewModel, RankTooltipValueReadsAsTheTierAndProgressTowardTheNext) {
-    auto snapshot = makeTrackableSnapshot();
-    // Held flat to the right edge, so every x from the first point on samples the last rank.
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 0.25}, {ymd(2024, 3, 5), 1.6},
-                                               {ymd(2024, 3, 6), 2.0}, {ymd(2024, 3, 7), 3.0}};
-    snapshot.projection->rollingPlaytime.clear();
+    auto snapshot = snapshotFor(makeUniformFixture(3, {{4, 25}, {5, 160}, {6, 200}, {7, 300}}, 100));
+    snapshot.visiblePlaytime.clear();
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
@@ -225,14 +214,9 @@ TEST(BenchmarkHistoryViewModel, RankAndPlaytimeKeepSeparateVerticalScales) {
 }
 
 TEST(BenchmarkHistoryViewModel, IncompleteDefinitionHasNoRankLineButKeepsPlaytime) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.selectedLoaded->completeness =
-        CompletenessResult{Completeness::Incomplete,
-                           {BenchmarkIssue{BenchmarkIssueCode::NoTiers, std::monostate{}}}};
-    snapshot.projection->completeness = Completeness::Incomplete;
-    snapshot.projection->averageRankHistory.clear();
-    snapshot.projection->attainedRank.reset();
-    auto fake = fakeWith(snapshot);
+    auto fixture = makeTrackableFixture();
+    fixture.completeness = CompletenessResult{Completeness::Incomplete, {BenchmarkIssue{BenchmarkIssueCode::NoTiers, std::monostate{}}}};
+    auto fake = fakeWith(snapshotFor(fixture));
     BenchmarkTrackingViewModel vm{fake};
 
     EXPECT_TRUE(vm.rankHistory()->series({kValueColumn}).isEmpty());
@@ -245,10 +229,9 @@ namespace {
     }
 
     BenchmarkWorkspaceSnapshot snapshotWithTiers(std::vector<Tier> tiers) {
-        auto snapshot = makeTrackableSnapshot();
-        snapshot.selectedLoaded->benchmark.tiers = tiers;
-        snapshot.projection->tiers = std::move(tiers);
-        return snapshot;
+        auto fixture = makeTrackableFixture();
+        fixture.definition.tiers = std::move(tiers);
+        return snapshotFor(fixture);
     }
 }
 
@@ -285,13 +268,7 @@ TEST(BenchmarkHistoryViewModel, PlaytimeSeriesHasNoTierLines) {
 
 TEST(BenchmarkHistoryViewModel, RankAxisHasATickAtEveryTierEvenWithManyTiers) {
     for (const int tierCount: {3, 5, 7, 12, 13, 25}) {
-        std::vector<Tier> tiers;
-        for (int index = 1; index <= tierCount; ++index)
-            tiers.push_back(coloredTier("t" + std::to_string(index), "Tier " + std::to_string(index),
-                                        BenchmarkColor{200, 200, 200, 255}));
-        auto snapshot = snapshotWithTiers(std::move(tiers));
-        snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), static_cast<double>(tierCount)}};
-        auto fake = fakeWith(snapshot);
+        auto fake = fakeWith(snapshotFor(makeUniformFixture(tierCount, {{4, static_cast<float>(tierCount)}})));
         BenchmarkTrackingViewModel vm{fake};
 
         const auto series = vm.rankHistory()->series({kValueColumn});
@@ -306,26 +283,24 @@ TEST(BenchmarkHistoryViewModel, RankAxisHasATickAtEveryTierEvenWithManyTiers) {
 
 TEST(BenchmarkHistoryViewModel, RankAxisAndTierLinesStopOneTierAboveThePeakRank) {
     struct Case {
-        double peak;
+        float peak;
         int shownTiers;
     };
-    for (const auto [peak, shownTiers]: {Case{0.25, 1}, Case{1.6, 2}, Case{2.0, 3}, Case{4.5, 5}, Case{5.0, 5}}) {
-        std::vector<Tier> tiers;
-        for (int index = 1; index <= 5; ++index)
-            tiers.push_back(coloredTier("t" + std::to_string(index), "Tier " + std::to_string(index),
-                                        BenchmarkColor{200, 200, 200, 255}));
-        auto snapshot = snapshotWithTiers(std::move(tiers));
-        // The peak is not the last point, so the cap follows the best rank rather than the current one.
-        snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), peak}, {ymd(2024, 3, 5), 0.1}};
-        auto fake = fakeWith(snapshot);
+    for (const auto [peak, shownTiers]: {Case{0.25, 1}, Case{1.75, 2}, Case{2.0, 3}, Case{4.5, 5}, Case{5.0, 5}}) {
+        auto fake = fakeWith(snapshotFor(makeUniformFixture(5, {{4, peak}, {5, 0}})));
         BenchmarkTrackingViewModel vm{fake};
 
-        const auto series = vm.rankHistory()->series({kValueColumn});
-        ASSERT_EQ(series.size(), 1) << peak;
-        ASSERT_TRUE(series.front()->yAxis.has_value()) << peak;
-        EXPECT_DOUBLE_EQ(series.front()->yAxis->max(), shownTiers) << peak;
-        EXPECT_EQ(series.front()->referenceLines.size(), shownTiers) << peak;
-        EXPECT_EQ(series.front()->yAxis->formatTick(shownTiers), "Tier " + QString::number(shownTiers)) << peak;
+        for (const auto *history: {vm.rankHistory(), vm.recentRankHistory()}) {
+            const auto series = history->series({kValueColumn});
+            ASSERT_EQ(series.size(), 1) << peak;
+            ASSERT_TRUE(series.front()->yAxis.has_value()) << peak;
+            EXPECT_DOUBLE_EQ(series.front()->yAxis->max(), shownTiers) << peak;
+            EXPECT_EQ(series.front()->referenceLines.size(), shownTiers) << peak;
+            EXPECT_EQ(series.front()->yAxis->formatTick(shownTiers), "Tier " + QString::number(shownTiers)) << peak;
+        }
+        const auto recent = vm.recentRankHistory()->series({kValueColumn});
+        ASSERT_EQ(recent.front()->points.size(), 2);
+        EXPECT_LT(recent.front()->points.back().y(), recent.front()->points.front().y());
     }
 }
 
@@ -384,7 +359,7 @@ TEST(BenchmarkHistoryViewModel, AWindowChangeRelabelsPlaytimeWithoutRebuildingTh
     QSignalSpy renamed(vm.playtimeHistory(), &BenchmarkHistoryViewModel::metricNameChanged);
 
     fake->snap.playtime.windowDays = 10;
-    fake->snap.projection->rollingPlaytime = {{ymd(2024, 3, 4), 1000.0}, {ymd(2024, 3, 6), 500.0}};
+    fake->snap.visiblePlaytime = {{ymd(2024, 3, 4), 1000.0}, {ymd(2024, 3, 6), 500.0}};
     fake->publishPlaytime();
 
     EXPECT_EQ(changed.count(), 0);
@@ -395,8 +370,7 @@ TEST(BenchmarkHistoryViewModel, AWindowChangeRelabelsPlaytimeWithoutRebuildingTh
 
 TEST(BenchmarkHistoryViewModel, ADatePlaytimeRangeSpansItsIntervalWhileTheRankAxisKeepsTheDefaultExtent) {
     auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0}};
-    snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 4), 600.0}, {ymd(2024, 3, 12), 1200.0}};
+    snapshot.visiblePlaytime = {{ymd(2024, 3, 4), 600.0}, {ymd(2024, 3, 12), 1200.0}};
     snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 4), ymd(2024, 3, 12)};
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
@@ -404,7 +378,7 @@ TEST(BenchmarkHistoryViewModel, ADatePlaytimeRangeSpansItsIntervalWhileTheRankAx
     const auto rankMax = vm.rankHistory()->xAxis().max();
 
     fake->snap.playtime.interval = DayInterval{ymd(2024, 3, 10), ymd(2024, 3, 12)};
-    fake->snap.projection->rollingPlaytime = {{ymd(2024, 3, 12), 1200.0}};
+    fake->snap.visiblePlaytime = {{ymd(2024, 3, 12), 1200.0}};
     fake->publishPlaytime();
 
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 10))));
@@ -418,7 +392,7 @@ TEST(BenchmarkHistoryViewModel, AnEmptyPlaytimeIntervalKeepsItsAxisAndDrawsNoLin
     auto snapshot = makeTrackableSnapshot();
     snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 4), ymd(2024, 3, 6)};
     snapshot.playtime.interval = DayInterval{ymd(2024, 4, 1), ymd(2024, 4, 7)};
-    snapshot.projection->rollingPlaytime.clear();
+    snapshot.visiblePlaytime.clear();
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
@@ -433,11 +407,11 @@ namespace {
     double ms(const std::chrono::sys_days day) { return static_cast<double>(expectedMidnightMs(day)); }
 
     // Improvements on 4, 6 and 10 March 2024; playtime spans 2 to 20 March.
-    BenchmarkWorkspaceSnapshot rankRangeSnapshot(const std::optional<DayInterval> interval) {
-        auto snapshot = makeTrackableSnapshot();
-        snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.0},
-                                                   {ymd(2024, 3, 10), 2.5}};
-        snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 2), 600.0}, {ymd(2024, 3, 20), 1200.0}};
+    BenchmarkWorkspaceSnapshot rankRangeSnapshot(const std::optional<DayInterval> interval,
+                                                  BenchmarkFixture fixture = makeUniformFixture(
+                                                      3, {{4, 100}, {6, 200}, {10, 250}}, 100)) {
+        auto snapshot = snapshotFor(fixture);
+        snapshot.visiblePlaytime = {{ymd(2024, 3, 2), 600.0}, {ymd(2024, 3, 20), 1200.0}};
         snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 2), ymd(2024, 3, 20)};
         snapshot.rank.interval = interval;
         return snapshot;
@@ -567,13 +541,7 @@ TEST(BenchmarkHistoryViewModel, EveryRankPointIsAnActualImprovementWhateverTheRa
 }
 
 TEST(BenchmarkHistoryViewModel, TierReferencesKeepTheirFullHistoryMeaningInANarrowRange) {
-    std::vector<Tier> tiers;
-    for (int index = 1; index <= 6; ++index)
-        tiers.push_back(coloredTier("t" + std::to_string(index), "Tier " + std::to_string(index),
-                                    BenchmarkColor{200, 200, 200, 255}));
-    auto snapshot = snapshotWithTiers(tiers);
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 8), 4.5}};
-    auto fake = fakeWith(snapshot);
+    auto fake = fakeWith(snapshotFor(makeUniformFixture(6, {{4, 1}, {8, 4.5}})));
     BenchmarkTrackingViewModel vm{fake};
     const auto wholeMax = rankSeries(vm)->yAxis->max();
     const auto wholeLines = rankSeries(vm)->referenceLines.size();
@@ -606,7 +574,7 @@ TEST(BenchmarkHistoryViewModel, RankAndPlaytimeRangesMoveOnlyTheirOwnAxes) {
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().max(), defaultMax);
 
     fake->snap.playtime.interval = DayInterval{ymd(2024, 3, 14), ymd(2024, 3, 16)};
-    fake->snap.projection->rollingPlaytime = {};
+    fake->snap.visiblePlaytime = {};
     fake->publishPlaytime();
     EXPECT_DOUBLE_EQ(vm.playtimeHistory()->xAxis().min(), ms(ymd(2024, 3, 14)));
     EXPECT_DOUBLE_EQ(vm.rankHistory()->xAxis().min(), ms(ymd(2024, 3, 5)));
@@ -708,7 +676,7 @@ TEST(BenchmarkHistoryContent, PointsOnlyBeforeAnyRankIsEstablishedIsAnEmptyRange
 }
 
 // EDGE-04: an anchor with no contributing run is the ordinary no-history state, even when stale
-// history lingers in the projection.
+// the benchmark has a full rank history.
 TEST(BenchmarkHistoryContent, AnAnchoredRankRangeWithoutAContributingRunReadsAsNoHistory) {
     auto snapshot = rankRangeSnapshot(std::nullopt);
     snapshot.rank.noRelevantHistory = true;
@@ -725,7 +693,7 @@ TEST(BenchmarkHistoryContent, APlaytimeRangeWithoutSamplesOverRecordedPlaytimeIs
     auto snapshot = makeTrackableSnapshot();
     snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 4), ymd(2024, 3, 6)};
     snapshot.playtime.interval = DayInterval{ymd(2024, 4, 1), ymd(2024, 4, 7)};
-    snapshot.projection->rollingPlaytime.clear();
+    snapshot.visiblePlaytime.clear();
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
     const auto *playtime = vm.playtimeHistory();
@@ -745,9 +713,8 @@ namespace {
 
     // Play days on 4, 6 and 10 March 2024, dipping on the 6th; playtime spans 2 to 20 March.
     BenchmarkWorkspaceSnapshot recentRangeSnapshot(const std::optional<DayInterval> interval) {
-        auto snapshot = rankRangeSnapshot(std::nullopt);
-        snapshot.projection->recentAverageRankHistory = {{ymd(2024, 3, 4), 1.5}, {ymd(2024, 3, 6), 1.1},
-                                                         {ymd(2024, 3, 10), 2.0}};
+        auto snapshot = rankRangeSnapshot(std::nullopt, makeUniformFixture(
+            3, {{4, 200}, {6, 100}, {10, 300}}, 100));
         snapshot.recentRank.interval = interval;
         return snapshot;
     }
@@ -770,26 +737,24 @@ TEST(BenchmarkRecentRankHistory, IsItsOwnNamedTierGraphOnItsOwnAxis) {
 }
 
 TEST(BenchmarkRecentRankHistory, KeepsTheFallsOfTheRecentAverage) {
-    auto fake = fakeWith(makeTrackableSnapshot());
+    auto fake = fakeWith(snapshotFor(makeUniformFixture(3, {{4, 100}, {5, 200}, {6, 0}}, 100)));
     BenchmarkTrackingViewModel vm{fake};
 
     const auto *series = recentSeries(vm);
     ASSERT_NE(series, nullptr);
     ASSERT_EQ(series->points.size(), 3);
-    EXPECT_EQ(series->points[1], QPointF(ms(ymd(2024, 3, 5)), 1.4));
-    EXPECT_EQ(series->points[2], QPointF(ms(ymd(2024, 3, 6)), 1.2));
+    EXPECT_EQ(series->points[1], QPointF(ms(ymd(2024, 3, 5)), 1.5));
+    EXPECT_EQ(series->points[2], QPointF(ms(ymd(2024, 3, 6)), 1.0));
 }
 
 TEST(BenchmarkRecentRankHistory, ItsTierAxisFollowsItsOwnPeakNotThePersonalBests) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 6), 2.5}};
-    snapshot.projection->recentAverageRankHistory = {{ymd(2024, 3, 4), 0.5}, {ymd(2024, 3, 6), 0.8}};
+    auto snapshot = snapshotFor(makeUniformFixture(5, {{4, 1}, {6, 5}}, 1));
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
-    EXPECT_DOUBLE_EQ(recentSeries(vm)->yAxis->max(), 1.0);
-    EXPECT_EQ(recentSeries(vm)->referenceLines.size(), 1);
-    EXPECT_DOUBLE_EQ(rankSeries(vm)->yAxis->max(), 3.0);
+    EXPECT_DOUBLE_EQ(recentSeries(vm)->yAxis->max(), 4.0);
+    EXPECT_EQ(recentSeries(vm)->referenceLines.size(), 4);
+    EXPECT_DOUBLE_EQ(rankSeries(vm)->yAxis->max(), 5.0);
 }
 
 TEST(BenchmarkRecentRankHistory, ARangeCarriesTheHeldValueInAndOut) {
@@ -799,11 +764,11 @@ TEST(BenchmarkRecentRankHistory, ARangeCarriesTheHeldValueInAndOut) {
     const auto *series = recentSeries(vm);
     ASSERT_NE(series, nullptr);
     ASSERT_EQ(series->points.size(), 1);
-    EXPECT_EQ(series->points[0], QPointF(ms(ymd(2024, 3, 6)), 1.1));
+    EXPECT_EQ(series->points[0], QPointF(ms(ymd(2024, 3, 6)), 1.5));
     ASSERT_TRUE(series->leadingCarry);
-    EXPECT_EQ(*series->leadingCarry, QPointF(ms(ymd(2024, 3, 5)), 1.5));
+    EXPECT_EQ(*series->leadingCarry, QPointF(ms(ymd(2024, 3, 5)), 2.0));
     ASSERT_TRUE(series->trailingCarry);
-    EXPECT_EQ(*series->trailingCarry, QPointF(ms(ymd(2024, 3, 8)), 1.1));
+    EXPECT_EQ(*series->trailingCarry, QPointF(ms(ymd(2024, 3, 8)), 1.5));
 }
 
 TEST(BenchmarkRecentRankHistory, ItsRangeMovesOnlyItsOwnAxisAndSeries) {
@@ -811,7 +776,8 @@ TEST(BenchmarkRecentRankHistory, ItsRangeMovesOnlyItsOwnAxisAndSeries) {
     BenchmarkTrackingViewModel vm{fake};
     const auto rankMin = vm.rankHistory()->xAxis().min();
     const auto rankMax = vm.rankHistory()->xAxis().max();
-    const auto rankPoints = rankSeries(vm)->points;
+    const QList<QPointF> rankPoints{{ms(ymd(2024, 3, 4)), 2.0}, {ms(ymd(2024, 3, 10)), 3.0}};
+    EXPECT_EQ(rankSeries(vm)->points, rankPoints);
     const QSignalSpy changed(&vm, &BenchmarkTrackingViewModel::changed);
 
     fake->snap.recentRank.interval = DayInterval{ymd(2024, 3, 5), ymd(2024, 3, 12)};
@@ -827,10 +793,8 @@ TEST(BenchmarkRecentRankHistory, ItsRangeMovesOnlyItsOwnAxisAndSeries) {
 }
 
 TEST(BenchmarkRecentRankHistory, ItsHistoryWidensTheSharedDefaultExtent) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->averageRankHistory = {{ymd(2024, 3, 4), 1.0}};
-    snapshot.projection->rollingPlaytime = {{ymd(2024, 3, 5), 600.0}};
-    snapshot.projection->recentAverageRankHistory = {{ymd(2024, 3, 4), 1.0}, {ymd(2024, 3, 9), 0.6}};
+    auto snapshot = snapshotFor(makeUniformFixture(3, {{4, 100}, {9, 50}}, 100));
+    snapshot.visiblePlaytime = {{ymd(2024, 3, 5), 600.0}};
     auto fake = fakeWith(snapshot);
     BenchmarkTrackingViewModel vm{fake};
 
@@ -841,10 +805,9 @@ TEST(BenchmarkRecentRankHistory, ItsHistoryWidensTheSharedDefaultExtent) {
 }
 
 TEST(BenchmarkRecentRankHistory, IsAbsentForAnIncompleteDefinition) {
-    auto snapshot = makeTrackableSnapshot();
-    snapshot.projection->completeness = Completeness::Incomplete;
-    snapshot.selectedLoaded->completeness.completeness = Completeness::Incomplete;
-    auto fake = fakeWith(snapshot);
+    auto fixture = makeTrackableFixture();
+    fixture.completeness = CompletenessResult{Completeness::Incomplete, {}};
+    auto fake = fakeWith(snapshotFor(fixture));
     BenchmarkTrackingViewModel vm{fake};
 
     EXPECT_FALSE(vm.recentRankHistory()->hasData());
@@ -1094,11 +1057,14 @@ TEST(BenchmarkHistoryStyle, TheStyleSurvivesRebuildsAndBenchmarkSelectionChanges
     fake->playtimePresentation.appearance = {ConnectionMode::Straight, true};
     fake->publishPresentation();
 
-    auto other = makeTrackableSnapshot();
-    other.selectedId = BenchmarkId{"b2"};
-    other.projection->averageRankHistory = {{ymd(2025, 1, 1), 2.0}, {ymd(2025, 1, 9), 3.0}};
-    other.projection->rollingPlaytime = {{ymd(2025, 1, 1), 60.0}, {ymd(2025, 1, 9), 120.0}};
-    fake->snap = other;
+    auto fixture = makeTrackableFixture();
+    fixture.definition.id = BenchmarkId{"b2"};
+    fixture.runs = {runOn(ymd(2025, 1, 1), "h1", 600, 1800),
+                    runOn(ymd(2025, 1, 1), "h1", 500),
+                    runOn(ymd(2025, 1, 9), "h1", 800, 900),
+                    runOn(ymd(2025, 1, 9), "h2", 800, 961)};
+    fake->show(std::move(fixture));
+    fake->snap.visiblePlaytime = {{ymd(2025, 1, 1), 60.0}, {ymd(2025, 1, 9), 120.0}};
     fake->publish();
     fake->publishPlaytime();
     fake->publishRank();
@@ -1123,4 +1089,17 @@ TEST(BenchmarkHistoryStyle, OnlyThePlaytimeGraphTakesAnAxisPolicyAndTheRankAxisS
     EXPECT_DOUBLE_EQ(playtimeAxis.min(), 5.0);
     EXPECT_DOUBLE_EQ(playtimeAxis.max(), 45.0);
     EXPECT_DOUBLE_EQ(vm.rankHistory()->series({kValueColumn}).front()->yAxis->max(), rankAxisMax);
+}
+
+TEST(BenchmarkHistoryViewModel, PlaytimeGraphPlotsTheSnapshotsVisibleSeriesNotTheBenchmarks) {
+    auto snapshot = makeTrackableSnapshot();
+    ASSERT_GT(snapshot.benchmark->rollingPlaytime(1).size(), 1u);
+    const auto day = ymd(2024, 3, 6);
+    snapshot.visiblePlaytime = {{day, 120}};
+    BenchmarkTrackingViewModel vm{fakeWith(std::move(snapshot))};
+
+    const auto *series = valueSeries(vm.playtimeHistory());
+    ASSERT_NE(series, nullptr);
+    ASSERT_EQ(series->points.size(), 1);
+    EXPECT_EQ(series->points.front(), QPointF(ms(day), 120));
 }

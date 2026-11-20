@@ -8,10 +8,10 @@
 #include <qqmlintegration.h>
 
 #include <optional>
+#include <span>
 #include <vector>
 
 #include "benchmarks/benchmark.h"
-#include "benchmarks/benchmark_projection.h"
 #include "presentation/benchmarks/tracking/progress_grid_content.h"
 
 namespace ksv::presentation {
@@ -21,7 +21,7 @@ namespace ksv::presentation {
     // The filled length in chunk units is the domain's normalized tier value (6.37 = six full
     // chunks and 37% of the seventh), the scale the rank graph and the average rank use.
 
-    // A rank on the domain's normalized scale (BenchmarkProjection::averageRank: k = tier k attained,
+    // A rank on the domain's normalized scale (Benchmark::averageRank: k = tier k attained,
     // fractions part-way to the next) as tier bar chunk fills: chunk k (0-based) fills
     // clamp(rank - k, 0, 1), so exactly k ends at chunk k-1's right edge.
     [[nodiscard]] std::vector<double> rankChunkFills(double rank, std::size_t tierCount);
@@ -31,23 +31,20 @@ namespace ksv::presentation {
     // the domain's normalized rank uses, so the filled length equals it whenever the ladder is
     // valid. A chunk whose bounding thresholds are missing, duplicated, negative, non-finite or not
     // increasing stays empty, and so does every chunk without a score.
-    [[nodiscard]] std::vector<double> scenarioChunkFills(const std::vector<domain::Tier> &tiers,
-                                                         const std::vector<domain::Threshold> &thresholds,
+    [[nodiscard]] std::vector<double> scenarioChunkFills(std::span<const domain::Tier> tiers,
+                                                         const domain::ScenarioBenchmarkEvaluation &scenario,
                                                          std::optional<double> score);
 
     // Per tier chunk, whether a bound it needs is unusable: its own threshold, or the previous
     // tier's (chunk 0 starts at 0), is missing, duplicated, negative or non-finite, or out of order
     // with a neighbouring threshold (not above the one before it, or not below the one after it;
     // either of the two may be the wrong one). Such a chunk never fills; the bar draws it hatched.
-    [[nodiscard]] std::vector<bool> missingThresholdChunks(const std::vector<domain::Tier> &tiers,
-                                                           const std::vector<domain::Threshold> &thresholds);
+    [[nodiscard]] std::vector<bool> missingThresholdChunks(std::span<const domain::Tier> tiers,
+                                                           const domain::ScenarioBenchmarkEvaluation &scenario);
 
-    // The Benchmarks tab's scenario progress grid, rebuilt from the selected definition joined
-    // with its projection: one row per scenario in definition order (Uncategorized first, then each
-    // category's direct scenarios and its subcategories), the group cells spanning those rows, and
-    // the tier ladder the bars and their header share. Groups without scenarios are left out. A
-    // scenario's match state is only reported when it is abnormal. Owned by
-    // BenchmarkTrackingViewModel, which resets it once per use-case revision.
+    // Row order follows the benchmark tree: Uncategorized first, then each category's direct
+    // scenarios and its subcategories. Empty groups have no spanning cell.
+    // Match states appear only when abnormal. BenchmarkTrackingViewModel owns the grid and resets it once per revision.
     class BenchmarkProgressGridModel final : public QObject {
         Q_OBJECT
         // [{id, name, color, barColor}]: name and readable text colour for the header, and the
@@ -75,9 +72,8 @@ namespace ksv::presentation {
         // The typed form the three lists are derived from.
         [[nodiscard]] const ProgressGridContent &content() const { return m_content; }
 
-        // Rebuilds every list for one coherent revision. Null `definition`/`projection` (outside
-        // the Ready states) empties the grid.
-        void reset(const domain::BenchmarkDefinition *definition, const domain::BenchmarkProjection *projection);
+        // Null empties the grid.
+        void reset(const domain::Benchmark *benchmark);
 
     signals:
         void changed();
@@ -95,8 +91,7 @@ namespace ksv::presentation {
     // score below the first tier sits inside the first chunk and tier k's threshold at the end of
     // chunk k-1. No position without a score or when the ladder is incomplete or not increasing,
     // so a marker is never drawn at a made-up place.
-    [[nodiscard]] std::optional<double> tierScalePosition(const std::vector<domain::Tier> &tiers,
-                                                          const std::vector<domain::Threshold> &thresholds,
+    [[nodiscard]] std::optional<double> tierScalePosition(const domain::ScenarioBenchmarkEvaluation &scenario,
                                                           std::optional<double> score);
 }
 

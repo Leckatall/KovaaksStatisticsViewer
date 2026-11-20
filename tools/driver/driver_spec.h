@@ -8,7 +8,7 @@
 
 #include <domain/user_profile.h>
 
-#include "benchmarks/benchmark.h"
+#include "benchmarks/benchmark_definition.h"
 #include "gallery_dataset.h"
 #include "modelled_run.h"
 
