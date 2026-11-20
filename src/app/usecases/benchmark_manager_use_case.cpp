@@ -93,7 +93,7 @@ namespace ksv::application {
         imported.id = domain::BenchmarkId{newId()};
         if (read.seed->name) imported.name = *read.seed->name;
         for (const auto &scenarioName: read.seed->scenarioNames)
-            imported.uncategorized.push_back(domain::ScenarioEntry{
+            imported.uncategorized.push_back(domain::BenchmarkScenario{
                 domain::ScenarioEntryId{newId()}, scenarioName, {}, {}});
         m_resolution->setEditLease(imported.id);
         return {std::nullopt, BenchmarkEditorSeed{std::move(imported), std::nullopt},

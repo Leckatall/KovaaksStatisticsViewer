@@ -16,7 +16,7 @@ namespace ksv::domain {
             return std::ranges::all_of(text, [](unsigned char ch) { return std::isspace(ch) != 0; });
         }
 
-        void validateEntryThresholds(const ScenarioEntry &entry, const std::vector<Tier> &tiers,
+        void validateEntryThresholds(const BenchmarkScenario &entry, const std::vector<Tier> &tiers,
                                      std::vector<BenchmarkIssue> &issues) {
             std::unordered_map<std::string, int> perTier;
             for (const auto &threshold: entry.thresholds) {

@@ -46,7 +46,7 @@ namespace ksv::domain {
         friend class Benchmark;
         ScenarioBenchmarkEvaluation() = default;
 
-        ScenarioEntry m_entry;
+        BenchmarkScenario m_entry;
         ScenarioMatchState m_matchState = ScenarioMatchState::Unresolved;
         ScenarioEvaluation m_stats;
         std::optional<std::vector<double>> m_ladder;

@@ -15,9 +15,9 @@ namespace {
         return Tier{TierId{std::move(id)}, std::move(name), BenchmarkColor{r, 0, 0, 255}};
     }
 
-    ScenarioEntry entry(std::string id, std::string name, std::vector<Threshold> thresholds,
+    BenchmarkScenario entry(std::string id, std::string name, std::vector<Threshold> thresholds,
                         std::optional<std::string> hash = std::nullopt) {
-        return ScenarioEntry{ScenarioEntryId{std::move(id)}, std::move(name),
+        return BenchmarkScenario{ScenarioEntryId{std::move(id)}, std::move(name),
                              hash ? std::vector<std::string>{std::move(*hash)} : std::vector<std::string>{},
                              std::move(thresholds)};
     }
@@ -173,11 +173,11 @@ namespace {
 
 TEST(BenchmarkValidation, ScenarioNameIssuesFollowCanonicalEntryOrder) {
     auto def = trackable();
-    def.uncategorized = {ScenarioEntry{ScenarioEntryId{"u"}, "", {}, {}}};
+    def.uncategorized = {BenchmarkScenario{ScenarioEntryId{"u"}, "", {}, {}}};
     def.categories = {
-        Category{GroupId{"c1"}, "C1", {}, {ScenarioEntry{ScenarioEntryId{"direct"}, "", {}, {}}}, {}},
+        Category{GroupId{"c1"}, "C1", {}, {BenchmarkScenario{ScenarioEntryId{"direct"}, "", {}, {}}}, {}},
         Category{GroupId{"c2"}, "C2", {}, {},
-                 {Subcategory{GroupId{"s2"}, "S2", {}, {ScenarioEntry{ScenarioEntryId{"nested"}, "", {}, {}}}}}}
+                 {Subcategory{GroupId{"s2"}, "S2", {}, {BenchmarkScenario{ScenarioEntryId{"nested"}, "", {}, {}}}}}}
     };
 
     const auto issues = issuesWith(validateBenchmark(def), BenchmarkIssueCode::MissingScenarioName);

@@ -17,7 +17,7 @@ using namespace ksv::domain;
 using namespace ksv::tests_support;
 
 namespace {
-    BenchmarkDefinition benchmarkWith(const std::string &id, std::vector<ScenarioEntry> entries) {
+    BenchmarkDefinition benchmarkWith(const std::string &id, std::vector<BenchmarkScenario> entries) {
         BenchmarkDefinition value;
         value.id = BenchmarkId{id};
         value.name = "Bench " + id;

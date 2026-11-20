@@ -147,9 +147,9 @@ TEST(BenchmarkEditor, AddScenarioRejectsDuplicateDisplayName) {
 TEST(BenchmarkEditor, AddScenarioRejectsADisplayNameUsedInACategoryOrSubcategory) {
     BenchmarkDefinition bench;
     bench.categories = {
-        Category{GroupId{"c1"}, "C1", {}, {ScenarioEntry{ScenarioEntryId{"e1"}, "direct", {}, {}}}, {}},
+        Category{GroupId{"c1"}, "C1", {}, {BenchmarkScenario{ScenarioEntryId{"e1"}, "direct", {}, {}}}, {}},
         Category{GroupId{"c2"}, "C2", {}, {},
-                 {Subcategory{GroupId{"s2"}, "S2", {}, {ScenarioEntry{ScenarioEntryId{"e2"}, "nested", {}, {}}}}}}
+                 {Subcategory{GroupId{"s2"}, "S2", {}, {BenchmarkScenario{ScenarioEntryId{"e2"}, "nested", {}, {}}}}}}
     };
     BenchmarkEditor editor{bench, countingIds()};
     const auto before = bench;
@@ -317,14 +317,14 @@ namespace {
         };
     }
 
-    ScenarioEntry scored(const std::string &id, const std::string &name, std::optional<std::string> hash,
+    BenchmarkScenario scored(const std::string &id, const std::string &name, std::optional<std::string> hash,
                          double score) {
-        return ScenarioEntry{ScenarioEntryId{id}, name,
+        return BenchmarkScenario{ScenarioEntryId{id}, name,
                              hash ? std::vector<std::string>{std::move(*hash)} : std::vector<std::string>{},
                              {Threshold{TierId{"t1"}, score}}};
     }
 
-    std::vector<std::string> idsOf(const std::vector<ScenarioEntry> &entries) {
+    std::vector<std::string> idsOf(const std::vector<BenchmarkScenario> &entries) {
         std::vector<std::string> ids;
         for (const auto &entry: entries) ids.push_back(entry.id.value);
         return ids;
@@ -348,7 +348,7 @@ namespace {
 
 TEST(BenchmarkTableRows, RepeatedUnnamedAppend) {
     BenchmarkDefinition bench;
-    bench.uncategorized = {ScenarioEntry{ScenarioEntryId{"u0"}, "", {}, {}},
+    bench.uncategorized = {BenchmarkScenario{ScenarioEntryId{"u0"}, "", {}, {}},
                            scored("n1", "Named", "h1", 10)};
     const auto before = bench.uncategorized;
     BenchmarkEditor editor{bench, countingIds()};

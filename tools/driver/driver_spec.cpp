@@ -529,7 +529,7 @@ namespace ksv::driver {
 
         QSet<QString> usedIds;
         const auto entry = [&](const BenchmarkScenarioRef &ref) {
-            domain::ScenarioEntry result;
+            domain::BenchmarkScenario result;
             result.name = ref.name;
             std::optional<std::string> hash = ref.hash;
             // A name maps to its scenario only when exactly one scenario has it; a

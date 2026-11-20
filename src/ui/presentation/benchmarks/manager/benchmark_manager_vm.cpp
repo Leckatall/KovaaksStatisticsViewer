@@ -188,7 +188,7 @@ namespace ksv::presentation {
                 projection.rows.push_back(std::move(row));
             };
 
-            const auto appendRow = [&](const domain::ScenarioEntry &entry, const BenchmarkTableGroupSpan &category,
+            const auto appendRow = [&](const domain::BenchmarkScenario &entry, const BenchmarkTableGroupSpan &category,
                                        const BenchmarkTableGroupSpan &subcategory) {
                 BenchmarkTableRow row;
                 row.entryId = idString(entry.id);

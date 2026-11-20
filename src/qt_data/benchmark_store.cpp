@@ -60,7 +60,7 @@ namespace ksv::qt_data {
             return Threshold{TierId{*tierId}, object["score"].toDouble()};
         }
 
-        std::optional<ScenarioEntry> decodeEntry(const QJsonValue &value, int version) {
+        std::optional<BenchmarkScenario> decodeEntry(const QJsonValue &value, int version) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             if (!(version == 1 ? exactKeys(object, {"id", "name", "hash", "thresholds"})
@@ -91,14 +91,14 @@ namespace ksv::qt_data {
                 if (!threshold) return std::nullopt;
                 thresholds.push_back(*threshold);
             }
-            ScenarioEntry entry{ScenarioEntryId{*id}, object["name"].toString().toStdString(),
+            BenchmarkScenario entry{ScenarioEntryId{*id}, object["name"].toString().toStdString(),
                                 std::move(hashes), std::move(thresholds)};
             return entry;
         }
 
-        std::optional<std::vector<ScenarioEntry>> decodeEntries(const QJsonValue &value, int version) {
+        std::optional<std::vector<BenchmarkScenario>> decodeEntries(const QJsonValue &value, int version) {
             if (!value.isArray()) return std::nullopt;
-            std::vector<ScenarioEntry> entries;
+            std::vector<BenchmarkScenario> entries;
             for (const auto &item: value.toArray()) {
                 const auto entry = decodeEntry(item, version);
                 if (!entry) return std::nullopt;
@@ -226,7 +226,7 @@ namespace ksv::qt_data {
             return LoadedBenchmark{*structure, validateBenchmark(*structure)};
         }
 
-        QJsonObject encodeEntry(const ScenarioEntry &entry) {
+        QJsonObject encodeEntry(const BenchmarkScenario &entry) {
             QJsonArray thresholds;
             for (const auto &threshold: entry.thresholds)
                 thresholds.append(QJsonObject{{"tierId", QString::fromStdString(threshold.tierId.value)},
@@ -240,7 +240,7 @@ namespace ksv::qt_data {
                                {"thresholds", thresholds}};
         }
 
-        QJsonArray encodeEntries(const std::vector<ScenarioEntry> &entries) {
+        QJsonArray encodeEntries(const std::vector<BenchmarkScenario> &entries) {
             QJsonArray array;
             for (const auto &entry: entries) array.append(encodeEntry(entry));
             return array;

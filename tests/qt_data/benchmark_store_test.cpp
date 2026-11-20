@@ -232,7 +232,7 @@ TEST_F(BenchmarkStoreTest, WriteCreatesThenRoundTripsThroughScan) {
     def.id = domain::BenchmarkId{"b1"};
     def.name = "Written";
     def.tiers = {domain::Tier{domain::TierId{"t1"}, "Bronze", {}}};
-    def.uncategorized = {domain::ScenarioEntry{domain::ScenarioEntryId{"s1"}, "One", {},
+    def.uncategorized = {domain::BenchmarkScenario{domain::ScenarioEntryId{"s1"}, "One", {},
                                                {domain::Threshold{domain::TierId{"t1"}, 10.0}}}};
 
     const auto write = store->write(def, "written.json", std::nullopt);
@@ -253,11 +253,11 @@ TEST_F(BenchmarkStoreTest, IncompleteWorkRoundTripsExactlyAndKeepsItsIssues) {
     def.tiers = {Tier{TierId{"t1"}, "Bronze", {200, 120, 0, 255}},
                  Tier{TierId{"t2"}, "Silver", {190, 190, 190, 255}}};
     // Partial thresholds: t2 still missing.
-    def.uncategorized = {ScenarioEntry{ScenarioEntryId{"s1"}, "Loose", {},
+    def.uncategorized = {BenchmarkScenario{ScenarioEntryId{"s1"}, "Loose", {},
                                        {Threshold{TierId{"t1"}, 10.0}}}};
     Category nested{GroupId{"c1"}, "Tracking", {10, 20, 30, 255}, {}, {}};
     nested.subcategories = {Subcategory{GroupId{"sc1"}, "Smooth", {40, 50, 60, 255},
-                                        {ScenarioEntry{ScenarioEntryId{"s2"}, "Mapped", std::vector<std::string>{"HASH", "OTHER"},
+                                        {BenchmarkScenario{ScenarioEntryId{"s2"}, "Mapped", std::vector<std::string>{"HASH", "OTHER"},
                                                        {Threshold{TierId{"t1"}, 1.5},
                                                         Threshold{TierId{"t2"}, 2.5}}}}}};
     def.categories = {nested, Category{GroupId{"c2"}, "Not yet filled", {70, 80, 90, 255}, {}, {}}};
@@ -325,7 +325,7 @@ TEST_F(BenchmarkStoreTest, ReplaceWithMatchingDigestSucceeds) {
     edited.id = domain::BenchmarkId{"b1"};
     edited.name = "Edited";
     edited.tiers = {domain::Tier{domain::TierId{"t1"}, "Bronze", {}}};
-    edited.uncategorized = {domain::ScenarioEntry{domain::ScenarioEntryId{"s1"}, "One", {},
+    edited.uncategorized = {domain::BenchmarkScenario{domain::ScenarioEntryId{"s1"}, "One", {},
                                                   {domain::Threshold{domain::TierId{"t1"}, 10.0}}}};
     ASSERT_TRUE(store->write(edited, "f.json", original.digest).succeeded());
     EXPECT_EQ(loaded(store->scan().snapshot->entries.at(0))->benchmark.name, "Edited");

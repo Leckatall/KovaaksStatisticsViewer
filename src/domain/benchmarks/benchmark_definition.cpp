@@ -4,7 +4,7 @@
 #include <unordered_set>
 
 namespace ksv::domain {
-    std::optional<double> ScenarioEntry::thresholdFor(const TierId &tier) const {
+    std::optional<double> BenchmarkScenario::thresholdFor(const TierId &tier) const {
         std::optional<double> found;
         for (const auto &threshold: thresholds) {
             if (threshold.tierId != tier) continue;
@@ -15,9 +15,9 @@ namespace ksv::domain {
         return found;
     }
 
-    std::vector<const ScenarioEntry *> BenchmarkDefinition::entries() const {
-        std::vector<const ScenarioEntry *> ordered;
-        const auto append = [&](const std::vector<ScenarioEntry> &scenarios) {
+    std::vector<const BenchmarkScenario *> BenchmarkDefinition::entries() const {
+        std::vector<const BenchmarkScenario *> ordered;
+        const auto append = [&](const std::vector<BenchmarkScenario> &scenarios) {
             for (const auto &entry: scenarios) ordered.push_back(&entry);
         };
         append(uncategorized);
@@ -39,7 +39,7 @@ namespace ksv::domain {
         return hashes;
     }
 
-    std::optional<std::vector<double>> BenchmarkDefinition::ladderFor(const ScenarioEntry &entry) const {
+    std::optional<std::vector<double>> BenchmarkDefinition::ladderFor(const BenchmarkScenario &entry) const {
         if (tiers.empty()) return std::nullopt;
         std::vector<double> ladder;
         ladder.reserve(tiers.size());

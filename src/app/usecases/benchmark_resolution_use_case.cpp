@@ -27,11 +27,11 @@ namespace ksv::application {
             return false;
         }
 
-        domain::ScenarioEntry *findEntry(domain::BenchmarkDefinition &benchmark, const domain::ScenarioEntryId &id) {
-            domain::ScenarioEntry *found = nullptr;
-            forEachScenarioList(benchmark, [&](std::vector<domain::ScenarioEntry> &entries) {
+        domain::BenchmarkScenario *findEntry(domain::BenchmarkDefinition &benchmark, const domain::ScenarioEntryId &id) {
+            domain::BenchmarkScenario *found = nullptr;
+            forEachScenarioList(benchmark, [&](std::vector<domain::BenchmarkScenario> &entries) {
                 const auto it = std::ranges::find_if(
-                    entries, [&](const domain::ScenarioEntry &entry) { return entry.id == id; });
+                    entries, [&](const domain::BenchmarkScenario &entry) { return entry.id == id; });
                 if (it == entries.end()) return false;
                 found = &*it;
                 return true;

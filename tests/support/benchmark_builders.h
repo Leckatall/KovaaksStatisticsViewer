@@ -13,10 +13,10 @@
 namespace ksv::tests_support {
     inline domain::Tier benchmarkTier(const std::string &id) { return {domain::TierId{id}, id, {}}; }
 
-    inline domain::ScenarioEntry benchmarkEntry(
+    inline domain::BenchmarkScenario benchmarkEntry(
         const std::string &id, const std::string &name, std::optional<std::string> hash,
         const std::vector<std::pair<std::string, double> > &thresholds) {
-        domain::ScenarioEntry entry{domain::ScenarioEntryId{id}, name, {}, {}};
+        domain::BenchmarkScenario entry{domain::ScenarioEntryId{id}, name, {}, {}};
         if (hash && !hash->empty()) entry.hashes.push_back(std::move(*hash));
         for (const auto &[tier, score]: thresholds) entry.thresholds.push_back({domain::TierId{tier}, score});
         return entry;

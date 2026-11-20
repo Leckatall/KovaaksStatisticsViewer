@@ -144,7 +144,7 @@ namespace ksv::ui {
                 GroupId id;
                 std::string name;
                 BenchmarkColor color;
-                std::vector<ScenarioEntry> entries;
+                std::vector<BenchmarkScenario> entries;
             };
             std::vector<Slot> groupSlots = {
                 {GroupId{"sc1"}, "Smooth", {0, 200, 0}, {}},
@@ -159,7 +159,7 @@ namespace ksv::ui {
                 const std::string id = "e" + std::to_string(i);
                 const double base = 1000.0 + i * 7.0;
 
-                ScenarioEntry entry{ScenarioEntryId{id}, "Sample Drill Number " + std::to_string(i + 1),
+                BenchmarkScenario entry{ScenarioEntryId{id}, "Sample Drill Number " + std::to_string(i + 1),
                                     std::vector<std::string>{"hash" + std::to_string(i)}, {}};
                 std::vector<double> scores;
                 for (std::size_t t = 0; t < tierCount; ++t) {

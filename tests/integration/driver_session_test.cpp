@@ -541,7 +541,7 @@ namespace {
             return *row;
         }
 
-        [[nodiscard]] const domain::ScenarioEntry &entry(const std::string &entryId) const {
+        [[nodiscard]] const domain::BenchmarkScenario &entry(const std::string &entryId) const {
             for (const auto *candidate: benchmark.definition().entries())
                 if (candidate->id.value == entryId) return *candidate;
             throw std::runtime_error("no entry " + entryId);

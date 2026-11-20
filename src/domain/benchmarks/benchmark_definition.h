@@ -22,12 +22,12 @@ namespace ksv::domain {
         auto operator<=>(const Threshold &) const = default;
     };
 
-    struct ScenarioEntry {
+    struct BenchmarkScenario {
         ScenarioEntryId id;
         std::string name;                  // retained display label; never replaced by the hash
         std::vector<std::string> hashes;   // unique, non-empty, in user order; writers enforce this
         std::vector<Threshold> thresholds; // one per tier when complete; decoded as-is for validation
-        auto operator<=>(const ScenarioEntry &) const = default;
+        auto operator<=>(const BenchmarkScenario &) const = default;
 
         /** @return The tier's score when exactly one threshold names it and it is finite and non-negative. */
         [[nodiscard]] std::optional<double> thresholdFor(const TierId &tier) const;
@@ -37,7 +37,7 @@ namespace ksv::domain {
         GroupId id;
         std::string name;
         BenchmarkColor color;
-        std::vector<ScenarioEntry> scenarios;
+        std::vector<BenchmarkScenario> scenarios;
         auto operator<=>(const Subcategory &) const = default;
     };
 
@@ -48,7 +48,7 @@ namespace ksv::domain {
         GroupId id;
         std::string name;
         BenchmarkColor color;
-        std::vector<ScenarioEntry> scenarios;
+        std::vector<BenchmarkScenario> scenarios;
         std::vector<Subcategory> subcategories;
         auto operator<=>(const Category &) const = default;
     };
@@ -57,7 +57,7 @@ namespace ksv::domain {
         BenchmarkId id;
         std::string name;                       // may be empty while incomplete
         std::vector<Tier> tiers;                // ordered ladder
-        std::vector<ScenarioEntry> uncategorized;
+        std::vector<BenchmarkScenario> uncategorized;
         std::vector<Category> categories;       // ordered user-created categories
         auto operator<=>(const BenchmarkDefinition &) const = default;
 
@@ -65,11 +65,11 @@ namespace ksv::domain {
          * Uncategorized; then per category its direct scenarios, then each subcategory's.
          * Pointers remain valid while the definition is alive and unmodified.
          */
-        [[nodiscard]] std::vector<const ScenarioEntry *> entries() const;
+        [[nodiscard]] std::vector<const BenchmarkScenario *> entries() const;
         /** Unique, in first-occurrence order over entries(). */
         [[nodiscard]] std::vector<std::string> scenarioHashes() const;
         /** Every tier admitted and strictly increasing, in tier order; otherwise nullopt. */
-        [[nodiscard]] std::optional<std::vector<double>> ladderFor(const ScenarioEntry &entry) const;
+        [[nodiscard]] std::optional<std::vector<double>> ladderFor(const BenchmarkScenario &entry) const;
     };
 }
 

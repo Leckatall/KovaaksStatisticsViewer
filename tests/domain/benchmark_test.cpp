@@ -89,22 +89,22 @@ namespace {
 
 TEST(BenchmarkThresholdLadder, OrdersByTierNotByThresholdPosition) {
     const BenchmarkDefinition definition{.tiers = {tier("bronze"), tier("silver")}};
-    const ScenarioEntry entry{.thresholds = steps({{"silver", 200}, {"bronze", 100}})};
+    const BenchmarkScenario entry{.thresholds = steps({{"silver", 200}, {"bronze", 100}})};
     EXPECT_EQ(definition.ladderFor(entry), (std::vector{100.0, 200.0}));
 }
 
 TEST(BenchmarkThresholdLadder, RejectsMissingDuplicateInvalidAndEmptyLadders) {
     const BenchmarkDefinition definition{.tiers = ladder3()};
-    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{.thresholds = steps({{"bronze", 100}, {"gold", 300}})}));
-    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{
+    EXPECT_FALSE(definition.ladderFor(BenchmarkScenario{.thresholds = steps({{"bronze", 100}, {"gold", 300}})}));
+    EXPECT_FALSE(definition.ladderFor(BenchmarkScenario{
         .thresholds = steps({{"bronze", 100}, {"bronze", 150}, {"silver", 200}, {"gold", 300}})}));
-    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{
+    EXPECT_FALSE(definition.ladderFor(BenchmarkScenario{
         .thresholds = steps({{"bronze", -1}, {"silver", 200}, {"gold", 300}})}));
-    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{
+    EXPECT_FALSE(definition.ladderFor(BenchmarkScenario{
         .thresholds = steps({{"bronze", std::numeric_limits<double>::infinity()}, {"silver", 200}, {"gold", 300}})}));
-    EXPECT_FALSE(definition.ladderFor(ScenarioEntry{
+    EXPECT_FALSE(definition.ladderFor(BenchmarkScenario{
         .thresholds = steps({{"bronze", 100}, {"silver", 100}, {"gold", 300}})}));
-    EXPECT_FALSE(BenchmarkDefinition{}.ladderFor(ScenarioEntry{.thresholds = steps({{"bronze", 100}})}));
+    EXPECT_FALSE(BenchmarkDefinition{}.ladderFor(BenchmarkScenario{.thresholds = steps({{"bronze", 100}})}));
 }
 
 TEST(BenchmarkNormalization, HandlesInterpolationBoundsAndUnreadableInput) {

@@ -94,7 +94,7 @@ namespace ksv::domain {
             std::vector<std::vector<TimedScore>> histories;
         };
 
-        RunIndex indexRuns(const std::vector<const ScenarioEntry *> &entries, const MatchByEntry &matches,
+        RunIndex indexRuns(const std::vector<const BenchmarkScenario *> &entries, const MatchByEntry &matches,
                            std::span<const RunFact> runFacts, std::vector<TimedScore> &memberScores) {
             RunIndex index{{}, std::vector<std::vector<TimedScore>>(entries.size())};
             for (std::size_t entry = 0; entry < entries.size(); ++entry) {
@@ -282,7 +282,7 @@ namespace ksv::domain {
         Benchmark &result;
 
         void evaluate(const std::vector<ScenarioResolution> &resolutions, std::span<const RunFact> runFacts);
-        ScenarioBenchmarkEvaluation evaluateEntry(const ScenarioEntry &entry, ScenarioMatchState match,
+        ScenarioBenchmarkEvaluation evaluateEntry(const BenchmarkScenario &entry, ScenarioMatchState match,
                                                  std::span<const TimedScore> history) const;
         void assignNextTier(const TierRules &rules, std::size_t tier) const;
 
@@ -348,7 +348,7 @@ namespace ksv::domain {
         assembleTree(std::move(tree.states), groupTiers);
     }
 
-    ScenarioBenchmarkEvaluation Benchmark::Builder::evaluateEntry(const ScenarioEntry &entry,
+    ScenarioBenchmarkEvaluation Benchmark::Builder::evaluateEntry(const BenchmarkScenario &entry,
                                                                   const ScenarioMatchState match,
                                                                   std::span<const TimedScore> history) const {
         ScenarioBenchmarkEvaluation scenario;

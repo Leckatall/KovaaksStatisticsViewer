@@ -7,7 +7,7 @@
 using namespace ksv::domain;
 
 namespace {
-    ScenarioEntry entry(const char *id) { return {.id = {id}}; }
+    BenchmarkScenario entry(const char *id) { return {.id = {id}}; }
 
     const TierId bronze{"bronze"};
     const TierId silver{"silver"};
@@ -45,7 +45,7 @@ TEST(BenchmarkDefinition, EntriesPointIntoTheDefinitionInCanonicalOrder) {
         }
     };
     const auto &categories = definition.categories;
-    const std::vector<const ScenarioEntry *> expected{
+    const std::vector<const BenchmarkScenario *> expected{
         &definition.uncategorized[0], &definition.uncategorized[1],
         &categories[0].scenarios[0], &categories[0].scenarios[1],
         &categories[1].subcategories[0].scenarios[0], &categories[1].subcategories[0].scenarios[1],
@@ -69,22 +69,22 @@ TEST(BenchmarkDefinition, ScenarioHashesKeepFirstOccurrencesAcrossEntries) {
 }
 
 TEST(BenchmarkDefinition, ThresholdForAdmitsExactlyOneFiniteNonNegativeScore) {
-    const ScenarioEntry admitted{.thresholds = {{bronze, 0}, {silver, 25}}};
+    const BenchmarkScenario admitted{.thresholds = {{bronze, 0}, {silver, 25}}};
     EXPECT_EQ(admitted.thresholdFor(bronze), 0.0);
     EXPECT_EQ(admitted.thresholdFor(silver), 25.0);
     EXPECT_EQ(admitted.thresholdFor(TierId{"absent"}), std::nullopt);
 
     for (const double rejected: {-1.0, infinity, nanScore}) {
-        const ScenarioEntry candidate{.thresholds = {{bronze, rejected}}};
+        const BenchmarkScenario candidate{.thresholds = {{bronze, rejected}}};
         EXPECT_EQ(candidate.thresholdFor(bronze), std::nullopt);
     }
-    const ScenarioEntry duplicate{.thresholds = {{bronze, 0}, {bronze, 12}}};
+    const BenchmarkScenario duplicate{.thresholds = {{bronze, 0}, {bronze, 12}}};
     EXPECT_EQ(duplicate.thresholdFor(bronze), std::nullopt);
 }
 
 TEST(BenchmarkDefinition, BrokenHigherTierLeavesTheGoodThresholdAdmitted) {
     const auto definition = twoTiers();
-    const ScenarioEntry candidate{.thresholds = {{bronze, 5}, {silver, infinity}}};
+    const BenchmarkScenario candidate{.thresholds = {{bronze, 5}, {silver, infinity}}};
 
     EXPECT_EQ(candidate.thresholdFor(bronze), 5.0);
     EXPECT_EQ(definition.ladderFor(candidate), std::nullopt);
@@ -94,7 +94,7 @@ TEST(BenchmarkDefinition, LadderRequiresEveryTierAndStrictlyIncreasingScoresInTi
     const auto definition = twoTiers();
     for (const auto &test: ladderCases) {
         SCOPED_TRACE(test.name);
-        EXPECT_EQ(definition.ladderFor(ScenarioEntry{.thresholds = test.thresholds}), test.expected);
+        EXPECT_EQ(definition.ladderFor(BenchmarkScenario{.thresholds = test.thresholds}), test.expected);
     }
-    EXPECT_EQ(BenchmarkDefinition{}.ladderFor(ScenarioEntry{.thresholds = ladderCases[0].thresholds}), std::nullopt);
+    EXPECT_EQ(BenchmarkDefinition{}.ladderFor(BenchmarkScenario{.thresholds = ladderCases[0].thresholds}), std::nullopt);
 }

@@ -57,7 +57,7 @@ namespace {
     Tier tier(const std::string &id, const std::string &name) { return {TierId{id}, name, {}}; }
 
     BenchmarkDefinition draftWith(const std::string &name, const std::vector<Tier> &tiers,
-                        const std::vector<ScenarioEntry> &uncategorized) {
+                        const std::vector<BenchmarkScenario> &uncategorized) {
         BenchmarkDefinition benchmark;
         benchmark.id = BenchmarkId{"b1"};
         benchmark.name = name;
@@ -775,18 +775,18 @@ TEST(BenchmarkManagerVm, DeleteDoesNotSilentlyDestroyOpenWorkingCopy) {
 // ── Table projection ────────────────────────────────────────────────────────────────────────────
 
 namespace {
-    ScenarioEntry tableEntry(const std::string &id, std::optional<std::string> hash = std::nullopt,
+    BenchmarkScenario tableEntry(const std::string &id, std::optional<std::string> hash = std::nullopt,
                              const std::vector<std::pair<std::string, double>> &scores = {}) {
         return benchmarkEntry(id, "Scenario " + id, std::move(hash), scores);
     }
 
-    Category tableCategory(const std::string &id, std::vector<ScenarioEntry> direct,
+    Category tableCategory(const std::string &id, std::vector<BenchmarkScenario> direct,
                            std::vector<Subcategory> subs = {}) {
         return Category{GroupId{id}, "Category " + id, BenchmarkColor{10, 20, 30, 255}, std::move(direct),
                         std::move(subs)};
     }
 
-    Subcategory tableSub(const std::string &id, std::vector<ScenarioEntry> entries) {
+    Subcategory tableSub(const std::string &id, std::vector<BenchmarkScenario> entries) {
         return Subcategory{GroupId{id}, "Sub " + id, BenchmarkColor{40, 50, 60, 255}, std::move(entries)};
     }
 
@@ -1368,7 +1368,7 @@ namespace {
     // The working copy as the view model last handed it to resolution: every edit re-resolves.
     const BenchmarkDefinition &working(const TableFixture &f) { return f.uc->resolveCalls.back(); }
 
-    const ScenarioEntry &entryIn(const BenchmarkDefinition &bench, const std::string &id) {
+    const BenchmarkScenario &entryIn(const BenchmarkDefinition &bench, const std::string &id) {
         const auto entries = bench.entries();
         const auto found = std::ranges::find_if(entries, [&](const auto *entry) { return entry->id.value == id; });
         if (found != entries.end()) return **found;
@@ -2473,7 +2473,7 @@ namespace {
         return names;
     }
 
-    QStringList idsOf(const std::vector<ScenarioEntry> &entries) {
+    QStringList idsOf(const std::vector<BenchmarkScenario> &entries) {
         QStringList ids;
         for (const auto &entry: entries) ids << QString::fromStdString(entry.id.value);
         return ids;
