@@ -128,7 +128,7 @@ namespace ksv::presentation {
         QList<QPointF> playtimePoints(const application::BenchmarkWorkspaceSnapshot &snapshot);
         [[nodiscard]] static BenchmarkHistoryViewModel::Content playtimeContent(
             const application::BenchmarkWorkspaceSnapshot &snapshot, const QList<QPointF> &points);
-        // `full` is empty without a projection.
+        // `full` is empty without a benchmark.
         void updateRankHistory(BenchmarkHistoryViewModel &history, const DateTimeAxis &axis,
                                std::span<const domain::AverageRankPoint> full,
                                const application::RankRangeView &view) const;

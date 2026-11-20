@@ -75,15 +75,10 @@ namespace ksv::ui {
     }
 
     TEST(CaptureTableSource, AnIncompleteBenchmarkHasANoteAndNoSummary) {
-        auto incomplete = makeBreakdownSnapshot();
-        incomplete.selectedLoaded->completeness = CompletenessResult{
+        auto incomplete = tests_ui::makeBreakdownFixture();
+        incomplete.completeness = CompletenessResult{
             Completeness::Incomplete, {BenchmarkIssue{BenchmarkIssueCode::MissingThreshold, std::monostate{}}}};
-        incomplete.projection->completeness = Completeness::Incomplete;
-        incomplete.projection->attainedRank.reset();
-        incomplete.projection->nextTier.reset();
-        incomplete.projection->averageRank.reset();
-        incomplete.projection->nextTierBlockers.clear();
-        auto fake = fakeWith(incomplete);
+        auto fake = fakeWith(tests_ui::snapshotFor(incomplete));
         BenchmarkTrackingViewModel vm{fake};
         ASSERT_EQ(vm.state(), "incomplete");
         ASSERT_FALSE(vm.progressGrid()->content().rows.empty());
@@ -105,19 +100,18 @@ namespace ksv::ui {
 
         auto unavailable = makeBreakdownSnapshot();
         unavailable.availability = BenchmarkTrackingState::Unavailable;
-        unavailable.selectedLoaded.reset();
-        unavailable.projection.reset();
+        unavailable.benchmark.reset();
+        unavailable.visiblePlaytime.clear();
         auto unavailableFake = fakeWith(unavailable);
         BenchmarkTrackingViewModel unavailableVm{unavailableFake};
         ASSERT_EQ(unavailableVm.state(), "unavailable");
         EXPECT_FALSE(captureTable(unavailableVm, CaptureAppearance{}).has_value());
 
-        auto empty = makeBreakdownSnapshot();
-        empty.selectedLoaded->benchmark.categories.clear();
-        empty.selectedLoaded->benchmark.uncategorized.clear();
-        empty.projection->categories.clear();
-        empty.projection->uncategorized.clear();
-        auto emptyFake = fakeWith(empty);
+        auto empty = tests_ui::makeBreakdownFixture();
+        empty.definition.categories.clear();
+        empty.definition.uncategorized.clear();
+        empty.completeness = CompletenessResult{Completeness::Trackable, {}};
+        auto emptyFake = fakeWith(tests_ui::snapshotFor(empty));
         BenchmarkTrackingViewModel emptyVm{emptyFake};
         ASSERT_EQ(emptyVm.state(), "trackable");
         ASSERT_TRUE(emptyVm.progressGrid()->content().rows.empty());
@@ -134,7 +128,7 @@ namespace ksv::ui {
         const std::vector<QString> personalBests = personalBestTexts(snapshot->grid);
         const TableCaptureSummary summary = *snapshot->summary;
 
-        fake->snap = tests_ui::makeTrackableSnapshot();
+        fake->show(tests_ui::makeTrackableFixture());
         fake->publish();
         ASSERT_NE(rowNames(vm.progressGrid()->content()), names);
 

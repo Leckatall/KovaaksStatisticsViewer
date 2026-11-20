@@ -11,27 +11,10 @@
 #include <utility>
 
 #include "presentation/benchmarks/benchmark_format.h"
-#include "benchmarks/benchmark_evaluator.h"
-#include "benchmarks/benchmark_ids.h"
-#include "benchmarks/benchmark_resolution.h"
 
 namespace ksv::presentation {
     namespace {
         QString q(const std::string &value) { return QString::fromStdString(value); }
-
-        // The tier's threshold when exactly one finite, non-negative score is set for it, the same
-        // admission rule as domain::thresholdLadder.
-        std::optional<double> thresholdFor(const std::vector<domain::Threshold> &thresholds,
-                                           const domain::TierId &tier) {
-            std::optional<double> found;
-            for (const auto &threshold: thresholds) {
-                if (threshold.tierId != tier) continue;
-                if (found) return std::nullopt;
-                found = threshold.score;
-            }
-            if (found && (!std::isfinite(*found) || *found < 0.0)) return std::nullopt;
-            return found;
-        }
 
         // A normally resolved scenario reports nothing; the user only sees match states they may
         // need to act on, in their own terms rather than the resolver's.
@@ -73,42 +56,43 @@ namespace ksv::presentation {
         }
 
         // The local day the PB was set, "2026-08-14".
-        QString personalBestDateText(const domain::ScenarioProjection &scenario) {
-            if (!scenario.personalBestTime) return QStringLiteral("—");
-            return QDateTime::fromSecsSinceEpoch(scenario.personalBestTime->time_since_epoch().count())
+        QString personalBestDateText(const domain::ScenarioEvaluation &stats) {
+            const auto time = stats.personalBestTime();
+            if (!time) return QStringLiteral("—");
+            return QDateTime::fromSecsSinceEpoch(time->time_since_epoch().count())
                 .toString(QStringLiteral("yyyy-MM-dd"));
         }
 
-        QString playCountText(const domain::ScenarioProjection &scenario) {
-            return scenario.runCount > 0 ? QLocale().toString(scenario.runCount) : QStringLiteral("—");
+        QString playCountText(const domain::ScenarioEvaluation &stats) {
+            return stats.runCount() > 0 ? QLocale().toString(stats.runCount()) : QStringLiteral("—");
         }
 
         // Where the PB sits on the ladder, in words: "Silver · 50% of the way to Gold (5,670 / 5,954)".
-        QString progressDescription(const std::vector<domain::Tier> &tiers,
-                                    const std::vector<domain::Threshold> &thresholds,
+        QString progressDescription(const std::span<const domain::Tier> tiers,
+                                    const domain::ScenarioBenchmarkEvaluation &scenario,
                                     const std::optional<double> score) {
             if (!score) return QObject::tr("Unplayed");
             // The first tier the score has not reached, climbing only while the ladder is usable.
             std::size_t index = 0;
             for (; index < tiers.size(); ++index) {
-                const auto threshold = thresholdFor(thresholds, tiers[index].id);
+                const auto threshold = scenario.thresholdFor(tiers[index].id);
                 if (!threshold || *score < *threshold) break;
                 if (index > 0) {
-                    const auto previous = thresholdFor(thresholds, tiers[index - 1].id);
+                    const auto previous = scenario.thresholdFor(tiers[index - 1].id);
                     if (previous && *threshold <= *previous) break;
                 }
             }
             if (index == tiers.size()) {
                 if (tiers.empty()) return formatBenchmarkNumber(*score);
-                const auto top = thresholdFor(thresholds, tiers.back().id);
+                const auto top = scenario.thresholdFor(tiers.back().id);
                 return QObject::tr("%1 · top tier reached (%2 / %3)")
                     .arg(q(tiers.back().name), formatBenchmarkNumber(*score),
                          top ? formatBenchmarkNumber(*top) : QStringLiteral("—"));
             }
             const QString from = index == 0 ? QObject::tr("Unranked") : q(tiers[index - 1].name);
-            const auto target = thresholdFor(thresholds, tiers[index].id);
+            const auto target = scenario.thresholdFor(tiers[index].id);
             if (!target) return QObject::tr("%1 · no threshold set for %2").arg(from, q(tiers[index].name));
-            const auto floor = index == 0 ? std::optional<double>{0.0} : thresholdFor(thresholds, tiers[index - 1].id);
+            const auto floor = index == 0 ? std::optional<double>{0.0} : scenario.thresholdFor(tiers[index - 1].id);
             if (index > 0 && floor && *target <= *floor)
                 return QObject::tr("%1 · the %2 threshold is not above %3's")
                     .arg(from, q(tiers[index].name), q(tiers[index - 1].name));
@@ -126,49 +110,43 @@ namespace ksv::presentation {
             QString textColor;
         };
 
-        // Builds the grid's lists in one pass over the definition, joined with the projection.
         class GridBuilder {
         public:
-            GridBuilder(const domain::BenchmarkDefinition &definition, const domain::BenchmarkProjection &projection)
-                : m_definition(definition), m_projection(projection) {
-                for (const auto &tier: projection.tiers) {
+            explicit GridBuilder(const domain::Benchmark &benchmark)
+                : m_benchmark(benchmark), m_tiers(benchmark.tiers()) {
+                for (const auto &tier: m_tiers) {
                     const QString id = q(tier.id.value);
                     content.tiers.push_back(ProgressGridTier{
                         id, q(tier.name), readableTextColor(tier.color).name(),
                         QColor(tier.color.red, tier.color.green, tier.color.blue).name()});
                     m_tierStyles.insert(id, TierStyle{q(tier.name), readableTextColor(tier.color).name()});
                 }
-                for (const auto &scenario: projection.scenarios) m_scenarios.insert(q(scenario.entryId.value), &scenario);
-                for (const auto &blocker: projection.nextTierBlockers)
+                for (const auto &blocker: benchmark.nextTierBlockers())
                     m_blockerRequired.insert(q(blocker.entryId.value), blocker.required);
-                if (projection.nextTier) {
-                    const TierStyle next = m_tierStyles.value(q(projection.nextTier->value));
+                if (const auto nextTier = benchmark.nextTier()) {
+                    const TierStyle next = m_tierStyles.value(q(nextTier->value));
                     m_nextTierName = next.name;
                     m_nextTierColor = next.textColor;
                 }
             }
 
             void build() {
-                if (!m_definition.uncategorized.empty()) {
-                    const int start = rowCount();
-                    for (const auto &entry: m_definition.uncategorized) addScenario(entry);
-                    addGroup(ProgressGridGroupColumn::Category, QString(), QObject::tr("Uncategorized"), QString(),
-                             start);
+                const auto uncategorized = m_benchmark.uncategorized();
+                if (!uncategorized.empty()) {
+                    for (const auto *scenario: uncategorized) addScenario(*scenario);
+                    addGroup(ProgressGridGroupColumn::Category, 0, nullptr);
                 }
-                for (const auto &category: m_definition.categories) {
+                for (const auto *category: m_benchmark.categories()) {
                     const int start = rowCount();
-                    for (const auto &entry: category.scenarios) addScenario(entry);
-                    for (const auto &subcategory: category.subcategories) {
+                    for (const auto *scenario: category->scenarios()) addScenario(*scenario);
+                    for (const auto *subcategory: category->subgroups()) {
                         const int subStart = rowCount();
-                        for (const auto &entry: subcategory.scenarios) addScenario(entry);
+                        for (const auto *scenario: subcategory->scenarios()) addScenario(*scenario);
                         if (rowCount() == subStart) continue;
-                        addGroup(ProgressGridGroupColumn::Subcategory, q(subcategory.id.value), q(subcategory.name),
-                                 toQColor(subcategory.color).name(), subStart);
+                        addGroup(ProgressGridGroupColumn::Subcategory, subStart, subcategory);
                         content.hasSubcategories = true;
                     }
-                    if (rowCount() == start) continue;
-                    addGroup(ProgressGridGroupColumn::Category, q(category.id.value), q(category.name),
-                             toQColor(category.color).name(), start);
+                    if (rowCount() != start) addGroup(ProgressGridGroupColumn::Category, start, category);
                 }
                 markSubcategorySpans();
             }
@@ -178,16 +156,20 @@ namespace ksv::presentation {
         private:
             [[nodiscard]] int rowCount() const { return static_cast<int>(content.rows.size()); }
 
-            void addGroup(const ProgressGridGroupColumn column, const QString &id, const QString &name,
-                          const QString &color, const int start) {
+            void addGroup(const ProgressGridGroupColumn column, const int start,
+                          const domain::GroupEvaluation *evaluation) {
                 ProgressGridGroup group;
                 group.column = column;
-                group.id = id;
-                group.name = name;
-                group.color = color;
+                if (evaluation) {
+                    group.id = q(evaluation->id().value);
+                    group.name = q(evaluation->name());
+                    group.color = toQColor(evaluation->color()).name();
+                    addGroupRank(group, *evaluation);
+                } else {
+                    group.name = QObject::tr("Uncategorized");
+                }
                 group.start = start;
                 group.span = rowCount() - start;
-                addGroupRank(group);
                 content.groups.push_back(std::move(group));
             }
 
@@ -205,54 +187,40 @@ namespace ksv::presentation {
                                              !startsInside(group.start, group.start + group.span);
             }
 
-            // The group's rank chip: the highest tier the group satisfies (the old breakdown's
-            // "highest Silver"), or Unranked. Only a trackable benchmark ranks groups, and
-            // Uncategorized is never ranked as a group, so both get no chip (empty rankText).
-            void addGroupRank(ProgressGridGroup &cell) const {
-                const domain::GroupProjection *group = findGroup(m_projection.categories, cell.id);
-                if (m_projection.completeness == domain::Completeness::Trackable && group) {
-                    cell.rankText = QObject::tr("Unranked");
-                    if (group->satisfiedTier) {
-                        for (const auto &tier: m_projection.tiers) {
-                            if (tier.id != *group->satisfiedTier) continue;
-                            cell.rankText = q(tier.name);
-                            cell.rankColor = readableTextColor(tier.color).name();
-                            cell.rankBarColor = QColor(tier.color.red, tier.color.green, tier.color.blue).name();
-                        }
+            void addGroupRank(ProgressGridGroup &cell, const domain::GroupEvaluation &group) const {
+                if (cell.id.isEmpty() || m_benchmark.completeness().completeness != domain::Completeness::Trackable)
+                    return;
+                cell.rankText = QObject::tr("Unranked");
+                if (const auto satisfied = group.satisfiedTier()) {
+                    for (const auto &tier: m_tiers) {
+                        if (tier.id != *satisfied) continue;
+                        cell.rankText = q(tier.name);
+                        cell.rankColor = readableTextColor(tier.color).name();
+                        cell.rankBarColor = QColor(tier.color.red, tier.color.green, tier.color.blue).name();
                     }
                 }
             }
 
-            static const domain::GroupProjection *findGroup(const std::vector<domain::GroupProjection> &groups,
-                                                            const QString &id) {
-                if (id.isEmpty()) return nullptr;
-                for (const auto &group: groups) {
-                    if (q(group.id.value) == id) return &group;
-                    if (const auto *found = findGroup(group.subgroups, id)) return found;
-                }
-                return nullptr;
-            }
-
-            void addScenario(const domain::ScenarioEntry &entry) {
-                const QString entryId = q(entry.id.value);
-                const domain::ScenarioProjection *projected = m_scenarios.value(entryId, nullptr);
-                const std::optional<double> personalBest = projected ? projected->personalBest : std::nullopt;
-                const auto matchState = projected ? projected->matchState : domain::ScenarioMatchState::Unresolved;
+            void addScenario(const domain::ScenarioBenchmarkEvaluation &scenario) {
+                const QString entryId = q(scenario.entryId().value);
+                const auto &stats = scenario.stats();
+                const auto personalBest = stats.personalBest();
+                const auto matchState = scenario.matchState();
 
                 ProgressGridScenarioRow row;
                 row.entryId = entryId;
-                row.name = projected ? q(projected->name) : q(entry.name);
+                row.name = q(scenario.name());
                 row.personalBestText = personalBest ? formatBenchmarkNumber(*personalBest) : QStringLiteral("—");
-                row.personalBestDateText = projected ? personalBestDateText(*projected) : QStringLiteral("—");
-                row.playCountText = projected ? playCountText(*projected) : QStringLiteral("—");
+                row.personalBestDateText = personalBestDateText(stats);
+                row.playCountText = playCountText(stats);
                 row.hasPersonalBest = personalBest.has_value();
-                row.hasPersonalBestDate = projected && projected->personalBestTime.has_value();
-                row.hasPlayCount = projected && projected->runCount > 0;
+                row.hasPersonalBestDate = stats.personalBestTime().has_value();
+                row.hasPlayCount = stats.runCount() > 0;
 
                 QString attainedText = QObject::tr("Unranked");
                 QString attainedColor;
-                if (projected && projected->attainedTier) {
-                    const auto found = m_tierStyles.constFind(q(projected->attainedTier->value));
+                if (const auto attained = scenario.attainedTier()) {
+                    const auto found = m_tierStyles.constFind(q(attained->value));
                     if (found != m_tierStyles.constEnd()) {
                         attainedText = found->name;
                         attainedColor = found->textColor;
@@ -261,19 +229,17 @@ namespace ksv::presentation {
                 row.attainedTierText = attainedText;
                 row.attainedTierColor = attainedColor;
 
-                const std::vector<double> fills = scenarioChunkFills(m_projection.tiers, entry.thresholds, personalBest);
-                row.fills = fills;
+                row.fills = scenarioChunkFills(m_tiers, scenario, personalBest);
+                const bool topChunkFilled = !row.fills.empty() && row.fills.back() >= 1.0;
 
-                const auto recent = projected ? projected->recentAverage : std::nullopt;
-                const auto recentPosition = tierScalePosition(m_projection.tiers, entry.thresholds, recent);
+                const auto recent = stats.recentAverage();
+                const auto recentPosition = tierScalePosition(scenario, recent);
                 row.recentPosition = recentPosition;
                 QString recentTier = QObject::tr("Unranked");
                 if (recentPosition) {
                     const auto reached = std::min(
-                        static_cast<std::size_t>(std::floor(
-                            domain::normalizedTierValue(m_projection.tiers, entry.thresholds, recent))),
-                        m_projection.tiers.size());
-                    if (reached >= 1) recentTier = q(m_projection.tiers[reached - 1].name);
+                        static_cast<std::size_t>(std::floor(*recentPosition)), m_tiers.size());
+                    if (reached >= 1) recentTier = q(m_tiers[reached - 1].name);
                 }
                 row.recentDescription =
                     recentPosition ? QObject::tr("Recent average %1 · %2").arg(formatBenchmarkNumber(*recent), recentTier)
@@ -283,14 +249,14 @@ namespace ksv::presentation {
                 QString nextTierText;
                 QString nextTierColor;
                 QString nextThresholdText = QStringLiteral("—");
-                if (projected && projected->nextThreshold) {
-                    const auto found = m_tierStyles.constFind(q(projected->nextThreshold->tierId.value));
+                if (const auto next = scenario.nextThreshold()) {
+                    const auto found = m_tierStyles.constFind(q(next->tierId.value));
                     if (found != m_tierStyles.constEnd()) {
                         nextTierText = found->name;
                         nextTierColor = found->textColor;
                     }
-                    nextThresholdText = formatBenchmarkNumber(projected->nextThreshold->score);
-                } else if (personalBest && !fills.empty() && fills.back() >= 1.0) {
+                    nextThresholdText = formatBenchmarkNumber(next->score);
+                } else if (personalBest && topChunkFilled) {
                     nextThresholdText = QObject::tr("Highest tier attained");
                 }
                 row.nextTierText = nextTierText;
@@ -303,18 +269,18 @@ namespace ksv::presentation {
                 row.matchStateText = matchText;
                 row.matchStateHint = matchHint;
 
-                QString description = progressDescription(m_projection.tiers, entry.thresholds, personalBest);
+                QString description = progressDescription(m_tiers, scenario, personalBest);
                 if (!matchText.isEmpty()) description += QStringLiteral("\n") + matchText + QStringLiteral(": ") + matchHint;
                 row.barDescription = description;
 
                 // Edge states, each with its own look: an unplayed scenario, a mapping the user
                 // has to fix (with its status), a PB above the top tier, and chunks whose
                 // thresholds are unusable.
-                row.missingChunks = missingThresholdChunks(m_projection.tiers, entry.thresholds);
+                row.missingChunks = missingThresholdChunks(m_tiers, scenario);
                 // The score that reaches each tier, at the end of its chunk ("" when this
                 // entry has no usable threshold for the tier).
-                for (const auto &tier: m_projection.tiers) {
-                    const auto threshold = thresholdFor(entry.thresholds, tier.id);
+                for (const auto &tier: m_tiers) {
+                    const auto threshold = scenario.thresholdFor(tier.id);
                     row.thresholdTexts.push_back(threshold ? formatBenchmarkNumber(*threshold) : QString());
                 }
                 ProgressGridEdgeState edgeState = ProgressGridEdgeState::None;
@@ -332,12 +298,12 @@ namespace ksv::presentation {
                     statusText = matchState == domain::ScenarioMatchState::MappedUnavailable
                                      ? QObject::tr("Unplayed · no runs of the linked scenario")
                                      : QObject::tr("Unplayed");
-                } else if (!m_projection.tiers.empty()) {
-                    const auto top = thresholdFor(entry.thresholds, m_projection.tiers.back().id);
-                    if (top && !fills.empty() && fills.back() >= 1.0 && *personalBest > *top) {
+                } else if (topChunkFilled) {
+                    const auto top = scenario.thresholdFor(m_tiers.back().id);
+                    if (top && *personalBest > *top) {
                         edgeState = ProgressGridEdgeState::AboveTop;
                         aboveTopText = QObject::tr("Above %1: %2 / %3")
-                                           .arg(q(m_projection.tiers.back().name), formatBenchmarkNumber(*personalBest),
+                                           .arg(q(m_tiers.back().name), formatBenchmarkNumber(*personalBest),
                                                 formatBenchmarkNumber(*top));
                     }
                 }
@@ -356,10 +322,9 @@ namespace ksv::presentation {
                 content.rows.push_back(std::move(row));
             }
 
-            const domain::BenchmarkDefinition &m_definition;
-            const domain::BenchmarkProjection &m_projection;
+            const domain::Benchmark &m_benchmark;
+            const std::span<const domain::Tier> m_tiers;
             QHash<QString, TierStyle> m_tierStyles;
-            QHash<QString, const domain::ScenarioProjection *> m_scenarios;
             QHash<QString, double> m_blockerRequired;
             QString m_nextTierName;
             QString m_nextTierColor;
@@ -374,31 +339,30 @@ namespace ksv::presentation {
         return fills;
     }
 
-    std::vector<double> scenarioChunkFills(const std::vector<domain::Tier> &tiers,
-                                           const std::vector<domain::Threshold> &thresholds,
+    std::vector<double> scenarioChunkFills(const std::span<const domain::Tier> tiers,
+                                           const domain::ScenarioBenchmarkEvaluation &scenario,
                                            const std::optional<double> score) {
         std::vector<double> fills(tiers.size(), 0.0);
         if (!score || !std::isfinite(*score)) return fills;
         for (std::size_t index = 0; index < tiers.size(); ++index) {
-            const auto upper = thresholdFor(thresholds, tiers[index].id);
-            const auto lower = index == 0 ? std::optional<double>{0.0} : thresholdFor(thresholds, tiers[index - 1].id);
+            const auto upper = scenario.thresholdFor(tiers[index].id);
+            const auto lower = index == 0 ? std::optional<double>{0.0} : scenario.thresholdFor(tiers[index - 1].id);
             if (!upper || !lower) continue;
             const double span = *upper - *lower;
             if (span > 0.0) fills[index] = std::clamp((*score - *lower) / span, 0.0, 1.0);
             else if (index == 0 && *upper == 0.0) fills[index] = 1.0; // a zero first threshold is met by any score
         }
         // A chunk the bar hatches never shows a fill measured from an unusable bound.
-        const auto missing = missingThresholdChunks(tiers, thresholds);
+        const auto missing = missingThresholdChunks(tiers, scenario);
         for (std::size_t index = 0; index < fills.size(); ++index)
             if (missing[index]) fills[index] = 0.0;
         return fills;
     }
 
-    std::optional<double> tierScalePosition(const std::vector<domain::Tier> &tiers,
-                                            const std::vector<domain::Threshold> &thresholds,
+    std::optional<double> tierScalePosition(const domain::ScenarioBenchmarkEvaluation &scenario,
                                             const std::optional<double> score) {
-        if (!score || !std::isfinite(*score) || !domain::thresholdLadder(tiers, thresholds)) return std::nullopt;
-        return domain::normalizedTierValue(tiers, thresholds, score);
+        if (!score || !std::isfinite(*score) || !scenario.ladder()) return std::nullopt;
+        return scenario.normalized(score);
     }
 
     namespace {
@@ -504,11 +468,10 @@ namespace ksv::presentation {
         return map;
     }
 
-    void BenchmarkProgressGridModel::reset(const domain::BenchmarkDefinition *definition,
-                                      const domain::BenchmarkProjection *projection) {
+    void BenchmarkProgressGridModel::reset(const domain::Benchmark *benchmark) {
         m_content = {};
-        if (definition && projection) {
-            GridBuilder builder(*definition, *projection);
+        if (benchmark) {
+            GridBuilder builder(*benchmark);
             builder.build();
             m_content = std::move(builder.content);
         }
@@ -519,11 +482,11 @@ namespace ksv::presentation {
         emit changed();
     }
 
-    std::vector<bool> missingThresholdChunks(const std::vector<domain::Tier> &tiers,
-                                             const std::vector<domain::Threshold> &thresholds) {
+    std::vector<bool> missingThresholdChunks(const std::span<const domain::Tier> tiers,
+                                             const domain::ScenarioBenchmarkEvaluation &scenario) {
         const std::size_t count = tiers.size();
         std::vector<std::optional<double> > values(count);
-        for (std::size_t index = 0; index < count; ++index) values[index] = thresholdFor(thresholds, tiers[index].id);
+        for (std::size_t index = 0; index < count; ++index) values[index] = scenario.thresholdFor(tiers[index].id);
         // A threshold out of order with a neighbour: which of the two is wrong is unknowable, so
         // neither bounds a chunk the bar may fill.
         std::vector<bool> outOfOrder(count, false);
