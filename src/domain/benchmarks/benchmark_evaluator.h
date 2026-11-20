@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-#include "benchmarks/benchmark_definition.h"
+#include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_projection.h"
 #include "benchmarks/benchmark_resolution.h"
 #include "benchmarks/benchmark_validation.h"
@@ -19,6 +19,9 @@ namespace ksv::domain {
     [[nodiscard]] double normalizedTierValue(const std::vector<Tier> &tiers,
                                              const std::vector<Threshold> &thresholds,
                                              std::optional<double> score);
+
+    [[nodiscard]] BenchmarkProjection toProjection(
+        const Benchmark &benchmark, std::vector<std::pair<std::chrono::sys_days, double>> rollingPlaytime);
 
     [[nodiscard]] BenchmarkProjection evaluateBenchmark(
         const BenchmarkDefinition &definition, const CompletenessResult &completeness,

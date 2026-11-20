@@ -11,6 +11,7 @@ add_library(ksv_domain STATIC
         rolling_playtime.cpp
         benchmarks/benchmark_ids.h
         benchmarks/benchmark.h
+        benchmarks/benchmark.cpp
         benchmarks/benchmark_definition.h
         benchmarks/benchmark_definition.cpp
         benchmarks/benchmark_validation.h

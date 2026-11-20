@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "benchmark_builders.h"
-#include "benchmarks/benchmark_evaluator.h"
+#include "benchmarks/benchmark.h"
 #include "run_builders.h"
 #include "user_profile.h"
 
@@ -27,17 +27,17 @@ namespace {
 TEST(BenchmarkProjectionTiming, AFullProjectionOverALargeProfileStaysWellUnderASecond) {
     UserProfile profile;
     std::vector<ScenarioId> scenarios;
-    BenchmarkDefinition benchmark;
-    benchmark.id = BenchmarkId{"timing"};
-    benchmark.name = "Timing";
-    benchmark.tiers = {benchmarkTier("bronze"), benchmarkTier("silver"), benchmarkTier("gold")};
+    BenchmarkDefinition definition;
+    definition.id = BenchmarkId{"timing"};
+    definition.name = "Timing";
+    definition.tiers = {benchmarkTier("bronze"), benchmarkTier("silver"), benchmarkTier("gold")};
     std::vector<ScenarioResolution> resolutions;
 
     for (int scenario = 0; scenario < kScenarios; ++scenario) {
         const auto hash = hashOf(scenario);
         scenarios.push_back({"Scenario " + hash, hash});
         const auto entryId = "e" + std::to_string(scenario);
-        benchmark.uncategorized.push_back(benchmarkEntry(
+        definition.uncategorized.push_back(benchmarkEntry(
             entryId, "Scenario " + hash, hash,
             {{"bronze", 100.0}, {"silver", 200.0}, {"gold", 300.0}}));
         resolutions.push_back(ksv::tests_support::resolvedEntry(entryId));
@@ -49,16 +49,17 @@ TEST(BenchmarkProjectionTiming, AFullProjectionOverALargeProfileStaysWellUnderAS
 
     const auto start = std::chrono::steady_clock::now();
     const auto facts = profile.getRunFacts(scenarios);
-    const auto rolling = profile.getRollingTimeAverage(scenarios, 3);
-    const auto projection = evaluateBenchmark(benchmark, {Completeness::Trackable, {}}, resolutions, facts, rolling);
+    const auto evaluated = Benchmark(definition, {Completeness::Trackable, {}}, resolutions, facts);
+    const auto rolling = evaluated.rollingPlaytime(3);
     const auto elapsed = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - start).count();
 
     std::cout << "[ TIMING   ] " << kScenarios << " scenarios x " << kRunsPerScenario
               << " runs = " << facts.size() << " facts, "
-              << projection.averageRankHistory.size() << " history points, "
+              << evaluated.averageRankHistory().size() << " history points, "
               << elapsed << " ms" << std::endl;
     EXPECT_EQ(facts.size(), static_cast<std::size_t>(kScenarios) * kRunsPerScenario);
-    EXPECT_FALSE(projection.averageRankHistory.empty());
+    EXPECT_FALSE(evaluated.averageRankHistory().empty());
+    EXPECT_FALSE(rolling.empty());
     EXPECT_LT(elapsed, kCeilingMs);
 }

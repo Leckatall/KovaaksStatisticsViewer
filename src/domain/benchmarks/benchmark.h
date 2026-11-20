@@ -46,9 +46,13 @@ namespace ksv::domain {
         friend class Benchmark;
         ScenarioBenchmarkEvaluation() = default;
 
-        // TODO(2026-11-19): placeholder storage, replaced by U3
-        ScenarioEntryId m_entryId;
+        ScenarioEntry m_entry;
+        ScenarioMatchState m_matchState = ScenarioMatchState::Unresolved;
         ScenarioEvaluation m_stats;
+        std::optional<std::vector<double>> m_ladder;
+        std::optional<TierId> m_attainedTier;
+        std::optional<Threshold> m_nextThreshold;
+        double m_normalizedRank = 0.0;
     };
 
     class GroupEvaluation {
@@ -64,8 +68,12 @@ namespace ksv::domain {
         friend class Benchmark;
         GroupEvaluation() = default;
 
-        // TODO(2026-11-19): placeholder storage, replaced by U3
         GroupId m_id;
+        std::string m_name;
+        BenchmarkColor m_color;
+        std::optional<TierId> m_satisfiedTier;
+        std::vector<ScenarioBenchmarkEvaluation> m_scenarios;
+        std::vector<GroupEvaluation> m_subgroups;
     };
 
     class Benchmark {
@@ -99,9 +107,23 @@ namespace ksv::domain {
         [[nodiscard]] std::vector<std::pair<std::chrono::sys_days, double>> rollingPlaytime(int windowDays) const;
 
     private:
-        // TODO(2026-11-19): placeholder storage, replaced by U3
+        struct Builder;
+
         BenchmarkDefinition m_definition;
         CompletenessResult m_completeness;
+        std::vector<ScenarioBenchmarkEvaluation> m_uncategorized;
+        std::vector<GroupEvaluation> m_categories;
+        std::optional<TierId> m_attainedRank;
+        std::optional<TierId> m_completedRank;
+        std::optional<TierId> m_nextTier;
+        std::vector<RankBlocker> m_nextTierBlockers;
+        int m_scenariosAtNextTier = 0;
+        std::optional<double> m_averageRank;
+        std::vector<AverageRankPoint> m_averageRankHistory;
+        std::vector<AverageRankPoint> m_recentAverageRankHistory;
+        double m_totalPlaytimeSeconds = 0.0;
+        std::optional<std::chrono::sys_days> m_latestRunDay;
+        std::vector<TimedScore> m_memberScores;
     };
 }
 

@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_projection.h"
 #include "run.h"
 
@@ -54,6 +55,25 @@ namespace ksv::tests_support {
         if (found == projection.scenarios.end()) throw std::out_of_range("no scenario projection " + id);
         return *found;
     }
+
+    inline domain::Benchmark evaluatedBenchmark(domain::BenchmarkDefinition definition,
+                                                const std::vector<domain::RunFact> &runs,
+                                                std::vector<domain::ScenarioResolution> resolutions = {}) {
+        if (resolutions.empty()) {
+            for (const auto *entry: definition.entries()) resolutions.push_back(resolvedEntry(entry->id.value));
+        }
+        auto completeness = domain::validateBenchmark(definition);
+        return domain::Benchmark(std::move(definition), std::move(completeness), resolutions, runs);
+    }
+
+    [[nodiscard]] inline const domain::ScenarioBenchmarkEvaluation &
+    scenarioNamed(const domain::Benchmark &benchmark, const std::string &id) {
+        const auto *scenario = benchmark.scenario(domain::ScenarioEntryId{id});
+        if (!scenario) throw std::out_of_range("no scenario evaluation " + id);
+        return *scenario;
+    }
+
+    const domain::ScenarioBenchmarkEvaluation &scenarioNamed(const domain::Benchmark &&, const std::string &) = delete;
 }
 
 #endif // KOVAAKSSTATSVIEWER_TESTS_BENCHMARK_BUILDERS_H
