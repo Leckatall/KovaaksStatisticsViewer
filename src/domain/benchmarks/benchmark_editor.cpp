@@ -35,14 +35,6 @@ namespace ksv::domain {
             return it == benchmark.categories.end() ? nullptr : &*it;
         }
 
-        BenchmarkGroup *findGroup(BenchmarkDefinition &benchmark, const GroupId &id) {
-            if (auto *category = findCategory(benchmark, id)) return category;
-            for (auto &category: benchmark.categories)
-                for (auto &sub: category.subcategories)
-                    if (sub.id == id) return &sub;
-            return nullptr;
-        }
-
         std::optional<BenchmarkScenario> detachEntry(BenchmarkDefinition &benchmark, const BenchmarkScenarioId &id) {
             const auto location = locateEntry(benchmark, id);
             if (!location.list) return std::nullopt;
@@ -71,7 +63,7 @@ namespace ksv::domain {
         std::optional<BenchmarkEditError> groupTargetError(BenchmarkDefinition &benchmark, const EditorGroupTarget &to) {
             const auto *targetGroup = std::get_if<GroupId>(&to);
             if (!targetGroup) return std::nullopt;
-            if (!findGroup(benchmark, *targetGroup)) return BenchmarkEditError::UnknownGroup;
+            if (!benchmark.group(*targetGroup)) return BenchmarkEditError::UnknownGroup;
             return std::nullopt;
         }
 
@@ -79,7 +71,7 @@ namespace ksv::domain {
         std::vector<BenchmarkScenario> &groupScenarios(BenchmarkDefinition &benchmark, const EditorGroupTarget &to) {
             const auto *targetGroup = std::get_if<GroupId>(&to);
             if (!targetGroup) return benchmark.uncategorized;
-            return findGroup(benchmark, *targetGroup)->scenarios;
+            return benchmark.group(*targetGroup)->scenarios;
         }
 
         // KSV-assigned defaults for new tiers and groups; users may edit any of them.
@@ -214,14 +206,14 @@ namespace ksv::domain {
     }
 
     BenchmarkEditResult BenchmarkEditor::renameGroup(const GroupId &id, const std::string &name) {
-        auto *group = findGroup(m_target, id);
+        auto *group = m_target.group(id);
         if (!group) return {BenchmarkEditError::UnknownGroup};
         group->name = name;
         return {};
     }
 
     BenchmarkEditResult BenchmarkEditor::setGroupColor(const GroupId &id, BenchmarkColor color) {
-        auto *group = findGroup(m_target, id);
+        auto *group = m_target.group(id);
         if (!group) return {BenchmarkEditError::UnknownGroup};
         group->color = color;
         return {};

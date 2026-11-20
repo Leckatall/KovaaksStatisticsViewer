@@ -36,7 +36,33 @@ namespace ksv::domain {
             }
             return nullptr;
         }
+
+        template<class Group, class Definition>
+        std::vector<Group *> groupsOf(Definition &definition) {
+            std::vector<Group *> groups;
+            for (auto &category: definition.categories) {
+                groups.push_back(&category);
+                for (auto &subcategory: category.subcategories) groups.push_back(&subcategory);
+            }
+            return groups;
+        }
+
+        template<class Group>
+        Group *findGroup(const std::vector<Group *> &groups, const GroupId &id) {
+            const auto found = std::ranges::find(groups, id, &BenchmarkGroup::id);
+            return found == groups.end() ? nullptr : *found;
+        }
     }
+
+    std::vector<BenchmarkGroup *> BenchmarkDefinition::groups() { return groupsOf<BenchmarkGroup>(*this); }
+
+    std::vector<const BenchmarkGroup *> BenchmarkDefinition::groups() const {
+        return groupsOf<const BenchmarkGroup>(*this);
+    }
+
+    BenchmarkGroup *BenchmarkDefinition::group(const GroupId &id) { return findGroup(groups(), id); }
+
+    const BenchmarkGroup *BenchmarkDefinition::group(const GroupId &id) const { return findGroup(groups(), id); }
 
     std::vector<std::vector<BenchmarkScenario> *> BenchmarkDefinition::scenarioLists() {
         return scenarioListsOf<std::vector<BenchmarkScenario>>(*this);

@@ -61,10 +61,10 @@ namespace ksv::domain {
                 issues.push_back({BenchmarkIssueCode::DuplicateTierName, tier.id});
         }
 
+        for (const auto *group: def.groups())
+            if (isBlank(group->name)) issues.push_back({BenchmarkIssueCode::MissingGroupName, group->id});
+
         for (const auto &category: def.categories) {
-            if (isBlank(category.name)) issues.push_back({BenchmarkIssueCode::MissingGroupName, category.id});
-            for (const auto &sub: category.subcategories)
-                if (isBlank(sub.name)) issues.push_back({BenchmarkIssueCode::MissingGroupName, sub.id});
             const bool hasScenarios = !category.scenarios.empty();
             const bool hasSubcategories = !category.subcategories.empty();
             if (hasScenarios && hasSubcategories)

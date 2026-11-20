@@ -185,11 +185,8 @@ namespace ksv::qt_data {
                 if (!add(tier.id.value)) return false;
                 tierIds.insert(tier.id.value);
             }
-            for (const auto &category: def.categories) {
-                if (!add(category.id.value)) return false;
-                for (const auto &sub: category.subcategories)
-                    if (!add(sub.id.value)) return false;
-            }
+            for (const auto *group: def.groups())
+                if (!add(group->id.value)) return false;
             for (const auto *entry: def.entries()) {
                 if (!add(entry->id.value)) return false;
                 for (const auto &threshold: entry->thresholds)

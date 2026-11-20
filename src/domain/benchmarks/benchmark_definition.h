@@ -72,6 +72,11 @@ namespace ksv::domain {
         [[nodiscard]] std::vector<const BenchmarkScenario *> entries() const;
         [[nodiscard]] BenchmarkScenario *entry(const BenchmarkScenarioId &id);
         [[nodiscard]] const BenchmarkScenario *entry(const BenchmarkScenarioId &id) const;
+        /** Each category followed by its subcategories. Pointers remain valid while the structure is unmodified. */
+        [[nodiscard]] std::vector<BenchmarkGroup *> groups();
+        [[nodiscard]] std::vector<const BenchmarkGroup *> groups() const;
+        [[nodiscard]] BenchmarkGroup *group(const GroupId &id);
+        [[nodiscard]] const BenchmarkGroup *group(const GroupId &id) const;
         /** Unique, in first-occurrence order over entries(). */
         [[nodiscard]] std::vector<std::string> scenarioHashes() const;
         /** Every tier admitted and strictly increasing, in tier order; otherwise nullopt. */

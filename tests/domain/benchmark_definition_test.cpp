@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <limits>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -94,6 +96,37 @@ TEST(BenchmarkDefinition, EntryFindsAScenarioAtAnyDepthById) {
     ASSERT_NE(nested, nullptr);
     nested->name = "renamed";
     EXPECT_EQ(definition.categories[1].subcategories[0].scenarios[1].name, "renamed");
+}
+
+TEST(BenchmarkDefinition, GroupsListEachCategoryBeforeItsSubcategories) {
+    auto definition = everyShape();
+    auto &categories = definition.categories;
+    const std::vector<BenchmarkGroup *> expected{
+        &categories[0], &categories[1], &categories[1].subcategories[0], &categories[1].subcategories[1],
+        &categories[2], &categories[2].subcategories[0], &categories[2].subcategories[1]
+    };
+
+    EXPECT_EQ(definition.groups(), expected);
+    EXPECT_EQ(std::as_const(definition).groups(), (std::vector<const BenchmarkGroup *>{expected.begin(), expected.end()}));
+    EXPECT_TRUE(BenchmarkDefinition{.uncategorized = {entry("u1")}}.groups().empty());
+}
+
+TEST(BenchmarkDefinition, GroupFindsACategoryOrSubcategoryById) {
+    auto definition = everyShape();
+    for (std::size_t index = 0; index < definition.categories.size(); ++index) {
+        definition.categories[index].id = GroupId{"c" + std::to_string(index)};
+        for (std::size_t sub = 0; sub < definition.categories[index].subcategories.size(); ++sub)
+            definition.categories[index].subcategories[sub].id = GroupId{"c" + std::to_string(index) + "s" + std::to_string(sub)};
+    }
+
+    for (const auto *group: definition.groups())
+        EXPECT_EQ(std::as_const(definition).group(group->id), group) << group->id.value;
+    EXPECT_EQ(definition.group(GroupId{"missing"}), nullptr);
+
+    auto *nested = definition.group(GroupId{"c2s1"});
+    ASSERT_NE(nested, nullptr);
+    nested->name = "renamed";
+    EXPECT_EQ(definition.categories[2].subcategories[1].name, "renamed");
 }
 
 TEST(BenchmarkDefinition, ScenarioHashesKeepFirstOccurrencesAcrossEntries) {
