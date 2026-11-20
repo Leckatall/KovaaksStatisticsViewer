@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -172,6 +171,7 @@ namespace ksv::application {
 
         if (!m_selected) {
             m_state = BenchmarkTrackingState::NoSelection;
+            // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
             m_projection = {};
             m_snapshot.availability = m_state;
             return;
@@ -194,24 +194,25 @@ namespace ksv::application {
             // served a remembered absence.
             cached = m_cache.emplace(*m_selected, evaluate(*loaded)).first;
         }
-        // Any library or profile change drops the whole cache, so a surviving entry is always
-        // current for the definition it was built from -- presence is the only check a hit needs.
+        // Resolution invalidates the cache, but a recents notification can arrive before it
+        // processes a library change. Publish every selected result from the same evaluation.
         if (cached != m_cache.end()) {
-            m_projection = cached->second.projection;
             applyPlaytimeView(cached->second);
             applyRankRange(GraphKey::BenchmarkRank, cached->second);
             applyRankRange(GraphKey::BenchmarkRecentRank, cached->second);
+            const auto &benchmark = m_snapshot.benchmark.emplace(cached->second.benchmark);
+            // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
+            m_projection = domain::toProjection(benchmark, m_snapshot.visiblePlaytime);
+            m_snapshot.projection = m_projection;
+            m_snapshot.selectedLoaded = data::LoadedBenchmark{benchmark.definition(), benchmark.completeness()};
             m_state = BenchmarkTrackingState::Ready;
         } else {
             m_state = BenchmarkTrackingState::Unavailable;
+            // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
             m_projection = {};
         }
 
         m_snapshot.availability = m_state;
-        if (m_state == BenchmarkTrackingState::Ready) {
-            if (loaded) m_snapshot.selectedLoaded = *loaded;
-            m_snapshot.projection = m_projection;
-        }
     }
 
     void BenchmarkTrackingUseCase::applyPlaytimeView(Evaluation &evaluation) {
@@ -219,13 +220,12 @@ namespace ksv::application {
         const auto &preferences = committed.configuration->preferences(GraphKey::BenchmarkPlaytime);
         const int window = effectiveAveragingWindow(preferences);
         if (evaluation.fullPlaytimeWindowDays != window) {
-            evaluation.fullPlaytime = includeInactiveDays(
-                m_profileService->getRollingTimeAverage(evaluation.scenarios, window));
+            evaluation.fullPlaytime = includeInactiveDays(evaluation.benchmark.rollingPlaytime(window));
             evaluation.fullPlaytimeWindowDays = window;
         }
         const auto projection = resolveRange(effectiveRange(preferences), m_daySource->today(),
-                                             evaluation.latestRunDay);
-        m_projection.rollingPlaytime = visiblePlaytime(evaluation.fullPlaytime, projection);
+                                             evaluation.benchmark.latestRunDay());
+        m_snapshot.visiblePlaytime = visiblePlaytime(evaluation.fullPlaytime, projection);
         m_snapshot.playtime = describePlaytimeView(window, projection, evaluation.fullPlaytime);
     }
 
@@ -234,7 +234,9 @@ namespace ksv::application {
         const auto cached = m_cache.find(*m_selected);
         if (cached == m_cache.end()) return;
         applyPlaytimeView(cached->second);
-        m_snapshot.projection->rollingPlaytime = m_projection.rollingPlaytime;
+        // TODO(2026-11-19): Remove at Cleanup with BenchmarkProjection; replaced by benchmark()
+        m_projection.rollingPlaytime = m_snapshot.visiblePlaytime;
+        m_snapshot.projection->rollingPlaytime = m_snapshot.visiblePlaytime;
         notifyPlaytimeChanged();
     }
 
@@ -244,8 +246,8 @@ namespace ksv::application {
 
     void BenchmarkTrackingUseCase::applyRankRange(const GraphKey graph, const Evaluation &evaluation) {
         const bool recent = graph == GraphKey::BenchmarkRecentRank;
-        const auto &history = recent ? evaluation.projection.recentAverageRankHistory
-                                     : evaluation.projection.averageRankHistory;
+        const auto &history = recent ? evaluation.benchmark.recentAverageRankHistory()
+                                     : evaluation.benchmark.averageRankHistory();
         auto &view = recent ? m_snapshot.recentRank : m_snapshot.rank;
         const auto committed = m_configuration->current();
         const auto range = effectiveRange(committed.configuration->preferences(graph));
@@ -281,29 +283,11 @@ namespace ksv::application {
                                                           : std::vector<domain::ScenarioResolution>{};
         // Unique mapped hashes only. The name is left empty deliberately: ScenarioId equality,
         // ordering and hashing all ignore it, so the profile lookup needs nothing else.
+        auto hashes = loaded.benchmark.scenarioHashes();
         std::vector<domain::ScenarioId> scenarios;
-        std::unordered_set<std::string> hashes;
-        const auto collectHashes = [&](const std::vector<domain::ScenarioEntry> &entries) {
-            for (const auto &entry: entries)
-                for (const auto &hash: entry.hashes)
-                    if (hashes.insert(hash).second) scenarios.push_back({{}, hash});
-        };
-        collectHashes(loaded.benchmark.uncategorized);
-        for (const auto &category: loaded.benchmark.categories) {
-            collectHashes(category.scenarios);
-            for (const auto &subcategory: category.subcategories) collectHashes(subcategory.scenarios);
-        }
+        scenarios.reserve(hashes.size());
+        for (auto &hash: hashes) scenarios.push_back({{}, std::move(hash)});
         const auto facts = m_profileService->getRunFacts(scenarios);
-        Evaluation evaluation;
-        for (const auto &fact: facts) {
-            // The playtime accounting skips runs stamped at or before the epoch, so the anchor does too.
-            if (fact.run_id.start_time <= 0) continue;
-            const auto day = fact.run_id.startDay();
-            if (!evaluation.latestRunDay || day > *evaluation.latestRunDay) evaluation.latestRunDay = day;
-        }
-        evaluation.projection = domain::evaluateBenchmark(loaded.benchmark, loaded.completeness, resolutions,
-                                                          facts, {});
-        evaluation.scenarios = std::move(scenarios);
-        return evaluation;
+        return {domain::Benchmark{loaded.benchmark, loaded.completeness, resolutions, facts}, {}, {}};
     }
 }
