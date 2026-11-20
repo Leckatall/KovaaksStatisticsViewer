@@ -9,7 +9,7 @@
 
 namespace ksv::presentation {
     struct BenchmarkCellKey {
-        domain::ScenarioEntryId entryId;
+        domain::BenchmarkScenarioId entryId;
         domain::TierId tierId;
         auto operator<=>(const BenchmarkCellKey &) const = default;
     };

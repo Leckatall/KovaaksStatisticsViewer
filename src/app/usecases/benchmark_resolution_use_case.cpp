@@ -27,7 +27,7 @@ namespace ksv::application {
             return false;
         }
 
-        domain::BenchmarkScenario *findEntry(domain::BenchmarkDefinition &benchmark, const domain::ScenarioEntryId &id) {
+        domain::BenchmarkScenario *findEntry(domain::BenchmarkDefinition &benchmark, const domain::BenchmarkScenarioId &id) {
             domain::BenchmarkScenario *found = nullptr;
             forEachScenarioList(benchmark, [&](std::vector<domain::BenchmarkScenario> &entries) {
                 const auto it = std::ranges::find_if(
@@ -59,7 +59,7 @@ namespace ksv::application {
         }
 
         struct AutoMapping {
-            domain::ScenarioEntryId entryId;
+            domain::BenchmarkScenarioId entryId;
             std::string hash;
             std::string name;
         };

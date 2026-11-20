@@ -195,7 +195,7 @@ namespace ksv::presentation {
         void restoreSelection(const QStringList &ids, const QVariantMap &cell, int fallbackPosition);
         void pruneCellInputs();
         // Selection arrives in click order; a batch keeps the rows' current visible order. Requires a draft.
-        [[nodiscard]] std::vector<domain::ScenarioEntryId> inVisibleOrder(const QStringList &entryIds) const;
+        [[nodiscard]] std::vector<domain::BenchmarkScenarioId> inVisibleOrder(const QStringList &entryIds) const;
 
         std::shared_ptr<application::IBenchmarkManagerUseCase> m_useCase;
 

@@ -91,7 +91,7 @@ namespace ksv::qt_data {
                 if (!threshold) return std::nullopt;
                 thresholds.push_back(*threshold);
             }
-            BenchmarkScenario entry{ScenarioEntryId{*id}, object["name"].toString().toStdString(),
+            BenchmarkScenario entry{BenchmarkScenarioId{*id}, object["name"].toString().toStdString(),
                                 std::move(hashes), std::move(thresholds)};
             return entry;
         }

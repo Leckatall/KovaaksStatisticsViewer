@@ -16,28 +16,28 @@ namespace ksv::tests_support {
     inline domain::BenchmarkScenario benchmarkEntry(
         const std::string &id, const std::string &name, std::optional<std::string> hash,
         const std::vector<std::pair<std::string, double> > &thresholds) {
-        domain::BenchmarkScenario entry{domain::ScenarioEntryId{id}, name, {}, {}};
+        domain::BenchmarkScenario entry{domain::BenchmarkScenarioId{id}, name, {}, {}};
         if (hash && !hash->empty()) entry.hashes.push_back(std::move(*hash));
         for (const auto &[tier, score]: thresholds) entry.thresholds.push_back({domain::TierId{tier}, score});
         return entry;
     }
 
     inline domain::ScenarioResolution resolvedEntry(const std::string &id) {
-        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Resolved, {}};
+        return {domain::BenchmarkScenarioId{id}, domain::ScenarioMatchState::Resolved, {}};
     }
     inline domain::ScenarioResolution unresolvedEntry(const std::string &id) {
-        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Unresolved, {}};
+        return {domain::BenchmarkScenarioId{id}, domain::ScenarioMatchState::Unresolved, {}};
     }
     inline domain::ScenarioResolution mappedUnavailableEntry(const std::string &id) {
-        return {domain::ScenarioEntryId{id}, domain::ScenarioMatchState::MappedUnavailable, {}};
+        return {domain::BenchmarkScenarioId{id}, domain::ScenarioMatchState::MappedUnavailable, {}};
     }
     inline domain::ScenarioResolution ambiguousEntry(const std::string &id, const std::vector<std::string> &hashes) {
-        domain::ScenarioResolution value{domain::ScenarioEntryId{id}, domain::ScenarioMatchState::Ambiguous, {}};
+        domain::ScenarioResolution value{domain::BenchmarkScenarioId{id}, domain::ScenarioMatchState::Ambiguous, {}};
         for (const auto &hash: hashes) value.candidates.push_back({hash, 1, std::nullopt});
         return value;
     }
     inline domain::ScenarioResolution autoMappableEntry(const std::string &id, const std::string &hash) {
-        domain::ScenarioResolution value{domain::ScenarioEntryId{id}, domain::ScenarioMatchState::AutoMappable, {}};
+        domain::ScenarioResolution value{domain::BenchmarkScenarioId{id}, domain::ScenarioMatchState::AutoMappable, {}};
         value.candidates.push_back({hash, 1, std::nullopt});
         return value;
     }
@@ -57,7 +57,7 @@ namespace ksv::tests_support {
 
     [[nodiscard]] inline const domain::ScenarioBenchmarkEvaluation &
     scenarioNamed(const domain::Benchmark &benchmark, const std::string &id) {
-        const auto *scenario = benchmark.scenario(domain::ScenarioEntryId{id});
+        const auto *scenario = benchmark.scenario(domain::BenchmarkScenarioId{id});
         if (!scenario) throw std::out_of_range("no scenario evaluation " + id);
         return *scenario;
     }

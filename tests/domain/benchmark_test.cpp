@@ -742,7 +742,7 @@ TEST(BenchmarkTree, CategoriesExposeDirectScenariosAndSubgroupsAndASubgroupHasNo
     const auto nested = categories.back()->subgroups().back()->scenarios();
     ASSERT_FALSE(nested.empty());
     EXPECT_EQ(evaluated.scenario(nested.front()->entryId()), nested.front());
-    EXPECT_EQ(evaluated.scenario(ScenarioEntryId{"unknown"}), nullptr);
+    EXPECT_EQ(evaluated.scenario(BenchmarkScenarioId{"unknown"}), nullptr);
     EXPECT_THROW(static_cast<void>(scenarioNamed(evaluated, "unknown")), std::out_of_range);
 }
 
@@ -782,7 +782,7 @@ TEST(BenchmarkRankLevel, IncompleteBuildsTheTreeStatsAndPlaytimeButNoRankResults
     ASSERT_EQ(subgroups.size(), 2U);
     const auto nested = subgroups.back()->scenarios();
     ASSERT_EQ(nested.size(), 1U);
-    EXPECT_EQ(evaluated.scenario(ScenarioEntryId{"b1"}), nested.front());
+    EXPECT_EQ(evaluated.scenario(BenchmarkScenarioId{"b1"}), nested.front());
     EXPECT_EQ(nested.front()->stats().runCount(), 2);
     double playtime = 0.0;
     for (const auto *scenario: evaluated.scenarios()) {
@@ -921,7 +921,7 @@ TEST(BenchmarkRollingPlaytime, AgreesWithTheProfileSeriesAndWithHandDerivedValue
 TEST(BenchmarkCopy, ACopyIsIndependentOfItsSource) {
     auto facts = hierarchyScores({{"u1", 200.0F}});
     for (auto &fact: facts) fact.duration_seconds = 10.0F;
-    const ScenarioEntryId nestedId{"a1"};
+    const BenchmarkScenarioId nestedId{"a1"};
     auto assigned = evaluatedBenchmark(benchmark(), {});
     const auto copy = [&] {
         const auto source = evaluatedBenchmark(hierarchyBenchmark(), facts);
@@ -938,7 +938,7 @@ TEST(BenchmarkCopy, ACopyIsIndependentOfItsSource) {
     const auto categories = copy.categories();
     ASSERT_EQ(categories.size(), 2U);
     ASSERT_EQ(categories.front()->scenarios().size(), 2U);
-    EXPECT_EQ(categories.front()->scenarios().front(), copy.scenario(ScenarioEntryId{"d1"}));
+    EXPECT_EQ(categories.front()->scenarios().front(), copy.scenario(BenchmarkScenarioId{"d1"}));
     ASSERT_EQ(categories.back()->subgroups().size(), 2U);
     ASSERT_FALSE(categories.back()->subgroups().front()->scenarios().empty());
     EXPECT_EQ(categories.back()->subgroups().front()->scenarios().front(), copy.scenario(nestedId));

@@ -546,7 +546,7 @@ namespace ksv::driver {
                      std::to_string(suffix);
             }
             usedIds.insert(QString::fromStdString(id));
-            result.id = domain::ScenarioEntryId{id};
+            result.id = domain::BenchmarkScenarioId{id};
             const auto found = hash ? best.find(*hash) : best.end();
             const double base = found != best.end() && found->second > 0 ? found->second : 1000.0;
             for (const auto &tier: spec.tiers) {

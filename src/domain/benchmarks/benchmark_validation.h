@@ -30,7 +30,7 @@ namespace ksv::domain {
         MissingGroupName              // a user-created category or subcategory
     };
 
-    using IssueTarget = std::variant<std::monostate, BenchmarkId, TierId, GroupId, ScenarioEntryId>;
+    using IssueTarget = std::variant<std::monostate, BenchmarkId, TierId, GroupId, BenchmarkScenarioId>;
 
     struct BenchmarkIssue {
         BenchmarkIssueCode code;

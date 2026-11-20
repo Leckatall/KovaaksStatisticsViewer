@@ -159,7 +159,7 @@ namespace ksv::ui {
                 const std::string id = "e" + std::to_string(i);
                 const double base = 1000.0 + i * 7.0;
 
-                BenchmarkScenario entry{ScenarioEntryId{id}, "Sample Drill Number " + std::to_string(i + 1),
+                BenchmarkScenario entry{BenchmarkScenarioId{id}, "Sample Drill Number " + std::to_string(i + 1),
                                     std::vector<std::string>{"hash" + std::to_string(i)}, {}};
                 std::vector<double> scores;
                 for (std::size_t t = 0; t < tierCount; ++t) {

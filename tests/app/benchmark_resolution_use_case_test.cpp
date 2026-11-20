@@ -215,7 +215,7 @@ TEST(BenchmarkResolutionUseCase, AutoMappingSkipsAHashAlreadyMappedInASubcategor
     ASSERT_TRUE(snap.resolutions.contains(BenchmarkId{"b1"}));
     const auto &resolutions = resolutionsFor(snap, "b1");
     ASSERT_EQ(resolutions.size(), 2U);
-    ASSERT_EQ(resolutions.front().entryId, ScenarioEntryId{"dupe"});
+    ASSERT_EQ(resolutions.front().entryId, BenchmarkScenarioId{"dupe"});
     EXPECT_EQ(resolutions.front().state, ScenarioMatchState::AutoMappable);
     for (const auto &batch: f.benchmarks->batchRequests)
         for (const auto &request: batch)

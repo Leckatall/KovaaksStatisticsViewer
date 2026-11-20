@@ -806,7 +806,7 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
     const auto *benchmark = w->app->benchmarkTrackingUseCase()->benchmark();
     ASSERT_NE(benchmark, nullptr);
     EXPECT_FALSE(benchmark->attainedRank().has_value());
-    const auto *wallSix = benchmark->scenario(domain::ScenarioEntryId{"s1"});
+    const auto *wallSix = benchmark->scenario(domain::BenchmarkScenarioId{"s1"});
     ASSERT_NE(wallSix, nullptr);
     EXPECT_EQ(wallSix->matchState(), domain::ScenarioMatchState::Resolved);
     EXPECT_TRUE(wallSix->stats().personalBest().has_value()) << "the mapped scenario keeps its played facts";
@@ -1095,7 +1095,7 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
     const auto otherHash = QString::fromStdString(other->hash);
     const auto tracking = w->app->benchmarkTrackingUseCase();
     tracking->select(domain::BenchmarkId{"b-track"});
-    const domain::ScenarioEntryId entryId{"s1"};
+    const domain::BenchmarkScenarioId entryId{"s1"};
     const auto baseline = [&] {
         const auto *benchmark = tracking->benchmark();
         const auto *row = benchmark ? benchmark->scenario(entryId) : nullptr;

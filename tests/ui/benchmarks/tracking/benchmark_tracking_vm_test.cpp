@@ -451,7 +451,7 @@ TEST(BenchmarkTrackingSummaryTexts, BlockerTextCountsTheBlockers) {
         for (std::size_t i = 0; i < count; ++i) {
             const auto id = std::to_string(i);
             fixture.definition.uncategorized.push_back(
-                {ScenarioEntryId{id}, "Scenario " + id, {id}, standardThresholds(1, 2, 3)});
+                {BenchmarkScenarioId{id}, "Scenario " + id, {id}, standardThresholds(1, 2, 3)});
             if (i < played) fixture.runs.push_back(runOn(ymd(2024, 3, 4), id, 3));
         }
         BenchmarkTrackingViewModel vm{fakeWith(snapshotFor(fixture))};

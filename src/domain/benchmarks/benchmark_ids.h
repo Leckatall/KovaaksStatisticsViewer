@@ -18,12 +18,12 @@ namespace ksv::domain {
     struct BenchmarkIdTag {};
     struct TierIdTag {};
     struct GroupIdTag {};
-    struct ScenarioEntryIdTag {};
+    struct BenchmarkScenarioIdTag {};
 
     using BenchmarkId = OpaqueId<BenchmarkIdTag>;
     using TierId = OpaqueId<TierIdTag>;
     using GroupId = OpaqueId<GroupIdTag>;
-    using ScenarioEntryId = OpaqueId<ScenarioEntryIdTag>;
+    using BenchmarkScenarioId = OpaqueId<BenchmarkScenarioIdTag>;
 
     struct BenchmarkColor {
         uint8_t red = 0;

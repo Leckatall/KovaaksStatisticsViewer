@@ -27,7 +27,7 @@ namespace ksv::domain {
     };
 
     struct ScenarioResolution {
-        ScenarioEntryId entryId;
+        BenchmarkScenarioId entryId;
         ScenarioMatchState state = ScenarioMatchState::Unresolved;
         std::vector<ScenarioCandidate> candidates;
         auto operator<=>(const ScenarioResolution &) const = default;

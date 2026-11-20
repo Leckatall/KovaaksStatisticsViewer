@@ -23,7 +23,7 @@ namespace ksv::domain {
     };
 
     struct BenchmarkScenario {
-        ScenarioEntryId id;
+        BenchmarkScenarioId id;
         std::string name;                  // retained display label; never replaced by the hash
         std::vector<std::string> hashes;   // unique, non-empty, in user order; writers enforce this
         std::vector<Threshold> thresholds; // one per tier when complete; decoded as-is for validation

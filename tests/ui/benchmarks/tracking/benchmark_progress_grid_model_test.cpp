@@ -55,7 +55,7 @@ namespace {
                                 std::vector<Tier> tiers = fiveTiers())
             : benchmark(evaluatedBenchmark(
                   {BenchmarkId{"grid"}, "Grid", std::move(tiers),
-                   {{ScenarioEntryId{"entry"}, "Scenario", {"hash"}, std::move(thresholds)}}, {}}, {})) {}
+                   {{BenchmarkScenarioId{"entry"}, "Scenario", {"hash"}, std::move(thresholds)}}, {}}, {})) {}
 
         const ScenarioBenchmarkEvaluation &scenario() const { return scenarioNamed(benchmark, "entry"); }
         std::vector<double> fills(std::optional<double> score) const {

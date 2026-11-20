@@ -29,7 +29,7 @@ namespace ksv::domain {
         }
     }
 
-    const ScenarioEntryId &ScenarioBenchmarkEvaluation::entryId() const { return m_entry.id; }
+    const BenchmarkScenarioId &ScenarioBenchmarkEvaluation::entryId() const { return m_entry.id; }
     const std::string &ScenarioBenchmarkEvaluation::name() const { return m_entry.name; }
     ScenarioMatchState ScenarioBenchmarkEvaluation::matchState() const { return m_matchState; }
     const ScenarioEvaluation &ScenarioBenchmarkEvaluation::stats() const { return m_stats; }
@@ -68,7 +68,7 @@ namespace ksv::domain {
         }
 
         const ScenarioBenchmarkEvaluation *findScenario(const std::vector<ScenarioBenchmarkEvaluation> &scenarios,
-                                                        const ScenarioEntryId &id) {
+                                                        const BenchmarkScenarioId &id) {
             const auto found = std::ranges::find(scenarios, id, &ScenarioBenchmarkEvaluation::entryId);
             return found == scenarios.end() ? nullptr : &*found;
         }
@@ -440,7 +440,7 @@ namespace ksv::domain {
         return result;
     }
 
-    const ScenarioBenchmarkEvaluation *Benchmark::scenario(const ScenarioEntryId &id) const {
+    const ScenarioBenchmarkEvaluation *Benchmark::scenario(const BenchmarkScenarioId &id) const {
         if (const auto *found = findScenario(m_uncategorized, id)) return found;
         for (const auto &category: m_categories) {
             if (const auto *found = findScenario(category.m_scenarios, id)) return found;

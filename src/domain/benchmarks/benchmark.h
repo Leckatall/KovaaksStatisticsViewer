@@ -19,7 +19,7 @@
 
 namespace ksv::domain {
     struct RankBlocker {
-        ScenarioEntryId entryId;
+        BenchmarkScenarioId entryId;
         std::optional<GroupId> group;
         double required = 0.0;
         std::optional<double> current;
@@ -29,7 +29,7 @@ namespace ksv::domain {
 
     class ScenarioBenchmarkEvaluation {
     public:
-        [[nodiscard]] const ScenarioEntryId &entryId() const;
+        [[nodiscard]] const BenchmarkScenarioId &entryId() const;
         [[nodiscard]] const std::string &name() const;
         [[nodiscard]] ScenarioMatchState matchState() const;
         [[nodiscard]] const ScenarioEvaluation &stats() const;
@@ -91,7 +91,7 @@ namespace ksv::domain {
         [[nodiscard]] std::vector<const ScenarioBenchmarkEvaluation *> uncategorized() const;
         [[nodiscard]] std::vector<const GroupEvaluation *> categories() const;
         [[nodiscard]] std::vector<const ScenarioBenchmarkEvaluation *> scenarios() const;
-        [[nodiscard]] const ScenarioBenchmarkEvaluation *scenario(const ScenarioEntryId &id) const;
+        [[nodiscard]] const ScenarioBenchmarkEvaluation *scenario(const BenchmarkScenarioId &id) const;
 
         [[nodiscard]] std::optional<TierId> attainedRank() const;
         [[nodiscard]] std::optional<TierId> completedRank() const;

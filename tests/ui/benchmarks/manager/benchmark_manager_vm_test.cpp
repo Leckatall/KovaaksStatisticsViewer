@@ -527,7 +527,7 @@ TEST(BenchmarkManagerResolution, ScenarioNodesCarryTheirMatchState) {
 TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
-    ScenarioResolution ambiguous{ScenarioEntryId{"e1"}, ScenarioMatchState::Ambiguous, {}};
+    ScenarioResolution ambiguous{BenchmarkScenarioId{"e1"}, ScenarioMatchState::Ambiguous, {}};
     ambiguous.candidates.push_back(
         {"ha", 3, std::chrono::sys_seconds{std::chrono::seconds{1'700'000'000}}});
     ambiguous.candidates.push_back({"hb", 7, std::nullopt});
@@ -548,7 +548,7 @@ TEST(BenchmarkManagerResolution, AnAmbiguousNodeExposesItsCandidates) {
 TEST(BenchmarkManagerResolution, AnAutoMappableNodeReportsItsSingleCandidate) {
     Fixture f;
     f.uc->nextNewSeed = newSeed(draftWith("Saved", {}, {benchmarkEntry("e1", "Alpha", std::nullopt, {})}));
-    ScenarioResolution mappable{ScenarioEntryId{"e1"}, ScenarioMatchState::AutoMappable, {}};
+    ScenarioResolution mappable{BenchmarkScenarioId{"e1"}, ScenarioMatchState::AutoMappable, {}};
     mappable.candidates.push_back({"h1", 1, std::nullopt});
     f.uc->nextResolveResult = {mappable};
     f.uc->stateValue.resolutionWriteFailed = true;

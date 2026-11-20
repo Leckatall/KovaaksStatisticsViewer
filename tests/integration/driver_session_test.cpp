@@ -536,7 +536,7 @@ namespace {
         domain::Benchmark benchmark;
 
         [[nodiscard]] const domain::ScenarioBenchmarkEvaluation &scenario(const std::string &entryId) const {
-            const auto *row = benchmark.scenario(domain::ScenarioEntryId{entryId});
+            const auto *row = benchmark.scenario(domain::BenchmarkScenarioId{entryId});
             if (!row) throw std::runtime_error("no row " + entryId);
             return *row;
         }
