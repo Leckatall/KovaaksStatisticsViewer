@@ -1716,7 +1716,7 @@ Item {
             verify(find(narrow, "probe_value").visible, "the PB still shows")
 
             // Of the moved places, one clear of the recent-average marker wins.
-            const marked = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250", marker: 0.5})
+            const marked = makeTierBar({width: 200, fills: [0.85, 0], valueText: "250", marker: 0.5, markerShown: true})
             compare(placement(marked, 0), "start", "the middle is under the marker, so the start")
         }
 
@@ -1724,34 +1724,34 @@ Item {
 
         function test_thresholdLabelMovesOffTheMarker() {
             // Chunk 0 spans [0, 99] of a 200 px bar.
-            const markedEnd = makeTierBar({width: 200, fills: [0.2, 0], marker: 0.95})
+            const markedEnd = makeTierBar({width: 200, fills: [0.2, 0], marker: 0.95, markerShown: true})
             compare(placement(markedEnd, 0), "middle", "the marker over the chunk's end moves the label to the middle")
             const w = find(markedEnd, "probe_label_0").implicitWidth
             verify(!markedEnd.coversMarker(0, w, "middle"), "clear of the marker there")
             compare(placement(markedEnd, 1), "end", "a chunk the marker is not in keeps its label at the end")
 
-            const markedBoth = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250", marker: 0.5})
+            const markedBoth = makeTierBar({width: 200, fills: [0.2, 0], valueText: "250", marker: 0.5, markerShown: true})
             compare(placement(markedBoth, 0), "end", "a marker away from the end leaves the label there")
 
             const probe = makeTierBar({width: 400, fills: [0, 0]})
             const textLeft = probe.labelSpanLeft(0, find(probe, "probe_label_0").implicitWidth, "end")
             const nearText = (textLeft - 5) / probe.chunkRight(0)
-            const plain = makeTierBar({width: 400, fills: [0, 0], marker: nearText})
+            const plain = makeTierBar({width: 400, fills: [0, 0], marker: nearText, markerShown: true})
             compare(placement(plain, 0), "end", "a label 5 px from the marker stays put")
-            const filled = makeTierBar({width: 400, fills: [0.97, 0], marker: nearText})
+            const filled = makeTierBar({width: 400, fills: [0.97, 0], marker: nearText, markerShown: true})
             compare(placement(filled, 0), "end", "the fill does not add extra clearance around the label")
         }
 
         function test_thresholdLabelStaysUnderTheMarkerOnlyWhenNothingElseIsClear() {
             // The PB covers the end and middle; the marker the start: avoiding the PB wins.
-            const blocked = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890", marker: 0.05})
+            const blocked = makeTierBar({width: 200, fills: [0.5, 0], valueText: "1,234,567,890", marker: 0.05, markerShown: true})
             const w = find(blocked, "probe_label_0").implicitWidth
             verify(blocked.coversMarker(0, w, "start"), "the marker is over the start")
             compare(placement(blocked, 0), "start", "under the marker rather than under the PB")
             verify(find(blocked, "probe_label_0").visible)
 
             // A chunk so narrow the marker reaches every place: the label stays at its end.
-            const narrow = makeTierBar({width: 60, fills: [0, 0], marker: 0.5})
+            const narrow = makeTierBar({width: 60, fills: [0, 0], marker: 0.5, markerShown: true})
             const nw = find(narrow, "probe_label_0").implicitWidth
             verify(["end", "middle", "start"].every(p => narrow.coversMarker(0, nw, p)), "no place is clear")
             compare(placement(narrow, 0), "end")
@@ -1762,7 +1762,7 @@ Item {
 
         function test_markerCrossingThePersonalBestIsCutBehindIt() {
             // The PB "250" sits just past a fill ending at 0.3 of chunk 0 ([0, 99]).
-            const crossed = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0.4})
+            const crossed = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0.4, markerShown: true})
             const value = find(crossed, "probe_value")
             const x = crossed.scaleX(0.4)
             verify(x > value.x && x < value.x + value.width, "the marker passes through the PB text")
@@ -1778,10 +1778,21 @@ Item {
                    "both ends still overhang the bar")
             compare(value.x, crossed.valueLeft, "the PB does not move")
 
-            const clear = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0.1})
+            const clear = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0.1, markerShown: true})
             verify(!clear.markerCrossesValue)
             verify(!find(clear, "probe_markerTickBottom").visible, "a marker clear of the PB is one whole tick")
             compare(find(clear, "probe_markerTick").height, find(clear, "probe_marker").height)
+        }
+
+        function test_aHiddenMarkerDrawsNothingEvenAtTheBarStart() {
+            const hidden = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0})
+            verify(!find(hidden, "probe_marker").visible, "0 is a position, not a flag")
+            verify(!hidden.markerCrossesValue)
+            const w = find(hidden, "probe_label_0").implicitWidth
+            verify(!hidden.coversMarker(0, w, "start"), "a hidden marker moves no label")
+
+            const shown = makeTierBar({width: 200, fills: [0.3, 0], valueText: "250", marker: 0, markerShown: true})
+            verify(find(shown, "probe_marker").visible, "the same position shows when flagged")
         }
 
         // -- rank names use their tier colours --------------------------
@@ -1839,6 +1850,7 @@ Item {
         function test_recentAverageMarkerSitsOnTheChunkScale() {
             const fx = TestDoubles.trackingFixtureTrackable()
             // sc-1w4ts: PB fill ends at 3.75; recent 2.5 is halfway through Gold's chunk.
+            fx.progressGrid.rows[1].hasRecentMarker = true
             fx.progressGrid.rows[1].recentPosition = 2.5
             fx.progressGrid.rows[1].recentDescription = "Recent average 790.5 · Silver"
             const ws = makeWorkspace(fx)

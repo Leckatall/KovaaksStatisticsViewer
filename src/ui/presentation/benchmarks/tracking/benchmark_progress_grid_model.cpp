@@ -220,18 +220,18 @@ namespace ksv::presentation {
                 row.fills = scenarioChunkFills(m_tiers, scenario, personalBest);
                 const bool topChunkFilled = !row.fills.empty() && row.fills.back() >= 1.0;
 
-                const auto recent = stats ? std::optional(stats->recentAverage()) : std::nullopt;
-                const auto recentPosition = tierScalePosition(scenario, recent);
-                row.recentPosition = recentPosition;
-                QString recentTier = QObject::tr("Unranked");
-                if (recentPosition) {
-                    const auto reached = std::min(
-                        static_cast<std::size_t>(std::floor(*recentPosition)), m_tiers.size());
-                    if (reached >= 1) recentTier = q(m_tiers[reached - 1].name);
+                row.recentPosition = stats ? std::optional(scenario.normalizedRecentRank()) : std::nullopt;
+                if (stats) {
+                    QString recentTier = QObject::tr("thresholds incomplete");
+                    if (scenario.ladder()) {
+                        recentTier = QObject::tr("Unranked");
+                        const auto reached = std::min(
+                            static_cast<std::size_t>(std::floor(*row.recentPosition)), m_tiers.size());
+                        if (reached >= 1) recentTier = q(m_tiers[reached - 1].name);
+                    }
+                    row.recentDescription = QObject::tr("Recent average %1 · %2")
+                                                .arg(formatBenchmarkNumber(stats->recentAverage()), recentTier);
                 }
-                row.recentDescription =
-                    recentPosition ? QObject::tr("Recent average %1 · %2").arg(formatBenchmarkNumber(*recent), recentTier)
-                                   : QString();
 
                 // The next tier this scenario's PB has not reached, with the score it needs.
                 QString nextTierText;
@@ -347,12 +347,6 @@ namespace ksv::presentation {
         return fills;
     }
 
-    std::optional<double> tierScalePosition(const domain::ScenarioBenchmarkEvaluation &scenario,
-                                            const std::optional<double> score) {
-        if (!score || !std::isfinite(*score) || !scenario.ladder()) return std::nullopt;
-        return scenario.normalized(score);
-    }
-
     namespace {
         QVariantMap toMap(const ProgressGridTier &tier) {
             QVariantMap map;
@@ -390,8 +384,8 @@ namespace ksv::presentation {
             QVariantList fills;
             for (const double fill: row.fills) fills.push_back(fill);
             map[QStringLiteral("fills")] = fills;
-            // -1 tells QML there is no recent-average marker.
-            map[QStringLiteral("recentPosition")] = row.recentPosition ? *row.recentPosition : -1.0;
+            map[QStringLiteral("hasRecentMarker")] = row.recentPosition.has_value();
+            map[QStringLiteral("recentPosition")] = row.recentPosition.value_or(0.0);
             map[QStringLiteral("recentDescription")] = row.recentDescription;
             map[QStringLiteral("nextTierText")] = row.nextTierText;
             map[QStringLiteral("nextTierColor")] = row.nextTierColor;

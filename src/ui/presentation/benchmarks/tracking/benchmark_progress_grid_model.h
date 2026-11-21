@@ -85,14 +85,6 @@ namespace ksv::presentation {
         QVariantList m_groups;
         bool m_hasSubcategories = false;
     };
-
-    // Where `score` sits on a tier bar's chunk scale, in chunk units from 0 (bar start) to the
-    // tier count (bar end), matching scenarioChunkFills: the domain's normalized tier value, so a
-    // score below the first tier sits inside the first chunk and tier k's threshold at the end of
-    // chunk k-1. No position without a score or when the ladder is incomplete or not increasing,
-    // so a marker is never drawn at a made-up place.
-    [[nodiscard]] std::optional<double> tierScalePosition(const domain::ScenarioBenchmarkEvaluation &scenario,
-                                                          std::optional<double> score);
 }
 
 #endif // KOVAAKSSTATSVIEWER_BENCHMARK_PROGRESS_GRID_MODEL_H

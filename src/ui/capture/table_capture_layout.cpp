@@ -585,7 +585,7 @@ namespace ksv::ui {
             }
 
             const bool hasChunks = !metrics.chunks.empty();
-            if (hasChunks && row.recentPosition && *row.recentPosition >= 0.0) {
+            if (hasChunks && row.recentPosition) {
                 appendMarker(items, *row.recentPosition, bar, valueRect ? &*valueRect : nullptr, appearance, metrics);
             }
 
@@ -735,7 +735,7 @@ namespace ksv::ui {
 
             std::vector<KeyEntry> entries;
             if (hasChunks && anyRow([](const ProgressGridScenarioRow &row) {
-                    return row.recentPosition && *row.recentPosition >= 0.0;
+                    return row.recentPosition.has_value();
                 })) {
                 entries.push_back({KeyMark::RecentAverage, QObject::tr("Recent average")});
             }

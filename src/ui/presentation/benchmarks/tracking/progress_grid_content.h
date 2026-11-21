@@ -32,6 +32,7 @@ namespace ksv::presentation {
         QString attainedTierText;
         QString attainedTierColor;
         std::vector<double> fills;
+        // The normalised recent rank on the bar's chunk scale; set whenever the scenario has runs.
         std::optional<double> recentPosition;
         QString recentDescription;
         QString nextTierText;
