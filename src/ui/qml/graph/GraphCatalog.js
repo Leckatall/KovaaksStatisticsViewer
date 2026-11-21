@@ -63,6 +63,12 @@ const seriesNames = {
 }
 
 // Bounds are typed in the unit the axis shows: accuracy as a percentage, playtime in minutes.
+// A horizontal axis has a description instead, shown beside its choice.
+const rankXAxes = {
+    runs: {name: "Run", unit: "", description: "Each run takes equal width, labelled with dates."},
+    calendar: {name: "Calendar", unit: "", description: "Each day takes equal width."}
+}
+
 const axisInfo = {
     scenarioHistory: {
         score: {name: "Score", unit: ""},
@@ -70,7 +76,9 @@ const axisInfo = {
         counts: {name: "Shots, hits and misses", unit: ""}
     },
     dailyPlaytime: {playtime: {name: "Playtime", unit: "minutes"}},
-    benchmarkPlaytime: {playtime: {name: "Playtime", unit: "minutes"}}
+    benchmarkPlaytime: {playtime: {name: "Playtime", unit: "minutes"}},
+    benchmarkRank: rankXAxes,
+    benchmarkRecentRank: rankXAxes
 }
 
 function graphIndex(key) {
@@ -90,6 +98,11 @@ function axisName(graph, key) {
 function axisUnit(graph, key) {
     const axes = axisInfo[graph]
     return axes && axes[key] ? axes[key].unit : ""
+}
+
+function axisDescription(graph, key) {
+    const axes = axisInfo[graph]
+    return axes && axes[key] ? axes[key].description || "" : ""
 }
 
 // Issues in the order a person reads the pages: graph, then group, then position within the group.

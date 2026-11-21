@@ -122,6 +122,28 @@ namespace {
         return configuration;
     }
 
+    // Documents before version 7 have no "xAxis" key in any graph section.
+    QJsonObject withoutXAxis(QJsonObject root) {
+        auto graphs = root["graphs"].toObject();
+        for (auto it = graphs.begin(); it != graphs.end(); ++it) {
+            auto section = it.value().toObject();
+            section.remove("xAxis");
+            it.value() = section;
+        }
+        root["graphs"] = graphs;
+        return root;
+    }
+
+    QJsonObject withGraphField(QJsonObject root, const char *graph, const char *field, const QJsonValue &value) {
+        auto graphs = root["graphs"].toObject();
+        auto section = graphs[graph].toObject();
+        if (value.isUndefined()) section.remove(field);
+        else section[field] = value;
+        graphs[graph] = section;
+        root["graphs"] = graphs;
+        return root;
+    }
+
     class GraphConfigurationPersistenceTest : public testing::Test {
     protected:
         std::shared_ptr<FakeSettingsService> settings = std::make_shared<FakeSettingsService>();
@@ -148,7 +170,7 @@ namespace {
         }
 
         [[nodiscard]] QJsonObject v4RootWithV3Series() const {
-            auto root = savedRoot(everyPreferenceKind());
+            auto root = withoutXAxis(savedRoot(everyPreferenceKind()));
             for (const auto *key: {"series", "axes", "nextComputedSeriesId", "nextAxisId"}) root[key] = v3Root()[key];
             root["schemaVersion"] = 4;
             root.remove("runAxisLabel");
@@ -159,7 +181,7 @@ namespace {
 
         // A version-5 document: the default lineup, labelled by a line's id.
         [[nodiscard]] QJsonObject v5Root(const QJsonValue &labelSeriesId) const {
-            auto root = savedRoot(everyPreferenceKind());
+            auto root = withoutXAxis(savedRoot(everyPreferenceKind()));
             root["schemaVersion"] = 5;
             root.remove("runAxisLabel");
             root["runAxisLabelSeriesId"] = labelSeriesId;
@@ -199,14 +221,14 @@ namespace {
         EXPECT_EQ(load(), defaultGraphConfiguration());
     }
 
-    TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionSixDocument) {
+    TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionSevenDocument) {
         const auto loaded = load();
 
         EXPECT_EQ(loaded, defaultGraphConfiguration());
         EXPECT_TRUE(settings->quarantined.empty());
         ASSERT_EQ(settings->document_writes, 1);
         const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 6);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 7);
         EXPECT_EQ(root["graphs"].toObject().keys(),
                   (QStringList{"benchmarkPlaytime", "benchmarkRank", "benchmarkRecentRank", "dailyPlaytime", "run",
                                "scenarioHistory"}));
@@ -250,7 +272,7 @@ namespace {
         for (const auto key: kGraphKeys) EXPECT_EQ(loaded.preferences(key), defaultGraphPreferences(key));
 
         save(loaded);
-        EXPECT_EQ(docObject()["schemaVersion"].toInt(), 6);
+        EXPECT_EQ(docObject()["schemaVersion"].toInt(), 7);
         EXPECT_EQ(load(), loaded);
     }
 
@@ -287,7 +309,7 @@ namespace {
         expectV3RootSeries(loaded.runSeries);
 
         const auto root = savedRoot(loaded);
-        EXPECT_EQ(root["schemaVersion"].toInt(), 6);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 7);
         EXPECT_TRUE(root["nextComputedSeriesId"].isNull());
         EXPECT_TRUE(root["nextAxisId"].isNull());
         auto expectedSeries = v3Root()["series"].toArray();
@@ -310,7 +332,7 @@ namespace {
         save(configuration);
 
         const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 6);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 7);
         for (const auto &item: root["series"].toArray())
             EXPECT_TRUE(item.toObject()["presentation"].toObject()["hiddenLeadingPoints"].isDouble());
         EXPECT_EQ(root["series"].toArray()[2].toObject()["presentation"].toObject()["hiddenLeadingPoints"].toInt(), 3);
@@ -358,6 +380,54 @@ namespace {
         EXPECT_EQ(settings->document_writes, 1);
         EXPECT_EQ(load(), configuration);
         EXPECT_TRUE(settings->quarantined.empty());
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, TheShownXAxisRoundTrips) {
+        auto configuration = everyPreferenceKind();
+        configuration.preferences(GraphKey::BenchmarkRank).xAxis = std::string(kCalendarXAxis);
+        configuration.preferences(GraphKey::BenchmarkRecentRank).xAxis = std::string(kRunXAxis);
+        save(configuration);
+
+        EXPECT_EQ(load(), configuration);
+        EXPECT_TRUE(settings->quarantined.empty());
+    }
+
+    // R15: a document written before the preference existed is not malformed for lacking it.
+    TEST_F(GraphConfigurationPersistenceTest, AVersionSixDocumentLoadsWithTheRunAxisAndIsNotQuarantined) {
+        auto root = withoutXAxis(savedRoot(everyPreferenceKind()));
+        root["schemaVersion"] = 6;
+        writeDoc(root);
+
+        const auto loaded = load();
+        EXPECT_TRUE(settings->quarantined.empty());
+        for (const auto graph: {GraphKey::BenchmarkRank, GraphKey::BenchmarkRecentRank})
+            EXPECT_EQ(loaded.preferences(graph).xAxis, std::optional<std::string>{std::string(kRunXAxis)})
+                << graphKeyName(graph);
+        EXPECT_EQ(loaded, everyPreferenceKind());
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, AnUnknownXAxisRejectsOnlyThatGraphsSection) {
+        auto configuration = everyPreferenceKind();
+        configuration.preferences(GraphKey::BenchmarkRank).xAxis = std::string(kCalendarXAxis);
+        writeDoc(withGraphField(savedRoot(configuration), "benchmarkRecentRank", "xAxis", "sideways"));
+
+        const auto loaded = load();
+        EXPECT_EQ(settings->quarantined.size(), 1U);
+        EXPECT_EQ(loaded.preferences(GraphKey::BenchmarkRecentRank),
+                  defaultGraphPreferences(GraphKey::BenchmarkRecentRank));
+        for (const auto key: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
+                              GraphKey::BenchmarkRank, GraphKey::BenchmarkPlaytime})
+            EXPECT_EQ(loaded.preferences(key), configuration.preferences(key)) << graphKeyName(key);
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, AVersionSevenRankSectionWithoutAnXAxisIsRejected) {
+        auto configuration = everyPreferenceKind();
+        configuration.preferences(GraphKey::BenchmarkRank).xAxis = std::string(kCalendarXAxis);
+        writeDoc(withGraphField(savedRoot(configuration), "benchmarkRank", "xAxis", QJsonValue::Undefined));
+
+        const auto loaded = load();
+        EXPECT_EQ(settings->quarantined.size(), 1U);
+        EXPECT_EQ(loaded.preferences(GraphKey::BenchmarkRank), defaultGraphPreferences(GraphKey::BenchmarkRank));
     }
 
     TEST_F(GraphConfigurationPersistenceTest, StoresCustomDatesAsIsoCalendarDates) {
@@ -610,7 +680,7 @@ namespace {
 
     TEST_F(GraphConfigurationPersistenceTest, UndecodableOrUnsupportedDocumentsFollowTheExistingRecoveryPath) {
         for (const std::string raw: {std::string("{\"schemaVersion\":4,"), std::string("[]"), std::string("{}"),
-                                     std::string("{\"schemaVersion\":7}"), std::string("{\"schemaVersion\":\"4\"}")}) {
+                                     std::string("{\"schemaVersion\":8}"), std::string("{\"schemaVersion\":\"4\"}")}) {
             settings = std::make_shared<FakeSettingsService>();
             settings->legacyRunAxisLabelSeriesId = "3";
             settings->document = raw;
@@ -620,7 +690,7 @@ namespace {
             // Line 3 is on the default Score axis.
             expected.runAxisLabel = AxisId{1};
             EXPECT_EQ(loaded, expected) << raw;
-            EXPECT_EQ(docObject()["schemaVersion"].toInt(), 6);
+            EXPECT_EQ(docObject()["schemaVersion"].toInt(), 7);
         }
     }
 
@@ -636,7 +706,7 @@ namespace {
         }
     };
 
-    TEST_F(GraphConfigurationQSettingsTest, LoadsAndSavesTheVersionSixSnapshotAcrossRestarts) {
+    TEST_F(GraphConfigurationQSettingsTest, LoadsAndSavesTheVersionSevenSnapshotAcrossRestarts) {
         {
             QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
             raw.setValue("graph/seriesConfigV1", QString::fromStdString(compact(v3Root())));
@@ -659,7 +729,7 @@ namespace {
         EXPECT_EQ(GraphConfigurationPersistence(settings).load(), configuration);
         const QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         const auto stored = QJsonDocument::fromJson(raw.value("graph/seriesConfigV1").toString().toUtf8()).object();
-        EXPECT_EQ(stored["schemaVersion"].toInt(), 6);
+        EXPECT_EQ(stored["schemaVersion"].toInt(), 7);
         EXPECT_EQ(raw.value("graphAxis/seriesId").toString(), "12");
     }
 }

@@ -25,13 +25,22 @@ namespace ksv::application {
             return std::ranges::find(document.axes, id, &AxisConfig::id) != document.axes.end();
         }
 
+        GraphAxisDescriptor verticalAxis(const std::string_view key, AxisPolicy policy) {
+            return {key, AxisOrientation::Vertical, std::move(policy)};
+        }
+
+        std::vector<GraphAxisDescriptor> rankXAxes() {
+            return {{kRunXAxis, AxisOrientation::Horizontal, std::nullopt},
+                    {kCalendarXAxis, AxisOrientation::Horizontal, std::nullopt}};
+        }
+
         std::array<GraphDescriptor, kGraphKeys.size()> makeDescriptors() {
             return {{
-                {GraphKey::Run, false, false, false, false, {}, {}, {}},
+                {GraphKey::Run, false, false, false, false, {}, {}, {}, {}},
                 {
                     GraphKey::DailyPlaytime, true, false, true, false, {RecentDays{30}, true},
                     {{"playtime", "playtime", kPlaytimeColor}},
-                    {{"playtime", StartAtZero{}}}
+                    {verticalAxis("playtime", StartAtZero{})}, {}
                 },
                 {
                     GraphKey::ScenarioHistory, true, true, false, true, {LatestRuns{100}, false},
@@ -43,22 +52,36 @@ namespace ksv::application {
                         {"misses", "counts", RgbaColor{229, 57, 53, 255}},
                         {"scoreAverage", "score", RgbaColor{171, 71, 188, 255}},
                     },
-                    {{"score", FitVisibleData{}}, {"accuracy", FitVisibleData{}}, {"counts", StartAtZero{}}}
+                    {verticalAxis("score", FitVisibleData{}), verticalAxis("accuracy", FitVisibleData{}),
+                     verticalAxis("counts", StartAtZero{})},
+                    {}
                 },
                 {
                     GraphKey::BenchmarkRank, true, false, false, false, {RecentDays{90}, true},
-                    {{"rank", "", kPersonalBestRankColor}}, {}
+                    {{"rank", "", kPersonalBestRankColor}}, rankXAxes(), kRunXAxis
                 },
                 {
                     GraphKey::BenchmarkRecentRank, true, false, false, false, {RecentDays{90}, true},
-                    {{"rank", "", kRecentRankColor}}, {}
+                    {{"rank", "", kRecentRankColor}}, rankXAxes(), kRunXAxis
                 },
                 {
                     GraphKey::BenchmarkPlaytime, true, false, true, false, {RecentDays{30}, true},
                     {{"playtime", "playtime", kPlaytimeColor}},
-                    {{"playtime", StartAtZero{}}}
+                    {verticalAxis("playtime", StartAtZero{})}, {}
                 },
             }};
+        }
+
+        [[nodiscard]] bool offersHorizontalAxis(const GraphDescriptor &descriptor, const std::string_view key) {
+            return std::ranges::any_of(descriptor.axes, [&](const GraphAxisDescriptor &axis) {
+                return axis.orientation == AxisOrientation::Horizontal && axis.key == key;
+            });
+        }
+
+        [[nodiscard]] bool hasPolicy(const GraphDescriptor &descriptor, const std::string_view key) {
+            return std::ranges::any_of(descriptor.axes, [&](const GraphAxisDescriptor &axis) {
+                return axis.defaultPolicy && axis.key == key;
+            });
         }
 
         class IssueSink {
@@ -168,7 +191,9 @@ namespace ksv::application {
         if (descriptor.dateRange) preferences.range = descriptor.defaultRange;
         if (descriptor.averagingWindow) preferences.averagingWindowDays = kDefaultAveragingWindowDays;
         preferences.appearance.lineModeMarkers = descriptor.defaultLineModeMarkers;
-        for (const auto &axis: descriptor.axes) preferences.axisPolicies.emplace(axis.key, axis.defaultPolicy);
+        for (const auto &axis: descriptor.axes)
+            if (axis.defaultPolicy) preferences.axisPolicies.emplace(axis.key, *axis.defaultPolicy);
+        if (!descriptor.defaultXAxis.empty()) preferences.xAxis = std::string(descriptor.defaultXAxis);
         return preferences;
     }
 
@@ -271,10 +296,10 @@ namespace ksv::application {
         }
 
         for (const auto &axis: descriptor.axes)
-            if (!preferences.axisPolicies.contains(axis.key))
+            if (axis.defaultPolicy && !preferences.axisPolicies.contains(axis.key))
                 sink.add(GraphConfigurationIssueCode::MissingValue, "axes", std::string(axis.key), "fitMode");
         for (const auto &[axisKey, policy]: preferences.axisPolicies) {
-            if (std::ranges::find(descriptor.axes, axisKey, &GraphAxisDescriptor::key) == descriptor.axes.end()) {
+            if (!hasPolicy(descriptor, axisKey)) {
                 sink.add(GraphConfigurationIssueCode::UnknownAxis, "axes", axisKey, "");
                 continue;
             }
@@ -284,6 +309,14 @@ namespace ksv::application {
             validateBound(bounds->maximum, sink, axisKey, "fixedMax");
             if (std::isfinite(bounds->minimum) && std::isfinite(bounds->maximum) && bounds->minimum >= bounds->maximum)
                 sink.add(GraphConfigurationIssueCode::FixedBoundsNotIncreasing, "axes", axisKey, "fixedMax");
+        }
+
+        if (descriptor.defaultXAxis.empty()) {
+            if (preferences.xAxis) sink.add(GraphConfigurationIssueCode::NotApplicable, "axes", "", "xAxis");
+        } else if (!preferences.xAxis) {
+            sink.add(GraphConfigurationIssueCode::MissingValue, "axes", "", "xAxis");
+        } else if (!offersHorizontalAxis(descriptor, *preferences.xAxis)) {
+            sink.add(GraphConfigurationIssueCode::UnknownAxis, "axes", *preferences.xAxis, "xAxis");
         }
         return issues;
     }
@@ -345,7 +378,7 @@ namespace ksv::application {
                 .range = was.range != now.range,
                 .window = was.averagingWindowDays != now.averagingWindowDays,
                 .style = was.appearance != now.appearance || was.seriesStyles != now.seriesStyles ||
-                         was.axisPolicies != now.axisPolicies
+                         was.axisPolicies != now.axisPolicies || was.xAxis != now.xAxis
             };
         }
         change.runSeries = !(before.runSeries == after.runSeries);

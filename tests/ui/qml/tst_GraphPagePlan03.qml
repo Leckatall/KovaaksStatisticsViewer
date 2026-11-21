@@ -76,8 +76,8 @@ TestCase {
             {tag: "run", graph: "run", sections: ["seriesStyle", "axes"]},
             {tag: "daily", graph: "dailyPlaytime", sections: ["dataRange", "seriesStyle", "axes"]},
             {tag: "scenario", graph: "scenarioHistory", sections: ["dataRange", "seriesStyle", "axes"]},
-            {tag: "rank", graph: "benchmarkRank", sections: ["dataRange", "seriesStyle"]},
-            {tag: "recentRank", graph: "benchmarkRecentRank", sections: ["dataRange", "seriesStyle"]},
+            {tag: "rank", graph: "benchmarkRank", sections: ["dataRange", "seriesStyle", "axes"]},
+            {tag: "recentRank", graph: "benchmarkRecentRank", sections: ["dataRange", "seriesStyle", "axes"]},
             {tag: "benchmark", graph: "benchmarkPlaytime", sections: ["dataRange", "seriesStyle", "axes"]}
         ]
     }

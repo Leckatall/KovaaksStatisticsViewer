@@ -120,10 +120,16 @@ namespace ksv::qt_data {
             return FixedBounds{*minimum, *maximum};
         }
 
-        std::vector<const char *> graphSectionKeys(const GraphDescriptor &descriptor) {
+        // Version 7 adds the shown X axis to the graphs that offer one.
+        [[nodiscard]] bool storesXAxis(const GraphDescriptor &descriptor, const int version) {
+            return !descriptor.defaultXAxis.empty() && version >= 7;
+        }
+
+        std::vector<const char *> graphSectionKeys(const GraphDescriptor &descriptor, const int version) {
             std::vector<const char *> keys{"connection", "lineModeMarkers", "seriesStyles", "axisPolicies"};
             if (descriptor.dateRange) keys.insert(keys.end(), {"range", "anchorToLatestRun"});
             if (descriptor.averagingWindow) keys.push_back("averagingWindowDays");
+            if (storesXAxis(descriptor, version)) keys.push_back("xAxis");
             return keys;
         }
 
@@ -144,14 +150,15 @@ namespace ksv::qt_data {
                 object["anchorToLatestRun"] = preferences.range->anchorToLatestRun;
             }
             if (preferences.averagingWindowDays) object["averagingWindowDays"] = *preferences.averagingWindowDays;
+            if (preferences.xAxis) object["xAxis"] = QString::fromStdString(*preferences.xAxis);
             return object;
         }
 
-        std::optional<GraphPreferences> decodeGraph(const GraphKey key, const QJsonValue &value) {
+        std::optional<GraphPreferences> decodeGraph(const GraphKey key, const QJsonValue &value, const int version) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             const auto &descriptor = graphDescriptor(key);
-            if (!exactKeys(object, graphSectionKeys(descriptor)) || !object["lineModeMarkers"].isBool() ||
+            if (!exactKeys(object, graphSectionKeys(descriptor, version)) || !object["lineModeMarkers"].isBool() ||
                 !object["seriesStyles"].isObject() || !object["axisPolicies"].isObject())
                 return std::nullopt;
 
@@ -168,6 +175,12 @@ namespace ksv::qt_data {
             if (descriptor.averagingWindow) {
                 preferences.averagingWindowDays = boundedInteger<int>(object["averagingWindowDays"]);
                 if (!preferences.averagingWindowDays) return std::nullopt;
+            }
+            if (storesXAxis(descriptor, version)) {
+                if (!object["xAxis"].isString()) return std::nullopt;
+                preferences.xAxis = object["xAxis"].toString().toStdString();
+            } else if (!descriptor.defaultXAxis.empty()) {
+                preferences.xAxis = std::string(descriptor.defaultXAxis);
             }
 
             const auto seriesStyles = object["seriesStyles"].toObject();
@@ -213,7 +226,7 @@ namespace ksv::qt_data {
             return std::nullopt;
         }
 
-        void decodeGraphs(const QJsonValue &value, DecodedGraphConfiguration &decoded) {
+        void decodeGraphs(const QJsonValue &value, const int version, DecodedGraphConfiguration &decoded) {
             if (!value.isObject()) {
                 decoded.hasRejectedSections = true;
                 return;
@@ -225,7 +238,7 @@ namespace ksv::qt_data {
                     decoded.hasRejectedSections = true;
                     continue;
                 }
-                if (const auto preferences = decodeGraph(*key, it.value()))
+                if (const auto preferences = decodeGraph(*key, it.value(), version))
                     decoded.configuration.preferences(*key) = *preferences;
                 else
                     decoded.hasRejectedSections = true;
@@ -260,7 +273,7 @@ namespace ksv::qt_data {
                     decoded.hasRejectedSections = true;
                 }
             }
-            if (root.contains("graphs")) decodeGraphs(root.take("graphs"), decoded);
+            if (root.contains("graphs")) decodeGraphs(root.take("graphs"), static_cast<int>(version), decoded);
         }
 
         if (auto runSeries = decodeRunSeries(root, seriesVersion)) {

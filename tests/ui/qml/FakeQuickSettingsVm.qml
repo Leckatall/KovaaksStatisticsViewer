@@ -158,8 +158,8 @@ QtObject {
                                          seriesRow("scoreAverage", "#ab47bc")],
                                 axes: [axisRow("score", "fit", ["score", "scoreAverage"]), axisRow("accuracy", "fit", ["accuracy"]),
                                        axisRow("counts", "zero", ["shots", "hits", "misses"])]}),
-        benchmarkRank: draft({series: [seriesRow("rank", undefined)], axes: []}),
-        benchmarkRecentRank: draft({series: [seriesRow("rank", undefined)], axes: []}),
+        benchmarkRank: draft({series: [seriesRow("rank", undefined)], axes: [], xAxes: defaultXAxes()}),
+        benchmarkRecentRank: draft({series: [seriesRow("rank", undefined)], axes: [], xAxes: defaultXAxes()}),
         benchmarkPlaytime: draft({hasWindow: true, window: 3, windowText: "3",
                                   series: [seriesRow("playtime", "#4dd0e1")],
                                   axes: [axisRow("playtime", "zero", ["playtime"])]})
@@ -172,8 +172,12 @@ QtObject {
             rangeStart: "", rangeEnd: "", rangeStartText: "", rangeEndText: "",
             rangeStartFormatted: "", rangeEndFormatted: "",
             anchor: false, window: 0, windowText: "", connection: "smooth", markers: false,
-            series: [], axes: []
+            series: [], axes: [], xAxes: []
         }, overrides)
+    }
+
+    function defaultXAxes() {
+        return [{key: "runs", shown: true}, {key: "calendar", shown: false}]
     }
 
     function seriesRow(key, color) {
@@ -249,7 +253,17 @@ QtObject {
         return true
     }
 
-    function resetGraph(graph) { record("resetGraph", [graph]); return true }
+    function setShownXAxis(graph, axis) {
+        record("setShownXAxis", [graph, axis])
+        change(graph, {xAxes: graphDrafts[graph].xAxes.map(r => Object.assign({}, r, {shown: r.key === axis}))})
+        return true
+    }
+
+    function resetGraph(graph) {
+        record("resetGraph", [graph])
+        if (graphDrafts[graph].xAxes.length > 0) change(graph, {xAxes: defaultXAxes()})
+        return true
+    }
 
     // ---- Graph Lines ---------------------------------------------------------------------------------
 

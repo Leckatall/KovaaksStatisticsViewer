@@ -120,26 +120,6 @@ Item {
         exclusive: true
     }
 
-    // Checked state follows the VM's `shown`, never a click, so revert and Cancel restore it; the click
-    // only stages the key and the patched row carries the new selection.
-    component YAxisButton: ActionButton {
-        required property string rowKey
-        required property string rowName
-        required property bool shown
-
-        objectName: "showOnYAxis_" + rowKey
-        ButtonGroup.group: yAxisSelection
-        checkable: false
-        checked: shown
-        highlighted: shown
-        text: shown ? qsTr("✓ Shown on Y-axis") : qsTr("Show on Y-axis")
-        Accessible.role: Accessible.RadioButton
-        Accessible.checkable: true
-        Accessible.checked: shown
-        Accessible.name: qsTr("Show %1 on Y-axis").arg(rowName)
-        onClicked: if (!shown) root.settingsVm.setRunAxisLabel(rowKey)
-    }
-
     component AxisRow: Frame {
         id: axisRow
 
@@ -202,10 +182,13 @@ Item {
                 Layout.column: axisRow.narrow ? 0 : 1
                 spacing: 8
 
-                YAxisButton {
+                ShowOnAxisButton {
+                    axisLetter: "Y"
                     rowKey: axisRow.key
                     rowName: axisRow.name
                     shown: axisRow.shown
+                    ButtonGroup.group: yAxisSelection
+                    onChosen: key => root.settingsVm.setRunAxisLabel(key)
                 }
 
                 ActionButton {
@@ -338,12 +321,15 @@ Item {
                         }
                     }
 
-                    YAxisButton {
+                    ShowOnAxisButton {
                         Layout.row: independentRow.narrow ? 1 : 0
                         Layout.column: independentRow.narrow ? 0 : 1
+                        axisLetter: "Y"
                         rowKey: independentRow.key
                         rowName: independentRow.name
                         shown: independentRow.shown
+                        ButtonGroup.group: yAxisSelection
+                        onChosen: key => root.settingsVm.setRunAxisLabel(key)
                     }
                 }
             }

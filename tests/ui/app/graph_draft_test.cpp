@@ -105,10 +105,12 @@ namespace {
             ASSERT_EQ(series.size(), static_cast<qsizetype>(descriptor.series.size()));
             for (std::size_t i = 0; i < descriptor.series.size(); ++i)
                 EXPECT_EQ(series[static_cast<qsizetype>(i)].toMap()["key"].toString(), qstring(descriptor.series[i].key));
-            const auto axes = draft["axes"].toList();
-            ASSERT_EQ(axes.size(), static_cast<qsizetype>(descriptor.axes.size()));
-            for (std::size_t i = 0; i < descriptor.axes.size(); ++i)
-                EXPECT_EQ(axes[static_cast<qsizetype>(i)].toMap()["key"].toString(), qstring(descriptor.axes[i].key));
+            QStringList policyAxes;
+            for (const auto &axis: descriptor.axes)
+                if (axis.defaultPolicy) policyAxes.append(qstring(axis.key));
+            QStringList axes;
+            for (const auto &axis: draft["axes"].toList()) axes.append(axis.toMap()["key"].toString());
+            EXPECT_EQ(axes, policyAxes);
         }
     }
 
@@ -125,8 +127,66 @@ namespace {
             const auto entry = axisEntry(draft, qstring(axis.key));
 
             EXPECT_EQ(entry["seriesKeys"].toStringList(), sharing) << axis.key;
-            EXPECT_EQ(entry["mode"].toString(), modeOf(axis.defaultPolicy)) << axis.key;
+            ASSERT_TRUE(axis.defaultPolicy) << axis.key;
+            EXPECT_EQ(entry["mode"].toString(), modeOf(*axis.defaultPolicy)) << axis.key;
         }
+    }
+
+    // ---- The shown X axis ------------------------------------------------------------------------
+
+    TEST_F(GraphDraftTest, RankGraphDraftsListBothXAxesWithRunsShown) {
+        const auto view_model = visit();
+        for (const auto *graph: {"benchmarkRank", "benchmarkRecentRank"}) {
+            SCOPED_TRACE(graph);
+            const auto xAxes = view_model->graphDraft(graph)["xAxes"].toList();
+            ASSERT_EQ(xAxes.size(), 2);
+            EXPECT_EQ(xAxes[0].toMap()["key"].toString(), qstring(kRunXAxis));
+            EXPECT_TRUE(xAxes[0].toMap()["shown"].toBool());
+            EXPECT_EQ(xAxes[1].toMap()["key"].toString(), qstring(kCalendarXAxis));
+            EXPECT_FALSE(xAxes[1].toMap()["shown"].toBool());
+        }
+        EXPECT_TRUE(view_model->graphDraft("benchmarkPlaytime")["xAxes"].toList().isEmpty());
+    }
+
+    TEST_F(GraphDraftTest, SetShownXAxisStagesTheKeyAndMarksTheGraphChanged) {
+        const auto view_model = visit();
+        const QSignalSpy draftSpy(view_model.get(), &SettingsViewModel::graphDraftsChanged);
+
+        EXPECT_TRUE(view_model->setShownXAxis("benchmarkRecentRank", qstring(kCalendarXAxis)));
+
+        EXPECT_EQ(draftSpy.count(), 1);
+        EXPECT_TRUE(view_model->hasPendingChanges());
+        EXPECT_TRUE(view_model->changedGraphs().contains("benchmarkRecentRank"));
+        const auto xAxes = view_model->graphDraft("benchmarkRecentRank")["xAxes"].toList();
+        EXPECT_FALSE(xAxes[0].toMap()["shown"].toBool());
+        EXPECT_TRUE(xAxes[1].toMap()["shown"].toBool());
+        EXPECT_TRUE(configuration->saves.empty());
+
+        EXPECT_TRUE(view_model->setShownXAxis("benchmarkRecentRank", qstring(kCalendarXAxis)));
+        EXPECT_EQ(draftSpy.count(), 1);
+        EXPECT_EQ(saved(*view_model).preferences(GraphKey::BenchmarkRecentRank).xAxis,
+                  std::optional<std::string>{std::string(kCalendarXAxis)});
+    }
+
+    TEST_F(GraphDraftTest, SetShownXAxisRefusesOtherGraphsAndUnknownKeys) {
+        const auto view_model = visit();
+        EXPECT_FALSE(view_model->setShownXAxis("benchmarkPlaytime", qstring(kRunXAxis)));
+        EXPECT_FALSE(view_model->setShownXAxis("scenarioHistory", "score"));
+        EXPECT_FALSE(view_model->setShownXAxis("benchmarkRank", "sideways"));
+        EXPECT_FALSE(view_model->setShownXAxis("unknownGraph", qstring(kRunXAxis)));
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_FALSE(make()->setShownXAxis("benchmarkRank", qstring(kCalendarXAxis)));
+    }
+
+    TEST_F(GraphDraftTest, ResetStagesTheRunAxis) {
+        configuration->configuration.preferences(GraphKey::BenchmarkRank).xAxis = std::string(kCalendarXAxis);
+        const auto view_model = visit();
+
+        EXPECT_TRUE(view_model->resetGraph("benchmarkRank"));
+
+        EXPECT_TRUE(view_model->graphDraft("benchmarkRank")["xAxes"].toList()[0].toMap()["shown"].toBool());
+        EXPECT_EQ(saved(*view_model).preferences(GraphKey::BenchmarkRank).xAxis,
+                  std::optional<std::string>{std::string(kRunXAxis)});
     }
 
     TEST_F(GraphDraftTest, TheDraftOfAFreshVisitShowsTheDefaults) {

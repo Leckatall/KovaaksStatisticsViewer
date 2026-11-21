@@ -56,13 +56,16 @@ namespace {
             EXPECT_EQ(configuration.preferences(key), defaultGraphPreferences(key));
 
             const auto &descriptor = graphDescriptor(key);
+            const bool hasVerticalAxes = std::ranges::any_of(descriptor.axes, [](const GraphAxisDescriptor &axis) {
+                return axis.orientation == AxisOrientation::Vertical;
+            });
             for (const auto &series: descriptor.series) {
                 SCOPED_TRACE(series.key);
-                if (descriptor.axes.empty()) {
+                if (!hasVerticalAxes) {
                     EXPECT_TRUE(series.axisKey.empty());
                 } else {
                     EXPECT_TRUE(std::ranges::any_of(descriptor.axes, [&](const GraphAxisDescriptor &axis) {
-                        return axis.key == series.axisKey;
+                        return axis.orientation == AxisOrientation::Vertical && axis.key == series.axisKey;
                     }));
                 }
             }
@@ -91,9 +94,28 @@ namespace {
         EXPECT_EQ(axisKeys(GraphKey::ScenarioHistory), (std::vector<std::string>{"score", "accuracy", "counts"}));
         EXPECT_EQ(axisKeys(GraphKey::DailyPlaytime), (std::vector<std::string>{"playtime"}));
         EXPECT_EQ(axisKeys(GraphKey::BenchmarkPlaytime), (std::vector<std::string>{"playtime"}));
-        EXPECT_TRUE(axisKeys(GraphKey::BenchmarkRank).empty());
-        EXPECT_TRUE(axisKeys(GraphKey::BenchmarkRecentRank).empty());
         EXPECT_TRUE(axisKeys(GraphKey::Run).empty());
+
+        for (const auto graph: {GraphKey::BenchmarkRank, GraphKey::BenchmarkRecentRank}) {
+            SCOPED_TRACE(graphKeyName(graph));
+            const auto &descriptor = graphDescriptor(graph);
+            EXPECT_EQ(axisKeys(graph), (std::vector<std::string>{"runs", "calendar"}));
+            for (const auto &axis: descriptor.axes) {
+                EXPECT_EQ(axis.orientation, AxisOrientation::Horizontal);
+                EXPECT_FALSE(axis.defaultPolicy);
+            }
+            EXPECT_EQ(descriptor.defaultXAxis, kRunXAxis);
+        }
+        for (const auto graph: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
+                                GraphKey::BenchmarkPlaytime}) {
+            SCOPED_TRACE(graphKeyName(graph));
+            const auto &descriptor = graphDescriptor(graph);
+            EXPECT_TRUE(descriptor.defaultXAxis.empty());
+            for (const auto &axis: descriptor.axes) {
+                EXPECT_EQ(axis.orientation, AxisOrientation::Vertical);
+                EXPECT_TRUE(axis.defaultPolicy);
+            }
+        }
 
         const auto &history = graphDescriptor(GraphKey::ScenarioHistory).series;
         for (const auto &series: history) {
@@ -204,6 +226,42 @@ namespace {
         rank.axisPolicies["rank"] = FixedBounds{0.0, 3.0};
         EXPECT_TRUE(hasIssue(validateGraphPreferences(GraphKey::BenchmarkRank, rank),
             GraphConfigurationIssueCode::UnknownAxis, GraphKey::BenchmarkRank, "axes", "rank", ""));
+    }
+
+    TEST(GraphConfigurationValidation, XAxisIsRequiredOnTheRankGraphsAndRejectedElsewhere) {
+        for (const auto graph: {GraphKey::BenchmarkRank, GraphKey::BenchmarkRecentRank}) {
+            SCOPED_TRACE(graphKeyName(graph));
+            auto preferences = defaultGraphPreferences(graph);
+            EXPECT_EQ(preferences.xAxis, std::optional<std::string>{std::string(kRunXAxis)});
+            preferences.xAxis = std::string(kCalendarXAxis);
+            EXPECT_TRUE(validateGraphPreferences(graph, preferences).empty());
+            preferences.xAxis.reset();
+            EXPECT_TRUE(hasIssue(validateGraphPreferences(graph, preferences), GraphConfigurationIssueCode::MissingValue,
+                graph, "axes", "", "xAxis"));
+        }
+        for (const auto graph: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
+                                GraphKey::BenchmarkPlaytime}) {
+            SCOPED_TRACE(graphKeyName(graph));
+            auto preferences = defaultGraphPreferences(graph);
+            EXPECT_FALSE(preferences.xAxis);
+            preferences.xAxis = std::string(kRunXAxis);
+            EXPECT_TRUE(hasIssue(validateGraphPreferences(graph, preferences), GraphConfigurationIssueCode::NotApplicable,
+                graph, "axes", "", "xAxis"));
+        }
+    }
+
+    TEST(GraphConfigurationValidation, AnUnknownXAxisIsRejected) {
+        auto preferences = defaultGraphPreferences(GraphKey::BenchmarkRank);
+        preferences.xAxis = "sideways";
+        EXPECT_TRUE(hasIssue(validateGraphPreferences(GraphKey::BenchmarkRank, preferences),
+            GraphConfigurationIssueCode::UnknownAxis, GraphKey::BenchmarkRank, "axes", "sideways", "xAxis"));
+    }
+
+    TEST(GraphConfigurationValidation, APolicyStoredForAHorizontalAxisIsUnknown) {
+        auto preferences = defaultGraphPreferences(GraphKey::BenchmarkRank);
+        preferences.axisPolicies[std::string(kRunXAxis)] = FitVisibleData{};
+        EXPECT_TRUE(hasIssue(validateGraphPreferences(GraphKey::BenchmarkRank, preferences),
+            GraphConfigurationIssueCode::UnknownAxis, GraphKey::BenchmarkRank, "axes", std::string(kRunXAxis), ""));
     }
 
     TEST(GraphConfigurationValidation, RequiresTheFieldsAGraphOffers) {
@@ -477,6 +535,18 @@ namespace {
             EXPECT_FALSE(change.sectionsOf(graph).any()) << graphKeyName(graph);
     }
 
+    // The shown X axis moves no measurement, range or window, so it is a style change, and only of
+    // the graph whose axis changed.
+    TEST(GraphConfigurationDiff, AnXAxisChangeIsAStyleChangeOfThatGraphOnly) {
+        const auto before = defaultGraphConfiguration();
+        auto after = before;
+        after.preferences(GraphKey::BenchmarkRecentRank).xAxis = std::string(kCalendarXAxis);
+        const auto change = diffGraphConfigurations(before, after);
+        EXPECT_EQ(change.sectionsOf(GraphKey::BenchmarkRecentRank), (GraphSectionChange{.style = true}));
+        for (const auto graph: {GraphKey::BenchmarkRank, GraphKey::BenchmarkPlaytime})
+            EXPECT_FALSE(change.sectionsOf(graph).any()) << graphKeyName(graph);
+    }
+
     TEST(GraphConfigurationDiff, TheTwoRankGraphsRangesAreIndependent) {
         const auto before = defaultGraphConfiguration();
         auto after = before;
@@ -501,6 +571,15 @@ namespace {
         EXPECT_EQ(presentation.seriesStyle("hits"),
                   (SeriesStyle{defaultSeriesStyle(GraphKey::ScenarioHistory, "hits").color, 6.5}));
         EXPECT_EQ(presentation.seriesStyle("accuracy"), defaultSeriesStyle(GraphKey::ScenarioHistory, "accuracy"));
+    }
+
+    TEST(GraphPresentation, PresentationCarriesTheShownXAxis) {
+        auto preferences = defaultGraphPreferences(GraphKey::BenchmarkRank);
+        EXPECT_EQ(presentationOf(GraphKey::BenchmarkRank, preferences).xAxis, preferences.xAxis);
+        preferences.xAxis = std::string(kCalendarXAxis);
+        EXPECT_EQ(presentationOf(GraphKey::BenchmarkRank, preferences).xAxis,
+                  std::optional<std::string>{std::string(kCalendarXAxis)});
+        EXPECT_FALSE(defaultGraphPresentation(GraphKey::BenchmarkPlaytime).xAxis);
     }
 
     TEST(GraphPresentation, ARecolouredRankSeriesKeepsItsKeyAndTheDefaultWidth) {
