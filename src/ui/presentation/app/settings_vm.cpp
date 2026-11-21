@@ -631,8 +631,13 @@ namespace ksv::presentation {
         entry["series"] = series;
 
         QVariantList axes;
+        QVariantList xAxes;
         for (const auto &described: descriptor.axes) {
             const auto axisKey = std::string(described.key);
+            if (described.orientation == AxisOrientation::Horizontal)
+                xAxes.append(QVariantMap{{"key", QString::fromStdString(axisKey)},
+                                         {"shown", preferences.xAxis == axisKey}});
+            if (!described.defaultPolicy) continue;
             const auto policy = axisPolicyFor(preferences.axisPolicies, key, described.key);
             QString mode = "fit";
             QString minText;
@@ -657,6 +662,7 @@ namespace ksv::presentation {
             });
         }
         entry["axes"] = axes;
+        entry["xAxes"] = xAxes;
         return entry;
     }
 
@@ -871,7 +877,7 @@ namespace ksv::presentation {
         const auto name = axis.toStdString();
         const auto &axes = graphDescriptor(key).axes;
         const auto described = preferences ? std::ranges::find(axes, name, &GraphAxisDescriptor::key) : axes.end();
-        if (!preferences || described == axes.end()) return false;
+        if (!preferences || described == axes.end() || !described->defaultPolicy) return false;
 
         auto &policy = preferences->axisPolicies[name];
         AxisPolicy next;
@@ -883,6 +889,21 @@ namespace ksv::presentation {
         if (next == policy) return true;
         policy = next;
         if (mode != "fixed") dropRawInput(key, "axes", name, {"fixedMin", "fixedMax"});
+        draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::setShownXAxis(const QString &graph, const QString &axis) {
+        using namespace application;
+        GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        const auto name = axis.toStdString();
+        if (!preferences || std::ranges::none_of(graphDescriptor(key).axes, [&](const GraphAxisDescriptor &described) {
+                return described.orientation == AxisOrientation::Horizontal && described.key == name;
+            }))
+            return false;
+        if (preferences->xAxis == name) return true;
+        preferences->xAxis = name;
         draftChanged();
         return true;
     }

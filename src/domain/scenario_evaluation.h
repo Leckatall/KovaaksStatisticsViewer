@@ -4,10 +4,19 @@
 #include <chrono>
 #include <optional>
 #include <span>
+#include <vector>
 
 #include "run.h"
 
 namespace ksv::domain {
+    struct PersonalBestEntry {
+        /// 1-based position in the run sequence the evaluation was built from.
+        int scenarioRun = 0;
+        double score = 0.0;
+
+        bool operator==(const PersonalBestEntry &) const = default;
+    };
+
     class ScenarioEvaluation {
     public:
         static constexpr int kRecentRuns = 5;
@@ -24,6 +33,10 @@ namespace ksv::domain {
         [[nodiscard]] double recentAverage() const;
         [[nodiscard]] int recentSampleCount() const;
         [[nodiscard]] double playtimeSeconds() const;
+        /// The first run and every later run that strictly beat the PB before it.
+        [[nodiscard]] const std::vector<PersonalBestEntry> &personalBestHistory() const;
+        /// Entry `i` is the recent average after scenario run `i + 1`.
+        [[nodiscard]] const std::vector<double> &recentAverages() const;
 
         bool operator==(const ScenarioEvaluation &) const = default;
 
@@ -36,6 +49,8 @@ namespace ksv::domain {
         double m_recentAverage = 0.0;
         int m_recentSampleCount = 0;
         double m_playtimeSeconds = 0.0;
+        std::vector<PersonalBestEntry> m_personalBestHistory;
+        std::vector<double> m_recentAverages;
     };
 }
 

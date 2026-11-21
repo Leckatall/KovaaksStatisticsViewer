@@ -114,8 +114,8 @@ Item {
         y: Math.round((rowItem.height - height) / 2)
         width: rowItem.grid.barWidth
         height: rowItem.grid.barHeight
-        marker: rowItem.modelData.recentPosition !== undefined
-                ? Number(rowItem.modelData.recentPosition) : -1
+        markerShown: rowItem.modelData.hasRecentMarker === true
+        marker: Number(rowItem.modelData.recentPosition || 0)
         markerDescription: String(rowItem.modelData.recentDescription || "")
         tiers: rowItem.grid.tiers
         fills: rowItem.modelData.fills || []

@@ -139,6 +139,8 @@ namespace ksv::presentation {
         Q_INVOKABLE bool clearSeriesOverride(const QString &graph, const QString &series, const QString &field);
         // fit, zero or fixed; unparsed text of the bound fields is dropped unless the mode is fixed.
         Q_INVOKABLE bool setAxisMode(const QString &graph, const QString &axis, const QString &mode);
+        // `axis` is one of the graph's horizontal axes (graphDraft's "xAxes").
+        Q_INVOKABLE bool setShownXAxis(const QString &graph, const QString &axis);
         // Stages the graph's presentation defaults only; its lines, axes and other graphs are untouched.
         Q_INVOKABLE bool resetGraph(const QString &graph);
 

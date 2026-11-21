@@ -32,8 +32,9 @@ namespace ksv::application {
         std::optional<DayInterval> interval;
         // An anchored preset found no point of its series to end at: nothing is shown rather than borrowing an anchor.
         bool noRelevantHistory = false;
-        // With the anchor flag on, the day of the series' last point. `interval` is already cut back to
-        // it; a range without one (all history) must still end there instead of at the shared extent.
+        // With the anchor flag on, the day of the benchmark's latest member run, for both rank views.
+        // `interval` is already cut back to it; a range without one (all history) must still end there
+        // instead of at the shared extent.
         std::optional<std::chrono::sys_days> anchoredEnd;
 
         bool operator==(const RankRangeView &) const = default;
@@ -48,9 +49,9 @@ namespace ksv::application {
         std::string lastKnownSelectedDisplayName;
         BenchmarkTrackingState availability = BenchmarkTrackingState::NoSelection;
         PlaytimeView playtime;
-        // Of averageRankHistory, whose anchor is the last improvement.
+        // Of averageRankHistory.
         RankRangeView rank;
-        // Of recentAverageRankHistory, whose anchor is the last play day.
+        // Of recentAverageRankHistory.
         RankRangeView recentRank;
         std::optional<domain::Benchmark> benchmark;
         // The range-sliced part of the committed averaging window's playtime series.

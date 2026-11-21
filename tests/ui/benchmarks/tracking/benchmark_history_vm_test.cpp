@@ -840,8 +840,7 @@ TEST(BenchmarkRecentRankHistory, TakesItsOwnCommittedStyle) {
 }
 
 TEST(BenchmarkRecentRankHistory, NeverTakesGenericNumericFitting) {
-    ValueAxis x;
-    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RecentAverageRank, x);
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RecentAverageRank);
     BenchmarkHistoryViewModel::Content content;
     content.historyAvailable = true;
     content.observations = {QPointF(0.0, 1.0), QPointF(1.0, 2.0)};
@@ -883,8 +882,7 @@ namespace {
 }
 
 TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitsFixesAndRestoresItsAxisInMinutes) {
-    ValueAxis x;
-    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime);
     vm.update(secondsContent({1800.0, 4200.0}), true, {});
     const double defaultMin = historyAxis(vm).min();
 
@@ -903,8 +901,7 @@ TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitsFixesAndRestoresItsAxisInMinutes) {
 }
 
 TEST(BenchmarkHistoryAxisPolicy, PlaytimePolicySurvivesFurtherUpdates) {
-    ValueAxis x;
-    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime);
     vm.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}});
 
     vm.update(secondsContent({600.0}), true, {});
@@ -916,8 +913,7 @@ TEST(BenchmarkHistoryAxisPolicy, PlaytimePolicySurvivesFurtherUpdates) {
 }
 
 TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitOfASingleDayUsesTheFallbackSpan) {
-    ValueAxis x;
-    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime);
     vm.setAxisPolicies({{"playtime", FitVisibleData{}}});
 
     vm.update(secondsContent({1800.0}), true, {});
@@ -928,8 +924,7 @@ TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitOfASingleDayUsesTheFallbackSpan) {
 }
 
 TEST(BenchmarkHistoryAxisPolicy, PlaytimePolicyChangesRepaintOnlyWhenTheyChangeSomething) {
-    ValueAxis x;
-    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime, x);
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RollingPlaytime);
     vm.update(secondsContent({1800.0}), true, {});
     const QSignalSpy bounds(&vm, &GraphViewModelBase::boundsChanged);
 
@@ -940,8 +935,7 @@ TEST(BenchmarkHistoryAxisPolicy, PlaytimePolicyChangesRepaintOnlyWhenTheyChangeS
 }
 
 TEST(BenchmarkHistoryAxisPolicy, TheRankGraphNeverTakesGenericNumericFitting) {
-    ValueAxis x;
-    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank, x);
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
     BenchmarkHistoryViewModel::Content content;
     content.historyAvailable = true;
     content.observations = {QPointF(0.0, 1.0), QPointF(1.0, 2.0)};
@@ -1102,4 +1096,198 @@ TEST(BenchmarkHistoryViewModel, PlaytimeGraphPlotsTheSnapshotsVisibleSeriesNotTh
     ASSERT_NE(series, nullptr);
     ASSERT_EQ(series->points.size(), 1);
     EXPECT_EQ(series->points.front(), QPointF(ms(day), 120));
+}
+
+// ---- run axis -------------------------------------------------------------------------------------
+
+namespace {
+    std::shared_ptr<FakeBenchmarkTrackingUseCase> onRunAxis(std::shared_ptr<FakeBenchmarkTrackingUseCase> fake) {
+        fake->rankPresentation.xAxis = std::string(kRunXAxis);
+        fake->recentRankPresentation.xAxis = std::string(kRunXAxis);
+        return fake;
+    }
+
+    std::vector<double> xs(const SeriesModel *series) {
+        std::vector<double> result;
+        if (series)
+            for (const auto &point: series->points) result.push_back(point.x());
+        return result;
+    }
+
+    // makeTrackableFixture's member runs are 1 (Mar 4), 2 (Mar 5), 3 and 4 (Mar 6); runs 1, 3 and 4 set PBs.
+}
+
+TEST(BenchmarkRunAxis, PointsSitAtTheirBenchmarkRunNumbers) {
+    auto fake = onRunAxis(fakeWith(makeTrackableSnapshot()));
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto *history = vm.rankHistory();
+    EXPECT_TRUE(history->runAxisShown());
+    const auto *rank = valueSeries(history);
+    ASSERT_NE(rank, nullptr);
+    const auto &domainHistory = fake->benchmark()->averageRankHistory();
+    ASSERT_EQ(rank->points.size(), static_cast<qsizetype>(domainHistory.size()));
+    for (std::size_t index = 0; index < domainHistory.size(); ++index) {
+        EXPECT_EQ(rank->points[static_cast<qsizetype>(index)].x(), domainHistory[index].benchmarkRun);
+        EXPECT_DOUBLE_EQ(rank->points[static_cast<qsizetype>(index)].y(), domainHistory[index].averageRank);
+    }
+    EXPECT_EQ(xs(rank), (std::vector<double>{1, 3, 4}));
+    EXPECT_EQ(history->xAxis().min(), 1);
+    EXPECT_EQ(history->xAxis().max(), 4);
+}
+
+TEST(BenchmarkRunAxis, TheRecentGraphHasAPointForEveryMemberRun) {
+    auto fake = onRunAxis(fakeWith(makeTrackableSnapshot()));
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_EQ(xs(valueSeries(vm.recentRankHistory())), (std::vector<double>{1, 2, 3, 4}));
+}
+
+TEST(BenchmarkRunAxis, ADateRangeSpansTheRunsOfItsDays) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.rank.interval = DayInterval{ymd(2024, 3, 5), ymd(2024, 3, 9)};
+    auto fake = onRunAxis(fakeWith(snapshot));
+    BenchmarkTrackingViewModel vm{fake};
+
+    const auto &axis = vm.rankHistory()->xAxis();
+    EXPECT_EQ(axis.min(), 2);
+    EXPECT_EQ(axis.max(), 4);
+    EXPECT_EQ(xs(valueSeries(vm.rankHistory())), (std::vector<double>{3, 4}));
+    EXPECT_EQ(axis.calendarRangeMs(),
+              std::optional(std::pair{expectedMidnightMs(ymd(2024, 3, 5)), expectedMidnightMs(ymd(2024, 3, 9))}));
+}
+
+// R24: the run axis has nothing to span where the range holds no run, so it shows the empty state
+// even though the calendar axis carries the held rank across those days.
+TEST(BenchmarkRunAxis, ARangeWithoutRunsDrawsNothingWhereTheCalendarAxisWouldCarry) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.rank.interval = DayInterval{ymd(2024, 3, 10), ymd(2024, 3, 12)};
+    auto calendarFake = fakeWith(snapshot);
+    auto runFake = onRunAxis(fakeWith(snapshot));
+    BenchmarkTrackingViewModel calendar{calendarFake};
+    BenchmarkTrackingViewModel runs{runFake};
+
+    auto *onCalendar = qobject_cast<BenchmarkHistoryViewModel *>(calendar.rankHistory());
+    auto *onRuns = qobject_cast<BenchmarkHistoryViewModel *>(runs.rankHistory());
+    ASSERT_TRUE(onCalendar->hasData());
+    ASSERT_TRUE(onCalendar->hasCarriedState());
+    EXPECT_FALSE(onRuns->hasData());
+    EXPECT_TRUE(onRuns->historyAvailable());
+    EXPECT_TRUE(onRuns->noObservationsInRange());
+    EXPECT_TRUE(onRuns->runAxisShown());
+}
+
+TEST(BenchmarkRunAxis, ALevelIsCarriedInFromTheFirstRunAndOutToTheLastRun) {
+    const auto &pbHistory = makeTrackableFixture().evaluate().averageRankHistory();
+    ASSERT_EQ(pbHistory.front().benchmarkRun, 1);
+    const double firstLevel = pbHistory.front().averageRank;
+
+    auto carriedIn = makeTrackableSnapshot();
+    carriedIn.rank.interval = DayInterval{ymd(2024, 3, 5), ymd(2024, 3, 6)};
+    auto inFake = onRunAxis(fakeWith(carriedIn));
+    BenchmarkTrackingViewModel inVm{inFake};
+    const auto *in = valueSeries(inVm.rankHistory());
+    ASSERT_NE(in, nullptr);
+    ASSERT_TRUE(in->leadingCarry);
+    EXPECT_EQ(in->leadingCarry->x(), 2);
+    EXPECT_DOUBLE_EQ(in->leadingCarry->y(), firstLevel);
+    EXPECT_FALSE(in->trailingCarry) << "run 4 is both the last run and a point";
+
+    auto carriedOut = makeTrackableSnapshot();
+    carriedOut.rank.interval = DayInterval{ymd(2024, 3, 4), ymd(2024, 3, 5)};
+    auto outFake = onRunAxis(fakeWith(carriedOut));
+    BenchmarkTrackingViewModel outVm{outFake};
+    const auto *out = valueSeries(outVm.rankHistory());
+    ASSERT_NE(out, nullptr);
+    EXPECT_FALSE(out->leadingCarry);
+    ASSERT_TRUE(out->trailingCarry);
+    EXPECT_EQ(out->trailingCarry->x(), 2);
+    EXPECT_DOUBLE_EQ(out->trailingCarry->y(), firstLevel);
+}
+
+TEST(BenchmarkRunAxis, AllHistorySpansEveryMemberRunWhateverThePlaytimeExtent) {
+    auto fixture = makeTrackableFixture();
+    fixture.runs.push_back(runOn(ymd(2024, 3, 7), "h1", 100));
+    auto snapshot = snapshotFor(fixture);
+    snapshot.visiblePlaytime = {{ymd(2024, 3, 1), 600.0}, {ymd(2024, 3, 30), 1200.0}};
+    snapshot.playtime.fullExtent = DayInterval{ymd(2024, 3, 1), ymd(2024, 3, 30)};
+    auto fake = onRunAxis(fakeWith(snapshot));
+    BenchmarkTrackingViewModel vm{fake};
+
+    for (const auto *history: {vm.rankHistory(), vm.recentRankHistory()}) {
+        EXPECT_EQ(history->xAxis().min(), 1);
+        EXPECT_EQ(history->xAxis().max(), 5);
+    }
+    const auto *rank = valueSeries(vm.rankHistory());
+    ASSERT_NE(rank, nullptr);
+    ASSERT_TRUE(rank->trailingCarry) << "the PB is held through the run since it was set";
+    EXPECT_EQ(rank->trailingCarry->x(), 5);
+}
+
+TEST(BenchmarkRunAxis, AnAnchoredRangeEndsAtTheAnchorDaysLastRun) {
+    auto snapshot = makeTrackableSnapshot();
+    snapshot.recentRank.anchoredEnd = ymd(2024, 3, 5);
+    auto fake = onRunAxis(fakeWith(snapshot));
+    BenchmarkTrackingViewModel vm{fake};
+
+    EXPECT_EQ(vm.recentRankHistory()->xAxis().min(), 1);
+    EXPECT_EQ(vm.recentRankHistory()->xAxis().max(), 2);
+    EXPECT_EQ(xs(valueSeries(vm.recentRankHistory())), (std::vector<double>{1, 2}));
+}
+
+// The run axis draws every run, so a day whose recent average rose and fell again reaches higher
+// than that day's last value, which is all the calendar axis plots.
+TEST(BenchmarkRunAxis, TheRecentTierScaleCoversItsHighestRunNotOnlyDayEnds) {
+    auto fixture = makeUniformFixture(3, {}, 100);
+    fixture.runs = {ksv::tests_support::benchmarkFact("u", expectedMidnightMs(ymd(2024, 3, 4)) + 1'000, 250.0F),
+                    ksv::tests_support::benchmarkFact("u", expectedMidnightMs(ymd(2024, 3, 4)) + 2'000, 50.0F)};
+    const auto snapshot = snapshotFor(fixture);
+    auto calendarFake = fakeWith(snapshot);
+    auto runFake = onRunAxis(fakeWith(snapshot));
+    BenchmarkTrackingViewModel calendar{calendarFake};
+    BenchmarkTrackingViewModel runs{runFake};
+
+    const auto *onCalendar = valueSeries(qobject_cast<BenchmarkHistoryViewModel *>(calendar.recentRankHistory()));
+    const auto *onRuns = valueSeries(qobject_cast<BenchmarkHistoryViewModel *>(runs.recentRankHistory()));
+    ASSERT_NE(onCalendar, nullptr);
+    ASSERT_NE(onRuns, nullptr);
+    EXPECT_EQ(onRuns->referenceLines.size(), 3);
+    EXPECT_LT(onCalendar->referenceLines.size(), onRuns->referenceLines.size());
+}
+
+// R16: the axis is a per-graph preference; switching it must not redraw the other graphs.
+TEST(BenchmarkRunAxis, SwitchingOneGraphsAxisRebuildsOnlyThatGraph) {
+    auto fake = fakeWith(makeTrackableSnapshot());
+    BenchmarkTrackingViewModel vm{fake};
+    const QSignalSpy rank(vm.rankHistory(), &GraphViewModelBase::dataUpdated);
+    const QSignalSpy recent(vm.recentRankHistory(), &GraphViewModelBase::dataUpdated);
+    const QSignalSpy playtime(vm.playtimeHistory(), &GraphViewModelBase::dataUpdated);
+
+    fake->rankPresentation.xAxis = std::string(kRunXAxis);
+    fake->publishPresentation();
+
+    EXPECT_TRUE(vm.rankHistory()->runAxisShown());
+    EXPECT_EQ(rank.count(), 1);
+    EXPECT_EQ(recent.count(), 0);
+    EXPECT_EQ(playtime.count(), 0);
+    EXPECT_FALSE(vm.recentRankHistory()->runAxisShown());
+
+    const int reads = fake->snapshotCalls;
+    fake->rankPresentation.appearance.connection = ConnectionMode::Straight;
+    fake->publishPresentation();
+    EXPECT_EQ(fake->snapshotCalls, reads) << "a style change that leaves the axis alone reads nothing";
+}
+
+TEST(BenchmarkRunAxis, RunAxisShownFollowsTheCommittedAxis) {
+    auto fake = onRunAxis(fakeWith(makeTrackableSnapshot()));
+    BenchmarkTrackingViewModel vm{fake};
+    ASSERT_TRUE(vm.recentRankHistory()->runAxisShown());
+    const QSignalSpy shown(vm.recentRankHistory(), &BenchmarkHistoryViewModel::runAxisShownChanged);
+
+    fake->recentRankPresentation.xAxis = std::string(kCalendarXAxis);
+    fake->publishPresentation();
+
+    EXPECT_FALSE(vm.recentRankHistory()->runAxisShown());
+    EXPECT_EQ(shown.count(), 1);
+    EXPECT_EQ(vm.recentRankHistory()->xAxis().min(), static_cast<double>(expectedMidnightMs(ymd(2024, 3, 4))));
 }

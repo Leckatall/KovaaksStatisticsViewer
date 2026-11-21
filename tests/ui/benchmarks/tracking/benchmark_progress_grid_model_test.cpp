@@ -62,9 +62,6 @@ namespace {
             return scenarioChunkFills(benchmark.tiers(), scenario(), score);
         }
         std::vector<bool> missing() const { return missingThresholdChunks(benchmark.tiers(), scenario()); }
-        std::optional<double> position(std::optional<double> score) const {
-            return tierScalePosition(scenario(), score);
-        }
     };
 
     BenchmarkFixture breakdownWithTopTier() {
@@ -159,36 +156,43 @@ TEST(TierChunkFills, ChunksBoundedByAnOutOfOrderThresholdStayEmpty) {
     expectFills(ScoredScenario{thresholds}.fills(5000.0), {0, 0, 0, 1, 0.5});
 }
 
-// The filled length is the domain's normalized rank (6.37 = six full chunks), and the marker
-// scale is the same.
-TEST(TierChunkFills, FilledLengthMatchesTheDomainNormalizedRankAndTheMarkerScale) {
+// The filled length is the domain's normalized rank (6.37 = six full chunks), the scale the
+// recent-average marker is placed on.
+TEST(TierChunkFills, FilledLengthMatchesTheDomainNormalizedRank) {
     const ScoredScenario scored;
     for (const double score: {0.0, 1.0, 999.0, 1000.0, 1500.0, 2999.0, 3000.0, 4100.0, 5999.0, 6000.0, 8000.0}) {
         const auto fills = scored.fills(score);
         const double length = std::accumulate(fills.begin(), fills.end(), 0.0);
         EXPECT_NEAR(length, scored.scenario().normalized(score), 1e-9) << score;
-        const auto position = scored.position(score);
-        ASSERT_TRUE(position);
-        EXPECT_NEAR(length, *position, 1e-9) << score;
     }
 }
 
 // --- the recent-average marker's position --------------------------------------------------------
 
-TEST(TierScalePosition, PlacesAScoreOnTheSameChunkScaleAsTheFills) {
-    const ScoredScenario scored;
-    EXPECT_NEAR(scored.position(500.0).value_or(-1.0), 0.5, 1e-9);   // below the first tier: inside Iron's chunk
-    EXPECT_NEAR(scored.position(3000.0).value_or(-1.0), 3.0, 1e-9);  // exactly on Silver: its chunk's end
-    EXPECT_NEAR(scored.position(5000.0).value_or(-1.0), 4.5, 1e-9);  // mid Gold -> Platinum
-    EXPECT_NEAR(scored.position(6000.0).value_or(-1.0), 5.0, 1e-9);  // the top tier: bar end
-    EXPECT_NEAR(scored.position(9000.0).value_or(-1.0), 5.0, 1e-9);  // above the top tier
+TEST(BenchmarkProgressGridModel, RecentMarkerSitsAtTheNormalizedRecentRankWheneverThereAreRuns) {
+    auto fake = gridFake();
+    BenchmarkTrackingViewModel vm{fake};
+    const auto &scenario = scenarioNamed(*fake->benchmark(), "e1");
+    ASSERT_TRUE(scenario.stats());
+
+    const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
+    EXPECT_TRUE(e1.value("hasRecentMarker").toBool());
+    EXPECT_EQ(e1.value("recentPosition").toDouble(), scenario.normalizedRecentRank());
 }
 
-TEST(TierScalePosition, NoPositionWithoutAScoreOrAValidLadder) {
-    EXPECT_FALSE(ScoredScenario{}.position(std::nullopt).has_value());
-    auto thresholds = fiveThresholds();
-    thresholds.pop_back();
-    EXPECT_FALSE(ScoredScenario{thresholds}.position(2000.0).has_value());
+// R27: an Incomplete benchmark can hold a played scenario with no usable ladder; its recent
+// average is still worth showing, at the bar's start, with the same caveat as its PB text.
+TEST(BenchmarkProgressGridModel, ARowWithRunsButNoUsableLadderShowsTheMarkerAtTheStart) {
+    auto fake = gridFake();
+    fake->fixture.definition.categories[0].scenarios[0].thresholds.pop_back();
+    fake->reevaluate();
+    BenchmarkTrackingViewModel vm{fake};
+    ASSERT_FALSE(scenarioNamed(*fake->benchmark(), "e1").ladder());
+
+    const QVariantMap e1 = rowFor(vm.progressGrid(), "e1");
+    EXPECT_TRUE(e1.value("hasRecentMarker").toBool());
+    EXPECT_EQ(e1.value("recentPosition").toDouble(), 0.0);
+    EXPECT_TRUE(e1.value("recentDescription").toString().endsWith(QStringLiteral("thresholds incomplete")));
 }
 
 TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheFillEnd) {
@@ -210,7 +214,7 @@ TEST(BenchmarkProgressGridModel, RecentAverageBelowThePersonalBestSitsLeftOfTheF
 
     // Scenarios without runs have no recent marker.
     for (const char *id: {"e2", "u1", "e3"}) {
-        EXPECT_LT(rowFor(vm.progressGrid(), id).value("recentPosition").toDouble(), 0.0) << id;
+        EXPECT_FALSE(rowFor(vm.progressGrid(), id).value("hasRecentMarker").toBool()) << id;
         EXPECT_TRUE(rowFor(vm.progressGrid(), id).value("recentDescription").toString().isEmpty()) << id;
     }
 }
@@ -271,7 +275,8 @@ TEST(BenchmarkProgressGridContent, MapsAreDerivedFromTheTypedForm) {
         EXPECT_EQ(map.value("playCountText").toString(), row.playCountText);
         EXPECT_EQ(map.value("attainedTierText").toString(), row.attainedTierText);
         EXPECT_EQ(map.value("attainedTierColor").toString(), row.attainedTierColor);
-        EXPECT_EQ(map.value("recentPosition").toDouble(), row.recentPosition.value_or(-1.0));
+        EXPECT_EQ(map.value("hasRecentMarker").toBool(), row.recentPosition.has_value());
+        EXPECT_EQ(map.value("recentPosition").toDouble(), row.recentPosition.value_or(0.0));
         EXPECT_EQ(map.value("recentDescription").toString(), row.recentDescription);
         EXPECT_EQ(map.value("nextTierText").toString(), row.nextTierText);
         EXPECT_EQ(map.value("nextTierColor").toString(), row.nextTierColor);
@@ -810,7 +815,9 @@ TEST(BenchmarkProgressGridModel, UnadmittedThresholdsLeaveTheRowsTextBlank) {
         ASSERT_EQ(missing.size(), 3);
         EXPECT_TRUE(texts.at(i).toString().isEmpty());
         EXPECT_TRUE(missing.at(i).toBool());
-        EXPECT_LT(row.value("recentPosition").toDouble(), 0.0);
+        // e1 has runs, so its marker shows, at the start of a bar with no usable ladder.
+        EXPECT_TRUE(row.value("hasRecentMarker").toBool());
+        EXPECT_EQ(row.value("recentPosition").toDouble(), 0.0);
     }
 }
 

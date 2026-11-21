@@ -350,6 +350,24 @@ namespace {
         vm->endVisit();
     }
 
+    TEST_F(GraphConfigurationFlowTest, ChoosingTheCalendarAxisAndSavingCommitsIt) {
+        ASSERT_NO_FATAL_FAILURE(startApp());
+        const std::optional<std::string> runs{std::string(kRunXAxis)};
+        const std::optional<std::string> calendar{std::string(kCalendarXAxis)};
+        auto *vm = settings();
+
+        vm->beginVisit();
+        ASSERT_TRUE(vm->setShownXAxis("benchmarkRank", QString::fromLatin1(kCalendarXAxis)));
+        EXPECT_EQ(committed().configuration->preferences(GraphKey::BenchmarkRank).xAxis, runs);
+
+        ASSERT_TRUE(vm->save()["accepted"].toBool());
+
+        EXPECT_EQ(committed().configuration->preferences(GraphKey::BenchmarkRank).xAxis, calendar);
+        EXPECT_EQ(committed().configuration->preferences(GraphKey::BenchmarkRecentRank).xAxis, runs);
+        EXPECT_EQ(env.graphConfigurationPersistence->load(), *committed().configuration);
+        vm->endVisit();
+    }
+
     TEST_F(GraphConfigurationFlowTest, EarlierPopupChangesSurviveCancellingALaterVisit) {
         ASSERT_NO_FATAL_FAILURE(startSeededApp());
         ASSERT_TRUE(quick("dailyPlaytime", {{"window", 9}}));

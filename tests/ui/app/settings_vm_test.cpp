@@ -675,6 +675,32 @@ namespace {
         EXPECT_TRUE(configuration->saves.empty());
     }
 
+    TEST_F(SettingsViewModelTest, SavingCommitsTheShownXAxis) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_TRUE(view_model->setShownXAxis("benchmarkRank", QString::fromLatin1(kCalendarXAxis)));
+
+        ASSERT_TRUE(view_model->save()["accepted"].toBool());
+
+        EXPECT_EQ(configuration->configuration.preferences(GraphKey::BenchmarkRank).xAxis,
+                  std::optional<std::string>{std::string(kCalendarXAxis)});
+        EXPECT_EQ(configuration->configuration.preferences(GraphKey::BenchmarkRecentRank).xAxis,
+                  std::optional<std::string>{std::string(kRunXAxis)});
+        EXPECT_FALSE(view_model->hasPendingChanges());
+    }
+
+    TEST_F(SettingsViewModelTest, CancelDiscardsTheShownXAxis) {
+        const auto view_model = make_view_model();
+        view_model->beginVisit();
+        ASSERT_TRUE(view_model->setShownXAxis("benchmarkRank", QString::fromLatin1(kCalendarXAxis)));
+
+        view_model->revertChanges();
+
+        EXPECT_TRUE(view_model->graphDraft("benchmarkRank")["xAxes"].toList()[0].toMap()["shown"].toBool());
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_TRUE(configuration->saves.empty());
+    }
+
     // ---- Axis names ---------------------------------------------------------------------------
 
     TEST_F(SettingsViewModelTest, RenamingAnAxisTrimsItsNameAndKeepsItsLines) {

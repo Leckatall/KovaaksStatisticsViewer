@@ -14,6 +14,7 @@ namespace ksv::application {
         LineAppearance appearance;
         std::map<std::string, SeriesStyleOverride, std::less<>> seriesStyles;
         std::map<std::string, AxisPolicy, std::less<>> axisPolicies;
+        std::optional<std::string> xAxis;
 
         [[nodiscard]] SeriesStyle seriesStyle(const std::string_view seriesKey) const {
             return resolvedSeriesStyle(graph, seriesStyles, seriesKey);

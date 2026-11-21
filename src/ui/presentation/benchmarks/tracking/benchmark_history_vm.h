@@ -12,14 +12,16 @@
 
 #include "presentation/graphs/common/axes/axis.h"
 #include "presentation/graphs/common/axes/axis_policy.h"
+#include "presentation/graphs/common/axes/date_time_axis.h"
+#include "presentation/graphs/common/axes/run_date_axis.h"
 #include "presentation/graphs/common/graph_vm_base.h"
 #include "presentation/graphs/common/series/series_model.h"
 
 namespace ksv::presentation {
     // One drawn metric of the benchmark tracking workspace - personal-best average rank, recent
     // average rank, or averaged playtime. BenchmarkTrackingViewModel owns one instance per metric and
-    // hands each its own UTC-day X axis (the same extent unless a range narrows one) while each keeps
-    // its own series name, delegate, and Y axis.
+    // sets the range of the X axes each one owns: a UTC-day calendar axis, and a run axis that only a
+    // rank metric is ever shown on. xAxis() is whichever the last update() was laid out for.
     // series() is empty whenever the metric is suppressed or has nothing to draw, so an incomplete
     // definition or an empty history never renders a line that resembles data.
     // One tier of the rank axis, bottom (lowest) first; tier k (1-based) sits at y = k.
@@ -50,6 +52,8 @@ namespace ksv::presentation {
         Q_PROPERTY(QString noPointsText READ noPointsText CONSTANT)
         // Names the playtime metric's effective averaging window; the rank metric's name never changes.
         Q_PROPERTY(QString metricName READ metricName NOTIFY metricNameChanged)
+        // Whether xAxis() is the run axis: X values are then benchmark run numbers, not epoch ms.
+        Q_PROPERTY(bool runAxisShown READ runAxisShown NOTIFY runAxisShownChanged)
 
     public:
         enum Metric { AverageRank, RecentAverageRank, RollingPlaytime };
@@ -59,11 +63,15 @@ namespace ksv::presentation {
         enum Column { Date = 0, Value = 1 };
         Q_ENUM(Column)
 
-        // `xAxis` is owned by the parent BenchmarkTrackingViewModel and must outlive this object.
-        BenchmarkHistoryViewModel(Metric metric, const Axis &xAxis, QObject *parent = nullptr);
+        explicit BenchmarkHistoryViewModel(Metric metric, QObject *parent = nullptr);
 
         [[nodiscard]] QList<SeriesModel *> series(const QList<int> &columns) const override;
-        [[nodiscard]] const Axis &xAxis() const override { return *m_xAxis; }
+        [[nodiscard]] const Axis &xAxis() const override {
+            return m_runAxisShown ? static_cast<const Axis &>(m_runAxis) : m_calendarAxis;
+        }
+        [[nodiscard]] DateTimeAxis &calendarAxis() { return m_calendarAxis; }
+        [[nodiscard]] RunDateAxis &runAxis() { return m_runAxis; }
+        [[nodiscard]] bool runAxisShown() const { return m_runAxisShown; }
         [[nodiscard]] int yAxisColumn() const override { return Value; }
 
         [[nodiscard]] bool hasData() const { return m_hasData; }
@@ -93,7 +101,8 @@ namespace ksv::presentation {
         void setPresentation(const application::GraphPresentation &presentation);
         [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
-        // X is UTC-midnight epoch ms, Y the metric's raw value (rank position, or playtime seconds).
+        // X is UTC-midnight epoch ms on the calendar axis and the benchmark run number on the run axis;
+        // Y is the metric's raw value (rank position, or playtime seconds).
         struct Content {
             QList<QPointF> observations;
             std::optional<QPointF> leadingCarry;
@@ -102,10 +111,14 @@ namespace ksv::presentation {
             // meaning rather than fitting only what a narrowed range shows.
             qreal fullHistoryPeak = 0.0;
             bool historyAvailable = false;
+            // Which axis the content is laid out for; update() shows that axis.
+            bool onRunAxis = false;
         };
 
-        // Called by BenchmarkTrackingViewModel inside one atomic rebuild, after it has updated this
-        // metric's X axis. `present` is false when the metric is suppressed; `rankTiers` is only read
+        // Called by BenchmarkTrackingViewModel inside one atomic rebuild, after it has set the range of
+        // the axis `content` is laid out for; this call switches xAxis() to that axis, so the axis and
+        // the content laid out on it are always installed together.
+        // `present` is false when the metric is suppressed; `rankTiers` is only read
         // for a rank metric: it sizes the rank axis from 0 up to one tier above the full-history peak
         // (capped at the top tier), with a tick at every shown tier, and gives each shown tier a
         // reference line in its colour. The rank line itself has no colour of its own (neutral), so
@@ -115,6 +128,7 @@ namespace ksv::presentation {
     signals:
         void metricNameChanged();
         void contentStateChanged();
+        void runAxisShownChanged();
 
     private:
         [[nodiscard]] bool isRank() const { return m_metric != RollingPlaytime; }
@@ -133,7 +147,10 @@ namespace ksv::presentation {
         application::GraphPresentation m_presentation;
         application::AxisPolicy m_playtimeAxisPolicy;
         SeriesModel *m_series;
-        const Axis *m_xAxis;
+        // Every history metric is at most one point per UTC day on it, so it never ticks in hours.
+        DateTimeAxis m_calendarAxis{DateTimeAxis::Options{.wholeDays = true}};
+        RunDateAxis m_runAxis;
+        bool m_runAxisShown = false;
         bool m_hasData = false;
         bool m_historyAvailable = false;
         int m_observationCount = 0;

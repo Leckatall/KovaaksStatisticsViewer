@@ -110,6 +110,7 @@ function makeFakeHistoryModel(overrides) {
         contentState: 0,
         pointMarkers: false,
         connectionMode: 0,
+        runAxisShown: false,
         enabledSeriesIds: [],
         allSeries: [],
         series: function () { return [] },

@@ -6,7 +6,7 @@
 #include "app/contracts/graph_configuration.h"
 
 namespace ksv::qt_data {
-    inline constexpr int kGraphConfigurationSchemaVersion = 6;
+    inline constexpr int kGraphConfigurationSchemaVersion = 7;
 
     struct DecodedGraphConfiguration {
         application::GraphConfiguration configuration;

@@ -185,9 +185,8 @@ namespace ksv::ui {
     TEST(CaptureContext, BenchmarkHistoryCarriesTheBenchmarkAndMetric) {
         const qint64 firstMs = utcMidnightOfEpochDay(19480);
         const qint64 lastMs = utcMidnightOfEpochDay(19520);
-        DateTimeAxis axis;
-        ASSERT_TRUE(axis.setEpochMillisecondsRange(firstMs, lastMs));
-        BenchmarkHistoryViewModel vm{BenchmarkHistoryViewModel::AverageRank, axis};
+        BenchmarkHistoryViewModel vm{BenchmarkHistoryViewModel::AverageRank};
+        ASSERT_TRUE(vm.calendarAxis().setEpochMillisecondsRange(firstMs, lastMs));
 
         const GraphCaptureContext context = benchmarkHistoryCaptureContext(QStringLiteral("Voltaic"), vm);
 
@@ -197,4 +196,23 @@ namespace ksv::ui {
         EXPECT_TRUE(context.rangeText.contains(utcDay(lastMs)));
         EXPECT_EQ(context.xTitle, QStringLiteral("Date"));
     }
+
+    TEST(CaptureContext, BenchmarkHistoryOnTheRunAxisNamesRunsInTheTitleAndKeepsTheDayRange) {
+        const qint64 firstMs = utcMidnightOfEpochDay(19480);
+        const qint64 lastMs = utcMidnightOfEpochDay(19520);
+        BenchmarkHistoryViewModel vm{BenchmarkHistoryViewModel::AverageRank};
+        std::ignore = vm.runAxis().setRuns({firstMs + 3'600'000, lastMs + 3'600'000}, 4, std::pair{firstMs, lastMs});
+        BenchmarkHistoryViewModel::Content content;
+        content.onRunAxis = true;
+        vm.update(content, true, {});
+        ASSERT_TRUE(vm.runAxisShown());
+
+        const GraphCaptureContext context = benchmarkHistoryCaptureContext(QStringLiteral("Voltaic"), vm);
+
+        EXPECT_TRUE(context.rangeText.contains(utcDay(firstMs)));
+        EXPECT_TRUE(context.rangeText.contains(utcDay(lastMs)));
+        EXPECT_TRUE(context.xTitle.contains(QStringLiteral("date"), Qt::CaseInsensitive));
+        EXPECT_TRUE(context.xTitle.contains(QStringLiteral("run"), Qt::CaseInsensitive));
+    }
+
 }

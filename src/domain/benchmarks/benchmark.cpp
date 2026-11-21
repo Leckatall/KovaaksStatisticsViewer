@@ -3,9 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <deque>
 #include <iterator>
-#include <numeric>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -36,6 +34,24 @@ namespace ksv::domain {
     std::optional<TierId> ScenarioBenchmarkEvaluation::attainedTier() const { return m_attainedTier; }
     std::optional<Threshold> ScenarioBenchmarkEvaluation::nextThreshold() const { return m_nextThreshold; }
     double ScenarioBenchmarkEvaluation::normalizedRank() const { return m_normalizedRank; }
+    double ScenarioBenchmarkEvaluation::normalizedRecentRank() const { return m_normalizedRecentRank; }
+
+    std::vector<NormalizedPersonalBest> ScenarioBenchmarkEvaluation::normalizedPersonalBestHistory() const {
+        std::vector<NormalizedPersonalBest> result;
+        if (!m_stats) return result;
+        result.reserve(m_stats->personalBestHistory().size());
+        for (const auto &[scenarioRun, score]: m_stats->personalBestHistory())
+            result.push_back({scenarioRun, normalized(score)});
+        return result;
+    }
+
+    std::vector<double> ScenarioBenchmarkEvaluation::normalizedRecentAverages() const {
+        std::vector<double> result;
+        if (!m_stats) return result;
+        result.reserve(m_stats->recentAverages().size());
+        for (const auto average: m_stats->recentAverages()) result.push_back(normalized(average));
+        return result;
+    }
 
     std::optional<double> ScenarioBenchmarkEvaluation::thresholdFor(const TierId &tier) const {
         return m_entry.thresholdFor(tier);
@@ -221,60 +237,53 @@ namespace ksv::domain {
 
         // ---- Rank history ----------------------------------------------------------------------
 
-        struct EntrySweep {
-            std::optional<double> best;
-            double bestNormalized = 0.0;
-            std::deque<double> recent;
-            double recentNormalized = 0.0;
-
-            /** @return Change in the normalized recent average. */
-            double pushRecent(const double score, const ScenarioBenchmarkEvaluation &state) {
-                recent.push_back(score);
-                if (recent.size() > static_cast<std::size_t>(ScenarioEvaluation::kRecentRuns)) recent.pop_front();
-                // Match ScenarioEvaluation::recentAverage's oldest-first sum for the last point.
-                const double total = std::accumulate(recent.begin(), recent.end(), 0.0);
-                const double updated = state.normalized(total / static_cast<double>(recent.size()));
-                return updated - std::exchange(recentNormalized, updated);
-            }
-
-            /** @return Change in the normalized best, or nothing when `score` is not a new best. */
-            std::optional<double> offerBest(const double score, const ScenarioBenchmarkEvaluation &state) {
-                if (best && score <= *best) return std::nullopt;
-                best = score;
-                const double updated = state.normalized(score);
-                return updated - std::exchange(bestNormalized, updated);
-            }
+        struct BenchmarkScenarioCursor {
+            std::vector<NormalizedPersonalBest> bests;
+            std::vector<double> recents;
+            std::size_t nextBest = 0;
+            int runs = 0;
+            double best = 0.0;
+            double recent = 0.0;
         };
 
-        // Running sums of every entry's normalized value rather than re-averaging per point, so the
-        // sweep stays linear in runs plus emitted points. runFacts is chronological by contract
-        // (UserProfile::getRunFacts), so each day is one contiguous block and no day is revisited.
+        // runFacts is chronological by contract (UserProfile::getRunFacts), and indexRuns walked it
+        // through the same entriesByHash, so a BenchmarkScenario's k-th member run here is run k of
+        // the sequence its stats were built from. Each point re-averages every BenchmarkScenario in
+        // tree order from 0.0, exactly as averageRank() does, so the histories end bit for bit on the
+        // current means instead of drifting the way running sums would.
         void sweepRankHistory(std::span<const RunFact> runFacts, const EntriesByHash &entriesByHash,
                               const std::vector<ScenarioBenchmarkEvaluation> &states,
-                              std::vector<AverageRankPoint> &bestHistory, std::vector<AverageRankPoint> &recentHistory) {
-            std::vector<EntrySweep> sweeps(states.size());
-            double bestRunning = 0.0;
-            double recentRunning = 0.0;
-            const auto entryCount = static_cast<double>(states.size());
-            for (std::size_t index = 0; index < runFacts.size();) {
-                const auto day = runFacts[index].run_id.startDay();
-                bool played = false;
+                              std::vector<AverageRankAfterRun> &bestHistory,
+                              std::vector<AverageRankAfterRun> &recentHistory,
+                              std::vector<std::chrono::sys_seconds> &memberRunStarts) {
+            std::vector<BenchmarkScenarioCursor> cursors;
+            cursors.reserve(states.size());
+            for (const auto &state: states)
+                cursors.push_back({state.normalizedPersonalBestHistory(), state.normalizedRecentAverages()});
+            const auto meanOf = [&](double BenchmarkScenarioCursor::*value) {
+                double total = 0.0;
+                for (const auto &cursor: cursors) total += cursor.*value;
+                return total / static_cast<double>(cursors.size());
+            };
+
+            for (const auto &fact: runFacts) {
+                const auto bucket = entriesByHash.find(fact.run_id.scenario_id.hash);
+                if (bucket == entriesByHash.end()) continue;
+                const auto start = fact.run_id.startSecond();
+                memberRunStarts.push_back(start);
+                const auto benchmarkRun = static_cast<int>(memberRunStarts.size());
                 bool improved = false;
-                for (; index < runFacts.size() && runFacts[index].run_id.startDay() == day; ++index) {
-                    const auto bucket = entriesByHash.find(runFacts[index].run_id.scenario_id.hash);
-                    if (bucket == entriesByHash.end()) continue;
-                    played = true;
-                    const auto score = static_cast<double>(runFacts[index].score);
-                    for (const auto entry: bucket->second) {
-                        recentRunning += sweeps[entry].pushRecent(score, states[entry]);
-                        if (const auto delta = sweeps[entry].offerBest(score, states[entry])) {
-                            bestRunning += *delta;
-                            improved = true;
-                        }
+                for (const auto entry: bucket->second) {
+                    auto &cursor = cursors[entry];
+                    const int run = ++cursor.runs;
+                    cursor.recent = cursor.recents[static_cast<std::size_t>(run - 1)];
+                    if (cursor.nextBest < cursor.bests.size() && cursor.bests[cursor.nextBest].scenarioRun == run) {
+                        cursor.best = cursor.bests[cursor.nextBest++].normalizedRank;
+                        improved = true;
                     }
                 }
-                if (improved) bestHistory.push_back({day, bestRunning / entryCount});
-                if (played) recentHistory.push_back({day, recentRunning / entryCount});
+                if (improved) bestHistory.push_back({start, benchmarkRun, meanOf(&BenchmarkScenarioCursor::best)});
+                recentHistory.push_back({start, benchmarkRun, meanOf(&BenchmarkScenarioCursor::recent)});
             }
         }
     }
@@ -343,8 +352,8 @@ namespace ksv::domain {
                     }));
                 groupTiers.push_back(std::move(tiers));
             }
-            sweepRankHistory(runFacts, runs.entriesByHash, tree.states,
-                             result.m_averageRankHistory, result.m_recentAverageRankHistory);
+            sweepRankHistory(runFacts, runs.entriesByHash, tree.states, result.m_averageRankHistory,
+                             result.m_recentAverageRankHistory, result.m_memberRunStarts);
         }
         assembleTree(std::move(tree.states), groupTiers);
     }
@@ -358,7 +367,10 @@ namespace ksv::domain {
         scenario.m_stats = ScenarioEvaluation::fromRuns(history);
         const auto &definition = result.m_definition;
         scenario.m_ladder = definition.ladderFor(entry);
-        if (scenario.m_stats) scenario.m_normalizedRank = scenario.normalized(scenario.m_stats->personalBest());
+        if (scenario.m_stats) {
+            scenario.m_normalizedRank = scenario.normalized(scenario.m_stats->personalBest());
+            scenario.m_normalizedRecentRank = scenario.normalized(scenario.m_stats->recentAverage());
+        }
         if (!scenario.m_ladder) return scenario;
 
         for (std::size_t tier = 0; tier < definition.tiers.size(); ++tier) {
@@ -457,10 +469,11 @@ namespace ksv::domain {
     const std::vector<RankBlocker> &Benchmark::nextTierBlockers() const { return m_nextTierBlockers; }
     int Benchmark::scenariosAtNextTier() const { return m_scenariosAtNextTier; }
     std::optional<double> Benchmark::averageRank() const { return m_averageRank; }
-    const std::vector<AverageRankPoint> &Benchmark::averageRankHistory() const { return m_averageRankHistory; }
-    const std::vector<AverageRankPoint> &Benchmark::recentAverageRankHistory() const {
+    const std::vector<AverageRankAfterRun> &Benchmark::averageRankHistory() const { return m_averageRankHistory; }
+    const std::vector<AverageRankAfterRun> &Benchmark::recentAverageRankHistory() const {
         return m_recentAverageRankHistory;
     }
+    const std::vector<std::chrono::sys_seconds> &Benchmark::memberRunStarts() const { return m_memberRunStarts; }
 
     double Benchmark::totalPlaytimeSeconds() const { return m_totalPlaytimeSeconds; }
     std::optional<std::chrono::sys_days> Benchmark::latestRunDay() const { return m_latestRunDay; }

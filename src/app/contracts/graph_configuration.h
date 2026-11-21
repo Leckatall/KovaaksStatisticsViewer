@@ -143,8 +143,10 @@ namespace ksv::application {
         LineAppearance appearance;
         // Keyed by GraphSeriesDescriptor::key.
         std::map<std::string, SeriesStyleOverride, std::less<>> seriesStyles;
-        // Keyed by GraphAxisDescriptor::key; holds every axis the graph offers.
+        // Keyed by GraphAxisDescriptor::key; holds every axis with a policy.
         std::map<std::string, AxisPolicy, std::less<>> axisPolicies;
+        // The key of the horizontal axis shown; set exactly when the graph offers horizontal axes.
+        std::optional<std::string> xAxis;
 
         bool operator==(const GraphPreferences &) const = default;
     };
@@ -156,10 +158,17 @@ namespace ksv::application {
         std::optional<RgbaColor> defaultColor;
     };
 
+    enum class AxisOrientation { Horizontal, Vertical };
+
     struct GraphAxisDescriptor {
         std::string_view key;
-        AxisPolicy defaultPolicy;
+        AxisOrientation orientation = AxisOrientation::Vertical;
+        // Set for an axis whose range the user tunes.
+        std::optional<AxisPolicy> defaultPolicy;
     };
+
+    inline constexpr std::string_view kRunXAxis = "runs";
+    inline constexpr std::string_view kCalendarXAxis = "calendar";
 
     struct GraphDescriptor {
         GraphKey key;
@@ -171,6 +180,8 @@ namespace ksv::application {
         RangePreference defaultRange;
         std::vector<GraphSeriesDescriptor> series;
         std::vector<GraphAxisDescriptor> axes;
+        // Empty for a graph with no horizontal axes.
+        std::string_view defaultXAxis;
     };
 
     [[nodiscard]] const GraphDescriptor &graphDescriptor(GraphKey key);
@@ -272,7 +283,7 @@ namespace ksv::application {
     // target: a series or axis key; for "graphLines", a path such as "records[2].yAxisId"; empty for
     // whole-graph fields.
     // field: "range", "recentDays", "latestRuns", "startDate", "endDate", "averagingWindow", "width",
-    // "fitMode", "fixedMin" or "fixedMax"; empty when the target itself is the problem.
+    // "fitMode", "fixedMin", "fixedMax" or "xAxis"; empty when the target itself is the problem.
     struct GraphConfigurationIssue {
         GraphConfigurationIssueCode code;
         GraphKey graph;
@@ -304,7 +315,7 @@ namespace ksv::application {
         // The range preference, anchor flag included.
         bool range = false;
         bool window = false;
-        // Appearance, series overrides and axis policies.
+        // Appearance, series overrides, axis policies and the shown X axis.
         bool style = false;
 
         [[nodiscard]] bool any() const { return range || window || style; }

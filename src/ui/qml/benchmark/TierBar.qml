@@ -112,7 +112,7 @@ Item {
     }
     // Whether that label would sit under the recent-average marker's tick, or within markerGap of it.
     function coversMarker(index, labelWidth, placement) {
-        if (marker < 0 || chunkCount <= 0) return false
+        if (!markerShown || chunkCount <= 0) return false
         const x = scaleX(marker)
         const left = labelSpanLeft(index, labelWidth, placement)
         const right = left + labelSpanWidth(index, labelWidth)
@@ -335,8 +335,9 @@ Item {
 
     // --- recent-average marker ------------------------------------------------
     // A position on the chunk scale (chunk units, 0 = bar start, chunkCount = bar
-    // end), or negative for no marker, with its own tooltip.
-    property real marker: -1
+    // end), drawn only while markerShown, with its own tooltip.
+    property bool markerShown: false
+    property real marker: 0
     property string markerDescription: ""
     // Half the tick's drawn width, and the gap a threshold label keeps from it.
     readonly property real markerHalfWidth: 2
@@ -345,7 +346,7 @@ Item {
     // where the text is and drawn only as its ends above and below the bar, so the value
     // stays legible and the ends still point at the marker's place.
     readonly property bool markerCrossesValue: {
-        if (!valueShown || marker < 0 || chunkCount <= 0) return false
+        if (!valueShown || !markerShown || chunkCount <= 0) return false
         const x = scaleX(marker)
         return x + markerHalfWidth + 1 > valueLeft && x - markerHalfWidth - 1 < valueRight
     }
@@ -361,7 +362,7 @@ Item {
     Item {
         id: markerItem
         objectName: root.objectName.length > 0 ? root.objectName + "_marker" : ""
-        visible: root.marker >= 0 && root.chunkCount > 0
+        visible: root.markerShown && root.chunkCount > 0
         // A wider hover target than the tick it centres on.
         width: 9
         height: root.height + 6

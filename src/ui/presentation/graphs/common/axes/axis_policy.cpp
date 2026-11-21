@@ -30,7 +30,8 @@ namespace ksv::presentation {
         if (const auto stored = policies.find(axisKey); stored != policies.end()) return stored->second;
         const auto &axes = application::graphDescriptor(graph).axes;
         const auto offered = std::ranges::find(axes, axisKey, &application::GraphAxisDescriptor::key);
-        return offered != axes.end() ? offered->defaultPolicy : application::AxisPolicy{application::FitVisibleData{}};
+        return offered != axes.end() && offered->defaultPolicy ? *offered->defaultPolicy
+                                                               : application::AxisPolicy{application::FitVisibleData{}};
     }
 
     ValueAxis::Options optionsForPolicy(const application::AxisPolicy &policy, ValueAxis::Options base) {

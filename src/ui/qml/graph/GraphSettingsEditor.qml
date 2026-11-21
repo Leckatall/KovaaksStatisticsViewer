@@ -22,6 +22,12 @@ Item {
     readonly property bool graphShown: visualSettings ? visualSettings.isGraphVisible(graphKey) : true
 
     readonly property alias colorDialog: seriesColorDialog
+    readonly property alias xAxisGroup: xAxisSelection
+
+    ButtonGroup {
+        id: xAxisSelection
+        exclusive: true
+    }
     readonly property alias scroller: editorScroll
 
     readonly property var draft: (settingsVm.graphDrafts || {})[graphKey] || ({})
@@ -31,10 +37,12 @@ Item {
     readonly property bool offersLatestRuns: draft.hasLatestRuns === true
     readonly property bool offersWindow: draft.hasWindow === true
     readonly property var axisRows: draft.axes || []
+    readonly property var xAxisRows: draft.xAxes || []
     readonly property var seriesRows: draft.series || []
     // The Repeaters are keyed by these, which change only when the graph's axes or series do: every
     // keystroke republishes the drafts, and a row rebuilt from them would take the field being typed in.
     readonly property string axisKeys: axisRows.map(r => r.key).join(",")
+    readonly property string xAxisKeys: xAxisRows.map(r => r.key).join(",")
     readonly property string seriesKeys: seriesRows.map(r => r.key).join(",")
     readonly property bool isRunGraph: graphKey === "run"
     readonly property bool wide: editorScroll.availableWidth >= 560
@@ -43,7 +51,7 @@ Item {
         const result = []
         if (offersRange || offersWindow) result.push("dataRange")
         result.push("seriesStyle")
-        if (isRunGraph || axisRows.length > 0) result.push("axes")
+        if (isRunGraph || axisRows.length > 0 || xAxisRows.length > 0) result.push("axes")
         return result
     }
     readonly property var sectionGroups: ({
@@ -648,6 +656,55 @@ Item {
                         active: root.isRunGraph
                         sourceComponent: AxesPanel {
                             settingsVm: root.settingsVm
+                        }
+                    }
+                    Label {
+                        objectName: "graphXAxesHeading"
+                        Layout.fillWidth: true
+                        visible: root.xAxisRows.length > 0
+                        text: qsTr("Horizontal axis")
+                        font.bold: true
+                        wrapMode: Text.WordWrap
+                    }
+                    Repeater {
+                        model: root.keyList(root.xAxisKeys)
+
+                        GridLayout {
+                            id: xAxis
+                            required property string modelData
+                            readonly property var row: root.rowFor(root.xAxisRows, modelData)
+                            readonly property string axisTitle: GraphCatalog.axisName(root.graphKey, modelData)
+
+                            objectName: "graphXAxis_" + modelData
+                            Layout.fillWidth: true
+                            columns: root.wide ? 2 : 1
+                            columnSpacing: 8
+                            rowSpacing: 4
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: xAxis.axisTitle
+                                    wrapMode: Text.WordWrap
+                                }
+                                Label {
+                                    objectName: "graphXAxisDescription_" + xAxis.modelData
+                                    Layout.fillWidth: true
+                                    text: GraphCatalog.axisDescription(root.graphKey, xAxis.modelData)
+                                    opacity: 0.75
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                            ShowOnAxisButton {
+                                axisLetter: "X"
+                                rowKey: xAxis.modelData
+                                rowName: xAxis.axisTitle
+                                shown: xAxis.row.shown === true
+                                ButtonGroup.group: xAxisSelection
+                                onChosen: key => root.settingsVm.setShownXAxis(root.graphKey, key)
+                            }
                         }
                     }
                     Repeater {

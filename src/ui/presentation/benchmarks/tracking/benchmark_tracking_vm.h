@@ -118,7 +118,8 @@ namespace ksv::presentation {
         using ExtentMs = std::pair<qint64, qint64>;
 
         void rebuild();
-        // A style-only change: each graph restyles itself; no measurement is read or recomputed.
+        // A style-only change: each graph restyles itself, and a rank graph whose committed X axis
+        // differs from the one it shows is re-laid out on it. Nothing else is read or recomputed.
         void applyPresentation();
         // A window or range change: only the playtime history and its axis move.
         void rebuildPlaytime();
@@ -130,8 +131,11 @@ namespace ksv::presentation {
             const application::BenchmarkWorkspaceSnapshot &snapshot, const QList<QPointF> &points);
         // `full` is empty without a benchmark.
         void updateRankHistory(BenchmarkHistoryViewModel &history, const DateTimeAxis &axis,
-                               std::span<const domain::AverageRankPoint> full,
+                               std::span<const domain::AverageRankOfDay> full,
                                const application::RankRangeView &view) const;
+        // The same history laid out per run on the history's run axis. `benchmark` is null without one.
+        void updateRankHistoryOnRuns(BenchmarkHistoryViewModel &history, const domain::Benchmark *benchmark,
+                                     bool recent, const application::RankRangeView &view) const;
         // The union every graph defaults to; empty when none has a sample.
         [[nodiscard]] std::optional<ExtentMs> unionExtent() const;
         // A graph with a date range spans exactly it; without one it spans the last applied union,
@@ -141,11 +145,6 @@ namespace ksv::presentation {
         void applyPlaytimeAxis(const application::BenchmarkWorkspaceSnapshot &snapshot);
 
         std::shared_ptr<application::IBenchmarkTrackingUseCase> m_useCase;
-        // Must precede the history children: each holds a non-owning pointer to its axis and is
-        // constructed with a reference to it, so the axes must outlive them.
-        DateTimeAxis m_rankXAxis;
-        DateTimeAxis m_recentRankXAxis;
-        DateTimeAxis m_playtimeXAxis;
         BenchmarkHistoryViewModel *m_rankHistory;
         BenchmarkHistoryViewModel *m_recentRankHistory;
         BenchmarkHistoryViewModel *m_playtimeHistory;
@@ -159,7 +158,11 @@ namespace ksv::presentation {
         std::optional<ExtentMs> m_appliedUnionMs;
         // Kept from the last full rebuild, so a rank range change redraws without re-deriving them.
         bool m_rankPresent = false;
+        // Set by the first rebuild(): until then there is no laid-out graph to switch axes on.
+        bool m_built = false;
         std::vector<RankTier> m_rankTiers;
+        std::vector<domain::AverageRankOfDay> m_rankByDay;
+        std::vector<domain::AverageRankOfDay> m_recentRankByDay;
 
         QString m_state;
         QString m_stateMessage;

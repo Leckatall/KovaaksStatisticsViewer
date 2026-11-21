@@ -25,6 +25,12 @@ namespace ksv::domain {
         std::optional<double> current;
     };
 
+    struct NormalizedPersonalBest {
+        /// As PersonalBestEntry::scenarioRun.
+        int scenarioRun = 0;
+        double normalizedRank = 0.0;
+    };
+
     class Benchmark;
 
     class ScenarioBenchmarkEvaluation {
@@ -37,6 +43,10 @@ namespace ksv::domain {
         [[nodiscard]] std::optional<TierId> attainedTier() const;
         [[nodiscard]] std::optional<Threshold> nextThreshold() const;
         [[nodiscard]] double normalizedRank() const;
+        [[nodiscard]] double normalizedRecentRank() const;
+        /** @return The stats' series on the ladder; empty without runs. */
+        [[nodiscard]] std::vector<NormalizedPersonalBest> normalizedPersonalBestHistory() const;
+        [[nodiscard]] std::vector<double> normalizedRecentAverages() const;
 
         [[nodiscard]] std::optional<double> thresholdFor(const TierId &tier) const;
         [[nodiscard]] const std::optional<std::vector<double>> &ladder() const;
@@ -54,6 +64,7 @@ namespace ksv::domain {
         std::optional<TierId> m_attainedTier;
         std::optional<Threshold> m_nextThreshold;
         double m_normalizedRank = 0.0;
+        double m_normalizedRecentRank = 0.0;
     };
 
     class GroupEvaluation {
@@ -100,8 +111,10 @@ namespace ksv::domain {
         [[nodiscard]] const std::vector<RankBlocker> &nextTierBlockers() const;
         [[nodiscard]] int scenariosAtNextTier() const;
         [[nodiscard]] std::optional<double> averageRank() const;
-        [[nodiscard]] const std::vector<AverageRankPoint> &averageRankHistory() const;
-        [[nodiscard]] const std::vector<AverageRankPoint> &recentAverageRankHistory() const;
+        [[nodiscard]] const std::vector<AverageRankAfterRun> &averageRankHistory() const;
+        [[nodiscard]] const std::vector<AverageRankAfterRun> &recentAverageRankHistory() const;
+        /// The start of benchmark run `n` at index `n - 1`; filled only when the histories are.
+        [[nodiscard]] const std::vector<std::chrono::sys_seconds> &memberRunStarts() const;
 
         [[nodiscard]] double totalPlaytimeSeconds() const;
         [[nodiscard]] std::optional<std::chrono::sys_days> latestRunDay() const;
@@ -120,8 +133,9 @@ namespace ksv::domain {
         std::vector<RankBlocker> m_nextTierBlockers;
         int m_scenariosAtNextTier = 0;
         std::optional<double> m_averageRank;
-        std::vector<AverageRankPoint> m_averageRankHistory;
-        std::vector<AverageRankPoint> m_recentAverageRankHistory;
+        std::vector<AverageRankAfterRun> m_averageRankHistory;
+        std::vector<AverageRankAfterRun> m_recentAverageRankHistory;
+        std::vector<std::chrono::sys_seconds> m_memberRunStarts;
         double m_totalPlaytimeSeconds = 0.0;
         std::optional<std::chrono::sys_days> m_latestRunDay;
         std::vector<TimedScore> m_memberScores;

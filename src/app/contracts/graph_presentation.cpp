@@ -2,7 +2,7 @@
 
 namespace ksv::application {
     GraphPresentation presentationOf(const GraphKey graph, const GraphPreferences &preferences) {
-        return {graph, preferences.appearance, preferences.seriesStyles, preferences.axisPolicies};
+        return {graph, preferences.appearance, preferences.seriesStyles, preferences.axisPolicies, preferences.xAxis};
     }
 
     GraphPresentation defaultGraphPresentation(const GraphKey graph) {
