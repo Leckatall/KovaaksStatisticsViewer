@@ -91,6 +91,49 @@ TEST(ScenarioEvaluation, PlaytimeIncludesRunsAtAndBeforeTheEpoch) {
     EXPECT_DOUBLE_EQ(evaluation->playtimeSeconds(), 15.0);
 }
 
+TEST(ScenarioEvaluation, PersonalBestHistoryHoldsTheFirstRunAndEveryStrictImprovement) {
+    const std::array runs{TimedScore{1'000, 100}, TimedScore{2'000, 90}, TimedScore{3'000, 150},
+                          TimedScore{4'000, 150}, TimedScore{5'000, 200}};
+    const auto evaluation = ScenarioEvaluation::fromRuns(runs);
+
+    ASSERT_TRUE(evaluation);
+    const std::vector<PersonalBestEntry> expected{{1, 100.0}, {3, 150.0}, {5, 200.0}};
+    EXPECT_EQ(evaluation->personalBestHistory(), expected);
+}
+
+TEST(ScenarioEvaluation, RollingRecentAverageGrowsToTheWindowThenSlides) {
+    constexpr auto window = ScenarioEvaluation::kRecentRuns;
+    std::vector<TimedScore> runs;
+    for (int index = 1; index <= window + 1; ++index)
+        runs.push_back({static_cast<long long>(index) * 1000, static_cast<float>(index * 10)});
+    const auto evaluation = ScenarioEvaluation::fromRuns(runs);
+
+    ASSERT_TRUE(evaluation);
+    const auto &averages = evaluation->recentAverages();
+    ASSERT_EQ(averages.size(), runs.size());
+    for (int count = 1; count <= window; ++count) {
+        SCOPED_TRACE(count);
+        EXPECT_DOUBLE_EQ(averages[static_cast<std::size_t>(count - 1)], 10.0 * (count + 1) / 2.0);
+    }
+    // Run window + 1 drops run 1: the mean of 20..(window + 1) * 10.
+    EXPECT_DOUBLE_EQ(averages.back(), 10.0 * (window + 3) / 2.0);
+}
+
+TEST(ScenarioEvaluation, CurrentValuesAreTheLastEntriesOfTheSeries) {
+    const std::array runs{TimedScore{1'000, 12.5F}, TimedScore{2'500, 40.25F}, TimedScore{3'000, 7},
+                          TimedScore{4'750, 33.3F}, TimedScore{5'000, 40.25F}, TimedScore{6'000, 19.9F},
+                          TimedScore{7'000, 1.1F}};
+    const auto evaluation = ScenarioEvaluation::fromRuns(runs);
+
+    ASSERT_TRUE(evaluation);
+    ASSERT_FALSE(evaluation->personalBestHistory().empty());
+    const auto &lastBest = evaluation->personalBestHistory().back();
+    EXPECT_EQ(evaluation->personalBest(), lastBest.score);
+    EXPECT_EQ(evaluation->personalBestTime(), runs[static_cast<std::size_t>(lastBest.scenarioRun - 1)].startSecond());
+    ASSERT_FALSE(evaluation->recentAverages().empty());
+    EXPECT_EQ(evaluation->recentAverage(), evaluation->recentAverages().back());
+}
+
 TEST(ScenarioEvaluation, ZeroScoreIsDistinctFromUnplayed) {
     const std::array zeroScore{TimedScore{1}};
     const std::array otherScore{TimedScore{1, 1}};

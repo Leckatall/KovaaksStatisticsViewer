@@ -104,7 +104,8 @@ namespace {
         const auto compareHistory = [](const auto &actualHistory, const auto &expectedHistory) {
             ASSERT_EQ(actualHistory.size(), expectedHistory.size());
             for (std::size_t index = 0; index < actualHistory.size(); ++index) {
-                EXPECT_EQ(actualHistory[index].day, expectedHistory[index].day);
+                EXPECT_EQ(actualHistory[index].start, expectedHistory[index].start);
+                EXPECT_EQ(actualHistory[index].benchmarkRun, expectedHistory[index].benchmarkRun);
                 EXPECT_EQ(actualHistory[index].averageRank, expectedHistory[index].averageRank);
             }
         };
@@ -419,8 +420,9 @@ TEST(BenchmarkTrackingCache, DefinitionEditReconstructsTheCachedProjection) {
     ASSERT_NE(fixture.tracking->benchmark(), nullptr);
     ASSERT_TRUE(fixture.tracking->benchmark()->averageRank());
     EXPECT_DOUBLE_EQ(*fixture.tracking->benchmark()->averageRank(), 3.0);
-    ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().size(), 2U);
-    EXPECT_DOUBLE_EQ(fixture.tracking->benchmark()->averageRankHistory().back().averageRank, 3.0);
+    const auto history = rankHistoryByDay(fixture.tracking->benchmark()->averageRankHistory());
+    ASSERT_EQ(history.size(), 2U);
+    EXPECT_DOUBLE_EQ(history.back().averageRank, 3.0);
 }
 
 // ---- Task A1: one coherent workspace snapshot ------------------------------------------------
@@ -1104,7 +1106,8 @@ namespace {
         const auto &rightHistory = right.averageRankHistory();
         ASSERT_EQ(leftHistory.size(), rightHistory.size());
         for (std::size_t index = 0; index < leftHistory.size(); ++index) {
-            EXPECT_EQ(leftHistory[index].day, rightHistory[index].day);
+            EXPECT_EQ(leftHistory[index].start, rightHistory[index].start);
+            EXPECT_EQ(leftHistory[index].benchmarkRun, rightHistory[index].benchmarkRun);
             EXPECT_EQ(leftHistory[index].averageRank, rightHistory[index].averageRank);
         }
     }
@@ -1446,7 +1449,7 @@ TEST(BenchmarkTrackingRank, AllHistoryLeavesTheRankRangeUnrestricted) {
     fixture.startRank();
 
     EXPECT_EQ(fixture.tracking->snapshot().rank, RankRangeView{});
-    EXPECT_EQ(fixture.tracking->benchmark()->averageRankHistory().size(), 3U);
+    EXPECT_EQ(rankHistoryByDay(fixture.tracking->benchmark()->averageRankHistory()).size(), 3U);
 }
 
 TEST(BenchmarkTrackingRank, ARangeChangeReprojectsWithoutReevaluatingOrTouchingTheSummaries) {
@@ -1481,7 +1484,7 @@ TEST(BenchmarkTrackingRank, TheAnchorIsTheLatestImprovementNotTheNewestContribut
     fixture.rankPreferences().range = RangePreference{RecentDays{3}, true};
     fixture.startRank();
 
-    ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day, epochDay(104));
+    ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day(), epochDay(104));
     EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
 }
 
@@ -1495,7 +1498,7 @@ TEST(BenchmarkTrackingRank, ALaterNonImprovingRunLeavesTheAnchor) {
     fixture.profile->run_facts.push_back(benchmarkFact("h2", 120 * kDay, 5.0F, 30.0F));
     fixture.profile->notifyProfileChanged();
 
-    EXPECT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day, epochDay(104));
+    EXPECT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day(), epochDay(104));
     EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
 }
 
@@ -1509,7 +1512,7 @@ TEST(BenchmarkTrackingRank, ALaterImprovingRunMovesTheAnchor) {
     fixture.profile->run_facts.push_back(benchmarkFact("h2", 120 * kDay, 900.0F, 30.0F));
     fixture.profile->notifyProfileChanged();
 
-    ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day, epochDay(120));
+    ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day(), epochDay(120));
     EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(118), epochDay(120)}));
 }
 
@@ -1684,7 +1687,7 @@ TEST(BenchmarkTrackingRecentRank, TheAnchorIsTheLastPlayDayNotTheLastImprovement
     fixture.recentPreferences().range = RangePreference{RecentDays{3}, true};
     fixture.startRank();
 
-    ASSERT_EQ(fixture.tracking->benchmark()->recentAverageRankHistory().back().day, epochDay(110));
+    ASSERT_EQ(fixture.tracking->benchmark()->recentAverageRankHistory().back().day(), epochDay(110));
     EXPECT_EQ(fixture.tracking->snapshot().recentRank.interval,
               std::optional(DayInterval{epochDay(108), epochDay(110)}));
     EXPECT_EQ(fixture.tracking->snapshot().recentRank.anchoredEnd, std::optional(epochDay(110)));

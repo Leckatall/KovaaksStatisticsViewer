@@ -130,7 +130,7 @@ namespace ksv::presentation {
             const application::BenchmarkWorkspaceSnapshot &snapshot, const QList<QPointF> &points);
         // `full` is empty without a benchmark.
         void updateRankHistory(BenchmarkHistoryViewModel &history, const DateTimeAxis &axis,
-                               std::span<const domain::AverageRankPoint> full,
+                               std::span<const domain::AverageRankOfDay> full,
                                const application::RankRangeView &view) const;
         // The union every graph defaults to; empty when none has a sample.
         [[nodiscard]] std::optional<ExtentMs> unionExtent() const;
@@ -160,6 +160,8 @@ namespace ksv::presentation {
         // Kept from the last full rebuild, so a rank range change redraws without re-deriving them.
         bool m_rankPresent = false;
         std::vector<RankTier> m_rankTiers;
+        std::vector<domain::AverageRankOfDay> m_rankByDay;
+        std::vector<domain::AverageRankOfDay> m_recentRankByDay;
 
         QString m_state;
         QString m_stateMessage;

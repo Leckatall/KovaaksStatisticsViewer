@@ -267,10 +267,13 @@ namespace ksv::presentation {
         m_rankTiers = std::move(rankTiers);
         m_rankExtentMs.reset();
         m_recentRankExtentMs.reset();
+        m_rankByDay.clear();
+        m_recentRankByDay.clear();
         if (m_rankPresent) {
-            for (const auto &point: benchmark->averageRankHistory()) widenExtent(m_rankExtentMs, utcMidnightMs(point.day));
-            for (const auto &point: benchmark->recentAverageRankHistory())
-                widenExtent(m_recentRankExtentMs, utcMidnightMs(point.day));
+            m_rankByDay = domain::rankHistoryByDay(benchmark->averageRankHistory());
+            m_recentRankByDay = domain::rankHistoryByDay(benchmark->recentAverageRankHistory());
+            for (const auto &point: m_rankByDay) widenExtent(m_rankExtentMs, utcMidnightMs(point.day));
+            for (const auto &point: m_recentRankByDay) widenExtent(m_recentRankExtentMs, utcMidnightMs(point.day));
         }
 
         const QList<QPointF> playtime = playtimePoints(snapshot);
@@ -348,7 +351,7 @@ namespace ksv::presentation {
     }
 
     void BenchmarkTrackingViewModel::updateRankHistory(BenchmarkHistoryViewModel &history, const DateTimeAxis &axis,
-                                                       const std::span<const domain::AverageRankPoint> full,
+                                                       const std::span<const domain::AverageRankOfDay> full,
                                                        const application::RankRangeView &view) const {
         BenchmarkHistoryViewModel::Content content;
         if (m_rankPresent) {
@@ -361,7 +364,7 @@ namespace ksv::presentation {
             return;
         }
 
-        const auto pointOf = [](const domain::AverageRankPoint &point) {
+        const auto pointOf = [](const domain::AverageRankOfDay &point) {
             return QPointF(static_cast<qreal>(utcMidnightMs(point.day)), point.averageRank);
         };
         // Neither rank lapses between points: a personal best is never lost, and a recent average
@@ -396,11 +399,9 @@ namespace ksv::presentation {
         const bool recent = graph == application::GraphKey::BenchmarkRecentRank;
         auto &axis = recent ? m_recentRankXAxis : m_rankXAxis;
         const auto &view = recent ? snapshot.recentRank : snapshot.rank;
-        std::span<const domain::AverageRankPoint> full;
-        if (snapshot.benchmark)
-            full = recent ? snapshot.benchmark->recentAverageRankHistory() : snapshot.benchmark->averageRankHistory();
         applyRankAxis(axis, view);
-        updateRankHistory(recent ? *m_recentRankHistory : *m_rankHistory, axis, full, view);
+        updateRankHistory(recent ? *m_recentRankHistory : *m_rankHistory, axis, recent ? m_recentRankByDay : m_rankByDay,
+                          view);
     }
 
     void BenchmarkTrackingViewModel::rebuildPlaytime() {

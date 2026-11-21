@@ -242,7 +242,7 @@ namespace ksv::application {
         const auto range = effectiveRange(committed.configuration->preferences(graph));
         // Anchored at the series' last point, not the newest run: the personal-best series has no
         // point after its last improvement, so anchoring later would only stretch the held level.
-        const auto lastPointDay = history.empty() ? std::nullopt : std::optional{history.back().day};
+        const auto lastPointDay = history.empty() ? std::nullopt : std::optional{history.back().day()};
         const auto projection = resolveRange(range, m_daySource->today(), lastPointDay);
         view = {};
         if (range.anchorToLatestRun) view.anchoredEnd = lastPointDay;
