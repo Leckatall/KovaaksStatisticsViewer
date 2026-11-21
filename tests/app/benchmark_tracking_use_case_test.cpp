@@ -1475,9 +1475,10 @@ TEST(BenchmarkTrackingRank, ARangeChangeReprojectsWithoutReevaluatingOrTouchingT
     expectSameSummary(before, *fixture.tracking->benchmark());
 }
 
-// The rank series has no point after its last improvement, so anchoring at a later run would only
-// stretch the held level past the end of the data.
-TEST(BenchmarkTrackingRank, TheAnchorIsTheLatestImprovementNotTheNewestContributingRun) {
+// "End date ranges at latest recorded run" means the latest run, not the last PB: the personal best
+// is held through every run since it was set, so the range runs on to the newest run and the line
+// is drawn flat up to it.
+TEST(BenchmarkTrackingRank, TheAnchorIsTheLatestMemberRunNotTheLastImprovement) {
     RankFixture fixture;
     fixture.improvingThenFlatRuns();
     fixture.days->setToday(epochDay(400));
@@ -1485,10 +1486,12 @@ TEST(BenchmarkTrackingRank, TheAnchorIsTheLatestImprovementNotTheNewestContribut
     fixture.startRank();
 
     ASSERT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day(), epochDay(104));
-    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
+    ASSERT_EQ(std::chrono::floor<std::chrono::days>(fixture.tracking->benchmark()->memberRunStarts().back()),
+              epochDay(110));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(108), epochDay(110)}));
 }
 
-TEST(BenchmarkTrackingRank, ALaterNonImprovingRunLeavesTheAnchor) {
+TEST(BenchmarkTrackingRank, ALaterNonImprovingRunMovesTheAnchor) {
     RankFixture fixture;
     fixture.improvingThenFlatRuns();
     fixture.days->setToday(epochDay(400));
@@ -1499,7 +1502,7 @@ TEST(BenchmarkTrackingRank, ALaterNonImprovingRunLeavesTheAnchor) {
     fixture.profile->notifyProfileChanged();
 
     EXPECT_EQ(fixture.tracking->benchmark()->averageRankHistory().back().day(), epochDay(104));
-    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(118), epochDay(120)}));
 }
 
 TEST(BenchmarkTrackingRank, ALaterImprovingRunMovesTheAnchor) {
@@ -1516,25 +1519,42 @@ TEST(BenchmarkTrackingRank, ALaterImprovingRunMovesTheAnchor) {
     EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(118), epochDay(120)}));
 }
 
-TEST(BenchmarkTrackingRank, AnchoredCustomDatesPastTheLastImprovementEndAtIt) {
+TEST(BenchmarkTrackingRank, AnchoredCustomDatesPastTheLatestMemberRunEndAtIt) {
     RankFixture fixture;
     fixture.improvingThenFlatRuns();
     fixture.rankPreferences().range = RangePreference{
-        CustomDates{std::chrono::year_month_day{epochDay(102)}, std::chrono::year_month_day{epochDay(108)}}, true};
+        CustomDates{std::chrono::year_month_day{epochDay(102)}, std::chrono::year_month_day{epochDay(115)}}, true};
     fixture.startRank();
 
-    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
-    EXPECT_EQ(fixture.tracking->snapshot().rank.anchoredEnd, std::optional(epochDay(104)));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(110)}));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.anchoredEnd, std::optional(epochDay(110)));
 }
 
-TEST(BenchmarkTrackingRank, AnchoredCustomDatesWhollyAfterTheLastImprovementStayAsEntered) {
+TEST(BenchmarkTrackingRank, AnchoredCustomDatesWhollyAfterTheLatestMemberRunStayAsEntered) {
     RankFixture fixture;
     fixture.improvingThenFlatRuns();
     fixture.rankPreferences().range = RangePreference{
-        CustomDates{std::chrono::year_month_day{epochDay(106)}, std::chrono::year_month_day{epochDay(108)}}, true};
+        CustomDates{std::chrono::year_month_day{epochDay(112)}, std::chrono::year_month_day{epochDay(115)}}, true};
     fixture.startRank();
 
-    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(106), epochDay(108)}));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(112), epochDay(115)}));
+}
+
+TEST(BenchmarkTrackingRank, BothRankGraphsShareTheAnchor) {
+    RankFixture fixture;
+    fixture.improvingThenFlatRuns();
+    fixture.days->setToday(epochDay(400));
+    fixture.rankPreferences().range = RangePreference{RecentDays{3}, true};
+    fixture.configuration->configuration.preferences(GraphKey::BenchmarkRecentRank).range =
+        RangePreference{RecentDays{3}, true};
+    fixture.startRank();
+
+    const auto &snapshot = fixture.tracking->snapshot();
+    ASSERT_TRUE(snapshot.rank.anchoredEnd);
+    EXPECT_EQ(snapshot.rank.anchoredEnd, snapshot.recentRank.anchoredEnd);
+    ASSERT_TRUE(snapshot.rank.interval);
+    ASSERT_TRUE(snapshot.recentRank.interval);
+    EXPECT_EQ(snapshot.rank.interval->last, snapshot.recentRank.interval->last);
 }
 
 TEST(BenchmarkTrackingRank, UnanchoredCustomDatesStayAsEntered) {
@@ -1548,14 +1568,14 @@ TEST(BenchmarkTrackingRank, UnanchoredCustomDatesStayAsEntered) {
     EXPECT_FALSE(fixture.tracking->snapshot().rank.anchoredEnd);
 }
 
-TEST(BenchmarkTrackingRank, AnAnchoredWholeHistoryReportsTheLastImprovementWithoutAnInterval) {
+TEST(BenchmarkTrackingRank, AnAnchoredWholeHistoryReportsTheLatestMemberRunWithoutAnInterval) {
     RankFixture fixture;
     fixture.improvingThenFlatRuns();
     fixture.rankPreferences().range = RangePreference{AllHistory{}, true};
     fixture.startRank();
 
     EXPECT_FALSE(fixture.tracking->snapshot().rank.interval);
-    EXPECT_EQ(fixture.tracking->snapshot().rank.anchoredEnd, std::optional(epochDay(104)));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.anchoredEnd, std::optional(epochDay(110)));
 }
 
 TEST(BenchmarkTrackingRank, AnAnchoredRangeWithoutContributingRunsHasNoRelevantHistory) {
@@ -1678,7 +1698,7 @@ TEST(BenchmarkTrackingRecentRank, ARankRangeChangeLeavesTheRecentRankViewAlone) 
 }
 
 // The recent line has a point on every play day, so it is anchored at the last one even when that
-// day improved nothing and the rank graph's anchor stays earlier.
+// day improved nothing; the rank graph shares that anchor.
 TEST(BenchmarkTrackingRecentRank, TheAnchorIsTheLastPlayDayNotTheLastImprovement) {
     RecentRankFixture fixture;
     fixture.improvingThenFlatRuns();
@@ -1691,7 +1711,7 @@ TEST(BenchmarkTrackingRecentRank, TheAnchorIsTheLastPlayDayNotTheLastImprovement
     EXPECT_EQ(fixture.tracking->snapshot().recentRank.interval,
               std::optional(DayInterval{epochDay(108), epochDay(110)}));
     EXPECT_EQ(fixture.tracking->snapshot().recentRank.anchoredEnd, std::optional(epochDay(110)));
-    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(102), epochDay(104)}));
+    EXPECT_EQ(fixture.tracking->snapshot().rank.interval, std::optional(DayInterval{epochDay(108), epochDay(110)}));
 }
 
 TEST(BenchmarkTrackingRecentRank, AnAnchoredRangeWithoutContributingRunsHasNoRelevantHistory) {

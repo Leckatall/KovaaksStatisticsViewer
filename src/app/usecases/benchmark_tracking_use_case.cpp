@@ -234,21 +234,21 @@ namespace ksv::application {
     }
 
     void BenchmarkTrackingUseCase::applyRankRange(const GraphKey graph, const Evaluation &evaluation) {
-        const bool recent = graph == GraphKey::BenchmarkRecentRank;
-        const auto &history = recent ? evaluation.benchmark.recentAverageRankHistory()
-                                     : evaluation.benchmark.averageRankHistory();
-        auto &view = recent ? m_snapshot.recentRank : m_snapshot.rank;
+        auto &view = graph == GraphKey::BenchmarkRecentRank ? m_snapshot.recentRank : m_snapshot.rank;
         const auto committed = m_configuration->current();
         const auto range = effectiveRange(committed.configuration->preferences(graph));
-        // Anchored at the series' last point, not the newest run: the personal-best series has no
-        // point after its last improvement, so anchoring later would only stretch the held level.
-        const auto lastPointDay = history.empty() ? std::nullopt : std::optional{history.back().day()};
-        const auto projection = resolveRange(range, m_daySource->today(), lastPointDay);
+        // Both graphs share the latest member run as their anchor: the setting ends ranges at the
+        // latest recorded run, and the personal-best line holds its level up to there.
+        const auto &starts = evaluation.benchmark.memberRunStarts();
+        const auto latestRunDay = starts.empty()
+                                      ? std::nullopt
+                                      : std::optional{std::chrono::floor<std::chrono::days>(starts.back())};
+        const auto projection = resolveRange(range, m_daySource->today(), latestRunDay);
         view = {};
-        if (range.anchorToLatestRun) view.anchoredEnd = lastPointDay;
+        if (range.anchorToLatestRun) view.anchoredEnd = latestRunDay;
         if (const auto *interval = std::get_if<DayInterval>(&projection)) {
             view.interval = *interval;
-            // Dates running past the last point are cut back to it; dates wholly after it stay as entered.
+            // Dates running past the anchor are cut back to it; dates wholly after it stay as entered.
             const auto &end = view.anchoredEnd;
             if (end && interval->first <= *end && *end < interval->last) view.interval->last = *end;
         }
