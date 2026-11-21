@@ -119,6 +119,6 @@ namespace ksv::ui {
         return {.title = benchmarkName,
                 .graphType = vm.metricName(),
                 .rangeText = calendarIntervalText(vm.xAxis()),
-                .xTitle = QObject::tr("Date")};
+                .xTitle = vm.runAxisShown() ? QObject::tr("Date (runs counted in order)") : QObject::tr("Date")};
     }
 }

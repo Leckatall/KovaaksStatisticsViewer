@@ -130,6 +130,10 @@ qt_add_qml_module(ksv_ui
             presentation/graphs/common/axes/value_axis.cpp
             presentation/graphs/common/axes/date_time_axis.h
             presentation/graphs/common/axes/date_time_axis.cpp
+            presentation/graphs/common/axes/calendar_interval.h
+            presentation/graphs/common/axes/calendar_interval.cpp
+            presentation/graphs/common/axes/run_date_axis.h
+            presentation/graphs/common/axes/run_date_axis.cpp
             presentation/graphs/common/axes/value_delegate.h
             presentation/graphs/common/series/series_model.h
             presentation/graphs/common/series/series_model.cpp

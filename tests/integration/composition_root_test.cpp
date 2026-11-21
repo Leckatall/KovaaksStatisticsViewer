@@ -267,6 +267,12 @@ namespace {
                   application::kDefaultAveragingWindowDays);
     }
 
+    TEST_F(CompositionRootTest, TheRankGraphsDefaultToTheRunAxis) {
+        EXPECT_TRUE(app->benchmarkTrackingVm()->rankHistory()->runAxisShown());
+        EXPECT_TRUE(app->benchmarkTrackingVm()->recentRankHistory()->runAxisShown());
+        EXPECT_FALSE(app->benchmarkTrackingVm()->playtimeHistory()->runAxisShown());
+    }
+
     TEST_F(CompositionRootTest, ARecentRankRangeChangeLeavesTheRankGraphsRangeAndAxisAlone) {
         const auto rankAxisMin = app->benchmarkTrackingVm()->rankHistory()->xAxis().min();
         const auto rankAxisMax = app->benchmarkTrackingVm()->rankHistory()->xAxis().max();

@@ -95,6 +95,8 @@ Frame {
                 showSeriesNames: true
                 pointMarkers: root.historyModel.pointMarkers
                 connectionMode: root.historyModel.connectionMode
+                hoverDetail: root.historyModel && root.historyModel.runAxisShown
+                             ? (xRaw => qsTr("Run: #%1").arg(Math.round(xRaw))) : null
                 xLabel: qsTr("Date")
             }
         }

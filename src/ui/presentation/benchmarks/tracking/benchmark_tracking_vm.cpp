@@ -5,6 +5,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -144,15 +145,9 @@ namespace ksv::presentation {
     BenchmarkTrackingViewModel::BenchmarkTrackingViewModel(
         std::shared_ptr<application::IBenchmarkTrackingUseCase> useCase, QObject *parent)
         : QObject(parent), m_useCase(std::move(useCase)),
-          // Every history metric is one point per UTC day, so the axis never ticks in hours.
-          m_rankXAxis(DateTimeAxis::Options{.wholeDays = true}),
-          m_recentRankXAxis(DateTimeAxis::Options{.wholeDays = true}),
-          m_playtimeXAxis(DateTimeAxis::Options{.wholeDays = true}),
-          m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, m_rankXAxis, this)),
-          m_recentRankHistory(
-              new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RecentAverageRank, m_recentRankXAxis, this)),
-          m_playtimeHistory(
-              new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, m_playtimeXAxis, this)),
+          m_rankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::AverageRank, this)),
+          m_recentRankHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RecentAverageRank, this)),
+          m_playtimeHistory(new BenchmarkHistoryViewModel(BenchmarkHistoryViewModel::RollingPlaytime, this)),
           m_progressGrid(new BenchmarkProgressGridModel(this)) {
         m_useCase->onChanged([this] { rebuild(); });
         m_useCase->onPlaytimeChanged([this] { rebuildPlaytime(); });
@@ -162,10 +157,21 @@ namespace ksv::presentation {
         rebuild();
     }
 
+    namespace {
+        bool showsRunAxis(const application::GraphPresentation &presentation) {
+            return presentation.xAxis == std::string(application::kRunXAxis);
+        }
+    }
+
     void BenchmarkTrackingViewModel::applyPresentation() {
         m_rankHistory->setPresentation(m_useCase->presentation(application::GraphKey::BenchmarkRank));
         m_recentRankHistory->setPresentation(m_useCase->presentation(application::GraphKey::BenchmarkRecentRank));
         m_playtimeHistory->setPresentation(m_useCase->presentation(application::GraphKey::BenchmarkPlaytime));
+        if (!m_built) return;
+        for (const auto graph: {application::GraphKey::BenchmarkRank, application::GraphKey::BenchmarkRecentRank}) {
+            const auto &history = graph == application::GraphKey::BenchmarkRank ? *m_rankHistory : *m_recentRankHistory;
+            if (showsRunAxis(m_useCase->presentation(graph)) != history.runAxisShown()) rebuildRank(graph);
+        }
     }
 
     void BenchmarkTrackingViewModel::selectBenchmark(const QString &id) {
@@ -285,6 +291,7 @@ namespace ksv::presentation {
         m_playtimeHistory->update(playtimeContent(snapshot, playtime), benchmark != nullptr, {});
 
         m_progressGrid->reset(benchmark);
+        m_built = true;
 
         emit changed();
     }
@@ -339,7 +346,7 @@ namespace ksv::presentation {
     }
 
     void BenchmarkTrackingViewModel::applyPlaytimeAxis(const application::BenchmarkWorkspaceSnapshot &snapshot) {
-        applyAxis(m_playtimeXAxis, snapshot.playtime.interval);
+        applyAxis(m_playtimeHistory->calendarAxis(), snapshot.playtime.interval);
     }
 
     BenchmarkHistoryViewModel::Content BenchmarkTrackingViewModel::playtimeContent(
@@ -394,14 +401,76 @@ namespace ksv::presentation {
         history.update(content, m_rankPresent, m_rankTiers);
     }
 
+    void BenchmarkTrackingViewModel::updateRankHistoryOnRuns(BenchmarkHistoryViewModel &history,
+                                                             const domain::Benchmark *benchmark, const bool recent,
+                                                             const application::RankRangeView &view) const {
+        BenchmarkHistoryViewModel::Content content;
+        content.onRunAxis = true;
+        std::span<const domain::AverageRankAfterRun> full;
+        std::span<const std::chrono::sys_seconds> starts;
+        if (m_rankPresent && benchmark) {
+            full = recent ? benchmark->recentAverageRankHistory() : benchmark->averageRankHistory();
+            starts = benchmark->memberRunStarts();
+            content.historyAvailable = !full.empty() && !view.noRelevantHistory;
+            for (const auto &point: full) content.fullHistoryPeak = std::max(content.fullHistoryPeak, point.averageRank);
+        }
+
+        const auto dayOf = [](const std::chrono::sys_seconds start) { return std::chrono::floor<std::chrono::days>(start); };
+        std::optional<domain::RunSpan> span;
+        std::optional<std::pair<qint64, qint64>> dayRange;
+        if (content.historyAvailable) {
+            if (const auto &interval = view.interval) {
+                span = domain::runSpanOfDays(starts, interval->first, interval->last);
+                dayRange = std::pair{utcMidnightMs(interval->first), utcMidnightMs(interval->last)};
+            } else if (view.anchoredEnd) {
+                span = domain::runSpanOfDays(starts, dayOf(starts.front()), *view.anchoredEnd);
+            } else {
+                span = domain::RunSpan{1, static_cast<int>(starts.size())};
+            }
+        }
+        // A range with no member run spans nothing on this axis, whatever rank is held across it.
+        if (!span) {
+            std::ignore = history.runAxis().setRuns({}, 1, dayRange);
+            history.update(content, m_rankPresent, m_rankTiers);
+            return;
+        }
+        const auto visible = starts.subspan(static_cast<std::size_t>(span->first - 1),
+                                            static_cast<std::size_t>(span->last - span->first + 1));
+        if (!dayRange) dayRange = std::pair{utcMidnightMs(dayOf(visible.front())), utcMidnightMs(dayOf(visible.back()))};
+
+        const auto window = domain::rankHistoryWindow(full, *span);
+        for (const auto &point: window.points)
+            content.observations.append(QPointF(static_cast<qreal>(point.benchmarkRun), point.averageRank));
+        std::optional<double> held;
+        if (window.established) {
+            held = window.established->averageRank;
+            if (content.observations.isEmpty() || content.observations.first().x() > span->first)
+                content.leadingCarry = QPointF(static_cast<qreal>(span->first), *held);
+        }
+        if (!content.observations.isEmpty()) held = content.observations.last().y();
+        const qreal lastX = content.observations.isEmpty() ? -std::numeric_limits<qreal>::infinity()
+                                                           : content.observations.last().x();
+        if (held && lastX < span->last) content.trailingCarry = QPointF(static_cast<qreal>(span->last), *held);
+
+        std::vector<qint64> visibleMs;
+        visibleMs.reserve(visible.size());
+        for (const auto start: visible)
+            visibleMs.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(start.time_since_epoch()).count());
+        std::ignore = history.runAxis().setRuns(std::move(visibleMs), span->first, dayRange);
+        history.update(content, m_rankPresent, m_rankTiers);
+    }
+
     void BenchmarkTrackingViewModel::rebuildRank(const application::GraphKey graph) {
         const application::BenchmarkWorkspaceSnapshot &snapshot = m_useCase->snapshot();
         const bool recent = graph == application::GraphKey::BenchmarkRecentRank;
-        auto &axis = recent ? m_recentRankXAxis : m_rankXAxis;
+        auto &history = recent ? *m_recentRankHistory : *m_rankHistory;
         const auto &view = recent ? snapshot.recentRank : snapshot.rank;
-        applyRankAxis(axis, view);
-        updateRankHistory(recent ? *m_recentRankHistory : *m_rankHistory, axis, recent ? m_recentRankByDay : m_rankByDay,
-                          view);
+        if (showsRunAxis(m_useCase->presentation(graph))) {
+            updateRankHistoryOnRuns(history, snapshot.benchmark ? &*snapshot.benchmark : nullptr, recent, view);
+            return;
+        }
+        applyRankAxis(history.calendarAxis(), view);
+        updateRankHistory(history, history.calendarAxis(), recent ? m_recentRankByDay : m_rankByDay, view);
     }
 
     void BenchmarkTrackingViewModel::rebuildPlaytime() {

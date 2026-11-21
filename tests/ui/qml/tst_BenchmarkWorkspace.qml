@@ -877,6 +877,24 @@ Item {
                 compare(canvas.visible, false, "no misleading line when the series is absent")
         }
 
+        function test_aRankCanvasOnTheRunAxisNamesTheHoveredRun() {
+            const fx = TestDoubles.trackingFixtureTrackable()
+            fx.rankHistory = TestDoubles.makeFakeHistoryModel({
+                metricName: "Personal-best average rank", hasData: true, runAxisShown: true
+            })
+            fx.recentRankHistory = TestDoubles.makeFakeHistoryModel({
+                metricName: "Recent average rank", hasData: true, runAxisShown: false
+            })
+            const ws = makeWorkspace(fx)
+            const onRuns = find(ws, "rankHistoryCanvas")
+            verify(onRuns !== null && typeof onRuns.hoverDetail === "function", "the run axis adds a hover row")
+            compare(onRuns.hoverDetail(7), "Run: #7")
+            compare(onRuns.hoverDetail(6.6), "Run: #7")
+            const onCalendar = find(ws, "recentRankHistoryCanvas")
+            verify(onCalendar !== null)
+            verify(!onCalendar.hoverDetail, "the calendar axis has no run to name")
+        }
+
         // Each benchmark card draws with its own graph committed line style.
         function test_historyCanvasesFollowTheirOwnViewModelsLineStyle() {
             const fx = TestDoubles.trackingFixtureTrackable()

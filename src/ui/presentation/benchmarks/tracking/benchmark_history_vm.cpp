@@ -11,10 +11,10 @@
 #include "presentation/graphs/common/axes/value_delegate.h"
 
 namespace ksv::presentation {
-    BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, const Axis &xAxis, QObject *parent)
+    BenchmarkHistoryViewModel::BenchmarkHistoryViewModel(const Metric metric, QObject *parent)
         : GraphViewModelBase(parent), m_metric(metric),
           m_playtimeAxisPolicy(axisPolicyFor({}, application::GraphKey::BenchmarkPlaytime, "playtime")),
-          m_series(new SeriesModel(this)), m_xAxis(&xAxis) {
+          m_series(new SeriesModel(this)) {
         setPresentation(application::defaultGraphPresentation(graphKey()));
     }
 
@@ -104,6 +104,10 @@ namespace ksv::presentation {
         m_observationCount = present ? static_cast<int>(content.observations.size()) : 0;
         m_hasCarriedState = present && (content.leadingCarry || content.trailingCarry);
         m_hasData = m_observationCount > 0 || m_hasCarriedState;
+        if (content.onRunAxis != m_runAxisShown) {
+            m_runAxisShown = content.onRunAxis;
+            emit runAxisShownChanged();
+        }
 
         if (!m_hasData) {
             m_series->points.clear();
