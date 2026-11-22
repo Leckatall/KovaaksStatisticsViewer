@@ -14,6 +14,7 @@
 #include "contracts/i_recent_benchmarks.h"
 #include "data/interfaces/i_benchmarks_service.h"
 #include "data/interfaces/i_playlist_reader.h"
+#include "files/file_naming.h"
 
 namespace ksv::application {
     class BenchmarkManagerUseCase final : public IBenchmarkManagerUseCase {
@@ -22,6 +23,7 @@ namespace ksv::application {
                                 std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
                                 std::shared_ptr<IPlaylistReader> playlist,
                                 std::function<std::string()> idFactory,
+                                data::files::CaseFold foldCase,
                                 std::shared_ptr<IRecentBenchmarks> recent = nullptr);
 
         [[nodiscard]] const BenchmarkManagerState &state() const override { return m_state; }
@@ -38,6 +40,9 @@ namespace ksv::application {
         [[nodiscard]] std::optional<BenchmarkEditorSeed> openBenchmark(const domain::BenchmarkId &id) override;
         void closeEditor() override;
         [[nodiscard]] PlaylistSeedImport importPlaylistSeed(const std::string &path) override;
+
+        [[nodiscard]] std::optional<BenchmarkNameProblem> checkName(
+            const std::string &name, const std::optional<data::BenchmarkEditToken> &token) const override;
 
         [[nodiscard]] data::BenchmarkSaveOutcome save(
             const domain::BenchmarkDefinition &benchmark,
@@ -57,6 +62,7 @@ namespace ksv::application {
         std::shared_ptr<IBenchmarkResolutionUseCase> m_resolution;
         std::shared_ptr<IPlaylistReader> m_playlist;
         std::function<std::string()> m_idFactory;
+        data::files::CaseFold m_foldCase;
         std::shared_ptr<IRecentBenchmarks> m_recent;
         BenchmarkManagerState m_state;
         std::vector<std::function<void()> > m_callbacks;

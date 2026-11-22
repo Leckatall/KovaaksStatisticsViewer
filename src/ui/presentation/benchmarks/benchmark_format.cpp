@@ -90,4 +90,26 @@ namespace ksv::presentation {
         }
         return Qt::white;
     }
+
+    QString migrationFailureText(const data::BenchmarkMigrationFailure &failure) {
+        QString reason;
+        switch (failure.reason) {
+            case data::BenchmarkMigrationFailureReason::SourceMismatch:
+                reason = QObject::tr("the file does not match version %1").arg(failure.fromVersion);
+                break;
+            case data::BenchmarkMigrationFailureReason::InvalidResult:
+                reason = QObject::tr("the upgraded benchmark is not valid");
+                break;
+            case data::BenchmarkMigrationFailureReason::WriteFailed:
+                reason = QObject::tr("the file could not be written");
+                break;
+            case data::BenchmarkMigrationFailureReason::RenameFailed:
+                reason = QObject::tr("the file could not be renamed");
+                break;
+        }
+        return QObject::tr("Migration from version %1 to version %2 failed: %3")
+            .arg(failure.fromVersion)
+            .arg(failure.fromVersion + 1)
+            .arg(reason);
+    }
 }

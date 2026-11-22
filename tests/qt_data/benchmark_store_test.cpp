@@ -17,43 +17,59 @@ using namespace ksv::data;
 using namespace ksv::qt_data;
 
 namespace {
-    // A minimal, valid, Trackable benchmark document at schemaVersion 1.
-    QByteArray trackableJson(const char *id = "b1", const char *name = "Bench") {
+    // A minimal, valid, Trackable benchmark document at schemaVersion 3.
+    QByteArray trackableJson() {
         return QByteArray(R"({
-            "schemaVersion": 1,
-            "id": ")") + id + R"(",
-            "name": ")" + name + R"(",
+            "schemaVersion": 3,
             "tiers": [ { "id": "t1", "name": "Bronze", "color": [200, 120, 0, 255] } ],
             "uncategorized": [
-                { "id": "s1", "name": "Scenario One", "hash": null,
+                { "id": "s1", "name": "Scenario One", "hashes": [],
                   "thresholds": [ { "tierId": "t1", "score": 100.0 } ] }
             ],
             "categories": []
-        })";
+        })");
     }
 
     QByteArray categorizedJson() {
         return QByteArray(R"({
-            "schemaVersion": 1,
-            "id": "b1",
-            "name": "Bench",
+            "schemaVersion": 3,
             "tiers": [ { "id": "t1", "name": "Bronze", "color": [200, 120, 0, 255] } ],
             "uncategorized": [],
             "categories": [
                 { "id": "c1", "name": "Category", "color": [10, 20, 30, 255],
                   "scenarios": [
-                      { "id": "s1", "name": "One", "hash": null,
+                      { "id": "s1", "name": "One", "hashes": [],
                         "thresholds": [ { "tierId": "t1", "score": 1.0 } ] }
                   ],
                   "subcategories": [
                       { "id": "sc1", "name": "Sub", "color": [40, 50, 60, 255],
                         "scenarios": [
-                            { "id": "s2", "name": "Two", "hash": null,
+                            { "id": "s2", "name": "Two", "hashes": [],
                               "thresholds": [ { "tierId": "t1", "score": 2.0 } ] }
                         ] }
                   ] }
             ]
         })");
+    }
+
+    QByteArray withTopLevel(const QByteArray &json, const char *key, const QJsonValue &value) {
+        auto object = QJsonDocument::fromJson(json).object();
+        object.insert(QLatin1String(key), value);
+        return QJsonDocument(object).toJson();
+    }
+
+    QByteArray withoutTopLevel(const QByteArray &json, const char *key) {
+        auto object = QJsonDocument::fromJson(json).object();
+        object.remove(QLatin1String(key));
+        return QJsonDocument(object).toJson();
+    }
+
+    domain::BenchmarkDefinition writableDefinition(const std::string &tierName = "Bronze") {
+        domain::BenchmarkDefinition def;
+        def.tiers = {domain::Tier{domain::TierId{"t1"}, tierName, {}}};
+        def.uncategorized = {domain::BenchmarkScenario{domain::BenchmarkScenarioId{"s1"}, "One", {},
+                                                   {domain::Threshold{domain::TierId{"t1"}, 10.0}}}};
+        return def;
     }
 
     class BenchmarkStoreTest : public testing::Test {
@@ -72,6 +88,29 @@ namespace {
             EXPECT_TRUE(file.open(QIODevice::WriteOnly));
             file.write(bytes);
             return path;
+        }
+
+        [[nodiscard]] std::optional<QByteArray> read(const QString &name) const {
+            QFile file(QDir(dir.path()).absoluteFilePath(name));
+            if (!file.exists() || !file.open(QIODevice::ReadOnly)) return std::nullopt;
+            return file.readAll();
+        }
+
+        [[nodiscard]] QStringList listing() const {
+            return QDir(dir.path()).entryList({"*.json"}, QDir::Files, QDir::Name);
+        }
+
+        [[nodiscard]] BenchmarkFileEntry onlyEntry() const {
+            const auto entries = store->scan().snapshot->entries;
+            EXPECT_EQ(entries.size(), 1U);
+            return entries.at(0);
+        }
+
+        [[nodiscard]] BenchmarkFileEntry entryNamed(const std::string &filename) const {
+            for (const auto &entry: store->scan().snapshot->entries)
+                if (entry.filename == filename) return entry;
+            ADD_FAILURE() << "no entry " << filename;
+            return {};
         }
     };
 
@@ -92,40 +131,75 @@ TEST_F(BenchmarkStoreTest, ScanClassifiesAValidTrackableFile) {
     EXPECT_EQ(entry.filename, "bench.json");
     EXPECT_FALSE(entry.digest.empty());
     ASSERT_NE(loaded(entry), nullptr);
-    EXPECT_EQ(loaded(entry)->completeness.completeness, domain::Completeness::Trackable);
-    EXPECT_EQ(loaded(entry)->benchmark.name, "Bench");
+    // The store never names a benchmark; BenchmarksService names it after its file.
+    std::vector<domain::BenchmarkIssueCode> codes;
+    for (const auto &issue: loaded(entry)->completeness.issues) codes.push_back(issue.code);
+    EXPECT_EQ(codes, std::vector{domain::BenchmarkIssueCode::MissingName});
 }
 
 TEST_F(BenchmarkStoreTest, ReadsMultipleHashesAndPreservesThemOnWrite) {
     auto json = trackableJson();
-    json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 2");
-    json.replace("\"hash\": null", "\"hashes\": [\"old\", \"new\"]");
+    json.replace("\"hashes\": []", "\"hashes\": [\"old\", \"new\"]");
     write("linked.json", json);
-    const auto entry = store->scan().snapshot->entries.at(0);
+    const auto entry = onlyEntry();
     ASSERT_NE(loaded(entry), nullptr);
     const auto saved = store->write(loaded(entry)->benchmark, "linked.json", entry.digest);
     ASSERT_TRUE(saved.succeeded());
-    QFile file(QDir(dir.path()).absoluteFilePath("linked.json"));
-    ASSERT_TRUE(file.open(QIODevice::ReadOnly));
-    const auto document = QJsonDocument::fromJson(file.readAll()).object();
-    EXPECT_EQ(document.value("schemaVersion").toInt(), 2);
+    const auto document = QJsonDocument::fromJson(*read("linked.json")).object();
     EXPECT_EQ(document.value("uncategorized").toArray().at(0).toObject().value("hashes").toArray(),
               (QJsonArray{"old", "new"}));
-    const auto reread = store->scan().snapshot->entries.at(0);
+    const auto reread = onlyEntry();
     ASSERT_NE(loaded(reread), nullptr);
     EXPECT_EQ(loaded(reread)->benchmark, loaded(entry)->benchmark);
 }
 
-TEST_F(BenchmarkStoreTest, RejectsMalformedVersionTwoHashArrays) {
+TEST_F(BenchmarkStoreTest, RejectsMalformedHashArrays) {
     for (const QByteArray hashes: {QByteArray{"null"}, QByteArray{"\"old\""}, QByteArray{"[1]"},
                                   QByteArray{"[\"\"]"}, QByteArray{"[\"old\",\"old\"]"}}) {
         auto json = trackableJson();
-        json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 2");
-        json.replace("\"hash\": null", QByteArray{"\"hashes\": "} + hashes);
+        json.replace("\"hashes\": []", QByteArray{"\"hashes\": "} + hashes);
         write("invalid.json", json);
-        const auto entry = store->scan().snapshot->entries.at(0);
-        EXPECT_NE(problem(entry), nullptr) << hashes.toStdString();
+        const auto entry = onlyEntry();
+        ASSERT_NE(problem(entry), nullptr) << hashes.toStdString();
+        EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid) << hashes.toStdString();
     }
+}
+
+TEST_F(BenchmarkStoreTest, WritesSchemaThreeWithNoTopLevelIdOrName) {
+    auto def = writableDefinition();
+    def.id = domain::BenchmarkId{"in-memory-key"};
+    def.name = "Working name";
+    ASSERT_TRUE(store->write(def, "written.json", std::nullopt).succeeded());
+
+    const auto document = QJsonDocument::fromJson(*read("written.json")).object();
+    EXPECT_EQ(document.keys(), (QStringList{"categories", "schemaVersion", "tiers", "uncategorized"}));
+    EXPECT_EQ(document.value("schemaVersion").toInt(), 3);
+    EXPECT_NE(loaded(onlyEntry()), nullptr);
+}
+
+TEST_F(BenchmarkStoreTest, SchemaThreeWithAnyOtherTopLevelKeySetIsInvalid) {
+    const std::vector<std::pair<std::string, QByteArray>> cases{
+        {"extra id", withTopLevel(trackableJson(), "id", "b1")},
+        {"extra name", withTopLevel(trackableJson(), "name", "Bench")},
+        {"unknown key", withTopLevel(trackableJson(), "notes", "x")},
+        {"missing key", withoutTopLevel(trackableJson(), "categories")},
+    };
+    for (const auto &[label, json]: cases) {
+        write("keys.json", json);
+        const auto entry = onlyEntry();
+        ASSERT_NE(problem(entry), nullptr) << label;
+        EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid) << label;
+    }
+}
+
+TEST_F(BenchmarkStoreTest, NewerSchemaVersionIsUnsupportedWithItsVersion) {
+    auto json = trackableJson();
+    json.replace("\"schemaVersion\": 3", "\"schemaVersion\": 4");
+    write("future.json", json);
+    const auto entry = onlyEntry();
+    ASSERT_NE(problem(entry), nullptr);
+    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Unsupported);
+    EXPECT_EQ(problem(entry)->schemaVersion, std::make_optional(4));
 }
 
 TEST_F(BenchmarkStoreTest, ScanReportsMissingDirectoryFailureOnceCreationIsImpossible) {
@@ -138,31 +212,28 @@ TEST_F(BenchmarkStoreTest, ScanReportsMissingDirectoryFailureOnceCreationIsImpos
     EXPECT_EQ(*result.failure, BenchmarkScanFailure::DirectoryUnavailable);
 }
 
-TEST_F(BenchmarkStoreTest, MalformedJsonIsInvalid) {
-    write("bad.json", QByteArray("{ not json"));
-    const auto entry = store->scan().snapshot->entries.at(0);
-    ASSERT_NE(problem(entry), nullptr);
-    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
-}
-
-TEST_F(BenchmarkStoreTest, NewerSchemaVersionIsUnsupportedAndKeepsName) {
-    auto json = trackableJson();
-    json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 3");
-    write("future.json", json);
-    const auto entry = store->scan().snapshot->entries.at(0);
-    ASSERT_NE(problem(entry), nullptr);
-    EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Unsupported);
-    ASSERT_TRUE(problem(entry)->schemaVersion.has_value());
-    EXPECT_EQ(*problem(entry)->schemaVersion, 3);
-    ASSERT_TRUE(problem(entry)->displayName.has_value());
-    EXPECT_EQ(*problem(entry)->displayName, "Bench");
+TEST_F(BenchmarkStoreTest, NonObjectsAndBadVersionsAreInvalid) {
+    const std::vector<std::pair<std::string, QByteArray>> cases{
+        {"malformed json", QByteArray("{ not json")},
+        {"array", QByteArray("[1, 2]")},
+        {"no version", withoutTopLevel(trackableJson(), "schemaVersion")},
+        {"string version", withTopLevel(trackableJson(), "schemaVersion", "3")},
+        {"fractional version", withTopLevel(trackableJson(), "schemaVersion", 2.5)},
+        {"version zero", withTopLevel(trackableJson(), "schemaVersion", 0)},
+    };
+    for (const auto &[label, json]: cases) {
+        write("bad.json", json);
+        const auto entry = onlyEntry();
+        ASSERT_NE(problem(entry), nullptr) << label;
+        EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid) << label;
+    }
 }
 
 TEST_F(BenchmarkStoreTest, DanglingTierReferenceIsInvalid) {
     auto json = trackableJson();
     json.replace("\"tierId\": \"t1\"", "\"tierId\": \"tX\"");  // references a tier that isn't declared
     write("dangling.json", json);
-    const auto entry = store->scan().snapshot->entries.at(0);
+    const auto entry = onlyEntry();
     ASSERT_NE(problem(entry), nullptr);
     EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
 }
@@ -171,7 +242,7 @@ TEST_F(BenchmarkStoreTest, StructurallyCompleteButMissingThresholdLoadsAsIncompl
     auto json = trackableJson();
     json.replace("\"thresholds\": [ { \"tierId\": \"t1\", \"score\": 100.0 } ]", "\"thresholds\": []");
     write("incomplete.json", json);
-    const auto entry = store->scan().snapshot->entries.at(0);
+    const auto entry = onlyEntry();
     ASSERT_NE(loaded(entry), nullptr);
     EXPECT_EQ(loaded(entry)->completeness.completeness, domain::Completeness::Incomplete);
 }
@@ -189,22 +260,21 @@ TEST_F(BenchmarkStoreTest, DuplicateStableIdWithinAFileIsInvalid) {
     auto json = trackableJson();
     json.replace("\"id\": \"s1\"", "\"id\": \"t1\"");  // scenario reuses the tier's id
     write("dupe.json", json);
-    const auto entry = store->scan().snapshot->entries.at(0);
+    const auto entry = onlyEntry();
     ASSERT_NE(problem(entry), nullptr);
     EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
 }
 
 TEST_F(BenchmarkStoreTest, CategorizedFixtureLoads) {
     write("categorized.json", categorizedJson());
-    const auto entry = store->scan().snapshot->entries.at(0);
-    EXPECT_NE(loaded(entry), nullptr);
+    EXPECT_NE(loaded(onlyEntry()), nullptr);
 }
 
 TEST_F(BenchmarkStoreTest, DuplicateEntryIdAcrossACategoryAndItsSubcategoryIsInvalid) {
     auto json = categorizedJson();
     json.replace("\"id\": \"s2\"", "\"id\": \"s1\"");
     write("dupe-entry.json", json);
-    const auto entry = store->scan().snapshot->entries.at(0);
+    const auto entry = onlyEntry();
     ASSERT_NE(problem(entry), nullptr);
     EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
 }
@@ -213,7 +283,7 @@ TEST_F(BenchmarkStoreTest, DanglingTierReferenceInASubcategoryEntryIsInvalid) {
     auto json = categorizedJson();
     json.replace("\"tierId\": \"t1\", \"score\": 2.0", "\"tierId\": \"tX\", \"score\": 2.0");
     write("dangling-nested.json", json);
-    const auto entry = store->scan().snapshot->entries.at(0);
+    const auto entry = onlyEntry();
     ASSERT_NE(problem(entry), nullptr);
     EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
 }
@@ -222,34 +292,24 @@ TEST_F(BenchmarkStoreTest, DuplicateGroupIdBetweenACategoryAndItsSubcategoryIsIn
     auto json = categorizedJson();
     json.replace("\"id\": \"sc1\"", "\"id\": \"c1\"");
     write("dupe-group.json", json);
-    const auto entry = store->scan().snapshot->entries.at(0);
+    const auto entry = onlyEntry();
     ASSERT_NE(problem(entry), nullptr);
     EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Invalid);
 }
 
 TEST_F(BenchmarkStoreTest, WriteCreatesThenRoundTripsThroughScan) {
-    domain::BenchmarkDefinition def;
-    def.id = domain::BenchmarkId{"b1"};
-    def.name = "Written";
-    def.tiers = {domain::Tier{domain::TierId{"t1"}, "Bronze", {}}};
-    def.uncategorized = {domain::BenchmarkScenario{domain::BenchmarkScenarioId{"s1"}, "One", {},
-                                               {domain::Threshold{domain::TierId{"t1"}, 10.0}}}};
-
-    const auto write = store->write(def, "written.json", std::nullopt);
+    const auto write = store->write(writableDefinition(), "written.json", std::nullopt);
     ASSERT_TRUE(write.succeeded());
 
-    const auto entries = store->scan().snapshot->entries;
-    ASSERT_EQ(entries.size(), 1U);
-    ASSERT_NE(loaded(entries[0]), nullptr);
-    EXPECT_EQ(loaded(entries[0])->benchmark.name, "Written");
-    EXPECT_EQ(entries[0].digest, *write.digest);  // scan digest matches the write's returned digest
+    const auto entry = onlyEntry();
+    ASSERT_NE(loaded(entry), nullptr);
+    EXPECT_EQ(loaded(entry)->benchmark, writableDefinition());
+    EXPECT_EQ(entry.digest, *write.digest);  // scan digest matches the write's returned digest
 }
 
 TEST_F(BenchmarkStoreTest, IncompleteWorkRoundTripsExactlyAndKeepsItsIssues) {
     using namespace ksv::domain;
     BenchmarkDefinition def;
-    def.id = BenchmarkId{"b1"};
-    def.name = "Half Done";
     def.tiers = {Tier{TierId{"t1"}, "Bronze", {200, 120, 0, 255}},
                  Tier{TierId{"t2"}, "Silver", {190, 190, 190, 255}}};
     // Partial thresholds: t2 still missing.
@@ -264,9 +324,8 @@ TEST_F(BenchmarkStoreTest, IncompleteWorkRoundTripsExactlyAndKeepsItsIssues) {
 
     ASSERT_TRUE(store->write(def, "half.json", std::nullopt).succeeded());
 
-    const auto entries = store->scan().snapshot->entries;
-    ASSERT_EQ(entries.size(), 1U);
-    const auto *reread = loaded(entries[0]);
+    const auto entry = onlyEntry();
+    const auto *reread = loaded(entry);
     ASSERT_NE(reread, nullptr);
     EXPECT_EQ(reread->benchmark, def);  // every entered value, colour, mapping and placement survives
     EXPECT_EQ(reread->completeness.completeness, Completeness::Incomplete);
@@ -281,60 +340,90 @@ TEST_F(BenchmarkStoreTest, IncompleteWorkRoundTripsExactlyAndKeepsItsIssues) {
 
 TEST_F(BenchmarkStoreTest, UnsupportedFileIsNeverRewritten) {
     auto json = trackableJson();
-    json.replace("\"schemaVersion\": 1", "\"schemaVersion\": 7");
-    const auto path = write("future.json", json);
+    json.replace("\"schemaVersion\": 3", "\"schemaVersion\": 7");
+    write("future.json", json);
 
     for (int pass = 0; pass < 2; ++pass) {
-        const auto entry = store->scan().snapshot->entries.at(0);
+        const auto entry = onlyEntry();
         ASSERT_NE(problem(entry), nullptr);
         EXPECT_EQ(problem(entry)->problem, BenchmarkFileProblem::Unsupported);
     }
-    domain::BenchmarkDefinition replacement;
-    replacement.id = domain::BenchmarkId{"b1"};
-    replacement.name = "Replacement";
-    EXPECT_EQ(store->write(replacement, "future.json", std::nullopt).failure,
+    EXPECT_EQ(store->write(writableDefinition(), "future.json", std::nullopt).failure,
               std::make_optional(BenchmarkWriteFailure::ExternalModificationConflict));
-
-    QFile file(path);
-    ASSERT_TRUE(file.open(QIODevice::ReadOnly));
-    EXPECT_EQ(file.readAll(), json);
+    EXPECT_EQ(read("future.json"), std::make_optional(json));
 }
 
 TEST_F(BenchmarkStoreTest, ReplaceWithStaleDigestIsAConflictAndDoesNotOverwrite) {
-    write("f.json", trackableJson("b1", "Original"));
-    const auto original = store->scan().snapshot->entries.at(0);
+    write("f.json", trackableJson());
+    const auto original = onlyEntry();
 
-    domain::BenchmarkDefinition edited;
-    edited.id = domain::BenchmarkId{"b1"};
-    edited.name = "Edited";
-    const auto result = store->write(edited, "f.json", std::string{"deadbeef"});  // wrong digest
+    const auto result = store->write(writableDefinition("Edited"), "f.json", std::string{"deadbeef"});
     ASSERT_FALSE(result.succeeded());
     EXPECT_EQ(*result.failure, BenchmarkWriteFailure::ExternalModificationConflict);
-
-    const auto after = store->scan().snapshot->entries.at(0);
-    ASSERT_NE(loaded(after), nullptr);
-    EXPECT_EQ(loaded(after)->benchmark.name, "Original");  // untouched
-    EXPECT_EQ(after.digest, original.digest);
+    EXPECT_EQ(read("f.json"), std::make_optional(trackableJson()));
+    EXPECT_EQ(onlyEntry().digest, original.digest);
 }
 
 TEST_F(BenchmarkStoreTest, ReplaceWithMatchingDigestSucceeds) {
-    write("f.json", trackableJson("b1", "Original"));
-    const auto original = store->scan().snapshot->entries.at(0);
+    write("f.json", trackableJson());
+    const auto original = onlyEntry();
 
-    domain::BenchmarkDefinition edited;
-    edited.id = domain::BenchmarkId{"b1"};
-    edited.name = "Edited";
-    edited.tiers = {domain::Tier{domain::TierId{"t1"}, "Bronze", {}}};
-    edited.uncategorized = {domain::BenchmarkScenario{domain::BenchmarkScenarioId{"s1"}, "One", {},
-                                                  {domain::Threshold{domain::TierId{"t1"}, 10.0}}}};
-    ASSERT_TRUE(store->write(edited, "f.json", original.digest).succeeded());
-    EXPECT_EQ(loaded(store->scan().snapshot->entries.at(0))->benchmark.name, "Edited");
+    ASSERT_TRUE(store->write(writableDefinition("Edited"), "f.json", original.digest).succeeded());
+    const auto entry = onlyEntry();
+    ASSERT_NE(loaded(entry), nullptr);
+    EXPECT_EQ(loaded(entry)->benchmark.tiers.at(0).name, "Edited");
 }
 
 TEST_F(BenchmarkStoreTest, RemoveRequiresMatchingDigest) {
     write("f.json", trackableJson());
-    const auto digest = store->scan().snapshot->entries.at(0).digest;
+    const auto digest = onlyEntry().digest;
     EXPECT_EQ(store->remove("f.json", "wrong").failure, BenchmarkWriteFailure::ExternalModificationConflict);
     EXPECT_TRUE(store->remove("f.json", digest).ok);
     EXPECT_TRUE(store->scan().snapshot->entries.empty());
+}
+
+TEST_F(BenchmarkStoreTest, RenameMovesTheFileAndKeepsItsBytes) {
+    write("old.json", trackableJson());
+    const auto digest = onlyEntry().digest;
+
+    const auto result = store->rename("old.json", "new.json", digest);
+    EXPECT_TRUE(result.ok);
+    EXPECT_EQ(listing(), (QStringList{"new.json"}));
+    EXPECT_EQ(read("new.json"), std::make_optional(trackableJson()));
+}
+
+TEST_F(BenchmarkStoreTest, RenameWithAStaleDigestOrAMissingSourceIsAConflict) {
+    write("old.json", trackableJson());
+
+    EXPECT_EQ(store->rename("old.json", "new.json", "wrong").failure,
+              std::make_optional(BenchmarkWriteFailure::ExternalModificationConflict));
+    EXPECT_EQ(store->rename("absent.json", "new.json", "wrong").failure,
+              std::make_optional(BenchmarkWriteFailure::ExternalModificationConflict));
+    EXPECT_EQ(listing(), (QStringList{"old.json"}));
+}
+
+TEST_F(BenchmarkStoreTest, RenameOntoAnotherExistingFileIsRefusedAndTouchesNeither) {
+    write("old.json", trackableJson());
+    write("Taken.json", categorizedJson());
+    const auto digest = entryNamed("old.json").digest;
+
+    // The lower-case target collides on a case-insensitive file system and is a free name on a
+    // case-sensitive one, so only the exact spelling is asserted on every platform.
+    const auto result = store->rename("old.json", "Taken.json", digest);
+    EXPECT_FALSE(result.ok);
+    EXPECT_EQ(result.failure, std::make_optional(BenchmarkWriteFailure::WriteFailed));
+#ifdef Q_OS_WIN
+    EXPECT_FALSE(store->rename("old.json", "taken.json", digest).ok);
+#endif
+    EXPECT_EQ(read("old.json"), std::make_optional(trackableJson()));
+    EXPECT_EQ(read("Taken.json"), std::make_optional(categorizedJson()));
+}
+
+TEST_F(BenchmarkStoreTest, RenameChangingOnlyLetterCaseRespellsTheFile) {
+    write("bench.json", trackableJson());
+    const auto digest = onlyEntry().digest;
+
+    EXPECT_TRUE(store->rename("bench.json", "Bench.json", digest).ok);
+    EXPECT_EQ(listing(), (QStringList{"Bench.json"}));
+    EXPECT_EQ(onlyEntry().filename, "Bench.json");
 }

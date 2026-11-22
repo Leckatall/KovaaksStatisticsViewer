@@ -53,7 +53,7 @@ namespace {
     constexpr int kBenchmarkScenarios = 40;
     constexpr int kProfileDays = 1000;
     constexpr auto kHeavyHash = "heavy-hash";
-    constexpr auto kBenchmarkId = "perf-benchmark";
+    constexpr auto kBenchmarkFile = "Performance Benchmark.json";
 
     QJsonObject profileSpec() {
         QJsonArray scenarios;
@@ -75,7 +75,7 @@ namespace {
             {"scenarios", scenarios},
             {
                 "benchmark", QJsonObject{
-                    {"id", kBenchmarkId}, {"name", "Performance Benchmark"},
+                    {"name", "Performance Benchmark"},
                     {"categories", QJsonArray{QJsonObject{{"name", "All"}, {"scenarios", benchmarked}}}}
                 }
             }
@@ -226,7 +226,7 @@ namespace {
 
             app->scenarioBrowserVm()->activateScenario(kHeavyHash, "Heavy Scenario");
             ASSERT_TRUE(QTest::qWaitFor([&] { return app->completionHistoryVm()->runCount() == kHeavyRuns; }, 10000));
-            app->benchmarkTrackingVm()->selectBenchmark(kBenchmarkId);
+            app->benchmarkTrackingVm()->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), kBenchmarkFile));
             ASSERT_TRUE(QTest::qWaitFor([&] { return app->benchmarkTrackingVm()->state() == "trackable"; }, 30000))
                 << app->benchmarkTrackingVm()->state().toStdString();
             for (const auto &scenario: app->profileService()->getScenarioList())
@@ -313,7 +313,7 @@ namespace {
         history->onRangeChanged([&] { ++historyRange; });
         history->onPresentationChanged([&] { ++historyStyle; });
 
-        tracking->select(domain::BenchmarkId{kBenchmarkId});
+        tracking->select(domain::BenchmarkId{integration::benchmarkKey(app->benchmarksService(), kBenchmarkFile).toStdString()});
         ASSERT_EQ(tracking->state(), BenchmarkTrackingState::Ready);
         (void) playtime->snapshot();
         (void) history->get_history();
@@ -502,7 +502,7 @@ namespace {
         PlaytimeGraphUseCase playtime(profile, config, day);
         BenchmarkTrackingUseCase tracking(app->benchmarksService(), app->benchmarkResolutionUseCase(), profile,
                                           config, day);
-        tracking.select(domain::BenchmarkId{kBenchmarkId});
+        tracking.select(domain::BenchmarkId{integration::benchmarkKey(app->benchmarksService(), kBenchmarkFile).toStdString()});
         ASSERT_EQ(tracking.state(), BenchmarkTrackingState::Ready);
         (void) playtime.snapshot();
         int trackingChanged = 0, trackingRank = 0;
@@ -565,7 +565,7 @@ namespace {
         ASSERT_TRUE(quick("benchmarkPlaytime", {{"rangeKind", "recentDays"}, {"count", 7}, {"window", 21}}));
         env.daySource->advance(5);
         tracking->clearSelection();
-        tracking->selectBenchmark(kBenchmarkId);
+        tracking->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), kBenchmarkFile));
         ASSERT_TRUE(QTest::qWaitFor([&] { return tracking->state() == "trackable"; }, 30000));
 
         EXPECT_TRUE(vm->hasPendingChanges());

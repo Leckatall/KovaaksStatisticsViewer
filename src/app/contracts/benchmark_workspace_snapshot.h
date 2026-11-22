@@ -9,11 +9,12 @@
 
 #include "benchmarks/benchmark.h"
 #include "benchmarks/benchmark_ids.h"
+#include "data/interfaces/benchmark_library_snapshot.h"
 #include "i_benchmark_tracking_use_case.h"
 #include "playtime_view.h"
 
 namespace ksv::application {
-    enum class BenchmarkChoiceClassification { Trackable, Incomplete, Invalid, Unsupported };
+    enum class BenchmarkChoiceClassification { Trackable, Incomplete, Invalid, Unsupported, MigrationFailed };
 
     struct BenchmarkChoice {
         std::string filename;
@@ -21,6 +22,7 @@ namespace ksv::application {
         std::string displayName;
         BenchmarkChoiceClassification classification = BenchmarkChoiceClassification::Invalid;
         std::optional<int> schemaVersion;
+        std::optional<data::BenchmarkMigrationFailure> migrationFailure;
         bool selectable = false;
         // Index in the recent-benchmarks list, 0 being the most recent; empty when never viewed or created.
         std::optional<std::size_t> recency;

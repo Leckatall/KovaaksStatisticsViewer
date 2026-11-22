@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -14,24 +16,33 @@ using namespace ksv::data;
 using ksv::tests_support::FakeBenchmarkStore;
 
 namespace {
-    domain::BenchmarkDefinition bench(const std::string &id, const std::string &name) {
+    // Benchmarks are told apart by content; the store never supplies an id or a name.
+    domain::BenchmarkDefinition bench(const std::string &marker) {
         domain::BenchmarkDefinition b;
-        b.id = domain::BenchmarkId{id};
+        b.tiers = {domain::Tier{domain::TierId{"t1"}, marker, {}}};
+        return b;
+    }
+
+    // A working copy as the editor submits it: its own key and the name it should be saved under.
+    domain::BenchmarkDefinition draft(const domain::BenchmarkId &id, const std::string &name,
+                                      const std::string &marker) {
+        auto b = bench(marker);
+        b.id = id;
         b.name = name;
         return b;
     }
 
-    BenchmarkFileEntry loadedEntry(std::string filename, std::string digest,
-                                   const std::string &id, const std::string &name) {
-        auto b = bench(id, name);
+    std::string markerOf(const domain::BenchmarkDefinition &b) { return b.tiers.empty() ? "" : b.tiers[0].name; }
+
+    BenchmarkFileEntry loadedEntry(std::string filename, std::string digest, const std::string &marker = "") {
+        auto b = bench(marker);
         auto completeness = domain::validateBenchmark(b);
-        return BenchmarkFileEntry{std::move(filename), std::move(digest),
-                                  LoadedBenchmark{std::move(b), completeness}};
+        return BenchmarkFileEntry{std::move(filename), std::move(digest), LoadedBenchmark{std::move(b), completeness}};
     }
 
-    BenchmarkFileEntry problemEntry(std::string filename, std::string digest) {
-        return BenchmarkFileEntry{std::move(filename), std::move(digest),
-                                  ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}, {}}};
+    BenchmarkFileEntry problemEntry(std::string filename, std::string digest,
+                                    BenchmarkFileProblem problem = BenchmarkFileProblem::Invalid) {
+        return BenchmarkFileEntry{std::move(filename), std::move(digest), ProblemBenchmark{problem, {}, {}}};
     }
 
     BenchmarkScanResult okScan(std::vector<BenchmarkFileEntry> entries) {
@@ -54,18 +65,37 @@ namespace {
         return out;
     }
 
-    const LoadedBenchmark *loadedFor(const BenchmarkLibrarySnapshot &s, const std::string &filename) {
+    const BenchmarkFileEntry *entryFor(const BenchmarkLibrarySnapshot &s, const std::string &filename) {
         for (const auto &e: s.entries)
-            if (e.filename == filename) return std::get_if<LoadedBenchmark>(&e.content);
+            if (e.filename == filename) return &e;
         return nullptr;
+    }
+
+    const LoadedBenchmark *loadedFor(const BenchmarkLibrarySnapshot &s, const std::string &filename) {
+        const auto *entry = entryFor(s, filename);
+        return entry ? std::get_if<LoadedBenchmark>(&entry->content) : nullptr;
+    }
+
+    domain::BenchmarkId keyOf(const BenchmarksService &service, const std::string &filename) {
+        const auto snapshot = service.snapshot();
+        const auto *entry = entryFor(*snapshot, filename);
+        EXPECT_NE(entry, nullptr) << filename;
+        return entry ? entry->id : domain::BenchmarkId{};
+    }
+
+    // The token the manager would build when opening `filename`.
+    BenchmarkEditToken tokenFor(const BenchmarksService &service, const std::string &filename) {
+        const auto snapshot = service.snapshot();
+        const auto *entry = entryFor(*snapshot, filename);
+        EXPECT_NE(entry, nullptr) << filename;
+        return entry ? BenchmarkEditToken{entry->id, entry->filename, entry->digest} : BenchmarkEditToken{};
     }
 }
 
 TEST(BenchmarksService, ConstructionAcceptsStartupSnapshotAndPublishesRevision) {
     auto store = std::make_shared<FakeBenchmarkStore>();
     store->directory = "/managed/benchmarks";
-    store->nextScan = okScan({loadedEntry("a.json", "da", "b1", "Alpha"),
-                              problemEntry("z.json", "dz")});
+    store->nextScan = okScan({loadedEntry("a.json", "da"), problemEntry("z.json", "dz")});
 
     BenchmarksService service(store);
 
@@ -88,13 +118,74 @@ TEST(BenchmarksService, ConstructionFailurePublishesDiagnosticWithoutAcceptedSna
     EXPECT_TRUE(service.lastRefreshFailed());
 }
 
+TEST(BenchmarksService, EveryEntryIsKeyedAndNamedAfterItsFilename) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->nextScan = okScan({loadedEntry("Alpha.json", "da"), loadedEntry("Beta.JSON", "db"),
+                              problemEntry("Broken.json", "dc"),
+                              problemEntry("Future.json", "dd", BenchmarkFileProblem::Unsupported),
+                              problemEntry("Old.json", "de", BenchmarkFileProblem::MigrationFailed)});
+
+    BenchmarksService service(store);
+
+    const auto library = service.snapshot();
+    const auto &entries = library->entries;
+    std::vector<std::string> names;
+    std::set<std::string> keys;
+    for (const auto &entry: entries) {
+        names.push_back(entry.name);
+        keys.insert(entry.id.value);
+        if (const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content)) {
+            EXPECT_EQ(loaded->benchmark.id, entry.id);
+            EXPECT_EQ(loaded->benchmark.name, entry.name);
+        }
+    }
+    EXPECT_EQ(names, (std::vector<std::string>{"Alpha", "Beta", "Broken", "Future", "Old"}));
+    EXPECT_EQ(keys.size(), entries.size());
+    EXPECT_FALSE(keys.contains(""));
+    // The store's definitions carry no name; once named after its file, a benchmark validates as such.
+    EXPECT_TRUE(std::ranges::none_of(loadedFor(*service.snapshot(), "Alpha.json")->completeness.issues,
+                                     [](const auto &issue) { return issue.code == domain::BenchmarkIssueCode::MissingName; }));
+}
+
+TEST(BenchmarksService, TwoFilesWithIdenticalContentAreTwoBenchmarks) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->nextScan = okScan({loadedEntry("Copy.json", "same", "x"), loadedEntry("Original.json", "same", "x")});
+
+    BenchmarksService service(store);
+
+    EXPECT_NE(keyOf(service, "Copy.json"), keyOf(service, "Original.json"));
+}
+
+TEST(BenchmarksService, KeysSurviveRefreshesWhileTheFilenameStaysButNotItsAbsence) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->scriptedScans = {
+        okScan({loadedEntry("a.json", "da"), loadedEntry("b.json", "db")}),
+        okScan({loadedEntry("a.json", "da2"), loadedEntry("c.json", "db")}),  // b.json renamed to c.json
+        okScan({loadedEntry("a.json", "da2")}),
+        okScan({loadedEntry("a.json", "da2"), loadedEntry("c.json", "db")}),  // c.json is back
+    };
+
+    BenchmarksService service(store);
+    const auto a = keyOf(service, "a.json");
+    const auto b = keyOf(service, "b.json");
+
+    service.refresh();
+    EXPECT_EQ(keyOf(service, "a.json"), a);
+    const auto c = keyOf(service, "c.json");
+    EXPECT_NE(c, b);
+
+    service.refresh();
+    service.refresh();
+    EXPECT_EQ(keyOf(service, "a.json"), a);
+    EXPECT_NE(keyOf(service, "c.json"), c);
+}
+
 TEST(BenchmarksService, RefreshReplacesTheCompleteAcceptedSnapshotOnce) {
     auto store = std::make_shared<FakeBenchmarkStore>();
     store->scriptedScans = {
-        okScan({loadedEntry("a.json", "da", "b1", "Alpha"),
-                loadedEntry("b.json", "db", "b2", "Beta")}),
-        okScan({loadedEntry("a.json", "da2", "b1", "Alpha renamed"),  // modification
-                loadedEntry("c.json", "dc", "b3", "Gamma")}),          // b.json removed, c.json added
+        okScan({loadedEntry("a.json", "da"), loadedEntry("b.json", "db")}),
+        okScan({loadedEntry("a.json", "da2"),  // modification
+                loadedEntry("c.json", "dc")}), // b.json removed, c.json added
     };
 
     BenchmarksService service(store);
@@ -114,7 +205,7 @@ TEST(BenchmarksService, RefreshReplacesTheCompleteAcceptedSnapshotOnce) {
 
 TEST(BenchmarksService, DirectoryFailurePreservesAcceptedSnapshotAndReportsFailure) {
     auto store = std::make_shared<FakeBenchmarkStore>();
-    store->scriptedScans = {okScan({loadedEntry("a.json", "da", "b1", "Alpha")})};
+    store->scriptedScans = {okScan({loadedEntry("a.json", "da")})};
     store->nextScan = failedScan();
 
     BenchmarksService service(store);
@@ -131,7 +222,7 @@ TEST(BenchmarksService, DirectoryFailurePreservesAcceptedSnapshotAndReportsFailu
     EXPECT_EQ(callbacks, 1);
 }
 
-TEST(BenchmarksService, SaveNewIncompleteBenchmarkReturnsAdmittedTokenAndPublishes) {
+TEST(BenchmarksService, CreateWritesTheNamedFileAndAdmitsItUnderTheDraftsKey) {
     auto store = std::make_shared<FakeBenchmarkStore>();
     store->nextScan = okScan({});
     store->nextWrite = BenchmarkWriteResult{std::string{"newdigest"}, std::nullopt};
@@ -141,21 +232,22 @@ TEST(BenchmarksService, SaveNewIncompleteBenchmarkReturnsAdmittedTokenAndPublish
     service.onChanged([&] { ++callbacks; });
     const auto revisionBefore = service.revision();
 
-    auto incomplete = bench("b9", "Fresh");  // name only: no tiers, no scenarios
-    const auto outcome = service.save(BenchmarkSaveRequest{incomplete, std::nullopt});
+    const domain::BenchmarkId draftKey{"draft-uuid"};
+    const auto outcome = service.save(BenchmarkSaveRequest{draft(draftKey, "Fresh", "x"), std::nullopt});
 
     ASSERT_TRUE(outcome.ok());
-    ASSERT_TRUE(outcome.token.has_value());
-    EXPECT_EQ(outcome.token->id.value, "b9");
-    EXPECT_EQ(outcome.token->filename, "b9.json");
+    EXPECT_EQ(outcome.token->id, draftKey);
+    EXPECT_EQ(outcome.token->filename, "Fresh.json");
     EXPECT_EQ(outcome.token->digest, "newdigest");
+    EXPECT_EQ(outcome.name, "Fresh");
 
-    EXPECT_EQ(store->lastWriteFilename, "b9.json");
+    EXPECT_EQ(store->lastWriteFilename, "Fresh.json");
     EXPECT_FALSE(store->lastWriteDigest.has_value());
+    EXPECT_EQ(store->renameCount, 0);
 
-    const auto snapshot = service.snapshot();
-    ASSERT_TRUE(snapshot.has_value());
-    const auto *entry = loadedFor(*snapshot, "b9.json");
+    EXPECT_EQ(keyOf(service, "Fresh.json"), draftKey);
+    const auto snapshotNow = service.snapshot();
+    const auto *entry = loadedFor(*snapshotNow, "Fresh.json");
     ASSERT_NE(entry, nullptr);
     EXPECT_EQ(entry->benchmark.name, "Fresh");
     EXPECT_EQ(entry->completeness.completeness, domain::Completeness::Incomplete);
@@ -163,34 +255,139 @@ TEST(BenchmarksService, SaveNewIncompleteBenchmarkReturnsAdmittedTokenAndPublish
     EXPECT_EQ(callbacks, 1);
 }
 
+TEST(BenchmarksService, ARenamingSaveWritesInPlaceThenMovesTheFileAndItsKey) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->nextScan = okScan({loadedEntry("Old.json", "d1", "before")});
+    BenchmarksService service(store);
+    int callbacks = 0;
+    service.onChanged([&] { ++callbacks; });
+    const auto token = tokenFor(service, "Old.json");
+
+    store->nextWrite = BenchmarkWriteResult{std::string{"d2"}, std::nullopt};
+    const auto outcome = service.save({draft(token.id, "New", "after"), token});
+
+    ASSERT_TRUE(outcome.ok());
+    EXPECT_EQ(store->lastWriteFilename, "Old.json");
+    EXPECT_EQ(store->lastWriteDigest, std::make_optional<std::string>("d1"));
+    EXPECT_EQ(store->lastRenameFrom, "Old.json");
+    EXPECT_EQ(store->lastRenameTo, "New.json");
+    EXPECT_EQ(store->lastRenameDigest, "d2");
+    EXPECT_EQ(outcome.token->id, token.id);
+    EXPECT_EQ(outcome.token->filename, "New.json");
+    EXPECT_EQ(outcome.token->digest, "d2");
+    EXPECT_EQ(outcome.name, "New");
+    EXPECT_EQ(filenames(*service.snapshot()), (std::vector<std::string>{"New.json"}));
+    EXPECT_EQ(keyOf(service, "New.json"), token.id);
+    EXPECT_EQ(markerOf(loadedFor(*service.snapshot(), "New.json")->benchmark), "after");
+    EXPECT_EQ(callbacks, 1);
+
+    store->nextWrite = BenchmarkWriteResult{std::string{"d3"}, std::nullopt};
+    ASSERT_TRUE(service.save({draft(token.id, "New", "again"), outcome.token}).ok());
+    EXPECT_EQ(store->lastWriteFilename, "New.json");
+    EXPECT_EQ(store->renameCount, 1);
+}
+
+TEST(BenchmarksService, AnUnchangedNameNeverRenamesEvenWithAnUpperCaseExtension) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->nextScan = okScan({loadedEntry("Same.JSON", "d1")});
+    store->nextWrite = BenchmarkWriteResult{std::string{"d2"}, std::nullopt};
+    BenchmarksService service(store);
+    const auto token = tokenFor(service, "Same.JSON");
+
+    const auto outcome = service.save({draft(token.id, "Same", "edited"), token});
+
+    ASSERT_TRUE(outcome.ok());
+    EXPECT_EQ(store->renameCount, 0);
+    EXPECT_EQ(outcome.token->filename, "Same.JSON");
+}
+
+TEST(BenchmarksService, ALetterCaseChangeRenames) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->nextScan = okScan({loadedEntry("alpha.json", "d1")});
+    store->nextWrite = BenchmarkWriteResult{std::string{"d2"}, std::nullopt};
+    BenchmarksService service(store);
+    const auto token = tokenFor(service, "alpha.json");
+
+    const auto outcome = service.save({draft(token.id, "Alpha", ""), token});
+
+    ASSERT_TRUE(outcome.ok());
+    EXPECT_EQ(store->lastRenameTo, "Alpha.json");
+    EXPECT_EQ(filenames(*service.snapshot()), (std::vector<std::string>{"Alpha.json"}));
+}
+
+TEST(BenchmarksService, AFailedRenameKeepsTheNewContentUnderTheOldNameAndCanBeRetried) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->nextScan = okScan({loadedEntry("Old.json", "d1", "before")});
+    BenchmarksService service(store);
+    const auto token = tokenFor(service, "Old.json");
+
+    store->nextWrite = BenchmarkWriteResult{std::string{"d2"}, std::nullopt};
+    store->nextRename = BenchmarkRenameResult{false, BenchmarkWriteFailure::WriteFailed};
+    const auto outcome = service.save({draft(token.id, "New", "after"), token});
+
+    EXPECT_FALSE(outcome.ok());
+    EXPECT_EQ(outcome.error, std::make_optional(BenchmarkSaveError::RenameFailed));
+    ASSERT_TRUE(outcome.token.has_value());
+    EXPECT_EQ(outcome.token->id, token.id);
+    EXPECT_EQ(outcome.token->filename, "Old.json");
+    EXPECT_EQ(outcome.token->digest, "d2");
+    EXPECT_EQ(outcome.name, "Old");
+    EXPECT_EQ(filenames(*service.snapshot()), (std::vector<std::string>{"Old.json"}));
+    EXPECT_EQ(digests(*service.snapshot()), (std::vector<std::string>{"d2"}));
+    const auto snapshotNow = service.snapshot();
+    const auto *entry = loadedFor(*snapshotNow, "Old.json");
+    EXPECT_EQ(markerOf(entry->benchmark), "after");
+    EXPECT_EQ(entry->benchmark.name, "Old");
+
+    store->nextWrite = BenchmarkWriteResult{std::string{"d3"}, std::nullopt};
+    store->nextRename = BenchmarkRenameResult{true, std::nullopt};
+    const auto retried = service.save({draft(token.id, "New", "after"), outcome.token});
+    ASSERT_TRUE(retried.ok());
+    EXPECT_EQ(store->lastWriteDigest, std::make_optional<std::string>("d2"));
+    EXPECT_EQ(filenames(*service.snapshot()), (std::vector<std::string>{"New.json"}));
+}
+
 TEST(BenchmarksService, SaveReplacementRequiresMatchingAcceptedToken) {
     auto store = std::make_shared<FakeBenchmarkStore>();
-    store->nextScan = okScan({loadedEntry("b1.json", "d1", "b1", "Alpha")});
+    store->nextScan = okScan({loadedEntry("Alpha.json", "d1")});
 
     BenchmarksService service(store);
     int callbacks = 0;
     service.onChanged([&] { ++callbacks; });
     const auto revisionBefore = service.revision();
 
-    auto edited = bench("b1", "Alpha edited");
-    const BenchmarkEditToken staleToken{domain::BenchmarkId{"b1"}, "b1.json", "WRONG-DIGEST"};
-    const auto outcome = service.save(BenchmarkSaveRequest{edited, staleToken});
+    auto staleToken = tokenFor(service, "Alpha.json");
+    staleToken.digest = "WRONG-DIGEST";
+    const auto outcome = service.save(BenchmarkSaveRequest{draft(staleToken.id, "Alpha", "edited"), staleToken});
 
     EXPECT_FALSE(outcome.ok());
-    EXPECT_TRUE(outcome.error.has_value());
+    EXPECT_EQ(outcome.error, std::make_optional(BenchmarkSaveError::StaleToken));
     EXPECT_EQ(store->writeCount, 0);
-    ASSERT_TRUE(service.snapshot().has_value());
-    EXPECT_EQ(filenames(*service.snapshot()), (std::vector<std::string>{"b1.json"}));
+    EXPECT_EQ(filenames(*service.snapshot()), (std::vector<std::string>{"Alpha.json"}));
     EXPECT_EQ(digests(*service.snapshot()), (std::vector<std::string>{"d1"}));
     EXPECT_EQ(service.revision(), revisionBefore);
     EXPECT_EQ(callbacks, 0);
+}
+
+TEST(BenchmarksService, ASaveWhoseFileWasRenamedAwayIsAnUnknownTarget) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->scriptedScans = {okScan({loadedEntry("Alpha.json", "d1")})};
+    store->nextScan = okScan({loadedEntry("Renamed.json", "d1")});
+    BenchmarksService service(store);
+    const auto token = tokenFor(service, "Alpha.json");
+
+    service.refresh();
+    const auto outcome = service.save({draft(token.id, "Alpha", "edited"), token});
+
+    EXPECT_EQ(outcome.error, std::make_optional(BenchmarkSaveError::UnknownTarget));
+    EXPECT_EQ(store->writeCount, 0);
 }
 
 TEST(BenchmarksService, SaveConflictOrWriteFailurePreservesAcceptedState) {
     for (const auto failure: {BenchmarkWriteFailure::ExternalModificationConflict,
                               BenchmarkWriteFailure::WriteFailed}) {
         auto store = std::make_shared<FakeBenchmarkStore>();
-        store->nextScan = okScan({loadedEntry("b1.json", "d1", "b1", "Alpha")});
+        store->nextScan = okScan({loadedEntry("Alpha.json", "d1", "before")});
 
         BenchmarksService service(store);
         int callbacks = 0;
@@ -198,9 +395,8 @@ TEST(BenchmarksService, SaveConflictOrWriteFailurePreservesAcceptedState) {
         const auto revisionBefore = service.revision();
 
         store->nextWrite = BenchmarkWriteResult{std::nullopt, failure};
-        auto edited = bench("b1", "Alpha edited");
-        const BenchmarkEditToken token{domain::BenchmarkId{"b1"}, "b1.json", "d1"};
-        const auto outcome = service.save(BenchmarkSaveRequest{edited, token});
+        const auto token = tokenFor(service, "Alpha.json");
+        const auto outcome = service.save(BenchmarkSaveRequest{draft(token.id, "Renamed", "after"), token});
 
         EXPECT_FALSE(outcome.ok());
         ASSERT_TRUE(outcome.error.has_value());
@@ -208,11 +404,11 @@ TEST(BenchmarksService, SaveConflictOrWriteFailurePreservesAcceptedState) {
                   failure == BenchmarkWriteFailure::ExternalModificationConflict
                       ? BenchmarkSaveError::Conflict
                       : BenchmarkSaveError::WriteFailed);
-        const auto snapshot = service.snapshot();
-        ASSERT_TRUE(snapshot.has_value());
-        const auto *entry = loadedFor(*snapshot, "b1.json");
+        EXPECT_EQ(store->renameCount, 0);
+        const auto snapshotNow = service.snapshot();
+        const auto *entry = loadedFor(*snapshotNow, "Alpha.json");
         ASSERT_NE(entry, nullptr);
-        EXPECT_EQ(entry->benchmark.name, "Alpha");
+        EXPECT_EQ(markerOf(entry->benchmark), "before");
         EXPECT_EQ(service.snapshot()->entries.at(0).digest, "d1");
         EXPECT_EQ(service.revision(), revisionBefore);
         EXPECT_EQ(callbacks, 0);
@@ -221,8 +417,7 @@ TEST(BenchmarksService, SaveConflictOrWriteFailurePreservesAcceptedState) {
 
 TEST(BenchmarksService, DeleteMatchingTokenRemovesEntryAndPublishes) {
     auto store = std::make_shared<FakeBenchmarkStore>();
-    store->nextScan = okScan({loadedEntry("b1.json", "d1", "b1", "Alpha"),
-                              loadedEntry("b2.json", "d2", "b2", "Beta")});
+    store->nextScan = okScan({loadedEntry("b1.json", "d1"), loadedEntry("b2.json", "d2")});
 
     BenchmarksService service(store);
     int callbacks = 0;
@@ -230,8 +425,7 @@ TEST(BenchmarksService, DeleteMatchingTokenRemovesEntryAndPublishes) {
     const auto revisionBefore = service.revision();
 
     store->nextRemove = BenchmarkDeleteResult{true, std::nullopt};
-    const BenchmarkEditToken token{domain::BenchmarkId{"b1"}, "b1.json", "d1"};
-    const auto outcome = service.remove(token);
+    const auto outcome = service.remove(tokenFor(service, "b1.json"));
 
     EXPECT_TRUE(outcome.ok());
     EXPECT_EQ(store->removeCount, 1);
@@ -245,12 +439,13 @@ TEST(BenchmarksService, DeleteMatchingTokenRemovesEntryAndPublishes) {
 
 TEST(BenchmarksService, DeleteUnknownStaleOrFailedTokenPreservesAcceptedState) {
     auto store = std::make_shared<FakeBenchmarkStore>();
-    store->nextScan = okScan({loadedEntry("b1.json", "d1", "b1", "Alpha")});
+    store->nextScan = okScan({loadedEntry("b1.json", "d1")});
 
     BenchmarksService service(store);
     int callbacks = 0;
     service.onChanged([&] { ++callbacks; });
     const auto revisionBefore = service.revision();
+    const auto token = tokenFor(service, "b1.json");
 
     const auto expectPreserved = [&] {
         ASSERT_TRUE(service.snapshot().has_value());
@@ -266,7 +461,7 @@ TEST(BenchmarksService, DeleteUnknownStaleOrFailedTokenPreservesAcceptedState) {
     expectPreserved();
 
     // Stale digest for a known file: never reaches the store.
-    auto stale = service.remove(BenchmarkEditToken{domain::BenchmarkId{"b1"}, "b1.json", "STALE"});
+    auto stale = service.remove(BenchmarkEditToken{token.id, "b1.json", "STALE"});
     EXPECT_FALSE(stale.ok());
     EXPECT_EQ(store->removeCount, 0);
     expectPreserved();
@@ -275,7 +470,7 @@ TEST(BenchmarksService, DeleteUnknownStaleOrFailedTokenPreservesAcceptedState) {
     for (const auto failure: {BenchmarkWriteFailure::ExternalModificationConflict,
                               BenchmarkWriteFailure::WriteFailed}) {
         store->nextRemove = BenchmarkDeleteResult{false, failure};
-        auto declined = service.remove(BenchmarkEditToken{domain::BenchmarkId{"b1"}, "b1.json", "d1"});
+        auto declined = service.remove(token);
         EXPECT_FALSE(declined.ok());
         ASSERT_TRUE(declined.error.has_value());
         EXPECT_EQ(*declined.error,
@@ -288,9 +483,8 @@ TEST(BenchmarksService, DeleteUnknownStaleOrFailedTokenPreservesAcceptedState) {
 
 TEST(BenchmarksService, BatchInstallsExactlySuccessfulReplacementsAndReportsEveryOutcome) {
     auto store = std::make_shared<FakeBenchmarkStore>();
-    store->nextScan = okScan({loadedEntry("a.json", "da", "ba", "Aaa"),
-                              loadedEntry("b.json", "db", "bb", "Bbb"),
-                              loadedEntry("c.json", "dc", "bc", "Ccc")});
+    store->nextScan = okScan({loadedEntry("a.json", "da", "Aaa"), loadedEntry("b.json", "db", "Bbb"),
+                              loadedEntry("c.json", "dc", "Ccc")});
 
     BenchmarksService service(store);
     int callbacks = 0;
@@ -302,10 +496,13 @@ TEST(BenchmarksService, BatchInstallsExactlySuccessfulReplacementsAndReportsEver
         BenchmarkWriteResult{std::nullopt, BenchmarkWriteFailure::ExternalModificationConflict},
         BenchmarkWriteResult{std::nullopt, BenchmarkWriteFailure::WriteFailed},
     };
+    const auto a = tokenFor(service, "a.json");
+    const auto b = tokenFor(service, "b.json");
+    const auto c = tokenFor(service, "c.json");
     const std::vector<BenchmarkReplacementRequest> requests{
-        {bench("ba", "Aaa mapped"), {domain::BenchmarkId{"ba"}, "a.json", "da"}},
-        {bench("bb", "Bbb mapped"), {domain::BenchmarkId{"bb"}, "b.json", "db"}},
-        {bench("bc", "Ccc mapped"), {domain::BenchmarkId{"bc"}, "c.json", "dc"}},
+        {draft(a.id, "a", "Aaa mapped"), a},
+        {draft(b.id, "b", "Bbb mapped"), b},
+        {draft(c.id, "c", "Ccc mapped"), c},
     };
 
     const auto outcome = service.replaceBatch(requests);
@@ -320,40 +517,49 @@ TEST(BenchmarksService, BatchInstallsExactlySuccessfulReplacementsAndReportsEver
     EXPECT_EQ(outcome.outcomes[2].error, BenchmarkSaveError::WriteFailed);
 
     const auto snapshot = service.snapshot();
-    ASSERT_TRUE(snapshot.has_value());
-    const auto *a = loadedFor(*snapshot, "a.json");
-    const auto *b = loadedFor(*snapshot, "b.json");
-    const auto *c = loadedFor(*snapshot, "c.json");
-    ASSERT_NE(a, nullptr);
-    ASSERT_NE(b, nullptr);
-    ASSERT_NE(c, nullptr);
-    EXPECT_EQ(a->benchmark.name, "Aaa mapped");
-    EXPECT_EQ(service.snapshot()->entries.at(0).digest, "da2");
-    EXPECT_EQ(b->benchmark.name, "Bbb");   // conflict: untouched
-    EXPECT_EQ(service.snapshot()->entries.at(1).digest, "db");
-    EXPECT_EQ(c->benchmark.name, "Ccc");   // write failure: untouched
-    EXPECT_EQ(service.snapshot()->entries.at(2).digest, "dc");
+    EXPECT_EQ(markerOf(loadedFor(*snapshot, "a.json")->benchmark), "Aaa mapped");
+    EXPECT_EQ(snapshot->entries.at(0).digest, "da2");
+    EXPECT_EQ(markerOf(loadedFor(*snapshot, "b.json")->benchmark), "Bbb");  // conflict: untouched
+    EXPECT_EQ(snapshot->entries.at(1).digest, "db");
+    EXPECT_EQ(markerOf(loadedFor(*snapshot, "c.json")->benchmark), "Ccc");  // write failure: untouched
+    EXPECT_EQ(snapshot->entries.at(2).digest, "dc");
 
     EXPECT_EQ(service.revision(), revisionBefore + 1);
     EXPECT_EQ(callbacks, 1);
 }
 
+TEST(BenchmarksService, BatchWritesInPlaceAndNeverRenamesOrCreatesEvenUnderAnUnusableName) {
+    auto store = std::make_shared<FakeBenchmarkStore>();
+    store->nextScan = okScan({loadedEntry("foo .json", "d1", "before")});
+    store->nextWrite = BenchmarkWriteResult{std::string{"d2"}, std::nullopt};
+    BenchmarksService service(store);
+    const auto token = tokenFor(service, "foo .json");
+
+    const auto outcome = service.replaceBatch({{draft(token.id, "foo ", "mapped"), token}});
+
+    ASSERT_TRUE(outcome.outcomes.at(0).ok());
+    EXPECT_EQ(store->lastWriteFilename, "foo .json");
+    EXPECT_EQ(store->lastWriteDigest, std::make_optional<std::string>("d1"));
+    EXPECT_EQ(store->renameCount, 0);
+    EXPECT_EQ(filenames(*service.snapshot()), (std::vector<std::string>{"foo .json"}));
+    EXPECT_EQ(keyOf(service, "foo .json"), token.id);
+}
+
 TEST(BenchmarksService, BatchPublishesAtMostOnceAfterAllWrites) {
     auto store = std::make_shared<FakeBenchmarkStore>();
-    store->nextScan = okScan({loadedEntry("a.json", "da", "ba", "Aaa"),
-                              loadedEntry("b.json", "db", "bb", "Bbb")});
+    store->nextScan = okScan({loadedEntry("a.json", "da", "Aaa"), loadedEntry("b.json", "db", "Bbb")});
 
     BenchmarksService service(store);
     int callbacks = 0;
-    std::vector<std::string> observedNamesAtCallback;
+    std::vector<std::string> observedAtCallback;
     service.onChanged([&] {
         ++callbacks;
-        observedNamesAtCallback.clear();
+        observedAtCallback.clear();
         const auto snap = service.snapshot();
         if (snap)
             for (const auto &e: snap->entries)
                 if (const auto *l = std::get_if<LoadedBenchmark>(&e.content))
-                    observedNamesAtCallback.push_back(l->benchmark.name);
+                    observedAtCallback.push_back(markerOf(l->benchmark));
     });
     const auto revisionBefore = service.revision();
 
@@ -361,21 +567,18 @@ TEST(BenchmarksService, BatchPublishesAtMostOnceAfterAllWrites) {
         BenchmarkWriteResult{std::string{"da2"}, std::nullopt},
         BenchmarkWriteResult{std::string{"db2"}, std::nullopt},
     };
-    const std::vector<BenchmarkReplacementRequest> requests{
-        {bench("ba", "Aaa2"), {domain::BenchmarkId{"ba"}, "a.json", "da"}},
-        {bench("bb", "Bbb2"), {domain::BenchmarkId{"bb"}, "b.json", "db"}},
-    };
-
-    service.replaceBatch(requests);
+    const auto a = tokenFor(service, "a.json");
+    const auto b = tokenFor(service, "b.json");
+    service.replaceBatch({{draft(a.id, "a", "Aaa2"), a}, {draft(b.id, "b", "Bbb2"), b}});
 
     EXPECT_EQ(callbacks, 1);
-    EXPECT_EQ(observedNamesAtCallback, (std::vector<std::string>{"Aaa2", "Bbb2"}));
+    EXPECT_EQ(observedAtCallback, (std::vector<std::string>{"Aaa2", "Bbb2"}));
     EXPECT_EQ(service.revision(), revisionBefore + 1);
 }
 
 TEST(BenchmarksService, BatchWithNoSuccessDoesNotAdvanceAcceptedRevision) {
     auto store = std::make_shared<FakeBenchmarkStore>();
-    store->nextScan = okScan({loadedEntry("a.json", "da", "ba", "Aaa")});
+    store->nextScan = okScan({loadedEntry("a.json", "da", "Aaa")});
 
     BenchmarksService service(store);
     int callbacks = 0;
@@ -383,9 +586,10 @@ TEST(BenchmarksService, BatchWithNoSuccessDoesNotAdvanceAcceptedRevision) {
     const auto revisionBefore = service.revision();
 
     store->scriptedWrites = {BenchmarkWriteResult{std::nullopt, BenchmarkWriteFailure::WriteFailed}};
+    const auto a = tokenFor(service, "a.json");
     const std::vector<BenchmarkReplacementRequest> requests{
-        {bench("ba", "Aaa2"), {domain::BenchmarkId{"ba"}, "a.json", "da"}},          // store fails
-        {bench("bZ", "Zzz"), {domain::BenchmarkId{"bZ"}, "z.json", "dz"}},           // unknown token
+        {draft(a.id, "a", "Aaa2"), a},                                                   // store fails
+        {draft(domain::BenchmarkId{"bZ"}, "z", "Zzz"), {domain::BenchmarkId{"bZ"}, "z.json", "dz"}},  // unknown token
     };
 
     const auto outcome = service.replaceBatch(requests);

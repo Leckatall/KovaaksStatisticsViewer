@@ -15,6 +15,7 @@
 #include "contracts/benchmark_manager_state.h"
 #include "usecases/benchmark_manager_use_case.h"
 #include "usecases/recent_benchmarks.h"
+#include "qt_data/case_fold.h"
 
 using namespace ksv;
 using namespace ksv::application;
@@ -39,7 +40,7 @@ namespace {
         void build() {
             recent = std::make_shared<RecentBenchmarks>(settings);
             manager = std::make_unique<BenchmarkManagerUseCase>(benchmarks, resolution, reader,
-                                                                countingIds(), recent);
+                                                                countingIds(), qt_data::foldCase, recent);
         }
     };
 
@@ -56,8 +57,25 @@ namespace {
     BenchmarkLibrarySnapshot snapshotOf(const BenchmarkDefinition &value) {
         BenchmarkLibrarySnapshot snapshot;
         snapshot.entries.push_back({value.id.value + ".json", "d-" + value.id.value,
-                                    LoadedBenchmark{value, validateBenchmark(value)}});
+                                    LoadedBenchmark{value, validateBenchmark(value)}, value.id, value.id.value});
         return snapshot;
+    }
+
+    // An entry as BenchmarksService publishes it, keyed and named after its file.
+    BenchmarkFileEntry namedEntry(const std::string &name, std::variant<LoadedBenchmark, ProblemBenchmark> content) {
+        return {name + ".json", "d-" + name, std::move(content), BenchmarkId{"key-" + name}, name};
+    }
+
+    LoadedBenchmark loadedNamed(const std::string &name) {
+        auto value = savedBenchmark("key-" + name);
+        value.name = name;
+        return {value, validateBenchmark(value)};
+    }
+
+    ProblemBenchmark problemOf(const BenchmarkFileProblem problem) { return {problem, {}, {}}; }
+
+    std::optional<BenchmarkEditToken> tokenOf(const std::string &name) {
+        return BenchmarkEditToken{BenchmarkId{"key-" + name}, name + ".json", "d-" + name};
     }
 }
 
@@ -152,8 +170,7 @@ TEST(BenchmarkManagerUseCase, OpenProblemEntryReturnsNulloptAndChangesNoLease) {
     Fixture fixture;
     BenchmarkLibrarySnapshot snapshot;
     snapshot.entries.push_back({"broken.json", "d",
-                                ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt,
-                                                 BenchmarkId{"b1"}, std::nullopt}});
+                                ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt, std::nullopt}});
     fixture.benchmarks->snapshotValue = snapshot;
     fixture.build();
 
@@ -195,40 +212,68 @@ TEST(BenchmarkManagerUseCase, SaveFailureIsForwardedVerbatim) {
 TEST(BenchmarkManagerUseCaseRecent, ASuccessfulCreateIsMarkedCreated) {
     Fixture fixture;
     fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
-    fixture.settings->recentBenchmarkIds = {"viewed"};
+    fixture.settings->recentBenchmarkFiles = {"Viewed.json"};
     fixture.build();
-    fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"fresh"}, "fresh.json", "d-fresh"},
-                                           std::nullopt};
+    fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"fresh"}, "Fresh.json", "d-fresh"},
+                                           std::nullopt, "Fresh"};
 
     ASSERT_TRUE(fixture.manager->save(savedBenchmark("fresh"), std::nullopt).ok());
 
-    EXPECT_EQ(fixture.recent->ids(), (std::vector<std::string>{"viewed", "fresh"}));
+    EXPECT_EQ(fixture.recent->filenames(), (std::vector<std::string>{"Viewed.json", "Fresh.json"}));
 }
 
 TEST(BenchmarkManagerUseCaseRecent, ReplacingAnExistingBenchmarkIsNotACreate) {
     Fixture fixture;
     fixture.benchmarks->snapshotValue = snapshotOf(savedBenchmark("b1"));
-    fixture.settings->recentBenchmarkIds = {"viewed"};
+    fixture.settings->recentBenchmarkFiles = {"Viewed.json"};
     fixture.build();
     fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d-b1-new"},
-                                           std::nullopt};
+                                           std::nullopt, "b1"};
 
     ASSERT_TRUE(fixture.manager->save(savedBenchmark("b1"), BenchmarkEditToken{BenchmarkId{"b1"}, "b1.json", "d-b1"})
         .ok());
 
-    EXPECT_EQ(fixture.recent->ids(), (std::vector<std::string>{"viewed"}));
+    EXPECT_EQ(fixture.recent->filenames(), (std::vector<std::string>{"Viewed.json"}));
+}
+
+TEST(BenchmarkManagerUseCaseRecent, ARenamingSaveRenamesTheRecentEntryInPlace) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.settings->recentBenchmarkFiles = {"Viewed.json", "Old.json", "Other.json"};
+    fixture.build();
+    fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "New.json", "d2"}, std::nullopt, "New"};
+
+    ASSERT_TRUE(fixture.manager->save(savedBenchmark("b1"), BenchmarkEditToken{BenchmarkId{"b1"}, "Old.json", "d1"})
+        .ok());
+
+    EXPECT_EQ(fixture.recent->filenames(), (std::vector<std::string>{"Viewed.json", "New.json", "Other.json"}));
+}
+
+TEST(BenchmarkManagerUseCaseRecent, AFailedRenameLeavesRecentsAlone) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.settings->recentBenchmarkFiles = {"Viewed.json", "Old.json"};
+    fixture.build();
+    fixture.benchmarks->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "Old.json", "d2"},
+                                           BenchmarkSaveError::RenameFailed, "Old"};
+
+    EXPECT_FALSE(fixture.manager->save(savedBenchmark("b1"), BenchmarkEditToken{BenchmarkId{"b1"}, "Old.json", "d1"})
+        .ok());
+
+    EXPECT_EQ(fixture.recent->filenames(), (std::vector<std::string>{"Viewed.json", "Old.json"}));
+    EXPECT_EQ(fixture.settings->recentBenchmarkFilesWrites, 0);
 }
 
 TEST(BenchmarkManagerUseCaseRecent, AFailedCreateIsNotMarkedCreated) {
     Fixture fixture;
     fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
-    fixture.settings->recentBenchmarkIds = {"viewed"};
+    fixture.settings->recentBenchmarkFiles = {"Viewed.json"};
     fixture.build();
     fixture.benchmarks->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::WriteFailed};
 
     EXPECT_FALSE(fixture.manager->save(savedBenchmark("fresh"), std::nullopt).ok());
 
-    EXPECT_EQ(fixture.recent->ids(), (std::vector<std::string>{"viewed"}));
+    EXPECT_EQ(fixture.recent->filenames(), (std::vector<std::string>{"Viewed.json"}));
 }
 
 TEST(BenchmarkManagerUseCase, WithAutomaticMappingsForwardsTheWorkingCopyAndReturnsTheLinkedValue) {
@@ -379,4 +424,55 @@ TEST(BenchmarkManagerUseCase, SaveSuccessReturnsAdmittedTokenWithoutAnIntervenin
     ASSERT_TRUE(outcome.ok());
     EXPECT_EQ(outcome.token->digest, "d-b1-2");
     EXPECT_TRUE(fixture.benchmarks->batchRequests.empty());  // manager issued no reconciliation batch
+}
+
+TEST(BenchmarkManagerUseCaseNames, ReportsEachReasonANameCannotBeAFilename) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.build();
+
+    const auto check = [&](const std::string &name) { return fixture.manager->checkName(name, std::nullopt); };
+    EXPECT_EQ(check(" "), BenchmarkNameProblem::Blank);
+    EXPECT_EQ(check("Voltaic: S5"), BenchmarkNameProblem::InvalidCharacter);
+    EXPECT_EQ(check(std::string(251, 'a')), BenchmarkNameProblem::TooLong);
+    EXPECT_EQ(check("Voltaic."), BenchmarkNameProblem::TrailingDotOrSpace);
+    EXPECT_EQ(check("aux"), BenchmarkNameProblem::Reserved);
+    EXPECT_EQ(check("Voltaic S5"), std::nullopt);
+}
+
+TEST(BenchmarkManagerUseCaseNames, ANameTakenByAnyOtherFileIgnoringCaseIsRefused) {
+    Fixture fixture;
+    BenchmarkLibrarySnapshot snapshot;
+    snapshot.entries = {namedEntry("Loaded", loadedNamed("Loaded")),
+                        namedEntry("Broken", problemOf(BenchmarkFileProblem::Invalid)),
+                        namedEntry("Future", problemOf(BenchmarkFileProblem::Unsupported)),
+                        namedEntry("\xC3\x84lter", problemOf(BenchmarkFileProblem::MigrationFailed))};
+    fixture.benchmarks->snapshotValue = snapshot;
+    fixture.build();
+
+    for (const auto *name: {"loaded", "BROKEN", "fUTURE", "\xC3\xA4LTER"}) {
+        EXPECT_EQ(fixture.manager->checkName(name, std::nullopt), BenchmarkNameProblem::Taken) << name;
+        EXPECT_EQ(fixture.manager->checkName(name, tokenOf("Loaded")),
+                  std::string{name} == "loaded" ? std::nullopt : std::optional{BenchmarkNameProblem::Taken})
+            << name;
+    }
+}
+
+TEST(BenchmarkManagerUseCaseNames, TheEditorsOwnFileIsNotACollisionSoACaseOnlyRenameIsAccepted) {
+    Fixture fixture;
+    BenchmarkLibrarySnapshot snapshot;
+    snapshot.entries = {namedEntry("Alpha", loadedNamed("Alpha")), namedEntry("Beta", loadedNamed("Beta"))};
+    fixture.benchmarks->snapshotValue = snapshot;
+    fixture.build();
+
+    EXPECT_EQ(fixture.manager->checkName("ALPHA", tokenOf("Alpha")), std::nullopt);
+    EXPECT_EQ(fixture.manager->checkName("beta", tokenOf("Alpha")), BenchmarkNameProblem::Taken);
+}
+
+TEST(BenchmarkManagerUseCase, ANewBenchmarkStartsWithAnEmptyName) {
+    Fixture fixture;
+    fixture.benchmarks->snapshotValue = BenchmarkLibrarySnapshot{};
+    fixture.build();
+
+    EXPECT_EQ(fixture.manager->beginNewBenchmark().benchmark.name, "");
 }

@@ -71,6 +71,14 @@ namespace {
             resolution = std::make_shared<BenchmarkResolutionUseCase>(benchmarks, profile);
             tracking = std::make_unique<BenchmarkTrackingUseCase>(benchmarks, resolution, profile, configuration, days);
         }
+
+        // The key the service gave `<stem>.json`, or an id no benchmark has when there is no such file.
+        BenchmarkId key(const std::string &stem) const {
+            if (const auto snapshot = benchmarks->snapshot())
+                for (const auto &entry: snapshot->entries)
+                    if (entry.filename == stem + ".json") return entry.id;
+            return BenchmarkId{"absent-" + stem};
+        }
     };
 
     BenchmarkLibrarySnapshot snapshotFor(const BenchmarkDefinition &value) {
@@ -136,7 +144,7 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ReadySnapshotCarriesTheEvaluatedBenchma
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     const auto expected = evaluatedBenchmark(definition, fixture.profile->run_facts);
     fixture.build();
-    fixture.tracking->select(definition.id);
+    fixture.tracking->select(fixture.key(definition.id.value));
 
     const auto &snapshot = fixture.tracking->snapshot();
     ASSERT_EQ(snapshot.availability, BenchmarkTrackingState::Ready);
@@ -160,14 +168,14 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, NoSelectionAndUnavailableClearTheBenchm
         EXPECT_TRUE(snapshot.visiblePlaytime.empty());
         EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
     };
-    fixture.tracking->select(definition.id);
+    fixture.tracking->select(fixture.key(definition.id.value));
     ASSERT_NE(fixture.tracking->benchmark(), nullptr);
     ASSERT_FALSE(fixture.tracking->snapshot().visiblePlaytime.empty());
     fixture.tracking->clearSelection();
     expectCleared(BenchmarkTrackingState::NoSelection);
-    fixture.tracking->select(definition.id);
+    fixture.tracking->select(fixture.key(definition.id.value));
     ASSERT_NE(fixture.tracking->benchmark(), nullptr);
-    fixture.tracking->select(BenchmarkId{"missing"});
+    fixture.tracking->select(fixture.key("missing"));
     expectCleared(BenchmarkTrackingState::Unavailable);
 }
 
@@ -181,7 +189,7 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, IncompleteBenchmarkCarriesCompletenessA
     const auto expected = evaluatedBenchmark(definition, fixture.profile->run_facts,
                                              {resolvedEntry("e1"), mappedUnavailableEntry("e2")});
     fixture.build();
-    fixture.tracking->select(definition.id);
+    fixture.tracking->select(fixture.key(definition.id.value));
 
     const auto *actual = fixture.tracking->benchmark();
     ASSERT_NE(actual, nullptr);
@@ -197,7 +205,7 @@ TEST(BenchmarkTracking, RequestsTheMappedHashesInFirstOccurrenceOrderAndNothingE
     definition.uncategorized.push_back(benchmarkEntry("e3", "Again", std::string{"h1"}, rungs()));
     fixture.repo->nextScan = {snapshotFor(definition), std::nullopt};
     fixture.build();
-    fixture.tracking->select(definition.id);
+    fixture.tracking->select(fixture.key(definition.id.value));
 
     std::vector<std::string> hashes;
     for (const auto &scenario: fixture.profile->requested_fact_scenarios) {
@@ -220,7 +228,7 @@ TEST(BenchmarkTracking, SelectingTrackableBenchmarkProducesProjection) {
     fixture.build();
     int notifications = 0;
     fixture.tracking->onChanged([&] { ++notifications; });
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
     ASSERT_NE(fixture.tracking->benchmark(), nullptr);
     EXPECT_EQ(notifications, 1);
@@ -234,7 +242,7 @@ TEST(BenchmarkTracking, RequestsUniqueMappedHashesAndTheProfileIsNeverAskedForAR
     value.uncategorized.push_back(benchmarkEntry("e3", "Again", std::string{"h1"}, rungs()));
     fixture.repo->nextScan = {snapshotFor(value), std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     EXPECT_EQ(fixture.profile->requested_fact_scenarios.size(), 2U);
     EXPECT_TRUE(fixture.profile->requested_rolling_scenarios.empty());
     EXPECT_EQ(fixture.profile->filtered_rolling_request_count, 0);
@@ -247,7 +255,7 @@ TEST(BenchmarkTracking, DoesNotRequestUnresolvedEntries) {
     value.uncategorized[1].hashes.clear();
     fixture.repo->nextScan = {snapshotFor(value), std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_EQ(fixture.profile->requested_fact_scenarios.size(), 1U);
     EXPECT_EQ(fixture.profile->requested_fact_scenarios.front().hash, "h1");
 }
@@ -263,24 +271,28 @@ TEST(BenchmarkTracking, ShowsTheRollingSeriesOfTheEvaluatedRuns_R24) {
     fixture.playtimePreferences().averagingWindowDays = 5;
     fixture.playtimePreferences().range = RangePreference{};
     fixture.build();
-    fixture.tracking->select(definition.id);
+    fixture.tracking->select(fixture.key(definition.id.value));
 
     ASSERT_NE(fixture.tracking->benchmark(), nullptr);
     const auto expected = includeInactiveDays(reference.rollingPlaytime(5));
     EXPECT_EQ(fixture.tracking->snapshot().visiblePlaytime, expected);
 }
 
-TEST(BenchmarkTracking, MissingProblemAndDuplicateDefinitionsAreUnavailable) {
+TEST(BenchmarkTracking, TwoFilesWithTheSameContentAreTwoChoicesEachTrackable) {
     Fixture fixture;
     BenchmarkLibrarySnapshot snapshot;
     snapshot.entries.push_back(fileFor(benchmark("b1"), "a.json"));
     snapshot.entries.push_back(fileFor(benchmark("b1"), "b.json"));
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
-    EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
-    EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
-    fixture.tracking->select(BenchmarkId{"missing"});
+
+    ASSERT_EQ(fixture.tracking->snapshot().choices.size(), 2U);
+    for (const auto *stem: {"a", "b"}) {
+        fixture.tracking->select(fixture.key(stem));
+        EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready) << stem;
+        EXPECT_EQ(fixture.tracking->snapshot().lastKnownSelectedDisplayName, stem);
+    }
+    fixture.tracking->select(fixture.key("missing"));
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
 }
 
@@ -288,10 +300,10 @@ TEST(BenchmarkTracking, ProblemDefinitionIsUnavailable) {
     Fixture fixture;
     BenchmarkLibrarySnapshot snapshot;
     snapshot.entries.push_back({"broken.json", "digest",
-                                ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, BenchmarkId{"b1"}, {}}});
+                                ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}}});
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("broken"));
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
     EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
 }
@@ -300,10 +312,10 @@ TEST(BenchmarkTracking, ClearAndRepeatSelectionHaveStableNotifications) {
     Fixture fixture;
     fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     int notifications = 0;
     fixture.tracking->onChanged([&] { ++notifications; });
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     EXPECT_EQ(notifications, 0);
     fixture.tracking->clearSelection();
     EXPECT_EQ(notifications, 1);
@@ -318,7 +330,7 @@ TEST(BenchmarkTracking, IncompleteBenchmarkStillProjectsSafeFacts) {
     fixture.repo->nextScan = {snapshotFor(value), std::nullopt};
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_NE(fixture.tracking->benchmark(), nullptr);
     EXPECT_EQ(fixture.tracking->benchmark()->completeness().completeness, Completeness::Incomplete);
     EXPECT_FALSE(fixture.tracking->benchmark()->attainedRank());
@@ -332,10 +344,10 @@ TEST(BenchmarkTrackingCache, ReusesPriorSelectionUntilRevisionChanges) {
     snapshot.entries.push_back(fileFor(benchmark("b2"), "b2.json"));
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     const int first = fixture.profile->fact_request_count;
-    fixture.tracking->select(BenchmarkId{"b2"});
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b2"));
+    fixture.tracking->select(fixture.key("b1"));
     EXPECT_EQ(fixture.profile->fact_request_count, first + 1);
 }
 
@@ -348,12 +360,12 @@ TEST(BenchmarkTrackingCache, DoesNotServeAnEntryCachedBeforeALibraryChange) {
     snapshot.entries.push_back(fileFor(benchmark("b2"), "b2.json"));
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
-    fixture.tracking->select(BenchmarkId{"b2"});
+    fixture.tracking->select(fixture.key("b1"));
+    fixture.tracking->select(fixture.key("b2"));
 
     fixture.benchmarks->refresh();
     const int afterRefresh = fixture.profile->fact_request_count;
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
 
     EXPECT_GT(fixture.profile->fact_request_count, afterRefresh);
 }
@@ -362,7 +374,7 @@ TEST(BenchmarkTrackingCache, ProfileAndLibraryChangesReevaluateAndRemovalIsUnava
     Fixture fixture;
     fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     const int selected = fixture.profile->fact_request_count;
     fixture.profile->notifyProfileChanged();
     EXPECT_GT(fixture.profile->fact_request_count, selected);
@@ -380,7 +392,7 @@ TEST(BenchmarkTrackingCache, OneProfileChangeEvaluatesTheSelectedBenchmarkOnce) 
     Fixture fixture;
     fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     const int before = fixture.profile->fact_request_count;
     fixture.profile->notifyProfileChanged();
     EXPECT_EQ(fixture.profile->fact_request_count, before + 1);
@@ -390,7 +402,7 @@ TEST(BenchmarkTrackingCache, OneLibraryChangeEvaluatesTheSelectedBenchmarkOnce) 
     Fixture fixture;
     fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     const int before = fixture.profile->fact_request_count;
     fixture.benchmarks->refresh();
     EXPECT_EQ(fixture.profile->fact_request_count, before + 1);
@@ -404,7 +416,7 @@ TEST(BenchmarkTrackingCache, DefinitionEditReconstructsTheCachedProjection) {
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 150.0F, 10.0F),
                                   benchmarkFact("h2", 101 * kDay, 150.0F, 10.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_NE(fixture.tracking->benchmark(), nullptr);
     ASSERT_TRUE(fixture.tracking->benchmark()->averageRank());
     EXPECT_DOUBLE_EQ(*fixture.tracking->benchmark()->averageRank(), 1.5);
@@ -433,10 +445,9 @@ namespace {
     }
 
     BenchmarkFileEntry problemEntry(const std::string &filename, BenchmarkFileProblem problem,
-                                    std::optional<std::string> name, std::optional<BenchmarkId> id,
-                                    std::optional<int> schemaVersion) {
-        return {filename, "d-" + filename,
-                ProblemBenchmark{problem, std::move(name), std::move(id), schemaVersion}};
+                                    std::optional<int> schemaVersion = std::nullopt,
+                                    std::optional<BenchmarkMigrationFailure> migrationFailure = std::nullopt) {
+        return {filename, "d-" + filename, ProblemBenchmark{problem, schemaVersion, migrationFailure}};
     }
 
     BenchmarkDefinition incompleteBenchmark(const std::string &id) {
@@ -450,8 +461,7 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, StartupPublishesNoSelectionWithChoicesI
     Fixture fixture;
     BenchmarkLibrarySnapshot snapshot;
     snapshot.entries.push_back(loadedEntry(benchmark("b1"), "b1.json"));
-    snapshot.entries.push_back(problemEntry("broken.json", BenchmarkFileProblem::Invalid,
-                                            std::string{"Broken"}, BenchmarkId{"b2"}, std::nullopt));
+    snapshot.entries.push_back(problemEntry("broken.json", BenchmarkFileProblem::Invalid));
     snapshot.entries.push_back(loadedEntry(benchmark("b3"), "b3.json"));
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.build();
@@ -467,26 +477,25 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, StartupPublishesNoSelectionWithChoicesI
     EXPECT_EQ(snap.choices[2].filename, "b3.json");
 }
 
-TEST(BenchmarkTrackingWorkspaceSnapshot, ChoicesCarryClassificationSelectabilityNameAndSchemaVersion) {
+TEST(BenchmarkTrackingWorkspaceSnapshot, ChoicesCarryClassificationSelectabilityFilenameNameAndProblemDetail) {
     Fixture fixture;
     BenchmarkLibrarySnapshot snapshot;
-    snapshot.entries.push_back(loadedEntry(benchmark("trackable"), "trackable.json"));
+    const BenchmarkMigrationFailure failure{1, BenchmarkMigrationFailureReason::SourceMismatch};
+    snapshot.entries.push_back(loadedEntry(benchmark("trackable"), "Trackable.json"));
     snapshot.entries.push_back(loadedEntry(incompleteBenchmark("incomplete"), "incomplete.json"));
-    snapshot.entries.push_back(problemEntry("invalid.json", BenchmarkFileProblem::Invalid,
-                                            std::string{"Broken Bench"}, BenchmarkId{"bad"}, std::nullopt));
-    snapshot.entries.push_back(problemEntry("legacy.json", BenchmarkFileProblem::Unsupported,
-                                            std::string{"Legacy Bench"}, BenchmarkId{"old"}, 2));
+    snapshot.entries.push_back(problemEntry("invalid.json", BenchmarkFileProblem::Invalid));
+    snapshot.entries.push_back(problemEntry("legacy.json", BenchmarkFileProblem::Unsupported, 4));
+    snapshot.entries.push_back(problemEntry("old.json", BenchmarkFileProblem::MigrationFailed, std::nullopt, failure));
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.build();
 
     const auto &choices = fixture.tracking->snapshot().choices;
-    ASSERT_EQ(choices.size(), 4U);
+    ASSERT_EQ(choices.size(), 5U);
 
     EXPECT_EQ(choices[0].classification, BenchmarkChoiceClassification::Trackable);
     EXPECT_TRUE(choices[0].selectable);
-    EXPECT_EQ(choices[0].displayName, "Tracked");
-    ASSERT_TRUE(choices[0].id.has_value());
-    EXPECT_EQ(choices[0].id->value, "trackable");
+    EXPECT_EQ(choices[0].displayName, "Trackable");
+    EXPECT_EQ(choices[0].id, std::optional{fixture.key("Trackable")});
     EXPECT_FALSE(choices[0].schemaVersion.has_value());
 
     EXPECT_EQ(choices[1].classification, BenchmarkChoiceClassification::Incomplete);
@@ -494,29 +503,31 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ChoicesCarryClassificationSelectability
 
     EXPECT_EQ(choices[2].classification, BenchmarkChoiceClassification::Invalid);
     EXPECT_FALSE(choices[2].selectable);
-    EXPECT_EQ(choices[2].displayName, "Broken Bench");
-    ASSERT_TRUE(choices[2].id.has_value());
-    EXPECT_EQ(choices[2].id->value, "bad");
+    EXPECT_EQ(choices[2].displayName, "invalid");
 
     EXPECT_EQ(choices[3].classification, BenchmarkChoiceClassification::Unsupported);
     EXPECT_FALSE(choices[3].selectable);
-    EXPECT_EQ(choices[3].displayName, "Legacy Bench");
-    ASSERT_TRUE(choices[3].schemaVersion.has_value());
-    EXPECT_EQ(*choices[3].schemaVersion, 2);
+    EXPECT_EQ(choices[3].displayName, "legacy");
+    EXPECT_EQ(choices[3].schemaVersion, std::make_optional(4));
+
+    EXPECT_EQ(choices[4].classification, BenchmarkChoiceClassification::MigrationFailed);
+    EXPECT_FALSE(choices[4].selectable);
+    EXPECT_EQ(choices[4].displayName, "old");
+    EXPECT_EQ(choices[4].migrationFailure, std::make_optional(failure));
 }
 
-TEST(BenchmarkTrackingWorkspaceSnapshot, ProblemEntryWithoutParsedNameUsesFilenameAsSafeDisplayName) {
+TEST(BenchmarkTrackingWorkspaceSnapshot, AMigrationFailedChoiceCannotBeTracked) {
     Fixture fixture;
     BenchmarkLibrarySnapshot snapshot;
-    snapshot.entries.push_back(problemEntry("mystery.json", BenchmarkFileProblem::Invalid,
-                                            std::nullopt, std::nullopt, std::nullopt));
+    snapshot.entries.push_back(problemEntry("old.json", BenchmarkFileProblem::MigrationFailed, std::nullopt,
+                                            BenchmarkMigrationFailure{2, BenchmarkMigrationFailureReason::WriteFailed}));
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.build();
 
-    const auto &choices = fixture.tracking->snapshot().choices;
-    ASSERT_EQ(choices.size(), 1U);
-    EXPECT_FALSE(choices[0].id.has_value());
-    EXPECT_EQ(choices[0].displayName, "mystery.json");
+    fixture.tracking->selectDefault();
+    EXPECT_FALSE(fixture.tracking->selected());
+    fixture.tracking->select(fixture.key("old"));
+    EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
 }
 
 TEST(BenchmarkTrackingWorkspaceSnapshot, ReadyTrackableSnapshotCarriesDefinitionAndProjectionInOneRevision) {
@@ -530,17 +541,17 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ReadyTrackableSnapshotCarriesDefinition
 
     int notifications = 0;
     fixture.tracking->onChanged([&] { ++notifications; });
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(notifications, 1);
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
     ASSERT_TRUE(snap.selectedId.has_value());
-    EXPECT_EQ(snap.selectedId->value, "b1");
+    EXPECT_EQ(*snap.selectedId, fixture.key("b1"));
     ASSERT_TRUE(snap.benchmark.has_value());
     EXPECT_EQ(snap.benchmark->completeness().completeness, Completeness::Trackable);
     EXPECT_TRUE(snap.benchmark->completeness().issues.empty());
-    EXPECT_EQ(snap.benchmark->id().value, "b1");
+    EXPECT_EQ(snap.benchmark->id(), fixture.key("b1"));
     ASSERT_TRUE(snap.benchmark->attainedRank().has_value());
     EXPECT_EQ(snap.benchmark->attainedRank()->value, "silver");
     EXPECT_EQ(snap.libraryRevision, fixture.benchmarks->revision());
@@ -554,7 +565,7 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ReadyIncompleteSnapshotCarriesFullCompl
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F)};
     fixture.build();
 
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
@@ -575,7 +586,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, ClearSelectionReturnsToNoSelectionAndD
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
 
     fixture.tracking->clearSelection();
@@ -595,10 +606,10 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectingUnknownIdPublishesUnavailable
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_TRUE(fixture.tracking->snapshot().benchmark.has_value());
 
-    fixture.tracking->select(BenchmarkId{"ghost"});
+    fixture.tracking->select(fixture.key("ghost"));
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Unavailable);
@@ -617,9 +628,10 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDeletionGoesUnavailableRetaini
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    const auto selected = fixture.key("b1");
+    fixture.tracking->select(selected);
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
-    ASSERT_EQ(fixture.tracking->snapshot().lastKnownSelectedDisplayName, "Tracked");
+    ASSERT_EQ(fixture.tracking->snapshot().lastKnownSelectedDisplayName, "b1");
 
     fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
     fixture.benchmarks->refresh();
@@ -627,14 +639,14 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDeletionGoesUnavailableRetaini
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Unavailable);
     ASSERT_TRUE(snap.selectedId.has_value());
-    EXPECT_EQ(snap.selectedId->value, "b1");
-    EXPECT_EQ(snap.lastKnownSelectedDisplayName, "Tracked");
+    EXPECT_EQ(*snap.selectedId, selected);
+    EXPECT_EQ(snap.lastKnownSelectedDisplayName, "b1");
     EXPECT_FALSE(snap.benchmark.has_value());
     EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
 }
 
-// The file survives but now fails to parse and exposes no embedded id, so it never appears as a
-// choice the current lookup can read a name from. The last-known name must still be retained.
+// The file survives but now fails to parse, so it can no longer be tracked; the Unavailable screen
+// still names it.
 TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedBecomingUnparseableProblemRetainsLastKnownName) {
     Fixture fixture;
     fixture.known("Alpha", "h1");
@@ -643,25 +655,25 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedBecomingUnparseableProblemReta
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
 
     BenchmarkLibrarySnapshot broken;
     broken.entries.push_back({"b1.json", "digest",
-                              ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt,
-                                               std::nullopt, std::nullopt}});
+                              ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt, std::nullopt}});
     fixture.repo->nextScan = {broken, std::nullopt};
     fixture.benchmarks->refresh();
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Unavailable);
     ASSERT_TRUE(snap.selectedId.has_value());
-    EXPECT_EQ(snap.selectedId->value, "b1");
-    EXPECT_EQ(snap.lastKnownSelectedDisplayName, "Tracked");
+    EXPECT_EQ(*snap.selectedId, fixture.key("b1"));
+    EXPECT_EQ(snap.lastKnownSelectedDisplayName, "b1");
     EXPECT_FALSE(snap.benchmark.has_value());
 }
 
-TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDuplicateIdConflictGoesUnavailableAndClearsDerivedState) {
+// Renaming or copying a file outside the application removes one benchmark and adds others.
+TEST(BenchmarkTrackingWorkspaceLifecycle, ASelectedFileRenamedOutsideTheAppGoesUnavailableAndIsNotFollowed) {
     Fixture fixture;
     fixture.known("Alpha", "h1");
     fixture.known("Beta", "h2");
@@ -669,22 +681,24 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, SelectedDuplicateIdConflictGoesUnavail
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    const auto selected = fixture.key("b1");
+    fixture.tracking->select(selected);
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
 
-    BenchmarkLibrarySnapshot clash;
-    clash.entries.push_back(loadedEntry(benchmark("b1"), "a.json"));
-    clash.entries.push_back(loadedEntry(benchmark("b1"), "b.json"));
-    fixture.repo->nextScan = {clash, std::nullopt};
+    BenchmarkLibrarySnapshot renamed;
+    renamed.entries.push_back(loadedEntry(benchmark("b1"), "a.json"));
+    renamed.entries.push_back(loadedEntry(benchmark("b1"), "b.json"));
+    fixture.repo->nextScan = {renamed, std::nullopt};
     fixture.benchmarks->refresh();
 
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Unavailable);
     ASSERT_TRUE(snap.selectedId.has_value());
-    EXPECT_EQ(snap.selectedId->value, "b1");
-    EXPECT_EQ(snap.lastKnownSelectedDisplayName, "Tracked");
+    EXPECT_EQ(*snap.selectedId, selected);
+    EXPECT_EQ(snap.lastKnownSelectedDisplayName, "b1");
     EXPECT_FALSE(snap.benchmark.has_value());
     EXPECT_EQ(fixture.tracking->benchmark(), nullptr);
+    EXPECT_EQ(snap.choices.size(), 2U);
 }
 
 // A directory-level scan failure is not a deletion: the library keeps its last accepted snapshot,
@@ -697,7 +711,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, WholeDirectoryRefreshFailureKeepsAccep
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
 
     fixture.repo->nextScan = {std::nullopt, BenchmarkScanFailure::DirectoryUnavailable};
@@ -707,7 +721,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, WholeDirectoryRefreshFailureKeepsAccep
     const auto &snap = fixture.tracking->snapshot();
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
     ASSERT_TRUE(snap.benchmark.has_value());
-    EXPECT_EQ(snap.benchmark->id().value, "b1");
+    EXPECT_EQ(snap.benchmark->id(), fixture.key("b1"));
     EXPECT_NE(fixture.tracking->benchmark(), nullptr);
 }
 
@@ -719,7 +733,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, ProfileChangeInvalidatesProjectionButK
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     const auto choicesBefore = fixture.tracking->snapshot().choices.size();
     const auto selectedBefore = fixture.tracking->snapshot().selectedId;
     const int factsBefore = fixture.profile->fact_request_count;
@@ -733,7 +747,9 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, ProfileChangeInvalidatesProjectionButK
     EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
 }
 
-TEST(BenchmarkTrackingWorkspaceLifecycle, UnavailableSelectionAutoRecoversWhenSameIdReturns) {
+// Keys last only while a filename is present, so a file that vanishes and comes back is a new
+// benchmark: the selection stays Unavailable until the user picks it again.
+TEST(BenchmarkTrackingWorkspaceLifecycle, AFileThatVanishesAndComesBackIsNotReselected) {
     Fixture fixture;
     fixture.known("Alpha", "h1");
     fixture.known("Beta", "h2");
@@ -741,7 +757,7 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, UnavailableSelectionAutoRecoversWhenSa
     fixture.profile->run_facts = {benchmarkFact("h1", 100 * kDay, 250.0F, 60.0F),
                                   benchmarkFact("h2", 101 * kDay, 300.0F, 30.0F)};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     ASSERT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
 
     fixture.repo->nextScan = {BenchmarkLibrarySnapshot{}, std::nullopt};
@@ -751,12 +767,9 @@ TEST(BenchmarkTrackingWorkspaceLifecycle, UnavailableSelectionAutoRecoversWhenSa
     fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
     fixture.benchmarks->refresh();
 
-    const auto &snap = fixture.tracking->snapshot();
-    EXPECT_EQ(snap.availability, BenchmarkTrackingState::Ready);
-    ASSERT_TRUE(snap.selectedId.has_value());
-    EXPECT_EQ(snap.selectedId->value, "b1");
-    ASSERT_TRUE(snap.benchmark.has_value());
-    EXPECT_EQ(snap.benchmark->id().value, "b1");
+    EXPECT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Unavailable);
+    fixture.tracking->select(fixture.key("b1"));
+    EXPECT_EQ(fixture.tracking->snapshot().availability, BenchmarkTrackingState::Ready);
 }
 
 // ---- default selection and remembered choice ------------------------------------------
@@ -785,14 +798,22 @@ namespace {
                                                                   recent);
         }
 
-        std::optional<std::size_t> recencyOf(const std::string &id) const {
+        std::optional<std::size_t> recencyOf(const std::string &stem) const {
             for (const auto &choice: tracking->snapshot().choices)
-                if (choice.id && choice.id->value == id) return choice.recency;
+                if (choice.filename == stem + ".json") return choice.recency;
             return std::nullopt;
+        }
+
+        // The key the service gave `<stem>.json`, or an id no benchmark has when there is no such file.
+        BenchmarkId key(const std::string &stem) const {
+            if (const auto snapshot = benchmarks->snapshot())
+                for (const auto &entry: snapshot->entries)
+                    if (entry.filename == stem + ".json") return entry.id;
+            return BenchmarkId{"absent-" + stem};
         }
     };
 
-    using Ids = std::vector<std::string>;
+    using Files = std::vector<std::string>;
 }
 
 TEST(BenchmarkTrackingWorkspaceSnapshot, ACachedEvaluationIsPublishedAsReadyEvenWithoutALoadedEntry) {
@@ -804,12 +825,13 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ACachedEvaluationIsPublishedAsReadyEven
     fixture.benchmarks = std::make_shared<BenchmarksService>(fixture.repo);
     fixture.recent = std::make_shared<RecentBenchmarks>(fixture.settings);
     // Notify tracking of the recents change before resolution handles the library change.
-    fixture.benchmarks->onChanged([&] { fixture.recent->markCreated("b2"); });
+    fixture.benchmarks->onChanged([&] { fixture.recent->markCreated("b2.json"); });
     fixture.resolution = std::make_shared<BenchmarkResolutionUseCase>(fixture.benchmarks, fixture.profile);
     fixture.tracking = std::make_unique<BenchmarkTrackingUseCase>(fixture.benchmarks, fixture.resolution,
                                                                  fixture.profile, fixture.configuration,
                                                                  fixture.days, fixture.recent);
-    fixture.tracking->select(definition.id);
+    const auto selected = fixture.key("b1");
+    fixture.tracking->select(selected);
     const auto factRequests = fixture.profile->fact_request_count;
     const auto expected = evaluatedBenchmark(definition, fixture.profile->run_facts);
 
@@ -821,7 +843,10 @@ TEST(BenchmarkTrackingWorkspaceSnapshot, ACachedEvaluationIsPublishedAsReadyEven
         EXPECT_TRUE(snapshot.choices.empty());
         ASSERT_TRUE(snapshot.benchmark);
         EXPECT_EQ(fixture.tracking->benchmark(), &*snapshot.benchmark);
-        EXPECT_EQ(snapshot.benchmark->definition(), definition);
+        auto named = definition;
+        named.id = selected;
+        named.name = "b1";
+        EXPECT_EQ(snapshot.benchmark->definition(), named);
         expectSameBenchmark(*snapshot.benchmark, expected, snapshot.playtime.windowDays);
         EXPECT_EQ(fixture.profile->fact_request_count, factRequests);
     });
@@ -848,7 +873,7 @@ TEST(BenchmarkTrackingDefaultSelection, SelectsTheOnlyBenchmark) {
     fixture.tracking->selectDefault();
 
     ASSERT_TRUE(fixture.tracking->selected());
-    EXPECT_EQ(fixture.tracking->selected()->value, "only");
+    EXPECT_EQ(*fixture.tracking->selected(), fixture.key("only"));
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
     EXPECT_EQ(notifications, 1);
 }
@@ -870,7 +895,7 @@ TEST(BenchmarkTrackingDefaultSelection, IgnoresProblemFilesWhenCountingTheOnlyBe
     BenchmarkLibrarySnapshot snapshot;
     snapshot.entries.push_back(fileFor(benchmark("good"), "good.json"));
     snapshot.entries.push_back({"broken.json", "digest",
-                                ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, BenchmarkId{"bad"}, {}}});
+                                ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}}});
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.benchmarks = std::make_shared<BenchmarksService>(fixture.repo);
     fixture.resolution = std::make_shared<BenchmarkResolutionUseCase>(fixture.benchmarks, fixture.profile);
@@ -882,35 +907,35 @@ TEST(BenchmarkTrackingDefaultSelection, IgnoresProblemFilesWhenCountingTheOnlyBe
     fixture.tracking->selectDefault();
 
     ASSERT_TRUE(fixture.tracking->selected());
-    EXPECT_EQ(fixture.tracking->selected()->value, "good");
+    EXPECT_EQ(*fixture.tracking->selected(), fixture.key("good"));
 }
 
 TEST(BenchmarkTrackingDefaultSelection, RestoresTheRememberedBenchmarkAmongSeveral) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"b2"};
+    fixture.settings->recentBenchmarkFiles = {"b2.json"};
     fixture.build({"b1", "b2", "b3"});
 
     fixture.tracking->selectDefault();
 
     ASSERT_TRUE(fixture.tracking->selected());
-    EXPECT_EQ(fixture.tracking->selected()->value, "b2");
+    EXPECT_EQ(*fixture.tracking->selected(), fixture.key("b2"));
     EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
 }
 
 TEST(BenchmarkTrackingDefaultSelection, FallsBackToTheOnlyBenchmarkWhenTheRememberedOneIsGone) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"deleted"};
+    fixture.settings->recentBenchmarkFiles = {"deleted.json"};
     fixture.build({"only"});
 
     fixture.tracking->selectDefault();
 
     ASSERT_TRUE(fixture.tracking->selected());
-    EXPECT_EQ(fixture.tracking->selected()->value, "only");
+    EXPECT_EQ(*fixture.tracking->selected(), fixture.key("only"));
 }
 
 TEST(BenchmarkTrackingDefaultSelection, RememberedButMissingAmongSeveralSelectsNothing) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"deleted"};
+    fixture.settings->recentBenchmarkFiles = {"deleted.json"};
     fixture.build({"b1", "b2"});
 
     fixture.tracking->selectDefault();
@@ -920,37 +945,37 @@ TEST(BenchmarkTrackingDefaultSelection, RememberedButMissingAmongSeveralSelectsN
 
 TEST(BenchmarkTrackingDefaultSelection, NeverReplacesAnExistingSelection) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"b1"};
+    fixture.settings->recentBenchmarkFiles = {"b1.json"};
     fixture.build({"b1", "b2"});
-    fixture.tracking->select(BenchmarkId{"b2"});
+    fixture.tracking->select(fixture.key("b2"));
     int notifications = 0;
     fixture.tracking->onChanged([&] { ++notifications; });
 
     fixture.tracking->selectDefault();
 
-    EXPECT_EQ(fixture.tracking->selected()->value, "b2");
+    EXPECT_EQ(*fixture.tracking->selected(), fixture.key("b2"));
     EXPECT_EQ(notifications, 0);
 }
 
-TEST(BenchmarkTrackingDefaultSelection, SkipsAFrontIdThatIsNoLongerSelectableAndTakesTheNext) {
+TEST(BenchmarkTrackingDefaultSelection, SkipsAFrontFileThatIsNoLongerSelectableAndTakesTheNext) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"deleted", "b3", "b1"};
+    fixture.settings->recentBenchmarkFiles = {"deleted.json", "b3.json", "b1.json"};
     fixture.build({"b1", "b2", "b3"});
 
     fixture.tracking->selectDefault();
 
     ASSERT_TRUE(fixture.tracking->selected());
-    EXPECT_EQ(fixture.tracking->selected()->value, "b3");
+    EXPECT_EQ(*fixture.tracking->selected(), fixture.key("b3"));
 }
 
-TEST(BenchmarkTrackingDefaultSelection, SkipsARecentIdThatNamesAProblemFile) {
+TEST(BenchmarkTrackingDefaultSelection, SkipsARecentFileThatIsAProblemFile) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"bad", "b1"};
+    fixture.settings->recentBenchmarkFiles = {"broken.json", "b1.json"};
     BenchmarkLibrarySnapshot snapshot;
     snapshot.entries.push_back(fileFor(benchmark("b1"), "b1.json"));
     snapshot.entries.push_back(fileFor(benchmark("b2"), "b2.json"));
     snapshot.entries.push_back({"broken.json", "digest",
-                                ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, BenchmarkId{"bad"}, {}}});
+                                ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}}});
     fixture.repo->nextScan = {snapshot, std::nullopt};
     fixture.benchmarks = std::make_shared<BenchmarksService>(fixture.repo);
     fixture.resolution = std::make_shared<BenchmarkResolutionUseCase>(fixture.benchmarks, fixture.profile);
@@ -962,54 +987,54 @@ TEST(BenchmarkTrackingDefaultSelection, SkipsARecentIdThatNamesAProblemFile) {
     fixture.tracking->selectDefault();
 
     ASSERT_TRUE(fixture.tracking->selected());
-    EXPECT_EQ(fixture.tracking->selected()->value, "b1");
+    EXPECT_EQ(*fixture.tracking->selected(), fixture.key("b1"));
 }
 
-TEST(BenchmarkTrackingRecent, SelectMovesItsIdToTheFrontAndNotifiesExactlyOnce) {
+TEST(BenchmarkTrackingRecent, SelectMovesItsFileToTheFrontAndNotifiesExactlyOnce) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"b1", "b2"};
+    fixture.settings->recentBenchmarkFiles = {"b1.json", "b2.json"};
     fixture.build({"b1", "b2", "b3"});
     int notifications = 0;
     fixture.tracking->onChanged([&] { ++notifications; });
 
-    fixture.tracking->select(BenchmarkId{"b3"});
+    fixture.tracking->select(fixture.key("b3"));
 
     EXPECT_EQ(notifications, 1);
-    EXPECT_EQ(fixture.settings->recentBenchmarkIds, (Ids{"b3", "b1", "b2"}));
+    EXPECT_EQ(fixture.settings->recentBenchmarkFiles, (Files{"b3.json", "b1.json", "b2.json"}));
     EXPECT_EQ(fixture.recencyOf("b3"), 0U);
     EXPECT_EQ(fixture.recencyOf("b1"), 1U);
     EXPECT_EQ(fixture.recencyOf("b2"), 2U);
 }
 
-TEST(BenchmarkTrackingRecent, SelectingAnAlreadyFrontIdNotifiesOnce) {
+TEST(BenchmarkTrackingRecent, SelectingTheFrontFileNotifiesOnce) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"b2", "b1"};
+    fixture.settings->recentBenchmarkFiles = {"b2.json", "b1.json"};
     fixture.build({"b1", "b2"});
     int notifications = 0;
     fixture.tracking->onChanged([&] { ++notifications; });
 
-    fixture.tracking->select(BenchmarkId{"b2"});
+    fixture.tracking->select(fixture.key("b2"));
 
     EXPECT_EQ(notifications, 1);
-    EXPECT_EQ(fixture.settings->recentBenchmarkIds, (Ids{"b2", "b1"}));
+    EXPECT_EQ(fixture.settings->recentBenchmarkFiles, (Files{"b2.json", "b1.json"}));
 }
 
 TEST(BenchmarkTrackingRecent, ClearSelectionLeavesTheListUnchanged) {
     RememberingFixture fixture;
     fixture.build({"b1", "b2"});
-    fixture.tracking->select(BenchmarkId{"b2"});
-    const int writes = fixture.settings->recentBenchmarkIdsWrites;
+    fixture.tracking->select(fixture.key("b2"));
+    const int writes = fixture.settings->recentBenchmarkFilesWrites;
 
     fixture.tracking->clearSelection();
 
-    EXPECT_EQ(fixture.settings->recentBenchmarkIds, (Ids{"b2"}));
-    EXPECT_EQ(fixture.settings->recentBenchmarkIdsWrites, writes);
+    EXPECT_EQ(fixture.settings->recentBenchmarkFiles, (Files{"b2.json"}));
+    EXPECT_EQ(fixture.settings->recentBenchmarkFilesWrites, writes);
     EXPECT_EQ(fixture.recencyOf("b2"), 0U);
 }
 
 TEST(BenchmarkTrackingRecent, ChoicesCarryTheirIndexInTheListOrNothing) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"gone", "b3", "b1"};
+    fixture.settings->recentBenchmarkFiles = {"gone.json", "b3.json", "b1.json"};
     fixture.build({"b1", "b2", "b3"});
 
     EXPECT_EQ(fixture.recencyOf("b3"), 1U);
@@ -1019,23 +1044,58 @@ TEST(BenchmarkTrackingRecent, ChoicesCarryTheirIndexInTheListOrNothing) {
 
 TEST(BenchmarkTrackingRecent, ACreateMadeElsewhereReordersTheChoicesAndNotifiesOnce) {
     RememberingFixture fixture;
-    fixture.settings->recentBenchmarkIds = {"b1"};
+    fixture.settings->recentBenchmarkFiles = {"b1.json"};
     fixture.build({"b1", "b2"});
     int notifications = 0;
     fixture.tracking->onChanged([&] { ++notifications; });
 
-    fixture.recent->markCreated("b2");
+    fixture.recent->markCreated("b2.json");
 
     EXPECT_EQ(notifications, 1);
     EXPECT_EQ(fixture.recencyOf("b1"), 0U);
     EXPECT_EQ(fixture.recencyOf("b2"), 1U);
 }
 
+TEST(BenchmarkTrackingRecent, ARenamingSaveKeepsTheSelectionReady) {
+    RememberingFixture fixture;
+    fixture.build({"b1", "b2"});
+    const auto selected = fixture.key("b1");
+    fixture.tracking->select(selected);
+    ASSERT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
+
+    auto renamed = benchmark("b1");
+    renamed.id = selected;
+    renamed.name = "Renamed";
+    fixture.repo->nextWrite = {std::string{"d2"}, std::nullopt};
+    ASSERT_TRUE(fixture.benchmarks->save({renamed, BenchmarkEditToken{selected, "b1.json", "d-b1.json"}}).ok());
+
+    EXPECT_EQ(fixture.tracking->selected(), std::optional{selected});
+    EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
+    EXPECT_EQ(fixture.tracking->snapshot().lastKnownSelectedDisplayName, "Renamed");
+    EXPECT_EQ(fixture.key("Renamed"), selected);
+}
+
+TEST(BenchmarkTrackingRecent, AFileRenamedOutsideTheAppIsANewChoiceWithNoRecency) {
+    RememberingFixture fixture;
+    fixture.settings->recentBenchmarkFiles = {"b1.json"};
+    fixture.build({"b1"});
+    fixture.tracking->selectDefault();
+    ASSERT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Ready);
+
+    BenchmarkLibrarySnapshot moved;
+    moved.entries.push_back(fileFor(benchmark("b1"), "moved.json"));
+    fixture.repo->nextScan = {moved, std::nullopt};
+    fixture.benchmarks->refresh();
+
+    EXPECT_EQ(fixture.tracking->state(), BenchmarkTrackingState::Unavailable);
+    EXPECT_EQ(fixture.recencyOf("moved"), std::nullopt);
+}
+
 TEST(BenchmarkTrackingRecent, WithoutAListChoicesHaveNoRecency) {
     Fixture fixture;
     fixture.repo->nextScan = {snapshotFor(benchmark("b1")), std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
 
     ASSERT_EQ(fixture.tracking->snapshot().choices.size(), 1U);
     EXPECT_FALSE(fixture.tracking->snapshot().choices.front().recency);
@@ -1045,7 +1105,7 @@ TEST(BenchmarkTrackingRecent, WithoutAListChoicesHaveNoRecency) {
 TEST(BenchmarkTrackingDefaultSelection, ChoiceSurvivesIntoANewSession) {
     RememberingFixture first;
     first.build({"b1", "b2", "b3"});
-    first.tracking->select(BenchmarkId{"b3"});
+    first.tracking->select(first.key("b3"));
 
     RememberingFixture second;
     second.settings = first.settings;
@@ -1054,7 +1114,7 @@ TEST(BenchmarkTrackingDefaultSelection, ChoiceSurvivesIntoANewSession) {
     second.tracking->selectDefault();
 
     ASSERT_TRUE(second.tracking->selected());
-    EXPECT_EQ(second.tracking->selected()->value, "b3");
+    EXPECT_EQ(*second.tracking->selected(), second.key("b3"));
 }
 
 TEST(BenchmarkTrackingDefaultSelection, WithoutSettingsOnlyTheSoleBenchmarkRuleApplies) {
@@ -1065,7 +1125,7 @@ TEST(BenchmarkTrackingDefaultSelection, WithoutSettingsOnlyTheSoleBenchmarkRuleA
     fixture.tracking->selectDefault();
 
     ASSERT_TRUE(fixture.tracking->selected());
-    EXPECT_EQ(fixture.tracking->selected()->value, "only");
+    EXPECT_EQ(*fixture.tracking->selected(), fixture.key("only"));
 }
 
 TEST(BenchmarkTracking, RequestsEveryExplicitLinkedHashOnceAndTheProfileIsNeverAskedForARollingSeries_R24) {
@@ -1074,7 +1134,7 @@ TEST(BenchmarkTracking, RequestsEveryExplicitLinkedHashOnceAndTheProfileIsNeverA
     value.uncategorized[0].hashes = {"h1", "new", "h2"};
     fixture.repo->nextScan = {snapshotFor(value), std::nullopt};
     fixture.build();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
     EXPECT_EQ(fixture.profile->requested_fact_scenarios.size(), 3U);
     EXPECT_TRUE(fixture.profile->requested_rolling_scenarios.empty());
     EXPECT_EQ(fixture.profile->filtered_rolling_request_count, 0);
@@ -1124,7 +1184,7 @@ namespace {
 
         void start() {
             build();
-            tracking->select(BenchmarkId{"b1"});
+            tracking->select(key("b1"));
             tracking->onChanged([this] { ++tracked; });
             tracking->onPlaytimeChanged([this] { ++playtimeOnly; });
         }
@@ -1845,7 +1905,7 @@ TEST(BenchmarkTrackingStyle, TheStyleFollowsTheGraphAcrossBenchmarkSelection) {
     const auto committed = fixture.tracking->presentation(GraphKey::BenchmarkRank);
 
     fixture.tracking->clearSelection();
-    fixture.tracking->select(BenchmarkId{"b1"});
+    fixture.tracking->select(fixture.key("b1"));
 
     EXPECT_EQ(fixture.tracking->presentation(GraphKey::BenchmarkRank), committed);
     EXPECT_EQ(committed.seriesStyle("rank").color, (RgbaColor{4, 4, 4, 255}));

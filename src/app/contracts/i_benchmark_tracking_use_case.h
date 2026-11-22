@@ -19,8 +19,8 @@ namespace ksv::application {
     public:
         virtual ~IBenchmarkTrackingUseCase() = default;
 
-        // An explicit choice; it moves to the front of the recent-benchmarks list, which is what
-        // the next launch restores from. Notifies once.
+        // An explicit choice; its file moves to the front of the recent-benchmarks list, which is
+        // what the next launch restores from. Notifies once.
         virtual void select(const domain::BenchmarkId &id) = 0;
         // Leaves the recent-benchmarks list untouched.
         virtual void clearSelection() = 0;
@@ -31,8 +31,9 @@ namespace ksv::application {
         virtual void selectDefault() = 0;
         // Valid until the next select/clearSelection or service callback; never retained by callers.
         [[nodiscard]] virtual const BenchmarkWorkspaceSnapshot &snapshot() const = 0;
-        // The selected id is kept even while the state is Unavailable, so a benchmark that
-        // reappears on the next refresh comes back without the user reselecting it.
+        // The selected id is kept even while the state is Unavailable. Ids are keys for filenames
+        // within this session, so a file that comes back after vanishing is a new benchmark and is
+        // not reselected.
         [[nodiscard]] virtual std::optional<domain::BenchmarkId> selected() const = 0;
         [[nodiscard]] virtual BenchmarkTrackingState state() const = 0;
         // nullptr unless state() is Ready.

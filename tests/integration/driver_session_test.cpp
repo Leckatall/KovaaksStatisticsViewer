@@ -14,6 +14,7 @@
 #include <QUrl>
 
 #include "benchmarks/benchmark.h"
+#include "data/benchmarks_service.h"
 #include "driver_dataset.h"
 #include "driver_ports.h"
 #include "driver_spec.h"
@@ -582,12 +583,13 @@ namespace {
         const auto *profile = std::get_if<domain::UserProfile>(&loadResult);
         if (!profile) throw std::runtime_error("seeded profile did not load");
 
-        const auto scan = qt_data::BenchmarkStore(data.benchmarksDir().toStdString()).scan();
-        if (!scan.snapshot) throw std::runtime_error("benchmark scan failed");
-        const auto file = std::ranges::find_if(scan.snapshot->entries, [&](const data::BenchmarkFileEntry &candidate) {
+        const data::BenchmarksService service(std::make_shared<qt_data::BenchmarkStore>(data.benchmarksDir().toStdString()));
+        const auto library = service.snapshot();
+        if (!library) throw std::runtime_error("benchmark scan failed");
+        const auto file = std::ranges::find_if(library->entries, [&](const data::BenchmarkFileEntry &candidate) {
             return candidate.filename == filename;
         });
-        if (file == scan.snapshot->entries.end()) throw std::runtime_error("no benchmark file " + filename);
+        if (file == library->entries.end()) throw std::runtime_error("no benchmark file " + filename);
         const auto &loaded = std::get<data::LoadedBenchmark>(file->content);
 
         std::set<std::string> played;
@@ -605,10 +607,9 @@ namespace {
     }
 
     TEST(DriverBenchmarkFixtureTest, DemoBenchmarkSpreadsTheRichProfileAcrossEveryRowState) {
-        const auto seeded = evaluateSeededBenchmark("rich", "driver-demo.json");
+        const auto seeded = evaluateSeededBenchmark("rich", driver::kDefaultBenchmarkFile);
         const auto &benchmark = seeded.benchmark;
         ASSERT_EQ(benchmark.completeness().completeness, domain::Completeness::Trackable);
-        EXPECT_EQ(benchmark.id().value, driver::kDefaultBenchmarkId);
 
         // Above the top tier, with its recent average back inside the Platinum chunk.
         EXPECT_EQ(seeded.attained("entry-gallery-primary"), "platinum");
@@ -663,7 +664,7 @@ namespace {
     }
 
     TEST(DriverBenchmarkFixtureTest, ManyTiersBenchmarkRanksEveryRowOnATwelveTierLadder) {
-        const auto seeded = evaluateSeededBenchmark("rich", "driver-many-tiers.json");
+        const auto seeded = evaluateSeededBenchmark("rich", "Driver Many Tiers Benchmark.json");
         const auto &benchmark = seeded.benchmark;
         ASSERT_EQ(benchmark.completeness().completeness, domain::Completeness::Trackable);
         EXPECT_EQ(benchmark.tiers().size(), 12U);
@@ -686,13 +687,44 @@ namespace {
     }
 
     TEST(DriverBenchmarkFixtureTest, SingleScenarioDatasetsLeaveTheOtherRowsUnplayed) {
-        const auto seeded = evaluateSeededBenchmark("single", "driver-demo.json");
+        const auto seeded = evaluateSeededBenchmark("single", driver::kDefaultBenchmarkFile);
         EXPECT_EQ(seeded.attained("entry-gallery-primary"), "silver");
         for (const auto *entryId: {"entry-gallery-pasu", "entry-gallery-smoothbot", "entry-gallery-flyts",
                                    "entry-gallery-celestial"}) {
             EXPECT_EQ(seeded.scenario(entryId).matchState(), domain::ScenarioMatchState::MappedUnavailable) << entryId;
         }
         EXPECT_FALSE(seeded.benchmark.attainedRank().has_value());
+    }
+
+    // The fixtures ship in the current format under their names, so a session never migrates them,
+    // and the file the driver remembers as most recent is among them.
+    TEST(DriverBenchmarkFixtureTest, SyntheticDatasetsSeedTheDefaultBenchmarkUnderItsName) {
+        QTemporaryDir dir;
+        const driver::SessionData data{dir.path()};
+        ASSERT_TRUE(driver::seedSessionData(data, "rich", {}, QStringLiteral(KSV_DRIVER_BENCHMARKS_DIR)).isEmpty());
+        const auto seededFiles = QDir(data.benchmarksDir()).entryList({"*.json"}, QDir::Files, QDir::Name);
+        QStringList bytesBefore;
+        for (const auto &name: seededFiles) {
+            QFile file(QDir(data.benchmarksDir()).filePath(name));
+            ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+            bytesBefore.push_back(QString::fromUtf8(file.readAll()));
+        }
+
+        const data::BenchmarksService service(std::make_shared<qt_data::BenchmarkStore>(data.benchmarksDir().toStdString()));
+
+        const auto library = service.snapshot();
+        ASSERT_TRUE(library.has_value());
+        const auto demo = std::ranges::find_if(library->entries, [](const data::BenchmarkFileEntry &entry) {
+            return entry.filename == driver::kDefaultBenchmarkFile;
+        });
+        ASSERT_NE(demo, library->entries.end());
+        EXPECT_TRUE(std::holds_alternative<data::LoadedBenchmark>(demo->content));
+        EXPECT_EQ(QDir(data.benchmarksDir()).entryList({"*.json"}, QDir::Files, QDir::Name), seededFiles);
+        for (qsizetype i = 0; i < seededFiles.size(); ++i) {
+            QFile file(QDir(data.benchmarksDir()).filePath(seededFiles[i]));
+            ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+            EXPECT_EQ(QString::fromUtf8(file.readAll()), bytesBefore[i]) << seededFiles[i].toStdString();
+        }
     }
 
     TEST(DriverFaultTest, ParsesPortsOpsAndEffectsAndNamesBadInput) {
@@ -829,16 +861,17 @@ namespace {
         driver::SettingAssignment assignment;
         ASSERT_TRUE(driver::parseSettingAssignment("driverSettingTest/visible=false", assignment).isEmpty());
         ASSERT_TRUE(driver::applySetting(assignment, service).isEmpty());
-        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/recentIds=[\"spec-bench\", \"other\"]", assignment)
+        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/recentFiles=[\"Spec Bench.json\", \"other.json\"]",
+                                                   assignment)
             .isEmpty());
         ASSERT_TRUE(driver::applySetting(assignment, service).isEmpty());
 
         const QSettings settings(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         EXPECT_FALSE(settings.value("driverSettingTest/visible", true).toBool());
-        EXPECT_EQ(service.getRecentBenchmarkIds(), (std::vector<std::string>{"spec-bench", "other"}));
+        EXPECT_EQ(service.getRecentBenchmarkFiles(), (std::vector<std::string>{"Spec Bench.json", "other.json"}));
 
-        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/recentIds=", assignment).isEmpty());
+        ASSERT_TRUE(driver::parseSettingAssignment("benchmarks/recentFiles=", assignment).isEmpty());
         ASSERT_TRUE(driver::applySetting(assignment, service).isEmpty());
-        EXPECT_TRUE(service.getRecentBenchmarkIds().empty());
+        EXPECT_TRUE(service.getRecentBenchmarkFiles().empty());
     }
 }

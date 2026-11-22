@@ -40,6 +40,9 @@ namespace ksv::presentation {
         // been reclassified as a problem entry since it was opened or last saved.
         Q_PROPERTY(bool baselineStale READ baselineStale NOTIFY draftChanged)
         Q_PROPERTY(QString benchmarkName READ benchmarkName NOTIFY draftChanged)
+        // Why the working name cannot be saved, or empty. A blank name is reported only once Save
+        // has been tried on this working copy.
+        Q_PROPERTY(QString nameProblem READ nameProblem NOTIFY draftChanged)
         // Empty when no draft is open; lets the dialog tell a delete that targets the draft
         // being edited from one that targets an unrelated library entry.
         Q_PROPERTY(QString draftId READ draftId NOTIFY draftChanged)
@@ -77,6 +80,7 @@ namespace ksv::presentation {
                    m_draftCompleteness.completeness == domain::Completeness::Trackable;
         }
         [[nodiscard]] const QString &benchmarkName() const { return m_benchmarkName; }
+        [[nodiscard]] const QString &nameProblem() const { return m_nameProblem; }
         [[nodiscard]] const QString &draftId() const { return m_draftId; }
         [[nodiscard]] const QVariantList &libraryEntries() const { return m_libraryEntries; }
         [[nodiscard]] const QVariantList &validationIssues() const { return m_validationIssues; }
@@ -179,6 +183,7 @@ namespace ksv::presentation {
         QVariantMap applyEdit(
             const std::function<domain::BenchmarkEditResult(domain::BenchmarkEditor &)> &op);
         void recomputeAfterLocalEdit();
+        [[nodiscard]] QString nameProblemText(application::BenchmarkNameProblem problem) const;
 
         // One Undo step: the session exactly as it was before a committed edit. Accepted baseline,
         // token, library and profile state are deliberately absent; Undo never rewinds them.
@@ -215,9 +220,11 @@ namespace ksv::presentation {
         bool m_draftDirty = false;
         bool m_draftFromLibrary = false;
         bool m_baselineStale = false;
+        bool m_saveAttempted = false;
         std::function<std::string()> m_idFactory;
 
         QString m_benchmarkName;
+        QString m_nameProblem;
         QString m_draftId;
         QVariantList m_libraryEntries;
         QVariantList m_validationIssues;

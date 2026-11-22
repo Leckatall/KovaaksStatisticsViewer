@@ -181,7 +181,7 @@ int main(int argc, char *argv[]) {
         if (driver::datasetSetsKovaaksDir(dataset)) settings->setKovaaksDirs({data.root.toStdString()});
         settings->setProfilePath(data.profilePath().toStdString());
         // With more than one benchmark the app selects none until one is picked.
-        if (driver::datasetShipsBenchmarks(dataset)) settings->setRecentBenchmarkIds({driver::kDefaultBenchmarkId});
+        if (driver::datasetShipsBenchmarks(dataset)) settings->setRecentBenchmarkFiles({driver::kDefaultBenchmarkFile});
     }
     if (compose) {
         for (const auto &assignment: settingAssignments) {

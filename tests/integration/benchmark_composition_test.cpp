@@ -41,9 +41,9 @@ using namespace ksv::data;
 namespace {
     QByteArray trackableJson() {
         return R"({
-            "schemaVersion": 1, "id": "b1", "name": "Composed",
+            "schemaVersion": 3,
             "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
-            "uncategorized": [ { "id": "s1", "name": "One", "hash": null,
+            "uncategorized": [ { "id": "s1", "name": "One", "hashes": [],
                 "thresholds": [ { "tierId": "t1", "score": 100.0 } ] } ],
             "categories": []
         })";
@@ -51,12 +51,34 @@ namespace {
 
     QByteArray unmappedJson() {
         return R"({
-            "schemaVersion": 1, "id": "auto-1", "name": "Auto",
+            "schemaVersion": 3,
             "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
-            "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hash": null,
+            "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hashes": [],
                 "thresholds": [ { "tierId": "t1", "score": 100.0 } ] } ],
             "categories": []
         })";
+    }
+
+    // The in-session key the library gave `filename`, which selection and the editor address it by.
+    domain::BenchmarkId keyOf(App &app, const std::string &filename) {
+        if (const auto library = app.benchmarksService()->snapshot())
+            for (const auto &entry: library->entries)
+                if (entry.filename == filename) return entry.id;
+        ADD_FAILURE() << "no library entry " << filename;
+        return {};
+    }
+
+    QString keyText(App &app, const std::string &filename) { return QString::fromStdString(keyOf(app, filename).value); }
+
+    void writeBytes(const QString &path, const QByteArray &bytes) {
+        QFile file(path);
+        ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+        file.write(bytes);
+    }
+
+    QByteArray readBytes(const QString &path) {
+        QFile file(path);
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
     }
 }
 
@@ -81,12 +103,12 @@ TEST(BenchmarkComposition, RealGraphAutoResolvesAScenarioNameAtStartup) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     }
     const auto resolutionSnapshot = app.benchmarkResolutionUseCase()->snapshot();
-    const auto resolutionIt = resolutionSnapshot.resolutions.find(domain::BenchmarkId{"auto-1"});
+    const auto resolutionIt = resolutionSnapshot.resolutions.find(keyOf(app, "auto.json"));
     ASSERT_NE(resolutionIt, resolutionSnapshot.resolutions.end());
     const auto &resolutions = resolutionIt->second;
     ASSERT_EQ(resolutions.size(), 1U);
     EXPECT_EQ(resolutions[0].state, domain::ScenarioMatchState::Resolved);
-    const qt_data::BenchmarkStore reread(benchmarks.path().toStdString());
+    qt_data::BenchmarkStore reread(benchmarks.path().toStdString());
     const auto rescanned = reread.scan();
     ASSERT_TRUE(rescanned.snapshot.has_value());
     const auto *loaded = std::get_if<LoadedBenchmark>(&rescanned.snapshot->entries[0].content);
@@ -118,7 +140,7 @@ TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
 
     const auto tracking = app.benchmarkTrackingUseCase();
     ASSERT_NE(tracking, nullptr);
-    tracking->select(domain::BenchmarkId{"auto-1"});
+    tracking->select(keyOf(app, "auto.json"));
     ASSERT_EQ(tracking->state(), BenchmarkTrackingState::Ready);
     const auto *benchmark = tracking->benchmark();
     ASSERT_NE(benchmark, nullptr);
@@ -131,14 +153,13 @@ TEST(BenchmarkComposition, RealGraphProducesProjectionForResolvedBenchmark) {
 }
 
 namespace {
-    // A valid, editable document for the given embedded id, used to simulate a hand edit
-    // of a managed file on disk.
-    QByteArray externallyEditedJson(const std::string &id) {
+    // A valid, editable document with no tiers, used to simulate a hand edit of a managed file on disk.
+    QByteArray externallyEditedJson() {
         return R"({
-            "schemaVersion": 1, "id": ")" + QByteArray::fromStdString(id) + R"(", "name": "Externally Edited",
+            "schemaVersion": 3,
             "tiers": [],
             "uncategorized": [
-                { "id": "s1", "name": "One", "hash": null, "thresholds": [] }
+                { "id": "s1", "name": "One", "hashes": [], "thresholds": [] }
             ],
             "categories": []
         })";
@@ -185,15 +206,14 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     EXPECT_TRUE(working.tiers.empty());
     const domain::BenchmarkId benchmarkId = working.id;
 
-    const auto savedPath =
-        QDir(dir.path()).absoluteFilePath(QString::fromStdString(benchmarkId.value) + ".json");
+    const auto savedPath = QDir(dir.path()).absoluteFilePath("Viscose Intermediate.json");
     working.name = "Viscose Intermediate";
     const auto save = manager->save(working, import.seed->token);
     ASSERT_TRUE(save.ok());
     ASSERT_TRUE(QFile::exists(savedPath));
     ASSERT_TRUE(service->snapshot().has_value());
     ASSERT_EQ(service->snapshot()->entries.size(), 1U);
-    EXPECT_EQ(service->snapshot()->entries.front().filename, benchmarkId.value + ".json");
+    EXPECT_EQ(service->snapshot()->entries.front().filename, "Viscose Intermediate.json");
     const auto savedSnapshot = service->snapshot();
     const auto *savedImport = std::get_if<LoadedBenchmark>(&savedSnapshot->entries.front().content);
     ASSERT_NE(savedImport, nullptr);
@@ -211,7 +231,7 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     {
         QFile file(savedPath);
         ASSERT_TRUE(file.open(QIODevice::WriteOnly));
-        file.write(externallyEditedJson(benchmarkId.value));
+        file.write(externallyEditedJson());
     }
     domain::BenchmarkDefinition stale = reopened->benchmark;
     stale.name = "Renamed After External Edit";
@@ -220,14 +240,15 @@ TEST(BenchmarkComposition, AuthoringRoundTripImportsSavesReopensAndDeletes) {
     {
         QFile file(savedPath);
         ASSERT_TRUE(file.open(QIODevice::ReadOnly));
-        EXPECT_EQ(file.readAll(), externallyEditedJson(benchmarkId.value));
+        EXPECT_EQ(file.readAll(), externallyEditedJson());
     }
 
     // Explicit refresh admits the external edit; the reopened definition is then deletable.
     manager->refresh();
     const auto readmitted = manager->openBenchmark(benchmarkId);
     ASSERT_TRUE(readmitted.has_value());
-    EXPECT_EQ(readmitted->benchmark.name, "Externally Edited");
+    EXPECT_EQ(readmitted->benchmark.name, "Viscose Intermediate");
+    EXPECT_TRUE(readmitted->benchmark.tiers.empty()) << "the hand-edited content was admitted";
 
     const auto deleted = manager->deleteBenchmark(*readmitted->token);
     ASSERT_TRUE(deleted.ok());
@@ -261,7 +282,7 @@ TEST(BenchmarkComposition, RefreshLoadsACopiedFileAndClearsAFixedProblemWithoutR
     // A file copied in from another KSV install, plus a repaired replacement for the broken one.
     writeFile("copied.json", trackableJson());
     QByteArray repaired = trackableJson();
-    repaired.replace("\"id\": \"b1\", \"name\": \"Composed\"", "\"id\": \"b2\", \"name\": \"Repaired\"");
+    repaired.replace("\"name\": \"Bronze\"", "\"name\": \"Repaired\"");
     ASSERT_NE(repaired, trackableJson());
     writeFile("broken.json", repaired);
     app.benchmarkManagerUseCase()->refresh();
@@ -270,16 +291,16 @@ TEST(BenchmarkComposition, RefreshLoadsACopiedFileAndClearsAFixedProblemWithoutR
     ASSERT_TRUE(refreshed.has_value());
     const auto &entries = refreshed->entries;
     ASSERT_EQ(entries.size(), 2U);
-    std::map<std::string, std::string> namesByFile;
+    std::map<std::string, std::string> tierByName;
     for (const auto &entry: entries) {
         const auto *loaded = std::get_if<LoadedBenchmark>(&entry.content);
         ASSERT_NE(loaded, nullptr) << entry.filename;
-        namesByFile[entry.filename] = loaded->benchmark.name;
+        tierByName[loaded->benchmark.name] = loaded->benchmark.tiers.at(0).name;
     }
-    EXPECT_EQ(namesByFile["broken.json"], "Repaired");
-    EXPECT_EQ(namesByFile["copied.json"], "Composed");
+    EXPECT_EQ(tierByName["broken"], "Repaired");
+    EXPECT_EQ(tierByName["copied"], "Bronze");
 
-    app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"b1"});
+    app.benchmarkTrackingUseCase()->select(keyOf(app, "copied.json"));
     EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Ready);
 }
 
@@ -292,7 +313,7 @@ TEST(BenchmarkComposition, UnsupportedFileIsReportedAndNeverRewrittenByAutomatic
     ASSERT_TRUE(benchmarks.isValid());
     // Auto-mappable by name if it were loaded, so only the version check keeps it untouched.
     QByteArray future = unmappedJson();
-    future.replace("\"schemaVersion\": 1", "\"schemaVersion\": 99");
+    future.replace("\"schemaVersion\": 3", "\"schemaVersion\": 99");
     ASSERT_NE(future, unmappedJson());
     const auto path = QDir(benchmarks.path()).absoluteFilePath("future.json");
     {
@@ -316,7 +337,7 @@ TEST(BenchmarkComposition, UnsupportedFileIsReportedAndNeverRewrittenByAutomatic
     ASSERT_NE(problem, nullptr);
     EXPECT_EQ(problem->problem, BenchmarkFileProblem::Unsupported);
     EXPECT_EQ(problem->schemaVersion, std::make_optional(99));
-    app.benchmarkTrackingUseCase()->select(domain::BenchmarkId{"auto-1"});
+    app.benchmarkTrackingUseCase()->select(keyOf(app, "future.json"));
     EXPECT_EQ(app.benchmarkTrackingUseCase()->state(), BenchmarkTrackingState::Unavailable);
 
     QFile file(path);
@@ -346,7 +367,7 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
     ASSERT_NE(vm, nullptr);
     auto service = app.benchmarksService();
 
-    ASSERT_TRUE(vm->openBenchmark("b1"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(app, "b1.json")));
     vm->setBenchmarkName("Edited locally");
     ASSERT_TRUE(vm->dirty());
     ASSERT_FALSE(vm->baselineStale());
@@ -355,7 +376,7 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
     {
         QFile file(path);
         ASSERT_TRUE(file.open(QIODevice::WriteOnly));
-        file.write(externallyEditedJson("b1"));
+        file.write(externallyEditedJson());
     }
     vm->refresh();
 
@@ -364,7 +385,7 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
     const auto refreshedSnapshot = service->snapshot();
     const auto *refreshed = std::get_if<LoadedBenchmark>(&refreshedSnapshot->entries.front().content);
     ASSERT_NE(refreshed, nullptr);
-    EXPECT_EQ(refreshed->benchmark.name, "Externally Edited");   // library reflects the external file
+    EXPECT_TRUE(refreshed->benchmark.tiers.empty());             // library reflects the external file
 
     EXPECT_EQ(vm->benchmarkName(), "Edited locally");            // working copy unchanged
     EXPECT_TRUE(vm->dirty());
@@ -376,12 +397,12 @@ TEST(BenchmarkComposition, RefreshDuringEditPreservesWorkingCopyAndStaleSaveConf
     {
         QFile file(path);
         ASSERT_TRUE(file.open(QIODevice::ReadOnly));
-        EXPECT_EQ(file.readAll(), externallyEditedJson("b1"));  // file on disk intact
+        EXPECT_EQ(file.readAll(), externallyEditedJson());  // file on disk intact
     }
     const auto afterConflictSnapshot = service->snapshot();
     const auto *afterConflict = std::get_if<LoadedBenchmark>(&afterConflictSnapshot->entries.front().content);
     ASSERT_NE(afterConflict, nullptr);
-    EXPECT_EQ(afterConflict->benchmark.name, "Externally Edited");  // accepted memory still the refreshed value
+    EXPECT_TRUE(afterConflict->benchmark.tiers.empty());  // accepted memory still the refreshed value
 }
 
 TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMapping) {
@@ -395,7 +416,7 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
     {
         QFile file(path);
         ASSERT_TRUE(file.open(QIODevice::WriteOnly));
-        file.write(unmappedJson());  // id "auto-1", hashless scenario "1wall6targets TE"
+        file.write(unmappedJson());  // hashless scenario "1wall6targets TE"
     }
 
     auto repo = std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString());
@@ -419,7 +440,7 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
     // No matching perf yet, so nothing auto-maps. Open the benchmark for editing (takes the lease).
     ASSERT_TRUE(service->snapshot().has_value());
     EXPECT_FALSE(hashOf(*service->snapshot()).has_value());
-    ASSERT_TRUE(manager->openBenchmark(domain::BenchmarkId{"auto-1"}).has_value());
+    ASSERT_TRUE(manager->openBenchmark(keyOf(app, "auto.json")).has_value());
 
     // The scenario becomes uniquely resolvable through a profile rebuild.
     ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
@@ -438,7 +459,7 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
     EXPECT_FALSE(hashOf(*service->snapshot()).has_value());
 
     // An external refresh admits a new definition/digest while the editor is still open.
-    QByteArray refreshed = QByteArray(unmappedJson()).replace(R"("name": "Auto")", R"("name": "Auto v2")");
+    QByteArray refreshed = QByteArray(unmappedJson()).replace(R"("name": "Bronze")", R"("name": "Bronze v2")");
     {
         QFile file(path);
         ASSERT_TRUE(file.open(QIODevice::WriteOnly));
@@ -457,7 +478,7 @@ TEST(BenchmarkComposition, EditLeaseDefersAndReleasePersistsLatestAutomaticMappi
     const auto *finalLoaded =
         std::get_if<LoadedBenchmark>(&finalScan.snapshot->entries.front().content);
     ASSERT_NE(finalLoaded, nullptr);
-    EXPECT_EQ(finalLoaded->benchmark.name, "Auto v2");  // reconciled against the refreshed definition
+    EXPECT_EQ(finalLoaded->benchmark.tiers.at(0).name, "Bronze v2");  // reconciled against the refreshed definition
     EXPECT_EQ(finalLoaded->benchmark.uncategorized.front().hashes, std::vector<std::string>{"3e50391f3c3f484c10a4b8fb362ded17"});
     EXPECT_EQ(hashOf(*service->snapshot()), std::optional<std::string>{std::string{"3e50391f3c3f484c10a4b8fb362ded17"}});
 }
@@ -472,14 +493,14 @@ namespace {
     // recent averages and the nested hierarchy at once.
     QByteArray hierarchyTrackableJson() {
         return R"({
-            "schemaVersion": 1, "id": "b-track", "name": "Tracked",
+            "schemaVersion": 3,
             "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
             "uncategorized": [],
             "categories": [
                 { "id": "c1", "name": "Aim", "color": [10,20,30,255], "scenarios": [],
                   "subcategories": [
                     { "id": "sc1", "name": "Clicking", "color": [40,50,60,255], "scenarios": [
-                        { "id": "s1", "name": "Wall Six", "hash": ")" + QByteArray(kWallSixHash) + R"(",
+                        { "id": "s1", "name": "Wall Six", "hashes": [")" + QByteArray(kWallSixHash) + R"("],
                           "thresholds": [ { "tierId": "t1", "score": 1.0 } ] }
                     ] }
                   ] }
@@ -491,10 +512,10 @@ namespace {
     // perf, so startup auto-resolution leaves it Unresolved until a manager mapping edit is saved.
     QByteArray unresolvedTrackableJson() {
         return R"({
-            "schemaVersion": 1, "id": "b-cascade", "name": "Cascade",
+            "schemaVersion": 3,
             "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
             "uncategorized": [
-                { "id": "s1", "name": "Needs Mapping", "hash": null,
+                { "id": "s1", "name": "Needs Mapping", "hashes": [],
                   "thresholds": [ { "tierId": "t1", "score": 1.0 } ] }
             ],
             "categories": []
@@ -547,7 +568,7 @@ TEST(BenchmarkWorkspaceComposition, SelectingLoadedBenchmarkThroughTrackingViewM
 
     auto *vm = w->app->benchmarkTrackingVm();
     QSignalSpy changed(vm, &presentation::BenchmarkTrackingViewModel::changed);
-    vm->selectBenchmark(QStringLiteral("b-track"));
+    vm->selectBenchmark(keyText(*w->app, "bench.json"));
     QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
 
     EXPECT_GE(changed.count(), 1);
@@ -597,7 +618,7 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
     ASSERT_NE(w, nullptr);
 
     auto *vm = w->app->benchmarkTrackingVm();
-    vm->selectBenchmark(QStringLiteral("b-cascade"));
+    vm->selectBenchmark(keyText(*w->app, "bench.json"));
     QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
 
     {
@@ -617,7 +638,7 @@ TEST(BenchmarkWorkspaceComposition, ManagerMappingSaveRefreshesSelectedTrackingW
 
     // Map the scenario and persist it through the manager use case; do NOT touch the tracking VM.
     auto manager = w->app->benchmarkManagerUseCase();
-    const auto seed = manager->openBenchmark(domain::BenchmarkId{"b-cascade"});
+    const auto seed = manager->openBenchmark(keyOf(*w->app, "bench.json"));
     ASSERT_TRUE(seed.has_value());
     domain::BenchmarkDefinition mapped = seed->benchmark;
     ASSERT_EQ(mapped.uncategorized.size(), 1U);
@@ -732,7 +753,7 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
     auto *vm = w->app->benchmarkManagerVm();
     const auto path = QDir(benchmarks.path()).absoluteFilePath("bench.json");
 
-    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
     ASSERT_TRUE(vm->pasteText(at("rankHeader"), "Silver\tGold\tPlatinum\tDiamond")["ok"].toBool());
     ASSERT_EQ(vm->tiers().size(), 5);
     QStringList tiers;
@@ -754,8 +775,9 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
 
     // Stored JSON: invalid inputs are simply absent thresholds; everything finite survives as typed.
     const auto stored = readJson(path);
-    EXPECT_EQ(stored.value("schemaVersion").toInt(), 2);
-    EXPECT_EQ(stored.value("id").toString(), "b-track");
+    EXPECT_EQ(stored.value("schemaVersion").toInt(), 3);
+    EXPECT_FALSE(stored.contains("id"));
+    EXPECT_FALSE(stored.contains("name"));
     const auto s1 = jsonEntry(stored, "s1");
     EXPECT_EQ(s1.value("name").toString(), "Wall Six");
     EXPECT_EQ(s1.value("hashes").toArray(), (QJsonArray{QString::fromLatin1(kWallSixHash)}));
@@ -790,7 +812,7 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
 
     // Reopening from accepted data shows the same incomplete definition.
     vm->discard();
-    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
     EXPECT_FALSE(vm->draftTrackable());
     EXPECT_FALSE(tableCell(*vm, unnamed, tiers[1], TableRole::HasValueRole).toBool());
     EXPECT_EQ(tableCell(*vm, unnamed, tiers[3], TableRole::DisplayTextRole).toString(), "4");
@@ -799,7 +821,7 @@ TEST(BenchmarkTableComposition, MalformedSaveRoundTrip) {
 
     // Tracking treats it as incomplete: no official rank, but the scenario facts remain.
     auto *tracking = w->app->benchmarkTrackingVm();
-    tracking->selectBenchmark(QStringLiteral("b-track"));
+    tracking->selectBenchmark(keyText(*w->app, "bench.json"));
     QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     EXPECT_EQ(tracking->state(), QStringLiteral("incomplete"));
     EXPECT_EQ(tracking->attainedRank(), QObject::tr("Unavailable"));
@@ -822,11 +844,11 @@ TEST(BenchmarkTableComposition, ConflictAndFailedWriteKeepSession) {
     const auto path = QDir(benchmarks.path()).absoluteFilePath("bench.json");
 
     // --- Conflict: the accepted file changed on disk behind the open editor.
-    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
     ASSERT_TRUE(vm->editThresholdText("s1", "t1", "oops")["ok"].toBool());
     ASSERT_TRUE(vm->renameScenario("s1", "Renamed")["ok"].toBool());
     vm->setCurrentCell(QVariantMap{{"entryId", "s1"}, {"tierId", "t1"}});
-    const QByteArray external = externallyEditedJson("b-track");
+    const QByteArray external = externallyEditedJson();
     {
         QFile file(path);
         ASSERT_TRUE(file.open(QIODevice::WriteOnly));
@@ -845,7 +867,7 @@ TEST(BenchmarkTableComposition, ConflictAndFailedWriteKeepSession) {
     const auto *accepted = std::get_if<LoadedBenchmark>(&acceptedSnapshot->entries.front().content);
     ASSERT_NE(accepted, nullptr);
     EXPECT_EQ(accepted->benchmark.uncategorized.size() + accepted->benchmark.categories.size(), 1U);
-    EXPECT_EQ(accepted->benchmark.name, "Tracked") << "the accepted snapshot is the one before the attempt";
+    EXPECT_EQ(accepted->benchmark.tiers.size(), 1U) << "the accepted snapshot is the one before the attempt";
     EXPECT_EQ(tableCell(*vm, "s1", "t1", TableRole::DisplayTextRole).toString(), "oops");
     EXPECT_EQ(tableCell(*vm, "s1", {}, TableRole::DisplayTextRole).toString(), "Renamed");
     EXPECT_EQ(vm->currentCell().value("entryId").toString(), "s1");
@@ -858,20 +880,20 @@ TEST(BenchmarkTableComposition, ConflictAndFailedWriteKeepSession) {
     // Discard, explicit refresh and reopen take the accepted (external) definition.
     vm->discard();
     vm->refresh();
-    ASSERT_TRUE(vm->openBenchmark("b-track"));
-    EXPECT_EQ(vm->benchmarkName(), "Externally Edited");
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
+    EXPECT_TRUE(vm->tiers().isEmpty()) << "the reopened copy is the external edit";
     EXPECT_FALSE(vm->canUndo());
     vm->discard();
 
-    // --- Write failure: a never-saved draft whose file name is occupied by a directory.
+    // --- Write failure: a never-saved draft whose file name is occupied by a directory, which is no
+    // benchmark file, so the name check lets it through to the store.
     const auto entriesBefore = service->snapshot()->entries.size();
     vm->beginNewBenchmark();
     vm->setBenchmarkName("Fresh");
     ASSERT_TRUE(vm->pasteText(at("append"), "Fresh scenario\t10\tbad")["ok"].toBool());
-    const QString freshId = vm->draftId();
     const QString freshEntry = tableRowIds(*vm).front();
     const QString secondTier = appendedTierIds(*vm, 1);
-    ASSERT_TRUE(QDir(benchmarks.path()).mkdir(freshId + ".json"));
+    ASSERT_TRUE(QDir(benchmarks.path()).mkdir("Fresh.json"));
 
     EXPECT_FALSE(vm->save()["ok"].toBool());
     for (int i = 0; i < 5; ++i) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
@@ -949,7 +971,7 @@ TEST(BenchmarkTableComposition, GroupedPlaylistMappingAndUndo) {
     EXPECT_FALSE(vm->canUndo()) << "history is session-only";
     EXPECT_TRUE(vm->normalizationIssues().isEmpty()) << "no raw input is persisted";
 
-    const auto stored = readJson(QDir(benchmarks.path()).absoluteFilePath(id + ".json"));
+    const auto stored = readJson(QDir(benchmarks.path()).absoluteFilePath("Grouped Import.json"));
     EXPECT_EQ(jsonEntry(stored, first).value("hashes").toArray(), (QJsonArray{QString::fromLatin1(kWallSixHash)}));
 }
 
@@ -961,7 +983,7 @@ TEST(BenchmarkTableComposition, ProfileRebuildRefreshesLeasedDraftMapping) {
     auto w = wireWorkspace(benchmarks, unmappedJson(), false);
     ASSERT_NE(w, nullptr);
     auto *vm = w->app->benchmarkManagerVm();
-    ASSERT_TRUE(vm->openBenchmark("auto-1"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
     ASSERT_EQ(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "unresolved");
     ASSERT_TRUE(vm->editThresholdText("s1", "t1", "123")["ok"].toBool());
     ASSERT_TRUE(vm->addTier("Silver")["ok"].toBool());
@@ -1023,9 +1045,9 @@ TEST(BenchmarkTableComposition, PastedNameLinksOnSaveDespiteCaseAndTrailingSpace
     auto w = wireWorkspace(benchmarks, unresolvedTrackableJson());
     ASSERT_NE(w, nullptr);
     auto *tracking = w->app->benchmarkTrackingVm();
-    tracking->selectBenchmark(QStringLiteral("b-cascade"));
+    tracking->selectBenchmark(keyText(*w->app, "bench.json"));
     auto *vm = w->app->benchmarkManagerVm();
-    ASSERT_TRUE(vm->openBenchmark("b-cascade"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
 
     ASSERT_TRUE(vm->pasteText(at("scenario", "s1"), "1WALL6TARGETS te  ")["ok"].toBool());
     EXPECT_EQ(tableCell(*vm, "s1", {}, TableRole::MappingStateRole).toString(), "autoMappable");
@@ -1057,7 +1079,7 @@ TEST(BenchmarkTableComposition, ClosedManagerBenchmarkLinksWhenTheScenarioIsLate
     auto w = wireWorkspace(benchmarks, unmappedJson(), false);
     ASSERT_NE(w, nullptr);
     auto *vm = w->app->benchmarkManagerVm();
-    ASSERT_TRUE(vm->openBenchmark("auto-1"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
     ASSERT_TRUE(vm->renameScenario("s1", " 1wall6targets te")["ok"].toBool());
     ASSERT_TRUE(vm->save()["ok"].toBool());
     vm->discard();
@@ -1094,7 +1116,7 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
     ASSERT_NE(other, scenarios.end());
     const auto otherHash = QString::fromStdString(other->hash);
     const auto tracking = w->app->benchmarkTrackingUseCase();
-    tracking->select(domain::BenchmarkId{"b-track"});
+    tracking->select(keyOf(*w->app, "bench.json"));
     const domain::BenchmarkScenarioId entryId{"s1"};
     const auto baseline = [&] {
         const auto *benchmark = tracking->benchmark();
@@ -1105,7 +1127,7 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
     const auto baselineRunCount = baseline->runCount();
     const auto baselinePlaytime = baseline->playtimeSeconds();
     auto *vm = w->app->benchmarkManagerVm();
-    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
     ASSERT_TRUE(vm->setScenarioHashes("s1", {kWallSixHash, otherHash, "unavailable"})["ok"].toBool());
     ASSERT_TRUE(vm->save()["ok"].toBool());
     const auto facts = w->app->profileService()->getRunFacts(scenarios);
@@ -1127,7 +1149,7 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
         EXPECT_DOUBLE_EQ(benchmark->totalPlaytimeSeconds(), expectedPlaytime);
     }
     vm->discard();
-    ASSERT_TRUE(vm->openBenchmark("b-track"));
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
     const auto *table = qobject_cast<presentation::BenchmarkTableModel *>(vm->tableModel());
     ASSERT_NE(table, nullptr);
     EXPECT_EQ(table->rowInfo(0).value("mappedHashes").toStringList(),
@@ -1147,4 +1169,86 @@ TEST(BenchmarkTableComposition, LinkedMappingsRoundTripAndRefreshRealBenchmarkSt
     ASSERT_NE(restored, nullptr);
     EXPECT_EQ(restored->stats()->runCount(), baselineRunCount);
     EXPECT_DOUBLE_EQ(benchmark->totalPlaytimeSeconds(), baselinePlaytime);
+}
+
+// --- Filename identity: migration at startup and renaming saves ---------------------------------
+
+TEST(BenchmarkFilenameComposition, AnOlderFormatFileIsMigratedAtStartupUnderItsStoredName) {
+    QTemporaryDir benchmarks;
+    ASSERT_TRUE(benchmarks.isValid());
+    writeBytes(QDir(benchmarks.path()).absoluteFilePath("1d24f105-87db-46d2-8c88-66f34c5d4dad.json"), R"({
+        "schemaVersion": 2, "id": "1d24f105-87db-46d2-8c88-66f34c5d4dad", "name": "Legacy Bench",
+        "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
+        "uncategorized": [ { "id": "s1", "name": "One", "hashes": [],
+            "thresholds": [ { "tierId": "t1", "score": 100.0 } ] } ],
+        "categories": []
+    })");
+
+    auto settings = std::make_shared<tests_support::FakeSettingsService>();
+    App app(settings, std::make_shared<data::ProtoDecoder>(),
+            std::make_shared<qt_data::GraphConfigurationPersistence>(settings), std::make_shared<StatsCsvParser>(),
+            std::make_shared<qt_data::BenchmarkStore>(benchmarks.path().toStdString()),
+            std::make_shared<tests_support::FakeDaySource>(), std::make_shared<tests_support::FakeClipboardImageWriter>(),
+            std::make_shared<tests_support::FakePngImageWriter>());
+
+    EXPECT_EQ(QDir(benchmarks.path()).entryList({"*.json"}, QDir::Files), QStringList{"Legacy Bench.json"});
+    const auto stored = readJson(QDir(benchmarks.path()).absoluteFilePath("Legacy Bench.json"));
+    EXPECT_EQ(stored.value("schemaVersion").toInt(), 3);
+    const auto &choices = app.benchmarkTrackingUseCase()->snapshot().choices;
+    ASSERT_EQ(choices.size(), 1U);
+    EXPECT_EQ(choices[0].filename, "Legacy Bench.json");
+    EXPECT_EQ(choices[0].displayName, "Legacy Bench");
+    EXPECT_TRUE(choices[0].selectable);
+}
+
+TEST(BenchmarkFilenameComposition, ARenamingSaveMovesTheFileAndKeepsTheSelectionAndItsRecency) {
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, hierarchyTrackableJson());
+    ASSERT_NE(w, nullptr);
+    const auto key = keyOf(*w->app, "bench.json");
+    w->app->benchmarkTrackingVm()->selectBenchmark(QString::fromStdString(key.value));
+    ASSERT_EQ(w->env.settings->getRecentBenchmarkFiles().front(), "bench.json");
+    const auto original = readBytes(QDir(benchmarks.path()).absoluteFilePath("bench.json"));
+
+    auto *vm = w->app->benchmarkManagerVm();
+    ASSERT_TRUE(vm->openBenchmark(QString::fromStdString(key.value)));
+    vm->setBenchmarkName("Renamed");
+    const auto result = vm->save();
+    ASSERT_TRUE(result["ok"].toBool()) << result["error"].toString().toStdString();
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+
+    EXPECT_EQ(QDir(benchmarks.path()).entryList({"*.json"}, QDir::Files), QStringList{"Renamed.json"});
+    EXPECT_EQ(readJson(QDir(benchmarks.path()).absoluteFilePath("Renamed.json")), QJsonDocument::fromJson(original).object())
+        << "nothing but the name changed, and the name is not stored in the file";
+    const auto tracking = w->app->benchmarkTrackingUseCase();
+    EXPECT_EQ(tracking->selected(), std::optional{key});
+    EXPECT_EQ(tracking->state(), BenchmarkTrackingState::Ready);
+    EXPECT_EQ(tracking->snapshot().lastKnownSelectedDisplayName, "Renamed");
+    const auto recent = w->env.settings->getRecentBenchmarkFiles();
+    ASSERT_FALSE(recent.empty());
+    EXPECT_EQ(recent.front(), "Renamed.json");
+    EXPECT_EQ(std::ranges::count(recent, std::string{"bench.json"}), 0);
+    EXPECT_TRUE(vm->hasDraft());
+    EXPECT_FALSE(vm->dirty());
+}
+
+TEST(BenchmarkFilenameComposition, ASaveAfterTheOpenFileWasRenamedInTheFolderIsRefused) {
+    QTemporaryDir benchmarks;
+    auto w = wireWorkspace(benchmarks, hierarchyTrackableJson());
+    ASSERT_NE(w, nullptr);
+    auto *vm = w->app->benchmarkManagerVm();
+    ASSERT_TRUE(vm->openBenchmark(keyText(*w->app, "bench.json")));
+    ASSERT_TRUE(vm->renameScenario("s1", "Edited")["ok"].toBool());
+    const QDir dir(benchmarks.path());
+    const auto original = readBytes(dir.absoluteFilePath("bench.json"));
+    ASSERT_TRUE(QFile::rename(dir.absoluteFilePath("bench.json"), dir.absoluteFilePath("moved.json")));
+    vm->refresh();
+
+    const auto result = vm->save();
+
+    EXPECT_FALSE(result["ok"].toBool());
+    EXPECT_FALSE(result["error"].toString().isEmpty());
+    EXPECT_EQ(dir.entryList({"*.json"}, QDir::Files), QStringList{"moved.json"});
+    EXPECT_EQ(readBytes(dir.absoluteFilePath("moved.json")), original);
+    EXPECT_TRUE(vm->dirty());
 }

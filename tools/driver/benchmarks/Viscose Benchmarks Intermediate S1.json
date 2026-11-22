@@ -1,4 +1,5 @@
 {
+    "schemaVersion": 3,
     "categories": [
         {
             "color": [
@@ -9,8 +10,7 @@
             ],
             "id": "a2dd45cb-2822-4f5e-affe-ff6140fcc451",
             "name": "Control Tracking",
-            "scenarios": [
-            ],
+            "scenarios": [],
             "subcategories": [
                 {
                     "color": [
@@ -563,8 +563,7 @@
             ],
             "id": "2bb337f7-f225-4a54-8520-a10aaf83ed9d",
             "name": "Reactive Tracking",
-            "scenarios": [
-            ],
+            "scenarios": [],
             "subcategories": [
                 {
                     "color": [
@@ -859,8 +858,7 @@
             ],
             "id": "6eef9ea8-2792-4288-923b-b39b44cd9bcd",
             "name": "Flick Tech",
-            "scenarios": [
-            ],
+            "scenarios": [],
             "subcategories": [
                 {
                     "color": [
@@ -1291,8 +1289,7 @@
             ],
             "id": "e09a7bf1-8c72-4250-ad1e-85e466c9c17b",
             "name": "Click Timing",
-            "scenarios": [
-            ],
+            "scenarios": [],
             "subcategories": [
                 {
                     "color": [
@@ -1702,9 +1699,6 @@
             ]
         }
     ],
-    "id": "1d24f105-87db-46d2-8c88-66f34c5d4dad",
-    "name": "Viscose Benchmarks Intermediate S1",
-    "schemaVersion": 2,
     "tiers": [
         {
             "color": [
@@ -1787,6 +1781,5 @@
             "name": "Fuchsia"
         }
     ],
-    "uncategorized": [
-    ]
+    "uncategorized": []
 }

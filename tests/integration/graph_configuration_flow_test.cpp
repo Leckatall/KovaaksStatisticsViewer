@@ -115,9 +115,9 @@ namespace {
     }
 
     constexpr auto kBenchmarkJson = R"({
-        "schemaVersion": 1, "id": "auto-1", "name": "Auto",
+        "schemaVersion": 3,
         "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
-        "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hash": null,
+        "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hashes": [],
             "thresholds": [ { "tierId": "t1", "score": 1000000000.0 } ] } ],
         "categories": []
     })";
@@ -132,7 +132,7 @@ namespace {
             ASSERT_TRUE(env.valid());
             ASSERT_TRUE(env.makePerformancesDir());
             ASSERT_FALSE(env.copyFixtureIntoPerformances("1wall6targets TE.perf").isEmpty());
-            writeBenchmark("auto.json", "auto-1");
+            writeBenchmark("auto.json");
         }
 
         void TearDown() override {
@@ -140,12 +140,10 @@ namespace {
             integration::clearSavedGraphConfiguration();
         }
 
-        void writeBenchmark(const QString &file, const char *id) const {
+        void writeBenchmark(const QString &file) const {
             QFile out(QDir(env.benchmarksDir.path()).absoluteFilePath(file));
             ASSERT_TRUE(out.open(QIODevice::WriteOnly));
-            QByteArray json = kBenchmarkJson;
-            json.replace("auto-1", id);
-            out.write(json);
+            out.write(kBenchmarkJson);
         }
 
         // Stands in for a relaunch: a new SettingsService and persistence over the same storage, so
@@ -391,7 +389,7 @@ namespace {
     }
 
     TEST_F(GraphConfigurationFlowTest, AGraphsConfigurationFollowsItAcrossScenariosAndBenchmarks) {
-        writeBenchmark("auto-2.json", "auto-2");
+        writeBenchmark("auto-2.json");
         ASSERT_NO_FATAL_FAILURE(startSeededApp());
         ASSERT_TRUE(quick("scenarioHistory", {{"rangeKind", "latestRuns"}, {"count", 1}, {"connection", "straight"}}));
         ASSERT_TRUE(quick("benchmarkRank", {{"connection", "pointsOnly"}}));
@@ -405,8 +403,8 @@ namespace {
         EXPECT_EQ(app->completionHistoryVm()->visibleRunCount(), 1) << "the range applies to the other scenario too";
         EXPECT_EQ(probe(app->completionHistoryVm()).connection, 1);
 
-        for (const char *benchmark: {"auto-1", "auto-2", "auto-1"}) {
-            tracking->selectBenchmark(benchmark);
+        for (const char *benchmark: {"auto.json", "auto-2.json", "auto.json"}) {
+            tracking->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), benchmark));
             ASSERT_TRUE(QTest::qWaitFor([&] { return tracking->state() == "trackable"; }, 3000))
                 << tracking->state().toStdString();
             EXPECT_EQ(probe(tracking->rankHistory()).connection, 2) << benchmark;
@@ -590,7 +588,7 @@ namespace {
 
     TEST_F(GraphConfigurationFlowTest, NoConfigurationChangeTouchesSourceRecordsDefinitionsOrTotals) {
         ASSERT_NO_FATAL_FAILURE(startSeededApp());
-        app->benchmarkTrackingVm()->selectBenchmark("auto-1");
+        app->benchmarkTrackingVm()->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), "auto.json"));
         ASSERT_TRUE(QTest::qWaitFor([&] { return app->benchmarkTrackingVm()->state() == "trackable"; }, 3000));
         const auto before = fingerprint(*app, env);
         ASSERT_GT(before.lines.size(), 8);

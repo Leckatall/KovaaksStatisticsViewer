@@ -7,6 +7,9 @@ add_executable(qt_data_tests
     graph_configuration_persistence_test.cpp
     system_day_source_test.cpp
     benchmark_store_test.cpp
+    case_fold_test.cpp
+    benchmark_migration_test.cpp
+    benchmark_store_migration_test.cpp
     playlist_reader_test.cpp
     raster_qimage_test.cpp
     qt_png_image_writer_test.cpp

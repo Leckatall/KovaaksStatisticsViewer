@@ -21,9 +21,9 @@ namespace ksv::driver {
     // Whether an earlier start already seeded `data` (its marker file exists).
     [[nodiscard]] bool isSeeded(const SessionData &data);
 
-    // The benchmark the synthetic datasets open on (driver-demo.json in the
-    // benchmark fixtures; the driver remembers it as the last selection).
-    inline constexpr auto kDefaultBenchmarkId = "driver-demo";
+    // The benchmark file the synthetic datasets open on (in the benchmark fixtures;
+    // the driver remembers it as the most recent benchmark).
+    inline constexpr auto kDefaultBenchmarkFile = "Driver Demo Benchmark.json";
 
     // Whether seeding `dataset` copies the benchmark fixtures (the synthetic ones).
     [[nodiscard]] bool datasetShipsBenchmarks(const QString &dataset);

@@ -14,6 +14,8 @@
 namespace ksv::application {
     struct BenchmarkManagerState;
 
+    enum class BenchmarkNameProblem { Blank, InvalidCharacter, TooLong, TrailingDotOrSpace, Reserved, Taken };
+
     // Sole application boundary for the Benchmark Manager. It composes accepted-library state and
     // derived resolution state for presentation and accepts whole benchmarks; it retains no working
     // copy and exposes no individual editor mutation. Presentation owns the working copy and its
@@ -39,8 +41,14 @@ namespace ksv::application {
 
         [[nodiscard]] virtual PlaylistSeedImport importPlaylistSeed(const std::string &path) = 0;
 
+        // Why `name` cannot be saved as a benchmark's name, if it cannot: it must make a usable
+        // filename and collide, ignoring letter case, with no library entry other than the one
+        // `token` addresses (so a case-only rename of the open benchmark is accepted).
+        [[nodiscard]] virtual std::optional<BenchmarkNameProblem> checkName(
+            const std::string &name, const std::optional<data::BenchmarkEditToken> &token) const = 0;
+
         // Submits a complete working value plus its optional admitted token; the data service's
-        // classified outcome is returned unchanged.
+        // classified outcome is returned unchanged. `benchmark.name` must have passed checkName.
         [[nodiscard]] virtual data::BenchmarkSaveOutcome save(
             const domain::BenchmarkDefinition &benchmark,
             const std::optional<data::BenchmarkEditToken> &token) = 0;

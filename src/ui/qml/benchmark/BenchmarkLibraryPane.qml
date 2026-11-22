@@ -171,22 +171,34 @@ ColumnLayout {
                 libraryList.forceActiveFocus()
                 libraryPane.openRequested(libraryEntry.modelData)
             }
-            contentItem: RowLayout {
-                spacing: 8
-                Label {
-                    text: libraryEntry.modelData.name
-                    elide: Text.ElideRight
+            contentItem: ColumnLayout {
+                spacing: 2
+                RowLayout {
+                    spacing: 8
                     Layout.fillWidth: true
-                }
-                Rectangle {
-                    Layout.preferredWidth: 8
-                    Layout.preferredHeight: 8
-                    radius: 4
-                    color: Theme.classificationColor(libraryEntry.modelData.classification)
+                    Label {
+                        text: libraryEntry.modelData.name
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    Rectangle {
+                        Layout.preferredWidth: 8
+                        Layout.preferredHeight: 8
+                        radius: 4
+                        color: Theme.classificationColor(libraryEntry.modelData.classification)
+                    }
+                    Label {
+                        text: libraryEntry.modelData.classification
+                        color: libraryEntry.palette.placeholderText
+                    }
                 }
                 Label {
-                    text: libraryEntry.modelData.classification
+                    objectName: "libraryEntryProblem_" + libraryEntry.index
+                    visible: text !== ""
+                    text: libraryEntry.modelData.problemText ?? ""
                     color: libraryEntry.palette.placeholderText
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
                 }
             }
         }

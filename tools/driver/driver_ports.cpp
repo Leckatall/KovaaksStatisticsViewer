@@ -85,7 +85,7 @@ namespace ksv::driver {
             InjectedBenchmarkStore(std::shared_ptr<data::IBenchmarkStore> inner, std::shared_ptr<FaultPlan> plan)
                 : m_inner(std::move(inner)), m_plan(std::move(plan)) {}
 
-            [[nodiscard]] data::BenchmarkScanResult scan() const override {
+            [[nodiscard]] data::BenchmarkScanResult scan() override {
                 if (m_plan->beforeCall(kBenchmarkStore, "scan")) {
                     return {std::nullopt, data::BenchmarkScanFailure::DirectoryUnavailable};
                 }
@@ -97,6 +97,13 @@ namespace ksv::driver {
                     return {std::nullopt, data::BenchmarkWriteFailure::WriteFailed};
                 }
                 return m_inner->write(definition, filename, expectedDigest);
+            }
+            data::BenchmarkRenameResult rename(const std::string &from, const std::string &to,
+                                               const std::string &expectedDigest) override {
+                if (m_plan->beforeCall(kBenchmarkStore, "rename")) {
+                    return {false, data::BenchmarkWriteFailure::WriteFailed};
+                }
+                return m_inner->rename(from, to, expectedDigest);
             }
             data::BenchmarkDeleteResult remove(const std::string &filename, const std::string &expectedDigest) override {
                 if (m_plan->beforeCall(kBenchmarkStore, "remove")) {
@@ -138,7 +145,7 @@ namespace ksv::driver {
         static const QList<std::pair<QString, QStringList>> kPorts{
             {kDecoder, {"decode", "decode_file"}},
             {kCsv, {"parseFile"}},
-            {kBenchmarkStore, {"scan", "write", "remove"}},
+            {kBenchmarkStore, {"scan", "write", "rename", "remove"}},
             {kSeriesStore, {"load", "save"}},
         };
         return kPorts;

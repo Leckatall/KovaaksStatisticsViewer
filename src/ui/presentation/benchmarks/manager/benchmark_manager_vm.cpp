@@ -324,22 +324,29 @@ namespace ksv::presentation {
             for (const auto &entry: snapshot->entries) {
                 QVariantMap row;
                 row["filename"] = QString::fromStdString(entry.filename);
+                row["id"] = idString(entry.id);
+                row["name"] = QString::fromStdString(entry.name);
+                row["problemText"] = QString();
                 if (const auto *loaded = std::get_if<data::LoadedBenchmark>(&entry.content)) {
-                    row["id"] = idString(loaded->benchmark.id);
-                    const auto name = QString::fromStdString(loaded->benchmark.name);
-                    row["name"] = name.isEmpty() ? row["filename"] : name;
                     row["classification"] = loaded->completeness.completeness == domain::Completeness::Trackable
                                                 ? QStringLiteral("Trackable")
                                                 : QStringLiteral("Incomplete");
                     row["openable"] = true;
                 } else {
                     const auto &problem = std::get<data::ProblemBenchmark>(entry.content);
-                    row["id"] = problem.id ? idString(*problem.id) : QString();
-                    const auto name = problem.displayName ? QString::fromStdString(*problem.displayName) : QString();
-                    row["name"] = !name.isEmpty() ? name : row["filename"];
-                    row["classification"] = problem.problem == data::BenchmarkFileProblem::Unsupported
-                                                ? QStringLiteral("Unsupported")
-                                                : QStringLiteral("Invalid");
+                    switch (problem.problem) {
+                        case data::BenchmarkFileProblem::Invalid:
+                            row["classification"] = QStringLiteral("Invalid");
+                            break;
+                        case data::BenchmarkFileProblem::Unsupported:
+                            row["classification"] = QStringLiteral("Unsupported");
+                            break;
+                        case data::BenchmarkFileProblem::MigrationFailed:
+                            row["classification"] = QStringLiteral("Migration failed");
+                            if (problem.migrationFailure)
+                                row["problemText"] = migrationFailureText(*problem.migrationFailure);
+                            break;
+                    }
                     row["openable"] = false;
                 }
                 // Problem entries have no trustworthy id+digest pair for the remove precondition,
@@ -433,6 +440,9 @@ namespace ksv::presentation {
         }
 
         m_baselineStale = baselineStale;
+        const auto nameProblem = m_draft ? m_useCase->checkName(m_draft->name, m_token) : std::nullopt;
+        const bool showName = nameProblem && (m_saveAttempted || *nameProblem != application::BenchmarkNameProblem::Blank);
+        m_nameProblem = showName ? nameProblemText(*nameProblem) : QString();
         m_benchmarkName = std::move(benchmarkName);
         m_draftId = std::move(draftId);
         m_validationIssues = std::move(validationIssues);
@@ -447,6 +457,7 @@ namespace ksv::presentation {
                                               bool dirty) {
         m_draft = std::move(seed.benchmark);
         m_token = std::move(seed.token);
+        m_saveAttempted = false;
         resetSession();
         m_baseline = dirty ? std::nullopt : std::optional<domain::BenchmarkDefinition>(*m_draft);
         m_draftFromLibrary = fromLibrary;
@@ -461,6 +472,7 @@ namespace ksv::presentation {
         resetSession();
         m_baseline.reset();
         m_token.reset();
+        m_saveAttempted = false;
         m_draftCompleteness = {};
         m_draftResolutions.clear();
         m_draftDirty = false;
@@ -560,8 +572,33 @@ namespace ksv::presentation {
         return QVariantMap{{"ok", true}, {"skipped", skipped}};
     }
 
+    QString BenchmarkManagerViewModel::nameProblemText(const application::BenchmarkNameProblem problem) const {
+        const auto name = QString::fromStdString(m_draft->name);
+        switch (problem) {
+            case application::BenchmarkNameProblem::Blank:
+                return tr("Give the benchmark a name before saving.");
+            case application::BenchmarkNameProblem::InvalidCharacter:
+                return tr("A benchmark name can't contain < > : \" / \\ | ? * or control characters.");
+            case application::BenchmarkNameProblem::TooLong:
+                return tr("That name is too long for a file name. Shorten it.");
+            case application::BenchmarkNameProblem::TrailingDotOrSpace:
+                return tr("A benchmark name can't end in a dot or a space.");
+            case application::BenchmarkNameProblem::Reserved:
+                return tr("\u201C%1\u201D is reserved by Windows and can't be a file name.").arg(name);
+            case application::BenchmarkNameProblem::Taken:
+                return tr("A benchmark named \u201C%1\u201D already exists.").arg(name);
+        }
+        return {};
+    }
+
     QVariantMap BenchmarkManagerViewModel::save() {
         if (!m_draft) return errorMap(tr("No benchmark is open."));
+        // Refused here, before anything is written, with the reason shown beside the name.
+        if (const auto problem = m_useCase->checkName(m_draft->name, m_token)) {
+            m_saveAttempted = true;
+            emitChanged();
+            return errorMap(nameProblemText(*problem));
+        }
         // Retained input is saved as a missing threshold. The candidate stays isolated until the
         // outcome is known: a publication may re-enter during save(), and a failure must leave the
         // visible session, its input and its history exactly as they were.
@@ -575,8 +612,6 @@ namespace ksv::presentation {
         const auto outcome = m_useCase->save(candidate, m_token);
         if (outcome.error) {
             switch (*outcome.error) {
-                case data::BenchmarkSaveError::EmptyName:
-                    return errorMap(tr("Give the benchmark a name before saving."));
                 case data::BenchmarkSaveError::UnknownTarget:
                     return errorMap(tr("That benchmark is no longer in the library."));
                 case data::BenchmarkSaveError::StaleToken:
@@ -584,6 +619,20 @@ namespace ksv::presentation {
                     return errorMap(tr("The file changed on disk. Refresh the library before saving."));
                 case data::BenchmarkSaveError::WriteFailed:
                     return errorMap(tr("Saving failed. The stored benchmark is unchanged."));
+                case data::BenchmarkSaveError::RenameFailed: {
+                    // The content is on disk under the old name: that becomes the baseline, and the
+                    // new name stays an unsaved change a later Save renames.
+                    m_token = outcome.token;
+                    m_baseline = candidate;
+                    m_baseline->name = outcome.name;
+                    m_draft = std::move(candidate);
+                    m_cellInputs.clear();
+                    m_history.clear();
+                    m_draftFromLibrary = true;
+                    recomputeAfterLocalEdit();
+                    return errorMap(tr("The benchmark was saved, but its file could not be renamed and keeps "
+                                       "its old name. Save again to retry the rename."));
+                }
             }
             return errorMap(tr("Saving failed."));
         }

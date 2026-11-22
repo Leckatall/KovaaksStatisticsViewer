@@ -38,10 +38,10 @@ namespace {
     constexpr int kPaintBudget = 2000;
 
     constexpr auto kBenchmarkJson = R"({
-        "schemaVersion": 1, "id": "auto-1", "name": "Auto",
+        "schemaVersion": 3,
         "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] },
                    { "id": "t2", "name": "Silver", "color": [180,180,190,255] } ],
-        "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hash": null,
+        "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hashes": [],
             "thresholds": [ { "tierId": "t1", "score": 1000000000.0 }, { "tierId": "t2", "score": 2000000000.0 } ] } ],
         "categories": []
     })";
@@ -255,7 +255,7 @@ namespace {
             startApp();
             seedRuns(2, 50.0F);
             auto *tracking = app->benchmarkTrackingVm();
-            tracking->selectBenchmark("auto-1");
+            tracking->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), "auto.json"));
             EXPECT_TRUE(QTest::qWaitFor([&] { return tracking->state() == "trackable"; }, 3000));
             return tracking;
         }
@@ -467,7 +467,7 @@ namespace {
         ASSERT_NO_FATAL_FAILURE(seedRuns(2, 50.0F));
 
         auto *tracking = app->benchmarkTrackingVm();
-        tracking->selectBenchmark("auto-1");
+        tracking->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), "auto.json"));
         ASSERT_TRUE(QTest::qWaitFor([&] { return tracking->state() == "trackable"; }, 3000))
             << tracking->state().toStdString();
         auto *rank = tracking->rankHistory();

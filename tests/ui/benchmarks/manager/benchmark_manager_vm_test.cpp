@@ -150,8 +150,10 @@ TEST(BenchmarkManagerVm, LibraryEntriesReflectAcceptedSnapshotClassification) {
     loaded.id = BenchmarkId{"bench-A"};
     loaded.name = "Alpha";
     BenchmarkLibrarySnapshot snapshot;
-    snapshot.entries.push_back({"a.json", "d1", LoadedBenchmark{loaded, validateBenchmark(loaded)}});
-    snapshot.entries.push_back({"bad.json", "d2", ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}, {}}});
+    snapshot.entries.push_back({"Alpha.json", "d1", LoadedBenchmark{loaded, validateBenchmark(loaded)},
+                                BenchmarkId{"bench-A"}, "Alpha"});
+    snapshot.entries.push_back({"bad.json", "d2", ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}},
+                                BenchmarkId{"bench-B"}, "bad"});
 
     Fixture f;
     f.uc->stateValue.library = snapshot;
@@ -167,7 +169,8 @@ TEST(BenchmarkManagerVm, LibraryEntriesReflectAcceptedSnapshotClassification) {
     EXPECT_TRUE(loadedRow["deletable"].toBool());
     const auto problemRow = entries.at(1).toMap();
     EXPECT_EQ(problemRow["classification"].toString(), "Invalid");
-    EXPECT_EQ(problemRow["name"].toString(), "bad.json");
+    EXPECT_EQ(problemRow["name"].toString(), "bad");
+    EXPECT_EQ(problemRow["problemText"].toString(), QString());
     EXPECT_FALSE(problemRow["openable"].toBool());
     EXPECT_FALSE(problemRow["deletable"].toBool());
 }
@@ -198,17 +201,179 @@ TEST(BenchmarkManagerVm, ImportPlaylistAdoptsSuccessfulSeedOnly) {
     EXPECT_EQ(scenarioNames(*f.vm), (QStringList{"a", "b", "c"}));
 }
 
-TEST(BenchmarkManagerVm, SaveEmptyNameSurfacesEmptyNameError) {
+TEST(BenchmarkManagerVm, AMigrationFailedRowNamesTheStepAndReasonAndCannotBeOpenedOrDeleted) {
+    const std::vector<BenchmarkMigrationFailure> failures{
+        {1, BenchmarkMigrationFailureReason::SourceMismatch},
+        {2, BenchmarkMigrationFailureReason::SourceMismatch},
+        {2, BenchmarkMigrationFailureReason::InvalidResult},
+        {2, BenchmarkMigrationFailureReason::WriteFailed},
+        {2, BenchmarkMigrationFailureReason::RenameFailed},
+    };
+    QSet<QString> reasons;
+    for (const auto &failure: failures) {
+        BenchmarkLibrarySnapshot snapshot;
+        snapshot.entries.push_back({"old.json", "d", ProblemBenchmark{BenchmarkFileProblem::MigrationFailed, {}, failure},
+                                    BenchmarkId{"k"}, "old"});
+        Fixture f;
+        f.uc->stateValue.library = snapshot;
+        f.build();
+
+        const auto row = f.vm->libraryEntries().at(0).toMap();
+        const auto prefix = QString("Migration from version %1 to version %2 failed: ")
+                                .arg(failure.fromVersion)
+                                .arg(failure.fromVersion + 1);
+        const auto text = row["problemText"].toString();
+        EXPECT_EQ(row["classification"].toString(), "Migration failed");
+        EXPECT_EQ(row["name"].toString(), "old");
+        EXPECT_TRUE(text.startsWith(prefix)) << text.toStdString();
+        reasons.insert(text.mid(prefix.size()));
+        EXPECT_FALSE(row["openable"].toBool());
+        EXPECT_FALSE(row["deletable"].toBool());
+    }
+    EXPECT_EQ(reasons.size(), failures.size());  // each step and reason reads differently
+    EXPECT_FALSE(reasons.contains(QString()));
+}
+
+TEST(BenchmarkManagerVm, NameProblemStatesEachReasonTheUseCaseGives) {
     Fixture f;
-    f.uc->nextNewSeed = newSeed(draftWith("", {}, {}));
-    f.uc->nextSaveOutcome = {std::nullopt, BenchmarkSaveError::EmptyName};
+    f.uc->nextNewSeed = newSeed(draftWith("Draft", {}, {}));
+    std::optional<BenchmarkNameProblem> problem;
+    f.uc->nameCheck = [&](const std::string &, const auto &) { return problem; };
     f.build();
     f.vm->beginNewBenchmark();
+
+    QSet<QString> texts;
+    for (const auto reason: {BenchmarkNameProblem::InvalidCharacter, BenchmarkNameProblem::TooLong,
+                             BenchmarkNameProblem::TrailingDotOrSpace, BenchmarkNameProblem::Reserved,
+                             BenchmarkNameProblem::Taken}) {
+        problem = reason;
+        f.vm->setBenchmarkName(QString("Name %1").arg(static_cast<int>(reason)));
+        EXPECT_FALSE(f.vm->nameProblem().isEmpty()) << static_cast<int>(reason);
+        texts.insert(f.vm->nameProblem());
+    }
+    EXPECT_EQ(texts.size(), 5);
+    EXPECT_TRUE(f.vm->nameProblem().contains("Name 5"));  // a taken name is named
+
+    problem.reset();
+    f.vm->setBenchmarkName("Fine");
+    EXPECT_EQ(f.vm->nameProblem(), QString());
+}
+
+TEST(BenchmarkManagerVm, NameProblemFollowsTheLibraryAndPassesTheOpenToken) {
+    Fixture f;
+    f.uc->nextOpenSeed = librarySeed(draftWith("Alpha", {}, {}));
+    bool taken = false;
+    std::optional<BenchmarkEditToken> seenToken;
+    f.uc->nameCheck = [&](const std::string &, const std::optional<BenchmarkEditToken> &token) {
+        seenToken = token;
+        return taken ? std::optional{BenchmarkNameProblem::Taken} : std::nullopt;
+    };
+    f.build();
+    ASSERT_TRUE(f.vm->openBenchmark("b1"));
+    EXPECT_EQ(f.vm->nameProblem(), QString());
+    ASSERT_TRUE(seenToken.has_value());
+    EXPECT_EQ(seenToken->filename, "b1.json");
+
+    QSignalSpy spy(f.vm.get(), &BenchmarkManagerViewModel::draftChanged);
+    taken = true;
+    f.publish();
+
+    EXPECT_FALSE(f.vm->nameProblem().isEmpty());
+    EXPECT_GE(spy.count(), 1);
+}
+
+TEST(BenchmarkManagerVm, ABlankNameIsOnlyReportedOnceSaveHasBeenTried) {
+    Fixture f;
+    f.uc->nextNewSeed = newSeed(draftWith("", {}, {}));
+    f.uc->nameCheck = [](const std::string &name, const auto &) {
+        return name.empty() ? std::optional{BenchmarkNameProblem::Blank} : std::nullopt;
+    };
+    f.build();
+    f.vm->beginNewBenchmark();
+    EXPECT_EQ(f.vm->nameProblem(), QString());
+
+    const auto result = f.vm->save();
+
+    EXPECT_FALSE(result["ok"].toBool());
+    EXPECT_FALSE(f.vm->nameProblem().isEmpty());
+    EXPECT_EQ(result["error"].toString(), f.vm->nameProblem());
+
+    f.vm->beginNewBenchmark();
+    EXPECT_EQ(f.vm->nameProblem(), QString());
+}
+
+TEST(BenchmarkManagerVm, SaveWithANameProblemIsRefusedBeforeReachingTheUseCase) {
+    for (const auto reason: {BenchmarkNameProblem::Blank, BenchmarkNameProblem::InvalidCharacter,
+                             BenchmarkNameProblem::Taken}) {
+        Fixture f;
+        f.uc->nextNewSeed = newSeed(draftWith("Voltaic", {tier("t1", "Bronze")}, {}));
+        f.uc->nameCheck = [&](const std::string &, const auto &) { return std::optional{reason}; };
+        f.build();
+        f.vm->beginNewBenchmark();
+        const auto nameBefore = f.vm->benchmarkName();
+
+        const auto result = f.vm->save();
+
+        EXPECT_FALSE(result["ok"].toBool());
+        EXPECT_EQ(result["error"].toString(), f.vm->nameProblem());
+        EXPECT_FALSE(f.vm->nameProblem().isEmpty());
+        EXPECT_TRUE(f.uc->saveCalls.empty());
+        EXPECT_TRUE(f.vm->hasDraft());
+        EXPECT_TRUE(f.vm->dirty());
+        EXPECT_EQ(f.vm->benchmarkName(), nameBefore);
+    }
+}
+
+TEST(BenchmarkManagerVm, ARenamingSaveKeepsTheEditorOpenAndTheNextSaveUsesTheNewFile) {
+    Fixture f;
+    f.uc->nextOpenSeed = librarySeed(draftWith("b1", {}, {}));
+    f.build();
+    ASSERT_TRUE(f.vm->openBenchmark("b1"));
+    f.vm->setBenchmarkName("Renamed");
+    const BenchmarkEditToken moved{BenchmarkId{"b1"}, "Renamed.json", "d2"};
+    f.uc->nextSaveOutcome = {moved, std::nullopt, "Renamed"};
+
+    ASSERT_TRUE(f.vm->save()["ok"].toBool());
+
+    EXPECT_TRUE(f.vm->hasDraft());
+    EXPECT_FALSE(f.vm->dirty());
+    EXPECT_EQ(f.vm->benchmarkName(), "Renamed");
+    f.vm->setBenchmarkName("Renamed again");
+    ASSERT_TRUE(f.vm->save()["ok"].toBool());
+    ASSERT_TRUE(f.uc->saveCalls.back().second.has_value());
+    EXPECT_EQ(f.uc->saveCalls.back().second->filename, "Renamed.json");
+    EXPECT_EQ(f.uc->saveCalls.back().second->digest, "d2");
+}
+
+TEST(BenchmarkManagerVm, AFailedRenameKeepsTheNewNameUnsavedAndARetrySendsTheReturnedToken) {
+    Fixture f;
+    f.uc->nextOpenSeed = librarySeed(draftWith("b1", {}, {}));
+    f.build();
+    ASSERT_TRUE(f.vm->openBenchmark("b1"));
+    f.vm->setBenchmarkName("Renamed");
+    const BenchmarkEditToken written{BenchmarkId{"b1"}, "b1.json", "d2"};
+    f.uc->nextSaveOutcome = {written, BenchmarkSaveError::RenameFailed, "b1"};
 
     const auto result = f.vm->save();
 
     EXPECT_FALSE(result["ok"].toBool());
     EXPECT_FALSE(result["error"].toString().isEmpty());
+    EXPECT_TRUE(f.vm->hasDraft());
+    EXPECT_EQ(f.vm->benchmarkName(), "Renamed");
+    EXPECT_TRUE(f.vm->dirty());
+
+    // The content on disk is now this editor's baseline, so the retry is not stale.
+    f.uc->stateValue.library = loadedSnapshot("b1", "b1");
+    f.uc->stateValue.library->entries[0].digest = "d2";
+    f.publish();
+    EXPECT_FALSE(f.vm->baselineStale());
+
+    f.uc->nextSaveOutcome = {BenchmarkEditToken{BenchmarkId{"b1"}, "Renamed.json", "d2"}, std::nullopt, "Renamed"};
+    ASSERT_TRUE(f.vm->save()["ok"].toBool());
+    ASSERT_TRUE(f.uc->saveCalls.back().second.has_value());
+    EXPECT_EQ(f.uc->saveCalls.back().second->filename, "b1.json");
+    EXPECT_EQ(f.uc->saveCalls.back().second->digest, "d2");
+    EXPECT_FALSE(f.vm->dirty());
 }
 
 TEST(BenchmarkManagerVm, SaveSuccessUpdatesLocalBaselineFromAdmittedToken) {
@@ -657,17 +822,20 @@ TEST(BenchmarkManagerVm, RefreshWhileEditingPreservesWorkingCopy) {
 
     // A later accepted snapshot with different content is published.
     BenchmarkDefinition changed = accepted;
-    changed.name = "Alpha (renamed on disk)";
+    changed.tiers.push_back(tier("t9", "Added on disk"));
     BenchmarkLibrarySnapshot next;
-    next.entries.push_back({"b1.json", "d2", LoadedBenchmark{changed, validateBenchmark(changed)}});
+    next.entries.push_back({"b1.json", "d2", LoadedBenchmark{changed, validateBenchmark(changed)}, changed.id,
+                            "Alpha"});
+    next.entries.push_back({"Beta.json", "d3", LoadedBenchmark{changed, validateBenchmark(changed)},
+                            BenchmarkId{"b2"}, "Beta"});
     f.uc->stateValue.library = next;
     f.publish();
 
     EXPECT_EQ(f.vm->benchmarkName(), "Alpha edited");   // working value + local edit preserved
     EXPECT_TRUE(f.vm->dirty());
     EXPECT_EQ(f.vm->validationIssues().size(), issuesBefore);
-    ASSERT_EQ(f.vm->libraryEntries().size(), 1);        // library rows reflect the new snapshot
-    EXPECT_EQ(f.vm->libraryEntries().at(0).toMap()["name"].toString(), "Alpha (renamed on disk)");
+    ASSERT_EQ(f.vm->libraryEntries().size(), 2);        // library rows reflect the new snapshot
+    EXPECT_EQ(f.vm->libraryEntries().at(1).toMap()["name"].toString(), "Beta");
 }
 
 TEST(BenchmarkManagerVm, ChangedRemovedOrReclassifiedBaselineBecomesStale) {
@@ -701,8 +869,7 @@ TEST(BenchmarkManagerVm, ChangedRemovedOrReclassifiedBaselineBecomesStale) {
     // Entry reclassified as a problem entry.
     BenchmarkLibrarySnapshot invalid;
     invalid.entries.push_back({"b1.json", "d3",
-                               ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt,
-                                                BenchmarkId{"b1"}, std::nullopt}});
+                               ProblemBenchmark{BenchmarkFileProblem::Invalid, std::nullopt, std::nullopt}});
     f.uc->stateValue.library = invalid;
     f.publish();
     EXPECT_TRUE(f.vm->baselineStale());
@@ -1872,7 +2039,7 @@ TEST(BenchmarkTableSave, SuccessfulNormalizationAndBoundary) {
 
 TEST(BenchmarkTableSave, EveryFailureRetainsRetryState) {
     const DefaultLocaleGuard guard{QLocale{QLocale::English, QLocale::UnitedKingdom}};
-    for (const auto error: {BenchmarkSaveError::EmptyName, BenchmarkSaveError::UnknownTarget,
+    for (const auto error: {BenchmarkSaveError::UnknownTarget,
                             BenchmarkSaveError::StaleToken, BenchmarkSaveError::Conflict,
                             BenchmarkSaveError::WriteFailed}) {
         TableFixture f;

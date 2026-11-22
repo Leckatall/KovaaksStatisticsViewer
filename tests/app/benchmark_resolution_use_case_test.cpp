@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "benchmark_builders.h"
+#include "data/benchmarks_service.h"
+#include "fake_benchmark_store.h"
 #include "fake_benchmarks_service.h"
 #include "fake_profile_service.h"
 #include "usecases/benchmark_resolution_use_case.h"
@@ -454,4 +456,56 @@ TEST(BenchmarkResolutionUseCase, AutomaticMappingCannotClaimAnExplicitAdditional
     const auto mapped = useCase->withAutomaticMappings(value);
     EXPECT_TRUE(mapped.uncategorized[1].hashes.empty());
     EXPECT_EQ(mapped.uncategorized[0].hashes, (std::vector<std::string>{"old", "new"}));
+}
+
+TEST(BenchmarkResolutionUseCase, AutomaticMappingNeverWritesAMigrationFailedFile) {
+    Fixture f;
+    f.played("Alpha", "hA");
+    f.library({benchmarkWith("b1", {benchmarkEntry("e1", "Alpha", std::nullopt, {})})});
+    f.benchmarks->snapshotValue->entries.push_back(
+        {"old.json", "d-old",
+         data::ProblemBenchmark{data::BenchmarkFileProblem::MigrationFailed, std::nullopt,
+                                data::BenchmarkMigrationFailure{2, data::BenchmarkMigrationFailureReason::WriteFailed}}});
+    f.benchmarks->nextBatchOutcome = {{admitted("b1")}};
+
+    const auto useCase = f.build();
+
+    ASSERT_EQ(f.benchmarks->batchRequests.size(), 1U);
+    ASSERT_EQ(f.benchmarks->batchRequests.front().size(), 1U);
+    EXPECT_EQ(f.benchmarks->batchRequests.front()[0].token.filename, "b1.json");
+}
+
+// The lease is keyed by the benchmark's in-session key, which a renaming save carries over to the
+// new filename, so background linking keeps away from the open benchmark under its new name too.
+TEST(BenchmarkResolutionUseCase, AfterARenamingSaveTheLeaseStillHoldsAndMappingRewritesFilesInPlace) {
+    const auto store = std::make_shared<FakeBenchmarkStore>();
+    data::BenchmarkLibrarySnapshot library;
+    for (const auto *filename: {"Old.json", "Other.json"}) {
+        const auto value = benchmarkWith("", {benchmarkEntry("e1", "Alpha", std::nullopt, {})});
+        library.entries.push_back({filename, std::string{"d-"} + filename,
+                                   data::LoadedBenchmark{value, validateBenchmark(value)}});
+    }
+    store->nextScan = {library, std::nullopt};
+    const auto service = std::make_shared<data::BenchmarksService>(store);
+    const auto profile = std::make_shared<FakeProfileService>();
+    application::BenchmarkResolutionUseCase useCase(service, profile);
+
+    data::BenchmarkEditToken token;
+    for (const auto &entry: service->snapshot()->entries)
+        if (entry.filename == "Old.json") token = {entry.id, entry.filename, entry.digest};
+    useCase.setEditLease(token.id);
+    auto renamed = std::get<data::LoadedBenchmark>(service->snapshot()->entries.front().content).benchmark;
+    renamed.name = "New";
+    store->nextWrite = {std::string{"d-new"}, std::nullopt};
+    ASSERT_TRUE(service->save({renamed, token}).ok());
+
+    store->nextWrite = {std::string{"d-other-2"}, std::nullopt};
+    profile->scenarios.push_back(ScenarioId{"Alpha", "hA"});
+    profile->run_counts[ScenarioId{"Alpha", "hA"}] = 1;
+    profile->notifyProfileChanged();
+
+    EXPECT_EQ(store->writeCount, 2);
+    EXPECT_EQ(store->lastWriteFilename, "Other.json");
+    EXPECT_EQ(store->lastWriteDigest, std::make_optional<std::string>("d-Other.json"));
+    EXPECT_EQ(store->renameCount, 1);
 }

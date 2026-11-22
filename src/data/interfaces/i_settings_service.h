@@ -29,9 +29,9 @@ namespace ksv::application {
         // The run graph's Y-axis-label series ID as VisualSettingsManager.qml stored it; empty when unset.
         [[nodiscard]] virtual std::string getLegacyRunAxisLabelSeriesId() const = 0;
 
-        // Most recent first; the front is what opens next launch.
-        [[nodiscard]] virtual std::vector<std::string> getRecentBenchmarkIds() const = 0;
-        virtual void setRecentBenchmarkIds(const std::vector<std::string> &ids) = 0;
+        // Benchmark filenames, most recent first; the front is what opens next launch.
+        [[nodiscard]] virtual std::vector<std::string> getRecentBenchmarkFiles() const = 0;
+        virtual void setRecentBenchmarkFiles(const std::vector<std::string> &filenames) = 0;
     };
 }
 #endif //KOVAAKSSTATSVIEWER_I_SETTINGS_SERVICE_H

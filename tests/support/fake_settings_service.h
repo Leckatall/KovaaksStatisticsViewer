@@ -61,14 +61,14 @@ namespace ksv::tests_support {
             return legacyRunAxisLabelSeriesId;
         }
 
-        std::vector<std::string> recentBenchmarkIds;
-        int recentBenchmarkIdsWrites = 0;
+        std::vector<std::string> recentBenchmarkFiles;
+        int recentBenchmarkFilesWrites = 0;
 
-        [[nodiscard]] std::vector<std::string> getRecentBenchmarkIds() const override { return recentBenchmarkIds; }
+        [[nodiscard]] std::vector<std::string> getRecentBenchmarkFiles() const override { return recentBenchmarkFiles; }
 
-        void setRecentBenchmarkIds(const std::vector<std::string> &ids) override {
-            recentBenchmarkIds = ids;
-            ++recentBenchmarkIdsWrites;
+        void setRecentBenchmarkFiles(const std::vector<std::string> &filenames) override {
+            recentBenchmarkFiles = filenames;
+            ++recentBenchmarkFilesWrites;
         }
 
     private:

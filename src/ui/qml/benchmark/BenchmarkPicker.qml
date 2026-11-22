@@ -197,8 +197,8 @@ Item {
                     readonly property bool rowSelectable: root._selectable(entryRow.modelData)
                     readonly property bool isSelected: entryRow.modelData.name === root.selectedName
                     readonly property string kind: String(entryRow.modelData.classification).toLowerCase()
-                    // Every exception (incomplete, invalid, unsupported) carries a chip and a way to
-                    // the manager, where its details are shown.
+                    // Every exception (incomplete, invalid, unsupported, migration failed) carries a
+                    // chip and a way to the manager, where its details are shown.
                     readonly property bool hasWarning: entryRow.kind !== "trackable"
                     width: ListView.view.width
                     implicitHeight: entryDelegate.implicitHeight
@@ -241,6 +241,10 @@ Item {
                         height: chipText.implicitHeight + 2
                         radius: height / 2
                         color: entryRow.kind === "incomplete" ? Theme.classificationColor("Incomplete") : Theme.errorText
+                        ToolTip.text: entryRow.modelData.problemText ?? ""
+                        ToolTip.visible: chipHover.hovered && ToolTip.text !== ""
+                        // Passive, so the click blocker stacked above the row does not hide it.
+                        HoverHandler { id: chipHover }
                         Label {
                             id: chipText
                             anchors.centerIn: parent

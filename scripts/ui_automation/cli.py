@@ -1053,7 +1053,7 @@ def build_parser(*, batch: bool = False) -> ArgumentParser:
     put.set_defaults(handler=handle_put)
 
     rm = add("rm", "delete files under the session's data/ and wait for the app")
-    rm.add_argument("paths", nargs="+", metavar="PATH", help="relative to data/, e.g. benchmarks/driver-demo.json")
+    rm.add_argument("paths", nargs="+", metavar="PATH", help="relative to data/, e.g. \"benchmarks/Driver Demo Benchmark.json\"")
     rm.add_argument("--timeout", type=float, default=5.0)
     rm.set_defaults(handler=handle_rm)
 

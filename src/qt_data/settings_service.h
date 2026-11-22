@@ -26,8 +26,8 @@ namespace ksv::qt_data {
         void quarantineSeriesConfigDocument(const std::string &invalidJson) override;
         [[nodiscard]] std::vector<std::string> getLegacyDisabledColumnKeys() const override;
         [[nodiscard]] std::string getLegacyRunAxisLabelSeriesId() const override;
-        [[nodiscard]] std::vector<std::string> getRecentBenchmarkIds() const override;
-        void setRecentBenchmarkIds(const std::vector<std::string> &ids) override;
+        [[nodiscard]] std::vector<std::string> getRecentBenchmarkFiles() const override;
+        void setRecentBenchmarkFiles(const std::vector<std::string> &filenames) override;
 
         // The directory getKovaaksDirs() reports when none is configured. Defaults
         // to the standard Steam install path; dev tools point it into a sandbox.

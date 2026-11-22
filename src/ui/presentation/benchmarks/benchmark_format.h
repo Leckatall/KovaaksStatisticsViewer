@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "benchmarks/benchmark_ids.h"
+#include "data/interfaces/benchmark_library_snapshot.h"
 
 namespace ksv::presentation {
     [[nodiscard]] QColor toQColor(const domain::BenchmarkColor &color);
@@ -35,6 +36,10 @@ namespace ksv::presentation {
     // The percentage is floored, so it never reads 100% before the next tier is reached. With no
     // tiers there is nothing to name, so it falls back to formatBenchmarkNumber().
     [[nodiscard]] QString describeAverageRank(double rank, const std::vector<QString> &tierNames);
+
+    // "Migration from version x to version x+1 failed: <reason>", the form every stored-format
+    // migration failure is shown in.
+    [[nodiscard]] QString migrationFailureText(const data::BenchmarkMigrationFailure &failure);
 }
 
 #endif // KOVAAKSSTATSVIEWER_BENCHMARK_FORMAT_H

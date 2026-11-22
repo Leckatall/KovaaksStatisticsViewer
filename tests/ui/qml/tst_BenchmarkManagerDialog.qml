@@ -260,6 +260,65 @@ TestCase {
         compare(vm(dialog).deleteCalls.length, 0)
     }
 
+    // The reason sits beside the name, but not while the user is still typing it.
+    function test_nameProblemShowsOnlyOnceTheNameFieldLosesFocus() {
+        const dialog = openWithFake({hasDraft: true, dirty: true, benchmarkName: "Alpha",
+                                     nameProblem: "A benchmark named \u201CAlpha\u201D already exists."})
+        const label = find(dialog, "benchmarkNameProblemLabel")
+        const field = find(dialog, "benchmarkNameField")
+        verify(label !== null, "the editor header has a name-problem label")
+        tryCompare(label, "visible", true)
+        compare(label.text, vm(dialog).nameProblem)
+
+        field.forceActiveFocus()
+        tryCompare(label, "visible", false)
+
+        field.focus = false
+        tryCompare(label, "visible", true)
+    }
+
+    function test_noNameProblemShowsNoLabel() {
+        const dialog = openWithFake({hasDraft: true, dirty: true, benchmarkName: "Alpha"})
+        compare(find(dialog, "benchmarkNameProblemLabel").visible, false)
+    }
+
+    function test_saveRefusedForTheNameShowsTheReasonAndKeepsTheDraft() {
+        const problem = "A benchmark name can't end in a dot or a space."
+        const dialog = openWithFake({hasDraft: true, dirty: true, benchmarkName: "Alpha.", nameProblem: problem,
+                                     saveResult: {ok: false, error: problem}})
+
+        mouseClick(find(dialog, "saveButton"))
+
+        tryCompare(vm(dialog), "saveCalls", 1)
+        const status = find(dialog, "saveStatusLabel")
+        tryCompare(status, "visible", true)
+        compare(status.text, problem)
+        compare(vm(dialog).hasDraft, true)
+        compare(vm(dialog).discardCalls, 0)
+        compare(find(dialog, "benchmarkNameField").visible, true)
+    }
+
+    function test_aMigrationFailedRowShowsWhyAndCannotBeOpenedOrDeleted() {
+        const text = "Migration from version 2 to version 3 failed: the file could not be renamed"
+        const entries = makeEntries().concat([
+            {id: "key-old", name: "Old", filename: "Old.json", classification: "Migration failed",
+             problemText: text, openable: false, deletable: false}
+        ])
+        const dialog = openWithFake({libraryEntries: entries})
+
+        const problem = find(dialog, "libraryEntryProblem_2")
+        verify(problem !== null, "the row has a problem line")
+        compare(problem.visible, true)
+        compare(problem.text, text)
+        compare(find(dialog, "libraryEntryProblem_0").visible, false)
+
+        mouseDoubleClickSequence(find(dialog, "libraryEntry_2"))
+        compare(find(dialog, "openBenchmarkButton").enabled, false)
+        compare(find(dialog, "deleteBenchmarkButton").enabled, false)
+        compare(vm(dialog).openCalls.length, 0)
+        compare(vm(dialog).deleteCalls.length, 0)
+    }
+
     function test_refreshButtonDelegatesToVmAndIsDisabledWhileDirty() {
         const dirtyDialog = openWithFake({dirty: true})
         compare(find(dirtyDialog, "refreshLibraryButton").enabled, false,
