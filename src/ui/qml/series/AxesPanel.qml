@@ -120,7 +120,7 @@ Item {
         exclusive: true
     }
 
-    component AxisRow: Frame {
+    component AxisRow: AxisChoiceCard {
         id: axisRow
 
         required property string axisId
@@ -132,24 +132,22 @@ Item {
         required property string lineNamesText
         required property bool hasEnabledLine
         required property bool shown
-        readonly property bool narrow: width < 520
         readonly property alias nameField: nameInput
         readonly property alias deleteButton: deleteInput
 
-        objectName: "axisRow_" + axisId
+        objectName: "yAxisChoice_" + key
         Layout.fillWidth: true
+        choiceKey: key
+        choiceName: name
+        selected: shown
+        detailText: usageLabel.text
+        ButtonGroup.group: yAxisSelection
+        onChosen: key => root.settingsVm.setRunAxisLabel(key)
 
-        GridLayout {
-            width: parent.width
-            columns: axisRow.narrow ? 1 : 2
-            columnSpacing: 8
-            rowSpacing: 4
-
+        header: [
             CommitOnFinishField {
                 id: nameInput
                 objectName: "axisNameField_" + axisRow.axisId
-                Layout.row: 0
-                Layout.column: 0
                 Layout.fillWidth: true
                 text: axisRow.nameText
                 committedText: axisRow.nameText
@@ -161,71 +159,64 @@ Item {
                         root.settingsVm.renameAxis(axisRow.axisId, text)
                     text = Qt.binding(() => axisRow.nameText)
                 }
-            }
-
-            Label {
-                id: errorLabel
-                objectName: "axisNameError_" + axisRow.axisId
-                Layout.row: 1
-                Layout.column: 0
-                Layout.columnSpan: axisRow.narrow ? 1 : 2
-                Layout.fillWidth: true
-                Layout.preferredWidth: 0
-                text: AxisNames.message(axisRow.nameIssue)
-                visible: text !== ""
-                color: Theme.errorText
-                wrapMode: Text.WordWrap
-            }
-
-            RowLayout {
-                Layout.row: axisRow.narrow ? 2 : 0
-                Layout.column: axisRow.narrow ? 0 : 1
-                spacing: 8
-
-                ShowOnAxisButton {
-                    axisLetter: "Y"
-                    rowKey: axisRow.key
-                    rowName: axisRow.name
-                    shown: axisRow.shown
-                    ButtonGroup.group: yAxisSelection
-                    onChosen: key => root.settingsVm.setRunAxisLabel(key)
-                }
-
-                ActionButton {
-                    id: deleteInput
-                    objectName: "deleteAxis_" + axisRow.axisId
-                    text: axisRow.lineCount > 0 ? qsTr("Delete…") : qsTr("Delete")
-                    Accessible.name: qsTr("Delete axis %1").arg(axisRow.name)
-                    onClicked: root.requestDelete(axisRow.axisId, axisRow.lineCount)
+            },
+            ActionButton {
+                id: deleteInput
+                objectName: "deleteAxis_" + axisRow.axisId
+                display: AbstractButton.IconOnly
+                icon.source: "../icons/trash-2.svg"
+                icon.width: 16
+                icon.height: 16
+                icon.color: Theme.errorText
+                Accessible.name: qsTr("Delete axis %1").arg(axisRow.name)
+                ToolTip.visible: hovered
+                ToolTip.delay: Theme.toolTipDelay
+                ToolTip.text: qsTr("Delete axis")
+                onClicked: root.requestDelete(axisRow.axisId, axisRow.lineCount)
+                background: Rectangle {
+                    implicitWidth: 28
+                    implicitHeight: 24
+                    radius: 4
+                    color: deleteInput.down ? Qt.alpha(Theme.errorText, 0.25)
+                        : deleteInput.hovered ? Qt.alpha(Theme.errorText, 0.12) : "transparent"
+                    border.color: deleteInput.visualFocus ? Theme.palette.highlight : Qt.alpha(Theme.errorText, 0.7)
+                    border.width: deleteInput.visualFocus ? 2 : 1
                 }
             }
+        ]
 
-            Label {
-                objectName: "axisUsage_" + axisRow.axisId
-                Layout.row: 3
-                Layout.column: 0
-                Layout.columnSpan: axisRow.narrow ? 1 : 2
-                Layout.fillWidth: true
-                Layout.preferredWidth: 0
-                wrapMode: Text.WordWrap
-                // The app ships no translations, so a bare "%n line(s)" would show its "(s)" verbatim.
-                text: axisRow.lineCount === 0 ? qsTr("Not assigned to any lines.")
-                    : axisRow.lineCount === 1 ? qsTr("Used by 1 line: %1").arg(axisRow.lineNamesText)
-                    : qsTr("Used by %n lines: %1", "", axisRow.lineCount).arg(axisRow.lineNamesText)
-            }
+        Label {
+            id: errorLabel
+            objectName: "axisNameError_" + axisRow.axisId
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
+            text: AxisNames.message(axisRow.nameIssue)
+            visible: text !== ""
+            color: Theme.errorText
+            wrapMode: Text.WordWrap
+        }
 
-            Label {
-                objectName: "axisHiddenNote_" + axisRow.axisId
-                Layout.row: 4
-                Layout.column: 0
-                Layout.columnSpan: axisRow.narrow ? 1 : 2
-                Layout.fillWidth: true
-                Layout.preferredWidth: 0
-                visible: !axisRow.hasEnabledLine
-                wrapMode: Text.WordWrap
-                color: Qt.alpha(palette.text, 0.7)
-                text: qsTr("No visible lines — the graph labels its first visible line instead.")
-            }
+        Label {
+            id: usageLabel
+            objectName: "axisUsage_" + axisRow.axisId
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
+            wrapMode: Text.WordWrap
+            color: Qt.alpha(palette.text, 0.7)
+            // The app ships no translations, so a bare "%n line(s)" would show its "(s)" verbatim.
+            text: axisRow.lineCount === 0 ? qsTr("Not assigned to any lines.")
+                : axisRow.lineCount === 1 ? qsTr("Used by 1 line: %1").arg(axisRow.lineNamesText)
+                : qsTr("Used by %n lines: %1", "", axisRow.lineCount).arg(axisRow.lineNamesText)
+        }
+
+        Label {
+            objectName: "axisHiddenNote_" + axisRow.axisId
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
+            visible: !axisRow.hasEnabledLine
+            wrapMode: Text.WordWrap
+            color: Qt.alpha(palette.text, 0.7)
+            text: qsTr("No visible lines — the graph labels its first visible line instead.")
         }
     }
 
@@ -277,7 +268,7 @@ Item {
                 id: independentRows
             }
 
-            Frame {
+            AxisChoiceCard {
                 id: independentRow
 
                 required property string lineId
@@ -285,52 +276,25 @@ Item {
                 required property string name
                 required property bool lineEnabled
                 required property bool shown
-                readonly property bool narrow: width < 520
 
-                objectName: "independentRow_" + lineId
+                objectName: "yAxisChoice_" + key
                 Layout.fillWidth: true
+                choiceKey: key
+                choiceName: name
+                selected: shown
+                detailText: lineEnabled ? "" : hiddenNote.text
+                ButtonGroup.group: yAxisSelection
+                onChosen: key => root.settingsVm.setRunAxisLabel(key)
 
-                GridLayout {
-                    width: parent.width
-                    columns: independentRow.narrow ? 1 : 2
-                    columnSpacing: 8
-                    rowSpacing: 4
-
-                    ColumnLayout {
-                        Layout.row: 0
-                        Layout.column: 0
-                        Layout.fillWidth: true
-                        spacing: 2
-
-                        Label {
-                            objectName: "independentName_" + independentRow.lineId
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: 0
-                            wrapMode: Text.WordWrap
-                            text: independentRow.name
-                        }
-
-                        Label {
-                            objectName: "independentHiddenNote_" + independentRow.lineId
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: 0
-                            visible: !independentRow.lineEnabled
-                            wrapMode: Text.WordWrap
-                            color: Qt.alpha(palette.text, 0.7)
-                            text: qsTr("Hidden line — the graph labels its first visible line instead.")
-                        }
-                    }
-
-                    ShowOnAxisButton {
-                        Layout.row: independentRow.narrow ? 1 : 0
-                        Layout.column: independentRow.narrow ? 0 : 1
-                        axisLetter: "Y"
-                        rowKey: independentRow.key
-                        rowName: independentRow.name
-                        shown: independentRow.shown
-                        ButtonGroup.group: yAxisSelection
-                        onChosen: key => root.settingsVm.setRunAxisLabel(key)
-                    }
+                Label {
+                    id: hiddenNote
+                    objectName: "independentHiddenNote_" + independentRow.lineId
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 0
+                    visible: !independentRow.lineEnabled
+                    wrapMode: Text.WordWrap
+                    color: Qt.alpha(palette.text, 0.7)
+                    text: qsTr("Hidden line — the graph labels its first visible line instead.")
                 }
             }
         }
