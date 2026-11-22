@@ -40,7 +40,7 @@ qt_add_qml_module(ksv_ui
             qml/graph/GraphTextInput.qml
             qml/graph/GraphVisibilityMenu.qml
             qml/graph/NoGraphsShown.qml
-            qml/graph/ShowOnAxisButton.qml
+            qml/graph/AxisChoiceCard.qml
             qml/graph/GraphCatalog.js
             qml/benchmark/BenchmarkProgressGrid.qml
             qml/benchmark/TierBar.qml

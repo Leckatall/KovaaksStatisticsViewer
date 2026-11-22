@@ -190,7 +190,12 @@ TestCase {
     }
 
     function yAxisButtons(panel) {
-        return ItemLookup.findByObjectNamePrefix(panel, "showOnYAxis_", [])
+        return ItemLookup.findByObjectNamePrefix(panel, "yAxisChoice_", [])
+    }
+
+    // A shared-axis card's centre can fall on its name field, which keeps its own clicks.
+    function choose(card) {
+        mouseClick(find(card, "axisChoiceMarker"))
     }
 
     function test_rowsShowSharedAxesWithUsageAndIndependentLinesWithoutRenameOrDelete() {
@@ -203,11 +208,12 @@ TestCase {
         compare(find(panel, "axisUsage_2").text, "Used by 2 lines: Accuracy, Accuracy (5s)")
         compare(find(panel, "axisNameError_1").visible, false)
 
-        const independent = find(panel, "independentRow_7")
-        compare(find(panel, "independentName_7").text, "Score/s (5s)")
+        const independent = find(panel, "yAxisChoice_series:7")
+        compare(find(independent, "axisChoiceName").text, "Score/s (5s)")
+        compare(find(independent, "axisChoiceName").visible, true)
         compare(ItemLookup.findByObjectNamePrefix(independent, "axisNameField_", []).length, 0)
         compare(ItemLookup.findByObjectNamePrefix(independent, "deleteAxis_", []).length, 0)
-        compare(ItemLookup.findByObjectNamePrefix(independent, "showOnYAxis_", []).length, 1)
+        compare(ItemLookup.findByObjectNamePrefix(independent, "yAxisChoice_", []).length, 1)
         compare(find(panel, "independentHiddenNote_7").visible, false)
         compare(find(panel, "independentHiddenNote_8").visible, true)
         compare(find(panel, "noIndependentLinesLabel").visible, false)
@@ -219,7 +225,7 @@ TestCase {
         const panel = makePanel(makeFakeSettingsVm({axisOverview: shared}))
 
         compare(find(panel, "noIndependentLinesLabel").visible, true)
-        absent(panel, "independentRow_7")
+        absent(panel, "yAxisChoice_series:7")
     }
 
     function test_anUnusedAxisSaysItIsNotAssignedAndDeletesWithoutConfirmation() {
@@ -239,12 +245,14 @@ TestCase {
 
         compare(yAxisButtons(panel).length, 5)
         compare(checked.length, 1)
-        compare(checked[0].objectName, "showOnYAxis_axis:1")
+        compare(checked[0].objectName, "yAxisChoice_axis:1")
         compare(checked[0].Accessible.role, Accessible.RadioButton)
         compare(checked[0].Accessible.checked, true)
-        compare(checked[0].Accessible.name, "Show Score on Y-axis")
+        compare(checked[0].Accessible.name, "Score")
+        compare(checked[0].Accessible.description, find(panel, "axisUsage_1").text)
         compare(panel.yAxisGroup.checkedButton, checked[0])
-        compare(find(panel, "showOnYAxis_series:7").Accessible.name, "Show Score/s (5s) on Y-axis")
+        compare(find(panel, "yAxisChoice_series:7").Accessible.name, "Score/s (5s)")
+        compare(find(panel, "yAxisChoice_series:8").Accessible.description, find(panel, "independentHiddenNote_8").text)
     }
 
     function expectOnlyShown(panel, name) {
@@ -256,10 +264,10 @@ TestCase {
     function test_theSelectionFollowsTheViewModel() {
         const panel = makeLivePanel()
 
-        mouseClick(find(panel, "showOnYAxis_series:7"))
+        choose(find(panel, "yAxisChoice_series:7"))
 
         compare(panel.settingsVm.setRunAxisLabelCalls, ["series:7"])
-        expectOnlyShown(panel, "showOnYAxis_series:7")
+        expectOnlyShown(panel, "yAxisChoice_series:7")
     }
 
     // Rows are patched shared axes first, so moving to axis:2 checks it before series:7 is cleared, and
@@ -267,18 +275,18 @@ TestCase {
     // binding outlived that.
     function test_theSelectionCanMoveBackToASharedAxis() {
         const panel = makeLivePanel()
-        mouseClick(find(panel, "showOnYAxis_series:7"))
+        choose(find(panel, "yAxisChoice_series:7"))
 
-        mouseClick(find(panel, "showOnYAxis_axis:2"))
+        choose(find(panel, "yAxisChoice_axis:2"))
 
         compare(panel.settingsVm.setRunAxisLabelCalls, ["series:7", "axis:2"])
-        expectOnlyShown(panel, "showOnYAxis_axis:2")
-        compare(find(panel, "showOnYAxis_series:7").text, "Show on Y-axis")
+        expectOnlyShown(panel, "yAxisChoice_axis:2")
+        compare(find(panel, "yAxisChoice_series:7").checked, false)
 
-        mouseClick(find(panel, "showOnYAxis_series:7"))
+        choose(find(panel, "yAxisChoice_series:7"))
 
         compare(panel.settingsVm.setRunAxisLabelCalls, ["series:7", "axis:2", "series:7"])
-        expectOnlyShown(panel, "showOnYAxis_series:7")
+        expectOnlyShown(panel, "yAxisChoice_series:7")
     }
 
     function test_deletingTheShownAxisListsItsLinesAsIndependentAndShowsTheFirst() {
@@ -288,14 +296,14 @@ TestCase {
 
         find(panel.deleteDialog.footer, "deleteAxisConfirmButton").clicked()
 
-        tryVerify(() => ItemLookup.findByObjectName(panel, "axisRow_1") === null)
+        tryVerify(() => ItemLookup.findByObjectName(panel, "yAxisChoice_axis:1") === null)
         verify(waitForRendering(panel))
-        const order = ["1.0", "1.1", "1.2", "1.3", "1.4", "7", "8"].map(id => find(panel, "independentRow_" + id))
+        const order = ["1.0", "1.1", "1.2", "1.3", "1.4", "7", "8"].map(id => find(panel, "yAxisChoice_series:" + id))
         for (let i = 1; i < order.length; ++i)
             verify(order[i - 1].y < order[i].y, order[i - 1].objectName + " sits above " + order[i].objectName
                    + " (" + order.map(row => row.y).join(", ") + ")")
-        compare(find(panel, "independentName_1.0").text, "Score")
-        expectOnlyShown(panel, "showOnYAxis_series:1.0")
+        compare(find(panel, "yAxisChoice_series:1.0").choiceName, "Score")
+        expectOnlyShown(panel, "yAxisChoice_series:1.0")
     }
 
     function test_freedLinesSlotInAmongTheIndependentLinesInDisplayOrder() {
@@ -306,34 +314,34 @@ TestCase {
 
         find(panel.deleteDialog.footer, "deleteAxisConfirmButton").clicked()
 
-        tryVerify(() => ItemLookup.findByObjectName(panel, "axisRow_2") === null)
+        tryVerify(() => ItemLookup.findByObjectName(panel, "yAxisChoice_axis:2") === null)
         verify(waitForRendering(panel))
-        const order = ["7", "2.0", "2.1", "8"].map(id => find(panel, "independentRow_" + id))
+        const order = ["7", "2.0", "2.1", "8"].map(id => find(panel, "yAxisChoice_series:" + id))
         for (let i = 1; i < order.length; ++i)
             verify(order[i - 1].y < order[i].y, order[i - 1].objectName + " sits above " + order[i].objectName
                    + " (" + order.map(row => row.y).join(", ") + ")")
-        compare(find(panel, "independentName_2.0").text, "Accuracy")
-        expectOnlyShown(panel, "showOnYAxis_axis:1")
+        compare(find(panel, "yAxisChoice_series:2.0").choiceName, "Accuracy")
+        expectOnlyShown(panel, "yAxisChoice_axis:1")
     }
 
     function test_choosingAnotherRowStagesItsKey() {
         const panel = makePanel()
 
-        mouseClick(find(panel, "showOnYAxis_axis:2"))
+        choose(find(panel, "yAxisChoice_axis:2"))
 
         compare(panel.settingsVm.setRunAxisLabelCalls, ["axis:2"])
         // The fake does not republish, so the shown row is still the one the VM reported.
-        compare(find(panel, "showOnYAxis_axis:1").checked, true)
-        compare(find(panel, "showOnYAxis_axis:2").checked, false)
+        compare(find(panel, "yAxisChoice_axis:1").checked, true)
+        compare(find(panel, "yAxisChoice_axis:2").checked, false)
     }
 
     function test_choosingTheShownRowDoesNothing() {
         const panel = makePanel()
 
-        mouseClick(find(panel, "showOnYAxis_axis:1"))
+        choose(find(panel, "yAxisChoice_axis:1"))
 
         compare(panel.settingsVm.setRunAxisLabelCalls.length, 0)
-        compare(find(panel, "showOnYAxis_axis:1").checked, true)
+        compare(find(panel, "yAxisChoice_axis:1").checked, true)
     }
 
     function test_aRowWithNoVisibleLinesExplainsTheFallback() {
@@ -382,7 +390,8 @@ TestCase {
         const error = find(panel, "axisNameError_2")
         compare(field.text, "score")
         compare(error.visible, true)
-        verify(error.y >= field.y + field.height, "the error sits under the field")
+        verify(error.mapToItem(panel, 0, 0).y >= field.mapToItem(panel, 0, field.height).y,
+               "the error sits under the field")
 
         field.forceActiveFocus()
         keyClick(Qt.Key_Tab)
@@ -445,7 +454,7 @@ TestCase {
 
     function test_focusStaysPutAfterARename() {
         const panel = makeLivePanel()
-        const oldShow = find(panel, "showOnYAxis_axis:1")
+        const oldDelete = find(panel, "deleteAxis_1")
         const field = find(panel, "axisNameField_1")
         field.forceActiveFocus()
         field.selectAll()
@@ -455,9 +464,9 @@ TestCase {
 
         tryVerify(() => panel.settingsVm.renameAxisCalls.length === 1)
         compare(panel.settingsVm.renameAxisCalls, [["1", "Points"]])
-        tryVerify(() => focusedName() === "showOnYAxis_axis:1")
+        tryVerify(() => focusedName() === "deleteAxis_1")
         const focused = testCase.Window.window.activeFocusItem
-        verify(focused === oldShow, "the edit keeps the row instead of replacing it")
+        verify(focused === oldDelete, "the edit keeps the row instead of replacing it")
         compare(find(panel, "axisNameField_1").text, "Points")
 
         const accuracy = find(panel, "axisNameField_2")
@@ -471,48 +480,40 @@ TestCase {
         tryVerify(() => focusedName() === "axisNameField_2")
         verify(testCase.Window.window.activeFocusItem === accuracy)
         compare(accuracy.text, "Hits")
+        compare(panel.settingsVm.setRunAxisLabelCalls, [], "Return in a name field chooses nothing")
     }
 
-    function test_narrowWidthMovesActionsBelowTheName() {
-        const wide = makePanel(makeFakeSettingsVm(), 800)
-        const wideField = find(wide, "axisNameField_1")
-        const wideShow = find(wide, "showOnYAxis_axis:1")
-        const wideRow = find(wide, "axisRow_1")
-        verify(wideShow.mapToItem(wideRow, 0, 0).y < wideField.mapToItem(wideRow, 0, 0).y + wideField.height,
-               "wide rows keep the actions beside the name")
+    // The design's constrained editor width.
+    function test_aNarrowCardKeepsDeleteBesideTheName() {
+        const narrow = makePanel(makeFakeSettingsVm(), 342)
+        const card = find(narrow, "yAxisChoice_axis:1")
+        const field = find(narrow, "axisNameField_1")
+        const deleteButton = find(narrow, "deleteAxis_1")
+        const fieldTop = field.mapToItem(card, 0, 0).y
+        const deleteTop = deleteButton.mapToItem(card, 0, 0).y
 
-        const narrow = makePanel(makeFakeSettingsVm(), 400)
-        const narrowField = find(narrow, "axisNameField_1")
-        const narrowRow = find(narrow, "axisRow_1")
-        const narrowShow = find(narrow, "showOnYAxis_axis:1")
-        const narrowDelete = find(narrow, "deleteAxis_1")
-        const fieldBottom = narrowField.mapToItem(narrowRow, 0, 0).y + narrowField.height
-        verify(narrowShow.mapToItem(narrowRow, 0, 0).y >= fieldBottom, "narrow rows put Show below the name")
-        verify(narrowDelete.mapToItem(narrowRow, 0, 0).y >= fieldBottom, "narrow rows put Delete below the name")
-        fuzzyCompare(narrowField.width, narrowRow.availableWidth, 1, "the name field takes the whole narrow row")
-        verify(narrowDelete.mapToItem(narrow, narrowDelete.width, 0).x <= narrow.width)
+        verify(deleteTop < fieldTop + field.height && fieldTop < deleteTop + deleteButton.height,
+               "Delete shares the name's row")
+        verify(deleteButton.mapToItem(card, 0, 0).x >= field.mapToItem(card, field.width, 0).x,
+               "Delete sits right of the name")
+        fuzzyCompare(field.width + deleteButton.width + card.headerSpacing,
+                     card.availableWidth - card.markerSize - card.headerSpacing, 1,
+                     "the name field takes the rest of the header")
+        verify(deleteButton.mapToItem(narrow, deleteButton.width, 0).x <= narrow.width)
+        verify(find(narrow, "axisUsage_1").lineCount > 1, "the usage summary wraps")
 
-        const besideName = find(wide, "independentName_7")
-        const besideShow = find(wide, "showOnYAxis_series:7")
-        const wideLine = find(wide, "independentRow_7")
-        verify(besideShow.mapToItem(wideLine, 0, 0).y < besideName.mapToItem(wideLine, 0, 0).y + besideName.height,
-               "wide independent rows keep Show beside the line name")
-        const lineName = find(narrow, "independentName_7")
-        const lineShow = find(narrow, "showOnYAxis_series:7")
-        const narrowLine = find(narrow, "independentRow_7")
-        verify(lineShow.mapToItem(narrowLine, 0, 0).y >= lineName.mapToItem(narrowLine, 0, 0).y + lineName.height,
-               "narrow independent rows put Show below the line name")
-        verify(lineShow.mapToItem(narrow, lineShow.width, 0).x <= narrow.width)
+        const line = find(narrow, "yAxisChoice_series:7")
+        verify(line.mapToItem(narrow, line.width, 0).x <= narrow.width)
     }
 
     function test_keyboardReachesEveryAction() {
         const panel = makePanel()
-        find(panel, "axisNameField_1").forceActiveFocus()
+        find(panel, "yAxisChoice_axis:1").forceActiveFocus(Qt.TabFocusReason)
         const expected = [
-            "axisNameField_1", "showOnYAxis_axis:1", "deleteAxis_1",
-            "axisNameField_2", "showOnYAxis_axis:2", "deleteAxis_2",
-            "axisNameField_3", "showOnYAxis_axis:3", "deleteAxis_3",
-            "newAxisButton", "showOnYAxis_series:7", "showOnYAxis_series:8"
+            "yAxisChoice_axis:1", "axisNameField_1", "deleteAxis_1",
+            "yAxisChoice_axis:2", "axisNameField_2", "deleteAxis_2",
+            "yAxisChoice_axis:3", "axisNameField_3", "deleteAxis_3",
+            "newAxisButton", "yAxisChoice_series:7", "yAxisChoice_series:8"
         ]
         const visited = [focusedName()]
         for (let i = 1; i < expected.length; ++i) {
@@ -529,9 +530,9 @@ TestCase {
     function test_enterActivatesEveryAction() {
         const panel = makePanel()
 
-        find(panel, "showOnYAxis_axis:2").forceActiveFocus()
+        find(panel, "yAxisChoice_axis:2").forceActiveFocus()
         keyClick(Qt.Key_Return)
-        find(panel, "showOnYAxis_series:7").forceActiveFocus()
+        find(panel, "yAxisChoice_series:7").forceActiveFocus()
         keyClick(Qt.Key_Enter)
         compare(panel.settingsVm.setRunAxisLabelCalls, ["axis:2", "series:7"])
 
@@ -593,14 +594,40 @@ TestCase {
 
     function test_rowsFillTheirWidth() {
         const panel = makePanel()
-        const row = find(panel, "axisRow_1")
-        fuzzyCompare(find(panel, "axisUsage_1").width, row.availableWidth, 1, "usage text wraps at the row width")
-        const independent = find(panel, "independentRow_7")
-        const show = find(panel, "showOnYAxis_series:7")
-        const name = find(panel, "independentName_7")
-        verify(name.width > independent.availableWidth / 2, "the line name gets the room beside its button")
-        verify(name.mapToItem(independent, name.width, 0).x <= show.mapToItem(independent, 0, 0).x,
-               "the line name stays clear of its button")
+        const row = find(panel, "yAxisChoice_axis:1")
+        const detailWidth = row.availableWidth - row.markerSize - row.headerSpacing
+        fuzzyCompare(find(panel, "axisUsage_1").width, detailWidth, 1, "usage text wraps at the card's detail width")
+        const independent = find(panel, "yAxisChoice_series:7")
+        const name = find(independent, "axisChoiceName")
+        fuzzyCompare(name.width, independent.availableWidth - independent.markerSize - independent.headerSpacing, 1,
+                     "the line name takes the card's width beside its marker")
+    }
+
+    function test_clickingAnywhereElseOnASharedCardChoosesIt() {
+        const panel = makePanel()
+
+        mouseClick(find(panel, "axisUsage_2"))
+
+        compare(panel.settingsVm.setRunAxisLabelCalls, ["axis:2"])
+    }
+
+    function test_theNameFieldAndDeleteDoNotChooseTheirAxis() {
+        const panel = makePanel()
+
+        mouseClick(find(panel, "axisNameField_2"))
+        mouseClick(find(panel, "deleteAxis_3"))
+
+        compare(panel.settingsVm.setRunAxisLabelCalls, [])
+        compare(panel.settingsVm.deleteAxisCalls, ["3"])
+    }
+
+    function test_deleteIsATrashButtonNamedForItsAxis() {
+        const panel = makePanel()
+        const deleteButton = find(panel, "deleteAxis_1")
+
+        compare(deleteButton.display, AbstractButton.IconOnly)
+        compare(deleteButton.ToolTip.text, "Delete axis")
+        compare(deleteButton.Accessible.name, "Delete axis Score")
     }
 
     function test_clickingARowButtonRightAfterEditingANameStillActs() {
@@ -609,11 +636,11 @@ TestCase {
         field.forceActiveFocus()
         field.selectAll()
         typeText("Points")
-        const show = find(panel, "showOnYAxis_axis:2")
+        const marker = find(find(panel, "yAxisChoice_axis:2"), "axisChoiceMarker")
 
-        mousePress(show)
+        mousePress(marker)
         wait(20)
-        mouseRelease(show)
+        mouseRelease(marker)
 
         compare(panel.settingsVm.renameAxisCalls, [["1", "Points"]])
         compare(panel.settingsVm.setRunAxisLabelCalls, ["axis:2"])
@@ -679,7 +706,7 @@ TestCase {
         keyClick(Qt.Key_Space)
 
         compare(panel.settingsVm.deleteAxisCalls, ["3"])
-        tryVerify(() => ItemLookup.findByObjectName(panel, "axisRow_3") === null, 5000, "the unused axis row is removed")
+        tryVerify(() => ItemLookup.findByObjectName(panel, "yAxisChoice_axis:3") === null, 5000, "the unused axis row is removed")
         tryVerify(() => focusedName() === "newAxisButton")
     }
 

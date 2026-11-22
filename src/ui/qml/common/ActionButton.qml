@@ -8,8 +8,10 @@ Button {
 
     property bool _enterDown: false
 
+    // Keys a focused child leaves unaccepted propagate here; a TextInput does that with Return after
+    // emitting editingFinished, which must not also press the button around it.
     function isEnter(event: KeyEvent): bool {
-        return event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+        return button.activeFocus && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
     }
 
     Keys.onPressed: event => {
