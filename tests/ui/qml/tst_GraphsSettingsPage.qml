@@ -237,17 +237,20 @@ TestCase {
         for (const graph of ["benchmarkRank", "benchmarkRecentRank"]) {
             const {dialog} = openOn(graph)
             verify(shown(dialog, "graphGroup_axes"), graph)
-            compare(names(dialog, "graphXAxis_"), ["graphXAxis_calendar", "graphXAxis_runs"], graph)
-            compare(find(dialog, "showOnXAxis_runs").checked, true, graph)
-            compare(find(dialog, "showOnXAxis_calendar").checked, false, graph)
-            compare(find(dialog, "showOnXAxis_runs").Accessible.name, "Show Run on X-axis")
+            compare(names(dialog, "xAxisChoice_"), ["xAxisChoice_calendar", "xAxisChoice_runs"], graph)
+            compare(find(dialog, "xAxisChoice_runs").checked, true, graph)
+            compare(find(dialog, "xAxisChoice_calendar").checked, false, graph)
+            compare(find(dialog, "xAxisChoice_runs").Accessible.name, "Run")
+            compare(find(dialog, "xAxisChoice_runs").Accessible.description,
+                    find(dialog, "graphXAxisDescription_runs").text)
+            compare(find(dialog, "graphXAxesHeading").text, "Horizontal axis")
         }
     }
 
     function test_otherGraphsShowNoXAxisRows() {
         for (const graph of ["run", "dailyPlaytime", "scenarioHistory", "benchmarkPlaytime"]) {
             const {dialog} = openOn(graph)
-            compare(names(dialog, "graphXAxis_"), [], graph)
+            compare(names(dialog, "xAxisChoice_"), [], graph)
             verify(!shown(dialog, "graphXAxesHeading"), graph)
         }
     }
@@ -255,26 +258,34 @@ TestCase {
     function test_choosingAnXAxisStagesItAndTheCheckFollowsTheDraft() {
         const {dialog, vm} = openOn("benchmarkRecentRank")
 
-        clickNamed(dialog, "showOnXAxis_calendar")
+        clickNamed(dialog, "xAxisChoice_calendar")
 
         compare(vm.callsNamed("setShownXAxis").map(c => c.args), [["benchmarkRecentRank", "calendar"]])
-        compare(find(dialog, "showOnXAxis_calendar").checked, true)
-        compare(find(dialog, "showOnXAxis_runs").checked, false)
-        compare(find(dialog, "graphSettingsEditor").xAxisGroup.checkedButton, find(dialog, "showOnXAxis_calendar"))
+        compare(find(dialog, "xAxisChoice_calendar").checked, true)
+        compare(find(dialog, "xAxisChoice_runs").checked, false)
+        compare(find(dialog, "graphSettingsEditor").xAxisGroup.checkedButton, find(dialog, "xAxisChoice_calendar"))
 
-        clickNamed(dialog, "showOnXAxis_calendar")
+        clickNamed(dialog, "xAxisChoice_calendar")
         compare(vm.callsNamed("setShownXAxis").length, 1, "choosing the shown axis again stages nothing")
+    }
+
+    function test_clickingAnXAxisDescriptionChoosesThatAxis() {
+        const {dialog, vm} = openOn("benchmarkRank")
+
+        clickNamed(dialog, "graphXAxisDescription_calendar")
+
+        compare(vm.callsNamed("setShownXAxis").map(c => c.args), [["benchmarkRank", "calendar"]])
     }
 
     function test_resetRestoresTheRunAxis() {
         const {dialog, vm} = openOn("benchmarkRank")
-        clickNamed(dialog, "showOnXAxis_calendar")
+        clickNamed(dialog, "xAxisChoice_calendar")
 
         clickNamed(dialog, "graphResetButton")
 
         compare(vm.callsNamed("resetGraph").map(c => c.args), [["benchmarkRank"]])
-        compare(find(dialog, "showOnXAxis_runs").checked, true)
-        compare(find(dialog, "showOnXAxis_calendar").checked, false)
+        compare(find(dialog, "xAxisChoice_runs").checked, true)
+        compare(find(dialog, "xAxisChoice_calendar").checked, false)
     }
 
     // ---- Data and range ------------------------------------------------------------------------------
