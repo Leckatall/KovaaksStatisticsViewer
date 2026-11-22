@@ -669,41 +669,28 @@ Item {
                     Repeater {
                         model: root.keyList(root.xAxisKeys)
 
-                        GridLayout {
+                        AxisChoiceCard {
                             id: xAxis
                             required property string modelData
                             readonly property var row: root.rowFor(root.xAxisRows, modelData)
-                            readonly property string axisTitle: GraphCatalog.axisName(root.graphKey, modelData)
 
-                            objectName: "graphXAxis_" + modelData
+                            objectName: "xAxisChoice_" + modelData
                             Layout.fillWidth: true
-                            columns: root.wide ? 2 : 1
-                            columnSpacing: 8
-                            rowSpacing: 4
+                            choiceKey: modelData
+                            choiceName: GraphCatalog.axisName(root.graphKey, modelData)
+                            selected: row.shown === true
+                            detailText: xAxisDescription.text
+                            ButtonGroup.group: xAxisSelection
+                            onChosen: key => root.settingsVm.setShownXAxis(root.graphKey, key)
 
-                            ColumnLayout {
+                            Label {
+                                id: xAxisDescription
+                                objectName: "graphXAxisDescription_" + xAxis.modelData
                                 Layout.fillWidth: true
-                                spacing: 2
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: xAxis.axisTitle
-                                    wrapMode: Text.WordWrap
-                                }
-                                Label {
-                                    objectName: "graphXAxisDescription_" + xAxis.modelData
-                                    Layout.fillWidth: true
-                                    text: GraphCatalog.axisDescription(root.graphKey, xAxis.modelData)
-                                    opacity: 0.75
-                                    wrapMode: Text.WordWrap
-                                }
-                            }
-                            ShowOnAxisButton {
-                                axisLetter: "X"
-                                rowKey: xAxis.modelData
-                                rowName: xAxis.axisTitle
-                                shown: xAxis.row.shown === true
-                                ButtonGroup.group: xAxisSelection
-                                onChosen: key => root.settingsVm.setShownXAxis(root.graphKey, key)
+                                Layout.preferredWidth: 0
+                                text: GraphCatalog.axisDescription(root.graphKey, xAxis.modelData)
+                                color: Qt.alpha(palette.text, 0.7)
+                                wrapMode: Text.WordWrap
                             }
                         }
                     }
