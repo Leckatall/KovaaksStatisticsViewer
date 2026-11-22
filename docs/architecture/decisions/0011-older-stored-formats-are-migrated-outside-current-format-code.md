@@ -49,3 +49,8 @@ The existing handling of older formats inside current-format code for benchmark 
 - [ADR-0004: Route view-model interactions through use cases](0004-route-view-model-interactions-through-use-cases.md), precedent for recording existing violations as debt
 - [ADR-0010: One data-layer authority for each body of persisted state](0010-one-data-layer-authority-for-each-body-of-persisted-state.md), which does not govern stored formats
 - [Run history data view](../views/run-history-data.md), [Graph configuration view](../views/graph-configuration.md) and [Benchmark definitions view](../views/benchmark-definitions.md), which describe the current migration behaviour
+
+## Amendments
+
+- 2026-11-22: Amended by [ADR-0012](0012-migrations-produce-current-stored-data-never-the-in-memory-model.md), which requires migration to produce current stored data and leaves building the in-memory model to the current-format reader; the run profile's migration, cited above as conforming, does not meet it.
+- 2026-11-22: Amended by [ADR-0013](0013-migrations-upgrade-stored-data-one-version-at-a-time.md), which requires migration to upgrade older data one version at a time.
