@@ -122,8 +122,24 @@ namespace {
         return configuration;
     }
 
-    // Documents before version 7 have no "xAxis" key in any graph section.
+    // Documents before version 8 have no rank axis: no "tierRounding" key and no "rank" policy.
+    QJsonObject withoutTierRounding(QJsonObject root) {
+        auto graphs = root["graphs"].toObject();
+        for (auto it = graphs.begin(); it != graphs.end(); ++it) {
+            auto section = it.value().toObject();
+            section.remove("tierRounding");
+            auto policies = section["axisPolicies"].toObject();
+            policies.remove("rank");
+            section["axisPolicies"] = policies;
+            it.value() = section;
+        }
+        root["graphs"] = graphs;
+        return root;
+    }
+
+    // Documents before version 7 also have no "xAxis" key in any graph section.
     QJsonObject withoutXAxis(QJsonObject root) {
+        root = withoutTierRounding(root);
         auto graphs = root["graphs"].toObject();
         for (auto it = graphs.begin(); it != graphs.end(); ++it) {
             auto section = it.value().toObject();
@@ -221,14 +237,14 @@ namespace {
         EXPECT_EQ(load(), defaultGraphConfiguration());
     }
 
-    TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionSevenDocument) {
+    TEST_F(GraphConfigurationPersistenceTest, SeedsCurrentDefaultsAndWritesAVersionEightDocument) {
         const auto loaded = load();
 
         EXPECT_EQ(loaded, defaultGraphConfiguration());
         EXPECT_TRUE(settings->quarantined.empty());
         ASSERT_EQ(settings->document_writes, 1);
         const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 7);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 8);
         EXPECT_EQ(root["graphs"].toObject().keys(),
                   (QStringList{"benchmarkPlaytime", "benchmarkRank", "benchmarkRecentRank", "dailyPlaytime", "run",
                                "scenarioHistory"}));
@@ -272,7 +288,7 @@ namespace {
         for (const auto key: kGraphKeys) EXPECT_EQ(loaded.preferences(key), defaultGraphPreferences(key));
 
         save(loaded);
-        EXPECT_EQ(docObject()["schemaVersion"].toInt(), 7);
+        EXPECT_EQ(docObject()["schemaVersion"].toInt(), 8);
         EXPECT_EQ(load(), loaded);
     }
 
@@ -309,7 +325,7 @@ namespace {
         expectV3RootSeries(loaded.runSeries);
 
         const auto root = savedRoot(loaded);
-        EXPECT_EQ(root["schemaVersion"].toInt(), 7);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 8);
         EXPECT_TRUE(root["nextComputedSeriesId"].isNull());
         EXPECT_TRUE(root["nextAxisId"].isNull());
         auto expectedSeries = v3Root()["series"].toArray();
@@ -332,7 +348,7 @@ namespace {
         save(configuration);
 
         const auto root = docObject();
-        EXPECT_EQ(root["schemaVersion"].toInt(), 7);
+        EXPECT_EQ(root["schemaVersion"].toInt(), 8);
         for (const auto &item: root["series"].toArray())
             EXPECT_TRUE(item.toObject()["presentation"].toObject()["hiddenLeadingPoints"].isDouble());
         EXPECT_EQ(root["series"].toArray()[2].toObject()["presentation"].toObject()["hiddenLeadingPoints"].toInt(), 3);
@@ -420,7 +436,7 @@ namespace {
             EXPECT_EQ(loaded.preferences(key), configuration.preferences(key)) << graphKeyName(key);
     }
 
-    TEST_F(GraphConfigurationPersistenceTest, AVersionSevenRankSectionWithoutAnXAxisIsRejected) {
+    TEST_F(GraphConfigurationPersistenceTest, ARankSectionWithoutAnXAxisIsRejected) {
         auto configuration = everyPreferenceKind();
         configuration.preferences(GraphKey::BenchmarkRank).xAxis = std::string(kCalendarXAxis);
         writeDoc(withGraphField(savedRoot(configuration), "benchmarkRank", "xAxis", QJsonValue::Undefined));
@@ -428,6 +444,74 @@ namespace {
         const auto loaded = load();
         EXPECT_EQ(settings->quarantined.size(), 1U);
         EXPECT_EQ(loaded.preferences(GraphKey::BenchmarkRank), defaultGraphPreferences(GraphKey::BenchmarkRank));
+    }
+
+    // Without the migration, every rank section saved before version 8 would lack the rank policy,
+    // fail validation and be quarantined, losing that graph's range and style.
+    TEST_F(GraphConfigurationPersistenceTest, AVersionSevenDocumentGainsTheRankAxisDefaultsAndIsNotQuarantined) {
+        auto root = withoutTierRounding(savedRoot(everyPreferenceKind()));
+        root["schemaVersion"] = 7;
+        writeDoc(root);
+
+        const auto loaded = load();
+        EXPECT_TRUE(settings->quarantined.empty());
+        for (const auto graph: {GraphKey::BenchmarkRank, GraphKey::BenchmarkRecentRank}) {
+            SCOPED_TRACE(graphKeyName(graph));
+            const auto &policies = loaded.preferences(graph).axisPolicies;
+            const auto rank = policies.find("rank");
+            ASSERT_TRUE(rank != policies.end());
+            EXPECT_TRUE(std::holds_alternative<FitVisibleData>(rank->second));
+            EXPECT_EQ(loaded.preferences(graph).tierRounding, TierRounding::Both);
+        }
+        EXPECT_EQ(loaded, everyPreferenceKind());
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, AVersionSevenDocumentMissingAnOlderPolicyIsStillRejected) {
+        auto root = withoutTierRounding(savedRoot(everyPreferenceKind()));
+        root["schemaVersion"] = 7;
+        auto history = root["graphs"].toObject()["scenarioHistory"].toObject();
+        auto policies = history["axisPolicies"].toObject();
+        policies.remove("score");
+        writeDoc(withGraphField(root, "scenarioHistory", "axisPolicies", policies));
+
+        const auto loaded = load();
+        EXPECT_EQ(settings->quarantined.size(), 1U);
+        EXPECT_EQ(loaded.preferences(GraphKey::ScenarioHistory), defaultGraphPreferences(GraphKey::ScenarioHistory));
+        EXPECT_EQ(loaded.preferences(GraphKey::BenchmarkRank), everyPreferenceKind().preferences(GraphKey::BenchmarkRank));
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, TheRankAxisPolicyAndTierRoundingRoundTrip) {
+        auto configuration = everyPreferenceKind();
+        configuration.preferences(GraphKey::BenchmarkRank).axisPolicies["rank"] = StartAtZero{};
+        configuration.preferences(GraphKey::BenchmarkRank).tierRounding = TierRounding::Off;
+        configuration.preferences(GraphKey::BenchmarkRecentRank).tierRounding = TierRounding::Above;
+        save(configuration);
+
+        EXPECT_EQ(graphSection("benchmarkRank")["tierRounding"].toString(), "off");
+        EXPECT_EQ(load(), configuration);
+        EXPECT_TRUE(settings->quarantined.empty());
+
+        configuration.preferences(GraphKey::BenchmarkRecentRank).tierRounding = TierRounding::Below;
+        save(configuration);
+        EXPECT_EQ(load(), configuration);
+    }
+
+    TEST_F(GraphConfigurationPersistenceTest, AnInvalidRankAxisRejectsOnlyThatGraphsSection) {
+        const auto saved = savedRoot(everyPreferenceKind());
+        auto policies = saved["graphs"].toObject()["benchmarkRank"].toObject()["axisPolicies"].toObject();
+        policies["rank"] = QJsonObject{{"mode", "fixed"}, {"min", 0}, {"max", 3}};
+        for (const auto &root: {withGraphField(saved, "benchmarkRank", "tierRounding", QJsonValue::Undefined),
+                                withGraphField(saved, "benchmarkRank", "tierRounding", "sideways"),
+                                withGraphField(saved, "benchmarkRank", "tierRounding", 1),
+                                withGraphField(saved, "benchmarkRank", "axisPolicies", policies)}) {
+            settings = std::make_shared<FakeSettingsService>();
+            writeDoc(root);
+            const auto loaded = load();
+            EXPECT_EQ(settings->quarantined.size(), 1U);
+            EXPECT_EQ(loaded.preferences(GraphKey::BenchmarkRank), defaultGraphPreferences(GraphKey::BenchmarkRank));
+            EXPECT_EQ(loaded.preferences(GraphKey::BenchmarkRecentRank),
+                      everyPreferenceKind().preferences(GraphKey::BenchmarkRecentRank));
+        }
     }
 
     TEST_F(GraphConfigurationPersistenceTest, StoresCustomDatesAsIsoCalendarDates) {
@@ -680,7 +764,7 @@ namespace {
 
     TEST_F(GraphConfigurationPersistenceTest, UndecodableOrUnsupportedDocumentsFollowTheExistingRecoveryPath) {
         for (const std::string raw: {std::string("{\"schemaVersion\":4,"), std::string("[]"), std::string("{}"),
-                                     std::string("{\"schemaVersion\":8}"), std::string("{\"schemaVersion\":\"4\"}")}) {
+                                     std::string("{\"schemaVersion\":9}"), std::string("{\"schemaVersion\":\"4\"}")}) {
             settings = std::make_shared<FakeSettingsService>();
             settings->legacyRunAxisLabelSeriesId = "3";
             settings->document = raw;
@@ -690,7 +774,7 @@ namespace {
             // Line 3 is on the default Score axis.
             expected.runAxisLabel = AxisId{1};
             EXPECT_EQ(loaded, expected) << raw;
-            EXPECT_EQ(docObject()["schemaVersion"].toInt(), 7);
+            EXPECT_EQ(docObject()["schemaVersion"].toInt(), 8);
         }
     }
 
@@ -706,7 +790,7 @@ namespace {
         }
     };
 
-    TEST_F(GraphConfigurationQSettingsTest, LoadsAndSavesTheVersionSevenSnapshotAcrossRestarts) {
+    TEST_F(GraphConfigurationQSettingsTest, LoadsAndSavesTheVersionEightSnapshotAcrossRestarts) {
         {
             QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
             raw.setValue("graph/seriesConfigV1", QString::fromStdString(compact(v3Root())));
@@ -729,7 +813,7 @@ namespace {
         EXPECT_EQ(GraphConfigurationPersistence(settings).load(), configuration);
         const QSettings raw(QSettings::IniFormat, QSettings::UserScope, "Lecka", "KovaaksStatsViewer");
         const auto stored = QJsonDocument::fromJson(raw.value("graph/seriesConfigV1").toString().toUtf8()).object();
-        EXPECT_EQ(stored["schemaVersion"].toInt(), 7);
+        EXPECT_EQ(stored["schemaVersion"].toInt(), 8);
         EXPECT_EQ(raw.value("graphAxis/seriesId").toString(), "12");
     }
 }

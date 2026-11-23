@@ -1,0 +1,10 @@
+---
+type: added
+area: Graphing
+user: The benchmark rank graphs now zoom to the ranks in view instead of always showing every tier. A new Vertical fit setting switches back to the full scale, and Round to whole tiers chooses whether the axis stops at tier boundaries or shows progress percentages.
+---
+`rank` vertical axis on the `BenchmarkRank` / `BenchmarkRecentRank` descriptors, default `FitVisibleData`; the `rank` series moved onto it. `GraphAxisDescriptor::offersFixedBounds` is false for it because tier names and counts differ per benchmark while preferences belong to the graph type, so validation reports `FixedBounds` there as `NotApplicable` and `SettingsViewModel::setAxisMode` refuses it. `StartAtZero` ("Start at Unranked") reproduces the old 0 → one-tier-above-peak axis.
+New graph-level `GraphPreferences::tierRounding` (`both`/`above`/`below`/`off`, default `both`), offered through `GraphAxisDescriptor::offersTierRounding`, carried into `GraphPresentation` and diffed as a `style` change; `SettingsViewModel::setTierRounding` stages it and the Graphs page shows it under the rank axis only while it fits the visible data.
+Graph configuration schema 7 → 8: version 8 stores `tierRounding`; a pre-8 rank section gets the default `rank` policy and `Both` before validation, so it is not quarantined. Only the axes version 8 introduced are filled in.
+`ValueAxis::Options::step` — an explicit tick step that bypasses the automatic choice, `integral` and label coarsening.
+`BenchmarkHistoryViewModel` keeps the tiers and full-history peak between updates and rebuilds only the Y axis on a policy or rounding change. A tier-rounded edge rounds onto the tier it reaches; a padded edge moves strictly outward to the next 10/20/50 % tick; both are clamped to [Unranked, shown tiers]. Padded axes label whole tiers by name, the first tick of each tier band on the axis "p% to <next tier>", and the rest "p%". Tier reference lines are unchanged: the canvas already skips those outside the axis.

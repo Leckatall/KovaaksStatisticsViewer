@@ -17,6 +17,8 @@ namespace ksv::application {
 
         constexpr std::array<std::string_view, 3> kConnectionModeNames{"smooth", "straight", "pointsOnly"};
 
+        constexpr std::array<std::string_view, 4> kTierRoundingNames{"both", "above", "below", "off"};
+
         constexpr RgbaColor kPlaytimeColor{77, 208, 225, 255};
         constexpr RgbaColor kPersonalBestRankColor{46, 204, 113, 255};
         constexpr RgbaColor kRecentRankColor{76, 175, 80, 255};
@@ -29,8 +31,11 @@ namespace ksv::application {
             return {key, AxisOrientation::Vertical, std::move(policy)};
         }
 
-        std::vector<GraphAxisDescriptor> rankXAxes() {
-            return {{kRunXAxis, AxisOrientation::Horizontal, std::nullopt},
+        // Fixed bounds are not offered: preferences belong to the graph type, and tier names and counts
+        // differ between benchmarks, so a fixed tier range would mean something different on each.
+        std::vector<GraphAxisDescriptor> rankAxes() {
+            return {{"rank", AxisOrientation::Vertical, FitVisibleData{}, false, true},
+                    {kRunXAxis, AxisOrientation::Horizontal, std::nullopt},
                     {kCalendarXAxis, AxisOrientation::Horizontal, std::nullopt}};
         }
 
@@ -58,11 +63,11 @@ namespace ksv::application {
                 },
                 {
                     GraphKey::BenchmarkRank, true, false, false, false, {RecentDays{90}, true},
-                    {{"rank", "", kPersonalBestRankColor}}, rankXAxes(), kRunXAxis
+                    {{"rank", "rank", kPersonalBestRankColor}}, rankAxes(), kRunXAxis
                 },
                 {
                     GraphKey::BenchmarkRecentRank, true, false, false, false, {RecentDays{90}, true},
-                    {{"rank", "", kRecentRankColor}}, rankXAxes(), kRunXAxis
+                    {{"rank", "rank", kRecentRankColor}}, rankAxes(), kRunXAxis
                 },
                 {
                     GraphKey::BenchmarkPlaytime, true, false, true, false, {RecentDays{30}, true},
@@ -78,10 +83,16 @@ namespace ksv::application {
             });
         }
 
-        [[nodiscard]] bool hasPolicy(const GraphDescriptor &descriptor, const std::string_view key) {
-            return std::ranges::any_of(descriptor.axes, [&](const GraphAxisDescriptor &axis) {
+        [[nodiscard]] const GraphAxisDescriptor *policyAxis(const GraphDescriptor &descriptor, const std::string_view key) {
+            const auto found = std::ranges::find_if(descriptor.axes, [&](const GraphAxisDescriptor &axis) {
                 return axis.defaultPolicy && axis.key == key;
             });
+            return found == descriptor.axes.end() ? nullptr : &*found;
+        }
+
+        [[nodiscard]] const GraphAxisDescriptor *tierRoundingAxis(const GraphDescriptor &descriptor) {
+            const auto found = std::ranges::find_if(descriptor.axes, &GraphAxisDescriptor::offersTierRounding);
+            return found == descriptor.axes.end() ? nullptr : &*found;
         }
 
         class IssueSink {
@@ -161,6 +172,16 @@ namespace ksv::application {
         return static_cast<ConnectionMode>(found - kConnectionModeNames.begin());
     }
 
+    std::string_view tierRoundingName(const TierRounding rounding) {
+        return kTierRoundingNames[static_cast<std::size_t>(rounding)];
+    }
+
+    std::optional<TierRounding> tierRoundingFromName(const std::string_view name) {
+        const auto found = std::ranges::find(kTierRoundingNames, name);
+        if (found == kTierRoundingNames.end()) return std::nullopt;
+        return static_cast<TierRounding>(found - kTierRoundingNames.begin());
+    }
+
     const GraphDescriptor &graphDescriptor(const GraphKey key) {
         static const auto descriptors = makeDescriptors();
         return descriptors[static_cast<std::size_t>(key)];
@@ -193,6 +214,7 @@ namespace ksv::application {
         preferences.appearance.lineModeMarkers = descriptor.defaultLineModeMarkers;
         for (const auto &axis: descriptor.axes)
             if (axis.defaultPolicy) preferences.axisPolicies.emplace(axis.key, *axis.defaultPolicy);
+        if (tierRoundingAxis(descriptor)) preferences.tierRounding = TierRounding::Both;
         if (!descriptor.defaultXAxis.empty()) preferences.xAxis = std::string(descriptor.defaultXAxis);
         return preferences;
     }
@@ -299,17 +321,27 @@ namespace ksv::application {
             if (axis.defaultPolicy && !preferences.axisPolicies.contains(axis.key))
                 sink.add(GraphConfigurationIssueCode::MissingValue, "axes", std::string(axis.key), "fitMode");
         for (const auto &[axisKey, policy]: preferences.axisPolicies) {
-            if (!hasPolicy(descriptor, axisKey)) {
+            const auto *axis = policyAxis(descriptor, axisKey);
+            if (!axis) {
                 sink.add(GraphConfigurationIssueCode::UnknownAxis, "axes", axisKey, "");
                 continue;
             }
             const auto *bounds = std::get_if<FixedBounds>(&policy);
             if (!bounds) continue;
+            if (!axis->offersFixedBounds) {
+                sink.add(GraphConfigurationIssueCode::NotApplicable, "axes", axisKey, "fitMode");
+                continue;
+            }
             validateBound(bounds->minimum, sink, axisKey, "fixedMin");
             validateBound(bounds->maximum, sink, axisKey, "fixedMax");
             if (std::isfinite(bounds->minimum) && std::isfinite(bounds->maximum) && bounds->minimum >= bounds->maximum)
                 sink.add(GraphConfigurationIssueCode::FixedBoundsNotIncreasing, "axes", axisKey, "fixedMax");
         }
+
+        if (const auto *rounded = tierRoundingAxis(descriptor); !rounded && preferences.tierRounding)
+            sink.add(GraphConfigurationIssueCode::NotApplicable, "axes", "", "tierRounding");
+        else if (rounded && !preferences.tierRounding)
+            sink.add(GraphConfigurationIssueCode::MissingValue, "axes", std::string(rounded->key), "tierRounding");
 
         if (descriptor.defaultXAxis.empty()) {
             if (preferences.xAxis) sink.add(GraphConfigurationIssueCode::NotApplicable, "axes", "", "xAxis");
@@ -378,7 +410,8 @@ namespace ksv::application {
                 .range = was.range != now.range,
                 .window = was.averagingWindowDays != now.averagingWindowDays,
                 .style = was.appearance != now.appearance || was.seriesStyles != now.seriesStyles ||
-                         was.axisPolicies != now.axisPolicies || was.xAxis != now.xAxis
+                         was.axisPolicies != now.axisPolicies || was.tierRounding != now.tierRounding ||
+                         was.xAxis != now.xAxis
             };
         }
         change.runSeries = !(before.runSeries == after.runSeries);

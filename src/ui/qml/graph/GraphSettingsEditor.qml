@@ -99,6 +99,12 @@ Item {
         {text: qsTr("Fixed bounds"), mode: "fixed"}
     ]
 
+    function fitEntriesFor(axisKey, offersFixed) {
+        const zeroText = GraphCatalog.axisZeroText(graphKey, axisKey)
+        return fitEntries.filter(e => offersFixed || e.mode !== "fixed")
+            .map(e => e.mode === "zero" && zeroText !== "" ? {text: zeroText, mode: e.mode} : e)
+    }
+
     function num(value) {
         return GraphCatalog.wholeNumberText(value)
     }
@@ -703,6 +709,10 @@ Item {
                             readonly property var row: root.rowFor(root.axisRows, modelData)
                             readonly property string axisUnit: GraphCatalog.axisUnit(root.graphKey, modelData)
                             readonly property string axisTitle: qsTr("%1 axis").arg(GraphCatalog.axisName(root.graphKey, modelData))
+                            // Bools, so the combo models below are rebuilt only when these flip, not on
+                            // every republish of the drafts.
+                            readonly property bool offersFixed: row.fixedBoundsOffered !== false
+                            readonly property bool offersTierRounding: row.tierRounding !== undefined
 
                             objectName: "graphAxis_" + modelData
                             Layout.fillWidth: true
@@ -730,7 +740,7 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.maximumWidth: Math.max(implicitWidth, fitMetrics.height * 16)
                                 FontMetrics { id: fitMetrics; font: fitCombo.font }
-                                readonly property var entries: root.fitEntries
+                                readonly property var entries: root.fitEntriesFor(axis.modelData, axis.offersFixed)
                                 model: entries
                                 textRole: "text"
                                 currentIndex: Math.max(0, entries.findIndex(e => e.mode === axis.row.mode))
@@ -749,6 +759,40 @@ Item {
                                 text: root.errorFor("axes", axis.modelData, "fitMode")
                                 color: Theme.errorText
                                 wrapMode: Text.WordWrap
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 4
+                                visible: axis.offersTierRounding && axis.row.mode === "fit"
+
+                                Label { text: qsTr("Round to whole tiers") }
+                                ComboBox {
+                                    id: roundingCombo
+                                    objectName: "graphField_axes_" + axis.modelData + "_tierRounding"
+                                    implicitContentWidthPolicy: ComboBox.WidestText
+                                    Layout.fillWidth: true
+                                    Layout.maximumWidth: Math.max(implicitWidth, fitMetrics.height * 16)
+                                    readonly property var entries: GraphCatalog.tierRoundings
+                                    model: entries
+                                    textRole: "text"
+                                    currentIndex: Math.max(0, entries.findIndex(e => e.value === axis.row.tierRounding))
+                                    Accessible.name: qsTr("%1 rounding to whole tiers").arg(axis.axisTitle)
+                                    Accessible.description: root.errorFor("axes", axis.modelData, "tierRounding")
+                                    onActivated: index => {
+                                        root.settingsVm.setTierRounding(root.graphKey, entries[index].value)
+                                        roundingCombo.currentIndex = Qt.binding(
+                                            () => Math.max(0, entries.findIndex(e => e.value === axis.row.tierRounding)))
+                                    }
+                                }
+                                Label {
+                                    objectName: roundingCombo.objectName + "_error"
+                                    Layout.fillWidth: true
+                                    visible: text !== ""
+                                    text: root.errorFor("axes", axis.modelData, "tierRounding")
+                                    color: Theme.errorText
+                                    wrapMode: Text.WordWrap
+                                }
                             }
 
                             GridLayout {

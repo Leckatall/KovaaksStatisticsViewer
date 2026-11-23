@@ -720,6 +720,32 @@ namespace {
             << "reference lines keep their own path in every mode";
     }
 
+    // A rank axis fitted to the visible tiers keeps every shown tier's line on its series; only the
+    // ones the axis reaches, its edges included, may be painted.
+    TEST(GraphCanvasConnectionTest, OnlyTheReferenceLinesInsideTheAxisArePainted) {
+        StyledVm vm({QPointF(0.0, 3.4), QPointF(10.0, 3.6)}, 0.0, 10.0);
+        presentation::ValueAxis fitted;
+        fitted.setRange(3.0, 4.0);
+        vm.model().yAxis = fitted;
+        const auto canvas = makeCanvas(vm, QVariantList{0});
+        const QRectF plot = canvas->property("plotArea").toRectF();
+        const QRect wholeCanvas(0, 0, int(canvas->width()), int(canvas->height()));
+        const auto lines = [](const QList<qreal> &values) {
+            QList<presentation::ReferenceLine> result;
+            for (const qreal value: values) result.append({.value = value, .color = QColor(kReferenceBlue)});
+            return result;
+        };
+
+        vm.model().referenceLines = lines({3.0, 4.0});
+        const int edgesOnly = countColour(render(*canvas), wholeCanvas, kReferenceBlue);
+        vm.model().referenceLines = lines({1.0, 2.0, 3.0, 4.0, 5.0});
+        const QImage every = render(*canvas);
+
+        EXPECT_GT(countColour(every, QRect(int(plot.left()), int(plot.top()) - 1, int(plot.width()), 3), kReferenceBlue), 0);
+        EXPECT_GT(countColour(every, QRect(int(plot.left()), int(plot.bottom()) - 1, int(plot.width()), 3), kReferenceBlue), 0);
+        EXPECT_EQ(countColour(every, wholeCanvas, kReferenceBlue), edgesOnly);
+    }
+
     TEST(GraphCanvasConnectionTest, TheSeriesIsPaintedOverItsReferenceLines) {
         StyledVm vm({QPointF(0.0, 10.0), QPointF(10.0, 10.0)}, 0.0, 10.0);
         vm.model().referenceLines = {presentation::ReferenceLine{.value = 10.0, .color = QColor(kReferenceBlue)}};

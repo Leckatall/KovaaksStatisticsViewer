@@ -653,13 +653,17 @@ namespace ksv::presentation {
             for (const auto &member: descriptor.series)
                 if (member.axisKey == described.key)
                     sharing.append(qstring(member.key));
-            axes.append(QVariantMap{
+            QVariantMap row{
                 {"key", QString::fromStdString(axisKey)},
                 {"mode", mode},
                 {"minText", rawOr({key, "axes", axisKey, "fixedMin"}, minText)},
                 {"maxText", rawOr({key, "axes", axisKey, "fixedMax"}, maxText)},
-                {"seriesKeys", sharing}
-            });
+                {"seriesKeys", sharing},
+                {"fixedBoundsOffered", described.offersFixedBounds}
+            };
+            if (described.offersTierRounding)
+                row["tierRounding"] = qstring(tierRoundingName(preferences.tierRounding.value_or(TierRounding::Both)));
+            axes.append(row);
         }
         entry["axes"] = axes;
         entry["xAxes"] = xAxes;
@@ -879,6 +883,7 @@ namespace ksv::presentation {
         const auto described = preferences ? std::ranges::find(axes, name, &GraphAxisDescriptor::key) : axes.end();
         if (!preferences || described == axes.end() || !described->defaultPolicy) return false;
 
+        if (mode == "fixed" && !described->offersFixedBounds) return false;
         auto &policy = preferences->axisPolicies[name];
         AxisPolicy next;
         if (mode == "fit") next = FitVisibleData{};
@@ -889,6 +894,20 @@ namespace ksv::presentation {
         if (next == policy) return true;
         policy = next;
         if (mode != "fixed") dropRawInput(key, "axes", name, {"fixedMin", "fixedMax"});
+        draftChanged();
+        return true;
+    }
+
+    bool SettingsViewModel::setTierRounding(const QString &graph, const QString &rounding) {
+        using namespace application;
+        GraphKey key{};
+        auto *preferences = draftPreferences(graph, key);
+        const auto parsed = tierRoundingFromName(rounding.toStdString());
+        if (!preferences || !parsed ||
+            std::ranges::none_of(graphDescriptor(key).axes, &GraphAxisDescriptor::offersTierRounding))
+            return false;
+        if (preferences->tierRounding == parsed) return true;
+        preferences->tierRounding = parsed;
         draftChanged();
         return true;
     }

@@ -64,7 +64,9 @@ const seriesNames = {
 
 // Bounds are typed in the unit the axis shows: accuracy as a percentage, playtime in minutes.
 // A horizontal axis has a description instead, shown beside its choice.
-const rankXAxes = {
+// zeroText renames "Start at zero" for an axis whose zero has a name of its own.
+const rankAxes = {
+    rank: {name: "Rank", unit: "", zeroText: "Start at Unranked"},
     runs: {name: "Run", unit: "", description: "Each run takes equal width, labelled with dates."},
     calendar: {name: "Calendar", unit: "", description: "Each day takes equal width."}
 }
@@ -77,9 +79,16 @@ const axisInfo = {
     },
     dailyPlaytime: {playtime: {name: "Playtime", unit: "minutes"}},
     benchmarkPlaytime: {playtime: {name: "Playtime", unit: "minutes"}},
-    benchmarkRank: rankXAxes,
-    benchmarkRecentRank: rankXAxes
+    benchmarkRank: rankAxes,
+    benchmarkRecentRank: rankAxes
 }
+
+const tierRoundings = [
+    {text: qsTr("Above and below"), value: "both"},
+    {text: qsTr("Above only"), value: "above"},
+    {text: qsTr("Below only"), value: "below"},
+    {text: qsTr("Off"), value: "off"}
+]
 
 function graphIndex(key) {
     return graphs.findIndex(graph => graph.key === key)
@@ -103,6 +112,11 @@ function axisUnit(graph, key) {
 function axisDescription(graph, key) {
     const axes = axisInfo[graph]
     return axes && axes[key] ? axes[key].description || "" : ""
+}
+
+function axisZeroText(graph, key) {
+    const axes = axisInfo[graph]
+    return axes && axes[key] && axes[key].zeroText ? axes[key].zeroText : ""
 }
 
 // Issues in the order a person reads the pages: graph, then group, then position within the group.
@@ -131,7 +145,7 @@ function sortedIssues(issues, drafts, overview) {
             const target = axisName ? issueTarget.substring(5) : issueTarget
             const index = rows.findIndex(r => String(r.id !== undefined ? r.id : r.key) === target)
             row = index < 0 ? 999 : index
-            field = axisName ? 0 : ["fitMode", "fixedMin", "fixedMax"].indexOf(issue.field || "fitMode")
+            field = axisName ? 0 : ["fitMode", "tierRounding", "fixedMin", "fixedMax"].indexOf(issue.field || "fitMode")
         }
         return [graph < 0 ? 999 : graph, section < 0 ? 999 : section, row, field < 0 ? 999 : field]
     }

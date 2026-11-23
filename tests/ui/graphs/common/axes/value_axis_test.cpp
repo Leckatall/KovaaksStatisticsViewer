@@ -79,6 +79,17 @@ namespace {
         EXPECT_GE(step, 1.0);
     }
 
+    // A caller that pads its range out to whole steps needs the axis to keep that step; `integral` and
+    // a single target interval would otherwise force a step of at least 1.
+    TEST(ValueAxisTest, AnExplicitStepIsKeptOverTheAutomaticChoice) {
+        ValueAxis axis({.integral = true, .targetTicks = 1, .niceBounds = false, .step = 0.1});
+        axis.setRange(3.3, 3.9);
+        EXPECT_DOUBLE_EQ(axis.min(), 3.3);
+        EXPECT_DOUBLE_EQ(axis.max(), 3.9);
+        ASSERT_EQ(axis.ticks().size(), 7);
+        for (int i = 0; i < 7; ++i) EXPECT_NEAR(axis.ticks()[i], 3.3 + 0.1 * i, 1e-9);
+    }
+
     TEST(ValueAxisTest, DegenerateRangeExpandsToNonZeroWidth) {
         ValueAxis axis({.baseline = ValueAxis::Baseline::HugData});
         axis.setRange(42.0, 42.0);

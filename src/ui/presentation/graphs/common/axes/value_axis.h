@@ -29,9 +29,12 @@ namespace ksv::presentation {
             // it, so no tick labels a value the data does not reach (e.g. run 0).
             bool niceBounds = true;
             // false: ticks stay where the step puts them even when neighbours share a label, giving up
-            // the coarsening described above. Must stay the last member: graph_vm.cpp builds Options
-            // positionally.
+            // the coarsening described above. graph_vm.cpp builds Options positionally up to
+            // fallbackSpan, so new members go after this one.
             bool distinctLabels = true;
+            // > 0: the tick step, used as given; `targetTicks`, `integral` and `distinctLabels` are
+            // then ignored.
+            qreal step = 0.0;
         };
 
         // GCC and Clang reject a default argument that needs Options' default member initializers

@@ -137,8 +137,11 @@ namespace ksv::presentation {
         Q_INVOKABLE bool setSeriesColor(const QString &graph, const QString &series, const QColor &color);
         // field is "color" or "width"; the series falls back to the graph's default for it.
         Q_INVOKABLE bool clearSeriesOverride(const QString &graph, const QString &series, const QString &field);
-        // fit, zero or fixed; unparsed text of the bound fields is dropped unless the mode is fixed.
+        // fit, zero or fixed (where the axis offers it); unparsed text of the bound fields is dropped
+        // unless the mode is fixed.
         Q_INVOKABLE bool setAxisMode(const QString &graph, const QString &axis, const QString &mode);
+        // both, above, below or off, on a graph whose axis offers tier rounding.
+        Q_INVOKABLE bool setTierRounding(const QString &graph, const QString &rounding);
         // `axis` is one of the graph's horizontal axes (graphDraft's "xAxes").
         Q_INVOKABLE bool setShownXAxis(const QString &graph, const QString &axis);
         // Stages the graph's presentation defaults only; its lines, axes and other graphs are untouched.

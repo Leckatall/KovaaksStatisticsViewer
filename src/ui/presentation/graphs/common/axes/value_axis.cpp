@@ -82,6 +82,11 @@ namespace ksv::presentation {
             }
         }
 
+        if (m_options.step > 0.0) {
+            Resolved resolved = resolve(lo, hi, m_options.step);
+            return replaceResolvedState(resolved.min, resolved.max, std::move(resolved.ticks), m_delegate);
+        }
+
         const int intervals = std::max(1, m_options.targetTicks);
         qreal step = niceNum(niceNum(hi - lo, false) / intervals, true);
         if (m_options.integral) step = std::max(1.0, std::round(step));

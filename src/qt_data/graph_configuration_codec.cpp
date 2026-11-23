@@ -125,11 +125,21 @@ namespace ksv::qt_data {
             return !descriptor.defaultXAxis.empty() && version >= 7;
         }
 
+        [[nodiscard]] bool offersTierRounding(const GraphDescriptor &descriptor) {
+            return std::ranges::any_of(descriptor.axes, &GraphAxisDescriptor::offersTierRounding);
+        }
+
+        // Version 8 adds the rank axis, with its policy and tier rounding, to the rank graphs.
+        [[nodiscard]] bool storesTierRounding(const GraphDescriptor &descriptor, const int version) {
+            return offersTierRounding(descriptor) && version >= 8;
+        }
+
         std::vector<const char *> graphSectionKeys(const GraphDescriptor &descriptor, const int version) {
             std::vector<const char *> keys{"connection", "lineModeMarkers", "seriesStyles", "axisPolicies"};
             if (descriptor.dateRange) keys.insert(keys.end(), {"range", "anchorToLatestRun"});
             if (descriptor.averagingWindow) keys.push_back("averagingWindowDays");
             if (storesXAxis(descriptor, version)) keys.push_back("xAxis");
+            if (storesTierRounding(descriptor, version)) keys.push_back("tierRounding");
             return keys;
         }
 
@@ -151,6 +161,7 @@ namespace ksv::qt_data {
             }
             if (preferences.averagingWindowDays) object["averagingWindowDays"] = *preferences.averagingWindowDays;
             if (preferences.xAxis) object["xAxis"] = QString::fromStdString(*preferences.xAxis);
+            if (preferences.tierRounding) object["tierRounding"] = latin1(tierRoundingName(*preferences.tierRounding));
             return object;
         }
 
@@ -182,6 +193,12 @@ namespace ksv::qt_data {
             } else if (!descriptor.defaultXAxis.empty()) {
                 preferences.xAxis = std::string(descriptor.defaultXAxis);
             }
+            if (storesTierRounding(descriptor, version)) {
+                preferences.tierRounding = tierRoundingFromName(object["tierRounding"].toString().toStdString());
+                if (!object["tierRounding"].isString() || !preferences.tierRounding) return std::nullopt;
+            } else if (offersTierRounding(descriptor)) {
+                preferences.tierRounding = TierRounding::Both;
+            }
 
             const auto seriesStyles = object["seriesStyles"].toObject();
             for (auto it = seriesStyles.begin(); it != seriesStyles.end(); ++it) {
@@ -195,6 +212,12 @@ namespace ksv::qt_data {
                 if (!policy) return std::nullopt;
                 preferences.axisPolicies.emplace(it.key().toStdString(), *policy);
             }
+            // Only the axes version 8 introduced are filled in: a missing policy of an older axis was
+            // already invalid and stays rejected.
+            if (version < 8)
+                for (const auto &axis: descriptor.axes)
+                    if (axis.offersTierRounding && axis.defaultPolicy)
+                        preferences.axisPolicies.try_emplace(std::string(axis.key), *axis.defaultPolicy);
 
             if (!validateGraphPreferences(key, preferences).empty()) return std::nullopt;
             return preferences;

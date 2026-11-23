@@ -134,6 +134,14 @@ namespace ksv::application {
 
     using AxisPolicy = std::variant<FitVisibleData, StartAtZero, FixedBounds>;
 
+    // Which edges of a fitted rank axis snap to a whole tier; an edge that does not is padded out to
+    // the next tick beyond the data.
+    enum class TierRounding { Both, Above, Below, Off };
+
+    [[nodiscard]] std::string_view tierRoundingName(TierRounding rounding);
+
+    [[nodiscard]] std::optional<TierRounding> tierRoundingFromName(std::string_view name);
+
     // ── Per-graph preferences ────────────────────────────────────────────────────────────────────
     // One shape for every graph; graphDescriptor() says which fields a graph offers and
     // validateGraphPreferences() rejects the rest.
@@ -145,6 +153,8 @@ namespace ksv::application {
         std::map<std::string, SeriesStyleOverride, std::less<>> seriesStyles;
         // Keyed by GraphAxisDescriptor::key; holds every axis with a policy.
         std::map<std::string, AxisPolicy, std::less<>> axisPolicies;
+        // Set exactly when one of the graph's axes offers tier rounding.
+        std::optional<TierRounding> tierRounding;
         // The key of the horizontal axis shown; set exactly when the graph offers horizontal axes.
         std::optional<std::string> xAxis;
 
@@ -165,6 +175,8 @@ namespace ksv::application {
         AxisOrientation orientation = AxisOrientation::Vertical;
         // Set for an axis whose range the user tunes.
         std::optional<AxisPolicy> defaultPolicy;
+        bool offersFixedBounds = true;
+        bool offersTierRounding = false;
     };
 
     inline constexpr std::string_view kRunXAxis = "runs";
@@ -283,7 +295,7 @@ namespace ksv::application {
     // target: a series or axis key; for "graphLines", a path such as "records[2].yAxisId"; empty for
     // whole-graph fields.
     // field: "range", "recentDays", "latestRuns", "startDate", "endDate", "averagingWindow", "width",
-    // "fitMode", "fixedMin", "fixedMax" or "xAxis"; empty when the target itself is the problem.
+    // "fitMode", "fixedMin", "fixedMax", "tierRounding" or "xAxis"; empty when the target itself is the problem.
     struct GraphConfigurationIssue {
         GraphConfigurationIssueCode code;
         GraphKey graph;
@@ -315,7 +327,7 @@ namespace ksv::application {
         // The range preference, anchor flag included.
         bool range = false;
         bool window = false;
-        // Appearance, series overrides, axis policies and the shown X axis.
+        // Appearance, series overrides, axis policies, tier rounding and the shown X axis.
         bool style = false;
 
         [[nodiscard]] bool any() const { return range || window || style; }

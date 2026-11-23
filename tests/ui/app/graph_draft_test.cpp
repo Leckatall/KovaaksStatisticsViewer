@@ -132,6 +132,57 @@ namespace {
         }
     }
 
+    // ---- The rank axis -----------------------------------------------------------------------------
+
+    TEST_F(GraphDraftTest, TheRankAxisRowOffersTierRoundingButNotFixedBounds) {
+        const auto view_model = visit();
+        for (const auto *graph: {"benchmarkRank", "benchmarkRecentRank"}) {
+            SCOPED_TRACE(graph);
+            const auto rank = axisEntry(view_model->graphDraft(graph), "rank");
+            EXPECT_EQ(rank["mode"].toString(), "fit");
+            EXPECT_EQ(rank["tierRounding"].toString(), "both");
+            EXPECT_FALSE(rank["fixedBoundsOffered"].toBool());
+            EXPECT_EQ(rank["seriesKeys"].toStringList(), QStringList{"rank"});
+        }
+        const auto playtime = axisEntry(view_model->graphDraft("dailyPlaytime"), "playtime");
+        EXPECT_TRUE(playtime["fixedBoundsOffered"].toBool());
+        EXPECT_FALSE(playtime.contains("tierRounding"));
+    }
+
+    TEST_F(GraphDraftTest, SetTierRoundingStagesTheChoice) {
+        const auto view_model = visit();
+        const QSignalSpy draftSpy(view_model.get(), &SettingsViewModel::graphDraftsChanged);
+
+        EXPECT_TRUE(view_model->setTierRounding("benchmarkRank", "off"));
+        EXPECT_EQ(draftSpy.count(), 1);
+        EXPECT_EQ(axisEntry(view_model->graphDraft("benchmarkRank"), "rank")["tierRounding"].toString(), "off");
+        EXPECT_TRUE(view_model->setTierRounding("benchmarkRank", "off"));
+        EXPECT_EQ(draftSpy.count(), 1);
+        EXPECT_EQ(saved(*view_model).preferences(GraphKey::BenchmarkRank).tierRounding, TierRounding::Off);
+    }
+
+    TEST_F(GraphDraftTest, SetTierRoundingRefusesOtherGraphsAndUnknownChoices) {
+        const auto view_model = visit();
+        EXPECT_FALSE(view_model->setTierRounding("dailyPlaytime", "off"));
+        EXPECT_FALSE(view_model->setTierRounding("benchmarkRank", "sideways"));
+        EXPECT_FALSE(view_model->setTierRounding("unknownGraph", "off"));
+        EXPECT_FALSE(view_model->hasPendingChanges());
+        EXPECT_FALSE(make()->setTierRounding("benchmarkRank", "off"));
+    }
+
+    TEST_F(GraphDraftTest, ResetRestoresTheRankAxisDefaults) {
+        auto &stored = configuration->configuration.preferences(GraphKey::BenchmarkRecentRank);
+        stored.axisPolicies["rank"] = StartAtZero{};
+        stored.tierRounding = TierRounding::Below;
+        const auto view_model = visit();
+
+        EXPECT_TRUE(view_model->resetGraph("benchmarkRecentRank"));
+
+        const auto rank = axisEntry(view_model->graphDraft("benchmarkRecentRank"), "rank");
+        EXPECT_EQ(rank["mode"].toString(), "fit");
+        EXPECT_EQ(rank["tierRounding"].toString(), "both");
+    }
+
     // ---- The shown X axis ------------------------------------------------------------------------
 
     TEST_F(GraphDraftTest, RankGraphDraftsListBothXAxesWithRunsShown) {

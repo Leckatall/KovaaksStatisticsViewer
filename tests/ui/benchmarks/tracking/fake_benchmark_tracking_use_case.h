@@ -83,11 +83,12 @@ namespace ksv::tests_ui {
         void onRankChanged(std::function<void(application::GraphKey)> callback) override {
             m_rankCallbacks.push_back(std::move(callback));
         }
-        // The calendar axis, so calendar-axis tests read as they always have; run-axis tests opt in.
+        // The calendar axis and the rank axis that starts at Unranked, so tests written before either
+        // was a choice read as they always have; run-axis and fitted-axis tests opt in.
         application::GraphPresentation rankPresentation =
-            onCalendarAxis(application::defaultGraphPresentation(application::GraphKey::BenchmarkRank));
+            asOriginally(application::defaultGraphPresentation(application::GraphKey::BenchmarkRank));
         application::GraphPresentation recentRankPresentation =
-            onCalendarAxis(application::defaultGraphPresentation(application::GraphKey::BenchmarkRecentRank));
+            asOriginally(application::defaultGraphPresentation(application::GraphKey::BenchmarkRecentRank));
         application::GraphPresentation playtimePresentation =
             application::defaultGraphPresentation(application::GraphKey::BenchmarkPlaytime);
         [[nodiscard]] application::GraphPresentation presentation(const application::GraphKey graph) const override {
@@ -122,8 +123,9 @@ namespace ksv::tests_ui {
         }
 
     private:
-        static application::GraphPresentation onCalendarAxis(application::GraphPresentation presentation) {
+        static application::GraphPresentation asOriginally(application::GraphPresentation presentation) {
             presentation.xAxis = std::string(application::kCalendarXAxis);
+            presentation.axisPolicies["rank"] = application::StartAtZero{};
             return presentation;
         }
 

@@ -204,11 +204,11 @@ TestCase {
         compare(names(dialog, "graphAxis_"), ["graphAxis_accuracy", "graphAxis_counts", "graphAxis_score"])
     }
 
-    function test_benchmarkRankHasRangeButNoWindowNoFittedAxesAndNamesItsOnlySeries() {
+    function test_benchmarkRankHasRangeButNoWindowOneRankAxisAndNamesItsOnlySeries() {
         const {dialog} = openOn("benchmarkRank")
 
         verify(shown(dialog, "graphGroup_dataRange"))
-        compare(names(dialog, "graphAxis_"), [], "the tier axis offers no numeric fitting")
+        compare(names(dialog, "graphAxis_"), ["graphAxis_rank"])
         verify(!shown(dialog, "graphField_dataRange_averagingWindow"))
         compare(names(dialog, "graphSeriesRow_"), ["graphSeriesRow_rank"])
         verify(find(dialog, "graphSeriesSelector") === null, "a single series needs no selector")
@@ -218,9 +218,49 @@ TestCase {
         const {dialog} = openOn("benchmarkRecentRank")
 
         verify(shown(dialog, "graphGroup_dataRange"))
-        compare(names(dialog, "graphAxis_"), [], "the tier axis offers no numeric fitting")
+        compare(names(dialog, "graphAxis_"), ["graphAxis_rank"])
         verify(!shown(dialog, "graphField_dataRange_averagingWindow"))
         compare(names(dialog, "graphSeriesRow_"), ["graphSeriesRow_rank"])
+    }
+
+    // ---- The rank axis ---------------------------------------------------------------------------------
+
+    function test_theRankAxisOffersFitAndStartAtUnrankedButNotFixedBounds() {
+        for (const graph of ["benchmarkRank", "benchmarkRecentRank"]) {
+            const {dialog} = openOn(graph)
+            const fit = find(dialog, "graphField_axes_rank_fitMode")
+            compare(fit.entries.map(e => e.text), ["Fit visible data", "Start at Unranked"], graph)
+            compare(fit.currentIndex, 0, graph)
+        }
+        const {dialog} = openOn("dailyPlaytime")
+        compare(find(dialog, "graphField_axes_playtime_fitMode").entries.map(e => e.text),
+                ["Fit visible data", "Start at zero", "Fixed bounds"])
+    }
+
+    function test_tierRoundingIsOfferedOnlyWhileTheRankAxisFitsTheVisibleData() {
+        const {dialog, vm} = openOn("benchmarkRank")
+        verify(shown(dialog, "graphField_axes_rank_tierRounding"))
+        compare(find(dialog, "graphField_axes_rank_tierRounding").currentText, "Above and below")
+
+        find(dialog, "graphField_axes_rank_fitMode").activated(1)
+        compare(vm.callsNamed("setAxisMode").map(c => c.args), [["benchmarkRank", "rank", "zero"]])
+        tryVerify(() => !shown(dialog, "graphField_axes_rank_tierRounding"))
+
+        select(dialog, vm, "dailyPlaytime")
+        verify(!shown(dialog, "graphField_axes_playtime_tierRounding"))
+    }
+
+    function test_choosingATierRoundingStagesItAndTheChoiceFollowsTheDraft() {
+        const {dialog, vm} = openOn("benchmarkRecentRank")
+        const rounding = find(dialog, "graphField_axes_rank_tierRounding")
+        compare(rounding.entries.map(e => e.value), ["both", "above", "below", "off"])
+
+        rounding.activated(3)
+        compare(vm.callsNamed("setTierRounding").map(c => c.args), [["benchmarkRecentRank", "off"]])
+        compare(rounding.currentText, "Off")
+
+        vm.setTierRounding("benchmarkRecentRank", "above")
+        compare(rounding.currentText, "Above only")
     }
 
     function test_benchmarkPlaytimeOffersTheSameControlsAsDailyPlaytime() {

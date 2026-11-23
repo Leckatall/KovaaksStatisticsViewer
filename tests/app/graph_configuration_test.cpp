@@ -99,11 +99,14 @@ namespace {
         for (const auto graph: {GraphKey::BenchmarkRank, GraphKey::BenchmarkRecentRank}) {
             SCOPED_TRACE(graphKeyName(graph));
             const auto &descriptor = graphDescriptor(graph);
-            EXPECT_EQ(axisKeys(graph), (std::vector<std::string>{"runs", "calendar"}));
+            EXPECT_EQ(axisKeys(graph), (std::vector<std::string>{"rank", "runs", "calendar"}));
             for (const auto &axis: descriptor.axes) {
-                EXPECT_EQ(axis.orientation, AxisOrientation::Horizontal);
-                EXPECT_FALSE(axis.defaultPolicy);
+                const bool vertical = axis.key == "rank";
+                EXPECT_EQ(axis.orientation, vertical ? AxisOrientation::Vertical : AxisOrientation::Horizontal);
+                EXPECT_EQ(axis.defaultPolicy.has_value(), vertical);
+                EXPECT_EQ(axis.offersTierRounding, vertical);
             }
+            EXPECT_EQ(descriptor.series.front().axisKey, "rank");
             EXPECT_EQ(descriptor.defaultXAxis, kRunXAxis);
         }
         for (const auto graph: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
@@ -222,10 +225,55 @@ namespace {
         EXPECT_TRUE(hasIssue(validateGraphPreferences(GraphKey::ScenarioHistory, history),
             GraphConfigurationIssueCode::NotApplicable, GraphKey::ScenarioHistory, "dataRange", "", "averagingWindow"));
 
+        auto playtime = defaultGraphPreferences(GraphKey::DailyPlaytime);
+        playtime.tierRounding = TierRounding::Off;
+        EXPECT_TRUE(hasIssue(validateGraphPreferences(GraphKey::DailyPlaytime, playtime),
+            GraphConfigurationIssueCode::NotApplicable, GraphKey::DailyPlaytime, "axes", "", "tierRounding"));
+    }
+
+    TEST(GraphConfigurationValidation, TheRankAxesFitByDefaultAndRoundToBothTiers) {
+        for (const auto graph: {GraphKey::BenchmarkRank, GraphKey::BenchmarkRecentRank}) {
+            SCOPED_TRACE(graphKeyName(graph));
+            const auto preferences = defaultGraphPreferences(graph);
+            EXPECT_EQ(preferences.axisPolicies.at("rank"), AxisPolicy{FitVisibleData{}});
+            EXPECT_EQ(preferences.tierRounding, TierRounding::Both);
+        }
+        for (const auto graph: {GraphKey::Run, GraphKey::DailyPlaytime, GraphKey::ScenarioHistory,
+                                GraphKey::BenchmarkPlaytime})
+            EXPECT_FALSE(defaultGraphPreferences(graph).tierRounding);
+    }
+
+    // Tier names and counts differ between benchmarks while preferences belong to the graph type, so
+    // fixed rank bounds would mean something different on each benchmark.
+    TEST(GraphConfigurationValidation, FixedBoundsAreNotOfferedOnTheRankAxis) {
         auto rank = defaultGraphPreferences(GraphKey::BenchmarkRank);
         rank.axisPolicies["rank"] = FixedBounds{0.0, 3.0};
         EXPECT_TRUE(hasIssue(validateGraphPreferences(GraphKey::BenchmarkRank, rank),
-            GraphConfigurationIssueCode::UnknownAxis, GraphKey::BenchmarkRank, "axes", "rank", ""));
+            GraphConfigurationIssueCode::NotApplicable, GraphKey::BenchmarkRank, "axes", "rank", "fitMode"));
+        rank.axisPolicies["rank"] = StartAtZero{};
+        EXPECT_TRUE(validateGraphPreferences(GraphKey::BenchmarkRank, rank).empty());
+
+        auto history = defaultGraphPreferences(GraphKey::ScenarioHistory);
+        history.axisPolicies["score"] = FixedBounds{0.0, 3.0};
+        EXPECT_TRUE(validateGraphPreferences(GraphKey::ScenarioHistory, history).empty());
+    }
+
+    TEST(GraphConfigurationValidation, TheRankGraphsRequireTierRounding) {
+        auto rank = defaultGraphPreferences(GraphKey::BenchmarkRecentRank);
+        rank.tierRounding.reset();
+        EXPECT_TRUE(hasIssue(validateGraphPreferences(GraphKey::BenchmarkRecentRank, rank),
+            GraphConfigurationIssueCode::MissingValue, GraphKey::BenchmarkRecentRank, "axes", "rank", "tierRounding"));
+    }
+
+    TEST(TierRounding, RoundTripsThroughItsStableNames) {
+        EXPECT_EQ(tierRoundingName(TierRounding::Both), "both");
+        EXPECT_EQ(tierRoundingName(TierRounding::Above), "above");
+        EXPECT_EQ(tierRoundingName(TierRounding::Below), "below");
+        EXPECT_EQ(tierRoundingName(TierRounding::Off), "off");
+        for (const auto rounding: {TierRounding::Both, TierRounding::Above, TierRounding::Below, TierRounding::Off})
+            EXPECT_EQ(tierRoundingFromName(tierRoundingName(rounding)), rounding);
+        EXPECT_FALSE(tierRoundingFromName("Both"));
+        EXPECT_FALSE(tierRoundingFromName(""));
     }
 
     TEST(GraphConfigurationValidation, XAxisIsRequiredOnTheRankGraphsAndRejectedElsewhere) {
@@ -513,6 +561,10 @@ namespace {
                     ? AxisPolicy{StartAtZero{}}
                     : AxisPolicy{FitVisibleData{}};
         EXPECT_EQ(sections(policy, GraphKey::BenchmarkPlaytime), (GraphSectionChange{.style = true}));
+
+        auto rounding = before;
+        rounding.preferences(GraphKey::BenchmarkRank).tierRounding = TierRounding::Off;
+        EXPECT_EQ(sections(rounding, GraphKey::BenchmarkRank), (GraphSectionChange{.style = true}));
     }
 
     TEST(GraphConfigurationDiff, SeveralSectionsOfOneGraphAndOtherGraphsStayIndependent) {

@@ -839,19 +839,19 @@ TEST(BenchmarkRecentRankHistory, TakesItsOwnCommittedStyle) {
     EXPECT_EQ(rankStyle.count(), 0);
 }
 
-TEST(BenchmarkRecentRankHistory, NeverTakesGenericNumericFitting) {
-    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::RecentAverageRank);
-    BenchmarkHistoryViewModel::Content content;
-    content.historyAvailable = true;
-    content.observations = {QPointF(0.0, 1.0), QPointF(1.0, 2.0)};
-    content.fullHistoryPeak = 2.0;
-    const std::vector<RankTier> tiers{{"Bronze", QColor()}, {"Silver", QColor()}, {"Gold", QColor()}};
-    vm.update(content, true, tiers);
+TEST(BenchmarkRecentRankHistory, TakesItsOwnRankAxisPolicy) {
+    auto fake = fakeWith(snapshotFor(makeUniformFixture(5, {{4, 300}, {5, 340}}, 100)));
+    BenchmarkTrackingViewModel vm{fake};
+    const auto rankMax = rankSeries(vm)->yAxis->max();
+    const QSignalSpy rankBounds(vm.rankHistory(), &GraphViewModelBase::boundsChanged);
 
-    vm.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}});
-    const auto &axis = *vm.series({kValueColumn}).front()->yAxis;
-    EXPECT_DOUBLE_EQ(axis.min(), 0.0);
-    EXPECT_DOUBLE_EQ(axis.max(), 3.0);
+    fake->recentRankPresentation.axisPolicies["rank"] = FitVisibleData{};
+    fake->publishPresentation();
+
+    EXPECT_GT(recentSeries(vm)->yAxis->min(), 0.0);
+    EXPECT_DOUBLE_EQ(rankSeries(vm)->yAxis->min(), 0.0);
+    EXPECT_DOUBLE_EQ(rankSeries(vm)->yAxis->max(), rankMax);
+    EXPECT_EQ(rankBounds.count(), 0);
 }
 
 // ── Numeric Y-axis policy (playtime metric only) ─────────────────────────────────────────────────
@@ -877,8 +877,6 @@ namespace {
         EXPECT_DOUBLE_EQ(actual.max(), expected.max());
         EXPECT_EQ(actual.ticks(), expected.ticks());
     }
-
-    const std::vector<RankTier> kTiers{{"Bronze", QColor("brown")}, {"Silver", QColor("gray")}, {"Gold", QColor("gold")}};
 }
 
 TEST(BenchmarkHistoryAxisPolicy, PlaytimeFitsFixesAndRestoresItsAxisInMinutes) {
@@ -934,25 +932,158 @@ TEST(BenchmarkHistoryAxisPolicy, PlaytimePolicyChangesRepaintOnlyWhenTheyChangeS
     EXPECT_EQ(bounds.count(), 1);
 }
 
-TEST(BenchmarkHistoryAxisPolicy, TheRankGraphNeverTakesGenericNumericFitting) {
+// ── Rank Y-axis policy and tier rounding ─────────────────────────────────────────────────────────
+
+namespace {
+    const std::vector<RankTier> kFiveTiers{{"Bronze", QColor("brown")}, {"Silver", QColor("gray")},
+                                           {"Gold", QColor("gold")}, {"Platinum", QColor("cyan")},
+                                           {"Diamond", QColor("blue")}};
+
+    BenchmarkHistoryViewModel::Content rankContent(const QList<qreal> &ranks, const qreal peak = 5.0) {
+        BenchmarkHistoryViewModel::Content content;
+        content.historyAvailable = true;
+        content.fullHistoryPeak = peak;
+        qreal x = 0.0;
+        for (const qreal rank: ranks) content.observations.append(QPointF(x++, rank));
+        return content;
+    }
+
+    GraphPresentation rankPresentation(const TierRounding rounding, AxisPolicy policy = FitVisibleData{}) {
+        auto presentation = defaultGraphPresentation(GraphKey::BenchmarkRank);
+        presentation.axisPolicies["rank"] = std::move(policy);
+        presentation.tierRounding = rounding;
+        return presentation;
+    }
+
+    QStringList tickLabels(const ValueAxis &axis) {
+        QStringList labels;
+        for (const qreal tick: axis.ticks()) labels.append(axis.formatTick(tick));
+        return labels;
+    }
+}
+
+TEST(BenchmarkRankAxis, ByDefaultTheAxisFitsTheVisibleRanksToTheirEnclosingTiers) {
     BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
-    BenchmarkHistoryViewModel::Content content;
-    content.historyAvailable = true;
-    content.observations = {QPointF(0.0, 1.0), QPointF(1.0, 2.0)};
-    content.fullHistoryPeak = 2.0;
-    vm.update(content, true, kTiers);
-    const ValueAxis tierAxis = historyAxis(vm);
+    vm.update(rankContent({3.2, 3.6}), true, kFiveTiers);
+
+    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 3.0);
+    EXPECT_DOUBLE_EQ(historyAxis(vm).max(), 4.0);
+    EXPECT_EQ(tickLabels(historyAxis(vm)), (QStringList{"Gold", "Platinum"}));
+}
+
+TEST(BenchmarkRankAxis, EachTierRoundingBoundsTheVisibleRanksAsSpecified) {
+    struct Case {
+        QList<qreal> ranks;
+        TierRounding rounding;
+        qreal min;
+        qreal max;
+    };
+    const Case cases[] = {
+        {{3.4, 3.4}, TierRounding::Both, 3.0, 4.0},
+        // A flat line on a whole tier widens a tier each way rather than collapsing the axis.
+        {{3.0, 3.0}, TierRounding::Both, 2.0, 4.0},
+        // A flat line is stepped as if it spanned a whole tier: 20 % steps.
+        {{3.4, 3.4}, TierRounding::Off, 3.2, 3.6},
+        {{3.37, 3.82}, TierRounding::Off, 3.3, 3.9},
+        // The bottom sits on a tick, so padding moves it one 20 % step further out.
+        {{3.0, 3.6}, TierRounding::Above, 2.8, 4.0},
+        {{3.0, 3.6}, TierRounding::Below, 3.0, 3.8},
+        {{0.0, 0.0}, TierRounding::Off, 0.0, 0.2},
+        {{4.6, 5.0}, TierRounding::Off, 4.5, 5.0},
+    };
+    for (const auto &[ranks, rounding, min, max]: cases) {
+        SCOPED_TRACE(testing::Message() << tierRoundingName(rounding) << " " << ranks.front() << "-" << ranks.back());
+        BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
+        vm.setPresentation(rankPresentation(rounding));
+        vm.update(rankContent(ranks), true, kFiveTiers);
+        EXPECT_NEAR(historyAxis(vm).min(), min, 1e-9);
+        EXPECT_NEAR(historyAxis(vm).max(), max, 1e-9);
+    }
+}
+
+TEST(BenchmarkRankAxis, ACarriedRankWidensTheFit) {
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
+    auto content = rankContent({3.2});
+    content.leadingCarry = QPointF(-1.0, 2.5);
+    vm.update(content, true, kFiveTiers);
+
+    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 2.0);
+    EXPECT_DOUBLE_EQ(historyAxis(vm).max(), 4.0);
+}
+
+TEST(BenchmarkRankAxis, StartingAtUnrankedSpansEveryShownTierWhateverIsVisible) {
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
+    vm.setPresentation(rankPresentation(TierRounding::Off, StartAtZero{}));
+    vm.update(rankContent({3.2, 3.6}, 3.6), true, kFiveTiers);
+
+    EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 0.0);
+    EXPECT_DOUBLE_EQ(historyAxis(vm).max(), 4.0);
+    EXPECT_EQ(tickLabels(historyAxis(vm)), (QStringList{"Unranked", "Bronze", "Silver", "Gold", "Platinum"}));
+}
+
+TEST(BenchmarkRankAxis, PaddedTicksNameTheTierEachBandIsProgressToward) {
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
+    vm.setPresentation(rankPresentation(TierRounding::Off));
+
+    vm.update(rankContent({3.37, 3.82}), true, kFiveTiers);
+    EXPECT_EQ(tickLabels(historyAxis(vm)),
+              (QStringList{"30% to Platinum", "40%", "50%", "60%", "70%", "80%", "90%"}));
+
+    vm.update(rankContent({3.7, 4.3}), true, kFiveTiers);
+    EXPECT_EQ(tickLabels(historyAxis(vm)), (QStringList{"60% to Platinum", "80%", "Platinum", "20% to Diamond", "40%"}));
+
+    vm.update(rankContent({0.3, 0.5}), true, kFiveTiers);
+    EXPECT_EQ(tickLabels(historyAxis(vm)), (QStringList{"20% to Bronze", "30%", "40%", "50%", "60%"}));
+}
+
+TEST(BenchmarkRankAxis, RoundingBothWaysKeepsOneTickPerTier) {
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
+    vm.update(rankContent({1.2, 3.6}), true, kFiveTiers);
+
+    EXPECT_EQ(historyAxis(vm).ticks(), (QList<qreal>{1.0, 2.0, 3.0, 4.0}));
+    EXPECT_EQ(tickLabels(historyAxis(vm)), (QStringList{"Bronze", "Silver", "Gold", "Platinum"}));
+}
+
+// The canvas drops tier lines outside the axis, so the series keeps every shown tier's line in
+// every mode; a tier-rounded edge lands exactly on its tier's line.
+TEST(BenchmarkRankAxis, TierLinesAreTheSameInEveryModeAndATierRoundedEdgeIsOne) {
+    QList<qreal> expected;
+    for (int tier = 1; tier <= 5; ++tier) expected.append(tier);
+    for (const auto &presentation: {rankPresentation(TierRounding::Both), rankPresentation(TierRounding::Off),
+                                    rankPresentation(TierRounding::Both, StartAtZero{})}) {
+        BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
+        vm.setPresentation(presentation);
+        vm.update(rankContent({3.2, 3.6}), true, kFiveTiers);
+        QList<qreal> values;
+        for (const auto &line: vm.series({kValueColumn}).front()->referenceLines) values.append(line.value);
+        EXPECT_EQ(values, expected);
+    }
+
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
+    vm.setPresentation(rankPresentation(TierRounding::Both));
+    vm.update(rankContent({3.2, 3.6}), true, kFiveTiers);
+    EXPECT_TRUE(expected.contains(historyAxis(vm).min()));
+    EXPECT_TRUE(expected.contains(historyAxis(vm).max()));
+}
+
+TEST(BenchmarkRankAxis, APolicyOrRoundingChangeRebindsTheAxisOnlyWhenItChangesSomething) {
+    BenchmarkHistoryViewModel vm(BenchmarkHistoryViewModel::AverageRank);
+    vm.update(rankContent({3.37, 3.82}), true, kFiveTiers);
     const QSignalSpy bounds(&vm, &GraphViewModelBase::boundsChanged);
 
-    vm.setAxisPolicies({{"playtime", FixedBounds{10.0, 45.0}}, {"rank", FitVisibleData{}}});
-    expectSameAxis(historyAxis(vm), tierAxis);
-    vm.update(content, true, kTiers);
+    vm.setPresentation(rankPresentation(TierRounding::Off));
+    EXPECT_EQ(bounds.count(), 1);
+    EXPECT_NEAR(historyAxis(vm).min(), 3.3, 1e-9);
 
-    expectSameAxis(historyAxis(vm), tierAxis);
+    vm.setPresentation(rankPresentation(TierRounding::Off, StartAtZero{}));
+    EXPECT_EQ(bounds.count(), 2);
     EXPECT_DOUBLE_EQ(historyAxis(vm).min(), 0.0);
-    EXPECT_DOUBLE_EQ(historyAxis(vm).max(), 3.0);
-    EXPECT_EQ(historyAxis(vm).formatTick(2.0), "Silver");
-    EXPECT_EQ(bounds.count(), 1) << "only the update announced anything";
+
+    auto restyled = rankPresentation(TierRounding::Off, StartAtZero{});
+    restyled.seriesStyles["rank"] = {RgbaColor{1, 2, 3, 255}, std::nullopt};
+    vm.setPresentation(restyled);
+    vm.setAxisPolicies({{"rank", StartAtZero{}}});
+    EXPECT_EQ(bounds.count(), 2);
 }
 
 
@@ -1070,15 +1201,21 @@ TEST(BenchmarkHistoryStyle, TheStyleSurvivesRebuildsAndBenchmarkSelectionChanges
     EXPECT_TRUE(vm.playtimeHistory()->property("pointMarkers").toBool());
 }
 
-TEST(BenchmarkHistoryStyle, OnlyThePlaytimeGraphTakesAnAxisPolicyAndTheRankAxisStaysTierBased) {
+TEST(BenchmarkHistoryStyle, EachGraphTakesOnlyItsOwnAxisPolicy) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
     const auto rankAxisMax = vm.rankHistory()->series({kValueColumn}).front()->yAxis->max();
+    const auto playtimeAxisMax = vm.playtimeHistory()->series({kValueColumn}).front()->yAxis->max();
+
+    fake->rankPresentation.axisPolicies["playtime"] = FixedBounds{5.0, 45.0};
+    fake->playtimePresentation.axisPolicies["rank"] = FitVisibleData{};
+    fake->playtimePresentation.tierRounding = TierRounding::Off;
+    fake->publishPresentation();
+    EXPECT_DOUBLE_EQ(vm.rankHistory()->series({kValueColumn}).front()->yAxis->max(), rankAxisMax);
+    EXPECT_DOUBLE_EQ(vm.playtimeHistory()->series({kValueColumn}).front()->yAxis->max(), playtimeAxisMax);
 
     fake->playtimePresentation.axisPolicies["playtime"] = FixedBounds{5.0, 45.0};
-    fake->rankPresentation.axisPolicies["playtime"] = FixedBounds{5.0, 45.0};
     fake->publishPresentation();
-
     const auto &playtimeAxis = *vm.playtimeHistory()->series({kValueColumn}).front()->yAxis;
     EXPECT_DOUBLE_EQ(playtimeAxis.min(), 5.0);
     EXPECT_DOUBLE_EQ(playtimeAxis.max(), 45.0);

@@ -158,8 +158,8 @@ QtObject {
                                          seriesRow("scoreAverage", "#ab47bc")],
                                 axes: [axisRow("score", "fit", ["score", "scoreAverage"]), axisRow("accuracy", "fit", ["accuracy"]),
                                        axisRow("counts", "zero", ["shots", "hits", "misses"])]}),
-        benchmarkRank: draft({series: [seriesRow("rank", undefined)], axes: [], xAxes: defaultXAxes()}),
-        benchmarkRecentRank: draft({series: [seriesRow("rank", undefined)], axes: [], xAxes: defaultXAxes()}),
+        benchmarkRank: draft({series: [seriesRow("rank", undefined)], axes: [rankAxisRow()], xAxes: defaultXAxes()}),
+        benchmarkRecentRank: draft({series: [seriesRow("rank", undefined)], axes: [rankAxisRow()], xAxes: defaultXAxes()}),
         benchmarkPlaytime: draft({hasWindow: true, window: 3, windowText: "3",
                                   series: [seriesRow("playtime", "#4dd0e1")],
                                   axes: [axisRow("playtime", "zero", ["playtime"])]})
@@ -186,7 +186,11 @@ QtObject {
     }
 
     function axisRow(key, mode, seriesKeys) {
-        return {key: key, mode: mode, minText: "", maxText: "", seriesKeys: seriesKeys}
+        return {key: key, mode: mode, minText: "", maxText: "", seriesKeys: seriesKeys, fixedBoundsOffered: true}
+    }
+
+    function rankAxisRow() {
+        return Object.assign(axisRow("rank", "fit", ["rank"]), {fixedBoundsOffered: false, tierRounding: "both"})
     }
 
     function record(name, args) {
@@ -253,6 +257,12 @@ QtObject {
         return true
     }
 
+    function setTierRounding(graph, rounding) {
+        record("setTierRounding", [graph, rounding])
+        change(graph, {axes: mapRows(graph, "axes", "rank", {tierRounding: rounding})})
+        return true
+    }
+
     function setShownXAxis(graph, axis) {
         record("setShownXAxis", [graph, axis])
         change(graph, {xAxes: graphDrafts[graph].xAxes.map(r => Object.assign({}, r, {shown: r.key === axis}))})
@@ -261,7 +271,7 @@ QtObject {
 
     function resetGraph(graph) {
         record("resetGraph", [graph])
-        if (graphDrafts[graph].xAxes.length > 0) change(graph, {xAxes: defaultXAxes()})
+        if (graphDrafts[graph].xAxes.length > 0) change(graph, {xAxes: defaultXAxes(), axes: [rankAxisRow()]})
         return true
     }
 

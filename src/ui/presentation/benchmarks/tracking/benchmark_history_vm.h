@@ -92,12 +92,12 @@ namespace ksv::presentation {
         // Only meaningful for RollingPlaytime; takes effect on the next update().
         void setAveragingWindowDays(int days);
 
-        // Takes the "playtime" policy, in minutes, for RollingPlaytime and is ignored for both rank
-        // metrics: the rank axis is always tier-based. Kept across updates.
+        // Takes the "playtime" policy, in minutes, for RollingPlaytime and the "rank" policy for both
+        // rank metrics. Kept across updates.
         void setAxisPolicies(const AxisPolicyMap &policies);
 
-        // This metric's graph style: connection, markers, series colour and width, and the playtime
-        // axis policy. Kept across updates; the series name never depends on it.
+        // This metric's graph style: connection, markers, series colour and width, the axis policy and,
+        // for a rank metric, its tier rounding. Kept across updates; the series name never depends on it.
         void setPresentation(const application::GraphPresentation &presentation);
         [[nodiscard]] int averagingWindowDays() const { return m_windowDays; }
 
@@ -107,8 +107,9 @@ namespace ksv::presentation {
             QList<QPointF> observations;
             std::optional<QPointF> leadingCarry;
             std::optional<QPointF> trailingCarry;
-            // Highest value of the unfiltered history: tier references keep their full-history
-            // meaning rather than fitting only what a narrowed range shows.
+            // Highest value of the unfiltered history. It decides which tiers are shown, so tier
+            // references keep their full-history meaning in a narrowed range, and it tops the axis
+            // that starts at Unranked.
             qreal fullHistoryPeak = 0.0;
             bool historyAvailable = false;
             // Which axis the content is laid out for; update() shows that axis.
@@ -118,11 +119,12 @@ namespace ksv::presentation {
         // Called by BenchmarkTrackingViewModel inside one atomic rebuild, after it has set the range of
         // the axis `content` is laid out for; this call switches xAxis() to that axis, so the axis and
         // the content laid out on it are always installed together.
-        // `present` is false when the metric is suppressed; `rankTiers` is only read
-        // for a rank metric: it sizes the rank axis from 0 up to one tier above the full-history peak
-        // (capped at the top tier), with a tick at every shown tier, and gives each shown tier a
-        // reference line in its colour. The rank line itself has no colour of its own (neutral), so
-        // it is never mistaken for a tier line.
+        // `present` is false when the metric is suppressed; `rankTiers` is only read for a rank metric.
+        // The shown tiers run up to one tier above the full-history peak (capped at the top tier), and
+        // each gets a reference line in its colour. Starting at Unranked, the axis spans every shown
+        // tier with a tick at each; fitting the visible data, it spans the visible line rounded per
+        // the tier rounding. The rank line itself has no colour of its own (neutral), so it is never
+        // mistaken for a tier line.
         void update(const Content &content, bool present, const std::vector<RankTier> &rankTiers);
 
     signals:
@@ -140,12 +142,20 @@ namespace ksv::presentation {
             }
             return application::GraphKey::BenchmarkPlaytime;
         }
-        [[nodiscard]] static ValueAxis rankYAxis(const std::vector<RankTier> &tiers);
+        [[nodiscard]] std::size_t shownTierCount() const;
+        [[nodiscard]] ValueAxis rankYAxis() const;
+        // Returns whether the Y axis was re-bounded.
+        bool applyAxisPolicies(const AxisPolicyMap &policies);
+        void refreshRankAxis();
 
         Metric m_metric;
         int m_windowDays = application::kDefaultAveragingWindowDays;
         application::GraphPresentation m_presentation;
         application::AxisPolicy m_playtimeAxisPolicy;
+        application::AxisPolicy m_rankAxisPolicy;
+        application::TierRounding m_tierRounding = application::TierRounding::Both;
+        std::vector<RankTier> m_rankTiers;
+        qreal m_fullHistoryPeak = 0.0;
         SeriesModel *m_series;
         // Every history metric is at most one point per UTC day on it, so it never ticks in hours.
         DateTimeAxis m_calendarAxis{DateTimeAxis::Options{.wholeDays = true}};
