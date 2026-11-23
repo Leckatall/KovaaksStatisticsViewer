@@ -802,9 +802,9 @@ namespace {
             QFile file(QDir(scene.env.benchmarksDir.path()).absoluteFilePath("auto.json"));
             ASSERT_TRUE(file.open(QIODevice::WriteOnly));
             file.write(R"({
-                "schemaVersion": 1, "id": "auto-1", "name": "Auto",
+                "schemaVersion": 3,
                 "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] } ],
-                "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hash": null,
+                "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hashes": [],
                     "thresholds": [ { "tierId": "t1", "score": 1000000000.0 } ] } ],
                 "categories": []
             })");
@@ -830,7 +830,7 @@ namespace {
         ASSERT_EQ(ksv::tests_support::seedProfile(*app->profileService(), std::move(profile)), application::ProfileImportOutcome::Succeeded);
 
         auto *tracking = app->benchmarkTrackingVm();
-        tracking->selectBenchmark("auto-1");
+        tracking->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), "auto.json"));
         auto *tabBar = scene.root->findChild<QObject *>("workspaceTabBar");
         ASSERT_NE(tabBar, nullptr);
         tabBar->setProperty("currentIndex", 1);

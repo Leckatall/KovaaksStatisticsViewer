@@ -129,4 +129,15 @@ GridLayout {
             onClicked: editorToolbar.saveRequested()
         }
     }
+    // Last in the grid and spanning it, so it always takes a row of its own under the name. Hidden
+    // while the name is being typed: the reason is about the name once it is committed.
+    Label {
+        objectName: "benchmarkNameProblemLabel"
+        Layout.columnSpan: editorToolbar.columns
+        Layout.fillWidth: true
+        visible: text !== "" && !benchmarkNameField.activeFocus
+        text: editorToolbar.manager?.nameProblem ?? ""
+        color: Theme.errorText
+        wrapMode: Text.WordWrap
+    }
 }

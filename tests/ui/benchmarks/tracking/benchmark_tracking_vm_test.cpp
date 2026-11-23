@@ -87,6 +87,22 @@ TEST(BenchmarkTrackingViewModel, SelectorOrdersLoadedEntriesFirstThenProblemsWit
     EXPECT_EQ(entries.at(4).toMap().value("classification").toString(), "invalid");
 }
 
+TEST(BenchmarkTrackingViewModel, AMigrationFailedChoiceIsListedWithItsFailureAndCannotBeSelected) {
+    auto choice = vtChoice("old.json", std::string{"k"}, "old", BenchmarkChoiceClassification::MigrationFailed, false);
+    choice.migrationFailure = ksv::data::BenchmarkMigrationFailure{1, ksv::data::BenchmarkMigrationFailureReason::SourceMismatch};
+    BenchmarkWorkspaceSnapshot snapshot;
+    snapshot.availability = BenchmarkTrackingState::NoSelection;
+    snapshot.choices = {choice};
+    BenchmarkTrackingViewModel vm{fakeWith(snapshot)};
+
+    const auto row = vm.selectorEntries().at(0).toMap();
+    EXPECT_EQ(row.value("classification").toString(), "migration failed");
+    EXPECT_EQ(row.value("name").toString(), "old");
+    EXPECT_EQ(row.value("problemText").toString(), migrationFailureText(*choice.migrationFailure));
+    EXPECT_FALSE(row.value("problemText").toString().isEmpty());
+    EXPECT_FALSE(row.value("selectable").toBool());
+}
+
 TEST(BenchmarkTrackingViewModel, SelectorOrdersRecentLoadedEntriesFirstThenAlphabeticalThenProblems) {
     const auto withRecency = [](BenchmarkChoice choice, const std::size_t recency) {
         choice.recency = recency;

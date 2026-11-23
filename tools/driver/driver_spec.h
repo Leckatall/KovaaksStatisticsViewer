@@ -37,9 +37,8 @@ namespace ksv::driver {
     };
 
     struct BenchmarkSpec {
-        std::string id = "spec-benchmark";
         std::string name = "Spec Benchmark";
-        std::string file;  // default: <id>.json
+        std::string file;  // default: <name>.json
         std::vector<BenchmarkTierSpec> tiers;
         std::vector<BenchmarkCategorySpec> categories;
     };

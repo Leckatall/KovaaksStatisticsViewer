@@ -109,7 +109,8 @@ namespace ksv::application {
         const auto recentBenchmarks = std::make_shared<RecentBenchmarks>(m_settingsService);
         m_benchmarkManagerUseCase = std::make_shared<BenchmarkManagerUseCase>(
             m_benchmarksService, m_benchmarkResolutionUseCase, std::make_shared<qt_data::PlaylistReader>(),
-            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); }, recentBenchmarks);
+            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); },
+            recentBenchmarks);
         m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
             m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService, m_graphConfigurationUseCase,
             m_daySource, recentBenchmarks);

@@ -10,8 +10,8 @@
 
 namespace ksv::domain {
     namespace {
-        // Matches the blank-name precondition the benchmarks service enforces on save, so a
-        // whitespace-only name cannot validate as Trackable and then be refused by the save.
+        // Matches the editor's name check, which refuses a blank name at Save, so a whitespace-only
+        // name cannot validate as Trackable and then be refused by the save.
         bool isBlank(const std::string &text) {
             return std::ranges::all_of(text, [](unsigned char ch) { return std::isspace(ch) != 0; });
         }

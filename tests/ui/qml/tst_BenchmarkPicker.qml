@@ -251,6 +251,26 @@ TestCase {
         verify(picker.popup.opened)
     }
 
+    function test_aMigrationFailedRowShowsItsChipAndFailureAndCannotBeSelected() {
+        const failure = "Migration from version 1 to version 2 failed: the file does not match version 1"
+        picker.entries = defaultEntries.concat([
+            {id: "key-old", name: "Old", filename: "Old.json", classification: "migration failed",
+             selectable: false, problemText: failure}
+        ])
+        openPopup()
+
+        const chip = find("selectorEntryLabel_Old")
+        verify(chip.visible)
+        compare(chip.color, find("selectorEntryLabel_bad.json").color, "the same error colour as Invalid")
+        compare(chip.ToolTip.text, failure)
+        mouseMove(chip, chip.width / 2, chip.height / 2)
+        tryVerify(() => chip.ToolTip.visible, 3000, "hovering the chip shows the failure")
+
+        compare(row("Old").enabled, false)
+        mouseClick(row("Old"))
+        compare(selectedSpy.count, 0)
+    }
+
     function test_incompleteRowIsStillSelectable() {
         openPopup()
         mouseClick(row("Beta Voltaic"))

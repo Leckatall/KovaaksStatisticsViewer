@@ -53,6 +53,8 @@ add_library(ksv_data STATIC
         run_ingestor.h
         benchmarks_service.cpp
         benchmarks_service.h
+        files/file_naming.cpp
+        files/file_naming.h
         graph_configuration_service.cpp
         graph_configuration_service.h
 

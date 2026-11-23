@@ -71,6 +71,18 @@ target_link_libraries(run_filename_tests PRIVATE
 ksv_copy_mingw_runtime_dlls(run_filename_tests)
 ksv_add_gtest_test(run_filename_tests)
 
+add_executable(file_naming_tests
+    file_naming_test.cpp
+)
+
+target_link_libraries(file_naming_tests PRIVATE
+    ksv_data
+    GTest::gtest_main
+)
+
+ksv_copy_mingw_runtime_dlls(file_naming_tests)
+ksv_add_gtest_test(file_naming_tests)
+
 add_executable(run_ingestor_tests
     run_ingestor_test.cpp
 )

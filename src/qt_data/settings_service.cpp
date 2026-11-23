@@ -11,8 +11,7 @@ namespace ksv::qt_data {
     namespace {
         constexpr auto kSeriesConfigKey = "graph/seriesConfigV1";
         constexpr auto kSeriesConfigQuarantinePrefix = "graph/seriesConfigQuarantine/";
-        constexpr auto kLastSelectedBenchmarkKey = "benchmarks/lastSelectedId";
-        constexpr auto kRecentBenchmarkIdsKey = "benchmarks/recentIds";
+        constexpr auto kRecentBenchmarkFilesKey = "benchmarks/recentFiles";
         constexpr auto kLegacyRunAxisLabelKey = "graphAxis/seriesId";
     }
 
@@ -119,27 +118,21 @@ namespace ksv::qt_data {
         return m_settings.value(kLegacyRunAxisLabelKey).toString().toStdString();
     }
 
-    std::vector<std::string> SettingsService::getRecentBenchmarkIds() const {
+    std::vector<std::string> SettingsService::getRecentBenchmarkFiles() const {
         const QMutexLocker locker(&m_settings_mutex);
-        if (m_settings.contains(kRecentBenchmarkIdsKey)) {
-            const auto stored = m_settings.value(kRecentBenchmarkIdsKey).toStringList();
-            std::vector<std::string> result;
-            result.reserve(stored.size());
-            for (const auto &id: stored) result.push_back(id.toStdString());
-            return result;
-        }
-        const auto legacy = m_settings.value(kLastSelectedBenchmarkKey).toString();
-        if (legacy.isEmpty()) return {};
-        return {legacy.toStdString()};
+        const auto stored = m_settings.value(kRecentBenchmarkFilesKey).toStringList();
+        std::vector<std::string> result;
+        result.reserve(stored.size());
+        for (const auto &filename: stored) result.push_back(filename.toStdString());
+        return result;
     }
 
-    void SettingsService::setRecentBenchmarkIds(const std::vector<std::string> &ids) {
+    void SettingsService::setRecentBenchmarkFiles(const std::vector<std::string> &filenames) {
         QStringList stored;
-        stored.reserve(static_cast<qsizetype>(ids.size()));
-        for (const auto &id: ids) stored.push_back(QString::fromStdString(id));
+        stored.reserve(static_cast<qsizetype>(filenames.size()));
+        for (const auto &filename: filenames) stored.push_back(QString::fromStdString(filename));
         const QMutexLocker locker(&m_settings_mutex);
-        m_settings.setValue(kRecentBenchmarkIdsKey, stored);
-        m_settings.remove(kLastSelectedBenchmarkKey);
+        m_settings.setValue(kRecentBenchmarkFilesKey, stored);
         m_settings.sync();
     }
 }

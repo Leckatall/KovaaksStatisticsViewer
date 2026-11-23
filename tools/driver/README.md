@@ -46,7 +46,7 @@ A session lives in `.temp/ui-driver/<name>/` (default name `default`, pick anoth
 
 ### Benchmark fixtures
 
-The synthetic datasets copy every file in [`benchmarks/`](benchmarks) into the session and remember `driver-demo` as the selected benchmark (`--setting 'benchmarks/recentIds=["…"]'` picks another). Their thresholds are fixed numbers picked against the rich profile's scores, so each row shows a different state; `DriverBenchmarkFixtureTest` (`tests/integration/driver_session_test.cpp`) fails when the run generator drifts from them.
+The synthetic datasets copy every file in [`benchmarks/`](benchmarks) into the session and remember `Driver Demo Benchmark.json` as the most recent benchmark (`--setting 'benchmarks/recentFiles=["…"]'` picks another). Their thresholds are fixed numbers picked against the rich profile's scores, so each row shows a different state; `DriverBenchmarkFixtureTest` (`tests/integration/driver_session_test.cpp`) fails when the run generator drifts from them.
 
 | File | Against `rich` |
 |---|---|
@@ -65,7 +65,7 @@ Other `start` options (all of them stored in `launch.json`, so `restart` reuses 
 | Option | Example | What it does |
 |---|---|---|
 | `--overlay DIR` (repeatable) | `--overlay tools/driver/tours/unreachable/broken` | Copies DIR's tree onto the session's `data/` after seeding, in order, replacing files. Lay it out like `data/`: `benchmarks/`, `FPSAimTrainer/performances/`, `FPSAimTrainer/stats/`, `profile.pb`. |
-| `--setting KEY=VALUE` (repeatable) | `--setting file/kovaaksDirs=` | Writes any QSettings key before the app reads settings. VALUE is JSON when it parses (`false`, `3`, `["a","b"]`), otherwise a string; `KEY=` removes the key. `file/kovaaksDirs`, `file/kovaaks` and `file/profilePath` are written in SettingsService's own URL encoding. Keys: `file/…`, `benchmarks/recentIds` (a JSON array of benchmark ids, most recent first; the app opens the first selectable one), `graph/…`, the legacy run-graph axis label `graphAxis/seriesId` (imported only while the graph document has no label of its own), and the QML `Settings {}` categories `window/`, `view/`, `historyGraph/`, `graphSeriesVisibility/` (`view/playtimeGraphVisible=false`). |
+| `--setting KEY=VALUE` (repeatable) | `--setting file/kovaaksDirs=` | Writes any QSettings key before the app reads settings. VALUE is JSON when it parses (`false`, `3`, `["a","b"]`), otherwise a string; `KEY=` removes the key. `file/kovaaksDirs`, `file/kovaaks` and `file/profilePath` are written in SettingsService's own URL encoding. Keys: `file/…`, `benchmarks/recentFiles` (a JSON array of benchmark filenames, most recent first; the app opens the first selectable one), `graph/…`, the legacy run-graph axis label `graphAxis/seriesId` (imported only while the graph document has no label of its own), and the QML `Settings {}` categories `window/`, `view/`, `historyGraph/`, `graphSeriesVisibility/` (`view/playtimeGraphVisible=false`). |
 | `--env KEY=VALUE` (repeatable) | `--env QT_SCALE_FACTOR=1.5` | Environment for `ksv_driver`, applied over the headless defaults; `KEY=` unsets. |
 | `--profile-spec FILE` | `--profile-spec tools/driver/specs/many-scenarios.json` | Builds `profile.pb` (and optionally a benchmark) from a JSON spec; see [Profile specs](#profile-specs). Combines with `--dataset empty` (the default with a spec), `first-run` or `fixtures`. |
 | `--inject PORT[.OP]=EFFECT[,EFFECT…]` (repeatable) | `--inject benchmarkStore.write=fail` | Fault and latency injection on the services `App` is built from; see [Fault injection](#fault-injection). |
@@ -102,7 +102,7 @@ Any warnings the app logs during a command are printed as `app warning: …`; `s
 | `resize WxH [--window KEY]`, `logs [--all] [--warnings] [--clear]` | |
 | `put SRC… [--to FOLDER]` | Copies files into the session's `data/` while it runs: `--to performances\|stats\|benchmarks\|.` or a path under `data/`; by default `.perf` goes to performances, `.csv` to stats, `.json` to benchmarks. `put "tests/examples/1wall6targets TE.perf"` imports a run live (the performances folder is watched). |
 | `rm PATH…` | Deletes files under `data/` (`rm benchmarks/driver-demo.json`); refuses anything outside it. |
-| `edit PATH --replace OLD NEW … \| --from SRC` | Rewrites a file under `data/` in place; OLD must occur. `edit benchmarks/driver-demo.json --replace "Driver Demo" "Renamed"`. |
+| `edit PATH --replace OLD NEW … \| --from SRC` | Rewrites a file under `data/` in place; OLD must occur. `edit "benchmarks/Driver Demo Benchmark.json" --replace "Iron" "Renamed"`. |
 | `batch FILE\|- [--keep-going] [--fail-on-warnings] [--var NAME=VALUE]` | Runs a step per line; see [Batches and tours](#batches-and-tours). |
 | `tour [NAME] [--report] [--stop-on-failure] [--fail-on-warnings] [--keep-running]` | Runs `tools/driver/tours/NAME.txt` in session `tour-NAME`; without NAME, lists the tours. `tour unreachable --report`. |
 | `report [DIR] [-o FILE] [--coverage FILE] [--title T] [--link]` | Builds a contact sheet (`index.html`) from a shots directory (default: the session's `shots/`). `report --session ses`. |
@@ -146,7 +146,7 @@ Prefer `objectName`s. `Main.qml` and the workspaces have many: `scenariosTab`, `
     {"name": "Pasu Spec", "hash": "spec-pasu", "runs": 30, "firstDay": 0, "daySpacing": 1, "runsPerDay": 3,
      "startMinute": 1080, "minuteSpacing": 2, "durationSeconds": 60, "performance": true, "shape": "gallery-pasu"}
   ],
-  "benchmark": {"id": "spec-benchmark", "name": "Spec Benchmark", "file": "spec-benchmark.json",
+  "benchmark": {"name": "Spec Benchmark", "file": "Spec Benchmark.json",
                 "tierFactors": [0.6, 0.8, 0.95, 1.05, 1.2],
                 "categories": [{"name": "Clicking", "color": "#00bcd4", "scenarios": ["Pasu Spec", {"name": "X", "hash": "x"}]}]}
 }
@@ -163,7 +163,7 @@ Prefer `objectName`s. `Main.qml` and the workspaces have many: `scenariosTab`, `
 | `performance` | true | false keeps only the run totals, as a stats-CSV-only import does (the run graph shows no performance data) |
 | `shape` | `gallery-primary` | a gallery shape (`gallery-primary`, `gallery-pasu`, `gallery-smoothbot`, `gallery-flyts`, `gallery-celestial`) or base values: `{"shotsPerSecond", "shotVariation", "accuracy", "hitsPerKill", "damagePerHit", "scorePerHit", "scorePerKill"}` |
 
-`benchmark` is either a path to a benchmark JSON file to copy (relative to the spec) or an object: `id`, `name`, `file`, then `tiers` (`[{"name", "id", "factor", "color"}]`) or `tierFactors` (up to five factors for Iron…Platinum; default `[0.6, 0.8, 0.95, 1.05, 1.2]`), and `categories` (`[{"name", "id", "color", "scenarios"}]`; default one category with every scenario). A category names scenarios by name or by `{"name", "hash"}`. Thresholds are each tier's factor times the scenario's personal best; a name that matches no scenario, or several, is written without a hash (unresolved or ambiguous) around a nominal 1000.
+`benchmark` is either a path to a benchmark JSON file to copy (relative to the spec) or an object: `name`, `file` (default `<name>.json`), then `tiers` (`[{"name", "id", "factor", "color"}]`) or `tierFactors` (up to five factors for Iron…Platinum; default `[0.6, 0.8, 0.95, 1.05, 1.2]`), and `categories` (`[{"name", "id", "color", "scenarios"}]`; default one category with every scenario). A category names scenarios by name or by `{"name", "hash"}`. Thresholds are each tier's factor times the scenario's personal best; a name that matches no scenario, or several, is written without a hash (unresolved or ambiguous) around a nominal 1000.
 
 Generation is deterministic: runs are seeded from their scenario and run index, scenarios are generated in order, and the store's creation time is pinned, so a spec always writes the same bytes. The four synthetic datasets use the same run generator (`gallery::makeRun`).
 
@@ -304,9 +304,9 @@ A niche state should need a tour and some data files, not driver code. For examp
 
 1. **Spec**: [`composing-example/twins.json`](tours/composing-example/twins.json) makes a profile with `Solo Scenario` and two `Twin Scenario`s that have different hashes.
 2. **Overlay**: [`composing-example/overlay/benchmarks/matching.json`](tours/composing-example/overlay/benchmarks/matching.json) is a benchmark naming Solo (with its hash), Twin (no hash: two candidates) and `Ghost Scenario` (no hash, no such scenario).
-3. **Tour**: one `start` line composes them, and `--setting 'benchmarks/recentIds=["matching-demo"]'` opens the Benchmarks tab on that benchmark:
+3. **Tour**: one `start` line composes them, and `--setting 'benchmarks/recentFiles=["Matching Demo.json"]'` opens the Benchmarks tab on that benchmark (an overlay's older-format benchmark is renamed after its stored name when the app scans the folder):
    ```
-   start --profile-spec "${TOUR_DATA}/twins.json" --overlay "${TOUR_DATA}/overlay" --setting 'benchmarks/recentIds=["matching-demo"]'
+   start --profile-spec "${TOUR_DATA}/twins.json" --overlay "${TOUR_DATA}/overlay" --setting 'benchmarks/recentFiles=["Matching Demo.json"]'
    set M=win:benchmarkManagerDialog
    section benchmarks
    click benchmarksTab --shot=matching-rows

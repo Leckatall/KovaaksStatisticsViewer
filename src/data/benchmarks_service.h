@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -32,19 +33,25 @@ namespace ksv::data {
 
     private:
         void notifyChanged();
+        void publish();
+        // Sets the entry's key and its name from the filename, onto a loaded benchmark too, which
+        // is then re-validated: the store's definitions carry neither.
+        static void identify(BenchmarkFileEntry &entry, const domain::BenchmarkId &key);
+        [[nodiscard]] bool knows(const std::string &filename) const;
         // Accepted loaded entry a token still addresses, or nullptr if the filename is unknown or
-        // its digest / embedded id no longer matches.
+        // its digest / key no longer matches.
         [[nodiscard]] const BenchmarkFileEntry *acceptedEntry(const BenchmarkEditToken &token) const;
-        void upsertSnapshotEntry(const std::string &filename, const std::string &digest,
-                                 LoadedBenchmark content);
-        // Validate, conditionally write, and (on success) install one accepted benchmark without
-        // publishing. `changed` is set true on any accepted mutation so the caller publishes once.
-        BenchmarkSaveOutcome writeAccepted(const domain::BenchmarkDefinition &benchmark,
-                                           const std::optional<BenchmarkEditToken> &token,
-                                           bool &changed);
+        [[nodiscard]] std::optional<BenchmarkSaveError> refusal(const BenchmarkEditToken &token) const;
+        // Installs written content under `filename` and `key` without publishing.
+        void admit(const std::string &filename, const std::string &digest,
+                   const domain::BenchmarkDefinition &benchmark, const domain::BenchmarkId &key);
+        void drop(const std::string &filename);
 
         std::shared_ptr<IBenchmarkStore> m_store;
         std::optional<BenchmarkLibrarySnapshot> m_snapshot;
+        // Key of every filename in m_snapshot.
+        std::map<std::string, domain::BenchmarkId> m_keys;
+        uint64_t m_nextKey = 0;
         uint64_t m_revision = 0;
         bool m_lastRefreshFailed = false;
         std::vector<std::function<void()>> m_callbacks;

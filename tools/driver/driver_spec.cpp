@@ -408,11 +408,10 @@ namespace ksv::driver {
 
         BenchmarkSpec parseBenchmark(const QJsonObject &object, const std::vector<ScenarioSpec> &scenarios) {
             const QString path = QStringLiteral("benchmark");
-            requireKnownKeys(object, path, {"id", "name", "file", "tiers", "tierFactors", "categories"});
+            requireKnownKeys(object, path, {"name", "file", "tiers", "tierFactors", "categories"});
             BenchmarkSpec spec;
-            spec.id = stringField(object, path, "id", QString::fromStdString(spec.id)).toStdString();
             spec.name = stringField(object, path, "name", QString::fromStdString(spec.name)).toStdString();
-            spec.file = stringField(object, path, "file", QString::fromStdString(spec.id + ".json")).toStdString();
+            spec.file = stringField(object, path, "file", QString::fromStdString(spec.name + ".json")).toStdString();
             if (object.contains("tiers") && object.contains("tierFactors")) {
                 reject(path, QStringLiteral("give either tiers or tierFactors, not both"));
             }
@@ -523,7 +522,6 @@ namespace ksv::driver {
         }
 
         domain::BenchmarkDefinition benchmark;
-        benchmark.id = domain::BenchmarkId{spec.id};
         benchmark.name = spec.name;
         for (const auto &tier: spec.tiers) benchmark.tiers.push_back({domain::TierId{tier.id}, tier.name, tier.color});
 

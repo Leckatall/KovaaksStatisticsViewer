@@ -11,14 +11,25 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
+#include <tuple>
 #include <unordered_set>
+
+#include "benchmark_migration/benchmark_migration.h"
+#include "files/file_naming.h"
 
 namespace ksv::qt_data {
     namespace {
         using namespace data;
         using namespace ksv::domain;
 
-        constexpr int kSchemaVersion = 2;
+        constexpr int kSchemaVersion = 3;
+        constexpr std::string_view kFallbackName = "Benchmark";
+
+        // Equal for names Windows treats as one file.
+        std::string caseInsensitiveKey(const std::string_view name) {
+            return QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size())).toCaseFolded().toStdString();
+        }
 
         bool exactKeys(const QJsonObject &object, const std::initializer_list<const char *> keys) {
             if (object.size() != static_cast<qsizetype>(keys.size())) return false;
@@ -60,30 +71,19 @@ namespace ksv::qt_data {
             return Threshold{TierId{*tierId}, object["score"].toDouble()};
         }
 
-        std::optional<BenchmarkScenario> decodeEntry(const QJsonValue &value, int version) {
+        std::optional<BenchmarkScenario> decodeEntry(const QJsonValue &value) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
-            if (!(version == 1 ? exactKeys(object, {"id", "name", "hash", "thresholds"})
-                              : exactKeys(object, {"id", "name", "hashes", "thresholds"})) ||
-                !object["name"].isString() ||
-                !object["thresholds"].isArray())
+            if (!exactKeys(object, {"id", "name", "hashes", "thresholds"}) || !object["name"].isString() ||
+                !object["thresholds"].isArray() || !object["hashes"].isArray())
                 return std::nullopt;
             const auto id = nonEmptyIdString(object["id"]);
             if (!id) return std::nullopt;
             std::vector<std::string> hashes;
-            if (version == 1) {
-                if (!object["hash"].isNull()) {
-                    if (!object["hash"].isString()) return std::nullopt;
-                    const auto hash = object["hash"].toString().toStdString();
-                    if (!hash.empty()) hashes.push_back(hash);
-                }
-            } else {
-                if (!object["hashes"].isArray()) return std::nullopt;
-                for (const auto &value: object["hashes"].toArray()) {
-                    const auto hash = nonEmptyIdString(value);
-                    if (!hash || std::ranges::find(hashes, *hash) != hashes.end()) return std::nullopt;
-                    hashes.push_back(*hash);
-                }
+            for (const auto &item: object["hashes"].toArray()) {
+                const auto hash = nonEmptyIdString(item);
+                if (!hash || std::ranges::find(hashes, *hash) != hashes.end()) return std::nullopt;
+                hashes.push_back(*hash);
             }
             std::vector<Threshold> thresholds;
             for (const auto &item: object["thresholds"].toArray()) {
@@ -96,11 +96,11 @@ namespace ksv::qt_data {
             return entry;
         }
 
-        std::optional<std::vector<BenchmarkScenario>> decodeEntries(const QJsonValue &value, int version) {
+        std::optional<std::vector<BenchmarkScenario>> decodeEntries(const QJsonValue &value) {
             if (!value.isArray()) return std::nullopt;
             std::vector<BenchmarkScenario> entries;
             for (const auto &item: value.toArray()) {
-                const auto entry = decodeEntry(item, version);
+                const auto entry = decodeEntry(item);
                 if (!entry) return std::nullopt;
                 entries.push_back(*entry);
             }
@@ -108,29 +108,29 @@ namespace ksv::qt_data {
         }
 
         // The caller checks the object's exact key set, which differs between categories and subcategories.
-        std::optional<BenchmarkGroup> decodeGroup(const QJsonObject &object, int version) {
+        std::optional<BenchmarkGroup> decodeGroup(const QJsonObject &object) {
             if (!object["name"].isString()) return std::nullopt;
             const auto id = nonEmptyIdString(object["id"]);
             const auto color = decodeColor(object["color"]);
-            auto scenarios = decodeEntries(object["scenarios"], version);
+            auto scenarios = decodeEntries(object["scenarios"]);
             if (!id || !color || !scenarios) return std::nullopt;
             return BenchmarkGroup{GroupId{*id}, object["name"].toString().toStdString(), *color, std::move(*scenarios)};
         }
 
-        std::optional<Category> decodeCategory(const QJsonValue &value, int version) {
+        std::optional<Category> decodeCategory(const QJsonValue &value) {
             if (!value.isObject()) return std::nullopt;
             const auto object = value.toObject();
             if (!exactKeys(object, {"id", "name", "color", "scenarios", "subcategories"}) ||
                 !object["subcategories"].isArray())
                 return std::nullopt;
-            auto group = decodeGroup(object, version);
+            auto group = decodeGroup(object);
             if (!group) return std::nullopt;
             std::vector<Subcategory> subcategories;
             for (const auto &item: object["subcategories"].toArray()) {
                 if (!item.isObject()) return std::nullopt;
                 const auto sub = item.toObject();
                 if (!exactKeys(sub, {"id", "name", "color", "scenarios"})) return std::nullopt;
-                auto subGroup = decodeGroup(sub, version);
+                auto subGroup = decodeGroup(sub);
                 if (!subGroup) return std::nullopt;
                 subcategories.push_back(Subcategory{std::move(*subGroup)});
             }
@@ -148,26 +148,21 @@ namespace ksv::qt_data {
         }
 
         // Structural decode: shape + types only. Returns nullopt on any representation failure.
-        std::optional<BenchmarkDefinition> decodeStructure(const QJsonObject &root, int version) {
-            if (!exactKeys(root, {"schemaVersion", "id", "name", "tiers", "uncategorized", "categories"}) ||
-                !root["name"].isString() || !root["tiers"].isArray() || !root["uncategorized"].isArray() ||
-                !root["categories"].isArray())
+        std::optional<BenchmarkDefinition> decodeStructure(const QJsonObject &root) {
+            if (!exactKeys(root, {"schemaVersion", "tiers", "uncategorized", "categories"}) ||
+                !root["tiers"].isArray() || !root["uncategorized"].isArray() || !root["categories"].isArray())
                 return std::nullopt;
-            const auto id = nonEmptyIdString(root["id"]);
-            if (!id) return std::nullopt;
             BenchmarkDefinition def;
-            def.id = BenchmarkId{*id};
-            def.name = root["name"].toString().toStdString();
             for (const auto &item: root["tiers"].toArray()) {
                 const auto tier = decodeTier(item);
                 if (!tier) return std::nullopt;
                 def.tiers.push_back(*tier);
             }
-            auto uncategorized = decodeEntries(root["uncategorized"], version);
+            auto uncategorized = decodeEntries(root["uncategorized"]);
             if (!uncategorized) return std::nullopt;
             def.uncategorized = std::move(*uncategorized);
             for (const auto &item: root["categories"].toArray()) {
-                const auto category = decodeCategory(item, version);
+                const auto category = decodeCategory(item);
                 if (!category) return std::nullopt;
                 def.categories.push_back(*category);
             }
@@ -179,7 +174,6 @@ namespace ksv::qt_data {
         bool hasStructuralIntegrity(const BenchmarkDefinition &def) {
             std::unordered_set<std::string> ids;
             const auto add = [&](const std::string &value) { return ids.insert(value).second; };
-            if (!add(def.id.value)) return false;
             std::unordered_set<std::string> tierIds;
             for (const auto &tier: def.tiers) {
                 if (!add(tier.id.value)) return false;
@@ -195,35 +189,55 @@ namespace ksv::qt_data {
             return true;
         }
 
-        std::variant<LoadedBenchmark, ProblemBenchmark> classifyBytes(const QByteArray &bytes) {
+        ProblemBenchmark invalid() { return ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}}; }
+
+        std::variant<LoadedBenchmark, ProblemBenchmark> readCurrentFormat(const QJsonObject &root) {
+            const auto structure = decodeStructure(root);
+            if (!structure || !hasStructuralIntegrity(*structure)) return invalid();
+            return LoadedBenchmark{*structure, validateBenchmark(*structure)};
+        }
+
+        ProblemBenchmark migrationFailed(const int fromVersion, const BenchmarkMigrationFailureReason reason) {
+            return ProblemBenchmark{BenchmarkFileProblem::MigrationFailed, {}, BenchmarkMigrationFailure{fromVersion, reason}};
+        }
+
+        // A schema 1 or 2 file whose upgrade the schema 3 reader accepts, still to be renamed and written.
+        struct AwaitingWrite {
+            QJsonObject schema3;
+            std::string storedName;
+            LoadedBenchmark content;
+        };
+
+        using StoredRead = std::variant<LoadedBenchmark, ProblemBenchmark, AwaitingWrite>;
+
+        StoredRead upgrade(const QJsonObject &root, const int version) {
+            const auto migrated = benchmark_migration::migrateBenchmark(root, version);
+            if (const auto *mismatch = std::get_if<benchmark_migration::BenchmarkMigrationMismatch>(&migrated))
+                return migrationFailed(mismatch->fromVersion, BenchmarkMigrationFailureReason::SourceMismatch);
+            const auto &upgraded = std::get<benchmark_migration::MigratedBenchmark>(migrated);
+            auto read = readCurrentFormat(upgraded.schema3);
+            auto *content = std::get_if<LoadedBenchmark>(&read);
+            if (!content) return migrationFailed(2, BenchmarkMigrationFailureReason::InvalidResult);
+            return AwaitingWrite{upgraded.schema3, upgraded.storedName, std::move(*content)};
+        }
+
+        // The only place current-format code meets older schema versions: it hands them to migration.
+        StoredRead readStoredBenchmark(const QByteArray &bytes) {
             QJsonParseError error;
             const auto document = QJsonDocument::fromJson(bytes, &error);
-            if (error.error != QJsonParseError::NoError || !document.isObject())
-                return ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}, {}};
+            if (error.error != QJsonParseError::NoError || !document.isObject()) return invalid();
             const auto root = document.object();
-            if (!root["schemaVersion"].isDouble())
-                return ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}, {}};
+            if (!root["schemaVersion"].isDouble()) return invalid();
             const auto version = root["schemaVersion"].toDouble();
-            if (std::floor(version) != version)
-                return ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}, {}};
-
-            // Best-effort display fields for a problem entry, taken only if safely parseable.
-            std::optional<std::string> displayName;
-            if (root["name"].isString() && !root["name"].toString().isEmpty())
-                displayName = root["name"].toString().toStdString();
-            std::optional<BenchmarkId> embeddedId;
-            if (const auto id = nonEmptyIdString(root["id"])) embeddedId = BenchmarkId{*id};
-
-            if (static_cast<int>(version) > kSchemaVersion)
-                return ProblemBenchmark{BenchmarkFileProblem::Unsupported, displayName, embeddedId,
-                                        static_cast<int>(version)};
-            if (version < 1)
-                return ProblemBenchmark{BenchmarkFileProblem::Invalid, displayName, embeddedId, {}};
-
-            const auto structure = decodeStructure(root, static_cast<int>(version));
-            if (!structure || !hasStructuralIntegrity(*structure))
-                return ProblemBenchmark{BenchmarkFileProblem::Invalid, displayName, embeddedId, {}};
-            return LoadedBenchmark{*structure, validateBenchmark(*structure)};
+            if (std::floor(version) != version || version < 1) return invalid();
+            if (version > kSchemaVersion)
+                return ProblemBenchmark{BenchmarkFileProblem::Unsupported, static_cast<int>(version), {}};
+            if (version == kSchemaVersion) {
+                auto current = readCurrentFormat(root);
+                if (auto *loaded = std::get_if<LoadedBenchmark>(&current)) return std::move(*loaded);
+                return std::get<ProblemBenchmark>(current);
+            }
+            return upgrade(root, static_cast<int>(version));
         }
 
         QJsonObject encodeEntry(const BenchmarkScenario &entry) {
@@ -268,8 +282,6 @@ namespace ksv::qt_data {
                 categories.append(object);
             }
             const QJsonObject root{{"schemaVersion", kSchemaVersion},
-                                   {"id", QString::fromStdString(def.id.value)},
-                                   {"name", QString::fromStdString(def.name)},
                                    {"tiers", tiers},
                                    {"uncategorized", encodeEntries(def.uncategorized)},
                                    {"categories", categories}};
@@ -289,30 +301,100 @@ namespace ksv::qt_data {
         }
     }
 
+    BenchmarkStore::FileOperations BenchmarkStore::defaultFileOperations() {
+        return {
+            [](const QString &from, const QString &to) { return QFile::rename(from, to); },
+            [](const QString &path, const QByteArray &bytes) {
+                QSaveFile save(path);  // temp sibling + atomic commit
+                return save.open(QIODevice::WriteOnly) && save.write(bytes) == bytes.size() && save.commit();
+            },
+        };
+    }
+
     BenchmarkStore::BenchmarkStore(std::string directoryPath)
-        : m_directory(std::move(directoryPath)) {}
+        : BenchmarkStore(std::move(directoryPath), defaultFileOperations()) {}
+
+    BenchmarkStore::BenchmarkStore(std::string directoryPath, FileOperations operations)
+        : m_directory(std::move(directoryPath)), m_operations(std::move(operations)) {}
 
     std::string BenchmarkStore::managedDirectoryPath() const { return m_directory; }
 
-    data::BenchmarkScanResult BenchmarkStore::scan() const {
+    data::BenchmarkScanResult BenchmarkStore::scan() {
         QDir dir(QString::fromStdString(m_directory));
         if (!dir.exists() && !QDir().mkpath(dir.absolutePath()))
             return {std::nullopt, data::BenchmarkScanFailure::DirectoryUnavailable};
 
+        struct Pending {
+            std::string filename;
+            std::string digest;
+            AwaitingWrite upgrade;
+        };
         data::BenchmarkLibrarySnapshot snapshot;
-        auto names = dir.entryList({"*.json"}, QDir::Files, QDir::Name);  // QDir::Name = deterministic
-        for (const auto &name: names) {
+        std::vector<Pending> pending;
+        // Names of every file present when the scan starts stay taken for the whole scan, so no
+        // migrating file claims a name another one is only about to leave.
+        std::set<std::string> taken;
+        const auto foldedName = [](const std::string &filename) {
+            return caseInsensitiveKey(files::stemOf(filename, data::kBenchmarkFileExtension));
+        };
+
+        for (const auto &name: dir.entryList({"*.json"}, QDir::Files)) {
+            const auto filename = name.toStdString();
+            taken.insert(foldedName(filename));
             QFile file(dir.absoluteFilePath(name));
             if (!file.open(QIODevice::ReadOnly)) {
                 // A file that enumerated but cannot be read is a per-file problem, not a directory failure.
-                snapshot.entries.push_back({name.toStdString(), {},
-                                            ProblemBenchmark{BenchmarkFileProblem::Invalid, {}, {}, {}}});
+                snapshot.entries.push_back({filename, {}, invalid()});
                 continue;
             }
             const auto bytes = file.readAll();
-            snapshot.entries.push_back({name.toStdString(), digestOf(bytes).toStdString(),
-                                        classifyBytes(bytes)});
+            auto digest = digestOf(bytes).toStdString();
+            auto read = readStoredBenchmark(bytes);
+            if (auto *upgrade = std::get_if<AwaitingWrite>(&read)) {
+                pending.push_back({filename, std::move(digest), std::move(*upgrade)});
+                continue;
+            }
+            if (auto *loaded = std::get_if<LoadedBenchmark>(&read))
+                snapshot.entries.push_back({filename, std::move(digest), std::move(*loaded)});
+            else
+                snapshot.entries.push_back({filename, std::move(digest), std::get<ProblemBenchmark>(read)});
         }
+
+        std::ranges::sort(pending, {}, [&](const Pending &file) {
+            return std::tuple{foldedName(file.filename), file.filename};
+        });
+        for (auto &file: pending) {
+            const auto ownName = foldedName(file.filename);
+            const auto claimed = files::uniqueName(
+                files::cleanName(file.upgrade.storedName, data::kBenchmarkFileExtension, kFallbackName),
+                data::kBenchmarkFileExtension, kFallbackName, [&](const std::string_view candidate) {
+                    const auto folded = caseInsensitiveKey(candidate);
+                    return folded != ownName && taken.contains(folded);
+                });
+            taken.insert(caseInsensitiveKey(claimed));
+
+            // Renamed before it is rewritten, so a failure never leaves the new format under the old
+            // name, where no later scan would migrate it and its stored name would be lost.
+            auto target = file.filename;
+            if (claimed != files::stemOf(file.filename, data::kBenchmarkFileExtension)) {
+                target = claimed + std::string{data::kBenchmarkFileExtension};
+                if (!m_operations.rename(dir.absoluteFilePath(QString::fromStdString(file.filename)),
+                                         dir.absoluteFilePath(QString::fromStdString(target)))) {
+                    snapshot.entries.push_back({file.filename, file.digest,
+                                                migrationFailed(2, BenchmarkMigrationFailureReason::RenameFailed)});
+                    continue;
+                }
+            }
+            const auto bytes = QJsonDocument(file.upgrade.schema3).toJson(QJsonDocument::Indented);
+            if (!m_operations.writeAtomically(dir.absoluteFilePath(QString::fromStdString(target)), bytes)) {
+                snapshot.entries.push_back({target, file.digest,
+                                            migrationFailed(2, BenchmarkMigrationFailureReason::WriteFailed)});
+                continue;
+            }
+            snapshot.entries.push_back({target, digestOf(bytes).toStdString(), std::move(file.upgrade.content)});
+        }
+
+        std::ranges::sort(snapshot.entries, {}, &data::BenchmarkFileEntry::filename);
         return {snapshot, std::nullopt};
     }
 
@@ -334,10 +416,21 @@ namespace ksv::qt_data {
         }
 
         const auto bytes = encode(definition);
-        QSaveFile save(path);  // temp sibling + atomic commit
-        if (!save.open(QIODevice::WriteOnly) || save.write(bytes) != bytes.size() || !save.commit())
-            return {std::nullopt, data::BenchmarkWriteFailure::WriteFailed};
+        if (!m_operations.writeAtomically(path, bytes)) return {std::nullopt, data::BenchmarkWriteFailure::WriteFailed};
         return {digestOf(bytes).toStdString(), std::nullopt};
+    }
+
+    data::BenchmarkRenameResult BenchmarkStore::rename(const std::string &from, const std::string &to,
+                                                       const std::string &expectedDigest) {
+        const QDir dir(QString::fromStdString(m_directory));
+        const auto fromPath = dir.absoluteFilePath(QString::fromStdString(from));
+        const auto onDisk = currentDigest(fromPath);
+        if (!onDisk || onDisk->toStdString() != expectedDigest)
+            return {false, data::BenchmarkWriteFailure::ExternalModificationConflict};
+        // QFile::rename refuses an existing target unless it is this same file respelt.
+        if (!m_operations.rename(fromPath, dir.absoluteFilePath(QString::fromStdString(to))))
+            return {false, data::BenchmarkWriteFailure::WriteFailed};
+        return {true, std::nullopt};
     }
 
     data::BenchmarkDeleteResult BenchmarkStore::remove(const std::string &filename,

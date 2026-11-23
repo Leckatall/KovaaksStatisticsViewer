@@ -58,7 +58,8 @@ QtObject {
             Trackable: success,
             Incomplete: warning,
             Invalid: error,
-            Unsupported: "#9E9E9E"
+            Unsupported: "#9E9E9E",
+            "Migration failed": error
         })[classification] || "#9E9E9E"
     }
 

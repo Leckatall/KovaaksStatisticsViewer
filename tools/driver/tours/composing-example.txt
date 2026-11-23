@@ -8,7 +8,7 @@
 #   --setting             opens the Benchmarks tab on that benchmark
 #
 #   uv run python scripts/ui_driver.py tour composing-example --report
-start --profile-spec "${TOUR_DATA}/twins.json" --overlay "${TOUR_DATA}/overlay" --setting 'benchmarks/recentIds=["matching-demo"]'
+start --profile-spec "${TOUR_DATA}/twins.json" --overlay "${TOUR_DATA}/overlay" --setting 'benchmarks/recentFiles=["Matching Demo.json"]'
 set M=win:benchmarkManagerDialog
 
 section benchmarks

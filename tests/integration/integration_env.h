@@ -23,6 +23,7 @@
 #include "formats/protobuf/proto_decoder.h"
 #include "profile_service.h"
 #include "qt_data/benchmark_store.h"
+#include "data/interfaces/i_benchmarks_service.h"
 #include "run_ingestor.h"
 #include "kovaaks_dir.h"
 #include "qt_data/graph_configuration_persistence.h"
@@ -38,6 +39,15 @@ namespace ksv::integration {
         raw.remove("graph");
         raw.remove("graphAxis");
         raw.sync();
+    }
+
+    // The in-session key the library gave the benchmark file `filename`, which selection and the
+    // editor address it by; empty when there is no such file.
+    inline QString benchmarkKey(const std::shared_ptr<data::IBenchmarksService> &benchmarks, const QString &filename) {
+        if (const auto library = benchmarks->snapshot())
+            for (const auto &entry: library->entries)
+                if (entry.filename == filename.toStdString()) return QString::fromStdString(entry.id.value);
+        return {};
     }
 
     inline QString fixturePath(const QString &name) {

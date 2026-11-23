@@ -14,6 +14,7 @@
 #include "contracts/i_recent_benchmarks.h"
 #include "data/interfaces/i_benchmarks_service.h"
 #include "data/interfaces/i_playlist_reader.h"
+#include "files/file_naming.h"
 
 namespace ksv::application {
     class BenchmarkManagerUseCase final : public IBenchmarkManagerUseCase {
@@ -38,6 +39,9 @@ namespace ksv::application {
         [[nodiscard]] std::optional<BenchmarkEditorSeed> openBenchmark(const domain::BenchmarkId &id) override;
         void closeEditor() override;
         [[nodiscard]] PlaylistSeedImport importPlaylistSeed(const std::string &path) override;
+
+        [[nodiscard]] std::optional<BenchmarkNameProblem> checkName(
+            const std::string &name, const std::optional<data::BenchmarkEditToken> &token) const override;
 
         [[nodiscard]] data::BenchmarkSaveOutcome save(
             const domain::BenchmarkDefinition &benchmark,

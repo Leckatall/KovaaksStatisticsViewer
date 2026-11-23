@@ -40,7 +40,6 @@ namespace {
     constexpr auto kUnplayedHash = "ffffffffffffffffffffffffffffffff";
     constexpr int kTierCount = 8;
     constexpr int kRowCount = 30;
-    const QString kBenchmarkId = QStringLiteral("parity-bench");
 
     const QStringList kTierNames{"Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Jade", "Master"};
 
@@ -58,7 +57,8 @@ namespace {
             if (tier == skippedTier) continue;
             thresholds.append(QJsonObject{{"tierId", QStringLiteral("t%1").arg(tier)}, {"score", scores.at(tier)}});
         }
-        return QJsonObject{{"id", id}, {"name", name}, {"hash", hash}, {"thresholds", thresholds}};
+        return QJsonObject{{"id", id}, {"name", name}, {"hashes", hash.isNull() ? QJsonArray{} : QJsonArray{hash}},
+                           {"thresholds", thresholds}};
     }
 
     QList<double> ladder(const int row) {
@@ -139,8 +139,7 @@ namespace {
              QJsonArray{QJsonObject{{"id", "sc-wide"}, {"name", "Wide"}, {"color", colorOf(15)},
                                     {"scenarios", scenarios("d", 27, 3, personalBest, false)}}}}};
 
-        return QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"id", kBenchmarkId}, {"name", "Parity Benchmark"},
-                                         {"tiers", tiers}, {"uncategorized", uncategorized},
+        return QJsonDocument(QJsonObject{{"schemaVersion", 3}, {"tiers", tiers}, {"uncategorized", uncategorized},
                                          {"categories", QJsonArray{tracking, clicking, switching}}})
             .toJson();
     }
@@ -164,14 +163,14 @@ namespace {
     // The fixture perf's personal best, read through a throwaway app so the real benchmark can be written around it.
     std::optional<double> fixturePersonalBest(integration::TestEnv &env) {
         const QJsonObject probe{
-            {"schemaVersion", 1}, {"id", "probe"}, {"name", "Probe"},
+            {"schemaVersion", 3},
             {"tiers", QJsonArray{QJsonObject{{"id", "t0"}, {"name", "Iron"}, {"color", colorOf(0)}}}},
             {"uncategorized", QJsonArray{entry("p0", "Wall Six", kWallSixHash, {1.0})}},
             {"categories", QJsonArray{}}};
         if (!writeBenchmarkFile(env, QJsonDocument(probe).toJson())) return std::nullopt;
         const auto app = startApp(env);
         if (!app) return std::nullopt;
-        app->benchmarkTrackingVm()->selectBenchmark(QStringLiteral("probe"));
+        app->benchmarkTrackingVm()->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), "parity.json"));
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
         const auto *benchmark = app->benchmarkTrackingUseCase()->benchmark();
         if (!benchmark) return std::nullopt;
@@ -247,7 +246,7 @@ namespace {
             app = startApp(env);
             ASSERT_NE(app, nullptr);
             auto *vm = app->benchmarkTrackingVm();
-            vm->selectBenchmark(kBenchmarkId);
+            vm->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), "parity.json"));
             QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
             ASSERT_EQ(vm->state(), QStringLiteral("incomplete"));
             ASSERT_EQ(vm->progressGrid()->content().rows.size(), static_cast<std::size_t>(kRowCount));

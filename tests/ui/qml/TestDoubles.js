@@ -394,6 +394,7 @@ function makeFakeBenchmarkManagerVm(overrides) {
         dirty: false,
         baselineStale: false,
         benchmarkName: "",
+        nameProblem: "",
         draftId: "",
         draftTrackable: false,
         draftFromLibrary: false,

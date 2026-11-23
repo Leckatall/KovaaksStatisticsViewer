@@ -5,7 +5,7 @@
 #
 #   uv run python scripts/ui_driver.py tour showcase --report
 options --fail-on-warnings
-start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --setting 'benchmarks/recentIds=["1d24f105-87db-46d2-8c88-66f34c5d4dad"]' --size 1440x900
+start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --setting 'benchmarks/recentFiles=["Viscose Benchmarks Intermediate S1.json"]' --size 1440x900
 
 section scenarios
 wait "scenarioGraphPanel > text:VT Controlsphere Novice S5 Hard (*"
@@ -99,7 +99,7 @@ click "win:settingsDialog/settingsNav_run"
 shot --window settingsDialog --name settings-run-graph
 
 section readme-reload
-start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --setting 'benchmarks/recentIds=["1d24f105-87db-46d2-8c88-66f34c5d4dad"]' --size 1100x820
+start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --setting 'benchmarks/recentFiles=["Viscose Benchmarks Intermediate S1.json"]' --size 1100x820
 wait "scenarioGraphPanel > text:VT Controlsphere Novice S5 Hard (*"
 eval "text = '1w3ts Reload'; textEdited()" --on scenarioSearchField
 click "scenarioSearchPanel > text:1w3ts Reload@1"
@@ -138,7 +138,7 @@ mouse move --at 0 70
 shot --name reload-benchmark-grid
 
 section readme-controlsphere
-start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --setting 'benchmarks/recentIds=["1d24f105-87db-46d2-8c88-66f34c5d4dad"]' --size 1100x820
+start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --setting 'benchmarks/recentFiles=["Viscose Benchmarks Intermediate S1.json"]' --size 1100x820
 wait "scenarioGraphPanel > text:VT Controlsphere Novice S5 Hard (*"
 eval "text = 'VT Controlsphere Novice S5 Hard'; textEdited()" --on scenarioSearchField
 click "scenarioSearchPanel > text:VT Controlsphere Novice S5 Hard@1"
@@ -177,7 +177,7 @@ mouse move --at 0 70
 shot --name controlsphere-benchmark-grid
 
 section readme-devts
-start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --setting 'benchmarks/recentIds=["1d24f105-87db-46d2-8c88-66f34c5d4dad"]' --size 1100x820
+start --profile-spec "${REPO}/tools/driver/specs/showcase/profile.json" --setting 'benchmarks/recentFiles=["Viscose Benchmarks Intermediate S1.json"]' --size 1100x820
 wait "scenarioGraphPanel > text:VT Controlsphere Novice S5 Hard (*"
 eval "text = 'devTS Goated NR Static 5Bot'; textEdited()" --on scenarioSearchField
 click "scenarioSearchPanel > text:devTS Goated NR Static 5Bot@1"

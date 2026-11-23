@@ -33,6 +33,7 @@ RUNNERS = {
             "proto_decoder_tests",
             "stats_csv_parser_tests",
             "run_filename_tests",
+            "file_naming_tests",
             "run_ingestor_tests",
             "benchmarks_service_tests",
             "graph_configuration_service_tests",

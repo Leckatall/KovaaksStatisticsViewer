@@ -13,16 +13,17 @@ namespace ksv::application {
     public:
         explicit RecentBenchmarks(std::shared_ptr<ISettingsService> settings);
 
-        [[nodiscard]] const std::vector<std::string> &ids() const override { return m_ids; }
-        void markViewed(const std::string &id) override;
-        void markCreated(const std::string &id) override;
+        [[nodiscard]] const std::vector<std::string> &filenames() const override { return m_filenames; }
+        void markViewed(const std::string &filename) override;
+        void markCreated(const std::string &filename) override;
+        void rename(const std::string &from, const std::string &to) override;
         void onChanged(std::function<void()> callback) override { m_callbacks.push_back(std::move(callback)); }
 
     private:
         void commit(std::vector<std::string> next);
 
         std::shared_ptr<ISettingsService> m_settings;
-        std::vector<std::string> m_ids;
+        std::vector<std::string> m_filenames;
         std::vector<std::function<void()> > m_callbacks;
     };
 }

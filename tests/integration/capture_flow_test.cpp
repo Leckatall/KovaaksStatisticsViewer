@@ -53,14 +53,12 @@ namespace {
     constexpr long long kDayMs = 24LL * 60 * 60 * 1000;
     constexpr int kWaitMs = 10000;
     constexpr int kTierCount = 8;
-    const QString kTrackableId = QStringLiteral("auto-1");
-    const QString kOverflowingId = QStringLiteral("overflowing-1");
 
     constexpr auto kTrackableJson = R"({
-        "schemaVersion": 1, "id": "auto-1", "name": "Auto",
+        "schemaVersion": 3,
         "tiers": [ { "id": "t1", "name": "Bronze", "color": [200,120,0,255] },
                    { "id": "t2", "name": "Silver", "color": [180,180,190,255] } ],
-        "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hash": null,
+        "uncategorized": [ { "id": "s1", "name": "1wall6targets TE", "hashes": [],
             "thresholds": [ { "tierId": "t1", "score": 1000000000.0 }, { "tierId": "t2", "score": 2000000000.0 } ] } ],
         "categories": []
     })";
@@ -87,15 +85,14 @@ namespace {
                 const QString hash = QStringLiteral("%1%2").arg(QString(30, 'f')).arg(row + 10);
                 scenarios.append(QJsonObject{{"id", QStringLiteral("e%1").arg(row)},
                                              {"name", QStringLiteral("Overflow Drill %1").arg(row)},
-                                             {"hash", hash}, {"thresholds", thresholds}});
+                                             {"hashes", QJsonArray{hash}}, {"thresholds", thresholds}});
             }
             categories.append(QJsonObject{{"id", QStringLiteral("c%1").arg(category)},
                                           {"name", QStringLiteral("Category %1").arg(category)},
                                           {"color", QJsonArray{100 + category * 40, 80, 160, 255}},
                                           {"scenarios", scenarios}, {"subcategories", QJsonArray{}}});
         }
-        return QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"id", kOverflowingId}, {"name", "Overflowing"},
-                                         {"tiers", tiers}, {"uncategorized", QJsonArray{}},
+        return QJsonDocument(QJsonObject{{"schemaVersion", 3}, {"tiers", tiers}, {"uncategorized", QJsonArray{}},
                                          {"categories", categories}})
             .toJson();
     }
@@ -236,7 +233,7 @@ namespace {
             ASSERT_TRUE(QTest::qWaitFor([&] { return app->playtimeVm()->hasData(); }, kWaitMs));
             ASSERT_TRUE(QTest::qWaitFor([&] { return app->completionHistoryVm()->runCount() == 5; }, kWaitMs));
             auto *tracking = app->benchmarkTrackingVm();
-            tracking->selectBenchmark(kTrackableId);
+            tracking->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), "auto.json"));
             ASSERT_TRUE(QTest::qWaitFor([&] { return tracking->state() == "trackable"; }, kWaitMs));
             ASSERT_TRUE(QTest::qWaitFor([&] {
                 return tracking->rankHistory()->hasData() && tracking->recentRankHistory()->hasData() &&
@@ -278,7 +275,7 @@ namespace {
         // Shows the overflowing benchmark's table and locates the two flickables that scroll it.
         void showOverflowingTable() {
             auto *tracking = app->benchmarkTrackingVm();
-            tracking->selectBenchmark(kOverflowingId);
+            tracking->selectBenchmark(integration::benchmarkKey(app->benchmarksService(), "overflowing.json"));
             ASSERT_TRUE(QTest::qWaitFor([&] { return tracking->state() == "incomplete"; }, kWaitMs))
                 << tracking->state().toStdString();
             ASSERT_NO_FATAL_FAILURE(showWorkspace(1));

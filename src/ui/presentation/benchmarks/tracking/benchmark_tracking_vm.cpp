@@ -38,6 +38,8 @@ namespace ksv::presentation {
                 case application::BenchmarkChoiceClassification::Incomplete: return QStringLiteral("incomplete");
                 case application::BenchmarkChoiceClassification::Invalid: return QStringLiteral("invalid");
                 case application::BenchmarkChoiceClassification::Unsupported: return QStringLiteral("unsupported");
+                case application::BenchmarkChoiceClassification::MigrationFailed:
+                    return QStringLiteral("migration failed");
             }
             return QStringLiteral("invalid");
         }
@@ -68,6 +70,8 @@ namespace ksv::presentation {
                 map[QStringLiteral("id")] = choice.id ? q(choice.id->value) : QString();
                 map[QStringLiteral("classification")] = classificationString(choice.classification);
                 map[QStringLiteral("selectable")] = choice.selectable;
+                map[QStringLiteral("problemText")] =
+                    choice.migrationFailure ? migrationFailureText(*choice.migrationFailure) : QString();
                 const QString displayName = q(choice.displayName);
                 if (isLoadedClassification(choice.classification)) {
                     map[QStringLiteral("name")] = displayName;

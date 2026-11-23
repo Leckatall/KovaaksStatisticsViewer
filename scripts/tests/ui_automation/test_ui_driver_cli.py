@@ -152,7 +152,7 @@ def test_put_routes_files_by_extension_or_to(tmp_path: Path) -> None:
 
 def test_rm_refuses_paths_outside_data_and_missing_files(tmp_path: Path) -> None:
     ctx, _ = make_context(tmp_path)
-    target = ctx.session.data_dir / "benchmarks" / "driver-demo.json"
+    target = ctx.session.data_dir / "benchmarks" / "Driver Demo Benchmark.json"
     target.parent.mkdir()
     target.write_text("{}")
     (ctx.session.directory / "launch.json").write_text("{}")
@@ -161,7 +161,7 @@ def test_rm_refuses_paths_outside_data_and_missing_files(tmp_path: Path) -> None
         run_handler(ctx, "rm", "../launch.json")
     with pytest.raises(UsageError, match="not a file"):
         run_handler(ctx, "rm", "benchmarks/missing.json")
-    assert run_handler(ctx, "rm", "benchmarks/driver-demo.json") == 0
+    assert run_handler(ctx, "rm", "benchmarks/Driver Demo Benchmark.json") == 0
     assert not target.exists()
     assert (ctx.session.directory / "launch.json").exists()
 

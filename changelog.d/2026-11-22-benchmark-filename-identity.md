@@ -1,0 +1,13 @@
+---
+type: changed
+area: Benchmarks
+user: Benchmark files are now named after their benchmarks, so a shared or copied file shows up under its filename. Existing benchmarks are renamed automatically; renaming a benchmark renames its file, and the editor explains why a name can't be used before you save.
+---
+A benchmark's filename is now its identity and its name. Stored files are schema 3: the schema 2 structure without the top-level `id` and `name`, so v1.0.0 reports them Unsupported.
+`BenchmarkStore::scan()` (now non-const) migrates every schema 1/2 file before returning: `readStoredBenchmark` is the only version switch, handing schema 3 to `readCurrentFormat` (no version parameters) and older files to the JSON-to-JSON steps in `src/qt_data/benchmark_migration/benchmark_migration.cpp` (`migrateV1ToV2`, `migrateV2ToV3`), whose result must pass `readCurrentFormat`. Each file is renamed after its stored name (`files::cleanName`, then `files::uniqueName` against every existing name, claimed in folded-filename order) before being rewritten, so a failure never leaves schema 3 under the old name. A file that does not migrate is the new `BenchmarkFileProblem::MigrationFailed` entry carrying `{fromVersion, reason}`, shown as "Migration from version x to version x+1 failed: …" and retried on the next scan.
+New Qt-free naming rule `src/data/files/file_naming.{h,cpp}` (`checkName`, `cleanName`, `uniqueName`, `stemOf`, `utf16Length`).
+`IBenchmarkStore` gains `rename`, which allows a case-only respelling of the same file.
+`BenchmarksService` mints an in-session `BenchmarkId` per filename (kept across refreshes, moved by a renaming save, dropped when the file goes) and names every entry, problem entries included, after its file. `save` writes `<name>.json`; a replace with a new name writes in place, then renames, and reports `RenameFailed` with a token for the content left under the old name. `replaceBatch` only rewrites in place. `BenchmarkSaveError::EmptyName` is gone.
+`IBenchmarkManagerUseCase::checkName` (blank, invalid character, too long, trailing dot or space, reserved, taken ignoring case by any other file) backs the manager VM's new `nameProblem` property and its refusal at Save; the editor toolbar shows it once the name field loses focus.
+Recent benchmarks are filenames under the new settings key `benchmarks/recentFiles` (`get/setRecentBenchmarkFiles`, `IRecentBenchmarks::rename`); `benchmarks/recentIds` and `benchmarks/lastSelectedId` are no longer read or removed.
+A selection whose file vanishes and comes back is no longer re-attached: the file is a new benchmark.

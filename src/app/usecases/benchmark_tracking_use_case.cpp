@@ -13,23 +13,26 @@ namespace ksv::application {
         // pointer into a local copy would dangle the moment that copy died.
         const data::LoadedBenchmark *findLoaded(const data::BenchmarkLibrarySnapshot &snapshot,
                                                 const domain::BenchmarkId &id) {
-            const data::LoadedBenchmark *found = nullptr;
-            for (const auto &entry: snapshot.entries) {
-                const auto *loaded = std::get_if<data::LoadedBenchmark>(&entry.content);
-                if (!loaded || !(loaded->benchmark.id == id)) continue;
-                // Two files claiming one id resolve to unavailable, never to an arbitrary pick.
-                if (found != nullptr) return nullptr;
-                found = loaded;
+            for (const auto &entry: snapshot.entries)
+                if (entry.id == id) return std::get_if<data::LoadedBenchmark>(&entry.content);
+            return nullptr;
+        }
+
+        BenchmarkChoiceClassification problemClassification(const data::BenchmarkFileProblem problem) {
+            switch (problem) {
+                case data::BenchmarkFileProblem::Invalid: return BenchmarkChoiceClassification::Invalid;
+                case data::BenchmarkFileProblem::Unsupported: return BenchmarkChoiceClassification::Unsupported;
+                case data::BenchmarkFileProblem::MigrationFailed: return BenchmarkChoiceClassification::MigrationFailed;
             }
-            return found;
+            return BenchmarkChoiceClassification::Invalid;
         }
 
         BenchmarkChoice choiceFor(const data::BenchmarkFileEntry &entry) {
             BenchmarkChoice choice;
             choice.filename = entry.filename;
+            choice.id = entry.id;
+            choice.displayName = entry.name;
             if (const auto *loaded = std::get_if<data::LoadedBenchmark>(&entry.content)) {
-                choice.id = loaded->benchmark.id;
-                choice.displayName = loaded->benchmark.name.empty() ? entry.filename : loaded->benchmark.name;
                 choice.classification = loaded->completeness.completeness == domain::Completeness::Trackable
                                             ? BenchmarkChoiceClassification::Trackable
                                             : BenchmarkChoiceClassification::Incomplete;
@@ -37,14 +40,9 @@ namespace ksv::application {
                 return choice;
             }
             const auto &problem = std::get<data::ProblemBenchmark>(entry.content);
-            choice.id = problem.id;
-            choice.displayName = problem.displayName && !problem.displayName->empty()
-                                     ? *problem.displayName
-                                     : entry.filename;
-            choice.classification = problem.problem == data::BenchmarkFileProblem::Unsupported
-                                        ? BenchmarkChoiceClassification::Unsupported
-                                        : BenchmarkChoiceClassification::Invalid;
+            choice.classification = problemClassification(problem.problem);
             choice.schemaVersion = problem.schemaVersion;
+            choice.migrationFailure = problem.migrationFailure;
             choice.selectable = false;
             return choice;
         }
@@ -100,9 +98,10 @@ namespace ksv::application {
         if (m_selected && *m_selected == id) return;
         m_selected = id;
         m_lastKnownSelectedDisplayName.clear();
-        if (m_recent) {
+        const auto chosen = std::ranges::find(m_snapshot.choices, std::optional{id}, &BenchmarkChoice::id);
+        if (m_recent && chosen != m_snapshot.choices.end()) {
             m_markingViewed = true;
-            m_recent->markViewed(id.value);
+            m_recent->markViewed(chosen->filename);
             m_markingViewed = false;
         }
         refresh();
@@ -123,9 +122,9 @@ namespace ksv::application {
         const auto selectable = [](const BenchmarkChoice &choice) { return choice.selectable && choice.id; };
 
         if (m_recent) {
-            for (const auto &remembered: m_recent->ids()) {
+            for (const auto &remembered: m_recent->filenames()) {
                 const auto found = std::find_if(choices.begin(), choices.end(), [&](const BenchmarkChoice &choice) {
-                    return selectable(choice) && choice.id->value == remembered;
+                    return selectable(choice) && choice.filename == remembered;
                 });
                 if (found == choices.end()) continue;
                 // `select` rebuilds m_snapshot, which `found` points into; pass a copy.
@@ -161,10 +160,9 @@ namespace ksv::application {
             for (const auto &entry: library->entries) m_snapshot.choices.push_back(choiceFor(entry));
         }
         if (m_recent) {
-            const auto &recent = m_recent->ids();
+            const auto &recent = m_recent->filenames();
             for (auto &choice: m_snapshot.choices) {
-                if (!choice.id) continue;
-                const auto found = std::ranges::find(recent, choice.id->value);
+                const auto found = std::ranges::find(recent, choice.filename);
                 if (found != recent.end()) choice.recency = static_cast<std::size_t>(found - recent.begin());
             }
         }

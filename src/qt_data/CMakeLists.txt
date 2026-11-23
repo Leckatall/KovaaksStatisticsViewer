@@ -18,6 +18,8 @@ add_library(ksv_qt_data STATIC
         ../data/interfaces/i_graph_configuration_persistence.h
         benchmark_store.cpp
         benchmark_store.h
+        benchmark_migration/benchmark_migration.cpp
+        benchmark_migration/benchmark_migration.h
         ../data/interfaces/i_benchmark_store.h
         ../data/interfaces/benchmark_library_snapshot.h
         playlist_reader.cpp

@@ -27,6 +27,9 @@ namespace ksv::tests_support {
         std::optional<application::BenchmarkEditorSeed> nextOpenSeed{};
         application::PlaylistSeedImport nextImport{};
 
+        // checkName() answers nothing wrong unless this is set.
+        std::function<std::optional<application::BenchmarkNameProblem>(
+            const std::string &, const std::optional<data::BenchmarkEditToken> &)> nameCheck;
         data::BenchmarkSaveOutcome nextSaveOutcome{};
         // Runs inside save(), before it returns, to model a publication re-entering the caller.
         std::function<void()> duringSave;
@@ -79,6 +82,10 @@ namespace ksv::tests_support {
             return nextImport;
         }
 
+        [[nodiscard]] std::optional<application::BenchmarkNameProblem> checkName(
+            const std::string &name, const std::optional<data::BenchmarkEditToken> &token) const override {
+            return nameCheck ? nameCheck(name, token) : std::nullopt;
+        }
         [[nodiscard]] data::BenchmarkSaveOutcome save(
             const domain::BenchmarkDefinition &benchmark,
             const std::optional<data::BenchmarkEditToken> &token) override {
