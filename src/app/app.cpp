@@ -34,7 +34,6 @@
 #include "usecases/benchmark_tracking_use_case.h"
 #include "usecases/recent_benchmarks.h"
 #include "qt_data/benchmark_store.h"
-#include "qt_data/case_fold.h"
 #include "qt_data/playlist_reader.h"
 #include "qt_data/system_day_source.h"
 #include "usecases/completion_history_use_case.h"
@@ -110,7 +109,7 @@ namespace ksv::application {
         const auto recentBenchmarks = std::make_shared<RecentBenchmarks>(m_settingsService);
         m_benchmarkManagerUseCase = std::make_shared<BenchmarkManagerUseCase>(
             m_benchmarksService, m_benchmarkResolutionUseCase, std::make_shared<qt_data::PlaylistReader>(),
-            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); }, qt_data::foldCase,
+            [] { return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(); },
             recentBenchmarks);
         m_benchmarkTrackingUseCase = std::make_shared<BenchmarkTrackingUseCase>(
             m_benchmarksService, m_benchmarkResolutionUseCase, m_profileService, m_graphConfigurationUseCase,

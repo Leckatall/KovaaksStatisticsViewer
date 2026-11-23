@@ -15,7 +15,6 @@
 #include "contracts/benchmark_manager_state.h"
 #include "usecases/benchmark_manager_use_case.h"
 #include "usecases/recent_benchmarks.h"
-#include "qt_data/case_fold.h"
 
 using namespace ksv;
 using namespace ksv::application;
@@ -40,7 +39,7 @@ namespace {
         void build() {
             recent = std::make_shared<RecentBenchmarks>(settings);
             manager = std::make_unique<BenchmarkManagerUseCase>(benchmarks, resolution, reader,
-                                                                countingIds(), qt_data::foldCase, recent);
+                                                                countingIds(), recent);
         }
     };
 

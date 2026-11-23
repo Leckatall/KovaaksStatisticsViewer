@@ -23,7 +23,6 @@ namespace ksv::application {
                                 std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
                                 std::shared_ptr<IPlaylistReader> playlist,
                                 std::function<std::string()> idFactory,
-                                data::files::CaseFold foldCase,
                                 std::shared_ptr<IRecentBenchmarks> recent = nullptr);
 
         [[nodiscard]] const BenchmarkManagerState &state() const override { return m_state; }
@@ -62,7 +61,6 @@ namespace ksv::application {
         std::shared_ptr<IBenchmarkResolutionUseCase> m_resolution;
         std::shared_ptr<IPlaylistReader> m_playlist;
         std::function<std::string()> m_idFactory;
-        data::files::CaseFold m_foldCase;
         std::shared_ptr<IRecentBenchmarks> m_recent;
         BenchmarkManagerState m_state;
         std::vector<std::function<void()> > m_callbacks;

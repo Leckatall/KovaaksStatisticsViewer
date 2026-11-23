@@ -16,7 +16,6 @@
 #include <unordered_set>
 
 #include "benchmark_migration/benchmark_migration.h"
-#include "case_fold.h"
 #include "files/file_naming.h"
 
 namespace ksv::qt_data {
@@ -26,6 +25,11 @@ namespace ksv::qt_data {
 
         constexpr int kSchemaVersion = 3;
         constexpr std::string_view kFallbackName = "Benchmark";
+
+        // Equal for names Windows treats as one file.
+        std::string caseInsensitiveKey(const std::string_view name) {
+            return QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size())).toCaseFolded().toStdString();
+        }
 
         bool exactKeys(const QJsonObject &object, const std::initializer_list<const char *> keys) {
             if (object.size() != static_cast<qsizetype>(keys.size())) return false;
@@ -331,7 +335,7 @@ namespace ksv::qt_data {
         // migrating file claims a name another one is only about to leave.
         std::set<std::string> taken;
         const auto foldedName = [](const std::string &filename) {
-            return foldCase(files::stemOf(filename, data::kBenchmarkFileExtension));
+            return caseInsensitiveKey(files::stemOf(filename, data::kBenchmarkFileExtension));
         };
 
         for (const auto &name: dir.entryList({"*.json"}, QDir::Files)) {
@@ -364,10 +368,10 @@ namespace ksv::qt_data {
             const auto claimed = files::uniqueName(
                 files::cleanName(file.upgrade.storedName, data::kBenchmarkFileExtension, kFallbackName),
                 data::kBenchmarkFileExtension, kFallbackName, [&](const std::string_view candidate) {
-                    const auto folded = foldCase(candidate);
+                    const auto folded = caseInsensitiveKey(candidate);
                     return folded != ownName && taken.contains(folded);
                 });
-            taken.insert(foldCase(claimed));
+            taken.insert(caseInsensitiveKey(claimed));
 
             // Renamed before it is rewritten, so a failure never leaves the new format under the old
             // name, where no later scan would migrate it and its stored name would be lost.

@@ -4,6 +4,8 @@
 #include <utility>
 #include <variant>
 
+#include <QString>
+
 #include "benchmarks/benchmark_definition.h"
 
 namespace ksv::application {
@@ -29,9 +31,9 @@ namespace ksv::application {
         std::shared_ptr<data::IBenchmarksService> benchmarks,
         std::shared_ptr<IBenchmarkResolutionUseCase> resolution,
         std::shared_ptr<IPlaylistReader> playlist, std::function<std::string()> idFactory,
-        data::files::CaseFold foldCase, std::shared_ptr<IRecentBenchmarks> recent)
+        std::shared_ptr<IRecentBenchmarks> recent)
         : m_benchmarks(std::move(benchmarks)), m_resolution(std::move(resolution)),
-          m_playlist(std::move(playlist)), m_idFactory(std::move(idFactory)), m_foldCase(std::move(foldCase)),
+          m_playlist(std::move(playlist)), m_idFactory(std::move(idFactory)),
           m_recent(std::move(recent)) {
         m_benchmarks->onChanged([this] { rebuildAndNotify(); });
         m_resolution->onChanged([this] { rebuildAndNotify(); });
@@ -114,9 +116,9 @@ namespace ksv::application {
             }
         }
         if (!m_state.library) return std::nullopt;
-        const auto folded = m_foldCase(name);
+        const auto candidate = QString::fromStdString(name);
         const bool taken = std::ranges::any_of(m_state.library->entries, [&](const data::BenchmarkFileEntry &entry) {
-            return !(token && entry.filename == token->filename) && m_foldCase(entry.name) == folded;
+            return !(token && entry.filename == token->filename) && QString::fromStdString(entry.name).compare(candidate, Qt::CaseInsensitive) == 0;
         });
         return taken ? std::optional{BenchmarkNameProblem::Taken} : std::nullopt;
     }

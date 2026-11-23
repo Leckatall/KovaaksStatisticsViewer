@@ -10,8 +10,6 @@
 #include <vector>
 
 #include "qt_data/benchmark_migration/benchmark_migration.h"
-#include "qt_data/benchmark_migration/benchmark_v1_to_v2.h"
-#include "qt_data/benchmark_migration/benchmark_v2_to_v3.h"
 
 using namespace ksv::qt_data::benchmark_migration;
 

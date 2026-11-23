@@ -8,8 +8,6 @@
 
 // Windows' rules for one path component, for any file the application names. Names are UTF-8.
 namespace ksv::data::files {
-    using CaseFold = std::function<std::string(std::string_view)>;
-
     enum class FileNameProblem { Blank, InvalidCharacter, TooLong, TrailingDotOrSpace, Reserved };
 
     [[nodiscard]] std::size_t utf16Length(std::string_view utf8);
