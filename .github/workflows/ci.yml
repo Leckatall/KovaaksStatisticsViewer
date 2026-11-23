@@ -113,22 +113,49 @@ jobs:
           & "$env:VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-      # vcpkg hashes the compiler into each package's ABI, so a changed MinGW misses the cache
-      # entries and rebuilds rather than reusing incompatible binaries.
-      - name: Cache vcpkg packages
-        uses: actions/cache@v4
+      # A package's ABI hash covers more than this key: the triplet passes PATH through, and vcpkg
+      # also hashes the CMake and PowerShell versions, so a runner image update can invalidate every
+      # archive under an unchanged key. Cache entries are immutable, so each save gets a new key and
+      # the restore takes the newest entry by prefix; a stale entry is simply never read again and
+      # expires after 7 days.
+      - name: Restore vcpkg packages
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.VCPKG_BINARY_CACHE }}
-          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ env.VCPKG_TRIPLET }}-${{ env.WINLIBS_RELEASE }}
+          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ env.VCPKG_TRIPLET }}-${{ env.WINLIBS_RELEASE }}-${{ github.run_id }}
+          restore-keys: vcpkg-${{ env.VCPKG_COMMIT }}-${{ env.VCPKG_TRIPLET }}-${{ env.WINLIBS_RELEASE }}-
 
       - name: Install protobuf and gtest
+        id: vcpkg-install
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_BINARY_CACHE | Out-Null
+          $restored = @(Get-ChildItem $env:VCPKG_BINARY_CACHE -Recurse -Filter *.zip | ForEach-Object BaseName | Sort-Object)
           $env:VCPKG_BINARY_SOURCES = "clear;files,$env:VCPKG_BINARY_CACHE,readwrite"
           & "$env:VCPKG_ROOT/vcpkg.exe" install protobuf gtest `
             --triplet $env:VCPKG_TRIPLET --host-triplet $env:VCPKG_TRIPLET --clean-after-build
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # The installed tree is fresh every run, so every Abi in the status database (and its
+          # not-yet-compacted updates) names an archive this run used; any other archive is dead and
+          # would otherwise be carried into every later save.
+          $db = "$env:VCPKG_ROOT/installed/vcpkg"
+          $live = @(Get-ChildItem "$db/status", "$db/updates/*" -File -ErrorAction SilentlyContinue |
+            Select-String -Pattern '^Abi: ([0-9a-f]+)$' | ForEach-Object { $_.Matches[0].Groups[1].Value })
+          if (-not $live) { throw "No Abi entries found under $db" }
+          Get-ChildItem $env:VCPKG_BINARY_CACHE -Recurse -Filter *.zip |
+            Where-Object BaseName -notin $live | Remove-Item
+          $kept = @(Get-ChildItem $env:VCPKG_BINARY_CACHE -Recurse -Filter *.zip | ForEach-Object BaseName | Sort-Object)
+          $changed = ($restored -join ',') -ne ($kept -join ',')
+          "changed=$($changed.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "vcpkg archives: $($restored.Count) restored, $($kept.Count) kept, changed=$changed"
+
+      # Only main writes: its entries are the ones every branch and PR can read.
+      - name: Save vcpkg packages
+        if: steps.vcpkg-install.outputs.changed == 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VCPKG_BINARY_CACHE }}
+          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ env.VCPKG_TRIPLET }}-${{ env.WINLIBS_RELEASE }}-${{ github.run_id }}
 
       - uses: astral-sh/setup-uv@v6
 
