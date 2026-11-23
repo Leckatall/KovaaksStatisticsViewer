@@ -1,6 +1,6 @@
 # KovaaK's Statistics Viewer
 
-Inspect your KovaaK's runs second by second, track your progress, and see which scenarios are holding back your benchmark rank.
+A data visualisation tool for Kovaaks.
 
 [![Latest release](https://img.shields.io/github/v/release/Leckatall/KovaaksStatisticsViewer)](https://github.com/Leckatall/KovaaksStatisticsViewer/releases/latest)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows%20x64-blue)
@@ -15,17 +15,51 @@ KovaaK's Statistics Viewer reads your local performance files and stats CSVs, ke
 
 ## Disclaimer
 
-This project is not affiliated with or endorsed by KovaaK's or The Meta.
+**This project is not affiliated with or endorsed by KovaaK's or The Meta.**
 
 ## Features
 
-- **Run graphs**: score and accuracy through a run, with projected final scores compared with your personal best, top runs and recent runs.
-- **Scenario history**: every run of a scenario on one graph with a rolling average. Click a point to open that run.
-- **Playtime**: how much you're playing over time, averaged over a window you choose.
-- **Benchmarks**: create a benchmark or start from a KovaaK's playlist, set its score thresholds, and track your rank, next-tier blockers and rank history.
-- **Configurable graph lines**: add, recolour and reorder lines, share axes, and build your own expressions for the comparisons you want.
-- **Image export**: copy any graph or benchmark table to the clipboard or save it as a PNG.
-- **Automatic import**: new runs appear while the app is open; runs played while it's closed are imported next time you launch it. Older runs with only a stats CSV appear in your history too, without per-second run graphs.
+### The Run Graph
+
+Similar to what you see in Kovaaks but with additional lines and the option to use arbitrary expressions to create new lines.
+
+It has support for:
+- Projections of the final score for scenarios that aren't 1min
+- Using the last x seconds to inform the projection.
+- Lines that are built on multiple runs (what was my projected final score at time x in my last n [OR top n%] runs?)
+- Arbitrary expressions to create new lines. Pretty much anything you could want to plot should be possible. (Please create an issue if you want something that can't currently be represented).
+
+NOTE: Old runs without performance data won't be shown on this graph as only the final data is recorded. 
+Old runs are still used for other features in the app.
+
+### Visual customisation
+
+Pretty much every line you see on a graph can be customised. 
+Right now there is support on almost every graph for changing a line's:
+- Colour (including alpha)
+- Width
+- Join style
+
+Pretty much every component can be hidden, if desired. Neighbouring components will expand to fill the space.
+
+Benchmark tier, rank, and, category colours are also completely customisable.
+
+### Progression tracking
+
+Within the app you can view:
+- Your playtime (calculated only from completed runs) across all scenarios or just those contained in a benchmark. This can also be shown as a rolling average across any window of time you want
+- Your score and accuracy history for a scenario (similar to what is already shown in Kovaaks)
+- Your average rank[^avg-rank], over time, for a benchmark. This can be shown on either a date or run-based axis and has a graph both for your "personal best" rank and recent average.
+
+[^avg-rank]: This is calculated by assigning each rank a number (e.g. bronze=1, silver=2, gold=3, etc.) 
+progress between ranks is then calculated as the progress towards the next tier.
+e.g.: if bronze requires a score of 10, and silver requires a score of 20, a score of 15 would be 1.5.
+
+### Image export
+
+Every data visualisation component can be exported at a PNG rendered at a custom resolution.
+
+### Screenshots
 
 Compare the projected scores of your recent runs with your strongest runs to see where they start to fall behind:
 
@@ -41,11 +75,9 @@ See each scenario against your tier thresholds, with markers for the ones holdin
 2. Extract it anywhere.
 3. Run `KovaaksStatsViewer.exe`.
 
-There's no installer and nothing else to install: the zip contains everything the app needs. Requires Windows 10 (1809 or later) or Windows 11, 64-bit.
-
 The release is not code-signed, so Windows SmartScreen may say *Windows protected your PC*; choose **More info → Run anyway** to launch it.
 
-To update, extract the latest zip into a new folder and run it. Your profile, benchmarks and settings are stored separately from the app.
+Using a newer version of the app won't re-write your existing data.
 
 ## Getting started
 
@@ -78,7 +110,7 @@ The app reads your KovaaK's files without changing them. By default, its own dat
 | `KovaaksStatsViewer\profile.pb` | Your run history (the location can be changed in Settings → Profile) |
 | `KovaaksStatsViewer\benchmarks\` | Your benchmarks |
 
-Back up `profile.pb`: it keeps imported runs even if the original files are later moved or deleted. **Refresh Profile** (`F5`) adds new runs to that history. **Rebuild from Scratch…**, in **Settings → Profile**, replaces it using the files still on disk and drops runs whose source files are gone. Back up your profile before rebuilding, and your benchmarks and settings if you want to keep your setup.
+**Refresh Profile** (`F5`) adds new runs to that history (this should be unnecessary as the profile is refreshed when a new file is added to your performances folder). **Rebuild from Scratch…**, in **Settings → Profile**, replaces it using the files still on disk and drops runs whose source files are gone.
 
 To uninstall, delete the extracted app folder. To remove its data too, delete the paths above and any profile stored in a custom location.
 
