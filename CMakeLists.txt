@@ -61,6 +61,13 @@ add_subdirectory(src/data)
 add_subdirectory(src/qt_data)
 #add_subdirectory(src/controllers)
 
+# windres runs its preprocessor through cmd.exe, which mangles a command line containing any quote: a quoted
+# define, or an include path with a space such as `vcpkg (1)`, makes cmd split the toolchain's own
+# C:\Program Files\... path. ksv.rc only embeds an icon, so it needs neither defines nor include paths.
+if(CMAKE_RC_COMPILER MATCHES "windres")
+    set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> -O coff <FLAGS> <SOURCE> <OBJECT>")
+endif()
+
 # Main executable
 qt_add_executable(ksv
         src/main.cpp
