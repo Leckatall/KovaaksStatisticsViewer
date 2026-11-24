@@ -94,11 +94,11 @@ if ($SkipBuild -and $Incremental) {
 
 # These are resolved here rather than as param defaults because `powershell -File` evaluates param
 # defaults before $PSScriptRoot is populated: "$PSScriptRoot/.." would quietly resolve to the root of
-# the current drive, and the whole build and package would land in C:\build-release and C:\dist.
+# the current drive, and the whole build and package would land in C:\build/release and C:\dist.
 if (-not $RepoRoot) { $RepoRoot = (Resolve-Path "$PSScriptRoot/..").Path }
 if (-not $BuildDir) {
-    # Never build-release: -Incremental there would leave the measure option cached ON for a later package.
-    $BuildDir = Join-Path $RepoRoot $(if ($CaptureMeasure) { "build-measure" } else { "build-release" })
+    # Never build/release: -Incremental there would leave the measure option cached ON for a later package.
+    $BuildDir = Join-Path $RepoRoot $(if ($CaptureMeasure) { "build/measure" } else { "build/release" })
 }
 
 . (Join-Path $PSScriptRoot "toolchain-config.ps1")

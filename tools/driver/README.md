@@ -31,7 +31,7 @@ A session lives in `.temp/ui-driver/<name>/` (default name `default`, pick anoth
 
 - `start` wipes the session and seeds it (`--keep` reuses it); it stops a running session of the same name first.
 - `restart` keeps data and settings and reuses the last `start` options. QML is loaded from `src/ui/qml` on disk, so **QML edits only need `restart`**; C++ edits need `restart --build`.
-- A running session holds `build-agent/ksv_driver.exe` open, so stop it before a full `build_and_test.py` run (`restart --build` handles this itself).
+- A running session holds `build/script-build/ksv_driver.exe` open, so stop it before a full `build_and_test.py` run (`restart --build` handles this itself).
 - No session reads anything outside its directory: with no KovaaK's folder configured the app would fall back to the Steam install path, so the driver points that fallback at the nonexistent `<session>/no-kovaaks-install`.
 
 `--dataset`:

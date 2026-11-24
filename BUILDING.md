@@ -62,7 +62,7 @@ If you use git worktrees, a worktree without its own local files uses the main c
 uv run python scripts/build_and_test.py
 ```
 
-This configures a Debug build in `build-agent/`, builds every target and runs the full test suite. A successful run prints a single line, and a failure prints every failing test and compiler diagnostic. Full logs are kept in `.temp/build-and-test/`.
+This configures a Debug build in `build/script-build/`, builds every target and runs the full test suite. A successful run prints a single line, and a failure prints every failing test and compiler diagnostic. Full logs are kept in `.temp/build-and-test/`.
 
 Options:
 
@@ -71,7 +71,7 @@ Options:
 - `--match '<wildcard>'` narrows a scope to matching test names, and `--list` shows the names without running anything.
 - `--scope qmllint` runs qmllint over the QML.
 
-The app is built as `build-agent/ksv.exe`. It's renamed to `KovaaksStatsViewer.exe` only when packaged.
+The app is built as `build/script-build/ksv.exe`. It's renamed to `KovaaksStatsViewer.exe` only when packaged.
 
 ## Package a release
 

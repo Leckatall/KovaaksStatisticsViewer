@@ -148,7 +148,7 @@ def run_pipeline(
     clock: Callable[[], float] = time.monotonic,
 ) -> int:
     started = clock()
-    build_dir = repo_root / "build-agent"
+    build_dir = repo_root / "build/script-build"
     runners = catalog_for_scope(args.scope)
     log_dir.mkdir(parents=True, exist_ok=True)
 

@@ -1,4 +1,4 @@
-> C:/repo/build-agent/domain_tests.exe --gtest_brief=1
+> C:/repo/build/script-build/domain_tests.exe --gtest_brief=1
 Running main() from C:/vcpkg/googletest/src/gtest_main.cc
 C:/repo/tests/domain/domain_test.cpp:189: Failure
 Failed

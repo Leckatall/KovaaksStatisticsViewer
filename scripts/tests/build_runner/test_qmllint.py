@@ -102,7 +102,7 @@ class LintExecutor(FakeExecutor):
 def run_lint(
     toolchain: Toolchain, repo: Path, build_result: tuple[int, str], write_report=lambda: None
 ) -> tuple[int, list[str], LintExecutor]:
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True, exist_ok=True)
     executor = LintExecutor(
         build_dir, toolchain, [(0, "-- Configuring done"), build_result], write_report=write_report
@@ -128,7 +128,7 @@ def test_scope_builds_only_the_lint_target_and_fails_on_warnings(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    report = repo / "build-agent" / "ksv_ui_qmllint.json"
+    report = repo / "build/script-build" / "ksv_ui_qmllint.json"
 
     result, output, executor = run_lint(
         toolchain, repo, (0, "[1/1] qmllint"), write_report=lambda: write_fixture(fixtures_dir, repo, report)
@@ -146,7 +146,7 @@ def test_scope_passes_when_only_info_findings_remain(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    report = repo / "build-agent" / "ksv_ui_qmllint.json"
+    report = repo / "build/script-build" / "ksv_ui_qmllint.json"
     info_only = (
         '{"files": [{"filename": "C:/repo/src/ui/qml/Main.qml", "success": true, "warnings": ['
         '{"column": 1, "id": "unused-imports", "line": 5, "message": "Unused import", "type": "info"}]}]}'
@@ -164,7 +164,7 @@ def test_scope_does_not_read_the_last_runs_report_when_qmllint_writes_none(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    write_fixture(fixtures_dir, repo, repo / "build-agent" / "ksv_ui_qmllint.json")
+    write_fixture(fixtures_dir, repo, repo / "build/script-build" / "ksv_ui_qmllint.json")
 
     with pytest.raises(Exception, match="wrote no \\*_qmllint.json report"):
         run_lint(toolchain, repo, (0, ""))

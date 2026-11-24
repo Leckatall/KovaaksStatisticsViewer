@@ -1,4 +1,4 @@
-> ctest.exe --test-dir C:/repo/build-agent --output-on-failure
+> ctest.exe --test-dir C:/repo/build/script-build --output-on-failure
     Start 1: PassingTest
 1/8 Test #1: PassingTest .....................   Passed    0.01 sec
     Start 7: HangingIntegrationTest

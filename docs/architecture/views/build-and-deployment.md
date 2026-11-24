@@ -108,7 +108,7 @@ The top-level `find_package(Qt6 ...)` always requires `Test`, `QuickTest` and `N
 | `ksv_capture_measure` | `KSV_BUILD_CAPTURE_MEASURE` | Measures capture cost to inform the capture limits; takes a header from `tests/ui/capture`. |
 | `scripts/ui_driver.py`, `scripts/make_dummy_kovaaks.py`, `scripts/arch_doc.py` | not built | Agent-side scripts: drive the automation protocol, generate a fake KovaaK's directory, and maintain this documentation. `ui_driver.py` reuses the Python toolchain resolution. |
 
-`package-release.ps1 -CaptureMeasure` builds `ksv_capture_measure` into `build-measure/` and deploys dependencies beside its executable instead of packaging. This mode works only with the MSVC profile: its deployment step reads the MSVC runtime directory that only that branch sets.
+`package-release.ps1 -CaptureMeasure` builds `ksv_capture_measure` into `build/measure/` and deploys dependencies beside its executable instead of packaging. This mode works only with the MSVC profile: its deployment step reads the MSVC runtime directory that only that branch sets.
 
 The gallery and driver share `ksv_gallery_support` (synthetic datasets and the source-tree QML interceptor). None of them is part of the packaged zip, and the Release gate keeps the first two out even when their option is on.
 
@@ -135,7 +135,7 @@ Because `integration_tests` conditionally adds sources, its content depends on t
 
 | Entry point | Owned output | Main safeguards and phases |
 |---|---|---|
-| Debug runner (`build_and_test.py`) | `build-agent/` | Checks fingerprint and cache, builds, then runs the selected suites. |
+| Debug runner (`build_and_test.py`) | `build/script-build/` | Checks fingerprint and cache, builds, then runs the selected suites. |
 | Release packager (`package-release.ps1`) | Release build tree and Windows zip | Builds Release, deploys dependencies, optionally smoke-tests, then zips. |
 
 ## Toolchain configuration
@@ -162,10 +162,10 @@ The PowerShell file marks the shared rules with "Mirrors" comments (`find_local_
 
 ## The build runner
 
-[`scripts/build_and_test.py`](../../../scripts/build_and_test.py) is a thin entry point for `build_runner.cli.main`, and the build runner owns the Debug tree `build-agent/`. The runner's safeguards are:
+[`scripts/build_and_test.py`](../../../scripts/build_and_test.py) is a thin entry point for `build_runner.cli.main`, and the build runner owns the Debug tree `build/script-build/`. The runner's safeguards are:
 
-- **One build at a time.** `build_tree_lock` takes an OS-level exclusive lock on `.temp/build-agent.lock` and fails immediately with the holder's pid if busy. The lock is tied to the open handle, so a killed run leaves no stale state. The lock path is under the repository root, so each worktree has its own lock and its own `build-agent/`.
-- **Fingerprint-based tree reuse.** If the tree exists and its fingerprint differs, the whole of `build-agent/` is deleted before configuring; `safe_remove_build_tree` refuses any other path.
+- **One build at a time.** `build_tree_lock` takes an OS-level exclusive lock on `.temp/build-agent.lock` and fails immediately with the holder's pid if busy. The lock is tied to the open handle, so a killed run leaves no stale state. The lock path is under the repository root, so each worktree has its own lock and its own `build/script-build/`.
+- **Fingerprint-based tree reuse.** If the tree exists and its fingerprint differs, the whole of `build/script-build/` is deleted before configuring; `safe_remove_build_tree` refuses any other path.
 
   The fingerprint (schema 3) records the flavour, option values, normalised tool paths and SHA-256 hashes of the CMake, Ninja and compiler executables, the MinGW runtime DLLs or `vcvars` script, the vcpkg toolchain file and `protoc`, every DLL in the vcpkg bin directory and every `.cmake` file under the Qt package directory. Consequently a change to a recorded path, setting or hashed file (a flavour switch, a new Qt CMake file, a vcpkg DLL, the protoc binary) rebuilds from scratch.
 
@@ -192,7 +192,7 @@ A new executable that links `ksv_data` or higher but does not call `ksv_copy_min
 
 | Step | Result |
 |---|---|
-| Delete `build-release/` (unless `-Incremental`), configure Release with `BUILD_TESTING=OFF`, assert the cache, build | A fresh `ksv.exe`. `-SkipBuild` packages an existing tree and cannot be combined with `-Incremental`. |
+| Delete `build/release/` (unless `-Incremental`), configure Release with `BUILD_TESTING=OFF`, assert the cache, build | A fresh `ksv.exe`. `-SkipBuild` packages an existing tree and cannot be combined with `-Incremental`. |
 | Copy `ksv.exe` to `dist/KovaaksStatsViewer-<Version>-win64/KovaaksStatsViewer.exe` | The executable is renamed only here. |
 | `windeployqt --release --qmldir src/ui/qml` (with `--compiler-runtime` for MinGW, `--no-compiler-runtime` for MSVC) | Qt DLLs and plugins. |
 | Copy every DLL from the vcpkg triplet bin directory | Protobuf and abseil, deliberately over-inclusive rather than a hand-kept list. |
@@ -210,7 +210,7 @@ The smoke test is bypassed by `-SkipSmokeTest` and skipped with a warning if the
 
 - **The layering is a convention, not a build rule.** Moving a dependency edge in CMake, or adding an include, changes nothing the build checks except Qt visibility and the contracts header-set test. Preserve the `I*` interface discipline in review; do not read a target link as proof of a layer rule.
 - **Two toolchain readers move together.** `config.py` and `toolchain-config.ps1` must agree on keys, precedence, placeholder detection and worktree lookup. A key added to one only will work in the runner and fail in packaging, or the reverse.
-- **The Debug fingerprint is the cache contract.** Any new toolchain input that affects the produced binaries and is not hashed or recorded in `build_fingerprint` can leave a stale `build-agent/` in use; any key added to the layering must be added to `TOOLCHAIN_KEYS` or it is rejected as unknown.
+- **The Debug fingerprint is the cache contract.** Any new toolchain input that affects the produced binaries and is not hashed or recorded in `build_fingerprint` can leave a stale `build/script-build/` in use; any key added to the layering must be added to `TOOLCHAIN_KEYS` or it is rejected as unknown.
 - **The runtime DLL rule needs three places.** A new executable needs `ksv_copy_mingw_runtime_dlls`, and a new packaged dependency must be covered by the vcpkg bin copy and by the smoke test's module list to be proved present.
 - **Release-only changes need separate verification.** The Debug suite does not exercise the Release-only debug-output definition or GUI subsystem flag; the packaging smoke test does not check either directly. Changing them needs validation beyond those checks.
 - **One version statement shape.** Reformatting the `project(... VERSION ...)` call so the regex in `version.ps1` misses it fails packaging, not the build; reformatting the suffix `set` silently drops the suffix from the package version while the build still compiles `KSV_VERSION` with it.

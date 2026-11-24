@@ -1,4 +1,4 @@
-> cmake.exe -S C:/repo -B C:/repo/build-agent
+> cmake.exe -S C:/repo -B C:/repo/build/script-build
 -- The CXX compiler identification is GNU 15.2.0
 CMake Error at C:/repo/CMakeLists.txt:14 (find_package):
   Could not find a package configuration file provided by "Qt6".

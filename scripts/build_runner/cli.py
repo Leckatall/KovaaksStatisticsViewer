@@ -83,7 +83,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         if local_env is not None and local_env.parent != scripts_dir:
             print(f"local overrides: {local_env.as_posix()} (main worktree)")
         fingerprint = build_fingerprint(toolchain)
-        build_dir = repo_root / "build-agent"
+        build_dir = repo_root / "build/script-build"
         fingerprint_path = build_dir / ".ksv-toolchain-fingerprint.json"
         with build_tree_lock(repo_root / ".temp" / "build-agent.lock"):
             if args.clean or (build_dir.exists() and not fingerprint_matches(fingerprint_path, fingerprint)):

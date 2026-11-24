@@ -106,7 +106,7 @@ def test_focused_success_is_one_line_and_build_parallelism_comes_from_settings(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
     (build_dir / "domain_tests.exe").write_bytes(b"test")
     log_dir = repo / ".temp" / "build-and-test" / "run"
@@ -148,7 +148,7 @@ def test_build_only_target_builds_just_the_named_target(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
     executor = FakeExecutor(
         build_dir,
@@ -184,7 +184,7 @@ def test_qml_listing_uses_framework_functions_instead_of_parsing_sources(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
     (build_dir / "ui_qml_tests.exe").write_bytes(b"test")
     executor = FakeExecutor(
@@ -222,7 +222,7 @@ def test_compiler_failure_is_reduced_and_ends_with_summary(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
     compiler_output = (fixtures_dir / "compiler.log").read_text(encoding="utf-8").replace("C:/repo", repo.as_posix())
     executor = FakeExecutor(
@@ -266,7 +266,7 @@ def test_silent_gtest_crash_is_named_without_requiring_a_log_read(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
     (build_dir / "domain_tests.exe").write_bytes(b"test")
     executor = FakeExecutor(
@@ -306,7 +306,7 @@ def test_silent_gtest_crash_is_named_without_requiring_a_log_read(
 
 
 CTEST_LISTING = (
-    "Test project build-agent\n"
+    "Test project build/script-build\n"
     "  Test #1: domain_tests\n"
     "  Test #2: tst_Main\n"
     "  Test #3: contracts_qt_free\n"
@@ -332,7 +332,7 @@ def run_scope_all(
     toolchain: Toolchain, repo: Path, results: list[tuple[int, str]], args: list[str],
     before_ctest: Callable[[list[str]], None] = lambda _: None,
 ) -> tuple[int, list[str], FakeExecutor]:
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     executor = CtestSideEffectExecutor(build_dir, toolchain, results, before_ctest=before_ctest)
     output: list[str] = []
     result = run_pipeline(
@@ -360,7 +360,7 @@ def test_scope_all_counts_gtest_cases_from_the_reports_in_place_of_their_executa
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
 
     result, output, _ = run_scope_all(
@@ -381,7 +381,7 @@ def test_scope_all_removes_last_runs_reports_before_ctest_starts(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     stale_gtest = build_dir / "tests" / "gtest-reports" / "domain_tests.xml"
     stale_qml = build_dir / "tests" / "ui" / "qml-test-logs" / "tst_Main.txt"
     write_gtest_report(stale_gtest, 5)
@@ -406,7 +406,7 @@ def test_scope_all_failure_names_the_failing_cases_of_an_executable_and_counts_c
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
     listing = CTEST_LISTING.replace("domain_tests", "ui_tests")
 
@@ -444,7 +444,7 @@ def test_scope_all_counts_a_crashed_executables_cases_by_enumerating_it(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
     (build_dir / "ui_tests.exe").write_bytes(b"test")
     listing = CTEST_LISTING.replace("domain_tests", "ui_tests")
@@ -481,7 +481,7 @@ def test_scope_all_list_enumerates_every_runner_and_keeps_unrelated_ctest_tests(
     _, values = toolchain_tree
     toolchain = make_toolchain(values, tmp_path)
     repo = tmp_path / "repo"
-    build_dir = repo / "build-agent"
+    build_dir = repo / "build/script-build"
     build_dir.mkdir(parents=True)
     runners = all_runners()
     enumerations: list[tuple[int, str]] = []

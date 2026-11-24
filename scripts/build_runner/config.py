@@ -32,7 +32,7 @@ TOOLCHAIN_KEYS = (
     "KSV_QT6_DIR",
 )
 # Runner settings share the env files but stay out of the toolchain fingerprint,
-# so changing them never wipes build-agent/.
+# so changing them never wipes build/script-build/.
 RUNNER_KEYS = (
     "KSV_BUILD_JOBS",
     "KSV_BUILD_PRIORITY",
@@ -359,7 +359,7 @@ def assert_cache(cache_path: Path, toolchain: Toolchain) -> None:
 
 
 def safe_remove_build_tree(path: Path, repo_root: Path) -> None:
-    expected = normalized_path(repo_root / "build-agent")
+    expected = normalized_path(repo_root / "build/script-build")
     if normalized_path(path) != expected:
         raise ToolchainError(f"Refusing to remove unexpected build directory: {path}")
     if path.exists():

@@ -1,4 +1,4 @@
-> cmake.exe --build C:/repo/build-agent --parallel 8 --target domain_tests
+> cmake.exe --build C:/repo/build/script-build --parallel 8 --target domain_tests
 [1/14] Automatic MOC and UIC for target ksv_domain
 [2/14] Building CXX object src/domain/CMakeFiles/ksv_domain.dir/run.cpp.obj
 FAILED: [code=1] src/domain/CMakeFiles/ksv_domain.dir/run.cpp.obj

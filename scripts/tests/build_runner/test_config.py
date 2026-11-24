@@ -295,11 +295,11 @@ def test_assert_cache_accepts_semantically_matching_paths(
     assert_cache(cache, config)
 
 
-def test_safe_remove_refuses_any_directory_except_repo_build_agent(tmp_path: Path) -> None:
+def test_safe_remove_refuses_any_directory_except_repo_script_build(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    unexpected = repo / "build-release"
-    unexpected.mkdir()
+    unexpected = repo / "build/release"
+    unexpected.mkdir(parents=True)
 
     with pytest.raises(ToolchainError, match="Refusing to remove unexpected build directory"):
         safe_remove_build_tree(unexpected, repo)

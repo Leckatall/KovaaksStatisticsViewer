@@ -480,7 +480,7 @@ def handle_shot(ns: argparse.Namespace, ctx: Context) -> int:
 
 
 def driver_exe() -> Path:
-    return REPO_ROOT / "build-agent" / DRIVER_EXE
+    return REPO_ROOT / "build/script-build" / DRIVER_EXE
 
 
 def stale_binary_warning(exe: Path) -> str | None:
