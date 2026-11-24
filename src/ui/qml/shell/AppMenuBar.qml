@@ -52,6 +52,12 @@ MenuBar {
         }
 
         Action {
+            objectName: "manageBenchmarksAction"
+            text: qsTr("&Manage Benchmarks...")
+            onTriggered: root.manageBenchmarksRequested()
+        }
+
+        Action {
             id: settingsAction
             text: qsTr("&Settings...")
             shortcut: "Ctrl+,"
@@ -143,14 +149,6 @@ MenuBar {
                 checked: root.visualSettings ? root.visualSettings.scenarioBrowserSectionVisible : true
                 onTriggered: if (root.visualSettings) root.visualSettings.scenarioBrowserSectionVisible = checked
             }
-        }
-    }
-    Menu {
-        title: qsTr("&Benchmarks")
-        Action {
-            objectName: "manageBenchmarksAction"
-            text: qsTr("&Manage Benchmarks...")
-            onTriggered: root.manageBenchmarksRequested()
         }
     }
     // Help stays last, as Windows menu bars put it.

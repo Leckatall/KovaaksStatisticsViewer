@@ -134,8 +134,8 @@ TestCase {
         let emitted = 0
         menuBar.aboutRequested.connect(() => emitted++)
 
-        const item = findMenuItemByText(menuBar.menuAt(3), "&About")
-        verify(item !== null, "no menu item with text '&About' found in menuAt(3)")
+        const item = findMenuItemByText(menuBar.menuAt(2), "&About")
+        verify(item !== null, "no menu item with text '&About' found in menuAt(2)")
         item.action.trigger()
 
         compare(emitted, 1, "aboutRequested should fire exactly once when its action is triggered")
