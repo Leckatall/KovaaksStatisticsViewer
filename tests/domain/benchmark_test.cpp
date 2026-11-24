@@ -286,13 +286,32 @@ TEST(BenchmarkNextTier, ReportsOnlyRequirementsThatActuallyBlockTheTier) {
                                                       {"d2", 100.0F}, {"b1", 200.0F}}));
     ASSERT_TRUE(evaluated.nextTier());
     EXPECT_EQ(evaluated.nextTier()->value, "gold");
-    ASSERT_EQ(evaluated.nextTierBlockers().size(), 4U);
-    EXPECT_EQ(evaluated.nextTierBlockers()[0].entryId.value, "u1");
-    EXPECT_FALSE(evaluated.nextTierBlockers()[0].group);
-    EXPECT_EQ(evaluated.nextTierBlockers()[1].group->value, "direct");
-    EXPECT_EQ(evaluated.nextTierBlockers()[2].group->value, "direct");
-    EXPECT_EQ(evaluated.nextTierBlockers()[3].group->value, "second");
+    const auto &blockers = evaluated.nextTierBlockers();
+    ASSERT_EQ(blockers.size(), 3U);
+    EXPECT_FALSE(blockers[0].group);
+    ASSERT_EQ(blockers[0].scenarios.size(), 1U);
+    EXPECT_EQ(blockers[0].scenarios[0].entryId.value, "u1");
+    ASSERT_TRUE(blockers[1].group);
+    EXPECT_EQ(blockers[1].group->value, "direct");
+    ASSERT_EQ(blockers[1].scenarios.size(), 2U);
+    EXPECT_EQ(blockers[1].scenarios[0].entryId.value, "d1");
+    EXPECT_EQ(blockers[1].scenarios[1].entryId.value, "d2");
+    ASSERT_TRUE(blockers[2].group);
+    EXPECT_EQ(blockers[2].group->value, "second");
+    ASSERT_EQ(blockers[2].scenarios.size(), 1U);
+    EXPECT_EQ(blockers[2].scenarios[0].entryId.value, "b1");
     EXPECT_EQ(evaluated.scenariosAtNextTier(), 3);
+}
+
+// Any one scenario attaining the tier meets a group's requirement, so its other scenarios hold nothing back.
+TEST(BenchmarkNextTier, AMetRequirementIsNotABlockerEvenWithNonAttainingScenarios) {
+    const auto evaluated = Benchmark(hierarchyBenchmark(), {Completeness::Trackable, {}},
+                                     hierarchyResolutions(),
+                                     hierarchyScores({{"u1", 200.0F}, {"d2", 100.0F}}));
+    ASSERT_TRUE(evaluated.nextTier());
+    EXPECT_EQ(evaluated.nextTier()->value, "gold");
+    for (const auto &blocker: evaluated.nextTierBlockers())
+        EXPECT_FALSE(blocker.group && blocker.group->value == "direct");
 }
 
 TEST(BenchmarkNextTier, IsAbsentAtTheHighestAttainedTierAndUsesEntryRequirements) {
@@ -304,9 +323,11 @@ TEST(BenchmarkNextTier, IsAbsentAtTheHighestAttainedTierAndUsesEntryRequirements
     const auto blocked = Benchmark(hierarchyBenchmark(), {Completeness::Trackable, {}},
                                    hierarchyResolutions(), hierarchyScores({{"u2", 200.0F}}));
     ASSERT_EQ(blocked.nextTierBlockers().size(), 1U);
-    EXPECT_DOUBLE_EQ(blocked.nextTierBlockers()[0].required, 300.0);
-    ASSERT_TRUE(blocked.nextTierBlockers()[0].current);
-    EXPECT_DOUBLE_EQ(*blocked.nextTierBlockers()[0].current, 200.0);
+    ASSERT_EQ(blocked.nextTierBlockers()[0].scenarios.size(), 1U);
+    const auto &scenario = blocked.nextTierBlockers()[0].scenarios[0];
+    EXPECT_DOUBLE_EQ(scenario.required, 300.0);
+    ASSERT_TRUE(scenario.current);
+    EXPECT_DOUBLE_EQ(*scenario.current, 200.0);
 }
 
 TEST(BenchmarkAverageRank, IncludesEveryEntryAndIsSuppressedWhenIncomplete) {

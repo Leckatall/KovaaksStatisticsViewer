@@ -237,7 +237,7 @@ For this personal/open-source desktop product, successful use and trustworthy an
 - [x] Given a score above the highest threshold, average-rank calculation interprets it as the highest tier while retaining the uncapped raw score and personal best.
 - [x] Given historical runs, the average-rank graph reconstructs the personal-best average at each date and does not decrease unless the benchmark definition changes.
 - [x] Given more than five runs for a scenario, recent average uses exactly its latest five and does not alter permanent attainment.
-- [x] Given a selected benchmark, the tracking view shows official and completed ranks, average-rank history, total playtime, three-day rolling playtime, and scenario-level blockers.
+- [x] Given a selected benchmark, the tracking view shows official and completed ranks, average-rank history, total playtime, three-day rolling playtime, and next-tier blockers, marked once per requirement: on the group, or on the row of an Uncategorized scenario.
 - [x] Given zero, one, or multiple name matches in the profile, KSV respectively keeps the scenario unresolved, binds it automatically, or exposes an ambiguity requiring user choice.
 - [x] Given a valid benchmark file copied or edited in the managed directory, refresh loads it without restarting the application.
 - [x] Given an invalid benchmark file, the manager shows its name when safely available, otherwise its filename, plus a useful validation reason while continuing to load valid benchmarks.

@@ -39,11 +39,16 @@ Item {
             Accessible.description: fieldRow.caption + ": " + fieldRow.value
                                     + (fieldRow.suffix.length > 0 ? " " + fieldRow.suffix : "")
         }
+        // Takes what its half of the card leaves and wraps there, so a long count never
+        // widens the column and pushes the right-hand fields across.
         Label {
             objectName: fieldRow.suffixObjectName
             visible: fieldRow.suffix.length > 0
             text: fieldRow.suffix
             color: root.palette.placeholderText
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
         }
     }
 

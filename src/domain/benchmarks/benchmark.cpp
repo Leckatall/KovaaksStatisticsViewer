@@ -223,16 +223,11 @@ namespace ksv::domain {
             }
         };
 
-        void collectBlockers(std::span<const ScenarioBenchmarkEvaluation> states, const std::optional<GroupId> &group,
-                             const std::size_t tier, std::vector<RankBlocker> &blockers) {
-            for (const auto &state: states) {
-                if (state.attains(tier)) continue;
-                const auto &ladder = state.ladder();
-                const auto required = ladder ? (*ladder)[tier] : 0.0;
-                const auto &stats = state.stats();
-                blockers.push_back({state.entryId(), group, required,
-                                    stats ? std::optional(stats->personalBest()) : std::nullopt});
-            }
+        RankBlockerScenario blockerScenario(const ScenarioBenchmarkEvaluation &state, const std::size_t tier) {
+            const auto &ladder = state.ladder();
+            const auto &stats = state.stats();
+            return {state.entryId(), ladder ? (*ladder)[tier] : 0.0,
+                    stats ? std::optional(stats->personalBest()) : std::nullopt};
         }
 
         // ---- Rank history ----------------------------------------------------------------------
@@ -387,12 +382,17 @@ namespace ksv::domain {
         result.m_nextTier = rules.tiers[tier].id;
         result.m_scenariosAtNextTier = static_cast<int>(std::ranges::count_if(
             rules.tree.states, [&](const auto &state) { return state.attains(tier); }));
-        collectBlockers(rules.slice(rules.tree.uncategorized), std::nullopt, tier, result.m_nextTierBlockers);
+        auto &blockers = result.m_nextTierBlockers;
+        for (const auto &state: rules.slice(rules.tree.uncategorized))
+            if (!state.attains(tier)) blockers.push_back({std::nullopt, {blockerScenario(state, tier)}});
         for (const auto &category: rules.tree.categories)
-            for (const auto &requirement: category.requirements)
-                if (!rules.met(requirement, tier))
-                    collectBlockers(rules.slice(requirement.scenarios), requirement.group, tier,
-                                    result.m_nextTierBlockers);
+            for (const auto &requirement: category.requirements) {
+                if (rules.met(requirement, tier)) continue;
+                RankBlocker blocker{requirement.group, {}};
+                for (const auto &state: rules.slice(requirement.scenarios))
+                    blocker.scenarios.push_back(blockerScenario(state, tier));
+                blockers.push_back(std::move(blocker));
+            }
     }
 
     void Benchmark::Builder::assembleTree(std::vector<ScenarioBenchmarkEvaluation> states,

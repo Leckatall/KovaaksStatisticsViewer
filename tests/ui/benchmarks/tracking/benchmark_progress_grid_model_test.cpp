@@ -322,10 +322,15 @@ TEST(BenchmarkProgressGridContent, MapsAreDerivedFromTheTypedForm) {
     walkRows();
 
     std::set<ProgressGridGroupColumn> columns;
+    bool sawGroupBlocker = false;
     for (qsizetype index = 0; index < grid->groups().size(); ++index) {
         const QVariantMap map = grid->groups().at(index).toMap();
         const ProgressGridGroup &group = content.groups[static_cast<std::size_t>(index)];
         columns.insert(group.column);
+        sawGroupBlocker |= group.blocker;
+        EXPECT_EQ(map.value("blocker").toBool(), group.blocker);
+        EXPECT_EQ(map.value("blockerColor").toString(), group.blockerColor);
+        EXPECT_EQ(map.value("blockerText").toString(), group.blockerText);
         EXPECT_EQ(map.value("column").toString(),
                   group.column == ProgressGridGroupColumn::Category ? QString("category") : QString("subcategory"));
         EXPECT_EQ(map.value("id").toString(), group.id);
@@ -344,6 +349,7 @@ TEST(BenchmarkProgressGridContent, MapsAreDerivedFromTheTypedForm) {
     EXPECT_TRUE(edgeStates.contains(ProgressGridEdgeState::Unmatched));
     EXPECT_TRUE(edgeStates.contains(ProgressGridEdgeState::AboveTop));
     EXPECT_TRUE(sawBlocker);
+    EXPECT_TRUE(sawGroupBlocker);
     EXPECT_TRUE(sawRecent);
     EXPECT_TRUE(sawMissingChunk);
     EXPECT_EQ(columns.size(), 2u) << "the fixture must have a subcategory group";
@@ -723,31 +729,99 @@ TEST(BenchmarkProgressGridModel, RowsCarryTheScoreThatReachesEachTier) {
     EXPECT_TRUE(texts.at(2).toString().isEmpty());
 }
 
-TEST(BenchmarkProgressGridModel, BlockingRowsNameTheNextTierInItsColour) {
-    auto fake = gridFake();
-    fake->fixture.definition.tiers[1].color = BenchmarkColor{192, 192, 200}; // Silver, the next tier
-    auto &fixture = fake->fixture;
-    fixture.definition.uncategorized[0].hashes = {"hu1"};
-    fixture.definition.uncategorized[1].hashes = {"hu2"};
-    fixture.resolutions[0] = resolvedEntry("u1");
-    fixture.resolutions[1] = resolvedEntry("u2");
-    fixture.resolutions.back() = resolvedEntry("e3");
-    const auto day = ymd(2024, 3, 4);
-    fixture.runs = {runOn(day, "hu1", 1000, 60), runOn(day, "hu2", 1000, 60),
-                    runOn(day, "h1", 900, 60), runOn(day, "h3", 400, 60)};
-    fake->reevaluate();
+namespace {
+    // Silver is next: the Uncategorized pair and Clicking (e1 at 900) reach it, and Smoothness
+    // (e3 at 400 against Silver's 600) holds the benchmark back.
+    BenchmarkFixture silverNextFixture() {
+        auto fixture = makeBreakdownFixture();
+        fixture.definition.tiers[1].color = BenchmarkColor{192, 192, 200};
+        fixture.definition.uncategorized[0].hashes = {"hu1"};
+        fixture.definition.uncategorized[1].hashes = {"hu2"};
+        fixture.resolutions[0] = resolvedEntry("u1");
+        fixture.resolutions[1] = resolvedEntry("u2");
+        fixture.resolutions.back() = resolvedEntry("e3");
+        const auto day = ymd(2024, 3, 4);
+        fixture.runs = {runOn(day, "hu1", 1000, 60), runOn(day, "hu2", 1000, 60),
+                        runOn(day, "h1", 900, 60), runOn(day, "h3", 400, 60)};
+        return fixture;
+    }
+
+    // Smoothness gains a second scenario, e4 ("air"), on hash h4.
+    BenchmarkFixture withSecondSmoothnessScenario(BenchmarkFixture fixture, std::vector<Threshold> thresholds) {
+        auto entry = benchmarkEntry("e4", "air", "h4", {});
+        entry.thresholds = std::move(thresholds);
+        fixture.definition.categories[1].subcategories[0].scenarios.push_back(std::move(entry));
+        fixture.resolutions.push_back(resolvedEntry("e4"));
+        return fixture;
+    }
+
+    QString groupBlockerText(BenchmarkFixture fixture) {
+        auto fake = gridFake(std::move(fixture));
+        BenchmarkTrackingViewModel vm{fake};
+        return groupFor(vm.progressGrid(), "sc1").value("blockerText").toString();
+    }
+}
+
+TEST(BenchmarkProgressGridModel, ABlockingGroupIsMarkedOnItsCellAndNotOnItsRows) {
+    auto fake = gridFake(silverNextFixture());
     BenchmarkTrackingViewModel vm{fake};
     const auto *grid = vm.progressGrid();
 
-    const QVariantMap e3 = rowFor(grid, "e3");
-    EXPECT_TRUE(e3.value("blocker").toBool());
-    EXPECT_EQ(e3.value("blockerText").toString(), QString("Blocks Silver (needs %1)").arg(formatBenchmarkNumber(600.0)));
-    EXPECT_EQ(e3.value("blockerColor").toString(), QColor(192, 192, 200).name());
-    for (const char *id: {"u1", "u2", "e1", "e2"}) {
+    const QVariantMap smoothness = groupFor(grid, "sc1");
+    EXPECT_TRUE(smoothness.value("blocker").toBool());
+    EXPECT_EQ(smoothness.value("blockerText").toString(),
+              QString("Blocks Silver (smoothbot needs %1)").arg(formatBenchmarkNumber(600.0)));
+    EXPECT_EQ(smoothness.value("blockerColor").toString(), QColor(192, 192, 200).name());
+    EXPECT_FALSE(groupFor(grid, "c1").value("blocker").toBool()) << "Clicking is met";
+    EXPECT_FALSE(groupFor(grid, "c2").value("blocker").toBool()) << "a category with subcategories never blocks";
+    for (const char *id: {"u1", "u2", "e1", "e2", "e3"}) {
         const QVariantMap row = rowFor(grid, id);
         EXPECT_FALSE(row.value("blocker").toBool()) << id;
         EXPECT_TRUE(row.value("blockerText").toString().isEmpty()) << id;
     }
+}
+
+TEST(BenchmarkProgressGridModel, BlockingUncategorizedRowsNameTheNextTierInItsColour) {
+    auto fixture = silverNextFixture();
+    fixture.runs[0] = runOn(ymd(2024, 3, 4), "hu1", 800, 60);
+    auto fake = gridFake(std::move(fixture));
+    BenchmarkTrackingViewModel vm{fake};
+
+    const QVariantMap u1 = rowFor(vm.progressGrid(), "u1");
+    EXPECT_TRUE(u1.value("blocker").toBool());
+    EXPECT_EQ(u1.value("blockerText").toString(), QString("Blocks Silver (needs %1)").arg(formatBenchmarkNumber(900.0)));
+    EXPECT_EQ(u1.value("blockerColor").toString(), QColor(192, 192, 200).name());
+    EXPECT_FALSE(rowFor(vm.progressGrid(), "u2").value("blocker").toBool());
+}
+
+// Scores on different ladders compare by normalised rank: air at 1800 is 80% of the way from
+// Bronze to Silver, smoothbot at 400 only a third, although smoothbot is 200 short and air 200 too.
+TEST(BenchmarkProgressGridModel, AGroupTooltipNamesItsClosestScenario) {
+    auto fixture = withSecondSmoothnessScenario(
+        silverNextFixture(), {Threshold{TierId{"t1"}, 1000.0}, Threshold{TierId{"t2"}, 2000.0},
+                              Threshold{TierId{"t3"}, 3000.0}});
+    fixture.runs.push_back(runOn(ymd(2024, 3, 4), "h4", 1800, 60));
+    EXPECT_EQ(groupBlockerText(std::move(fixture)),
+              QString("Blocks Silver: any one of these 2 scenarios (closest: air, needs %1)")
+                  .arg(formatBenchmarkNumber(2000.0)));
+}
+
+TEST(BenchmarkProgressGridModel, AGroupTooltipBreaksATieOnClosenessByDefinitionOrder) {
+    auto fixture = withSecondSmoothnessScenario(
+        silverNextFixture(), {Threshold{TierId{"t1"}, 300.0}, Threshold{TierId{"t2"}, 600.0},
+                              Threshold{TierId{"t3"}, 900.0}});
+    fixture.runs.push_back(runOn(ymd(2024, 3, 4), "h4", 400, 60));
+    EXPECT_EQ(groupBlockerText(std::move(fixture)),
+              QString("Blocks Silver: any one of these 2 scenarios (closest: smoothbot, needs %1)")
+                  .arg(formatBenchmarkNumber(600.0)));
+}
+
+TEST(BenchmarkProgressGridModel, AnUnplayedGroupTooltipNamesNoClosestScenario) {
+    auto fixture = withSecondSmoothnessScenario(
+        silverNextFixture(), {Threshold{TierId{"t1"}, 300.0}, Threshold{TierId{"t2"}, 600.0},
+                              Threshold{TierId{"t3"}, 900.0}});
+    fixture.runs.pop_back(); // smoothbot's run; air has none either
+    EXPECT_EQ(groupBlockerText(std::move(fixture)), QString("Blocks Bronze: any one of these 2 scenarios"));
 }
 
 TEST(BenchmarkProgressGridModel, EmptiesOutsideTheReadyStatesAndNotifiesOncePerRevision) {

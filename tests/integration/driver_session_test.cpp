@@ -644,7 +644,11 @@ namespace {
         ASSERT_TRUE(benchmark.nextTier());
         EXPECT_EQ(benchmark.nextTier()->value, "silver");
         ASSERT_EQ(benchmark.nextTierBlockers().size(), 1U);
-        EXPECT_EQ(benchmark.nextTierBlockers()[0].entryId.value, "entry-gallery-pasu");
+        const auto &blocker = benchmark.nextTierBlockers()[0];
+        ASSERT_TRUE(blocker.group);
+        EXPECT_EQ(blocker.group->value, "dynamic");
+        ASSERT_EQ(blocker.scenarios.size(), 1U);
+        EXPECT_EQ(blocker.scenarios[0].entryId.value, "entry-gallery-pasu");
         EXPECT_EQ(benchmark.scenariosAtNextTier(), 2);
 
         // The personal-best average climbs in several steps over the month.
@@ -681,9 +685,13 @@ namespace {
         EXPECT_EQ(benchmark.completedRank()->value, "iron");
         ASSERT_TRUE(benchmark.nextTier());
         EXPECT_EQ(benchmark.nextTier()->value, "nova");
-        std::set<std::string> blockers;
-        for (const auto &blocker: benchmark.nextTierBlockers()) blockers.insert(blocker.entryId.value);
-        EXPECT_EQ(blockers, (std::set<std::string>{"entry-gallery-primary", "entry-gallery-pasu"}));
+        ASSERT_EQ(benchmark.nextTierBlockers().size(), 1U);
+        const auto &blocker = benchmark.nextTierBlockers()[0];
+        ASSERT_TRUE(blocker.group);
+        EXPECT_EQ(blocker.group->value, "clicking");
+        ASSERT_EQ(blocker.scenarios.size(), 2U);
+        EXPECT_EQ(blocker.scenarios[0].entryId.value, "entry-gallery-primary");
+        EXPECT_EQ(blocker.scenarios[1].entryId.value, "entry-gallery-pasu");
     }
 
     TEST(DriverBenchmarkFixtureTest, SingleScenarioDatasetsLeaveTheOtherRowsUnplayed) {

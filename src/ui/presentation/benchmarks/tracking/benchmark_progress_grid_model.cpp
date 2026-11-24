@@ -93,6 +93,42 @@ namespace ksv::presentation {
                 .arg(q(tiers[reached].name), formatBenchmarkNumber(*score), formatBenchmarkNumber(target));
         }
 
+        // The played scenario nearest the tier, by normalised rank so different ladders compare;
+        // the first in definition order on a tie. Null when none is played.
+        const domain::RankBlockerScenario *closestScenario(const domain::Benchmark &benchmark,
+                                                           const domain::RankBlocker &blocker) {
+            const domain::RankBlockerScenario *closest = nullptr;
+            double closestRank = 0.0;
+            for (const auto &candidate: blocker.scenarios) {
+                if (!candidate.current) continue;
+                const auto *scenario = benchmark.scenario(candidate.entryId);
+                if (!scenario) continue;
+                if (closest && scenario->normalizedRank() <= closestRank) continue;
+                closest = &candidate;
+                closestRank = scenario->normalizedRank();
+            }
+            return closest;
+        }
+
+        QString scenarioName(const domain::Benchmark &benchmark, const domain::BenchmarkScenarioId &id) {
+            const auto *scenario = benchmark.scenario(id);
+            return scenario ? q(scenario->name()) : QString();
+        }
+
+        QString groupBlockerText(const domain::Benchmark &benchmark, const domain::RankBlocker &blocker,
+                                 const QString &tierName) {
+            if (blocker.scenarios.size() == 1) {
+                const auto &only = blocker.scenarios.front();
+                return QObject::tr("Blocks %1 (%2 needs %3)")
+                    .arg(tierName, scenarioName(benchmark, only.entryId), formatBenchmarkNumber(only.required));
+            }
+            const auto count = static_cast<int>(blocker.scenarios.size());
+            const auto *closest = closestScenario(benchmark, blocker);
+            if (!closest) return QObject::tr("Blocks %1: any one of these %n scenarios", nullptr, count).arg(tierName);
+            return QObject::tr("Blocks %1: any one of these %n scenarios (closest: %2, needs %3)", nullptr, count)
+                .arg(tierName, scenarioName(benchmark, closest->entryId), formatBenchmarkNumber(closest->required));
+        }
+
         struct TierStyle {
             QString name;
             QString textColor;
@@ -109,12 +145,18 @@ namespace ksv::presentation {
                         QColor(tier.color.red, tier.color.green, tier.color.blue).name()});
                     m_tierStyles.insert(id, TierStyle{q(tier.name), readableTextColor(tier.color).name()});
                 }
-                for (const auto &blocker: benchmark.nextTierBlockers())
-                    m_blockerRequired.insert(q(blocker.entryId.value), blocker.required);
                 if (const auto nextTier = benchmark.nextTier()) {
                     const TierStyle next = m_tierStyles.value(q(nextTier->value));
                     m_nextTierName = next.name;
                     m_nextTierColor = next.textColor;
+                }
+                for (const auto &blocker: benchmark.nextTierBlockers()) {
+                    if (blocker.group)
+                        m_groupBlockerText.insert(q(blocker.group->value),
+                                                  groupBlockerText(benchmark, blocker, m_nextTierName));
+                    else if (!blocker.scenarios.empty())
+                        m_blockerRequired.insert(q(blocker.scenarios.front().entryId.value),
+                                                 blocker.scenarios.front().required);
                 }
             }
 
@@ -153,6 +195,12 @@ namespace ksv::presentation {
                     group.name = q(evaluation->name());
                     group.color = toQColor(evaluation->color()).name();
                     addGroupRank(group, *evaluation);
+                    const auto blocker = m_groupBlockerText.constFind(group.id);
+                    if (blocker != m_groupBlockerText.constEnd() && !m_nextTierName.isEmpty()) {
+                        group.blocker = true;
+                        group.blockerColor = m_nextTierColor;
+                        group.blockerText = *blocker;
+                    }
                 } else {
                     group.name = QObject::tr("Uncategorized");
                 }
@@ -299,7 +347,7 @@ namespace ksv::presentation {
                 row.statusText = statusText;
                 row.aboveTopText = aboveTopText;
 
-                // A row whose scenario keeps the benchmark from the next tier.
+                // Only an Uncategorized scenario blocks on its own row; a group blocks on its cell.
                 const auto required = m_blockerRequired.constFind(entryId);
                 row.blocker = required != m_blockerRequired.constEnd() && !m_nextTierName.isEmpty();
                 row.blockerColor = row.blocker ? m_nextTierColor : QString();
@@ -314,6 +362,7 @@ namespace ksv::presentation {
             const std::span<const domain::Tier> m_tiers;
             QHash<QString, TierStyle> m_tierStyles;
             QHash<QString, double> m_blockerRequired;
+            QHash<QString, QString> m_groupBlockerText;
             QString m_nextTierName;
             QString m_nextTierColor;
         };
@@ -423,6 +472,9 @@ namespace ksv::presentation {
             map[QStringLiteral("rankText")] = group.rankText;
             map[QStringLiteral("rankColor")] = group.rankColor;
             map[QStringLiteral("rankBarColor")] = group.rankBarColor;
+            map[QStringLiteral("blocker")] = group.blocker;
+            map[QStringLiteral("blockerColor")] = group.blockerColor;
+            map[QStringLiteral("blockerText")] = group.blockerText;
             return map;
         }
 

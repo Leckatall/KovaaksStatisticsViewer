@@ -14,7 +14,7 @@ Item {
         required property real columnWidth
         x: columnX + rowItem.grid.cellPadding
         width: Math.max(0, columnWidth - 2 * rowItem.grid.cellPadding)
-        height: rowItem.grid.rowHeight
+        height: rowItem.height
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignRight
         elide: Text.ElideRight
@@ -23,9 +23,9 @@ Item {
 
     objectName: "progressRow_" + modelData.entryId
     x: 0
-    y: rowItem.grid.headerHeight + index * rowItem.grid.rowHeight
+    y: rowItem.grid.rowTops[index]
     width: rowItem.grid.columns.total
-    height: rowItem.grid.rowHeight
+    height: rowItem.grid.rowTops[index + 1] - rowItem.grid.rowTops[index]
     Accessible.role: Accessible.Row
     Accessible.name: String(modelData.name)
 

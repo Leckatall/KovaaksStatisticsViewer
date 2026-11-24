@@ -42,7 +42,7 @@ The design is shaped by these concerns:
 - Playlist membership arrives as names, while accepted run identity is hash-based. Automatic resolution must not guess among multiple hashes or overwrite a saved mapping.
 - Definitions are editable and incomplete work is valuable. Validation must preserve repairable drafts without allowing partial thresholds to produce plausible but misleading ranks.
 - Every benchmark projection is retrospective under the current definition. Persisting derived ranks would create stale or historically inconsistent results.
-- Large playlists make hierarchy editing and threshold entry dense, while tracking needs enough space for status, two histories, and scenario-level blockers.
+- Large playlists make hierarchy editing and threshold entry dense, while tracking needs enough space for status, two histories, and next-tier blockers per requirement (a group, or an Uncategorized scenario).
 - Rank, category, validation, and matching state must remain understandable without relying on configurable colors.
 
 ## Proposed design and delta

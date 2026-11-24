@@ -881,6 +881,114 @@ namespace ksv::ui {
         EXPECT_EQ(fallback->color, rowDiamonds.front().color);
     }
 
+    // As in the app, a group's rank chip sits beside a name that leaves it room, and on a line of its own under a
+    // name that has to wrap.
+    TEST(TableCaptureLayout, AGroupsRankChipSitsBesideItsNameUntilTheNameWraps) {
+        presentation::ProgressGridGroup group = tableFixtureGroup(QStringLiteral("Short"), 0, 3, tableFixtureTint(0));
+        group.rankText = QStringLiteral("Gold");
+        const TableCaptureSnapshot beside = tableFixtureSnapshot(plainRowNames(3), {group});
+        const CaptureLayout besideLayout = layoutTableCapture(beside, false);
+
+        const std::optional<RankChip> chip = chipHolding(besideLayout, group.rankText);
+        const std::optional<CaptureTextItem> name = textEqualTo(besideLayout, group.name);
+        ASSERT_TRUE(chip && name);
+        EXPECT_GE(chip->rect.rect.left(), name->rect.left() + advanceOf(beside, *name));
+        EXPECT_NEAR(chip->rect.rect.center().y(), name->rect.center().y(), 1.0);
+
+        group.name = longPhrase(QStringLiteral("Grouping"));
+        const TableCaptureSnapshot below = tableFixtureSnapshot(plainRowNames(3), {group});
+        const CaptureLayout belowLayout = layoutTableCapture(below, false);
+
+        const std::optional<RankChip> belowChip = chipHolding(belowLayout, group.rankText);
+        const std::vector<CaptureTextItem> lines = linesSpelling(belowLayout, group.name);
+        ASSERT_TRUE(belowChip);
+        ASSERT_GT(lines.size(), 1u);
+        EXPECT_GE(belowChip->rect.rect.top(), lines.back().rect.bottom() - 0.5);
+        EXPECT_NEAR(belowChip->rect.rect.left(), lines.back().rect.left(), 0.5);
+    }
+
+    // A column is as wide as its widest group, so each case has a column of its own.
+    TEST(TableCaptureLayout, AGroupColumnFitsItsNameAndChip) {
+        using presentation::ProgressGridGroupColumn;
+        const QString wideChipTint = tableFixtureTint(0);
+        const QString longNameTint = tableFixtureTint(1);
+        presentation::ProgressGridGroup wideChip = tableFixtureGroup(QStringLiteral("X"), 0, 2, wideChipTint);
+        wideChip.rankText = QStringLiteral("Grandmaster Elite");
+        presentation::ProgressGridGroup longName = tableFixtureGroup(
+            QStringLiteral("Static Clicking"), 0, 2, longNameTint, ProgressGridGroupColumn::Subcategory);
+        longName.rankText = QStringLiteral("Gold");
+        const TableCaptureSnapshot snapshot = tableFixtureSnapshot(plainRowNames(2), {longName, wideChip});
+
+        const CaptureLayout layout = layoutTableCapture(snapshot, false);
+
+        const std::optional<QRectF> wideChipCell = tintedCell(snapshot, layout, wideChipTint);
+        const std::optional<RankChip> bigChip = chipHolding(layout, wideChip.rankText);
+        ASSERT_TRUE(wideChipCell && bigChip);
+        EXPECT_TRUE(wideChipCell->contains(bigChip->rect.rect));
+
+        const std::optional<QRectF> longNameCell = tintedCell(snapshot, layout, longNameTint);
+        const std::optional<RankChip> smallChip = chipHolding(layout, longName.rankText);
+        const std::optional<CaptureTextItem> name = textEqualTo(layout, longName.name);
+        ASSERT_TRUE(longNameCell && smallChip && name);
+        EXPECT_GE(smallChip->rect.rect.left(), name->rect.left() + advanceOf(snapshot, *name))
+            << "a column with room keeps the chip beside the name";
+        EXPECT_TRUE(longNameCell->contains(smallChip->rect.rect));
+    }
+
+    // Rows inside groups never carry a marker, so without an Uncategorized blocker no name keeps an empty slot.
+    TEST(TableCaptureLayout, ScenarioNamesReserveMarkerRoomOnlyWhenARowBlocks) {
+        const auto nameOffset = [](const TableCaptureSnapshot &snapshot) -> std::optional<qreal> {
+            const CaptureLayout layout = layoutTableCapture(snapshot, false);
+            const std::optional<CaptureTextItem> heading = textEqualTo(layout, snapshot.grid.headings.scenario);
+            const std::optional<CaptureTextItem> name = textEqualTo(layout, snapshot.grid.rows.at(1).name);
+            if (!heading || !name) return std::nullopt;
+            return name->rect.left() - heading->rect.left();
+        };
+
+        const std::optional<qreal> unmarked = nameOffset(plainTable(2));
+        TableCaptureSnapshot blocking = plainTable(2);
+        blocking.grid.rows.at(0).blocker = true;
+        const std::optional<qreal> marked = nameOffset(blocking);
+        ASSERT_TRUE(unmarked && marked);
+        EXPECT_NEAR(*unmarked, 0.0, 0.5) << "names start under the heading";
+        EXPECT_GT(*marked, 0.5) << "a blocking row keeps every name aligned after the marker";
+    }
+
+    // A group that blocks the next tier is marked once, after its rank chip, and the key explains the mark.
+    TEST(TableCaptureBars, ABlockingGroupIsMarkedAfterItsChipAndKeyed) {
+        for (const QString &name : {QStringLiteral("Everything"), longPhrase(QStringLiteral("Grouping"))}) {
+            TableCaptureSnapshot snapshot = plainTable(3);
+            presentation::ProgressGridGroup &group = snapshot.grid.groups.front();
+            group.name = name;
+            group.rankText = snapshot.grid.tiers.at(0).name;
+            group.blocker = true;
+            group.blockerColor = snapshot.grid.tiers.at(1).barColor;
+            group.blockerText = QStringLiteral("Holds back the next tier");
+
+            const CaptureLayout layout = layoutTableCapture(snapshot, false);
+
+            const std::optional<QRectF> cell = tintedCell(snapshot, layout, group.color);
+            const std::optional<RankChip> chip = chipHolding(layout, group.rankText);
+            const std::optional<QRectF> lastBand = bandOfRow(snapshot, layout, 2);
+            ASSERT_TRUE(cell && chip && lastBand) << name.toStdString();
+            const std::vector<CaptureGlyphItem> diamonds = glyphsIn(layout, *cell, CaptureGlyphItem::Kind::Diamond);
+            ASSERT_EQ(diamonds.size(), 1u) << name.toStdString();
+            const CaptureGlyphItem &diamond = diamonds.front();
+            EXPECT_EQ(diamond.color, QColor(group.blockerColor));
+            EXPECT_GE(diamond.rect.left(), chip->rect.rect.right());
+            EXPECT_NEAR(diamond.rect.center().y(), chip->rect.rect.center().y(), 0.5);
+            EXPECT_TRUE(cell->contains(diamond.rect)) << name.toStdString();
+
+            const KeyEntries key = keyBelow(snapshot, layout, *lastBand);
+            EXPECT_EQ(key.explanations, 1u);
+            EXPECT_EQ(key.diamonds, 1u);
+            const QRectF below(0.0, lastBand->bottom(), layout.size.width(), layout.size.height() - lastBand->bottom());
+            const std::vector<CaptureGlyphItem> sample = glyphsIn(layout, below, CaptureGlyphItem::Kind::Diamond);
+            ASSERT_EQ(sample.size(), 1u);
+            EXPECT_EQ(sample.front().color, QColor(group.blockerColor)) << "the key's sample takes the group's colour";
+        }
+    }
+
     TEST(TableCaptureBars, StatusTextNeverOverflowsItsBar) {
         TableCaptureSnapshot snapshot = plainTable(2, 2);
         snapshot.grid.tiers.at(0).name = QStringLiteral("A");

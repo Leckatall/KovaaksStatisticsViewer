@@ -627,43 +627,86 @@ Item {
             verify(tick === null || !tick.visible, "nothing completed, no tick")
         }
 
-        // the grid replaces the blocker list: a blocking row carries a marker in
-        // the next tier's colour that says what it blocks.
-        function test_blockingRowsAreMarkedInTheNextTierColour() {
+        function blockerMarkers(ws) {
+            return findAllPrefixed(ws, "progress").filter(function (item) {
+                return /^progress(Row|Group)_.*_blocker$/.test(item.objectName)
+            })
+        }
+
+        // A blocking group is marked once, on its own cell; an Uncategorized scenario,
+        // a requirement of its own, is marked on its row. Each marker is in the next tier's
+        // colour and says what it blocks.
+        function test_blockersAreMarkedOncePerRequirementInTheNextTierColour() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             wait(0)
-            const markers = findAllPrefixed(ws, "progressRow_").filter(function (item) {
-                return /_blocker$/.test(item.objectName)
-            })
-            compare(markers.length, 2, "one marker per blocking row")
+            compare(blockerMarkers(ws).length, 2, "one marker per blocking requirement")
 
-            const marker = find(ws, "progressRow_sc-1w4ts_blocker")
-            verify(marker !== null && marker.visible, "the blocking row is marked")
-            verify(String(marker.Accessible.name).indexOf("Blocks Platinum") !== -1,
-                   "the marker says which tier it blocks: " + marker.Accessible.name)
-            verify(String(marker.ToolTip.text).indexOf("Blocks Platinum") !== -1, "and its tooltip does too")
-            verify(Qt.colorEqual(marker.children[0].color, "#50dcdc"), "the marker uses the next tier's colour")
+            const group = find(ws, "progressGroup_sub-static_blocker")
+            verify(group !== null && group.visible, "the blocking group is marked")
+            verify(String(group.Accessible.name).indexOf("Blocks Platinum") !== -1,
+                   "the marker says which tier it blocks: " + group.Accessible.name)
+            verify(String(group.ToolTip.text).indexOf("Blocks Platinum") !== -1, "and its tooltip does too")
+            verify(Qt.colorEqual(group.children[0].color, "#50dcdc"), "the marker uses the next tier's colour")
+            compare(find(ws, "progressRow_sc-1w4ts_blocker"), null, "the group's own scenario is not marked")
+
+            const row = find(ws, "progressRow_sc-popcorn_blocker")
+            verify(row !== null && row.visible, "an Uncategorized blocker keeps its row marker")
             verify(find(ws, "progressRow_sc-pasu_blocker") === null, "a row that blocks nothing has no marker")
         }
 
-        function test_nextTierNamesItsBlockersAndMatchesTheMarkedRows() {
+        function test_aGroupMarkerFollowsItsRankChipInsideTheCell() {
             const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
             wait(0)
-            const markers = findAllPrefixed(ws, "progressRow_").filter(function (item) {
-                return /_blocker$/.test(item.objectName)
-            })
+            const cell = find(ws, "progressGroup_sub-static")
+            const chip = find(ws, "progressGroup_sub-static_rank")
+            const marker = find(ws, "progressGroup_sub-static_blocker")
+            verify(marker.mapToItem(cell, 0, 0).x >= chip.mapToItem(cell, chip.width, 0).x - 0.5,
+                   "the marker sits right of the chip")
+            fuzzyCompare(centreOf(marker, cell), centreOf(chip, cell), 0.5, "on the chip's line")
+            verify(marker.mapToItem(cell, marker.width, 0).x <= cell.width + 0.5, "inside the cell")
+        }
+        function centreOf(item, ancestor) { return item.mapToItem(ancestor, 0, item.height / 2).y }
+
+        // Switching to the Scenarios page and back hides the workspace for a while; a cell's
+        // chip and marker must not take that as their own visibility and stay hidden.
+        function test_aGroupKeepsItsChipAndMarkerAfterTheWorkspaceIsHiddenAndShown() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            wait(0)
+            ws.visible = false
+            wait(0)
+            ws.visible = true
+            wait(0)
+            const chip = find(ws, "progressGroup_sub-static_rank")
+            const marker = find(ws, "progressGroup_sub-static_blocker")
+            verify(chip !== null && chip.visible, "the rank chip is shown again")
+            verify(marker !== null && marker.visible, "the blocker marker is shown again")
+        }
+
+        function test_aGroupMarkerShowsItsTooltipOnHover() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            wait(0)
+            const marker = find(ws, "progressGroup_sub-static_blocker")
+            mouseMove(marker, marker.width / 2, marker.height / 2)
+            tryVerify(function () { return marker.ToolTip.visible }, 3000, "hovering the marker shows what it blocks")
+        }
+
+        function test_nextTierNamesItsBlockersAndMatchesTheMarkers() {
+            const ws = makeWorkspace(TestDoubles.trackingFixtureTrackable())
+            wait(0)
             const tier = find(ws, "summaryNextTier")
             const blockers = find(ws, "summaryNextTierBlockers")
             compare(tier.text, "Platinum")
-            compare(blockers.text, "(blocked by " + markers.length + " scenarios)")
+            compare(blockerMarkers(ws).length, 2)
+            compare(blockers.text, "(blocked by 1 group and 1 scenario)")
             verify(blockers.visible)
-            verify(String(tier.Accessible.description).indexOf("(blocked by 2 scenarios)") !== -1,
+            verify(String(tier.Accessible.description).indexOf("(blocked by 1 group and 1 scenario)") !== -1,
                    "the description includes the parenthesis: " + tier.Accessible.description)
         }
 
         function test_nextTierBlockersSingularAndNoNextTier() {
             const fx = TestDoubles.trackingFixtureTrackable()
             fx.nextTierBlockerCount = 1
+            fx.nextTierBlockerText = "(blocked by 1 scenario)"
             let ws = makeWorkspace(fx)
             compare(find(ws, "summaryNextTierBlockers").text, "(blocked by 1 scenario)")
 
@@ -672,6 +715,7 @@ Item {
             top.nextTier = "Highest tier attained"
             top.nextTierColor = ""
             top.nextTierBlockerCount = 0
+            top.nextTierBlockerText = ""
             ws = makeWorkspace(top)
             compare(find(ws, "summaryNextTier").text, "Highest tier attained")
             const none = find(ws, "summaryNextTierBlockers")
@@ -686,6 +730,7 @@ Item {
             none.nextTier = "Bronze"
             none.nextTierColor = "#cd7f32"
             none.nextTierBlockerCount = 4
+            none.nextTierBlockerText = "(blocked by 4 scenarios)"
             const ws = makeWorkspace(none)
             compare(find(ws, "summaryNextTier").text, "Bronze")
             compare(find(ws, "summaryNextTierBlockers").text, "(blocked by 4 scenarios)")
@@ -1135,6 +1180,154 @@ Item {
             verify(gold.mapToItem(cell, gold.width, 0).x <= cell.width, "the chip fits inside its group cell")
         }
 
+        // -- group cells adapt to width: chips move under names, names wrap, rows grow --
+
+        // The trackable fixture's grid, its groups adjusted by `edit`, laid out at `width`.
+        function layoutGrid(width, edit) {
+            const data = TestDoubles.trackingFixtureTrackable().progressGrid
+            if (edit) edit(data.groups)
+            const grid = createTemporaryObject(progressGridComponent, root, {grid: data, width: width})
+            verify(grid !== null, "the grid failed to instantiate")
+            wait(0)
+            return grid
+        }
+        function gridFind(grid, name) { return ItemLookup.findByObjectName(grid, name) }
+        function centreY(item, ancestor) { return item.mapToItem(ancestor, 0, item.height / 2).y }
+
+        // Rows inside groups never carry a marker, so a benchmark whose blockers are all groups
+        // keeps no empty slot in front of its scenario names.
+        function test_scenarioNamesReserveMarkerRoomOnlyWhenARowBlocks() {
+            const marked = layoutGrid(4000)
+            const data = TestDoubles.trackingFixtureTrackable().progressGrid
+            for (const row of data.rows) row.blocker = false
+            const unmarked = createTemporaryObject(progressGridComponent, root, {grid: data, width: 4000})
+            wait(0)
+
+            const name = gridFind(unmarked, "progressRow_sc-pasu_name")
+            fuzzyCompare(name.mapToItem(unmarked, 0, 0).x, unmarked.columns.scenario.x + unmarked.cellPadding, 0.5,
+                         "with no row marker, names start at the cell's padding")
+            verify(unmarked.columns.scenario.width < marked.columns.scenario.width,
+                   "and the Scenario column gives the marker's room back")
+            const markedName = gridFind(marked, "progressRow_sc-pasu_name")
+            verify(markedName.mapToItem(marked, 0, 0).x > marked.columns.scenario.x + marked.cellPadding + 0.5,
+                   "a blocking row keeps every name aligned after the marker")
+        }
+
+        // With room, a rank chip sits beside its name; short of room it moves under the name
+        // before the name itself wraps.
+        function test_aRankChipSitsBesideItsNameUntilSpaceRunsShort() {
+            const gold = function (groups) { groups[3].rankText = "Gold" } // cat-click
+            for (const roomy of [true, false]) {
+                const grid = layoutGrid(roomy ? 4000 : 0, gold)
+                const cell = gridFind(grid, "progressGroup_cat-click")
+                const name = gridFind(grid, "progressGroup_cat-click_name")
+                const chip = gridFind(grid, "progressGroup_cat-click_rank")
+                compare(grid.groupLayouts[3].lines.length, 1, "the name stays on one line")
+                verify(chip.mapToItem(cell, chip.width, 0).x <= cell.width + 0.5, "the chip stays inside the cell")
+                if (roomy) {
+                    verify(chip.mapToItem(cell, 0, 0).x >= name.mapToItem(cell, name.implicitWidth, 0).x - 0.5,
+                           "with room, the chip sits beside the name")
+                    fuzzyCompare(centreY(chip, cell), centreY(name, cell), 0.5, "on the name's line")
+                } else {
+                    verify(chip.mapToItem(cell, 0, 0).y >= name.mapToItem(cell, 0, name.height).y - 0.5,
+                           "short of room, the chip moves under the name")
+                    fuzzyCompare(chip.mapToItem(cell, 0, 0).x, name.mapToItem(cell, 0, 0).x, 0.5,
+                                 "and lines up with it")
+                }
+            }
+        }
+
+        // Short of width, group names wrap onto more lines before any scenario name gives way.
+        function test_groupNamesWrapBeforeScenarioNamesElide() {
+            const rename = function (groups) {
+                groups[3].name = "Clicking Benchmarks Of Many Words"   // cat-click
+                groups[1].name = "Static Clicking Scenarios"            // sub-static
+            }
+            const probe = layoutGrid(4000, rename)
+            const full = probe._measured
+            const tierCount = probe.tiers.length
+            // Every column at full width but the bar, which is already at its narrowest.
+            const tight = full.category + full.subcategory + full.scenario + full.pbDate + full.plays + full.next
+                          + tierCount * full.chunkMinimum + 2 * probe.barInset
+            const grid = layoutGrid(tight - 120, rename)
+
+            verify(!grid.overflowing, "the group columns alone make the grid fit")
+            fuzzyCompare(grid.columns.scenario.width, full.scenario, 0.5, "no scenario name elides")
+            verify(grid.columns.category.width + grid.columns.subcategory.width < full.category + full.subcategory,
+                   "the group columns gave the width")
+            verify(grid.groupLayouts[3].lines.length > 1 || grid.groupLayouts[1].lines.length > 1,
+                   "a group name wrapped")
+            for (const index of [1, 3])
+                compare(grid.groupLayouts[index].lines.join(" "), grid.groups[index].name, "no word is lost or broken")
+        }
+
+        function test_aGroupColumnNeverGetsNarrowerThanItsLongestWord() {
+            const grid = layoutGrid(0, function (groups) { groups[3].name = "Clicking Benchmarks Of Many Words" })
+            verify(grid.overflowing, "a grid with no room scrolls")
+            verify(grid.columns.category.width >= grid.longestWordWidth("Benchmarks") + 2 * grid.cellPadding - 0.5,
+                   "the column keeps its longest word whole")
+            for (const line of grid.groupLayouts[3].lines)
+                verify(grid.groups[3].name.indexOf(line) !== -1, "the line '" + line + "' is whole words")
+        }
+
+        function test_rowsGrowToFitTheirGroupAndValuesCentreInThem() {
+            // At its narrowest, sub-static's chip and marker move under its name.
+            const grid = layoutGrid(0, function (groups) { groups[1].rankText = "Unranked" })
+            verify(!grid.groupLayouts[1].chipBeside, "the fixture's chip has moved under the name")
+            const row = gridFind(grid, "progressRow_sc-1w4ts")
+            const cell = gridFind(grid, "progressGroup_sub-static")
+            verify(row.height > grid.rowHeight, "a one-row group with a chip line makes its row taller")
+            fuzzyCompare(cell.height, row.height, 0.5, "the group cell still spans exactly its row")
+            const next = gridFind(grid, "progressRow_sc-pasu")
+            fuzzyCompare(next.y, row.y + row.height, 0.5, "the next row starts where the taller one ends")
+            for (const value of ["personalBestDate", "playCount"])
+                fuzzyCompare(centreY(gridFind(grid, "progressRow_sc-1w4ts_" + value), row), row.height / 2, 0.5,
+                             value + " centres in the taller row")
+            compare(gridFind(grid, "progressRow_sc-popcorn").height, grid.rowHeight,
+                    "a one-line group without a chip never grows its row")
+        }
+
+        function test_groupContentCentresInItsFirstRowWhenItFits() {
+            const grid = layoutGrid(1200)
+            const cell = gridFind(grid, "progressGroup_cat-click")
+            const content = gridFind(grid, "progressGroup_cat-click_content")
+            const firstRow = gridFind(grid, "progressRow_sc-1w4ts")
+            fuzzyCompare(centreY(content, cell), firstRow.height / 2, 0.5, "level with the first scenario")
+        }
+
+        function test_aGroupNameIsDrawnAsTallAsTheGridMeasuredIt() {
+            const names = function (groups) {
+                groups[3].name = "Aaaaa"                 // cat-click: one line
+                // sub-static: a word per line at its narrowest, each word wider than the header
+                groups[1].name = "Bbbbbbbbbbbbbbb Ccccccccccccccc Ddddddddddddddd"
+            }
+            const grid = layoutGrid(0, names)
+            compare(grid.groupLayouts[1].lines.length, 3, "the fixture wraps to three lines")
+            for (const id of ["cat-click", "sub-static"]) {
+                const index = id === "cat-click" ? 3 : 1
+                const label = gridFind(grid, "progressGroup_" + id + "_name")
+                fuzzyCompare(label.implicitHeight, grid.groupLayouts[index].lines.length * grid.groupLineHeight, 1,
+                             id + " is drawn at its measured height")
+            }
+        }
+
+        function test_aBlockingGroupKeepsRoomForChipAndMarkerAtItsNarrowest() {
+            const grid = layoutGrid(0)
+            const cell = gridFind(grid, "progressGroup_sub-static")
+            const marker = gridFind(grid, "progressGroup_sub-static_blocker")
+            verify(marker.visible)
+            verify(marker.mapToItem(cell, marker.width, 0).x <= cell.width - grid.cellPadding + 0.5,
+                   "the marker stays inside the cell's padding")
+        }
+
+        function test_aGroupNameIsShownAsPlainText() {
+            const grid = layoutGrid(0, function (groups) { groups[1].name = "<b>Bbbbb</b> Ccccccccccc" })
+            const label = gridFind(grid, "progressGroup_sub-static_name")
+            compare(grid.groupLayouts[1].lines.length, 2)
+            compare(label.lineCount, 2, "the measured line break is drawn")
+            verify(label.text.indexOf("<b>Bbbbb</b>") !== -1, "the markup is shown as written")
+        }
+
         function test_noSubcategoryColumnWithoutSubcategories() {
             const fx = TestDoubles.trackingFixtureTrackable()
             fx.progressGrid.hasSubcategories = false
@@ -1380,9 +1573,13 @@ Item {
                 fuzzyCompare(name.mapToItem(grid, 0, 0).x,
                              grid.columns.scenario.x + grid.cellPadding + grid.markerSpace, 0.5, id + " name stays put")
             }
-            const blocker = ItemLookup.findByObjectName(grid, "progressRow_sc-1w4ts_blocker")
+            const blocker = ItemLookup.findByObjectName(grid, "progressRow_sc-popcorn_blocker")
             fuzzyCompare(blocker.mapToItem(grid, 0, 0).x, grid.columns.scenario.x + grid.cellPadding - 4, 0.5,
                          "the blocker marker stays beside its name")
+            const groupMarker = ItemLookup.findByObjectName(grid, "progressGroup_sub-static_blocker")
+            mouseMove(groupMarker, groupMarker.width / 2, groupMarker.height / 2)
+            tryVerify(function () { return groupMarker.ToolTip.visible }, 3000,
+                      "a group marker still shows its tooltip while the columns are pinned")
             // Group cells, including categories that span the Subcategory column.
             const flat = ItemLookup.findByObjectName(grid, "progressGroup_cat-track")
             const split = ItemLookup.findByObjectName(grid, "progressGroup_cat-click")

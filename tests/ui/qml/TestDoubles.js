@@ -206,10 +206,10 @@ function makeFakeTrackingVm(overrides) {
             attainedRank: "Attained rank", completedRank: "Completed rank", averageRank: "Average rank",
             totalPlaytime: "Total playtime", nextTier: "Next tier"
         }
+    // The wording is the C++ view model's (BlockerTextCountsTheBlockers); a fixture that
+    // shows the text sets it.
     if (vm.nextTierBlockerText === undefined)
-        vm.nextTierBlockerText = !vm.hasNextTier ? ""
-            : vm.nextTierBlockerCount === 1 ? "(blocked by 1 scenario)"
-            : "(blocked by " + vm.nextTierBlockerCount + " scenarios)"
+        vm.nextTierBlockerText = ""
     return vm
 }
 
@@ -325,6 +325,7 @@ function trackingFixtureTrackable() {
         nextTierColor: "#50dcdc",
         scenariosAtNextTier: 3,
         nextTierBlockerCount: 2,
+        nextTierBlockerText: "(blocked by 1 group and 1 scenario)",
         hasNextTier: true,
         scenarioCount: 9,
         rankHistory: makeFakeHistoryModel({
@@ -357,8 +358,7 @@ function trackingFixtureTrackable() {
                     entryId: "sc-1w4ts", name: "1w4ts", personalBestText: "812", personalBestDateText: "2026-08-14", playCountText: "37",
                     attainedTierText: "Gold", attainedTierColor: "#ffc828", fills: [1, 1, 1, 0.75],
                     nextTierText: "Platinum", nextTierColor: "#50dcdc", nextThresholdText: "900",
-                    barDescription: "Gold · 75% of the way to Platinum (812 / 900)",
-                    blocker: true, blockerColor: "#50dcdc", blockerText: "Blocks Platinum (needs 900)"
+                    barDescription: "Gold · 75% of the way to Platinum (812 / 900)"
                 }),
                 makeFakeProgressRow({
                     entryId: "sc-pasu", name: "Pasu Reload", personalBestText: "1,040.25", personalBestDateText: "2026-08-02",
@@ -376,7 +376,9 @@ function trackingFixtureTrackable() {
             ],
             groups: [
                 {column: "category", id: "", name: "Uncategorized", color: "", start: 0, span: 1, spansSubcategory: true},
-                {column: "subcategory", id: "sub-static", name: "Static", color: "#00A000", start: 1, span: 1, spansSubcategory: false},
+                {column: "subcategory", id: "sub-static", name: "Static", color: "#00A000", start: 1, span: 1, spansSubcategory: false,
+                 rankText: "Gold", rankColor: "#ffc828", rankBarColor: "#ffc828",
+                 blocker: true, blockerColor: "#50dcdc", blockerText: "Blocks Platinum (1w4ts needs 900)"},
                 {column: "subcategory", id: "sub-dynamic", name: "Dynamic", color: "#007000", start: 2, span: 1, spansSubcategory: false},
                 {column: "category", id: "cat-click", name: "Clicking", color: "#00A000", start: 1, span: 2, spansSubcategory: false},
                 {column: "category", id: "cat-track", name: "Tracking", color: "#9c27b0", start: 3, span: 1, spansSubcategory: true}

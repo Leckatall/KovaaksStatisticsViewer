@@ -60,11 +60,12 @@ namespace ksv::presentation {
         Q_PROPERTY(double completedRankPosition READ completedRankPosition NOTIFY changed)
         Q_PROPERTY(QString totalPlaytime READ totalPlaytime NOTIFY changed)
         Q_PROPERTY(int scenariosAtNextTier READ scenariosAtNextTier NOTIFY changed)
-        // Scenarios that keep the benchmark from nextTier: exactly the rows the progress grid marks as
-        // blockers. hasNextTier is false when the top tier is attained (or the benchmark is not trackable).
+        // Requirements that keep the benchmark from nextTier: exactly the rows and group cells the
+        // progress grid marks as blockers. hasNextTier is false when the top tier is attained (or the
+        // benchmark is not trackable).
         Q_PROPERTY(int nextTierBlockerCount READ nextTierBlockerCount NOTIFY changed)
         Q_PROPERTY(bool hasNextTier READ hasNextTier NOTIFY changed)
-        // "(blocked by N scenarios)", or "" without a next tier.
+        // "(blocked by N groups and M scenarios)", or "" without a next tier.
         Q_PROPERTY(QString nextTierBlockerText READ nextTierBlockerText NOTIFY changed)
         // Keys attainedRank, completedRank, averageRank, totalPlaytime, nextTier.
         Q_PROPERTY(QVariantMap summaryCaptions READ summaryCaptions CONSTANT)

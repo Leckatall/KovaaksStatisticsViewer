@@ -63,6 +63,9 @@ namespace ksv::presentation {
         QString rankText;
         QString rankColor;
         QString rankBarColor;
+        bool blocker = false;
+        QString blockerColor;
+        QString blockerText;
     };
 
     struct ProgressGridHeadings {

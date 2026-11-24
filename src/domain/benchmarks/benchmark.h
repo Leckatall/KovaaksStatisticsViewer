@@ -18,11 +18,18 @@
 #include "scenario_evaluation.h"
 
 namespace ksv::domain {
-    struct RankBlocker {
+    struct RankBlockerScenario {
         BenchmarkScenarioId entryId;
-        std::optional<GroupId> group;
         double required = 0.0;
         std::optional<double> current;
+    };
+
+    // One unmet rank requirement. Any one of a group's scenarios attaining the tier would meet it.
+    struct RankBlocker {
+        /// Empty for an Uncategorized scenario, which is a requirement on its own.
+        std::optional<GroupId> group;
+        /// In definition order; exactly one without a group.
+        std::vector<RankBlockerScenario> scenarios;
     };
 
     struct NormalizedPersonalBest {

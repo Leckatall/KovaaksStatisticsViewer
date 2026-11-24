@@ -32,6 +32,23 @@ namespace ksv::presentation {
             return QObject::tr("%1h %2m").arg(total / 3600).arg(total % 3600 / 60);
         }
 
+        // "(blocked by 2 groups and 1 scenario)": a group blocks as one requirement, and each
+        // Uncategorized scenario is a requirement of its own.
+        QString nextTierBlockerSummary(const std::vector<domain::RankBlocker> &blockers) {
+            const auto groups = std::ranges::count_if(blockers, [](const auto &blocker) {
+                return blocker.group.has_value();
+            });
+            const auto scenarios = static_cast<int>(blockers.size()) - static_cast<int>(groups);
+            // The app ships no translations, so a bare "%n group(s)" would show its "(s)" verbatim.
+            const QString groupPart =
+                groups == 1 ? QObject::tr("1 group") : QObject::tr("%n groups", nullptr, static_cast<int>(groups));
+            const QString scenarioPart =
+                scenarios == 1 ? QObject::tr("1 scenario") : QObject::tr("%n scenarios", nullptr, scenarios);
+            if (groups == 0) return QObject::tr("(blocked by %1)").arg(scenarioPart);
+            if (scenarios == 0) return QObject::tr("(blocked by %1)").arg(groupPart);
+            return QObject::tr("(blocked by %1 and %2)").arg(groupPart, scenarioPart);
+        }
+
         QString classificationString(const application::BenchmarkChoiceClassification classification) {
             switch (classification) {
                 case application::BenchmarkChoiceClassification::Trackable: return QStringLiteral("trackable");
@@ -265,12 +282,7 @@ namespace ksv::presentation {
         m_scenariosAtNextTier = benchmark ? benchmark->scenariosAtNextTier() : 0;
         m_hasNextTier = trackable && benchmark && benchmark->nextTier().has_value();
         m_nextTierBlockerCount = m_hasNextTier ? static_cast<int>(benchmark->nextTierBlockers().size()) : 0;
-        // Ranks are attained per group, so this counts the rows marked as blockers, not the
-        // scenarios already at the next tier.
-        m_nextTierBlockerText = !m_hasNextTier ? QString()
-                                : m_nextTierBlockerCount == 1
-                                    ? QObject::tr("(blocked by 1 scenario)")
-                                    : QObject::tr("(blocked by %1 scenarios)").arg(m_nextTierBlockerCount);
+        m_nextTierBlockerText = m_hasNextTier ? nextTierBlockerSummary(benchmark->nextTierBlockers()) : QString();
         m_scenarioCount = benchmark ? static_cast<int>(benchmark->scenarios().size()) : 0;
 
         m_rankPresent = trackable && benchmark != nullptr;

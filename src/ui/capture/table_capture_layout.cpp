@@ -74,6 +74,8 @@ namespace ksv::ui {
         constexpr qreal kChipPadding = 6.0;
         constexpr qreal kChipSpacing = 6.0;
         constexpr qreal kChipExtraHeight = 4.0;
+        // Between a group name's last line and its chip line; the app's groupLineGap.
+        constexpr qreal kGroupLineGap = 4.0;
         constexpr qreal kChipFillAlpha = 0.28;
         constexpr qreal kSectionGap = 10.0;
         constexpr qreal kSummaryCellGap = 24.0;
@@ -108,6 +110,7 @@ namespace ksv::ui {
 
         struct GroupText {
             QStringList lines;
+            // Only a one-line name that leaves room for the chip has it beside; otherwise the chip has a line below.
             bool chipBesideName = false;
         };
 
@@ -121,6 +124,8 @@ namespace ksv::ui {
             std::vector<GroupText> groupTexts;
             // One more entry than there are rows; the last is the bottom of the last row.
             std::vector<qreal> rowTops;
+            // In front of every scenario name, so names align; none when no row shows a blocker marker.
+            qreal markerSpace = 0.0;
 
             [[nodiscard]] qreal width() const { return next.right(); }
             [[nodiscard]] qreal height() const { return rowTops.back(); }
@@ -148,6 +153,13 @@ namespace ksv::ui {
 
         qreal chipHeight(const Fonts &fonts) {
             return lineHeight(fonts.small) + kChipExtraHeight;
+        }
+
+        // The rank chip and, for a blocking group, its marker after it; they never split.
+        qreal chipUnitWidth(const ProgressGridGroup &group, const Fonts &fonts) {
+            if (group.rankText.isEmpty()) return 0.0;
+            const qreal chip = chipWidth(fonts, group.rankText);
+            return group.blocker ? chip + kChipSpacing + kDiamondSize : chip;
         }
 
         bool isStatusRow(const ProgressGridScenarioRow &row) {
@@ -232,11 +244,10 @@ namespace ksv::ui {
         }
 
         qreal groupInnerWidth(const ProgressGridGroup &group, const Fonts &fonts) {
-            const qreal name = measuredWidth(fonts.bold, group.name);
-            const qreal word = longestWordWidth(fonts.bold, group.name);
-            if (group.rankText.isEmpty()) return cappedWidth(name, word);
-            const qreal chip = chipWidth(fonts, group.rankText);
-            return cappedWidth(name + kChipSpacing + chip, std::max(word, chip));
+            const qreal chip = chipUnitWidth(group, fonts);
+            const qreal beside = chip > 0.0 ? kChipSpacing + chip : 0.0;
+            return cappedWidth(measuredWidth(fonts.bold, group.name) + beside,
+                               std::max(longestWordWidth(fonts.bold, group.name), chip));
         }
 
         bool spansBothColumns(const ProgressGridContent &grid, const ProgressGridGroup &group) {
@@ -275,8 +286,10 @@ namespace ksv::ui {
                                            : measuredWidth(fonts.body, row.nextTierText) + kNextPartGap;
                 nextInner = std::max(nextInner, tierPart + measuredWidth(fonts.body, row.nextThresholdText));
             }
+            metrics.markerSpace =
+                std::ranges::any_of(grid.rows, &ProgressGridScenarioRow::blocker) ? kMarkerSpace : 0.0;
             const qreal scenarioInner = std::max(measuredWidth(fonts.bold, grid.headings.scenario),
-                                                 kMarkerSpace + cappedWidth(nameWidth, nameWord));
+                                                 metrics.markerSpace + cappedWidth(nameWidth, nameWord));
 
             const std::vector<qreal> chunkSizes = chunkWidths(grid, fonts);
             const qreal barWidth = chunkSizes.empty()
@@ -318,15 +331,16 @@ namespace ksv::ui {
 
         qreal groupContentHeight(const ProgressGridGroup &group, const GroupText &text, const Fonts &fonts) {
             const qreal lines = static_cast<qreal>(text.lines.size()) * lineHeight(fonts.bold);
-            const bool chipBelowName = !group.rankText.isEmpty() && !text.chipBesideName;
-            return lines + (chipBelowName ? chipHeight(fonts) : 0.0);
+            if (group.rankText.isEmpty()) return lines;
+            if (text.chipBesideName) return std::max(lines, chipHeight(fonts));
+            return lines + kGroupLineGap + chipHeight(fonts);
         }
 
         // A group's cell can outgrow its rows. Only ever raising rows means a group settled here stays settled, so
         // nested category and subcategory groups need no ordering.
         void measureRows(const ProgressGridContent &grid, TableMetrics &metrics) {
             const Fonts &fonts = metrics.fonts;
-            const qreal nameWidth = metrics.scenario.innerWidth() - kMarkerSpace;
+            const qreal nameWidth = metrics.scenario.innerWidth() - metrics.markerSpace;
 
             std::vector<qreal> heights;
             for (const ProgressGridScenarioRow &row : grid.rows) {
@@ -338,10 +352,10 @@ namespace ksv::ui {
 
             for (const ProgressGridGroup &group : grid.groups) {
                 const qreal available = groupColumn(grid, group, metrics).innerWidth();
-                GroupText text{wrappedLines(group.name, fonts.bold, available, kWrapMode), false};
-                text.chipBesideName = !group.rankText.isEmpty() && text.lines.size() == 1 &&
-                                      measuredWidth(fonts.bold, group.name) + kChipSpacing +
-                                      chipWidth(fonts, group.rankText) <= available;
+                GroupText text{wrappedLines(group.name, fonts.bold, available, kWrapMode)};
+                const qreal chip = chipUnitWidth(group, fonts);
+                text.chipBesideName = chip > 0.0 && text.lines.size() == 1 &&
+                                      measuredWidth(fonts.bold, group.name) + kChipSpacing + chip <= available;
 
                 const auto first = heights.begin() + group.start;
                 const auto last = first + group.span;
@@ -607,9 +621,13 @@ namespace ksv::ui {
             return row.blockerColor.isEmpty() ? appearance.highlight : QColor(row.blockerColor);
         }
 
+        QColor groupBlockerColor(const ProgressGridGroup &group, const CaptureAppearance &appearance) {
+            return group.blockerColor.isEmpty() ? appearance.highlight : QColor(group.blockerColor);
+        }
+
         void appendBlocker(std::vector<CaptureItem> &items, const ProgressGridScenarioRow &row,
                            const CaptureAppearance &appearance, const TableMetrics &metrics, const QRectF &band) {
-            const qreal centreX = metrics.scenario.innerLeft() - kDiamondCentreInset + kMarkerSpace / 2.0;
+            const qreal centreX = metrics.scenario.innerLeft() - kDiamondCentreInset + metrics.markerSpace / 2.0;
             const QRectF rect(centreX - kDiamondSize / 2.0, band.center().y() - kDiamondSize / 2.0, kDiamondSize,
                               kDiamondSize);
             items.emplace_back(CaptureGlyphItem{CaptureGlyphItem::Kind::Diamond, rect, blockerColor(row, appearance),
@@ -630,8 +648,8 @@ namespace ksv::ui {
             }
 
             const qreal lineSize = lineHeight(metrics.fonts.body);
-            const qreal nameLeft = metrics.scenario.innerLeft() + kMarkerSpace;
-            const qreal nameWidth = metrics.scenario.innerWidth() - kMarkerSpace;
+            const qreal nameLeft = metrics.scenario.innerLeft() + metrics.markerSpace;
+            const qreal nameWidth = metrics.scenario.innerWidth() - metrics.markerSpace;
             qreal lineTop = band.top() + (band.height() - static_cast<qreal>(nameLines.size()) * lineSize) / 2.0;
             for (const QString &line : nameLines) {
                 appendText(items, QRectF(nameLeft, lineTop, nameWidth, lineSize), line, CaptureTextRole::Body,
@@ -683,20 +701,30 @@ namespace ksv::ui {
             const qreal firstRowHeight = metrics.rowTops[group.start + 1] - top;
             const qreal contentHeight = groupContentHeight(group, text, fonts);
             const qreal lineSize = lineHeight(fonts.bold);
-            qreal y = top + std::max(kCellVerticalPadding, (firstRowHeight - contentHeight) / 2.0);
+            const qreal contentTop = top + std::max(kCellVerticalPadding, (firstRowHeight - contentHeight) / 2.0);
+            // Beside the chip, the one name line centres on the shared line, as the app's grid aligns them.
+            qreal y = text.chipBesideName ? contentTop + (contentHeight - lineSize) / 2.0 : contentTop;
             for (const QString &line : text.lines) {
                 appendText(items, QRectF(column.innerLeft(), y, column.innerWidth(), lineSize), line,
                            CaptureTextRole::BodyBold, appearance.text, kLeftAligned);
                 y += lineSize;
             }
 
+            // A blocking group always has a chip: blockers exist only for trackable benchmarks, where every group
+            // with an id is at least "Unranked".
             if (group.rankText.isEmpty()) return;
-            if (text.chipBesideName) {
-                const qreal chipLeft = column.innerLeft() + measuredWidth(fonts.bold, group.name) + kChipSpacing;
-                appendChip(items, group, appearance, fonts, QPointF(chipLeft, y - (lineSize + chipHeight(fonts)) / 2.0));
-            } else {
-                appendChip(items, group, appearance, fonts, QPointF(column.innerLeft(), y));
-            }
+            const qreal chipLeft = text.chipBesideName
+                                       ? column.innerLeft() + measuredWidth(fonts.bold, group.name) + kChipSpacing
+                                       : column.innerLeft();
+            const qreal chipTop = text.chipBesideName ? contentTop + (contentHeight - chipHeight(fonts)) / 2.0
+                                                      : y + kGroupLineGap;
+            appendChip(items, group, appearance, fonts, QPointF(chipLeft, chipTop));
+            if (!group.blocker) return;
+            const qreal diamondLeft = chipLeft + chipWidth(fonts, group.rankText) + kChipSpacing;
+            const qreal diamondTop = chipTop + (chipHeight(fonts) - kDiamondSize) / 2.0;
+            items.emplace_back(CaptureGlyphItem{CaptureGlyphItem::Kind::Diamond,
+                                                QRectF(diamondLeft, diamondTop, kDiamondSize, kDiamondSize),
+                                                groupBlockerColor(group, appearance), QColor(), 0.0});
         }
 
         // A self-contained block of the page, in its own coordinates; empty when it has nothing to show.
@@ -739,7 +767,8 @@ namespace ksv::ui {
                 })) {
                 entries.push_back({KeyMark::RecentAverage, QObject::tr("Recent average")});
             }
-            if (anyRow([](const ProgressGridScenarioRow &row) { return row.blocker; })) {
+            if (anyRow([](const ProgressGridScenarioRow &row) { return row.blocker; }) ||
+                std::ranges::any_of(grid.groups, &ProgressGridGroup::blocker)) {
                 entries.push_back({KeyMark::Blocker, QObject::tr("Holding back the next tier")});
             }
             if (hasChunks && anyRow([](const ProgressGridScenarioRow &row) {
@@ -748,6 +777,14 @@ namespace ksv::ui {
                 entries.push_back({KeyMark::AboveTop, QObject::tr("Above the top tier")});
             }
             return entries;
+        }
+
+        // Every marker of one real snapshot is in the next tier's colour, so the first one speaks for them all.
+        QColor keyBlockerColor(const ProgressGridContent &grid, const CaptureAppearance &appearance) {
+            const auto row = std::ranges::find_if(grid.rows, &ProgressGridScenarioRow::blocker);
+            if (row != grid.rows.end()) return blockerColor(*row, appearance);
+            const auto group = std::ranges::find_if(grid.groups, &ProgressGridGroup::blocker);
+            return group != grid.groups.end() ? groupBlockerColor(*group, appearance) : appearance.highlight;
         }
 
         void appendKeySample(std::vector<CaptureItem> &items, const KeyMark mark, const QRectF &slot,
@@ -759,12 +796,8 @@ namespace ksv::ui {
                     appendMarkerTick(items, appearance, centre.x(), slot.top(), slot.height());
                     break;
                 case KeyMark::Blocker:
-                    // keyEntries adds this mark only when a row blocks.
-                    items.emplace_back(CaptureGlyphItem{
-                        CaptureGlyphItem::Kind::Diamond, slot,
-                        blockerColor(*std::ranges::find_if(snapshot.grid.rows, &ProgressGridScenarioRow::blocker),
-                                     appearance),
-                        QColor(), 0.0});
+                    items.emplace_back(CaptureGlyphItem{CaptureGlyphItem::Kind::Diamond, slot,
+                                                        keyBlockerColor(snapshot.grid, appearance), QColor(), 0.0});
                     break;
                 case KeyMark::AboveTop: {
                     const QRectF rect(centre.x() - kChevronWidth / 2.0, centre.y() - kChevronHeight / 2.0,

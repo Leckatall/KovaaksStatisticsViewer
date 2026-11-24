@@ -307,14 +307,19 @@ TEST(BenchmarkTrackingViewModel, NonTrackableBenchmarkHasNoNextTierAndNoBlockers
     EXPECT_EQ(vm.nextTierBlockerCount(), 0);
 }
 
-TEST(BenchmarkTrackingViewModel, BlockerCountEqualsTheRowsTheGridMarks) {
+TEST(BenchmarkTrackingViewModel, BlockerCountEqualsTheRowsAndGroupsTheGridMarks) {
     auto fake = fakeWith(makeTrackableSnapshot());
     BenchmarkTrackingViewModel vm{fake};
 
-    int marked = 0;
+    int rows = 0;
     for (const auto &row: vm.progressGrid()->rows())
-        if (row.toMap().value("blocker").toBool()) ++marked;
-    EXPECT_EQ(vm.nextTierBlockerCount(), marked);
+        if (row.toMap().value("blocker").toBool()) ++rows;
+    int groups = 0;
+    for (const auto &group: vm.progressGrid()->groups())
+        if (group.toMap().value("blocker").toBool()) ++groups;
+    EXPECT_EQ(rows, 1);
+    EXPECT_EQ(groups, 1);
+    EXPECT_EQ(vm.nextTierBlockerCount(), rows + groups);
 }
 
 TEST(BenchmarkTrackingViewModel, ProgressGridListsEveryScenarioAndMarksTheBlockers) {
@@ -332,8 +337,15 @@ TEST(BenchmarkTrackingViewModel, ProgressGridListsEveryScenarioAndMarksTheBlocke
 
     const auto wall = rows.at(1).toMap();
     EXPECT_EQ(wall.value("name").toString(), "1w6ts");
-    EXPECT_TRUE(wall.value("blocker").toBool());
+    EXPECT_FALSE(wall.value("blocker").toBool()) << "its category carries the marker";
     EXPECT_TRUE(wall.value("personalBestText").toString().contains("800"));
+
+    QVariantMap clicking;
+    for (const auto &group: vm.progressGrid()->groups())
+        if (group.toMap().value("id").toString() == "c1") clicking = group.toMap();
+    EXPECT_TRUE(clicking.value("blocker").toBool());
+    EXPECT_EQ(clicking.value("blockerText").toString(),
+              QString("Blocks Gold (1w6ts needs %1)").arg(formatBenchmarkNumber(1000.0)));
 }
 
 TEST(BenchmarkTrackingViewModel, ReadyToUnavailableClearsSummaryGridAndGraphsBeforeNotifying) {
@@ -461,14 +473,23 @@ TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
 }
 
 TEST(BenchmarkTrackingSummaryTexts, BlockerTextCountsTheBlockers) {
-    const auto textFor = [](const std::size_t count, const std::size_t played) {
+    // `groups` categories of two unplayed scenarios each, after `scenarios` Uncategorized ones.
+    const auto textFor = [](const std::size_t scenarios, const std::size_t played, const std::size_t groups = 0) {
         auto fixture = makeUniformFixture(3, {});
         fixture.definition.uncategorized.clear();
-        for (std::size_t i = 0; i < count; ++i) {
+        for (std::size_t i = 0; i < scenarios; ++i) {
             const auto id = std::to_string(i);
             fixture.definition.uncategorized.push_back(
                 {BenchmarkScenarioId{id}, "Scenario " + id, {id}, standardThresholds(1, 2, 3)});
             if (i < played) fixture.runs.push_back(runOn(ymd(2024, 3, 4), id, 3));
+        }
+        for (std::size_t g = 0; g < groups; ++g) {
+            Category category{GroupId{"g" + std::to_string(g)}, "Group " + std::to_string(g), {}, {}, {}};
+            for (const char *suffix: {"a", "b"}) {
+                const auto id = "g" + std::to_string(g) + suffix;
+                category.scenarios.push_back({BenchmarkScenarioId{id}, id, {id}, standardThresholds(1, 2, 3)});
+            }
+            fixture.definition.categories.push_back(std::move(category));
         }
         BenchmarkTrackingViewModel vm{fakeWith(snapshotFor(fixture))};
         return vm.property("nextTierBlockerText").toString();
@@ -477,6 +498,10 @@ TEST(BenchmarkTrackingSummaryTexts, BlockerTextCountsTheBlockers) {
     EXPECT_EQ(textFor(1, 0), "(blocked by 1 scenario)");
     EXPECT_EQ(textFor(3, 0), "(blocked by 3 scenarios)");
     EXPECT_TRUE(textFor(2, 2).isEmpty());
+    EXPECT_EQ(textFor(0, 0, 1), "(blocked by 1 group)");
+    EXPECT_EQ(textFor(0, 0, 2), "(blocked by 2 groups)");
+    EXPECT_EQ(textFor(1, 0, 1), "(blocked by 1 group and 1 scenario)");
+    EXPECT_EQ(textFor(3, 0, 2), "(blocked by 2 groups and 3 scenarios)");
 }
 
 TEST(BenchmarkTrackingSummaryTexts, PublishesEveryCaption) {

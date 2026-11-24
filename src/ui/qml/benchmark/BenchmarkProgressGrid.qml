@@ -12,8 +12,9 @@ import KovaaksStatsViewer
 // over every row, so values line up under their headings. The tier headers show only
 // their names, in the tier's readable colour, so a chunk need be no wider than the
 // widest tier name. When the widths do not fit, the chunks first give up their padding
-// around that name, then the scenario names elide, and the grid then scrolls
-// horizontally inside its own frame. The end of the bar matters most, so an
+// around that name, then the Category and Subcategory columns narrow by wrapping group
+// names onto more lines (rows grow to fit), then the scenario names elide, and the grid
+// then scrolls horizontally inside its own frame. The end of the bar matters most, so an
 // overflowing grid opens scrolled to its right end, and the identifying columns
 // (Category, Subcategory, Scenario) stay pinned at the left while the rest scrolls
 // under them.
@@ -35,7 +36,9 @@ Item {
     readonly property real barInset: 8
     readonly property real barHeight: 16
     // Room in front of every scenario name for the blocker marker, so names align.
-    readonly property real markerSpace: 16
+    // Only reserved while some row shows a marker: rows inside groups never do, so most
+    // benchmarks would otherwise carry an empty slot that the group columns could use.
+    readonly property real markerSpace: rows.some(function (row) { return row.blocker === true }) ? 16 : 0
     readonly property real maximumChunkWidth: 160
     // Room on each side of the widest tier name in a comfortable chunk; it is the
     // first thing given up when the grid is short of width.
@@ -49,8 +52,8 @@ Item {
     // right end and forgets the user's own scroll position.
     property string benchmarkKey
 
-    readonly property real tableHeight: headerHeight + rows.length * rowHeight
     readonly property var columns: _layoutColumns(width, _measured)
+    readonly property real tableHeight: rowTops[rowTops.length - 1]
     readonly property bool overflowing: columns.total > width + 0.5
     readonly property real barX: columns.progress.x + barInset
     readonly property real barWidth: Math.max(0, columns.progress.width - 2 * barInset)
@@ -120,13 +123,49 @@ Item {
         return tiers.length > 0 ? Math.round(index * barWidth / tiers.length) : 0
     }
 
-    // --- group rank chips ---------------------------------------------------------
+    // --- group cells: the rank chip beside a one-line name, else on a line of its own --
+    // The cells read these sizes rather than repeating them, so what is measured here is
+    // what they draw.
     readonly property real rankChipPadding: 6
     readonly property real rankChipSpacing: 6
-    // The width a group's rank chip adds beside its name (none without a rank).
-    function rankChipSpace(group) {
+    readonly property real groupLineHeight: Math.ceil(boldMetrics.height)
+    readonly property real groupChipHeight: Math.ceil(chipMetrics.height) + 4
+    readonly property real groupLineGap: 4
+    readonly property real groupVerticalPadding: 4
+    // The box a blocking group's marker sits in, after its chip; the capture's diamond size.
+    readonly property real groupMarkerSize: 13
+
+    // The chip's width, the blocker marker included; none without a rank.
+    function groupChipUnitWidth(group) {
         const text = String(group.rankText || "")
-        return text.length > 0 ? rankChipSpacing + 2 * rankChipPadding + chipMetrics.advanceWidth(text) + 2 : 0
+        if (text.length === 0) return 0
+        const chip = 2 * rankChipPadding + chipMetrics.advanceWidth(text) + 2
+        return group.blocker === true ? chip + rankChipSpacing + groupMarkerSize : chip
+    }
+    function _words(text) {
+        return String(text).split(/\s+/).filter(function (word) { return word.length > 0 })
+    }
+    function longestWordWidth(text) {
+        let widest = 0
+        for (const word of _words(text)) widest = Math.max(widest, boldMetrics.advanceWidth(word))
+        return widest
+    }
+    // Greedy word wrap in the bold font. Each candidate line is measured whole, as the
+    // Label shapes it.
+    function wrapGroupName(text, width) {
+        const lines = []
+        let line = ""
+        for (const word of _words(text)) {
+            const candidate = line.length > 0 ? line + " " + word : word
+            if (line.length > 0 && boldMetrics.advanceWidth(candidate) > width) {
+                lines.push(line)
+                line = word
+            } else {
+                line = candidate
+            }
+        }
+        if (line.length > 0) lines.push(line)
+        return lines
     }
     Label {
         id: chipProbe
@@ -176,13 +215,26 @@ Item {
             next: boldMetrics.advanceWidth(headers.next)
         }
         const scenarioHeader = widths.scenario
+        // A group column is comfortable with its name and chip side by side. It narrows,
+        // first dropping the chip below the name and then wrapping the name, down to its
+        // widest single word or chip, never further.
+        const least = {category: widths.category, subcategory: widths.subcategory}
         // Widest spanning category cell; it may use the Subcategory column's width too.
         let spanning = 0
+        let spanningLeast = 0
         for (const group of groups) {
             const key = String(group.column)
-            const need = boldMetrics.advanceWidth(String(group.name)) + rankChipSpace(group)
-            if (spansSubcategory(group)) spanning = Math.max(spanning, need)
-            else widths[key] = Math.max(widths[key], need)
+            const name = String(group.name)
+            const chip = groupChipUnitWidth(group)
+            const need = boldMetrics.advanceWidth(name) + (chip > 0 ? rankChipSpacing + chip : 0)
+            const atLeast = Math.max(longestWordWidth(name), chip)
+            if (spansSubcategory(group)) {
+                spanning = Math.max(spanning, need)
+                spanningLeast = Math.max(spanningLeast, atLeast)
+            } else {
+                widths[key] = Math.max(widths[key], need)
+                least[key] = Math.max(least[key], atLeast)
+            }
         }
         for (const row of rows) {
             widths.scenario = Math.max(widths.scenario, markerSpace + metrics.advanceWidth(String(row.name)))
@@ -193,6 +245,11 @@ Item {
         for (const key in widths) widths[key] = Math.ceil(widths[key] + 2 * cellPadding)
         if (spanning > 0)
             widths.category = Math.max(widths.category, Math.ceil(spanning + 2 * cellPadding) - widths.subcategory)
+        widths.categoryMinimum = Math.ceil(least.category + 2 * cellPadding)
+        widths.subcategoryMinimum = hasSubcategories ? Math.ceil(least.subcategory + 2 * cellPadding) : 0
+        // Category and Subcategory together never get narrower than a spanning cell's least.
+        widths.groupsMinimum = Math.max(widths.categoryMinimum + widths.subcategoryMinimum,
+                                        spanningLeast > 0 ? Math.ceil(spanningLeast + 2 * cellPadding) : 0)
         // A tier header shows only its name: a chunk is comfortable with some padding
         // around the widest name, and never narrower than that name.
         let tierName = 0
@@ -207,22 +264,37 @@ Item {
     // Every column is as wide as its widest value; the bar takes the remaining width,
     // between one comfortable chunk per tier and a cap that keeps it readable on very
     // wide windows. Too narrow: the chunks give up their padding around the tier names
-    // first (down to the widest name), then the scenario names give way (eliding),
-    // then the grid scrolls.
+    // first (down to the widest name), then Category and Subcategory narrow (rank chips
+    // move under their names, then names wrap), then the scenario names give way
+    // (eliding), then the grid scrolls.
     function _layoutColumns(totalWidth, measured) {
         const count = Math.max(1, tiers.length)
-        const category = measured.category
-        const subcategory = hasSubcategories ? measured.subcategory : 0
+        let category = measured.category
+        let subcategory = hasSubcategories ? measured.subcategory : 0
         let scenario = measured.scenario
         const progressMinimum = count * measured.chunkMinimum + 2 * barInset
         const progressComfortable = count * measured.chunk + 2 * barInset
         const progressMaximum = count * Math.max(measured.chunk, maximumChunkWidth) + 2 * barInset
-        const fixed = category + subcategory + scenario + measured.pbDate + measured.plays + measured.next
+        const others = measured.pbDate + measured.plays + measured.next
+        const fixed = category + subcategory + scenario + others
         let progress = Math.min(progressMaximum, Math.max(progressComfortable, totalWidth - fixed))
         let excess = fixed + progress - totalWidth
         if (excess > 0)
             progress -= Math.min(excess, progress - progressMinimum)
-        excess = fixed + progress - totalWidth
+        excess = category + subcategory + scenario + others + progress - totalWidth
+        if (excess > 0) {
+            // Each column gives in proportion to how far it is above its own minimum, so
+            // neither goes below it, and together they keep a spanning cell's least.
+            const categorySlack = Math.max(0, category - measured.categoryMinimum)
+            const subcategorySlack = Math.max(0, subcategory - measured.subcategoryMinimum)
+            const slack = categorySlack + subcategorySlack
+            const take = Math.min(excess, slack, Math.max(0, category + subcategory - measured.groupsMinimum))
+            if (take > 0) {
+                category -= take * categorySlack / slack
+                subcategory -= take * subcategorySlack / slack
+            }
+        }
+        excess = category + subcategory + scenario + others + progress - totalWidth
         if (excess > 0)
             scenario -= Math.min(excess, Math.max(0, scenario - measured.scenarioMinimum))
 
@@ -241,6 +313,52 @@ Item {
         place("next", measured.next)
         cols.total = x
         return cols
+    }
+
+    // Per group, in `groups` order: the name's lines at its cell's width, whether the chip
+    // sits beside a one-line name (only when both fit) rather than on a line of its own,
+    // and the content's height, padding excluded.
+    readonly property var groupLayouts: {
+        // advanceWidth() is a call, not a property: read the fonts so a font change
+        // re-wraps.
+        void boldMetrics.font
+        void chipMetrics.font
+        const layouts = []
+        for (const group of groups) {
+            const width = spansSubcategory(group) ? columns.category.width + columns.subcategory.width
+                                                  : columns[String(group.column)].width
+            const inner = Math.max(0, width - 2 * cellPadding)
+            const name = String(group.name)
+            const chip = groupChipUnitWidth(group)
+            if (chip > 0 && boldMetrics.advanceWidth(name) + rankChipSpacing + chip <= inner) {
+                layouts.push({lines: [name], chipBeside: true,
+                              contentHeight: Math.max(groupLineHeight, groupChipHeight)})
+                continue
+            }
+            const lines = wrapGroupName(name, inner)
+            const chipLine = chip > 0 ? groupLineGap + groupChipHeight : 0
+            layouts.push({lines: lines, chipBeside: false, contentHeight: lines.length * groupLineHeight + chipLine})
+        }
+        return layouts
+    }
+
+    // The top of every row and, last, the bottom of the table. A row is `rowHeight` unless
+    // a group ending on it needs more room than its rows give; rows only ever grow, so the
+    // groups need no particular order.
+    readonly property var rowTops: {
+        const heights = rows.map(function () { return rowHeight })
+        for (let index = 0; index < groups.length; ++index) {
+            const start = Number(groups[index].start)
+            const span = Number(groups[index].span)
+            if (span <= 0 || start + span > heights.length) continue
+            let given = 0
+            for (let row = start; row < start + span; ++row) given += heights[row]
+            const needed = groupLayouts[index].contentHeight + 2 * groupVerticalPadding
+            if (needed > given) heights[start + span - 1] += Math.ceil(needed - given)
+        }
+        const tops = [headerHeight]
+        for (const height of heights) tops.push(tops[tops.length - 1] + height)
+        return tops
     }
 
     component HeaderCell: GridHeaderCell {
