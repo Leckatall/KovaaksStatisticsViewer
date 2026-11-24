@@ -33,7 +33,7 @@ OverflowScrollView {
             model: (incompleteScroll.trackingVm && incompleteScroll.trackingVm.completenessIssues)
                    ? incompleteScroll.trackingVm.completenessIssues : []
             delegate: Label {
-                required property var modelData
+                required property string modelData
                 required property int index
                 objectName: "completenessIssue_" + index
                 Layout.fillWidth: true

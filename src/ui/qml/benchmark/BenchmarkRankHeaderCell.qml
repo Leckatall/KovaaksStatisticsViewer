@@ -10,8 +10,8 @@ FocusScope {
     property var table: null
     readonly property string tierId: headerCell.model.tierId !== undefined ? headerCell.model.tierId : ""
     readonly property string headerName: headerCell.model.display !== undefined ? headerCell.model.display : ""
-    readonly property var headerIssues: headerCell.model.issues || []
-    readonly property var headerColor: headerCell.model.headerColor !== undefined ? headerCell.model.headerColor : "transparent"
+    readonly property list<string> headerIssues: headerCell.model.issues || []
+    readonly property color headerColor: headerCell.model.headerColor !== undefined ? headerCell.model.headerColor : "transparent"
     property bool editingName: false
     objectName: headerCell.tierId !== "" ? "rankHeader_" + headerCell.tierId : ""
     implicitWidth: headerCell.table.thresholdWidth

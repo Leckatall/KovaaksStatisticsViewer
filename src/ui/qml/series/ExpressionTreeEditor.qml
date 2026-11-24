@@ -9,7 +9,7 @@ Item {
 
     required property var model
 
-    readonly property var ancestorChain: rootItem.model && rootItem.model.selected ? rootItem.model.ancestorChain(rootItem.model.selected) : []
+    readonly property list<EditableExpressionNode> ancestorChain: rootItem.model && rootItem.model.selected ? rootItem.model.ancestorChain(rootItem.model.selected) : []
 
     function accentColor(kind, alpha) {
         const category = model.isBinary(kind) ? "binary" : (kind === "averageAcrossRuns" || kind === "bestRun") ? "average" : (kind === "primitive" || kind === "constant" || kind === "final") ? "leaf" : "unary";
@@ -77,31 +77,31 @@ Item {
                         id: pathCard
 
                         required property int index
-                        required property var modelData
+                        required property EditableExpressionNode modelData
 
                         focused: pathCard.index === rootItem.ancestorChain.length - 1
 
                         property Component primitiveEditorComponent: Component {
                             FieldEditors.PrimitiveEditor {
-                                node: pathCard.node
+                                node: pathCard.node as EditablePrimitiveNode
                                 treeModel: rootItem.model
                             }
                         }
                         property Component finalValueEditorComponent: Component {
                             FieldEditors.FinalValueEditor {
-                                node: pathCard.node
+                                node: pathCard.node as EditableFinalValueNode
                                 treeModel: rootItem.model
                             }
                         }
-                        property Component constantEditorComponent: Component { FieldEditors.ConstantEditor { node: pathCard.node } }
+                        property Component constantEditorComponent: Component { FieldEditors.ConstantEditor { node: pathCard.node as EditableConstantNode } }
                         property Component binaryOpEditorComponent: Component {
                             FieldEditors.BinaryOpEditor {
-                                node: pathCard.node
+                                node: pathCard.node as EditableBinaryOpNode
                                 kindLabel: rootItem.kindLabel
                             }
                         }
-                        property Component rollingMeanEditorComponent: Component { FieldEditors.RollingMeanEditor { node: pathCard.node } }
-                        property Component averageAcrossRunsEditorComponent: Component { FieldEditors.AverageAcrossRunsEditor { node: pathCard.node } }
+                        property Component rollingMeanEditorComponent: Component { FieldEditors.RollingMeanEditor { node: pathCard.node as EditableRollingMeanNode } }
+                        property Component averageAcrossRunsEditorComponent: Component { FieldEditors.AverageAcrossRunsEditor { node: pathCard.node as EditableAverageAcrossRunsNode } }
 
                         function editorComponentFor(kind) {
                             return ({ primitive: primitiveEditorComponent, final: finalValueEditorComponent, constant: constantEditorComponent, add: binaryOpEditorComponent, subtract: binaryOpEditorComponent, multiply: binaryOpEditorComponent, divide: binaryOpEditorComponent, rollingMean: rollingMeanEditorComponent, averageAcrossRuns: averageAcrossRunsEditorComponent })[kind] || null;
@@ -130,7 +130,7 @@ Item {
                                 id: slotRow
 
                                 required property string modelData
-                                readonly property var childNode: pathCard.node[slotRow.modelData]
+                                readonly property EditableExpressionNode childNode: pathCard.node[slotRow.modelData]
 
                                 Layout.fillWidth: true
 

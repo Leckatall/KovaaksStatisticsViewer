@@ -14,7 +14,7 @@ Popup {
     property var optionsProvider: null
     // [{id, name}]
     property var parentCategories: []
-    property var scenarioNames: []
+    property list<string> scenarioNames: []
     property var actions: []
     property bool exactMatch: false
     property int highlightedIndex: -1

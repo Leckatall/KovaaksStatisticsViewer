@@ -319,7 +319,7 @@ Item {
     Dialog {
         id: deleteAxisDialog
 
-        readonly property var lineNames: root.deleteTarget ? root.deleteTarget.lineNames : []
+        readonly property list<string> lineNames: root.deleteTarget ? root.deleteTarget.lineNames : []
 
         objectName: "deleteAxisDialog"
         modal: true

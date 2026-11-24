@@ -114,8 +114,8 @@ ApplicationWindow {
     property real latchY: 0
     property bool jumping: false
     readonly property string currentSection: currentPage === "profile" ? "" : (sectionLatch || graphEditor.sectionInView)
-    property var leftWithIssue: []
-    property var rejectedGraphs: []
+    property list<string> leftWithIssue: []
+    property list<string> rejectedGraphs: []
     property bool saveRejected: false
 
     // A rejected Save can name issues the draft does not have, such as one only the store reports.

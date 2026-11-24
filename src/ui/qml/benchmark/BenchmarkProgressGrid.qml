@@ -345,7 +345,7 @@ Item {
     // The top of every row and, last, the bottom of the table. A row is `rowHeight` unless
     // a group ending on it needs more room than its rows give; rows only ever grow, so the
     // groups need no particular order.
-    readonly property var rowTops: {
+    readonly property list<real> rowTops: {
         const heights = rows.map(function () { return rowHeight })
         for (let index = 0; index < groups.length; ++index) {
             const start = Number(groups[index].start)

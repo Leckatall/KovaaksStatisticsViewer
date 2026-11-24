@@ -6,7 +6,7 @@ import KovaaksStatsViewer
 Item {
     id: root
 
-    required property var graphVm
+    required property GraphViewModelBase graphVm
     property var visibleColumns: []
     property int yAxisColumn: -1
     property bool showSeriesNames: true

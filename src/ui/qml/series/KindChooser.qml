@@ -9,7 +9,7 @@ RowLayout {
 
     required property var treeModel
     required property var kindLabel
-    required property var parentNode
+    required property EditableExpressionNode parentNode
     property string slot: "root"
 
     Label { text: qsTr("Add:") }
@@ -22,7 +22,7 @@ RowLayout {
         objectName: "kindChooser_" + chooser.slot
 
         delegate: ItemDelegate {
-            required property var modelData
+            required property string modelData
 
             text: chooser.kindLabel(modelData)
             width: kindCombo.width

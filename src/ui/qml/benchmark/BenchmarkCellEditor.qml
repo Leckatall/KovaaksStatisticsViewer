@@ -19,7 +19,7 @@ TextField {
     property string original
     property TableView ownerView: null
     property int suggestionIndex: 0
-    readonly property var suggestionPopupView: suggestionPopup
+    readonly property Popup suggestionPopupView: suggestionPopup
 
     // A spanning category's name is edited across the whole span.
     width: cell.face.width

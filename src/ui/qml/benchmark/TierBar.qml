@@ -16,7 +16,7 @@ Item {
     // [{name, barColor}] in ladder order.
     property var tiers: []
     // One fill fraction in [0, 1] per tier.
-    property var fills: []
+    property list<real> fills: []
     // Tooltip and accessible text: where the value sits on the ladder.
     property string description: ""
 
@@ -48,7 +48,7 @@ Item {
 
     // --- edge states -------------------------------------------------------------
     // One flag per tier: that chunk's thresholds are unusable, so it is hatched.
-    property var missing: []
+    property list<bool> missing: []
     // "" | "unplayed" | "unmatched" | "aboveTop"; statusText labels the first two.
     property string edgeState: ""
     property string statusText: ""
@@ -57,14 +57,14 @@ Item {
     readonly property color unmatchedColor: Theme.attention
 
     function missingAt(index) {
-        return root.missing && root.missing.length > index && root.missing[index] === true
+        return root.missing.length > index && root.missing[index]
     }
 
     // One short text per tier, right-aligned at the end of its chunk (the score that reaches
     // the tier, which completes the chunk); "" or absent for none. Hidden under a hatched
     // chunk and behind a status label. Where the value label or the recent-average marker
     // would cover it, it moves to its chunk's middle, then to its start; see labelPlacementAt().
-    property var labels: []
+    property list<string> labels: []
     function labelAt(index) {
         return root.labels && root.labels.length > index ? String(root.labels[index] || "") : ""
     }

@@ -12,7 +12,7 @@ Pane {
     required property ScrollView scrollView
     property var sourceRows: settingsVm.allSeriesConfigs
     property var displayRows: []
-    property var headerFirstRow: null
+    property Item headerFirstRow: null
     property var colorTarget: null
     // The options popup lives here rather than in a row: every edit republishes allSeriesConfigs,
     // which rebuilds every row delegate and would destroy a popup owned by one.
@@ -205,7 +205,7 @@ Pane {
             id: columnHeaders
             Layout.fillWidth: true
             implicitHeight: 20
-            readonly property var firstRow: root.headerFirstRow
+            readonly property Item firstRow: root.headerFirstRow
             Repeater {
                 model: [
                     { key: "name", text: qsTr("Name"), property: "nameControl" },

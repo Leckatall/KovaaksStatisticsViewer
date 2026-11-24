@@ -6,7 +6,7 @@ import KovaaksStatsViewer
 Rectangle {
     id: chip
 
-    required property var childNode
+    required property EditableExpressionNode childNode
     required property var treeModel
     required property var accentColorFn
 

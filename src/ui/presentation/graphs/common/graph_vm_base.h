@@ -19,7 +19,8 @@
 namespace ksv::presentation {
     class GraphViewModelBase : public QObject {
         Q_OBJECT
-        QML_ANONYMOUS
+        QML_ELEMENT
+        QML_UNCREATABLE("Abstract base, use a concrete graph view model")
         // GraphCanvas::ConnectionMode: 0 smooth, 1 straight, 2 points only.
         Q_PROPERTY(int connectionMode READ connectionMode NOTIFY styleChanged)
         // The line modes' marker preference; points only marks every observation regardless.

@@ -6,7 +6,7 @@ import KovaaksStatsViewer
 Rectangle {
     id: card
 
-    required property var node
+    required property EditableExpressionNode node
     required property bool focused
     required property var kindLabel
     required property var accentColorFn

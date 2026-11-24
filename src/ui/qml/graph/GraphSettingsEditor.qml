@@ -47,7 +47,7 @@ Item {
     readonly property bool isRunGraph: graphKey === "run"
     readonly property bool wide: editorScroll.availableWidth >= 560
     // Each group's visibility is bound to this list, so the sidebar never lists a hidden section.
-    readonly property var sections: {
+    readonly property list<string> sections: {
         const result = []
         if (offersRange || offersWindow) result.push("dataRange")
         result.push("seriesStyle")

@@ -10,6 +10,7 @@
 #include <presentation/graphs/playtime_graph_vm.h>
 #include <presentation/expression/editable_expression_node.h>
 #include <presentation/benchmarks/manager/benchmark_manager_vm.h>
+#include <presentation/benchmarks/manager/benchmark_table_model.h>
 #include <presentation/benchmarks/tracking/benchmark_tracking_vm.h>
 #include <presentation/benchmarks/tracking/benchmark_history_vm.h>
 #include <presentation/benchmarks/tracking/benchmark_progress_grid_model.h>
@@ -20,6 +21,8 @@ namespace ksv {
     // module's auto-registration objects (ksv_ui is built NO_PLUGIN). Called
     // from every executable that loads the QML module.
     inline void declare_metatypes() {
+        qmlRegisterUncreatableType<presentation::GraphViewModelBase>(
+            "KovaaksStatsViewer", 1, 0, "GraphViewModelBase", "Abstract base, use a concrete graph view model");
         qmlRegisterUncreatableType<presentation::GraphViewModel>(
             "KovaaksStatsViewer", 1, 0, "GraphViewModel", "Created in C++");
         qmlRegisterUncreatableType<presentation::PlaytimeGraphViewModel>(
@@ -44,6 +47,8 @@ namespace ksv {
             "KovaaksStatsViewer", 1, 0, "EditableAverageAcrossRunsNode");
         qmlRegisterUncreatableType<presentation::BenchmarkManagerViewModel>(
             "KovaaksStatsViewer", 1, 0, "BenchmarkManagerViewModel", "Created in C++");
+        qmlRegisterUncreatableType<presentation::BenchmarkTableModel>(
+            "KovaaksStatsViewer", 1, 0, "BenchmarkTableModel", "Created in C++");
         qmlRegisterType<ui::GraphCanvas>(
             "KovaaksStatsViewer", 1, 0, "GraphCanvas");
         qmlRegisterType<ui::CapturePreviewItem>(

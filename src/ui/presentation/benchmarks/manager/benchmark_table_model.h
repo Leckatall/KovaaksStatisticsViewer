@@ -10,6 +10,7 @@
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
+#include <qqmlintegration.h>
 #include <vector>
 
 namespace ksv::presentation {
@@ -69,6 +70,8 @@ namespace ksv::presentation {
     // none of it.
     class BenchmarkTableModel : public QAbstractTableModel {
         Q_OBJECT
+        QML_ELEMENT
+        QML_UNCREATABLE("Created in C++")
 
     public:
         static constexpr int FixedColumnCount = 3;

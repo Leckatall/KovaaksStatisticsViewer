@@ -43,7 +43,7 @@ QtObject {
     component BinaryOpEditor: ComboBox {
         required property EditableBinaryOpNode node
         required property var kindLabel
-        readonly property var operatorKinds: ["add", "subtract", "multiply", "divide"]
+        readonly property list<string> operatorKinds: ["add", "subtract", "multiply", "divide"]
 
         Layout.fillWidth: true
         currentIndex: node ? operatorKinds.indexOf(node.operatorKind) : -1

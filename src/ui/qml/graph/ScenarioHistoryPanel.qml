@@ -15,7 +15,7 @@ Frame {
     signal moreGraphSettingsRequested(string graphKey)
     signal hideGraphRequested(string graphKey)
     signal seriesVisibilityRequested(string seriesId, bool shown)
-    readonly property var plottable: [
+    readonly property list<int> plottable: [
         CompletionHistoryViewModel.Score,
         CompletionHistoryViewModel.Accuracy,
         CompletionHistoryViewModel.Shots,
@@ -36,7 +36,7 @@ Frame {
         }
         return null
     }
-    readonly property var visibleColumns: root.plottable.filter(column => {
+    readonly property list<int> visibleColumns: root.plottable.filter(column => {
         const s = root.seriesForColumn(column)
         return s && root.isHistorySeriesVisible(s.id)
     })
@@ -85,7 +85,7 @@ Frame {
         id: legendModel
 
         readonly property var allSeries: root.historyVm.allSeries
-        readonly property var enabledSeriesIds: root.historyVm.allSeries.map(series => series.id)
+        readonly property list<string> enabledSeriesIds: root.historyVm.allSeries.map(series => series.id)
     }
 
     QtObject {

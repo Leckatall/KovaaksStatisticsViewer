@@ -14,7 +14,7 @@ Control {
     property string targetKey: ""
     property string targetName: root.targetKey === "benchmarkTable" ? qsTr("Benchmark table")
                                                                      : GraphCatalog.nameOf(root.targetKey)
-    property var canvas: null
+    property Item canvas: null
 
     visible: root.captureVm !== null
     padding: 3

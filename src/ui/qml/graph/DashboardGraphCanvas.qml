@@ -11,7 +11,7 @@ Frame {
     required property var visualSettings
     property var settingsVm: null
     property var captureVm: null
-    readonly property var visibleColumns: {
+    readonly property list<int> visibleColumns: {
         const result = [];
         for (const id of root.graphVm.enabledSeriesIds) {
             if (!root.visualSettings.isSeriesVisible(id)) continue;

@@ -21,20 +21,20 @@ FocusScope {
     readonly property alias identityView: identityTableView
     readonly property alias thresholdView: thresholdTableView
     readonly property alias selectionModel: selection
-    readonly property var tableModel: root.manager ? root.manager.tableModel : null
+    readonly property BenchmarkTableModel tableModel: root.manager ? root.manager.tableModel : null
 
     property int rowHeight: 30
     property int headerHeight: 34
     // The identifying columns' comfortable widths. A table too narrow for them and one rank column
     // narrows them toward the width their content needs (never below it), each in proportion to
     // the room it has to spare; minimumTableWidth is where that runs out.
-    readonly property var identityPreferredWidths: [130, 120, 200]
-    readonly property var identityHeaders: [qsTr("Category"), qsTr("Subcategory"), qsTr("Scenario")]
+    readonly property list<int> identityPreferredWidths: [130, 120, 200]
+    readonly property list<string> identityHeaders: [qsTr("Category"), qsTr("Subcategory"), qsTr("Scenario")]
     readonly property string unassignedText: qsTr("⚠ Unassigned")
     readonly property string dropHintText: qsTr("+ Drop scenarios here")
     readonly property int rowHandleWidth: 18
     property int identityContentRevision: 0
-    readonly property var identityContentWidths: {
+    readonly property list<int> identityContentWidths: {
         void root.identityContentRevision
         const bold = text => Math.ceil(identityBoldMetrics.advanceWidth(text))
         const plain = text => Math.ceil(identityMetrics.advanceWidth(text))
@@ -44,8 +44,7 @@ FocusScope {
         widths[2] = Math.max(widths[2], Math.ceil(addScenarioPlus.implicitWidth))
         // A cell's label keeps 6px on either side, or on the right clears a group's swatch (and a
         // category's add-subcategory button); see TableCell.
-        const rows = root.tableModel && typeof root.tableModel.identityTexts === "function"
-                     ? root.tableModel.identityTexts() : []
+        const rows = root.tableModel ? root.tableModel.identityTexts() : []
         for (const row of rows) {
             const emptyCategory = row.emptyGroup && row.subcategoryId === ""
             const emptySubcategory = row.emptyGroup && row.subcategoryId !== ""
@@ -63,7 +62,7 @@ FocusScope {
         }
         return widths.map((width, column) => Math.min(width, root.identityPreferredWidths[column]))
     }
-    readonly property var identityWidths: {
+    readonly property list<int> identityWidths: {
         const preferred = root.identityPreferredWidths
         const content = root.identityContentWidths
         const total = preferred[0] + preferred[1] + preferred[2]
@@ -97,8 +96,7 @@ FocusScope {
     readonly property int rankHeaderMinimumWidth: {
         void root.tierHeaderRevision
         let widest = rankHeaderMetrics.advanceWidth(root.rankHeaderText("", false))
-        const headers = root.tableModel && typeof root.tableModel.tierHeaders === "function"
-                        ? root.tableModel.tierHeaders() : []
+        const headers = root.tableModel ? root.tableModel.tierHeaders() : []
         for (const header of headers)
             widest = Math.max(widest, rankHeaderMetrics.advanceWidth(root.rankHeaderText(header.name, header.hasIssues)))
         return Math.ceil(widest) + root.rankHeaderChromeWidth
@@ -261,7 +259,7 @@ FocusScope {
     property var selectedCellAnchors: []
     // Every live cell reads this for its highlight; selectedIds() would rebuild the list per cell.
     property var selectedEntryLookup: ({})
-    property var dragEntryIds: []
+    property list<string> dragEntryIds: []
     property bool draggingRows: false
     property string hoverDropGroupId: ""
     // {row, above}: the gap a row drop would land in, while hovering between rows.
@@ -285,7 +283,7 @@ FocusScope {
     signal rankContextRequested(string tierId, real x, real y)
     signal scenarioIdentityRequested(string entryId, string name, string hash)
 
-    readonly property var kindKeys: ["category", "subcategory", "scenario"]
+    readonly property list<string> kindKeys: ["category", "subcategory", "scenario"]
     readonly property int thresholdKind: 3
 
     // A row with no subcategory sits straight under its category (or in Uncategorized), so its
@@ -932,15 +930,15 @@ FocusScope {
         required property string editText
         required property bool hasValue
         required property string inputState
-        required property var issues
+        required property list<string> issues
         required property string categoryId
         required property string categoryName
-        required property var categoryColor
+        required property color categoryColor
         required property int categorySpanStart
         required property int categorySpanLength
         required property string subcategoryId
         required property string subcategoryName
-        required property var subcategoryColor
+        required property color subcategoryColor
         required property int subcategorySpanStart
         required property int subcategorySpanLength
         required property string emptyGroupId
@@ -962,7 +960,7 @@ FocusScope {
         readonly property string groupId: columnKind === 0 ? categoryId : columnKind === 1 ? subcategoryId : ""
         readonly property int spanStart: columnKind === 0 ? categorySpanStart : subcategorySpanStart
         readonly property int spanLength: columnKind === 0 ? categorySpanLength : subcategorySpanLength
-        readonly property var groupColor: columnKind === 0 ? categoryColor : subcategoryColor
+        readonly property color groupColor: columnKind === 0 ? categoryColor : subcategoryColor
         readonly property int topRow: tableCell.TableView.view ? tableCell.TableView.view.topRow : 0
         // A span shows its name once: on its first row, or on the top visible row when the first
         // row has scrolled away, so a clipped span stays readable.

@@ -21,7 +21,7 @@ Pane {
     readonly property string currentEntryId: mappingPanel.currentRow && mappingPanel.currentRow.entryId ? mappingPanel.currentRow.entryId : ""
     readonly property string mappingState: mappingPanel.currentRow && mappingPanel.currentRow.mappingState ? mappingPanel.currentRow.mappingState : "unresolved"
     readonly property var candidates: mappingPanel.currentRow && mappingPanel.currentRow.mappingCandidates ? mappingPanel.currentRow.mappingCandidates : []
-    readonly property var mappedHashes: mappingPanel.currentRow && mappingPanel.currentRow.mappedHashes ? mappingPanel.currentRow.mappedHashes : []
+    readonly property list<string> mappedHashes: mappingPanel.currentRow && mappingPanel.currentRow.mappedHashes ? mappingPanel.currentRow.mappedHashes : []
     readonly property bool armed: mappingPanel.candidatesArmed || mappingPanel.mappingState === "ambiguous"
 
     onCurrentEntryIdChanged: {
