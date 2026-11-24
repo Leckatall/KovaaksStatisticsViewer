@@ -490,11 +490,13 @@ TEST(BenchmarkResolutionUseCase, AfterARenamingSaveTheLeaseStillHoldsAndMappingR
     const auto profile = std::make_shared<FakeProfileService>();
     application::BenchmarkResolutionUseCase useCase(service, profile);
 
-    data::BenchmarkEditToken token;
-    for (const auto &entry: service->snapshot()->entries)
-        if (entry.filename == "Old.json") token = {entry.id, entry.filename, entry.digest};
+    // Held in a local: a range-for over snapshot()->entries would outlive the returned optional.
+    const auto snapshot = service->snapshot();
+    const auto old = std::ranges::find(snapshot->entries, std::string{"Old.json"}, &data::BenchmarkFileEntry::filename);
+    ASSERT_NE(old, snapshot->entries.end());
+    const data::BenchmarkEditToken token{old->id, old->filename, old->digest};
     useCase.setEditLease(token.id);
-    auto renamed = std::get<data::LoadedBenchmark>(service->snapshot()->entries.front().content).benchmark;
+    auto renamed = std::get<data::LoadedBenchmark>(old->content).benchmark;
     renamed.name = "New";
     store->nextWrite = {std::string{"d-new"}, std::nullopt};
     ASSERT_TRUE(service->save({renamed, token}).ok());
