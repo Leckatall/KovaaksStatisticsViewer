@@ -233,7 +233,10 @@ qt_add_qml_module(ksv_ui
         DEPENDENCIES QtCore
 )
 
-#set(QML_IMPORT_PATH ${CMAKE_CURRENT_BINARY_DIR}/KovaaksStatsViewer)
+# Editor-only: IDE QML code models (Qt Creator, qmlls) resolve `import KovaaksStatsViewer` by finding
+# KovaaksStatsViewer/qmldir under an import path, and read that path from the cache. The module is built
+# below this directory rather than the build root, so nothing finds it without this. The app never reads it.
+set(QML_IMPORT_PATH "${CMAKE_CURRENT_BINARY_DIR}" CACHE STRING "QML import paths for IDE code models")
 
 target_include_directories(ksv_ui PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
